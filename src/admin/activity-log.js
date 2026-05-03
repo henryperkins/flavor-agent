@@ -16,7 +16,7 @@ import {
 } from '@wordpress/element';
 import { DataViews } from '@wordpress/dataviews/wp';
 import { __, sprintf } from '@wordpress/i18n';
-import { check, page, plugins, symbol, undo, warning } from '@wordpress/icons';
+import { caution, check, page, plugins, symbol, undo } from '@wordpress/icons';
 import './wpds-runtime.css';
 import './dataviews-runtime.css';
 import '../tokens.css';
@@ -56,7 +56,7 @@ function getIconForEntry( entry ) {
 	switch ( entry?.status ) {
 		case 'blocked':
 		case 'failed':
-			return warning;
+			return caution;
 		case 'undone':
 			return undo;
 		default:
@@ -436,7 +436,7 @@ function ErrorState( { error, onRetry } ) {
 			<CardBody>
 				<div className="flavor-agent-activity-log__error-heading">
 					<span className="flavor-agent-activity-log__error-icon">
-						<Icon icon={ warning } />
+						<Icon icon={ caution } />
 					</span>
 					<h3 className="flavor-agent-activity-log__section-title">
 						{ __( 'Activity log unavailable', 'flavor-agent' ) }
@@ -641,21 +641,27 @@ function ActivityDetailRow( { label, value, kind, status } ) {
 
 function ActivityDetailSection( { section, entry } ) {
 	const summary = section.summary( entry ) || '';
-	const rows = section.rows
-		.map( ( [ label, key, kind ] ) => (
-			<ActivityDetailRow
-				key={ key }
-				label={ label }
-				value={ entry[ key ] }
-				kind={ kind }
-				status={ kind === 'status' ? entry.status : undefined }
-			/>
-		) )
-		.filter( Boolean );
+	const visibleRows = section.rows.filter( ( [ , key, kind ] ) => {
+		if ( kind !== 'code' ) {
+			return true;
+		}
 
-	if ( rows.length === 0 ) {
+		return ! isEmptyDetailValue( entry[ key ] );
+	} );
+
+	if ( visibleRows.length === 0 ) {
 		return null;
 	}
+
+	const rows = visibleRows.map( ( [ label, key, kind ] ) => (
+		<ActivityDetailRow
+			key={ key }
+			label={ label }
+			value={ entry[ key ] }
+			kind={ kind }
+			status={ kind === 'status' ? entry.status : undefined }
+		/>
+	) );
 
 	return (
 		<details

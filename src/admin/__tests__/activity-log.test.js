@@ -560,11 +560,34 @@ describe( 'ActivityLogApp', () => {
 				documentScopeKey: 'post:42',
 				blockPath: '0',
 				user: 'admin',
-				requestAbility: 'Insert',
-				requestRoute: '/wp/v2/posts',
-				requestReference: 'rest::insert',
-				requestPrompt: '',
+				request: {
+					ability: 'Insert',
+					route: '/wp/v2/posts',
+					reference: 'rest::insert',
+				},
 				transportError: '',
+			} ),
+			createEntry( {
+				id: 'activity-code-populated',
+				suggestion: 'Code detail populated check',
+				surfaceLabel: 'block',
+				statusLabel: 'Applied',
+				operationTypeLabel: 'Insert',
+				timestampDisplay: '2026-03-27T10:00:00Z',
+				activityTypeLabel: 'Pattern',
+				entity: 'core/paragraph',
+				postType: 'post',
+				entityId: '42',
+				documentLabel: 'Post',
+				documentScopeKey: 'post:42',
+				blockPath: '0',
+				user: 'admin',
+				request: {
+					ability: 'Insert',
+					route: '/wp/v2/posts',
+					reference: 'rest::insert',
+					prompt: '{\n  "prompt": "Use concise copy"\n}',
+				},
 			} ),
 		] );
 
@@ -586,29 +609,18 @@ describe( 'ActivityLogApp', () => {
 				'.flavor-agent-activity-log__detail-value--code'
 			)
 		).toBeNull();
+		expect( getDetailSectionByLabel( 'State snapshots' ) ).toBeUndefined();
 
-		await renderApp( [
-			createEntry( {
-				id: 'activity-code-populated',
-				suggestion: 'Code detail check',
-				surfaceLabel: 'block',
-				statusLabel: 'Applied',
-				operationTypeLabel: 'Insert',
-				timestampDisplay: '2026-03-27T10:00:00Z',
-				activityTypeLabel: 'Pattern',
-				entity: 'core/paragraph',
-				postType: 'post',
-				entityId: '42',
-				documentLabel: 'Post',
-				documentScopeKey: 'post:42',
-				blockPath: '0',
-				user: 'admin',
-				requestAbility: 'Insert',
-				requestRoute: '/wp/v2/posts',
-				requestReference: 'rest::insert',
-				requestPrompt: '{\n  "prompt": "Use concise copy"\n}',
-			} ),
-		] );
+		const populatedButton = Array.from(
+			getContainer().querySelectorAll( '.mock-dataviews-layout button' )
+		).find(
+			( button ) => button.textContent === 'Code detail populated check'
+		);
+		expect( populatedButton ).toBeTruthy();
+
+		await act( async () => {
+			populatedButton.click();
+		} );
 
 		const populatedRequestSection = getDetailSectionByLabel( 'Request' );
 		expect( populatedRequestSection ).not.toBeNull();

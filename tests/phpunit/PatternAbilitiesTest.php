@@ -2416,35 +2416,54 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	private function save_cloudflare_ai_search_index_state( array $overrides = [] ): void {
-		$embedding_config    = Provider::embedding_configuration();
-		$embedding_signature = EmbeddingClient::build_signature_for_dimension( 2, $embedding_config );
-
 		PatternIndex::save_state(
 			array_merge(
 				PatternIndex::get_state(),
 				[
-					'status'                 => 'ready',
-					'fingerprint'            => 'cloudflare-fingerprint-123',
-					'qdrant_url'             => (string) get_option( 'flavor_agent_qdrant_url', '' ),
-					'qdrant_collection'      => QdrantClient::get_collection_name( $embedding_signature ),
-					'openai_provider'        => $embedding_config['provider'],
-					'openai_endpoint'        => $embedding_config['endpoint'],
-					'embedding_model'        => $embedding_config['model'],
-					'embedding_dimension'    => 2,
-					'embedding_signature'    => $embedding_signature['signature_hash'],
-					'last_synced_at'         => '2026-03-24T00:00:00+00:00',
-					'last_attempt_at'        => '2000-01-01T00:00:00+00:00',
-					'indexed_count'          => 3,
-					'last_error'             => null,
-					'last_error_code'        => '',
-					'last_error_status'      => 0,
-					'last_error_retryable'   => false,
-					'last_error_retry_after' => null,
-					'stale_reason'           => '',
-					'stale_reasons'          => [],
-					'pattern_fingerprints'   => [],
+					'status'                         => 'ready',
+					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+					'fingerprint'                    => 'cloudflare-fingerprint-123',
+					'qdrant_url'                     => '',
+					'qdrant_collection'              => '',
+					'cloudflare_ai_search_namespace' => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ),
+					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
+					'cloudflare_ai_search_signature' => $this->expected_cloudflare_ai_search_signature(),
+					'openai_provider'                => '',
+					'openai_endpoint'                => '',
+					'embedding_model'                => '',
+					'embedding_dimension'            => 0,
+					'embedding_signature'            => '',
+					'last_synced_at'                 => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'                => '2000-01-01T00:00:00+00:00',
+					'indexed_count'                  => 3,
+					'last_error'                     => null,
+					'last_error_code'                => '',
+					'last_error_status'              => 0,
+					'last_error_retryable'           => false,
+					'last_error_retry_after'         => null,
+					'stale_reason'                   => '',
+					'stale_reasons'                  => [],
+					'pattern_fingerprints'           => [],
 				],
 				$overrides
+			)
+		);
+	}
+
+	private function expected_cloudflare_ai_search_signature(): string {
+		return hash(
+			'sha256',
+			implode(
+				'|',
+				array_map(
+					'trim',
+					[
+						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID, '' ),
+						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ),
+						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
+						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN, '' ),
+					]
+				)
 			)
 		);
 	}
