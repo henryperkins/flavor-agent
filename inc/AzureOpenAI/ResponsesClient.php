@@ -9,11 +9,9 @@ use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Support\WordPressAIPolicy;
 
 /**
- * Thin compatibility facade. After Workstream C of the WP 7.0 overlap remediation,
- * chat traffic is owned by Settings > Connectors via the WordPress AI Client.
- * This class is kept so existing callers (block, pattern, style, template,
- * template-part, and navigation abilities) continue to work without touching
- * each call site.
+ * Thin compatibility facade for legacy callers. Chat is owned by core
+ * Settings > Connectors via the WordPress AI Client; this class only translates
+ * the legacy rank() signature into a WordPressAIClient::chat() call.
  */
 final class ResponsesClient {
 

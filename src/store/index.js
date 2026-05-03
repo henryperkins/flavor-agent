@@ -187,8 +187,6 @@ const SURFACE_INTERACTION_CONTRACT = Object.freeze( {
 		stages: SHARED_PANEL_SEQUENCE,
 	} ),
 } );
-const API_FETCH_INVALID_JSON_MESSAGE =
-	'The response is not a valid JSON response.';
 const BLOCK_REST_INVALID_JSON_MESSAGE =
 	'The block recommendation endpoint returned a non-JSON response.';
 const BLOCK_REST_INVALID_JSON_DETAIL =
@@ -763,9 +761,7 @@ function buildBlockRecommendationFailureDiagnostics(
 ) {
 	const rawMessage = getApiErrorMessage( error, 'Request failed.' );
 	const errorCode = getApiErrorCode( error );
-	const isInvalidJsonResponse =
-		errorCode === 'invalid_json' ||
-		rawMessage === API_FETCH_INVALID_JSON_MESSAGE;
+	const isInvalidJsonResponse = errorCode === 'invalid_json';
 	const message = isInvalidJsonResponse
 		? BLOCK_REST_INVALID_JSON_MESSAGE
 		: rawMessage;

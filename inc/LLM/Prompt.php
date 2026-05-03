@@ -49,6 +49,12 @@ final class Prompt {
 	];
 
 	/**
+	 * Confidence floor for suggestions recovered from a plain-text block lane response.
+	 * Below the standard 0.5 mid-confidence threshold to signal low-confidence advisory recovery.
+	 */
+	private const PLAIN_TEXT_RECOVERY_CONFIDENCE = 0.35;
+
+	/**
 	 * Build the system prompt that instructs the LLM how to respond.
 	 */
 	public static function build_system(): string {
@@ -933,7 +939,7 @@ SYSTEM;
 			'type'             => 'structural_recommendation',
 			'attributeUpdates' => '{}',
 			'operations'       => [],
-			'confidence'       => 0.35,
+			'confidence'       => self::PLAIN_TEXT_RECOVERY_CONFIDENCE,
 		];
 	}
 

@@ -7,6 +7,7 @@ import {
 } from '@wordpress/element';
 
 const FEEDBACK_MS = 1200;
+const PENDING_FALLBACK_KEY = Symbol( 'pending' );
 
 export default function useSuggestionApplyFeedback( {
 	applySuggestion,
@@ -60,7 +61,7 @@ export default function useSuggestionApplyFeedback( {
 
 			const key = keyOverride ?? getKey( suggestion );
 
-			pendingKeyRef.current = key || 'pending';
+			pendingKeyRef.current = key || PENDING_FALLBACK_KEY;
 			setPendingKey( pendingKeyRef.current );
 
 			let didApply = false;

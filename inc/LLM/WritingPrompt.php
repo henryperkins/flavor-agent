@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Support\WordPressAIPolicy;
+
 final class WritingPrompt {
 
 	public static function build_system(): string {
@@ -330,7 +332,7 @@ SYSTEM;
 			return '';
 		}
 
-		return trim( str_replace( "\r", '', $value ) );
+		return WordPressAIPolicy::sanitize_textarea_content( $value );
 	}
 
 	/**
