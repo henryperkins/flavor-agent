@@ -20,6 +20,7 @@ final class RequestTraceTest extends TestCase {
 	protected function setUp(): void {
 		WordPressTestState::$filters['flavor_agent_diagnostic_trace_enabled'] = [];
 		WordPressTestState::$filters['flavor_agent_diagnostic_trace']         = [];
+		WordPressTestState::$do_action_counts                                 = [];
 
 		$reflection = new ReflectionClass( RequestTrace::class );
 		$active     = $reflection->getProperty( 'active' );
@@ -51,5 +52,21 @@ final class RequestTraceTest extends TestCase {
 			$captured_input,
 			'WP_DEBUG alone must not pre-enable error_log writes; only the explicit diagnostic constant or filter override should.'
 		);
+	}
+
+	public function test_is_consumed_returns_false_when_no_observer_or_log_filter(): void {
+		$this->assertFalse( RequestTrace::is_consumed() );
+	}
+
+	public function test_is_consumed_returns_true_when_action_listener_attached(): void {
+		add_action( 'flavor_agent_diagnostic_trace', static fn () => null );
+
+		$this->assertTrue( RequestTrace::is_consumed() );
+	}
+
+	public function test_is_consumed_returns_true_when_log_filter_enables_writes(): void {
+		add_filter( 'flavor_agent_diagnostic_trace_enabled', '__return_true' );
+
+		$this->assertTrue( RequestTrace::is_consumed() );
 	}
 }

@@ -119,34 +119,39 @@ final class WordPressAIClient {
 			$schema,
 			$request_timeout_seconds
 		);
-		$owns_trace              = ! RequestTrace::is_active();
-		$chat_trace_context      = self::build_chat_trace_context(
-			$system_prompt,
-			$user_prompt,
-			$provider,
-			$reasoning_effort,
-			$schema,
-			$request_timeout_seconds,
-			$schema_union_count
-		);
+		$trace_consumed          = RequestTrace::is_consumed();
+		$owns_trace              = $trace_consumed && ! RequestTrace::is_active();
+		$chat_trace_context      = $trace_consumed
+			? self::build_chat_trace_context(
+				$system_prompt,
+				$user_prompt,
+				$provider,
+				$reasoning_effort,
+				$schema,
+				$request_timeout_seconds,
+				$schema_union_count
+			)
+			: [];
 
-		if ( $owns_trace ) {
-			RequestTrace::start(
-				'wordpress-ai-client',
-				$chat_trace_context,
-				'ai.chat.start'
-			);
-		} else {
+		if ( $trace_consumed ) {
+			if ( $owns_trace ) {
+				RequestTrace::start(
+					'wordpress-ai-client',
+					$chat_trace_context,
+					'ai.chat.start'
+				);
+			} else {
+				RequestTrace::event(
+					'ai.chat.start',
+					$chat_trace_context
+				);
+			}
+
 			RequestTrace::event(
-				'ai.chat.start',
+				'ai.chat.request_ready',
 				$chat_trace_context
 			);
 		}
-
-		RequestTrace::event(
-			'ai.chat.request_ready',
-			$chat_trace_context
-		);
 		$started_at = microtime( true );
 
 		try {
@@ -158,10 +163,12 @@ final class WordPressAIClient {
 			);
 		} catch ( \Throwable $throwable ) {
 			$throwable_context = self::build_throwable_trace_context( $throwable );
-			RequestTrace::event(
-				'ai.chat.throwable',
-				$throwable_context
-			);
+			if ( $trace_consumed ) {
+				RequestTrace::event(
+					'ai.chat.throwable',
+					$throwable_context
+				);
+			}
 
 			if ( $owns_trace ) {
 				RequestTrace::finish(
@@ -181,10 +188,12 @@ final class WordPressAIClient {
 				self::with_error_summary( $request_diagnostics, $result )
 			);
 			$error_context = self::build_error_trace_context( $result );
-			RequestTrace::event(
-				'ai.chat.error',
-				$error_context
-			);
+			if ( $trace_consumed ) {
+				RequestTrace::event(
+					'ai.chat.error',
+					$error_context
+				);
+			}
 
 			if ( $owns_trace ) {
 				RequestTrace::finish(
@@ -208,10 +217,12 @@ final class WordPressAIClient {
 				? $parsed['diagnostics']['responseSummary']
 				: [],
 		];
-		RequestTrace::event(
-			'ai.chat.response_ready',
-			$response_context
-		);
+		if ( $trace_consumed ) {
+			RequestTrace::event(
+				'ai.chat.response_ready',
+				$response_context
+			);
+		}
 
 		Provider::record_runtime_chat_metrics( $parsed['metrics'] );
 		Provider::record_runtime_chat_diagnostics( $parsed['diagnostics'] );
@@ -223,10 +234,12 @@ final class WordPressAIClient {
 				[ 'status' => 502 ]
 			);
 			$error_context = self::build_error_trace_context( $error );
-			RequestTrace::event(
-				'ai.chat.error',
-				$error_context
-			);
+			if ( $trace_consumed ) {
+				RequestTrace::event(
+					'ai.chat.error',
+					$error_context
+				);
+			}
 
 			if ( $owns_trace ) {
 				RequestTrace::finish(

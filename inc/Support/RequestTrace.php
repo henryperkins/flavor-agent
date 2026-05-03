@@ -28,6 +28,14 @@ final class RequestTrace {
 		return isset( self::$active['traceId'] ) && is_string( self::$active['traceId'] );
 	}
 
+	public static function is_consumed(): bool {
+		if ( function_exists( 'has_action' ) && false !== has_action( self::ACTION_HOOK ) ) {
+			return true;
+		}
+
+		return self::should_write_error_log();
+	}
+
 	/**
 	 * @param array<string, mixed> $context
 	 */

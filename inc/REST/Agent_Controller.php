@@ -713,11 +713,15 @@ final class Agent_Controller {
 	public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$client_id              = $request->get_param( 'clientId' );
 		$resolve_signature_only = self::is_signature_only_request( $request );
-		RequestTrace::start(
-			'recommend-block',
-			self::build_recommend_block_trace_context( $request, $resolve_signature_only ),
-			'rest.recommend_block.start'
-		);
+		$trace_consumed         = RequestTrace::is_consumed();
+
+		if ( $trace_consumed ) {
+			RequestTrace::start(
+				'recommend-block',
+				self::build_recommend_block_trace_context( $request, $resolve_signature_only ),
+				'rest.recommend_block.start'
+			);
+		}
 		$input = [
 			'editorContext'        => $request->get_param( 'editorContext' ),
 			'prompt'               => $request->get_param( 'prompt' ),
@@ -728,27 +732,31 @@ final class Agent_Controller {
 			$result = BlockAbilities::recommend_block( $input );
 		} catch ( \Throwable $throwable ) {
 			$throwable_context = self::build_trace_throwable_context( $throwable );
-			RequestTrace::event(
-				'rest.recommend_block.throwable',
-				$throwable_context
-			);
-			RequestTrace::finish(
-				'rest.recommend_block.finish',
-				array_merge(
-					[ 'outcome' => 'throwable' ],
+			if ( $trace_consumed ) {
+				RequestTrace::event(
+					'rest.recommend_block.throwable',
 					$throwable_context
-				)
-			);
+				);
+				RequestTrace::finish(
+					'rest.recommend_block.finish',
+					array_merge(
+						[ 'outcome' => 'throwable' ],
+						$throwable_context
+					)
+				);
+			}
 
 			throw $throwable;
 		}
 
 		if ( \is_wp_error( $result ) ) {
 			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-block' );
-			RequestTrace::event(
-				'rest.recommend_block.error',
-				self::build_trace_error_context( $result )
-			);
+			if ( $trace_consumed ) {
+				RequestTrace::event(
+					'rest.recommend_block.error',
+					self::build_trace_error_context( $result )
+				);
+			}
 
 			if ( ! $resolve_signature_only ) {
 				self::persist_request_diagnostic_failure_activity(
@@ -760,13 +768,15 @@ final class Agent_Controller {
 				);
 			}
 
-			RequestTrace::finish(
-				'rest.recommend_block.finish',
-				array_merge(
-					[ 'outcome' => 'error' ],
-					self::build_trace_error_context( $result )
-				)
-			);
+			if ( $trace_consumed ) {
+				RequestTrace::finish(
+					'rest.recommend_block.finish',
+					array_merge(
+						[ 'outcome' => 'error' ],
+						self::build_trace_error_context( $result )
+					)
+				);
+			}
 
 			return $result;
 		}
@@ -774,10 +784,12 @@ final class Agent_Controller {
 		$payload = $resolve_signature_only
 			? $result
 			: self::append_request_meta_for_route( $result, 'recommend-block' );
-		RequestTrace::event(
-			'rest.recommend_block.payload_ready',
-			self::build_recommendation_payload_trace_context( $payload )
-		);
+		if ( $trace_consumed ) {
+			RequestTrace::event(
+				'rest.recommend_block.payload_ready',
+				self::build_recommendation_payload_trace_context( $payload )
+			);
+		}
 
 		if ( ! $resolve_signature_only ) {
 			self::persist_request_diagnostic_activity(
@@ -789,13 +801,15 @@ final class Agent_Controller {
 			);
 		}
 
-		RequestTrace::finish(
-			'rest.recommend_block.finish',
-			array_merge(
-				[ 'outcome' => 'success' ],
-				self::build_recommendation_payload_trace_context( $payload )
-			)
-		);
+		if ( $trace_consumed ) {
+			RequestTrace::finish(
+				'rest.recommend_block.finish',
+				array_merge(
+					[ 'outcome' => 'success' ],
+					self::build_recommendation_payload_trace_context( $payload )
+				)
+			);
+		}
 
 		return new \WP_REST_Response(
 			[

@@ -510,6 +510,39 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'success', $events[3]['context']['outcome'] ?? null );
 	}
 
+	public function test_chat_emits_trace_events_when_observer_is_attached(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$events = [];
+		add_action(
+			'flavor_agent_diagnostic_trace',
+			static function ( array $entry ) use ( &$events ): void {
+				$events[] = $entry['event'] ?? '';
+			}
+		);
+
+		WordPressAIClient::chat( 'sys', 'user' );
+
+		$this->assertSame(
+			[ 'ai.chat.start', 'ai.chat.request_ready', 'ai.chat.response_ready', 'ai.chat.finish' ],
+			$events
+		);
+	}
+
+	public function test_chat_skips_trace_lifecycle_when_no_observer_is_attached(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		WordPressAIClient::chat( 'sys', 'user' );
+
+		$this->assertSame(
+			0,
+			WordPressTestState::$do_action_counts['flavor_agent_diagnostic_trace'] ?? 0,
+			'RequestTrace::emit should not fire when no observer is attached.'
+		);
+	}
+
 	public function test_chat_allows_wordpress_ai_client_timeout_filter_override(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';

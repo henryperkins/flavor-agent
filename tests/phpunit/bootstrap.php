@@ -116,6 +116,9 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<string, array<int, array<int, array{callback: callable, accepted_args: int}>>> */
 		public static array $filters = [];
 
+		/** @var array<string, int> */
+		public static array $do_action_counts = [];
+
 		public static int $db_insert_id = 0;
 
 		public static int $current_user_id = 0;
@@ -335,6 +338,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$db_tables                   = [];
 			self::$db_queries                  = [];
 			self::$filters                     = [];
+			self::$do_action_counts            = [];
 			self::$db_insert_id                = 0;
 			self::$current_user_id             = 0;
 			self::$current_screen              = null;
@@ -1900,6 +1904,9 @@ namespace {
 
 	if ( ! function_exists( 'do_action' ) ) {
 		function do_action( string $hook_name, ...$args ): void {
+			WordPressTestState::$do_action_counts[ $hook_name ] =
+				( WordPressTestState::$do_action_counts[ $hook_name ] ?? 0 ) + 1;
+
 			if ( empty( WordPressTestState::$filters[ $hook_name ] ) ) {
 				return;
 			}
@@ -1991,6 +1998,34 @@ namespace {
 			}
 
 			return true;
+		}
+	}
+
+	if ( ! function_exists( 'has_action' ) ) {
+		function has_action( string $hook_name, $callback = false ) {
+			if ( empty( WordPressTestState::$filters[ $hook_name ] ) ) {
+				return false;
+			}
+
+			if ( false === $callback ) {
+				return true;
+			}
+
+			foreach ( WordPressTestState::$filters[ $hook_name ] as $priority => $entries ) {
+				foreach ( $entries as $entry ) {
+					if ( ( $entry['callback'] ?? null ) === $callback ) {
+						return $priority;
+					}
+				}
+			}
+
+			return false;
+		}
+	}
+
+	if ( ! function_exists( 'has_filter' ) ) {
+		function has_filter( string $hook_name, $callback = false ) {
+			return has_action( $hook_name, $callback );
 		}
 	}
 
