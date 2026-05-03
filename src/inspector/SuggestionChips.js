@@ -74,19 +74,20 @@ export default function SuggestionChips( {
 	const resolvedRequestSignature =
 		currentRequestSignature || fallbackRequestSignature;
 	const resolvedRequestInput = currentRequestInput || fallbackRequestInput;
-	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
-		applySuggestion: ( targetClientId, suggestion ) =>
-			applySuggestion(
-				targetClientId,
-				suggestion,
-				resolvedRequestSignature,
-				resolvedRequestInput
-			),
-		buildFeedback: buildChipFeedback,
-		clientId,
-		getKey: getSuggestionKey,
-		suggestions,
-	} );
+	const { appliedKey, feedback, handleApply, pendingKey } =
+		useSuggestionApplyFeedback( {
+			applySuggestion: ( targetClientId, suggestion ) =>
+				applySuggestion(
+					targetClientId,
+					suggestion,
+					resolvedRequestSignature,
+					resolvedRequestInput
+				),
+			buildFeedback: buildChipFeedback,
+			clientId,
+			getKey: getSuggestionKey,
+			suggestions,
+		} );
 	const tonePillClassName = isStale
 		? 'flavor-agent-pill--stale'
 		: getTonePillClassName( tone );
@@ -149,10 +150,12 @@ export default function SuggestionChips( {
 				{ suggestions.map( ( s ) => {
 					const key = getSuggestionKey( s );
 					const wasApplied = appliedKey === key;
+					const isPending = pendingKey === key;
 					const isChipDisabled =
 						Boolean( s?.isCurrentStyle ) ||
 						Boolean( s?.disabled ) ||
 						wasApplied ||
+						Boolean( pendingKey ) ||
 						disabled ||
 						isStale;
 
@@ -187,7 +190,11 @@ export default function SuggestionChips( {
 					return (
 						<Button
 							key={ key }
-							variant={ wasApplied ? 'primary' : 'secondary' }
+							variant={
+								wasApplied || isPending
+									? 'primary'
+									: 'secondary'
+							}
 							size="small"
 							onClick={ () => void handleApply( s ) }
 							disabled={ isChipDisabled }

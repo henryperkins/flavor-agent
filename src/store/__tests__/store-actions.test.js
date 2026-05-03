@@ -408,6 +408,74 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'fetchBlockRecommendations explains invalid JSON REST responses as server response failures', async () => {
+		apiFetch.mockRejectedValue( {
+			code: 'invalid_json',
+			message: 'The response is not a valid JSON response.',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockRequestToken: jest.fn().mockReturnValue( 7 ),
+		};
+		const context = {
+			block: {
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Hello world',
+				},
+			},
+		};
+
+		await actions.fetchBlockRecommendations(
+			'block-1',
+			context,
+			'Tighten this copy.'
+		)( {
+			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'page',
+								getCurrentPostId: () => 3,
+						  }
+						: {}
+				),
+			},
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setBlockRequestState(
+				'block-1',
+				'error',
+				'The block recommendation endpoint returned a non-JSON response.',
+				8
+			)
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			3,
+			expect.objectContaining( {
+				type: 'SET_BLOCK_RECS',
+				clientId: 'block-1',
+				requestToken: 8,
+				diagnostics: expect.objectContaining( {
+					type: 'failure',
+					title: 'Block request failed: The block recommendation endpoint returned a non-JSON response.',
+					errorCode: 'invalid_json',
+					errorMessage:
+						'The block recommendation endpoint returned a non-JSON response.',
+					detailLines: expect.arrayContaining( [
+						'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
+						'Original parser message: The response is not a valid JSON response.',
+					] ),
+				} ),
+			} )
+		);
+	} );
+
 	test( 'fetchNavigationRecommendations dispatches fallback data on request failures', async () => {
 		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
@@ -1149,6 +1217,48 @@ describe( 'store action thunks', () => {
 			ok: false,
 			staleReason: 'server-review',
 			surface: 'navigation',
+		} );
+	} );
+
+	test( 'revalidateNavigationReviewFreshness skips client-stale checks without clearing stored server-stale state', async () => {
+		const dispatch = jest.fn();
+		const select = {
+			getNavigationReviewRequestToken: jest.fn().mockReturnValue( 2 ),
+			getNavigationBlockClientId: jest.fn().mockReturnValue( 'nav-1' ),
+			getNavigationRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Simplify the header navigation.' ),
+			getNavigationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'navigation-context-signature' ),
+			getNavigationReviewContextSignature: jest
+				.fn()
+				.mockReturnValue( 'review-navigation-stored' ),
+		};
+		const currentRequestSignature =
+			buildNavigationRecommendationRequestSignature( {
+				blockClientId: 'nav-1',
+				prompt: 'Changed temporary prompt.',
+				contextSignature: 'navigation-context-signature',
+			} );
+
+		const result = await actions.revalidateNavigationReviewFreshness(
+			currentRequestSignature,
+			{
+				menuId: 42,
+				navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
+				prompt: 'Changed temporary prompt.',
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( dispatch ).not.toHaveBeenCalled();
+		expect( result ).toEqual( {
+			ok: false,
+			skipped: true,
 		} );
 	} );
 
@@ -3139,6 +3249,54 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'applyBlockStructuralSuggestion ignores duplicate calls while a block apply is already in flight', async () => {
+		const insertBlocks = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getBlockApplyStatus: jest.fn().mockReturnValue( 'applying' ),
+			getActivityScopeKey: jest.fn(),
+			getBlockRecommendations: jest.fn(),
+		};
+		const registry = {
+			select: jest.fn( () => ( {
+				getBlock: jest.fn(),
+				getSettings: jest.fn(),
+			} ) ),
+			dispatch: jest.fn().mockReturnValue( {
+				insertBlocks,
+			} ),
+		};
+
+		const result = await actions.applyBlockStructuralSuggestion(
+			'block-1',
+			{
+				label: 'Add hero pattern',
+				actionability: {
+					tier: 'review-safe',
+					executableOperations: [
+						{ ...BASE_BLOCK_STRUCTURAL_OPERATION },
+					],
+				},
+			},
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					blockOperationContext: BASE_BLOCK_OPERATION_CONTEXT,
+				},
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toBe( false );
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( insertBlocks ).not.toHaveBeenCalled();
+		expect( dispatch ).not.toHaveBeenCalled();
+	} );
+
 	test( 'applySuggestion surfaces a deterministic error when no safe attribute updates remain', async () => {
 		apiFetch.mockResolvedValue( {
 			payload: {
@@ -3208,6 +3366,51 @@ describe( 'store action thunks', () => {
 			)
 		);
 		expect( result ).toBe( false );
+	} );
+
+	test( 'applySuggestion ignores duplicate calls while a block apply is already in flight', async () => {
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getBlockApplyStatus: jest.fn().mockReturnValue( 'applying' ),
+			getActivityScopeKey: jest.fn(),
+			getBlockResolvedContextSignature: jest.fn(),
+			getBlockRecommendations: jest.fn(),
+		};
+		const registry = {
+			select: jest.fn( () => ( {
+				getBlockAttributes: jest.fn(),
+			} ) ),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Refresh content',
+				attributeUpdates: {
+					content: 'New copy',
+				},
+			},
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: PARAGRAPH_BLOCK_CONTEXT,
+				},
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toBe( false );
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).not.toHaveBeenCalled();
 	} );
 
 	test( 'applySuggestion rejects lock and undeclared top-level attribute updates', async () => {

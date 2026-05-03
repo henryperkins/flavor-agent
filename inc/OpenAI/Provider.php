@@ -101,7 +101,7 @@ final class Provider {
 	 *   configured: bool,
 	 *   label: string,
 	 *   settingName: string,
-	 *   keySource: 'env'|'constant'|'database'|'none',
+	 *   keySource: 'env'|'constant'|'database'|'connector_filter'|'none',
 	 *   credentialsUrl: ?string,
 	 *   pluginSlug: ?string
 	 * }
@@ -113,7 +113,7 @@ final class Provider {
 		$setting_name    = is_string( $authentication['setting_name'] ?? null ) && '' !== $authentication['setting_name']
 			? $authentication['setting_name']
 			: self::CONNECTOR_OPENAI_OPTION;
-		$key_source      = self::connector_api_key_source( self::OPENAI_CONNECTOR_ID, $setting_name );
+		$key_source      = self::connector_api_key_source( self::OPENAI_CONNECTOR_ID, $setting_name, [], $connector );
 		$is_registered   = self::is_connector_registered( self::OPENAI_CONNECTOR_ID, $connector );
 		$credentials_url = is_string( $authentication['credentials_url'] ?? null ) && '' !== $authentication['credentials_url']
 			? $authentication['credentials_url']
@@ -159,7 +159,7 @@ final class Provider {
 	 *     configured: bool,
 	 *     label: string,
 	 *     settingName: string,
-	 *     keySource: 'env'|'constant'|'database'|'none',
+	 *     keySource: 'env'|'constant'|'database'|'connector_filter'|'none',
 	 *     credentialsUrl: ?string,
 	 *     pluginSlug: ?string
 	 *   }
@@ -183,7 +183,7 @@ final class Provider {
 		}
 
 		$connector_source = $connector_status['keySource'];
-		if ( 'none' !== $connector_source ) {
+		if ( 'none' !== $connector_source && 'connector_filter' !== $connector_source ) {
 			return [
 				'api_key'   => self::connector_api_key_value(
 					self::OPENAI_CONNECTOR_ID,
@@ -923,45 +923,83 @@ final class Provider {
 
 	/**
 	 * @param array<string, string> $overrides
-	 * @return 'env'|'constant'|'database'|'none'
+	 * @return 'env'|'constant'|'database'|'connector_filter'|'none'
 	 */
-	private static function connector_api_key_source( string $connector_id, string $setting_name, array $overrides = [] ): string {
-		$env_var_name = self::connector_env_var_name( $connector_id );
-		$env_value    = getenv( $env_var_name );
-		if ( false !== $env_value && '' !== $env_value ) {
-			return 'env';
-		}
+	private static function connector_api_key_source( string $connector_id, string $setting_name, array $overrides = [], ?array $connector = null ): string {
+		foreach ( self::connector_env_var_names( $connector_id, $setting_name ) as $env_var_name ) {
+			$env_value = getenv( $env_var_name );
+			if ( false !== $env_value && '' !== $env_value ) {
+				return 'env';
+			}
 
-		if ( defined( $env_var_name ) ) {
-			$constant_value = constant( $env_var_name );
-			if ( is_scalar( $constant_value ) && '' !== (string) $constant_value ) {
-				return 'constant';
+			if ( defined( $env_var_name ) ) {
+				$constant_value = constant( $env_var_name );
+				if ( is_scalar( $constant_value ) && '' !== (string) $constant_value ) {
+					return 'constant';
+				}
 			}
 		}
 
 		$db_value = self::option_value( $overrides, $setting_name );
-		if ( '' !== $db_value ) {
+		$source   = '' !== $db_value ? 'database' : 'none';
+
+		$connector ??= self::registered_connectors()[ $connector_id ] ?? [];
+		$configured = 'none' !== $source;
+		$filtered   = apply_filters(
+			'wpai_is_' . sanitize_key( $connector_id ) . '_connector_configured',
+			$configured,
+			is_array( $connector ) ? $connector : []
+		);
+
+		if ( false === (bool) $filtered ) {
+			return 'none';
+		}
+
+		if ( 'none' === $source && true === (bool) $filtered ) {
+			return 'connector_filter';
+		}
+
+		if ( 'database' === $source ) {
 			return 'database';
 		}
 
-		return 'none';
+		return $source;
 	}
 
 	/**
 	 * @param array<string, string> $overrides
 	 */
 	private static function connector_api_key_value( string $connector_id, string $setting_name, array $overrides = [] ): string {
-		$source       = self::connector_api_key_source( $connector_id, $setting_name, $overrides );
-		$env_var_name = self::connector_env_var_name( $connector_id );
+		$source = self::connector_api_key_source( $connector_id, $setting_name, $overrides );
 
 		if ( 'env' === $source ) {
-			$env_value = getenv( $env_var_name );
+			$env_value = false;
+
+			foreach ( self::connector_env_var_names( $connector_id, $setting_name ) as $env_var_name ) {
+				$env_value = getenv( $env_var_name );
+
+				if ( false !== $env_value && '' !== $env_value ) {
+					break;
+				}
+			}
 
 			return false !== $env_value ? (string) $env_value : '';
 		}
 
 		if ( 'constant' === $source ) {
-			$constant_value = constant( $env_var_name );
+			$constant_value = '';
+
+			foreach ( self::connector_env_var_names( $connector_id, $setting_name ) as $env_var_name ) {
+				if ( ! defined( $env_var_name ) ) {
+					continue;
+				}
+
+				$constant_value = constant( $env_var_name );
+
+				if ( is_scalar( $constant_value ) && '' !== (string) $constant_value ) {
+					break;
+				}
+			}
 
 			return is_scalar( $constant_value ) ? (string) $constant_value : '';
 		}
@@ -971,6 +1009,28 @@ final class Provider {
 		}
 
 		return '';
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function connector_env_var_names( string $connector_id, string $setting_name = '' ): array {
+		$names = [];
+
+		if ( '' !== $setting_name ) {
+			$names[] = strtoupper( preg_replace( '/[^A-Za-z0-9]+/', '_', $setting_name ) ?? '' );
+		}
+
+		$names[] = self::connector_env_var_name( $connector_id );
+
+		return array_values(
+			array_unique(
+				array_filter(
+					$names,
+					static fn ( string $name ): bool => '' !== $name
+				)
+			)
+		);
 	}
 
 	private static function connector_env_var_name( string $connector_id ): string {

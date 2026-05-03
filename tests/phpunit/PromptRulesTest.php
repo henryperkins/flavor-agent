@@ -17,7 +17,11 @@ final class PromptRulesTest extends TestCase {
 			$system
 		);
 		$this->assertStringContainsString(
-			'Do not include attributeUpdates on structural_recommendation or pattern_replacement items.',
+			'For structural_recommendation or pattern_replacement items, set attributeUpdates to "{}".',
+			$system
+		);
+		$this->assertStringContainsString(
+			'Use replace_block_with_pattern only when the allowed pattern lists replace and set position to an empty string.',
 			$system
 		);
 		$this->assertStringContainsString(
@@ -28,6 +32,50 @@ final class PromptRulesTest extends TestCase {
 			'Structural_recommendation and pattern_replacement block items are advisory-only. Omit panel',
 			$system
 		);
+	}
+
+	public function test_parse_response_accepts_schema_conformant_replacement_operation_with_empty_position(): void {
+		$parsed = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => [],
+					'styles'      => [],
+					'block'       => [
+						[
+							'label'            => 'Replace with hero pattern',
+							'description'      => 'A hero pattern better fits the section.',
+							'type'             => 'pattern_replacement',
+							'attributeUpdates' => '{}',
+							'panel'            => '',
+							'operations'       => [
+								[
+									'type'           => 'replace_block_with_pattern',
+									'patternName'    => 'theme/hero',
+									'targetClientId' => 'block-1',
+									'position'       => '',
+								],
+							],
+							'currentValue'     => '',
+							'suggestedValue'   => '',
+							'isCurrentStyle'   => false,
+							'isRecommended'    => true,
+							'confidence'       => 0.8,
+							'preview'          => '',
+							'presetSlug'       => '',
+							'cssVar'           => '',
+						],
+					],
+					'explanation' => 'Replacement operation should survive compact schema parsing.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $parsed );
+		$this->assertCount( 1, $parsed['block'] );
+		$this->assertSame( [], $parsed['block'][0]['attributeUpdates'] );
+		$this->assertSame( 'pattern_replacement', $parsed['block'][0]['type'] );
+		$this->assertSame( 'replace_block_with_pattern', $parsed['block'][0]['proposedOperations'][0]['type'] );
+		$this->assertSame( '', $parsed['block'][0]['proposedOperations'][0]['position'] );
 	}
 
 	public function test_enforce_block_context_rules_returns_empty_payload_for_disabled_blocks(): void {
@@ -223,6 +271,143 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( 'accent', $result['settings'][0]['presetSlug'] );
 		$this->assertSame( 'var(--wp--preset--color--accent)', $result['settings'][0]['cssVar'] );
 		$this->assertSame( 0.72, $result['settings'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_extracts_json_object_from_surrounding_text(): void {
+		$result = Prompt::parse_response(
+			<<<'TEXT'
+Here is the block recommendation payload:
+{
+  "settings": [],
+  "styles": [],
+  "block": [
+    {
+      "label": "Use wide alignment",
+      "description": "Let the blog index breathe within the template.",
+      "type": "structural_recommendation",
+      "operations": []
+    }
+  ],
+  "explanation": "Use wide alignment for the blog index."
+}
+TEXT
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Use wide alignment', $result['block'][0]['label'] );
+		$this->assertSame( 'Use wide alignment for the blog index.', $result['explanation'] );
+	}
+
+	public function test_parse_response_converts_plain_text_block_lane_to_advisory_suggestion(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => 'Wide alignment belongs in the block lane.',
+					'styles'      => [],
+					'block'       => 'Use wide alignment as the primary block-level improvement.',
+					'explanation' => [],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $result['settings'] );
+		$this->assertSame( 'Use wide alignment as the primary block-level improvement.', $result['block'][0]['label'] );
+		$this->assertSame( 'structural_recommendation', $result['block'][0]['type'] );
+		$this->assertSame( [], $result['block'][0]['attributeUpdates'] );
+		$this->assertSame( [], $result['block'][0]['operations'] );
+		$this->assertSame( '', $result['explanation'] );
+	}
+
+	public function test_parse_response_rejects_plain_text_response(): void {
+		$result = Prompt::parse_response( 'I cannot provide recommendations right now.' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'parse_error', $result->get_error_code() );
+		$this->assertStringContainsString( 'Failed to parse LLM response as JSON', $result->get_error_message() );
+	}
+
+	public function test_parse_response_rejects_json_string_response(): void {
+		$result = Prompt::parse_response( wp_json_encode( 'Use wide alignment as the primary block-level improvement.' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'parse_error', $result->get_error_code() );
+		$this->assertSame( 'Block recommendation response must be a JSON object.', $result->get_error_message() );
+	}
+
+	public function test_parse_response_preserves_empty_block_panel_for_style_variation(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => [],
+					'styles'      => [],
+					'block'       => [
+						[
+							'label'            => 'Use outline style',
+							'description'      => 'The outline style fits this button better.',
+							'panel'            => '',
+							'type'             => 'style_variation',
+							'attributeUpdates' => '{"className":"is-style-outline"}',
+							'operations'       => [],
+						],
+					],
+					'explanation' => 'Use the registered outline style.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( '', $result['block'][0]['panel'] );
+
+		$filtered = Prompt::enforce_block_context_rules(
+			$result,
+			[],
+			[
+				'allowedPanels'            => [],
+				'hasExplicitlyEmptyPanels' => true,
+				'registeredStyles'         => [ 'outline' ],
+			]
+		);
+
+		$this->assertSame( 'style_variation', $filtered['block'][0]['type'] );
+		$this->assertSame( '', $filtered['block'][0]['panel'] );
+		$this->assertSame( 'is-style-outline', $filtered['block'][0]['attributeUpdates']['className'] );
+	}
+
+	public function test_enforce_block_context_rules_rejects_style_variation_with_two_registered_classes(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => [],
+					'styles'      => [],
+					'block'       => [
+						[
+							'label'            => 'Combine outline and rounded styles',
+							'description'      => 'Activate two registered variations at once.',
+							'panel'            => '',
+							'type'             => 'style_variation',
+							'attributeUpdates' => '{"className":"is-style-outline is-style-rounded"}',
+							'operations'       => [],
+						],
+					],
+					'explanation' => 'Style variations are mutually exclusive; reject combinations.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+
+		$filtered = Prompt::enforce_block_context_rules(
+			$result,
+			[],
+			[
+				'allowedPanels'            => [],
+				'hasExplicitlyEmptyPanels' => true,
+				'registeredStyles'         => [ 'outline', 'rounded' ],
+			]
+		);
+
+		$this->assertSame( [], $filtered['block'] );
 	}
 
 	public function test_parse_response_treats_compact_schema_display_sentinels_as_absent(): void {
@@ -868,6 +1053,85 @@ final class PromptRulesTest extends TestCase {
 		);
 	}
 
+	public function test_enforce_block_context_rules_drops_block_attribute_changes_with_empty_panel_when_mapping_is_known(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'              => 'Set custom alignment',
+						'panel'              => '',
+						'type'               => 'attribute_change',
+						'attributeUpdates'   => [
+							'align' => 'wide',
+						],
+						'proposedOperations' => [],
+						'operations'         => [],
+						'rejectedOperations' => [],
+					],
+				],
+				'explanation' => 'Panel-less executable block attribute changes should drop.',
+			],
+			[],
+			[
+				'panelMappingKnown'        => true,
+				'allowedPanels'            => [ 'layout' ],
+				'hasExplicitlyEmptyPanels' => false,
+				'configAttributeKeys'      => [ 'align' ],
+			]
+		);
+
+		$this->assertSame( [], $result['block'] );
+	}
+
+	public function test_enforce_block_context_rules_preserves_block_attribute_changes_with_valid_panel_when_mapping_is_known(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'              => 'Set custom alignment',
+						'panel'              => 'layout',
+						'type'               => 'attribute_change',
+						'attributeUpdates'   => [
+							'align' => 'wide',
+						],
+						'proposedOperations' => [],
+						'operations'         => [],
+						'rejectedOperations' => [],
+					],
+				],
+				'explanation' => 'Panel-backed executable block attribute changes should survive.',
+			],
+			[],
+			[
+				'panelMappingKnown'        => true,
+				'allowedPanels'            => [ 'layout' ],
+				'hasExplicitlyEmptyPanels' => false,
+				'configAttributeKeys'      => [ 'align' ],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Set custom alignment',
+					'panel'              => 'layout',
+					'type'               => 'attribute_change',
+					'attributeUpdates'   => [
+						'align' => 'wide',
+					],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
+				],
+			],
+			$result['block']
+		);
+	}
+
 	public function test_enforce_block_context_rules_drops_block_suggestions_with_unknown_panel_when_mapping_is_known(): void {
 		$result = Prompt::enforce_block_context_rules(
 			[
@@ -899,6 +1163,47 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( [], $result['block'] );
 	}
 
+	public function test_enforce_block_context_rules_preserves_advisory_structural_suggestions_with_empty_panel(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'              => 'Wrap this block in a pattern',
+						'panel'              => '',
+						'type'               => 'structural_recommendation',
+						'attributeUpdates'   => [],
+						'proposedOperations' => [],
+						'operations'         => [],
+						'rejectedOperations' => [],
+					],
+				],
+				'explanation' => 'Advisory structural ideas can stay panel-less.',
+			],
+			[],
+			[
+				'panelMappingKnown' => true,
+				'allowedPanels'     => [ 'layout' ],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Wrap this block in a pattern',
+					'panel'              => '',
+					'type'               => 'structural_recommendation',
+					'attributeUpdates'   => [],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
+				],
+			],
+			$result['block']
+		);
+	}
+
 	public function test_enforce_block_context_rules_filters_executable_updates_to_declared_attribute_contract(): void {
 		$result = Prompt::enforce_block_context_rules(
 			[
@@ -917,6 +1222,7 @@ final class PromptRulesTest extends TestCase {
 				'block'       => [
 					[
 						'label'            => 'Connect supported metadata',
+						'panel'            => 'general',
 						'attributeUpdates' => [
 							'metadata' => [
 								'name'            => 'Hero CTA',
@@ -945,6 +1251,7 @@ final class PromptRulesTest extends TestCase {
 				'bindableAttributes' => [ 'content' ],
 			],
 			[
+				'panelMappingKnown'   => true,
 				'allowedPanels'       => [ 'general' ],
 				'configAttributeKeys' => [ 'dropCap' ],
 			]
@@ -966,6 +1273,7 @@ final class PromptRulesTest extends TestCase {
 			[
 				[
 					'label'              => 'Connect supported metadata',
+					'panel'              => 'general',
 					'attributeUpdates'   => [
 						'metadata' => [
 							'blockVisibility' => [
@@ -1135,6 +1443,143 @@ final class PromptRulesTest extends TestCase {
 		);
 
 		$this->assertSame( [], $result['styles'] );
+		$this->assertSame( [], $result['block'] );
+	}
+
+	public function test_enforce_block_context_rules_rejects_style_variations_with_extra_classes(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Use outline style',
+						'type'             => 'style_variation',
+						'attributeUpdates' => [
+							'className' => 'is-style-outline arbitrary-extra-class',
+						],
+					],
+				],
+				'explanation' => 'Extra classes should not survive.',
+			],
+			[],
+			[
+				'allowedPanels'    => [],
+				'registeredStyles' => [ 'outline' ],
+			]
+		);
+
+		$this->assertSame( [], $result['block'] );
+	}
+
+	public function test_enforce_block_context_rules_rejects_style_variations_with_unknown_style_tokens(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Use outline and fancy styles',
+						'type'             => 'style_variation',
+						'attributeUpdates' => [
+							'className' => 'is-style-outline is-style-fancy',
+						],
+					],
+				],
+				'explanation' => 'Unknown style tokens should not survive.',
+			],
+			[],
+			[
+				'allowedPanels'    => [],
+				'registeredStyles' => [ 'outline' ],
+			]
+		);
+
+		$this->assertSame( [], $result['block'] );
+	}
+
+	public function test_enforce_block_context_rules_canonicalizes_registered_style_variation_classes(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Use outline style',
+						'type'             => 'style_variation',
+						'attributeUpdates' => [
+							'className' => 'is-style-outline is-style-outline',
+						],
+					],
+				],
+				'explanation' => 'Duplicate registered style tokens should normalize.',
+			],
+			[],
+			[
+				'allowedPanels'    => [],
+				'registeredStyles' => [ 'outline' ],
+			]
+		);
+
+		$this->assertSame( 'is-style-outline', $result['block'][0]['attributeUpdates']['className'] );
+	}
+
+	public function test_enforce_block_context_rules_preserves_registered_style_variation_with_empty_panel_when_panels_are_empty(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Use outline style',
+						'panel'            => '',
+						'type'             => 'style_variation',
+						'attributeUpdates' => [
+							'className' => 'is-style-outline',
+						],
+					],
+				],
+				'explanation' => 'Registered style variations can survive without mapped panels.',
+			],
+			[],
+			[
+				'allowedPanels'            => [],
+				'hasExplicitlyEmptyPanels' => true,
+				'registeredStyles'         => [ 'outline' ],
+			]
+		);
+
+		$this->assertSame( 'Use outline style', $result['block'][0]['label'] );
+		$this->assertSame( 'style_variation', $result['block'][0]['type'] );
+		$this->assertSame( '', $result['block'][0]['panel'] );
+		$this->assertSame( 'is-style-outline', $result['block'][0]['attributeUpdates']['className'] );
+	}
+
+	public function test_enforce_block_context_rules_drops_registered_style_variation_with_invalid_non_empty_panel(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Use outline style',
+						'panel'            => 'layout',
+						'type'             => 'style_variation',
+						'attributeUpdates' => [
+							'className' => 'is-style-outline',
+						],
+					],
+				],
+				'explanation' => 'Style variation panels must still be valid when provided.',
+			],
+			[],
+			[
+				'panelMappingKnown' => true,
+				'allowedPanels'     => [ 'color' ],
+				'registeredStyles'  => [ 'outline' ],
+			]
+		);
+
 		$this->assertSame( [], $result['block'] );
 	}
 

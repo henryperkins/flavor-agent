@@ -17,7 +17,9 @@ export default function useSuggestionApplyFeedback( {
 } ) {
 	const [ appliedKey, setAppliedKey ] = useState( null );
 	const [ feedback, setFeedback ] = useState( null );
+	const [ pendingKey, setPendingKey ] = useState( null );
 	const resetTimerRef = useRef( null );
+	const pendingKeyRef = useRef( null );
 	const suggestionSetKey = useMemo( () => {
 		if ( ! Array.isArray( suggestions ) || suggestions.length === 0 ) {
 			return '';
@@ -46,17 +48,33 @@ export default function useSuggestionApplyFeedback( {
 
 		setAppliedKey( null );
 		setFeedback( null );
+		setPendingKey( null );
+		pendingKeyRef.current = null;
 	}, [ suggestionSetKey ] );
 
 	const handleApply = useCallback(
 		async ( suggestion, keyOverride = null ) => {
-			const didApply = await applySuggestion( clientId, suggestion );
-
-			if ( ! didApply ) {
+			if ( pendingKeyRef.current ) {
 				return;
 			}
 
 			const key = keyOverride ?? getKey( suggestion );
+
+			pendingKeyRef.current = key || 'pending';
+			setPendingKey( pendingKeyRef.current );
+
+			let didApply = false;
+
+			try {
+				didApply = await applySuggestion( clientId, suggestion );
+			} finally {
+				pendingKeyRef.current = null;
+				setPendingKey( null );
+			}
+
+			if ( ! didApply ) {
+				return;
+			}
 
 			if ( resetTimerRef.current ) {
 				window.clearTimeout( resetTimerRef.current );
@@ -82,5 +100,6 @@ export default function useSuggestionApplyFeedback( {
 		appliedKey,
 		feedback,
 		handleApply,
+		pendingKey,
 	};
 }

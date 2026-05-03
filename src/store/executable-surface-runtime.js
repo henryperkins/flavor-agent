@@ -236,12 +236,6 @@ export function createExecutableSurfaceReviewFreshnessAction( {
 				! storedReviewContextSignature ||
 				Object.keys( requestData ).length === 0
 			) {
-				localDispatch(
-					setReviewState( 'idle', {
-						requestToken,
-					} )
-				);
-
 				return {
 					ok: false,
 					skipped: true,

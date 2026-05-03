@@ -967,7 +967,9 @@ export function BlockRecommendationsContent( {
 						label="AI block suggestions"
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
-						disabled={ isStaleResult }
+						disabled={
+							isStaleResult || blockApplyStatus === 'applying'
+						}
 					/>
 				</RecommendationLane>
 			) }
@@ -1003,6 +1005,7 @@ export function BlockRecommendationsContent( {
 							isStale={ isStaleResult }
 							canApplyReviewedStructure={ isBlockStructuralActionsEnabled() }
 							isApplying={ blockApplyStatus === 'applying' }
+							isReviewDisabled={ blockApplyStatus === 'applying' }
 							onReview={ handleOpenReview }
 							onApply={ handleApplyReviewedStructure }
 						/>
@@ -1030,7 +1033,9 @@ export function BlockRecommendationsContent( {
 						label="AI settings suggestions"
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
-						disabled={ isStaleResult }
+						disabled={
+							isStaleResult || blockApplyStatus === 'applying'
+						}
 					/>
 				</RecommendationLane>
 			) }
@@ -1055,7 +1060,9 @@ export function BlockRecommendationsContent( {
 						label="AI style suggestions"
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
-						disabled={ isStaleResult }
+						disabled={
+							isStaleResult || blockApplyStatus === 'applying'
+						}
 					/>
 				</RecommendationLane>
 			) }
@@ -1134,6 +1141,7 @@ function ReviewSuggestionCard( {
 	isStale,
 	canApplyReviewedStructure,
 	isApplying,
+	isReviewDisabled = false,
 	onReview,
 	onApply,
 } ) {
@@ -1175,7 +1183,7 @@ function ReviewSuggestionCard( {
 				<Button
 					variant="secondary"
 					size="small"
-					disabled={ isStale }
+					disabled={ isStale || isReviewDisabled }
 					onClick={ () => onReview( suggestion ) }
 					className="flavor-agent-card__apply"
 					aria-label={ reviewButtonLabel }

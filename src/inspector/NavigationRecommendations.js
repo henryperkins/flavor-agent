@@ -493,7 +493,7 @@ export default function NavigationRecommendations( {
 	] );
 
 	useEffect( () => {
-		if ( ! hasStoredResult || status !== 'ready' ) {
+		if ( ! hasStoredResult || status !== 'ready' || isClientStaleResult ) {
 			return;
 		}
 
@@ -504,6 +504,7 @@ export default function NavigationRecommendations( {
 	}, [
 		currentReviewContextSignature,
 		hasStoredResult,
+		isClientStaleResult,
 		recommendationRequestSignature,
 		revalidateNavigationReviewFreshness,
 		reviewRequestInput,
@@ -610,7 +611,7 @@ export default function NavigationRecommendations( {
 			{ ! embedded && (
 				<SurfacePanelIntro
 					eyebrow="Navigation Recommendations"
-					introCopy="Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only, so accepted changes still need manual follow-through."
+					introCopy="Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only, so accepted changes still need manual follow-through. Treat each idea as guidance, not a pre-applied edit."
 					meta={
 						menuId > 0 ? (
 							<span className="flavor-agent-pill">

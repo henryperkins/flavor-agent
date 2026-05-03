@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Context;
 
+use FlavorAgent\Support\WordPressAIPolicy;
+
 final class PostContentRenderer {
 
 	private const MAX_ATTR_LENGTH = 500;
@@ -128,6 +130,8 @@ final class PostContentRenderer {
 	}
 
 	private function strip_block_html( string $html ): string {
+		$html = WordPressAIPolicy::pre_normalize_content( $html );
+
 		$with_breaks = preg_replace(
 			'#</(p|div|h[1-6]|li|tr|td|th|blockquote|article|section|aside|header|footer|main|figure|figcaption|nav|ul|ol|table)\b[^>]*>#i',
 			"\n$0",
@@ -144,7 +148,7 @@ final class PostContentRenderer {
 			$with_breaks
 		) ?? $with_breaks;
 
-		return trim( wp_strip_all_tags( $with_breaks ) );
+		return WordPressAIPolicy::normalize_content( trim( wp_strip_all_tags( $with_breaks ) ) );
 	}
 
 	/**
@@ -311,6 +315,6 @@ final class PostContentRenderer {
 	}
 
 	private static function fallback( string $post_content ): string {
-		return sanitize_textarea_field( $post_content );
+		return WordPressAIPolicy::sanitize_textarea_content( $post_content );
 	}
 }

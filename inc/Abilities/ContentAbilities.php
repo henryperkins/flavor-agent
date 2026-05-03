@@ -9,6 +9,7 @@ use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\WritingPrompt;
 use FlavorAgent\Support\StringArray;
+use FlavorAgent\Support\WordPressAIPolicy;
 
 final class ContentAbilities {
 
@@ -124,7 +125,7 @@ final class ContentAbilities {
 			return '';
 		}
 
-		return sanitize_textarea_field( str_replace( "\r", '', $value ) );
+		return WordPressAIPolicy::sanitize_textarea_content( $value );
 	}
 
 	private static function normalize_map( mixed $value ): array {

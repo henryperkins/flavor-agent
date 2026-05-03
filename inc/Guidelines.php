@@ -7,6 +7,7 @@ namespace FlavorAgent;
 use FlavorAgent\Guidelines\LegacyGuidelinesRepository;
 use FlavorAgent\Guidelines\PromptGuidelinesFormatter;
 use FlavorAgent\Guidelines\RepositoryResolver;
+use FlavorAgent\Support\WordPressAIPolicy;
 
 final class Guidelines {
 
@@ -72,6 +73,15 @@ final class Guidelines {
 	}
 
 	public static function format_prompt_context( string $block_name = '' ): string {
+		$upstream = WordPressAIPolicy::upstream_guidelines_for_prompt(
+			[ 'site', 'copy', 'images', 'additional' ],
+			$block_name
+		);
+
+		if ( '' !== $upstream ) {
+			return $upstream;
+		}
+
 		return PromptGuidelinesFormatter::format( self::get_all(), $block_name );
 	}
 

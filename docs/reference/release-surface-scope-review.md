@@ -201,7 +201,7 @@ Do not add:
 
 ### Release Actions
 
-- [ ] Tighten copy so the user understands the result is editorial guidance or generated text, not an automatic patch.
+- [x] Tighten copy so the user understands the result is editorial guidance or generated text, not an automatic patch.
 - [ ] Add or verify a clear manual handoff path for draft/edit output.
 - [ ] Keep unsupported post types hidden or clearly unavailable.
 - [ ] Confirm provider unavailability points to Connectors setup rather than plugin-owned provider routing.
@@ -238,7 +238,7 @@ Do not add:
 
 ### Release Actions
 
-- [ ] Keep navigation copy advisory and avoid apply-like verbs.
+- [x] Keep navigation copy advisory and avoid apply-like verbs.
 - [ ] Confirm stale menu or overlay drift keeps previous advice visible but non-executable.
 - [ ] Keep embedded navigation visually subordinate to the main block recommendation flow.
 - [ ] Validate that missing menu ID, missing markup, or unavailable capability degrades clearly.

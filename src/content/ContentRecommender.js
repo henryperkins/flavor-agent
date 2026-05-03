@@ -265,7 +265,7 @@ export default function ContentRecommender() {
 			<div className="flavor-agent-panel flavor-agent-content-recommender">
 				<SurfacePanelIntro
 					eyebrow={ documentTypeLabel }
-					introCopy="Generate editorial guidance and text to review. Flavor Agent does not change the post; copy anything useful into the editor yourself."
+					introCopy="Generate editorial guidance and text to review. Flavor Agent does not change the post directly; review the result and use Copy generated text to place selected content manually."
 					meta={
 						documentStatusLabel ? (
 							<span className="flavor-agent-pill flavor-agent-pill--prominent">

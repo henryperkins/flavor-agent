@@ -109,6 +109,54 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
+	public function test_chat_routes_through_ai_service_with_supported_generation_options(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.',
+			null,
+			null,
+			null,
+			[
+				'temperature'       => '0.3',
+				'max_tokens'        => '500',
+				'candidate_count'   => 2,
+				'top_p'             => 0.8,
+				'top_k'             => 40,
+				'stop_sequences'    => [ 'END', 123, '' ],
+				'presence_penalty'  => 0.1,
+				'frequency_penalty' => 0.2,
+				'logprobs'          => true,
+				'top_logprobs'      => 5,
+				'ignored_option'    => 'must not pass through',
+			],
+			'flavor-agent/recommend-block'
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertCount( 1, WordPressTestState::$ai_service_calls );
+		$this->assertSame( 'Recommend a better block.', WordPressTestState::$ai_service_calls[0]['prompt'] );
+		$this->assertSame(
+			[
+				'system_instruction' => 'WordPress Gutenberg block styling and configuration assistant.',
+				'candidate_count'    => 2,
+				'max_tokens'         => 500,
+				'temperature'        => 0.3,
+				'top_p'              => 0.8,
+				'top_k'              => 40,
+				'stop_sequences'     => [ 'END', '123' ],
+				'presence_penalty'   => 0.1,
+				'frequency_penalty'  => 0.2,
+				'logprobs'           => true,
+				'top_logprobs'       => 5,
+			],
+			WordPressTestState::$ai_service_calls[0]['options']
+		);
+		$this->assertArrayNotHasKey( 'ignored_option', WordPressTestState::$ai_service_calls[0]['options'] );
+	}
+
 	public function test_chat_sends_compact_block_schema_for_generic_wordpress_ai_client_fallback(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
@@ -374,6 +422,64 @@ final class WordPressAIClientTest extends TestCase {
 				'https://api.openai.com/v1/responses'
 			)['timeout'] ?? null
 		);
+	}
+
+	public function test_chat_emits_structured_diagnostic_trace_events_when_enabled(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+		$events = [];
+
+		add_filter( 'flavor_agent_diagnostic_trace_enabled', '__return_false' );
+		add_action(
+			'flavor_agent_diagnostic_trace',
+			static function ( array $entry ) use ( &$events ): void {
+				$events[] = $entry;
+			},
+			10,
+			1
+		);
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.',
+			'codex',
+			'high',
+			[
+				'type'       => 'object',
+				'properties' => [
+					'explanation' => [ 'type' => 'string' ],
+				],
+			]
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertNotEmpty( $events );
+		$this->assertSame(
+			[
+				'ai.chat.start',
+				'ai.chat.request_ready',
+				'ai.chat.response_ready',
+				'ai.chat.finish',
+			],
+			array_column( $events, 'event' )
+		);
+
+		$trace_id = $events[0]['traceId'] ?? '';
+		$this->assertIsString( $trace_id );
+		$this->assertNotSame( '', $trace_id );
+
+		foreach ( $events as $event ) {
+			$this->assertSame( $trace_id, $event['traceId'] ?? null );
+			$this->assertSame( 'wordpress-ai-client', $event['surface'] ?? null );
+			$this->assertIsArray( $event['runtime'] ?? null );
+		}
+
+		$this->assertSame( 'codex', $events[0]['context']['provider'] ?? null );
+		$this->assertSame( 'high', $events[0]['context']['reasoningEffort'] ?? null );
+		$this->assertSame( 90, $events[0]['context']['timeoutSeconds'] ?? null );
+		$this->assertTrue( $events[0]['context']['hasSchema'] ?? false );
+		$this->assertSame( 39, $events[2]['context']['textBytes'] ?? null );
+		$this->assertSame( 'success', $events[3]['context']['outcome'] ?? null );
 	}
 
 	public function test_chat_allows_wordpress_ai_client_timeout_filter_override(): void {

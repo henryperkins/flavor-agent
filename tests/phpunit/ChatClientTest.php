@@ -93,6 +93,45 @@ final class ChatClientTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_chat_applies_wordpress_ai_system_instruction_filter_for_surface(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                     = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"mode":"draft","title":"OK","summary":"","content":"X"}';
+		$seen_ability                                       = null;
+
+		add_filter(
+			'wpai_system_instruction',
+			static function ( string $instruction, string $ability ) use ( &$seen_ability ): string {
+				$seen_ability = $ability;
+
+				return $instruction . "\n\nSite policy: no hype.";
+			},
+			10,
+			3
+		);
+
+		$result = ChatClient::chat( 'system prompt', 'user prompt', null, 'flavor_agent_content' );
+
+		$this->assertSame( '{"mode":"draft","title":"OK","summary":"","content":"X"}', $result );
+		$this->assertSame( 'flavor-agent/recommend-content', $seen_ability );
+		$this->assertSame( "system prompt\n\nSite policy: no hype.", WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+	}
+
 	public function test_chat_returns_unified_setup_message_when_no_backend_is_available(): void {
 		$result = ChatClient::chat( 'system prompt', 'user prompt' );
 

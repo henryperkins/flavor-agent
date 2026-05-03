@@ -6,6 +6,8 @@ namespace FlavorAgent\LLM;
 
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Support\MetricsNormalizer;
+use FlavorAgent\Support\RequestTrace;
+use FlavorAgent\Support\WordPressAIPolicy;
 use WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception;
 use WordPress\AiClient\Providers\Models\DTO\ModelConfig;
 
@@ -45,11 +47,28 @@ final class WordPressAIClient {
 		string $user_prompt,
 		?string $provider = null,
 		?string $reasoning_effort = null,
-		?array $schema = null
+		?array $schema = null,
+		?array $model_options = null,
+		string $ability_name = ''
 	): string|\WP_Error {
 		Provider::record_runtime_chat_metrics( null );
 		Provider::record_runtime_chat_diagnostics( null );
-		$prompt = self::make_prompt( $user_prompt );
+		$model_options = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
+		$system_prompt = WordPressAIPolicy::system_instruction(
+			$system_prompt,
+			$ability_name,
+			[
+				'provider'        => is_string( $provider ) ? sanitize_key( $provider ) : '',
+				'reasoningEffort' => self::normalize_reasoning_effort_value( $reasoning_effort ),
+				'hasSchema'       => is_array( $schema ) && [] !== $schema,
+			]
+		);
+		$prompt        = self::make_prompt(
+			$user_prompt,
+			[
+				'system_instruction' => $system_prompt,
+			] + $model_options
+		);
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -86,6 +105,7 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
+		$schema_union_count      = is_array( $schema ) ? self::count_schema_unions( $schema ) : 0;
 		$request_timeout_seconds = self::request_timeout_seconds(
 			$provider,
 			$reasoning_effort,
@@ -99,32 +119,136 @@ final class WordPressAIClient {
 			$schema,
 			$request_timeout_seconds
 		);
-		$started_at              = microtime( true );
-		$result                  = self::call_prompt_method_with_request_timeout(
-			$prompt,
-			'generate_text_result',
-			[],
-			$request_timeout_seconds
+		$owns_trace              = ! RequestTrace::is_active();
+		$chat_trace_context      = self::build_chat_trace_context(
+			$system_prompt,
+			$user_prompt,
+			$provider,
+			$reasoning_effort,
+			$schema,
+			$request_timeout_seconds,
+			$schema_union_count
 		);
+
+		if ( $owns_trace ) {
+			RequestTrace::start(
+				'wordpress-ai-client',
+				$chat_trace_context,
+				'ai.chat.start'
+			);
+		} else {
+			RequestTrace::event(
+				'ai.chat.start',
+				$chat_trace_context
+			);
+		}
+
+		RequestTrace::event(
+			'ai.chat.request_ready',
+			$chat_trace_context
+		);
+		$started_at = microtime( true );
+
+		try {
+			$result = self::call_prompt_method_with_request_timeout(
+				$prompt,
+				'generate_text_result',
+				[],
+				$request_timeout_seconds
+			);
+		} catch ( \Throwable $throwable ) {
+			$throwable_context = self::build_throwable_trace_context( $throwable );
+			RequestTrace::event(
+				'ai.chat.throwable',
+				$throwable_context
+			);
+
+			if ( $owns_trace ) {
+				RequestTrace::finish(
+					'ai.chat.finish',
+					array_merge(
+						[ 'outcome' => 'throwable' ],
+						$throwable_context
+					)
+				);
+			}
+
+			throw $throwable;
+		}
 
 		if ( is_wp_error( $result ) ) {
 			Provider::record_runtime_chat_diagnostics(
 				self::with_error_summary( $request_diagnostics, $result )
 			);
+			$error_context = self::build_error_trace_context( $result );
+			RequestTrace::event(
+				'ai.chat.error',
+				$error_context
+			);
+
+			if ( $owns_trace ) {
+				RequestTrace::finish(
+					'ai.chat.finish',
+					array_merge(
+						[ 'outcome' => 'error' ],
+						$error_context
+					)
+				);
+			}
 
 			return $result;
 		}
 
-		$parsed = self::normalize_generated_text_result( $result, $started_at, $request_diagnostics );
+		$parsed           = self::normalize_generated_text_result( $result, $started_at, $request_diagnostics );
+		$response_context = [
+			'textBytes'       => strlen( $parsed['text'] ),
+			'textEmpty'       => '' === $parsed['text'],
+			'metrics'         => is_array( $parsed['metrics'] ) ? $parsed['metrics'] : [],
+			'responseSummary' => is_array( $parsed['diagnostics']['responseSummary'] ?? null )
+				? $parsed['diagnostics']['responseSummary']
+				: [],
+		];
+		RequestTrace::event(
+			'ai.chat.response_ready',
+			$response_context
+		);
 
 		Provider::record_runtime_chat_metrics( $parsed['metrics'] );
 		Provider::record_runtime_chat_diagnostics( $parsed['diagnostics'] );
 
 		if ( '' === $parsed['text'] ) {
-			return new \WP_Error(
+			$error         = new \WP_Error(
 				'empty_response',
 				'The WordPress AI client returned an empty response.',
 				[ 'status' => 502 ]
+			);
+			$error_context = self::build_error_trace_context( $error );
+			RequestTrace::event(
+				'ai.chat.error',
+				$error_context
+			);
+
+			if ( $owns_trace ) {
+				RequestTrace::finish(
+					'ai.chat.finish',
+					array_merge(
+						[ 'outcome' => 'error' ],
+						$response_context,
+						$error_context
+					)
+				);
+			}
+
+			return $error;
+		}
+
+		if ( $owns_trace ) {
+			RequestTrace::finish(
+				'ai.chat.finish',
+				array_merge(
+					[ 'outcome' => 'success' ],
+					$response_context
+				)
 			);
 		}
 
@@ -138,7 +262,27 @@ final class WordPressAIClient {
 	/**
 	 * @return object|\WP_Error
 	 */
-	private static function make_prompt( string $user_prompt ): mixed {
+	private static function make_prompt( string $user_prompt, array $options = [] ): mixed {
+		if ( function_exists( 'WordPress\\AI\\get_ai_service' ) ) {
+			try {
+				$service = \WordPress\AI\get_ai_service();
+
+				if ( is_object( $service ) && is_callable( [ $service, 'create_textgen_prompt' ] ) ) {
+					$prompt = $service->create_textgen_prompt( $user_prompt, $options );
+
+					if ( is_wp_error( $prompt ) ) {
+						return $prompt;
+					}
+
+					if ( is_object( $prompt ) ) {
+						return $prompt;
+					}
+				}
+			} catch ( \Throwable $throwable ) {
+				// Fall back to the raw SDK entry point below for older or partial installs.
+			}
+		}
+
 		if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
 			return new \WP_Error(
 				'wp_ai_client_unavailable',
@@ -864,6 +1008,84 @@ final class WordPressAIClient {
 		];
 
 		return $diagnostics;
+	}
+
+	/**
+	 * @param array<string, mixed>|null $schema
+	 * @return array<string, mixed>
+	 */
+	private static function build_chat_trace_context(
+		string $system_prompt,
+		string $user_prompt,
+		?string $provider,
+		?string $reasoning_effort,
+		?array $schema,
+		int $timeout_seconds,
+		int $schema_union_count
+	): array {
+		$reasoning_effort = self::normalize_reasoning_effort_value( $reasoning_effort );
+		$provider         = is_string( $provider ) ? sanitize_key( $provider ) : '';
+
+		return [
+			'provider'          => $provider,
+			'reasoningEffort'   => $reasoning_effort,
+			'timeoutSeconds'    => max( 1, $timeout_seconds ),
+			'hasSchema'         => is_array( $schema ) && [] !== $schema,
+			'schemaUnionCount'  => $schema_union_count,
+			'systemPromptChars' => strlen( $system_prompt ),
+			'userPromptChars'   => strlen( $user_prompt ),
+			'requestBodyBytes'  => self::json_byte_length(
+				array_filter(
+					[
+						'provider'     => $provider,
+						'instructions' => $system_prompt,
+						'input'        => $user_prompt,
+						'reasoning'    => null !== $reasoning_effort
+							? [ 'effort' => $reasoning_effort ]
+							: null,
+						'text'         => is_array( $schema ) && [] !== $schema
+							? [
+								'format' => [
+									'type'   => 'json_schema',
+									'schema' => $schema,
+								],
+							]
+							: null,
+					],
+					static fn ( mixed $value ): bool => null !== $value && '' !== $value
+				)
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_error_trace_context( \WP_Error $error ): array {
+		$data = $error->get_error_data();
+		$data = is_array( $data ) ? $data : [];
+
+		return [
+			'error' => [
+				'code'    => $error->get_error_code(),
+				'message' => $error->get_error_message(),
+				'status'  => is_numeric( $data['status'] ?? null ) ? (int) $data['status'] : null,
+			],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_throwable_trace_context( \Throwable $throwable ): array {
+		return [
+			'throwable' => [
+				'class'   => get_class( $throwable ),
+				'message' => $throwable->getMessage(),
+				'file'    => $throwable->getFile(),
+				'line'    => $throwable->getLine(),
+			],
+		];
 	}
 
 	/**

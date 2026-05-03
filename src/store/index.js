@@ -187,6 +187,12 @@ const SURFACE_INTERACTION_CONTRACT = Object.freeze( {
 		stages: SHARED_PANEL_SEQUENCE,
 	} ),
 } );
+const API_FETCH_INVALID_JSON_MESSAGE =
+	'The response is not a valid JSON response.';
+const BLOCK_REST_INVALID_JSON_MESSAGE =
+	'The block recommendation endpoint returned a non-JSON response.';
+const BLOCK_REST_INVALID_JSON_DETAIL =
+	'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.';
 
 function getSurfaceContract( surface ) {
 	return SURFACE_INTERACTION_CONTRACT[ surface ] || null;
@@ -755,7 +761,14 @@ function buildBlockRecommendationFailureDiagnostics(
 	requestData = {},
 	requestToken = null
 ) {
-	const message = getApiErrorMessage( error, 'Request failed.' );
+	const rawMessage = getApiErrorMessage( error, 'Request failed.' );
+	const errorCode = getApiErrorCode( error );
+	const isInvalidJsonResponse =
+		errorCode === 'invalid_json' ||
+		rawMessage === API_FETCH_INVALID_JSON_MESSAGE;
+	const message = isInvalidJsonResponse
+		? BLOCK_REST_INVALID_JSON_MESSAGE
+		: rawMessage;
 	const requestMeta = normalizeRequestMeta( error?.data?.requestMeta );
 	const wrappedMessage =
 		normalizeStringMessage(
@@ -768,12 +781,20 @@ function buildBlockRecommendationFailureDiagnostics(
 		detailLines.push( `Transport detail: ${ wrappedMessage }` );
 	}
 
+	if ( isInvalidJsonResponse ) {
+		detailLines.push( BLOCK_REST_INVALID_JSON_DETAIL );
+
+		if ( rawMessage && rawMessage !== message ) {
+			detailLines.push( `Original parser message: ${ rawMessage }` );
+		}
+	}
+
 	return {
 		type: 'failure',
 		title: `Block request failed: ${ message }`,
 		detailLines,
 		requestMeta,
-		errorCode: getApiErrorCode( error ),
+		errorCode,
 		errorMessage: message,
 		requestToken,
 		timestamp: new Date().toISOString(),
@@ -1242,7 +1263,7 @@ const actions = {
 						actions.setBlockRequestState(
 							requestClientId,
 							'error',
-							err?.message || 'Request failed.',
+							diagnostics.errorMessage || 'Request failed.',
 							requestToken
 						)
 					);
@@ -1375,6 +1396,10 @@ const actions = {
 		liveRequestInput = null
 	) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
+			if ( select.getBlockApplyStatus?.( clientId ) === 'applying' ) {
+				return false;
+			}
+
 			const scope = getCurrentActivityScope( registry );
 			const applyErrorMessage =
 				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.';
@@ -1412,6 +1437,8 @@ const actions = {
 				return false;
 			}
 
+			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
+
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface: 'block',
@@ -1435,8 +1462,6 @@ const actions = {
 			if ( ! resolvedFreshness.ok ) {
 				return false;
 			}
-
-			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
 
 			const storedRecommendationPayload =
 				select.getBlockRecommendations( clientId ) || null;
@@ -1567,6 +1592,10 @@ const actions = {
 		liveRequestInput = null
 	) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
+			if ( select.getBlockApplyStatus?.( clientId ) === 'applying' ) {
+				return false;
+			}
+
 			const scope = getCurrentActivityScope( registry );
 
 			syncStoreActivitySession( localDispatch, select, scope );
@@ -1599,6 +1628,8 @@ const actions = {
 			if ( staleApplyResult ) {
 				return false;
 			}
+
+			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
 
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
@@ -1660,8 +1691,6 @@ const actions = {
 				blockEditorSelect.getBlocks?.() || [],
 				targetClientId
 			);
-
-			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
 
 			const result = {
 				...applyBlockStructuralSuggestionOperations( {
@@ -2725,16 +2754,22 @@ function reducer( state = DEFAULT_STATE, action ) {
 				return state;
 			}
 
+			let nextNavigationReviewStaleReason =
+				state.navigationReviewStaleReason;
+
+			if ( action.status === 'stale' ) {
+				nextNavigationReviewStaleReason = action.staleReason ?? null;
+			} else if ( action.status === 'fresh' ) {
+				nextNavigationReviewStaleReason = null;
+			}
+
 			return {
 				...state,
 				navigationReviewRequestToken:
 					action.requestToken ?? state.navigationReviewRequestToken,
 				navigationReviewFreshnessStatus:
 					action.status ?? state.navigationReviewFreshnessStatus,
-				navigationReviewStaleReason:
-					action.status === 'stale'
-						? action.staleReason ?? null
-						: null,
+				navigationReviewStaleReason: nextNavigationReviewStaleReason,
 			};
 		case 'CLEAR_NAVIGATION_ERROR':
 			return {

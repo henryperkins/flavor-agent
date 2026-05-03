@@ -495,7 +495,13 @@ final class PatternAbilities {
 			$candidates
 		);
 
-		$ranked = ResponsesClient::rank( self::ranking_system_prompt(), $llm_input );
+		$ranked = ResponsesClient::rank(
+			self::ranking_system_prompt(),
+			$llm_input,
+			null,
+			null,
+			'flavor_agent_pattern'
+		);
 		if ( is_wp_error( $ranked ) ) {
 			return $ranked;
 		}

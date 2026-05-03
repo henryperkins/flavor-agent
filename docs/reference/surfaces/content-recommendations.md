@@ -32,7 +32,7 @@ Do not ship:
 
 ## Next Steps
 
-- [ ] Tighten copy so users understand results are editorial guidance or
+- [x] Tighten copy so users understand results are editorial guidance or
       generated text, not automatic patches.
 - [ ] Add or verify a clear manual handoff path for draft/edit output.
 - [ ] Keep unsupported post types hidden or clearly unavailable.

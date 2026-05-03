@@ -748,14 +748,21 @@ function reduceExecutableSurface( state, action, def ) {
 			return state;
 		}
 
+		let nextReviewStaleReason = state[ def.reviewStaleReasonKey ];
+
+		if ( action.status === 'stale' ) {
+			nextReviewStaleReason = action.staleReason ?? null;
+		} else if ( action.status === 'fresh' ) {
+			nextReviewStaleReason = null;
+		}
+
 		return {
 			...state,
 			[ def.reviewRequestTokenKey ]:
 				action.requestToken ?? state[ def.reviewRequestTokenKey ],
 			[ def.reviewFreshnessStatusKey ]:
 				action.status ?? state[ def.reviewFreshnessStatusKey ],
-			[ def.reviewStaleReasonKey ]:
-				action.status === 'stale' ? action.staleReason ?? null : null,
+			[ def.reviewStaleReasonKey ]: nextReviewStaleReason,
 		};
 	}
 

@@ -79,6 +79,51 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
+	test( 'buildSafeAttributeUpdates preserves non-style className tokens when applying a style variation', () => {
+		const currentAttributes = {
+			className: 'my-custom-class is-style-default another-class',
+		};
+		const suggestedUpdates = {
+			className: 'is-style-outline',
+		};
+
+		expect(
+			buildSafeAttributeUpdates( currentAttributes, suggestedUpdates )
+		).toEqual( {
+			className: 'my-custom-class another-class is-style-outline',
+		} );
+	} );
+
+	test( 'buildSafeAttributeUpdates merges style variation onto a className with no existing style token', () => {
+		const currentAttributes = {
+			className: 'my-custom-class',
+		};
+		const suggestedUpdates = {
+			className: 'is-style-outline',
+		};
+
+		expect(
+			buildSafeAttributeUpdates( currentAttributes, suggestedUpdates )
+		).toEqual( {
+			className: 'my-custom-class is-style-outline',
+		} );
+	} );
+
+	test( 'buildSafeAttributeUpdates de-duplicates style variation tokens already present', () => {
+		const currentAttributes = {
+			className: 'is-style-outline my-custom-class',
+		};
+		const suggestedUpdates = {
+			className: 'is-style-outline',
+		};
+
+		expect(
+			buildSafeAttributeUpdates( currentAttributes, suggestedUpdates )
+		).toEqual( {
+			className: 'my-custom-class is-style-outline',
+		} );
+	} );
+
 	test( 'buildSafeAttributeUpdates strips custom CSS channels before merging', () => {
 		const currentAttributes = {
 			style: {
@@ -670,6 +715,7 @@ describe( 'update helpers', () => {
 		expect(
 			getBlockSuggestionExecutionInfo(
 				{
+					panel: 'dimensions',
 					attributeUpdates: {
 						style: {
 							spacing: {
@@ -1023,6 +1069,7 @@ describe( 'update helpers', () => {
 			settings: [
 				{
 					label: 'Use accent background',
+					panel: 'color',
 					type: 'attribute_change',
 					currentValue: 'base',
 					suggestedValue: 'accent',
@@ -1034,6 +1081,7 @@ describe( 'update helpers', () => {
 			styles: [
 				{
 					label: 'Outline',
+					panel: 'color',
 					type: 'style_variation',
 					isCurrentStyle: false,
 					isRecommended: true,
@@ -1047,9 +1095,20 @@ describe( 'update helpers', () => {
 		};
 
 		expect(
-			sanitizeRecommendationsForContext( recommendations, {
-				isInsideContentOnly: false,
-			} )
+			sanitizeRecommendationsForContext(
+				recommendations,
+				{
+					isInsideContentOnly: false,
+				},
+				{
+					allowedPanels: [ 'color' ],
+					styleSupportPaths: [ 'color.background' ],
+					registeredStyles: [ 'outline' ],
+					presetSlugs: {
+						color: [ 'accent' ],
+					},
+				}
+			)
 		).toEqual( {
 			...recommendations,
 			block: [],
@@ -1169,6 +1228,208 @@ describe( 'update helpers', () => {
 				executionContract
 			)
 		).toEqual( recommendations );
+	} );
+
+	test( 'sanitizeRecommendationsForContext drops block attribute changes with empty panel when panel mapping is known', () => {
+		const recommendations = {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Set wide alignment',
+					panel: '',
+					type: 'attribute_change',
+					attributeUpdates: {
+						align: 'wide',
+					},
+				},
+			],
+			explanation: 'Panel-less executable block updates should drop.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext(
+				recommendations,
+				{},
+				{
+					panelMappingKnown: true,
+					allowedPanels: [ 'layout' ],
+					configAttributeKeys: [ 'align' ],
+				}
+			)
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: 'Panel-less executable block updates should drop.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext preserves block attribute changes with valid panel when panel mapping is known', () => {
+		const recommendations = {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Set wide alignment',
+					panel: 'layout',
+					type: 'attribute_change',
+					attributeUpdates: {
+						align: 'wide',
+					},
+				},
+			],
+			explanation:
+				'Panel-backed executable block updates should survive.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext(
+				recommendations,
+				{},
+				{
+					panelMappingKnown: true,
+					allowedPanels: [ 'layout' ],
+					configAttributeKeys: [ 'align' ],
+				}
+			)
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [
+				expect.objectContaining( {
+					label: 'Set wide alignment',
+					panel: 'layout',
+					type: 'attribute_change',
+					attributeUpdates: {
+						align: 'wide',
+					},
+					eligibility: expect.objectContaining( {
+						blockers: [],
+						source: ACTIONABILITY_SOURCE_VALIDATOR,
+						tier: ACTIONABILITY_TIER_INLINE_SAFE,
+					} ),
+				} ),
+			],
+			explanation:
+				'Panel-backed executable block updates should survive.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext preserves registered style variations with empty panel when panels are empty', () => {
+		expect(
+			sanitizeRecommendationsForContext(
+				{
+					settings: [],
+					styles: [],
+					block: [
+						{
+							label: 'Use outline style',
+							panel: '',
+							type: 'style_variation',
+							attributeUpdates: {
+								className: 'is-style-outline',
+							},
+						},
+					],
+					explanation:
+						'Registered style variations can survive without panels.',
+				},
+				{},
+				{
+					hasExplicitlyEmptyPanels: true,
+					allowedPanels: [],
+					registeredStyles: [ 'outline' ],
+				}
+			)
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [
+				expect.objectContaining( {
+					label: 'Use outline style',
+					panel: '',
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-outline',
+					},
+					eligibility: expect.objectContaining( {
+						blockers: [],
+						tier: ACTIONABILITY_TIER_INLINE_SAFE,
+					} ),
+				} ),
+			],
+			explanation:
+				'Registered style variations can survive without panels.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext drops registered style variations with invalid non-empty panel', () => {
+		expect(
+			sanitizeRecommendationsForContext(
+				{
+					settings: [],
+					styles: [],
+					block: [
+						{
+							label: 'Use outline style',
+							panel: 'layout',
+							type: 'style_variation',
+							attributeUpdates: {
+								className: 'is-style-outline',
+							},
+						},
+					],
+					explanation: 'Invalid provided panels should still drop.',
+				},
+				{},
+				{
+					panelMappingKnown: true,
+					allowedPanels: [ 'color' ],
+					registeredStyles: [ 'outline' ],
+				}
+			)
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: 'Invalid provided panels should still drop.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext preserves advisory structural suggestions with empty panel', () => {
+		const result = sanitizeRecommendationsForContext(
+			{
+				settings: [],
+				styles: [],
+				block: [
+					{
+						label: 'Wrap this block in a pattern',
+						panel: '',
+						type: 'structural_recommendation',
+						attributeUpdates: {},
+					},
+				],
+				explanation: 'Advisory structural ideas can stay panel-less.',
+			},
+			{},
+			{
+				panelMappingKnown: true,
+				allowedPanels: [ 'layout' ],
+			}
+		);
+
+		expect( result.block ).toEqual( [
+			expect.objectContaining( {
+				label: 'Wrap this block in a pattern',
+				panel: '',
+				type: 'structural_recommendation',
+				attributeUpdates: [],
+				eligibility: expect.objectContaining( {
+					tier: ACTIONABILITY_TIER_ADVISORY,
+				} ),
+			} ),
+		] );
 	} );
 
 	test( 'getSuggestionAttributeUpdates preserves style updates when panel mapping is unknown', () => {
@@ -1931,6 +2192,127 @@ describe( 'update helpers', () => {
 			isAdvisoryOnly: false,
 			isExecutable: false,
 		} );
+	} );
+
+	test( 'getBlockSuggestionExecutionInfo rejects panel-less block attribute changes when panel mapping is known', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					panel: '',
+					type: 'attribute_change',
+					attributeUpdates: {
+						align: 'wide',
+					},
+				},
+				{},
+				{
+					panelMappingKnown: true,
+					allowedPanels: [ 'layout' ],
+					configAttributeKeys: [ 'align' ],
+				}
+			)
+		).toEqual( {
+			allowedUpdates: {},
+			actionability: expect.objectContaining( {
+				source: ACTIONABILITY_SOURCE_VALIDATOR,
+				tier: ACTIONABILITY_TIER_ADVISORY,
+			} ),
+			eligibility: expect.objectContaining( {
+				source: ACTIONABILITY_SOURCE_VALIDATOR,
+				tier: ACTIONABILITY_TIER_ADVISORY,
+			} ),
+			isAdvisory: true,
+			isAdvisoryOnly: false,
+			isExecutable: false,
+		} );
+	} );
+
+	test( 'getBlockSuggestionExecutionInfo treats style variations with extra classes as non-executable', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-outline arbitrary-extra-class',
+					},
+				},
+				{},
+				{
+					registeredStyles: [ 'outline' ],
+				}
+			)
+		).toEqual(
+			expect.objectContaining( {
+				allowedUpdates: {},
+				isAdvisory: true,
+				isExecutable: false,
+			} )
+		);
+	} );
+
+	test( 'getBlockSuggestionExecutionInfo treats style variations with unknown style tokens as non-executable', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-outline is-style-fancy',
+					},
+				},
+				{},
+				{
+					registeredStyles: [ 'outline' ],
+				}
+			)
+		).toEqual(
+			expect.objectContaining( {
+				allowedUpdates: {},
+				isAdvisory: true,
+				isExecutable: false,
+			} )
+		);
+	} );
+
+	test( 'getBlockSuggestionExecutionInfo canonicalizes duplicate registered style variation classes', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-outline is-style-outline',
+					},
+				},
+				{},
+				{
+					registeredStyles: [ 'outline' ],
+				}
+			).allowedUpdates
+		).toEqual( {
+			className: 'is-style-outline',
+		} );
+	} );
+
+	test( 'getBlockSuggestionExecutionInfo treats style variations with two distinct registered classes as non-executable', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-outline is-style-rounded',
+					},
+				},
+				{},
+				{
+					registeredStyles: [ 'outline', 'rounded' ],
+				}
+			)
+		).toEqual(
+			expect.objectContaining( {
+				allowedUpdates: {},
+				isAdvisory: true,
+				isExecutable: false,
+			} )
+		);
 	} );
 
 	test( 'buildUndoAttributeUpdates restores removed keys and previous nested objects', () => {

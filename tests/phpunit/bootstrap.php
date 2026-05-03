@@ -37,6 +37,14 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $last_ai_client_prompt = [];
 
+		/** @var array<int, array{prompt: string, options: array<string, mixed>}> */
+		public static array $ai_service_calls = [];
+
+		public static string $wpai_formatted_guidelines = '';
+
+		/** @var array<int, array{categories: array<int, string>, blockName: string|null}> */
+		public static array $wpai_guideline_calls = [];
+
 		public static array $last_http_request_args = [];
 
 		public static array $options = [];
@@ -295,6 +303,9 @@ namespace FlavorAgent\Tests\Support {
 			self::$remote_post_responses       = [];
 			self::$remote_get_responses        = [];
 			self::$last_ai_client_prompt       = [];
+			self::$ai_service_calls            = [];
+			self::$wpai_formatted_guidelines   = '';
+			self::$wpai_guideline_calls        = [];
 			self::$last_http_request_args      = [];
 			self::$options                     = [];
 			self::$connectors                  = [];
@@ -372,6 +383,91 @@ namespace WordPress\AiClient\Providers\Models\DTO {
 			public function toArray(): array {
 				return $this->config;
 			}
+		}
+	}
+}
+
+namespace WordPress\AI {
+
+	use FlavorAgent\Tests\Support\WordPressTestState;
+
+	final class FakeAIService {
+
+		/**
+		 * @param array<string, mixed> $options
+		 */
+		public function create_textgen_prompt( ?string $prompt = null, array $options = [] ): \WP_AI_Client_Prompt_Builder {
+			WordPressTestState::$ai_service_calls[] = [
+				'prompt'  => is_string( $prompt ) ? $prompt : '',
+				'options' => $options,
+			];
+
+			$builder = \wp_ai_client_prompt( $prompt );
+
+			if (
+				isset( $options['system_instruction'] )
+				&& is_callable( [ $builder, 'using_system_instruction' ] )
+			) {
+				$builder = $builder->using_system_instruction( (string) $options['system_instruction'] );
+			}
+
+			return $builder;
+		}
+	}
+
+	if ( ! function_exists( 'WordPress\\AI\\get_ai_service' ) ) {
+		function get_ai_service(): FakeAIService {
+			return new FakeAIService();
+		}
+	}
+
+	if ( ! function_exists( 'WordPress\\AI\\format_guidelines_for_prompt' ) ) {
+		function format_guidelines_for_prompt( array $categories, ?string $block_name = null ): string {
+			WordPressTestState::$wpai_guideline_calls[] = [
+				'categories' => array_values( array_map( 'strval', $categories ) ),
+				'blockName'  => $block_name,
+			];
+
+			return WordPressTestState::$wpai_formatted_guidelines;
+		}
+	}
+
+	if ( ! function_exists( 'WordPress\\AI\\has_ai_credentials' ) ) {
+		function has_ai_credentials(): bool {
+			$connectors      = \function_exists( 'wp_get_connectors' ) ? \wp_get_connectors() : [];
+			$has_credentials = false;
+
+			foreach ( $connectors as $connector_data ) {
+				if ( ! is_array( $connector_data ) || 'ai_provider' !== (string) ( $connector_data['type'] ?? '' ) ) {
+					continue;
+				}
+
+				$auth         = is_array( $connector_data['authentication'] ?? null ) ? $connector_data['authentication'] : [];
+				$setting_name = is_string( $auth['setting_name'] ?? null ) ? $auth['setting_name'] : '';
+
+				if ( '' !== $setting_name && '' !== (string) \get_option( $setting_name, '' ) ) {
+					$has_credentials = true;
+					break;
+				}
+			}
+
+			return (bool) \apply_filters( 'wpai_has_ai_credentials', $has_credentials, $connectors );
+		}
+	}
+
+	if ( ! function_exists( 'WordPress\\AI\\has_valid_ai_credentials' ) ) {
+		function has_valid_ai_credentials(): bool {
+			if ( ! has_ai_credentials() ) {
+				return false;
+			}
+
+			$valid = \apply_filters( 'wpai_pre_has_valid_credentials_check', null );
+
+			if ( null !== $valid ) {
+				return (bool) $valid;
+			}
+
+			return \wp_ai_client_prompt( 'Test' )->is_supported_for_text_generation();
 		}
 	}
 }

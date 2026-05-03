@@ -117,9 +117,17 @@ final class BlockTypeIntrospector {
 			return null;
 		}
 
+		preg_match_all( '/\bis-style-([a-z0-9_-]+)\b/i', $class_name, $matches );
+		$active_styles = array_fill_keys(
+			array_map( 'sanitize_key', $matches[1] ?? [] ),
+			true
+		);
+
 		foreach ( $styles as $style ) {
-			if ( str_contains( $class_name, 'is-style-' . ( $style['name'] ?? '' ) ) ) {
-				return $style['name'];
+			$style_name = is_string( $style['name'] ?? null ) ? sanitize_key( $style['name'] ) : '';
+
+			if ( '' !== $style_name && isset( $active_styles[ $style_name ] ) ) {
+				return $style_name;
 			}
 		}
 

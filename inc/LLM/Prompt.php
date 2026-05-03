@@ -91,7 +91,7 @@ Each item in block is an object:
   "description": "Why this helps (one sentence)",
 	"type": "attribute_change|style_variation|structural_recommendation|pattern_replacement or empty string",
 	"attributeUpdates": "{\"attributeName\":\"value\"}",
-	"panel": "Inspector panel for executable block items; use empty string for advisory structural/pattern ideas",
+	"panel": "Inspector panel for executable block items; use empty string for advisory structural/pattern ideas and style_variation items when no mapped panel applies",
 	"operations": [],
   "currentValue": "Current value display label or empty string",
   "suggestedValue": "Suggested value display label or empty string",
@@ -107,12 +107,13 @@ Rules:
 - "settings" array: suggestions for the Settings tab (layout, alignment, position, advanced, bindings, list, general config).
 - "styles" array: suggestions for the Appearance tab (color, filter, typography, dimensions, border, shadow, background, style variations).
 - "block" array: block-level suggestions (style variation changes, structural recommendations).
-- Only suggest changes for panels listed in the block's inspectorPanels.
+- Only suggest executable settings/styles suggestions and executable block attribute_change suggestions for panels listed in the block's inspectorPanels.
+- Executable block attribute_change items must include a non-empty panel listed in inspectorPanels when panel mapping is known.
 - If inspectorPanels is an empty object or array, treat that as an explicit signal that no mapped Inspector panels are available — not that the field was omitted. Do not say the panels were not provided.
-- You may still suggest a registered style variation as a block-level "style_variation" item when styles are provided and one is clearly beneficial, even if inspectorPanels is empty.
+- You may still suggest a registered style variation as a block-level "style_variation" item when styles are provided and one is clearly beneficial, even if inspectorPanels is empty; set panel to an empty string when no specific mapped panel applies.
 - When a block has little or no direct Inspector surface, you may use the block array for advisory suggestions about parent containers, structural composition, or replacing the block with a more suitable pattern.
 - Structural_recommendation and pattern_replacement block items are advisory-only unless they include exactly one operation from the allowed catalog shown in the prompt. Even then, the operation is only a proposal; the plugin validator decides whether it becomes review-safe metadata. Omit panel for those items unless it materially clarifies the idea.
-- Do not include attributeUpdates on structural_recommendation or pattern_replacement items. If a local selected-block attribute update is also useful, emit it as a separate attribute_change item.
+- For structural_recommendation or pattern_replacement items, set attributeUpdates to "{}". If a local selected-block attribute update is also useful, emit it as a separate attribute_change item.
 - Advisory block suggestions must not invent executable attributeUpdates for ancestor blocks, wrappers, or replacement patterns. Only include attributeUpdates when the selected block's own local attributes can be changed safely.
 - If you need to suggest both a local selected-block mutation and a broader structural idea, emit two separate suggestions instead of combining them into one item.
 - attributeUpdates must be a JSON object string, not a nested object. Use "{}" when there are no selected-block attribute changes.
@@ -121,7 +122,7 @@ Rules:
 - Do not invent proposedOperations or rejectedOperations. The plugin derives them after validation.
 - When allowed block pattern actions are provided, you may propose at most one operation from the catalog.
 - Use insert_pattern only with position insert_before or insert_after.
-- Use replace_block_with_pattern only when the allowed pattern lists replace.
+- Use replace_block_with_pattern only when the allowed pattern lists replace and set position to an empty string.
 - Never treat operations as authorization; the plugin validator may reject them.
 - When structural actions are not described in the prompt, return operations: [].
 - Use "list" for List View tab suggestions.
@@ -616,7 +617,7 @@ SYSTEM;
 			$lines[] = 'Allowed patterns: ' . wp_json_encode( $patterns );
 			$lines[] = 'Catalog:';
 			$lines[] = '- insert_pattern: patternName, targetClientId, position insert_before|insert_after.';
-			$lines[] = '- replace_block_with_pattern: patternName, targetClientId.';
+			$lines[] = '- replace_block_with_pattern: patternName, targetClientId, position empty string.';
 			$lines[] = 'Return at most one operation per block suggestion.';
 			$lines[] = 'Use only targetClientId and patternName values shown above.';
 		}
@@ -805,27 +806,151 @@ SYSTEM;
 	 * Parse the LLM's JSON response into the expected payload shape.
 	 */
 	public static function parse_response( string $raw ): array|\WP_Error {
-		$cleaned = preg_replace( '/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim( $raw ) );
+		$cleaned = self::clean_response_text( $raw );
+		$data    = self::decode_response_json( $cleaned, $raw );
 
-		$data = json_decode( $cleaned, true );
+		if ( is_wp_error( $data ) ) {
+			return $data;
+		}
 
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
+		if ( ! is_array( $data ) ) {
 			return new \WP_Error(
 				'parse_error',
-				'Failed to parse LLM response as JSON: ' . json_last_error_msg(),
+				'Block recommendation response must be a JSON object.',
 				[
-					'status' => 500,
+					'status' => 502,
 					'raw'    => substr( $raw, 0, 500 ),
 				]
 			);
 		}
 
+		$block_suggestions = self::normalize_response_suggestion_list( $data['block'] ?? null, 'block' );
+
+		if ( [] === $block_suggestions ) {
+			$block_suggestions = self::normalize_response_suggestion_list( $data['suggestions'] ?? null, 'block' );
+		}
+
+		$explanation = $data['explanation'] ?? '';
+		$explanation = is_scalar( $explanation ) ? sanitize_text_field( (string) $explanation ) : '';
+
 		return [
-			'settings'    => self::validate_suggestions( $data['settings'] ?? [], 'settings' ),
-			'styles'      => self::validate_suggestions( $data['styles'] ?? [], 'styles' ),
-			'block'       => self::validate_suggestions( $data['block'] ?? [], 'block' ),
-			'explanation' => sanitize_text_field( $data['explanation'] ?? '' ),
+			'settings'    => self::validate_suggestions(
+				self::normalize_response_suggestion_list( $data['settings'] ?? null, 'settings' ),
+				'settings'
+			),
+			'styles'      => self::validate_suggestions(
+				self::normalize_response_suggestion_list( $data['styles'] ?? null, 'styles' ),
+				'styles'
+			),
+			'block'       => self::validate_suggestions( $block_suggestions, 'block' ),
+			'explanation' => $explanation,
 		];
+	}
+
+	private static function clean_response_text( string $raw ): string {
+		$cleaned = preg_replace( '/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim( $raw ) );
+
+		return is_string( $cleaned ) ? trim( $cleaned ) : trim( $raw );
+	}
+
+	private static function decode_response_json( string $cleaned, string $raw ): mixed {
+		$data = json_decode( $cleaned, true );
+
+		if ( json_last_error() === JSON_ERROR_NONE ) {
+			return $data;
+		}
+
+		$json_object = self::extract_json_object( $cleaned );
+
+		if ( null !== $json_object ) {
+			$data = json_decode( $json_object, true );
+
+			if ( json_last_error() === JSON_ERROR_NONE ) {
+				return $data;
+			}
+		}
+
+		return new \WP_Error(
+			'parse_error',
+			'Failed to parse LLM response as JSON: ' . json_last_error_msg(),
+			[
+				'status' => 502,
+				'raw'    => substr( $raw, 0, 500 ),
+			]
+		);
+	}
+
+	private static function extract_json_object( string $text ): ?string {
+		$start = strpos( $text, '{' );
+		$end   = strrpos( $text, '}' );
+
+		if ( false === $start || false === $end || $end <= $start ) {
+			return null;
+		}
+
+		return substr( $text, $start, $end - $start + 1 );
+	}
+
+	private static function normalize_response_suggestion_list( mixed $value, string $group ): array {
+		if ( is_array( $value ) ) {
+			if ( self::is_list_array( $value ) ) {
+				return $value;
+			}
+
+			return array_key_exists( 'label', $value ) || array_key_exists( 'description', $value )
+				? [ $value ]
+				: [];
+		}
+
+		if ( 'block' === $group && is_string( $value ) ) {
+			$suggestion = self::build_plain_text_advisory_suggestion( $value );
+
+			return null !== $suggestion ? [ $suggestion ] : [];
+		}
+
+		return [];
+	}
+
+	private static function build_plain_text_advisory_suggestion( string $text ): ?array {
+		$description = self::normalize_plain_text_recommendation( $text );
+
+		if ( '' === $description ) {
+			return null;
+		}
+
+		return [
+			'label'            => self::plain_text_recommendation_summary( $description ),
+			'description'      => $description,
+			'type'             => 'structural_recommendation',
+			'attributeUpdates' => '{}',
+			'operations'       => [],
+			'confidence'       => 0.35,
+		];
+	}
+
+	private static function normalize_plain_text_recommendation( string $text ): string {
+		$without_tags = wp_strip_all_tags( $text );
+		$collapsed    = preg_replace( '/\s+/', ' ', $without_tags );
+		$normalized   = is_string( $collapsed ) ? trim( $collapsed ) : trim( $without_tags );
+
+		if ( '' === $normalized || ! preg_match( '/[A-Za-z]/', $normalized ) ) {
+			return '';
+		}
+
+		return $normalized;
+	}
+
+	private static function plain_text_recommendation_summary( string $text ): string {
+		$sentences = preg_split( '/(?<=[.!?])\s+/', $text );
+		$summary   = is_array( $sentences ) && is_string( $sentences[0] ?? null )
+			? trim( $sentences[0] )
+			: trim( $text );
+
+		if ( strlen( $summary ) > 96 ) {
+			$summary = rtrim( substr( $summary, 0, 93 ) ) . '...';
+		}
+
+		return $summary;
 	}
 
 	public static function enforce_block_context_rules( array $payload, array $block, array $execution_contract = [], array $block_operation_context = [] ): array {
@@ -1014,23 +1139,31 @@ SYSTEM;
 	}
 
 	private static function filter_suggestion_for_execution_contract( array $suggestion, string $group, array $execution_contract ): ?array {
-		$is_advisory_only      = 'block' === $group && self::is_advisory_only_block_type( $suggestion['type'] ?? null );
-		$allowed_panels        = self::get_allowed_panel_lookup( $execution_contract );
-		$has_empty_panels      = ! empty( $execution_contract['hasExplicitlyEmptyPanels'] );
-		$should_enforce_panels = $has_empty_panels
+		$is_advisory_only            = 'block' === $group && self::is_advisory_only_block_type( $suggestion['type'] ?? null );
+		$allowed_panels              = self::get_allowed_panel_lookup( $execution_contract );
+		$has_empty_panels            = ! empty( $execution_contract['hasExplicitlyEmptyPanels'] );
+		$should_enforce_panels       = $has_empty_panels
 			|| [] !== $allowed_panels
 			|| self::execution_contract_knows_panel_mapping( $execution_contract );
-		$panel                 = array_key_exists( 'panel', $suggestion )
-			? self::normalize_panel_key( $suggestion['panel'] ?? 'general' )
+		$should_enforce_block_panels = $has_empty_panels
+			|| self::execution_contract_knows_panel_mapping( $execution_contract );
+		$panel                       = array_key_exists( 'panel', $suggestion )
+			? self::normalize_optional_panel_key( $suggestion['panel'] ?? '' )
 			: '';
-		$is_style_variation    = ( $suggestion['type'] ?? null ) === 'style_variation';
+		$is_style_variation          = ( $suggestion['type'] ?? null ) === 'style_variation';
 
 		if ( 'settings' === $group || 'styles' === $group ) {
 			if ( $should_enforce_panels && ( '' === $panel || ! isset( $allowed_panels[ $panel ] ) ) ) {
 				return null;
 			}
-		} elseif ( 'block' === $group && ! $is_advisory_only && $should_enforce_panels && '' !== $panel && ! isset( $allowed_panels[ $panel ] ) ) {
-			return null;
+		} elseif ( 'block' === $group && ! $is_advisory_only && $should_enforce_block_panels ) {
+			if ( $is_style_variation ) {
+				if ( '' !== $panel && ! isset( $allowed_panels[ $panel ] ) ) {
+					return null;
+				}
+			} elseif ( '' === $panel || ! isset( $allowed_panels[ $panel ] ) ) {
+				return null;
+			}
 		}
 
 		if ( 'block' === $group && ! $is_advisory_only && $has_empty_panels && ! $is_style_variation ) {
@@ -1075,7 +1208,7 @@ SYSTEM;
 					break;
 				case 'className':
 					$validated = $allow_class_name && is_string( $value )
-						? $value
+						? self::normalize_registered_style_variation_class_name( $value, $execution_contract )
 						: null;
 					break;
 				case 'metadata':
@@ -1741,7 +1874,60 @@ SYSTEM;
 	}
 
 	private static function is_valid_style_variation_suggestion( array $suggestion, array $execution_contract ): bool {
-		$registered_styles = array_fill_keys(
+		if ( [] === self::get_registered_style_variation_lookup( $execution_contract ) ) {
+			return false;
+		}
+
+		$class_name = is_string( $suggestion['attributeUpdates']['className'] ?? null )
+			? (string) $suggestion['attributeUpdates']['className']
+			: '';
+
+		return null !== self::normalize_registered_style_variation_class_name( $class_name, $execution_contract );
+	}
+
+	private static function normalize_registered_style_variation_class_name( string $class_name, array $execution_contract ): ?string {
+		$registered_styles = self::get_registered_style_variation_lookup( $execution_contract );
+		$tokens            = preg_split( '/\s+/', trim( $class_name ) );
+
+		if ( ! is_array( $tokens ) ) {
+			$tokens = [];
+		}
+
+		$style_classes = [];
+
+		if ( [] === $registered_styles || [] === $tokens ) {
+			return null;
+		}
+
+		foreach ( $tokens as $token ) {
+			if ( ! is_string( $token ) || '' === $token ) {
+				continue;
+			}
+
+			if ( ! preg_match( '/^is-style-([a-z0-9_-]+)$/i', $token, $matches ) ) {
+				return null;
+			}
+
+			$style_name = sanitize_key( $matches[1] );
+
+			if ( ! isset( $registered_styles[ $style_name ] ) ) {
+				return null;
+			}
+
+			$style_classes[] = 'is-style-' . $style_name;
+		}
+
+		$style_classes = array_values( array_unique( $style_classes ) );
+
+		if ( count( $style_classes ) !== 1 ) {
+			return null;
+		}
+
+		return $style_classes[0];
+	}
+
+	private static function get_registered_style_variation_lookup( array $execution_contract ): array {
+		return array_fill_keys(
 			array_map(
 				'sanitize_key',
 				array_filter(
@@ -1751,26 +1937,6 @@ SYSTEM;
 			),
 			true
 		);
-
-		if ( [] === $registered_styles ) {
-			return false;
-		}
-
-		$class_name = is_string( $suggestion['attributeUpdates']['className'] ?? null )
-			? (string) $suggestion['attributeUpdates']['className']
-			: '';
-
-		if ( '' === $class_name ) {
-			return false;
-		}
-
-		foreach ( self::extract_style_variation_names( $class_name ) as $style_name ) {
-			if ( isset( $registered_styles[ $style_name ] ) ) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	/**
@@ -2169,7 +2335,11 @@ SYSTEM;
 				'description' => sanitize_text_field( $s['description'] ?? '' ),
 			];
 
-			if ( 'block' !== $group || array_key_exists( 'panel', $s ) ) {
+			if ( 'block' === $group ) {
+				if ( array_key_exists( 'panel', $s ) ) {
+					$normalized['panel'] = self::normalize_optional_panel_key( $s['panel'] ?? '' );
+				}
+			} else {
 				$normalized['panel'] = self::normalize_panel_key( $s['panel'] ?? 'general' );
 			}
 
@@ -2724,6 +2894,14 @@ SYSTEM;
 			'listview', 'list-view' => 'list',
 			default => $normalized !== '' ? $normalized : 'general',
 		};
+	}
+
+	private static function normalize_optional_panel_key( mixed $panel ): string {
+		if ( is_string( $panel ) && '' === trim( $panel ) ) {
+			return '';
+		}
+
+		return self::normalize_panel_key( $panel );
 	}
 
 	private static function sanitize_attribute_update_key( mixed $key ): ?string {

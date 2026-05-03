@@ -188,4 +188,42 @@ describe( 'navigation request state', () => {
 			selectors.getNavigationReviewStaleReason( staleCompletion, 'nav-1' )
 		).toBeNull();
 	} );
+
+	test( 'navigation idle review freshness does not clear existing server-stale state', () => {
+		let state = reducer(
+			undefined,
+			actions.setNavigationRecommendations(
+				'nav-1',
+				{
+					suggestions: [ { label: 'Group utility links' } ],
+					explanation: 'Keep utility items together.',
+				},
+				'Prompt',
+				1,
+				'navigation-signature',
+				'review-navigation'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setNavigationReviewFreshnessState(
+				'stale',
+				2,
+				'server-review'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setNavigationReviewFreshnessState( 'idle', 3 )
+		);
+
+		expect(
+			selectors.getNavigationReviewFreshnessStatus( state, 'nav-1' )
+		).toBe( 'idle' );
+		expect(
+			selectors.getNavigationReviewStaleReason( state, 'nav-1' )
+		).toBe( 'server-review' );
+	} );
 } );

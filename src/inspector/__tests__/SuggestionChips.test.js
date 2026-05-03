@@ -270,6 +270,46 @@ describe( 'SuggestionChips', () => {
 		expect( mockApplySuggestion ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	test( 'suppresses duplicate clicks while apply is pending', async () => {
+		let resolveApply;
+		mockApplySuggestion.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolveApply = resolve;
+			} )
+		);
+
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					suggestions={ [
+						{
+							label: 'Use accent color',
+							panel: 'color',
+						},
+					] }
+				/>
+			);
+		} );
+
+		const chip = getContainer().querySelector( 'button' );
+
+		await act( async () => {
+			chip.click();
+			chip.click();
+			await Promise.resolve();
+		} );
+
+		expect( chip.disabled ).toBe( true );
+		expect( mockApplySuggestion ).toHaveBeenCalledTimes( 1 );
+
+		await act( async () => {
+			resolveApply( true );
+			await Promise.resolve();
+		} );
+	} );
+
 	test( 'keeps apply feedback visible across rerenders with a cloned suggestion array', async () => {
 		const initialSuggestions = [
 			{

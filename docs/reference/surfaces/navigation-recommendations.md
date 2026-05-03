@@ -34,7 +34,7 @@ Do not ship:
 
 ## Next Steps
 
-- [ ] Keep navigation copy advisory and avoid apply-like verbs.
+- [x] Keep navigation copy advisory and avoid apply-like verbs.
 - [ ] Confirm stale menu or overlay drift keeps previous advice visible but
   non-executable.
 - [ ] Keep embedded navigation visually subordinate to the main block
@@ -46,4 +46,3 @@ Do not ship:
 ## Verification Gate
 
 - [ ] Re-run navigation smoke coverage in the Playground harness.
-

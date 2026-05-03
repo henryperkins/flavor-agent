@@ -143,6 +143,46 @@ final class ContentAbilitiesTest extends TestCase {
 		$this->assertStringNotContainsString( '<em>', $prompt );
 	}
 
+	public function test_recommend_content_applies_wordpress_ai_content_normalization_filters(): void {
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'edit',
+				'title'   => 'Policy filtered',
+				'summary' => '',
+				'content' => 'Filtered copy.',
+			]
+		);
+
+		add_filter(
+			'wpai_pre_normalize_content',
+			static fn ( string $content ): string => str_replace( 'SECRET', 'REDACTED', $content ),
+			10,
+			1
+		);
+		add_filter(
+			'wpai_normalize_content',
+			static fn ( string $content ): string => $content . ' [policy]',
+			10,
+			1
+		);
+
+		$result = ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Tighten the draft.',
+				'postContext' => [
+					'title'   => 'Draft title',
+					'content' => 'SECRET launch copy.',
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
+		$this->assertStringContainsString( 'REDACTED launch copy. [policy]', $prompt );
+		$this->assertStringNotContainsString( 'SECRET launch copy.', $prompt );
+	}
+
 	public function test_recommend_content_uses_editorial_prompt_contract(): void {
 		$this->stub_successful_content_response(
 			[

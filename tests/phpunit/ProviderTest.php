@@ -14,12 +14,16 @@ final class ProviderTest extends TestCase {
 
 	private string|false $previous_openai_api_key;
 
+	private string|false $previous_connectors_ai_openai_api_key;
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->previous_openai_api_key = getenv( 'OPENAI_API_KEY' );
+		$this->previous_openai_api_key               = getenv( 'OPENAI_API_KEY' );
+		$this->previous_connectors_ai_openai_api_key = getenv( 'CONNECTORS_AI_OPENAI_API_KEY' );
 		putenv( 'OPENAI_API_KEY' );
+		putenv( 'CONNECTORS_AI_OPENAI_API_KEY' );
 	}
 
 	protected function tearDown(): void {
@@ -27,6 +31,12 @@ final class ProviderTest extends TestCase {
 			putenv( 'OPENAI_API_KEY' );
 		} else {
 			putenv( 'OPENAI_API_KEY=' . $this->previous_openai_api_key );
+		}
+
+		if ( false === $this->previous_connectors_ai_openai_api_key ) {
+			putenv( 'CONNECTORS_AI_OPENAI_API_KEY' );
+		} else {
+			putenv( 'CONNECTORS_AI_OPENAI_API_KEY=' . $this->previous_connectors_ai_openai_api_key );
 		}
 
 		parent::tearDown();
@@ -65,6 +75,51 @@ final class ProviderTest extends TestCase {
 		$this->assertSame( 'none', $status['keySource'] );
 		$this->assertNull( $status['credentialsUrl'] );
 		$this->assertNull( $status['pluginSlug'] );
+	}
+
+	public function test_openai_connector_status_respects_upstream_connector_configured_filter(): void {
+		WordPressTestState::$connectors = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'oauth',
+					'setting_name' => '',
+				],
+			],
+		];
+
+		add_filter(
+			'wpai_is_openai_connector_configured',
+			static fn ( bool $configured, array $connector ): bool => 'oauth' === (string) ( $connector['authentication']['method'] ?? '' ),
+			10,
+			2
+		);
+
+		$status = Provider::openai_connector_status();
+
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'connector_filter', $status['keySource'] );
+	}
+
+	public function test_openai_connector_status_checks_environment_from_connector_setting_name(): void {
+		putenv( 'CONNECTORS_AI_OPENAI_API_KEY=connector-env-key' );
+
+		WordPressTestState::$connectors = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+
+		$status = Provider::openai_connector_status();
+
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'env', $status['keySource'] );
 	}
 
 	public function test_chat_configuration_routes_through_wordpress_ai_client_when_a_connector_is_pinned(): void {

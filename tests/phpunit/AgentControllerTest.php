@@ -220,6 +220,126 @@ final class AgentControllerTest extends TestCase {
 		$this->assertSame( 'core/paragraph', $entry['target']['blockName'] ?? null );
 	}
 
+	public function test_handle_recommend_block_accepts_plain_text_block_lane_as_advisory_result(): void {
+		ActivityRepository::install();
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => 'Use wide alignment as the primary block-level improvement.',
+				'explanation' => 'Use wide alignment for the blog index.',
+			]
+		);
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-block' );
+		$request->set_param( 'clientId', 'client-123' );
+		$request->set_param( 'prompt', 'Improve the blog index.' );
+		$request->set_param(
+			'editorContext',
+			[
+				'block' => [
+					'name'              => 'core/paragraph',
+					'currentAttributes' => [
+						'content' => 'Latest posts',
+					],
+				],
+			]
+		);
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_block( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$response_data = $response->get_data();
+		$suggestion    = $response_data['payload']['block'][0] ?? [];
+		$this->assertSame( 'Use wide alignment as the primary block-level improvement.', $suggestion['label'] ?? null );
+		$this->assertSame( 'structural_recommendation', $suggestion['type'] ?? null );
+		$this->assertSame( [], $suggestion['attributeUpdates'] ?? null );
+		$this->assertSame( [], $suggestion['operations'] ?? null );
+		$this->assertSame( 'Use wide alignment for the blog index.', $response_data['payload']['explanation'] ?? null );
+		$this->assertResponseRequestMeta(
+			$response_data['payload'],
+			'flavor-agent/recommend-block',
+			'POST /flavor-agent/v1/recommend-block'
+		);
+	}
+
+	public function test_handle_recommend_block_emits_layered_diagnostic_trace_events(): void {
+		ActivityRepository::install();
+		WordPressTestState::$options                        = [
+			Provider::OPTION_NAME => 'openai',
+		];
+		WordPressTestState::$ai_client_generate_text_result = [
+			'text'      => '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
+			'latencyMs' => 187,
+		];
+		$events = [];
+
+		add_filter( 'flavor_agent_diagnostic_trace_enabled', '__return_false' );
+		add_action(
+			'flavor_agent_diagnostic_trace',
+			static function ( array $entry ) use ( &$events ): void {
+				$events[] = $entry;
+			},
+			10,
+			1
+		);
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-block' );
+		$request->set_param( 'clientId', 'client-123' );
+		$request->set_param( 'prompt', 'Make it sharper' );
+		$request->set_param(
+			'editorContext',
+			[
+				'block' => [
+					'name'              => 'core/paragraph',
+					'currentAttributes' => [
+						'content' => 'Hello world',
+					],
+				],
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_block( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[
+				'rest.recommend_block.start',
+				'ai.chat.start',
+				'ai.chat.request_ready',
+				'ai.chat.response_ready',
+				'rest.recommend_block.payload_ready',
+				'rest.recommend_block.finish',
+			],
+			array_column( $events, 'event' )
+		);
+
+		$trace_id = $events[0]['traceId'] ?? '';
+		$this->assertIsString( $trace_id );
+		$this->assertNotSame( '', $trace_id );
+
+		foreach ( $events as $event ) {
+			$this->assertSame( $trace_id, $event['traceId'] ?? null );
+			$this->assertSame( 'recommend-block', $event['surface'] ?? null );
+		}
+
+		$this->assertSame( 'client-123', $events[0]['context']['clientId'] ?? null );
+		$this->assertSame( 'core/paragraph', $events[0]['context']['blockName'] ?? null );
+		$this->assertSame( 187, $events[3]['context']['metrics']['latencyMs'] ?? null );
+		$this->assertSame( 'openai', $events[5]['context']['requestMeta']['provider'] ?? null );
+		$this->assertSame( 'success', $events[5]['context']['outcome'] ?? null );
+	}
+
 	public function test_handle_recommend_block_persists_failed_request_diagnostic_when_scoped(): void {
 		ActivityRepository::install();
 

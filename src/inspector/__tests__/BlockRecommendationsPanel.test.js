@@ -1758,6 +1758,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 								label: 'Tighten spacing',
 								description:
 									'Use safer spacing for the menu block.',
+								panel: 'dimensions',
 								attributeUpdates: {
 									style: {
 										spacing: {

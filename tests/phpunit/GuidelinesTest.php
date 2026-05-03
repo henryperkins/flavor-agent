@@ -222,6 +222,26 @@ final class GuidelinesTest extends TestCase {
 		$this->assertStringContainsString( 'Copy: Use active voice.', $prompt );
 	}
 
+	public function test_prompt_context_prefers_upstream_wordpress_ai_guidelines_when_available(): void {
+		WordPressTestState::$options                   = [
+			Guidelines::OPTION_SITE => 'Legacy site context.',
+		];
+		WordPressTestState::$wpai_formatted_guidelines = '<guidelines><site>Upstream site policy.</site></guidelines>';
+
+		$prompt_context = Guidelines::format_prompt_context( 'core/paragraph' );
+
+		$this->assertSame( '<guidelines><site>Upstream site policy.</site></guidelines>', $prompt_context );
+		$this->assertSame(
+			[
+				[
+					'categories' => [ 'site', 'copy', 'images', 'additional' ],
+					'blockName'  => 'core/paragraph',
+				],
+			],
+			WordPressTestState::$wpai_guideline_calls
+		);
+	}
+
 	public function test_get_content_block_options_returns_only_blocks_with_content_role_attributes(): void {
 		$registry = \WP_Block_Type_Registry::get_instance();
 

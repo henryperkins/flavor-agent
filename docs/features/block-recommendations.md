@@ -30,6 +30,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/referen
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Block recommendations normally move `idle -> loading -> advisory-ready`; safe local attribute updates can then move directly to `success` because only the selected block's local attributes are mutated
 - Fresh results now surface one featured next step before the grouped `Apply now`, `Review first`, and `Manual ideas` lanes
+- `Apply now` is limited to validator-computed local selected-block attribute updates tied to a known Inspector panel when panel mapping is known. Registered block style variations are the only executable block-level exception that may survive without a mapped panel when no specific panel applies.
+- `Review first` is limited to exactly one server-approved selected-block structural pattern operation that the browser operation catalog can reproduce against the live block context.
+- `Manual ideas` contains advisory-only structural or pattern guidance plus any suggestions blocked by panel, attribute, binding, content-only, freshness, or structural-operation validators.
 - Advisory block ideas now use the shared `AIAdvisorySection` shell so the block surface matches the review-first surfaces more closely without changing its direct-apply contract. Mixed suggestions keep rejected structural proposals visible as advisory remainders when a local attribute update remains inline-safe.
 - Block recommendations are the only recommendation surface that now retains stale client-side results; stale results stay visible for reference, executable chips are demoted/disabled, and `SurfaceScopeBar` exposes an explicit `Refresh` action
 - Freshness now has two layers on the block surface: the client-local request signature still drives immediate stale UI, and the stored server `resolvedContextSignature` hashes the server-normalized block apply context plus the sanitized prompt. Background revalidation checks the wrapped REST signature-only response and silently demotes/disables stale results only when that check succeeds with a mismatched signature; apply-time signature revalidation is the hard gate. Background docs-cache warms alone do not invalidate apply. `applySuggestion()` only mutates attributes after both checks pass.
@@ -327,6 +330,8 @@ The server normalizes that context with lock, content-only, and editing-mode def
 - Disabled blocks do not render the surface at all
 - Content-only editing mode limits executable suggestions to content-safe attributes, though broader manual guidance can still remain visible
 - Visibility state in `attributes.metadata.blockVisibility` is respected during prompt building and post-parse enforcement
+- Executable block attribute suggestions require a non-empty `panel` that appears in the block execution contract whenever panel mapping is known. Empty or unknown panels are filtered out before they can become `Apply now` suggestions.
+- Registered style variation suggestions must reference a registered style class; they may use an empty panel when no mapped panel applies, but a non-empty panel must still be valid.
 - Executable updates cannot set `lock`, arbitrary `metadata`, or undeclared top-level attributes; `metadata` is limited to supported `blockVisibility` and allowed `bindings`. Partial execution contracts inherit missing local attribute-key lists from the block context before this undeclared-attribute filter runs.
 - Apply is also blocked when the live server-resolved apply context drifts, even if the local block snapshot still hashes to the same client request signature
 - If no allowed attribute updates remain after validation, the suggestion is not applied

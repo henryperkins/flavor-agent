@@ -1142,7 +1142,12 @@ function filterAttributeUpdatesForExecutionContract(
 				break;
 			case 'className':
 				validated =
-					allowClassName && typeof value === 'string' ? value : null;
+					allowClassName && typeof value === 'string'
+						? normalizeRegisteredStyleVariationClassName(
+								value,
+								executionContract
+						  )
+						: null;
 				break;
 			case 'metadata':
 				validated = filterMetadataAttributeUpdatesForExecutionContract(
@@ -1307,47 +1312,98 @@ function filterMetadataAttributeUpdatesForExecutionContract(
 	return filtered;
 }
 
-function extractStyleVariationNames( className = '' ) {
-	if ( typeof className !== 'string' || ! className.trim() ) {
-		return [];
-	}
-
-	return [
-		...new Set(
-			Array.from(
-				className.matchAll( /\bis-style-([a-z0-9_-]+)\b/gi )
-			).map( ( match ) => match[ 1 ] )
-		),
-	];
+function normalizeStyleName( value = '' ) {
+	return typeof value === 'string'
+		? value
+				.trim()
+				.toLowerCase()
+				.replace( /[^a-z0-9_-]/g, '' )
+		: '';
 }
 
-function isValidStyleVariationSuggestion( suggestion, executionContract ) {
+function normalizeRegisteredStyleVariationClassName(
+	className = '',
+	executionContract = {}
+) {
 	const registeredStyleNames = Array.isArray(
 		executionContract?.registeredStyles
 	)
-		? executionContract.registeredStyles
+		? executionContract.registeredStyles.map( normalizeStyleName )
 		: [];
-	const registeredStyles = new Set( registeredStyleNames );
+	const registeredStyles = new Set( registeredStyleNames.filter( Boolean ) );
+	const tokens =
+		typeof className === 'string' ? className.trim().split( /\s+/ ) : [];
+	const styleClasses = [];
+
+	if ( registeredStyles.size === 0 || tokens.length === 0 ) {
+		return null;
+	}
+
+	for ( const token of tokens ) {
+		const match = token.match( /^is-style-([a-z0-9_-]+)$/i );
+
+		if ( ! match ) {
+			return null;
+		}
+
+		const styleName = normalizeStyleName( match[ 1 ] );
+
+		if ( ! registeredStyles.has( styleName ) ) {
+			return null;
+		}
+
+		styleClasses.push( `is-style-${ styleName }` );
+	}
+
+	const distinct = [ ...new Set( styleClasses ) ];
+
+	return distinct.length === 1 ? distinct[ 0 ] : null;
+}
+
+function isValidStyleVariationSuggestion( suggestion, executionContract ) {
 	const className = suggestion?.attributeUpdates?.className;
 
 	if ( typeof className !== 'string' ) {
 		return false;
 	}
 
-	if (
-		registeredStyles.size === 0 &&
-		! isAuthoritativeExecutionContract( executionContract )
-	) {
-		return extractStyleVariationNames( className ).length > 0;
-	}
-
-	if ( ! registeredStyles.size ) {
-		return false;
-	}
-
-	return extractStyleVariationNames( className ).some( ( styleName ) =>
-		registeredStyles.has( styleName )
+	return Boolean(
+		normalizeRegisteredStyleVariationClassName(
+			className,
+			executionContract
+		)
 	);
+}
+
+function getSuggestionPanel( suggestion = {} ) {
+	return typeof suggestion?.panel === 'string'
+		? normalizePanelKey( suggestion.panel )
+		: '';
+}
+
+function suggestionHasValidExecutionPanel(
+	suggestion = {},
+	executionContract = {}
+) {
+	const isAdvisoryOnly = isAdvisoryOnlyBlockSuggestion( suggestion );
+	const hasExplicitlyEmptyPanels =
+		executionContract?.hasExplicitlyEmptyPanels === true;
+	const shouldEnforceBlockPanels =
+		hasExplicitlyEmptyPanels ||
+		executionContractKnowsPanelMapping( executionContract );
+
+	if ( isAdvisoryOnly || ! shouldEnforceBlockPanels ) {
+		return true;
+	}
+
+	const panel = getSuggestionPanel( suggestion );
+	const allowedPanels = getAllowedPanelsLookup( executionContract );
+
+	if ( suggestion?.type === 'style_variation' ) {
+		return ! panel || Boolean( allowedPanels[ panel ] );
+	}
+
+	return Boolean( panel && allowedPanels[ panel ] );
 }
 
 function sanitizeSuggestionForExecutionContract(
@@ -1362,16 +1418,16 @@ function sanitizeSuggestionForExecutionContract(
 	const isAdvisoryOnly =
 		group === 'block' && isAdvisoryOnlyBlockSuggestion( suggestion );
 	const isStyleVariation = suggestion?.type === 'style_variation';
-	const panel =
-		typeof suggestion?.panel === 'string'
-			? normalizePanelKey( suggestion.panel )
-			: '';
+	const panel = getSuggestionPanel( suggestion );
 	const allowedPanels = getAllowedPanelsLookup( executionContract );
 	const hasExplicitlyEmptyPanels =
 		executionContract?.hasExplicitlyEmptyPanels === true;
 	const shouldEnforcePanels =
 		hasExplicitlyEmptyPanels ||
 		Object.keys( allowedPanels ).length > 0 ||
+		executionContractKnowsPanelMapping( executionContract );
+	const shouldEnforceBlockPanels =
+		hasExplicitlyEmptyPanels ||
 		executionContractKnowsPanelMapping( executionContract );
 
 	if ( group === 'settings' || group === 'styles' ) {
@@ -1381,11 +1437,15 @@ function sanitizeSuggestionForExecutionContract(
 	} else if (
 		group === 'block' &&
 		! isAdvisoryOnly &&
-		shouldEnforcePanels &&
-		panel &&
-		! allowedPanels[ panel ]
+		shouldEnforceBlockPanels
 	) {
-		return null;
+		if ( isStyleVariation ) {
+			if ( panel && ! allowedPanels[ panel ] ) {
+				return null;
+			}
+		} else if ( ! panel || ! allowedPanels[ panel ] ) {
+			return null;
+		}
 	}
 
 	if (
@@ -1555,12 +1615,45 @@ export function buildSafeAttributeUpdates(
 				currentAttributes[ key ],
 				value
 			);
+		} else if ( key === 'className' && typeof value === 'string' ) {
+			safeUpdates[ key ] = mergeStyleVariationClassNameWithCurrent(
+				currentAttributes[ key ],
+				value
+			);
 		} else {
 			safeUpdates[ key ] = value;
 		}
 	}
 
 	return safeUpdates;
+}
+
+function mergeStyleVariationClassNameWithCurrent(
+	currentClassName,
+	suggestedClassName
+) {
+	const suggestedTokens =
+		typeof suggestedClassName === 'string'
+			? suggestedClassName.trim().split( /\s+/ ).filter( Boolean )
+			: [];
+	const currentTokens =
+		typeof currentClassName === 'string'
+			? currentClassName.trim().split( /\s+/ ).filter( Boolean )
+			: [];
+	const preservedTokens = currentTokens.filter(
+		( token ) => ! /^is-style-/i.test( token )
+	);
+	const merged = [];
+	const seen = new Set();
+
+	for ( const token of [ ...preservedTokens, ...suggestedTokens ] ) {
+		if ( ! seen.has( token ) ) {
+			seen.add( token );
+			merged.push( token );
+		}
+	}
+
+	return merged.join( ' ' );
 }
 
 /**
@@ -2355,19 +2448,24 @@ export function getBlockSuggestionExecutionInfo(
 		blockContext
 	);
 	const advisoryOnly = isAdvisoryOnlyBlockSuggestion( normalizedSuggestion );
-	const allowedUpdates = advisoryOnly
-		? {}
-		: getSuggestionAttributeUpdates(
-				normalizedSuggestion,
-				blockContext,
-				executionContract
-		  );
-	const hasExecutableUpdates = Object.keys( allowedUpdates ).length > 0;
-	const hasReviewOperation = operationValidation.operations.length === 1;
 	const resolvedExecutionContract = resolveExecutionContract(
 		blockContext,
 		executionContract
 	);
+	const hasValidExecutionPanel = suggestionHasValidExecutionPanel(
+		normalizedSuggestion,
+		resolvedExecutionContract
+	);
+	const allowedUpdates =
+		advisoryOnly || ! hasValidExecutionPanel
+			? {}
+			: getSuggestionAttributeUpdates(
+					normalizedSuggestion,
+					blockContext,
+					resolvedExecutionContract
+			  );
+	const hasExecutableUpdates = Object.keys( allowedUpdates ).length > 0;
+	const hasReviewOperation = operationValidation.operations.length === 1;
 	const restrictions = getEditingRestrictions(
 		blockContext,
 		resolvedExecutionContract

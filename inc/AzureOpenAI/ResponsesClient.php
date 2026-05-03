@@ -6,6 +6,7 @@ namespace FlavorAgent\AzureOpenAI;
 
 use FlavorAgent\LLM\WordPressAIClient;
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Support\WordPressAIPolicy;
 
 /**
  * Thin compatibility facade. After Workstream C of the WP 7.0 overlap remediation,
@@ -52,10 +53,9 @@ final class ResponsesClient {
 		string $input,
 		?string $reasoning_effort = null,
 		?array $schema = null,
-		?string $schema_name = null
+		?string $schema_name = null,
+		?array $model_options = null
 	): string|\WP_Error {
-		unset( $schema_name );
-
 		Provider::record_runtime_chat_metrics( null );
 		Provider::record_runtime_chat_diagnostics( null );
 
@@ -76,7 +76,9 @@ final class ResponsesClient {
 			$input,
 			$pinned_connector,
 			self::resolve_reasoning_effort( $reasoning_effort ),
-			$schema
+			$schema,
+			$model_options,
+			WordPressAIPolicy::ability_name_for_schema_name( $schema_name )
 		);
 	}
 

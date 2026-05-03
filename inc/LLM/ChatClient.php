@@ -19,9 +19,10 @@ final class ChatClient {
 		string $system_prompt,
 		string $user_prompt,
 		?array $schema = null,
-		?string $schema_name = null
+		?string $schema_name = null,
+		?array $model_options = null
 	): string|\WP_Error {
-		$result = ResponsesClient::rank( $system_prompt, $user_prompt, null, $schema, $schema_name );
+		$result = ResponsesClient::rank( $system_prompt, $user_prompt, null, $schema, $schema_name, $model_options );
 
 		if (
 			is_wp_error( $result )

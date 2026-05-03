@@ -15,6 +15,7 @@ use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Abilities\TemplateAbilities;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
+use FlavorAgent\Support\RequestTrace;
 use FlavorAgent\Support\StringArray;
 
 final class Agent_Controller {
@@ -712,15 +713,42 @@ final class Agent_Controller {
 	public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$client_id              = $request->get_param( 'clientId' );
 		$resolve_signature_only = self::is_signature_only_request( $request );
-		$input                  = [
+		RequestTrace::start(
+			'recommend-block',
+			self::build_recommend_block_trace_context( $request, $resolve_signature_only ),
+			'rest.recommend_block.start'
+		);
+		$input = [
 			'editorContext'        => $request->get_param( 'editorContext' ),
 			'prompt'               => $request->get_param( 'prompt' ),
 			'resolveSignatureOnly' => $resolve_signature_only,
 		];
-		$result                 = BlockAbilities::recommend_block( $input );
+
+		try {
+			$result = BlockAbilities::recommend_block( $input );
+		} catch ( \Throwable $throwable ) {
+			$throwable_context = self::build_trace_throwable_context( $throwable );
+			RequestTrace::event(
+				'rest.recommend_block.throwable',
+				$throwable_context
+			);
+			RequestTrace::finish(
+				'rest.recommend_block.finish',
+				array_merge(
+					[ 'outcome' => 'throwable' ],
+					$throwable_context
+				)
+			);
+
+			throw $throwable;
+		}
 
 		if ( \is_wp_error( $result ) ) {
 			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-block' );
+			RequestTrace::event(
+				'rest.recommend_block.error',
+				self::build_trace_error_context( $result )
+			);
 
 			if ( ! $resolve_signature_only ) {
 				self::persist_request_diagnostic_failure_activity(
@@ -732,12 +760,24 @@ final class Agent_Controller {
 				);
 			}
 
+			RequestTrace::finish(
+				'rest.recommend_block.finish',
+				array_merge(
+					[ 'outcome' => 'error' ],
+					self::build_trace_error_context( $result )
+				)
+			);
+
 			return $result;
 		}
 
 		$payload = $resolve_signature_only
 			? $result
 			: self::append_request_meta_for_route( $result, 'recommend-block' );
+		RequestTrace::event(
+			'rest.recommend_block.payload_ready',
+			self::build_recommendation_payload_trace_context( $payload )
+		);
 
 		if ( ! $resolve_signature_only ) {
 			self::persist_request_diagnostic_activity(
@@ -748,6 +788,14 @@ final class Agent_Controller {
 				$input
 			);
 		}
+
+		RequestTrace::finish(
+			'rest.recommend_block.finish',
+			array_merge(
+				[ 'outcome' => 'success' ],
+				self::build_recommendation_payload_trace_context( $payload )
+			)
+		);
 
 		return new \WP_REST_Response(
 			[
@@ -983,6 +1031,102 @@ final class Agent_Controller {
 			$request->get_param( 'resolveSignatureOnly' ),
 			FILTER_VALIDATE_BOOLEAN
 		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_recommend_block_trace_context( \WP_REST_Request $request, bool $resolve_signature_only ): array {
+		$editor_context = $request->get_param( 'editorContext' );
+		$editor_context = \is_array( $editor_context ) || \is_object( $editor_context )
+			? self::sanitize_structured_value( $editor_context )
+			: [];
+		$block          = \is_array( $editor_context['block'] ?? null ) ? $editor_context['block'] : [];
+		$document       = self::sanitize_activity_document( $request->get_param( 'document' ) );
+		$prompt         = $request->get_param( 'prompt' );
+
+		return [
+			'clientId'             => sanitize_text_field( (string) $request->get_param( 'clientId' ) ),
+			'route'                => 'POST /flavor-agent/v1/recommend-block',
+			'resolveSignatureOnly' => $resolve_signature_only,
+			'promptChars'          => \is_string( $prompt ) ? strlen( $prompt ) : 0,
+			'blockName'            => sanitize_text_field( (string) ( $block['name'] ?? '' ) ),
+			'editingMode'          => sanitize_key( (string) ( $block['editingMode'] ?? '' ) ),
+			'hasDocumentScope'     => \is_array( $document ),
+			'documentScopeKey'     => \is_array( $document ) ? (string) ( $document['scopeKey'] ?? '' ) : '',
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_recommendation_payload_trace_context( array $payload ): array {
+		$request_meta = \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [];
+
+		return [
+			'counts'               => [
+				'settings' => \is_array( $payload['settings'] ?? null ) ? \count( $payload['settings'] ) : 0,
+				'styles'   => \is_array( $payload['styles'] ?? null ) ? \count( $payload['styles'] ) : 0,
+				'block'    => \is_array( $payload['block'] ?? null ) ? \count( $payload['block'] ) : 0,
+			],
+			'hasExecutionContract' => \is_array( $payload['executionContract'] ?? null ),
+			'hasRequestMeta'       => [] !== $request_meta,
+			'requestMeta'          => self::summarize_trace_request_meta( $request_meta ),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function summarize_trace_request_meta( array $request_meta ): array {
+		if ( [] === $request_meta ) {
+			return [];
+		}
+
+		return array_filter(
+			[
+				'provider'        => \is_string( $request_meta['provider'] ?? null ) ? $request_meta['provider'] : '',
+				'model'           => \is_string( $request_meta['model'] ?? null ) ? $request_meta['model'] : '',
+				'transport'       => \is_array( $request_meta['transport'] ?? null ) ? $request_meta['transport'] : [],
+				'requestSummary'  => \is_array( $request_meta['requestSummary'] ?? null ) ? $request_meta['requestSummary'] : [],
+				'responseSummary' => \is_array( $request_meta['responseSummary'] ?? null ) ? $request_meta['responseSummary'] : [],
+				'errorSummary'    => \is_array( $request_meta['errorSummary'] ?? null ) ? $request_meta['errorSummary'] : [],
+			],
+			static fn ( mixed $value ): bool => [] !== $value && '' !== $value
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_trace_error_context( \WP_Error $error ): array {
+		$data = $error->get_error_data();
+		$data = \is_array( $data ) ? $data : [];
+
+		return [
+			'error'       => [
+				'code'    => $error->get_error_code(),
+				'message' => $error->get_error_message(),
+				'status'  => \is_numeric( $data['status'] ?? null ) ? (int) $data['status'] : null,
+			],
+			'requestMeta' => self::summarize_trace_request_meta(
+				\is_array( $data['requestMeta'] ?? null ) ? $data['requestMeta'] : []
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_trace_throwable_context( \Throwable $throwable ): array {
+		return [
+			'throwable' => [
+				'class'   => get_class( $throwable ),
+				'message' => $throwable->getMessage(),
+				'file'    => $throwable->getFile(),
+				'line'    => $throwable->getLine(),
+			],
+		];
 	}
 
 	/**
