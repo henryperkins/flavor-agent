@@ -880,6 +880,15 @@ SYSTEM;
 		);
 	}
 
+	/**
+	 * Recover a single JSON object from a response that may include surrounding prose.
+	 *
+	 * Naive scan: returns the substring between the first `{` and the last `}`.
+	 * This handles the common case where the model prefixes/suffixes the JSON
+	 * payload with a sentence or two. It does not handle multiple top-level
+	 * objects, unbalanced braces inside string literals, or code-fenced JSON
+	 * containing prose. Those cases fall through to the parse_error WP_Error path.
+	 */
 	private static function extract_json_object( string $text ): ?string {
 		$start = strpos( $text, '{' );
 		$end   = strrpos( $text, '}' );

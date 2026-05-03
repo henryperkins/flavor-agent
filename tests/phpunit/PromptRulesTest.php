@@ -298,6 +298,33 @@ TEXT
 		$this->assertSame( 'Use wide alignment for the blog index.', $result['explanation'] );
 	}
 
+	public function test_parse_response_returns_wp_error_when_response_has_two_top_level_json_objects(): void {
+		$result = Prompt::parse_response(
+			'Example: {"a":1} Real: {"settings":[],"styles":[],"block":[],"explanation":"OK"}'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'parse_error', $result->get_error_code() );
+	}
+
+	public function test_parse_response_returns_wp_error_when_string_literal_contains_unbalanced_brace(): void {
+		$result = Prompt::parse_response(
+			'Note: use {} for empty. Then: {"settings":[],"styles":[],"block":[],"explanation":"OK"}'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'parse_error', $result->get_error_code() );
+	}
+
+	public function test_parse_response_recovers_when_json_object_is_followed_by_trailing_prose(): void {
+		$result = Prompt::parse_response(
+			'{"settings":[],"styles":[],"block":[],"explanation":"OK"} (end of message)'
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'OK', $result['explanation'] );
+	}
+
 	public function test_parse_response_converts_plain_text_block_lane_to_advisory_suggestion(): void {
 		$result = Prompt::parse_response(
 			wp_json_encode(
