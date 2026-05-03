@@ -3987,6 +3987,88 @@ describe( 'store action thunks', () => {
 		expect( state.blockRequestState[ 'block-1' ].staleReason ).toBeNull();
 	} );
 
+	describe.each( [
+		{
+			surface: 'template',
+			setRecommendations: 'setTemplateRecommendations',
+			setReviewFreshness: 'setTemplateReviewFreshnessState',
+			getStatus: 'getTemplateReviewFreshnessStatus',
+			getStaleReason: 'getTemplateReviewStaleReason',
+			target: 'home',
+			reviewSig: 'review-template',
+		},
+		{
+			surface: 'template-part',
+			setRecommendations: 'setTemplatePartRecommendations',
+			setReviewFreshness: 'setTemplatePartReviewFreshnessState',
+			getStatus: 'getTemplatePartReviewFreshnessStatus',
+			getStaleReason: 'getTemplatePartReviewStaleReason',
+			target: 'header',
+			reviewSig: 'review-template-part',
+		},
+		{
+			surface: 'global-styles',
+			setRecommendations: 'setGlobalStylesRecommendations',
+			setReviewFreshness: 'setGlobalStylesReviewFreshnessState',
+			getStatus: 'getGlobalStylesReviewFreshnessStatus',
+			getStaleReason: 'getGlobalStylesReviewStaleReason',
+			target: {
+				scopeKey: 'global_styles:17',
+				globalStylesId: '17',
+			},
+			reviewSig: 'review-global-styles',
+		},
+		{
+			surface: 'style-book',
+			setRecommendations: 'setStyleBookRecommendations',
+			setReviewFreshness: 'setStyleBookReviewFreshnessState',
+			getStatus: 'getStyleBookReviewFreshnessStatus',
+			getStaleReason: 'getStyleBookReviewStaleReason',
+			target: {
+				scopeKey: 'style_book:17:core/paragraph',
+				globalStylesId: '17',
+				blockName: 'core/paragraph',
+			},
+			reviewSig: 'review-style-book',
+		},
+	] )(
+		'$surface review freshness preserves server-stale reason on idle transitions',
+		( spec ) => {
+			test( 'idle does not clear stored stale reason', () => {
+				let state = reducer(
+					undefined,
+					actions[ spec.setRecommendations ](
+						spec.target,
+						{ suggestions: [], explanation: '' },
+						'Prompt',
+						1,
+						'request-sig',
+						spec.reviewSig
+					)
+				);
+
+				state = reducer(
+					state,
+					actions[ spec.setReviewFreshness ](
+						'stale',
+						2,
+						'server-review'
+					)
+				);
+
+				state = reducer(
+					state,
+					actions[ spec.setReviewFreshness ]( 'idle', 3 )
+				);
+
+				expect( selectors[ spec.getStatus ]( state ) ).toBe( 'idle' );
+				expect( selectors[ spec.getStaleReason ]( state ) ).toBe(
+					'server-review'
+				);
+			} );
+		}
+	);
+
 	test( 'revalidateBlockReviewFreshness marks wrapped signature-only drift stale', async () => {
 		apiFetch.mockResolvedValue( {
 			payload: {
