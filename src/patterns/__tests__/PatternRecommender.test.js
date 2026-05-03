@@ -242,7 +242,7 @@ describe( 'PatternRecommender', () => {
 			act( () => {
 				getRoot().unmount();
 			} );
-		} catch ( error ) {
+		} catch {
 			// Ignore unmount errors from already-unmounted roots in test cleanup.
 		}
 		document.body.innerHTML = '';

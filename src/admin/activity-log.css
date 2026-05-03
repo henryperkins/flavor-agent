@@ -1,13 +1,32 @@
+/* Warm-cream paper foundation — bleeds across the wp-admin gutters so the
+   hero and cards float on the brand page background, not stock #f0f0f1. */
+body.settings_page_flavor-agent-activity {
+  background: var(--flavor-agent-surface-page, #fffdf8);
+}
+
 .flavor-agent-activity-log {
-  --flavor-agent-activity-log-accent: var(--flavor-agent-color-accent);
-  --flavor-agent-activity-log-accent-soft: color-mix(
-    in srgb,
-    var(--flavor-agent-color-accent) 8%,
-    transparent
+  /* Pin the activity-log accent to brand teal so the audit page reads as
+     Flavor Agent regardless of the WP admin scheme. */
+  --flavor-agent-activity-log-accent: var(--flavor-agent-color-accent, #0b7b80);
+  --flavor-agent-activity-log-accent-strong: var(
+    --flavor-agent-color-accent-strong,
+    #075c62
+  );
+  --flavor-agent-activity-log-accent-soft: var(
+    --flavor-agent-color-accent-wash,
+    rgba(11, 123, 128, 0.12)
+  );
+  --flavor-agent-activity-log-accent-line: var(
+    --flavor-agent-color-accent-line,
+    rgba(11, 123, 128, 0.18)
   );
   --flavor-agent-activity-log-border: var(
-    --wpds-color-stroke-surface-neutral,
-    #d8d8d8
+    --flavor-agent-color-line,
+    var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+  );
+  --flavor-agent-activity-log-border-soft: var(
+    --flavor-agent-color-line-soft,
+    #e0e0e0
   );
   --flavor-agent-activity-log-border-strong: color-mix(
     in srgb,
@@ -15,35 +34,69 @@
     var(--flavor-agent-activity-log-border)
   );
   --flavor-agent-activity-log-muted: var(
-    --wpds-color-fg-content-neutral-weak,
-    #6d6d6d
+    --flavor-agent-color-muted,
+    var(--wpds-color-fg-content-neutral-weak, #5f6d73)
   );
   --flavor-agent-activity-log-text: var(
-    --wpds-color-fg-content-neutral,
-    #1e1e1e
+    --flavor-agent-color-text,
+    var(--wpds-color-fg-content-neutral, #203038)
   );
+  --flavor-agent-activity-log-ink: var(--flavor-agent-color-ink, #17232a);
+  --flavor-agent-activity-log-frost: var(
+    --flavor-agent-surface-frost,
+    rgba(255, 255, 255, 0.74)
+  );
+  --flavor-agent-activity-log-shell: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.85),
+      rgba(255, 253, 247, 1)
+    ),
+    var(--flavor-agent-surface-brand-strong, #f4efe2);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   color: var(--flavor-agent-activity-log-text);
+  font-family: var(--flavor-agent-font-sans);
 }
 
-.flavor-agent-activity-log__overview,
+/* Generic shells — the feed card, sidebar card, and empty/error cards share
+   a soft warm-cream gradient over the brand-strong tint with a hairline
+   accent border and a small brand shadow. Earlier flat white shells looked
+   like stock wp-admin chrome; the warm gradient is the audit-log brand. */
 .flavor-agent-activity-log__feed-card,
 .flavor-agent-activity-log__sidebar-card,
 .flavor-agent-activity-log__empty {
   border: 1px solid var(--flavor-agent-activity-log-border);
-  border-radius: var(--wpds-border-radius-lg, 8px);
-  background: var(--wpds-color-bg-surface-neutral-strong, #ffffff);
-  box-shadow: none;
+  border-radius: var(--flavor-agent-radius-2xl, 22px);
+  background: var(--flavor-agent-activity-log-shell);
+  box-shadow: var(--flavor-agent-shadow-xs, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
+  overflow: hidden;
 }
 
+/* Hero masthead — radial teal glow over the warm-cream → mint-cream wash,
+   22px radius, brand shadow. This is the brand moment of the audit page. */
 .flavor-agent-activity-log__masthead {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 4px 2px 0;
+  gap: 24px;
+  padding: 24px 28px;
+  border: 1px solid var(--flavor-agent-activity-log-border);
+  border-radius: var(--flavor-agent-radius-2xl, 22px);
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(11, 123, 128, 0.18),
+      transparent 38%
+    ),
+    linear-gradient(135deg, #f7f0df 0%, #fffdf8 60%, #edf7f7 100%);
+  box-shadow: var(
+    --flavor-agent-shadow-sm,
+    0 1px 2px 0 rgba(0, 0, 0, 0.05),
+    0 2px 3px 0 rgba(0, 0, 0, 0.04),
+    0 6px 6px 0 rgba(0, 0, 0, 0.03),
+    0 8px 8px 0 rgba(0, 0, 0, 0.02)
+  );
 }
 
 .flavor-agent-activity-log__masthead-copy {
@@ -52,10 +105,11 @@
 }
 
 .flavor-agent-activity-log__eyebrow {
-  margin: 0 0 6px;
-  color: var(--flavor-agent-activity-log-accent);
-  font-size: var(--wpds-font-size-xs, 11px);
-  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--flavor-agent-activity-log-accent-strong);
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -65,23 +119,25 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .flavor-agent-activity-log__page-title,
 .flavor-agent-activity-log__section-title {
   margin: 0;
-  color: var(--flavor-agent-activity-log-text);
-  font-family: inherit;
+  color: var(--flavor-agent-activity-log-ink);
 }
 
 .flavor-agent-activity-log__page-title {
-  font-size: 23px;
+  font-family: var(--flavor-agent-font-serif);
+  font-size: clamp(26px, 2.4vw, 32px);
   font-weight: 600;
-  line-height: 1.3;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
 }
 
 .flavor-agent-activity-log__section-title {
+  font-family: var(--flavor-agent-font-sans);
   font-size: var(--wpds-font-size-lg, 15px);
   font-weight: 600;
   line-height: 1.4;
@@ -90,9 +146,10 @@
 .flavor-agent-activity-log__copy {
   margin: 0;
   color: var(--flavor-agent-activity-log-muted);
-  font-size: var(--wpds-font-size-md, 13px);
-  line-height: 1.5;
-  max-width: 72ch;
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 60ch;
 }
 
 .flavor-agent-activity-log__fallback h1 {
@@ -121,47 +178,69 @@
   justify-content: flex-end;
 }
 
+/* Overview is a layout container only — the brand chrome lives on the
+   summary cards (frosted bordered tiles) and the toolbar shell below it. */
 .flavor-agent-activity-log__overview {
-  overflow: hidden;
-  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
+/* Glance metrics — frosted bordered cards on the warm-cream page. We keep
+   six metrics so the admin page mirrors the server-side summary; auto-fit
+   wraps to 3-up / 2-up / 1-up at narrower widths. */
 .flavor-agent-activity-log__summary {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  border-bottom: 1px solid var(--flavor-agent-activity-log-border);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
 }
 
 .flavor-agent-activity-log__summary-item {
   min-width: 0;
-  padding: 14px 16px 16px;
-  border-inline-start: 1px solid var(--flavor-agent-activity-log-border);
-}
-
-.flavor-agent-activity-log__summary-item:first-child {
-  border-inline-start: 0;
+  padding: 14px 18px;
+  border: 1px solid var(--flavor-agent-activity-log-border-soft);
+  border-radius: var(--flavor-agent-radius-xl, 16px);
+  background: var(--flavor-agent-activity-log-frost);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .flavor-agent-activity-log__summary-label {
   color: var(--flavor-agent-activity-log-muted);
-  font-size: var(--wpds-font-size-xs, 11px);
-  font-weight: 600;
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .flavor-agent-activity-log__summary-value {
   margin-top: 6px;
-  color: var(--flavor-agent-activity-log-text);
-  font-size: 28px;
+  color: var(--flavor-agent-activity-log-ink);
+  font-family: var(--flavor-agent-font-serif);
+  font-size: 22px;
   font-weight: 600;
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+/* Toolbar shell — wraps the search/filter row in the same warm-cream
+   gradient + 22px radius the feed card uses, so search and the table read
+   as one continuous brand surface. */
+.flavor-agent-activity-log__toolbar {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--flavor-agent-activity-log-border);
+  border-radius: var(--flavor-agent-radius-2xl, 22px);
+  background: var(--flavor-agent-activity-log-shell);
+  box-shadow: var(--flavor-agent-shadow-xs, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
+  overflow: hidden;
 }
 
 .flavor-agent-activity-log__controls {
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 14px 18px;
 }
 
 .flavor-agent-activity-log__controls-main {
@@ -183,6 +262,31 @@
   max-width: none;
 }
 
+/* Brand-styled search field — 40px height, 12px radius, accent border,
+   inset top highlight. We target both the WP InputControl wrapper and the
+   raw input so DataViews' own search and any direct input use the rule. */
+.flavor-agent-activity-log__search .components-input-control__container,
+.flavor-agent-activity-log__search input[type="search"],
+.flavor-agent-activity-log__search input[type="text"] {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--flavor-agent-activity-log-accent-line);
+  border-radius: var(--flavor-agent-radius-lg, 12px);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 13.5px;
+  color: var(--flavor-agent-activity-log-text);
+}
+
+.flavor-agent-activity-log__search input:focus {
+  outline: none;
+  border-color: var(--flavor-agent-activity-log-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    var(--flavor-agent-focus-ring);
+}
+
 .flavor-agent-activity-log__controls-actions {
   flex: 0 0 auto;
   flex-wrap: wrap;
@@ -190,7 +294,7 @@
 }
 
 .flavor-agent-activity-log__filters {
-  padding: 0 14px 12px;
+  padding: 0 18px 14px;
 }
 
 .flavor-agent-activity-log__filters:empty {
@@ -200,7 +304,7 @@
 .flavor-agent-activity-log__filters .dataviews-filters__container {
   position: static;
   padding: 12px 0 0;
-  border-top: 1px solid var(--flavor-agent-activity-log-border);
+  border-top: 1px solid var(--flavor-agent-activity-log-border-soft);
   background: transparent;
 }
 
@@ -208,12 +312,61 @@
   gap: 8px;
 }
 
+/* Filter chips — pill, 40px high, brand accent on active. DataViews
+   emits `aria-pressed="true"` for the active chip, so we key the active
+   state off that. The count span (when present) is mono. */
+.flavor-agent-activity-log .dataviews-filters__summary-chip-container button,
+.flavor-agent-activity-log .dataviews-filters__summary-chip {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--flavor-agent-radius-full, 999px);
+  border: 1px solid var(--flavor-agent-activity-log-accent-line);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--flavor-agent-activity-log-text);
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.flavor-agent-activity-log
+  .dataviews-filters__summary-chip-container
+  button:hover:not(:disabled),
+.flavor-agent-activity-log .dataviews-filters__summary-chip:hover:not(:disabled) {
+  border-color: var(--flavor-agent-activity-log-accent-strong);
+  color: var(--flavor-agent-activity-log-accent-strong);
+  background: var(--flavor-agent-activity-log-accent-soft);
+}
+
+.flavor-agent-activity-log
+  .dataviews-filters__summary-chip-container
+  button[aria-pressed="true"],
+.flavor-agent-activity-log
+  .dataviews-filters__summary-chip[aria-pressed="true"],
+.flavor-agent-activity-log
+  .dataviews-filters__summary-chip-container
+  button.is-pressed,
+.flavor-agent-activity-log .dataviews-filters__summary-chip.is-pressed {
+  border-color: var(--flavor-agent-activity-log-accent);
+  color: var(--flavor-agent-activity-log-accent-strong);
+  background: var(--flavor-agent-activity-log-accent-soft);
+}
+
+.flavor-agent-activity-log
+  .dataviews-filters__summary-chip-container
+  button:focus-visible {
+  outline: none;
+  box-shadow: var(--flavor-agent-focus-ring);
+}
+
 .flavor-agent-activity-log .dataviews-filters__visibility-toggle,
 .flavor-agent-activity-log
   .dataviews-view-config__toggle-wrapper
   > .components-button {
   min-width: auto;
-  padding-inline: 10px 12px;
+  min-height: 32px;
+  padding-inline: 12px 14px;
+  border-radius: var(--flavor-agent-radius-full, 999px);
 }
 
 .flavor-agent-activity-log .dataviews-filters__visibility-toggle::after,
@@ -252,6 +405,7 @@
 .flavor-agent-activity-log__feed-card .components-card__body {
   padding: 0;
   overflow: hidden;
+  background: transparent;
 }
 
 .flavor-agent-activity-log__feed-card .dataviews-wrapper {
@@ -260,6 +414,38 @@
 
 .flavor-agent-activity-log__feed-card .dataviews-layout__container {
   max-height: 68vh;
+}
+
+/* DataViews table — accent eyebrow column headers + warm cream rows.
+   Targets the table layout DataViews emits inside .dataviews-view-table. */
+.flavor-agent-activity-log .dataviews-view-table {
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 13.5px;
+}
+
+.flavor-agent-activity-log .dataviews-view-table th {
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-activity-log-accent-strong);
+  background: rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid var(--flavor-agent-activity-log-border-soft);
+}
+
+.flavor-agent-activity-log .dataviews-view-table td {
+  border-bottom: 1px solid var(--flavor-agent-activity-log-border-soft);
+  color: var(--flavor-agent-activity-log-text);
+  line-height: 1.45;
+}
+
+.flavor-agent-activity-log .dataviews-view-table tr:last-child td {
+  border-bottom: none;
+}
+
+.flavor-agent-activity-log .dataviews-view-table tr:hover td {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .flavor-agent-activity-log__pagination {
@@ -275,7 +461,157 @@
 
 .flavor-agent-activity-log__sidebar-card .components-card__header,
 .flavor-agent-activity-log__sidebar-card .components-card__body {
-  padding: 16px;
+  padding: 18px;
+  background: transparent;
+}
+
+.flavor-agent-activity-log__sidebar-card .components-card__header {
+  border-bottom: 1px solid var(--flavor-agent-activity-log-border-soft);
+}
+
+/* ---------------------------------------------------------------
+ * Sidebar entry-detail sections.
+ *
+ * Replaces the stacked DataForm output. Each section is a collapsible
+ * `<details>` with an eyebrow heading + a one-line muted summary; the body
+ * is a two-column key/value `<dl>` grid. Code blobs (Prompt, diff, etc.)
+ * render as `<pre>` blocks and hide entirely when empty so the sidebar
+ * stays scannable for entries that don't have transport diagnostics.
+ * --------------------------------------------------------------- */
+
+.flavor-agent-activity-log__detail-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flavor-agent-activity-log__detail-section {
+  padding: 10px 0;
+  border-top: 1px solid var(--flavor-agent-activity-log-border-soft);
+}
+
+.flavor-agent-activity-log__detail-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.flavor-agent-activity-log__detail-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.flavor-agent-activity-log__detail-summary::-webkit-details-marker {
+  display: none;
+}
+
+.flavor-agent-activity-log__detail-summary::before {
+  content: "▸";
+  display: inline-block;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--flavor-agent-activity-log-muted);
+  margin-inline-end: 8px;
+  transform: translateY(-1px);
+  transition: transform 120ms ease;
+}
+
+.flavor-agent-activity-log__detail-section[open]
+  > .flavor-agent-activity-log__detail-summary::before {
+  transform: translateY(-1px) rotate(90deg);
+}
+
+.flavor-agent-activity-log__detail-summary:focus-visible {
+  outline: none;
+  box-shadow: var(--flavor-agent-focus-ring);
+  border-radius: var(--flavor-agent-radius-sm, 6px);
+}
+
+.flavor-agent-activity-log__detail-summary-label {
+  flex: 0 0 auto;
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-activity-log-accent-strong);
+}
+
+.flavor-agent-activity-log__detail-summary-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: end;
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--flavor-agent-activity-log-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flavor-agent-activity-log__detail-grid {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 16px;
+  row-gap: 2px;
+  margin: 8px 0 4px;
+  padding: 0;
+}
+
+.flavor-agent-activity-log__detail-label {
+  margin: 0;
+  padding-block: 5px;
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-activity-log-muted);
+  white-space: nowrap;
+}
+
+.flavor-agent-activity-log__detail-value {
+  margin: 0;
+  padding-block: 5px;
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--flavor-agent-activity-log-text);
+  word-break: break-word;
+  min-width: 0;
+}
+
+/* Keep a valid `<dl>` structure by styling only `dt`/`dd` children directly. */
+.flavor-agent-activity-log__detail-value.is-empty {
+  color: var(--flavor-agent-activity-log-muted);
+  font-style: italic;
+  opacity: 0.72;
+}
+
+.flavor-agent-activity-log__detail-label--code,
+.flavor-agent-activity-log__detail-value--code {
+  grid-column: 1 / -1;
+}
+
+.flavor-agent-activity-log__detail-label--code {
+  padding-block: 8px 2px;
+}
+
+.flavor-agent-activity-log__detail-value--code {
+  padding-block: 0 8px;
+}
+
+.flavor-agent-activity-log__detail-value--code .flavor-agent-activity-log__code {
+  margin: 0;
+  max-height: 220px;
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
 .flavor-agent-activity-log__sidebar-heading {
@@ -562,36 +898,9 @@
   }
 }
 
-@media (max-width: 1200px) {
-  .flavor-agent-activity-log__summary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .flavor-agent-activity-log__summary-item:nth-child(3n + 1) {
-    border-inline-start: 0;
-  }
-
-  .flavor-agent-activity-log__summary-item:nth-child(n + 4) {
-    border-top: 1px solid var(--flavor-agent-activity-log-border);
-  }
-}
-
 @media (max-width: 782px) {
-  .flavor-agent-activity-log__summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .flavor-agent-activity-log__summary-item {
-    border-top: 0;
-    border-inline-start: 1px solid var(--flavor-agent-activity-log-border);
-  }
-
-  .flavor-agent-activity-log__summary-item:nth-child(odd) {
-    border-inline-start: 0;
-  }
-
-  .flavor-agent-activity-log__summary-item:nth-child(n + 3) {
-    border-top: 1px solid var(--flavor-agent-activity-log-border);
+  .flavor-agent-activity-log__masthead {
+    padding: 20px 22px;
   }
 
   .flavor-agent-activity-log__controls,
@@ -615,19 +924,6 @@
 }
 
 @media (max-width: 600px) {
-  .flavor-agent-activity-log__summary {
-    grid-template-columns: 1fr;
-  }
-
-  .flavor-agent-activity-log__summary-item {
-    border-inline-start: 0;
-    border-top: 1px solid var(--flavor-agent-activity-log-border);
-  }
-
-  .flavor-agent-activity-log__summary-item:first-child {
-    border-top: 0;
-  }
-
   .flavor-agent-activity-log__masthead-actions > *,
   .flavor-agent-activity-log__controls-actions > *,
   .flavor-agent-activity-log__sidebar-actions > * {
@@ -646,4 +942,67 @@
     > .components-button {
     width: 100%;
   }
+}
+
+/* ---------------------------------------------------------------
+ * Brand-scoped button overrides — only inside the activity log.
+ *
+ * Native WP <Button> primaries follow --wp-admin-theme-color so they take
+ * whatever admin scheme the user has selected. Inside the audit page, the
+ * masthead and controls actions read as Flavor Agent: pill shape, brand
+ * teal primary, frosted secondary.
+ * --------------------------------------------------------------- */
+
+.flavor-agent-activity-log .components-button.is-primary,
+.flavor-agent-activity-log .components-button.is-secondary,
+.flavor-agent-activity-log .components-button.is-tertiary {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: var(--flavor-agent-radius-full, 999px);
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.flavor-agent-activity-log .components-button.is-primary {
+  background: var(--flavor-agent-activity-log-accent);
+  border-color: var(--flavor-agent-activity-log-accent);
+  color: #fff;
+}
+
+.flavor-agent-activity-log
+  .components-button.is-primary:hover:not(:disabled) {
+  background: var(--flavor-agent-activity-log-accent-strong);
+  border-color: var(--flavor-agent-activity-log-accent-strong);
+}
+
+.flavor-agent-activity-log .components-button.is-secondary {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--flavor-agent-activity-log-accent-line);
+  color: var(--flavor-agent-activity-log-text);
+}
+
+.flavor-agent-activity-log
+  .components-button.is-secondary:hover:not(:disabled) {
+  background: #fff;
+  border-color: var(--flavor-agent-activity-log-accent-strong);
+  color: var(--flavor-agent-activity-log-accent-strong);
+}
+
+.flavor-agent-activity-log .components-button.is-tertiary {
+  background: transparent;
+  color: var(--flavor-agent-activity-log-accent-strong);
+}
+
+.flavor-agent-activity-log
+  .components-button.is-tertiary:hover:not(:disabled) {
+  background: var(--flavor-agent-activity-log-accent-soft);
+  color: var(--flavor-agent-activity-log-accent-strong);
+}
+
+.flavor-agent-activity-log
+  .components-button:focus-visible:not(:disabled) {
+  outline: none;
+  box-shadow: var(--flavor-agent-focus-ring);
 }

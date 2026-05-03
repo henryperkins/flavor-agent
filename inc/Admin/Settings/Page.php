@@ -148,8 +148,20 @@ final class Page {
 		);
 	}
 
+	public static function render_cloudflare_workers_ai_section(): void {
+		// Guidance now lives in the subsection heading to keep the page compact.
+	}
+
+	public static function render_pattern_retrieval_section(): void {
+		// Guidance now lives in the field description to keep the page focused on controls.
+	}
+
 	public static function render_qdrant_section(): void {
 		// Guidance now lives in the screen Help panel to keep the page focused on controls.
+	}
+
+	public static function render_cloudflare_pattern_ai_search_section(): void {
+		// Guidance now lives in the subsection heading to keep the page compact.
 	}
 
 	public static function render_pattern_recommendations_section(): void {
@@ -475,7 +487,7 @@ final class Page {
 		);
 		?>
 		<p class="description">
-			<?php echo esc_html__( 'Shared chat credentials live in Settings > Connectors. The Azure and OpenAI fields below configure plugin-owned embeddings for pattern sync.', 'flavor-agent' ); ?>
+			<?php echo esc_html__( 'Shared chat credentials live in Settings > Connectors. The Azure, OpenAI, and Workers AI fields below configure plugin-owned embeddings for pattern sync.', 'flavor-agent' ); ?>
 		</p>
 		<?php
 
@@ -498,6 +510,7 @@ final class Page {
 			<?php
 			self::render_azure_direct_settings_fields();
 			self::render_openai_native_direct_settings_fields();
+			self::render_cloudflare_workers_ai_direct_settings_fields();
 			return;
 		}
 
@@ -506,7 +519,12 @@ final class Page {
 			return;
 		}
 
-		self::render_openai_native_direct_settings_fields();
+		if ( Provider::is_native( (string) $state['selected_provider'] ) ) {
+			self::render_openai_native_direct_settings_fields();
+			return;
+		}
+
+		self::render_cloudflare_workers_ai_direct_settings_fields();
 	}
 
 	private static function render_azure_direct_settings_fields(): void {
@@ -541,17 +559,58 @@ final class Page {
 		);
 	}
 
+	private static function render_cloudflare_workers_ai_direct_settings_fields(): void {
+		self::render_subsection_heading(
+			__( 'Cloudflare Workers AI Embeddings', 'flavor-agent' ),
+			__( 'Plugin-owned credentials used for pattern embeddings. Chat is handled by Settings > Connectors.', 'flavor-agent' )
+		);
+		self::render_registered_section_callback( 'flavor_agent_cloudflare_workers_ai' );
+		self::render_registered_fields_table(
+			'flavor_agent_cloudflare_workers_ai',
+			[
+				'flavor_agent_cloudflare_workers_ai_account_id',
+				'flavor_agent_cloudflare_workers_ai_api_token',
+				'flavor_agent_cloudflare_workers_ai_embedding_model',
+			]
+		);
+	}
+
 	/**
 	 * @param array<string, mixed> $feedback
 	 */
 	private static function render_pattern_recommendations_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_PATTERNS, $state, $feedback );
+		self::render_registered_section_callback( 'flavor_agent_pattern_retrieval' );
+		self::render_registered_fields_table(
+			'flavor_agent_pattern_retrieval',
+			[
+				Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
+			]
+		);
+		self::render_subsection_heading(
+			__( 'Qdrant Pattern Backend', 'flavor-agent' ),
+			__( 'Existing vector backend for pattern indexing and retrieval. Required while Qdrant is selected.', 'flavor-agent' )
+		);
 		self::render_registered_section_callback( 'flavor_agent_qdrant' );
 		self::render_registered_fields_table(
 			'flavor_agent_qdrant',
 			[
 				'flavor_agent_qdrant_url',
 				'flavor_agent_qdrant_key',
+			]
+		);
+		self::render_subsection_heading(
+			__( 'Cloudflare AI Search Pattern Backend', 'flavor-agent' ),
+			__( 'Private Cloudflare AI Search instance used for site pattern indexing and retrieval. This is separate from the built-in WordPress developer docs endpoint.', 'flavor-agent' )
+		);
+		self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
+		self::render_registered_fields_table(
+			'flavor_agent_cloudflare_pattern_ai_search',
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 			]
 		);
 		?>
@@ -566,6 +625,7 @@ final class Page {
 					'flavor_agent_pattern_recommendations',
 					[
 						'flavor_agent_pattern_recommendation_threshold',
+						Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
 						'flavor_agent_pattern_max_recommendations',
 					]
 				);
@@ -1106,7 +1166,7 @@ final class Page {
 		}
 
 		if ( ! $embedding_ready ) {
-			return __( 'Add a complete embeddings backend (OpenAI Native key and model, or Azure endpoint, key, and deployment) before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+			return __( 'Add a complete embeddings backend (OpenAI Native key and model, Azure endpoint, key, and deployment, or Cloudflare Workers AI account, token, and model) before the Sync Pattern Catalog button can run.', 'flavor-agent' );
 		}
 
 		return __( 'Add the Qdrant URL and API key before the Sync Pattern Catalog button can run.', 'flavor-agent' );

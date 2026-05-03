@@ -15,11 +15,18 @@ const BLOCK_RESPONSE = {
 		block: [
 			{
 				label: 'Update content',
+				panel: 'typography',
 				attributeUpdates: {
 					content: 'Hello from Flavor Agent',
 				},
 			},
 		],
+		executionContract: {
+			allowedPanels: [ 'typography' ],
+			panelMappingKnown: true,
+			contentAttributeKeys: [ 'content' ],
+			configAttributeKeys: [],
+		},
 		explanation: 'Mocked block recs',
 	},
 };

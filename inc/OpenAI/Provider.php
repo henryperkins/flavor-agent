@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\OpenAI;
 
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\LLM\WordPressAIClient;
 
 final class Provider {
@@ -44,8 +45,9 @@ final class Provider {
 	 */
 	public static function direct_choices(): array {
 		return [
-			self::AZURE  => 'Azure OpenAI',
-			self::NATIVE => 'OpenAI Native',
+			self::AZURE                               => 'Azure OpenAI',
+			self::NATIVE                              => 'OpenAI Native',
+			WorkersAIEmbeddingConfiguration::PROVIDER => 'Cloudflare Workers AI',
 		];
 	}
 
@@ -232,6 +234,10 @@ final class Provider {
 
 		$provider = self::normalize_provider( $provider );
 
+		if ( WorkersAIEmbeddingConfiguration::PROVIDER === $provider && WordPressAIClient::is_supported() ) {
+			return self::wordpress_ai_client_configuration();
+		}
+
 		$connector_provider = self::selected_chat_connector( $provider );
 
 		if ( '' !== $connector_provider ) {
@@ -251,6 +257,10 @@ final class Provider {
 		}
 
 		$provider = self::normalize_provider( $provider ?? self::get() );
+
+		if ( WorkersAIEmbeddingConfiguration::PROVIDER === $provider ) {
+			return WorkersAIEmbeddingConfiguration::get( $overrides );
+		}
 
 		if ( self::is_connector( $provider ) ) {
 			return [
@@ -659,14 +669,20 @@ final class Provider {
 	/**
 	 * Resolve the active chat runtime. The selected option may pin chat to a
 	 * specific connector. OpenAI Native maps to the OpenAI connector when that
-	 * connector is available. No other Connectors-backed provider is used as a
-	 * fallback.
+	 * connector is available. Workers AI is an embeddings-only direct provider,
+	 * so chat delegates to the configured WordPress AI Client runtime without
+	 * pinning a Cloudflare provider. No other Connectors-backed provider is used
+	 * as a fallback.
 	 *
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
 	private static function runtime_chat_configuration(): array {
 		$selected_provider  = self::get();
 		$connector_provider = self::selected_chat_connector( $selected_provider );
+
+		if ( WorkersAIEmbeddingConfiguration::PROVIDER === $selected_provider && WordPressAIClient::is_supported() ) {
+			return self::wordpress_ai_client_configuration();
+		}
 
 		if ( '' !== $connector_provider && WordPressAIClient::is_supported( $connector_provider ) ) {
 			return self::connector_chat_configuration( $connector_provider );
@@ -694,6 +710,13 @@ final class Provider {
 		$provider          = self::normalize_provider_for_request_meta( $provider );
 
 		if ( $provider === $selected_provider ) {
+			return true;
+		}
+
+		if (
+			WorkersAIEmbeddingConfiguration::PROVIDER === $selected_provider
+			&& self::WORDPRESS_AI_CLIENT_PROVIDER === $provider
+		) {
 			return true;
 		}
 
@@ -748,6 +771,10 @@ final class Provider {
 
 		foreach ( array_keys( self::direct_choices() ) as $candidate ) {
 			if ( $candidate === $selected_provider ) {
+				continue;
+			}
+
+			if ( WorkersAIEmbeddingConfiguration::PROVIDER === $candidate ) {
 				continue;
 			}
 

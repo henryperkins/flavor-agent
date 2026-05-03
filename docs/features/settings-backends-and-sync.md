@@ -16,9 +16,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## What The User Can Configure
 
-- Provider selection: direct Azure/OpenAI Native options configure plugin-owned embeddings; connector-backed options pin chat to that connector while embeddings still require a configured direct backend; OpenAI Native can also pin chat to the OpenAI connector when that connector is available
+- Provider selection: direct Azure OpenAI, OpenAI Native, and Cloudflare Workers AI options configure plugin-owned embeddings; connector-backed options pin chat to that connector while embeddings still require a configured direct backend; OpenAI Native can also pin chat to the OpenAI connector when that connector is available
 - Azure OpenAI endpoint, API key, embedding deployment, and default reasoning effort for supported Connectors-routed chat providers
 - OpenAI Native API key override and embedding model ID
+- Cloudflare Workers AI account ID, API token, and embedding model ID
 - Qdrant URL and API key
 - Pattern recommendation ranking threshold and max results
 - Cloudflare AI Search max result count
@@ -26,7 +27,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Guidelines: site context, copy guidelines, image guidelines, additional guidelines, and block-specific notes. When the core/Gutenberg Guidelines store is present, Flavor Agent reads that store first and keeps the legacy fields as migration/import-export tooling.
 - Manual pattern sync through the `Sync Pattern Catalog` button
 
-Chat is no longer configured with plugin-owned chat credentials on this screen. After Workstream C of the WP 7.0 overlap remediation, chat traffic is owned by `Settings > Connectors` via the WordPress AI Client. Selecting `azure_openai` routes embeddings only and does not fall back to another chat provider. Selecting `openai_native` routes embeddings and can pin chat to the OpenAI connector when that connector is available. Selecting any connector-backed provider pins chat to that connector while embeddings fall back to a configured direct Azure/OpenAI Native backend.
+Chat is no longer configured with plugin-owned chat credentials on this screen. After Workstream C of the WP 7.0 overlap remediation, chat traffic is owned by `Settings > Connectors` via the WordPress AI Client. Selecting `azure_openai` routes embeddings only and does not fall back to another chat provider. Selecting `openai_native` routes embeddings and can pin chat to the OpenAI connector when that connector is available. Selecting `cloudflare_workers_ai` routes embeddings to Workers AI and delegates chat to the configured WordPress AI Client runtime without pinning a Cloudflare provider. Selecting any connector-backed provider pins chat to that connector while embeddings fall back to a configured direct Azure/OpenAI Native backend. Cloudflare Workers AI must be explicitly selected and is not used as an implicit embedding fallback.
 
 The reasoning effort setting is attached to Connectors-routed chat as provider-specific `ModelConfig::customOptions` only where Flavor Agent has a known request contract today: `codex` receives `reasoningEffort`, and `openai` receives `reasoning.effort`. `openai_native` uses the OpenAI mapping because chat resolves to the OpenAI connector. Anthropic is left unmapped until its provider plugin documents the accepted reasoning payload.
 
@@ -35,7 +36,7 @@ The reasoning effort setting is attached to Connectors-routed chat as provider-s
 | Surface                       | Primary gate                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Block recommendations         | `ChatClient::is_supported()` returns `true` when the selected connector, or the OpenAI connector that matches OpenAI Native, is available through `Settings > Connectors`.                                                                                                                                                                                                                     |
-| Pattern recommendations       | Any configured direct embedding backend (`azure_openai` or `openai_native`), Qdrant configured, a selected/matching WordPress AI Client chat connector for ranking, and a usable pattern index                                                                                                                                                                                                 |
+| Pattern recommendations       | Any configured direct embedding backend (`azure_openai`, `openai_native`, or explicitly selected `cloudflare_workers_ai`), Qdrant configured, a selected/matching WordPress AI Client chat connector for ranking, and a usable pattern index                                                                                                                                                   |
 | Template recommendations      | Runtime chat configured through `Settings > Connectors`                                                                                                                                                                                                                                                                                                                                        |
 | Template-part recommendations | Runtime chat configured through `Settings > Connectors`                                                                                                                                                                                                                                                                                                                                        |
 | Navigation recommendations    | Runtime chat configured through `Settings > Connectors` and current user can edit theme options                                                                                                                                                                                                                                                                                                |
@@ -46,7 +47,7 @@ The reasoning effort setting is attached to Connectors-routed chat as provider-s
 
 1. The user changes settings on `Settings > Flavor Agent`
 2. WordPress Settings API saves the options registered by `FlavorAgent\Settings::register_settings()`
-3. Flavor Agent validates Azure, OpenAI Native, and Qdrant **embedding** settings when those credential sets changed and enough data is present to run the validation. Direct-provider fields submitted while a connector-backed provider is pinned for chat still validate as embedding credentials. Cloudflare override credentials are only revalidated when those override fields are still being used.
+3. Flavor Agent validates Azure, OpenAI Native, Cloudflare Workers AI, and Qdrant **embedding** settings when those credential sets changed and enough data is present to run the validation. Direct-provider fields submitted while a connector-backed provider is pinned for chat still validate as embedding credentials. Cloudflare AI Search override credentials are only revalidated when those override fields are still being used.
 4. If validation fails, the plugin keeps the previous values and surfaces the error through normal Settings API notices
 5. The OpenAI Native embeddings section reports the current effective API key source and whether the core OpenAI connector is registered/configured
 6. Connector-backed providers appear in the dropdown only when the WordPress AI Client reports that they currently support text generation
@@ -87,6 +88,7 @@ The reasoning effort setting is attached to Connectors-routed chat as provider-s
 - Block recommendations, template work, navigation, and style surfaces require the WordPress AI Client / Connectors chat runtime; there is no plugin-managed chat fallback after Workstream C
 - Pattern recommendations fail closed when either the active direct embedding provider or Qdrant is not configured
 - Connector-backed providers currently apply only to chat; pattern embeddings remain plugin-managed
+- Cloudflare Workers AI embeddings require explicit provider selection; they are not used as an implicit fallback from Azure OpenAI, OpenAI Native, or connector-backed selections
 - Guidelines are read core-first when the `wp_guideline` model is available; Flavor Agent does not require or assume a future `wp_register_guideline()` API yet
 - Legacy guideline options are not deleted during the bridge phase
 - Cloudflare validation only accepts guidance sourced from `developer.wordpress.org`
@@ -104,6 +106,7 @@ The reasoning effort setting is attached to Connectors-routed chat as provider-s
 - `inc/Settings.php`
 - `inc/OpenAI/Provider.php`
 - `inc/AzureOpenAI/ConfigurationValidator.php`
+- `inc/Cloudflare/WorkersAIEmbeddingConfiguration.php`
 - `inc/Abilities/InfraAbilities.php`
 - `inc/Abilities/WordPressDocsAbilities.php`
 - `inc/Abilities/SurfaceCapabilities.php` — shared surface readiness checks; see `docs/reference/shared-internals.md`

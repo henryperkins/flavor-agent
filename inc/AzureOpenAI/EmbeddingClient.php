@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\AzureOpenAI;
 
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\OpenAI\Provider;
 
 final class EmbeddingClient extends BaseHttpClient {
@@ -22,26 +23,33 @@ final class EmbeddingClient extends BaseHttpClient {
 			return new \WP_Error(
 				'embedding_validation_error',
 				sprintf(
-					'%s does not currently expose embedding generation through Settings > Connectors. Choose Azure OpenAI or OpenAI Native in Settings > Flavor Agent for pattern recommendations.',
+					'%s does not currently expose embedding generation through Settings > Connectors. Choose Azure OpenAI, OpenAI Native, or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations.',
 					Provider::label( $provider )
 				),
 				[ 'status' => 400 ]
 			);
 		}
 
-		$config = Provider::embedding_configuration(
-			$provider,
-			Provider::is_native( $provider )
-				? [
-					'flavor_agent_openai_native_api_key' => (string) ( $api_key ?? get_option( 'flavor_agent_openai_native_api_key', '' ) ),
-					'flavor_agent_openai_native_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_openai_native_embedding_model', '' ) ),
-				]
-				: [
-					'flavor_agent_azure_openai_endpoint' => (string) ( $endpoint ?? get_option( 'flavor_agent_azure_openai_endpoint', '' ) ),
-					'flavor_agent_azure_openai_key'      => (string) ( $api_key ?? get_option( 'flavor_agent_azure_openai_key', '' ) ),
-					'flavor_agent_azure_embedding_deployment' => (string) ( $deployment ?? get_option( 'flavor_agent_azure_embedding_deployment', '' ) ),
-				]
-		);
+		if ( WorkersAIEmbeddingConfiguration::PROVIDER === $provider ) {
+			$overrides = [
+				'flavor_agent_cloudflare_workers_ai_account_id' => (string) ( $endpoint ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) ),
+				'flavor_agent_cloudflare_workers_ai_api_token' => (string) ( $api_key ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) ),
+				'flavor_agent_cloudflare_workers_ai_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' ) ),
+			];
+		} elseif ( Provider::is_native( $provider ) ) {
+			$overrides = [
+				'flavor_agent_openai_native_api_key' => (string) ( $api_key ?? get_option( 'flavor_agent_openai_native_api_key', '' ) ),
+				'flavor_agent_openai_native_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_openai_native_embedding_model', '' ) ),
+			];
+		} else {
+			$overrides = [
+				'flavor_agent_azure_openai_endpoint'      => (string) ( $endpoint ?? get_option( 'flavor_agent_azure_openai_endpoint', '' ) ),
+				'flavor_agent_azure_openai_key'           => (string) ( $api_key ?? get_option( 'flavor_agent_azure_openai_key', '' ) ),
+				'flavor_agent_azure_embedding_deployment' => (string) ( $deployment ?? get_option( 'flavor_agent_azure_embedding_deployment', '' ) ),
+			];
+		}
+
+		$config = Provider::embedding_configuration( $provider, $overrides );
 
 		$data = ConfigurationValidator::validate_with_response(
 			$config['url'],
@@ -73,7 +81,7 @@ final class EmbeddingClient extends BaseHttpClient {
 	/**
 	 * Embed a single input string.
 	 *
-	 * @return float[]|\WP_Error 3072-dimension vector.
+	 * @return float[]|\WP_Error Vector from the active embedding provider.
 	 */
 	public static function embed( string $input ): array|\WP_Error {
 		$result = self::embed_batch( [ $input ] );
@@ -96,7 +104,7 @@ final class EmbeddingClient extends BaseHttpClient {
 			return new \WP_Error(
 				'embedding_unsupported',
 				sprintf(
-					'%s does not currently expose embedding generation through Settings > Connectors. Choose Azure OpenAI or OpenAI Native in Settings > Flavor Agent for pattern recommendations.',
+					'%s does not currently expose embedding generation through Settings > Connectors. Choose Azure OpenAI, OpenAI Native, or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations.',
 					Provider::label( $config['provider'] )
 				),
 				[ 'status' => 400 ]

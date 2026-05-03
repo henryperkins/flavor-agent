@@ -7,6 +7,7 @@ namespace FlavorAgent\Admin\Settings;
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 
@@ -19,22 +20,33 @@ final class Validation {
 	private const SECRET_OPTION_NAMES = [
 		'flavor_agent_azure_openai_key',
 		'flavor_agent_openai_native_api_key',
+		'flavor_agent_cloudflare_workers_ai_api_token',
 		'flavor_agent_qdrant_key',
+		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 		'flavor_agent_cloudflare_ai_search_api_token',
 	];
 
 	private const SECRET_OPTION_COMPANIONS = [
-		'flavor_agent_azure_openai_key'               => [
+		'flavor_agent_azure_openai_key'                => [
 			'flavor_agent_azure_openai_endpoint',
 			'flavor_agent_azure_embedding_deployment',
 		],
-		'flavor_agent_openai_native_api_key'          => [
+		'flavor_agent_openai_native_api_key'           => [
 			'flavor_agent_openai_native_embedding_model',
 		],
-		'flavor_agent_qdrant_key'                     => [
+		'flavor_agent_cloudflare_workers_ai_api_token' => [
+			'flavor_agent_cloudflare_workers_ai_account_id',
+			'flavor_agent_cloudflare_workers_ai_embedding_model',
+		],
+		'flavor_agent_qdrant_key'                      => [
 			'flavor_agent_qdrant_url',
 		],
-		'flavor_agent_cloudflare_ai_search_api_token' => [
+		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => [
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
+		],
+		'flavor_agent_cloudflare_ai_search_api_token'  => [
 			'flavor_agent_cloudflare_ai_search_account_id',
 			'flavor_agent_cloudflare_ai_search_instance_id',
 		],
@@ -64,6 +76,13 @@ final class Validation {
 	/**
 	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
 	 */
+	private static ?array $workers_ai_validation_state = null;
+
+	private static bool $workers_ai_validation_error_reported = false;
+
+	/**
+	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
+	 */
 	private static ?array $qdrant_validation_state = null;
 
 	private static bool $qdrant_validation_error_reported = false;
@@ -83,6 +102,8 @@ final class Validation {
 		self::$azure_validation_error_reported         = false;
 		self::$native_openai_validation_state          = null;
 		self::$native_openai_validation_error_reported = false;
+		self::$workers_ai_validation_state             = null;
+		self::$workers_ai_validation_error_reported    = false;
 		self::$qdrant_validation_state                 = null;
 		self::$qdrant_validation_error_reported        = false;
 		self::$cloudflare_validation_state             = null;
@@ -105,6 +126,30 @@ final class Validation {
 		Feedback::mark_section_changed_by_option( 'flavor_agent_pattern_recommendation_threshold', $threshold );
 
 		return $threshold;
+	}
+
+	public static function sanitize_pattern_recommendation_threshold_cloudflare_ai_search( mixed $value ): float {
+		$threshold = (float) $value;
+
+		$threshold = max( 0.0, min( 1.0, round( $threshold, 2 ) ) );
+		Feedback::mark_section_changed_by_option(
+			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
+			$threshold
+		);
+
+		return $threshold;
+	}
+
+	public static function sanitize_pattern_retrieval_backend( mixed $value ): string {
+		$backend = sanitize_key( (string) $value );
+
+		if ( ! in_array( $backend, Config::PATTERN_BACKENDS, true ) ) {
+			$backend = Config::PATTERN_BACKEND_QDRANT;
+		}
+
+		Feedback::mark_section_changed_by_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, $backend );
+
+		return $backend;
 	}
 
 	public static function sanitize_pattern_max_recommendations( mixed $value ): int {
@@ -171,6 +216,27 @@ final class Validation {
 		);
 	}
 
+	public static function sanitize_cloudflare_workers_ai_account_id( mixed $value ): string {
+		return self::sanitize_workers_ai_text_option(
+			$value,
+			'flavor_agent_cloudflare_workers_ai_account_id'
+		);
+	}
+
+	public static function sanitize_cloudflare_workers_ai_api_token( mixed $value ): string {
+		return self::sanitize_workers_ai_text_option(
+			$value,
+			'flavor_agent_cloudflare_workers_ai_api_token'
+		);
+	}
+
+	public static function sanitize_cloudflare_workers_ai_embedding_model( mixed $value ): string {
+		return self::sanitize_workers_ai_text_option(
+			$value,
+			'flavor_agent_cloudflare_workers_ai_embedding_model'
+		);
+	}
+
 	public static function sanitize_qdrant_url( mixed $value ): string {
 		$sanitized_value = Utils::sanitize_url_value( $value );
 		Feedback::mark_section_changed_by_option( 'flavor_agent_qdrant_url', $sanitized_value );
@@ -205,6 +271,34 @@ final class Validation {
 		}
 
 		return $resolved_values['flavor_agent_qdrant_key'] ?? $sanitized_value;
+	}
+
+	public static function sanitize_cloudflare_pattern_ai_search_account_id( mixed $value ): string {
+		return self::sanitize_pattern_ai_search_text_option(
+			$value,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID
+		);
+	}
+
+	public static function sanitize_cloudflare_pattern_ai_search_namespace( mixed $value ): string {
+		return self::sanitize_pattern_ai_search_text_option(
+			$value,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
+		);
+	}
+
+	public static function sanitize_cloudflare_pattern_ai_search_instance_id( mixed $value ): string {
+		return self::sanitize_pattern_ai_search_text_option(
+			$value,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID
+		);
+	}
+
+	public static function sanitize_cloudflare_pattern_ai_search_api_token( mixed $value ): string {
+		return self::sanitize_pattern_ai_search_text_option(
+			$value,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN
+		);
 	}
 
 	public static function sanitize_cloudflare_account_id( mixed $value ): string {
@@ -416,6 +510,87 @@ final class Validation {
 		);
 
 		self::$native_openai_validation_state = [
+			'fingerprint' => $fingerprint,
+			'values'      => $values,
+			'error'       => is_wp_error( $validation ) ? $validation : null,
+		];
+
+		return is_wp_error( $validation ) ? $validation : $values;
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array<string, string>|\WP_Error
+	 */
+	public static function resolve_workers_ai_submission_values( array $overrides = [] ): array|\WP_Error {
+		$current_values = self::get_current_workers_ai_values();
+		$values         = self::get_cached_submission_values(
+			'cloudflare_workers_ai',
+			static function () use ( $current_values ): array {
+				return [
+					'flavor_agent_cloudflare_workers_ai_account_id' => self::read_posted_text_value(
+						'flavor_agent_cloudflare_workers_ai_account_id',
+						$current_values['flavor_agent_cloudflare_workers_ai_account_id']
+					),
+					'flavor_agent_cloudflare_workers_ai_api_token' => self::read_posted_text_value(
+						'flavor_agent_cloudflare_workers_ai_api_token',
+						$current_values['flavor_agent_cloudflare_workers_ai_api_token']
+					),
+					'flavor_agent_cloudflare_workers_ai_embedding_model' => self::read_posted_text_value(
+						'flavor_agent_cloudflare_workers_ai_embedding_model',
+						$current_values['flavor_agent_cloudflare_workers_ai_embedding_model']
+					),
+				];
+			}
+		);
+
+		foreach ( $overrides as $option_name => $override_value ) {
+			$values[ $option_name ] = sanitize_text_field( $override_value );
+		}
+
+		if ( ! self::should_validate_submission() ) {
+			return $values;
+		}
+
+		if (
+			! self::should_validate_direct_provider_submission(
+				WorkersAIEmbeddingConfiguration::PROVIDER,
+				array_keys( $current_values )
+			)
+		) {
+			return $values;
+		}
+
+		if (
+			'' === $values['flavor_agent_cloudflare_workers_ai_account_id'] ||
+			'' === $values['flavor_agent_cloudflare_workers_ai_api_token']
+		) {
+			return $values;
+		}
+
+		if ( ! self::values_require_validation( $values, $current_values ) ) {
+			return $values;
+		}
+
+		$fingerprint = self::build_validation_fingerprint( $values );
+
+		if (
+			is_array( self::$workers_ai_validation_state ) &&
+			( self::$workers_ai_validation_state['fingerprint'] ?? '' ) === $fingerprint
+		) {
+			return self::$workers_ai_validation_state['error'] instanceof \WP_Error
+				? self::$workers_ai_validation_state['error']
+				: self::$workers_ai_validation_state['values'];
+		}
+
+		$validation = EmbeddingClient::validate_configuration(
+			$values['flavor_agent_cloudflare_workers_ai_account_id'],
+			$values['flavor_agent_cloudflare_workers_ai_api_token'],
+			$values['flavor_agent_cloudflare_workers_ai_embedding_model'],
+			WorkersAIEmbeddingConfiguration::PROVIDER
+		);
+
+		self::$workers_ai_validation_state = [
 			'fingerprint' => $fingerprint,
 			'values'      => $values,
 			'error'       => is_wp_error( $validation ) ? $validation : null,
@@ -674,6 +849,31 @@ final class Validation {
 		return $resolved_values[ $option_name ] ?? $sanitized_value;
 	}
 
+	private static function sanitize_workers_ai_text_option( mixed $value, string $option_name ): string {
+		$sanitized_value = self::sanitize_text_option_value( $value, $option_name );
+		Feedback::mark_section_changed_by_option( $option_name, $sanitized_value );
+		$resolved_values = self::resolve_workers_ai_submission_values(
+			[
+				$option_name => $sanitized_value,
+			]
+		);
+
+		if ( is_wp_error( $resolved_values ) ) {
+			self::report_workers_ai_validation_error( $resolved_values );
+
+			return (string) get_option( $option_name, '' );
+		}
+
+		return $resolved_values[ $option_name ] ?? $sanitized_value;
+	}
+
+	private static function sanitize_pattern_ai_search_text_option( mixed $value, string $option_name ): string {
+		$sanitized_value = self::sanitize_text_option_value( $value, $option_name );
+		Feedback::mark_section_changed_by_option( $option_name, $sanitized_value );
+
+		return $sanitized_value;
+	}
+
 	private static function sanitize_cloudflare_text_option( mixed $value, string $option_name ): string {
 		$sanitized_value = self::sanitize_text_option_value( $value, $option_name );
 		Feedback::mark_section_changed_by_option( $option_name, $sanitized_value );
@@ -730,6 +930,19 @@ final class Validation {
 			[
 				'flavor_agent_openai_native_api_key' => 'sanitize_text_field',
 				'flavor_agent_openai_native_embedding_model' => 'sanitize_text_field',
+			]
+		);
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function get_current_workers_ai_values(): array {
+		return self::get_current_option_values(
+			[
+				'flavor_agent_cloudflare_workers_ai_account_id' => 'sanitize_text_field',
+				'flavor_agent_cloudflare_workers_ai_api_token' => 'sanitize_text_field',
+				'flavor_agent_cloudflare_workers_ai_embedding_model' => 'sanitize_text_field',
 			]
 		);
 	}
@@ -1011,6 +1224,20 @@ final class Validation {
 			__( 'We kept your previous OpenAI Native settings because validation failed.', 'flavor-agent' )
 		);
 		self::$native_openai_validation_error_reported = true;
+	}
+
+	private static function report_workers_ai_validation_error( \WP_Error $error ): void {
+		if ( self::$workers_ai_validation_error_reported ) {
+			return;
+		}
+
+		Feedback::report_validation_feedback(
+			Config::GROUP_CHAT,
+			'flavor_agent_cloudflare_workers_ai_validation',
+			$error,
+			__( 'We kept your previous Cloudflare Workers AI settings because validation failed.', 'flavor-agent' )
+		);
+		self::$workers_ai_validation_error_reported = true;
 	}
 
 	private static function report_qdrant_validation_error( \WP_Error $error ): void {

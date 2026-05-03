@@ -66,8 +66,20 @@ final class Settings {
 		Page::render_openai_native_section();
 	}
 
+	public static function render_cloudflare_workers_ai_section(): void {
+		Page::render_cloudflare_workers_ai_section();
+	}
+
+	public static function render_pattern_retrieval_section(): void {
+		Page::render_pattern_retrieval_section();
+	}
+
 	public static function render_qdrant_section(): void {
 		Page::render_qdrant_section();
+	}
+
+	public static function render_cloudflare_pattern_ai_search_section(): void {
+		Page::render_cloudflare_pattern_ai_search_section();
 	}
 
 	public static function render_pattern_recommendations_section(): void {
@@ -110,6 +122,14 @@ final class Settings {
 		return Validation::sanitize_pattern_recommendation_threshold( $value );
 	}
 
+	public static function sanitize_pattern_recommendation_threshold_cloudflare_ai_search( mixed $value ): float {
+		return Validation::sanitize_pattern_recommendation_threshold_cloudflare_ai_search( $value );
+	}
+
+	public static function sanitize_pattern_retrieval_backend( mixed $value ): string {
+		return Validation::sanitize_pattern_retrieval_backend( $value );
+	}
+
 	public static function sanitize_pattern_max_recommendations( mixed $value ): int {
 		return Validation::sanitize_pattern_max_recommendations( $value );
 	}
@@ -146,12 +166,40 @@ final class Settings {
 		return Validation::sanitize_openai_native_embedding_model( $value );
 	}
 
+	public static function sanitize_cloudflare_workers_ai_account_id( mixed $value ): string {
+		return Validation::sanitize_cloudflare_workers_ai_account_id( $value );
+	}
+
+	public static function sanitize_cloudflare_workers_ai_api_token( mixed $value ): string {
+		return Validation::sanitize_cloudflare_workers_ai_api_token( $value );
+	}
+
+	public static function sanitize_cloudflare_workers_ai_embedding_model( mixed $value ): string {
+		return Validation::sanitize_cloudflare_workers_ai_embedding_model( $value );
+	}
+
 	public static function sanitize_qdrant_url( mixed $value ): string {
 		return Validation::sanitize_qdrant_url( $value );
 	}
 
 	public static function sanitize_qdrant_key( mixed $value ): string {
 		return Validation::sanitize_qdrant_key( $value );
+	}
+
+	public static function sanitize_cloudflare_pattern_ai_search_account_id( mixed $value ): string {
+		return Validation::sanitize_cloudflare_pattern_ai_search_account_id( $value );
+	}
+
+	public static function sanitize_cloudflare_pattern_ai_search_namespace( mixed $value ): string {
+		return Validation::sanitize_cloudflare_pattern_ai_search_namespace( $value );
+	}
+
+	public static function sanitize_cloudflare_pattern_ai_search_instance_id( mixed $value ): string {
+		return Validation::sanitize_cloudflare_pattern_ai_search_instance_id( $value );
+	}
+
+	public static function sanitize_cloudflare_pattern_ai_search_api_token( mixed $value ): string {
+		return Validation::sanitize_cloudflare_pattern_ai_search_api_token( $value );
 	}
 
 	public static function sanitize_cloudflare_account_id( mixed $value ): string {

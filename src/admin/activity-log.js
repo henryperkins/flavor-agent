@@ -7,8 +7,14 @@ import {
 	Icon,
 	Spinner,
 } from '@wordpress/components';
-import { createRoot, useEffect, useMemo, useState } from '@wordpress/element';
-import { DataForm, DataViews } from '@wordpress/dataviews/wp';
+import {
+	createRoot,
+	Fragment,
+	useEffect,
+	useMemo,
+	useState,
+} from '@wordpress/element';
+import { DataViews } from '@wordpress/dataviews/wp';
 import { __, sprintf } from '@wordpress/i18n';
 import { check, page, plugins, symbol, undo, warning } from '@wordpress/icons';
 import './wpds-runtime.css';
@@ -453,435 +459,222 @@ function ErrorState( { error, onRetry } ) {
 	);
 }
 
-function getDetailFields() {
-	return [
-		{
-			id: 'overviewSummary',
-			label: __( 'Overview summary', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<span>
-					{ item.statusLabel } · { item.operationTypeLabel }
-				</span>
-			),
-		},
-		{
-			id: 'diagnosticsSummary',
-			label: __( 'Diagnostics summary', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => {
-				const parts = [
-					item.provider,
-					item.model,
-					item.providerPath,
-				].filter( ( value ) => value && value !== NOT_RECORDED );
-
-				return (
-					<span>
-						{ parts.join( ' · ' ) ||
-							__( 'Not recorded', 'flavor-agent' ) }
-					</span>
-				);
-			},
-		},
-		{
-			id: 'requestSummary',
-			label: __( 'Request summary', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => {
-				const parts = [
-					item.requestAbility,
-					item.requestReference,
-				].filter( ( value ) => value && value !== NOT_RECORDED );
-
-				return (
-					<span>
-						{ parts.join( ' · ' ) ||
-							__( 'Not recorded', 'flavor-agent' ) }
-					</span>
-				);
-			},
-		},
-		{
-			id: 'undoSummary',
-			label: __( 'Undo summary', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<span>
-					{ item.undoStatusLabel }
-					{ item.undoReason && item.undoReason !== NOT_RECORDED
-						? ` · ${ item.undoReason }`
-						: '' }
-				</span>
-			),
-		},
-		{
-			id: 'statusLabel',
-			label: __( 'Status', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<span
-					className={ `flavor-agent-activity-log__status is-${ item.status }` }
-				>
-					{ item.statusLabel }
-				</span>
-			),
-		},
-		{
-			id: 'timestampDisplay',
-			label: __( 'Recorded', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'surfaceLabel',
-			label: __( 'Surface', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'operationTypeLabel',
-			label: __( 'Action type', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'activityTypeLabel',
-			label: __( 'Recorded activity type', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'entity',
-			label: __( 'Entity', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'postType',
-			label: __( 'Post type', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'entityId',
-			label: __( 'Entity ID', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'documentLabel',
-			label: __( 'Document', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'documentScopeKey',
-			label: __( 'Document scope', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'blockPath',
-			label: __( 'Block path', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'user',
-			label: __( 'User', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'provider',
-			label: __( 'Provider', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'model',
-			label: __( 'Model', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'providerPath',
-			label: __( 'Provider path', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'configurationOwner',
-			label: __( 'Configured in', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'credentialSource',
-			label: __( 'Credential source', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'selectedProvider',
-			label: __( 'Selected provider', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'connector',
-			label: __( 'Connector', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'connectorPlugin',
-			label: __( 'Connector plugin', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'requestFallback',
-			label: __( 'Fallback', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'tokenUsage',
-			label: __( 'Token usage', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'latency',
-			label: __( 'Latency', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'transportEndpoint',
-			label: __( 'Endpoint', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'timeout',
-			label: __( 'Timeout', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'requestPayload',
-			label: __( 'Payload', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'responseSummary',
-			label: __( 'Response', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'providerRequestId',
-			label: __( 'Provider request ID', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'transportError',
-			label: __( 'Transport detail', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<pre className="flavor-agent-activity-log__code">
-					{ item.transportError }
-				</pre>
-			),
-		},
-		{
-			id: 'requestReference',
-			label: __( 'Reference', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'requestAbility',
-			label: __( 'Ability', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'requestRoute',
-			label: __( 'Route', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'requestPrompt',
-			label: __( 'Prompt', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<pre className="flavor-agent-activity-log__code">
-					{ item.requestPrompt }
-				</pre>
-			),
-		},
-		{
-			id: 'undoStatusLabel',
-			label: __( 'Undo state', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'undoError',
-			label: __( 'Undo error', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'undoReason',
-			label: __( 'Undo reason', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-		},
-		{
-			id: 'stateDiff',
-			label: __( 'Structured diff', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<pre className="flavor-agent-activity-log__code">
-					{ item.stateDiff }
-				</pre>
-			),
-		},
-		{
-			id: 'beforeSummary',
-			label: __( 'Before', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<pre className="flavor-agent-activity-log__code">
-					{ item.beforeSummary }
-				</pre>
-			),
-		},
-		{
-			id: 'afterSummary',
-			label: __( 'After', 'flavor-agent' ),
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<pre className="flavor-agent-activity-log__code">
-					{ item.afterSummary }
-				</pre>
-			),
-		},
-	];
-}
-
-function getDetailForm() {
-	return {
-		fields: [
-			{
-				id: 'overview',
-				label: __( 'Overview', 'flavor-agent' ),
-				children: [
-					'statusLabel',
-					'timestampDisplay',
-					'operationTypeLabel',
-					'activityTypeLabel',
-					'surfaceLabel',
-					'entity',
-					'postType',
-					'entityId',
-					'documentLabel',
-					'documentScopeKey',
-					'blockPath',
-					'user',
-				],
-				layout: {
-					type: 'details',
-					summary: 'overviewSummary',
-				},
-			},
-			{
-				id: 'diagnostics',
-				label: __( 'Diagnostics', 'flavor-agent' ),
-				children: [
-					'provider',
-					'model',
-					'providerPath',
-					'configurationOwner',
-					'credentialSource',
-					'selectedProvider',
-					'connector',
-					'connectorPlugin',
-					'requestFallback',
-					'tokenUsage',
-					'latency',
-					'transportEndpoint',
-					'timeout',
-					'requestPayload',
-					'responseSummary',
-					'providerRequestId',
-					'transportError',
-				],
-				layout: {
-					type: 'details',
-					summary: 'diagnosticsSummary',
-				},
-			},
-			{
-				id: 'request',
-				label: __( 'Request', 'flavor-agent' ),
-				children: [
-					'requestAbility',
-					'requestRoute',
-					'requestReference',
-					'requestPrompt',
-				],
-				layout: {
-					type: 'details',
-					summary: 'requestSummary',
-				},
-			},
-			{
-				id: 'undo',
-				label: __( 'Undo', 'flavor-agent' ),
-				children: [ 'undoStatusLabel', 'undoReason', 'undoError' ],
-				layout: {
-					type: 'details',
-					summary: 'undoSummary',
-				},
-			},
-			{
-				id: 'state',
-				label: __( 'State snapshots', 'flavor-agent' ),
-				children: [ 'stateDiff', 'beforeSummary', 'afterSummary' ],
-				layout: {
-					type: 'details',
-				},
-			},
+/**
+ * Section spec for the entry-detail sidebar.
+ *
+ * Each row is `[label, fieldKey]` (text) or `[label, fieldKey, 'code']` for
+ * pre-formatted blobs. `summary` produces the dimmed line shown next to the
+ * section heading; rows where the value is empty or "Not recorded" are
+ * either dimmed (text) or hidden (code), keeping the sidebar scannable.
+ */
+const DETAIL_SECTIONS = [
+	{
+		id: 'overview',
+		label: __( 'Overview', 'flavor-agent' ),
+		summary: ( entry ) =>
+			[ entry.statusLabel, entry.operationTypeLabel ]
+				.filter( ( value ) => value && value !== NOT_RECORDED )
+				.join( ' · ' ),
+		rows: [
+			[ __( 'Status', 'flavor-agent' ), 'statusLabel', 'status' ],
+			[ __( 'Recorded', 'flavor-agent' ), 'timestampDisplay' ],
+			[ __( 'Surface', 'flavor-agent' ), 'surfaceLabel' ],
+			[ __( 'Action type', 'flavor-agent' ), 'operationTypeLabel' ],
+			[
+				__( 'Recorded activity type', 'flavor-agent' ),
+				'activityTypeLabel',
+			],
+			[ __( 'Entity', 'flavor-agent' ), 'entity' ],
+			[ __( 'Post type', 'flavor-agent' ), 'postType' ],
+			[ __( 'Entity ID', 'flavor-agent' ), 'entityId' ],
+			[ __( 'Document', 'flavor-agent' ), 'documentLabel' ],
+			[ __( 'Document scope', 'flavor-agent' ), 'documentScopeKey' ],
+			[ __( 'Block path', 'flavor-agent' ), 'blockPath' ],
+			[ __( 'User', 'flavor-agent' ), 'user' ],
 		],
-	};
+		initialOpen: true,
+	},
+	{
+		id: 'diagnostics',
+		label: __( 'Diagnostics', 'flavor-agent' ),
+		summary: ( entry ) =>
+			[ entry.provider, entry.model, entry.providerPath ]
+				.filter( ( value ) => value && value !== NOT_RECORDED )
+				.join( ' · ' ),
+		rows: [
+			[ __( 'Provider', 'flavor-agent' ), 'provider' ],
+			[ __( 'Model', 'flavor-agent' ), 'model' ],
+			[ __( 'Provider path', 'flavor-agent' ), 'providerPath' ],
+			[ __( 'Configured in', 'flavor-agent' ), 'configurationOwner' ],
+			[ __( 'Credential source', 'flavor-agent' ), 'credentialSource' ],
+			[ __( 'Selected provider', 'flavor-agent' ), 'selectedProvider' ],
+			[ __( 'Connector', 'flavor-agent' ), 'connector' ],
+			[ __( 'Connector plugin', 'flavor-agent' ), 'connectorPlugin' ],
+			[ __( 'Fallback', 'flavor-agent' ), 'requestFallback' ],
+			[ __( 'Token usage', 'flavor-agent' ), 'tokenUsage' ],
+			[ __( 'Latency', 'flavor-agent' ), 'latency' ],
+			[ __( 'Endpoint', 'flavor-agent' ), 'transportEndpoint' ],
+			[ __( 'Timeout', 'flavor-agent' ), 'timeout' ],
+			[ __( 'Payload', 'flavor-agent' ), 'requestPayload' ],
+			[ __( 'Response', 'flavor-agent' ), 'responseSummary' ],
+			[
+				__( 'Provider request ID', 'flavor-agent' ),
+				'providerRequestId',
+			],
+			[
+				__( 'Transport detail', 'flavor-agent' ),
+				'transportError',
+				'code',
+			],
+		],
+	},
+	{
+		id: 'request',
+		label: __( 'Request', 'flavor-agent' ),
+		summary: ( entry ) =>
+			[ entry.requestAbility, entry.requestReference ]
+				.filter( ( value ) => value && value !== NOT_RECORDED )
+				.join( ' · ' ),
+		rows: [
+			[ __( 'Ability', 'flavor-agent' ), 'requestAbility' ],
+			[ __( 'Route', 'flavor-agent' ), 'requestRoute' ],
+			[ __( 'Reference', 'flavor-agent' ), 'requestReference' ],
+			[ __( 'Prompt', 'flavor-agent' ), 'requestPrompt', 'code' ],
+		],
+	},
+	{
+		id: 'undo',
+		label: __( 'Undo', 'flavor-agent' ),
+		summary: ( entry ) => {
+			const parts = [ entry.undoStatusLabel ];
+
+			if ( entry.undoReason && entry.undoReason !== NOT_RECORDED ) {
+				parts.push( entry.undoReason );
+			}
+
+			return parts.filter( Boolean ).join( ' · ' );
+		},
+		rows: [
+			[ __( 'Undo state', 'flavor-agent' ), 'undoStatusLabel' ],
+			[ __( 'Undo reason', 'flavor-agent' ), 'undoReason' ],
+			[ __( 'Undo error', 'flavor-agent' ), 'undoError' ],
+		],
+	},
+	{
+		id: 'state',
+		label: __( 'State snapshots', 'flavor-agent' ),
+		summary: () => '',
+		rows: [
+			[ __( 'Structured diff', 'flavor-agent' ), 'stateDiff', 'code' ],
+			[ __( 'Before', 'flavor-agent' ), 'beforeSummary', 'code' ],
+			[ __( 'After', 'flavor-agent' ), 'afterSummary', 'code' ],
+		],
+	},
+];
+
+function isEmptyDetailValue( value ) {
+	return (
+		value === undefined ||
+		value === null ||
+		value === '' ||
+		value === NOT_RECORDED
+	);
 }
 
-function handleReadOnlyDataFormChange() {
-	if ( process.env.NODE_ENV !== 'production' ) {
-		// eslint-disable-next-line no-console
-		console.warn(
-			'Flavor Agent activity details are read-only; DataForm changes are ignored.'
+function ActivityDetailRow( { label, value, kind, status } ) {
+	const empty = isEmptyDetailValue( value );
+
+	if ( kind === 'code' ) {
+		// Code blobs hide entirely when empty — there's nothing to inspect.
+		if ( empty ) {
+			return null;
+		}
+
+		return (
+			<Fragment>
+				<dt className="flavor-agent-activity-log__detail-label flavor-agent-activity-log__detail-label--code">
+					{ label }
+				</dt>
+				<dd className="flavor-agent-activity-log__detail-value flavor-agent-activity-log__detail-value--code">
+					<pre className="flavor-agent-activity-log__code">
+						{ value }
+					</pre>
+				</dd>
+			</Fragment>
 		);
 	}
+
+	if ( kind === 'status' ) {
+		return (
+			<Fragment>
+				<dt className="flavor-agent-activity-log__detail-label">
+					{ label }
+				</dt>
+				<dd className="flavor-agent-activity-log__detail-value">
+					<span
+						className={ `flavor-agent-activity-log__status is-${ status }` }
+					>
+						{ value }
+					</span>
+				</dd>
+			</Fragment>
+		);
+	}
+
+	return (
+		<Fragment>
+			<dt className="flavor-agent-activity-log__detail-label">
+				{ label }
+			</dt>
+			<dd
+				className={
+					empty
+						? 'flavor-agent-activity-log__detail-value is-empty'
+						: 'flavor-agent-activity-log__detail-value'
+				}
+			>
+				{ value }
+			</dd>
+		</Fragment>
+	);
+}
+
+function ActivityDetailSection( { section, entry } ) {
+	const summary = section.summary( entry ) || '';
+	const rows = section.rows
+		.map( ( [ label, key, kind ] ) => (
+			<ActivityDetailRow
+				key={ key }
+				label={ label }
+				value={ entry[ key ] }
+				kind={ kind }
+				status={ kind === 'status' ? entry.status : undefined }
+			/>
+		) )
+		.filter( Boolean );
+
+	if ( rows.length === 0 ) {
+		return null;
+	}
+
+	return (
+		<details
+			className="flavor-agent-activity-log__detail-section"
+			open={ Boolean( section.initialOpen ) }
+		>
+			<summary className="flavor-agent-activity-log__detail-summary">
+				<span className="flavor-agent-activity-log__detail-summary-label">
+					{ section.label }
+				</span>
+				{ summary && (
+					<span className="flavor-agent-activity-log__detail-summary-text">
+						{ summary }
+					</span>
+				) }
+			</summary>
+			<dl className="flavor-agent-activity-log__detail-grid">{ rows }</dl>
+		</details>
+	);
 }
 
 function ActivityEntryDetails( { entry } ) {
@@ -928,12 +721,15 @@ function ActivityEntryDetails( { entry } ) {
 				</div>
 			</CardHeader>
 			<CardBody>
-				<DataForm
-					data={ entry }
-					fields={ getDetailFields() }
-					form={ getDetailForm() }
-					onChange={ handleReadOnlyDataFormChange }
-				/>
+				<div className="flavor-agent-activity-log__detail-sections">
+					{ DETAIL_SECTIONS.map( ( section ) => (
+						<ActivityDetailSection
+							key={ section.id }
+							section={ section }
+							entry={ entry }
+						/>
+					) ) }
+				</div>
 			</CardBody>
 		</Card>
 	);

@@ -17,25 +17,50 @@
     --wp-components-color-foreground-secondary,
     var(--wpds-color-fg-content-neutral-weak, #50575e)
   );
-  --flavor-agent-editor-accent: var(--wp-admin-theme-color, #3858e9);
-  --flavor-agent-editor-accent-strong: var(
-    --wp-admin-theme-color-darker-10,
-    color-mix(in srgb, var(--wp-admin-theme-color, #3858e9) 82%, black)
+  /* Flavor Agent's teal is layered on top of whatever wp-admin theme color
+     the user has selected. Inspector AI chrome reads as Flavor Agent regardless
+     of admin scheme; the wp-admin scheme is the fallback only. */
+  --flavor-agent-editor-accent: var(
+    --flavor-agent-color-accent,
+    var(--wp-admin-theme-color, #0b7b80)
   );
-  --flavor-agent-editor-warm: var(--wp-admin-theme-color, #3858e9);
+  --flavor-agent-editor-accent-strong: var(
+    --flavor-agent-color-accent-strong,
+    var(
+      --wp-admin-theme-color-darker-10,
+      color-mix(in srgb, var(--wp-admin-theme-color, #0b7b80) 82%, black)
+    )
+  );
+  --flavor-agent-editor-warm: var(--flavor-agent-color-warm, #ba7925);
+  /* Brand serif used only on the AI Recommendations section title (15px,
+     letter-spacing -0.01em). UI labels and controls stay on the body sans. */
   --flavor-agent-editor-font-serif: var(
-    --wpds-font-family-body,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif
+    --flavor-agent-font-serif,
+    var(
+      --wpds-font-family-body,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif
+    )
   );
   --flavor-agent-editor-font-sans: var(
-    --wpds-font-family-body,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif
+    --flavor-agent-font-sans,
+    var(
+      --wpds-font-family-body,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif
+    )
+  );
+  --flavor-agent-editor-font-mono: var(
+    --flavor-agent-font-mono,
+    "JetBrains Mono",
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace
   );
   --flavor-agent-editor-radius-lg: var(--wpds-border-radius-lg, 8px);
   --flavor-agent-editor-radius-xl: var(--wpds-border-radius-lg, 8px);
@@ -58,6 +83,59 @@
   --flavor-agent-editor-space-8: var(--wpds-dimension-gap-sm, 8px);
   --flavor-agent-editor-space-12: var(--wpds-dimension-gap-md, 12px);
   --flavor-agent-editor-space-16: var(--wpds-dimension-gap-lg, 16px);
+
+  /* Brand surfaces echoed for the Inspector AI panel. The hero reads against
+     a layered cream → mint-cream wash; per-card surfaces stay neutral so they
+     don't compete with the featured hero. */
+  --flavor-agent-editor-surface-page: var(
+    --flavor-agent-surface-page,
+    #fffdf8
+  );
+  --flavor-agent-editor-surface-mint: var(
+    --flavor-agent-surface-mint,
+    #edf7f7
+  );
+  --flavor-agent-editor-surface-frost: var(
+    --flavor-agent-surface-frost,
+    rgba(255, 255, 255, 0.72)
+  );
+  --flavor-agent-editor-warm-weak: var(
+    --flavor-agent-color-warm-weak,
+    #fff7e0
+  );
+  --flavor-agent-editor-warning: var(
+    --flavor-agent-color-warning,
+    var(--wpds-color-fg-content-warning, #926300)
+  );
+  --flavor-agent-editor-warning-weak: var(
+    --flavor-agent-color-warning-weak,
+    var(--wpds-color-bg-surface-warning-weak, #fff7e0)
+  );
+  --flavor-agent-editor-success: var(
+    --flavor-agent-color-success,
+    var(--wpds-color-fg-content-success-weak, #007f30)
+  );
+  --flavor-agent-editor-success-weak: var(
+    --flavor-agent-color-success-weak,
+    var(--wpds-color-bg-surface-success-weak, #eaffed)
+  );
+  --flavor-agent-editor-accent-line: var(
+    --flavor-agent-color-accent-line,
+    rgba(11, 123, 128, 0.18)
+  );
+  --flavor-agent-editor-accent-wash: var(
+    --flavor-agent-color-accent-wash,
+    rgba(11, 123, 128, 0.12)
+  );
+  --flavor-agent-editor-ai-edge: var(
+    --flavor-agent-ai-edge,
+    linear-gradient(180deg, #0b7b80 0%, #ba7925 100%)
+  );
+  --flavor-agent-editor-focus-ring: var(
+    --flavor-agent-focus-ring,
+    0 0 0 1px var(--flavor-agent-editor-accent),
+    0 0 0 4px rgba(11, 123, 128, 0.18)
+  );
 }
 
 /* ---------------------------------------------------------------
@@ -98,11 +176,12 @@
 
 .flavor-agent-panel__eyebrow {
   margin: 0;
-  font-size: 10px;
-  font-weight: 600;
+  font-family: var(--flavor-agent-editor-font-sans);
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--flavor-agent-editor-muted);
+  color: var(--flavor-agent-editor-accent-strong);
 }
 
 .flavor-agent-panel__intro-copy {
@@ -243,11 +322,12 @@
 
 .flavor-agent-panel__group-title {
   min-width: 0;
-  font-size: var(--wpds-font-size-sm, 12px);
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--flavor-agent-editor-muted);
+  font-family: var(--flavor-agent-editor-font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-editor-accent-strong);
 }
 
 .flavor-agent-panel__group-body {
@@ -315,17 +395,22 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 14px;
   border-radius: var(--flavor-agent-editor-radius-lg);
-  border: 1px solid var(--flavor-agent-editor-stroke-subtle);
-  border-inline-start-width: 4px;
-  border-inline-start-color: color-mix(
-    in srgb,
-    var(--flavor-agent-editor-accent) 45%,
-    var(--wpds-color-stroke-surface-neutral, #d8d8d8)
-  );
-  background: var(--flavor-agent-editor-panel-bg);
-  box-shadow: none;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--flavor-agent-editor-accent) 22%,
+      var(--flavor-agent-editor-stroke-subtle)
+    );
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(255, 253, 247, 1)
+    ),
+    var(--flavor-agent-editor-surface-mint);
+  box-shadow: var(--flavor-agent-shadow-xs, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
 }
 
 .flavor-agent-recommendation-hero__header {
@@ -344,15 +429,17 @@
 
 .flavor-agent-recommendation-hero__eyebrow {
   margin: 0;
-  font-size: 10px;
-  font-weight: 600;
+  font-family: var(--flavor-agent-editor-font-sans);
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--flavor-agent-editor-accent);
+  color: var(--flavor-agent-editor-accent-strong);
 }
 
 .flavor-agent-recommendation-hero__title {
-  font-size: 15px;
+  font-family: var(--flavor-agent-editor-font-sans);
+  font-size: 13px;
   line-height: 1.35;
   font-weight: 600;
   color: var(--flavor-agent-editor-text);
@@ -385,8 +472,19 @@
   gap: var(--wpds-dimension-gap-sm, 8px);
   padding: 10px;
   border-radius: var(--wpds-border-radius-lg, 8px);
-  border: 1px solid var(--flavor-agent-editor-stroke-subtle);
-  background: var(--flavor-agent-editor-panel-bg);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--flavor-agent-editor-accent-line) 50%,
+      var(--flavor-agent-editor-stroke-subtle)
+    );
+  background:
+    linear-gradient(
+      0deg,
+      rgba(237, 247, 247, 0.55),
+      rgba(237, 247, 247, 0.55)
+    ),
+    var(--flavor-agent-editor-panel-bg);
 }
 
 .flavor-agent-activity-row__info {
@@ -593,10 +691,16 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 9px 12px;
   border-radius: var(--wpds-border-radius-md, 4px);
-  border: 1px solid var(--wpds-color-stroke-surface-warning, #cc8b00);
-  background: var(--wpds-color-bg-surface-warning-weak, #fff8e5);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--flavor-agent-editor-warning) 28%,
+      var(--flavor-agent-editor-stroke-subtle)
+    );
+  border-inline-start: 3px solid var(--flavor-agent-editor-warning);
+  background: var(--flavor-agent-editor-warning-weak);
 }
 
 .flavor-agent-stale-banner--embedded {
@@ -965,12 +1069,13 @@
  * --------------------------------------------------------------- */
 
 .flavor-agent-section-label {
-  font-size: var(--wpds-font-size-sm, 12px);
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
+  font-family: var(--flavor-agent-editor-font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   line-height: 1.4;
-  color: var(--flavor-agent-editor-muted);
+  color: var(--flavor-agent-editor-accent-strong);
   margin-bottom: 8px;
 }
 
@@ -1155,36 +1260,92 @@
   padding: 0;
 }
 
+/* Suggestion chip — atomic AI accept pill. The left edge carries the
+   teal → amber AI-provenance gradient (`--flavor-agent-editor-ai-edge`)
+   so the chip reads as AI-suggested at a glance. */
 .flavor-agent-chip.components-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 30px;
-  padding: 0 8px;
+  padding: 0 10px 0 14px;
+  border: 1px solid var(--flavor-agent-editor-stroke-subtle);
   border-radius: var(--wpds-border-radius-md, 4px);
+  background: var(--flavor-agent-editor-panel-bg);
+  color: var(--flavor-agent-editor-text);
   font-size: var(--wpds-font-size-xs, 11px);
+  font-weight: 500;
   line-height: 1.4;
   box-shadow: none;
+  overflow: hidden;
+  isolation: isolate;
+  transition: border-color 120ms ease, background-color 120ms ease,
+    color 120ms ease;
+}
+
+.flavor-agent-chip.components-button::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--flavor-agent-editor-ai-edge);
+  pointer-events: none;
+}
+
+.flavor-agent-chip.components-button:hover:not(:disabled) {
+  border-color: var(--flavor-agent-editor-accent-strong);
+  background: var(--flavor-agent-editor-surface-page);
+  color: var(--flavor-agent-editor-text);
+}
+
+.flavor-agent-chip.components-button:focus-visible {
+  outline: none;
+  box-shadow: var(--flavor-agent-editor-focus-ring);
 }
 
 .flavor-agent-chip.is-applied.components-button {
-  border-color: var(--wpds-color-stroke-surface-success, #8ac894);
-  background: var(--wpds-color-bg-surface-success-weak, #eaffed);
-  color: var(--wpds-color-fg-content-success-weak, #007f30);
+  border-color: color-mix(
+    in srgb,
+    var(--flavor-agent-editor-success) 28%,
+    var(--flavor-agent-editor-stroke-subtle)
+  );
+  background: var(--flavor-agent-editor-success-weak);
+  color: var(--flavor-agent-editor-success);
+}
+
+.flavor-agent-chip.is-applied.components-button::before {
+  background: var(--flavor-agent-editor-success);
+}
+
+.flavor-agent-chip.components-button:disabled {
+  opacity: 0.65;
 }
 
 .flavor-agent-chip--passive {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 30px;
-  padding: 0 8px;
+  padding: 0 10px 0 14px;
   border: 1px solid var(--wpds-color-stroke-subtle, rgba(0, 0, 0, 0.08));
   border-radius: var(--wpds-border-radius-md, 4px);
   background: var(--wpds-color-bg-surface-secondary, #f6f7f7);
   color: var(--wpds-color-fg-content-secondary, #50575e);
   font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.4;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.flavor-agent-chip--passive::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--flavor-agent-editor-stroke-subtle);
+  pointer-events: none;
 }
 
 .flavor-agent-chip__label {
@@ -1877,4 +2038,128 @@
 
 .flavor-agent-content-notice {
   margin: 0 0 8px;
+}
+
+/* ---------------------------------------------------------------
+ * Brand-scoped button overrides — only inside the Flavor Agent panel.
+ *
+ * Native WP <Button> primaries follow --wp-admin-theme-color so they
+ * inherit whatever admin scheme the user has selected. Inside Flavor
+ * Agent's recommendation surfaces we layer brand teal on top so the AI
+ * chrome reads as Flavor Agent regardless of admin scheme. The buttons
+ * stay structurally native (square corners, 36px) — only color changes.
+ * --------------------------------------------------------------- */
+
+.flavor-agent-panel
+  .components-button.is-primary,
+.flavor-agent-panel .flavor-agent-fetch-button.components-button.is-primary {
+  background: var(--flavor-agent-editor-accent);
+  border-color: var(--flavor-agent-editor-accent);
+  color: #fff;
+  box-shadow: none;
+}
+
+.flavor-agent-panel
+  .components-button.is-primary:hover:not(:disabled),
+.flavor-agent-panel
+  .flavor-agent-fetch-button.components-button.is-primary:hover:not(:disabled) {
+  background: var(--flavor-agent-editor-accent-strong);
+  border-color: var(--flavor-agent-editor-accent-strong);
+  color: #fff;
+}
+
+.flavor-agent-panel
+  .components-button.is-primary:focus-visible:not(:disabled),
+.flavor-agent-panel
+  .flavor-agent-fetch-button.components-button.is-primary:focus-visible:not(
+    :disabled
+  ) {
+  outline: none;
+  box-shadow: var(--flavor-agent-editor-focus-ring);
+}
+
+.flavor-agent-panel .components-button.is-secondary {
+  color: var(--flavor-agent-editor-accent-strong);
+  border-color: color-mix(
+    in srgb,
+    var(--flavor-agent-editor-accent) 32%,
+    var(--flavor-agent-editor-stroke-subtle)
+  );
+  background: transparent;
+  box-shadow: none;
+}
+
+.flavor-agent-panel .components-button.is-secondary:hover:not(:disabled) {
+  color: var(--flavor-agent-editor-accent-strong);
+  background: var(--flavor-agent-editor-accent-wash);
+  border-color: var(--flavor-agent-editor-accent-strong);
+}
+
+.flavor-agent-panel
+  .components-button.is-secondary:focus-visible:not(:disabled) {
+  outline: none;
+  box-shadow: var(--flavor-agent-editor-focus-ring);
+}
+
+/* The chip stack already paints its own brand surface (AI-edge + cream
+   wash). Don't double-coat its primary state with the panel-wide overrides
+   below — the chip's own rules win at higher specificity. */
+
+/* ---------------------------------------------------------------
+ * Lane / advisory count badge — mono, muted.
+ *
+ * RecommendationLane and AIAdvisorySection emit the count as a generic
+ * pill on the right side of the lane header. The design's lane count
+ * reads as a quiet mono number, not as a prominent pill. We keep the
+ * pill chrome minimal (no border, no fill) so it's a clean count.
+ * --------------------------------------------------------------- */
+
+.flavor-agent-recommendation-lane > .flavor-agent-panel__group-header
+  .flavor-agent-card__meta > .flavor-agent-pill:last-child,
+.flavor-agent-advisory-section .flavor-agent-advisory-section__toggle
+  .flavor-agent-card__meta > .flavor-agent-pill:last-child {
+  font-family: var(--flavor-agent-editor-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--flavor-agent-editor-muted);
+  background: transparent;
+  border-color: transparent;
+  padding-inline: 0;
+}
+
+/* ---------------------------------------------------------------
+ * AI provenance wash — applied to the recommendation lane group
+ * surface so AI suggestions read as AI suggestions even before the
+ * chip edges resolve.
+ * --------------------------------------------------------------- */
+
+.flavor-agent-recommendation-lane {
+  background:
+    linear-gradient(
+      0deg,
+      rgba(11, 123, 128, 0.025),
+      rgba(11, 123, 128, 0.025)
+    ),
+    var(--flavor-agent-editor-panel-bg);
+}
+
+/* ---------------------------------------------------------------
+ * Activity section — mint-cream wash for the activity tail.
+ * --------------------------------------------------------------- */
+
+.flavor-agent-activity-section {
+  background:
+    linear-gradient(
+      0deg,
+      rgba(237, 247, 247, 0.4),
+      rgba(237, 247, 247, 0.4)
+    ),
+    var(--flavor-agent-editor-panel-bg);
+  border-color: color-mix(
+    in srgb,
+    var(--flavor-agent-editor-accent-line) 60%,
+    var(--flavor-agent-editor-stroke-subtle)
+  );
 }

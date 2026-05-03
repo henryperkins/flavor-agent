@@ -51,8 +51,9 @@ final class ProviderTest extends TestCase {
 
 		$this->assertSame(
 			[
-				Provider::AZURE  => 'Azure OpenAI',
-				Provider::NATIVE => 'OpenAI Native',
+				Provider::AZURE         => 'Azure OpenAI',
+				Provider::NATIVE        => 'OpenAI Native',
+				'cloudflare_workers_ai' => 'Cloudflare Workers AI',
 			],
 			Provider::choices( 'anthropic' )
 		);
@@ -206,6 +207,26 @@ final class ProviderTest extends TestCase {
 		$this->assertSame( 'Azure OpenAI', $config['label'] );
 		$this->assertSame( '', $config['model'] );
 		$this->assertFalse( $config['configured'] );
+	}
+
+	public function test_chat_configuration_uses_wordpress_ai_client_for_workers_ai_embedding_selection(): void {
+		WordPressTestState::$options             = [
+			Provider::OPTION_NAME => 'cloudflare_workers_ai',
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		$config = Provider::chat_configuration();
+
+		$this->assertSame( 'wordpress_ai_client', $config['provider'] );
+		$this->assertSame( 'WordPress AI Client', $config['label'] );
+		$this->assertSame( 'provider-managed', $config['model'] );
+		$this->assertTrue( $config['configured'] );
+
+		$meta = Provider::active_chat_request_meta();
+
+		$this->assertSame( 'cloudflare_workers_ai', $meta['selectedProvider'] );
+		$this->assertSame( 'wordpress_ai_client', $meta['provider'] );
+		$this->assertFalse( $meta['usedFallback'] );
 	}
 
 	public function test_chat_configuration_maps_openai_native_to_the_openai_connector_only(): void {

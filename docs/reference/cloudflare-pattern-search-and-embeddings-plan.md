@@ -48,6 +48,15 @@
 6. **Use a private AI Search instance for site pattern content.**
    The built-in public docs endpoint remains only for docs grounding. Pattern content must require site-owner Cloudflare credentials and must never use the public docs endpoint.
 
+7. **Workers AI does NOT participate in the implicit runtime fallback chain.**
+   `Provider::runtime_embedding_configuration()` currently iterates `direct_choices()` order and uses the first configured entry when the selected provider is unconfigured. Workers AI is added to `direct_choices()` for selectability, but `runtime_embedding_configuration()` must explicitly skip Workers AI when it is not the selected provider. **Why:** silent fallback to Cloudflare from a site whose admin selected Azure or OpenAI Native would route pattern text to a backend the operator did not opt into and is not disclosed. Sites must explicitly select Workers AI to use it.
+
+8. **Workers AI credentials are read from option storage only in this plan.**
+   Env-var/constant resolution (parity with `Provider::native_effective_api_key_metadata()`) is explicitly out of scope. Operators set the account ID and token through `Settings > Flavor Agent`. Re-evaluate after Phase 2 if CI/devcontainer use cases ask for env-var support.
+
+9. **AI Search scores are NOT comparable to Qdrant cosine similarity.**
+   Cloudflare AI Search returns RRF-fused hybrid scores with their own match-threshold semantics. The existing `flavor_agent_pattern_recommendation_threshold` is calibrated for Qdrant. Phase 2 introduces a separate `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search` option (default `0.2`, matching the AI Search request `match_threshold`) so each backend can be tuned independently. The shared threshold setting remains Qdrant-only.
+
 ## File Structure
 
 ### New Files
@@ -87,10 +96,12 @@
   - Report pattern readiness for either Qdrant or AI Search backend.
 - `inc/Admin/Settings/Config.php`
   - Add option names and grouping for Workers AI embeddings and pattern retrieval backend.
+- `inc/Admin/Settings/Registrar.php`
+  - Register the new options with `register_setting()` and wire field rows. **This file owns option registration and field-row registration; `Fields.php` only renders inputs.**
 - `inc/Admin/Settings/Fields.php`
-  - Add fields for Workers AI and pattern AI Search.
+  - Add render callbacks if any new field shapes are needed (re-use existing `render_text_field` where possible).
 - `inc/Admin/Settings/Page.php`
-  - Render the new settings with clear ownership labels and prerequisite copy.
+  - Render the new settings sections with clear ownership labels and prerequisite copy.
 - `inc/Admin/Settings/State.php`
   - Include selected pattern backend, Workers AI readiness, and AI Search pattern readiness.
 - `inc/Admin/Settings/Validation.php`
@@ -125,6 +136,8 @@
   - Add backend-specific debugging paths.
 - `docs/reference/cross-surface-validation-gates.md`
   - Update Gate 2 examples if needed.
+- `docs/reference/wordpress-ai-roadmap-tracking.md`
+  - Refresh per the doc's documented procedure to confirm no active conflicts with WordPress org project 240 (AI Planning & Roadmap) before adding `cloudflare_workers_ai` as a built-in `direct_choices()` entry.
 - `docs/reference/local-environment-setup.md`
   - Add local setup notes.
 - `readme.txt`
@@ -141,7 +154,7 @@
 - Modify: `inc/OpenAI/Provider.php`
 - Test: `tests/phpunit/CloudflareWorkersAIEmbeddingTest.php`
 
-- [ ] **Step 1: Add failing provider configuration tests**
+- [x] **Step 1: Add failing provider configuration tests**
 
 Create `tests/phpunit/CloudflareWorkersAIEmbeddingTest.php` with tests that assert:
 
@@ -176,7 +189,7 @@ public function test_workers_ai_embedding_signature_includes_provider_model_and_
 }
 ```
 
-- [ ] **Step 2: Run the failing tests**
+- [x] **Step 2: Run the failing tests**
 
 Run:
 
@@ -186,7 +199,7 @@ composer run test:php -- --filter CloudflareWorkersAIEmbeddingTest
 
 Expected: fails because `cloudflare_workers_ai` is not a known provider and the configuration class does not exist.
 
-- [ ] **Step 3: Implement Workers AI configuration**
+- [x] **Step 3: Implement Workers AI configuration**
 
 Add `inc/Cloudflare/WorkersAIEmbeddingConfiguration.php`:
 
@@ -273,7 +286,26 @@ if ( WorkersAIEmbeddingConfiguration::PROVIDER === $provider ) {
 }
 ```
 
-- [ ] **Step 4: Run the provider tests**
+Update `Provider::runtime_embedding_configuration()` to skip Workers AI during the fallback iteration so it is never used as an implicit fallback for sites that selected Azure or OpenAI Native (see Product Decision 7):
+
+```php
+foreach ( array_keys( self::direct_choices() ) as $candidate ) {
+	if ( $candidate === $selected_provider ) {
+		continue;
+	}
+
+	if ( WorkersAIEmbeddingConfiguration::PROVIDER === $candidate ) {
+		continue; // Workers AI must be explicitly selected.
+	}
+
+	$candidate_config = self::embedding_configuration( $candidate, $overrides );
+	// ...
+}
+```
+
+Add a `CloudflareWorkersAIEmbeddingTest` case proving that a site with `flavor_agent_openai_provider = azure_openai` and blank Azure credentials does NOT fall back to a fully-configured Workers AI installation.
+
+- [x] **Step 4: Run the provider tests**
 
 Run:
 
@@ -290,7 +322,7 @@ Expected: pass.
 - Modify: `inc/Admin/Settings/Validation.php`
 - Test: `tests/phpunit/CloudflareWorkersAIEmbeddingTest.php`
 
-- [ ] **Step 1: Add failing HTTP validation and batch embedding tests**
+- [x] **Step 1: Add failing HTTP validation and batch embedding tests**
 
 Append tests that seed a Workers AI OpenAI-compatible response:
 
@@ -345,7 +377,7 @@ public function test_workers_ai_embedding_batch_reuses_existing_vector_parser():
 }
 ```
 
-- [ ] **Step 2: Run the failing tests**
+- [x] **Step 2: Run the failing tests**
 
 Run:
 
@@ -355,28 +387,43 @@ composer run test:php -- --filter CloudflareWorkersAIEmbeddingTest
 
 Expected: validation fails until `EmbeddingClient::validate_configuration()` can resolve Workers AI config from the provider branch.
 
-- [ ] **Step 3: Update `EmbeddingClient::validate_configuration()`**
+- [x] **Step 3: Update `EmbeddingClient::validate_configuration()` and `embed_batch()`**
 
-Extend the config selection so `cloudflare_workers_ai` uses `Provider::embedding_configuration( $provider, $overrides )` with Cloudflare option keys:
+The current `validate_configuration()` uses a single ternary on `Provider::is_native()` (`inc/AzureOpenAI/EmbeddingClient.php:32-44`) that hard-splits into Native vs. Azure overrides. Replace that ternary with an explicit three-branch override builder, then call `Provider::embedding_configuration()` once:
 
 ```php
 if ( 'cloudflare_workers_ai' === $provider ) {
-	$config = Provider::embedding_configuration(
-		$provider,
-		[
-			'flavor_agent_cloudflare_workers_ai_account_id' => (string) ( $endpoint ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) ),
-			'flavor_agent_cloudflare_workers_ai_api_token' => (string) ( $api_key ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) ),
-			'flavor_agent_cloudflare_workers_ai_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' ) ),
-		]
-	);
+	$overrides = [
+		'flavor_agent_cloudflare_workers_ai_account_id' => (string) ( $endpoint ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) ),
+		'flavor_agent_cloudflare_workers_ai_api_token'  => (string) ( $api_key ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) ),
+		'flavor_agent_cloudflare_workers_ai_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' ) ),
+	];
+} elseif ( Provider::is_native( $provider ) ) {
+	$overrides = [
+		'flavor_agent_openai_native_api_key'         => (string) ( $api_key ?? get_option( 'flavor_agent_openai_native_api_key', '' ) ),
+		'flavor_agent_openai_native_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_openai_native_embedding_model', '' ) ),
+	];
 } else {
-	// Keep the existing native/Azure branch.
+	$overrides = [
+		'flavor_agent_azure_openai_endpoint'      => (string) ( $endpoint ?? get_option( 'flavor_agent_azure_openai_endpoint', '' ) ),
+		'flavor_agent_azure_openai_key'           => (string) ( $api_key ?? get_option( 'flavor_agent_azure_openai_key', '' ) ),
+		'flavor_agent_azure_embedding_deployment' => (string) ( $deployment ?? get_option( 'flavor_agent_azure_embedding_deployment', '' ) ),
+	];
 }
+
+$config = Provider::embedding_configuration( $provider, $overrides );
 ```
 
-Also update method comments that say vectors are always 3072-dimension.
+Also update the user-visible connector-rejection error strings that hard-code "Choose Azure OpenAI or OpenAI Native":
 
-- [ ] **Step 4: Run the tests**
+- `inc/AzureOpenAI/EmbeddingClient.php:25` (in `validate_configuration()`)
+- `inc/AzureOpenAI/EmbeddingClient.php:99` (in `embed_batch()`)
+
+Replace with: `"Choose Azure OpenAI, OpenAI Native, or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations."`
+
+Update doc comments on `embed()` and `embed_batch()` that claim vectors are always 3072-dimension. Workers AI's `@cf/qwen/qwen3-embedding-0.6b` returns 1024-dimension vectors.
+
+- [x] **Step 4: Run the tests**
 
 Run:
 
@@ -400,7 +447,7 @@ Expected: both suites pass; Azure and OpenAI Native behavior is unchanged.
 - Test: `tests/phpunit/SettingsTest.php`
 - Test: `src/admin/__tests__/settings-page-controller.test.js`
 
-- [ ] **Step 1: Add failing PHP settings tests**
+- [x] **Step 1: Add failing PHP settings tests**
 
 Add tests in `SettingsTest` that assert the settings screen renders:
 
@@ -412,7 +459,7 @@ Add tests in `SettingsTest` that assert the settings screen renders:
 
 Add validation tests for successful and failed Workers AI probe responses using the same response shape as Task 2.
 
-- [ ] **Step 2: Add failing JS prerequisite tests**
+- [x] **Step 2: Add failing JS prerequisite tests**
 
 Add tests to `src/admin/__tests__/settings-page-controller.test.js` for:
 
@@ -420,7 +467,7 @@ Add tests to `src/admin/__tests__/settings-page-controller.test.js` for:
 - Workers AI configured plus Qdrant configured says pattern sync can run.
 - Workers AI configured plus no Qdrant says "Needs Qdrant".
 
-- [ ] **Step 3: Run failing tests**
+- [x] **Step 3: Run failing tests**
 
 Run:
 
@@ -431,7 +478,7 @@ npm run test:unit -- src/admin/__tests__/settings-page-controller.test.js
 
 Expected: fails until fields, validation, and copy are wired.
 
-- [ ] **Step 4: Implement settings fields**
+- [x] **Step 4: Implement settings fields**
 
 Add options to settings config and fields:
 
@@ -460,7 +507,7 @@ EmbeddingClient::validate_configuration(
 );
 ```
 
-- [ ] **Step 5: Run settings tests**
+- [x] **Step 5: Run settings tests**
 
 Run:
 
@@ -479,7 +526,7 @@ Expected: pass.
 - Test: `tests/phpunit/PluginLifecycleTest.php`
 - Test: `tests/phpunit/PatternIndexTest.php`
 
-- [ ] **Step 1: Add failing dependency tests**
+- [x] **Step 1: Add failing dependency tests**
 
 Add tests proving these option updates call `PatternIndex::handle_dependency_change()`:
 
@@ -491,13 +538,25 @@ update_option_flavor_agent_cloudflare_workers_ai_embedding_model
 
 Add a `PatternIndexTest` that seeds a ready Qdrant state, changes the active provider from OpenAI Native to Workers AI, and asserts runtime state becomes stale with `embedding_signature_changed`.
 
-- [ ] **Step 2: Implement hooks and state labels**
+- [x] **Step 2: Implement hooks and state labels**
 
-Register the dependency hooks in `flavor-agent.php` beside the existing Azure, Qdrant, and `home` hooks.
+Append the new option names to the existing option-name array in `flavor-agent.php` (currently the `foreach` at lines 91-111) that registers `update_option_*` actions for `PatternIndex::handle_dependency_change()`. Do not introduce a second loop.
 
-Update state labels that mention only Azure/OpenAI to say "embedding provider".
+```php
+foreach ( [
+	'flavor_agent_openai_provider',
+	// ... existing Azure / Native / OpenAI connector / Qdrant / home entries ...
+	'flavor_agent_cloudflare_workers_ai_account_id',
+	'flavor_agent_cloudflare_workers_ai_api_token',
+	'flavor_agent_cloudflare_workers_ai_embedding_model',
+] as $flavor_agent_option_name ) {
+	add_action( "update_option_{$flavor_agent_option_name}", [ FlavorAgent\Patterns\PatternIndex::class, 'handle_dependency_change' ], 10, 3 );
+}
+```
 
-- [ ] **Step 3: Run targeted tests**
+Update `PatternIndex` state labels and stale-reason copy that mention only Azure/OpenAI to say "embedding provider".
+
+- [x] **Step 3: Run targeted tests**
 
 Run:
 
@@ -523,7 +582,7 @@ Expected: pass.
 - Modify: `inc/Admin/Settings/Feedback.php`
 - Test: `tests/phpunit/SettingsTest.php`
 
-- [ ] **Step 1: Add failing settings tests**
+- [x] **Step 1: Add failing settings tests**
 
 Add tests that assert the settings screen renders:
 
@@ -535,23 +594,38 @@ Add tests that assert the settings screen renders:
 
 Assert copy clearly distinguishes this private pattern backend from the public docs AI Search endpoint.
 
-- [ ] **Step 2: Implement options and UI**
+- [x] **Step 2: Implement options and UI**
 
-Add a Pattern Retrieval Backend setting:
-
-```php
-qdrant
-cloudflare_ai_search
-```
-
-Add private Cloudflare AI Search fields:
+In `inc/Admin/Settings/Registrar.php`, register the pattern retrieval backend selector:
 
 ```php
-flavor_agent_cloudflare_pattern_ai_search_account_id
-flavor_agent_cloudflare_pattern_ai_search_namespace
-flavor_agent_cloudflare_pattern_ai_search_instance_id
-flavor_agent_cloudflare_pattern_ai_search_api_token
+register_setting( 'flavor_agent_settings', 'flavor_agent_pattern_retrieval_backend', [
+	'type'              => 'string',
+	'sanitize_callback' => static fn ( $v ) => in_array( (string) $v, [ 'qdrant', 'cloudflare_ai_search' ], true ) ? (string) $v : 'qdrant',
+	'default'           => 'qdrant',
+] );
 ```
+
+Register the private Cloudflare AI Search options:
+
+```php
+register_setting( 'flavor_agent_settings', 'flavor_agent_cloudflare_pattern_ai_search_account_id',  [ 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => '' ] );
+register_setting( 'flavor_agent_settings', 'flavor_agent_cloudflare_pattern_ai_search_namespace',   [ 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => '' ] );
+register_setting( 'flavor_agent_settings', 'flavor_agent_cloudflare_pattern_ai_search_instance_id', [ 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => '' ] );
+register_setting( 'flavor_agent_settings', 'flavor_agent_cloudflare_pattern_ai_search_api_token',   [ 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => '' ] );
+```
+
+Register the per-backend threshold introduced by Product Decision 9:
+
+```php
+register_setting( 'flavor_agent_settings', 'flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search', [
+	'type'              => 'number',
+	'sanitize_callback' => static fn ( $v ) => max( 0.0, min( 1.0, (float) $v ) ),
+	'default'           => 0.2,
+] );
+```
+
+Add field rows for each option using the existing `add_settings_field()` pattern in `Registrar.php`.
 
 Use settings copy:
 
@@ -559,7 +633,7 @@ Use settings copy:
 Private Cloudflare AI Search instance used for site pattern indexing and retrieval. This is separate from the built-in WordPress developer docs endpoint.
 ```
 
-- [ ] **Step 3: Run settings tests**
+- [x] **Step 3: Run settings tests**
 
 Run:
 
@@ -575,7 +649,7 @@ Expected: pass.
 - Create: `inc/Cloudflare/PatternSearchClient.php`
 - Test: `tests/phpunit/CloudflarePatternSearchClientTest.php`
 
-- [ ] **Step 1: Add failing client tests**
+- [x] **Step 1: Add failing client tests**
 
 Create tests for:
 
@@ -588,7 +662,7 @@ Create tests for:
 - Upload sends multipart `file`, `metadata`, and `wait_for_completion`.
 - Delete calls `/items/{item_id}` and treats `404` as already deleted.
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run:
 
@@ -598,17 +672,24 @@ composer run test:php -- --filter CloudflarePatternSearchClientTest
 
 Expected: fails because the client does not exist.
 
-- [ ] **Step 3: Implement the client**
+- [x] **Step 3: Implement the client**
 
-`PatternSearchClient` must expose:
+`PatternSearchClient` must expose this surface (`is_configured()` mirrors `AISearchClient::is_configured()` so the Settings page can probe with submitted values before persisting):
 
 ```php
-public static function is_configured(): bool;
+public static function is_configured(
+	?string $account_id = null,
+	?string $namespace = null,
+	?string $instance_id = null,
+	?string $api_token = null
+): bool;
 public static function validate_configuration( ?string $account_id = null, ?string $namespace = null, ?string $instance_id = null, ?string $api_token = null ): true|\WP_Error;
 public static function upload_pattern( array $pattern, string $item_id, bool $wait = false ): true|\WP_Error;
 public static function delete_pattern( string $item_id ): true|\WP_Error;
 public static function search_patterns( string $query, array $visible_pattern_names, int $max_results = 50 ): array|\WP_Error;
 ```
+
+All HTTP requests must go through `FlavorAgent\AzureOpenAI\BaseHttpClient::post_json_with_retry()` (or the multipart equivalent) for consistent retry/backoff behavior with existing transports. Do not introduce a separate retry implementation.
 
 The search request body must use:
 
@@ -649,9 +730,14 @@ synced_id
 public_safe
 ```
 
+Cloudflare AI Search metadata filters require fields to be declared as filterable in the AI Search instance schema. The Cloudflare API today does not expose programmatic schema management for custom metadata, so:
+
+- `validate_configuration()` must probe the instance with a search using a `filters.pattern_name` clause. If the API returns a schema error, surface a settings-page error explicitly instructing the operator to add `pattern_name` (and the other four fields) as filterable metadata in the AI Search dashboard for that instance.
+- `docs/reference/local-environment-setup.md` (Modified Files) must list the exact dashboard steps to declare these five fields filterable before the plugin's first sync.
+
 The markdown file body uploaded for each pattern must include title, description, categories, block types, template types, inferred traits, and sanitized pattern content. Do not store private/draft/trashed synced patterns.
 
-- [ ] **Step 4: Run client tests**
+- [x] **Step 4: Run client tests**
 
 Run:
 
@@ -671,7 +757,7 @@ Expected: pass.
 - Modify: `inc/Abilities/PatternAbilities.php`
 - Test: `tests/phpunit/PatternAbilitiesTest.php`
 
-- [ ] **Step 1: Add failing PatternAbilities tests**
+- [x] **Step 1: Add failing PatternAbilities tests**
 
 Add tests for:
 
@@ -682,7 +768,7 @@ Add tests for:
 - Synced candidates from AI Search are rehydrated through current `wp_block` posts before ranker input.
 - Unreadable synced candidates are omitted and only aggregate diagnostics are returned.
 
-- [ ] **Step 2: Implement interfaces**
+- [x] **Step 2: Implement interfaces**
 
 Use this interface:
 
@@ -704,7 +790,7 @@ Move the existing Qdrant embed, signature, collection validation, pass A, pass B
 
 Add `CloudflareAISearchPatternRetrievalBackend` that calls `PatternSearchClient::search_patterns()` and normalizes chunks into the same candidate shape expected by the existing post-filter/ranker flow.
 
-- [ ] **Step 3: Wire `PatternAbilities`**
+- [x] **Step 3: Wire `PatternAbilities`**
 
 Replace the direct Step 3 and Step 4 Qdrant code with:
 
@@ -734,7 +820,7 @@ if ( is_wp_error( $retrieved ) ) {
 
 Keep the existing candidate authorization, rehydration, reranking, thresholding, and diagnostics code after retrieval.
 
-- [ ] **Step 4: Run PatternAbilities tests**
+- [x] **Step 4: Run PatternAbilities tests**
 
 Run:
 
@@ -812,22 +898,24 @@ For `cloudflare_ai_search`, `PatternIndex::do_sync()` must:
 2. Compute fingerprint and per-pattern fingerprints exactly as Qdrant sync does.
 3. Mark indexing before remote work.
 4. List remote AI Search items for the instance.
-5. Upload changed current patterns with `PatternSearchClient::upload_pattern()`.
-6. Delete stale item IDs with `PatternSearchClient::delete_pattern()`.
+5. Upload changed current patterns with `PatternSearchClient::upload_pattern( $pattern, $item_id, /* wait */ true )`. **Each upload must pass `wait_for_completion=true` to avoid a race between the upload and the delete pass.** The plan's Qdrant path is synchronous; AI Search is async by default. Without `wait`, a stale-delete pass executed in the same sync run could delete items that haven't finished indexing.
+6. Delete stale item IDs with `PatternSearchClient::delete_pattern()`. Re-list remote items after step 5 if `wait_for_completion=true` is unavailable for any backend reason; reconcile only against the post-wait list.
 7. Persist ready state.
+
+Re-uploading the same `item_id` overwrites the existing item in Cloudflare AI Search. Use the deterministic `pattern_uuid()` already exposed by `PatternIndex` to produce stable item IDs, and add a `CloudflarePatternSearchClientTest` case proving repeat uploads do not produce duplicates.
 
 Do not call `EmbeddingClient` or `QdrantClient` in this branch.
 
 - [ ] **Step 5: Register dependency hooks**
 
-Register `PatternIndex::handle_dependency_change()` for:
+Append the following option names to the same `foreach` loop in `flavor-agent.php` (lines 91-111) extended in Task 4 — do not introduce a second loop:
 
 ```php
-update_option_flavor_agent_pattern_retrieval_backend
-update_option_flavor_agent_cloudflare_pattern_ai_search_account_id
-update_option_flavor_agent_cloudflare_pattern_ai_search_namespace
-update_option_flavor_agent_cloudflare_pattern_ai_search_instance_id
-update_option_flavor_agent_cloudflare_pattern_ai_search_api_token
+'flavor_agent_pattern_retrieval_backend',
+'flavor_agent_cloudflare_pattern_ai_search_account_id',
+'flavor_agent_cloudflare_pattern_ai_search_namespace',
+'flavor_agent_cloudflare_pattern_ai_search_instance_id',
+'flavor_agent_cloudflare_pattern_ai_search_api_token',
 ```
 
 - [ ] **Step 6: Run sync tests**
@@ -859,6 +947,8 @@ Add tests proving AI Search backend results:
 - Count badge results only when renderable by current Gutenberg allowed-pattern data.
 - Return "not currently exposing those patterns" when backend names are not renderable.
 - Do not create apply, undo, or activity semantics for pattern insertion.
+- **Defense-in-depth: synced candidates returned by AI Search are dropped if the underlying `wp_block` post is currently private/draft/trashed/unreadable, even if the AI Search index still contains them.** Status changes between syncs must never leak private content. Add an explicit test that flips a synced pattern to `draft` after upload and asserts it is filtered out of recommendations before the next sync.
+- **Activity-log parity:** every recommendation request still emits a `request_diagnostic` activity row, and the row's metadata records the `pattern_backend` (`qdrant` or `cloudflare_ai_search`) plus the resolved chat/embedding provider. Add a `PatternAbilitiesTest` assertion against the activity-row payload for both backends. (See active project memory: pattern recommendations already emit `request_diagnostic` rows; this change must not regress that.)
 
 - [ ] **Step 2: Keep UI behavior unchanged**
 
@@ -917,6 +1007,7 @@ Add two distinct Cloudflare rows in `docs/reference/external-service-disclosure.
    - Data: pattern title, description, categories, block/template metadata, inferred traits, public-safe pattern content, recommendation query, visible pattern names as search filters.
    - Trigger: settings validation, manual/scheduled pattern sync, recommendation retrieval.
    - Gate: selected pattern backend plus private Cloudflare AI Search credentials.
+   - **Public-safety guarantee is two-layer.** At sync time, only public, published, non-trashed synced patterns are uploaded; status changes between syncs may leave a previously-uploaded pattern in the AI Search index until the next sync run. Retrieval-time rehydration (Task 7 / Task 9) is the defense-in-depth layer: any synced candidate returned by AI Search is dropped if the current `wp_block` post is no longer publicly readable. Disclosure copy must state both layers explicitly.
 
 Keep the existing Cloudflare AI Search docs-grounding row separate.
 
@@ -964,9 +1055,17 @@ Record:
 - number of renderable final recommendations
 - visible scope size
 
-- [ ] **Step 2: Keep the default threshold conservative**
+- [ ] **Step 2: Use the per-backend threshold introduced by Product Decision 9**
 
-Do not change `flavor_agent_pattern_recommendation_threshold` default in the first implementation unless targeted tests show AI Search returns no useful results with the current value. If changed, update settings tests and docs in the same task.
+`flavor_agent_pattern_recommendation_threshold` remains Qdrant-only. AI Search uses the new `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search` option (default `0.2`, registered in Task 5 Step 2). RRF-fused hybrid scores from AI Search are not on the same scale as Qdrant cosine similarity, so a shared threshold would zero out recommendations on one backend or over-permit on the other.
+
+`PatternAbilities` must select the threshold by active backend before applying the post-rerank cutoff. Add a `PatternAbilitiesTest` case proving:
+
+- The Qdrant backend reads `flavor_agent_pattern_recommendation_threshold`.
+- The AI Search backend reads `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search`.
+- Lowering the AI Search threshold to `0` returns more candidates without affecting Qdrant.
+
+If the AI Search default of `0.2` proves wrong during calibration evidence collection (Step 1), update the option default and the settings copy in the same task.
 
 ### Task 12: Full Verification
 
@@ -1047,6 +1146,8 @@ Expected: pass.
 4. Run a checkpoint with targeted PHP/JS tests plus pattern inserter Playwright.
 5. Phase 3, Tasks 10-12: docs, disclosure, calibration, and full validation.
 
+**Cut line for the 2026-05-31 WordPress.org submission window.** Phase 1 alone is a coherent ship: Workers AI as a third embedding provider for the existing Qdrant pattern flow, with disclosure and verification updates scoped to that change. Phase 2 + Phase 3 are larger (new client, retrieval abstraction, dual-backend disclosure, threshold calibration) and are appropriate for a follow-up dot release after submission. If submission readiness is at risk after Phase 1, defer Phase 2 + Phase 3 explicitly rather than landing them partially. Record the cut decision and the deferred scope in `STATUS.md`.
+
 ## Acceptance Criteria
 
 - Site owners can select Cloudflare Workers AI as the embedding provider and use the existing Qdrant-backed pattern recommendation flow.
@@ -1055,7 +1156,10 @@ Expected: pass.
 - Existing Cloudflare docs grounding continues to use `FlavorAgent\Cloudflare\AISearchClient` and remains restricted to trusted WordPress developer docs.
 - Pattern recommendations remain scoped to `visiblePatternNames`.
 - Synced pattern recommendations are rehydrated from current readable posts before reranking/output.
-- Private, draft, trashed, or unreadable synced pattern content is not uploaded, ranked, or returned.
+- Private, draft, trashed, or unreadable synced pattern content is not uploaded, ranked, or returned. Defense-in-depth applies at both index time AND retrieval time, so post-status changes between sync runs cannot leak private content.
+- Workers AI is never used as an implicit runtime fallback. A site whose admin selected Azure or OpenAI Native and left credentials blank does not silently route pattern text to Cloudflare.
+- Each backend uses its own recommendation threshold (`flavor_agent_pattern_recommendation_threshold` for Qdrant; `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search` for AI Search).
+- AI Activity log integration is preserved: every pattern recommendation request emits a `request_diagnostic` row tagged with the active `pattern_backend` and the resolved chat/embedding provider for both backends.
 - Settings, capability notices, disclosures, and docs accurately distinguish:
   - Settings > Connectors text generation
   - plugin-owned embeddings
@@ -1069,3 +1173,12 @@ Expected: pass.
 - Spec coverage: all findings from the Cloudflare AI Search versus embeddings analysis map to either Phase 1, Phase 2, or Phase 3.
 - Placeholder scan: no implementation task is left without files, test targets, and expected verification commands.
 - Type consistency: provider id is `cloudflare_workers_ai`; pattern backend id is `cloudflare_ai_search`; private pattern options use the `flavor_agent_cloudflare_pattern_ai_search_*` prefix; docs-grounding options keep the existing `flavor_agent_cloudflare_ai_search_*` prefix.
+- File targeting verified against the live tree: option registration lives in `inc/Admin/Settings/Registrar.php`; `Fields.php` is a renderer; the dependency-hook list lives in a single `foreach` at `flavor-agent.php:91-111`; `EmbeddingClient::validate_configuration()` uses a Native-vs-Azure ternary that must be expanded into a three-branch builder.
+
+### Risks and Known Unknowns
+
+- **Cloudflare AI Search filter schema is dashboard-managed.** No public API for declaring custom-metadata filterability today. If Cloudflare changes that during execution, `PatternSearchClient::validate_configuration()` should be revisited to manage the schema programmatically instead of surfacing a setup error. (Cloudflare changelog: 2026-04-09 changelog post listed in references; check for newer entries before kickoff.)
+- **`wait_for_completion` timing on large pattern catalogs.** Sites with very large pattern libraries (high hundreds) may exceed reasonable per-request timeouts when waiting for ingestion. If observed during evidence collection, batch upload + post-batch list reconciliation may need to replace per-item `wait`.
+- **Threshold calibration is empirical.** The `0.2` AI Search default mirrors the request-side `match_threshold`. Real-world calibration may show this is too lenient for the post-rerank cutoff specifically; treat the default as a starting point, not a load-bearing decision.
+- **WordPress AI Client provider abstractions in flux.** WordPress org project 240 may introduce a first-class abstraction that supersedes the plugin-owned `Provider::direct_choices()` mechanism. Check `docs/reference/wordpress-ai-roadmap-tracking.md` before adding `cloudflare_workers_ai` and again before Phase 2 kickoff.
+- **Workers AI model choice is opinionated.** `@cf/qwen/qwen3-embedding-0.6b` is selected based on April 2026 Cloudflare docs; if the recommended model changes, the embedding signature will change, triggering a full re-index for every site after upgrade. Note this in user-visible upgrade notes once a model rotation actually happens.

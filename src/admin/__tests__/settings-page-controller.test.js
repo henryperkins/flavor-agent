@@ -383,6 +383,47 @@ describe( 'settings page controller', () => {
 		);
 	} );
 
+	test( 'disabled sync button can reference missing embeddings guidance', () => {
+		const root = renderSettingsPage( {
+			prerequisitesReady: '0',
+			prerequisiteMessage:
+				'Choose and complete an embeddings backend before syncing.',
+		} );
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+
+		const button = root.querySelector( '#flavor-agent-sync-button' );
+		const describedBy = button.getAttribute( 'aria-describedby' );
+
+		expect( button.disabled ).toBe( true );
+		expect( root.querySelector( `#${ describedBy }` ).textContent ).toBe(
+			'Choose and complete an embeddings backend before syncing.'
+		);
+	} );
+
+	test( 'sync button remains enabled when embeddings and qdrant are ready', () => {
+		const root = renderSettingsPage( {
+			prerequisitesReady: '1',
+			prerequisiteMessage: '',
+		} );
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+
+		const button = root.querySelector( '#flavor-agent-sync-button' );
+
+		expect( button.disabled ).toBe( false );
+		expect( button.getAttribute( 'aria-disabled' ) ).toBe( 'false' );
+		expect( button.hasAttribute( 'aria-describedby' ) ).toBe( false );
+	} );
+
 	test( 'guidelines manager adds, edits, and removes block guidelines in the hidden field', () => {
 		const root = renderGuidelinesSettingsPage();
 		const originalConfirm = window.confirm;

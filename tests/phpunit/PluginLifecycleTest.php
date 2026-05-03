@@ -32,6 +32,14 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertHookRegistered( 'admin_init', [ \FlavorAgent\Settings::class, 'register_settings' ] );
 		$this->assertHookRegistered( PatternIndex::CRON_HOOK, [ PatternIndex::class, 'sync' ] );
 		$this->assertHookRegistered( 'update_option_flavor_agent_azure_openai_endpoint', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_workers_ai_account_id', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_workers_ai_api_token', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_workers_ai_embedding_model', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookRegistered( 'update_option_flavor_agent_pattern_retrieval_backend', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_account_id', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_namespace', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_instance_id', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_api_token', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_flavor_agent_qdrant_url', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_home', [ PatternIndex::class, 'handle_dependency_change' ] );
 	}

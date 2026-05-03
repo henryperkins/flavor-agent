@@ -32,7 +32,7 @@ Snapshot of work that must land before the plugin can credibly enter the review 
 
 - `readme.txt` now exists as a reviewer-facing artifact with setup, FAQ, and external-service disclosure language. Before submission it still needs final screenshot captions/assets and any final version/changelog polish against the frozen scope.
 - `lint-plugin` is currently optional in ad-hoc `npm run verify` usage (`--skip=lint-plugin` when WP-CLI or a WordPress root is unavailable). For the submission half of the plan it must be a required, weekly-tracked KPI run against a representative WordPress 7.0 environment; any skipped Plugin Check run is a recorded blocker or waiver, not a green release signal.
-- The external-service disclosure inventory lives at `docs/reference/external-service-disclosure.md`. It enumerates outbound call sites (OpenAI, Azure OpenAI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, GitHub) with trigger, data sent, and setup/explicit-action gates, and must stay 1:1 with the disclosure block in `readme.txt`.
+- The external-service disclosure inventory lives at `docs/reference/external-service-disclosure.md`. It enumerates outbound call sites (OpenAI, Azure OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, GitHub) with trigger, data sent, and setup/explicit-action gates, and must stay 1:1 with the disclosure block in `readme.txt`.
 - Cron-driven outbound calls (`flavor_agent_reindex_patterns`, `flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`, `flavor_agent_warm_core_roadmap_guidance`) are audited in `docs/reference/external-service-disclosure.md`. Keep tests and docs aligned so none can phone home on activation before the corresponding backend is configured or explicitly enabled.
 - No banner, icon, or screenshot assets exist yet for the WordPress.org listing. They cannot be produced until scope is fully frozen, since they show the product visually.
 
@@ -62,7 +62,7 @@ Header constraints specific to this plugin:
 
 Description requirements specific to this plugin:
 
-- An explicit "uses external services" disclosure block listing OpenAI, Azure OpenAI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, and GitHub; what data is sent to each; when (only after the user configures or explicitly enables the corresponding backend); and a link to each provider's terms of service and privacy policy.
+- An explicit "uses external services" disclosure block listing OpenAI, Azure OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, and GitHub; what data is sent to each; when (only after the user configures or explicitly enables the corresponding backend); and a link to each provider's terms of service and privacy policy.
 - A clear "AI-assisted recommendation plugin" framing that does not over-claim accuracy, safety, accessibility, design quality, or compliance.
 - Setup steps that make the external dependencies obvious before installation, not buried in an Installation section the reviewer has to dig for.
 

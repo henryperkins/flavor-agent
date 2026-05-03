@@ -12,12 +12,14 @@ This is the operational companion to `docs/features/pattern-recommendations.md`.
 
 ## Fast Mental Model
 
-The pattern pipeline has four distinct stages:
+The current pattern pipeline has four distinct stages:
 
 1. `PatternIndex::sync()` in `inc/Patterns/PatternIndex.php` builds and maintains the Qdrant collection
 2. `PatternAbilities::recommend_patterns()` in `inc/Abilities/PatternAbilities.php` checks visible-pattern scope, runtime state, backend readiness, and synced-pattern access
 3. `QdrantClient::search()` in `inc/AzureOpenAI/QdrantClient.php` retrieves semantic and structural candidates
 4. `ResponsesClient::rank()` in `inc/AzureOpenAI/ResponsesClient.php` reranks those candidates through the WordPress AI Client / Connectors runtime into the final recommendation list
+
+The embedding provider behind Qdrant can be Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI. Workers AI is not used as an implicit fallback from the other provider selections.
 
 If you identify which stage is failing, the rest of the debugging path usually becomes obvious.
 

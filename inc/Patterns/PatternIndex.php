@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Patterns;
 
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\EmbeddingSignature;
 use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Context\SyncedPatternRepository;
 use FlavorAgent\OpenAI\Provider;
@@ -21,12 +23,15 @@ final class PatternIndex {
 	private const COOLDOWN                    = 300;
 	private const BATCH_SIZE                  = 100;
 	private const COMPATIBILITY_STALE_REASONS = [
+		'pattern_backend_changed',
 		'embedding_signature_changed',
 		'qdrant_url_changed',
 		'openai_endpoint_changed',
 		'collection_name_changed',
 		'collection_missing',
 		'collection_size_mismatch',
+		'cloudflare_ai_search_instance_changed',
+		'cloudflare_ai_search_signature_changed',
 	];
 
 	/** Increment when the embedding text template changes. */
@@ -37,26 +42,30 @@ final class PatternIndex {
 
 	public static function get_state(): array {
 		$defaults = [
-			'status'                 => 'uninitialized',
-			'fingerprint'            => '',
-			'qdrant_url'             => '',
-			'qdrant_collection'      => '',
-			'openai_provider'        => '',
-			'openai_endpoint'        => '',
-			'embedding_model'        => '',
-			'embedding_dimension'    => 0,
-			'embedding_signature'    => '',
-			'last_synced_at'         => null,
-			'last_attempt_at'        => null,
-			'indexed_count'          => 0,
-			'last_error'             => null,
-			'last_error_code'        => '',
-			'last_error_status'      => 0,
-			'last_error_retryable'   => false,
-			'last_error_retry_after' => null,
-			'stale_reason'           => '',
-			'stale_reasons'          => [],
-			'pattern_fingerprints'   => [],
+			'status'                         => 'uninitialized',
+			'pattern_backend'                => Config::PATTERN_BACKEND_QDRANT,
+			'fingerprint'                    => '',
+			'qdrant_url'                     => '',
+			'qdrant_collection'              => '',
+			'cloudflare_ai_search_namespace' => '',
+			'cloudflare_ai_search_instance'  => '',
+			'cloudflare_ai_search_signature' => '',
+			'openai_provider'                => '',
+			'openai_endpoint'                => '',
+			'embedding_model'                => '',
+			'embedding_dimension'            => 0,
+			'embedding_signature'            => '',
+			'last_synced_at'                 => null,
+			'last_attempt_at'                => null,
+			'indexed_count'                  => 0,
+			'last_error'                     => null,
+			'last_error_code'                => '',
+			'last_error_status'              => 0,
+			'last_error_retryable'           => false,
+			'last_error_retry_after'         => null,
+			'stale_reason'                   => '',
+			'stale_reasons'                  => [],
+			'pattern_fingerprints'           => [],
 		];
 
 		return wp_parse_args( get_option( self::STATE_OPTION, $defaults ), $defaults );
@@ -86,21 +95,29 @@ final class PatternIndex {
 	}
 
 	public static function save_state( array $state ): void {
-		$state['embedding_dimension']    = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
-		$state['embedding_signature']    = (string) ( $state['embedding_signature'] ?? '' );
-		$state['last_error_code']        = (string) ( $state['last_error_code'] ?? '' );
-		$state['last_error_status']      = max( 0, (int) ( $state['last_error_status'] ?? 0 ) );
-		$state['last_error_retryable']   = ! empty( $state['last_error_retryable'] );
-		$state['last_error_retry_after'] = isset( $state['last_error_retry_after'] ) && $state['last_error_retry_after'] !== null
+		$state['pattern_backend']                = self::normalize_pattern_backend( (string) ( $state['pattern_backend'] ?? '' ) );
+		$state['embedding_dimension']            = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
+		$state['embedding_signature']            = (string) ( $state['embedding_signature'] ?? '' );
+		$state['cloudflare_ai_search_namespace'] = sanitize_text_field( (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ) );
+		$state['cloudflare_ai_search_instance']  = sanitize_text_field( (string) ( $state['cloudflare_ai_search_instance'] ?? '' ) );
+		$state['cloudflare_ai_search_signature'] = sanitize_text_field( (string) ( $state['cloudflare_ai_search_signature'] ?? '' ) );
+		$state['last_error_code']                = (string) ( $state['last_error_code'] ?? '' );
+		$state['last_error_status']              = max( 0, (int) ( $state['last_error_status'] ?? 0 ) );
+		$state['last_error_retryable']           = ! empty( $state['last_error_retryable'] );
+		$state['last_error_retry_after']         = isset( $state['last_error_retry_after'] ) && $state['last_error_retry_after'] !== null
 			? max( 1, min( 60, (int) $state['last_error_retry_after'] ) )
 			: null;
-		$state['stale_reason']           = (string) ( $state['stale_reason'] ?? '' );
-		$state['stale_reasons']          = self::normalize_stale_reasons( $state );
+		$state['stale_reason']                   = (string) ( $state['stale_reason'] ?? '' );
+		$state['stale_reasons']                  = self::normalize_stale_reasons( $state );
 
 		update_option( self::STATE_OPTION, $state, false );
 	}
 
 	public static function recommendation_backends_configured(): bool {
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === self::selected_pattern_backend() ) {
+			return PatternSearchClient::is_configured();
+		}
+
 		return (bool) (
 			Provider::embedding_configured()
 			&& get_option( 'flavor_agent_qdrant_url', '' )
@@ -185,7 +202,7 @@ final class PatternIndex {
 	}
 
 	public static function handle_dependency_change( ...$args ): void {
-		self::mark_dirty();
+		self::mark_dirty( self::dependency_change_reason( $args ) );
 		self::schedule_sync( true );
 	}
 
@@ -452,6 +469,57 @@ final class PatternIndex {
 		return $patterns;
 	}
 
+	private static function selected_pattern_backend(): string {
+		return self::normalize_pattern_backend(
+			(string) get_option(
+				Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
+				Config::PATTERN_BACKEND_QDRANT
+			)
+		);
+	}
+
+	private static function normalize_pattern_backend( string $backend ): string {
+		$backend = sanitize_key( $backend );
+
+		return in_array( $backend, Config::PATTERN_BACKENDS, true )
+			? $backend
+			: Config::PATTERN_BACKEND_QDRANT;
+	}
+
+	/**
+	 * @param array<int, mixed> $args
+	 */
+	private static function dependency_change_reason( array $args ): string {
+		$option = '';
+
+		foreach ( $args as $arg ) {
+			if ( is_string( $arg ) && str_starts_with( $arg, 'flavor_agent_' ) ) {
+				$option = $arg;
+				break;
+			}
+		}
+
+		return match ( $option ) {
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => 'pattern_backend_changed',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'cloudflare_ai_search_instance_changed',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'cloudflare_ai_search_signature_changed',
+			default => 'pattern_registry_changed',
+		};
+	}
+
+	private static function cloudflare_ai_search_signature(): string {
+		$parts = [
+			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID, '' ),
+			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ),
+			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
+			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN, '' ),
+		];
+
+		return hash( 'sha256', implode( '|', array_map( 'trim', $parts ) ) );
+	}
+
 	/**
 	 * @return array<string, mixed>
 	 */
@@ -490,6 +558,11 @@ final class PatternIndex {
 
 		$state['last_attempt_at'] = gmdate( 'c' );
 		self::save_state( $state );
+
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === self::selected_pattern_backend() ) {
+			return self::do_cloudflare_ai_search_sync( $patterns, $fingerprint, $state );
+		}
+
 		$probe = self::probe_active_embedding_signature();
 
 		if ( is_wp_error( $probe ) ) {
@@ -511,6 +584,7 @@ final class PatternIndex {
 		$has_usable_index              = self::has_usable_index( $state );
 
 		$needs_reindex = ! $has_usable_index
+			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_QDRANT
 			|| $state['fingerprint'] !== $fingerprint
 			|| $state['qdrant_url'] !== $qdrant_url
 			|| $state['qdrant_collection'] !== $qdrant_collection
@@ -520,6 +594,7 @@ final class PatternIndex {
 
 		$needs_state_refresh = $needs_reindex
 			|| $state['status'] !== 'ready'
+			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_QDRANT
 			|| $state['openai_provider'] !== $openai_provider
 			|| $state['openai_endpoint'] !== $openai_endpoint
 			|| $state['embedding_model'] !== $embedding_model
@@ -542,6 +617,7 @@ final class PatternIndex {
 					$state,
 					[
 						'status'              => 'ready',
+						'pattern_backend'     => Config::PATTERN_BACKEND_QDRANT,
 						'fingerprint'         => $fingerprint,
 						'qdrant_url'          => $qdrant_url,
 						'qdrant_collection'   => $qdrant_collection,
@@ -575,6 +651,7 @@ final class PatternIndex {
 		}
 
 		$requires_full_reindex = ! $has_usable_index
+			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_QDRANT
 			|| $state['qdrant_url'] !== $qdrant_url
 			|| $state['qdrant_collection'] !== $qdrant_collection
 			|| $state['embedding_signature'] !== $embedding_signature
@@ -671,27 +748,172 @@ final class PatternIndex {
 		// Persist ready state.
 		self::save_state(
 			[
-				'status'               => 'ready',
-				'fingerprint'          => $fingerprint,
-				'qdrant_url'           => $qdrant_url,
-				'qdrant_collection'    => $qdrant_collection,
-				'openai_provider'      => $openai_provider,
-				'openai_endpoint'      => $openai_endpoint,
-				'embedding_model'      => $embedding_model,
-				'embedding_dimension'  => $embedding_dimension,
-				'embedding_signature'  => $embedding_signature,
-				'last_synced_at'       => gmdate( 'c' ),
-				'last_attempt_at'      => $state['last_attempt_at'],
-				'indexed_count'        => count( $current ),
-				'last_error'           => null,
-				'stale_reason'         => '',
-				'stale_reasons'        => [],
-				'pattern_fingerprints' => $current_pattern_fingerprints,
+				'status'                         => 'ready',
+				'pattern_backend'                => Config::PATTERN_BACKEND_QDRANT,
+				'fingerprint'                    => $fingerprint,
+				'qdrant_url'                     => $qdrant_url,
+				'qdrant_collection'              => $qdrant_collection,
+				'cloudflare_ai_search_namespace' => '',
+				'cloudflare_ai_search_instance'  => '',
+				'cloudflare_ai_search_signature' => '',
+				'openai_provider'                => $openai_provider,
+				'openai_endpoint'                => $openai_endpoint,
+				'embedding_model'                => $embedding_model,
+				'embedding_dimension'            => $embedding_dimension,
+				'embedding_signature'            => $embedding_signature,
+				'last_synced_at'                 => gmdate( 'c' ),
+				'last_attempt_at'                => $state['last_attempt_at'],
+				'indexed_count'                  => count( $current ),
+				'last_error'                     => null,
+				'stale_reason'                   => '',
+				'stale_reasons'                  => [],
+				'pattern_fingerprints'           => $current_pattern_fingerprints,
 			]
 		);
 
 		return [
 			'indexed'     => count( $uuids_to_embed ),
+			'removed'     => count( $to_delete ),
+			'fingerprint' => $fingerprint,
+			'status'      => 'ready',
+		];
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $patterns
+	 * @param array<string, mixed>             $state
+	 */
+	private static function do_cloudflare_ai_search_sync( array $patterns, string $fingerprint, array $state ): array|\WP_Error {
+		$namespace                     = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ) );
+		$instance                      = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
+		$signature                     = self::cloudflare_ai_search_signature();
+		$previous_pattern_fingerprints = is_array( $state['pattern_fingerprints'] ?? null )
+			? $state['pattern_fingerprints']
+			: [];
+		$has_usable_index              = self::has_usable_index( $state );
+
+		$current                      = [];
+		$current_pattern_fingerprints = [];
+		foreach ( $patterns as $pattern ) {
+			$uuid = self::pattern_uuid( (string) ( $pattern['name'] ?? '' ) );
+
+			if ( '' === $uuid ) {
+				continue;
+			}
+
+			$current[ $uuid ]                      = $pattern;
+			$current_pattern_fingerprints[ $uuid ] = self::compute_pattern_fingerprint( $pattern );
+		}
+
+		$needs_reindex = ! $has_usable_index
+			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH
+			|| $state['fingerprint'] !== $fingerprint
+			|| ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== $namespace
+			|| ( $state['cloudflare_ai_search_instance'] ?? '' ) !== $instance
+			|| ( $state['cloudflare_ai_search_signature'] ?? '' ) !== $signature
+			|| empty( $previous_pattern_fingerprints );
+
+		$needs_state_refresh = $needs_reindex
+			|| $state['status'] !== 'ready'
+			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH
+			|| ! empty( self::get_stale_reasons( $state ) );
+
+		if ( ! $needs_state_refresh ) {
+			return [
+				'indexed'     => $state['indexed_count'],
+				'removed'     => 0,
+				'fingerprint' => $fingerprint,
+				'status'      => 'ready',
+			];
+		}
+
+		$requires_full_reindex = ! $has_usable_index
+			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH
+			|| ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== $namespace
+			|| ( $state['cloudflare_ai_search_instance'] ?? '' ) !== $instance
+			|| ( $state['cloudflare_ai_search_signature'] ?? '' ) !== $signature
+			|| empty( $previous_pattern_fingerprints );
+
+		$state['status']          = 'indexing';
+		$state['pattern_backend'] = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;
+		$state['last_attempt_at'] = gmdate( 'c' );
+		$state['last_error']      = null;
+		$state['stale_reason']    = '';
+		$state['stale_reasons']   = [];
+		self::save_state( $state );
+
+		$remote_ids = PatternSearchClient::list_pattern_item_ids();
+		if ( is_wp_error( $remote_ids ) ) {
+			self::save_error_state( $remote_ids );
+			return $remote_ids;
+		}
+
+		$to_upload = [];
+		foreach ( $current_pattern_fingerprints as $uuid => $pattern_fingerprint ) {
+			if (
+				$requires_full_reindex
+				|| ! isset( $previous_pattern_fingerprints[ $uuid ] )
+				|| $previous_pattern_fingerprints[ $uuid ] !== $pattern_fingerprint
+			) {
+				$to_upload[] = $uuid;
+			}
+		}
+
+		foreach ( $to_upload as $uuid ) {
+			$upload = PatternSearchClient::upload_pattern( $current[ $uuid ], $uuid, true );
+
+			if ( is_wp_error( $upload ) ) {
+				self::save_error_state( $upload );
+				return $upload;
+			}
+		}
+
+		$current_ids = array_fill_keys( array_keys( $current ), true );
+		$to_delete   = [];
+		foreach ( $remote_ids as $remote_id ) {
+			$remote_id = sanitize_text_field( (string) $remote_id );
+
+			if ( '' !== $remote_id && ! isset( $current_ids[ $remote_id ] ) ) {
+				$to_delete[] = $remote_id;
+			}
+		}
+
+		foreach ( $to_delete as $uuid ) {
+			$delete = PatternSearchClient::delete_pattern( $uuid );
+
+			if ( is_wp_error( $delete ) ) {
+				self::save_error_state( $delete );
+				return $delete;
+			}
+		}
+
+		self::save_state(
+			[
+				'status'                         => 'ready',
+				'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+				'fingerprint'                    => $fingerprint,
+				'qdrant_url'                     => '',
+				'qdrant_collection'              => '',
+				'cloudflare_ai_search_namespace' => $namespace,
+				'cloudflare_ai_search_instance'  => $instance,
+				'cloudflare_ai_search_signature' => $signature,
+				'openai_provider'                => '',
+				'openai_endpoint'                => '',
+				'embedding_model'                => '',
+				'embedding_dimension'            => 0,
+				'embedding_signature'            => '',
+				'last_synced_at'                 => gmdate( 'c' ),
+				'last_attempt_at'                => $state['last_attempt_at'],
+				'indexed_count'                  => count( $current ),
+				'last_error'                     => null,
+				'stale_reason'                   => '',
+				'stale_reasons'                  => [],
+				'pattern_fingerprints'           => $current_pattern_fingerprints,
+			]
+		);
+
+		return [
+			'indexed'     => count( $to_upload ),
 			'removed'     => count( $to_delete ),
 			'fingerprint' => $fingerprint,
 			'status'      => 'ready',
@@ -759,8 +981,30 @@ final class PatternIndex {
 	 * @return string[]
 	 */
 	private static function detect_runtime_stale_reasons( array $state ): array {
+		$selected_backend = self::selected_pattern_backend();
+		$state_backend    = self::normalize_pattern_backend( (string) ( $state['pattern_backend'] ?? '' ) );
+		$reasons          = [];
+
+		if ( $state_backend !== $selected_backend ) {
+			$reasons[] = 'pattern_backend_changed';
+		}
+
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend ) {
+			if (
+				(string) ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ) )
+				|| (string) ( $state['cloudflare_ai_search_instance'] ?? '' ) !== trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) )
+			) {
+				$reasons[] = 'cloudflare_ai_search_instance_changed';
+			}
+
+			if ( (string) ( $state['cloudflare_ai_search_signature'] ?? '' ) !== self::cloudflare_ai_search_signature() ) {
+				$reasons[] = 'cloudflare_ai_search_signature_changed';
+			}
+
+			return array_values( array_unique( $reasons ) );
+		}
+
 		$current_config = \FlavorAgent\OpenAI\Provider::embedding_configuration();
-		$reasons        = [];
 
 		if ( (string) ( $state['qdrant_url'] ?? '' ) !== (string) get_option( 'flavor_agent_qdrant_url', '' ) ) {
 			$reasons[] = 'qdrant_url_changed';

@@ -19,40 +19,56 @@ final class State {
 	 * @return array<string, mixed>
 	 */
 	public static function get_page_state(): array {
-		$selected_provider       = Provider::get();
-		$selected_chat           = Provider::chat_configuration( $selected_provider );
-		$runtime_chat            = Provider::chat_configuration();
-		$selected_embedding      = Provider::embedding_configuration( $selected_provider );
-		$runtime_embedding       = Provider::embedding_configuration();
-		$qdrant_configured       = '' !== (string) get_option( 'flavor_agent_qdrant_url', '' )
+		$selected_provider        = Provider::get();
+		$selected_pattern_backend = self::get_selected_pattern_backend();
+		$selected_chat            = Provider::chat_configuration( $selected_provider );
+		$runtime_chat             = Provider::chat_configuration();
+		$selected_embedding       = Provider::embedding_configuration( $selected_provider );
+		$runtime_embedding        = Provider::embedding_configuration();
+		$qdrant_configured        = '' !== (string) get_option( 'flavor_agent_qdrant_url', '' )
 			&& '' !== (string) get_option( 'flavor_agent_qdrant_key', '' );
-		$pattern_state           = PatternIndex::get_runtime_state();
-		$patterns_ready_for_sync = PatternIndex::recommendation_backends_configured();
-		$docs_configured         = AISearchClient::is_configured();
-		$prewarm_state           = AISearchClient::get_prewarm_state();
-		$runtime_docs_grounding  = AISearchClient::get_runtime_state();
-		$guidelines_enabled      = Guidelines::has_any();
-		$guidelines_storage      = Guidelines::storage_status();
-		$structural_actions_on   = function_exists( '\\flavor_agent_block_structural_actions_enabled' )
+		$pattern_state            = PatternIndex::get_runtime_state();
+		$patterns_ready_for_sync  = PatternIndex::recommendation_backends_configured();
+		$docs_configured          = AISearchClient::is_configured();
+		$prewarm_state            = AISearchClient::get_prewarm_state();
+		$runtime_docs_grounding   = AISearchClient::get_runtime_state();
+		$guidelines_enabled       = Guidelines::has_any();
+		$guidelines_storage       = Guidelines::storage_status();
+		$structural_actions_on    = function_exists( '\\flavor_agent_block_structural_actions_enabled' )
 			? \flavor_agent_block_structural_actions_enabled()
 			: self::parse_boolean_flag( get_option( Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, false ) );
 
 		return [
-			'selected_provider'                => $selected_provider,
-			'selected_chat'                    => $selected_chat,
-			'runtime_chat'                     => $runtime_chat,
-			'selected_embedding'               => $selected_embedding,
-			'runtime_embedding'                => $runtime_embedding,
-			'qdrant_configured'                => $qdrant_configured,
-			'pattern_state'                    => $pattern_state,
-			'patterns_ready'                   => $patterns_ready_for_sync,
-			'docs_configured'                  => $docs_configured,
-			'prewarm_state'                    => $prewarm_state,
-			'runtime_docs_grounding'           => $runtime_docs_grounding,
-			'guidelines_enabled'               => $guidelines_enabled,
-			'guidelines_storage'               => $guidelines_storage,
-			'block_structural_actions_enabled' => $structural_actions_on,
+			'selected_provider'                       => $selected_provider,
+			'selected_pattern_backend'                => $selected_pattern_backend,
+			'selected_chat'                           => $selected_chat,
+			'runtime_chat'                            => $runtime_chat,
+			'selected_embedding'                      => $selected_embedding,
+			'runtime_embedding'                       => $runtime_embedding,
+			'qdrant_configured'                       => $qdrant_configured,
+			'cloudflare_pattern_ai_search_configured' => self::cloudflare_pattern_ai_search_configured(),
+			'pattern_state'                           => $pattern_state,
+			'patterns_ready'                          => $patterns_ready_for_sync,
+			'docs_configured'                         => $docs_configured,
+			'prewarm_state'                           => $prewarm_state,
+			'runtime_docs_grounding'                  => $runtime_docs_grounding,
+			'guidelines_enabled'                      => $guidelines_enabled,
+			'guidelines_storage'                      => $guidelines_storage,
+			'block_structural_actions_enabled'        => $structural_actions_on,
 		];
+	}
+
+	public static function get_selected_pattern_backend(): string {
+		$backend = sanitize_key(
+			(string) get_option(
+				Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
+				Config::PATTERN_BACKEND_QDRANT
+			)
+		);
+
+		return in_array( $backend, Config::PATTERN_BACKENDS, true )
+			? $backend
+			: Config::PATTERN_BACKEND_QDRANT;
 	}
 
 	public static function determine_default_open_group( array $state ): string {
@@ -488,6 +504,23 @@ final class State {
 		$embedding_configured = ! empty( $state['runtime_embedding']['configured'] );
 
 		return $qdrant_configured !== $embedding_configured;
+	}
+
+	private static function cloudflare_pattern_ai_search_configured(): bool {
+		foreach (
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
+			] as $option_name
+		) {
+			if ( '' === trim( (string) get_option( $option_name, '' ) ) ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	private static function runtime_chat_uses_connectors( array $state ): bool {

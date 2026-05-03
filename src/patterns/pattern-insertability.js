@@ -16,7 +16,7 @@ export function resolvePatternBlocks( pattern ) {
 	if ( typeof pattern?.content === 'string' && pattern.content.trim() ) {
 		try {
 			return rawHandler( { HTML: pattern.content } ).filter( Boolean );
-		} catch ( error ) {
+		} catch {
 			return [];
 		}
 	}

@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
-use FlavorAgent\AzureOpenAI\EmbeddingClient;
-use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Context\SyncedPatternRepository;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
+use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
@@ -303,78 +304,6 @@ final class PatternAbilities {
 			$has_insertion_context
 		);
 
-		// Step 3: Embed query.
-		$query_vector = EmbeddingClient::embed( $query );
-		if ( is_wp_error( $query_vector ) ) {
-			return $query_vector;
-		}
-
-		$active_signature    = EmbeddingClient::build_signature_for_dimension( count( $query_vector ) );
-		$expected_collection = QdrantClient::get_collection_name( $active_signature );
-
-		if (
-			(string) ( $state['embedding_signature'] ?? '' ) !== (string) $active_signature['signature_hash']
-			|| (string) ( $state['qdrant_collection'] ?? '' ) !== $expected_collection
-		) {
-			PatternIndex::mark_stale(
-				[
-					'embedding_signature_changed',
-					'collection_name_changed',
-				]
-			);
-
-			PatternIndex::schedule_sync();
-
-			return new \WP_Error(
-				'index_warming',
-				'Pattern catalog is rebuilding because the active embedding signature changed. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
-				[ 'status' => 503 ]
-			);
-		}
-
-		$collection_validation = QdrantClient::validate_collection_compatibility(
-			(string) $state['qdrant_collection'],
-			count( $query_vector )
-		);
-
-		if ( is_wp_error( $collection_validation ) ) {
-			if ( 'qdrant_collection_missing' === $collection_validation->get_error_code() ) {
-				PatternIndex::mark_stale( [ 'collection_missing' ] );
-				PatternIndex::schedule_sync();
-
-				return new \WP_Error(
-					'index_warming',
-					'Pattern catalog is rebuilding because the active Qdrant collection is missing. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
-					[ 'status' => 503 ]
-				);
-			}
-
-			if ( 'qdrant_collection_size_mismatch' === $collection_validation->get_error_code() ) {
-				PatternIndex::mark_stale( [ 'collection_size_mismatch' ] );
-				PatternIndex::schedule_sync();
-
-				return new \WP_Error(
-					'index_warming',
-					'Pattern catalog is rebuilding because the active Qdrant collection is incompatible with the current embedding size. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
-					[ 'status' => 503 ]
-				);
-			}
-
-			return $collection_validation;
-		}
-
-		// Step 4: Two-pass Qdrant retrieval.
-		$pass_a = QdrantClient::search(
-			$query_vector,
-			$semantic_limit,
-			[],
-			(string) $state['qdrant_collection']
-		);
-		if ( is_wp_error( $pass_a ) ) {
-			return $pass_a;
-		}
-
-		$pass_b              = [];
 		$should_clauses      = self::build_structural_should_clauses(
 			$post_type,
 			$block_name,
@@ -387,24 +316,37 @@ final class PatternAbilities {
 		);
 		$ran_structural_pass = ! empty( $should_clauses );
 
-		if ( $ran_structural_pass ) {
-			$pass_b = QdrantClient::search(
-				$query_vector,
-				$structural_limit,
-				[ 'should' => $should_clauses ],
-				(string) $state['qdrant_collection']
-			);
-			if ( is_wp_error( $pass_b ) ) {
-				return $pass_b;
-			}
+		// Step 3/4: Retrieve candidates from the selected pattern backend.
+		$backend = PatternRetrievalBackendFactory::for_runtime_state( $state );
+		if ( is_wp_error( $backend ) ) {
+			return $backend;
 		}
 
-		// Union, dedupe by payload.name, keep best score.
+		$retrieved = $backend->search(
+			$query,
+			$visible_pattern_names,
+			$state,
+			[
+				'postType'                => $post_type,
+				'blockName'               => $block_name,
+				'templateType'            => $template_type,
+				'insertionContext'        => $insertion_context,
+				'semanticLimit'           => $semantic_limit,
+				'structuralLimit'         => $structural_limit,
+				'structuralShouldClauses' => $should_clauses,
+			]
+		);
+
+		if ( is_wp_error( $retrieved ) ) {
+			return $retrieved;
+		}
+
+		// Authorize, rehydrate, and dedupe by payload.name, keeping best score.
 		$candidates                            = [];
 		$retrieved_candidate_names             = [];
 		$reported_unreadable_synced_candidates = [];
-		foreach ( array_merge( $pass_a, $pass_b ) as $point ) {
-			$payload = is_array( $point['payload'] ?? null ) ? $point['payload'] : [];
+		foreach ( $retrieved as $candidate_hit ) {
+			$payload = is_array( $candidate_hit['payload'] ?? null ) ? $candidate_hit['payload'] : [];
 			$name    = self::resolve_recommendation_candidate_visible_name( $payload );
 
 			if ( $visible_lookup && $name !== '' && ! isset( $visible_lookup[ $name ] ) ) {
@@ -421,8 +363,7 @@ final class PatternAbilities {
 				continue;
 			}
 
-			$name  = $payload['name'] ?? '';
-			$score = $point['score'] ?? 0.0;
+			$name = $payload['name'] ?? '';
 			if ( $name === '' ) {
 				continue;
 			}
@@ -430,6 +371,11 @@ final class PatternAbilities {
 			if ( $visible_lookup && ! isset( $visible_lookup[ $name ] ) ) {
 				continue;
 			}
+
+			$score = isset( $candidate_hit['score'] ) && is_numeric( $candidate_hit['score'] )
+				? (float) $candidate_hit['score']
+				: 0.0;
+
 			if ( ! isset( $candidates[ $name ] ) || $candidates[ $name ]['score'] < $score ) {
 				$candidates[ $name ] = [
 					'score'   => $score,
@@ -591,12 +537,33 @@ final class PatternAbilities {
 	}
 
 	private static function validate_recommendation_backends(): true|\WP_Error {
+		$selected_backend = PatternRetrievalBackendFactory::selected_backend();
+
+		if ( ! Provider::chat_configured() ) {
+			return new \WP_Error(
+				'missing_credentials',
+				'Pattern recommendations need a usable text-generation provider in Settings > Connectors.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend ) {
+			if ( ! PatternSearchClient::is_configured() ) {
+				return new \WP_Error(
+					'missing_credentials',
+					'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+					[ 'status' => 400 ]
+				);
+			}
+
+			return true;
+		}
+
 		$qdrant_url = get_option( 'flavor_agent_qdrant_url', '' );
 		$qdrant_key = get_option( 'flavor_agent_qdrant_key', '' );
 
 		if (
 			! Provider::embedding_configured()
-			|| ! Provider::chat_configured()
 			|| $qdrant_url === ''
 			|| $qdrant_key === ''
 		) {

@@ -38,7 +38,7 @@ const GUIDELINE_CATEGORY_FIELDS = {
 function getDefaultStorage() {
 	try {
 		return window.localStorage;
-	} catch ( error ) {
+	} catch {
 		return null;
 	}
 }
@@ -58,7 +58,7 @@ function readStoredSection( storage, key ) {
 
 	try {
 		return normalizeText( storage.getItem( key ), '' );
-	} catch ( error ) {
+	} catch {
 		return '';
 	}
 }
@@ -75,7 +75,7 @@ function writeStoredSection( storage, key, value ) {
 		}
 
 		storage.removeItem( key );
-	} catch ( error ) {
+	} catch {
 		// Ignore storage write failures and keep the page functional.
 	}
 }
@@ -444,7 +444,7 @@ function parseJsonValue( value, fallback = null ) {
 
 	try {
 		return JSON.parse( value );
-	} catch ( error ) {
+	} catch {
 		return fallback;
 	}
 }
@@ -939,7 +939,7 @@ async function readJsonResponse( response ) {
 
 	try {
 		return JSON.parse( rawBody );
-	} catch ( error ) {
+	} catch {
 		return {
 			message: rawBody,
 		};

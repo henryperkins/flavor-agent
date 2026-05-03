@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\WordPressAIClient;
@@ -43,6 +44,7 @@ final class InfraAbilities {
 		$openai_connector_status        = Provider::openai_connector_status();
 		$native_api_key_source          = Provider::native_effective_api_key_source();
 		$native_embedding_config        = Provider::embedding_configuration( Provider::NATIVE );
+		$workers_ai_embedding_config    = Provider::embedding_configuration( WorkersAIEmbeddingConfiguration::PROVIDER );
 		$azure_endpoint                 = get_option( 'flavor_agent_azure_openai_endpoint', '' );
 		$azure_key                      = get_option( 'flavor_agent_azure_openai_key', '' );
 		$azure_embedding                = get_option( 'flavor_agent_azure_embedding_deployment', '' );
@@ -80,14 +82,14 @@ final class InfraAbilities {
 				$connectors_url
 			),
 			'backends'           => [
-				'wordpress_ai_client'  => [
+				'wordpress_ai_client'   => [
 					'configured' => $wordpress_ai_client_configured,
 				],
-				'azure_openai'         => [
+				'azure_openai'          => [
 					'configured'          => $azure_embedding_configured,
 					'embeddingDeployment' => ! empty( $azure_embedding ) ? $azure_embedding : null,
 				],
-				'openai_native'        => [
+				'openai_native'         => [
 					'configured'          => $native_embedding_configured,
 					'embeddingModel'      => ! empty( $native_embedding_config['model'] ) ? $native_embedding_config['model'] : null,
 					'credentialSource'    => 'none' !== $native_api_key_source ? $native_api_key_source : null,
@@ -97,10 +99,16 @@ final class InfraAbilities {
 						? $openai_connector_status['keySource']
 						: null,
 				],
-				'qdrant'               => [
+				'cloudflare_workers_ai' => [
+					'configured'     => $workers_ai_embedding_config['configured'],
+					'embeddingModel' => ! empty( $workers_ai_embedding_config['model'] )
+						? $workers_ai_embedding_config['model']
+						: null,
+				],
+				'qdrant'                => [
 					'configured' => $qdrant_configured,
 				],
-				'cloudflare_ai_search' => [
+				'cloudflare_ai_search'  => [
 					'configured' => $cloudflare_configured,
 					'instanceId' => $cloudflare_configured ? $cloudflare_ai_search_id : null,
 				],

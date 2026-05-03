@@ -13,7 +13,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 
 ## Surfacing Conditions
 
-- `window.flavorAgentData.canRecommendPatterns` must be true; that requires a compatible embedding backend plus Qdrant in `Settings > Flavor Agent`, and a usable text-generation provider in `Settings > Connectors`
+- `window.flavorAgentData.canRecommendPatterns` must be true; that requires a compatible embedding backend (Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI) plus Qdrant in `Settings > Flavor Agent`, and a usable text-generation provider in `Settings > Connectors`
 - A post type must be available from `core/editor`
 - Passive fetch runs when the editor loads
 - Active refresh runs when the inserter search input changes while the inserter is open
@@ -29,7 +29,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_patterns()` adapts the REST request to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state
 6. `PatternIndex::sync()` maintains a Qdrant corpus made from registered block patterns plus public-safe published user `wp_block` patterns across sync states normalized to Gutenberg's user-pattern name format, `core/block/{id}`
-7. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` without foreground AI Search warming, embeds the pattern query through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, rehydrates synced candidates from current readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()`, and filters out low-confidence results
+7. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` without foreground AI Search warming, embeds the pattern query through the selected plugin-owned embedding provider, retrieves candidates from Qdrant in semantic and structural passes, rehydrates synced candidates from current readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()`, and filters out low-confidence results
 8. The store saves the recommendations and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
 9. If pattern backends are unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
 10. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists

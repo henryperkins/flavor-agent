@@ -15,7 +15,6 @@ function setupReactTest() {
 	let container = null;
 	let root = null;
 
-	// eslint-disable-next-line no-undef
 	window.IS_REACT_ACT_ENVIRONMENT = true;
 
 	beforeEach( () => {

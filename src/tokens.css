@@ -28,16 +28,38 @@
 	--flavor-agent-color-ink: #17232a;            /* Darkest — wordmarks, headings */
 	--flavor-agent-color-text: #203038;           /* Body text (reconciles brand #203038 / old editor #1f2d34) */
 	--flavor-agent-color-muted: #5f6d73;          /* Secondary text (reconciles brand #5f6d73 / old editor #627078) */
+	--flavor-agent-color-subtle: #8a97a1;         /* Tertiary, placeholders */
+	--flavor-agent-color-line: #d8d8d8;           /* Neutral strokes */
+	--flavor-agent-color-line-soft: #e0e0e0;      /* Weaker strokes */
 	--flavor-agent-color-accent: #0b7b80;         /* Primary teal */
 	--flavor-agent-color-accent-strong: #075c62;  /* Teal hover/active */
-	--flavor-agent-color-warm: #cf7a45;           /* Warm orange — gradient counterpoint */
+	--flavor-agent-color-accent-wash: rgba(11, 123, 128, 0.12);
+	--flavor-agent-color-accent-line: rgba(11, 123, 128, 0.18);
+	--flavor-agent-color-warm: #ba7925;           /* Amber — editorial second voice */
+	--flavor-agent-color-warm-weak: #fff7e0;
+
+	/* Semantic palette — brand-faithful fallbacks for editor surfaces that
+	   may not have a WPDS runtime mounted (e.g. Inspector panels in the
+	   block editor frame). */
+
+	--flavor-agent-color-success: #007f30;
+	--flavor-agent-color-success-weak: #eaffed;
+	--flavor-agent-color-warning: #926300;
+	--flavor-agent-color-warning-weak: #fff7e0;
+	--flavor-agent-color-error: #cc1818;
+	--flavor-agent-color-error-weak: #fff6f4;
 
 	/* ── Brand surfaces ─────────────────────────────────────────────────────── */
 	/* Hero card, settings section, and admin marketing backgrounds.            */
 	/* Fixed — these are the brand aesthetic, not scheme-adaptive chrome.       */
 
+	--flavor-agent-surface-page: #fffdf8;        /* Warm-cream paper foundation */
+	--flavor-agent-surface-panel: #ffffff;       /* Card body */
 	--flavor-agent-surface-brand: #fffdf7;
 	--flavor-agent-surface-brand-strong: #f4efe2;
+	--flavor-agent-surface-mint: #edf7f7;        /* Mint cream — featured-hero base */
+	--flavor-agent-surface-frost: rgba(255, 255, 255, 0.72);
+	--flavor-agent-surface-frost-soft: rgba(255, 255, 255, 0.16);
 
 	/* ── Accent-derived surfaces ────────────────────────────────────────────── */
 	/* Blends brand accent into the WPDS neutral background when available.     */
@@ -56,11 +78,21 @@
 
 	/* ── Brand typography ────────────────────────────────────────────────────── */
 	/* WPDS uses system-ui; the plugin uses these custom stacks for identity.   */
+	/* Fraunces and Inter are not bundled — fall back to the closest system     */
+	/* serif/sans so editor chrome reads the same way without a font payload.   */
 
-	--flavor-agent-font-serif: "Iowan Old Style", "Palatino Linotype",
+	--flavor-agent-font-serif: "Fraunces", "Iowan Old Style", "Palatino Linotype",
 		"Book Antiqua", Georgia, serif;
-	--flavor-agent-font-sans: "Aptos", "Segoe UI", "Helvetica Neue",
-		sans-serif;
+	--flavor-agent-font-sans: "Inter", "Aptos", -apple-system,
+		BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+	--flavor-agent-font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas,
+		"Liberation Mono", monospace;
+
+	/* Letter spacing — caps eyebrows are the only place uppercase tracking
+	   should appear. */
+	--flavor-agent-tracking-caps: 0.08em;
+	--flavor-agent-tracking-caps-sm: 0.04em;
+	--flavor-agent-tracking-display: -0.04em;
 
 	/* ── Extended border-radius ─────────────────────────────────────────────── */
 	/* WPDS border-radius scale tops out at lg = 8px. The plugin's rounded      */
@@ -72,9 +104,50 @@
 	--flavor-agent-radius-2xl: 24px;   /* Large section wrappers */
 	--flavor-agent-radius-full: 999px; /* Pills, badges, icon buttons */
 
-	/* ── Brand shadow ────────────────────────────────────────────────────────── */
-	/* A single dramatic drop shadow used on brand hero/marketing surfaces.     */
-	/* Standard UI elevation uses --wpds-elevation-* tokens instead.            */
+	/* ── Brand shadow scale ─────────────────────────────────────────────────── */
+	/* Brand-faithful elevation. Standard UI elevation continues to use the     */
+	/* --wpds-elevation-* tokens.                                               */
 
+	--flavor-agent-shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+	--flavor-agent-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05),
+		0 2px 3px 0 rgba(0, 0, 0, 0.04),
+		0 6px 6px 0 rgba(0, 0, 0, 0.03),
+		0 8px 8px 0 rgba(0, 0, 0, 0.02);
 	--flavor-agent-shadow-brand: 0 24px 56px rgba(17, 34, 41, 0.1);
+
+	/* ── Focus + AI signal ──────────────────────────────────────────────────── */
+	/* Unified focus-visible treatment for pill/icon buttons that opt in via    */
+	/* :focus-visible { box-shadow: var(--flavor-agent-focus-ring); }           */
+
+	--flavor-agent-focus-ring: 0 0 0 1px var(--flavor-agent-color-accent),
+		0 0 0 4px rgba(11, 123, 128, 0.18);
+	--flavor-agent-focus-ring-warning: 0 0 0 1px var(--flavor-agent-color-warning),
+		0 0 0 4px rgba(186, 121, 37, 0.22);
+
+	/* AI provenance shimmer along chip edges and recommendation cards. */
+	--flavor-agent-ai-edge: linear-gradient(
+		180deg,
+		var(--flavor-agent-color-accent) 0%,
+		var(--flavor-agent-color-warm) 100%
+	);
+	--flavor-agent-ai-wash: linear-gradient(
+		135deg,
+		rgba(11, 123, 128, 0.1) 0%,
+		rgba(186, 121, 37, 0.08) 100%
+	);
+}
+
+/* Reduced-motion: kill ambient loops + entrance staggers. Honors the WP
+   accessibility expectation across every Flavor Agent surface. */
+@media (prefers-reduced-motion: reduce) {
+	.flavor-agent-panel *,
+	.flavor-agent-panel *::before,
+	.flavor-agent-panel *::after,
+	.flavor-agent-toast-region *,
+	.flavor-agent-toast-region *::before,
+	.flavor-agent-toast-region *::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.001ms !important;
+	}
 }

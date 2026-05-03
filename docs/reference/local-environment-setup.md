@@ -99,7 +99,29 @@ The expected local runtime includes these active slugs:
 - `mcp-adapter`
 - `plugin-check`
 
-Configure text-generation credentials in `Settings > Connectors`. The OpenAI and Anthropic provider plugins own their provider-specific setup; do not use Flavor Agent's Azure/OpenAI Native embedding settings as a replacement for the Connectors runtime. Pattern recommendations still need plugin-owned embeddings and Qdrant configured in `Settings > Flavor Agent`.
+Configure text-generation credentials in `Settings > Connectors`. The OpenAI and Anthropic provider plugins own their provider-specific setup; do not use Flavor Agent's Azure/OpenAI Native embedding settings as a replacement for the Connectors runtime. Pattern recommendations still need a plugin-owned retrieval backend configured in `Settings > Flavor Agent`: Qdrant for vector search, or a private Cloudflare AI Search instance for pattern retrieval.
+
+## Cloudflare Pattern AI Search Metadata
+
+Before selecting Cloudflare AI Search as the pattern retrieval backend, create a private AI Search instance for Flavor Agent pattern content and declare exactly these five custom metadata fields as filterable metadata in the Cloudflare dashboard:
+
+| Field | Type |
+| --- | --- |
+| `pattern_name` | Text |
+| `candidate_type` | Text |
+| `source` | Text |
+| `synced_id` | Text |
+| `public_safe` | Boolean |
+
+Dashboard setup:
+
+1. Open the Cloudflare dashboard and select the account that owns the AI Search instance.
+2. Go to **AI > AI Search**, open the namespace used for local pattern testing, then open the private pattern-search instance.
+3. Open the instance metadata or indexing configuration and add the five custom metadata fields listed above.
+4. Mark each field as available for filtering so search requests can use `filters.pattern_name`.
+5. Save the instance configuration and wait for the dashboard to finish applying the schema before running the first Flavor Agent pattern sync.
+
+Use a token with **AI Search:Edit** and **AI Search:Run** permissions for this private pattern instance. Do not reuse the built-in public WordPress developer-docs AI Search endpoint for pattern content.
 
 ## Plugin Check
 

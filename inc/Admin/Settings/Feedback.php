@@ -339,6 +339,7 @@ final class Feedback {
 		return match ( $settings_error_code ) {
 			'flavor_agent_azure_validation' => __( 'Azure validation failed. Check the endpoint, API key, and embedding deployment, then try again.', 'flavor-agent' ),
 			'flavor_agent_openai_native_validation' => __( 'OpenAI Native validation failed. Check the API key and embedding model, then try again.', 'flavor-agent' ),
+			'flavor_agent_cloudflare_workers_ai_validation' => __( 'Cloudflare Workers AI validation failed. Check the account ID, API token, and embedding model, then try again.', 'flavor-agent' ),
 			'flavor_agent_qdrant_validation' => __( 'Qdrant validation failed. Check the cluster URL and API key, then try again.', 'flavor-agent' ),
 			'flavor_agent_cloudflare_ai_search_validation' => __( 'Docs grounding validation failed. Check the Cloudflare account, instance, and API token, then try again.', 'flavor-agent' ),
 			default => __( 'Validation failed. Check the saved values and try again.', 'flavor-agent' ),
@@ -363,12 +364,19 @@ final class Feedback {
 		return match ( $option_name ) {
 			Provider::OPTION_NAME,
 			'flavor_agent_azure_reasoning_effort' => [ Config::GROUP_CHAT ],
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
+			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
 			'flavor_agent_pattern_recommendation_threshold',
 			'flavor_agent_pattern_max_recommendations',
 			'flavor_agent_qdrant_url',
 			'flavor_agent_qdrant_key',
 			'flavor_agent_azure_embedding_deployment',
-			'flavor_agent_openai_native_embedding_model' => [ Config::GROUP_PATTERNS ],
+			'flavor_agent_openai_native_embedding_model',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => [ Config::GROUP_PATTERNS ],
 			'flavor_agent_cloudflare_ai_search_account_id',
 			'flavor_agent_cloudflare_ai_search_instance_id',
 			'flavor_agent_cloudflare_ai_search_api_token',
@@ -381,7 +389,9 @@ final class Feedback {
 			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS => [ Config::GROUP_EXPERIMENTS ],
 			'flavor_agent_azure_openai_endpoint',
 			'flavor_agent_azure_openai_key',
-			'flavor_agent_openai_native_api_key' => [ Config::GROUP_CHAT, Config::GROUP_PATTERNS ],
+			'flavor_agent_openai_native_api_key',
+			'flavor_agent_cloudflare_workers_ai_account_id',
+			'flavor_agent_cloudflare_workers_ai_api_token' => [ Config::GROUP_CHAT, Config::GROUP_PATTERNS ],
 			default => [],
 		};
 	}
@@ -403,6 +413,8 @@ final class Feedback {
 	private static function get_default_option_value_for_feedback( string $option_name ): mixed {
 		return match ( $option_name ) {
 			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS => false,
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_QDRANT,
+			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH => Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT,
 			default => '',
 		};
 	}

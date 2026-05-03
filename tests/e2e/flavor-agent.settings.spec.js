@@ -35,7 +35,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	);
 	await expect(
 		page.locator( '.flavor-agent-settings__glance-item' )
-	).toHaveCount( 4 );
+	).toHaveCount( 5 );
 	await expect( page.locator( '.flavor-agent-settings' ) ).not.toContainText(
 		'Recent Activity'
 	);
@@ -50,6 +50,9 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	const docsSection = page.locator( '[data-flavor-agent-section="docs"]' );
 	const guidelinesSection = page.locator(
 		'[data-flavor-agent-section="guidelines"]'
+	);
+	const experimentsSection = page.locator(
+		'[data-flavor-agent-section="experiments"]'
 	);
 	const sectionSummarySelector =
 		':scope > .flavor-agent-settings-section__summary';
@@ -80,6 +83,9 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	).toContainText(
 		'Store plugin-owned site, writing, image, and block guidance.'
 	);
+	await expect(
+		experimentsSection.locator( sectionSummarySelector )
+	).toContainText( 'Optional' );
 
 	const chatInitiallyOpen = await chatSection.evaluate(
 		( section ) => section.open

@@ -195,6 +195,26 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_rank_uses_unpinned_wordpress_ai_client_when_workers_ai_embeddings_are_selected(): void {
+		WordPressTestState::$options = [
+			Provider::OPTION_NAME                          => 'cloudflare_workers_ai',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+		];
+
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = 'Workers AI embedding path ranked output';
+
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
+
+		$this->assertSame( 'Workers AI embedding path ranked output', $result );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
 	public function test_embed_batch_returns_a_retryable_rate_limit_error_without_sleeping(): void {
 		WordPressTestState::$options               = [
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',

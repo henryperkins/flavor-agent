@@ -3,18 +3,15 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 const fs = require( 'fs' );
 const path = require( 'path' );
 
-const mockTranslate = jest.fn( ( value ) => value );
-const mockSprintf = jest.fn( ( template, ...values ) => {
-	return values.reduce( ( result, value, index ) => {
-		return result
-			.replaceAll( `%${ index + 1 }$s`, String( value ) )
-			.replace( '%s', String( value ) );
-	}, template );
-} );
-
 jest.mock( '@wordpress/i18n', () => ( {
-	__: ( ...args ) => mockTranslate( ...args ),
-	sprintf: ( ...args ) => mockSprintf( ...args ),
+	__: jest.fn( ( value ) => value ),
+	sprintf: jest.fn( ( template, ...values ) =>
+		values.reduce( ( result, value, index ) => {
+			return result
+				.replaceAll( `%${ index + 1 }$s`, String( value ) )
+				.replace( '%s', String( value ) );
+		}, template )
+	),
 } ) );
 
 function getDataViewsMockState() {
@@ -191,6 +188,7 @@ const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import apiFetch from '@wordpress/api-fetch';
+import * as i18n from '@wordpress/i18n';
 
 import {
 	DEFAULT_ACTIVITY_VIEW,
@@ -315,11 +313,25 @@ function getSidebarTitle() {
 	);
 }
 
+function getDetailSectionByLabel( label ) {
+	return Array.from(
+		getContainer().querySelectorAll(
+			'.flavor-agent-activity-log__detail-section'
+		)
+	).find( ( section ) => {
+		return (
+			section.querySelector(
+				'.flavor-agent-activity-log__detail-summary-label'
+			)?.textContent === label
+		);
+	} );
+}
+
 beforeEach( () => {
 	getDataViewsMockState().latestProps = null;
 	apiFetch.mockReset();
-	mockTranslate.mockClear();
-	mockSprintf.mockClear();
+	i18n.__.mockClear();
+	i18n.sprintf.mockClear();
 	window.localStorage.clear();
 } );
 
@@ -379,9 +391,9 @@ describe( 'ActivityLogApp', () => {
 		expect( getSummaryCardValue( 'Failed or unavailable' ) ).toBe( '2' );
 	} );
 
-	test( 'styles the six summary metrics as one desktop grid row', () => {
+	test( 'styles summary metrics as an auto-fit frosted card grid', () => {
 		expect( ACTIVITY_LOG_CSS ).toMatch(
-			/grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/
+			/\.flavor-agent-activity-log__summary\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(\s*\d+px\s*,\s*1fr\)\)/s
 		);
 	} );
 
@@ -507,6 +519,116 @@ describe( 'ActivityLogApp', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toBe(
 			`${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&search=Alpha&sortField=timestamp&sortDirection=desc`
+		);
+	} );
+
+	test( 'renders the detail sidebar as semantic <dl> > <dt>/<dd> fields', async () => {
+		await renderApp( [
+			createEntry( { suggestion: 'Audit details row' } ),
+		] );
+
+		const detailGrid = getContainer().querySelector(
+			'.flavor-agent-activity-log__detail-grid'
+		);
+		const topLevelDetails = detailGrid
+			? Array.from( detailGrid.children )
+			: [];
+
+		expect( detailGrid ).not.toBeNull();
+		expect( topLevelDetails.length ).toBeGreaterThan( 0 );
+		expect(
+			topLevelDetails.every(
+				( node ) => node.tagName === 'DT' || node.tagName === 'DD'
+			)
+		).toBe( true );
+	} );
+
+	test( 'hides empty code rows and shows populated code rows as pre blocks', async () => {
+		await renderApp( [
+			createEntry( {
+				id: 'activity-code-empty',
+				suggestion: 'Code detail check',
+				surfaceLabel: 'block',
+				statusLabel: 'Applied',
+				operationTypeLabel: 'Insert',
+				timestampDisplay: '2026-03-27T10:00:00Z',
+				activityTypeLabel: 'Pattern',
+				entity: 'core/paragraph',
+				postType: 'post',
+				entityId: '42',
+				documentLabel: 'Post',
+				documentScopeKey: 'post:42',
+				blockPath: '0',
+				user: 'admin',
+				requestAbility: 'Insert',
+				requestRoute: '/wp/v2/posts',
+				requestReference: 'rest::insert',
+				requestPrompt: '',
+				transportError: '',
+			} ),
+		] );
+
+		const requestSection = getDetailSectionByLabel( 'Request' );
+		expect( requestSection ).not.toBeNull();
+		const requestLabels = requestSection
+			? Array.from(
+					requestSection.querySelectorAll(
+						'.flavor-agent-activity-log__detail-grid dt'
+					)
+			  ).map( ( node ) => node.textContent )
+			: [];
+		expect( requestLabels ).toEqual(
+			expect.arrayContaining( [ 'Ability', 'Route', 'Reference' ] )
+		);
+		expect( requestLabels ).not.toContain( 'Prompt' );
+		expect(
+			requestSection.querySelector(
+				'.flavor-agent-activity-log__detail-value--code'
+			)
+		).toBeNull();
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-code-populated',
+				suggestion: 'Code detail check',
+				surfaceLabel: 'block',
+				statusLabel: 'Applied',
+				operationTypeLabel: 'Insert',
+				timestampDisplay: '2026-03-27T10:00:00Z',
+				activityTypeLabel: 'Pattern',
+				entity: 'core/paragraph',
+				postType: 'post',
+				entityId: '42',
+				documentLabel: 'Post',
+				documentScopeKey: 'post:42',
+				blockPath: '0',
+				user: 'admin',
+				requestAbility: 'Insert',
+				requestRoute: '/wp/v2/posts',
+				requestReference: 'rest::insert',
+				requestPrompt: '{\n  "prompt": "Use concise copy"\n}',
+			} ),
+		] );
+
+		const populatedRequestSection = getDetailSectionByLabel( 'Request' );
+		expect( populatedRequestSection ).not.toBeNull();
+		const populatedRequestLabels = populatedRequestSection
+			? Array.from(
+					populatedRequestSection.querySelectorAll(
+						'.flavor-agent-activity-log__detail-grid dt'
+					)
+			  ).map( ( node ) => node.textContent )
+			: [];
+		const requestCode = populatedRequestSection
+			? populatedRequestSection.querySelector(
+					'.flavor-agent-activity-log__detail-grid .flavor-agent-activity-log__code'
+			  )
+			: null;
+
+		expect( populatedRequestLabels ).toContain( 'Prompt' );
+		expect( requestCode ).not.toBeNull();
+		expect( requestCode?.textContent ).toContain(
+			'"prompt": "Use concise copy"'
 		);
 	} );
 
@@ -658,31 +780,22 @@ describe( 'ActivityLogApp', () => {
 	test( 'localizes the interactive page chrome and feed labels', async () => {
 		await renderApp( [ createEntry() ] );
 
-		expect( mockTranslate ).toHaveBeenCalledWith(
+		expect( i18n.__ ).toHaveBeenCalledWith(
 			'AI Activity Log',
 			'flavor-agent'
 		);
-		expect( mockTranslate ).toHaveBeenCalledWith(
+		expect( i18n.__ ).toHaveBeenCalledWith(
 			'Search AI activity',
 			'flavor-agent'
 		);
-		expect( mockTranslate ).toHaveBeenCalledWith(
-			'Refresh',
-			'flavor-agent'
-		);
-		expect( mockTranslate ).toHaveBeenCalledWith(
-			'Status',
-			'flavor-agent'
-		);
-		expect( mockTranslate ).toHaveBeenCalledWith(
+		expect( i18n.__ ).toHaveBeenCalledWith( 'Refresh', 'flavor-agent' );
+		expect( i18n.__ ).toHaveBeenCalledWith( 'Status', 'flavor-agent' );
+		expect( i18n.__ ).toHaveBeenCalledWith(
 			'Failed or unavailable',
 			'flavor-agent'
 		);
-		expect( mockTranslate ).toHaveBeenCalledWith( 'Block', 'flavor-agent' );
-		expect( mockTranslate ).toHaveBeenCalledWith(
-			'Open post',
-			'flavor-agent'
-		);
+		expect( i18n.__ ).toHaveBeenCalledWith( 'Block', 'flavor-agent' );
+		expect( i18n.__ ).toHaveBeenCalledWith( 'Open post', 'flavor-agent' );
 	} );
 
 	test( 'uses row selection instead of per-entry feed actions', async () => {
@@ -797,7 +910,7 @@ describe( 'ActivityLogApp', () => {
 				( element ) => element.value === 'failed'
 			).label
 		).toBe( 'Failed or unavailable' );
-		expect( mockTranslate ).toHaveBeenCalledWith(
+		expect( i18n.__ ).toHaveBeenCalledWith(
 			'Failed or unavailable',
 			'flavor-agent'
 		);

@@ -7,7 +7,7 @@ This document is the editor-flow reference. For overall doc ownership and readin
 It currently has eight primary editor experiences:
 
 - Block recommendations in the native Inspector, powered by the WordPress AI Client and `Settings > Connectors`.
-- Pattern recommendations in the native inserter, powered by plugin-owned Azure OpenAI or OpenAI Native embeddings, Qdrant, and Connectors-owned chat for reranking.
+- Pattern recommendations in the native inserter, powered by plugin-owned Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI embeddings, Qdrant, and Connectors-owned chat for reranking.
 - Content recommendations in the post/page document sidebar for draft, edit, and critique passes.
 - Navigation recommendations in the native Inspector for selected `core/navigation` blocks, powered by Connectors-owned chat and scoped as advisory guidance today.
 - Template recommendations in the Site Editor, powered by Connectors-owned chat with validated template-part and pattern operations.
@@ -188,7 +188,7 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Azure OpenAI and OpenAI Native fields on this screen now configure plugin-owned embeddings for pattern sync; they no longer provide a direct plugin-managed chat fallback. Selecting a connector-backed provider pins chat to that connector while embeddings fall back to a configured direct Azure/OpenAI Native backend. OpenAI Native can pin chat to the OpenAI connector when available; otherwise Flavor Agent fails closed instead of using an unselected provider.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Azure OpenAI, OpenAI Native, and Cloudflare Workers AI fields on this screen configure plugin-owned embeddings for pattern sync; they no longer provide a direct plugin-managed chat fallback. Selecting a connector-backed provider pins chat to that connector while embeddings fall back only to configured Azure/OpenAI Native embeddings. Workers AI delegates chat to the unpinned WordPress AI Client runtime because it is embeddings-only, and it must be explicitly selected for embeddings rather than used as fallback. OpenAI Native can pin chat to the OpenAI connector when available; otherwise Flavor Agent fails closed instead of using an unselected provider.
 When OpenAI Native is selected for embeddings, credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy reports which source is currently effective.
 
 Flavor Agent now uses a managed public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not need to enter Cloudflare account, instance, or token values. Legacy Cloudflare credentials remain supported internally for backwards compatibility, and the legacy validation flow still probes trusted `developer.wordpress.org` guidance before accepting changed credentials.
@@ -202,6 +202,9 @@ Configured options:
 - `flavor_agent_azure_reasoning_effort`
 - `flavor_agent_openai_native_api_key`
 - `flavor_agent_openai_native_embedding_model`
+- `flavor_agent_cloudflare_workers_ai_account_id`
+- `flavor_agent_cloudflare_workers_ai_api_token`
+- `flavor_agent_cloudflare_workers_ai_embedding_model`
 - `flavor_agent_qdrant_url`
 - `flavor_agent_qdrant_key`
 - `flavor_agent_pattern_recommendation_threshold`
