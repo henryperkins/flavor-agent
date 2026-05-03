@@ -1463,6 +1463,7 @@ const actions = {
 				return false;
 			}
 
+			try {
 			const storedRecommendationPayload =
 				select.getBlockRecommendations( clientId ) || null;
 			const storedRecommendations = storedRecommendationPayload || {};
@@ -1582,6 +1583,16 @@ const actions = {
 			);
 
 			return true;
+			} catch ( error ) {
+				localDispatch(
+					actions.setBlockApplyState(
+						clientId,
+						'error',
+						error?.message || applyErrorMessage
+					)
+				);
+				throw error;
+			}
 		};
 	},
 
@@ -1655,6 +1666,7 @@ const actions = {
 				return false;
 			}
 
+			try {
 			const storedRecommendationPayload =
 				select.getBlockRecommendations( clientId ) || null;
 			const storedRecommendations = storedRecommendationPayload || {};
@@ -1748,6 +1760,19 @@ const actions = {
 			);
 
 			return true;
+			} catch ( error ) {
+				localDispatch(
+					actions.setBlockApplyState(
+						clientId,
+						'error',
+						error?.message ||
+							getBlockStructuralActionErrorMessage(
+								'operation_invalid'
+							)
+					)
+				);
+				throw error;
+			}
 		};
 	},
 

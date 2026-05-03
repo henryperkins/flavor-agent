@@ -3413,6 +3413,75 @@ describe( 'store action thunks', () => {
 		expect( dispatch ).not.toHaveBeenCalled();
 	} );
 
+	test( 'applySuggestion resets apply state when updateBlockAttributes throws synchronously', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-sig',
+			},
+		} );
+
+		const updateBlockAttributes = jest.fn( () => {
+			throw new Error( 'simulated editor crash' );
+		} );
+		const dispatch = jest.fn();
+		const select = {
+			getBlockApplyStatus: jest.fn().mockReturnValue( null ),
+			getActivityScopeKey: jest.fn(),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-sig' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				prompt: '',
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
+				executionContract: { contentAttributeKeys: [ 'content' ] },
+			} ),
+			getBlockRecommendationContextSignature: jest.fn(),
+			getBlockRequestToken: jest.fn().mockReturnValue( 1 ),
+		};
+		const registry = {
+			select: jest.fn( () => ( {
+				getBlockAttributes: jest.fn().mockReturnValue( {
+					content: 'old',
+				} ),
+				getBlocks: jest.fn().mockReturnValue( [] ),
+			} ) ),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		await expect(
+			actions.applySuggestion(
+				'block-1',
+				{
+					label: 'Refresh content',
+					panel: 'general',
+					type: 'attribute_change',
+					attributeUpdates: { content: 'new' },
+				},
+				null,
+				{
+					clientId: 'block-1',
+					editorContext: { block: { name: 'core/paragraph' } },
+				}
+			)( { dispatch, registry, select } )
+		).rejects.toThrow( 'simulated editor crash' );
+
+		const errorDispatch = dispatch.mock.calls.find(
+			( [ action ] ) =>
+				action?.type === 'SET_BLOCK_APPLY_STATE' &&
+				action?.status === 'error'
+		);
+
+		expect( errorDispatch ).toBeDefined();
+		expect( errorDispatch[ 0 ] ).toEqual(
+			expect.objectContaining( {
+				clientId: 'block-1',
+				status: 'error',
+			} )
+		);
+	} );
+
 	test( 'applySuggestion rejects lock and undeclared top-level attribute updates', async () => {
 		apiFetch.mockResolvedValue( {
 			payload: {
