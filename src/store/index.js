@@ -1460,125 +1460,126 @@ const actions = {
 			}
 
 			try {
-			const storedRecommendationPayload =
-				select.getBlockRecommendations( clientId ) || null;
-			const storedRecommendations = storedRecommendationPayload || {};
-			const blockContext = storedRecommendations.blockContext || {};
-			const executionContract =
-				storedRecommendations.executionContract || null;
-			const blockEditorSelect =
-				registry?.select?.( 'core/block-editor' ) || {};
-			const blockEditorDispatch =
-				registry?.dispatch?.( 'core/block-editor' ) || {};
-			const currentAttributes =
-				blockEditorSelect.getBlockAttributes?.( clientId ) || {};
-			const execution = getBlockSuggestionExecutionInfo(
-				suggestion,
-				blockContext,
-				executionContract
-			);
-			const allowedUpdates = execution.allowedUpdates;
-			let nextAttributes = null;
-			let didApply = false;
-			let isNoOp = false;
-
-			if ( execution.isAdvisoryOnly ) {
-				localDispatch(
-					actions.setBlockApplyState(
-						clientId,
-						'error',
-						advisoryApplyMessage
-					)
+				const storedRecommendationPayload =
+					select.getBlockRecommendations( clientId ) || null;
+				const storedRecommendations = storedRecommendationPayload || {};
+				const blockContext = storedRecommendations.blockContext || {};
+				const executionContract =
+					storedRecommendations.executionContract || null;
+				const blockEditorSelect =
+					registry?.select?.( 'core/block-editor' ) || {};
+				const blockEditorDispatch =
+					registry?.dispatch?.( 'core/block-editor' ) || {};
+				const currentAttributes =
+					blockEditorSelect.getBlockAttributes?.( clientId ) || {};
+				const execution = getBlockSuggestionExecutionInfo(
+					suggestion,
+					blockContext,
+					executionContract
 				);
-				return false;
-			}
+				const allowedUpdates = execution.allowedUpdates;
+				let nextAttributes = null;
+				let didApply = false;
+				let isNoOp = false;
 
-			if ( Object.keys( allowedUpdates ).length > 0 ) {
-				const safeUpdates = buildSafeAttributeUpdates(
-					currentAttributes,
-					allowedUpdates
-				);
-				const proposedNextAttributes = {
-					...currentAttributes,
-					...safeUpdates,
-				};
-
-				if (
-					Object.keys( safeUpdates ).length > 0 &&
-					attributeSnapshotsMatch(
-						currentAttributes,
-						proposedNextAttributes
-					)
-				) {
-					isNoOp = true;
-				}
-
-				if (
-					Object.keys( safeUpdates ).length > 0 &&
-					! isNoOp &&
-					typeof blockEditorDispatch.updateBlockAttributes ===
-						'function'
-				) {
-					nextAttributes = proposedNextAttributes;
-					blockEditorDispatch.updateBlockAttributes(
-						clientId,
-						safeUpdates
-					);
-					didApply = true;
-				}
-			}
-
-			if ( ! didApply ) {
-				if ( isNoOp ) {
+				if ( execution.isAdvisoryOnly ) {
 					localDispatch(
-						actions.setBlockApplyState( clientId, 'idle' )
+						actions.setBlockApplyState(
+							clientId,
+							'error',
+							advisoryApplyMessage
+						)
 					);
 					return false;
 				}
 
+				if ( Object.keys( allowedUpdates ).length > 0 ) {
+					const safeUpdates = buildSafeAttributeUpdates(
+						currentAttributes,
+						allowedUpdates
+					);
+					const proposedNextAttributes = {
+						...currentAttributes,
+						...safeUpdates,
+					};
+
+					if (
+						Object.keys( safeUpdates ).length > 0 &&
+						attributeSnapshotsMatch(
+							currentAttributes,
+							proposedNextAttributes
+						)
+					) {
+						isNoOp = true;
+					}
+
+					if (
+						Object.keys( safeUpdates ).length > 0 &&
+						! isNoOp &&
+						typeof blockEditorDispatch.updateBlockAttributes ===
+							'function'
+					) {
+						nextAttributes = proposedNextAttributes;
+						blockEditorDispatch.updateBlockAttributes(
+							clientId,
+							safeUpdates
+						);
+						didApply = true;
+					}
+				}
+
+				if ( ! didApply ) {
+					if ( isNoOp ) {
+						localDispatch(
+							actions.setBlockApplyState( clientId, 'idle' )
+						);
+						return false;
+					}
+
+					localDispatch(
+						actions.setBlockApplyState(
+							clientId,
+							'error',
+							applyErrorMessage
+						)
+					);
+					return false;
+				}
+
+				await logStoreActivityEntry(
+					localDispatch,
+					select,
+					buildBlockActivityEntry( {
+						afterAttributes: nextAttributes || currentAttributes,
+						beforeAttributes: currentAttributes,
+						blockContext,
+						blockPath: findBlockPath(
+							blockEditorSelect.getBlocks?.() || [],
+							clientId
+						),
+						clientId,
+						requestPrompt: storedRecommendations.prompt || '',
+						requestMeta:
+							suggestion?.requestMeta ||
+							storedRecommendations.requestMeta ||
+							null,
+						requestToken:
+							select.getBlockRequestToken( clientId ) || 0,
+						scope,
+						suggestion,
+					} )
+				);
+
 				localDispatch(
 					actions.setBlockApplyState(
 						clientId,
-						'error',
-						applyErrorMessage
+						'success',
+						null,
+						suggestion?.suggestionKey || suggestion?.label || null
 					)
 				);
-				return false;
-			}
 
-			await logStoreActivityEntry(
-				localDispatch,
-				select,
-				buildBlockActivityEntry( {
-					afterAttributes: nextAttributes || currentAttributes,
-					beforeAttributes: currentAttributes,
-					blockContext,
-					blockPath: findBlockPath(
-						blockEditorSelect.getBlocks?.() || [],
-						clientId
-					),
-					clientId,
-					requestPrompt: storedRecommendations.prompt || '',
-					requestMeta:
-						suggestion?.requestMeta ||
-						storedRecommendations.requestMeta ||
-						null,
-					requestToken: select.getBlockRequestToken( clientId ) || 0,
-					scope,
-					suggestion,
-				} )
-			);
-
-			localDispatch(
-				actions.setBlockApplyState(
-					clientId,
-					'success',
-					null,
-					suggestion?.suggestionKey || suggestion?.label || null
-				)
-			);
-
-			return true;
+				return true;
 			} catch ( error ) {
 				localDispatch(
 					actions.setBlockApplyState(
@@ -1663,99 +1664,105 @@ const actions = {
 			}
 
 			try {
-			const storedRecommendationPayload =
-				select.getBlockRecommendations( clientId ) || null;
-			const storedRecommendations = storedRecommendationPayload || {};
-			const blockEditorSelect =
-				registry?.select?.( 'core/block-editor' ) || {};
-			const blockEditorDispatch =
-				registry?.dispatch?.( 'core/block-editor' ) || {};
-			const blockContext =
-				liveRequestInput?.editorContext?.block ||
-				storedRecommendations.blockContext ||
-				{};
-			const blockOperationContext =
-				liveRequestInput?.editorContext?.blockOperationContext ||
-				storedRecommendations.blockOperationContext ||
-				null;
+				const storedRecommendationPayload =
+					select.getBlockRecommendations( clientId ) || null;
+				const storedRecommendations = storedRecommendationPayload || {};
+				const blockEditorSelect =
+					registry?.select?.( 'core/block-editor' ) || {};
+				const blockEditorDispatch =
+					registry?.dispatch?.( 'core/block-editor' ) || {};
+				const blockContext =
+					liveRequestInput?.editorContext?.block ||
+					storedRecommendations.blockContext ||
+					{};
+				const blockOperationContext =
+					liveRequestInput?.editorContext?.blockOperationContext ||
+					storedRecommendations.blockOperationContext ||
+					null;
 
-			if ( ! blockOperationContext ) {
-				const error =
-					getBlockStructuralActionErrorMessage( 'operation_invalid' );
+				if ( ! blockOperationContext ) {
+					const error =
+						getBlockStructuralActionErrorMessage(
+							'operation_invalid'
+						);
 
-				localDispatch(
-					actions.setBlockApplyState( clientId, 'error', error )
+					localDispatch(
+						actions.setBlockApplyState( clientId, 'error', error )
+					);
+
+					return false;
+				}
+
+				const targetClientId =
+					blockOperationContext.targetClientId || clientId;
+				const targetRootClientId =
+					blockEditorSelect.getBlockRootClientId?.(
+						targetClientId
+					) || null;
+				const blockPath = findBlockPath(
+					blockEditorSelect.getBlocks?.() || [],
+					targetClientId
 				);
 
-				return false;
-			}
-
-			const targetClientId =
-				blockOperationContext.targetClientId || clientId;
-			const targetRootClientId =
-				blockEditorSelect.getBlockRootClientId?.( targetClientId ) ||
-				null;
-			const blockPath = findBlockPath(
-				blockEditorSelect.getBlocks?.() || [],
-				targetClientId
-			);
-
-			const result = {
-				...applyBlockStructuralSuggestionOperations( {
-					suggestion,
-					blockOperationContext,
-					blockEditorSelect,
-					blockEditorDispatch,
-					parsePatternBlocks: createBlockStructuralPatternParser(
+				const result = {
+					...applyBlockStructuralSuggestionOperations( {
+						suggestion,
+						blockOperationContext,
 						blockEditorSelect,
-						targetRootClientId
-					),
-				} ),
-				blockPath,
-			};
+						blockEditorDispatch,
+						parsePatternBlocks: createBlockStructuralPatternParser(
+							blockEditorSelect,
+							targetRootClientId
+						),
+					} ),
+					blockPath,
+				};
 
-			if ( ! result.ok ) {
+				if ( ! result.ok ) {
+					localDispatch(
+						actions.setBlockApplyState(
+							clientId,
+							'error',
+							result.error ||
+								getBlockStructuralActionErrorMessage(
+									result.code
+								)
+						)
+					);
+
+					return false;
+				}
+
+				await logStoreActivityEntry(
+					localDispatch,
+					select,
+					buildBlockStructuralActivityEntry( {
+						blockContext,
+						clientId,
+						requestPrompt: storedRecommendations.prompt || '',
+						requestMeta:
+							suggestion?.requestMeta ||
+							storedRecommendations.requestMeta ||
+							null,
+						requestToken:
+							select.getBlockRequestToken( clientId ) || 0,
+						blockPath: result.blockPath,
+						result,
+						scope,
+						suggestion,
+					} )
+				);
+
 				localDispatch(
 					actions.setBlockApplyState(
 						clientId,
-						'error',
-						result.error ||
-							getBlockStructuralActionErrorMessage( result.code )
+						'success',
+						null,
+						suggestion?.suggestionKey || suggestion?.label || null
 					)
 				);
 
-				return false;
-			}
-
-			await logStoreActivityEntry(
-				localDispatch,
-				select,
-				buildBlockStructuralActivityEntry( {
-					blockContext,
-					clientId,
-					requestPrompt: storedRecommendations.prompt || '',
-					requestMeta:
-						suggestion?.requestMeta ||
-						storedRecommendations.requestMeta ||
-						null,
-					requestToken: select.getBlockRequestToken( clientId ) || 0,
-					blockPath: result.blockPath,
-					result,
-					scope,
-					suggestion,
-				} )
-			);
-
-			localDispatch(
-				actions.setBlockApplyState(
-					clientId,
-					'success',
-					null,
-					suggestion?.suggestionKey || suggestion?.label || null
-				)
-			);
-
-			return true;
+				return true;
 			} catch ( error ) {
 				localDispatch(
 					actions.setBlockApplyState(
