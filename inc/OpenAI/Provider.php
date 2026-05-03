@@ -448,6 +448,28 @@ final class Provider {
 		return $model !== '' ? $model : null;
 	}
 
+	/**
+	 * @return array{provider: string, providerLabel: string, backendLabel: string, model: string, configured: bool, owner: string, ownerLabel: string, pathLabel: string}
+	 */
+	public static function active_embedding_request_meta(): array {
+		$config         = self::embedding_configuration();
+		$provider       = sanitize_key( (string) ( $config['provider'] ?? self::get() ) );
+		$provider_label = self::label( $provider );
+		$model          = trim( (string) ( $config['model'] ?? '' ) );
+		$backend_label  = trim( (string) ( $config['label'] ?? $provider_label ) );
+
+		return [
+			'provider'      => $provider,
+			'providerLabel' => $provider_label,
+			'backendLabel'  => '' !== $backend_label ? $backend_label : $provider_label,
+			'model'         => '' !== $model ? $model : 'not configured',
+			'configured'    => ! empty( $config['configured'] ),
+			'owner'         => 'flavor_agent',
+			'ownerLabel'    => 'Settings > Flavor Agent',
+			'pathLabel'     => sprintf( '%s pattern embeddings', $provider_label ),
+		];
+	}
+
 	public static function normalize_provider( string $provider ): string {
 		$provider = sanitize_key( $provider );
 

@@ -28,9 +28,9 @@ Use this skill for plugin work such as:
 ### 0) Triage and locate plugin entrypoints
 
 1. Run triage:
-   - `node .codex/skills/wp-project-triage/scripts/detect_wp_project.mjs`
+   - `node skills/wp-project-triage/scripts/detect_wp_project.mjs`
 2. Detect plugin headers (deterministic scan):
-   - `node .codex/skills/wp-plugin-development/scripts/detect_plugins.mjs`
+   - `node skills/wp-plugin-development/scripts/detect_plugins.mjs`
 
 If this is a full site repo, pick the specific plugin under `wp-content/plugins/` or `mu-plugins/` before changing code.
 

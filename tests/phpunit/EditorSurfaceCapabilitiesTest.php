@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 require_once __DIR__ . '/support/editor-surface-capabilities-bootstrap.php';
 
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -150,6 +151,28 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame(
 			'Configure a text-generation provider in Settings > Connectors to enable Style Book recommendations.',
 			$capabilities['styleBook']['message']
+		);
+	}
+
+	public function test_pattern_capability_uses_cloudflare_ai_search_unavailable_copy(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+			'manage_options'     => true,
+		];
+		WordPressTestState::$options      = [
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+		];
+
+		$capabilities = \flavor_agent_get_editor_surface_capabilities(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php'
+		);
+
+		$this->assertFalse( $capabilities['pattern']['available'] );
+		$this->assertSame( 'pattern_backend_unconfigured', $capabilities['pattern']['reason'] );
+		$this->assertSame(
+			'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+			$capabilities['pattern']['message']
 		);
 	}
 }

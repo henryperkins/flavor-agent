@@ -292,7 +292,7 @@ Template parts are the strongest Site Editor fit because headers, footers, and s
 
 Good enough to merit release presence: yes.
 
-Release-quality as-is: close, assuming current browser evidence is refreshed. The most valuable improvement is better operation yield, not broader operation authority.
+Release-quality as-is: close; current browser evidence is captured in [`docs/validation/2026-05-02-template-surface-release-closeout.md`](../validation/2026-05-02-template-surface-release-closeout.md), which exercises template-part coverage in the wp70 harness. The most valuable improvement is better operation yield, not broader operation authority.
 
 ### Stop Line
 
@@ -315,7 +315,7 @@ Do not add:
 
 - [ ] Improve recommendation yield by giving the prompt better bounded context, not by loosening validators.
 - [ ] Confirm unsupported suggestions stay useful as manual ideas.
-- [ ] Re-run WP 7.0 template-part browser flows.
+- [x] Re-run WP 7.0 template-part browser flows. Captured in [`docs/validation/2026-05-02-template-surface-release-closeout.md`](../validation/2026-05-02-template-surface-release-closeout.md).
 - [ ] Watch Block Bindings and Pattern Overrides before investing in deeper executable behavior.
 - [ ] Keep operation vocabulary synchronized with `docs/reference/template-operations.md`.
 

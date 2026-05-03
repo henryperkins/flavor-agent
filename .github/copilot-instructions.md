@@ -1,6 +1,6 @@
 # Flavor Agent Copilot Instructions
 
-WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, vector-powered pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
+WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, post/page content drafting and critique, vector-powered pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 
@@ -70,7 +70,7 @@ For any change that touches more than one recommendation surface or any shared s
 
 **Pattern recommendations** are a separate pipeline. `src/patterns/PatternRecommender.js` does an initial fetch plus debounced refreshes, always passing `visiblePatternNames` for the current inserter root. Server-side, patterns are embedded with plugin-owned Azure/OpenAI Native embeddings, searched in Qdrant, reranked through the WordPress AI Client chat path, then returned. The client renders matching allowed patterns in a Flavor Agent-owned local inserter shelf and does not rewrite Gutenberg's native pattern registry or pattern metadata.
 
-**Template recommendations** are Site Editor-only. `src/templates/TemplateRecommender.js` activates only for `wp_template` entities and is advisory rather than auto-applying. **Template-part recommendations** (`src/template-parts/TemplatePartRecommender.js`) are scoped to individual template-part blocks. **Navigation recommendations** suggest structure for navigation blocks.
+**Template recommendations** are Site Editor-only. `src/templates/TemplateRecommender.js` activates only for `wp_template` entities; executable suggestions (`assign_template_part`, `replace_template_part`, `insert_pattern`) apply only after the user opens the shared review panel and confirms, with inline undo afterward, while non-deterministic ideas stay advisory in the `Manual ideas` lane. **Template-part recommendations** (`src/template-parts/TemplatePartRecommender.js`) are scoped to individual template-part blocks. **Navigation recommendations** suggest structure for navigation blocks.
 
 **Pattern indexing** is its own subsystem. `inc/Patterns/PatternIndex.php` keeps runtime state in the `flavor_agent_pattern_index_state` option, computes fingerprints, and uses a lock plus cooldown around sync work. Syncs trigger on activation, theme/plugin changes, backend-setting changes, cron (`flavor_agent_reindex_patterns`), or the admin sync button.
 
@@ -86,7 +86,7 @@ All routes live under `flavor-agent/v1/`: `recommend-block`, `recommend-content`
 
 ### LLM provider architecture
 
-`LLM\ChatClient` routes chat through the WordPress AI Client (`wp_ai_client_prompt()`) and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages plugin-owned Azure/OpenAI Native embeddings, Qdrant, Cloudflare AI Search, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` now selects the embedding backend for patterns or pins chat to a configured connector while embeddings fall back to a configured direct backend. Each recommendation surface disables independently when its required backend is unavailable.
+`LLM\ChatClient` routes chat through the WordPress AI Client (`wp_ai_client_prompt()`) and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages plugin-owned Azure OpenAI, OpenAI Native, and Cloudflare Workers AI embeddings, Qdrant, Cloudflare AI Search, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` selects the embedding backend (`azure_openai`, `openai_native`, or `cloudflare_workers_ai` — the last must be explicitly chosen and is never used as an implicit fallback) or pins chat to a configured connector while embeddings fall back to a configured direct backend. Each recommendation surface disables independently when its required backend is unavailable.
 
 ## Key conventions
 
@@ -104,7 +104,7 @@ Pattern recommendations stay local to the Flavor Agent inserter shelf. Do not mu
 
 Pattern settings keys and inserter DOM selectors are centralized in `src/patterns/compat.js`. The adapter resolves stable keys first, then `__experimentalAdditional*` override keys, then `__experimental*` base keys.
 
-`visiblePatternNames` should come from the current inserter root. That scoping is important for pattern recommendations, while the template recommender intentionally stays advisory and broader in scope.
+`visiblePatternNames` should come from the current inserter root for pattern recommendations. The template recommender intentionally captures it at template-global scope instead, since template suggestions span the whole template rather than a specific insertion point.
 
 Settings sanitization has an established pattern: Azure, Qdrant, and Cloudflare validation only runs when submitted values actually change, validation results are deduplicated within a single save request via fingerprinted static state, and failed validation keeps the previously saved value while surfacing a Settings API error.
 

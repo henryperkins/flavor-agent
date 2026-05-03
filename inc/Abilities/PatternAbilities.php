@@ -465,8 +465,9 @@ final class PatternAbilities {
 		}
 
 		$recommendations     = [];
+		$selected_backend    = PatternRetrievalBackendFactory::selected_backend();
 		$max_recommendations = self::max_recommendations();
-		$score_threshold     = self::recommendation_score_threshold();
+		$score_threshold     = self::recommendation_score_threshold( $selected_backend );
 		foreach ( (array) $data['recommendations'] as $rec ) {
 			if ( count( $recommendations ) >= $max_recommendations ) {
 				break;
@@ -489,8 +490,10 @@ final class PatternAbilities {
 				sanitize_text_field( $rec['reason'] ?? '' ),
 				$ranking_hint
 			);
-			$source_signals = [ 'qdrant_semantic', 'llm_ranker' ];
-			if ( $ran_structural_pass ) {
+			$source_signals = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend
+				? [ 'cloudflare_ai_search', 'llm_ranker' ]
+				: [ 'qdrant_semantic', 'llm_ranker' ];
+			if ( Config::PATTERN_BACKEND_QDRANT === $selected_backend && $ran_structural_pass ) {
 				$source_signals[] = 'qdrant_structural';
 			}
 			$recommendations[] = [
@@ -517,9 +520,12 @@ final class PatternAbilities {
 						'sourceSignals' => $source_signals,
 						'safetyMode'    => 'validated',
 						'freshnessMeta' => [
-							'indexStatus'        => (string) ( $state['status'] ?? '' ),
-							'embeddingSignature' => (string) ( $state['embedding_signature'] ?? '' ),
-							'qdrantCollection'   => (string) ( $state['qdrant_collection'] ?? '' ),
+							'indexStatus'                  => (string) ( $state['status'] ?? '' ),
+							'patternBackend'               => $selected_backend,
+							'embeddingSignature'           => (string) ( $state['embedding_signature'] ?? '' ),
+							'qdrantCollection'             => (string) ( $state['qdrant_collection'] ?? '' ),
+							'cloudflareAISearchNamespace'  => (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ),
+							'cloudflareAISearchInstance'   => (string) ( $state['cloudflare_ai_search_instance'] ?? '' ),
 						],
 						'rankingHint'   => $ranking_hint,
 					]
@@ -1803,11 +1809,14 @@ SYSTEM;
 		];
 	}
 
-	private static function recommendation_score_threshold(): float {
-		$value = (float) get_option(
-			'flavor_agent_pattern_recommendation_threshold',
-			self::DEFAULT_RECOMMENDATION_SCORE_THRESHOLD
-		);
+	private static function recommendation_score_threshold( string $backend ): float {
+		$option  = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend
+			? Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH
+			: 'flavor_agent_pattern_recommendation_threshold';
+		$default = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend
+			? Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT
+			: self::DEFAULT_RECOMMENDATION_SCORE_THRESHOLD;
+		$value   = (float) get_option( $option, $default );
 
 		return max( 0.0, min( 1.0, $value ) );
 	}

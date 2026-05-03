@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
+use FlavorAgent\Admin\Settings\Config;
+use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 
 final class SurfaceCapabilities {
 
@@ -15,12 +18,15 @@ final class SurfaceCapabilities {
 	public static function build( string $settings_url = '', string $connectors_url = '' ): array {
 		$block_available     = ChatClient::is_supported();
 		$chat_available      = Provider::chat_configured();
-		$pattern_available   = (bool) (
-			Provider::embedding_configured()
-			&& $chat_available
-			&& get_option( 'flavor_agent_qdrant_url' )
-			&& get_option( 'flavor_agent_qdrant_key' )
-		);
+		$pattern_backend       = PatternRetrievalBackendFactory::selected_backend();
+		$pattern_backend_ready = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend
+			? PatternSearchClient::is_configured()
+			: (bool) (
+				Provider::embedding_configured()
+				&& get_option( 'flavor_agent_qdrant_url' )
+				&& get_option( 'flavor_agent_qdrant_key' )
+			);
+		$pattern_available   = $chat_available && $pattern_backend_ready;
 		$can_edit_theme      = current_user_can( 'edit_theme_options' );
 		$can_manage_settings = current_user_can( 'manage_options' );
 
@@ -33,15 +39,12 @@ final class SurfaceCapabilities {
 				'Block recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
-		$pattern_message       = $can_manage_settings
-			? __(
-				'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
-				'flavor-agent'
-			)
-			: __(
-				'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent pattern backends and a text-generation provider in Settings > Connectors.',
-				'flavor-agent'
-			);
+		$pattern_message       = self::pattern_unavailable_message(
+			$can_manage_settings,
+			$chat_available,
+			$pattern_backend,
+			$pattern_backend_ready
+		);
 		$content_message       = $can_manage_settings
 			? __(
 				'Configure a text-generation provider in Settings > Connectors to enable content recommendations.',
@@ -345,5 +348,33 @@ final class SurfaceCapabilities {
 				static fn( array $action ): bool => ! empty( $action['label'] ) && ! empty( $action['href'] )
 			)
 		);
+	}
+
+	private static function pattern_unavailable_message( bool $can_manage_settings, bool $chat_available, string $pattern_backend, bool $pattern_backend_ready ): string {
+		if ( ! $can_manage_settings ) {
+			return __( 'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent pattern backends and a text-generation provider in Settings > Connectors.', 'flavor-agent' );
+		}
+
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend ) {
+			if ( ! $pattern_backend_ready && ! $chat_available ) {
+				return __( 'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
+			}
+
+			if ( ! $pattern_backend_ready ) {
+				return __( 'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent.', 'flavor-agent' );
+			}
+
+			return __( 'Pattern recommendations need a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
+		}
+
+		if ( ! $pattern_backend_ready && ! $chat_available ) {
+			return __( 'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
+		}
+
+		if ( ! $pattern_backend_ready ) {
+			return __( 'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent.', 'flavor-agent' );
+		}
+
+		return __( 'Pattern recommendations need a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
 	}
 }
