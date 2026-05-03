@@ -731,7 +731,7 @@ final class Agent_Controller {
 		try {
 			$result = BlockAbilities::recommend_block( $input );
 		} catch ( \Throwable $throwable ) {
-			$throwable_context = self::build_trace_throwable_context( $throwable );
+			$throwable_context = RequestTrace::throwable_context( $throwable );
 			if ( $trace_consumed ) {
 				RequestTrace::event(
 					'rest.recommend_block.throwable',
@@ -1126,20 +1126,6 @@ final class Agent_Controller {
 			'requestMeta' => self::summarize_trace_request_meta(
 				\is_array( $data['requestMeta'] ?? null ) ? $data['requestMeta'] : []
 			),
-		];
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private static function build_trace_throwable_context( \Throwable $throwable ): array {
-		return [
-			'throwable' => [
-				'class'   => get_class( $throwable ),
-				'message' => $throwable->getMessage(),
-				'file'    => $throwable->getFile(),
-				'line'    => $throwable->getLine(),
-			],
 		];
 	}
 

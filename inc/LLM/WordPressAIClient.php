@@ -162,7 +162,7 @@ final class WordPressAIClient {
 				$request_timeout_seconds
 			);
 		} catch ( \Throwable $throwable ) {
-			$throwable_context = self::build_throwable_trace_context( $throwable );
+			$throwable_context = RequestTrace::throwable_context( $throwable );
 			if ( $trace_consumed ) {
 				RequestTrace::event(
 					'ai.chat.throwable',
@@ -1118,20 +1118,6 @@ final class WordPressAIClient {
 				'code'    => $error->get_error_code(),
 				'message' => $error->get_error_message(),
 				'status'  => is_numeric( $data['status'] ?? null ) ? (int) $data['status'] : null,
-			],
-		];
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private static function build_throwable_trace_context( \Throwable $throwable ): array {
-		return [
-			'throwable' => [
-				'class'   => get_class( $throwable ),
-				'message' => $throwable->getMessage(),
-				'file'    => $throwable->getFile(),
-				'line'    => $throwable->getLine(),
 			],
 		];
 	}

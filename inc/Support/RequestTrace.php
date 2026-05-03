@@ -37,6 +37,20 @@ final class RequestTrace {
 	}
 
 	/**
+	 * @return array{throwable: array{class: string, message: string, file: string, line: int}}
+	 */
+	public static function throwable_context( \Throwable $throwable ): array {
+		return [
+			'throwable' => [
+				'class'   => get_class( $throwable ),
+				'message' => $throwable->getMessage(),
+				'file'    => $throwable->getFile(),
+				'line'    => $throwable->getLine(),
+			],
+		];
+	}
+
+	/**
 	 * @param array<string, mixed> $context
 	 */
 	public static function start( string $surface, array $context = [], string $event = 'trace.start' ): string {

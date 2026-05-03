@@ -69,4 +69,14 @@ final class RequestTraceTest extends TestCase {
 
 		$this->assertTrue( RequestTrace::is_consumed() );
 	}
+
+	public function test_throwable_context_returns_canonical_shape(): void {
+		$throwable = new \RuntimeException( 'boom' );
+		$context   = RequestTrace::throwable_context( $throwable );
+
+		$this->assertSame( \RuntimeException::class, $context['throwable']['class'] );
+		$this->assertSame( 'boom', $context['throwable']['message'] );
+		$this->assertNotEmpty( $context['throwable']['file'] );
+		$this->assertIsInt( $context['throwable']['line'] );
+	}
 }
