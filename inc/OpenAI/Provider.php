@@ -941,29 +941,19 @@ final class Provider {
 		}
 
 		$db_value = self::option_value( $overrides, $setting_name );
-		$source   = '' !== $db_value ? 'database' : 'none';
 
-		$connector ??= self::registered_connectors()[ $connector_id ] ?? [];
-		$configured = 'none' !== $source;
-		$filtered   = apply_filters(
-			'wpai_is_' . sanitize_key( $connector_id ) . '_connector_configured',
-			$configured,
-			is_array( $connector ) ? $connector : []
-		);
-
-		if ( false === (bool) $filtered ) {
-			return 'none';
-		}
-
-		if ( 'none' === $source && true === (bool) $filtered ) {
-			return 'connector_filter';
-		}
-
-		if ( 'database' === $source ) {
+		if ( '' !== $db_value ) {
 			return 'database';
 		}
 
-		return $source;
+		$connector ??= self::registered_connectors()[ $connector_id ] ?? [];
+		$filtered    = apply_filters(
+			'wpai_is_' . sanitize_key( $connector_id ) . '_connector_configured',
+			false,
+			is_array( $connector ) ? $connector : []
+		);
+
+		return true === (bool) $filtered ? 'connector_filter' : 'none';
 	}
 
 	/**

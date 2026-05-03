@@ -102,6 +102,29 @@ final class ProviderTest extends TestCase {
 		$this->assertSame( 'connector_filter', $status['keySource'] );
 	}
 
+	public function test_openai_connector_status_keeps_database_key_when_filter_returns_false(): void {
+		WordPressTestState::$options    = [
+			'connectors_ai_openai_api_key' => 'sk-saved-key',
+		];
+		WordPressTestState::$connectors = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+
+		add_filter( 'wpai_is_openai_connector_configured', '__return_false', 10, 2 );
+
+		$status = Provider::openai_connector_status();
+
+		$this->assertSame( 'database', $status['keySource'], 'Saved DB key must not be suppressed by a false filter result.' );
+		$this->assertTrue( $status['configured'] );
+	}
+
 	public function test_openai_connector_status_checks_environment_from_connector_setting_name(): void {
 		putenv( 'CONNECTORS_AI_OPENAI_API_KEY=connector-env-key' );
 
