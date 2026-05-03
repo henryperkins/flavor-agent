@@ -305,7 +305,42 @@ final class WordPressAIClient {
 			);
 		}
 
-		return $prompt;
+		return self::apply_options_to_prompt_builder( $prompt, $options );
+	}
+
+	/**
+	 * Apply sanitized model options to a prompt builder via using_model_config.
+	 *
+	 * system_instruction is intentionally excluded because chat() applies it to
+	 * the returned builder through apply_system_instruction().
+	 *
+	 * @param array<string, mixed> $options
+	 */
+	private static function apply_options_to_prompt_builder( object $prompt, array $options ): object {
+		$model_options = $options;
+		unset( $model_options['system_instruction'] );
+
+		if ( [] === $model_options ) {
+			return $prompt;
+		}
+
+		if (
+			! class_exists( ModelConfig::class )
+			|| ! is_callable( [ ModelConfig::class, 'fromArray' ] )
+			|| ! is_callable( [ $prompt, 'using_model_config' ] )
+		) {
+			return $prompt;
+		}
+
+		try {
+			$model_config = ModelConfig::fromArray( $model_options );
+		} catch ( \Throwable $throwable ) {
+			return $prompt;
+		}
+
+		$updated_prompt = $prompt->using_model_config( $model_config );
+
+		return is_object( $updated_prompt ) ? $updated_prompt : $prompt;
 	}
 
 	/**

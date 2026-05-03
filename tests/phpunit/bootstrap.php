@@ -40,6 +40,8 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<int, array{prompt: string, options: array<string, mixed>}> */
 		public static array $ai_service_calls = [];
 
+		public static ?\Throwable $ai_service_call_throws = null;
+
 		public static string $wpai_formatted_guidelines = '';
 
 		/** @var array<int, array{categories: array<int, string>, blockName: string|null}> */
@@ -304,6 +306,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$remote_get_responses        = [];
 			self::$last_ai_client_prompt       = [];
 			self::$ai_service_calls            = [];
+			self::$ai_service_call_throws      = null;
 			self::$wpai_formatted_guidelines   = '';
 			self::$wpai_guideline_calls        = [];
 			self::$last_http_request_args      = [];
@@ -397,6 +400,10 @@ namespace WordPress\AI {
 		 * @param array<string, mixed> $options
 		 */
 		public function create_textgen_prompt( ?string $prompt = null, array $options = [] ): \WP_AI_Client_Prompt_Builder {
+			if ( null !== WordPressTestState::$ai_service_call_throws ) {
+				throw WordPressTestState::$ai_service_call_throws;
+			}
+
 			WordPressTestState::$ai_service_calls[] = [
 				'prompt'  => is_string( $prompt ) ? $prompt : '',
 				'options' => $options,
