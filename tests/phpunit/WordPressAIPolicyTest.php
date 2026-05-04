@@ -10,22 +10,26 @@ use PHPUnit\Framework\TestCase;
 final class WordPressAIPolicyTest extends TestCase {
 
 	public function test_sanitize_text_generation_options_drops_unknown_keys(): void {
-		$result = WordPressAIPolicy::sanitize_text_generation_options( [
-			'unsupported'    => 'value',
-			'max_tokens'     => 256,
-		] );
+		$result = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'unsupported' => 'value',
+				'max_tokens'  => 256,
+			]
+		);
 
 		$this->assertArrayNotHasKey( 'unsupported', $result );
 		$this->assertSame( 256, $result['max_tokens'] );
 	}
 
 	public function test_sanitize_text_generation_options_coerces_non_negative_ints(): void {
-		$result = WordPressAIPolicy::sanitize_text_generation_options( [
-			'candidate_count' => '4',
-			'max_tokens'      => 1024.7,
-			'top_k'           => -10,
-			'top_logprobs'    => '0',
-		] );
+		$result = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'candidate_count' => '4',
+				'max_tokens'      => 1024.7,
+				'top_k'           => -10,
+				'top_logprobs'    => '0',
+			]
+		);
 
 		$this->assertSame( 4, $result['candidate_count'] );
 		$this->assertSame( 1024, $result['max_tokens'] );
@@ -34,21 +38,25 @@ final class WordPressAIPolicyTest extends TestCase {
 	}
 
 	public function test_sanitize_text_generation_options_drops_non_numeric_ints(): void {
-		$result = WordPressAIPolicy::sanitize_text_generation_options( [
-			'candidate_count' => 'not-a-number',
-			'max_tokens'      => null,
-		] );
+		$result = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'candidate_count' => 'not-a-number',
+				'max_tokens'      => null,
+			]
+		);
 
 		$this->assertSame( [], $result );
 	}
 
 	public function test_sanitize_text_generation_options_coerces_floats(): void {
-		$result = WordPressAIPolicy::sanitize_text_generation_options( [
-			'temperature'       => '0.7',
-			'top_p'             => 0.9,
-			'presence_penalty'  => -0.5,
-			'frequency_penalty' => 1,
-		] );
+		$result = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'temperature'       => '0.7',
+				'top_p'             => 0.9,
+				'presence_penalty'  => -0.5,
+				'frequency_penalty' => 1,
+			]
+		);
 
 		$this->assertSame( 0.7, $result['temperature'] );
 		$this->assertSame( 0.9, $result['top_p'] );
@@ -57,24 +65,32 @@ final class WordPressAIPolicyTest extends TestCase {
 	}
 
 	public function test_sanitize_text_generation_options_drops_non_numeric_floats(): void {
-		$result = WordPressAIPolicy::sanitize_text_generation_options( [
-			'temperature' => 'hot',
-			'top_p'       => null,
-		] );
+		$result = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'temperature' => 'hot',
+				'top_p'       => null,
+			]
+		);
 
 		$this->assertSame( [], $result );
 	}
 
 	public function test_sanitize_text_generation_options_handles_logprobs_boolean(): void {
-		$truthy = WordPressAIPolicy::sanitize_text_generation_options( [
-			'logprobs' => 'true',
-		] );
-		$falsy = WordPressAIPolicy::sanitize_text_generation_options( [
-			'logprobs' => '0',
-		] );
-		$invalid = WordPressAIPolicy::sanitize_text_generation_options( [
-			'logprobs' => 'maybe',
-		] );
+		$truthy  = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'logprobs' => 'true',
+			]
+		);
+		$falsy   = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'logprobs' => '0',
+			]
+		);
+		$invalid = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'logprobs' => 'maybe',
+			]
+		);
 
 		$this->assertTrue( $truthy['logprobs'] );
 		$this->assertFalse( $falsy['logprobs'] );
@@ -82,17 +98,19 @@ final class WordPressAIPolicyTest extends TestCase {
 	}
 
 	public function test_sanitize_text_generation_options_normalizes_stop_sequences(): void {
-		$result = WordPressAIPolicy::sanitize_text_generation_options( [
-			'stop_sequences' => [
-				'STOP',
-				'STOP',
-				'',
-				'  end  ',
-				[ 'nested' ],
-				(object) [ 'foo' => 'bar' ],
-				42,
-			],
-		] );
+		$result = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'stop_sequences' => [
+					'STOP',
+					'STOP',
+					'',
+					'  end  ',
+					[ 'nested' ],
+					(object) [ 'foo' => 'bar' ],
+					42,
+				],
+			]
+		);
 
 		// Duplicates removed, empty strings removed, arrays/objects skipped,
 		// scalars cast to string and trimmed via sanitize_text_field.
@@ -100,15 +118,19 @@ final class WordPressAIPolicyTest extends TestCase {
 	}
 
 	public function test_sanitize_text_generation_options_drops_empty_or_invalid_stop_sequences(): void {
-		$nonArray = WordPressAIPolicy::sanitize_text_generation_options( [
-			'stop_sequences' => 'STOP',
-		] );
-		$emptyAfterFilter = WordPressAIPolicy::sanitize_text_generation_options( [
-			'stop_sequences' => [ '', [ 'nested' ] ],
-		] );
+		$non_array          = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'stop_sequences' => 'STOP',
+			]
+		);
+		$empty_after_filter = WordPressAIPolicy::sanitize_text_generation_options(
+			[
+				'stop_sequences' => [ '', [ 'nested' ] ],
+			]
+		);
 
-		$this->assertArrayNotHasKey( 'stop_sequences', $nonArray );
-		$this->assertArrayNotHasKey( 'stop_sequences', $emptyAfterFilter );
+		$this->assertArrayNotHasKey( 'stop_sequences', $non_array );
+		$this->assertArrayNotHasKey( 'stop_sequences', $empty_after_filter );
 	}
 
 	/**
