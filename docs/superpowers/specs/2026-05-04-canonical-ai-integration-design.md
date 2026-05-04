@@ -22,7 +22,7 @@ The approved direction is a cold-turkey migration: the AI plugin Feature framewo
 
 1. Make Settings > AI the source of truth for Flavor Agent feature visibility and enabled state.
 2. Register recommendation abilities through `WordPress\AI\Abstracts\Abstract_Ability` subclasses.
-3. Execute recommendation requests from JavaScript through `@wordpress/abilities` `executeAbility()`.
+3. Execute recommendation requests from JavaScript through the WordPress Abilities runtime or an abortable canonical Abilities API transport.
 4. Remove editor dependence on `flavor-agent/v1/recommend-*` endpoints.
 5. Use canonical AI credential helpers for capability checks.
 6. Fail closed with clear setup state when the AI plugin contracts are unavailable.
@@ -99,6 +99,8 @@ The Feature's `register()` method owns Flavor Agent's AI integration hooks:
 
 The shared `flavor-agent` ability category and read-only helper ability registration can remain outside the Feature lifecycle so helper REST/MCP tools do not disappear when the AI recommendation Feature is disabled.
 
+Add a separate non-Feature bootstrap for dependency/setup messaging. It may register admin notices, settings-page diagnostics, and editor bootstrap flags that say the canonical AI contracts are unavailable, but it must not enqueue the recommendation UI when `Abstract_Feature` or the Abilities runtime is missing. If the Feature cannot be registered, the editor recommendation UI is absent rather than partially loaded through the Feature path.
+
 Non-AI plugin lifecycle hooks such as activity repository maintenance, pattern index cron, and settings sanitization can remain in the plugin bootstrap.
 
 ### Ability Classes
@@ -145,7 +147,18 @@ final class Recommend_Block_Ability extends \WordPress\AI\Abstracts\Abstract_Abi
 
 The ability must not return the raw focused-class payload directly. Today the REST controller wraps successful and failed recommendation results with `requestMeta`, provider metadata, pattern backend metadata where relevant, and request diagnostic activity persistence. That behavior moves into a shared recommendation ability execution service before custom routes are removed.
 
-Schema construction can temporarily reuse the existing `Registration` schema helpers, but the long-term owner is the ability class, not the registration aggregator.
+Schema construction can temporarily reuse the existing `Registration` schema helpers, but the long-term owner is the ability class, not the registration aggregator. Reuse must not preserve stale input contracts that no longer match the editor client.
+
+Recommendation input schemas:
+
+- every recommendation input schema must include optional `document` as an object because request diagnostic persistence depends on document scope;
+- every recommendation input schema must include optional `prompt` where the current UI sends user instructions;
+- every recommendation input schema that supports apply freshness must include optional `resolveSignatureOnly`;
+- `recommend-block` must accept the editor payload shape sent today: `editorContext`, `clientId`, optional `prompt`, optional `document`, and optional `resolveSignatureOnly`;
+- `recommend-block` may also accept `selectedBlock` as an external-client compatibility alias, but must not require `selectedBlock` unconditionally;
+- surface-specific schemas must document the same transport fields the editor sends, rather than relying on unknown properties surviving validation.
+
+The `document` field should be a narrow schema with at least `scopeKey` as a string and should allow the currently persisted document metadata needed by activity diagnostics. If `document` is absent, the wrapper may return recommendations but must skip request diagnostic activity persistence.
 
 Guideline categories:
 
@@ -194,8 +207,8 @@ Add a shared server-side wrapper for all recommendation abilities. The wrapper o
 - for `resolveSignatureOnly`, return only the signature payload and do not persist request diagnostic activity;
 - for success, append `requestMeta` before returning to the Abilities API client;
 - for failure, append equivalent request metadata to the `WP_Error` data;
-- persist request diagnostic activity for successful non-signature recommendation requests when a document scope is present;
-- persist request diagnostic failure activity for failed non-signature recommendation requests when a document scope is present;
+- persist request diagnostic activity for successful non-signature recommendation requests only when a validated `document.scopeKey` is present and the request is not stale or aborted;
+- persist request diagnostic failure activity for failed non-signature recommendation requests only when a validated `document.scopeKey` is present and the request is not stale or aborted;
 - preserve request tracing without route-specific event names becoming the public contract.
 
 Request metadata fields for new entries:
@@ -230,7 +243,17 @@ window.flavorAgentAbilities.executeAbility( 'flavor-agent/recommend-block', data
 
 If the bridge is not ready, the store returns a setup-state error instead of falling back to `apiFetch()`.
 
-After the delivery model is in place, recommendation calls go through one local helper that invokes WordPress' `executeAbility()` from the chosen delivery model. The helper may use a direct module import only if the editor bundle itself is a script module:
+The local helper must preserve the current abort semantics. Its signature should accept an `AbortSignal` and request identity metadata:
+
+```js
+executeFlavorAgentAbility( abilityName, data, { signal, requestToken, abortId } )
+```
+
+If WordPress' `executeAbility()` path cannot pass an `AbortSignal` to the underlying request, the implementation must not silently drop cancellation. Use an abortable canonical Abilities API transport for recommendation calls, or defer the JS migration until the WordPress-provided runtime exposes abort support. The fallback must still target the canonical Abilities API route family, never `flavor-agent/v1/recommend-*`.
+
+Request success handling must keep the current token guard: a response from an older request must not update UI state or cause client-side diagnostic writes after a newer request supersedes it. Server-side diagnostic persistence must be tied to the same request identity or avoided for non-abortable transports.
+
+After the delivery model is in place, recommendation calls go through one local helper. The helper should invoke WordPress' `executeAbility()` when the chosen delivery model can preserve abort behavior. It may use a direct module import only if the editor bundle itself is a script module:
 
 ```js
 import { executeAbility } from '@wordpress/abilities';
@@ -262,7 +285,7 @@ Surface definitions store `abilityName` instead of `endpoint` for recommendation
 
 Result normalization must accept the canonical Abilities API execution result. The UI can continue consuming the existing recommendation payload shape (`executionContract`, `resolvedContextSignature`, `preFilteringCounts`, `suggestions`, etc.), but normalization should happen in one helper, not at every call site.
 
-`resolveSignatureOnly` remains part of the ability input contract during this migration because apply freshness checks depend on server-side signature recomputation. It is still executed through `executeAbility()`, not a custom route.
+`resolveSignatureOnly` remains part of the ability input contract during this migration because apply freshness checks depend on server-side signature recomputation. It is still executed through the approved Abilities helper, not a custom route.
 
 ### Custom REST Route Removal
 
@@ -319,11 +342,17 @@ The primary path remains:
 If that path is unavailable but `wp_ai_client_prompt()` exists, the fallback must apply model preferences in addition to model config:
 
 ```php
-$prompt = wp_ai_client_prompt( $user_prompt )
-    ->using_model_preference( ... );
+$preferred_models = function_exists( 'WordPress\\AI\\get_preferred_models_for_text_generation' )
+    ? \WordPress\AI\get_preferred_models_for_text_generation()
+    : [];
+
+$prompt = wp_ai_client_prompt( $user_prompt );
+if ( $preferred_models && is_callable( [ $prompt, 'using_model_preference' ] ) ) {
+    $prompt = $prompt->using_model_preference( ...$preferred_models );
+}
 ```
 
-Only call `using_model_preference()` when the builder supports it. Preserve current `using_model_config()` handling for supported option keys.
+Use `WordPress\AI\get_preferred_models_for_text_generation()` as the source of the fallback text-model preferences. Only call `using_model_preference()` when the helper returns at least one preference and the builder supports it. Preserve current `using_model_config()` handling for supported option keys. Tests must assert the exact preferences passed to `using_model_preference()`, not merely that the method was called.
 
 ### Settings
 
@@ -348,12 +377,12 @@ If Flavor Agent needs feature-specific settings on Settings > AI, implement them
 
 ### Editor Recommendation Request
 
-1. UI builds the same request input it uses today.
-2. Store dispatch calls `executeAbility( abilityName, input )`.
-3. `@wordpress/core-abilities` dispatches to `/wp-abilities/v1/abilities/{name}/run`.
+1. UI builds the same editor request payload it uses today, now represented in the recommendation ability input schema.
+2. Store dispatch calls `executeFlavorAgentAbility( abilityName, input, { signal, requestToken, abortId } )`.
+3. The WordPress Abilities runtime, or the approved abortable canonical transport, dispatches to the Abilities API route family.
 4. The server resolves the `Abstract_Ability` class.
 5. Permission callback runs.
-6. Input schema validation runs through the Abilities API.
+6. Input schema validation runs through the Abilities API against the updated editor-compatible schema, including `document` where present.
 7. The shared recommendation execution wrapper runs per-surface readiness checks.
 8. Existing recommendation logic executes.
 9. The wrapper appends canonical request metadata and persists request diagnostic activity when applicable.
@@ -364,7 +393,7 @@ If Flavor Agent needs feature-specific settings on Settings > AI, implement them
 ### Apply Freshness Request
 
 1. Store strips the stored context signature from the original input.
-2. Store calls the same ability through `executeAbility()` with `resolveSignatureOnly: true`.
+2. Store calls the same ability through the approved Abilities helper with `resolveSignatureOnly: true`.
 3. Ability recomputes the server signature and returns `resolvedContextSignature`.
 4. The wrapper skips request metadata and activity persistence for the signature-only response.
 5. Store compares it with the stored signature.
@@ -380,6 +409,8 @@ Feature unavailable:
 AI contracts unavailable:
 
 - no private fallback route is used;
+- if the Feature framework is unavailable before editor assets enqueue, recommendation UI is absent and the non-Feature bootstrap shows admin/settings diagnostics;
+- if a stale already-loaded page loses the Abilities runtime, ability execution failures surface as setup-state errors;
 - setup messaging should name the missing dependency: WordPress 7.0+ AI Client / AI plugin Feature framework / Abilities API as appropriate.
 
 Credential invalid:
@@ -405,10 +436,13 @@ Output mismatch:
 - Feature registration is a no-op when the AI plugin class is missing.
 - Feature metadata returns expected ID, label, description, category, and stability.
 - Feature `register()` attaches recommendation ability and editor integration hooks only when enabled by the AI plugin framework.
+- Non-Feature bootstrap exposes admin/settings diagnostics when AI plugin contracts are missing, without enqueueing recommendation UI.
 - The seven recommendation abilities register with AI plugin `ability_class`, not direct `execute_callback`.
 - The seven recommendation ability classes extend `WordPress\AI\Abstracts\Abstract_Ability`.
 - Read-only helper abilities remain registered and REST/MCP-discoverable when the Flavor Agent Feature is disabled.
-- Recommendation ability classes expose the same input and output schema currently asserted in `RegistrationTest`.
+- Recommendation ability classes preserve existing output schemas and update input schemas to match editor request payloads.
+- `recommend-block` schema accepts `editorContext`, `clientId`, optional `prompt`, optional `document`, and optional `resolveSignatureOnly`; it may allow `selectedBlock` but must not require it when `editorContext` is present.
+- Every recommendation input schema includes optional `document` so request diagnostic persistence fields are part of the public Abilities contract.
 - Recommendation ability `meta()` does not set readonly annotations and therefore routes through POST in the Abilities JavaScript runtime.
 - Read-only helper ability `meta()` may keep readonly annotations and GET routing.
 - Recommendation ability classes delegate through the shared recommendation execution wrapper, not directly to raw focused callbacks.
@@ -419,20 +453,24 @@ Output mismatch:
 - The wrapper persists request diagnostic activity for successful non-signature recommendation requests when document scope exists.
 - The wrapper persists request diagnostic failure activity for failed non-signature recommendation requests when document scope exists.
 - The wrapper skips metadata persistence for `resolveSignatureOnly` responses.
+- The wrapper skips diagnostic persistence for aborted or stale superseded recommendation requests.
 - `guideline_categories()` returns the expected categories per recommendation ability.
 - Manual Guidelines injection remains active during the delegation phase, or an explicit wrapper/ability handoff test proves Guidelines reach the focused prompt builders.
 - Credential checks prefer `WordPress\AI\has_valid_ai_credentials()` when available.
 - Per-surface readiness still fails when the selected chat connector, embedding backend, Qdrant, or Cloudflare AI Search backend required by a surface is unavailable.
-- Fallback prompt builder calls `using_model_preference()` when supported.
+- Fallback prompt builder reads `WordPress\AI\get_preferred_models_for_text_generation()` and passes those exact preferences to `using_model_preference()` when supported.
 
 ### JavaScript Unit
 
 - Recommendation fetch thunks call the approved Abilities bridge/helper with the expected ability name and input.
 - No recommendation thunk calls `apiFetch()` with `flavor-agent/v1/recommend-*`.
 - The Abilities bridge uses the WordPress-provided Abilities runtime and fails closed when unavailable.
+- The Abilities bridge preserves abort behavior: superseding a request aborts the previous request for the same abort key/id.
+- A stale response whose request token no longer matches does not update recommendation state and does not trigger client-side diagnostic persistence.
+- If the selected Abilities transport cannot accept `AbortSignal`, the migration fails a targeted test rather than silently dropping cancellation.
 - Executable surface definitions use `abilityName`.
 - Ability result normalization handles direct payloads and canonical ability execution wrappers.
-- Freshness checks call `executeAbility()` with `resolveSignatureOnly: true`.
+- Freshness checks call the approved Abilities helper with `resolveSignatureOnly: true`.
 - Error normalization preserves useful Abilities API error codes/messages.
 
 ### E2E
@@ -466,16 +504,18 @@ Run the relevant Playwright harnesses before release because this changes editor
 ## Migration Sequence
 
 1. Add Feature class and registration hook.
-2. Add the shared recommendation execution wrapper and move request metadata/activity persistence into it while existing routes still work.
-3. Add ability class base/helper structure.
-4. Convert the seven recommendation ability registrations to `ability_class`.
-5. Update global AI availability and per-surface readiness checks.
-6. Add the approved WordPress Abilities delivery model and JS execution helper.
-7. Switch recommendation thunks and executable surfaces to the Abilities helper.
-8. Move activity request metadata to canonical ability execution naming for new entries.
-9. Remove active custom recommendation route registration.
-10. Update unit and E2E tests.
-11. Update contributor-facing docs that mention recommendation routes or settings location.
+2. Add the non-Feature dependency/setup bootstrap for missing AI contracts.
+3. Add the shared recommendation execution wrapper and move request metadata/activity persistence into it while existing routes still work.
+4. Add ability class base/helper structure.
+5. Update recommendation input schemas to match editor payloads and include optional `document`.
+6. Convert the seven recommendation ability registrations to `ability_class`.
+7. Update global AI availability and per-surface readiness checks.
+8. Add the approved WordPress Abilities delivery model and JS execution helper with abort support.
+9. Switch recommendation thunks and executable surfaces to the Abilities helper.
+10. Move activity request metadata to canonical ability execution naming for new entries.
+11. Remove active custom recommendation route registration.
+12. Update unit and E2E tests.
+13. Update contributor-facing docs that mention recommendation routes or settings location.
 
 ## Open Implementation Notes
 
@@ -491,7 +531,10 @@ Run the relevant Playwright harnesses before release because this changes editor
 - Recommendation abilities are registered through `ability_class` subclasses.
 - Read-only helper abilities remain discoverable when the Flavor Agent Feature is disabled.
 - Recommendation ability metadata forces POST routing by avoiding readonly annotations.
-- Editor recommendation requests use `executeAbility()`.
+- Recommendation input schemas match the editor payloads, including block `editorContext` and optional `document`.
+- Editor recommendation requests use the approved Abilities helper over the canonical Abilities API transport.
+- Editor recommendation requests preserve current abort/stale suppression behavior.
+- Missing AI plugin contracts show non-Feature admin/settings diagnostics; editor recommendation UI is absent when the Feature cannot register.
 - Recommendation ability execution preserves request metadata and request diagnostic activity logging.
 - JavaScript ability execution uses the WordPress-provided Abilities runtime, not an isolated bundled copy.
 - No active editor recommendation request targets `flavor-agent/v1/recommend-*`.
