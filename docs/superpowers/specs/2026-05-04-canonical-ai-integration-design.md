@@ -59,7 +59,7 @@ executeAbility( 'flavor-agent/recommend-template', input )
 executeAbility( 'flavor-agent/recommend-template-part', input )
 ```
 
-Server-side REST execution remains available through the canonical Abilities API route:
+Server-side REST execution remains available through the canonical Abilities API route family. Implementation must verify URL encoding for slash-containing ability names before recording literal paths in metadata:
 
 ```text
 /wp-json/wp-abilities/v1/abilities/{ability-name}/run
@@ -89,20 +89,21 @@ Registration:
 - hook into `wpai_default_feature_classes`;
 - guard with `class_exists( '\WordPress\AI\Abstracts\Abstract_Feature' )`;
 - register early enough for the AI plugin loader to collect it;
-- do not initialize recommendation UI or ability execution when the Feature is disabled.
+- do not initialize recommendation UI or recommendation ability execution when the Feature is disabled.
 
 The Feature's `register()` method owns Flavor Agent's AI integration hooks:
 
-- ability category registration;
-- ability registration;
+- recommendation ability registration;
 - editor asset enqueueing for recommendation UI;
 - any AI-specific setup state needed by the editor bootstrap.
+
+The shared `flavor-agent` ability category and read-only helper ability registration can remain outside the Feature lifecycle so helper REST/MCP tools do not disappear when the AI recommendation Feature is disabled.
 
 Non-AI plugin lifecycle hooks such as activity repository maintenance, pattern index cron, and settings sanitization can remain in the plugin bootstrap.
 
 ### Ability Classes
 
-Replace direct `execute_callback` registrations with `ability_class` registrations.
+Replace direct `execute_callback` registrations with `ability_class` registrations for recommendation abilities.
 
 Each ability class extends `WordPress\AI\Abstracts\Abstract_Ability` and provides:
 
@@ -113,6 +114,19 @@ Each ability class extends `WordPress\AI\Abstracts\Abstract_Ability` and provide
 - `meta(): array`
 - `category(): string`
 - `guideline_categories(): array` where content generation should consume Guidelines
+
+Recommendation ability `meta()` must force POST execution through the Abilities JavaScript runtime. Recommendation requests carry large editor context and user prompts, so they must not be routed as GET requests.
+
+Recommendation meta requirements:
+
+- `show_in_rest: true`;
+- no top-level `readonly: true`;
+- no `annotations.readonly: true`;
+- no `annotations.readOnlyHint: true`;
+- `annotations.destructive: false`;
+- `annotations.idempotent: false`.
+
+Read-only annotations are reserved for helper abilities that do not call a model and do not accept large or sensitive editor context.
 
 Initial implementation may delegate execution to the existing focused classes, for example:
 
@@ -146,17 +160,30 @@ Guideline categories:
 | `recommend-template-part` | `site`, `copy`, `additional` |
 | read-only helper abilities | empty |
 
-If a recommendation prompt already manually injects guidelines, remove that duplication after the corresponding `Abstract_Ability` subclass is active.
+The current focused callbacks build their own prompts and do not call `Abstract_Ability::load_system_instruction_from_file()`. During the delegation phase, `guideline_categories()` documents the intended canonical integration but does not by itself affect the actual prompt. Do not remove the existing manual Guidelines injection until either:
+
+- prompt construction is owned by the ability classes and uses the AI plugin system-instruction flow; or
+- the shared recommendation execution wrapper has an explicit, tested handoff that passes the AI plugin Guidelines output into the existing prompt builders.
+
+Until one of those handoff paths exists, manual Guidelines injection remains the runtime source and tests must prove Guidelines still reach the model prompt.
 
 ### Registration Aggregator
 
 Keep `FlavorAgent\Abilities\Registration` as a thin registry coordinator only:
 
 - register the `flavor-agent` ability category;
-- map stable ability IDs to ability class names;
+- map recommendation ability IDs to AI plugin ability class names;
+- keep read-only helper abilities registered outside the Flavor Agent Feature gate unless a separate breaking contract explicitly removes them;
 - keep shared schema fragments only where they avoid duplication and remain testable.
 
 It should no longer encode every ability's callback contract inline.
+
+This revises the "all 20 abilities" conversion target into two groups:
+
+- the seven recommendation abilities move to AI plugin `Abstract_Ability` subclasses and are gated by the Flavor Agent Feature;
+- read-only helper abilities remain discoverable through REST/MCP when the Feature is disabled, because they expose site/theme metadata and diagnostics rather than model execution.
+
+If a future implementation intentionally gates helper abilities too, that must be documented as a separate breaking contract before implementation.
 
 ### Recommendation Execution Wrapper
 
@@ -174,10 +201,14 @@ Add a shared server-side wrapper for all recommendation abilities. The wrapper o
 Request metadata fields for new entries:
 
 - `ability`: canonical ability name, for example `flavor-agent/recommend-block`;
-- `transport`: `wp-abilities`;
-- `route`: canonical Abilities API route, for example `/wp-abilities/v1/abilities/flavor-agent/recommend-block/run`;
+- `executionTransport`: `wp-abilities`;
+- `route`: logical execution route identifier, for example `wp-abilities:flavor-agent/recommend-block`;
 - provider metadata from `Provider::active_chat_request_meta()` for text-generation surfaces;
 - pattern backend metadata for pattern recommendations, including selected backend and embedding provider metadata where applicable.
+
+Do not write `requestMeta.transport` for Abilities API execution. That key is reserved for provider/request transport diagnostics returned by `Provider::active_chat_request_meta()` and may be a structured array.
+
+Do not make a literal REST path an acceptance criterion until implementation verifies the Abilities API route matcher and URL encoding behavior for slash-containing ability names. If a literal path is useful for diagnostics after verification, store it under a distinct key such as `abilityRestPath`, not `route`.
 
 The existing route controller can temporarily call the same wrapper while routes still exist. That keeps activity payloads consistent during the migration and prevents route removal from deleting telemetry.
 
@@ -373,18 +404,23 @@ Output mismatch:
 - Feature registration adds `FlavorAgent` to `wpai_default_feature_classes` when `Abstract_Feature` exists.
 - Feature registration is a no-op when the AI plugin class is missing.
 - Feature metadata returns expected ID, label, description, category, and stability.
-- Feature `register()` attaches ability/category registration hooks only when enabled by the AI plugin framework.
-- All 20 abilities register with `ability_class`, not direct `execute_callback`.
-- All 20 ability classes extend `WordPress\AI\Abstracts\Abstract_Ability`.
+- Feature `register()` attaches recommendation ability and editor integration hooks only when enabled by the AI plugin framework.
+- The seven recommendation abilities register with AI plugin `ability_class`, not direct `execute_callback`.
+- The seven recommendation ability classes extend `WordPress\AI\Abstracts\Abstract_Ability`.
+- Read-only helper abilities remain registered and REST/MCP-discoverable when the Flavor Agent Feature is disabled.
 - Recommendation ability classes expose the same input and output schema currently asserted in `RegistrationTest`.
+- Recommendation ability `meta()` does not set readonly annotations and therefore routes through POST in the Abilities JavaScript runtime.
+- Read-only helper ability `meta()` may keep readonly annotations and GET routing.
 - Recommendation ability classes delegate through the shared recommendation execution wrapper, not directly to raw focused callbacks.
-- The wrapper appends `requestMeta.ability`, `requestMeta.transport`, canonical `requestMeta.route`, and provider metadata to successful non-signature responses.
+- The wrapper appends `requestMeta.ability`, `requestMeta.executionTransport`, logical `requestMeta.route`, and provider metadata to successful non-signature responses.
+- The wrapper does not overwrite structured `requestMeta.transport` provider diagnostics.
 - The wrapper appends pattern backend and embedding metadata for pattern recommendation responses.
 - The wrapper appends equivalent request metadata to `WP_Error` data for failed non-signature responses.
 - The wrapper persists request diagnostic activity for successful non-signature recommendation requests when document scope exists.
 - The wrapper persists request diagnostic failure activity for failed non-signature recommendation requests when document scope exists.
 - The wrapper skips metadata persistence for `resolveSignatureOnly` responses.
 - `guideline_categories()` returns the expected categories per recommendation ability.
+- Manual Guidelines injection remains active during the delegation phase, or an explicit wrapper/ability handoff test proves Guidelines reach the focused prompt builders.
 - Credential checks prefer `WordPress\AI\has_valid_ai_credentials()` when available.
 - Per-surface readiness still fails when the selected chat connector, embedding backend, Qdrant, or Cloudflare AI Search backend required by a surface is unavailable.
 - Fallback prompt builder calls `using_model_preference()` when supported.
@@ -432,7 +468,7 @@ Run the relevant Playwright harnesses before release because this changes editor
 1. Add Feature class and registration hook.
 2. Add the shared recommendation execution wrapper and move request metadata/activity persistence into it while existing routes still work.
 3. Add ability class base/helper structure.
-4. Convert all ability registrations to `ability_class`.
+4. Convert the seven recommendation ability registrations to `ability_class`.
 5. Update global AI availability and per-surface readiness checks.
 6. Add the approved WordPress Abilities delivery model and JS execution helper.
 7. Switch recommendation thunks and executable surfaces to the Abilities helper.
@@ -444,7 +480,7 @@ Run the relevant Playwright harnesses before release because this changes editor
 ## Open Implementation Notes
 
 - The exact AI plugin category constant should be resolved from the installed AI plugin source during implementation. If the constant is unavailable, use the documented string category only behind a guard.
-- Existing recommendation payload fields remain valid outputs. This migration changes transport and registration contract, not UI payload semantics.
+- Existing recommendation payload fields remain valid outputs. This migration changes execution transport and registration contract, not UI payload semantics.
 - Existing activity history may contain old route strings. Do not migrate stored historical activity entries unless a separate data migration is approved.
 - If `@wordpress/core-abilities` is not automatically present in the editor context, enqueue the script module explicitly with the editor assets.
 - Do not switch JS callers until a runtime check proves the classic bundle is using WordPress' Abilities runtime, not a bundled duplicate store.
@@ -453,6 +489,8 @@ Run the relevant Playwright harnesses before release because this changes editor
 
 - Settings > AI can list and gate Flavor Agent.
 - Recommendation abilities are registered through `ability_class` subclasses.
+- Read-only helper abilities remain discoverable when the Flavor Agent Feature is disabled.
+- Recommendation ability metadata forces POST routing by avoiding readonly annotations.
 - Editor recommendation requests use `executeAbility()`.
 - Recommendation ability execution preserves request metadata and request diagnostic activity logging.
 - JavaScript ability execution uses the WordPress-provided Abilities runtime, not an isolated bundled copy.
