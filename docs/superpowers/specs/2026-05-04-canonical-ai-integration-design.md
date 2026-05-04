@@ -119,10 +119,17 @@ Initial implementation may delegate execution to the existing focused classes, f
 ```php
 final class Recommend_Block_Ability extends \WordPress\AI\Abstracts\Abstract_Ability {
     public function execute_callback( mixed $input ): mixed {
-        return BlockAbilities::recommend_block( $input );
+        return Recommendation_Ability_Execution::execute(
+            'block',
+            'flavor-agent/recommend-block',
+            $input,
+            [ BlockAbilities::class, 'recommend_block' ]
+        );
     }
 }
 ```
+
+The ability must not return the raw focused-class payload directly. Today the REST controller wraps successful and failed recommendation results with `requestMeta`, provider metadata, pattern backend metadata where relevant, and request diagnostic activity persistence. That behavior moves into a shared recommendation ability execution service before custom routes are removed.
 
 Schema construction can temporarily reuse the existing `Registration` schema helpers, but the long-term owner is the ability class, not the registration aggregator.
 
@@ -151,12 +158,57 @@ Keep `FlavorAgent\Abilities\Registration` as a thin registry coordinator only:
 
 It should no longer encode every ability's callback contract inline.
 
+### Recommendation Execution Wrapper
+
+Add a shared server-side wrapper for all recommendation abilities. The wrapper owns the behavior currently embedded in `Agent_Controller` around the raw recommendation callbacks:
+
+- normalize the input enough to identify `resolveSignatureOnly`, document context, prompt, target, and surface;
+- call the focused recommendation callback;
+- for `resolveSignatureOnly`, return only the signature payload and do not persist request diagnostic activity;
+- for success, append `requestMeta` before returning to the Abilities API client;
+- for failure, append equivalent request metadata to the `WP_Error` data;
+- persist request diagnostic activity for successful non-signature recommendation requests when a document scope is present;
+- persist request diagnostic failure activity for failed non-signature recommendation requests when a document scope is present;
+- preserve request tracing without route-specific event names becoming the public contract.
+
+Request metadata fields for new entries:
+
+- `ability`: canonical ability name, for example `flavor-agent/recommend-block`;
+- `transport`: `wp-abilities`;
+- `route`: canonical Abilities API route, for example `/wp-abilities/v1/abilities/flavor-agent/recommend-block/run`;
+- provider metadata from `Provider::active_chat_request_meta()` for text-generation surfaces;
+- pattern backend metadata for pattern recommendations, including selected backend and embedding provider metadata where applicable.
+
+The existing route controller can temporarily call the same wrapper while routes still exist. That keeps activity payloads consistent during the migration and prevents route removal from deleting telemetry.
+
 ### JavaScript Execution
 
-Add `@wordpress/abilities` as a runtime dependency and execute server abilities with:
+Execute server abilities through the WordPress-provided Abilities runtime, not a bundled private copy of `@wordpress/abilities`.
+
+The current editor bundle is enqueued as a classic script with `wp_enqueue_script()`, so the implementation must first choose one compatible delivery model:
+
+- preferred: add a small script-module bridge that imports `executeAbility` from WordPress' `@wordpress/abilities`, ensures `@wordpress/core-abilities` is loaded, and exposes a single Flavor Agent helper to the existing classic bundle;
+- acceptable: convert the editor bundle to a script module and use WordPress' module dependency graph directly;
+- not allowed: bundle a separate npm copy of `@wordpress/abilities` into the classic script and execute against an isolated or empty abilities store.
+
+The classic-bundle bridge shape is:
+
+```js
+window.flavorAgentAbilities.executeAbility( 'flavor-agent/recommend-block', data )
+```
+
+If the bridge is not ready, the store returns a setup-state error instead of falling back to `apiFetch()`.
+
+After the delivery model is in place, recommendation calls go through one local helper that invokes WordPress' `executeAbility()` from the chosen delivery model. The helper may use a direct module import only if the editor bundle itself is a script module:
 
 ```js
 import { executeAbility } from '@wordpress/abilities';
+```
+
+The existing classic bundle should instead call the script-module bridge:
+
+```js
+window.flavorAgentAbilities.executeAbility( abilityName, data )
 ```
 
 All recommendation request paths in `src/store/index.js` and `src/store/executable-surface-runtime.js` switch from:
@@ -172,7 +224,7 @@ apiFetch( {
 to:
 
 ```js
-executeAbility( 'flavor-agent/recommend-block', data )
+executeFlavorAgentAbility( 'flavor-agent/recommend-block', data )
 ```
 
 Surface definitions store `abilityName` instead of `endpoint` for recommendation surfaces.
@@ -192,25 +244,38 @@ Keep routes that do not duplicate recommendation abilities:
 - pattern sync routes;
 - settings/admin support routes that have no Abilities API equivalent.
 
-Activity request metadata should record the canonical ability name and canonical execution surface. Route metadata should stop presenting `POST /flavor-agent/v1/recommend-*` as the request path for new entries. Historical entries can remain as stored.
+Activity request metadata must already be owned by the shared recommendation ability execution wrapper before these routes are removed. Route metadata should stop presenting `POST /flavor-agent/v1/recommend-*` as the request path for new entries. Historical entries can remain as stored.
 
 ### Capability Detection
 
-Production capability detection uses canonical helpers when available:
+Production capability detection has two layers.
+
+Global AI availability uses canonical helpers when available:
 
 ```php
 \WordPress\AI\has_valid_ai_credentials()
 \WordPress\AI\has_ai_credentials()
 ```
 
-Rules:
+Global rules:
 
-- `has_valid_ai_credentials()` is preferred for "can execute now" checks.
+- `has_valid_ai_credentials()` is preferred for "does this site have usable AI at all?" checks.
 - `has_ai_credentials()` can support setup messaging where validation is too expensive or unavailable.
 - private connector walking is not the authority for global AI availability.
 - if the helper is missing, the site is treated as unsupported for canonical integration, not silently supported through private fallback.
 
-The existing connector-specific diagnostics can remain as diagnostics only; they must not decide whether the Feature is enabled or executable.
+Per-surface readiness remains separate and must not be replaced by global credential success. A site can have valid AI credentials while the selected Flavor Agent surface is still unavailable.
+
+Per-surface rules:
+
+- text-generation surfaces require the selected chat runtime to be configured and supported, including any selected connector pinning;
+- pattern recommendations require the selected pattern retrieval backend to be configured and usable;
+- Qdrant-backed pattern recommendations require the selected embedding backend plus Qdrant URL/key;
+- Cloudflare AI Search pattern recommendations require the Cloudflare AI Search backend configuration;
+- pattern recommendations also require the selected chat runtime for ranking/explanation;
+- surface-specific errors should name the missing selected dependency, not just say global AI credentials are missing.
+
+The existing connector-specific diagnostics can remain as diagnostics and as per-surface readiness inputs. They must not override the global Settings > AI Feature gate.
 
 ### Prompt Builder Fallback
 
@@ -258,18 +323,21 @@ If Flavor Agent needs feature-specific settings on Settings > AI, implement them
 4. The server resolves the `Abstract_Ability` class.
 5. Permission callback runs.
 6. Input schema validation runs through the Abilities API.
-7. Existing recommendation logic executes.
-8. Output schema validation runs.
-9. JS normalizes the ability execution result to the existing recommendation payload shape.
-10. UI renders recommendations and apply affordances as today.
+7. The shared recommendation execution wrapper runs per-surface readiness checks.
+8. Existing recommendation logic executes.
+9. The wrapper appends canonical request metadata and persists request diagnostic activity when applicable.
+10. Output schema validation runs.
+11. JS normalizes the ability execution result to the existing recommendation payload shape.
+12. UI renders recommendations and apply affordances as today.
 
 ### Apply Freshness Request
 
 1. Store strips the stored context signature from the original input.
 2. Store calls the same ability through `executeAbility()` with `resolveSignatureOnly: true`.
 3. Ability recomputes the server signature and returns `resolvedContextSignature`.
-4. Store compares it with the stored signature.
-5. Apply proceeds only when the signatures match.
+4. The wrapper skips request metadata and activity persistence for the signature-only response.
+5. Store compares it with the stored signature.
+6. Apply proceeds only when the signatures match.
 
 ## Error Handling
 
@@ -309,15 +377,23 @@ Output mismatch:
 - All 20 abilities register with `ability_class`, not direct `execute_callback`.
 - All 20 ability classes extend `WordPress\AI\Abstracts\Abstract_Ability`.
 - Recommendation ability classes expose the same input and output schema currently asserted in `RegistrationTest`.
-- Recommendation ability classes delegate to the existing execution classes.
+- Recommendation ability classes delegate through the shared recommendation execution wrapper, not directly to raw focused callbacks.
+- The wrapper appends `requestMeta.ability`, `requestMeta.transport`, canonical `requestMeta.route`, and provider metadata to successful non-signature responses.
+- The wrapper appends pattern backend and embedding metadata for pattern recommendation responses.
+- The wrapper appends equivalent request metadata to `WP_Error` data for failed non-signature responses.
+- The wrapper persists request diagnostic activity for successful non-signature recommendation requests when document scope exists.
+- The wrapper persists request diagnostic failure activity for failed non-signature recommendation requests when document scope exists.
+- The wrapper skips metadata persistence for `resolveSignatureOnly` responses.
 - `guideline_categories()` returns the expected categories per recommendation ability.
 - Credential checks prefer `WordPress\AI\has_valid_ai_credentials()` when available.
+- Per-surface readiness still fails when the selected chat connector, embedding backend, Qdrant, or Cloudflare AI Search backend required by a surface is unavailable.
 - Fallback prompt builder calls `using_model_preference()` when supported.
 
 ### JavaScript Unit
 
-- Recommendation fetch thunks call `executeAbility()` with the expected ability name and input.
+- Recommendation fetch thunks call the approved Abilities bridge/helper with the expected ability name and input.
 - No recommendation thunk calls `apiFetch()` with `flavor-agent/v1/recommend-*`.
+- The Abilities bridge uses the WordPress-provided Abilities runtime and fails closed when unavailable.
 - Executable surface definitions use `abilityName`.
 - Ability result normalization handles direct payloads and canonical ability execution wrappers.
 - Freshness checks call `executeAbility()` with `resolveSignatureOnly: true`.
@@ -354,15 +430,16 @@ Run the relevant Playwright harnesses before release because this changes editor
 ## Migration Sequence
 
 1. Add Feature class and registration hook.
-2. Add ability class base/helper structure.
-3. Convert all ability registrations to `ability_class`.
-4. Update credential detection to canonical helpers.
-5. Add `@wordpress/abilities` dependency and JS execution helper.
-6. Switch recommendation thunks and executable surfaces to `executeAbility()`.
-7. Remove active custom recommendation route registration.
-8. Move activity request metadata to canonical ability execution naming.
-9. Update unit and E2E tests.
-10. Update contributor-facing docs that mention recommendation routes or settings location.
+2. Add the shared recommendation execution wrapper and move request metadata/activity persistence into it while existing routes still work.
+3. Add ability class base/helper structure.
+4. Convert all ability registrations to `ability_class`.
+5. Update global AI availability and per-surface readiness checks.
+6. Add the approved WordPress Abilities delivery model and JS execution helper.
+7. Switch recommendation thunks and executable surfaces to the Abilities helper.
+8. Move activity request metadata to canonical ability execution naming for new entries.
+9. Remove active custom recommendation route registration.
+10. Update unit and E2E tests.
+11. Update contributor-facing docs that mention recommendation routes or settings location.
 
 ## Open Implementation Notes
 
@@ -370,14 +447,17 @@ Run the relevant Playwright harnesses before release because this changes editor
 - Existing recommendation payload fields remain valid outputs. This migration changes transport and registration contract, not UI payload semantics.
 - Existing activity history may contain old route strings. Do not migrate stored historical activity entries unless a separate data migration is approved.
 - If `@wordpress/core-abilities` is not automatically present in the editor context, enqueue the script module explicitly with the editor assets.
+- Do not switch JS callers until a runtime check proves the classic bundle is using WordPress' Abilities runtime, not a bundled duplicate store.
 
 ## Acceptance Criteria
 
 - Settings > AI can list and gate Flavor Agent.
 - Recommendation abilities are registered through `ability_class` subclasses.
 - Editor recommendation requests use `executeAbility()`.
+- Recommendation ability execution preserves request metadata and request diagnostic activity logging.
+- JavaScript ability execution uses the WordPress-provided Abilities runtime, not an isolated bundled copy.
 - No active editor recommendation request targets `flavor-agent/v1/recommend-*`.
 - The seven custom recommendation REST routes are not registered as first-class active routes.
-- Canonical credential helpers determine AI availability.
+- Canonical credential helpers determine global AI availability, and per-surface readiness still enforces selected connector/backend requirements.
 - Existing recommendation UI behavior remains functionally equivalent once abilities execute successfully.
 - Tests cover the new Feature, ability classes, JS execution helper, and route removal.
