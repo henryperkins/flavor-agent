@@ -6,6 +6,15 @@ const port = Number( process.env.PLAYWRIGHT_PORT || 9402 );
 const pluginDir = rootDir;
 const muPluginDir = path.join( rootDir, 'tests/e2e/playground-mu-plugin' );
 
+// Ensure the SHELL environment variable is set to the detected bash path
+// to avoid ENOENT errors on Windows when Playwright tries to spawn a shell
+if (process.platform === 'win32') {
+    const bashPath = 'C:\\Windows\\System32\\bash.exe';
+    if (require('fs').existsSync(bashPath)) {
+        process.env.SHELL = bashPath;
+    }
+}
+
 module.exports = defineConfig( {
 	testDir: path.join( rootDir, 'tests/e2e' ),
 	testIgnore: /.*\.wp70\.setup\.js/,

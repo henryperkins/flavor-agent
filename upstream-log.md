@@ -6,6 +6,13 @@ The deeper upstream map lives in `docs/reference/wordpress-ai-roadmap-tracking.m
 
 ## Entries
 
+### 2026-05-03
+
+- **Scanned:** `WordPress/ai` milestones [17 (`0.9.0`)](https://github.com/WordPress/ai/milestone/17) and [7 (`1.0.0`)](https://github.com/WordPress/ai/milestone/7) via the public GitHub API.
+- **Impact:** The core AI plugin release train now makes `0.9.0` the version immediately before `1.0.0`, with `1.0.0` described upstream as the WordPress 7.0 Stable Release Candidate target. Near-term overlap shifts from the older bundled `#419` PR to split milestone items such as AI Request Logging (`#437`), Ability schema sanitization (`#481`), provider permission/settings work (`#343`, `#486`), and client-side Abilities API usage (`#482`).
+- **Response:** Updated `docs/reference/wordpress-ai-roadmap-tracking.md` with a release-milestone overlay, current watch-first items, and revised activity/provider/abilities collision tables.
+- **Next action:** Watch the `0.9.0` logging and schema PRs first; when they merge, decide whether Flavor Agent forwards activity writes into the core AI plugin logging schema or retires parts of `Settings > AI Activity`.
+
 ### 2026-04-30
 
 - **Scanned:** `productivity-plan.md`, `docs/reference/wordpress-ai-roadmap-tracking.md`, `docs/reference/gutenberg-feature-tracking.md`, and the current recommendation-actionability docs after the M4/M1A completion pass.
