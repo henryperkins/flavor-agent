@@ -20,6 +20,7 @@
 		"test:e2e:playground": "playwright test",
 		"test:e2e:wp70": "playwright test -c playwright.wp70.config.js",
 		"verify": "node scripts/verify.js",
+		"verify:strict": "node scripts/verify.js --strict",
 		"wp:start": "node scripts/ensure-local-env.js && node scripts/docker-compose.js up -d --build",
 		"wp:stop": "node scripts/ensure-local-env.js && node scripts/docker-compose.js down",
 		"wp:reset": "node scripts/ensure-local-env.js && node scripts/docker-compose.js down -v",

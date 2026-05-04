@@ -8,11 +8,13 @@ const { spawnSync } = require( 'child_process' );
 const {
 	STEPS,
 	collectDiscoveredArtifacts,
+	computeCounts,
 	computeStatus,
 	getLintPluginAvailability,
 	loadDotEnvFile,
 	parseArgs,
 	parseDotEnvLine,
+	resolvePluginCheckContext,
 	resolveStepAvailability,
 	snapshotArtifacts,
 } = require( '../verify.js' );
@@ -203,6 +205,402 @@ describe( 'verify script helpers', () => {
 			);
 			expect( discovered ).not.toContain(
 				path.relative( repoRoot, unchangedDir )
+			);
+		} finally {
+			fs.rmSync( tempRoot, { recursive: true, force: true } );
+		}
+	} );
+
+	describe( 'parseArgs', () => {
+		test( 'rejects unknown CLI arguments with a useful message', () => {
+			expect( () =>
+				parseArgs( [ 'node', 'verify.js', '--unknown' ] )
+			).toThrow( 'Unknown argument: --unknown' );
+		} );
+
+		test( 'rejects unknown step names in --only', () => {
+			expect( () =>
+				parseArgs( [ 'node', 'verify.js', '--only=does-not-exist' ] )
+			).toThrow( 'Unknown step in --only: does-not-exist' );
+		} );
+
+		test( 'rejects unknown step names in --skip', () => {
+			expect( () =>
+				parseArgs( [ 'node', 'verify.js', '--skip=mystery' ] )
+			).toThrow( 'Unknown step in --skip: mystery' );
+		} );
+
+		test( 'parses combined flags into a normalized options object', () => {
+			const opts = parseArgs( [
+				'node',
+				'verify.js',
+				'--bail',
+				'--dry-run',
+				'--json',
+				'--strict',
+				'--skip-e2e',
+				'--only=build,unit',
+				'--skip=lint-plugin',
+				'--output=tmp/verify',
+			] );
+
+			expect( opts.bail ).toBe( true );
+			expect( opts.dryRun ).toBe( true );
+			expect( opts.json ).toBe( true );
+			expect( opts.strict ).toBe( true );
+			expect( opts.skipE2E ).toBe( true );
+			expect( opts.only ).toEqual( [ 'build', 'unit' ] );
+			expect( opts.skip ).toEqual( [ 'lint-plugin' ] );
+			expect( opts.outputDir ).toBe( 'tmp/verify' );
+		} );
+
+		test( 'recognizes --help and -h', () => {
+			expect( parseArgs( [ 'node', 'verify.js', '--help' ] ).help ).toBe(
+				true
+			);
+			expect( parseArgs( [ 'node', 'verify.js', '-h' ] ).help ).toBe(
+				true
+			);
+		} );
+	} );
+
+	describe( 'computeStatus / computeCounts', () => {
+		test( 'reports pass when every step passed', () => {
+			const results = [
+				{ name: 'a', status: 'pass' },
+				{ name: 'b', status: 'pass' },
+			];
+			expect( computeStatus( results ) ).toBe( 'pass' );
+			expect( computeCounts( results ) ).toEqual( {
+				total: 2,
+				passed: 2,
+				failed: 0,
+				skipped: 0,
+			} );
+		} );
+
+		test( 'reports fail when any step failed, even alongside incomplete', () => {
+			const results = [
+				{ name: 'a', status: 'pass' },
+				{ name: 'b', status: 'fail' },
+				{
+					name: 'c',
+					status: 'skipped',
+					incomplete: true,
+					reason: 'missing tool',
+				},
+			];
+			expect( computeStatus( results ) ).toBe( 'fail' );
+			expect( computeCounts( results ) ).toEqual( {
+				total: 3,
+				passed: 1,
+				failed: 1,
+				skipped: 1,
+			} );
+		} );
+
+		test( 'reports incomplete when a prerequisite was missing but no failure occurred', () => {
+			const results = [
+				{ name: 'a', status: 'pass' },
+				{
+					name: 'b',
+					status: 'skipped',
+					incomplete: true,
+					reason: 'required command not found: wp',
+				},
+			];
+			expect( computeStatus( results ) ).toBe( 'incomplete' );
+		} );
+
+		test( 'reports incomplete when no step actually completed', () => {
+			const results = [
+				{
+					name: 'a',
+					status: 'skipped',
+					reason: 'excluded via --skip',
+				},
+				{
+					name: 'b',
+					status: 'skipped',
+					reason: 'not in --only',
+				},
+			];
+			expect( computeStatus( results ) ).toBe( 'incomplete' );
+			expect( computeCounts( results ) ).toEqual( {
+				total: 2,
+				passed: 0,
+				failed: 0,
+				skipped: 2,
+			} );
+		} );
+	} );
+
+	describe( 'parseDotEnvLine edge cases', () => {
+		test( 'returns null for blank, whitespace-only, and comment lines', () => {
+			expect( parseDotEnvLine( '' ) ).toBeNull();
+			expect( parseDotEnvLine( '   \t  ' ) ).toBeNull();
+			expect( parseDotEnvLine( '   # leading comment' ) ).toBeNull();
+		} );
+
+		test( 'strips matching single-quote wrappers from values', () => {
+			expect( parseDotEnvLine( "FOO='bar'" ) ).toEqual( {
+				key: 'FOO',
+				value: 'bar',
+			} );
+		} );
+
+		test( 'preserves mismatched quote characters', () => {
+			expect( parseDotEnvLine( 'FOO="bar' ) ).toEqual( {
+				key: 'FOO',
+				value: '"bar',
+			} );
+		} );
+
+		test( 'returns null for lines without a key/value separator', () => {
+			expect( parseDotEnvLine( 'NOT_AN_ASSIGNMENT' ) ).toBeNull();
+		} );
+
+		test( 'strips trailing CR for Windows-style line endings', () => {
+			expect( parseDotEnvLine( 'FOO=bar\r' ) ).toEqual( {
+				key: 'FOO',
+				value: 'bar',
+			} );
+		} );
+	} );
+
+	describe( 'loadDotEnvFile', () => {
+		test( 'returns an empty object when the env file does not exist', () => {
+			const tempRoot = fs.mkdtempSync(
+				path.join( os.tmpdir(), 'verify-no-env-' )
+			);
+			try {
+				const env = {};
+				expect(
+					loadDotEnvFile( path.join( tempRoot, '.env' ), env )
+				).toEqual( {} );
+				expect( env ).toEqual( {} );
+			} finally {
+				fs.rmSync( tempRoot, { recursive: true, force: true } );
+			}
+		} );
+
+		test( 'skips comment lines and unparsable entries', () => {
+			const tempRoot = fs.mkdtempSync(
+				path.join( os.tmpdir(), 'verify-noisy-env-' )
+			);
+			const envPath = path.join( tempRoot, '.env' );
+
+			try {
+				fs.writeFileSync(
+					envPath,
+					[
+						'# comment',
+						'',
+						'NOT_AN_ASSIGNMENT',
+						'GOOD=value',
+					].join( '\n' )
+				);
+				const env = {};
+				expect( loadDotEnvFile( envPath, env ) ).toEqual( {
+					GOOD: 'value',
+				} );
+				expect( env.GOOD ).toBe( 'value' );
+			} finally {
+				fs.rmSync( tempRoot, { recursive: true, force: true } );
+			}
+		} );
+	} );
+
+	describe( 'resolvePluginCheckContext', () => {
+		test( 'derives wp-config and plugins paths from WP_PLUGIN_CHECK_PATH', () => {
+			const tempRoot = fs.mkdtempSync(
+				path.join( os.tmpdir(), 'verify-pc-context-' )
+			);
+			try {
+				const context = resolvePluginCheckContext( {
+					WP_PLUGIN_CHECK_PATH: tempRoot,
+				} );
+				expect( context.wpRoot ).toBe( tempRoot );
+				expect( context.wpConfigPath ).toBe(
+					path.join( tempRoot, 'wp-config.php' )
+				);
+				expect( context.pluginsDir ).toBe(
+					path.join( tempRoot, 'wp-content', 'plugins' )
+				);
+			} finally {
+				fs.rmSync( tempRoot, { recursive: true, force: true } );
+			}
+		} );
+
+		test( 'falls back to repo-relative ancestor when WP_PLUGIN_CHECK_PATH is unset', () => {
+			const context = resolvePluginCheckContext( {} );
+			// The fallback resolves three levels up from REPO_ROOT, so it must
+			// at least produce an absolute path with the expected suffix.
+			expect( path.isAbsolute( context.wpRoot ) ).toBe( true );
+			expect( context.pluginsDir.endsWith(
+				path.join( 'wp-content', 'plugins' )
+			) ).toBe( true );
+		} );
+	} );
+
+	describe( 'getLintPluginAvailability prerequisite handling', () => {
+		test( 'reports missing bash before any other check', () => {
+			expect(
+				getLintPluginAvailability( {
+					commandExists: ( command ) => command !== 'bash',
+				} )
+			).toEqual( {
+				available: false,
+				reason: 'required command not found: bash',
+			} );
+		} );
+
+		test( 'reports a missing plugins directory inside an otherwise-valid WP root', () => {
+			const tempRoot = fs.mkdtempSync(
+				path.join( os.tmpdir(), 'verify-no-plugins-' )
+			);
+			try {
+				fs.writeFileSync(
+					path.join( tempRoot, 'wp-config.php' ),
+					'<?php\n'
+				);
+				const availability = getLintPluginAvailability( {
+					env: { WP_PLUGIN_CHECK_PATH: tempRoot },
+					commandExists: () => true,
+				} );
+
+				expect( availability.available ).toBe( false );
+				expect( availability.reason ).toContain(
+					'plugin-check plugins directory not found'
+				);
+			} finally {
+				fs.rmSync( tempRoot, { recursive: true, force: true } );
+			}
+		} );
+
+		test( 'returns the resolved context when every prerequisite is satisfied', () => {
+			const tempRoot = fs.mkdtempSync(
+				path.join( os.tmpdir(), 'verify-full-pc-' )
+			);
+			try {
+				fs.writeFileSync(
+					path.join( tempRoot, 'wp-config.php' ),
+					'<?php\n'
+				);
+				fs.mkdirSync( path.join( tempRoot, 'wp-content', 'plugins' ), {
+					recursive: true,
+				} );
+				const availability = getLintPluginAvailability( {
+					env: { WP_PLUGIN_CHECK_PATH: tempRoot },
+					commandExists: () => true,
+				} );
+
+				expect( availability.available ).toBe( true );
+				expect( availability.context.wpRoot ).toBe( tempRoot );
+			} finally {
+				fs.rmSync( tempRoot, { recursive: true, force: true } );
+			}
+		} );
+	} );
+
+	describe( 'resolveStepAvailability', () => {
+		test( 'delegates to checkAvailability after required commands pass', () => {
+			const checkAvailability = jest.fn( () => ( {
+				available: false,
+				reason: 'custom-reason',
+			} ) );
+			const result = resolveStepAvailability(
+				{ requires: 'bash', checkAvailability },
+				{ commandExists: () => true }
+			);
+
+			expect( checkAvailability ).toHaveBeenCalled();
+			expect( result ).toEqual( {
+				available: false,
+				reason: 'custom-reason',
+			} );
+		} );
+
+		test( 'short-circuits when a single required command is missing', () => {
+			const result = resolveStepAvailability(
+				{ requires: 'composer' },
+				{ commandExists: ( cmd ) => cmd !== 'composer' }
+			);
+			expect( result ).toEqual( {
+				available: false,
+				reason: 'required command not found: composer',
+			} );
+		} );
+
+		test( 'reports available when no requirements are declared', () => {
+			expect(
+				resolveStepAvailability(
+					{},
+					{ commandExists: () => false }
+				)
+			).toEqual( { available: true } );
+		} );
+	} );
+} );
+
+describe( 'plugin-check.sh prerequisite handling', () => {
+	const scriptPath = path.resolve( __dirname, '../plugin-check.sh' );
+
+	test( 'fails fast with a clear message when WP_PLUGIN_CHECK_PATH is not a WordPress root', () => {
+		// Skip on environments without bash to keep the suite portable.
+		const probe = spawnSync( 'bash', [ '--version' ] );
+		if ( probe.status !== 0 ) {
+			return;
+		}
+
+		const tempRoot = fs.mkdtempSync(
+			path.join( os.tmpdir(), 'verify-pc-sh-' )
+		);
+
+		try {
+			const result = spawnSync( 'bash', [ scriptPath ], {
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					WP_PLUGIN_CHECK_PATH: tempRoot,
+				},
+			} );
+
+			expect( result.status ).toBe( 1 );
+			expect( result.stderr ).toContain(
+				`Expected a WordPress root at ${ tempRoot }`
+			);
+		} finally {
+			fs.rmSync( tempRoot, { recursive: true, force: true } );
+		}
+	} );
+
+	test( 'fails when wp-config.php exists but the plugins directory is missing', () => {
+		const probe = spawnSync( 'bash', [ '--version' ] );
+		if ( probe.status !== 0 ) {
+			return;
+		}
+
+		const tempRoot = fs.mkdtempSync(
+			path.join( os.tmpdir(), 'verify-pc-sh-no-plugins-' )
+		);
+
+		try {
+			fs.writeFileSync(
+				path.join( tempRoot, 'wp-config.php' ),
+				'<?php\n'
+			);
+			const result = spawnSync( 'bash', [ scriptPath ], {
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					WP_PLUGIN_CHECK_PATH: tempRoot,
+				},
+			} );
+
+			expect( result.status ).toBe( 1 );
+			expect( result.stderr ).toContain(
+				'Expected a plugins directory'
 			);
 		} finally {
 			fs.rmSync( tempRoot, { recursive: true, force: true } );

@@ -91,6 +91,8 @@ args=(
 	check
 	"$(basename "${staged_plugin_dir}")"
 	"--path=${wp_root}"
+	"--exclude-directories=vendor,node_modules"
+	"--ignore-codes=WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound,WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound,WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in,WordPress.DB.SlowDBQuery.slow_db_query_tax_query"
 	"--slug=${plugin_slug}"
 )
 

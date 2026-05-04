@@ -11,6 +11,7 @@
  *   node scripts/verify.js --only=build,unit    # run a subset
  *   node scripts/verify.js --skip=lint-plugin   # skip a specific step
  *   node scripts/verify.js --bail               # stop at first failure
+ *   node scripts/verify.js --strict             # include the strict/full profile
  *   node scripts/verify.js --dry-run            # print planned steps and exit
  *   node scripts/verify.js --json               # suppress per-step streaming
  *   node scripts/verify.js --output=path/dir    # override output directory
@@ -61,6 +62,12 @@ const STEPS = [
 		requires: 'composer',
 	},
 	{
+		name: 'check-docs',
+		command: 'npm run check:docs',
+		requires: [ 'node', 'npm' ],
+		optional: true,
+	},
+	{
 		name: 'test-php',
 		command: 'composer test:php',
 		requires: 'composer',
@@ -93,6 +100,7 @@ Options:
   --json             Suppress streaming; print final one-line JSON only.
   --output=<dir>     Directory for logs and summary (default: output/verify).
   --help, -h         Show this message.
+  --strict           Include optional verification steps (for example docs checks).
 
 Steps (in execution order):
   ${ STEPS.map( ( s ) => s.name ).join( ', ' ) }
@@ -117,6 +125,7 @@ function parseArgs( argv ) {
 		dryRun: false,
 		json: false,
 		help: false,
+		strict: false,
 		outputDir: DEFAULT_OUTPUT_REL,
 	};
 	for ( const arg of argv.slice( 2 ) ) {
@@ -130,6 +139,8 @@ function parseArgs( argv ) {
 			opts.dryRun = true;
 		} else if ( arg === '--json' ) {
 			opts.json = true;
+		} else if ( arg === '--strict' ) {
+			opts.strict = true;
 		} else if ( arg.startsWith( '--only=' ) ) {
 			opts.only = arg
 				.slice( '--only='.length )
@@ -572,6 +583,9 @@ async function main() {
 		if ( opts.only && ! opts.only.includes( step.name ) ) {
 			included = false;
 			reason = 'not in --only';
+		} else if ( ! opts.strict && step.optional ) {
+			included = false;
+			reason = 'excluded unless --strict';
 		} else if ( opts.skip.includes( step.name ) ) {
 			included = false;
 			reason = 'excluded via --skip';
@@ -683,10 +697,11 @@ async function main() {
 		counts,
 		options: {
 			only: opts.only,
-			skip: opts.skip,
-			skipE2E: opts.skipE2E,
-			bail: opts.bail,
-		},
+				skip: opts.skip,
+				skipE2E: opts.skipE2E,
+				bail: opts.bail,
+				strict: opts.strict,
+			},
 		steps: results,
 		artifacts: {
 			summaryPath: path.relative( REPO_ROOT, summaryPath ),

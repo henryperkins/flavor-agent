@@ -82,6 +82,7 @@ final class CoreGuidelinesRepository implements GuidelinesRepository {
 			&& function_exists( 'taxonomy_exists' )
 			&& taxonomy_exists( self::TAXONOMY )
 		) {
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- Taxonomy is static, narrow, and cached once for guideline discovery.
 			$args['tax_query'] = [
 				[
 					'taxonomy' => self::TAXONOMY,

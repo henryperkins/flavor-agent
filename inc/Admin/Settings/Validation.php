@@ -1208,7 +1208,7 @@ final class Validation {
 	}
 
 	private static function get_raw_posted_string( string $option_name ): ?string {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Callers validate the nonce first and sanitize the returned value before use.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Callers validate the nonce first and sanitize the returned value before use.
 		$value = $_POST[ $option_name ] ?? null;
 
 		if ( ! is_string( $value ) ) {

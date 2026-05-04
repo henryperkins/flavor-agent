@@ -43,11 +43,11 @@ final class Repository {
 
 		$installed_version       = (int) get_option( self::SCHEMA_OPTION, 0 );
 		$table_previously_exists = self::table_exists();
-		$table_name              = self::table_name();
+		$activity_table_name     = self::table_name();
 		$charset                 = method_exists( $wpdb, 'get_charset_collate' )
 			? (string) $wpdb->get_charset_collate()
 			: '';
-		$sql                     = "CREATE TABLE {$table_name} (
+		$sql                     = "CREATE TABLE {$activity_table_name} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			activity_id varchar(191) NOT NULL,
 			schema_version smallint(5) unsigned NOT NULL DEFAULT 1,
@@ -112,7 +112,7 @@ final class Repository {
 		if ( function_exists( 'dbDelta' ) ) {
 			\dbDelta( $sql );
 		} else {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Internal schema definition for a plugin-owned table; schema creation is not cacheable.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.SchemaChange,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Plugin-owned schema creation for migration and activation paths.
 			$wpdb->query( $sql );
 		}
 

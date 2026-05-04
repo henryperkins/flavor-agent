@@ -36,6 +36,7 @@ final class PostVoiceSampleCollector {
 				'posts_per_page'         => 3,
 				'orderby'                => 'date',
 				'order'                  => 'DESC',
+				// phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in -- Excluding current post avoids duplicate sample content while returning recent authored posts.
 				'post__not_in'           => $post_id > 0 ? [ $post_id ] : [],
 				'no_found_rows'          => true,
 				'update_post_meta_cache' => false,
