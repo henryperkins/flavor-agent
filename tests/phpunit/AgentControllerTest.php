@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\Context\ServerCollector;
@@ -845,11 +846,69 @@ final class AgentControllerTest extends TestCase {
 			'flavor-agent/recommend-patterns',
 			'POST /flavor-agent/v1/recommend-patterns'
 		);
+		$this->assertSame( Config::PATTERN_BACKEND_QDRANT, $response->get_data()['requestMeta']['pattern_backend'] ?? null );
+		$this->assertSame( Provider::NATIVE, $response->get_data()['requestMeta']['embedding_provider']['provider'] ?? null );
 		$entries = ActivityRepository::query( [ 'scopeKey' => 'post:42' ] );
 		$this->assertCount( 1, $entries );
 		$this->assertSame( 'request_diagnostic', $entries[0]['type'] ?? null );
 		$this->assertSame( 'pattern', $entries[0]['surface'] ?? null );
 		$this->assertSame( 'review', $entries[0]['executionResult'] ?? null );
+		$this->assertSame( Config::PATTERN_BACKEND_QDRANT, $entries[0]['request']['ai']['pattern_backend'] ?? null );
+		$this->assertSame( Provider::NATIVE, $entries[0]['request']['ai']['embedding_provider']['provider'] ?? null );
+	}
+
+	public function test_handle_recommend_patterns_records_cloudflare_ai_search_backend_metadata(): void {
+		ActivityRepository::install();
+		$this->disable_wordpress_ai_client_runtime();
+		$this->configure_cloudflare_pattern_recommendation_backends();
+		$this->save_ready_cloudflare_pattern_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->cloudflare_ai_search_chunks_response(
+				[
+					$this->cloudflare_ai_search_chunk( 'theme/hero', 0.87, 'Indexed hero copy.' ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.82,
+								'reason' => 'Matches the current context.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
+		$request->set_param( 'postType', 'page' );
+		$request->set_param( 'visiblePatternNames', [ 'theme/hero' ] );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_patterns( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [ 'theme/hero' ], array_column( $response->get_data()['recommendations'] ?? [], 'name' ) );
+		$this->assertSame( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH, $response->get_data()['requestMeta']['pattern_backend'] ?? null );
+		$this->assertSame( 'cloudflare_ai_search', $response->get_data()['requestMeta']['embedding_provider']['provider'] ?? null );
+
+		$entries = ActivityRepository::query( [ 'scopeKey' => 'post:42' ] );
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'request_diagnostic', $entries[0]['type'] ?? null );
+		$this->assertSame( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH, $entries[0]['request']['ai']['pattern_backend'] ?? null );
+		$this->assertSame( 'cloudflare_ai_search', $entries[0]['request']['ai']['embedding_provider']['provider'] ?? null );
 	}
 
 	public function test_handle_recommend_patterns_passes_insertion_context_through_to_ranking(): void {
@@ -2975,6 +3034,20 @@ final class AgentControllerTest extends TestCase {
 		WordPressTestState::$ai_client_supported = true;
 	}
 
+	private function configure_cloudflare_pattern_recommendation_backends(): void {
+		WordPressTestState::$options             = [
+			Provider::OPTION_NAME                        => Provider::NATIVE,
+			'flavor_agent_openai_native_api_key'         => 'native-key',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND     => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-123',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-xyz',
+		];
+		WordPressTestState::$ai_client_supported = true;
+	}
+
 	private function save_ready_pattern_index_state(): void {
 		$patterns             = ServerCollector::for_patterns();
 		$embedding_config     = Provider::embedding_configuration();
@@ -3041,6 +3114,45 @@ final class AgentControllerTest extends TestCase {
 		if ( [] === WordPressTestState::$remote_get_responses ) {
 			WordPressTestState::$remote_get_response = $this->qdrant_collection_response( 2 );
 		}
+	}
+
+	private function save_ready_cloudflare_pattern_index_state(): void {
+		$patterns             = ServerCollector::for_patterns();
+		$pattern_fingerprints = [];
+
+		foreach ( $patterns as $pattern ) {
+			$pattern_fingerprints[ PatternIndex::pattern_uuid( (string) $pattern['name'] ) ] = 'fingerprint-' . (string) $pattern['name'];
+		}
+
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'                         => 'ready',
+					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+					'fingerprint'                    => PatternIndex::compute_fingerprint( $patterns ),
+					'qdrant_url'                     => '',
+					'qdrant_collection'              => '',
+					'cloudflare_ai_search_namespace' => 'patterns',
+					'cloudflare_ai_search_instance'  => 'pattern-index',
+					'cloudflare_ai_search_signature' => hash( 'sha256', 'account-123|patterns|pattern-index|token-xyz' ),
+					'openai_provider'                => '',
+					'openai_endpoint'                => '',
+					'embedding_model'                => '',
+					'embedding_dimension'            => 0,
+					'embedding_signature'            => '',
+					'last_synced_at'                 => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'                => '2026-03-24T00:00:00+00:00',
+					'indexed_count'                  => count( $patterns ),
+					'last_error'                     => null,
+					'last_error_code'                => '',
+					'last_error_status'              => 0,
+					'last_error_retryable'           => false,
+					'last_error_retry_after'         => null,
+					'pattern_fingerprints'           => $pattern_fingerprints,
+				]
+			)
+		);
 	}
 
 	private function stub_successful_llm_response(): void {
@@ -3112,6 +3224,50 @@ final class AgentControllerTest extends TestCase {
 					],
 				],
 			),
+		];
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $chunks
+	 * @return array<string, mixed>
+	 */
+	private function cloudflare_ai_search_chunks_response( array $chunks ): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => $chunks,
+					],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $metadata_overrides
+	 * @return array<string, mixed>
+	 */
+	private function cloudflare_ai_search_chunk( string $name, float $score, string $text, array $metadata_overrides = [] ): array {
+		$metadata = array_merge(
+			[
+				'pattern_name'   => $name,
+				'candidate_type' => 'pattern',
+				'source'         => 'registered',
+				'synced_id'      => str_replace( '/', '-', $name ),
+				'public_safe'    => true,
+			],
+			$metadata_overrides
+		);
+
+		return [
+			'id'    => str_replace( '/', '-', $name ) . '-chunk',
+			'score' => $score,
+			'text'  => $text,
+			'item'  => [
+				'key'      => str_replace( '/', '-', $name ) . '.md',
+				'metadata' => $metadata,
+			],
 		];
 	}
 

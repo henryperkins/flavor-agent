@@ -520,12 +520,12 @@ final class PatternAbilities {
 						'sourceSignals' => $source_signals,
 						'safetyMode'    => 'validated',
 						'freshnessMeta' => [
-							'indexStatus'                  => (string) ( $state['status'] ?? '' ),
-							'patternBackend'               => $selected_backend,
-							'embeddingSignature'           => (string) ( $state['embedding_signature'] ?? '' ),
-							'qdrantCollection'             => (string) ( $state['qdrant_collection'] ?? '' ),
-							'cloudflareAISearchNamespace'  => (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ),
-							'cloudflareAISearchInstance'   => (string) ( $state['cloudflare_ai_search_instance'] ?? '' ),
+							'indexStatus'                 => (string) ( $state['status'] ?? '' ),
+							'patternBackend'              => $selected_backend,
+							'embeddingSignature'          => (string) ( $state['embedding_signature'] ?? '' ),
+							'qdrantCollection'            => (string) ( $state['qdrant_collection'] ?? '' ),
+							'cloudflareAISearchNamespace' => (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ),
+							'cloudflareAISearchInstance'  => (string) ( $state['cloudflare_ai_search_instance'] ?? '' ),
 						],
 						'rankingHint'   => $ranking_hint,
 					]

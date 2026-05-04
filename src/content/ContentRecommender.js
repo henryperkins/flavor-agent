@@ -9,7 +9,6 @@ import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import SurfaceComposer from '../components/SurfaceComposer';
-import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import { STORE_NAME } from '../store';
 import { getSurfaceCapability } from '../utils/capability-flags';
 
@@ -21,13 +20,12 @@ const CONTENT_MODE_CONFIG = {
 		title: 'Generate draft text',
 		placeholder:
 			'Describe the draft you want (for example: concise launch post for store managers).',
-		helperText:
-			'Works from a title, short brief, or rough outline. Copy any useful text into the editor yourself.',
+		helperText: 'Generated text is for review and manual copy.',
 		fetchLabel: 'Generate Draft Text',
 		starterPrompts: [
-			'Draft an opening that gets to the point faster.',
-			'Sketch a sharper structure for this piece.',
-			'Write a cleaner closing section.',
+			'Sharper opening',
+			'Cleaner structure',
+			'Stronger closing',
 		],
 	},
 	edit: {
@@ -35,13 +33,12 @@ const CONTENT_MODE_CONFIG = {
 		title: 'Generate revision text',
 		placeholder:
 			'Describe the revision pass (for example: tighten intro and trim repetition).',
-		helperText:
-			'Best when this post already has copy you want to tighten. The result is text to review and copy manually.',
+		helperText: 'Review the revision and copy useful text manually.',
 		fetchLabel: 'Generate Revision Text',
 		starterPrompts: [
-			'Tighten the pacing and transitions.',
-			'Cut repetition and sharpen the voice.',
-			'Make each section pull its weight.',
+			'Tighter pacing',
+			'Less repetition',
+			'Sharper voice',
 		],
 	},
 	critique: {
@@ -49,14 +46,9 @@ const CONTENT_MODE_CONFIG = {
 		title: 'Stress-test the draft',
 		placeholder:
 			'Describe the critique focus (for example: clarity gaps and weak transitions).',
-		helperText:
-			'Flags weak lines, clarity gaps, and structural drift without changing the post.',
+		helperText: 'Flags issues without changing the post.',
 		fetchLabel: 'Generate Critique',
-		starterPrompts: [
-			'Point out the weakest lines and why they miss.',
-			'Critique the structure for drift or repetition.',
-			'Flag anything that sounds vague or generic.',
-		],
+		starterPrompts: [ 'Weakest lines', 'Structure drift', 'Vague wording' ],
 	},
 };
 
@@ -263,17 +255,7 @@ export default function ContentRecommender() {
 			title="Content Recommendations"
 		>
 			<div className="flavor-agent-panel flavor-agent-content-recommender">
-				<SurfacePanelIntro
-					eyebrow={ documentTypeLabel }
-					introCopy="Generate editorial guidance and text to review. Flavor Agent does not change the post directly; review the result and use Copy generated text to place selected content manually."
-					meta={
-						documentStatusLabel ? (
-							<span className="flavor-agent-pill flavor-agent-pill--prominent">
-								{ documentStatusLabel }
-							</span>
-						) : null
-					}
-				>
+				<div className="flavor-agent-content-recommender__context">
 					<div
 						className={ `flavor-agent-content-recommender__document-title${
 							hasDocumentTitle ? '' : ' is-untitled'
@@ -281,7 +263,17 @@ export default function ContentRecommender() {
 					>
 						{ documentTitle }
 					</div>
-				</SurfacePanelIntro>
+					<div className="flavor-agent-card__meta">
+						<span className="flavor-agent-pill">
+							{ documentTypeLabel }
+						</span>
+						{ documentStatusLabel && (
+							<span className="flavor-agent-pill flavor-agent-pill--prominent">
+								{ documentStatusLabel }
+							</span>
+						) }
+					</div>
+				</div>
 
 				{ ! canRecommend && <CapabilityNotice surface="content" /> }
 
@@ -312,15 +304,15 @@ export default function ContentRecommender() {
 							prompt={ prompt }
 							onPromptChange={ setPrompt }
 							label={ `What should Flavor Agent do with this ${ documentNoun }?` }
+							hideLabelFromVision
 							placeholder={ activeMode.placeholder }
 							helperText={ activeMode.helperText }
-							rows={ 4 }
+							rows={ 3 }
 							onFetch={ handleFetch }
 							fetchLabel={ activeMode.fetchLabel }
 							loadingLabel="Requesting content…"
 							isLoading={ contentStatus === 'loading' }
 							className="flavor-agent-content-recommender__composer"
-							starterPromptsLayout="stacked"
 							starterPrompts={ activeMode.starterPrompts }
 						/>
 						<AIStatusNotice
@@ -330,7 +322,7 @@ export default function ContentRecommender() {
 
 						{ hasResult && (
 							<RecommendationHero
-								eyebrow="Generated Content Guidance"
+								eyebrow=""
 								title={
 									contentRecommendation?.title ||
 									`${ formatModeLabel(
@@ -344,7 +336,6 @@ export default function ContentRecommender() {
 								tone={ formatModeLabel(
 									contentRecommendation?.mode || contentMode
 								) }
-								why="Editorial guidance only. Review the generated text and copy anything you want into the editor manually."
 								primaryActionLabel={
 									hasGeneratedContent ? copyButtonLabel : ''
 								}
@@ -353,6 +344,7 @@ export default function ContentRecommender() {
 										? handleCopyContent
 										: undefined
 								}
+								className="flavor-agent-content-recommender__result"
 							>
 								<ContentBody
 									content={
@@ -403,7 +395,7 @@ export default function ContentRecommender() {
 
 						<AIActivitySection
 							title="Recent Content Requests"
-							description={ `Flavor Agent keeps request history for this ${ documentNoun }, including failed attempts.` }
+							description={ `Recent requests for this ${ documentNoun }.` }
 							entries={ activityEntries }
 							initialOpen={ false }
 							maxVisible={ 4 }

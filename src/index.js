@@ -29,6 +29,7 @@ import TemplateRecommender from './templates/TemplateRecommender';
 import TemplatePartRecommender from './template-parts/TemplatePartRecommender';
 import GlobalStylesRecommender from './global-styles/GlobalStylesRecommender';
 import StyleBookRecommender from './style-book/StyleBookRecommender';
+import ToastRegion from './components/ToastRegion';
 
 registerPlugin( 'flavor-agent', {
 	render: () => (
@@ -42,6 +43,7 @@ registerPlugin( 'flavor-agent', {
 			<TemplatePartRecommender />
 			<GlobalStylesRecommender />
 			<StyleBookRecommender />
+			<ToastRegion />
 		</>
 	),
 } );

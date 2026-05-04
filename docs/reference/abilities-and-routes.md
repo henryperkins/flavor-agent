@@ -24,7 +24,7 @@ Use it when you need to answer:
 | `flavor-agent/recommend-content` | `edit_posts`; positive `postContext.postId` also requires `edit_post` for that post | Connectors text-generation provider configured | Draft, edit, or critique payload for blog posts, essays, and site copy in Henry Perkins's voice, with notes and line-level rewrites. Positive `postId` requests render current-post blocks server-side before prompting; absent or `0` uses the text fallback path. | Post/page Content Recommendations panel plus external-agent contract |
 | `flavor-agent/introspect-block` | `edit_posts` | None beyond capability | Block registry manifest: supports, Inspector panels, attributes, styles, and variations | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/list-allowed-blocks` | `edit_posts` | None beyond capability | Site-wide registered block manifests plus `total`, with optional search, category, pagination, and variation controls; not filtered by current inserter context | No direct first-party UI; helper and external-agent surface |
-| `flavor-agent/recommend-patterns` | `edit_posts` | Plugin-owned embeddings (Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI), Connectors text generation, Qdrant configured, usable pattern index | Ranked registered and synced/user patterns that are in the supplied visible scope and currently readable | Pattern inserter recommendations |
+| `flavor-agent/recommend-patterns` | `edit_posts` | Selected pattern backend configured, Connectors text generation, usable pattern index. Qdrant backend requires plugin-owned embeddings (Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI) plus Qdrant; Cloudflare AI Search backend requires private pattern AI Search credentials | Ranked registered and synced/user patterns that are in the supplied visible scope and currently readable | Pattern inserter recommendations |
 | `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional category, block-type, template-type, search, pagination, and `includeContent` controls, plus `total` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-pattern` | `edit_posts` | None beyond capability | One registered block pattern by name; `patternId` is an alias for the returned string `id` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/list-synced-patterns` | `edit_posts` | Per-post read access with published browse fallback | Caller-readable or published `wp_block` pattern entities filtered by `syncStatus` (`synced`, `partial`, `unsynced`, or `all`), with optional search, pagination, `includeContent`, and `total` | No direct first-party UI; helper and external-agent surface |
@@ -56,7 +56,9 @@ Use it when you need to answer:
 - `flavor-agent/list-patterns` supports `search`, `limit`, `offset`, and `includeContent`, returns `total`, and omits `content` by default.
 - `flavor-agent/list-synced-patterns` accepts `synced`, `partial`, `unsynced`, or `all`. It queries `wp_block` posts with `post_status = any`, keeps the helper browse fallback that allows published posts when `read_post` is denied, supports `search`, `limit`, `offset`, and `includeContent`, returns `total`, and omits `content` by default.
 - `flavor-agent/get-synced-pattern` uses the same helper browse fallback for published `wp_block` patterns. That fallback is not reused by recommendation ranking.
-- `flavor-agent/recommend-patterns` requires `visiblePatternNames` from the current inserter root; missing or empty scope returns an empty recommendation list. It indexes registered patterns plus public-safe published synced/user `wp_block` patterns, then rehydrates synced candidates through current `read_post` access before ranking or response output. Synced/user candidates keep Gutenberg's `core/block/{id}` names and carry `type: user`, `source: synced`, `syncedPatternId`, and `syncStatus` metadata in recommendation payloads. The response may include `diagnostics.filteredCandidates.unreadableSyncedPatterns`, a de-duplicated aggregate count of visible-scope synced/user candidates skipped because the current request could not read the source `wp_block`. This diagnostic is intentionally non-identifying and is safe for the inserter UI to display.
+- `flavor-agent/recommend-patterns` requires `visiblePatternNames` from the current inserter root; missing or empty scope returns an empty recommendation list. It indexes registered patterns plus public-safe published synced/user `wp_block` patterns in the selected pattern backend, then rehydrates synced candidates through current published `wp_block` state and `read_post` access before ranking or response output. Synced/user candidates keep Gutenberg's `core/block/{id}` names and carry `type: user`, `source: synced`, `syncedPatternId`, and `syncStatus` metadata in recommendation payloads. The response may include `diagnostics.filteredCandidates.unreadableSyncedPatterns`, a de-duplicated aggregate count of visible-scope synced/user candidates skipped because the current request could not read the source `wp_block`. This diagnostic is intentionally non-identifying and is safe for the inserter UI to display.
+- Pattern recommendations support two retrieval backends. The default Qdrant backend embeds queries with the selected plugin-owned embedding provider and searches Qdrant. The Cloudflare AI Search backend sends query text plus the `visiblePatternNames` filter to a private site-owner Cloudflare AI Search pattern instance and does not call `EmbeddingClient` or `QdrantClient`. Both backends still rerank through `ResponsesClient::rank()` / the WordPress AI Client chat runtime.
+- Pattern recommendation request diagnostics include `pattern_backend`, `patternBackend`, and `embedding_provider` metadata. For Qdrant, `embedding_provider` describes the active plugin-owned embedding provider. For Cloudflare AI Search, it identifies Cloudflare AI Search managed embeddings/private pattern index ownership.
 - `flavor-agent/list-allowed-blocks` returns the whole registered block registry rather than context-aware inserter results. It now also supports `search`, `category`, `limit`, `offset`, `includeVariations`, and `maxVariations`, returns `total`, and omits `variations` by default. `introspect-block` still returns up to 10 variations; `list-allowed-blocks` truncates only when `includeVariations` is enabled.
 - `flavor-agent/get-theme-styles` returns both raw `styles` and extracted summaries. `elementStyles.base`, `hover`, and `focus` are color-only objects, while `focusVisible` preserves the full `:focus-visible` object.
 - Helper permissions are intentionally asymmetric: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, and `get-theme-tokens` require `edit_posts`; `list-template-parts` allows either editor or theme capability at the boundary but silently coerces `includeContent: true` to metadata-only unless the caller has `edit_theme_options`; the theme-oriented recommendation surfaces remain `edit_theme_options` only.
@@ -144,7 +146,14 @@ Use it when you need to answer:
 }
 ```
 
-`configured` means the active chat runtime is available, or the pattern pipeline has both a configured embedding provider and Qdrant. It is not a standalone docs-search readiness flag. WordPress docs search availability is reflected in `availableAbilities` and `backends.cloudflare_ai_search`.
+`configured` means the active chat runtime is available, or the selected pattern pipeline is ready. For Qdrant, that means both a configured embedding provider and Qdrant. For Cloudflare AI Search, that means private pattern AI Search credentials are configured. It is not a standalone docs-search readiness flag. WordPress docs search availability is reflected in `availableAbilities` and `backends.cloudflare_ai_search`.
+
+### Pattern Recommendation Backend Matrix
+
+| Pattern backend | Embeddings | Vector/index service | Search service | Required settings |
+| --- | --- | --- | --- | --- |
+| Qdrant | Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI | Qdrant | Qdrant | Embedding provider, Qdrant, Connectors chat |
+| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Private pattern AI Search, Connectors chat |
 
 ### List-Allowed-Blocks Response Shape
 
@@ -729,6 +738,8 @@ The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The s
 }
 ```
 
+The same response shape is used for Qdrant and Cloudflare AI Search syncs. The persisted `flavor_agent_pattern_index_state` records `pattern_backend`, Qdrant state fields for Qdrant, and `cloudflare_ai_search_namespace`, `cloudflare_ai_search_instance`, and `cloudflare_ai_search_signature` for Cloudflare AI Search.
+
 ### Activity Entry Shape
 
 ```json
@@ -754,7 +765,7 @@ The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The s
 
 ```text
 Block UI -> store -> /recommend-block -> BlockAbilities -> ChatClient -> Prompt -> UI
-Pattern UI -> store -> /recommend-patterns -> PatternAbilities -> Qdrant + Responses -> inserter patch
+Pattern UI -> store -> /recommend-patterns -> PatternAbilities -> selected retrieval backend + Responses -> local inserter shelf
 Navigation UI -> store -> /recommend-navigation -> NavigationAbilities -> NavigationPrompt -> advisory UI
 Template UI -> store -> /recommend-template -> TemplateAbilities -> TemplatePrompt -> preview/apply/undo
 Template-part UI -> store -> /recommend-template-part -> TemplateAbilities -> TemplatePartPrompt -> preview/apply/undo

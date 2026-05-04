@@ -640,14 +640,19 @@ describe( 'TemplateRecommender', () => {
 		expect( getButton( 'Confirm Apply' )?.disabled ).toBe( true );
 	} );
 
-	test( 'renders the template explanation after the primary recommendation hero', async () => {
+	test( 'renders the template explanation before the recommendation lanes', async () => {
 		await renderPanel();
 
 		expect(
+			getContainer().querySelector( '.flavor-agent-recommendation-hero' )
+		).toBeNull();
+		expect(
 			getContainer()
-				.querySelector( '.flavor-agent-recommendation-hero' )
+				.querySelector( '.flavor-agent-explanation' )
 				?.compareDocumentPosition(
-					getContainer().querySelector( '.flavor-agent-explanation' )
+					getContainer().querySelector(
+						'.flavor-agent-recommendation-lane'
+					)
 				)
 		).toBe( DOCUMENT_POSITION_FOLLOWING );
 	} );
@@ -1211,9 +1216,7 @@ describe( 'TemplateRecommender', () => {
 		expect( hasText( 'Settings > Connectors' ) ).toBe( true );
 		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
 		expect(
-			hasText(
-				'Template actions use the same latest-valid undo rule as the block review surface.'
-			)
+			hasText( 'Newest valid template action can be undone here.' )
 		).toBe( true );
 		expect( hasText( 'Clarify hierarchy' ) ).toBe( true );
 		expect(

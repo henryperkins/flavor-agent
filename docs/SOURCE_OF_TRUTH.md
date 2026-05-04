@@ -368,6 +368,7 @@ flavor-agent/
 | OpenAI Native Embeddings         | Pattern embedding                                        | Pattern index + pattern recommendations when OpenAI Native is the active embedding backend                           | Optional `flavor_agent_openai_native_api_key` override, `_embedding_model`; otherwise inherits core OpenAI connector credentials |
 | Cloudflare Workers AI Embeddings | Pattern embedding                                        | Pattern index + pattern recommendations when Workers AI is the explicitly selected embedding backend                 | `flavor_agent_cloudflare_workers_ai_account_id`, `_api_token`, `_embedding_model`                                                |
 | Qdrant                           | Vector similarity search                                 | Pattern recommendations                                                                                              | `flavor_agent_qdrant_url`, `_key`                                                                                                |
+| Private Cloudflare AI Search     | Managed pattern indexing and retrieval                   | Pattern recommendations when the Cloudflare AI Search pattern backend is selected                                     | `flavor_agent_cloudflare_pattern_ai_search_account_id`, `_namespace`, `_instance_id`, `_api_token`                               |
 | Cloudflare AI Search             | WordPress dev-doc grounding                              | Supplemental doc context for block, pattern, template, template-part, navigation, Global Styles, and Style Book recs | Managed public search endpoint plus `flavor_agent_cloudflare_ai_search_max_results`                                              |
 
 The plugin works in degraded mode without any services configured. Each surface gracefully disables when its required backends are absent.
@@ -391,8 +392,8 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 #### Pattern Recommendations
 
 - **Trigger:** Passive fetch on editor load; active fetch on inserter search input change (400ms debounce).
-- **Pipeline:** Build query text -> cache-backed WordPress docs grounding via Cloudflare AI Search -> provider-selected embedding (Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI) -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via the active responses backend -> filter scores below the saved ranking threshold (default `0.3`) -> return up to the saved max result count (default `8`, capped at `12`). Missing or empty `visiblePatternNames` returns an empty list before embedding, Qdrant, docs, or ranker calls.
-- **Synced/user patterns:** The index includes published `wp_block` patterns across `synced`, `partial`, and `unsynced` states as `core/block/{id}` candidates. Request-time ranking treats Qdrant synced/user payloads as untrusted and rehydrates each candidate through current `read_post` access before ranker input or response output.
+- **Pipeline:** Build query text -> cache-backed WordPress docs grounding via Cloudflare AI Search -> selected pattern retrieval backend -> LLM rerank via the active responses backend -> filter scores below the backend-specific ranking threshold -> return up to the saved max result count (default `8`, capped at `12`). Missing or empty `visiblePatternNames` returns an empty list before retrieval, docs, or ranker calls. The Qdrant backend uses provider-selected embeddings (Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI) plus two-pass Qdrant search (semantic + structural). The Cloudflare AI Search backend sends query text and the `visiblePatternNames` filter to the private pattern AI Search instance and does not call `EmbeddingClient` or `QdrantClient`.
+- **Synced/user patterns:** The index includes published `wp_block` patterns across `synced`, `partial`, and `unsynced` states as `core/block/{id}` candidates. Request-time ranking treats synced/user payloads from either backend as untrusted and rehydrates each candidate through current published status and `read_post` access before ranker input or response output.
 - **Inserter integration:** The shelf stays local to Flavor Agent. It uses the current allowed-pattern selector to show only patterns Gutenberg already exposes for the active insertion root, then dispatches core block insertion from the shelf rather than patching the native registry.
 - **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Ready count and tooltip are derived from recommendations that match the current inserter root's allowed patterns, not from a raw store badge cache. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` derived from inserter root for context-appropriate results via `compat.getAllowedPatterns`.
@@ -471,7 +472,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 #### Pattern Index Lifecycle
 
-- **Sync:** Diffs current registered patterns plus published synced/user `wp_block` patterns normalized as `core/block/{id}` against the Qdrant index using per-pattern fingerprints. Embeds only changed patterns in batches of 100. Detects config changes for full reindex.
+- **Sync:** Diffs current registered patterns plus published synced/user `wp_block` patterns normalized as `core/block/{id}` against the selected backend using per-pattern fingerprints. Qdrant sync embeds only changed patterns in batches of 100 and upserts/deletes points. Cloudflare AI Search sync uploads changed public-safe pattern markdown items with stable IDs and `wait_for_completion=true`, then deletes stale remote item IDs. Both paths detect config changes for full reindex.
 - **Triggers:** Plugin activation, theme switch, plugin activate/deactivate, upgrades, settings changes, and synced-pattern save/delete/trash/untrash events.
 - **Scheduling:** WP cron with 300s cooldown and transient lock.
 - **Admin UI:** Manual sync button on settings page with status display.
@@ -509,12 +510,12 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 Settings page at `Settings > Flavor Agent` renders four top-level groups with status cards and native Help guidance:
 
-- **Embeddings & Connectors** -- Embeddings backend selection (`azure_openai`, `openai_native`, `cloudflare_workers_ai`, or a connector-backed provider that pins chat to that connector), Azure OpenAI endpoint/key/embedding deployment, default reasoning effort for supported Connectors-routed chat providers, OpenAI Native API key override/model/effective key source, Cloudflare Workers AI account/token/model, and Qdrant URL/key.
-- **Pattern Recommendations** -- Ranking threshold, max results, and the `Sync Pattern Catalog` status/metrics/manual trigger panel.
+- **Embeddings & Connectors** -- Embeddings backend selection (`azure_openai`, `openai_native`, `cloudflare_workers_ai`, or a connector-backed provider that pins chat to that connector), Azure OpenAI endpoint/key/embedding deployment, default reasoning effort for supported Connectors-routed chat providers, OpenAI Native API key override/model/effective key source, and Cloudflare Workers AI account/token/model for the Qdrant pattern backend.
+- **Pattern Recommendations** -- Pattern retrieval backend selector, Qdrant URL/key, private Cloudflare AI Search pattern credentials, backend-specific ranking thresholds, max results, and the `Sync Pattern Catalog` status/metrics/manual trigger panel.
 - **Docs Grounding** -- Managed public Cloudflare AI Search max result count, optional legacy Cloudflare override credentials, runtime grounding diagnostics, and docs prewarm diagnostics.
 - **Guidelines** -- Site/copy/image/additional guidelines, block-specific notes for content-role blocks, and JSON import/export tooling. Runtime recommendations read the core/Gutenberg Guidelines store first when the `wp_guideline` model is present, with legacy Flavor Agent options retained as migration/admin tooling and fallback storage.
 
-Block, content, template, template-part, navigation, Global Styles, Style Book, and pattern reranking requests use the WordPress AI Client and `Settings > Connectors` for chat. Connector selections pin chat to that connector, OpenAI Native pins chat to the OpenAI connector when available, and Cloudflare Workers AI delegates chat to the unpinned WordPress AI Client runtime because it is embeddings-only. Pattern embeddings remain plugin-owned until core exposes an embeddings provider path. When OpenAI Native is selected for embeddings, the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved. Cloudflare Workers AI is an explicit embedding-provider selection and is not used as fallback when Azure OpenAI, OpenAI Native, or a connector-backed provider is selected.
+Block, content, template, template-part, navigation, Global Styles, Style Book, and pattern reranking requests use the WordPress AI Client and `Settings > Connectors` for chat. Connector selections pin chat to that connector, OpenAI Native pins chat to the OpenAI connector when available, and Cloudflare Workers AI delegates chat to the unpinned WordPress AI Client runtime because it is embeddings-only. Qdrant pattern embeddings remain plugin-owned until core exposes an embeddings provider path. The Cloudflare AI Search pattern backend uses Cloudflare-managed embeddings/indexing inside a private AI Search instance instead. When OpenAI Native is selected for embeddings, the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved. Cloudflare Workers AI is an explicit embedding-provider selection and is not used as fallback when Azure OpenAI, OpenAI Native, or a connector-backed provider is selected.
 
 The legacy-named reasoning effort setting is applied to Connectors-routed chat only through known provider model custom options: Codex `reasoningEffort` and OpenAI `reasoning.effort`. Anthropic remains unmapped until its provider plugin publishes the accepted reasoning/thinking payload contract.
 
@@ -522,6 +523,7 @@ When the Azure OpenAI endpoint, key, or embedding deployment changes and all thr
 When the OpenAI Native effective API key or embedding model changes and both values are present, the settings save flow validates the embeddings model and preserves the previous values if validation fails.
 When the Cloudflare Workers AI account ID, API token, or embedding model changes and all three fields are present, the settings save flow validates the Workers AI embedding model and preserves the previous values if validation fails.
 When the Qdrant URL or key changes and both fields are present, the settings save flow validates the `/collections` endpoint and preserves the previous values if validation fails.
+When private Cloudflare AI Search pattern account ID, namespace, instance ID, or API token changes and all four fields are present, the settings save flow validates a filtered search probe and preserves the previous values if validation fails.
 Flavor Agent uses a managed public Cloudflare AI Search `/search` endpoint for docs grounding, so site owners do not need to configure Cloudflare credentials. When optional legacy Cloudflare account/instance/token override values are present and change, the settings save flow validates them with a lightweight probe search and preserves the previous values if validation fails. This keeps backwards compatibility with documented AI Search Run tokens and explicit custom-endpoint overrides.
 Unchanged or partial credential submissions skip remote validation.
 Successful saves still use the standard Settings API notice flow, and failed Azure OpenAI, OpenAI Native, Cloudflare Workers AI, Qdrant, or Cloudflare AI Search validation surfaces a plugin-scoped error notice on the same screen.
@@ -600,12 +602,12 @@ Editor loads (or inserter search changes)
      -> POST /flavor-agent/v1/recommend-patterns
         -> Agent_Controller -> PatternAbilities::recommend_patterns()
             -> PatternIndex: check state (ready/stale/error)
-            -> Qdrant corpus: registered patterns + published synced/user wp_block patterns as core/block/{id}
-           -> EmbeddingClient::embed(query)
-           -> QdrantClient::search() x2 (semantic + structural)
-           -> Dedupe, take top 12 candidates
+            -> selected backend corpus: registered patterns + published synced/user wp_block patterns as core/block/{id}
+            -> Qdrant backend: EmbeddingClient::embed(query) + QdrantClient::search() x2 (semantic + structural)
+            -> Cloudflare AI Search backend: PatternSearchClient::search_patterns(query, visiblePatternNames)
+           -> Dedupe/normalize, take top candidates
             -> ResponsesClient::rank(instructions, candidates)
-            -> Parse ranking, apply saved threshold (default 0.3), rehydrate synced/user payloads through read_post access
+            -> Parse ranking, apply backend-specific threshold, rehydrate synced/user payloads through published status/read_post access
         <- JSON response: [{ name, score, reason, ... }]
   -> store: SET_PATTERN_RECS + setPatternStatus('ready')
   -> PatternRecommender.js matches allowed patterns for the current inserter root
@@ -631,7 +633,7 @@ User editing wp_template in Site Editor
            -> TemplatePrompt::parse_response() (validates against context, normalizes executable operations)
         <- JSON response: { suggestions, explanation }
   -> store: SET_TEMPLATE_RECS
-  -> UI: RecommendationHero + `Review first` / `Manual ideas` lanes + linked entity text + review state
+  -> UI: compact scope/composer shell + linked explanation + `Review first` / `Manual ideas` lanes + review state; stale results use a refresh `RecommendationHero`
      -> Template-part links -> selectBlockBySlugOrArea()
      -> Pattern links -> openInserterForPattern()
   -> User opens review on an executable suggestion and clicks "Confirm Apply"
@@ -864,7 +866,7 @@ Minimum sign-off evidence:
 1. **Connectors-owned chat, plugin-owned embeddings**: Block and content requests use `ChatClient`, while template, template-part, navigation, Global Styles, Style Book, and pattern ranking use `ResponsesClient`. Both resolve chat through the WordPress AI Client by pinning the selected configured connector-backed provider, by pinning the OpenAI connector when OpenAI Native is selected, or by using the unpinned WordPress AI Client runtime when Cloudflare Workers AI is selected as an embeddings-only provider. Generic WordPress AI Client provider fallback is intentionally disabled for Azure OpenAI, OpenAI Native, and connector-backed selections so unselected providers are not used implicitly. Direct Azure OpenAI, OpenAI Native, and Cloudflare Workers AI settings remain embeddings-oriented for pattern sync until core exposes an embeddings provider path.
 2. **Narrow approval model**: Block suggestions still apply inline on click, template/template-part/Global Styles/Style Book suggestions require review first, navigation stays advisory-only, and pattern recommendations stay ranking/browse-only. There is no separate multi-stage approval workspace or diff-review pipeline.
 3. **Inspector injection over sidebar**: Recommendations appear in the native Inspector tabs (Settings, Styles, sub-panels) rather than a separate sidebar. This feels native, not bolted-on.
-4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.
+4. **Indexed retrieval for patterns**: Patterns are retrieved through the selected backend rather than passed to the LLM as a raw full catalog. The default Qdrant backend embeds patterns into vectors and searches Qdrant. The Cloudflare AI Search backend stores public-safe pattern markdown in a private AI Search instance and retrieves filtered chunks. Both paths keep final ranking bounded before the LLM sees candidates.
 5. **Cache-only docs grounding**: WordPress docs are not fetched on every recommendation request. Cache is warmed via explicit `search-wordpress-docs` calls, async prewarm jobs, prior queries, or first-request misses that queue follow-up warming. This avoids latency on the critical path.
 6. **Abilities API is additive**: The REST API remains the primary runtime path. Abilities API registration is a parallel exposure for external agents. Neither depends on the other.
 7. **Store is the contract boundary for first-party recommendation surfaces**: Block, pattern, navigation, template, template-part, Global Styles, and Style Book UI read through `@wordpress/data` selectors and store thunks handle REST calls, ranking/request state, stale-request rejection, and activity/undo coordination where those contracts exist.

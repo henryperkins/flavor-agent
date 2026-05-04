@@ -1,6 +1,6 @@
 # CLAUDE.md — Flavor Agent
 
-WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, post/page content drafting and critique, vector-powered pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
+WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, post/page content drafting and critique, indexed pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 
@@ -88,10 +88,11 @@ Treat the gates there as additive release stops:
 | `AzureOpenAI\QdrantClient`                | Qdrant vector DB for pattern similarity search                                                                                                                         |
 | `AzureOpenAI\ResponsesClient`             | Compatibility facade that routes ranking/chat through `WordPressAIClient`                                                                                              |
 | `Cloudflare\AISearchClient`               | WordPress developer-doc grounding, cache, and prewarm pipeline                                                                                                         |
-| `Patterns\PatternIndex`                   | Embeds registered patterns into Qdrant; syncs on theme/plugin changes                                                                                                  |
+| `Cloudflare\PatternSearchClient`          | Private Cloudflare AI Search client for pattern item upload/list/delete/search                                                                                         |
+| `Patterns\PatternIndex`                   | Syncs registered and public-safe synced patterns into the selected pattern backend; syncs on theme/plugin changes                                                      |
 | `Abilities\Registration`                  | Registers abilities + category with WordPress Abilities API                                                                                                            |
 | `Abilities\BlockAbilities`                | Block recommendation and introspection handlers                                                                                                                        |
-| `Abilities\PatternAbilities`              | Pattern listing and vector-powered recommendation handlers                                                                                                             |
+| `Abilities\PatternAbilities`              | Pattern listing and selected-backend recommendation handlers                                                                                                           |
 | `Abilities\TemplateAbilities`             | Template and template-part composition recommendation handlers                                                                                                         |
 | `Abilities\NavigationAbilities`           | Navigation structure recommendation handler                                                                                                                            |
 | `Abilities\WordPressDocsAbilities`        | WordPress developer docs search via Cloudflare AI Search                                                                                                               |
@@ -185,7 +186,8 @@ Treat the gates there as additive release stops:
 | OpenAI Native (embeddings)    | `flavor_agent_openai_native_api_key`, `flavor_agent_openai_native_embedding_model`                                                                                                              |
 | Cloudflare Workers AI (embeddings) | `flavor_agent_cloudflare_workers_ai_account_id`, `flavor_agent_cloudflare_workers_ai_api_token`, `flavor_agent_cloudflare_workers_ai_embedding_model`                                      |
 | Qdrant vector DB              | `flavor_agent_qdrant_url`, `flavor_agent_qdrant_key`                                                                                                                                            |
-| Cloudflare AI Search          | `flavor_agent_cloudflare_ai_search_account_id`, `flavor_agent_cloudflare_ai_search_instance_id`, `flavor_agent_cloudflare_ai_search_api_token`, `flavor_agent_cloudflare_ai_search_max_results` |
+| Private Cloudflare AI Search pattern backend | `flavor_agent_pattern_retrieval_backend`, `flavor_agent_cloudflare_pattern_ai_search_account_id`, `flavor_agent_cloudflare_pattern_ai_search_namespace`, `flavor_agent_cloudflare_pattern_ai_search_instance_id`, `flavor_agent_cloudflare_pattern_ai_search_api_token` |
+| Cloudflare AI Search docs grounding | `flavor_agent_cloudflare_ai_search_account_id`, `flavor_agent_cloudflare_ai_search_instance_id`, `flavor_agent_cloudflare_ai_search_api_token`, `flavor_agent_cloudflare_ai_search_max_results` |
 
 Each recommendation surface disables independently when its required backend is unavailable.
 

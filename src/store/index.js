@@ -56,6 +56,14 @@ import {
 	reduceExecutableSurfaceState,
 } from './executable-surfaces';
 import {
+	buildToastForActivity,
+	reduceToastsState,
+	toastsActionCreators,
+	toastsDefaultState,
+	toastsSelectors,
+	TOAST_DEFAULTS,
+} from './toasts';
+import {
 	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
 	buildBlockRecommendationDiagnostics,
@@ -118,6 +126,7 @@ const DEFAULT_STATE = {
 	patternResultToken: 0,
 	patternRequestSignature: '',
 	...createExecutableSurfaceDefaultState(),
+	...toastsDefaultState,
 };
 
 const SHARED_PANEL_SEQUENCE = Object.freeze( [
@@ -903,7 +912,27 @@ function createBlockStructuralPatternParser(
 	};
 }
 
+function dispatchExecutableSurfaceToast( {
+	localDispatch,
+	persistedEntry,
+	surface,
+	suggestion,
+	extras,
+} ) {
+	localDispatch(
+		actions.enqueueToast(
+			buildToastForActivity( {
+				surface,
+				persistedEntry,
+				suggestion,
+				extras,
+			} )
+		)
+	);
+}
+
 const EXECUTABLE_SURFACE_APPLY_DEPS = {
+	dispatchToastForActivity: dispatchExecutableSurfaceToast,
 	getCurrentActivityScope,
 	guardSurfaceApplyFreshness,
 	guardSurfaceApplyResolvedFreshness,
@@ -1546,7 +1575,7 @@ const actions = {
 					return false;
 				}
 
-				await logStoreActivityEntry(
+				const persistedBlockEntry = await logStoreActivityEntry(
 					localDispatch,
 					select,
 					buildBlockActivityEntry( {
@@ -1576,6 +1605,17 @@ const actions = {
 						'success',
 						null,
 						suggestion?.suggestionKey || suggestion?.label || null
+					)
+				);
+
+				localDispatch(
+					actions.enqueueToast(
+						buildToastForActivity( {
+							surface: 'block',
+							persistedEntry: persistedBlockEntry,
+							suggestion,
+							extras: { blockContext },
+						} )
 					)
 				);
 
@@ -1733,7 +1773,7 @@ const actions = {
 					return false;
 				}
 
-				await logStoreActivityEntry(
+				const persistedStructuralEntry = await logStoreActivityEntry(
 					localDispatch,
 					select,
 					buildBlockStructuralActivityEntry( {
@@ -1759,6 +1799,21 @@ const actions = {
 						'success',
 						null,
 						suggestion?.suggestionKey || suggestion?.label || null
+					)
+				);
+
+				localDispatch(
+					actions.enqueueToast(
+						buildToastForActivity( {
+							surface: 'block',
+							persistedEntry: persistedStructuralEntry,
+							suggestion,
+							extras: {
+								blockContext,
+								result,
+								operations: result?.operations,
+							},
+						} )
 					)
 				);
 
@@ -2275,6 +2330,36 @@ const actions = {
 };
 
 Object.assign( actions, createExecutableSurfaceStateActionCreators( actions ) );
+Object.assign( actions, toastsActionCreators );
+Object.assign( actions, {
+	undoToastAction( toastId, activityId ) {
+		return async ( { dispatch: localDispatch } ) => {
+			if ( ! activityId ) {
+				localDispatch( actions.dismissToast( toastId ) );
+				return false;
+			}
+
+			try {
+				await localDispatch( actions.undoActivity( activityId ) );
+				localDispatch( actions.dismissToast( toastId ) );
+				return true;
+			} catch ( error ) {
+				localDispatch(
+					actions.updateToast( toastId, {
+						variant: 'error',
+						title: 'Undo failed',
+						errorHint:
+							error?.message ||
+							'The change could not be reverted.',
+						autoDismissMs: TOAST_DEFAULTS.errorMs,
+						interacted: false,
+					} )
+				);
+				return false;
+			}
+		};
+	},
+} );
 Object.assign(
 	actions,
 	createExecutableSurfaceRuntimeActionCreators( actions, {
@@ -2292,6 +2377,12 @@ function reducer( state = DEFAULT_STATE, action ) {
 
 	if ( executableSurfaceState ) {
 		return executableSurfaceState;
+	}
+
+	const toastsState = reduceToastsState( state, action );
+
+	if ( toastsState ) {
+		return toastsState;
 	}
 
 	switch ( action.type ) {
@@ -2953,6 +3044,7 @@ const selectors = {
 			state.navigationBlockClientId === blockClientId ) &&
 		state.navigationStatus === 'loading',
 	...executableSurfaceSelectors,
+	...toastsSelectors,
 	getSurfaceInteractionContract: ( state, surface ) => {
 		void state;
 

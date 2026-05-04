@@ -16,8 +16,8 @@ final class SurfaceCapabilities {
 	 * @return array<string, array<string, mixed>>
 	 */
 	public static function build( string $settings_url = '', string $connectors_url = '' ): array {
-		$block_available     = ChatClient::is_supported();
-		$chat_available      = Provider::chat_configured();
+		$block_available       = ChatClient::is_supported();
+		$chat_available        = Provider::chat_configured();
 		$pattern_backend       = PatternRetrievalBackendFactory::selected_backend();
 		$pattern_backend_ready = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend
 			? PatternSearchClient::is_configured()
@@ -26,9 +26,9 @@ final class SurfaceCapabilities {
 				&& get_option( 'flavor_agent_qdrant_url' )
 				&& get_option( 'flavor_agent_qdrant_key' )
 			);
-		$pattern_available   = $chat_available && $pattern_backend_ready;
-		$can_edit_theme      = current_user_can( 'edit_theme_options' );
-		$can_manage_settings = current_user_can( 'manage_options' );
+		$pattern_available     = $chat_available && $pattern_backend_ready;
+		$can_edit_theme        = current_user_can( 'edit_theme_options' );
+		$can_manage_settings   = current_user_can( 'manage_options' );
 
 		$block_message         = $can_manage_settings
 			? __(

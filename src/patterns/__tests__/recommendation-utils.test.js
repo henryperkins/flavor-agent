@@ -50,11 +50,19 @@ describe( 'buildRecommendedPatterns', () => {
 						reason: 'Current readable synced pattern.',
 					},
 				],
-				[ { name: 'core/block/94', title: 'Current Shared Banner' } ]
+				[
+					{
+						name: 'core/block/94',
+						title: 'Current Shared Banner',
+					},
+				]
 			)
 		).toEqual( [
 			{
-				pattern: { name: 'core/block/94', title: 'Current Shared Banner' },
+				pattern: {
+					name: 'core/block/94',
+					title: 'Current Shared Banner',
+				},
 				recommendation: {
 					name: 'core/block/94',
 					source: 'synced',

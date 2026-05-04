@@ -82,12 +82,12 @@ Suggested pattern:
 ---
 
 ## Optional governance improvement
-Create: `scripts/check-doc-drift.sh`
+Created: `scripts/check-doc-drift.sh`
 - Checks for high-risk duplicated phrases and emits file/location of drift candidates:
   - `for agentic workers: REQUIRED SUB-SKILL`
   - shared review protocol sentence block
   - exact surface stop-line phrase families (for example: `Activity and undo only...`, navigation-embedded recommendation patterns, and template-part review boundaries)
-- Add to a lightweight docs check command or CI pre-commit if feasible.
+- Run manually with `bash scripts/check-doc-drift.sh` while the drift signatures are still being tuned. Add it to a lightweight docs check command or CI pre-commit only after the signature list is stable enough to avoid false positives in in-progress plans.
 
 Suggested script behavior:
 1. Use exact-string scan first, then ignore allowed canonical files.

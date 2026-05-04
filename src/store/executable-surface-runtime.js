@@ -323,6 +323,7 @@ export function buildExecutableSurfaceReviewFreshnessThunk(
 export function createExecutableSurfaceApplyAction( {
 	applyFailureMessage,
 	buildActivityEntry,
+	dispatchToastForActivity = null,
 	endpoint,
 	executeSuggestion,
 	getCurrentActivityScope,
@@ -421,8 +422,10 @@ export function createExecutableSurfaceApplyAction( {
 				return result;
 			}
 
+			let persistedEntry = null;
+
 			if ( typeof buildActivityEntry === 'function' ) {
-				await recordActivityEntry(
+				persistedEntry = await recordActivityEntry(
 					localDispatch,
 					select,
 					buildActivityEntry( {
@@ -441,6 +444,16 @@ export function createExecutableSurfaceApplyAction( {
 				} )
 			);
 
+			if ( typeof dispatchToastForActivity === 'function' ) {
+				dispatchToastForActivity( {
+					localDispatch,
+					persistedEntry,
+					surface,
+					suggestion,
+					extras: { operations: result.operations, result },
+				} );
+			}
+
 			return result;
 		};
 	};
@@ -452,6 +465,7 @@ export function buildExecutableSurfaceApplyThunk(
 	currentRequestSignature = null,
 	liveRequestInput = null,
 	{
+		dispatchToastForActivity = null,
 		getCurrentActivityScope,
 		guardSurfaceApplyFreshness,
 		guardSurfaceApplyResolvedFreshness,
@@ -461,6 +475,7 @@ export function buildExecutableSurfaceApplyThunk(
 ) {
 	return createExecutableSurfaceApplyAction( {
 		...config,
+		dispatchToastForActivity,
 		getCurrentActivityScope,
 		guardSurfaceApplyFreshness,
 		guardSurfaceApplyResolvedFreshness,

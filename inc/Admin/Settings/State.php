@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
@@ -198,6 +199,10 @@ final class State {
 		$pattern_state = is_array( $state['pattern_state'] ?? null ) ? $state['pattern_state'] : [];
 
 		if ( empty( $state['patterns_ready'] ) ) {
+			if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $state['selected_pattern_backend'] ?? '' ) ) {
+				return self::make_badge( __( 'Needs private AI Search', 'flavor-agent' ), 'warning' );
+			}
+
 			$embedding_ready = ! empty( $state['runtime_embedding']['configured'] );
 			$qdrant_ready    = ! empty( $state['qdrant_configured'] );
 
@@ -324,7 +329,14 @@ final class State {
 		}
 
 		if ( Config::GROUP_PATTERNS === $group ) {
-			if ( ! empty( $state['qdrant_configured'] ) && empty( $state['runtime_embedding']['configured'] ) ) {
+			if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $state['selected_pattern_backend'] ?? '' ) ) {
+				if ( empty( $state['cloudflare_pattern_ai_search_configured'] ) ) {
+					$status_blocks[] = [
+						'tone'    => 'warning',
+						'message' => __( 'Cloudflare AI Search is selected, but pattern recommendations still need a private pattern AI Search account, namespace, instance, and API token before you can sync.', 'flavor-agent' ),
+					];
+				}
+			} elseif ( ! empty( $state['qdrant_configured'] ) && empty( $state['runtime_embedding']['configured'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
 					'message' => __( 'Qdrant is configured, but pattern recommendations still need a configured embeddings backend.', 'flavor-agent' ),
@@ -507,20 +519,7 @@ final class State {
 	}
 
 	private static function cloudflare_pattern_ai_search_configured(): bool {
-		foreach (
-			[
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-			] as $option_name
-		) {
-			if ( '' === trim( (string) get_option( $option_name, '' ) ) ) {
-				return false;
-			}
-		}
-
-		return true;
+		return PatternSearchClient::is_configured();
 	}
 
 	private static function runtime_chat_uses_connectors( array $state ): bool {

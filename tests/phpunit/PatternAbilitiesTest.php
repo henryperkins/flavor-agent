@@ -613,6 +613,123 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_recommend_patterns_cloudflare_ai_search_drops_synced_pattern_after_status_change_before_resync(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$this->save_cloudflare_ai_search_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:95' => true,
+		];
+		WordPressTestState::$posts        = [
+			95 => $this->synced_pattern_post( 95, 'Drafted Shared Banner', 'Previously public copy', 'draft' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->cloudflare_ai_search_chunks_response(
+				[
+					$this->cloudflare_ai_search_chunk(
+						'core/block/95',
+						0.96,
+						'Previously public copy from Cloudflare.',
+						[
+							'candidate_type' => 'user',
+							'source'         => 'synced',
+							'synced_id'      => '95',
+						]
+					),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'core/block/95' ]
+		);
+
+		$this->assertSame( [], $result['recommendations'] );
+		$this->assertSame(
+			1,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Previously public copy', wp_json_encode( $result ) );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_recommend_patterns_cloudflare_ai_search_uses_ai_search_source_signal_and_threshold(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$this->save_cloudflare_ai_search_index_state();
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0.5;
+		$this->register_pattern(
+			'theme/hero',
+			[
+				'title'      => 'Current Hero',
+				'categories' => [ 'featured' ],
+				'content'    => '<!-- wp:group --><div>Current hero copy</div><!-- /wp:group -->',
+			]
+		);
+
+		WordPressTestState::$remote_post_responses = [
+			$this->cloudflare_ai_search_chunks_response(
+				[
+					$this->cloudflare_ai_search_chunk( 'theme/hero', 0.87, 'Indexed hero copy.' ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.4,
+								'reason' => 'Below the AI Search threshold.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns( [ 'postType' => 'page' ], [ 'theme/hero' ] );
+
+		$this->assertSame( [], $result['recommendations'] );
+
+		WordPressTestState::$remote_post_calls     = [];
+		WordPressTestState::$remote_post_responses = [
+			$this->cloudflare_ai_search_chunks_response(
+				[
+					$this->cloudflare_ai_search_chunk( 'theme/hero', 0.87, 'Indexed hero copy.' ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.4,
+								'reason' => 'Accepted at lower threshold.',
+							],
+						],
+					]
+				)
+			),
+		];
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0;
+
+		$result = $this->recommend_patterns( [ 'postType' => 'page' ], [ 'theme/hero' ] );
+
+		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertSame(
+			[ 'cloudflare_ai_search', 'llm_ranker' ],
+			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
+		);
+		$this->assertSame(
+			Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			$result['recommendations'][0]['ranking']['freshnessMeta']['patternBackend'] ?? null
+		);
+	}
+
 	public function test_recommend_patterns_returns_index_warming_and_schedules_sync_for_uninitialized_index(): void {
 		$this->configure_backends();
 		WordPressTestState::$capabilities = [ 'manage_options' => true ];
@@ -1814,6 +1931,41 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 	}
 
+	public function test_recommend_patterns_skips_draft_synced_candidate_even_when_read_post_is_allowed(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:96' => true,
+		];
+		WordPressTestState::$posts        = [
+			96 => $this->synced_pattern_post( 96, 'Draft Shared Banner', 'Draft shared copy', 'draft' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->synced_pattern_point( 96, 0.96, 'Draft Shared Banner', 'Draft shared copy' ),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'            => 'page',
+				'visiblePatternNames' => [ 'core/block/96' ],
+			],
+			[ 'core/block/96' ]
+		);
+
+		$this->assertSame( [], $result['recommendations'] );
+		$this->assertSame(
+			1,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Draft shared copy', wp_json_encode( $result ) );
+	}
+
 	public function test_recommend_patterns_treats_legacy_core_block_name_as_synced_candidate(): void {
 		$this->configure_backends();
 		$this->save_index_state();
@@ -2204,7 +2356,8 @@ final class PatternAbilitiesTest extends TestCase {
 	public function test_recommend_patterns_respects_configured_score_threshold(): void {
 		$this->configure_backends();
 		$this->save_index_state();
-		WordPressTestState::$options['flavor_agent_pattern_recommendation_threshold'] = 0.75;
+		WordPressTestState::$options['flavor_agent_pattern_recommendation_threshold']                        = 0.75;
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0;
 
 		WordPressTestState::$remote_post_responses = [
 			$this->embedding_response( [ 0.12, 0.34 ] ),

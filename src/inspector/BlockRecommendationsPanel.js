@@ -28,7 +28,6 @@ import CapabilityNotice from '../components/CapabilityNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
-import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	APPLY_NOW_LABEL,
@@ -58,20 +57,20 @@ import {
 const EMPTY_BLOCK_SUGGESTIONS = [];
 const EMPTY_SURFACE_SUGGESTIONS = [];
 const BLOCK_COMPOSER_HELPER_TEXT =
-	'Flavor Agent keeps one-click apply limited to safe local block attribute changes.';
+	'One-click apply stays limited to safe local block changes.';
 const CONTENT_ONLY_COMPOSER_HELPER_TEXT =
-	'Flavor Agent will stay within editable content for this block and avoid style or settings changes.';
+	'Content-only mode avoids style and settings changes.';
 const CONTENT_ONLY_NOTICE_TEXT =
 	'This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only.';
 const DEFAULT_BLOCK_STARTER_PROMPTS = [
-	'Improve clarity and spacing',
-	'Make this feel more editorial',
-	'Simplify the layout',
+	'Improve clarity',
+	'More editorial',
+	'Simplify layout',
 ];
 const CONTENT_ONLY_STARTER_PROMPTS = [
 	'Tighten the copy',
 	'Clarify the message',
-	'Make the content more concise',
+	'More concise',
 ];
 const BLOCK_REVIEW_REVALIDATION_DEBOUNCE_MS = 300;
 
@@ -263,38 +262,6 @@ function useBlockRecommendationState( clientId ) {
 			editingMode === 'contentOnly' || isInsideContentOnly,
 		block,
 	};
-}
-
-function getFeaturedSuggestion(
-	executableBlockSuggestions,
-	reviewBlockSuggestions,
-	advisoryBlockSuggestions
-) {
-	if ( executableBlockSuggestions.length > 0 ) {
-		return {
-			suggestion: executableBlockSuggestions[ 0 ],
-			tone: APPLY_NOW_LABEL,
-			why: 'Flavor Agent can safely apply this directly on the current block.',
-		};
-	}
-
-	if ( reviewBlockSuggestions.length > 0 ) {
-		return {
-			suggestion: reviewBlockSuggestions[ 0 ],
-			tone: REVIEW_LANE_LABEL,
-			why: 'This is the strongest validated structural change, but it requires review before any apply path.',
-		};
-	}
-
-	if ( advisoryBlockSuggestions.length > 0 ) {
-		return {
-			suggestion: advisoryBlockSuggestions[ 0 ],
-			tone: MANUAL_IDEAS_LABEL,
-			why: 'This is the strongest next move, but it still needs manual follow-through.',
-		};
-	}
-
-	return null;
 }
 
 function isReviewSafeSuggestion( suggestion = {} ) {
@@ -649,22 +616,6 @@ export function BlockRecommendationsContent( {
 		reviewBlockSuggestions,
 		reviewScope,
 	] );
-	const featuredSuggestion = useMemo(
-		() =>
-			isStaleResult
-				? null
-				: getFeaturedSuggestion(
-						executableBlockSuggestions,
-						reviewBlockSuggestions,
-						advisoryBlockSuggestions
-				  ),
-		[
-			advisoryBlockSuggestions,
-			executableBlockSuggestions,
-			isStaleResult,
-			reviewBlockSuggestions,
-		]
-	);
 	const diagnosticActivityEntry = useMemo( () => {
 		const isFailureDiagnostic = requestDiagnostics?.type === 'failure';
 		const isEmptyResultDiagnostic =
@@ -745,7 +696,7 @@ export function BlockRecommendationsContent( {
 	);
 	const activitySectionDescription = diagnosticActivityEntry
 		? 'Recent request diagnostics and applied actions for this block.'
-		: 'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.';
+		: 'Newest valid block action can be undone here.';
 
 	const handleFetch = useCallback( () => {
 		if ( ! canRecommendBlocks ) {
@@ -857,12 +808,13 @@ export function BlockRecommendationsContent( {
 				: 'This result no longer matches the current block or prompt. Refresh before applying anything from the previous result.';
 	}
 
-	return (
-		<div className="flavor-agent-panel">
-			<SurfacePanelIntro eyebrow={ eyebrow } introCopy={ introCopy } />
+	const shouldShowScopeNote = eyebrow !== 'Selected Block' && introCopy;
 
+	return (
+		<div className="flavor-agent-panel flavor-agent-block-panel">
 			<SurfaceScopeBar
 				scopeLabel={ blockScopeLabel }
+				scopeDetails={ eyebrow ? [ eyebrow ] : [] }
 				isFresh={ hasFreshResult }
 				hasResult={ hasResult }
 				announceChanges
@@ -871,6 +823,12 @@ export function BlockRecommendationsContent( {
 				onRefresh={ isStaleResult ? handleRefresh : undefined }
 				isRefreshing={ isLoading }
 			/>
+
+			{ shouldShowScopeNote && (
+				<p className="flavor-agent-explanation flavor-agent-panel__note">
+					{ introCopy }
+				</p>
+			) }
 
 			{ ! canRecommendBlocks && <CapabilityNotice surface="block" /> }
 
@@ -891,10 +849,10 @@ export function BlockRecommendationsContent( {
 				onFetch={ handleFetch }
 				placeholder={ composerPlaceholder }
 				label={ composerLabel }
-				rows={ 3 }
+				hideLabelFromVision
+				rows={ 2 }
 				helperText={ composerHelperText }
 				starterPrompts={ composerStarterPrompts }
-				submitHint="Press Cmd/Ctrl+Enter to submit."
 				fetchIcon={ icon }
 				isLoading={ isLoading }
 				disabled={ ! canRecommendBlocks }
@@ -922,20 +880,6 @@ export function BlockRecommendationsContent( {
 				/>
 			) }
 
-			{ featuredSuggestion && (
-				<RecommendationHero
-					title={
-						featuredSuggestion?.suggestion?.label ||
-						'Recommended next change'
-					}
-					description={
-						featuredSuggestion?.suggestion?.description || ''
-					}
-					tone={ featuredSuggestion.tone }
-					why={ featuredSuggestion.why }
-				/>
-			) }
-
 			{ hasResult && recommendations?.explanation && (
 				<p className="flavor-agent-explanation flavor-agent-panel__note">
 					{ recommendations.explanation }
@@ -953,7 +897,7 @@ export function BlockRecommendationsContent( {
 					description={
 						isStaleResult
 							? 'These suggestions are shown for reference from the last request. Refresh before applying them.'
-							: 'Validator-computed inline-safe suggestions can change local block attributes directly.'
+							: 'Inline-safe changes can apply directly.'
 					}
 					meta={
 						<EligibilitySummary
@@ -985,7 +929,7 @@ export function BlockRecommendationsContent( {
 					description={
 						isStaleResult
 							? 'These structural suggestions are shown for reference from the last request. Refresh before reviewing them.'
-							: 'Validated structural operations require review before apply.'
+							: 'Review required before structural apply.'
 					}
 					meta={
 						<EligibilitySummary
@@ -1024,7 +968,7 @@ export function BlockRecommendationsContent( {
 					description={
 						isStaleResult
 							? 'These settings suggestions are shown for reference from the last request. Refresh before applying them.'
-							: 'Flavor Agent keeps settings changes executable here and mirrors them into native panels for context only.'
+							: 'Settings changes apply here only.'
 					}
 				>
 					<SuggestionChips
@@ -1051,7 +995,7 @@ export function BlockRecommendationsContent( {
 					description={
 						isStaleResult
 							? 'These style suggestions are shown for reference from the last request. Refresh before applying them.'
-							: 'Flavor Agent keeps style changes executable here and mirrors them into native panels for context only.'
+							: 'Style changes apply here only.'
 					}
 				>
 					<SuggestionChips
@@ -1076,7 +1020,7 @@ export function BlockRecommendationsContent( {
 					description={
 						isStaleResult
 							? 'These ideas are shown for reference from the last request. Refresh before acting on them against the current block.'
-							: 'These ideas need manual follow-through or a broader review flow, so Flavor Agent keeps them advisory.'
+							: 'Manual follow-through only.'
 					}
 				>
 					{ advisoryBlockSuggestions.map( ( suggestion ) => (
@@ -1385,7 +1329,7 @@ export function BlockRecommendationsDocumentPanel() {
 			<BlockRecommendationsContent
 				clientId={ rememberedClientId }
 				eyebrow="Last Selected Block"
-				introCopy="Saving cleared block selection. Flavor Agent stays scoped to the last block you selected until you choose another block."
+				introCopy="Using the last selected block until selection returns."
 			/>
 		</PluginDocumentSettingPanel>
 	);

@@ -371,10 +371,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( getContainer().textContent ).toContain( 'Last Selected Block' );
 		expect( getContainer().textContent ).toContain(
-			'Saving cleared block selection. Flavor Agent stays scoped to the last block you selected until you choose another block.'
+			'Using the last selected block until selection returns.'
 		);
 		expect( getContainer().textContent ).toContain(
-			'Flavor Agent keeps one-click apply limited to safe local block attribute changes.'
+			'One-click apply stays limited to safe local block changes.'
 		);
 		expect( getContainer().textContent ).toContain( 'Get Suggestions' );
 		expect(
@@ -625,8 +625,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			][ 0 ]
 		).toEqual(
 			expect.objectContaining( {
-				description:
-					'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.',
+				description: 'Newest valid block action can be undone here.',
 				entries: expect.any( Array ),
 				resetKey: 'block-1',
 			} )
@@ -715,7 +714,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain(
 			'Eligibility blockers: Missing pattern context.'
 		);
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Recommended Next Step'
 		);
 		expect( getContainer().textContent ).toContain(
@@ -1068,7 +1067,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain( 'Review first' );
 		expect( getContainer().textContent ).toContain( 'Review-safe' );
 		expect( getContainer().textContent ).toContain(
-			'Validated structural operations require review before apply.'
+			'Review required before structural apply.'
 		);
 		expect( getContainer().textContent ).toContain(
 			'Add a hero pattern after this group'
@@ -1678,15 +1677,15 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).not.toContain( 'Stale' );
 	} );
 
-	test( 'renders the shared intro shell and a shorter composer helper in the main block panel', () => {
+	test( 'renders compact scope and composer helper in the main block panel', () => {
 		renderContent();
 
 		expect( getContainer().textContent ).toContain( 'Selected Block' );
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Ask for a specific outcome or fetch recommendations based on the current block context.'
 		);
 		expect( getContainer().textContent ).toContain(
-			'Flavor Agent keeps one-click apply limited to safe local block attribute changes.'
+			'One-click apply stays limited to safe local block changes.'
 		);
 	} );
 

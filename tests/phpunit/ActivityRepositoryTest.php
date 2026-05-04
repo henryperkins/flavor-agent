@@ -835,6 +835,58 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'Assign template part', $operation_labels['activity-assign'] ?? null );
 	}
 
+	public function test_query_admin_entries_include_canonical_admin_display_metadata(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_block_entry_with_request_meta(
+				'activity-canonical',
+				'2026-03-24T10:00:00Z',
+				[
+					'backendLabel'          => 'WordPress AI Client',
+					'model'                 => 'provider-managed',
+					'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
+					'ownerLabel'            => 'Settings > Connectors',
+					'credentialSourceLabel' => 'Provider-managed',
+					'selectedProviderLabel' => 'Anthropic',
+					'ability'               => 'flavor-agent/recommend-block',
+					'route'                 => 'POST /flavor-agent/v1/recommend-block',
+				],
+				'42'
+			)
+		);
+
+		$result = Repository::query_admin( [ 'perPage' => 10 ] );
+		$entry  = $result['entries'][0] ?? [];
+
+		$this->assertSame(
+			[
+				'status'             => 'applied',
+				'statusLabel'        => 'Applied',
+				'surface'            => 'block',
+				'surfaceLabel'       => 'Block',
+				'postType'           => 'post',
+				'entityId'           => '42',
+				'blockPath'          => 'Paragraph · 1',
+				'userId'             => 7,
+				'userLabel'          => 'User #7',
+				'operationType'      => 'modify-attributes',
+				'operationTypeLabel' => 'Modify attributes',
+				'provider'           => 'WordPress AI Client',
+				'model'              => 'provider-managed',
+				'providerPath'       => 'WordPress AI Client via Settings > Connectors',
+				'configurationOwner' => 'Settings > Connectors',
+				'credentialSource'   => 'Provider-managed',
+				'selectedProvider'   => 'Anthropic',
+				'requestAbility'     => 'flavor-agent/recommend-block',
+				'requestRoute'       => 'POST /flavor-agent/v1/recommend-block',
+				'requestReference'   => 'block:42:1',
+				'requestPrompt'      => 'Tighten the intro copy.',
+			],
+			$entry['admin'] ?? null
+		);
+	}
+
 	public function test_query_admin_supports_operator_filters_and_user_sorting(): void {
 		Repository::install();
 

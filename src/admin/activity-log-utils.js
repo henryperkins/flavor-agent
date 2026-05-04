@@ -100,6 +100,27 @@ function isPlainObject( value ) {
 	);
 }
 
+function getAdminMetadata( entry ) {
+	return isPlainObject( entry?.admin ) ? entry.admin : {};
+}
+
+function getAdminMetadataString( admin, key ) {
+	const value = isPlainObject( admin ) ? admin[ key ] : undefined;
+
+	return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function getAdminString( entry, key ) {
+	return getAdminMetadataString( getAdminMetadata( entry ), key );
+}
+
+function getAdminPositiveInteger( entry, key ) {
+	const value = getAdminMetadata( entry )[ key ];
+	const normalized = Number( value );
+
+	return Number.isInteger( normalized ) && normalized > 0 ? normalized : null;
+}
+
 function readPath( value, path = [] ) {
 	let current = value;
 
@@ -238,12 +259,18 @@ function parseScopeKey( scopeKey = '' ) {
 }
 
 function getDocumentContext( entry ) {
+	const adminPostType = getAdminString( entry, 'postType' );
+	const adminEntityId = getAdminString( entry, 'entityId' );
 	const document = isPlainObject( entry?.document ) ? entry.document : {};
 	const parsedScope = parseScopeKey( document.scopeKey || '' );
 
 	return {
-		postType: String( document.postType || parsedScope.postType || '' ),
-		entityId: String( document.entityId || parsedScope.entityId || '' ),
+		postType: String(
+			adminPostType || document.postType || parsedScope.postType || ''
+		),
+		entityId: String(
+			adminEntityId || document.entityId || parsedScope.entityId || ''
+		),
 		scopeKey: String( document.scopeKey || '' ),
 	};
 }
@@ -551,6 +578,21 @@ function getPrimaryOperation( entry ) {
 }
 
 function deriveOperationType( entry ) {
+	const adminOperationType = getAdminString( entry, 'operationType' );
+	const adminOperationTypeLabel = getAdminString(
+		entry,
+		'operationTypeLabel'
+	);
+
+	if ( adminOperationType || adminOperationTypeLabel ) {
+		return {
+			value: adminOperationType || String( entry?.type || 'recorded' ),
+			label:
+				adminOperationTypeLabel ||
+				humanizeValueLabel( adminOperationType ),
+		};
+	}
+
 	if ( entry?.type === 'request_diagnostic' ) {
 		return {
 			value: 'request-diagnostic',
@@ -611,6 +653,12 @@ function deriveOperationType( entry ) {
 }
 
 function getBlockPathLabel( entry ) {
+	const adminBlockPath = getAdminString( entry, 'blockPath' );
+
+	if ( adminBlockPath ) {
+		return adminBlockPath;
+	}
+
 	const blockPath = formatBlockPath( entry?.target?.blockPath || [] );
 
 	if ( ! blockPath ) {
@@ -675,43 +723,49 @@ export function summarizeActivityState( state ) {
 	}
 }
 
-function getRequestDiagnostics( request = {} ) {
-	const provider = getFirstString( request, [
-		[ 'ai', 'backendLabel' ],
-		[ 'ai', 'providerLabel' ],
-		[ 'provider' ],
-		[ 'providerName' ],
-		[ 'metadata', 'provider' ],
-		[ 'ai', 'provider' ],
-		[ 'result', 'provider' ],
-	] );
-	const model = getFirstString( request, [
-		[ 'ai', 'model' ],
-		[ 'model' ],
-		[ 'modelName' ],
-		[ 'metadata', 'model' ],
-		[ 'result', 'model' ],
-	] );
-	const providerPath = getFirstString( request, [
-		[ 'ai', 'pathLabel' ],
-		[ 'pathLabel' ],
-	] );
-	const configurationOwner = getFirstString( request, [
-		[ 'ai', 'ownerLabel' ],
-		[ 'ownerLabel' ],
-	] );
-	const credentialSource = getFirstString( request, [
-		[ 'ai', 'credentialSourceLabel' ],
-		[ 'ai', 'credentialSource' ],
-		[ 'credentialSourceLabel' ],
-		[ 'credentialSource' ],
-	] );
-	const selectedProvider = getFirstString( request, [
-		[ 'ai', 'selectedProviderLabel' ],
-		[ 'ai', 'selectedProvider' ],
-		[ 'selectedProviderLabel' ],
-		[ 'selectedProvider' ],
-	] );
+function getRequestDiagnostics( request = {}, admin = {} ) {
+	const provider =
+		getAdminMetadataString( admin, 'provider' ) ||
+		getFirstString( request, [
+			[ 'ai', 'backendLabel' ],
+			[ 'ai', 'providerLabel' ],
+			[ 'provider' ],
+			[ 'providerName' ],
+			[ 'metadata', 'provider' ],
+			[ 'ai', 'provider' ],
+			[ 'result', 'provider' ],
+		] );
+	const model =
+		getAdminMetadataString( admin, 'model' ) ||
+		getFirstString( request, [
+			[ 'ai', 'model' ],
+			[ 'model' ],
+			[ 'modelName' ],
+			[ 'metadata', 'model' ],
+			[ 'result', 'model' ],
+		] );
+	const providerPath =
+		getAdminMetadataString( admin, 'providerPath' ) ||
+		getFirstString( request, [ [ 'ai', 'pathLabel' ], [ 'pathLabel' ] ] );
+	const configurationOwner =
+		getAdminMetadataString( admin, 'configurationOwner' ) ||
+		getFirstString( request, [ [ 'ai', 'ownerLabel' ], [ 'ownerLabel' ] ] );
+	const credentialSource =
+		getAdminMetadataString( admin, 'credentialSource' ) ||
+		getFirstString( request, [
+			[ 'ai', 'credentialSourceLabel' ],
+			[ 'ai', 'credentialSource' ],
+			[ 'credentialSourceLabel' ],
+			[ 'credentialSource' ],
+		] );
+	const selectedProvider =
+		getAdminMetadataString( admin, 'selectedProvider' ) ||
+		getFirstString( request, [
+			[ 'ai', 'selectedProviderLabel' ],
+			[ 'ai', 'selectedProvider' ],
+			[ 'selectedProviderLabel' ],
+			[ 'selectedProvider' ],
+		] );
 	const connector = getFirstString( request, [
 		[ 'ai', 'connectorLabel' ],
 		[ 'ai', 'connectorId' ],
@@ -722,14 +776,12 @@ function getRequestDiagnostics( request = {} ) {
 		[ 'ai', 'connectorPluginSlug' ],
 		[ 'connectorPluginSlug' ],
 	] );
-	const requestAbility = getFirstString( request, [
-		[ 'ai', 'ability' ],
-		[ 'ability' ],
-	] );
-	const requestRoute = getFirstString( request, [
-		[ 'ai', 'route' ],
-		[ 'route' ],
-	] );
+	const requestAbility =
+		getAdminMetadataString( admin, 'requestAbility' ) ||
+		getFirstString( request, [ [ 'ai', 'ability' ], [ 'ability' ] ] );
+	const requestRoute =
+		getAdminMetadataString( admin, 'requestRoute' ) ||
+		getFirstString( request, [ [ 'ai', 'route' ], [ 'route' ] ] );
 	const fallbackValue =
 		readPath( request, [ 'ai', 'usedFallback' ] ) ?? request?.usedFallback;
 	const hasFallbackSignal = typeof fallbackValue === 'boolean';
@@ -1054,6 +1106,16 @@ export function getActivityStatus( entry, allEntries = [] ) {
 		return explicitStatus;
 	}
 
+	const adminStatus = getAdminString( entry, 'status' );
+
+	if (
+		[ 'applied', 'review', 'undone', 'blocked', 'failed' ].includes(
+			adminStatus
+		)
+	) {
+		return adminStatus;
+	}
+
 	if (
 		entry?.type === 'request_diagnostic' ||
 		entry?.executionResult === 'review' ||
@@ -1085,6 +1147,13 @@ export function getActivityStatusLabel( entry, allEntries = [] ) {
 		typeof entry === 'string'
 			? entry
 			: getActivityStatus( entry, allEntries );
+	const adminStatusLabel =
+		typeof entry === 'object' ? getAdminString( entry, 'statusLabel' ) : '';
+
+	if ( adminStatusLabel ) {
+		return adminStatusLabel;
+	}
+
 	const isFailedRequestDiagnostic =
 		typeof entry === 'object' &&
 		entry?.type === 'request_diagnostic' &&
@@ -1377,8 +1446,10 @@ export function normalizeActivityEntry(
 		timeZone = 'UTC',
 	} = {}
 ) {
+	const request = isPlainObject( entry?.request ) ? entry.request : {};
+	const admin = getAdminMetadata( entry );
 	const { postType, entityId } = getDocumentContext( entry );
-	const diagnostics = getRequestDiagnostics( entry?.request || {} );
+	const diagnostics = getRequestDiagnostics( request, admin );
 	const resolvedUndo = getResolvedActivityUndoState( entry, allEntries );
 	const status = getActivityStatus( entry, allEntries );
 	const { timestampDisplay, dayKey } = formatActivityTimestamp(
@@ -1394,14 +1465,26 @@ export function normalizeActivityEntry(
 	const targetLink = buildActivityTargetLink( entry, adminBaseUrl );
 	let undoError = EMPTY_VALUE;
 	let userLabel = EMPTY_VALUE;
+	const adminUserId = getAdminPositiveInteger( entry, 'userId' );
+	const adminUserLabel = getAdminString( entry, 'userLabel' );
+	const entryUserId =
+		entry?.userId || entry?.userId === 0
+			? String( entry.userId )
+			: EMPTY_VALUE;
+	const userId = adminUserId !== null ? String( adminUserId ) : entryUserId;
 
-	if ( typeof entry?.userLabel === 'string' && entry.userLabel.trim() ) {
+	if ( adminUserLabel ) {
+		userLabel = adminUserLabel;
+	} else if (
+		typeof entry?.userLabel === 'string' &&
+		entry.userLabel.trim()
+	) {
 		userLabel = entry.userLabel.trim();
-	} else if ( entry?.userId ) {
+	} else if ( adminUserId || entry?.userId ) {
 		userLabel = sprintf(
 			/* translators: %s: user ID. */
 			__( 'User #%s', 'flavor-agent' ),
-			entry.userId
+			adminUserId || entry.userId
 		);
 	}
 
@@ -1428,6 +1511,19 @@ export function normalizeActivityEntry(
 		);
 	}
 
+	const requestPromptValue =
+		typeof request?.prompt === 'string' ? request.prompt.trim() : '';
+	const requestReferenceValue =
+		typeof request?.reference === 'string' ? request.reference.trim() : '';
+	const requestPrompt =
+		getAdminString( entry, 'requestPrompt' ) ||
+		requestPromptValue ||
+		EMPTY_VALUE;
+	const requestReference =
+		getAdminString( entry, 'requestReference' ) ||
+		requestReferenceValue ||
+		EMPTY_VALUE;
+
 	return {
 		...entry,
 		icon: status,
@@ -1441,8 +1537,12 @@ export function normalizeActivityEntry(
 		timestampDisplay,
 		status,
 		statusLabel: getActivityStatusLabel( entry, allEntries ),
-		surface: String( entry?.surface || '' ),
-		surfaceLabel: formatSurfaceLabel( entry?.surface ),
+		surface:
+			getAdminString( entry, 'surface' ) ||
+			String( entry?.surface || '' ),
+		surfaceLabel:
+			getAdminString( entry, 'surfaceLabel' ) ||
+			formatSurfaceLabel( entry?.surface ),
 		activityType: String( entry?.type || '' ) || EMPTY_VALUE,
 		activityTypeLabel: formatActivityTypeLabel( entry?.type ),
 		operationType: operationType.value || EMPTY_VALUE,
@@ -1455,23 +1555,12 @@ export function normalizeActivityEntry(
 				? entry.document.scopeKey.trim()
 				: EMPTY_VALUE,
 		blockPath: getBlockPathLabel( entry ),
-		userId:
-			entry?.userId || entry?.userId === 0
-				? String( entry.userId )
-				: EMPTY_VALUE,
+		userId,
 		user: userLabel,
 		entity: entityLabel,
 		documentLabel: documentLabel || EMPTY_VALUE,
-		requestPrompt:
-			typeof entry?.request?.prompt === 'string' &&
-			entry.request.prompt.trim()
-				? entry.request.prompt.trim()
-				: EMPTY_VALUE,
-		requestReference:
-			typeof entry?.request?.reference === 'string' &&
-			entry.request.reference.trim()
-				? entry.request.reference.trim()
-				: EMPTY_VALUE,
+		requestPrompt,
+		requestReference,
 		providerPath: diagnostics.providerPath,
 		configurationOwner: diagnostics.configurationOwner,
 		credentialSource: diagnostics.credentialSource,

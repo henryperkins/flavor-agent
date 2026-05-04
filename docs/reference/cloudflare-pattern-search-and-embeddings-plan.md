@@ -838,7 +838,7 @@ Expected: pass.
 - Test: `tests/phpunit/PatternIndexTest.php`
 - Test: `tests/phpunit/PluginLifecycleTest.php`
 
-- [ ] **Step 1: Add failing sync tests**
+- [x] **Step 1: Add failing sync tests**
 
 Add tests for:
 
@@ -849,7 +849,7 @@ Add tests for:
 - AI Search state records selected backend, namespace, instance, fingerprint, indexed count, and last sync time.
 - Changing pattern backend from `qdrant` to `cloudflare_ai_search` marks state stale with `pattern_backend_changed`.
 
-- [ ] **Step 2: Update runtime state shape**
+- [x] **Step 2: Update runtime state shape**
 
 Add state fields:
 
@@ -868,7 +868,7 @@ cloudflare_ai_search_instance_changed
 cloudflare_ai_search_signature_changed
 ```
 
-- [ ] **Step 3: Split backend readiness**
+- [x] **Step 3: Split backend readiness**
 
 Replace the current single readiness check:
 
@@ -890,7 +890,7 @@ return Provider::embedding_configured()
 	&& get_option( 'flavor_agent_qdrant_key', '' );
 ```
 
-- [ ] **Step 4: Implement AI Search sync flow**
+- [x] **Step 4: Implement AI Search sync flow**
 
 For `cloudflare_ai_search`, `PatternIndex::do_sync()` must:
 
@@ -906,7 +906,7 @@ Re-uploading the same `item_id` overwrites the existing item in Cloudflare AI Se
 
 Do not call `EmbeddingClient` or `QdrantClient` in this branch.
 
-- [ ] **Step 5: Register dependency hooks**
+- [x] **Step 5: Register dependency hooks**
 
 Append the following option names to the same `foreach` loop in `flavor-agent.php` (lines 91-111) extended in Task 4 — do not introduce a second loop:
 
@@ -918,7 +918,7 @@ Append the following option names to the same `foreach` loop in `flavor-agent.ph
 'flavor_agent_cloudflare_pattern_ai_search_api_token',
 ```
 
-- [ ] **Step 6: Run sync tests**
+- [x] **Step 6: Run sync tests**
 
 Run:
 
@@ -938,7 +938,7 @@ Expected: pass.
 - Test: `src/patterns/__tests__/recommendation-utils.test.js`
 - Test: `src/patterns/__tests__/InserterBadge.test.js`
 
-- [ ] **Step 1: Add behavior parity tests**
+- [x] **Step 1: Add behavior parity tests**
 
 Add tests proving AI Search backend results:
 
@@ -950,7 +950,7 @@ Add tests proving AI Search backend results:
 - **Defense-in-depth: synced candidates returned by AI Search are dropped if the underlying `wp_block` post is currently private/draft/trashed/unreadable, even if the AI Search index still contains them.** Status changes between syncs must never leak private content. Add an explicit test that flips a synced pattern to `draft` after upload and asserts it is filtered out of recommendations before the next sync.
 - **Activity-log parity:** every recommendation request still emits a `request_diagnostic` activity row, and the row's metadata records the `pattern_backend` (`qdrant` or `cloudflare_ai_search`) plus the resolved chat/embedding provider. Add a `PatternAbilitiesTest` assertion against the activity-row payload for both backends. (See active project memory: pattern recommendations already emit `request_diagnostic` rows; this change must not regress that.)
 
-- [ ] **Step 2: Keep UI behavior unchanged**
+- [x] **Step 2: Keep UI behavior unchanged**
 
 Most UI code should not change. Only update unavailable-state copy when backend prerequisites differ:
 
@@ -958,7 +958,7 @@ Most UI code should not change. Only update unavailable-state copy when backend 
 - AI Search backend: needs private Cloudflare AI Search pattern backend.
 - Both: need text generation through Settings > Connectors for reranking.
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run:
 
@@ -985,7 +985,7 @@ Expected: pass.
 - Modify: `docs/reference/local-environment-setup.md`
 - Modify: `readme.txt`
 
-- [ ] **Step 1: Update source-of-truth docs**
+- [x] **Step 1: Update source-of-truth docs**
 
 Document this backend matrix:
 
@@ -994,7 +994,7 @@ Document this backend matrix:
 | Qdrant | Azure, OpenAI Native, or Workers AI | Qdrant | Qdrant | Embedding provider, Qdrant, Connectors chat |
 | Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Private pattern AI Search, Connectors chat |
 
-- [ ] **Step 2: Update disclosure**
+- [x] **Step 2: Update disclosure**
 
 Add two distinct Cloudflare rows in `docs/reference/external-service-disclosure.md`:
 
@@ -1011,7 +1011,7 @@ Add two distinct Cloudflare rows in `docs/reference/external-service-disclosure.
 
 Keep the existing Cloudflare AI Search docs-grounding row separate.
 
-- [ ] **Step 3: Update debugging docs**
+- [x] **Step 3: Update debugging docs**
 
 Add a first split in `docs/reference/pattern-recommendation-debugging.md`:
 
@@ -1021,7 +1021,7 @@ Check selected pattern backend first:
 - cloudflare_ai_search: inspect private AI Search credentials, item sync state, search chunks, filters, and synced-pattern rehydration.
 ```
 
-- [ ] **Step 4: Run docs check**
+- [x] **Step 4: Run docs check**
 
 Run:
 
@@ -1037,7 +1037,7 @@ Expected: pass.
 - Modify: `docs/reference/pattern-recommendation-debugging.md`
 - Modify: `STATUS.md` if release evidence is recorded there during execution
 
-- [ ] **Step 1: Add calibration guidance**
+- [x] **Step 1: Add calibration guidance**
 
 Document that Workers AI and AI Search scores are not equivalent to OpenAI `text-embedding-3-*` plus Qdrant scores. Recommended evaluation:
 
@@ -1055,7 +1055,7 @@ Record:
 - number of renderable final recommendations
 - visible scope size
 
-- [ ] **Step 2: Use the per-backend threshold introduced by Product Decision 9**
+- [x] **Step 2: Use the per-backend threshold introduced by Product Decision 9**
 
 `flavor_agent_pattern_recommendation_threshold` remains Qdrant-only. AI Search uses the new `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search` option (default `0.2`, registered in Task 5 Step 2). RRF-fused hybrid scores from AI Search are not on the same scale as Qdrant cosine similarity, so a shared threshold would zero out recommendations on one backend or over-permit on the other.
 
@@ -1072,7 +1072,7 @@ If the AI Search default of `0.2` proves wrong during calibration evidence colle
 **Files:**
 - No source edits unless verification finds a regression.
 
-- [ ] **Step 1: Run targeted PHP tests**
+- [x] **Step 1: Run targeted PHP tests**
 
 Run:
 
@@ -1088,7 +1088,7 @@ composer run test:php -- --filter PluginLifecycleTest
 
 Expected: pass.
 
-- [ ] **Step 2: Run targeted JS tests**
+- [x] **Step 2: Run targeted JS tests**
 
 Run:
 
@@ -1098,7 +1098,7 @@ npm run test:unit -- src/admin/__tests__/settings-page-controller.test.js src/pa
 
 Expected: pass.
 
-- [ ] **Step 3: Run aggregate non-browser verification**
+- [x] **Step 3: Run aggregate non-browser verification**
 
 Run:
 
@@ -1108,7 +1108,7 @@ node scripts/verify.js --skip-e2e
 
 Expected: `VERIFY_RESULT` reports pass. If plugin-check prerequisites are unavailable, record the `incomplete` blocker and rerun with the documented environment.
 
-- [ ] **Step 4: Run browser evidence**
+- [x] **Step 4: Run browser evidence**
 
 Run:
 
@@ -1126,7 +1126,7 @@ npm run test:e2e:wp70
 
 Expected: pass or a recorded blocker/waiver per `docs/reference/cross-surface-validation-gates.md`.
 
-- [ ] **Step 5: Run docs check**
+- [x] **Step 5: Run docs check**
 
 Run:
 

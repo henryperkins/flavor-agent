@@ -7,6 +7,7 @@ namespace FlavorAgent\Admin\Settings;
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
@@ -88,6 +89,13 @@ final class Validation {
 	private static bool $qdrant_validation_error_reported = false;
 
 	/**
+	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
+	 */
+	private static ?array $pattern_ai_search_validation_state = null;
+
+	private static bool $pattern_ai_search_validation_error_reported = false;
+
+	/**
 	 * @var array<string, array{request_fingerprint: string, values: array<string, string>}>
 	 */
 	private static array $submission_value_cache = [];
@@ -98,18 +106,20 @@ final class Validation {
 	private static ?array $submission_request_fingerprint = null;
 
 	public static function reset(): void {
-		self::$azure_validation_state                  = null;
-		self::$azure_validation_error_reported         = false;
-		self::$native_openai_validation_state          = null;
-		self::$native_openai_validation_error_reported = false;
-		self::$workers_ai_validation_state             = null;
-		self::$workers_ai_validation_error_reported    = false;
-		self::$qdrant_validation_state                 = null;
-		self::$qdrant_validation_error_reported        = false;
-		self::$cloudflare_validation_state             = null;
-		self::$cloudflare_validation_error_reported    = false;
-		self::$submission_value_cache                  = [];
-		self::$submission_request_fingerprint          = null;
+		self::$azure_validation_state                      = null;
+		self::$azure_validation_error_reported             = false;
+		self::$native_openai_validation_state              = null;
+		self::$native_openai_validation_error_reported     = false;
+		self::$workers_ai_validation_state                 = null;
+		self::$workers_ai_validation_error_reported        = false;
+		self::$qdrant_validation_state                     = null;
+		self::$qdrant_validation_error_reported            = false;
+		self::$pattern_ai_search_validation_state          = null;
+		self::$pattern_ai_search_validation_error_reported = false;
+		self::$cloudflare_validation_state                 = null;
+		self::$cloudflare_validation_error_reported        = false;
+		self::$submission_value_cache                      = [];
+		self::$submission_request_fingerprint              = null;
 	}
 
 	public static function sanitize_grounding_result_count( mixed $value ): int {
@@ -671,6 +681,84 @@ final class Validation {
 	 * @param array<string, string> $overrides
 	 * @return array<string, string>|\WP_Error
 	 */
+	public static function resolve_pattern_ai_search_submission_values( array $overrides = [] ): array|\WP_Error {
+		$current_values = self::get_current_pattern_ai_search_values();
+		$values         = self::get_cached_submission_values(
+			'cloudflare_pattern_ai_search',
+			static function () use ( $current_values ): array {
+				return [
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => self::read_posted_text_value(
+						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ]
+					),
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => self::read_posted_text_value(
+						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ]
+					),
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => self::read_posted_text_value(
+						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
+						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ]
+					),
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => self::read_posted_text_value(
+						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
+						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
+					),
+				];
+			}
+		);
+
+		foreach ( $overrides as $option_name => $override_value ) {
+			$values[ $option_name ] = sanitize_text_field( $override_value );
+		}
+
+		if ( ! self::should_validate_submission() ) {
+			return $values;
+		}
+
+		if (
+			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ] ||
+			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ] ||
+			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] ||
+			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
+		) {
+			return $values;
+		}
+
+		if ( ! self::values_require_validation( $values, $current_values ) ) {
+			return $values;
+		}
+
+		$fingerprint = self::build_validation_fingerprint( $values );
+
+		if (
+			is_array( self::$pattern_ai_search_validation_state ) &&
+			( self::$pattern_ai_search_validation_state['fingerprint'] ?? '' ) === $fingerprint
+		) {
+			return self::$pattern_ai_search_validation_state['error'] instanceof \WP_Error
+				? self::$pattern_ai_search_validation_state['error']
+				: self::$pattern_ai_search_validation_state['values'];
+		}
+
+		$validation = PatternSearchClient::validate_configuration(
+			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ],
+			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ],
+			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ],
+			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
+		);
+
+		self::$pattern_ai_search_validation_state = [
+			'fingerprint' => $fingerprint,
+			'values'      => $values,
+			'error'       => is_wp_error( $validation ) ? $validation : null,
+		];
+
+		return is_wp_error( $validation ) ? $validation : $values;
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array<string, string>|\WP_Error
+	 */
 	public static function resolve_cloudflare_submission_values( array $overrides = [] ): array|\WP_Error {
 		$current_values = self::get_current_cloudflare_values();
 		$values         = self::get_cached_submission_values(
@@ -870,8 +958,19 @@ final class Validation {
 	private static function sanitize_pattern_ai_search_text_option( mixed $value, string $option_name ): string {
 		$sanitized_value = self::sanitize_text_option_value( $value, $option_name );
 		Feedback::mark_section_changed_by_option( $option_name, $sanitized_value );
+		$resolved_values = self::resolve_pattern_ai_search_submission_values(
+			[
+				$option_name => $sanitized_value,
+			]
+		);
 
-		return $sanitized_value;
+		if ( is_wp_error( $resolved_values ) ) {
+			self::report_pattern_ai_search_validation_error( $resolved_values );
+
+			return (string) get_option( $option_name, '' );
+		}
+
+		return $resolved_values[ $option_name ] ?? $sanitized_value;
 	}
 
 	private static function sanitize_cloudflare_text_option( mixed $value, string $option_name ): string {
@@ -955,6 +1054,20 @@ final class Validation {
 			[
 				'flavor_agent_qdrant_url' => [ Utils::class, 'sanitize_url_value' ],
 				'flavor_agent_qdrant_key' => 'sanitize_text_field',
+			]
+		);
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function get_current_pattern_ai_search_values(): array {
+		return self::get_current_option_values(
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'sanitize_text_field',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'sanitize_text_field',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'sanitize_text_field',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'sanitize_text_field',
 			]
 		);
 	}
@@ -1252,6 +1365,20 @@ final class Validation {
 			__( 'We kept your previous Qdrant settings because validation failed.', 'flavor-agent' )
 		);
 		self::$qdrant_validation_error_reported = true;
+	}
+
+	private static function report_pattern_ai_search_validation_error( \WP_Error $error ): void {
+		if ( self::$pattern_ai_search_validation_error_reported ) {
+			return;
+		}
+
+		Feedback::report_validation_feedback(
+			Config::GROUP_PATTERNS,
+			'flavor_agent_cloudflare_pattern_ai_search_validation',
+			$error,
+			__( 'We kept your previous private Cloudflare AI Search pattern settings because validation failed.', 'flavor-agent' )
+		);
+		self::$pattern_ai_search_validation_error_reported = true;
 	}
 
 	private static function report_cloudflare_validation_error( \WP_Error $error ): void {
