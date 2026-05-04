@@ -1,6 +1,6 @@
 # Ability `meta.annotations` Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Follow the execution protocol in [../reference/agentic-plan-implementation-guide.md](../reference/agentic-plan-implementation-guide.md). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add behavior annotations to all 20 Flavor Agent abilities so the WP 7.0 client-side abilities API keeps safe HTTP method routing and the MCP Adapter surfaces accurate behavior hints. True data-read abilities use WP-format `meta.annotations.{readonly,destructive,idempotent}`; LLM-invoking recommendation abilities intentionally keep WP-format `readonly` unset so large prompt/editor-context payloads continue to execute via POST, while exposing the MCP `readOnlyHint` directly.
 

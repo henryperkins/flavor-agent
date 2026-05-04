@@ -7,7 +7,7 @@ This document is the editor-flow reference. For overall doc ownership and readin
 It currently has eight primary editor experiences:
 
 - Block recommendations in the native Inspector, powered by the WordPress AI Client and `Settings > Connectors`.
-- Pattern recommendations in the native inserter, powered by plugin-owned Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI embeddings, Qdrant, and Connectors-owned chat for reranking.
+- Pattern recommendations in the native inserter, powered by a selected pattern retrieval backend (Qdrant with plugin-owned embeddings, or private Cloudflare AI Search) and Connectors-owned chat for reranking.
 - Content recommendations in the post/page document sidebar for draft, edit, and critique passes.
 - Navigation recommendations in the native Inspector for selected `core/navigation` blocks, powered by Connectors-owned chat and scoped as advisory guidance today.
 - Template recommendations in the Site Editor, powered by Connectors-owned chat with validated template-part and pattern operations.
@@ -43,12 +43,12 @@ flavor-agent/
 │   ├── Activity/                 # Server-backed AI activity repository, permissions, and serialization
 │   ├── Admin/                    # Settings page and AI Activity admin page registration/assets
 │   ├── AzureOpenAI/              # Deployment validation, embeddings, Responses API, and Qdrant clients
-│   ├── Cloudflare/               # AI Search grounding + prewarm pipeline
+│   ├── Cloudflare/               # AI Search docs grounding, Workers AI config, and private pattern AI Search client
 │   ├── Context/                  # Server-side block/theme/pattern/template/navigation collectors
 │   ├── Guidelines/               # Core-first and legacy guideline storage adapters
 │   ├── LLM/                      # WordPress AI client wrapper + prompt/response handling
 │   ├── OpenAI/                   # Provider selection and connector-aware credential resolution
-│   ├── Patterns/                 # Pattern index state, sync, fingerprinting, scheduling
+│   ├── Patterns/                 # Pattern index state, retrieval backends, sync, fingerprinting, scheduling
 │   ├── REST/                     # Editor-facing REST routes
 │   ├── Support/                  # Shared sanitization helpers
 │   └── Settings.php              # Settings API page, validation, and sync/diagnostics panels
@@ -102,7 +102,7 @@ Pattern recommendations are exposed through `POST /flavor-agent/v1/recommend-pat
 
 The client behavior is:
 
-- Passive fetch on editor load when the active embedding backend, Qdrant, and Connectors chat are configured.
+- Passive fetch on editor load when the selected pattern backend and Connectors chat are configured.
 - Search-triggered refresh when the inserter search box changes.
 - A local inserter shelf that only renders ranked patterns currently exposed by Gutenberg's allowed-pattern selector for the active insertion root.
 - A toolbar badge that shows recommendation count, loading state, or error state next to the inserter toggle.
@@ -110,10 +110,9 @@ The client behavior is:
 The server behavior is:
 
 - Check persisted pattern index runtime state.
-- Embed the query with the active plugin-owned embeddings configuration.
-- Retrieve candidates from Qdrant using semantic and optional structural search passes.
+- Retrieve candidates from the selected pattern backend: Qdrant embeds the query with the active plugin-owned embeddings configuration and searches semantic/structural passes; Cloudflare AI Search searches a private pattern instance with `visiblePatternNames` as a filter.
 - Rank candidates with the active Connectors-owned chat runtime.
-- Rehydrate registry-owned fields (`title`, `categories`, `content`) from stored payloads.
+- Rehydrate synced/user candidates from the current published readable `wp_block` before ranking or response output.
 
 `visiblePatternNames` is now derived from the active inserter root, so nested insertion contexts only receive patterns WordPress already allows in that specific surface.
 
@@ -188,7 +187,7 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Azure OpenAI, OpenAI Native, and Cloudflare Workers AI fields on this screen configure plugin-owned embeddings for pattern sync; they no longer provide a direct plugin-managed chat fallback. Selecting a connector-backed provider pins chat to that connector while embeddings fall back only to configured Azure/OpenAI Native embeddings. Workers AI delegates chat to the unpinned WordPress AI Client runtime because it is embeddings-only, and it must be explicitly selected for embeddings rather than used as fallback. OpenAI Native can pin chat to the OpenAI connector when available; otherwise Flavor Agent fails closed instead of using an unselected provider.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Azure OpenAI, OpenAI Native, and Cloudflare Workers AI fields on this screen configure plugin-owned embeddings for the Qdrant pattern backend; they no longer provide a direct plugin-managed chat fallback. Selecting a connector-backed provider pins chat to that connector while Qdrant embeddings fall back only to configured Azure/OpenAI Native embeddings. Workers AI delegates chat to the unpinned WordPress AI Client runtime because it is embeddings-only, and it must be explicitly selected for embeddings rather than used as fallback. OpenAI Native can pin chat to the OpenAI connector when available; otherwise Flavor Agent fails closed instead of using an unselected provider. The Cloudflare AI Search pattern backend uses private AI Search credentials and Cloudflare-managed indexing/search instead of plugin-owned embeddings or Qdrant.
 When OpenAI Native is selected for embeddings, credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy reports which source is currently effective.
 
 Flavor Agent now uses a managed public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not need to enter Cloudflare account, instance, or token values. Legacy Cloudflare credentials remain supported internally for backwards compatibility, and the legacy validation flow still probes trusted `developer.wordpress.org` guidance before accepting changed credentials.
@@ -205,10 +204,16 @@ Configured options:
 - `flavor_agent_cloudflare_workers_ai_account_id`
 - `flavor_agent_cloudflare_workers_ai_api_token`
 - `flavor_agent_cloudflare_workers_ai_embedding_model`
+- `flavor_agent_pattern_retrieval_backend`
 - `flavor_agent_qdrant_url`
 - `flavor_agent_qdrant_key`
 - `flavor_agent_pattern_recommendation_threshold`
+- `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search`
 - `flavor_agent_pattern_max_recommendations`
+- `flavor_agent_cloudflare_pattern_ai_search_account_id`
+- `flavor_agent_cloudflare_pattern_ai_search_namespace`
+- `flavor_agent_cloudflare_pattern_ai_search_instance_id`
+- `flavor_agent_cloudflare_pattern_ai_search_api_token`
 - `flavor_agent_cloudflare_ai_search_account_id`
 - `flavor_agent_cloudflare_ai_search_instance_id`
 - `flavor_agent_cloudflare_ai_search_api_token`
@@ -258,7 +263,7 @@ Pattern indexing is managed by `FlavorAgent\Patterns\PatternIndex`.
 
 Current lifecycle behavior:
 
-- Activation marks the catalog dirty and schedules a sync when the vector backends are configured.
+- Activation marks the catalog dirty and schedules a sync when the selected pattern backend is configured.
 - Theme switches, plugin activation/deactivation, upgrades, and relevant settings changes mark the index dirty and schedule a background refresh.
 - Deactivation clears the scheduled reindex hook and any active sync lock.
 - Uninstall removes legacy/direct provider, Qdrant, and Cloudflare grounding options, pattern index state, docs warm state/queue, the sync lock, and selected scheduled hooks.

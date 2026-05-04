@@ -5102,7 +5102,12 @@ describe( 'store action thunks', () => {
 				} ),
 			} )
 		);
-		expect( dispatch ).toHaveBeenLastCalledWith(
+		// Use `toHaveBeenCalledWith` (not `Last…`) because the executor pipeline
+		// now dispatches an `enqueueToast` action after the apply state is set
+		// to surface the change in the Undo Toast region. The toast dispatch is
+		// covered by the toasts slice and ToastRegion suites; here we only care
+		// that the apply state did transition to success with the right payload.
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplateApplyState(
 				'success',
 				null,
@@ -5332,7 +5337,10 @@ describe( 'store action thunks', () => {
 				} ),
 			} )
 		);
-		expect( dispatch ).toHaveBeenLastCalledWith(
+		// See `applyTemplateSuggestion records success…` for why this is
+		// `toHaveBeenCalledWith` rather than `Last…`. The Undo Toast region
+		// receives an `enqueueToast` dispatch after this state transition.
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplatePartApplyState(
 				'success',
 				null,

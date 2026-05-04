@@ -1338,6 +1338,8 @@ final class SettingsTest extends TestCase {
 			Config::PATTERN_BACKEND_QDRANT,
 			Settings::sanitize_pattern_retrieval_backend( 'invalid-backend' )
 		);
+
+		$_POST = [];
 		$this->assertSame(
 			'account-123',
 			Settings::sanitize_cloudflare_pattern_ai_search_account_id( '<b>account-123</b>' )
@@ -1363,9 +1365,131 @@ final class SettingsTest extends TestCase {
 			Settings::sanitize_pattern_recommendation_threshold_cloudflare_ai_search( '4' )
 		);
 
+		$_POST   = [
+			'option_page'                        => Config::OPTION_GROUP,
+			'flavor_agent_settings_feedback_key' => 'pattern-backend',
+		];
+		$changed = Settings::sanitize_pattern_retrieval_backend( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH );
+		$this->assertSame( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH, $changed );
+
 		$feedback = array_values( WordPressTestState::$transients )[0] ?? [];
 
 		$this->assertTrue( (bool) ( $feedback['changed_sections']['patterns'] ?? false ) );
+	}
+
+	public function test_sanitize_private_pattern_ai_search_settings_accept_verified_values_and_validate_once(): void {
+		WordPressTestState::$options               = [
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-old',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns-old',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-old',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-old',
+		];
+		$_POST                                     = [
+			'option_page' => Config::OPTION_GROUP,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-123',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode(
+					[
+						'result' => [
+							'chunks' => [],
+						],
+					]
+				),
+			],
+		];
+
+		$this->assertSame(
+			'account-123',
+			Settings::sanitize_cloudflare_pattern_ai_search_account_id( 'account-123' )
+		);
+		$this->assertSame(
+			'patterns',
+			Settings::sanitize_cloudflare_pattern_ai_search_namespace( 'patterns' )
+		);
+		$this->assertSame(
+			'pattern-index',
+			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( 'pattern-index' )
+		);
+		$this->assertSame(
+			'token-xyz',
+			Settings::sanitize_cloudflare_pattern_ai_search_api_token( 'token-xyz' )
+		);
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+		$this->assertSame(
+			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/pattern-index/search',
+			WordPressTestState::$remote_post_calls[0]['url']
+		);
+	}
+
+	public function test_sanitize_private_pattern_ai_search_settings_reverts_invalid_values(): void {
+		WordPressTestState::$options              = [
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-old',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns-old',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-old',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-old',
+		];
+		$_POST                                    = [
+			'option_page' => Config::OPTION_GROUP,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-new',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns-new',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-new',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-new',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 403 ],
+			'body'     => wp_json_encode(
+				[
+					'errors' => [
+						[
+							'message' => 'Authentication failed for token-new',
+						],
+					],
+				]
+			),
+		];
+
+		$this->assertSame(
+			'account-old',
+			Settings::sanitize_cloudflare_pattern_ai_search_account_id( 'account-new' )
+		);
+		$this->assertSame(
+			'patterns-old',
+			Settings::sanitize_cloudflare_pattern_ai_search_namespace( 'patterns-new' )
+		);
+		$this->assertSame(
+			'instance-old',
+			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( 'instance-new' )
+		);
+		$this->assertSame(
+			'token-old',
+			Settings::sanitize_cloudflare_pattern_ai_search_api_token( 'token-new' )
+		);
+		$this->assertSame(
+			[
+				[
+					'setting' => Config::OPTION_GROUP,
+					'code'    => 'flavor_agent_cloudflare_pattern_ai_search_validation',
+					'message' => 'Private Cloudflare AI Search pattern validation failed. Check the account, namespace, instance, API token, and filterable metadata schema, then try again.',
+					'type'    => 'error',
+				],
+				[
+					'setting' => Config::OPTION_GROUP,
+					'code'    => 'flavor_agent_cloudflare_pattern_ai_search_validation_preserved',
+					'message' => 'We kept your previous private Cloudflare AI Search pattern settings because validation failed.',
+					'type'    => 'warning',
+				],
+			],
+			WordPressTestState::$settings_errors
+		);
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+		$this->assertStringNotContainsString( 'token-new', wp_json_encode( WordPressTestState::$settings_errors ) );
 	}
 
 	public function test_page_state_tracks_private_pattern_ai_search_configuration(): void {
@@ -1570,6 +1694,20 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringNotContainsString( 'Chat Provider', $output );
+	}
+
+	public function test_pattern_setup_copy_uses_private_ai_search_when_selected(): void {
+		$state                             = $this->build_default_open_group_state();
+		$state['selected_pattern_backend'] = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;
+		$state['cloudflare_pattern_ai_search_configured'] = false;
+		$status        = State::get_pattern_overview_status( $state );
+		$status_blocks = State::get_section_status_blocks( Config::GROUP_PATTERNS, $state, [] );
+
+		$this->assertSame( 'Needs private AI Search', $status['label'] );
+		$this->assertSame(
+			'Cloudflare AI Search is selected, but pattern recommendations still need a private pattern AI Search account, namespace, instance, and API token before you can sync.',
+			$status_blocks[0]['message'] ?? ''
+		);
 	}
 
 	public function test_should_enqueue_admin_assets_accepts_settings_and_admin_hook_variants(): void {
@@ -2253,17 +2391,19 @@ final class SettingsTest extends TestCase {
 	 */
 	private function build_default_open_group_state(): array {
 		return [
-			'runtime_chat'           => [ 'configured' => true ],
-			'pattern_state'          => [
+			'runtime_chat'                            => [ 'configured' => true ],
+			'selected_pattern_backend'                => Config::PATTERN_BACKEND_QDRANT,
+			'pattern_state'                           => [
 				'last_error' => '',
 				'status'     => 'ok',
 			],
-			'patterns_ready'         => false,
-			'qdrant_configured'      => false,
-			'runtime_embedding'      => [ 'configured' => false ],
-			'docs_configured'        => false,
-			'prewarm_state'          => [ 'status' => 'ok' ],
-			'runtime_docs_grounding' => [ 'status' => 'ok' ],
+			'patterns_ready'                          => false,
+			'qdrant_configured'                       => false,
+			'cloudflare_pattern_ai_search_configured' => false,
+			'runtime_embedding'                       => [ 'configured' => false ],
+			'docs_configured'                         => false,
+			'prewarm_state'                           => [ 'status' => 'ok' ],
+			'runtime_docs_grounding'                  => [ 'status' => 'ok' ],
 		];
 	}
 

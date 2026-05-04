@@ -7,7 +7,7 @@ Purpose: Evidence-first review of style recommendations for security, contract, 
 ```text
 Review Flavor Agent style recommendations in this repository with the same evidence-first stance as the template recommendation review.
 
-Treat this as a code review, not an implementation pass. Do not edit files. Findings must lead, ordered by severity, with exact file/line references and a clear explanation of the user-visible or security impact.
+Follow the shared review protocol at [../reference/review-response-protocol.md](../reference/review-response-protocol.md).
 
 Scope:
 - Primary surface: flavor-agent/recommend-style
@@ -56,11 +56,5 @@ Focus areas:
 - missing tests for shared contracts, freshness guards, validation, scope resolution, or docs drift
 - docs that overclaim behavior not enforced by code
 
-Output format
-1. Start with findings first, ordered by severity (`P0`, `P1`, `P2`, `P3`).
-2. For each finding include: title, exact file/line references, observed behavior, impact, and the smallest practical fix.
-3. Keep confirmed findings and open questions separate. Add an "Open Questions / Assumptions" section only if you verified a gap.
-4. Include a short "Verification Reviewed" section naming commands you ran and commands you did not run.
-5. If there are no findings, say so plainly and identify remaining test or environment gaps.
-6. Keep conclusions checkout-specific and evidence-backed. Confirm behavior from live code paths and do not treat stale docs or plans as higher priority than code.
+Output format: follow [../reference/review-response-protocol.md](../reference/review-response-protocol.md).
 ```

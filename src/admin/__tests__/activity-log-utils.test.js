@@ -228,6 +228,73 @@ describe( 'activity log utils', () => {
 		expect( entries[ 0 ].latency ).toBe( 'Not recorded' );
 	} );
 
+	test( 'normalizeActivityEntries prefers canonical admin metadata for dashboard display', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				before: {
+					attributes: {
+						content: 'Before copy',
+					},
+				},
+				after: {
+					attributes: {
+						content: 'After copy',
+					},
+				},
+				admin: {
+					status: 'blocked',
+					statusLabel: 'Undo blocked',
+					surface: 'block',
+					surfaceLabel: 'Block',
+					postType: 'page',
+					entityId: '99',
+					blockPath: 'Group · 2',
+					userId: 14,
+					userLabel: 'Ada Lovelace',
+					operationType: 'insert',
+					operationTypeLabel: 'Insert pattern',
+					provider: 'WordPress AI Client',
+					model: 'provider-managed',
+					providerPath:
+						'WordPress AI Client via Settings > Connectors',
+					configurationOwner: 'Settings > Connectors',
+					credentialSource: 'Provider-managed',
+					selectedProvider: 'Anthropic',
+					requestAbility: 'flavor-agent/recommend-block',
+					requestRoute: 'POST /flavor-agent/v1/recommend-block',
+					requestReference: 'block:99:2',
+					requestPrompt: 'Use a stronger hero.',
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			status: 'blocked',
+			statusLabel: 'Undo blocked',
+			surface: 'block',
+			surfaceLabel: 'Block',
+			operationType: 'insert',
+			operationTypeLabel: 'Insert pattern',
+			postType: 'page',
+			entityId: '99',
+			blockPath: 'Group · 2',
+			userId: '14',
+			user: 'Ada Lovelace',
+			provider: 'WordPress AI Client',
+			model: 'provider-managed',
+			providerPath: 'WordPress AI Client via Settings > Connectors',
+			configurationOwner: 'Settings > Connectors',
+			credentialSource: 'Provider-managed',
+			selectedProvider: 'Anthropic',
+			requestAbility: 'flavor-agent/recommend-block',
+			requestRoute: 'POST /flavor-agent/v1/recommend-block',
+			requestReference: 'block:99:2',
+			requestPrompt: 'Use a stronger hero.',
+		} );
+		expect( entries[ 0 ].description ).toContain( 'Insert pattern' );
+		expect( entries[ 0 ].description ).toContain( 'Group · 2' );
+	} );
+
 	test( 'normalizeActivityEntries records fallback provenance and blocked undo reason', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {

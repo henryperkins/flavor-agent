@@ -13,8 +13,10 @@ use FlavorAgent\Abilities\NavigationAbilities;
 use FlavorAgent\Abilities\PatternAbilities;
 use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Abilities\TemplateAbilities;
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
+use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 use FlavorAgent\Support\RequestTrace;
 use FlavorAgent\Support\StringArray;
 
@@ -1148,6 +1150,10 @@ final class Agent_Controller {
 			$request_meta['ability'] = $route_definition['ability'];
 		}
 
+		if ( 'recommend-patterns' === $route_key ) {
+			$request_meta = self::append_pattern_request_meta( $request_meta );
+		}
+
 		$request_meta['route']  = $route_definition['route'];
 		$payload['requestMeta'] = $request_meta;
 
@@ -1178,6 +1184,10 @@ final class Agent_Controller {
 			$request_meta['ability'] = $route_definition['ability'];
 		}
 
+		if ( 'recommend-patterns' === $route_key ) {
+			$request_meta = self::append_pattern_request_meta( $request_meta );
+		}
+
 		$request_meta['route'] = $route_definition['route'];
 		$data['requestMeta']   = $request_meta;
 
@@ -1186,6 +1196,39 @@ final class Agent_Controller {
 			$error->get_error_message( $code ),
 			$data
 		);
+	}
+
+	/**
+	 * @param array<string, mixed> $request_meta
+	 * @return array<string, mixed>
+	 */
+	private static function append_pattern_request_meta( array $request_meta ): array {
+		$backend = PatternRetrievalBackendFactory::selected_backend();
+
+		$request_meta['pattern_backend'] = $backend;
+		$request_meta['patternBackend']  = [
+			'id'    => $backend,
+			'label' => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend
+				? 'Cloudflare AI Search'
+				: 'Qdrant',
+		];
+
+		if ( Config::PATTERN_BACKEND_QDRANT === $backend ) {
+			$request_meta['embedding_provider'] = Provider::active_embedding_request_meta();
+		} else {
+			$request_meta['embedding_provider'] = [
+				'provider'      => 'cloudflare_ai_search',
+				'providerLabel' => 'Cloudflare AI Search managed embeddings',
+				'backendLabel'  => 'Cloudflare AI Search',
+				'model'         => 'managed by Cloudflare AI Search',
+				'configured'    => true,
+				'owner'         => 'cloudflare_ai_search',
+				'ownerLabel'    => 'Settings > Flavor Agent',
+				'pathLabel'     => 'Cloudflare AI Search private pattern index',
+			];
+		}
+
+		return $request_meta;
 	}
 
 	/**

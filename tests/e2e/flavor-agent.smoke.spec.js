@@ -2586,6 +2586,8 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 			data.capabilities.surfaces.pattern.available = false;
 			data.capabilities.surfaces.pattern.reason =
 				'pattern_backend_unconfigured';
+			data.capabilities.surfaces.pattern.message =
+				'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.';
 		}
 
 		window.wp?.data

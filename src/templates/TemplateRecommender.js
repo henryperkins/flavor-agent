@@ -35,7 +35,6 @@ import LinkedEntityText from '../components/LinkedEntityText';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
-import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
@@ -673,11 +672,8 @@ export default function TemplateRecommender() {
 		! hasResult &&
 		templateActivityEntries.length === 0 &&
 		! selectedSuggestionKey;
-	const featuredSuggestionCard = isStaleResult
-		? null
-		: executableSuggestionCards[ 0 ] ||
-		  advisorySuggestionCards[ 0 ] ||
-		  null;
+	const hasComposerMeta =
+		currentPatternOverrideCount > 0 || currentVisibilityConstraintCount > 0;
 	const dismissStatusNotice = useCallback( () => {
 		switch ( statusNotice?.source ) {
 			case 'request':
@@ -760,32 +756,7 @@ export default function TemplateRecommender() {
 			name="flavor-agent-template-recommendations"
 			title="AI Template Recommendations"
 		>
-			<div className="flavor-agent-panel">
-				<SurfacePanelIntro
-					eyebrow={ formatTemplateTypeLabel( templateType ) }
-					introCopy="Describe the structure or layout you want. Review each suggested template-part change or pattern insertion, then confirm before Flavor Agent mutates the template."
-					meta={
-						<>
-							{ currentPatternOverrideCount > 0 && (
-								<span className="flavor-agent-pill">
-									{ formatCount(
-										currentPatternOverrideCount,
-										'override-ready block'
-									) }
-								</span>
-							) }
-							{ currentVisibilityConstraintCount > 0 && (
-								<span className="flavor-agent-pill">
-									{ formatCount(
-										currentVisibilityConstraintCount,
-										'viewport constraint'
-									) }
-								</span>
-							) }
-						</>
-					}
-				/>
-
+			<div className="flavor-agent-panel flavor-agent-template-panel">
 				<SurfaceScopeBar
 					scopeLabel={ formatTemplateTypeLabel( templateType ) }
 					scopeDetails={ templateRef ? [ templateRef ] : [] }
@@ -807,13 +778,36 @@ export default function TemplateRecommender() {
 						onFetch={ handleFetch }
 						placeholder="Describe the structure or layout you want."
 						label="What are you trying to achieve with this template?"
-						helperText="Flavor Agent keeps executable template suggestions bounded to validated template-part assignments and pattern insertions."
+						hideLabelFromVision
+						rows={ 2 }
+						helperText="Review validated template-part and pattern changes before applying."
 						starterPrompts={ [
-							'Strengthen the page hierarchy',
-							'Create a clearer opening section',
-							'Balance the template structure',
+							'Stronger hierarchy',
+							'Clearer opening',
+							'Balanced structure',
 						] }
-						submitHint="Press Cmd/Ctrl+Enter to submit."
+						meta={
+							hasComposerMeta ? (
+								<>
+									{ currentPatternOverrideCount > 0 && (
+										<span className="flavor-agent-pill">
+											{ formatCount(
+												currentPatternOverrideCount,
+												'override-ready block'
+											) }
+										</span>
+									) }
+									{ currentVisibilityConstraintCount > 0 && (
+										<span className="flavor-agent-pill">
+											{ formatCount(
+												currentVisibilityConstraintCount,
+												'viewport constraint'
+											) }
+										</span>
+									) }
+								</>
+							) : null
+						}
 						isLoading={ isLoading }
 					/>
 				) }
@@ -850,26 +844,6 @@ export default function TemplateRecommender() {
 					/>
 				) }
 
-				{ canRecommend && featuredSuggestionCard && (
-					<RecommendationHero
-						title={
-							featuredSuggestionCard.label ||
-							'Recommended template change'
-						}
-						description={ featuredSuggestionCard.description || '' }
-						tone={
-							featuredSuggestionCard.canApply
-								? REVIEW_LANE_LABEL
-								: MANUAL_IDEAS_LABEL
-						}
-						why={
-							featuredSuggestionCard.canApply
-								? 'Flavor Agent validated a deterministic operation sequence for this suggestion, so review it before applying.'
-								: 'This is the strongest next idea, but it still needs manual follow-through.'
-						}
-					/>
-				) }
-
 				{ canRecommend && hasResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
 						<LinkedEntityText
@@ -886,7 +860,6 @@ export default function TemplateRecommender() {
 						tone={ REVIEW_LANE_LABEL }
 						count={ executableSuggestionCards.length }
 						countNoun="suggestion"
-						description="Preview the validated operations below before Flavor Agent mutates the template."
 					>
 						{ executableSuggestionCards.map(
 							( suggestion, index ) => (
@@ -1002,7 +975,7 @@ export default function TemplateRecommender() {
 				) }
 
 				<AIActivitySection
-					description="Template actions use the same latest-valid undo rule as the block review surface."
+					description="Newest valid template action can be undone here."
 					entries={ templateActivityEntries }
 					isUndoing={ undoStatus === 'undoing' }
 					onUndo={ handleUndo }
@@ -1053,11 +1026,6 @@ function TemplateSuggestionCard( {
 						{ suggestion.label }
 					</div>
 					<div className="flavor-agent-card__meta">
-						<span className="flavor-agent-pill">
-							{ suggestion.canApply
-								? REVIEW_LANE_LABEL
-								: MANUAL_IDEAS_LABEL }
-						</span>
 						{ summaryParts.length > 0 && (
 							<span className="flavor-agent-pill">
 								{ summaryParts.join( ' • ' ) }
@@ -1122,57 +1090,71 @@ function TemplateSuggestionCard( {
 					</div>
 					{ suggestion.templateParts.map( ( part ) => (
 						<div key={ part.key } className="flavor-agent-tpl-row">
-							<span className="flavor-agent-tpl-row__mapping">
-								<Tooltip
-									text={ `Select “${ part.slug }” block in editor` }
-								>
-									<Button
-										size="small"
-										variant="link"
-										onClick={ () =>
-											selectBlockBySlugOrArea(
-												part.slug,
-												part.area
-											)
-										}
-										className="flavor-agent-action-link flavor-agent-action-link--part"
+							<div className="flavor-agent-tpl-row__main">
+								<span className="flavor-agent-tpl-row__mapping">
+									<Tooltip
+										text={ `Select “${ part.slug }” block in editor` }
 									>
-										{ part.slug }
-									</Button>
-								</Tooltip>
+										<Button
+											size="small"
+											variant="link"
+											onClick={ () =>
+												selectBlockBySlugOrArea(
+													part.slug,
+													part.area
+												)
+											}
+											className="flavor-agent-action-link flavor-agent-action-link--part"
+										>
+											{ part.slug }
+										</Button>
+									</Tooltip>
 
-								<span className="flavor-agent-tpl-row__arrow">
-									→
+									<span className="flavor-agent-tpl-row__arrow">
+										→
+									</span>
+
+									<Tooltip
+										text={ `Select “${ part.area }” area in editor` }
+									>
+										<Button
+											size="small"
+											variant="link"
+											onClick={ () =>
+												selectBlockByArea( part.area )
+											}
+											className="flavor-agent-action-link flavor-agent-action-link--area"
+										>
+											{ part.area }
+										</Button>
+									</Tooltip>
 								</span>
 
-								<Tooltip
-									text={ `Select “${ part.area }” area in editor` }
+								{ part.reason && (
+									<div className="flavor-agent-tpl-row__reason">
+										<LinkedEntityText
+											text={ part.reason }
+											entities={ entityMap }
+											onEntityClick={ onEntityClick }
+										/>
+									</div>
+								) }
+							</div>
+
+							{ part.ctaLabel && (
+								<Button
+									size="small"
+									variant="tertiary"
+									onClick={ () =>
+										selectBlockBySlugOrArea(
+											part.slug,
+											part.area
+										)
+									}
+									className="flavor-agent-assign-btn"
 								>
-									<Button
-										size="small"
-										variant="link"
-										onClick={ () =>
-											selectBlockByArea( part.area )
-										}
-										className="flavor-agent-action-link flavor-agent-action-link--area"
-									>
-										{ part.area }
-									</Button>
-								</Tooltip>
-							</span>
-
-							<span className="flavor-agent-pill">
-								{ part.ctaLabel }
-							</span>
-
-							{ part.reason && (
-								<div className="flavor-agent-tpl-row__reason">
-									<LinkedEntityText
-										text={ part.reason }
-										entities={ entityMap }
-										onEntityClick={ onEntityClick }
-									/>
-								</div>
+									{ part.ctaLabel }
+								</Button>
 							) }
 						</div>
 					) ) }

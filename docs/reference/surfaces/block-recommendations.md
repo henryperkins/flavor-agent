@@ -15,20 +15,10 @@ release-ready for default-on structural apply.
 
 ## Stop Line
 
-Ship:
+Canonical scope: [release-stop-lines.md](./release-stop-lines.md#block-recommendations)
 
-- Safe one-click local attribute apply.
-- Review-first structural operations behind a rollout flag.
-- Passive delegated Inspector subpanel mirrors.
-- Activity and undo only for the main block-owned action path.
+No additional surface-specific deltas are currently defined.
 
-Do not ship:
-
-- General block-tree mutation.
-- Multi-block rewrite.
-- Free-form pattern insertion from model text.
-- Apply buttons in passive settings/style mirrors.
-- Site-wide block remediation.
 
 ## Next Steps
 

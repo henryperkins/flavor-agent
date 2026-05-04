@@ -1,6 +1,6 @@
 # Style Contrast Validator Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Follow the execution protocol in [../reference/agentic-plan-implementation-guide.md](../reference/agentic-plan-implementation-guide.md). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a server-authoritative deterministic WCAG AA contrast validator that downgrades low-contrast or unverifiable style suggestions to advisory before they reach the editor.
 

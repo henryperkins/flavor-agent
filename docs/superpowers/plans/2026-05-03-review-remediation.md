@@ -1,6 +1,6 @@
 # WP 7.0 Integration Branch — Review Remediation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Follow the execution protocol in [../reference/agentic-plan-implementation-guide.md](../reference/agentic-plan-implementation-guide.md). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Address the regressions and quality issues identified in the 2026-05-03 code review of the uncommitted WP 7.0 / WordPress AI Client integration branch, before this work lands on `master`.
 

@@ -115,7 +115,7 @@ Action:
 
 ### 2. Update the WP 7.0 harness image when the stable Docker image exists
 
-The repo still pins the Docker-backed WP 7.0 harness to `wordpress:beta-7.0-RC2-php8.2-apache`.
+The repo still pins the Docker-backed WP 7.0 harness to a pre-release image via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the current pinned tag and override instructions live in `docs/local-wordpress-ide.md`.
 
 Grounding:
 

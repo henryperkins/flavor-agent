@@ -1,6 +1,6 @@
 # Content Context Renderer Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Follow the execution protocol in [../reference/agentic-plan-implementation-guide.md](../reference/agentic-plan-implementation-guide.md). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Render the current post's blocks server-side and harvest attribute-borne text so the content recommender sees what readers see, instead of strip-tagged saved content that wipes dynamic blocks and HTML attributes.
 

@@ -148,6 +148,35 @@ describe( 'capability-flags', () => {
 		);
 	} );
 
+	test( 'uses structured Cloudflare AI Search pattern guidance when provided', () => {
+		window.flavorAgentData = {
+			capabilities: {
+				surfaces: {
+					pattern: {
+						available: false,
+						reason: 'pattern_backend_unconfigured',
+						message:
+							'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+						actions: [
+							{
+								label: 'Settings > Flavor Agent',
+								href: 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+							},
+						],
+					},
+				},
+			},
+		};
+
+		expect( getCapabilityNotice( 'pattern' ) ).toMatchObject( {
+			status: 'warning',
+			actionLabel: 'Settings > Flavor Agent',
+		} );
+		expect( getCapabilityNotice( 'pattern' )?.message ).toContain(
+			'private Cloudflare AI Search pattern backend'
+		);
+	} );
+
 	test( 'uses structured style-book metadata when the surface is not shipped yet', () => {
 		window.flavorAgentData = {
 			capabilities: {

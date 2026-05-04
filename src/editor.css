@@ -150,6 +150,13 @@
   font-family: var(--flavor-agent-editor-font-sans);
 }
 
+.flavor-agent-template-panel,
+.flavor-agent-block-panel,
+.flavor-agent-content-recommender {
+  gap: 10px;
+  padding-top: 0;
+}
+
 .flavor-agent-panel__intro,
 .flavor-agent-panel__composer,
 .flavor-agent-panel__group {
@@ -261,7 +268,7 @@
   max-width: 100%;
   height: auto;
   padding: 7px 10px;
-  border-radius: var(--wpds-border-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-sm, 2px);
   justify-content: flex-start;
   align-items: flex-start;
   text-align: left;
@@ -299,12 +306,81 @@
   color: var(--flavor-agent-editor-muted);
 }
 
+:is(
+    .flavor-agent-template-panel,
+    .flavor-agent-block-panel,
+    .flavor-agent-content-recommender
+  )
+  .flavor-agent-panel__composer {
+  gap: 8px;
+  padding: 10px;
+}
+
+:is(
+    .flavor-agent-template-panel,
+    .flavor-agent-block-panel,
+    .flavor-agent-content-recommender
+  )
+  .flavor-agent-panel__composer-header {
+  flex-wrap: wrap;
+}
+
+:is(
+    .flavor-agent-template-panel,
+    .flavor-agent-block-panel,
+    .flavor-agent-content-recommender
+  )
+  .flavor-agent-panel__composer-meta {
+  justify-content: flex-start;
+}
+
+:is(
+    .flavor-agent-template-panel,
+    .flavor-agent-block-panel,
+    .flavor-agent-content-recommender
+  )
+  .flavor-agent-panel__composer-starters {
+  gap: 4px;
+}
+
+:is(
+    .flavor-agent-template-panel,
+    .flavor-agent-block-panel,
+    .flavor-agent-content-recommender
+  )
+  .flavor-agent-panel__composer-starter.components-button {
+  min-height: 26px;
+  padding: 4px 8px;
+  line-height: 1.3;
+}
+
+:is(
+    .flavor-agent-template-panel,
+    .flavor-agent-block-panel,
+    .flavor-agent-content-recommender
+  )
+  .flavor-agent-panel__composer-actions {
+  justify-content: flex-start;
+}
+
 .flavor-agent-panel__group {
   display: flex;
   flex-direction: column;
   gap: var(--flavor-agent-editor-space-12);
   padding: var(--flavor-agent-editor-space-12);
   border-radius: var(--flavor-agent-editor-radius-lg);
+}
+
+:is(
+    .flavor-agent-template-panel,
+    .flavor-agent-block-panel,
+    .flavor-agent-content-recommender
+  )
+  .flavor-agent-panel__group {
+  gap: 8px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
 }
 
 .flavor-agent-recommendation-lane,
@@ -315,6 +391,7 @@
 
 .flavor-agent-panel__group-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--flavor-agent-editor-space-8);
@@ -376,7 +453,7 @@
 
 .flavor-agent-navigation-embedded__refresh.components-button {
   min-height: 28px;
-  border-radius: var(--wpds-border-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-sm, 2px);
 }
 
 .flavor-agent-navigation-embedded__section {
@@ -396,7 +473,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 14px;
-  border-radius: var(--flavor-agent-editor-radius-lg);
+  border-radius: var(--wpds-border-radius-md, 4px);
   border: 1px solid
     color-mix(
       in srgb,
@@ -468,7 +545,8 @@
 
 .flavor-agent-activity-row {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--wpds-dimension-gap-sm, 8px);
   padding: 10px;
   border-radius: var(--wpds-border-radius-lg, 8px);
@@ -488,7 +566,7 @@
 }
 
 .flavor-agent-activity-row__info {
-  flex: 1 1 auto;
+  flex: 1 1 180px;
   min-width: 0;
 }
 
@@ -502,6 +580,7 @@
   margin-top: 2px;
   font-size: var(--wpds-font-size-xs, 11px);
   color: var(--flavor-agent-editor-muted);
+  overflow-wrap: anywhere;
 }
 
 .flavor-agent-panel__note {
@@ -617,6 +696,11 @@
   background: var(--flavor-agent-editor-muted-bg);
 }
 
+:is(.flavor-agent-template-panel, .flavor-agent-block-panel)
+  .flavor-agent-scope-bar {
+  padding: 8px 10px;
+}
+
 .flavor-agent-scope-bar--stale {
   border-color: color-mix(
     in srgb,
@@ -670,7 +754,7 @@
 
 .flavor-agent-scope-bar__refresh.components-button {
   min-height: 28px;
-  border-radius: var(--wpds-border-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-sm, 2px);
 }
 
 .flavor-agent-pill--fresh {
@@ -692,7 +776,7 @@
   align-items: center;
   gap: 8px;
   padding: 9px 12px;
-  border-radius: var(--wpds-border-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-sm, 2px);
   border: 1px solid
     color-mix(
       in srgb,
@@ -717,7 +801,7 @@
 
 .flavor-agent-stale-banner__refresh.components-button {
   min-height: 28px;
-  border-radius: var(--wpds-border-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-sm, 2px);
 }
 
 .flavor-agent-capability-notice {
@@ -846,14 +930,24 @@
   padding: 0;
 }
 
+.flavor-agent-content-recommender__context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 0;
+}
+
 .flavor-agent-content-recommender__document-title {
   margin: 0;
   color: var(--flavor-agent-editor-text);
   font-family: var(--flavor-agent-editor-font-sans);
-  font-size: 15px;
+  font-size: var(--wpds-font-size-md, 13px);
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .flavor-agent-content-recommender__document-title.is-untitled {
@@ -875,6 +969,7 @@
 
 .flavor-agent-content-recommender__modes {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0;
   max-width: 100%;
@@ -885,8 +980,8 @@
 }
 
 .flavor-agent-content-recommender__mode-option.components-button {
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 26px;
+  padding: 0 8px;
   border: 0;
   border-radius: var(--wpds-border-radius-pill, 999px);
   background: transparent;
@@ -894,6 +989,17 @@
   box-shadow: none;
   font-size: var(--wpds-font-size-sm, 12px);
   font-weight: 600;
+}
+
+.flavor-agent-content-recommender__result {
+  gap: 8px;
+  padding: 10px;
+  background: var(--flavor-agent-editor-panel-bg);
+}
+
+.flavor-agent-content-recommender__result
+  .flavor-agent-recommendation-hero__why {
+  display: none;
 }
 
 .flavor-agent-content-recommender__mode-option.components-button:hover:not(
@@ -1115,6 +1221,7 @@
 
 .flavor-agent-card__header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
@@ -1125,6 +1232,7 @@
 }
 
 .flavor-agent-card__lead {
+  flex: 1 1 160px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1217,7 +1325,9 @@
 
 .flavor-agent-card__apply {
   flex-shrink: 0;
-  border-radius: var(--wpds-border-radius-md, 4px);
+  max-width: 100%;
+  border-radius: var(--wpds-border-radius-sm, 2px);
+  white-space: normal;
 }
 
 /* Applied state: brief confirmation feedback */
@@ -1262,7 +1372,9 @@
 
 /* Suggestion chip — atomic AI accept pill. The left edge carries the
    teal → amber AI-provenance gradient (`--flavor-agent-editor-ai-edge`)
-   so the chip reads as AI-suggested at a glance. */
+   so the chip reads as AI-suggested at a glance. Squared 2px corners
+   align with the WP-native rectilinear shape language; brand color stays
+   in the edge marker and hover border. */
 .flavor-agent-chip.components-button {
   position: relative;
   display: inline-flex;
@@ -1271,7 +1383,7 @@
   min-height: 30px;
   padding: 0 10px 0 14px;
   border: 1px solid var(--flavor-agent-editor-stroke-subtle);
-  border-radius: var(--wpds-border-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-sm, 2px);
   background: var(--flavor-agent-editor-panel-bg);
   color: var(--flavor-agent-editor-text);
   font-size: var(--wpds-font-size-xs, 11px);
@@ -1330,7 +1442,7 @@
   min-height: 30px;
   padding: 0 10px 0 14px;
   border: 1px solid var(--wpds-color-stroke-subtle, rgba(0, 0, 0, 0.08));
-  border-radius: var(--wpds-border-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-sm, 2px);
   background: var(--wpds-color-bg-surface-secondary, #f6f7f7);
   color: var(--wpds-color-fg-content-secondary, #50575e);
   font-size: var(--wpds-font-size-xs, 11px);
@@ -1469,6 +1581,15 @@
     background-color 120ms ease;
 }
 
+:is(
+    .flavor-agent-template-panel,
+    .flavor-agent-block-panel,
+    .flavor-agent-content-recommender
+  )
+  .flavor-agent-prompt textarea {
+  min-height: 64px;
+}
+
 .flavor-agent-prompt textarea:hover:not(:disabled) {
   border-color: var(--wpds-color-stroke-surface-neutral-strong, #50575e);
   background: var(--wpds-color-bg-surface-neutral, #f6f7f7);
@@ -1502,7 +1623,7 @@
   width: auto;
   max-width: 100%;
   min-height: 30px;
-  border-radius: var(--wpds-border-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-sm, 2px);
   box-shadow: none;
 }
 
@@ -1576,7 +1697,7 @@
 .flavor-agent-tpl-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px 6px;
   padding: 7px 0;
   font-size: var(--wpds-font-size-sm, 12px);
@@ -1594,10 +1715,12 @@
 /* Slug → Area mapping line */
 .flavor-agent-tpl-row__mapping {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 3px;
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
+  max-width: 100%;
 }
 
 .flavor-agent-tpl-row__arrow {
@@ -1612,18 +1735,23 @@
   line-height: 1.45;
   color: var(--flavor-agent-editor-muted);
   padding-left: 2px;
+  overflow-wrap: anywhere;
 }
 
 /* ---- Action links: shared base ---- */
 
 .flavor-agent-action-link.components-button.is-link {
   font-size: var(--wpds-font-size-xs, 11px);
+  max-width: 100%;
   padding: 2px 8px;
   height: auto;
   min-height: 0;
   text-decoration: none;
   border-radius: var(--wpds-border-radius-md, 4px);
   line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 .flavor-agent-action-link.components-button.is-link:hover {
@@ -1691,9 +1819,11 @@
   font-size: var(--wpds-font-size-xs, 11px);
   height: 24px;
   min-height: 24px;
+  max-width: 100%;
   padding: 0 10px;
-  flex-shrink: 0;
+  flex: 0 1 auto;
   border-radius: var(--wpds-border-radius-md, 4px);
+  white-space: normal;
 }
 
 /* ---- Done badge ---- */
@@ -1827,6 +1957,7 @@
   flex: 0 1 auto;
   min-height: 32px;
   max-width: 100%;
+  border-radius: var(--wpds-border-radius-sm, 2px);
 }
 
 .flavor-agent-template-preview__action--primary.components-button {
@@ -1836,11 +1967,14 @@
 .flavor-agent-preview-token {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   font-size: var(--wpds-font-size-xs, 11px);
   padding: 2px 8px;
   line-height: 1.4;
   border-radius: var(--wpds-border-radius-md, 4px);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 .flavor-agent-preview-token--part {
@@ -2162,4 +2296,233 @@
     var(--flavor-agent-editor-accent-line) 60%,
     var(--flavor-agent-editor-stroke-subtle)
   );
+}
+
+/* ---------------------------------------------------------------
+ * Undo Toast
+ *
+ * Bottom-center snackbar surfaced after an executable AI apply. Each toast
+ * carries the activity entry id so its Undo button reuses the canonical
+ * `undoActivity()` thunk. Stack is capped at 3 visible (FIFO eviction skips
+ * interacted toasts). Dark `--flavor-agent-color-ink` ground keeps the toast
+ * legible against any editor canvas.
+ * --------------------------------------------------------------- */
+
+.flavor-agent-toast-region {
+  position: fixed;
+  inset: auto 0 24px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.flavor-agent-toast-region__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.flavor-agent-toast {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 6px 8px 14px;
+  background: var(--flavor-agent-color-ink);
+  color: #fff;
+  border-radius: var(--wpds-border-radius-sm, 2px);
+  font-family: var(--flavor-agent-editor-font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow:
+    0 14px 32px -10px rgba(23, 35, 42, 0.42),
+    0 4px 10px -4px rgba(23, 35, 42, 0.22);
+  animation: flavor-agent-toast-rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  max-width: min(560px, calc(100vw - 48px));
+}
+
+@keyframes flavor-agent-toast-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.flavor-agent-toast__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--flavor-agent-color-accent);
+  flex-shrink: 0;
+}
+
+.flavor-agent-toast__icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.flavor-agent-toast__icon--success { color: #6cd394; }
+.flavor-agent-toast__icon--warning { color: #f0c267; }
+.flavor-agent-toast__icon--error   { color: #ff8b8b; }
+
+.flavor-agent-toast__msg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.flavor-agent-toast__title {
+  font-weight: 600;
+  color: #fff;
+}
+
+.flavor-agent-toast__detail {
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--flavor-agent-editor-font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.flavor-agent-toast__error-hint {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  flex-basis: 100%;
+}
+
+.flavor-agent-toast .flavor-agent-toast__action.components-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  border-radius: var(--wpds-border-radius-sm, 2px);
+  cursor: pointer;
+  flex-shrink: 0;
+  pointer-events: auto;
+  box-shadow: none;
+}
+
+.flavor-agent-toast .flavor-agent-toast__action.components-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #fff;
+}
+
+.flavor-agent-toast .flavor-agent-toast__action.components-button[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.flavor-agent-toast .flavor-agent-toast__action.components-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--flavor-agent-color-ink),
+    0 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.flavor-agent-toast .flavor-agent-toast__action.components-button svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.flavor-agent-toast .flavor-agent-toast__close.components-button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: var(--wpds-border-radius-sm, 2px);
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  flex-shrink: 0;
+  pointer-events: auto;
+  box-shadow: none;
+}
+
+.flavor-agent-toast .flavor-agent-toast__close.components-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.flavor-agent-toast .flavor-agent-toast__close.components-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--flavor-agent-color-ink),
+    0 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.flavor-agent-toast .flavor-agent-toast__close.components-button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.flavor-agent-toast__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--flavor-agent-color-accent);
+  transform-origin: left center;
+  animation: flavor-agent-toast-progress 6s linear forwards;
+}
+
+.flavor-agent-toast--error .flavor-agent-toast__progress {
+  background: #ff8b8b;
+  animation-duration: 8s;
+}
+
+.flavor-agent-toast--warning .flavor-agent-toast__progress {
+  background: #f0c267;
+}
+
+.flavor-agent-toast__progress.is-paused {
+  animation-play-state: paused;
+}
+
+@keyframes flavor-agent-toast-progress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+/* Reduced-motion: WCAG 2.2.1 — Timing Adjustable.
+ * The progress bar is purely visual; under reduced-motion we hide it because
+ * the existing `prefers-reduced-motion` rule in tokens.css collapses the 6s
+ * animation to an instant jump-to-empty, which would misrepresent the dismiss
+ * timing. The component also skips scheduling its `setTimeout` under reduced-
+ * motion, so the toast persists until Undo or Close is clicked.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .flavor-agent-toast {
+    animation: none;
+  }
+
+  .flavor-agent-toast__progress {
+    display: none;
+  }
 }

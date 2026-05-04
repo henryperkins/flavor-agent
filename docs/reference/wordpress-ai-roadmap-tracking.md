@@ -263,7 +263,7 @@ These are not currently on project 240, but they are tracked in upstream repos a
 - `WordPress/wp-ai-client#66` — Lifecycle events `wp_ai_client_before_generate_result` and `wp_ai_client_after_generate_result` never fire. When fixed they become the natural place for `inc/Activity/Repository.php` to subscribe instead of wrapper-level instrumentation.
 - `WordPress/abilities-api#160` — Question of archiving the standalone repo since the Abilities API merged into core. Stay subscribed for the migration message.
 - `WordPress/abilities-api#149` — Proposal to add input/output and permission/logging filters around ability invocation. Once filters land, do not double-log: wire `inc/Activity/Repository.php` writes through the lifecycle filter rather than wrapper code.
-- `WordPress/abilities-api#75` — Proposal that REST endpoints themselves become abilities. If this lands, the parallel surface in `inc/REST/Agent_Controller.php` (8 routes mirroring 20 abilities) becomes redundant.
+- `WordPress/abilities-api#75` — Proposal that REST endpoints themselves become abilities. If this lands, the parallel surface in `inc/REST/Agent_Controller.php` (10 routes; 8 mirror registered abilities while `/activity` and `/activity/{id}/undo` are activity-storage adapters) becomes redundant.
 - `WordPress/abilities-api#38` — In progress, High priority. Convenient filtering of registered abilities by category, namespace, and metadata. Flavor Agent registers under nine categories; once filtering is canonical, internal listings should migrate.
 
 ## Out Of Scope At Snapshot

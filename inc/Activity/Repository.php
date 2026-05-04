@@ -2136,10 +2136,15 @@ final class Repository {
 				'operationType'      => $operation_type,
 				'operationTypeLabel' => $operation_label,
 				'provider'           => $request_meta['provider'],
+				'model'              => $request_meta['model'],
 				'providerPath'       => $request_meta['providerPath'],
 				'configurationOwner' => $request_meta['configurationOwner'],
 				'credentialSource'   => $request_meta['credentialSource'],
 				'selectedProvider'   => $request_meta['selectedProvider'],
+				'requestAbility'     => $request_meta['requestAbility'],
+				'requestRoute'       => $request_meta['requestRoute'],
+				'requestReference'   => $request_reference,
+				'requestPrompt'      => $request_prompt,
 				'dayKey'             => $timestamp_data['dayKey'],
 				'timestampUnix'      => $timestamp_data['timestampUnix'],
 				'timestamp'          => self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
@@ -2362,8 +2367,63 @@ final class Repository {
 		$stored_row      = $stored_rows[ $activity_id ] ?? null;
 		$entry           = Serializer::hydrate_row( is_array( $stored_row ) ? $stored_row : $row );
 		$entry['status'] = (string) ( $record['meta']['status'] ?? 'applied' );
+		$entry['admin']  = self::get_public_admin_entry_meta(
+			is_array( $record['meta'] ?? null ) ? $record['meta'] : []
+		);
 
 		return $entry;
+	}
+
+	/**
+	 * @param array<string, mixed> $meta
+	 * @return array{
+	 *   status: string,
+	 *   statusLabel: string,
+	 *   surface: string,
+	 *   surfaceLabel: string,
+	 *   postType: string,
+	 *   entityId: string,
+	 *   blockPath: string,
+	 *   userId: int,
+	 *   userLabel: string,
+	 *   operationType: string,
+	 *   operationTypeLabel: string,
+	 *   provider: string,
+	 *   model: string,
+	 *   providerPath: string,
+	 *   configurationOwner: string,
+	 *   credentialSource: string,
+	 *   selectedProvider: string,
+	 *   requestAbility: string,
+	 *   requestRoute: string,
+	 *   requestReference: string,
+	 *   requestPrompt: string
+	 * }
+	 */
+	private static function get_public_admin_entry_meta( array $meta ): array {
+		return [
+			'status'             => trim( (string) ( $meta['status'] ?? '' ) ),
+			'statusLabel'        => trim( (string) ( $meta['statusLabel'] ?? '' ) ),
+			'surface'            => trim( (string) ( $meta['surface'] ?? '' ) ),
+			'surfaceLabel'       => trim( (string) ( $meta['surfaceLabel'] ?? '' ) ),
+			'postType'           => trim( (string) ( $meta['postType'] ?? '' ) ),
+			'entityId'           => trim( (string) ( $meta['entityId'] ?? '' ) ),
+			'blockPath'          => trim( (string) ( $meta['blockPath'] ?? '' ) ),
+			'userId'             => (int) ( $meta['userId'] ?? 0 ),
+			'userLabel'          => trim( (string) ( $meta['userLabel'] ?? '' ) ),
+			'operationType'      => trim( (string) ( $meta['operationType'] ?? '' ) ),
+			'operationTypeLabel' => trim( (string) ( $meta['operationTypeLabel'] ?? '' ) ),
+			'provider'           => trim( (string) ( $meta['provider'] ?? '' ) ),
+			'model'              => trim( (string) ( $meta['model'] ?? '' ) ),
+			'providerPath'       => trim( (string) ( $meta['providerPath'] ?? '' ) ),
+			'configurationOwner' => trim( (string) ( $meta['configurationOwner'] ?? '' ) ),
+			'credentialSource'   => trim( (string) ( $meta['credentialSource'] ?? '' ) ),
+			'selectedProvider'   => trim( (string) ( $meta['selectedProvider'] ?? '' ) ),
+			'requestAbility'     => trim( (string) ( $meta['requestAbility'] ?? '' ) ),
+			'requestRoute'       => trim( (string) ( $meta['requestRoute'] ?? '' ) ),
+			'requestReference'   => trim( (string) ( $meta['requestReference'] ?? '' ) ),
+			'requestPrompt'      => trim( (string) ( $meta['requestPrompt'] ?? '' ) ),
+		];
 	}
 
 	/**

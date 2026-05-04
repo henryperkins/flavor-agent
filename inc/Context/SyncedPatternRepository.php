@@ -170,8 +170,13 @@ final class SyncedPatternRepository {
 
 		$post_id   = absint( $post->ID ?? 0 );
 		$post_type = sanitize_key( (string) ( $post->post_type ?? '' ) );
+		$status    = sanitize_key( (string) ( $post->post_status ?? '' ) );
 
 		if ( $post_id <= 0 || 'wp_block' !== $post_type ) {
+			return null;
+		}
+
+		if ( 'publish' !== $status ) {
 			return null;
 		}
 

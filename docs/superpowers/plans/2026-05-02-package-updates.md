@@ -1,6 +1,6 @@
 # Package Updates Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Follow the execution protocol in [../reference/agentic-plan-implementation-guide.md](../reference/agentic-plan-implementation-guide.md). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring `package.json` and `package-lock.json` to current versions in four bisectable commits, deferring `composer.json` PHPCS bump (upstream-blocked) and capturing baselines so any regression can be attributed to one stage.
 

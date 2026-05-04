@@ -3,7 +3,7 @@
 ```text
 Review Flavor Agent template recommendations in this repository with the same evidence-first stance as the block recommendation review.
 
-Treat this as a code review, not an implementation pass. Do not edit files. Findings must lead, ordered by severity, with exact file/line references and a clear explanation of the user-visible or security impact.
+Follow the shared review protocol at [../reference/review-response-protocol.md](../reference/review-response-protocol.md).
 
 Scope:
 - Primary surface: flavor-agent/recommend-template
@@ -35,10 +35,5 @@ Focus areas:
 - missing tests for shared contracts, freshness guards, validation, or docs drift
 - docs that overclaim behavior not enforced by code
 
-Output format:
-1. Findings first, ordered by severity (P0, P1, P2, P3).
-2. Each finding must include exact file/line references, impact, and the smallest credible fix direction.
-3. Add "Open Questions / Assumptions" only if needed.
-4. Add a short "Verification Reviewed" section listing the tests/docs you inspected and any commands you ran.
-5. If no findings are confirmed, say that plainly and identify remaining test gaps or residual risk.
+Output format: follow [../reference/review-response-protocol.md](../reference/review-response-protocol.md).
 ```

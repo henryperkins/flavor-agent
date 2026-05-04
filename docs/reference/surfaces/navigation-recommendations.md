@@ -16,21 +16,10 @@ clearly non-mutating.
 
 ## Stop Line
 
-Ship:
+Canonical scope: [release-stop-lines.md](./release-stop-lines.md#navigation-recommendations)
 
-- Embedded `Navigation Ideas` inside the selected navigation block
-  recommendation surface.
-- Standalone/fallback advisory shell only where already supported.
-- Server-side freshness/signature checks.
-- Read-only diagnostic activity rows.
+No additional surface-specific deltas are currently defined.
 
-Do not ship:
-
-- Apply.
-- Undo.
-- Menu restructuring.
-- Site-wide navigation planner.
-- Separate navigation agent identity.
 
 ## Next Steps
 

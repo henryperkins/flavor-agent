@@ -161,18 +161,18 @@ Renders a review-before-apply confirmation panel for executable AI operations. D
 
 These components provide the reusable top-of-panel shell for the full recommendation surfaces.
 
-- `SurfacePanelIntro.js` renders the short surface-specific intro copy block.
+- `SurfacePanelIntro.js` renders the short surface-specific intro copy block for expanded full-panel shells. Compact shells may replace it with `SurfaceScopeBar`, composer helper text, and short inline notes when the surface contract remains clear.
 - `SurfaceScopeBar.js` renders current/stale scope state plus the refresh affordance when a result exists. On executable surfaces, freshness still starts with local request-signature comparison, then hybrid review surfaces (template/template-part/Global Styles/Style Book) can layer server review staleness from `reviewContextSignature` revalidation while block layers background server staleness from the wrapped REST `payload.resolvedContextSignature`. Store apply actions continue using server `resolvedContextSignature` revalidation before mutation. Stale-state messaging is intentionally surface-owned; the shared status notice does not render stale notices.
 - `SurfaceComposer.js` wraps the prompt field, starter prompts, submit action, helper text, and keyboard submission handling. Executable surfaces hydrate the composer prompt from the stored ready-result prompt once per result token so preloaded results start in a fresh state and only become stale after the user edits the prompt or the live context signature changes.
 - Keyboard-only verification notes for `SurfaceComposer`: (1) tab order remains prompt textarea -> starter prompts (if present) -> submit action, (2) prompt focus ring stays clearly visible in default and high-contrast admin themes, and (3) visible labels/helper copy continue to communicate purpose even when placeholder text is absent.
 
-**Consumers:** Block Inspector, Content, Template, Template-Part, Global Styles, Style Book (6 surfaces). Delegated block Inspector subpanels render passive `SuggestionChips` only; they do not reuse the full panel shell.
+**Consumers:** Template-Part, Global Styles, Style Book, plus Navigation standalone variants for `SurfacePanelIntro`; Block, Content, Template, Template-Part, Navigation, Global Styles, and Style Book consume the broader scope/composer shell pieces with surface-specific compact variants. Delegated block Inspector subpanels render passive `SuggestionChips` only; they do not reuse the full panel shell.
 
 ### `src/components/RecommendationHero.js` and `RecommendationLane.js`
 
 These components provide the shared suggestion presentation layers used before review/apply or advisory follow-through:
 
-- `RecommendationHero.js` renders the featured next recommendation at the top of a fresh result set.
+- `RecommendationHero.js` renders either a featured fresh result on expanded shells, a stale-refresh call to action on compact executable shells, or the generated-result body on the content surface.
 - `RecommendationLane.js` renders grouped executable or lightweight embedded suggestions below the hero.
 
 **Consumers:** Block Inspector, Content, Navigation, Template, Template-Part, Global Styles, Style Book (7 surfaces)

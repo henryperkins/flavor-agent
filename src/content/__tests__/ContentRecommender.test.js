@@ -162,10 +162,10 @@ describe( 'ContentRecommender', () => {
 			'What should Flavor Agent do with this post?'
 		);
 		expect( text ).toContain(
-			'Works from a title, short brief, or rough outline. Copy any useful text into the editor yourself.'
+			'Generated text is for review and manual copy.'
 		);
 
-		// The composer label must be visually rendered (not hidden off-screen).
+		// The compact composer keeps the accessible label but hides it visually.
 		const labelSpan = Array.from(
 			getContainer().querySelectorAll( 'span' )
 		).find(
@@ -174,8 +174,8 @@ describe( 'ContentRecommender', () => {
 				'What should Flavor Agent do with this post?'
 		);
 		expect( labelSpan ).not.toBeUndefined();
-		expect( labelSpan.style.position ).not.toBe( 'absolute' );
-		expect( labelSpan.style.left ).not.toBe( '-9999px' );
+		expect( labelSpan.style.position ).toBe( 'absolute' );
+		expect( labelSpan.style.left ).toBe( '-9999px' );
 
 		expect( text ).toContain( 'Generate Draft Text' );
 		expect( text ).not.toContain( 'Current document' );
@@ -288,7 +288,6 @@ describe( 'ContentRecommender', () => {
 
 		const text = getContainer().textContent;
 
-		expect( text ).toContain( 'Generated Content Guidance' );
 		expect( text ).toContain( 'Retail floors to agent workflows' );
 		expect( text ).toContain(
 			'Lead with the concrete progression before the abstraction.'
@@ -304,9 +303,7 @@ describe( 'ContentRecommender', () => {
 			'WordPress changed. Cloud changed. The customer still needed the thing to work.'
 		);
 		expect( text ).toContain( 'Recent Content Requests' );
-		expect( text ).toContain(
-			'Editorial guidance only. Review the generated text and copy anything you want into the editor manually.'
-		);
+		expect( text ).not.toContain( 'Generated Content Guidance' );
 
 		const copyButton = Array.from(
 			getContainer().querySelectorAll( 'button' )

@@ -39,6 +39,40 @@ describe( 'buildRecommendedPatterns', () => {
 		] );
 	} );
 
+	it( 'matches Cloudflare AI Search synced recommendations by current core/block name', () => {
+		expect(
+			buildRecommendedPatterns(
+				[
+					{
+						name: 'core/block/94',
+						source: 'synced',
+						syncedPatternId: 94,
+						reason: 'Current readable synced pattern.',
+					},
+				],
+				[
+					{
+						name: 'core/block/94',
+						title: 'Current Shared Banner',
+					},
+				]
+			)
+		).toEqual( [
+			{
+				pattern: {
+					name: 'core/block/94',
+					title: 'Current Shared Banner',
+				},
+				recommendation: {
+					name: 'core/block/94',
+					source: 'synced',
+					syncedPatternId: 94,
+					reason: 'Current readable synced pattern.',
+				},
+			},
+		] );
+	} );
+
 	it( 'returns empty for ranked names missing from allowed patterns', () => {
 		expect(
 			buildRecommendedPatterns(
@@ -88,6 +122,7 @@ describe( 'getPatternRecommendationInsights', () => {
 						sourceSignals: [
 							'qdrant_semantic',
 							'qdrant_structural',
+							'cloudflare_ai_search',
 							'llm_ranker',
 						],
 						rankingHint: {
@@ -99,6 +134,7 @@ describe( 'getPatternRecommendationInsights', () => {
 		).toEqual( [
 			'Semantic match',
 			'Structural fit',
+			'AI Search match',
 			'Model ranked',
 			'Category: hero',
 			'Allowed here',

@@ -15,20 +15,10 @@ permission gates are explicit.
 
 ## Stop Line
 
-Ship:
+Canonical scope: [release-stop-lines.md](./release-stop-lines.md#helper-abilities-and-rest)
 
-- Surface-specific recommendation abilities.
-- Read-only helper abilities that provide context, diagnostics, and
-  discoverability.
-- Permission-gated synced-pattern, theme, token, and docs grounding helpers.
-- Accurate annotations for supported read-only behavior.
+No additional surface-specific deltas are currently defined.
 
-Do not ship:
-
-- A general external tool catalog.
-- Mutating helper abilities outside first-party review/apply contracts.
-- Provider-routing abilities.
-- Site-agent orchestration abilities.
 
 ## Next Steps
 

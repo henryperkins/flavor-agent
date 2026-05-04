@@ -5,6 +5,7 @@ Use this when pattern recommendations are failing in production and you need to 
 - backend configuration problems
 - pattern-index drift or stalled rebuilds
 - Qdrant collection health issues
+- Cloudflare AI Search item sync or schema issues
 - weak raw retrieval
 - LLM reranking problems
 
@@ -12,14 +13,21 @@ This is the operational companion to `docs/features/pattern-recommendations.md`.
 
 ## Fast Mental Model
 
+Check the selected pattern backend first:
+
+| Backend | First debugging path |
+| --- | --- |
+| `qdrant` | Inspect embeddings, Qdrant health, collection compatibility, and raw Qdrant hits. |
+| `cloudflare_ai_search` | Inspect private AI Search credentials, filterable metadata schema, item sync state, search chunks, filters, and synced-pattern rehydration. |
+
 The current pattern pipeline has four distinct stages:
 
-1. `PatternIndex::sync()` in `inc/Patterns/PatternIndex.php` builds and maintains the Qdrant collection
+1. `PatternIndex::sync()` in `inc/Patterns/PatternIndex.php` builds and maintains the selected pattern backend corpus
 2. `PatternAbilities::recommend_patterns()` in `inc/Abilities/PatternAbilities.php` checks visible-pattern scope, runtime state, backend readiness, and synced-pattern access
-3. `QdrantClient::search()` in `inc/AzureOpenAI/QdrantClient.php` retrieves semantic and structural candidates
+3. `QdrantClient::search()` or `PatternSearchClient::search_patterns()` retrieves candidates
 4. `ResponsesClient::rank()` in `inc/AzureOpenAI/ResponsesClient.php` reranks those candidates through the WordPress AI Client / Connectors runtime into the final recommendation list
 
-The embedding provider behind Qdrant can be Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI. Workers AI is not used as an implicit fallback from the other provider selections.
+The embedding provider behind Qdrant can be Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI. Workers AI is not used as an implicit fallback from the other provider selections. The Cloudflare AI Search backend uses Cloudflare-managed embeddings/indexing and does not call `EmbeddingClient` or `QdrantClient`.
 
 If you identify which stage is failing, the rest of the debugging path usually becomes obvious.
 
@@ -30,6 +38,10 @@ When the system is healthy, all of the following should be true:
 - the stored pattern index state reports `status: ready`
 - `last_synced_at` is populated
 - `indexed_count` is non-zero and matches the collection point count closely for registered patterns plus public-safe published synced/user `wp_block` patterns
+- `pattern_backend` matches the selected backend in `Settings > Flavor Agent`
+
+For Qdrant, the following should be true:
+
 - `QdrantClient::validate_configuration()` returns `true`
 - `QdrantClient::probe_health( 'readyz' )` returns HTTP `200`
 - the collection definition reports `status: green`
@@ -40,7 +52,16 @@ When the system is healthy, all of the following should be true:
 - synced/user pattern hits use payload names like `core/block/{id}` with `source: synced`
 - final recommendations either preserve those hits or improve their order after request-time synced-pattern rehydration
 
-Small collections have one easy-to-misread detail:
+For Cloudflare AI Search, the following should be true:
+
+- `PatternSearchClient::validate_configuration()` returns `true`
+- the private AI Search instance has `pattern_name`, `candidate_type`, `source`, `synced_id`, and `public_safe` declared as filterable metadata
+- `PatternSearchClient::list_pattern_item_ids()` returns stable item IDs for the current corpus after sync
+- raw AI Search chunks for a prompt include relevant patterns and metadata with names in the current `visiblePatternNames` scope
+- synced/user pattern hits use payload names like `core/block/{id}` with `source: synced`
+- final recommendations either preserve those hits or improve their order after request-time synced-pattern rehydration
+
+Small Qdrant collections have one easy-to-misread detail:
 
 - `indexed_vectors_count` can stay `0` while the collection is still healthy
 - this repo creates small pattern catalogs, and the observed optimizer config uses `indexing_threshold: 10000`
@@ -62,6 +83,10 @@ Focus on:
 - `last_synced_at`
 - `indexed_count`
 - `qdrant_collection`
+- `pattern_backend`
+- `cloudflare_ai_search_namespace`
+- `cloudflare_ai_search_instance`
+- `cloudflare_ai_search_signature`
 - `embedding_dimension`
 - `embedding_signature`
 - `last_error`
@@ -70,7 +95,9 @@ Focus on:
 - `last_error_retryable`
 - `stale_reasons`
 
-### 2. Validate the three required backends
+### 2. Validate the selected backend and chat
+
+For Qdrant:
 
 ```bash
 wp eval 'var_export( \FlavorAgent\AzureOpenAI\QdrantClient::validate_configuration() );'
@@ -88,7 +115,21 @@ Interpretation:
 - if embeddings validation fails, both sync and live retrieval are blocked
 - if Connectors/text-generation validation fails, raw retrieval can still be healthy while final recommendations fail
 
-### 3. Inspect the live collection definition
+For Cloudflare AI Search:
+
+```bash
+wp eval 'var_export( \FlavorAgent\Cloudflare\PatternSearchClient::validate_configuration() );'
+
+wp eval 'var_export( \FlavorAgent\AzureOpenAI\ResponsesClient::validate_configuration() );'
+```
+
+Interpretation:
+
+- if validation reports missing credentials, fix the private pattern AI Search settings first
+- if validation reports metadata/filter schema errors, add the five filterable metadata fields in the Cloudflare dashboard before the first sync
+- if Connectors/text-generation validation fails, raw retrieval can still be healthy while final recommendations fail
+
+### 3. Inspect the live Qdrant collection definition
 
 Use the collection name stored in the runtime state and fetch the collection definition directly:
 
@@ -145,7 +186,7 @@ Healthy output should show:
 
 Use `GET /collections/{name}`, not `GET /collections/{name}/index`, for this summary.
 
-### 4. Inspect optimizer activity
+### 4. Inspect Qdrant optimizer activity
 
 ```bash
 wp eval '
@@ -178,7 +219,7 @@ Interpretation:
 
 ### 5. Compare raw retrieval to final output
 
-First inspect raw Qdrant hits:
+For Qdrant, first inspect raw Qdrant hits:
 
 ```bash
 wp eval '
@@ -280,6 +321,36 @@ Interpretation:
 - if raw Qdrant hits are bad, the problem is retrieval, indexing, or the collection contents
 - if raw Qdrant hits are good but final recommendations are bad, the problem is reranking or post-rerank filtering
 
+For Cloudflare AI Search, inspect raw chunks first:
+
+```bash
+wp eval '
+$result = \FlavorAgent\Cloudflare\PatternSearchClient::search_patterns(
+	"hero section with image and call to action",
+	array( "theme/hero", "theme/call-to-action", "core/block/123" ),
+	8
+);
+
+if ( is_wp_error( $result ) ) {
+	echo wp_json_encode(
+		array(
+			"error"   => $result->get_error_code(),
+			"message" => $result->get_error_message(),
+			"data"    => $result->get_error_data(),
+		)
+	);
+	return;
+}
+
+echo wp_json_encode( $result );
+'
+```
+
+Interpretation:
+
+- if raw chunks are empty, confirm the `visiblePatternNames` filter, filterable metadata schema, and item sync state
+- if raw chunks are good but final recommendations are empty, inspect synced-pattern access and the active backend threshold
+
 ## Symptom Runbook
 
 ### `missing_credentials`
@@ -287,6 +358,7 @@ Interpretation:
 What it means:
 
 - pattern recommendations do not have embeddings, chat, Qdrant URL, or Qdrant key configured
+- or the selected Cloudflare AI Search pattern backend does not have private account, namespace, instance, or token configured
 
 Where it is enforced:
 
@@ -298,11 +370,16 @@ What to check:
 - `Provider::chat_configured()`
 - `flavor_agent_qdrant_url`
 - `flavor_agent_qdrant_key`
+- `flavor_agent_pattern_retrieval_backend`
+- `flavor_agent_cloudflare_pattern_ai_search_account_id`
+- `flavor_agent_cloudflare_pattern_ai_search_namespace`
+- `flavor_agent_cloudflare_pattern_ai_search_instance_id`
+- `flavor_agent_cloudflare_pattern_ai_search_api_token`
 
 Most likely fix:
 
 - configure text generation in `Settings > Connectors`
-- configure plugin-owned embeddings and Qdrant in `Settings > Flavor Agent`
+- configure the selected pattern backend in `Settings > Flavor Agent`: plugin-owned embeddings and Qdrant for Qdrant, or private Cloudflare AI Search for AI Search
 - if a connector-backed provider is pinned, confirm that connector path is still available
 
 ### `index_warming`
@@ -321,6 +398,10 @@ What to check:
 - `status`
 - `stale_reasons`
 - `qdrant_collection`
+- `pattern_backend`
+- `cloudflare_ai_search_namespace`
+- `cloudflare_ai_search_instance`
+- `cloudflare_ai_search_signature`
 - `embedding_signature`
 - `last_attempt_at`
 - scheduled cron events for `flavor_agent_reindex_patterns`
@@ -335,7 +416,8 @@ wp transient get flavor_agent_sync_lock
 
 Interpretation:
 
-- `embedding_signature_changed`, `collection_name_changed`, or `collection_size_mismatch` means configuration drift, not transient request failure
+- `embedding_signature_changed`, `collection_name_changed`, or `collection_size_mismatch` means Qdrant configuration drift, not transient request failure
+- `pattern_backend_changed`, `cloudflare_ai_search_instance_changed`, or `cloudflare_ai_search_signature_changed` means selected backend or private AI Search configuration drift
 - no scheduled cron event while the state stays stale suggests background rebuilds are not being queued or executed
 - a long-lived sync lock suggests the rebuild path did not clean up correctly
 
@@ -362,6 +444,7 @@ Most likely root causes:
 - embedding request failure
 - Qdrant collection creation or write failure
 - Qdrant scroll, upsert, or delete failure during sync
+- Cloudflare AI Search validation, item list, upload, or delete failure during sync
 
 ### Empty recommendations with no hard error
 
@@ -373,6 +456,7 @@ Most likely causes:
 
 - `visiblePatternNames` was missing or empty
 - raw Qdrant retrieval returned no usable matches
+- raw Cloudflare AI Search retrieval returned no usable chunks
 - synced/user candidates were dropped during request-time `read_post` rehydration
 - reranker scores fell below the score threshold
 
@@ -388,6 +472,29 @@ Important nuance:
 - this is not automatically a Qdrant failure
 - raw retrieval can succeed while thresholding still removes every final result
 - raw synced hits can also be correct while current post access removes them before ranking
+- Cloudflare AI Search scores use their own scale. The AI Search backend reads `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search`, while Qdrant reads `flavor_agent_pattern_recommendation_threshold`.
+
+### Calibrate backend thresholds
+
+Workers AI embeddings and Cloudflare AI Search scores are not equivalent to OpenAI `text-embedding-3-*` embeddings plus Qdrant cosine scores. Treat thresholds as backend-specific operational settings, not portable quality numbers.
+
+Use a representative visible scope and prompt, then compare raw retrieval against final renderable recommendations:
+
+```bash
+wp eval 'echo wp_json_encode( \FlavorAgent\Patterns\PatternIndex::sync() );'
+wp eval 'echo wp_json_encode( \FlavorAgent\Abilities\PatternAbilities::recommend_patterns( array( "postType" => "post", "visiblePatternNames" => array( "theme/hero", "theme/footer-callout" ), "prompt" => "hero for a product launch" ) ) );'
+```
+
+Record this evidence for each backend you tune:
+
+- backend (`qdrant` or `cloudflare_ai_search`)
+- embedding model for Qdrant or AI Search namespace and instance
+- active threshold option and value
+- number of candidates before rerank
+- number of renderable final recommendations
+- visible scope size
+
+For Qdrant, tune `flavor_agent_pattern_recommendation_threshold`. For Cloudflare AI Search, tune `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search`; its RRF-fused hybrid scores are independent from Qdrant similarity scores.
 
 ### Raw Qdrant hits look broad or irrelevant
 
@@ -412,6 +519,26 @@ If raw hits are wrong:
 - inspect the stored pattern payloads
 - inspect the embedding query text
 - confirm the collection belongs to the active embedding signature
+
+### Raw Cloudflare AI Search chunks look broad or irrelevant
+
+What it usually means:
+
+- the private AI Search instance is reachable, but retrieval precision or filtering is weak for the current context
+
+What to compare:
+
+- does the request include the expected `visiblePatternNames`
+- did the uploaded pattern markdown include title, description, categories, block types, template types, traits, and sanitized content
+- are the five metadata fields filterable in the Cloudflare dashboard, especially `pattern_name`
+- does the active threshold come from `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search`
+
+If raw chunks are wrong:
+
+- inspect the uploaded item metadata and markdown body
+- confirm `PatternIndex::sync()` uploaded changed items with stable item IDs and `wait_for_completion=true`
+- confirm stale remote item IDs were deleted after sync
+- confirm the AI Search instance/namespace in runtime state matches the selected settings
 
 ### Raw Qdrant hits look good but final recommendations still look wrong
 
@@ -445,8 +572,9 @@ Reason:
 ## Fast Decision Rules
 
 - If backend validation fails, fix configuration first.
-- If the runtime state is stale or erroring, fix the rebuild path before looking at ranking quality.
-- If the collection is green and raw hits look good, stop blaming Qdrant.
+- If the runtime state is stale or erroring, fix the selected backend rebuild path before looking at ranking quality.
+- If the Qdrant collection is green and raw hits look good, stop blaming Qdrant.
+- If Cloudflare AI Search raw chunks are relevant and in visible scope, stop blaming AI Search.
 - If raw hits are good but final picks are poor, debug `ResponsesClient` and thresholding.
 - If final picks are empty without errors, inspect `visiblePatternNames`, synced-pattern access, and score filtering before changing infrastructure.
 

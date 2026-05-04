@@ -99,7 +99,7 @@ The expected local runtime includes these active slugs:
 - `mcp-adapter`
 - `plugin-check`
 
-Configure text-generation credentials in `Settings > Connectors`. The OpenAI and Anthropic provider plugins own their provider-specific setup; do not use Flavor Agent's Azure/OpenAI Native embedding settings as a replacement for the Connectors runtime. Pattern recommendations still need a plugin-owned retrieval backend configured in `Settings > Flavor Agent`: Qdrant for vector search, or a private Cloudflare AI Search instance for pattern retrieval.
+Configure text-generation credentials in `Settings > Connectors`. The OpenAI and Anthropic provider plugins own their provider-specific setup; do not use Flavor Agent's Azure/OpenAI Native embedding settings as a replacement for the Connectors runtime. Pattern recommendations still need a retrieval backend configured in `Settings > Flavor Agent`: Qdrant with plugin-owned embeddings, or a private Cloudflare AI Search instance for pattern retrieval.
 
 ## Cloudflare Pattern AI Search Metadata
 
