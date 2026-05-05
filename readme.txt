@@ -18,6 +18,7 @@ Results are recommendations, generated text, or review-first suggestions. Flavor
 
 = Setup ownership =
 
+* Recommendation surfaces require the WordPress AI plugin (`ai`) to be installed and active because Flavor Agent registers as a downstream AI feature and ability provider.
 * Text generation for recommendations is configured through `Settings > Connectors` and the WordPress AI Client.
 * Pattern retrieval is configured in `Settings > Flavor Agent`. The Qdrant backend uses plugin-owned Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI embeddings plus Qdrant. The Cloudflare AI Search backend uses a private site-owner pattern AI Search instance instead of plugin-owned embeddings or Qdrant.
 * Pattern sync runs only after the selected pattern backend is configured; administrators can also start a sync manually from `Settings > Flavor Agent`.
@@ -42,10 +43,11 @@ The canonical disclosure inventory is maintained in `docs/reference/external-ser
 == Installation ==
 
 1. Upload the plugin files to the `/wp-content/plugins/flavor-agent` directory, or install the plugin through the WordPress plugins screen.
-2. Activate the plugin through the `Plugins` screen in WordPress.
-3. Open `Settings > Connectors` to configure the shared text-generation provider used by recommendation surfaces.
-4. Optional: open `Settings > Flavor Agent` to configure a pattern retrieval backend, docs grounding limits/overrides, and guidelines.
-5. Optional: run `Sync Pattern Catalog` only after the selected pattern backend is configured.
+2. Install and activate the WordPress AI plugin (`ai`).
+3. Activate Flavor Agent through the `Plugins` screen in WordPress.
+4. Open `Settings > Connectors` to configure the shared text-generation provider used by recommendation surfaces.
+5. Optional: open `Settings > Flavor Agent` to configure a pattern retrieval backend, docs grounding limits/overrides, and guidelines.
+6. Optional: run `Sync Pattern Catalog` only after the selected pattern backend is configured.
 
 == Frequently Asked Questions ==
 
@@ -61,11 +63,21 @@ No. Content recommendations are generated text and editorial guidance only. Revi
 
 Use `Settings > Connectors` for text-generation providers. Use `Settings > Flavor Agent` for pattern retrieval backends, plugin-owned Qdrant embeddings, docs grounding options, and guidelines.
 
+= How do external integrations call recommendation surfaces? =
+
+Use the WordPress Abilities API. The legacy private `POST /wp-json/flavor-agent/v1/recommend-*` endpoints were removed before the 0.2.0 contract. Call `POST /wp-json/wp-abilities/v1/abilities/flavor-agent/recommend-*/run` with the Flavor Agent payload wrapped in `{ "input": { ... } }`.
+
 = What data is sent to AI providers? =
 
 Only data needed for the requested surface is sent after setup or explicit user action. This can include prompts, post/page content, selected block context, template/navigation/style context, guidelines, docs snippets, pattern text, and pattern metadata. See the External services section above for service-specific details.
 
 == Changelog ==
+
+= 0.2.0 =
+* Breaking: removed private `POST /wp-json/flavor-agent/v1/recommend-*` endpoints. Recommendation integrations now use `POST /wp-json/wp-abilities/v1/abilities/flavor-agent/recommend-*/run`.
+* Added explicit dependency on the WordPress AI plugin (`ai`) for recommendation UI and feature registration.
+* Added dedicated MCP Adapter server support for direct Flavor Agent recommendation tools when the MCP Adapter is active.
+* Documented the per-post `edit_post` permission check for post-scoped recommendation requests.
 
 = 0.1.0 =
 * Initial release.

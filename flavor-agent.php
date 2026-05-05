@@ -9,6 +9,7 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 7.0
  * Requires PHP: 8.0
+ * Requires Plugins: ai
  */
 
 declare(strict_types=1);
