@@ -253,4 +253,41 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 
 		$this->assertCount( 2, $entries );
 	}
+
+	public function test_execute_persists_block_request_diagnostic_with_block_path(): void {
+		RecommendationAbilityExecution::execute(
+			'block',
+			'flavor-agent/recommend-block',
+			[
+				'editorContext' => [
+					'block' => [
+						'name'      => 'core/paragraph',
+						'blockPath' => [ 0, '2', -1, 'bad' ],
+					],
+				],
+				'clientId'      => 'block-a',
+				'document'      => [
+					'scopeKey' => 'post:42',
+				],
+				'clientRequest' => [
+					'sessionId'    => 'session-1',
+					'requestToken' => 1,
+					'abortId'      => 'block-a',
+					'scopeKey'     => 'post:42',
+				],
+			],
+			static fn(): array => [
+				'block'       => [],
+				'settings'    => [],
+				'styles'      => [],
+				'explanation' => 'Block request diagnostic.',
+			]
+		);
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+		$this->assertCount( 1, $entries );
+
+		$target = json_decode( (string) ( $entries[0]['target_json'] ?? '' ), true );
+		$this->assertSame( [ 0, 2 ], $target['blockPath'] ?? null );
+	}
 }

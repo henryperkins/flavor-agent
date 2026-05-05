@@ -18,6 +18,8 @@ Use it when you need to answer:
 
 Activity history is also maintained as a scoped client session. `loadActivitySession()` hydrates the current scope, merges any pending local entries, and then refreshes from the server-backed activity repository for that same scope.
 
+When server hydration requests `groupBySurface=true`, the repository returns the latest bounded window for each surface independently. A noisy read-only surface such as pattern request diagnostics must not evict executable history from template, block, style, or other surfaces in the same scope.
+
 ## Undo States
 
 | State | Meaning |

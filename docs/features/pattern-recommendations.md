@@ -14,7 +14,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 ## Surfacing Conditions
 
 - `window.flavorAgentData.canRecommendPatterns` must be true; that requires the selected pattern backend to be configured in `Settings > Flavor Agent` and a usable text-generation provider in `Settings > Connectors`
-- Qdrant storage readiness requires the Embedding Model (OpenAI Native or explicitly selected Cloudflare Workers AI) plus Qdrant URL/key
+- Qdrant storage readiness requires the Cloudflare Workers AI Embedding Model plus Qdrant URL/key
 - Cloudflare AI Search backend readiness requires a private site-owner Cloudflare AI Search pattern instance and token; it does not use plugin-owned embeddings or Qdrant
 - A post type must be available from `core/editor`
 - Passive fetch runs when the editor loads
@@ -32,7 +32,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state
 6. `PatternIndex::sync()` maintains the selected retrieval backend corpus made from registered block patterns plus public-safe published user `wp_block` patterns across sync states normalized to Gutenberg's user-pattern name format, `core/block/{id}`
 7. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` without foreground docs AI Search warming, retrieves candidates through the selected pattern backend, rehydrates synced candidates from current published readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()`, and filters out low-confidence results
-8. The Qdrant backend embeds the pattern query through the selected plugin-owned embedding provider and retrieves semantic and structural candidates from Qdrant
+8. The Qdrant backend embeds the pattern query through Cloudflare Workers AI and retrieves semantic and structural candidates from Qdrant
 9. The Cloudflare AI Search backend sends the query and `visiblePatternNames` filter to the private pattern AI Search instance, using Cloudflare-managed indexing/search instead of `EmbeddingClient` or `QdrantClient`
 10. The store saves the recommendations and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
 11. If Pattern Storage or the Embedding Model is unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
@@ -43,7 +43,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 
 | Pattern backend | Embeddings | Vector/index service | Search service | Required settings |
 | --- | --- | --- | --- | --- |
-| Qdrant | OpenAI Native or explicitly selected Cloudflare Workers AI | Qdrant | Qdrant | Embedding provider, Qdrant, Connectors chat |
+| Qdrant | Cloudflare Workers AI | Qdrant | Qdrant | Cloudflare Workers AI embeddings, Qdrant, Connectors chat |
 | Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Private pattern AI Search, Connectors chat |
 
 ## What This Surface Can Do

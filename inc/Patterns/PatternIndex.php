@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace FlavorAgent\Patterns;
 
 use FlavorAgent\Admin\Settings\Config;
-use FlavorAgent\AzureOpenAI\EmbeddingClient;
-use FlavorAgent\AzureOpenAI\EmbeddingSignature;
-use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\Embeddings\EmbeddingClient;
+use FlavorAgent\Embeddings\EmbeddingSignature;
+use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Context\SyncedPatternRepository;
 use FlavorAgent\OpenAI\Provider;
 
 final class PatternIndex {
+
 
 	public const STATE_OPTION = 'flavor_agent_pattern_index_state';
 	public const CRON_HOOK    = 'flavor_agent_reindex_patterns';
@@ -563,7 +564,7 @@ final class PatternIndex {
 			return self::do_cloudflare_ai_search_sync( $patterns, $fingerprint, $state );
 		}
 
-		$probe = self::probe_active_embedding_signature();
+		$probe = self::active_embedding_signature_for_state( $state );
 
 		if ( is_wp_error( $probe ) ) {
 			self::save_error_state( $probe );
@@ -654,6 +655,7 @@ final class PatternIndex {
 			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_QDRANT
 			|| $state['qdrant_url'] !== $qdrant_url
 			|| $state['qdrant_collection'] !== $qdrant_collection
+			|| $state['openai_endpoint'] !== $openai_endpoint
 			|| $state['embedding_signature'] !== $embedding_signature
 			|| empty( $previous_pattern_fingerprints );
 
@@ -959,6 +961,34 @@ final class PatternIndex {
 	}
 
 	/**
+	 * @param array<string, mixed> $state
+	 * @return array{signature: array{provider: string, model: string, dimension: int, signature_hash: string}, endpoint: string}|\WP_Error
+	 */
+	private static function active_embedding_signature_for_state( array $state ): array|\WP_Error {
+		$embedding_config = Provider::embedding_configuration();
+		$endpoint         = (string) ( $embedding_config['endpoint'] ?? '' );
+		$dimension        = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
+
+		if ( ! empty( $embedding_config['configured'] ) && self::has_usable_index( $state ) && $dimension > 0 ) {
+			$signature = EmbeddingSignature::from_configuration( $embedding_config, $dimension );
+
+			if (
+				(string) ( $state['openai_provider'] ?? '' ) === $signature['provider']
+				&& (string) ( $state['openai_endpoint'] ?? '' ) === $endpoint
+				&& (string) ( $state['embedding_model'] ?? '' ) === $signature['model']
+				&& (string) ( $state['embedding_signature'] ?? '' ) === $signature['signature_hash']
+			) {
+				return [
+					'signature' => $signature,
+					'endpoint'  => $endpoint,
+				];
+			}
+		}
+
+		return self::probe_active_embedding_signature();
+	}
+
+	/**
 	 * @return array{signature: array{provider: string, model: string, dimension: int, signature_hash: string}, endpoint: string}|\WP_Error
 	 */
 	private static function probe_active_embedding_signature(): array|\WP_Error {
@@ -968,7 +998,7 @@ final class PatternIndex {
 			return $vector;
 		}
 
-		$embedding_config = \FlavorAgent\OpenAI\Provider::embedding_configuration();
+		$embedding_config = Provider::embedding_configuration();
 
 		return [
 			'signature' => EmbeddingSignature::from_configuration( $embedding_config, count( $vector ) ),

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Cloudflare;
 
 use FlavorAgent\Admin\Settings\Config;
-use FlavorAgent\AzureOpenAI\BaseHttpClient;
+use FlavorAgent\Embeddings\BaseHttpClient;
 
 final class PatternSearchClient extends BaseHttpClient {
 

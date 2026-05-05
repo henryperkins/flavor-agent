@@ -28,7 +28,7 @@ Completed on 2026-04-23:
 
 Completed on 2026-04-28:
 
-- Workstream 3: chat is now owned by Settings > Connectors via the WordPress AI Client. Direct Azure and OpenAI Native chat fields (`flavor_agent_azure_chat_deployment`, `flavor_agent_openai_native_chat_model`) and the corresponding sanitizers, validators, settings UI rows, and runtime fallback paths are removed. `ChatClient::chat()` and `ResponsesClient::rank()` now route every chat call through `WordPressAIClient::chat()`. Plugin settings retain OpenAI Native credentials for embeddings, while previously saved Azure embedding credentials are legacy-only for older installs because Connectors does not yet provide embeddings.
+- Workstream 3: chat is now owned by Settings > Connectors via the WordPress AI Client. Direct Azure and OpenAI Native chat fields (`flavor_agent_azure_chat_deployment`, `flavor_agent_openai_native_chat_model`) and the corresponding sanitizers, validators, settings UI rows, and runtime fallback paths are removed. `ChatClient::chat()` and `ResponsesClient::rank()` now route every chat call through `WordPressAIClient::chat()`. Plugin-owned embeddings now use Cloudflare Workers AI only; previously saved Azure/OpenAI Native embedding values are legacy database cleanup state, not runtime configuration.
 
 Read bridge implemented on 2026-04-28; write migration pending:
 
@@ -237,7 +237,7 @@ Result:
 
 1. Split provider concerns into:
    - chat runtime: core AI Client plus Connectors
-   - embedding runtime: plugin-owned Azure/OpenAI Native config for pattern search
+   - embedding runtime: plugin-owned Cloudflare Workers AI config for Qdrant-backed pattern search
 2. Remove chat provider selection and direct chat credential fields from the long-term settings model.
 3. Change the settings page chat section into a Connectors status and guidance section.
 4. Simplify `ChatClient` so chat surfaces use the WordPress AI Client path only.

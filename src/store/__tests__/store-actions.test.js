@@ -398,6 +398,7 @@ describe( 'store action thunks', () => {
 		const context = {
 			block: {
 				name: 'core/paragraph',
+				blockPath: [ 0, 1 ],
 				attributes: {
 					content: 'Hello world',
 				},
@@ -460,8 +461,65 @@ describe( 'store action thunks', () => {
 					type: 'failure',
 					errorMessage: 'Network blew up.',
 					prompt: 'Tighten this copy.',
+					blockName: 'core/paragraph',
+					blockPath: [ 0, 1 ],
 					requestToken: 5,
 				} ),
+			} )
+		);
+	} );
+
+	test( 'fetchBlockRecommendations stores block path on empty block-result diagnostics', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				settings: [],
+				styles: [ { label: 'Use accent text' } ],
+				block: [],
+				explanation: 'Use stronger editorial contrast.',
+			},
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockRequestToken: jest.fn().mockReturnValue( 5 ),
+		};
+		const context = {
+			block: {
+				name: 'core/paragraph',
+				blockPath: [ 0, '1' ],
+			},
+		};
+
+		await actions.fetchBlockRecommendations(
+			'block-1',
+			context,
+			'Make this feel more editorial.'
+		)( {
+			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'post',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
+			select,
+		} );
+
+		const setBlockRecsAction = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'SET_BLOCK_RECS'
+		)?.[ 0 ];
+
+		expect( setBlockRecsAction.diagnostics ).toEqual(
+			expect.objectContaining( {
+				hasEmptyBlockResult: true,
+				blockName: 'core/paragraph',
+				blockPath: [ 0, 1 ],
+				prompt: 'Make this feel more editorial.',
+				requestToken: 6,
 			} )
 		);
 	} );

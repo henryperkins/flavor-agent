@@ -489,6 +489,57 @@ export function getAnnotatedBlockTree( maxDepth = 10 ) {
 	return annotatedTree;
 }
 
+function normalizeBlockPath( path ) {
+	if ( ! Array.isArray( path ) ) {
+		return [];
+	}
+
+	return path
+		.map( ( segment ) => Number.parseInt( segment, 10 ) )
+		.filter( ( segment ) => Number.isInteger( segment ) && segment >= 0 );
+}
+
+function findBlockPathInEditor(
+	blockEditor,
+	clientId,
+	rootClientId = '',
+	visitedRootClientIds = new Set()
+) {
+	if ( ! blockEditor || ! clientId ) {
+		return null;
+	}
+
+	if ( visitedRootClientIds.has( rootClientId ) ) {
+		return null;
+	}
+
+	visitedRootClientIds.add( rootClientId );
+
+	const order = blockEditor.getBlockOrder?.( rootClientId ) || [];
+	const directIndex = order.indexOf( clientId );
+
+	if ( directIndex !== -1 ) {
+		return [ directIndex ];
+	}
+
+	for ( let index = 0; index < order.length; index++ ) {
+		const currentClientId = order[ index ];
+
+		const childPath = findBlockPathInEditor(
+			blockEditor,
+			clientId,
+			currentClientId,
+			visitedRootClientIds
+		);
+
+		if ( childPath ) {
+			return [ index, ...childPath ];
+		}
+	}
+
+	return null;
+}
+
 /**
  * Build a focused context for a single block's Inspector recommendations.
  *
@@ -563,9 +614,14 @@ export function collectBlockContext( clientId ) {
 		annotatedTree,
 		identityIndex
 	);
+	const blockEditor = select( blockEditorStore );
+	const blockPath = normalizeBlockPath(
+		findBlockPathInEditor( blockEditor, clientId )
+	);
 	const context = {
 		block: {
 			name: instance.name,
+			blockPath,
 			title: instance.title,
 			currentAttributes: instance.currentAttributes,
 			inspectorPanels: instance.inspectorPanels,
@@ -613,7 +669,6 @@ export function collectBlockContext( clientId ) {
 	};
 
 	if ( isBlockStructuralActionsEnabled() ) {
-		const blockEditor = select( blockEditorStore );
 		const rootClientId =
 			blockEditor?.getBlockRootClientId?.( clientId ) || null;
 		const targetLocked = isTargetLocked( context.block );

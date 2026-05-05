@@ -2708,6 +2708,42 @@ describe( 'template-actions', () => {
 		} );
 	} );
 
+	test( 'getTemplateActivityUndoState leaves request diagnostics review-only', () => {
+		const result = getTemplateActivityUndoState( {
+			type: 'request_diagnostic',
+			surface: 'template',
+			undo: {
+				canUndo: true,
+				status: 'available',
+				error: null,
+			},
+		} );
+
+		expect( result ).toEqual( {
+			canUndo: false,
+			status: 'review',
+			error: null,
+		} );
+	} );
+
+	test( 'getTemplatePartActivityUndoState preserves failed request diagnostics without template undo validation', () => {
+		const result = getTemplatePartActivityUndoState( {
+			type: 'request_diagnostic',
+			surface: 'template-part',
+			undo: {
+				canUndo: false,
+				status: 'failed',
+				error: 'The provider timed out.',
+			},
+		} );
+
+		expect( result ).toEqual( {
+			canUndo: false,
+			status: 'failed',
+			error: 'The provider timed out.',
+		} );
+	} );
+
 	test( 'getTemplatePartActivityUndoState recomputes availability after a transient failed state', () => {
 		setupBlockEditor( {
 			blocks: [

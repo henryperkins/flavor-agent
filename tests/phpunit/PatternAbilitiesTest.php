@@ -6,11 +6,12 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\PatternAbilities;
 use FlavorAgent\Admin\Settings\Config;
-use FlavorAgent\AzureOpenAI\EmbeddingClient;
-use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\Embeddings\EmbeddingClient;
+use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
+use FlavorAgent\Patterns\Retrieval\QdrantPatternRetrievalBackend;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -1111,6 +1112,33 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertContains( 'embedding_signature_changed', $state['stale_reasons'] );
 	}
 
+	public function test_qdrant_backend_returns_index_warming_before_embedding_when_stored_signature_is_stale(): void {
+		$this->configure_backends();
+		$this->save_index_state(
+			[
+				'embedding_signature' => 'stale-signature',
+			]
+		);
+
+		$backend = new QdrantPatternRetrievalBackend();
+		$result  = $backend->search(
+			'Recommend a hero pattern.',
+			[ 'theme/hero' ],
+			PatternIndex::get_state(),
+			[]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+
+		$state = PatternIndex::get_state();
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'embedding_signature_changed', $state['stale_reasons'] );
+	}
+
 	public function test_recommend_patterns_marks_index_stale_and_rebuilds_when_collection_is_missing_before_search(): void {
 		$this->configure_backends();
 		$this->save_index_state();
@@ -1315,7 +1343,8 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
 		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
-		$this->assertStringNotContainsString( 'api.cloudflare.com', wp_json_encode( WordPressTestState::$remote_post_calls ) );
+		$this->assertStringNotContainsString( '/ai-search/', wp_json_encode( WordPressTestState::$remote_post_calls ) );
+		$this->assertStringNotContainsString( '.search.ai.cloudflare.com', wp_json_encode( WordPressTestState::$remote_post_calls ) );
 		$this->assertArrayHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
 
 		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
@@ -2229,13 +2258,14 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
 	}
 
-	public function test_recommend_patterns_uses_generic_chat_with_direct_openai_native_embeddings(): void {
+	public function test_recommend_patterns_uses_generic_chat_with_workers_ai_embeddings(): void {
 		WordPressTestState::$options = [
-			Provider::OPTION_NAME                        => Provider::NATIVE,
-			'flavor_agent_openai_native_api_key'         => 'native-key',
-			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'                    => 'qdrant-key',
+			Provider::OPTION_NAME                          => 'cloudflare_workers_ai',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                      => 'qdrant-key',
 		];
 
 		WordPressTestState::$ai_client_supported = true;
@@ -2457,16 +2487,17 @@ final class PatternAbilitiesTest extends TestCase {
 				],
 			]
 		);
-		WordPressTestState::$options                    = array_merge(
-			WordPressTestState::$options,
-			[
-				Provider::OPTION_NAME                => Provider::NATIVE,
-				'flavor_agent_openai_native_api_key' => 'native-key',
-				'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-				'flavor_agent_qdrant_url'            => 'https://example.cloud.qdrant.io:6333',
-				'flavor_agent_qdrant_key'            => 'qdrant-key',
-			]
-		);
+			WordPressTestState::$options                = array_merge(
+				WordPressTestState::$options,
+				[
+					Provider::OPTION_NAME     => 'cloudflare_workers_ai',
+					'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+					'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+					'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+					'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
+					'flavor_agent_qdrant_key' => 'qdrant-key',
+				]
+			);
 		WordPressTestState::$ai_client_supported        = true;
 		WordPressTestState::$ai_client_provider_support = array_merge(
 			WordPressTestState::$ai_client_provider_support,

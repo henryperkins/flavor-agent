@@ -94,6 +94,9 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<string, mixed> */
 		public static array $updated_options = [];
 
+		/** @var array<string, mixed> */
+		public static array $option_autoload = [];
+
 		/** @var array<string> */
 		public static array $cleared_cron_hooks = [];
 
@@ -336,6 +339,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$registered_block_pattern_categories = [];
 			self::$scheduled_events            = [];
 			self::$updated_options              = [];
+			self::$option_autoload              = [];
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
 			self::$registered_post_types       = [];
@@ -3102,6 +3106,24 @@ namespace {
 		function update_option( string $name, $value, $autoload = null ): bool {
 			WordPressTestState::$options[ $name ] = $value;
 			WordPressTestState::$updated_options[ $name ] = $value;
+			if ( null !== $autoload ) {
+				WordPressTestState::$option_autoload[ $name ] = $autoload;
+			}
+
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'add_option' ) ) {
+		function add_option( string $name, $value = '', string $deprecated = '', $autoload = 'yes' ): bool {
+			unset( $deprecated );
+
+			if ( array_key_exists( $name, WordPressTestState::$options ) ) {
+				return false;
+			}
+
+			WordPressTestState::$options[ $name ]         = $value;
+			WordPressTestState::$option_autoload[ $name ] = $autoload;
 
 			return true;
 		}
@@ -3111,7 +3133,8 @@ namespace {
 		function delete_option( string $name ): bool {
 			unset(
 				WordPressTestState::$options[ $name ],
-				WordPressTestState::$updated_options[ $name ]
+				WordPressTestState::$updated_options[ $name ],
+				WordPressTestState::$option_autoload[ $name ]
 			);
 
 			return true;

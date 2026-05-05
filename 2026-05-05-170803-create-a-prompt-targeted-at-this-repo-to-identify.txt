@@ -1,0 +1,178 @@
+ ▐▛███▜▌   Claude Code v2.1.128
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/flavor-agent
+
+ ⚠ Large CLAUDE.md will impact performance (41.7k chars > 40.0k) · /memory to edit
+
+❯ Create a prompt targeted at this repo to identify theme / style / ui issues   
+  and code smells                                                               
+
+  Read 2 files, listed 1 directory (ctrl+o to expand)
+
+● Here's a prompt sized for this repo and styled to match
+  docs/prompts/surface-review-prompt.md +
+  docs/reference/review-response-protocol.md. Drop it into a fresh review
+  session.
+
+  Review the Flavor Agent repository for theme, style, UI, and code-smell issues
+   as a review-only pass. Do not modify files, do not rewrite components, and do
+   not propose redesigns unless tied to a concrete bug, accessibility violation,
+   contract drift, performance hazard, security/escaping issue, or
+  duplicated/dead code path. Follow docs/reference/review-response-protocol.md
+  for output: findings first, severity-ordered (P0–P3), file:line refs, observed
+   behavior, user-visible impact, minimal credible fix.
+
+  Scope rules
+  - Start by reading the current checkout. Grep hits are leads, not findings —
+  open the file and confirm the runtime path before flagging.
+  - Cover both editor surfaces (Inspector, Site Editor, Style Book) and admin
+  surfaces (Settings page, Settings > AI Activity). Static `readme.txt` and
+  end-user docs are out of scope unless the UI claims behavior they contradict.
+  - Treat WPDS / DataViews / DataForm runtime shims as third-party-adjacent:
+  flag overrides that defeat token theming, but do not rewrite vendor selectors.
+
+  Files / areas to inspect
+
+  Theme & style layer
+  - src/tokens.css, src/editor.css
+  - src/admin/{settings,brand,activity-log,wpds-runtime,dataviews-runtime}.css
+  - src/style-surfaces/{presentation,request-input}.js
+  - src/utils/{style-design-semantics,style-operations,style-validation}.js
+  - src/global-styles/GlobalStylesRecommender.js,
+  src/style-book/{StyleBookRecommender,dom}.js
+  - src/context/{theme-settings,theme-tokens,block-inspector}.js — verify
+  three-tier (`stable` → `__experimentalAdditional*` → `__experimental*`)
+  resolution actually fails closed when keys are absent
+  - inc/Context/ThemeTokenCollector.php, inc/LLM/ThemeTokenFormatter.php,
+  inc/LLM/StyleContrastValidator.php (WCAG AA = 4.5)
+
+  Editor / Inspector UI
+  - src/inspector/{InspectorInjector,BlockRecommendationsPanel,NavigationRecomme
+  ndations,SuggestionChips,group-by-panel,panel-delegation}.js
+  - src/components/{AIAdvisorySection,AIReviewSection,AIStatusNotice,CapabilityN
+  otice,InlineActionFeedback,LinkedEntityText,RecommendationHero,RecommendationL
+  ane,StaleResultBanner,SurfaceComposer,SurfacePanelIntro,SurfaceScopeBar,ToastR
+  egion,UndoToast,AIActivitySection,ActivitySessionBootstrap,surface-labels}.js
+  - src/patterns/{PatternRecommender,InserterBadge,inserter-badge-state,inserter
+  -dom,compat,find-inserter-search-input}.js
+  - src/content/ContentRecommender.js, src/templates/TemplateRecommender.js,
+  src/template-parts/TemplatePartRecommender.js
+
+  Admin surfaces
+  - src/admin/{settings-page,settings-page-controller,activity-log,activity-log-
+  utils}.js
+  - inc/Admin/Settings/{Assets,Page,Fields,Help,Feedback,Registrar,State}.php
+  - inc/Admin/ActivityPage.php
+
+  Cross-cutting
+  - src/store/{toasts,activity-undo,activity-history,executable-surface-runtime,
+  executable-surfaces}.js
+  - src/utils/{format-count,recommendation-actionability,recommendation-stale-re
+  asons,capability-flags}.js
+  - src/test-utils/{setup-react-test,wp-components}.js (only if a finding traces
+   to a faulty test harness)
+
+  Theme / style focus
+  - Hard-coded colors, spacing, typography, or z-index that should consume
+  tokens (src/tokens.css, theme.json, or `--wp--*` custom props). Flag any
+  literal hex/rgb that bypasses brand or WPDS tokens.
+  - Color-only state distinguishability — review states (advisory / review /
+  blocked / failed / undone / applied), CapabilityNotice, status pills, lane
+  tone classes, six-card summary on AI Activity. Each must remain
+  distinguishable without color (icon, label, shape).
+  - WCAG AA contrast on text + interactive states (hover, focus, disabled), in
+  both light and dark Site Editor previews. Verify `StyleContrastValidator`
+  threshold (4.5) is actually enforced on the apply path, not only on the
+  suggestion path.
+  - Focus-visible rings on every interactive surface (buttons, chips, lane
+  cards, toasts, DataViews rows). Flag selectors that suppress `:focus-visible`
+  for aesthetics.
+  - Reduced-motion respect on UndoToast auto-dismiss, ToastRegion transitions,
+  hero/lane reveals (`prefers-reduced-motion`).
+  - ToolsPanel grid contract — Inspector sub-panel chips rely on `grid-column: 1
+   / -1`; flag any new chip/card that breaks the span or duplicates the
+  override.
+  - Iframe-aware focus behavior — ToastRegion `mod+shift+z` and Style Book
+  sidebar mounts must work inside the editor canvas iframe.
+  - Overflow / responsive behavior at narrow Inspector widths, Site Editor
+  sidebar, and the Settings + AI Activity pages (DataViews horizontal scroll,
+  summary card grid collapse, accordion vs urgent-validation conflicts).
+  - WPDS / DataViews runtime CSS overrides that win against future vendor
+  updates by selector specificity rather than tokens — call these out as
+  fragility.
+  - Style Book vs Global Styles operation scope mismatches that surface as wrong
+   UI affordances (e.g., `set_theme_variation` reachable inside Style Book
+  panel).
+
+  UI / interaction focus
+  - Duplicate apply / refresh / activity paths between block surface and
+  embedded NavigationRecommendations.
+  - Stale-context banners (`StaleResultBanner`) that render but the underlying
+  thunks still allow apply — verify `reviewContextSignature` /
+  `resolvedContextSignature` actually demote.
+  - Undo toasts: cap-3 eviction + skip-oldest-interacted policy, hover/focus
+  pause, and surface→title mapping (`store/toasts.js`).
+  - Capability gating — `flavorAgentData.capabilities.surfaces` map vs the
+  legacy `canRecommend*` flags; flag UI that gates on the legacy flag where the
+  structured map should win, or that renders before the bootstrap arrives.
+  - DataViews/DataForm: filter mapping, persisted view state, target links,
+  per-page caps, sort field allowlist mismatches between client and
+  `Activity\Repository`.
+  - Empty / loading / error states present and accessible (aria-busy, aria-live
+  regions for AIStatusNotice and ToastRegion).
+  - Settings page accordion persistence vs urgent validation focus — flag cases
+  where a validation error opens behind a collapsed section.
+
+  Code-smell focus
+  - Dead exports / unused components / orphaned CSS rules (cross-check entry
+  points: `src/index.js`, `src/admin/settings-page.js`,
+  `src/admin/activity-log.js`).
+  - Duplicated logic between `src/style-surfaces/*` and per-surface recommenders
+   (Global Styles, Style Book) that could regress independently.
+  - Re-export wrappers kept "for backward compatibility" with no remaining
+  external callers (e.g., `src/patterns/find-inserter-search-input.js`) —
+  confirm before recommending removal.
+  - Direct `__experimental*` API usage outside the three documented exceptions
+  (`src/patterns/compat.js`, `src/context/theme-tokens.js`,
+  `src/context/block-inspector.js`). Any new direct use is a smell.
+  - React anti-patterns in editor components: missing keys, effects without
+  cleanup that listen on the editor iframe, stale closures over `clientId`,
+  derived state stored in `useState`.
+  - `@wordpress/data` selectors called inside loops or render bodies instead of
+  `useSelect`.
+  - PHP escaping smells in admin templates: unescaped option values rendered
+  into `Settings/Page.php`, `Help.php`, `Fields.php`, `ActivityPage.php`.
+  Confirm `esc_html`, `esc_attr`, `esc_url`, `wp_kses_post` per context.
+  - Magic numbers (timeouts, caps, thresholds) duplicated across PHP and JS
+  rather than sourced from a shared constant; the canonical
+  `TEMPLATE_PATTERN_CANDIDATE_CAP` is the model — flag siblings that aren't.
+  - Long files / God components: BlockRecommendationsPanel,
+  settings-page-controller, activity-log-utils — only flag when a concrete
+  extraction is justified by a bug, contract drift, or test gap, not stylistic
+  preference.
+  - Inline `style={{...}}` that should be a CSS class consuming a token; flag
+  only when it harms theming, dark mode, or token consistency.
+  - Comments or JSDoc claiming behavior the code no longer implements (treat as
+  drift, not stylistic).
+
+  Output
+  - Findings ordered P0 → P3 per review-response-protocol.md.
+  - Separate "Confirmed findings" from "Open questions / assumptions".
+  - End with a `Verification Reviewed` section naming files opened and any
+  harness/command not run (e.g., did not execute `npm run build`, did not run
+  Playwright). If you only confirmed via grep without opening the file, say so —
+   do not call it confirmed.
+  - If nothing rises above P3, say so plainly and list residual risk.
+
+  A few notes on what I deliberately left out, in case you want to extend it:
+
+  - I scoped this to review-only. If you want the same prompt to also apply
+  fixes, add an "Implementation mode" section that gates on user confirmation
+  per finding — don't blanket-authorize edits.
+  - I did not include tests/e2e/wp70-theme*/style.css because those are fixture
+  themes; flagging them as smells would be noise.
+  - The "code-smell focus" section is intentionally short — broad smell-hunting
+  prompts produce drive-by complaints. The bullets above are the ones that map
+  to actual contracts in this repo.
+
+✻ Cogitated for 1m 31s

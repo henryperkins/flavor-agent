@@ -2633,6 +2633,21 @@ function getUndoSourceOperations( activity ) {
 	return Array.isArray( activity?.operations ) ? activity.operations : [];
 }
 
+function getReviewOnlyUndoState( activity, existingUndo ) {
+	if ( activity?.type !== 'request_diagnostic' ) {
+		return existingUndo;
+	}
+
+	const isFailedDiagnostic = existingUndo?.status === 'failed';
+
+	return {
+		...existingUndo,
+		canUndo: false,
+		status: isFailedDiagnostic ? 'failed' : 'review',
+		error: isFailedDiagnostic ? existingUndo?.error ?? null : null,
+	};
+}
+
 export function resolveTemplatePartUndoTarget(
 	operation,
 	areaLookup = getTemplatePartAreaLookup(),
@@ -3037,6 +3052,10 @@ export function getTemplateActivityUndoState(
 		return existingUndo;
 	}
 
+	if ( activity?.type && activity.type !== 'apply_template_suggestion' ) {
+		return getReviewOnlyUndoState( activity, existingUndo );
+	}
+
 	if ( existingUndo.status === 'undone' ) {
 		return existingUndo;
 	}
@@ -3074,6 +3093,13 @@ export function getTemplatePartActivityUndoState(
 
 	if ( activity?.surface !== 'template-part' ) {
 		return existingUndo;
+	}
+
+	if (
+		activity?.type &&
+		activity.type !== 'apply_template_part_suggestion'
+	) {
+		return getReviewOnlyUndoState( activity, existingUndo );
 	}
 
 	if ( existingUndo.status === 'undone' ) {

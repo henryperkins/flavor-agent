@@ -576,27 +576,26 @@ final class Registration {
 						'backends'           => [
 							'type'       => 'object',
 							'properties' => [
-								'wordpress_ai_client'  => [
+								'wordpress_ai_client'   => [
 									'type'       => 'object',
 									'properties' => [
 										'configured' => [ 'type' => 'boolean' ],
 									],
 								],
-								'openai_native'        => [
+								'cloudflare_workers_ai' => [
 									'type'       => 'object',
 									'properties' => [
 										'configured'     => [ 'type' => 'boolean' ],
-										'chatModel'      => [ 'type' => [ 'string', 'null' ] ],
 										'embeddingModel' => [ 'type' => [ 'string', 'null' ] ],
 									],
 								],
-								'qdrant'               => [
+								'qdrant'                => [
 									'type'       => 'object',
 									'properties' => [
 										'configured' => [ 'type' => 'boolean' ],
 									],
 								],
-								'cloudflare_ai_search' => [
+								'cloudflare_ai_search'  => [
 									'type'       => 'object',
 									'properties' => [
 										'configured' => [ 'type' => 'boolean' ],

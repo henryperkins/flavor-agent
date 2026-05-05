@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace FlavorAgent\AzureOpenAI;
+namespace FlavorAgent\Embeddings;
 
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\OpenAI\Provider;
@@ -12,44 +12,25 @@ final class EmbeddingClient extends BaseHttpClient {
 	private const REQUEST_TIMEOUT = 60;
 
 	public static function validate_configuration(
-		?string $endpoint = null,
-		?string $api_key = null,
-		?string $deployment = null,
-		?string $provider = null
+		?string $account_id = null,
+		?string $api_token = null,
+		?string $model = null
 	): array|\WP_Error {
-		$provider = Provider::normalize_provider( $provider ?? Provider::get() );
+		$overrides = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => (string) ( $account_id ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) ),
+			'flavor_agent_cloudflare_workers_ai_api_token' => (string) ( $api_token ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) ),
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => (string) ( $model ?? get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' ) ),
+		];
 
-		if ( Provider::is_connector( $provider ) ) {
+		$config = Provider::embedding_configuration( null, $overrides );
+
+		if ( ! $config['configured'] ) {
 			return new \WP_Error(
-				'embedding_validation_error',
-				sprintf(
-					'%s does not currently expose embedding generation through Settings > Connectors. Choose OpenAI Native or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations.',
-					Provider::label( $provider )
-				),
+				'missing_credentials',
+				'Cloudflare Workers AI embedding credentials are not configured. Go to Settings > Flavor Agent.',
 				[ 'status' => 400 ]
 			);
 		}
-
-		if ( WorkersAIEmbeddingConfiguration::PROVIDER === $provider ) {
-			$overrides = [
-				'flavor_agent_cloudflare_workers_ai_account_id' => (string) ( $endpoint ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) ),
-				'flavor_agent_cloudflare_workers_ai_api_token' => (string) ( $api_key ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) ),
-				'flavor_agent_cloudflare_workers_ai_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' ) ),
-			];
-		} elseif ( Provider::is_native( $provider ) ) {
-			$overrides = [
-				'flavor_agent_openai_native_api_key' => (string) ( $api_key ?? get_option( 'flavor_agent_openai_native_api_key', '' ) ),
-				'flavor_agent_openai_native_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_openai_native_embedding_model', '' ) ),
-			];
-		} else {
-			$overrides = [
-				'flavor_agent_azure_openai_endpoint'      => (string) ( $endpoint ?? get_option( 'flavor_agent_azure_openai_endpoint', '' ) ),
-				'flavor_agent_azure_openai_key'           => (string) ( $api_key ?? get_option( 'flavor_agent_azure_openai_key', '' ) ),
-				'flavor_agent_azure_embedding_deployment' => (string) ( $deployment ?? get_option( 'flavor_agent_azure_embedding_deployment', '' ) ),
-			];
-		}
-
-		$config = Provider::embedding_configuration( $provider, $overrides );
 
 		$data = ConfigurationValidator::validate_with_response(
 			$config['url'],
@@ -92,7 +73,7 @@ final class EmbeddingClient extends BaseHttpClient {
 	}
 
 	/**
-	 * Embed multiple inputs in a single request (max ~2048).
+	 * Embed multiple inputs, chunked to the Workers AI model request limit.
 	 *
 	 * @param string[] $inputs
 	 * @return float[][]|\WP_Error Array of vectors.
@@ -100,41 +81,38 @@ final class EmbeddingClient extends BaseHttpClient {
 	public static function embed_batch( array $inputs ): array|\WP_Error {
 		$config = Provider::embedding_configuration();
 
-		if ( Provider::is_connector( $config['provider'] ) ) {
-			return new \WP_Error(
-				'embedding_unsupported',
-				sprintf(
-					'%s does not currently expose embedding generation through Settings > Connectors. Choose OpenAI Native or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations.',
-					Provider::label( $config['provider'] )
-				),
-				[ 'status' => 400 ]
-			);
-		}
-
 		if ( ! $config['configured'] ) {
 			return new \WP_Error(
 				'missing_credentials',
-				sprintf(
-					'%s embedding credentials are not configured. Go to Settings > Flavor Agent.',
-					Provider::label( $config['provider'] )
-				),
+				'Cloudflare Workers AI embedding credentials are not configured. Go to Settings > Flavor Agent.',
 				[ 'status' => 400 ]
 			);
 		}
 
-		$body = wp_json_encode(
-			[
-				'model' => $config['model'],
-				'input' => $inputs,
-			]
-		);
+		$vectors = [];
 
-		$data = self::request( $config['url'], $config['headers'], $body, $config['label'] );
-		if ( is_wp_error( $data ) ) {
-			return $data;
+		foreach ( array_chunk( $inputs, WorkersAIEmbeddingConfiguration::MAX_BATCH_INPUTS ) as $input_chunk ) {
+			$body = wp_json_encode(
+				[
+					'model' => $config['model'],
+					'input' => $input_chunk,
+				]
+			);
+
+			$data = self::request( $config['url'], $config['headers'], $body, $config['label'] );
+			if ( is_wp_error( $data ) ) {
+				return $data;
+			}
+
+			$chunk_vectors = self::extract_vectors_from_response( $data );
+			if ( is_wp_error( $chunk_vectors ) ) {
+				return $chunk_vectors;
+			}
+
+			$vectors = array_merge( $vectors, $chunk_vectors );
 		}
 
-		return self::extract_vectors_from_response( $data );
+		return $vectors;
 	}
 
 	/**

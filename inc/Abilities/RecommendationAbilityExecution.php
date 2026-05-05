@@ -453,11 +453,45 @@ final class RecommendationAbilityExecution {
 	private static function build_block_target( array $input ): array {
 		$editor_context = \is_array( $input['editorContext'] ?? null ) ? $input['editorContext'] : [];
 		$block          = \is_array( $editor_context['block'] ?? null ) ? $editor_context['block'] : [];
+		$block_path     = self::sanitize_block_path( $block['blockPath'] ?? ( $input['blockPath'] ?? [] ) );
 
-		return [
+		$target = [
 			'clientId'  => \sanitize_text_field( (string) ( $input['clientId'] ?? '' ) ),
 			'blockName' => \sanitize_text_field( (string) ( $block['name'] ?? ( $input['selectedBlock']['blockName'] ?? '' ) ) ),
 		];
+
+		if ( [] !== $block_path ) {
+			$target['blockPath'] = $block_path;
+		}
+
+		return $target;
+	}
+
+	/**
+	 * @return array<int, int>
+	 */
+	private static function sanitize_block_path( mixed $value ): array {
+		if ( ! \is_array( $value ) ) {
+			return [];
+		}
+
+		$path = [];
+
+		foreach ( $value as $segment ) {
+			if ( ! \is_numeric( $segment ) ) {
+				continue;
+			}
+
+			$segment = (int) $segment;
+
+			if ( $segment < 0 ) {
+				continue;
+			}
+
+			$path[] = $segment;
+		}
+
+		return $path;
 	}
 
 	/**

@@ -220,6 +220,16 @@ function normalizeBlockRequestDiagnostics( diagnostics = null ) {
 	return isPlainObject( diagnostics ) ? diagnostics : null;
 }
 
+function normalizeBlockPath( value ) {
+	return Array.isArray( value )
+		? value
+				.map( ( segment ) => Number.parseInt( segment, 10 ) )
+				.filter(
+					( segment ) => Number.isInteger( segment ) && segment >= 0
+				)
+		: [];
+}
+
 function normalizePatternDiagnostics( diagnostics = null ) {
 	const unreadableSyncedPatterns = Number(
 		diagnostics?.filteredCandidates?.unreadableSyncedPatterns ?? 0
@@ -829,6 +839,9 @@ function buildBlockRecommendationFailureDiagnostics(
 		timestamp: new Date().toISOString(),
 		prompt: requestData.prompt || '',
 		blockName: requestData.editorContext?.block?.name || '',
+		blockPath: normalizeBlockPath(
+			requestData.editorContext?.block?.blockPath
+		),
 	};
 }
 
@@ -1404,6 +1417,9 @@ const actions = {
 								blockName:
 									requestData.editorContext?.block?.name ||
 									'',
+								blockPath: normalizeBlockPath(
+									blockContext?.blockPath
+								),
 								prompt: requestData.prompt || '',
 								requestToken,
 								timestamp: new Date().toISOString(),

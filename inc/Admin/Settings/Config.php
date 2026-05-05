@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Admin\Settings;
 
-final class Config
-{
+final class Config {
+
 
 	public const OPTION_GROUP                                    = 'flavor_agent_settings';
 	public const PAGE_SLUG                                       = 'flavor-agent';

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace FlavorAgent\AzureOpenAI;
+namespace FlavorAgent\Embeddings;
 
 use FlavorAgent\OpenAI\Provider;
 
@@ -15,6 +15,9 @@ final class EmbeddingSignature {
 	 * @return array{provider: string, model: string, dimension: int, signature_hash: string}
 	 */
 	public static function from_configuration( array $config, int $dimension ): array {
+		// The signature intentionally tracks vector compatibility, not credential ownership.
+		// Workers AI vectors are model/dimension compatible across accounts. Include account
+		// or API base here only if Flavor Agent adds account-scoped custom embedding models.
 		$payload = [
 			'provider'  => Provider::normalize_provider( (string) ( $config['provider'] ?? Provider::get() ) ),
 			'model'     => trim( (string) ( $config['model'] ?? '' ) ),

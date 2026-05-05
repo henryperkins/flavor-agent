@@ -9,22 +9,21 @@ use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Settings;
 
-if (! defined('ABSPATH')) {
+if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-final class Registrar
-{
+final class Registrar {
 
-	public static function register_settings(): void
-	{
+
+	public static function register_settings(): void {
 		register_setting(
 			Config::OPTION_GROUP,
 			Provider::OPTION_NAME,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_openai_provider'],
-				'default'           => Provider::NATIVE,
+				'sanitize_callback' => [ Settings::class, 'sanitize_openai_provider' ],
+				'default'           => WorkersAIEmbeddingConfiguration::PROVIDER,
 			]
 		);
 		register_setting(
@@ -32,7 +31,7 @@ final class Registrar
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_pattern_retrieval_backend'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_pattern_retrieval_backend' ],
 				'default'           => Config::PATTERN_BACKEND_QDRANT,
 			]
 		);
@@ -42,26 +41,8 @@ final class Registrar
 			Config::OPTION_REASONING_EFFORT,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_reasoning_effort'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_reasoning_effort' ],
 				'default'           => 'medium',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_openai_native_api_key',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_openai_native_api_key'],
-				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_openai_native_embedding_model',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_openai_native_embedding_model'],
-				'default'           => '',
 			]
 		);
 		register_setting(
@@ -69,7 +50,7 @@ final class Registrar
 			'flavor_agent_cloudflare_workers_ai_account_id',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_workers_ai_account_id'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_workers_ai_account_id' ],
 				'default'           => '',
 			]
 		);
@@ -78,8 +59,9 @@ final class Registrar
 			'flavor_agent_cloudflare_workers_ai_api_token',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_workers_ai_api_token'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_workers_ai_api_token' ],
 				'default'           => '',
+				'autoload'          => false,
 			]
 		);
 		register_setting(
@@ -87,7 +69,7 @@ final class Registrar
 			'flavor_agent_cloudflare_workers_ai_embedding_model',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_workers_ai_embedding_model'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_workers_ai_embedding_model' ],
 				'default'           => WorkersAIEmbeddingConfiguration::DEFAULT_MODEL,
 			]
 		);
@@ -96,7 +78,7 @@ final class Registrar
 			'flavor_agent_qdrant_url',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_qdrant_url'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_qdrant_url' ],
 				'default'           => '',
 			]
 		);
@@ -105,8 +87,9 @@ final class Registrar
 			'flavor_agent_qdrant_key',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_qdrant_key'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_qdrant_key' ],
 				'default'           => '',
+				'autoload'          => false,
 			]
 		);
 		register_setting(
@@ -114,7 +97,7 @@ final class Registrar
 			'flavor_agent_pattern_recommendation_threshold',
 			[
 				'type'              => 'number',
-				'sanitize_callback' => [Settings::class, 'sanitize_pattern_recommendation_threshold'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_pattern_recommendation_threshold' ],
 				'default'           => 0.3,
 			]
 		);
@@ -123,7 +106,7 @@ final class Registrar
 			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
 			[
 				'type'              => 'number',
-				'sanitize_callback' => [Settings::class, 'sanitize_pattern_recommendation_threshold_cloudflare_ai_search'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_pattern_recommendation_threshold_cloudflare_ai_search' ],
 				'default'           => Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT,
 			]
 		);
@@ -132,7 +115,7 @@ final class Registrar
 			'flavor_agent_pattern_max_recommendations',
 			[
 				'type'              => 'integer',
-				'sanitize_callback' => [Settings::class, 'sanitize_pattern_max_recommendations'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_pattern_max_recommendations' ],
 				'default'           => Config::PATTERN_MAX_RECOMMENDATIONS_DEFAULT,
 			]
 		);
@@ -141,7 +124,7 @@ final class Registrar
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_pattern_ai_search_account_id'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_pattern_ai_search_account_id' ],
 				'default'           => '',
 			]
 		);
@@ -150,7 +133,7 @@ final class Registrar
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_pattern_ai_search_namespace'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_pattern_ai_search_namespace' ],
 				'default'           => '',
 			]
 		);
@@ -159,7 +142,7 @@ final class Registrar
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_pattern_ai_search_instance_id'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_pattern_ai_search_instance_id' ],
 				'default'           => '',
 			]
 		);
@@ -168,35 +151,9 @@ final class Registrar
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_pattern_ai_search_api_token'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_pattern_ai_search_api_token' ],
 				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_cloudflare_ai_search_account_id',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_account_id'],
-				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_cloudflare_ai_search_instance_id',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_instance_id'],
-				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_cloudflare_ai_search_api_token',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_cloudflare_api_token'],
-				'default'           => '',
+				'autoload'          => false,
 			]
 		);
 		register_setting(
@@ -204,7 +161,7 @@ final class Registrar
 			'flavor_agent_cloudflare_ai_search_max_results',
 			[
 				'type'              => 'integer',
-				'sanitize_callback' => [Settings::class, 'sanitize_grounding_result_count'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_grounding_result_count' ],
 				'default'           => 4,
 			]
 		);
@@ -213,7 +170,7 @@ final class Registrar
 			Guidelines::OPTION_SITE,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_guideline_site'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_guideline_site' ],
 				'default'           => '',
 			]
 		);
@@ -222,7 +179,7 @@ final class Registrar
 			Guidelines::OPTION_COPY,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_guideline_copy'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_guideline_copy' ],
 				'default'           => '',
 			]
 		);
@@ -231,7 +188,7 @@ final class Registrar
 			Guidelines::OPTION_IMAGES,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_guideline_images'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_guideline_images' ],
 				'default'           => '',
 			]
 		);
@@ -240,7 +197,7 @@ final class Registrar
 			Guidelines::OPTION_ADDITIONAL,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => [Settings::class, 'sanitize_guideline_additional'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_guideline_additional' ],
 				'default'           => '',
 			]
 		);
@@ -249,7 +206,7 @@ final class Registrar
 			Guidelines::OPTION_BLOCKS,
 			[
 				'type'              => 'array',
-				'sanitize_callback' => [Settings::class, 'sanitize_guideline_blocks'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_guideline_blocks' ],
 				'default'           => [],
 			]
 		);
@@ -258,90 +215,64 @@ final class Registrar
 			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
 			[
 				'type'              => 'boolean',
-				'sanitize_callback' => [Settings::class, 'sanitize_block_structural_actions_enabled'],
+				'sanitize_callback' => [ Settings::class, 'sanitize_block_structural_actions_enabled' ],
 				'default'           => false,
 			]
 		);
 
 		add_settings_section(
-			'flavor_agent_openai_provider',
-			'Embedding Provider',
-			[Settings::class, 'render_openai_provider_section'],
-			Config::PAGE_SLUG
-		);
-		add_settings_section(
-			'flavor_agent_openai_native',
-			'OpenAI Native (embeddings)',
-			[Settings::class, 'render_openai_native_section'],
-			Config::PAGE_SLUG
-		);
-		add_settings_section(
 			'flavor_agent_cloudflare_workers_ai',
 			'Cloudflare Workers AI Embeddings',
-			[Settings::class, 'render_cloudflare_workers_ai_section'],
+			[ Settings::class, 'render_cloudflare_workers_ai_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_pattern_retrieval',
 			'Pattern Storage',
-			[Settings::class, 'render_pattern_retrieval_section'],
+			[ Settings::class, 'render_pattern_retrieval_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_qdrant',
 			'Qdrant Pattern Storage',
-			[Settings::class, 'render_qdrant_section'],
+			[ Settings::class, 'render_qdrant_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_cloudflare_pattern_ai_search',
 			'Cloudflare AI Search Pattern Storage',
-			[Settings::class, 'render_cloudflare_pattern_ai_search_section'],
+			[ Settings::class, 'render_cloudflare_pattern_ai_search_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_pattern_recommendations',
 			'Pattern Recommendations',
-			[Settings::class, 'render_pattern_recommendations_section'],
+			[ Settings::class, 'render_pattern_recommendations_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_cloudflare',
 			'Cloudflare AI Search',
-			[Settings::class, 'render_cloudflare_section'],
+			[ Settings::class, 'render_cloudflare_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_guidelines',
 			'Guidelines',
-			[Settings::class, 'render_guidelines_section'],
+			[ Settings::class, 'render_guidelines_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_experimental_features',
 			'Experimental Features',
-			[Settings::class, 'render_experimental_features_section'],
+			[ Settings::class, 'render_experimental_features_section' ],
 			Config::PAGE_SLUG
 		);
 
 		add_settings_field(
-			Provider::OPTION_NAME,
-			'Embedding Provider',
-			[Settings::class, 'render_select_field'],
-			Config::PAGE_SLUG,
-			'flavor_agent_openai_provider',
-			[
-				'option'      => Provider::OPTION_NAME,
-				'label_for'   => Provider::OPTION_NAME,
-				'choices'     => Provider::embedding_settings_choices(),
-				'description' => 'Choose the single embedding provider Flavor Agent uses for semantic features. Text generation lives in Settings > Connectors.',
-				'class'       => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
 			'Pattern Storage',
-			[Settings::class, 'render_select_field'],
+			[ Settings::class, 'render_select_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_pattern_retrieval',
 			[
@@ -357,40 +288,9 @@ final class Registrar
 			]
 		);
 		add_settings_field(
-			'flavor_agent_openai_native_api_key',
-			'API Key',
-			[Settings::class, 'render_text_field'],
-			Config::PAGE_SLUG,
-			'flavor_agent_openai_native',
-			[
-				'option'       => 'flavor_agent_openai_native_api_key',
-				'label_for'    => 'flavor_agent_openai_native_api_key',
-				'type'         => 'password',
-				'placeholder'  => 'sk-...',
-				'description'  => 'OpenAI API key used for embeddings. Leave blank to use Settings > Connectors or OPENAI_API_KEY.',
-				'autocomplete' => 'new-password',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_openai_native_embedding_model',
-			'Embedding Model',
-			[Settings::class, 'render_text_field'],
-			Config::PAGE_SLUG,
-			'flavor_agent_openai_native',
-			[
-				'option'       => 'flavor_agent_openai_native_embedding_model',
-				'label_for'    => 'flavor_agent_openai_native_embedding_model',
-				'placeholder'  => 'text-embedding-3-large',
-				'description'  => 'OpenAI embedding model ID for Flavor Agent semantic features.',
-				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
 			'flavor_agent_cloudflare_workers_ai_account_id',
 			'Account ID',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_cloudflare_workers_ai',
 			[
@@ -405,7 +305,7 @@ final class Registrar
 		add_settings_field(
 			'flavor_agent_cloudflare_workers_ai_api_token',
 			'API Token',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_cloudflare_workers_ai',
 			[
@@ -421,7 +321,7 @@ final class Registrar
 		add_settings_field(
 			'flavor_agent_cloudflare_workers_ai_embedding_model',
 			'Embedding Model',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_cloudflare_workers_ai',
 			[
@@ -437,7 +337,7 @@ final class Registrar
 		add_settings_field(
 			'flavor_agent_qdrant_url',
 			'Cluster URL',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_qdrant',
 			[
@@ -453,7 +353,7 @@ final class Registrar
 		add_settings_field(
 			'flavor_agent_qdrant_key',
 			'API Key',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_qdrant',
 			[
@@ -469,7 +369,7 @@ final class Registrar
 		add_settings_field(
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
 			'Account ID',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_cloudflare_pattern_ai_search',
 			[
@@ -484,7 +384,7 @@ final class Registrar
 		add_settings_field(
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 			'Namespace',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_cloudflare_pattern_ai_search',
 			[
@@ -499,7 +399,7 @@ final class Registrar
 		add_settings_field(
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 			'AI Search Instance ID',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_cloudflare_pattern_ai_search',
 			[
@@ -514,7 +414,7 @@ final class Registrar
 		add_settings_field(
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 			'API Token',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_cloudflare_pattern_ai_search',
 			[
@@ -530,7 +430,7 @@ final class Registrar
 		add_settings_field(
 			'flavor_agent_pattern_recommendation_threshold',
 			'Ranking Threshold',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_pattern_recommendations',
 			[
@@ -549,7 +449,7 @@ final class Registrar
 		add_settings_field(
 			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
 			'AI Search Match Threshold',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_pattern_recommendations',
 			[
@@ -568,7 +468,7 @@ final class Registrar
 		add_settings_field(
 			'flavor_agent_pattern_max_recommendations',
 			'Max Results',
-			[Settings::class, 'render_text_field'],
+			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_pattern_recommendations',
 			[
@@ -584,71 +484,25 @@ final class Registrar
 				'inputmode'   => 'numeric',
 			]
 		);
-		add_settings_field(
-			'flavor_agent_cloudflare_ai_search_account_id',
-			'Account ID',
-			[Settings::class, 'render_text_field'],
-			Config::PAGE_SLUG,
-			'flavor_agent_cloudflare',
-			[
-				'option'       => 'flavor_agent_cloudflare_ai_search_account_id',
-				'label_for'    => 'flavor_agent_cloudflare_ai_search_account_id',
-				'placeholder'  => 'e.g. 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d',
-				'description'  => 'Optional override. Cloudflare account ID for the AI Search instance that indexes developer.wordpress.org docs.',
-				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_cloudflare_ai_search_instance_id',
-			'AI Search Instance ID',
-			[Settings::class, 'render_text_field'],
-			Config::PAGE_SLUG,
-			'flavor_agent_cloudflare',
-			[
-				'option'       => 'flavor_agent_cloudflare_ai_search_instance_id',
-				'label_for'    => 'flavor_agent_cloudflare_ai_search_instance_id',
-				'placeholder'  => 'wordpress-developer-docs',
-				'description'  => 'Optional override. Enter the AI Search instance name from the REST path. For namespace-scoped Search, use namespace/instance-name. The instance must return trusted developer.wordpress.org chunks.',
-				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_cloudflare_ai_search_api_token',
-			'API Token',
-			[Settings::class, 'render_text_field'],
-			Config::PAGE_SLUG,
-			'flavor_agent_cloudflare',
-			[
-				'option'       => 'flavor_agent_cloudflare_ai_search_api_token',
-				'label_for'    => 'flavor_agent_cloudflare_ai_search_api_token',
-				'type'         => 'password',
-				'placeholder'  => 'Cloudflare API token',
-				'description'  => 'Optional override. Needs Account > AI Search:Edit and Account > AI Search:Run permissions.',
-				'autocomplete' => 'new-password',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_cloudflare_ai_search_max_results',
-			'Max Grounding Sources',
-			[Settings::class, 'render_text_field'],
-			Config::PAGE_SLUG,
-			'flavor_agent_cloudflare',
-			[
-				'option'      => 'flavor_agent_cloudflare_ai_search_max_results',
-				'label_for'   => 'flavor_agent_cloudflare_ai_search_max_results',
-				'type'        => 'number',
-				'placeholder' => '4',
-				'description' => 'Maximum docs sources per grounded request.',
-				'inputmode'   => 'numeric',
-			]
-		);
+			add_settings_field(
+				'flavor_agent_cloudflare_ai_search_max_results',
+				'Max Grounding Sources',
+				[ Settings::class, 'render_text_field' ],
+				Config::PAGE_SLUG,
+				'flavor_agent_cloudflare',
+				[
+					'option'      => 'flavor_agent_cloudflare_ai_search_max_results',
+					'label_for'   => 'flavor_agent_cloudflare_ai_search_max_results',
+					'type'        => 'number',
+					'placeholder' => '4',
+					'description' => 'Maximum docs sources per grounded request.',
+					'inputmode'   => 'numeric',
+				]
+			);
 		add_settings_field(
 			Guidelines::OPTION_SITE,
 			'Site Context',
-			[Settings::class, 'render_textarea_field'],
+			[ Settings::class, 'render_textarea_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_guidelines',
 			[
@@ -661,7 +515,7 @@ final class Registrar
 		add_settings_field(
 			Guidelines::OPTION_COPY,
 			'Copy Guidelines',
-			[Settings::class, 'render_textarea_field'],
+			[ Settings::class, 'render_textarea_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_guidelines',
 			[
@@ -674,7 +528,7 @@ final class Registrar
 		add_settings_field(
 			Guidelines::OPTION_IMAGES,
 			'Image Guidelines',
-			[Settings::class, 'render_textarea_field'],
+			[ Settings::class, 'render_textarea_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_guidelines',
 			[
@@ -687,7 +541,7 @@ final class Registrar
 		add_settings_field(
 			Guidelines::OPTION_ADDITIONAL,
 			'Additional Guidelines',
-			[Settings::class, 'render_textarea_field'],
+			[ Settings::class, 'render_textarea_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_guidelines',
 			[
@@ -700,7 +554,7 @@ final class Registrar
 		add_settings_field(
 			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
 			'Block Structural Actions',
-			[Settings::class, 'render_checkbox_field'],
+			[ Settings::class, 'render_checkbox_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_experimental_features',
 			[

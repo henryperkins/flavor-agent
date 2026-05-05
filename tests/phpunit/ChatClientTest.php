@@ -35,11 +35,11 @@ final class ChatClientTest extends TestCase {
 		);
 	}
 
-	public function test_is_supported_when_selected_connector_provider_is_available(): void {
-		WordPressTestState::$options                    = [
+	public function test_is_supported_when_wordpress_ai_client_runtime_is_available(): void {
+		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
-		WordPressTestState::$connectors                 = [
+		WordPressTestState::$connectors                     = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -50,11 +50,12 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support = [
-			'openai' => true,
-		];
+			WordPressTestState::$ai_client_provider_support = [
+				'openai' => true,
+			];
+			WordPressTestState::$ai_client_supported        = true;
 
-		$this->assertTrue( ChatClient::is_supported() );
+			$this->assertTrue( ChatClient::is_supported() );
 	}
 
 	public function test_is_not_supported_when_wordpress_ai_client_has_no_text_generation_provider(): void {
@@ -63,11 +64,11 @@ final class ChatClientTest extends TestCase {
 		$this->assertFalse( ChatClient::is_supported() );
 	}
 
-	public function test_chat_routes_through_the_selected_connector_provider(): void {
-		WordPressTestState::$options                        = [
+	public function test_chat_ignores_saved_connector_provider_and_uses_wordpress_ai_client(): void {
+		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
-		WordPressTestState::$connectors                     = [
+		WordPressTestState::$connectors                         = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -78,26 +79,27 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support     = [
-			'openai' => true,
-		];
-		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+			WordPressTestState::$ai_client_provider_support     = [
+				'openai' => true,
+			];
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
-		$result = ChatClient::chat( 'system prompt', 'user prompt' );
+			$result = ChatClient::chat( 'system prompt', 'user prompt' );
 
-		$this->assertSame(
-			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
-			$result
-		);
-		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+			$this->assertSame(
+				'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
+				$result
+			);
+			$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+			$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_chat_applies_wordpress_ai_system_instruction_filter_for_surface(): void {
-		WordPressTestState::$options                        = [
+		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
-		WordPressTestState::$connectors                     = [
+		WordPressTestState::$connectors                         = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -108,22 +110,23 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support     = [
-			'openai' => true,
-		];
-		WordPressTestState::$ai_client_generate_text_result = '{"mode":"draft","title":"OK","summary":"","content":"X"}';
-		$seen_ability                                       = null;
+			WordPressTestState::$ai_client_provider_support     = [
+				'openai' => true,
+			];
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_generate_text_result = '{"mode":"draft","title":"OK","summary":"","content":"X"}';
+			$seen_ability                                       = null;
 
-		add_filter(
-			'wpai_system_instruction',
-			static function ( string $instruction, string $ability ) use ( &$seen_ability ): string {
-				$seen_ability = $ability;
+			add_filter(
+				'wpai_system_instruction',
+				static function ( string $instruction, string $ability ) use ( &$seen_ability ): string {
+					$seen_ability = $ability;
 
-				return $instruction . "\n\nSite policy: no hype.";
-			},
-			10,
-			3
-		);
+					return $instruction . "\n\nSite policy: no hype.";
+				},
+				10,
+				3
+			);
 
 		$result = ChatClient::chat( 'system prompt', 'user prompt', null, 'flavor_agent_content' );
 
@@ -140,11 +143,11 @@ final class ChatClientTest extends TestCase {
 		$this->assertSame( ChatClient::get_setup_message(), $result->get_error_message() );
 	}
 
-	public function test_selected_connector_provider_pins_chat_to_that_connector(): void {
-		WordPressTestState::$options                        = [
+	public function test_saved_connector_provider_does_not_pin_chat_to_that_connector(): void {
+		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];
-		WordPressTestState::$connectors                     = [
+		WordPressTestState::$connectors                         = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
 				'description'    => 'Anthropic connector',
@@ -155,26 +158,27 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support     = [
-			'anthropic' => true,
-		];
-		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
-		$result = ChatClient::chat( 'system prompt', 'user prompt' );
+			$result = ChatClient::chat( 'system prompt', 'user prompt' );
 
-		$this->assertSame(
-			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
-			$result
-		);
-		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+			$this->assertSame(
+				'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
+				$result
+			);
+			$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+			$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_selected_connector_provider_skips_unsupported_optional_prompt_features(): void {
-		WordPressTestState::$options                        = [
+	public function test_saved_connector_provider_uses_unpinned_runtime_and_skips_unsupported_optional_prompt_features(): void {
+		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];
-		WordPressTestState::$connectors                     = [
+		WordPressTestState::$connectors                         = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
 				'description'    => 'Anthropic connector',
@@ -185,42 +189,43 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support     = [
-			'anthropic' => true,
-		];
-		WordPressTestState::$ai_client_feature_support      = [
-			'reasoning'   => false,
-			'json_schema' => false,
-		];
-		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_feature_support      = [
+				'reasoning'   => false,
+				'json_schema' => false,
+			];
+			WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
-		$result = ChatClient::chat(
-			'system prompt',
-			'user prompt',
-			[
-				'type'       => 'object',
-				'properties' => [
-					'explanation' => [ 'type' => 'string' ],
-				],
-			]
-		);
+			$result = ChatClient::chat(
+				'system prompt',
+				'user prompt',
+				[
+					'type'       => 'object',
+					'properties' => [
+						'explanation' => [ 'type' => 'string' ],
+					],
+				]
+			);
 
 		$this->assertSame(
 			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
 			$result
 		);
-		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
-		$this->assertSame( 'system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+			$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+			$this->assertSame( 'system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
 		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
 		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_connector_json_schema_sends_compact_block_schema_for_schema_compatible_connector(): void {
-		WordPressTestState::$options                        = [
+		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
-		WordPressTestState::$connectors                     = [
+		WordPressTestState::$connectors                         = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -231,16 +236,17 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support     = [
-			'openai' => true,
-		];
-		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+			WordPressTestState::$ai_client_provider_support     = [
+				'openai' => true,
+			];
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
-		$result = ChatClient::chat(
-			'system prompt',
-			'user prompt',
-			ResponseSchema::get( 'block' )
-		);
+			$result = ChatClient::chat(
+				'system prompt',
+				'user prompt',
+				ResponseSchema::get( 'block' )
+			);
 
 		$this->assertSame(
 			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
@@ -273,10 +279,10 @@ final class ChatClientTest extends TestCase {
 	}
 
 	public function test_connector_json_schema_closes_object_nodes_for_schema_compatible_connector(): void {
-		WordPressTestState::$options                        = [
+		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
-		WordPressTestState::$connectors                     = [
+		WordPressTestState::$connectors                         = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -287,16 +293,17 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support     = [
-			'openai' => true,
-		];
-		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+			WordPressTestState::$ai_client_provider_support     = [
+				'openai' => true,
+			];
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
-		ChatClient::chat(
-			'system prompt',
-			'user prompt',
-			ResponseSchema::get( 'block' )
-		);
+			ChatClient::chat(
+				'system prompt',
+				'user prompt',
+				ResponseSchema::get( 'block' )
+			);
 
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
 
@@ -304,10 +311,10 @@ final class ChatClientTest extends TestCase {
 	}
 
 	public function test_connector_json_schema_marks_all_object_properties_as_required_for_schema_compatible_connector(): void {
-		WordPressTestState::$options                        = [
+		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
-		WordPressTestState::$connectors                     = [
+		WordPressTestState::$connectors                         = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -318,16 +325,17 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support     = [
-			'openai' => true,
-		];
-		WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Use the current structure."}';
+			WordPressTestState::$ai_client_provider_support     = [
+				'openai' => true,
+			];
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Use the current structure."}';
 
-		ChatClient::chat(
-			'system prompt',
-			'user prompt',
-			ResponseSchema::get( 'template' )
-		);
+			ChatClient::chat(
+				'system prompt',
+				'user prompt',
+				ResponseSchema::get( 'template' )
+			);
 
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
 

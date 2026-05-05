@@ -184,6 +184,7 @@ final class WordPressAIClient {
 		}
 
 		if ( is_wp_error( $result ) ) {
+			$result = self::normalize_ai_client_error( $result );
 			Provider::record_runtime_chat_diagnostics(
 				self::with_error_summary( $request_diagnostics, $result )
 			);
@@ -877,10 +878,81 @@ final class WordPressAIClient {
 		} catch ( \Throwable $throwable ) {
 			return new \WP_Error(
 				'wp_ai_client_request_failed',
-				$throwable->getMessage(),
+				self::normalize_ai_client_error_message( $throwable->getMessage() ),
 				[ 'status' => 500 ]
 			);
 		}
+	}
+
+	private static function normalize_ai_client_error( \WP_Error $error ): \WP_Error {
+		$code               = $error->get_error_code();
+		$message            = $error->get_error_message( $code );
+		$normalized_message = self::normalize_ai_client_error_message( $message );
+
+		if ( $normalized_message === $message ) {
+			return $error;
+		}
+
+		return new \WP_Error(
+			$code,
+			$normalized_message,
+			$error->get_error_data( $code )
+		);
+	}
+
+	private static function normalize_ai_client_error_message( string $message ): string {
+		$message = trim( $message );
+
+		if ( '' === $message ) {
+			return $message;
+		}
+
+		$candidate = trim( html_entity_decode( $message, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+
+		if ( '' === $candidate ) {
+			return $message;
+		}
+
+		$decoded = json_decode( $candidate, true );
+
+		if ( is_array( $decoded ) ) {
+			$json_message = self::extract_error_message_from_array( $decoded );
+
+			if ( '' !== $json_message ) {
+				return $json_message;
+			}
+		}
+
+		if ( ! str_starts_with( $candidate, '{' ) ) {
+			return $message;
+		}
+
+		foreach ( [ "'", '"' ] as $quote ) {
+			$pattern = '/[\'"]message[\'"]\s*:\s*' . preg_quote( $quote, '/' ) . '([^' . preg_quote( $quote, '/' ) . ']*)' . preg_quote( $quote, '/' ) . '/s';
+
+			if ( preg_match( $pattern, $candidate, $matches ) ) {
+				$structured_message = trim( stripcslashes( (string) ( $matches[1] ?? '' ) ) );
+
+				if ( '' !== $structured_message ) {
+					return $structured_message;
+				}
+			}
+		}
+
+		return $message;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private static function extract_error_message_from_array( array $payload ): string {
+		$message = $payload['message'] ?? null;
+
+		if ( is_scalar( $message ) ) {
+			return trim( (string) $message );
+		}
+
+		return '';
 	}
 
 	/**

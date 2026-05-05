@@ -17,20 +17,19 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## What The User Can Configure
 
 - AI Model status: text generation is configured in `Settings > Connectors`; this screen links to that shared setup and reports the active WordPress AI Client runtime.
-- Embedding Model: one direct OpenAI Native or Cloudflare Workers AI embedding provider for Flavor Agent semantic features.
+- Embedding Model: Cloudflare Workers AI account ID, API token, and embedding model for Flavor Agent semantic features.
 - Azure OpenAI endpoint, API key, and embedding deployment are no longer editable settings. The neutral `flavor_agent_reasoning_effort` option is used by the Connectors-routed chat runtime when present; valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a fallback/migration source. Text-generation provider and model readiness belong to `Settings > Connectors`.
-- OpenAI Native API key override and embedding model ID.
 - Cloudflare Workers AI account ID, API token, and embedding model ID.
 - Pattern Storage: Qdrant vector storage or private Cloudflare AI Search managed index. This is infrastructure, not another AI model choice.
 - Qdrant URL and API key when Qdrant Pattern Storage is selected.
 - Private Cloudflare AI Search account ID, namespace, instance ID, and API token when Cloudflare AI Search Pattern Storage is selected.
 - Pattern recommendation ranking threshold and max results.
 - Cloudflare AI Search pattern recommendation ranking threshold.
-- Developer Docs max result count. Developer docs use Flavor Agent's built-in public endpoint; custom Cloudflare credentials are a legacy override shown only when saved values already exist.
+- Developer Docs source status and max result count. Developer docs use Flavor Agent's built-in public endpoint and do not expose Cloudflare credential fields.
 - Guidelines: site context, copy guidelines, image guidelines, additional guidelines, and block-specific notes. When the core/Gutenberg Guidelines store is present, Flavor Agent reads that store first and keeps the legacy fields as migration/import-export tooling.
 - Manual pattern sync through the `Sync Pattern Catalog` button.
 
-Chat is no longer configured with plugin-owned chat credentials on this screen. After Workstream C of the WP 7.0 overlap remediation, chat traffic is owned by `Settings > Connectors` via the WordPress AI Client. The Embedding Model section no longer doubles as a chat-provider selector: direct OpenAI Native and Cloudflare Workers AI choices configure Flavor Agent embeddings, while text generation uses the configured WordPress AI Client runtime. Saved legacy connector IDs can still pin chat when the connector remains available; if a pinned connector is unavailable, chat fails closed instead of silently switching providers. Cloudflare Workers AI must be explicitly selected for embeddings and is not used as an implicit embedding fallback. Selecting the Cloudflare AI Search pattern backend bypasses plugin-owned embeddings and Qdrant for pattern retrieval; final pattern reranking still requires Connectors chat.
+Chat is no longer configured with plugin-owned chat credentials on this screen. After Workstream C of the WP 7.0 overlap remediation, chat traffic is owned by `Settings > Connectors` via the WordPress AI Client. The Embedding Model section no longer doubles as a provider selector: Cloudflare Workers AI configures Flavor Agent embeddings, while text generation uses the configured WordPress AI Client runtime. Saved provider values from older settings screens are ignored instead of pinning chat. Selecting the Cloudflare AI Search pattern backend bypasses plugin-owned embeddings and Qdrant for pattern retrieval; final pattern reranking still requires Connectors chat.
 
 The reasoning effort setting is attached to Connectors-routed chat as provider-specific `ModelConfig::customOptions` only where Flavor Agent has a known request contract today: `codex` receives `reasoningEffort`, and `openai` receives `reasoning.effort`. Anthropic is left unmapped until its provider plugin documents the accepted reasoning payload.
 
@@ -38,7 +37,7 @@ The reasoning effort setting is attached to Connectors-routed chat as provider-s
 
 | Surface                       | Primary gate                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Block recommendations         | `ChatClient::is_supported()` returns `true` when the WordPress AI Client has a configured text-generation runtime through `Settings > Connectors`. Saved legacy connector pins must still resolve to an available connector.                                                                                                                                                                   |
+| Block recommendations         | `ChatClient::is_supported()` returns `true` when the WordPress AI Client has a configured text-generation runtime through `Settings > Connectors`. Saved provider values from older settings screens are ignored.                                                                                                                                                                               |
 | Pattern recommendations       | Selected pattern storage ready, WordPress AI Client chat for ranking, and a usable pattern index. Qdrant requires the single configured Embedding Model plus Qdrant. Cloudflare AI Search requires private pattern AI Search credentials and instance metadata.                                                                                                                                |
 | Template recommendations      | Runtime chat configured through `Settings > Connectors`                                                                                                                                                                                                                                                                                                                                        |
 | Template-part recommendations | Runtime chat configured through `Settings > Connectors`                                                                                                                                                                                                                                                                                                                                        |
@@ -50,10 +49,10 @@ The reasoning effort setting is attached to Connectors-routed chat as provider-s
 
 1. The user changes settings on `Settings > Flavor Agent`
 2. WordPress Settings API saves the options registered by `FlavorAgent\Settings::register_settings()`
-3. Flavor Agent validates OpenAI Native, Cloudflare Workers AI, Qdrant, and private pattern Cloudflare AI Search settings when those credential sets changed and enough data is present to run the validation. Legacy Azure embedding options are not rendered or save-validated. Cloudflare AI Search developer-doc override credentials are legacy-only and are revalidated only when saved override fields are still being used.
+3. Flavor Agent validates Cloudflare Workers AI, Qdrant, and private pattern Cloudflare AI Search settings when those credential sets changed and enough data is present to run the validation. Legacy Azure/OpenAI embedding options are not rendered or save-validated from the admin screen. Developer Docs uses the built-in public endpoint and has no credential save-validation path.
 4. If validation fails, the plugin keeps the previous values and surfaces the error through normal Settings API notices
-5. The OpenAI Native embeddings section reports the current effective API key source and whether the core OpenAI connector is registered/configured
-6. Runtime status messages call out which WordPress AI Client path is currently serving chat and which embedding provider is configured.
+5. The Cloudflare Workers AI embeddings section reports the account/token/model fields used by the runtime embedding path
+6. Runtime status messages call out which WordPress AI Client path is currently serving chat and whether Cloudflare Workers AI embeddings are configured.
 7. Pattern setup messages describe storage readiness separately from model readiness so Pattern Storage does not look like another AI model picker.
 8. Durable setup guidance, troubleshooting, and format notes live in the native WordPress `Help` dropdown so inline page copy can stay focused on active controls and runtime state
 
@@ -68,7 +67,7 @@ Backend-specific sync behavior:
 
 | Pattern backend      | Sync behavior                                                                                                                                                                                                               |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Qdrant               | Diffs current registered patterns plus public-safe published synced/user `wp_block` patterns, embeds changed patterns with the selected plugin-owned embedding backend, upserts Qdrant points, and deletes stale points.    |
+| Qdrant               | Diffs current registered patterns plus public-safe published synced/user `wp_block` patterns, embeds changed patterns with Cloudflare Workers AI, upserts Qdrant points, and deletes stale points.                       |
 | Cloudflare AI Search | Diffs the same public-safe corpus, uploads changed patterns as markdown items to the private AI Search instance with stable item IDs and `wait_for_completion=true`, lists remote item IDs, and deletes stale remote items. |
 
 ## Guidelines Bridge Flow
@@ -85,7 +84,7 @@ Backend-specific sync behavior:
 | --------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Settings page         | `Settings::add_menu()` / `Settings::render_page()`                                    | Registers and renders `Settings > Flavor Agent`                                                            |
 | Settings registration | `Settings::register_settings()`                                                       | Registers options, sections, and fields                                                                    |
-| Provider diagnostics  | `Provider::openai_connector_status()` / `Provider::native_effective_api_key_source()` | Explain effective OpenAI Native credential ownership                                                       |
+| Provider diagnostics  | `Provider::embedding_configuration()` / `InfraAbilities::check_status()`              | Explain Cloudflare Workers AI embedding readiness and backend availability                                 |
 | Backend status        | `InfraAbilities::check_status()`                                                      | Returns backend inventory and currently available abilities                                                |
 | Theme tokens          | `InfraAbilities::get_theme_tokens()`                                                  | Exposes the current theme token snapshot through an ability                                                |
 | Docs grounding        | `WordPressDocsAbilities::search_wordpress_docs()`                                     | Exposes trusted developer-doc grounding through an ability                                                 |
@@ -99,10 +98,10 @@ Backend-specific sync behavior:
 - Pattern recommendations fail closed when the selected pattern backend is not configured or Connectors text generation is unavailable
 - Flavor Agent has one embedding model choice for semantic features; Pattern Storage is a separate infrastructure choice
 - Cloudflare AI Search pattern retrieval uses private site-owner Cloudflare credentials and is separate from the public WordPress developer-docs AI Search endpoint
-- Cloudflare Workers AI embeddings require explicit provider selection; they are not used as an implicit fallback from OpenAI Native or connector-backed selections
+- Cloudflare Workers AI embeddings are the only first-party admin embedding setup path
 - Guidelines are read core-first when the `wp_guideline` model is available; Flavor Agent does not require or assume a future `wp_register_guideline()` API yet
 - Legacy guideline options are not deleted during the bridge phase
-- Legacy Developer Docs override validation only accepts guidance sourced from `developer.wordpress.org`
+- Developer Docs grounding only accepts guidance sourced from `developer.wordpress.org`
 - Sync is admin-only and does not bypass pattern-index validation or locking rules
 
 ## Related Routes And Abilities
@@ -116,7 +115,7 @@ Backend-specific sync behavior:
 
 - `inc/Settings.php`
 - `inc/OpenAI/Provider.php`
-- `inc/AzureOpenAI/ConfigurationValidator.php`
+- `inc/Embeddings/ConfigurationValidator.php`
 - `inc/Cloudflare/WorkersAIEmbeddingConfiguration.php`
 - `inc/Abilities/InfraAbilities.php`
 - `inc/Abilities/WordPressDocsAbilities.php`

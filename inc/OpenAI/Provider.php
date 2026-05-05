@@ -7,17 +7,19 @@ namespace FlavorAgent\OpenAI;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\LLM\WordPressAIClient;
 
+/**
+ * Legacy-named provider facade for chat metadata and Workers AI embeddings.
+ *
+ * The OpenAI namespace and `flavor_agent_openai_provider` option are historical
+ * compatibility surfaces. Runtime chat is resolved through the WordPress AI
+ * Client, and plugin-owned embeddings resolve to Cloudflare Workers AI only.
+ */
 final class Provider {
 
+
 	public const OPTION_NAME = 'flavor_agent_openai_provider';
-	public const AZURE       = 'azure_openai';
-	public const NATIVE      = 'openai_native';
 
 	private const WORDPRESS_AI_CLIENT_PROVIDER = 'wordpress_ai_client';
-	private const OPENAI_CONNECTOR_ID          = 'openai';
-	private const CONNECTOR_OPENAI_OPTION      = 'connectors_ai_openai_api_key';
-	private const NATIVE_API_KEY_ENV_VAR       = 'OPENAI_API_KEY';
-	private const NATIVE_BASE_URL              = 'https://api.openai.com';
 
 	/**
 	 * @var array<string, mixed>|null
@@ -45,7 +47,6 @@ final class Provider {
 	 */
 	public static function direct_choices(): array {
 		return [
-			self::NATIVE                              => 'OpenAI Native',
 			WorkersAIEmbeddingConfiguration::PROVIDER => 'Cloudflare Workers AI',
 		];
 	}
@@ -54,48 +55,13 @@ final class Provider {
 	 * @return array<string, string>
 	 */
 	public static function choices( ?string $selected_provider = null ): array {
-		return self::direct_choices() + self::selectable_connector_choices( $selected_provider );
-	}
+		unset( $selected_provider );
 
-	/**
-	 * @return array<string, string>
-	 */
-	public static function embedding_settings_choices( ?string $selected_provider = null ): array {
-		$selected_provider = sanitize_key(
-			(string) (
-				$selected_provider
-				?? self::raw_saved_provider()
-			)
-		);
-		$choices           = self::direct_choices();
-
-		if ( self::is_azure( $selected_provider ) ) {
-			$choices = [
-				$selected_provider => sprintf(
-					'Removed provider: %s',
-					self::legacy_embedding_provider_choices()[ $selected_provider ]
-				),
-			] + $choices;
-		} elseif ( self::is_connector_or_saved_legacy_pin( $selected_provider ) ) {
-			$choices = [
-				$selected_provider => sprintf(
-					'Legacy connector pin: %s',
-					self::legacy_connector_pin_label( $selected_provider )
-				),
-			] + $choices;
-		}
-
-		return $choices;
+		return self::direct_choices();
 	}
 
 	public static function get(): string {
-		$provider = self::raw_saved_provider();
-
-		if ( isset( self::all_choices()[ $provider ] ) || self::is_saved_legacy_connector_pin( $provider ) ) {
-			return $provider;
-		}
-
-		return self::NATIVE;
+		return WorkersAIEmbeddingConfiguration::PROVIDER;
 	}
 
 	public static function label( ?string $provider = null ): string {
@@ -106,19 +72,7 @@ final class Provider {
 			return $choices[ $provider ];
 		}
 
-		if ( self::is_saved_legacy_connector_pin( $provider ) ) {
-			return self::legacy_connector_pin_label( $provider );
-		}
-
-		return self::direct_choices()[ self::NATIVE ];
-	}
-
-	public static function is_azure( ?string $provider = null ): bool {
-		return ( $provider ?? self::get() ) === self::AZURE;
-	}
-
-	public static function is_native( ?string $provider = null ): bool {
-		return ( $provider ?? self::get() ) === self::NATIVE;
+		return self::direct_choices()[ WorkersAIEmbeddingConfiguration::PROVIDER ];
 	}
 
 	public static function is_connector( ?string $provider = null ): bool {
@@ -128,17 +82,9 @@ final class Provider {
 	}
 
 	public static function is_saved_legacy_connector_pin( ?string $provider = null ): bool {
-		$provider = sanitize_key( (string) ( $provider ?? self::raw_saved_provider() ) );
+		unset( $provider );
 
-		if (
-			'' === $provider
-			|| isset( self::direct_choices()[ $provider ] )
-			|| isset( self::legacy_embedding_provider_choices()[ $provider ] )
-		) {
-			return false;
-		}
-
-		return $provider === self::raw_saved_provider();
+		return false;
 	}
 
 	public static function is_connector_or_saved_legacy_pin( ?string $provider = null ): bool {
@@ -155,142 +101,17 @@ final class Provider {
 			return $connector_choices[ $provider ];
 		}
 
-		if ( isset( self::legacy_embedding_provider_choices()[ $provider ] ) ) {
-			return self::legacy_embedding_provider_choices()[ $provider ];
-		}
-
-		return '' !== $provider ? $provider : self::direct_choices()[ self::NATIVE ];
+		return '' !== $provider ? $provider : self::direct_choices()[ WorkersAIEmbeddingConfiguration::PROVIDER ];
 	}
 
 	public static function is_wordpress_ai_client( ?string $provider = null ): bool {
 		return sanitize_key( (string) ( $provider ?? self::get() ) ) === self::WORDPRESS_AI_CLIENT_PROVIDER;
 	}
 
-	public static function native_base_url(): string {
-		return self::NATIVE_BASE_URL;
-	}
-
-	/**
-	 * @return array{
-	 *   registered: bool,
-	 *   configured: bool,
-	 *   label: string,
-	 *   settingName: string,
-	 *   keySource: 'env'|'constant'|'database'|'connector_filter'|'none',
-	 *   credentialsUrl: ?string,
-	 *   pluginSlug: ?string
-	 * }
-	 */
-	public static function openai_connector_status(): array {
-		$connector       = self::openai_connector();
-		$authentication  = is_array( $connector['authentication'] ?? null ) ? $connector['authentication'] : [];
-		$plugin          = is_array( $connector['plugin'] ?? null ) ? $connector['plugin'] : [];
-		$setting_name    = is_string( $authentication['setting_name'] ?? null ) && '' !== $authentication['setting_name']
-			? $authentication['setting_name']
-			: self::CONNECTOR_OPENAI_OPTION;
-		$key_source      = self::connector_api_key_source( self::OPENAI_CONNECTOR_ID, $setting_name, [], $connector );
-		$is_registered   = self::is_connector_registered( self::OPENAI_CONNECTOR_ID, $connector );
-		$credentials_url = is_string( $authentication['credentials_url'] ?? null ) && '' !== $authentication['credentials_url']
-			? $authentication['credentials_url']
-			: null;
-		$plugin_slug     = is_string( $plugin['slug'] ?? null ) && '' !== $plugin['slug']
-			? $plugin['slug']
-			: null;
-		$label           = is_string( $connector['name'] ?? null ) && '' !== $connector['name']
-			? $connector['name']
-			: 'OpenAI';
-
-		return [
-			'registered'     => $is_registered,
-			'configured'     => 'none' !== $key_source,
-			'label'          => $label,
-			'settingName'    => $setting_name,
-			'keySource'      => $key_source,
-			'credentialsUrl' => $credentials_url,
-			'pluginSlug'     => $plugin_slug,
-		];
-	}
-
-	/**
-	 * Resolve the effective OpenAI native API key.
-	 *
-	 * Flavor Agent prefers its own saved key for backward compatibility, but will
-	 * fall back to the core OpenAI connector lifecycle when the plugin-specific key
-	 * is blank.
-	 *
-	 * @param array<string, string> $overrides
-	 */
-	public static function native_effective_api_key( array $overrides = [] ): string {
-		return self::native_effective_api_key_metadata( $overrides )['api_key'];
-	}
-
-	/**
-	 * @param array<string, string> $overrides
-	 * @return array{
-	 *   api_key: string,
-	 *   source: 'plugin_override'|'env'|'constant'|'connector_database'|'none',
-	 *   connector: array{
-	 *     registered: bool,
-	 *     configured: bool,
-	 *     label: string,
-	 *     settingName: string,
-	 *     keySource: 'env'|'constant'|'database'|'connector_filter'|'none',
-	 *     credentialsUrl: ?string,
-	 *     pluginSlug: ?string
-	 *   }
-	 * }
-	 */
-	public static function native_effective_api_key_metadata( array $overrides = [] ): array {
-		if ( array_key_exists( 'flavor_agent_openai_native_api_key', $overrides ) ) {
-			$api_key = (string) $overrides['flavor_agent_openai_native_api_key'];
-		} else {
-			$api_key = (string) get_option( 'flavor_agent_openai_native_api_key', '' );
-		}
-
-		$connector_status = self::openai_connector_status();
-
-		if ( '' !== $api_key ) {
-			return [
-				'api_key'   => $api_key,
-				'source'    => 'plugin_override',
-				'connector' => $connector_status,
-			];
-		}
-
-		$connector_source = $connector_status['keySource'];
-		if ( 'none' !== $connector_source && 'connector_filter' !== $connector_source ) {
-			return [
-				'api_key'   => self::connector_api_key_value(
-					self::OPENAI_CONNECTOR_ID,
-					$connector_status['settingName'],
-					$overrides
-				),
-				'source'    => 'database' === $connector_source ? 'connector_database' : $connector_source,
-				'connector' => $connector_status,
-			];
-		}
-
-		return [
-			'api_key'   => '',
-			'source'    => 'none',
-			'connector' => $connector_status,
-		];
-	}
-
-	/**
-	 * @param array<string, string> $overrides
-	 * @return 'plugin_override'|'env'|'constant'|'connector_database'|'none'
-	 */
-	public static function native_effective_api_key_source( array $overrides = [] ): string {
-		return self::native_effective_api_key_metadata( $overrides )['source'];
-	}
-
 	/**
 	 * Chat is owned by Settings > Connectors via the WordPress AI Client. Flavor
-	 * Agent pins saved connector selections and OpenAI Native to matching
-	 * connectors when supported, and otherwise lets direct embedding selections use
-	 * the configured generic WordPress AI Client runtime. Saved legacy connector
-	 * pins fail closed when their connector is unavailable.
+	 * Agent ignores saved provider values from older settings screens and lets the
+	 * configured generic WordPress AI Client runtime choose text generation.
 	 *
 	 * @param array<string, string> $overrides Reserved for parity with embedding_configuration().
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
@@ -334,59 +155,9 @@ final class Provider {
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
 	public static function embedding_configuration( ?string $provider = null, array $overrides = [] ): array {
-		if ( null === $provider ) {
-			return self::runtime_embedding_configuration( $overrides );
-		}
+		unset( $provider );
 
-		$provider = self::normalize_provider( $provider ?? self::get() );
-
-		if ( WorkersAIEmbeddingConfiguration::PROVIDER === $provider ) {
-			return WorkersAIEmbeddingConfiguration::get( $overrides );
-		}
-
-		if ( self::is_connector_or_saved_legacy_pin( $provider ) ) {
-			return [
-				'provider'   => $provider,
-				'endpoint'   => '',
-				'api_key'    => '',
-				'model'      => '',
-				'configured' => false,
-				'headers'    => [],
-				'url'        => '',
-				'label'      => self::label( $provider ),
-			];
-		}
-
-		if ( self::is_native( $provider ) ) {
-			$api_key = self::native_effective_api_key( $overrides );
-			$model   = self::option_value( $overrides, 'flavor_agent_openai_native_embedding_model' );
-
-			return [
-				'provider'   => $provider,
-				'endpoint'   => self::NATIVE_BASE_URL,
-				'api_key'    => $api_key,
-				'model'      => $model,
-				'configured' => $api_key !== '' && $model !== '',
-				'headers'    => self::native_headers( $api_key ),
-				'url'        => self::NATIVE_BASE_URL . '/v1/embeddings',
-				'label'      => 'OpenAI embeddings',
-			];
-		}
-
-		$endpoint = self::option_value( $overrides, 'flavor_agent_azure_openai_endpoint' );
-		$api_key  = self::option_value( $overrides, 'flavor_agent_azure_openai_key' );
-		$model    = self::option_value( $overrides, 'flavor_agent_azure_embedding_deployment' );
-
-		return [
-			'provider'   => $provider,
-			'endpoint'   => $endpoint,
-			'api_key'    => $api_key,
-			'model'      => $model,
-			'configured' => $endpoint !== '' && $api_key !== '' && $model !== '',
-			'headers'    => self::azure_headers( $api_key ),
-			'url'        => rtrim( $endpoint, '/' ) . '/openai/v1/embeddings',
-			'label'      => 'Azure OpenAI embeddings',
-		];
+		return WorkersAIEmbeddingConfiguration::get( $overrides );
 	}
 
 	public static function chat_configured(): bool {
@@ -555,31 +326,18 @@ final class Provider {
 	public static function normalize_provider( string $provider ): string {
 		$provider = sanitize_key( $provider );
 
-		if ( isset( self::all_choices()[ $provider ] ) || self::is_saved_legacy_connector_pin( $provider ) ) {
+		if ( isset( self::all_choices()[ $provider ] ) ) {
 			return $provider;
 		}
 
-		return self::NATIVE;
-	}
-
-	private static function raw_saved_provider(): string {
-		return sanitize_key( (string) get_option( self::OPTION_NAME, self::NATIVE ) );
+		return WorkersAIEmbeddingConfiguration::PROVIDER;
 	}
 
 	/**
 	 * @return array<string, string>
 	 */
 	private static function all_choices(): array {
-		return self::direct_choices() + self::legacy_embedding_provider_choices() + self::registered_connector_choices();
-	}
-
-	/**
-	 * @return array<string, string>
-	 */
-	private static function legacy_embedding_provider_choices(): array {
-		return [
-			self::AZURE => 'Azure OpenAI',
-		];
+		return self::direct_choices() + self::registered_connector_choices();
 	}
 
 	private static function normalize_provider_for_request_meta( string $provider ): string {
@@ -785,10 +543,9 @@ final class Provider {
 
 	/**
 	 * Resolve the active chat runtime. Chat belongs to Settings > Connectors. A
-	 * selected connector can still pin chat for legacy installs, OpenAI Native
-	 * maps to the OpenAI connector when available, and otherwise Flavor Agent uses
-	 * the configured WordPress AI Client runtime independently of the embedding
-	 * provider selected on this page.
+	 * Saved provider values do not pin chat. Flavor Agent uses the configured
+	 * WordPress AI Client runtime independently of the embedding model configured
+	 * on this page.
 	 *
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
@@ -804,10 +561,6 @@ final class Provider {
 			return self::connector_chat_configuration( $connector_provider );
 		}
 
-		if ( self::is_saved_legacy_connector_pin( $selected_provider ) ) {
-			return self::missing_chat_configuration( $selected_provider );
-		}
-
 		if ( ! self::is_connector( $selected_provider ) && WordPressAIClient::is_supported() ) {
 			return self::wordpress_ai_client_configuration();
 		}
@@ -820,10 +573,6 @@ final class Provider {
 
 		if ( self::is_connector_or_saved_legacy_pin( $provider ) ) {
 			return $provider;
-		}
-
-		if ( self::NATIVE === $provider && self::is_connector( self::OPENAI_CONNECTOR_ID ) ) {
-			return self::OPENAI_CONNECTOR_ID;
 		}
 
 		return '';
@@ -851,7 +600,7 @@ final class Provider {
 			return true;
 		}
 
-		return self::NATIVE === $selected_provider && self::OPENAI_CONNECTOR_ID === $provider;
+		return false;
 	}
 
 	/**
@@ -893,30 +642,7 @@ final class Provider {
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
 	private static function runtime_embedding_configuration( array $overrides = [] ): array {
-		$selected_provider = self::get();
-		$selected_config   = self::embedding_configuration( $selected_provider, $overrides );
-
-		if ( $selected_config['configured'] ) {
-			return $selected_config;
-		}
-
-		foreach ( array_keys( self::direct_choices() ) as $candidate ) {
-			if ( $candidate === $selected_provider ) {
-				continue;
-			}
-
-			if ( WorkersAIEmbeddingConfiguration::PROVIDER === $candidate ) {
-				continue;
-			}
-
-			$candidate_config = self::embedding_configuration( $candidate, $overrides );
-
-			if ( $candidate_config['configured'] ) {
-				return $candidate_config;
-			}
-		}
-
-		return $selected_config;
+		return WorkersAIEmbeddingConfiguration::get( $overrides );
 	}
 
 	/**
@@ -950,39 +676,6 @@ final class Provider {
 	}
 
 	/**
-	 * @return array<string, string>
-	 */
-	private static function selectable_connector_choices( ?string $selected_provider = null ): array {
-		$selected_provider = sanitize_key(
-			(string) (
-				$selected_provider
-				?? get_option( self::OPTION_NAME, self::NATIVE )
-			)
-		);
-		$registered        = self::registered_connector_choices();
-		$choices           = [];
-
-		foreach ( $registered as $provider => $label ) {
-			if ( WordPressAIClient::is_supported( $provider ) ) {
-				$choices[ $provider ] = sprintf( '%s (Settings > Connectors)', $label );
-			}
-		}
-
-		if (
-			'' !== $selected_provider
-			&& isset( $registered[ $selected_provider ] )
-			&& ! isset( $choices[ $selected_provider ] )
-		) {
-			$choices[ $selected_provider ] = sprintf(
-				'%s (Settings > Connectors, currently unavailable)',
-				$registered[ $selected_provider ]
-			);
-		}
-
-		return $choices;
-	}
-
-	/**
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
 	private static function wordpress_ai_client_configuration(): array {
@@ -995,26 +688,6 @@ final class Provider {
 			'headers'    => [],
 			'url'        => '',
 			'label'      => 'WordPress AI Client',
-		];
-	}
-
-	/**
-	 * @return array<string, string>
-	 */
-	private static function azure_headers( string $api_key ): array {
-		return [
-			'Content-Type' => 'application/json',
-			'api-key'      => $api_key,
-		];
-	}
-
-	/**
-	 * @return array<string, string>
-	 */
-	private static function native_headers( string $api_key ): array {
-		return [
-			'Content-Type'  => 'application/json',
-			'Authorization' => $api_key !== '' ? 'Bearer ' . $api_key : '',
 		];
 	}
 
@@ -1061,142 +734,5 @@ final class Provider {
 		}
 
 		return is_array( $connectors ) ? $connectors : [];
-	}
-
-	private static function is_connector_registered( string $connector_id, ?array $connector = null ): bool {
-		if ( function_exists( 'wp_is_connector_registered' ) ) {
-			try {
-				return wp_is_connector_registered( $connector_id );
-			} catch ( \Throwable $throwable ) {
-				// Fall back to any registry data we can still read below.
-			}
-		}
-
-		if ( null !== $connector ) {
-			return true;
-		}
-
-		return array_key_exists( $connector_id, self::registered_connectors() );
-	}
-
-	/**
-	 * @param array<string, string> $overrides
-	 * @return 'env'|'constant'|'database'|'connector_filter'|'none'
-	 */
-	private static function connector_api_key_source( string $connector_id, string $setting_name, array $overrides = [], ?array $connector = null ): string {
-		foreach ( self::connector_env_var_names( $connector_id, $setting_name ) as $env_var_name ) {
-			$env_value = getenv( $env_var_name );
-			if ( false !== $env_value && '' !== $env_value ) {
-				return 'env';
-			}
-
-			if ( defined( $env_var_name ) ) {
-				$constant_value = constant( $env_var_name );
-				if ( is_scalar( $constant_value ) && '' !== (string) $constant_value ) {
-					return 'constant';
-				}
-			}
-		}
-
-		$db_value = self::option_value( $overrides, $setting_name );
-
-		if ( '' !== $db_value ) {
-			return 'database';
-		}
-
-		$connector ??= self::registered_connectors()[ $connector_id ] ?? [];
-		$filtered    = apply_filters(
-			'wpai_is_' . sanitize_key( $connector_id ) . '_connector_configured',
-			false,
-			is_array( $connector ) ? $connector : []
-		);
-
-		return true === (bool) $filtered ? 'connector_filter' : 'none';
-	}
-
-	/**
-	 * @param array<string, string> $overrides
-	 */
-	private static function connector_api_key_value( string $connector_id, string $setting_name, array $overrides = [] ): string {
-		$source = self::connector_api_key_source( $connector_id, $setting_name, $overrides );
-
-		if ( 'env' === $source ) {
-			$env_value = false;
-
-			foreach ( self::connector_env_var_names( $connector_id, $setting_name ) as $env_var_name ) {
-				$env_value = getenv( $env_var_name );
-
-				if ( false !== $env_value && '' !== $env_value ) {
-					break;
-				}
-			}
-
-			return false !== $env_value ? (string) $env_value : '';
-		}
-
-		if ( 'constant' === $source ) {
-			$constant_value = '';
-
-			foreach ( self::connector_env_var_names( $connector_id, $setting_name ) as $env_var_name ) {
-				if ( ! defined( $env_var_name ) ) {
-					continue;
-				}
-
-				$constant_value = constant( $env_var_name );
-
-				if ( is_scalar( $constant_value ) && '' !== (string) $constant_value ) {
-					break;
-				}
-			}
-
-			return is_scalar( $constant_value ) ? (string) $constant_value : '';
-		}
-
-		if ( 'database' === $source ) {
-			return self::option_value( $overrides, $setting_name );
-		}
-
-		return '';
-	}
-
-	/**
-	 * @return array<int, string>
-	 */
-	private static function connector_env_var_names( string $connector_id, string $setting_name = '' ): array {
-		$names = [];
-
-		if ( '' !== $setting_name ) {
-			$names[] = strtoupper( preg_replace( '/[^A-Za-z0-9]+/', '_', $setting_name ) ?? '' );
-		}
-
-		$names[] = self::connector_env_var_name( $connector_id );
-
-		return array_values(
-			array_unique(
-				array_filter(
-					$names,
-					static fn ( string $name ): bool => '' !== $name
-				)
-			)
-		);
-	}
-
-	private static function connector_env_var_name( string $connector_id ): string {
-		$constant_case_id = strtoupper(
-			preg_replace( '/([a-z])([A-Z])/', '$1_$2', str_replace( '-', '_', $connector_id ) )
-		);
-
-		return "{$constant_case_id}_API_KEY";
-	}
-
-	/**
-	 * @param array<string, string> $overrides
-	 */
-	private static function option_value( array $overrides, string $option_name ): string {
-		if ( array_key_exists( $option_name, $overrides ) ) {
-			return (string) $overrides[ $option_name ];
-		}
-
-		return (string) get_option( $option_name, '' );
 	}
 }

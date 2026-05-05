@@ -9,6 +9,7 @@ import {
 	createActivityEntry,
 	getBlockActivityUndoState,
 	getCurrentActivityScope,
+	getLatestAppliedActivity,
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
 	limitActivityLog,
@@ -281,6 +282,47 @@ describe( 'activity history helpers', () => {
 		] );
 	} );
 
+	test( 'persisted template request diagnostics do not get legacy template undo failures', () => {
+		window.sessionStorage.setItem(
+			'flavor-agent:activity:wp_template:home',
+			JSON.stringify( {
+				version: 4,
+				updatedAt: '2026-03-24T00:00:00Z',
+				entries: [
+					{
+						id: 'template-diagnostic-1',
+						surface: 'template',
+						type: 'request_diagnostic',
+						timestamp: '2026-03-24T00:00:00Z',
+						executionResult: 'review',
+						request: {
+							reference: 'template:home:7',
+						},
+						undo: {
+							canUndo: false,
+							status: 'failed',
+							error: 'The provider timed out.',
+							updatedAt: '2026-03-24T00:00:00Z',
+							undoneAt: null,
+						},
+					},
+				],
+			} )
+		);
+
+		expect( readPersistedActivityLog( 'wp_template:home' ) ).toEqual( [
+			expect.objectContaining( {
+				id: 'template-diagnostic-1',
+				executionResult: 'review',
+				undo: expect.objectContaining( {
+					canUndo: false,
+					status: 'failed',
+					error: 'The provider timed out.',
+				} ),
+			} ),
+		] );
+	} );
+
 	test( 'ordered undo eligibility only unlocks older entries after newer ones are undone', () => {
 		const older = createActivityEntry( {
 			type: 'apply_suggestion',
@@ -335,6 +377,75 @@ describe( 'activity history helpers', () => {
 		expect( getLatestUndoableActivity( [ older, undoneNewer ] ) ).toEqual(
 			expect.objectContaining( {
 				id: older.id,
+			} )
+		);
+	} );
+
+	test( 'failed request diagnostics do not become ordered undo blockers', () => {
+		const older = {
+			...createActivityEntry( {
+				type: 'request_diagnostic',
+				surface: 'template',
+				requestRef: 'template:home:7',
+				timestamp: '2026-03-24T10:00:00Z',
+			} ),
+			undo: {
+				canUndo: false,
+				status: 'failed',
+				error: 'First request failed.',
+				updatedAt: '2026-03-24T10:00:00Z',
+			},
+		};
+		const newer = {
+			...createActivityEntry( {
+				type: 'request_diagnostic',
+				surface: 'template',
+				requestRef: 'template:home:7',
+				timestamp: '2026-03-24T10:00:01Z',
+			} ),
+			undo: {
+				canUndo: false,
+				status: 'failed',
+				error: 'Second request failed.',
+				updatedAt: '2026-03-24T10:00:01Z',
+			},
+		};
+
+		expect( getResolvedActivityEntries( [ older, newer ] ) ).toEqual( [
+			expect.objectContaining( {
+				id: older.id,
+				undo: expect.objectContaining( {
+					canUndo: false,
+					status: 'failed',
+					error: 'First request failed.',
+				} ),
+			} ),
+			expect.objectContaining( {
+				id: newer.id,
+				undo: expect.objectContaining( {
+					canUndo: false,
+					status: 'failed',
+					error: 'Second request failed.',
+				} ),
+			} ),
+		] );
+	} );
+
+	test( 'getLatestAppliedActivity skips request diagnostics', () => {
+		const applied = createActivityEntry( {
+			type: 'apply_template_suggestion',
+			surface: 'template',
+			timestamp: '2026-03-24T10:00:00Z',
+		} );
+		const diagnostic = createActivityEntry( {
+			type: 'request_diagnostic',
+			surface: 'template',
+			timestamp: '2026-03-24T10:00:01Z',
+		} );
+
+		expect( getLatestAppliedActivity( [ applied, diagnostic ] ) ).toEqual(
+			expect.objectContaining( {
+				id: applied.id,
 			} )
 		);
 	} );

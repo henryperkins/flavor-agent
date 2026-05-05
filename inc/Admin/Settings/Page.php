@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Admin\Settings;
 
-use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
@@ -139,18 +140,6 @@ final class Page {
 			</div>
 		</div>
 		<?php
-	}
-
-	public static function render_openai_provider_section(): void {
-		// Guidance now lives in the screen Help panel to keep the page focused on controls.
-	}
-
-	public static function render_openai_native_section(): void {
-		printf(
-			'<p class="flavor-agent-settings-inline-meta">%s <strong>%s</strong>.</p>',
-			esc_html__( 'Current effective OpenAI key source:', 'flavor-agent' ),
-			esc_html( State::format_openai_native_key_source_label( Provider::native_effective_api_key_source() ) )
-		);
 	}
 
 	public static function render_cloudflare_workers_ai_section(): void {
@@ -525,73 +514,22 @@ final class Page {
 	 */
 	private static function render_embedding_model_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_EMBEDDINGS, $state, $feedback );
-		self::render_registered_section_callback( 'flavor_agent_openai_provider' );
-		self::render_registered_fields_table(
-			'flavor_agent_openai_provider',
-			[
-				Provider::OPTION_NAME,
-			]
-		);
 		?>
-		<p class="description">
-			<?php echo esc_html__( 'Configure this once for Flavor Agent semantic features. Patterns use this embedding model when Pattern Storage is set to Qdrant.', 'flavor-agent' ); ?>
-		</p>
+		<input type="hidden" name="<?php echo esc_attr( Provider::OPTION_NAME ); ?>" value="<?php echo esc_attr( WorkersAIEmbeddingConfiguration::PROVIDER ); ?>" />
+			<p class="description">
+				<?php echo esc_html__( 'Configure Cloudflare Workers AI embeddings for Flavor Agent semantic features. Patterns use this embedding model when Pattern Storage is set to Qdrant.', 'flavor-agent' ); ?>
+			</p>
+			<p class="flavor-agent-settings-inline-meta">
+				<?php
+				printf(
+					/* translators: %s: embedding provider label */
+					esc_html__( 'Current embedding provider: %s.', 'flavor-agent' ),
+					esc_html( Provider::label( WorkersAIEmbeddingConfiguration::PROVIDER ) )
+				);
+				?>
+			</p>
 		<?php
-
-		if ( Provider::is_connector_or_saved_legacy_pin( (string) $state['selected_provider'] ) ) {
-			$legacy_label = Provider::legacy_connector_pin_label( (string) $state['selected_provider'] );
-			?>
-			<div class="notice notice-warning inline flavor-agent-settings-status">
-				<p>
-					<?php
-					printf(
-						/* translators: %s: legacy connector label */
-						esc_html__( 'A legacy chat connector pin is saved for %s. It is preserved for backwards compatibility and chat still fails closed if that connector is unavailable. If the saved legacy connector is not currently registered, reinstall or re-enable the connector in Settings > Connectors before using that chat path. Choose OpenAI Native or Cloudflare Workers AI to migrate Embedding Provider to a direct embedding backend.', 'flavor-agent' ),
-						esc_html( $legacy_label )
-					);
-					?>
-				</p>
-			</div>
-			<?php
-			self::render_openai_native_direct_settings_fields();
-			self::render_cloudflare_workers_ai_direct_settings_fields();
-			return;
-		}
-
-		if ( Provider::is_azure( (string) $state['selected_provider'] ) ) {
-			?>
-			<div class="notice notice-warning inline flavor-agent-settings-status">
-				<p>
-					<?php echo esc_html__( 'Azure OpenAI embedding settings are no longer editable in Flavor Agent. Choose OpenAI Native or Cloudflare Workers AI to migrate Embedding Provider to an editable backend.', 'flavor-agent' ); ?>
-				</p>
-			</div>
-			<?php
-			self::render_openai_native_direct_settings_fields();
-			self::render_cloudflare_workers_ai_direct_settings_fields();
-			return;
-		}
-
-		if ( Provider::is_native( (string) $state['selected_provider'] ) ) {
-			self::render_openai_native_direct_settings_fields();
-			return;
-		}
-
 		self::render_cloudflare_workers_ai_direct_settings_fields();
-	}
-
-	private static function render_openai_native_direct_settings_fields(): void {
-		self::render_subsection_heading(
-			__( 'OpenAI Embeddings', 'flavor-agent' ),
-			__( 'Embedding credentials used by Flavor Agent semantic features.', 'flavor-agent' )
-		);
-		self::render_registered_section_callback( 'flavor_agent_openai_native' );
-		self::render_registered_fields_table(
-			'flavor_agent_openai_native',
-			[
-				'flavor_agent_openai_native_api_key',
-				'flavor_agent_openai_native_embedding_model',
-			]
-		);
 	}
 
 	private static function render_cloudflare_workers_ai_direct_settings_fields(): void {
@@ -693,7 +631,7 @@ final class Page {
 				'flavor_agent_cloudflare_ai_search_max_results',
 			]
 		);
-		self::render_cloudflare_legacy_override_panel();
+		self::render_docs_source_status();
 		self::render_prewarm_diagnostics_panel( $state );
 	}
 
@@ -825,33 +763,33 @@ final class Page {
 		<?php
 	}
 
-	private static function render_cloudflare_legacy_override_panel(): void {
-		$has_saved_legacy_values = Validation::has_saved_cloudflare_legacy_values();
-
-		if ( ! $has_saved_legacy_values ) {
-			return;
-		}
+	private static function render_docs_source_status(): void {
+		$instance_id = AISearchClient::configured_instance_id();
 		?>
-		<details class="flavor-agent-settings-subpanel" open>
-			<summary class="flavor-agent-settings-subpanel__summary">
-				<?php echo esc_html__( 'Legacy Developer Docs Cloudflare Override', 'flavor-agent' ); ?>
-			</summary>
-			<div class="flavor-agent-settings-subpanel__body">
-				<p class="description">
-					<?php echo esc_html__( 'Saved custom developer-docs override values are present. Clear all three fields to use the built-in public endpoint.', 'flavor-agent' ); ?>
+		<div class="flavor-agent-settings-diagnostic">
+			<div class="flavor-agent-settings-diagnostic__header">
+				<p class="flavor-agent-settings-diagnostic__title">
+					<?php echo esc_html__( 'Developer Docs Source', 'flavor-agent' ); ?>
 				</p>
-				<?php
-				self::render_registered_fields_table(
-					'flavor_agent_cloudflare',
-					[
-						'flavor_agent_cloudflare_ai_search_account_id',
-						'flavor_agent_cloudflare_ai_search_instance_id',
-						'flavor_agent_cloudflare_ai_search_api_token',
-					]
-				);
-				?>
+				<p class="flavor-agent-settings-diagnostic__status">
+					<?php echo esc_html__( 'Ready', 'flavor-agent' ); ?>
+				</p>
 			</div>
-		</details>
+			<p class="flavor-agent-settings-diagnostic__meta">
+				<?php echo esc_html__( 'Built-in public Cloudflare AI Search endpoint', 'flavor-agent' ); ?>
+			</p>
+			<?php if ( null !== $instance_id ) : ?>
+				<p class="flavor-agent-settings-diagnostic__meta">
+					<?php
+					printf(
+						/* translators: %s: public Cloudflare AI Search instance ID */
+						esc_html__( 'Instance: %s', 'flavor-agent' ),
+						esc_html( $instance_id )
+					);
+					?>
+				</p>
+			<?php endif; ?>
+		</div>
 		<?php
 	}
 

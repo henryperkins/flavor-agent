@@ -27,7 +27,7 @@ The current pattern pipeline has four distinct stages:
 3. `QdrantClient::search()` or `PatternSearchClient::search_patterns()` retrieves candidates
 4. `ResponsesClient::rank()` in `inc/AzureOpenAI/ResponsesClient.php` reranks those candidates through the WordPress AI Client / Connectors runtime into the final recommendation list
 
-The embedding provider behind Qdrant can be OpenAI Native or explicitly selected Cloudflare Workers AI. Workers AI is not used as an implicit fallback from the other provider selections. The Cloudflare AI Search backend uses Cloudflare-managed embeddings/indexing and does not call `EmbeddingClient` or `QdrantClient`.
+The embedding provider behind Qdrant is Cloudflare Workers AI. The Cloudflare AI Search backend uses Cloudflare-managed embeddings/indexing and does not call `EmbeddingClient` or `QdrantClient`.
 
 If you identify which stage is failing, the rest of the debugging path usually becomes obvious.
 
@@ -100,11 +100,11 @@ Focus on:
 For Qdrant:
 
 ```bash
-wp eval 'var_export( \FlavorAgent\AzureOpenAI\QdrantClient::validate_configuration() );'
+wp eval 'var_export( \FlavorAgent\Embeddings\QdrantClient::validate_configuration() );'
 
-wp eval 'echo wp_json_encode( \FlavorAgent\AzureOpenAI\QdrantClient::probe_health( "readyz" ) );'
+wp eval 'echo wp_json_encode( \FlavorAgent\Embeddings\QdrantClient::probe_health( "readyz" ) );'
 
-wp eval 'echo wp_json_encode( \FlavorAgent\AzureOpenAI\EmbeddingClient::validate_configuration() );'
+wp eval 'echo wp_json_encode( \FlavorAgent\Embeddings\EmbeddingClient::validate_configuration() );'
 
 wp eval 'var_export( \FlavorAgent\AzureOpenAI\ResponsesClient::validate_configuration() );'
 ```
@@ -192,7 +192,7 @@ Use `GET /collections/{name}`, not `GET /collections/{name}/index`, for this sum
 wp eval '
 $state      = get_option( \FlavorAgent\Patterns\PatternIndex::STATE_OPTION, array() );
 $collection = (string) ( $state["qdrant_collection"] ?? "" );
-$result     = \FlavorAgent\AzureOpenAI\QdrantClient::get_collection_optimizations(
+$result     = \FlavorAgent\Embeddings\QdrantClient::get_collection_optimizations(
 	$collection,
 	array( "queued", "completed", "idle_segments" )
 );
@@ -245,7 +245,7 @@ $query = $method->invoke(
 	false
 );
 
-$vector = \FlavorAgent\AzureOpenAI\EmbeddingClient::embed( $query );
+$vector = \FlavorAgent\Embeddings\EmbeddingClient::embed( $query );
 
 if ( is_wp_error( $vector ) ) {
 	echo wp_json_encode(
@@ -257,7 +257,7 @@ if ( is_wp_error( $vector ) ) {
 	return;
 }
 
-$hits = \FlavorAgent\AzureOpenAI\QdrantClient::search( $vector, 8, array(), $collection );
+$hits = \FlavorAgent\Embeddings\QdrantClient::search( $vector, 8, array(), $collection );
 
 if ( is_wp_error( $hits ) ) {
 	echo wp_json_encode(

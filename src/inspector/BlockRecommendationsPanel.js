@@ -42,6 +42,8 @@ import { getSuggestionKey } from './suggestion-keys';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import { describeEditorBlockLabel } from '../utils/editor-context-metadata';
 import {
+	ACTIONABILITY_REASON_MANUAL_COPY_ONLY,
+	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
 	ACTIONABILITY_TIER_REVIEW_SAFE,
 	classifyOperationActionability,
 	getActionabilityLabel,
@@ -72,6 +74,10 @@ const CONTENT_ONLY_STARTER_PROMPTS = [
 	'Clarify the message',
 	'More concise',
 ];
+const HIDDEN_ADVISORY_BLOCKER_REASONS = new Set( [
+	ACTIONABILITY_REASON_MANUAL_COPY_ONLY,
+	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
+] );
 const BLOCK_REVIEW_REVALIDATION_DEBOUNCE_MS = 300;
 
 export function findBlockPath( blocks, clientId, path = [] ) {
@@ -641,6 +647,10 @@ export function BlockRecommendationsContent( {
 					block?.name ||
 					recommendations?.blockName ||
 					'',
+				...( Array.isArray( requestDiagnostics.blockPath ) &&
+				requestDiagnostics.blockPath.length > 0
+					? { blockPath: requestDiagnostics.blockPath }
+					: {} ),
 			},
 			request: {
 				prompt:
@@ -1198,6 +1208,7 @@ function AdvisorySuggestionCard( { suggestion } ) {
 		suggestion?.eligibility || suggestion?.actionability || {};
 	const tierLabel = getActionabilityLabel( eligibility?.tier );
 	const reasonLabels = ( eligibility?.blockers || eligibility?.reasons || [] )
+		.filter( ( reason ) => ! HIDDEN_ADVISORY_BLOCKER_REASONS.has( reason ) )
 		.map( getActionabilityReasonLabel )
 		.filter( Boolean );
 

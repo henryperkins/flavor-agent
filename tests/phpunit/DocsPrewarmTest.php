@@ -17,6 +17,12 @@ final class DocsPrewarmTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
+	protected function tearDown(): void {
+		remove_filter( 'flavor_agent_cloudflare_ai_search_allow_public_prewarm', '__return_true' );
+
+		parent::tearDown();
+	}
+
 	// ------------------------------------------------------------------
 	// Warm set definition
 	// ------------------------------------------------------------------
@@ -131,7 +137,7 @@ final class DocsPrewarmTest extends TestCase {
 	// Throttling
 	// ------------------------------------------------------------------
 
-	public function test_prewarm_throttled_with_same_credentials_within_window(): void {
+	public function test_prewarm_throttled_with_same_public_source_within_window(): void {
 		$this->configure_cloudflare();
 		$this->prime_successful_search_responses( count( AISearchClient::get_warm_set() ) );
 
@@ -141,7 +147,6 @@ final class DocsPrewarmTest extends TestCase {
 
 		$call_count_after_first = count( WordPressTestState::$remote_post_calls );
 
-		// Second prewarm with same credentials within throttle window.
 		$second = AISearchClient::prewarm();
 
 		$this->assertSame( 0, $second['warmed'] );
@@ -157,7 +162,7 @@ final class DocsPrewarmTest extends TestCase {
 		$this->assertSame( $first_state_timestamp, $state['timestamp'] );
 	}
 
-	public function test_prewarm_runs_again_when_credentials_change(): void {
+	public function test_prewarm_ignores_removed_legacy_credential_changes(): void {
 		$this->configure_cloudflare();
 		$this->prime_successful_search_responses( count( AISearchClient::get_warm_set() ) * 2 );
 
@@ -168,8 +173,8 @@ final class DocsPrewarmTest extends TestCase {
 
 		$second = AISearchClient::prewarm();
 
-		$this->assertSame( count( AISearchClient::get_warm_set() ), $second['warmed'] );
-		$this->assertSame( 0, $second['skipped'] );
+		$this->assertSame( 0, $second['warmed'] );
+		$this->assertSame( count( AISearchClient::get_warm_set() ), $second['skipped'] );
 	}
 
 	public function test_prewarm_runs_again_when_throttle_window_expires(): void {
@@ -328,7 +333,7 @@ final class DocsPrewarmTest extends TestCase {
 		);
 	}
 
-	public function test_schedule_prewarm_accepts_explicit_credential_changes_even_when_current_config_is_throttled(): void {
+	public function test_schedule_prewarm_ignores_explicit_legacy_credentials_when_current_public_source_is_throttled(): void {
 		$this->configure_cloudflare();
 		$this->prime_successful_search_responses( count( AISearchClient::get_warm_set() ) );
 
@@ -339,7 +344,7 @@ final class DocsPrewarmTest extends TestCase {
 			'changed-token'
 		);
 
-		$this->assertArrayHasKey(
+		$this->assertArrayNotHasKey(
 			AISearchClient::PREWARM_CRON_HOOK,
 			WordPressTestState::$scheduled_events
 		);
@@ -368,7 +373,7 @@ final class DocsPrewarmTest extends TestCase {
 		$this->assertFalse( AISearchClient::should_prewarm() );
 	}
 
-	public function test_should_prewarm_returns_true_after_credential_change(): void {
+	public function test_should_prewarm_ignores_removed_legacy_credential_changes(): void {
 		$this->configure_cloudflare();
 		$this->prime_successful_search_responses( count( AISearchClient::get_warm_set() ) );
 
@@ -376,7 +381,7 @@ final class DocsPrewarmTest extends TestCase {
 
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token'] = 'changed-token';
 
-		$this->assertTrue( AISearchClient::should_prewarm() );
+		$this->assertFalse( AISearchClient::should_prewarm() );
 	}
 
 	// ------------------------------------------------------------------
@@ -448,14 +453,7 @@ final class DocsPrewarmTest extends TestCase {
 	// ------------------------------------------------------------------
 
 	private function configure_cloudflare(): void {
-		WordPressTestState::$options = array_merge(
-			WordPressTestState::$options,
-			[
-				'flavor_agent_cloudflare_ai_search_account_id'  => 'account-123',
-				'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
-				'flavor_agent_cloudflare_ai_search_api_token'   => 'token-xyz',
-			]
-		);
+		add_filter( 'flavor_agent_cloudflare_ai_search_allow_public_prewarm', '__return_true' );
 	}
 
 	/**

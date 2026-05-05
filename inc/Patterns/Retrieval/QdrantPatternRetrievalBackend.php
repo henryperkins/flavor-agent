@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Patterns\Retrieval;
 
-use FlavorAgent\AzureOpenAI\EmbeddingClient;
-use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\Embeddings\EmbeddingClient;
+use FlavorAgent\Embeddings\EmbeddingSignature;
+use FlavorAgent\Embeddings\QdrantClient;
+use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 
 final class QdrantPatternRetrievalBackend implements PatternRetrievalBackend {
@@ -22,6 +24,11 @@ final class QdrantPatternRetrievalBackend implements PatternRetrievalBackend {
 	 * @return array<int, array{payload: array<string, mixed>, score: float}>|\WP_Error
 	 */
 	public function search( string $query, array $visible_pattern_names, array $state, array $context ): array|\WP_Error {
+		$compatibility_error = $this->validate_stored_embedding_signature( $state );
+		if ( is_wp_error( $compatibility_error ) ) {
+			return $compatibility_error;
+		}
+
 		$query_vector = EmbeddingClient::embed( $query );
 
 		if ( is_wp_error( $query_vector ) ) {
@@ -35,20 +42,7 @@ final class QdrantPatternRetrievalBackend implements PatternRetrievalBackend {
 			(string) ( $state['embedding_signature'] ?? '' ) !== (string) $active_signature['signature_hash']
 			|| (string) ( $state['qdrant_collection'] ?? '' ) !== $expected_collection
 		) {
-			PatternIndex::mark_stale(
-				[
-					'embedding_signature_changed',
-					'collection_name_changed',
-				]
-			);
-
-			PatternIndex::schedule_sync();
-
-			return new \WP_Error(
-				'index_warming',
-				'Pattern catalog is rebuilding because the active embedding signature changed. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
-				[ 'status' => 503 ]
-			);
+			return $this->mark_embedding_signature_changed();
 		}
 
 		$collection_validation = QdrantClient::validate_collection_compatibility(
@@ -116,6 +110,45 @@ final class QdrantPatternRetrievalBackend implements PatternRetrievalBackend {
 		}
 
 		return $this->dedupe_points( array_merge( $pass_a, $pass_b ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $state
+	 */
+	private function validate_stored_embedding_signature( array $state ): bool|\WP_Error {
+		$dimension = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
+		if ( 0 === $dimension ) {
+			return true;
+		}
+
+		$active_signature    = EmbeddingSignature::from_configuration( Provider::embedding_configuration(), $dimension );
+		$expected_collection = QdrantClient::get_collection_name( $active_signature );
+
+		if (
+			(string) ( $state['embedding_signature'] ?? '' ) !== (string) $active_signature['signature_hash']
+			|| (string) ( $state['qdrant_collection'] ?? '' ) !== $expected_collection
+		) {
+			return $this->mark_embedding_signature_changed();
+		}
+
+		return true;
+	}
+
+	private function mark_embedding_signature_changed(): \WP_Error {
+		PatternIndex::mark_stale(
+			[
+				'embedding_signature_changed',
+				'collection_name_changed',
+			]
+		);
+
+		PatternIndex::schedule_sync();
+
+		return new \WP_Error(
+			'index_warming',
+			'Pattern catalog is rebuilding because the active embedding signature changed. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
+			[ 'status' => 503 ]
+		);
 	}
 
 	/**

@@ -52,6 +52,32 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( WordPressAIClient::get_setup_message(), $result->get_error_message() );
 	}
 
+	public function test_chat_extracts_message_from_structured_ai_client_error_payload(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'wp_ai_client_request_failed',
+			"{'message': 'Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.', 'codexErrorInfo': 'unauthorized', 'additionalDetails': None}",
+			[ 'status' => 401 ]
+		);
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+		$meta   = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'wp_ai_client_request_failed', $result->get_error_code() );
+		$this->assertSame(
+			'Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.',
+			$result->get_error_message()
+		);
+		$this->assertSame(
+			'Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.',
+			$meta['errorSummary']['wrappedMessage'] ?? null
+		);
+	}
+
 	public function test_chat_returns_prompt_prevented_error_when_filter_blocks_generation(): void {
 		WordPressTestState::$ai_client_supported = true;
 		add_filter( 'wp_ai_client_prevent_prompt', '__return_true' );

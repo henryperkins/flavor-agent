@@ -72,10 +72,9 @@ The Connectors API (`wp_connectors_init` action, `WP_Connector_Registry` class) 
 - API key priority: env var -> PHP constant -> database (`connectors_ai_{$id}_api_key`)
 - Built-in connectors: Anthropic, Google, OpenAI
 
-The plugin already has partial Connectors integration: `inc/OpenAI/Provider.php` falls back to `connectors_ai_openai_api_key`, and block recommendations already use the core WordPress AI Client plus `Settings > Connectors` flow. A deeper integration could:
-- Lean harder on connector metadata for OpenAI Native availability and credential-source UX
-- Potentially move additional AI-provider-style credentials into Connectors where the API is a natural fit
-- Use `wp_get_connector()` / `wp_is_connector_registered()` to check provider availability instead of custom option checks in more places
+The plugin already uses the core WordPress AI Client plus `Settings > Connectors` flow for chat. A deeper integration could:
+- Move additional AI-provider-style preferences into Connectors where the API is a natural fit
+- Use standardized connector capability metadata when core exposes enough detail for Flavor Agent diagnostics
 
 Qdrant and Cloudflare AI Search should remain plugin-owned for now. The current Connectors screen is AI-provider-centric, so forcing non-provider infrastructure into it would add abstraction drift rather than reduce it.
 

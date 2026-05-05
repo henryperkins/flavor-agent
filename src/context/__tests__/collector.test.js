@@ -119,6 +119,78 @@ describe( 'collectBlockContext', () => {
 		expect( collectBlockContext( null ) ).toBeNull();
 	} );
 
+	test( 'includes a durable block path for nested selected blocks', () => {
+		mockIntrospectBlockInstance.mockReturnValue( {
+			name: 'core/paragraph',
+			title: 'Paragraph',
+			currentAttributes: { content: 'Nested copy' },
+			inspectorPanels: {},
+			bindableAttributes: [],
+			styles: [],
+			activeStyle: '',
+			variations: [],
+			supportsContentRole: false,
+			contentAttributes: {},
+			configAttributes: {},
+			editingMode: 'default',
+			isInsideContentOnly: false,
+			blockVisibility: {},
+			childCount: 0,
+		} );
+		mockIntrospectBlockTree.mockReturnValue( [
+			{
+				clientId: 'root-1',
+				name: 'core/group',
+				innerBlocks: [
+					{
+						clientId: 'child-1',
+						name: 'core/heading',
+						innerBlocks: [],
+					},
+					{
+						clientId: 'target-1',
+						name: 'core/paragraph',
+						innerBlocks: [],
+					},
+				],
+			},
+		] );
+		mockFindNodePath.mockReturnValue( [
+			{ clientId: 'root-1', name: 'core/group' },
+			{ clientId: 'target-1', name: 'core/paragraph' },
+		] );
+		mockFindBranchRoot.mockReturnValue( null );
+		mockCollectThemeTokens.mockReturnValue( {} );
+		mockSummarizeTokens.mockReturnValue( { summary: {} } );
+		const blockEditor = {
+			getBlockRootClientId: jest.fn( ( currentClientId ) =>
+				currentClientId === 'target-1' ? 'root-1' : null
+			),
+			getBlockOrder: jest.fn( ( rootClientId = '' ) => {
+				if ( rootClientId === '' ) {
+					return [ 'root-1' ];
+				}
+
+				if ( rootClientId === 'root-1' ) {
+					return [ 'child-1', 'target-1' ];
+				}
+
+				return [];
+			} ),
+			getBlockName: jest.fn( ( currentClientId ) =>
+				currentClientId === 'target-1' ? 'core/paragraph' : 'core/group'
+			),
+			getBlockAttributes: jest.fn().mockReturnValue( {} ),
+		};
+		mockSelect.mockReturnValue( blockEditor );
+
+		const result = collectBlockContext( 'target-1' );
+
+		expect( result.block.blockPath ).toEqual( [ 0, 1 ] );
+		expect( blockEditor.getBlockOrder ).toHaveBeenCalledWith( '' );
+		expect( blockEditor.getBlockOrder ).toHaveBeenCalledWith( 'root-1' );
+	} );
+
 	test( 'includes bindableAttributes and structural identity when block is found in tree', () => {
 		const selectedNode = {
 			clientId: 'client-1',

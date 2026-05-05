@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Admin\Settings;
 
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\OpenAI\Provider;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -145,7 +146,7 @@ final class Fields {
 		];
 		$value          = (string) get_option(
 			$option,
-			$option === Provider::OPTION_NAME ? Provider::NATIVE : $default
+			$option === Provider::OPTION_NAME ? WorkersAIEmbeddingConfiguration::PROVIDER : $default
 		);
 		$autocomplete   = array_key_exists( 'autocomplete', $args )
 			? (string) $args['autocomplete']

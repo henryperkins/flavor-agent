@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace FlavorAgent\AzureOpenAI;
+namespace FlavorAgent\Embeddings;
 
 abstract class BaseHttpClient {
 

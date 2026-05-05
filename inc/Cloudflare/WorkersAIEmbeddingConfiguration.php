@@ -6,8 +6,9 @@ namespace FlavorAgent\Cloudflare;
 
 final class WorkersAIEmbeddingConfiguration {
 
-	public const PROVIDER      = 'cloudflare_workers_ai';
-	public const DEFAULT_MODEL = '@cf/qwen/qwen3-embedding-0.6b';
+	public const PROVIDER         = 'cloudflare_workers_ai';
+	public const DEFAULT_MODEL    = '@cf/qwen/qwen3-embedding-0.6b';
+	public const MAX_BATCH_INPUTS = 32;
 
 	/**
 	 * @param array<string, string> $overrides

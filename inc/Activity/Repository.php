@@ -293,56 +293,25 @@ final class Repository {
 			return self::query( $query_filters );
 		}
 
-		// Single bounded query then PHP bucketing: fetch the most-recent
-		// rows for the scope (and any narrowing filters), then keep up to
-		// $surface_limit per surface. Replaces the prior 1+N pattern of
-		// one surface-discovery query plus one window query per surface.
-		// Bound is generous (surface_limit * MAX_KNOWN_SURFACES) so a typical
-		// scope captures every surface; if a single surface dominates the
-		// recent window beyond that bound, less-recent surfaces may be
-		// truncated — accepted given the round-trip win.
-		$fetch_filters = array_merge(
-			$filters,
-			[
-				'scopeKey' => $scope_key,
-				'limit'    => $surface_limit * self::MAX_KNOWN_SURFACES,
-			]
+		$surfaces = array_slice(
+			self::query_scope_surfaces( $scope_key, $filters ),
+			0,
+			self::MAX_KNOWN_SURFACES
 		);
-		unset(
-			$fetch_filters['groupBySurface'],
-			$fetch_filters['surfaceLimit'],
-			$fetch_filters['surface']
-		);
+		$entries  = [];
 
-		$candidate_entries = self::query( $fetch_filters );
+		foreach ( $surfaces as $entry_surface ) {
+			$query_filters = array_merge(
+				$filters,
+				[
+					'scopeKey' => $scope_key,
+					'surface'  => $entry_surface,
+					'limit'    => $surface_limit,
+				]
+			);
+			unset( $query_filters['groupBySurface'], $query_filters['surfaceLimit'] );
 
-		// Bucket by surface, preserving newest-first order then trimming.
-		$by_surface = [];
-		// query() returns oldest-first within the LIMIT, so the rightmost
-		// entries are the newest. Iterate in reverse to fill the per-surface
-		// bucket newest-first; stop adding to a bucket once it is full.
-		for ( $index = count( $candidate_entries ) - 1; $index >= 0; --$index ) {
-			$entry         = $candidate_entries[ $index ];
-			$entry_surface = (string) ( $entry['surface'] ?? '' );
-
-			if ( '' === $entry_surface ) {
-				continue;
-			}
-
-			if ( ! isset( $by_surface[ $entry_surface ] ) ) {
-				$by_surface[ $entry_surface ] = [];
-			}
-
-			if ( count( $by_surface[ $entry_surface ] ) >= $surface_limit ) {
-				continue;
-			}
-
-			$by_surface[ $entry_surface ][] = $entry;
-		}
-
-		$entries = [];
-		foreach ( $by_surface as $surface_entries ) {
-			foreach ( $surface_entries as $surface_entry ) {
+			foreach ( self::query( $query_filters ) as $surface_entry ) {
 				$entries[] = $surface_entry;
 			}
 		}

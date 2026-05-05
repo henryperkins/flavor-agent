@@ -28,6 +28,19 @@ export const ORDERED_UNDO_BLOCKED_ERROR = 'Undo blocked by newer AI actions.';
 
 let activitySequence = 0;
 
+function isRequestDiagnosticEntry( entry ) {
+	return entry?.type === 'request_diagnostic';
+}
+
+function getDiagnosticUndoState( timestamp, undo = {} ) {
+	const status = undo?.status === 'failed' ? 'failed' : 'review';
+
+	return buildUndoState( timestamp, {
+		...undo,
+		status,
+	} );
+}
+
 function canUseSessionStorage() {
 	try {
 		return (
@@ -235,6 +248,14 @@ function normalizePersistedActivityEntry(
 		undo: buildUndoState( timestamp, entry.undo ),
 		persistence: buildPersistenceState( timestamp, entry.persistence ),
 	};
+
+	if ( isRequestDiagnosticEntry( normalizedEntry ) ) {
+		return {
+			...normalizedEntry,
+			executionResult: 'review',
+			undo: getDiagnosticUndoState( timestamp, normalizedEntry.undo ),
+		};
+	}
 
 	if (
 		( normalizedEntry.surface === 'template' ||
@@ -559,6 +580,7 @@ export function createActivityEntry( {
 		! Array.isArray( requestMeta )
 			? requestMeta
 			: null;
+	const isRequestDiagnostic = type === 'request_diagnostic';
 
 	return {
 		id: `activity-${ Date.now() }-${ activitySequence }`,
@@ -581,8 +603,10 @@ export function createActivityEntry( {
 		},
 		document,
 		timestamp: normalizedTimestamp,
-		executionResult: 'applied',
-		undo: buildUndoState( normalizedTimestamp ),
+		executionResult: isRequestDiagnostic ? 'review' : 'applied',
+		undo: isRequestDiagnostic
+			? getDiagnosticUndoState( normalizedTimestamp )
+			: buildUndoState( normalizedTimestamp ),
 		persistence: buildPersistenceState( normalizedTimestamp, {
 			status: 'local',
 			syncType: 'create',
@@ -798,6 +822,13 @@ export function getResolvedActivityUndoState(
 
 	const baseUndo = getPreliminaryUndoState( entry, runtimeUndoState );
 
+	if ( isRequestDiagnosticEntry( entry ) ) {
+		return getDiagnosticUndoState(
+			normalizeActivityTimestamp( entry?.timestamp ),
+			baseUndo
+		);
+	}
+
 	if ( baseUndo.status === 'review' ) {
 		return {
 			...baseUndo,
@@ -856,6 +887,13 @@ export function getResolvedActivityEntries(
 					? preliminaryUndoStates[ entryIndex ]
 					: getPreliminaryUndoState( entry );
 
+			if ( isRequestDiagnosticEntry( entry ) ) {
+				return getDiagnosticUndoState(
+					normalizeActivityTimestamp( entry?.timestamp ),
+					resolvedUndo
+				);
+			}
+
 			if ( resolvedUndo?.status === 'undone' ) {
 				return {
 					...resolvedUndo,
@@ -906,7 +944,9 @@ export function getLatestAppliedActivity( entries = [] ) {
 		[ ...sortActivityEntries( entries ) ]
 			.reverse()
 			.find(
-				( entry ) => getBaseUndoState( entry ).status !== 'undone'
+				( entry ) =>
+					! isRequestDiagnosticEntry( entry ) &&
+					getBaseUndoState( entry ).status !== 'undone'
 			) || null
 	);
 }

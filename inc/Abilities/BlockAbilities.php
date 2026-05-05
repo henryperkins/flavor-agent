@@ -208,6 +208,31 @@ final class BlockAbilities {
 		return \FlavorAgent\Support\NonNegativeInteger::normalize( $value );
 	}
 
+	/**
+	 * @return array<int, int>
+	 */
+	private static function normalize_block_path( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$path = [];
+
+		foreach ( $value as $segment ) {
+			if ( ! is_numeric( $segment ) ) {
+				continue;
+			}
+
+			$segment = (int) $segment;
+
+			if ( $segment >= 0 ) {
+				$path[] = $segment;
+			}
+		}
+
+		return $path;
+	}
+
 	private static function build_context_from_editor_context( mixed $raw_context ): array|\WP_Error {
 		$context = self::normalize_map( $raw_context );
 		$block   = self::normalize_map( $context['block'] ?? [] );
@@ -235,6 +260,11 @@ final class BlockAbilities {
 
 		// Preserve client-only editor details that the server cannot infer.
 		$normalized['block']['editingMode'] = self::normalize_editing_mode( $block['editingMode'] ?? 'default' );
+
+		$block_path = self::normalize_block_path( $block['blockPath'] ?? [] );
+		if ( [] !== $block_path ) {
+			$normalized['block']['blockPath'] = $block_path;
+		}
 
 		$title = is_string( $block['title'] ?? null ) ? sanitize_text_field( $block['title'] ) : '';
 		if ( '' !== $title ) {

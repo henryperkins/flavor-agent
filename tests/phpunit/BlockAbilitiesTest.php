@@ -29,6 +29,7 @@ final class BlockAbilitiesTest extends TestCase {
 							'content'   => '<strong>Hello</strong>',
 							'className' => 'is-style-outline',
 						],
+						'blockPath'           => [ 0, '1', -1, 'bad' ],
 						'isInsideContentOnly' => true,
 						'editingMode'         => 'disabled',
 						'blockVisibility'     => (object) [
@@ -153,6 +154,7 @@ final class BlockAbilitiesTest extends TestCase {
 			$prepared['prompt']
 		);
 		$this->assertSame( 'core/paragraph', $prepared['context']['block']['name'] );
+		$this->assertSame( [ 0, 1 ], $prepared['context']['block']['blockPath'] ?? null );
 		$this->assertTrue( $prepared['context']['block']['isInsideContentOnly'] );
 		$this->assertSame( 'disabled', $prepared['context']['block']['editingMode'] );
 		$this->assertSame( 'Paragraph Block', $prepared['context']['block']['title'] );
@@ -538,10 +540,10 @@ final class BlockAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_block_emits_pre_filtering_counts_when_server_filters_remove_block_items(): void {
-		WordPressTestState::$options                        = [
+		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
-		WordPressTestState::$connectors                     = [
+		WordPressTestState::$connectors                         = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -552,30 +554,31 @@ final class BlockAbilitiesTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support     = [
-			'openai' => true,
-		];
-		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
-			[
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => [
-					[
-						'label'            => 'Add minimum height',
-						'type'             => 'attribute_change',
-						'panel'            => 'dimensions',
-						'attributeUpdates' => '{"minHeight":"200px"}',
+			WordPressTestState::$ai_client_provider_support     = [
+				'openai' => true,
+			];
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+				[
+					'settings'    => [],
+					'styles'      => [],
+					'block'       => [
+						[
+							'label'            => 'Add minimum height',
+							'type'             => 'attribute_change',
+							'panel'            => 'dimensions',
+							'attributeUpdates' => '{"minHeight":"200px"}',
+						],
+						[
+							'label'            => 'Set aspect ratio',
+							'type'             => 'attribute_change',
+							'panel'            => 'dimensions',
+							'attributeUpdates' => '{"aspectRatio":"16/9"}',
+						],
 					],
-					[
-						'label'            => 'Set aspect ratio',
-						'type'             => 'attribute_change',
-						'panel'            => 'dimensions',
-						'attributeUpdates' => '{"aspectRatio":"16/9"}',
-					],
-				],
-				'explanation' => 'Tighten the paragraph layout.',
-			]
-		);
+					'explanation' => 'Tighten the paragraph layout.',
+				]
+			);
 
 		$result = BlockAbilities::recommend_block(
 			[

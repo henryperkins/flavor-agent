@@ -708,7 +708,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain( 'Inline-safe' );
 		expect( getContainer().textContent ).toContain( 'Advisory' );
 		expect( getContainer().textContent ).toContain( 'Validator computed' );
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Eligibility blockers: Unsupported operation.'
 		);
 		expect( getContainer().textContent ).toContain(
@@ -889,8 +889,11 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain( 'Manual ideas' );
 		expect( getContainer().textContent ).toContain( 'Advisory only' );
 		expect( getContainer().textContent ).toContain( 'Validator computed' );
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Eligibility blockers: Unsupported operation.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Eligibility blockers:'
 		);
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
@@ -955,7 +958,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain( 'Manual ideas' );
 		expect( getContainer().textContent ).toContain( 'Advisory only' );
 		expect( getContainer().textContent ).toContain( 'Validator computed' );
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Eligibility blockers: Unsupported operation.'
 		);
 		expect( getContainer().textContent ).toContain(
@@ -1845,6 +1848,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 							'Flavor Agent returned 1 style, but none in the block lane.',
 						],
 						blockName: 'core/paragraph',
+						blockPath: [ 0, 1 ],
 						prompt: 'Make this feel more editorial.',
 						requestToken: 3,
 						timestamp: '2026-04-06T12:00:00Z',
@@ -1870,6 +1874,11 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			expect.objectContaining( {
 				type: 'request_diagnostic',
 				suggestion: 'No block-lane suggestions returned',
+				target: expect.objectContaining( {
+					clientId: 'block-1',
+					blockName: 'core/paragraph',
+					blockPath: [ 0, 1 ],
+				} ),
 				diagnostic: expect.objectContaining( {
 					detailLines: [
 						'Flavor Agent returned 1 style, but none in the block lane.',
@@ -1900,6 +1909,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 							'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
 						],
 						blockName: 'core/paragraph',
+						blockPath: [ 0, 1 ],
 						prompt: 'Make this feel more editorial.',
 						requestToken: 4,
 						timestamp: '2026-04-08T12:00:00Z',
@@ -1930,6 +1940,11 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				type: 'request_diagnostic',
 				suggestion:
 					'Block request failed: Azure OpenAI responses request timed out after 180 seconds.',
+				target: expect.objectContaining( {
+					clientId: 'block-1',
+					blockName: 'core/paragraph',
+					blockPath: [ 0, 1 ],
+				} ),
 				request: expect.objectContaining( {
 					error: expect.objectContaining( {
 						code: 'http_request_failed',

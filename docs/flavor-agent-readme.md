@@ -42,7 +42,8 @@ flavor-agent/
 │   ├── Abilities/                # Block, content, pattern, template, navigation, style, docs, and infra abilities
 │   ├── Activity/                 # Server-backed AI activity repository, permissions, and serialization
 │   ├── Admin/                    # Settings page and AI Activity admin page registration/assets
-│   ├── AzureOpenAI/              # Shared embedding clients, legacy Azure path, Responses facade, and Qdrant client
+│   ├── AzureOpenAI/              # Legacy chat Responses facade for Connectors-owned text generation
+│   ├── Embeddings/               # Workers AI embedding client, signatures, shared HTTP helpers, and Qdrant client
 │   ├── Cloudflare/               # AI Search docs grounding, Workers AI config, and private pattern AI Search client
 │   ├── Context/                  # Server-side block/theme/pattern/template/navigation collectors
 │   ├── Guidelines/               # Core-first and legacy guideline storage adapters
@@ -187,17 +188,14 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The OpenAI Native and Cloudflare Workers AI fields on this screen configure one Flavor Agent embedding model for semantic features; they no longer provide a direct plugin-managed chat fallback. Saved legacy connector-backed provider values can still pin chat to that connector when it remains available. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend uses private AI Search credentials and Cloudflare-managed indexing/search instead of plugin-owned embeddings or Qdrant.
-When OpenAI Native is selected for embeddings, credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy reports which source is currently effective.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend uses private AI Search credentials and Cloudflare-managed indexing/search instead of plugin-owned embeddings or Qdrant.
 
-Flavor Agent now uses a managed public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not need to enter Cloudflare account, instance, or token values. Legacy Cloudflare credentials remain supported internally for backwards compatibility, and the legacy validation flow still probes trusted `developer.wordpress.org` guidance before accepting changed credentials.
+Flavor Agent uses its built-in public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not enter Cloudflare account, instance, or token values for Developer Docs.
 
 Configured options:
 
 - `flavor_agent_openai_provider`
 - `flavor_agent_reasoning_effort`
-- `flavor_agent_openai_native_api_key`
-- `flavor_agent_openai_native_embedding_model`
 - `flavor_agent_cloudflare_workers_ai_account_id`
 - `flavor_agent_cloudflare_workers_ai_api_token`
 - `flavor_agent_cloudflare_workers_ai_embedding_model`
@@ -211,9 +209,6 @@ Configured options:
 - `flavor_agent_cloudflare_pattern_ai_search_namespace`
 - `flavor_agent_cloudflare_pattern_ai_search_instance_id`
 - `flavor_agent_cloudflare_pattern_ai_search_api_token`
-- `flavor_agent_cloudflare_ai_search_account_id`
-- `flavor_agent_cloudflare_ai_search_instance_id`
-- `flavor_agent_cloudflare_ai_search_api_token`
 - `flavor_agent_cloudflare_ai_search_max_results`
 - `flavor_agent_guideline_site`
 - `flavor_agent_guideline_copy`
@@ -221,9 +216,9 @@ Configured options:
 - `flavor_agent_guideline_additional`
 - `flavor_agent_guideline_blocks`
 
-`flavor_agent_openai_native_api_key` is optional once the core OpenAI connector is configured. Flavor Agent still keeps the native embedding model ID in its own settings either way, but chat always uses the WordPress AI Client and `Settings > Connectors`.
+`flavor_agent_openai_provider` is kept as a compatibility option for older saved chat/provider state. The settings screen writes `cloudflare_workers_ai` for the embedding path on save.
 
-`flavor_agent_reasoning_effort` is the neutral saved option used by the Connectors-routed chat runtime when present. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source, and the Azure-named option is no longer the active setting. Flavor Agent maps the neutral value to Codex `reasoningEffort` and OpenAI `reasoning.effort` model custom options today; Anthropic is intentionally left unmapped until its provider contract is documented. The optional Cloudflare account, instance, and token fields are shown only as legacy/custom-endpoint overrides; leaving them blank uses the managed public docs endpoint.
+`flavor_agent_reasoning_effort` is the neutral saved option used by the Connectors-routed chat runtime when present. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source, and the Azure-named option is no longer the active setting. Flavor Agent maps the neutral value to Codex `reasoningEffort` and OpenAI `reasoning.effort` model custom options today; Anthropic is intentionally left unmapped until its provider contract is documented. Developer Docs always uses the built-in public docs endpoint and exposes only source status plus the max grounding source count.
 
 The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and refreshes the live sync status panel in place.
 

@@ -338,16 +338,7 @@ final class State {
 			if ( empty( $state['runtime_embedding']['configured'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'No embedding model is ready yet. Configure one embedding provider here for Flavor Agent semantic features.', 'flavor-agent' ),
-				];
-			}
-			if (
-				Provider::is_native( (string) $state['selected_provider'] ) &&
-				'' === Provider::native_effective_api_key()
-			) {
-				$status_blocks[] = [
-					'tone'    => 'warning',
-					'message' => __( 'OpenAI Native embeddings are selected, but no API key source is available yet. Add a plugin key, Settings > Connectors key, or OPENAI_API_KEY.', 'flavor-agent' ),
+					'message' => __( 'No embedding model is ready yet. Configure Cloudflare Workers AI embeddings here for Flavor Agent semantic features.', 'flavor-agent' ),
 				];
 			}
 		}
@@ -519,19 +510,6 @@ final class State {
 			'fresh'   => __( 'fresh live warm', 'flavor-agent' ),
 			'none'    => __( 'no guidance', 'flavor-agent' ),
 			default   => str_replace( '_', ' ', $fallback_type ),
-		};
-	}
-
-	/**
-	 * @param 'plugin_override'|'env'|'constant'|'connector_database'|'none' $source
-	 */
-	public static function format_openai_native_key_source_label( string $source ): string {
-		return match ( $source ) {
-			'plugin_override'    => 'Flavor Agent plugin setting',
-			'env'                => 'OPENAI_API_KEY environment variable',
-			'constant'           => 'OPENAI_API_KEY PHP constant',
-			'connector_database' => 'Settings > Connectors',
-			default              => 'none',
 		};
 	}
 

@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\AI\FeatureBootstrap;
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\WordPressAIClient;
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 
 final class InfraAbilities {
+
 
 	public static function get_theme_tokens( mixed $input ): array {
 		unset( $input );
@@ -42,40 +46,39 @@ final class InfraAbilities {
 		unset( $input );
 
 		$wordpress_ai_client_configured = WordPressAIClient::is_supported();
-		$openai_connector_status        = Provider::openai_connector_status();
-		$native_api_key_source          = Provider::native_effective_api_key_source();
-		$native_embedding_config        = Provider::embedding_configuration( Provider::NATIVE );
 		$workers_ai_embedding_config    = Provider::embedding_configuration( WorkersAIEmbeddingConfiguration::PROVIDER );
 		$qdrant_url                     = get_option( 'flavor_agent_qdrant_url', '' );
 		$qdrant_key                     = get_option( 'flavor_agent_qdrant_key', '' );
 		$cloudflare_ai_search_id        = AISearchClient::configured_instance_id();
+		$pattern_backend                = PatternRetrievalBackendFactory::selected_backend();
 
-		$native_embedding_configured = $native_embedding_config['configured'];
-		$qdrant_configured           = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
-		$cloudflare_configured       = AISearchClient::is_configured();
-		$active_chat_configured      = ChatClient::is_supported();
-		$recommendations_enabled     = FeatureBootstrap::recommendation_feature_enabled();
-		$active_pattern_provider     = $recommendations_enabled
-			&& Provider::embedding_configured()
-			&& $active_chat_configured;
-		$settings_url                = function_exists( 'admin_url' )
-			? admin_url( 'options-general.php?page=flavor-agent' )
-			: '';
-		$connectors_url              = function_exists( 'admin_url' )
-			? admin_url( 'options-connectors.php' )
-			: '';
+		$qdrant_configured          = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
+		$cloudflare_configured      = AISearchClient::is_configured();
+		$active_chat_configured     = ChatClient::is_supported();
+		$recommendations_enabled    = FeatureBootstrap::recommendation_feature_enabled();
+		$pattern_backend_configured = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend
+			? PatternSearchClient::is_configured()
+			: ( Provider::embedding_configured() && $qdrant_configured );
+		$patterns_configured        = $recommendations_enabled
+			&& $active_chat_configured
+			&& $pattern_backend_configured;
+			$settings_url           = function_exists( 'admin_url' )
+				? admin_url( 'options-general.php?page=flavor-agent' )
+				: '';
+			$connectors_url         = function_exists( 'admin_url' )
+				? admin_url( 'options-connectors.php' )
+				: '';
 
 		$abilities = self::available_abilities(
 			$recommendations_enabled && $active_chat_configured,
 			$recommendations_enabled && $active_chat_configured,
-			$active_pattern_provider,
-			$qdrant_configured,
+			$patterns_configured,
 			$cloudflare_configured
 		);
 
 		return [
 			'configured'         => ( $recommendations_enabled && $active_chat_configured )
-				|| ( $active_pattern_provider && $qdrant_configured ),
+				|| $patterns_configured,
 			'model'              => ( $recommendations_enabled && $active_chat_configured )
 				? Provider::active_chat_model()
 				: null,
@@ -87,16 +90,6 @@ final class InfraAbilities {
 			'backends'           => [
 				'wordpress_ai_client'   => [
 					'configured' => $wordpress_ai_client_configured,
-				],
-				'openai_native'         => [
-					'configured'          => $native_embedding_configured,
-					'embeddingModel'      => ! empty( $native_embedding_config['model'] ) ? $native_embedding_config['model'] : null,
-					'credentialSource'    => 'none' !== $native_api_key_source ? $native_api_key_source : null,
-					'connectorRegistered' => $openai_connector_status['registered'],
-					'connectorConfigured' => $openai_connector_status['configured'],
-					'connectorKeySource'  => 'none' !== $openai_connector_status['keySource']
-						? $openai_connector_status['keySource']
-						: null,
 				],
 				'cloudflare_workers_ai' => [
 					'configured'     => $workers_ai_embedding_config['configured'],
@@ -121,8 +114,7 @@ final class InfraAbilities {
 	private static function available_abilities(
 		bool $block_recommendations_configured,
 		bool $chat_configured,
-		bool $pattern_provider_configured,
-		bool $qdrant_configured,
+		bool $patterns_configured,
 		bool $cloudflare_configured
 	): array {
 		$abilities = [];
@@ -143,7 +135,7 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-tokens', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/check-status', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-block', 'edit_posts', $block_recommendations_configured );
-		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-patterns', 'edit_posts', $pattern_provider_configured && $qdrant_configured );
+		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-patterns', 'edit_posts', $patterns_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template-part', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-navigation', 'edit_theme_options', $chat_configured );
