@@ -46,14 +46,10 @@ final class InfraAbilities {
 		$native_api_key_source          = Provider::native_effective_api_key_source();
 		$native_embedding_config        = Provider::embedding_configuration( Provider::NATIVE );
 		$workers_ai_embedding_config    = Provider::embedding_configuration( WorkersAIEmbeddingConfiguration::PROVIDER );
-		$azure_endpoint                 = get_option( 'flavor_agent_azure_openai_endpoint', '' );
-		$azure_key                      = get_option( 'flavor_agent_azure_openai_key', '' );
-		$azure_embedding                = get_option( 'flavor_agent_azure_embedding_deployment', '' );
 		$qdrant_url                     = get_option( 'flavor_agent_qdrant_url', '' );
 		$qdrant_key                     = get_option( 'flavor_agent_qdrant_key', '' );
 		$cloudflare_ai_search_id        = AISearchClient::configured_instance_id();
 
-		$azure_embedding_configured  = ! empty( $azure_endpoint ) && ! empty( $azure_key ) && ! empty( $azure_embedding );
 		$native_embedding_configured = $native_embedding_config['configured'];
 		$qdrant_configured           = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
 		$cloudflare_configured       = AISearchClient::is_configured();
@@ -91,10 +87,6 @@ final class InfraAbilities {
 			'backends'           => [
 				'wordpress_ai_client'   => [
 					'configured' => $wordpress_ai_client_configured,
-				],
-				'azure_openai'          => [
-					'configured'          => $azure_embedding_configured,
-					'embeddingDeployment' => ! empty( $azure_embedding ) ? $azure_embedding : null,
 				],
 				'openai_native'         => [
 					'configured'          => $native_embedding_configured,

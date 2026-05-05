@@ -8,17 +8,20 @@ use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
-final class UninstallTest extends TestCase {
+final class UninstallTest extends TestCase
+{
 
-	protected function setUp(): void {
+	protected function setUp(): void
+	{
 		parent::setUp();
 
 		WordPressTestState::reset();
 	}
 
-	public function test_uninstall_removes_plugin_owned_options_cron_transients_and_activity_table(): void {
-		if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
-			define( 'WP_UNINSTALL_PLUGIN', true );
+	public function test_uninstall_removes_plugin_owned_options_cron_transients_and_activity_table(): void
+	{
+		if (! defined('WP_UNINSTALL_PLUGIN')) {
+			define('WP_UNINSTALL_PLUGIN', true);
 		}
 
 		$option_names = [
@@ -30,6 +33,7 @@ final class UninstallTest extends TestCase {
 			'flavor_agent_azure_embedding_deployment',
 			'flavor_agent_azure_chat_deployment',
 			'flavor_agent_azure_reasoning_effort',
+			'flavor_agent_reasoning_effort',
 			'flavor_agent_openai_native_api_key',
 			'flavor_agent_openai_native_embedding_model',
 			'flavor_agent_qdrant_url',
@@ -55,35 +59,35 @@ final class UninstallTest extends TestCase {
 			'flavor_agent_guidelines_migration_status',
 		];
 
-		WordPressTestState::$options                                       = array_fill_keys( $option_names, 'seeded' );
+		WordPressTestState::$options                                       = array_fill_keys($option_names, 'seeded');
 		WordPressTestState::$transients                                    = [
 			'flavor_agent_sync_lock'                => 1,
 			'flavor_agent_core_roadmap_guidance_v1' => [],
 			'flavor_agent_core_roadmap_guidance_schedule_lock' => 1,
 		];
 		WordPressTestState::$scheduled_events                              = [
-			'flavor_agent_reindex_patterns'           => [ 'hook' => 'flavor_agent_reindex_patterns' ],
-			'flavor_agent_prune_activity'             => [ 'hook' => 'flavor_agent_prune_activity' ],
-			'flavor_agent_backfill_activity_admin_projection' => [ 'hook' => 'flavor_agent_backfill_activity_admin_projection' ],
-			'flavor_agent_prewarm_docs'               => [ 'hook' => 'flavor_agent_prewarm_docs' ],
-			'flavor_agent_warm_docs_context'          => [ 'hook' => 'flavor_agent_warm_docs_context' ],
-			'flavor_agent_warm_core_roadmap_guidance' => [ 'hook' => 'flavor_agent_warm_core_roadmap_guidance' ],
+			'flavor_agent_reindex_patterns'           => ['hook' => 'flavor_agent_reindex_patterns'],
+			'flavor_agent_prune_activity'             => ['hook' => 'flavor_agent_prune_activity'],
+			'flavor_agent_backfill_activity_admin_projection' => ['hook' => 'flavor_agent_backfill_activity_admin_projection'],
+			'flavor_agent_prewarm_docs'               => ['hook' => 'flavor_agent_prewarm_docs'],
+			'flavor_agent_warm_docs_context'          => ['hook' => 'flavor_agent_warm_docs_context'],
+			'flavor_agent_warm_core_roadmap_guidance' => ['hook' => 'flavor_agent_warm_core_roadmap_guidance'],
 		];
-		WordPressTestState::$db_tables[ ActivityRepository::table_name() ] = [
+		WordPressTestState::$db_tables[ActivityRepository::table_name()] = [
 			[
 				'id'          => 1,
 				'activity_id' => 'activity-1',
 			],
 		];
 
-		require dirname( __DIR__, 2 ) . '/uninstall.php';
+		require dirname(__DIR__, 2) . '/uninstall.php';
 
-		foreach ( $option_names as $option_name ) {
-			$this->assertArrayNotHasKey( $option_name, WordPressTestState::$options );
+		foreach ($option_names as $option_name) {
+			$this->assertArrayNotHasKey($option_name, WordPressTestState::$options);
 		}
 
-		$this->assertSame( [], WordPressTestState::$transients );
-		$this->assertArrayNotHasKey( ActivityRepository::table_name(), WordPressTestState::$db_tables );
+		$this->assertSame([], WordPressTestState::$transients);
+		$this->assertArrayNotHasKey(ActivityRepository::table_name(), WordPressTestState::$db_tables);
 		$this->assertSame(
 			[
 				'flavor_agent_reindex_patterns',

@@ -23,7 +23,7 @@ final class EmbeddingClient extends BaseHttpClient {
 			return new \WP_Error(
 				'embedding_validation_error',
 				sprintf(
-					'%s does not currently expose embedding generation through Settings > Connectors. Choose Azure OpenAI, OpenAI Native, or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations.',
+					'%s does not currently expose embedding generation through Settings > Connectors. Choose OpenAI Native or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations.',
 					Provider::label( $provider )
 				),
 				[ 'status' => 400 ]
@@ -104,7 +104,7 @@ final class EmbeddingClient extends BaseHttpClient {
 			return new \WP_Error(
 				'embedding_unsupported',
 				sprintf(
-					'%s does not currently expose embedding generation through Settings > Connectors. Choose Azure OpenAI, OpenAI Native, or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations.',
+					'%s does not currently expose embedding generation through Settings > Connectors. Choose OpenAI Native or Cloudflare Workers AI in Settings > Flavor Agent for pattern recommendations.',
 					Provider::label( $config['provider'] )
 				),
 				[ 'status' => 400 ]

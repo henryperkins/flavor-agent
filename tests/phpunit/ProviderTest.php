@@ -51,7 +51,6 @@ final class ProviderTest extends TestCase {
 
 		$this->assertSame(
 			[
-				Provider::AZURE         => 'Azure OpenAI',
 				Provider::NATIVE        => 'OpenAI Native',
 				'cloudflare_workers_ai' => 'Cloudflare Workers AI',
 			],
@@ -195,18 +194,58 @@ final class ProviderTest extends TestCase {
 		$this->assertFalse( $config['configured'] );
 	}
 
-	public function test_chat_configuration_does_not_use_generic_wordpress_ai_client_for_direct_provider(): void {
+	public function test_chat_configuration_uses_generic_wordpress_ai_client_for_direct_embedding_provider(): void {
 		WordPressTestState::$options             = [
-			Provider::OPTION_NAME => Provider::AZURE,
+			Provider::OPTION_NAME => Provider::NATIVE,
 		];
 		WordPressTestState::$ai_client_supported = true;
 
 		$config = Provider::chat_configuration();
 
-		$this->assertSame( Provider::AZURE, $config['provider'] );
-		$this->assertSame( 'Azure OpenAI', $config['label'] );
-		$this->assertSame( '', $config['model'] );
-		$this->assertFalse( $config['configured'] );
+		$this->assertSame( 'wordpress_ai_client', $config['provider'] );
+		$this->assertSame( 'WordPress AI Client', $config['label'] );
+		$this->assertSame( 'provider-managed', $config['model'] );
+		$this->assertTrue( $config['configured'] );
+	}
+
+	public function test_explicit_openai_native_chat_configuration_uses_generic_wordpress_ai_client_when_supported(): void {
+		WordPressTestState::$options             = [
+			Provider::OPTION_NAME => Provider::NATIVE,
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		$config = Provider::chat_configuration( Provider::NATIVE );
+
+		$this->assertSame( 'wordpress_ai_client', $config['provider'] );
+		$this->assertSame( 'WordPress AI Client', $config['label'] );
+		$this->assertSame( 'provider-managed', $config['model'] );
+		$this->assertTrue( $config['configured'] );
+	}
+
+	public function test_explicit_openai_native_chat_configuration_falls_back_to_generic_client_when_openai_connector_is_not_supported(): void {
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME => Provider::NATIVE,
+		];
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => false,
+		];
+
+		$config = Provider::chat_configuration( Provider::NATIVE );
+
+		$this->assertSame( 'wordpress_ai_client', $config['provider'] );
+		$this->assertTrue( $config['configured'] );
 	}
 
 	public function test_chat_configuration_uses_wordpress_ai_client_for_workers_ai_embedding_selection(): void {
@@ -264,14 +303,56 @@ final class ProviderTest extends TestCase {
 
 	public function test_chat_configuration_reports_unconfigured_when_no_text_generation_provider_is_available(): void {
 		WordPressTestState::$options = [
-			Provider::OPTION_NAME => Provider::AZURE,
+			Provider::OPTION_NAME => Provider::NATIVE,
 		];
 
 		$config = Provider::chat_configuration();
 
-		$this->assertSame( Provider::AZURE, $config['provider'] );
+		$this->assertSame( Provider::NATIVE, $config['provider'] );
 		$this->assertSame( '', $config['model'] );
 		$this->assertFalse( $config['configured'] );
+	}
+
+	public function test_explicit_legacy_connector_chat_configuration_does_not_fall_back_when_connector_is_unsupported(): void {
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME => 'anthropic',
+		];
+		WordPressTestState::$connectors                 = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => false,
+		];
+
+		$config = Provider::chat_configuration( 'anthropic' );
+
+		$this->assertSame( 'anthropic', $config['provider'] );
+		$this->assertSame( '', $config['model'] );
+		$this->assertFalse( $config['configured'] );
+	}
+
+	public function test_unregistered_saved_connector_pin_does_not_fall_back_to_generic_wordpress_ai_client(): void {
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME => 'anthropic',
+		];
+		WordPressTestState::$connectors                 = [];
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [];
+
+		$config = Provider::chat_configuration();
+
+		$this->assertSame( 'anthropic', Provider::get() );
+		$this->assertSame( 'anthropic', $config['provider'] );
+		$this->assertFalse( $config['configured'] );
+		$this->assertSame( '', $config['endpoint'] );
+		$this->assertSame( '', $config['model'] );
 	}
 
 	public function test_active_chat_request_meta_reports_matching_openai_connector_for_openai_native_selection(): void {

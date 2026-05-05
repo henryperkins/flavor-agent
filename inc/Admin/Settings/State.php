@@ -77,6 +77,14 @@ final class State {
 			return Config::GROUP_CHAT;
 		}
 
+		if ( self::cloudflare_pattern_storage_needs_setup( $state ) ) {
+			return Config::GROUP_PATTERNS;
+		}
+
+		if ( empty( $state['runtime_embedding']['configured'] ) ) {
+			return Config::GROUP_EMBEDDINGS;
+		}
+
 		if (
 			! empty( $state['pattern_state']['last_error'] ) ||
 			'stale' === (string) ( $state['pattern_state']['status'] ?? '' ) ||
@@ -111,6 +119,7 @@ final class State {
 	 * @return array{summary: string, badges: array<int, array{label: string, tone: string}>, status: array{label: string, tone: string}, open: bool}
 	 */
 	public static function get_group_card_meta( string $group, array $state ): array {
+		$embedding_status   = self::get_embedding_overview_status( $state );
 		$pattern_status     = self::get_pattern_overview_status( $state );
 		$docs_status        = self::get_docs_overview_status( $state );
 		$guidelines_status  = self::get_guidelines_overview_status( $state );
@@ -118,7 +127,7 @@ final class State {
 
 		return match ( $group ) {
 			Config::GROUP_CHAT => [
-				'summary' => __( 'Required. Chat is handled by Settings > Connectors; this screen configures embeddings and supporting services.', 'flavor-agent' ),
+				'summary' => __( 'Required. Text generation is configured in Settings > Connectors.', 'flavor-agent' ),
 				'badges'  => [
 					self::make_badge( __( 'Required', 'flavor-agent' ), 'neutral' ),
 					self::make_badge( self::runtime_chat_label( $state ), 'accent' ),
@@ -141,8 +150,17 @@ final class State {
 				),
 				'open'    => false,
 			],
+			Config::GROUP_EMBEDDINGS => [
+				'summary' => __( 'Required. Configure one embedding model for Flavor Agent semantic features.', 'flavor-agent' ),
+				'badges'  => [
+					self::make_badge( __( 'Required', 'flavor-agent' ), 'neutral' ),
+					self::make_badge( self::runtime_embedding_label( $state ), 'accent' ),
+				],
+				'status'  => $embedding_status,
+				'open'    => false,
+			],
 			Config::GROUP_PATTERNS => [
-				'summary' => __( 'Optional. Add vector search for pattern recommendations.', 'flavor-agent' ),
+				'summary' => __( 'Optional. Pattern recommendations use Pattern Storage plus the configured embedding model when needed.', 'flavor-agent' ),
 				'badges'  => [
 					self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
 				],
@@ -150,9 +168,9 @@ final class State {
 				'open'    => false,
 			],
 			Config::GROUP_DOCS => [
-				'summary' => __( 'Optional. Ground responses with developer.wordpress.org docs.', 'flavor-agent' ),
+				'summary' => __( 'Ready. Internal developer.wordpress.org grounding is already configured.', 'flavor-agent' ),
 				'badges'  => [
-					self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
+					self::make_badge( __( 'Built in', 'flavor-agent' ), 'accent' ),
 				],
 				'status'  => $docs_status,
 				'open'    => false,
@@ -195,6 +213,17 @@ final class State {
 	/**
 	 * @return array{label: string, tone: string}
 	 */
+	public static function get_embedding_overview_status( array $state ): array {
+		if ( ! empty( $state['runtime_embedding']['configured'] ) ) {
+			return self::make_badge( __( 'Ready', 'flavor-agent' ), 'success' );
+		}
+
+		return self::make_badge( __( 'Needs setup', 'flavor-agent' ), 'warning' );
+	}
+
+	/**
+	 * @return array{label: string, tone: string}
+	 */
 	public static function get_pattern_overview_status( array $state ): array {
 		$pattern_state = is_array( $state['pattern_state'] ?? null ) ? $state['pattern_state'] : [];
 
@@ -207,14 +236,14 @@ final class State {
 			$qdrant_ready    = ! empty( $state['qdrant_configured'] );
 
 			if ( ! $embedding_ready && ! $qdrant_ready ) {
-				return self::make_badge( __( 'Needs embeddings & Qdrant', 'flavor-agent' ), 'warning' );
+				return self::make_badge( __( 'Needs model & storage', 'flavor-agent' ), 'warning' );
 			}
 
 			if ( ! $embedding_ready ) {
-				return self::make_badge( __( 'Needs embeddings', 'flavor-agent' ), 'warning' );
+				return self::make_badge( __( 'Needs embedding model', 'flavor-agent' ), 'warning' );
 			}
 
-			return self::make_badge( __( 'Needs Qdrant', 'flavor-agent' ), 'warning' );
+			return self::make_badge( __( 'Needs pattern storage', 'flavor-agent' ), 'warning' );
 		}
 
 		if ( ! empty( $pattern_state['last_error'] ) ) {
@@ -234,7 +263,7 @@ final class State {
 	 */
 	public static function get_docs_overview_status( array $state ): array {
 		if ( empty( $state['docs_configured'] ) ) {
-			return self::make_badge( __( 'Off', 'flavor-agent' ), 'neutral' );
+			return self::make_badge( __( 'Unavailable', 'flavor-agent' ), 'warning' );
 		}
 
 		$prewarm_status = (string) ( $state['prewarm_state']['status'] ?? 'never' );
@@ -255,7 +284,7 @@ final class State {
 			return self::make_badge( __( 'Needs attention', 'flavor-agent' ), 'warning' );
 		}
 
-		return self::make_badge( __( 'On', 'flavor-agent' ), 'success' );
+		return self::make_badge( __( 'Ready', 'flavor-agent' ), 'success' );
 	}
 
 	/**
@@ -293,30 +322,25 @@ final class State {
 					'tone'    => 'warning',
 					'message' => __( 'No chat path is ready yet. Configure a text-generation provider in Settings > Connectors.', 'flavor-agent' ),
 				];
-			} elseif (
-				self::runtime_chat_uses_connectors( $state )
-				&& ! Provider::is_connector( (string) $state['selected_provider'] )
-			) {
-				$status_blocks[] = [
-					'tone'    => 'accent',
-					'message' => sprintf(
-						/* translators: 1: runtime chat label, 2: selected provider label */
-						__( '%1$s is currently handling chat through Settings > Connectors. The %2$s settings on this page only configure embeddings.', 'flavor-agent' ),
-						self::runtime_chat_label( $state ),
-						Provider::label( (string) $state['selected_provider'] )
-					),
-				];
-			} elseif ( empty( $state['selected_chat']['configured'] ) ) {
+			} elseif ( empty( $state['selected_chat']['configured'] ) && Provider::is_connector_or_saved_legacy_pin( (string) $state['selected_provider'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
 					'message' => sprintf(
 						/* translators: 1: provider label */
-						__( '%1$s is selected, but no matching text-generation connector is available. Select a connector-backed provider in Settings > Flavor Agent or configure the matching provider in Settings > Connectors.', 'flavor-agent' ),
+						__( '%1$s is saved from an older connector-pinning setup, but that connector is not available. Configure text generation in Settings > Connectors.', 'flavor-agent' ),
 						Provider::label( (string) $state['selected_provider'] )
 					),
 				];
 			}
+		}
 
+		if ( Config::GROUP_EMBEDDINGS === $group ) {
+			if ( empty( $state['runtime_embedding']['configured'] ) ) {
+				$status_blocks[] = [
+					'tone'    => 'warning',
+					'message' => __( 'No embedding model is ready yet. Configure one embedding provider here for Flavor Agent semantic features.', 'flavor-agent' ),
+				];
+			}
 			if (
 				Provider::is_native( (string) $state['selected_provider'] ) &&
 				'' === Provider::native_effective_api_key()
@@ -339,12 +363,12 @@ final class State {
 			} elseif ( ! empty( $state['qdrant_configured'] ) && empty( $state['runtime_embedding']['configured'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'Qdrant is configured, but pattern recommendations still need a configured embeddings backend.', 'flavor-agent' ),
+					'message' => __( 'Pattern storage is configured, but pattern recommendations still need the Embedding Model section to be ready.', 'flavor-agent' ),
 				];
 			} elseif ( empty( $state['qdrant_configured'] ) && ! empty( $state['runtime_embedding']['configured'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'Embeddings are ready, but pattern recommendations still need a Qdrant connection before you can sync.', 'flavor-agent' ),
+					'message' => __( 'The embedding model is ready, but pattern recommendations still need pattern storage before you can sync.', 'flavor-agent' ),
 				];
 			}
 		}
@@ -362,15 +386,15 @@ final class State {
 					'message' => '' !== $last_error
 						? sprintf(
 							/* translators: %s: last runtime grounding error message */
-							__( 'Docs grounding is retrying fresh warm requests after a runtime search failure: %s', 'flavor-agent' ),
+							__( 'Developer Docs grounding is retrying fresh warm requests after a runtime search failure: %s', 'flavor-agent' ),
 							$last_error
 						)
-						: __( 'Docs grounding is retrying fresh warm requests after a runtime search failure.', 'flavor-agent' ),
+						: __( 'Developer Docs grounding is retrying fresh warm requests after a runtime search failure.', 'flavor-agent' ),
 				];
 			} elseif ( 'warming' === $runtime_status ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'Docs grounding is warming more specific guidance in the background. Broad cached guidance may still be used until the queue drains.', 'flavor-agent' ),
+					'message' => __( 'Developer Docs grounding is warming more specific guidance in the background. Broad cached guidance may still be used until the queue drains.', 'flavor-agent' ),
 				];
 			} elseif ( in_array( $runtime_status, [ 'degraded', 'error' ], true ) ) {
 				$status_blocks[] = [
@@ -378,10 +402,10 @@ final class State {
 					'message' => '' !== $last_error
 						? sprintf(
 							/* translators: %s: last runtime grounding error message */
-							__( 'Docs grounding is on, but live grounding needs attention: %s', 'flavor-agent' ),
+							__( 'Developer Docs grounding is on, but live grounding needs attention: %s', 'flavor-agent' ),
 							$last_error
 						)
-						: __( 'Docs grounding is on, but live grounding is currently falling back to broad cached guidance.', 'flavor-agent' ),
+						: __( 'Developer Docs grounding is on, but live grounding is currently falling back to broad cached guidance.', 'flavor-agent' ),
 				];
 			}
 
@@ -429,7 +453,7 @@ final class State {
 
 	public static function get_pattern_sync_reason_label( string $reason ): string {
 		return match ( $reason ) {
-			'embedding_signature_changed' => __( 'Embedding provider, model, or vector size changed.', 'flavor-agent' ),
+			'embedding_signature_changed' => __( 'Embedding model, provider, or vector size changed.', 'flavor-agent' ),
 			'collection_name_changed' => __( 'Pattern index collection naming changed and needs a rebuild.', 'flavor-agent' ),
 			'collection_missing' => __( 'Pattern index collection is missing and needs a rebuild.', 'flavor-agent' ),
 			'collection_size_mismatch' => __( 'Pattern index collection vector size no longer matches the active embedding configuration.', 'flavor-agent' ),
@@ -512,10 +536,25 @@ final class State {
 	}
 
 	private static function pattern_backends_partially_configured( array $state ): bool {
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $state['selected_pattern_backend'] ?? '' ) ) {
+			$search_configured = ! empty( $state['cloudflare_pattern_ai_search_configured'] );
+			$patterns_ready    = ! empty( $state['patterns_ready'] );
+
+			return $search_configured !== $patterns_ready;
+		}
+
 		$qdrant_configured    = ! empty( $state['qdrant_configured'] );
 		$embedding_configured = ! empty( $state['runtime_embedding']['configured'] );
 
 		return $qdrant_configured !== $embedding_configured;
+	}
+
+	private static function cloudflare_pattern_storage_needs_setup( array $state ): bool {
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== (string) ( $state['selected_pattern_backend'] ?? '' ) ) {
+			return false;
+		}
+
+		return empty( $state['cloudflare_pattern_ai_search_configured'] );
 	}
 
 	private static function cloudflare_pattern_ai_search_configured(): bool {
@@ -532,6 +571,16 @@ final class State {
 
 	private static function runtime_chat_label( array $state ): string {
 		$runtime_label = trim( (string) ( $state['runtime_chat']['label'] ?? '' ) );
+
+		if ( '' !== $runtime_label ) {
+			return $runtime_label;
+		}
+
+		return Provider::label( (string) $state['selected_provider'] );
+	}
+
+	private static function runtime_embedding_label( array $state ): string {
+		$runtime_label = trim( (string) ( $state['runtime_embedding']['label'] ?? '' ) );
 
 		if ( '' !== $runtime_label ) {
 			return $runtime_label;

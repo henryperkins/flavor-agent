@@ -399,7 +399,7 @@ describe( 'PatternRecommender', () => {
 
 		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
 		expect( document.body.textContent ).toContain(
-			'Pattern recommendations need a compatible embedding backend and Qdrant'
+			'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage'
 		);
 		expect( document.body.textContent ).toContain(
 			'Settings > Flavor Agent'

@@ -98,7 +98,7 @@ function getPatternOverviewStatus( runtimeState, hasPrerequisites ) {
 
 	if ( ! hasPrerequisites ) {
 		return {
-			label: 'Needs embeddings & Qdrant',
+			label: 'Needs setup',
 			tone: 'warning',
 		};
 	}

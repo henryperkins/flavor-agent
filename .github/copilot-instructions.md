@@ -86,7 +86,7 @@ Remaining REST routes live under `flavor-agent/v1/`: `activity`, `activity/{id}/
 
 ### LLM provider architecture
 
-`LLM\ChatClient` routes chat through the WordPress AI Client (`wp_ai_client_prompt()`) and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages plugin-owned Azure OpenAI, OpenAI Native, and Cloudflare Workers AI embeddings for Qdrant, Qdrant itself, private Cloudflare AI Search pattern retrieval, public Cloudflare AI Search docs grounding, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` selects the embedding backend (`azure_openai`, `openai_native`, or `cloudflare_workers_ai` — the last must be explicitly chosen and is never used as an implicit fallback) or pins chat to a configured connector while embeddings fall back to a configured direct backend. Each recommendation surface disables independently when its required backend is unavailable.
+`LLM\ChatClient` routes chat through the WordPress AI Client (`wp_ai_client_prompt()`) and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages plugin-owned OpenAI Native and Cloudflare Workers AI embeddings for Qdrant, preserves previously saved Azure OpenAI embedding options only as a legacy runtime/cleanup path, and manages Qdrant itself, private Cloudflare AI Search pattern retrieval, public Cloudflare AI Search docs grounding, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` selects the embedding backend (`openai_native`, `cloudflare_workers_ai`, or legacy `azure_openai` when already saved — Workers AI must be explicitly chosen and is never used as an implicit fallback) or pins chat to a configured connector while embeddings fall back to a configured direct backend. Each recommendation surface disables independently when its required backend is unavailable.
 
 ## Key conventions
 
@@ -106,7 +106,7 @@ Pattern settings keys and inserter DOM selectors are centralized in `src/pattern
 
 `visiblePatternNames` should come from the current inserter root for pattern recommendations. The template recommender intentionally captures it at template-global scope instead, since template suggestions span the whole template rather than a specific insertion point.
 
-Settings sanitization has an established pattern: Azure, Qdrant, and Cloudflare validation only runs when submitted values actually change, validation results are deduplicated within a single save request via fingerprinted static state, and failed validation keeps the previously saved value while surfacing a Settings API error.
+Settings sanitization has an established pattern: OpenAI Native, Cloudflare Workers AI, Qdrant, and Cloudflare AI Search validation only runs when submitted values actually change, validation results are deduplicated within a single save request via fingerprinted static state, and failed validation keeps the previously saved value while surfacing a Settings API error. Legacy Azure embedding options are not rendered or save-validated.
 
 PHP unit tests do not boot a real WordPress environment. `tests/phpunit/bootstrap.php` provides a stub harness for core functions and classes. JS unit tests live next to source as `*.test.js` files or in `__tests__/` directories.
 

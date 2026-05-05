@@ -23,7 +23,7 @@ Use it when you need to answer:
 | `flavor-agent/recommend-content` | `edit_posts`; positive `postContext.postId` also requires `edit_post` for that post | Connectors text-generation provider configured | Draft, edit, or critique payload for blog posts, essays, and site copy in Henry Perkins's voice, with notes and line-level rewrites. Positive `postId` requests render current-post blocks server-side before prompting; absent or `0` uses the text fallback path. | Post/page Content Recommendations panel plus external-agent contract |
 | `flavor-agent/introspect-block` | `edit_posts` | None beyond capability | Block registry manifest: supports, Inspector panels, attributes, styles, and variations | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/list-allowed-blocks` | `edit_posts` | None beyond capability | Site-wide registered block manifests plus `total`, with optional search, category, pagination, and variation controls; not filtered by current inserter context | No direct first-party UI; helper and external-agent surface |
-| `flavor-agent/recommend-patterns` | `edit_posts` | Selected pattern backend configured, Connectors text generation, usable pattern index. Qdrant backend requires plugin-owned embeddings (Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI) plus Qdrant; Cloudflare AI Search backend requires private pattern AI Search credentials | Ranked registered and synced/user patterns that are in the supplied visible scope and currently readable | Pattern inserter recommendations |
+| `flavor-agent/recommend-patterns` | `edit_posts` | Selected pattern backend configured, Connectors text generation, usable pattern index. Qdrant backend requires plugin-owned embeddings (OpenAI Native or explicitly selected Cloudflare Workers AI) plus Qdrant; Cloudflare AI Search backend requires private pattern AI Search credentials | Ranked registered and synced/user patterns that are in the supplied visible scope and currently readable | Pattern inserter recommendations |
 | `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional category, block-type, template-type, search, pagination, and `includeContent` controls, plus `total` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-pattern` | `edit_posts` | None beyond capability | One registered block pattern by name; `patternId` is an alias for the returned string `id` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/list-synced-patterns` | `edit_posts` | Per-post read access with published browse fallback | Caller-readable or published `wp_block` pattern entities filtered by `syncStatus` (`synced`, `partial`, `unsynced`, or `all`), with optional search, pagination, `includeContent`, and `total` | No direct first-party UI; helper and external-agent surface |
@@ -124,10 +124,6 @@ Use it when you need to answer:
     "wordpress_ai_client": {
       "configured": true
     },
-    "azure_openai": {
-      "configured": true,
-      "embeddingDeployment": "text-embedding-3-small"
-    },
     "openai_native": {
       "configured": true,
       "embeddingModel": "text-embedding-3-small",
@@ -146,7 +142,7 @@ Use it when you need to answer:
 
 | Pattern backend | Embeddings | Vector/index service | Search service | Required settings |
 | --- | --- | --- | --- | --- |
-| Qdrant | Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI | Qdrant | Qdrant | Embedding provider, Qdrant, Connectors chat |
+| Qdrant | OpenAI Native or explicitly selected Cloudflare Workers AI | Qdrant | Qdrant | Embedding provider, Qdrant, Connectors chat |
 | Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Private pattern AI Search, Connectors chat |
 
 ### List-Allowed-Blocks Response Shape

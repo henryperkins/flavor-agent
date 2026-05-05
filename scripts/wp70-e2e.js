@@ -8,6 +8,11 @@ const DEFAULT_BASE_IMAGE = 'wordpress:beta-7.0-RC2-php8.2-apache';
 const DEFAULT_WORDPRESS_PORT = '9404';
 const DEFAULT_PHPMYADMIN_PORT = '9405';
 const DEFAULT_THEME_SLUG = 'flavor-agent-e2e';
+// Flavor Agent declares `Requires Plugins: ai` in its plugin header, so WP
+// refuses to activate the plugin unless the AI plugin is present. The WP 7.0
+// harness intentionally stays minimal (no MCP / AI provider plugins) — extend
+// via FLAVOR_AGENT_WP70_COMPANION_PLUGINS only when a spec needs it.
+const DEFAULT_COMPANION_PLUGINS = [ 'ai' ];
 
 function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 	const wordpressPort =
@@ -29,6 +34,9 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 			process.env.FLAVOR_AGENT_WP70_RESET === undefined ||
 			process.env.FLAVOR_AGENT_WP70_RESET === '1',
 		themeSlug: process.env.FLAVOR_AGENT_WP70_THEME || DEFAULT_THEME_SLUG,
+		companionPlugins: parseCompanionPlugins(
+			process.env.FLAVOR_AGENT_WP70_COMPANION_PLUGINS
+		),
 		wordpressTitle:
 			process.env.FLAVOR_AGENT_WP70_TITLE || 'Flavor Agent WP 7.0 E2E',
 		adminUser: process.env.FLAVOR_AGENT_WP70_ADMIN_USER || 'admin',
@@ -66,6 +74,25 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 				'admin@example.com',
 		},
 	};
+}
+
+function parseCompanionPlugins( raw ) {
+	if ( raw === undefined || raw === null || raw === '' ) {
+		return [ ...DEFAULT_COMPANION_PLUGINS ];
+	}
+
+	const slugs = String( raw )
+		.split( ',' )
+		.map( ( slug ) => slug.trim() )
+		.filter( ( slug ) => slug.length > 0 );
+
+	if ( ! slugs.includes( 'ai' ) ) {
+		// `ai` is mandatory (Flavor Agent's plugin header requires it). Always
+		// install it first regardless of how the override list is ordered.
+		slugs.unshift( 'ai' );
+	}
+
+	return slugs;
 }
 
 function runCommand( command, args, options = {} ) {
@@ -207,13 +234,28 @@ update_option( 'page_for_posts', 0 );
 	] );
 }
 
+function installCompanionPlugins( harness ) {
+	const slugs = harness.companionPlugins || [];
+	if ( slugs.length === 0 ) {
+		return;
+	}
+
+	runWpCli( harness, [
+		'plugin',
+		'install',
+		...slugs,
+		'--activate',
+		'--force',
+	] );
+}
+
 function seedFlavorAgentOptions( harness ) {
 	const optionValues = {
-		flavor_agent_openai_provider: 'azure_openai',
-		flavor_agent_azure_openai_endpoint: 'https://example.test/openai',
-		flavor_agent_azure_openai_key: 'playground-key',
-		flavor_agent_azure_embedding_deployment: 'playground-embeddings',
-		flavor_agent_azure_chat_deployment: 'playground-chat',
+		wpai_features_enabled: '1',
+		'wpai_feature_flavor-agent_enabled': '1',
+		flavor_agent_openai_provider: 'openai_native',
+		flavor_agent_openai_native_api_key: 'playground-key',
+		flavor_agent_openai_native_embedding_model: 'playground-embeddings',
 		flavor_agent_qdrant_url: 'https://example.test/qdrant',
 		flavor_agent_qdrant_key: 'playground-qdrant-key',
 	};
@@ -256,6 +298,7 @@ async function bootstrapWp70Harness() {
 
 	runWpCli( harness, [ 'option', 'update', 'home', harness.baseURL ] );
 	runWpCli( harness, [ 'option', 'update', 'siteurl', harness.baseURL ] );
+	installCompanionPlugins( harness );
 	runWpCli( harness, [ 'plugin', 'activate', 'flavor-agent' ] );
 	seedFlavorAgentOptions( harness );
 	runWpCli( harness, [ 'theme', 'activate', harness.themeSlug ] );

@@ -163,9 +163,9 @@ const SURFACE_MESSAGES = Object.freeze( {
 	},
 	pattern: {
 		default:
-			'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+			'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
 		cloudflare_ai_search_unconfigured:
-			'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+			'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
 	},
 } );
 

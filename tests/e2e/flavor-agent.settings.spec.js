@@ -28,11 +28,11 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		page.getByRole( 'heading', { name: 'Flavor Agent Settings' } )
 	).toBeVisible();
 	await expect( page.locator( '.flavor-agent-admin-hero__copy' ) ).toHaveText(
-		'Configure site-specific settings here. Use Help for setup reference and troubleshooting.'
+		'Review model readiness, embeddings, patterns, developer docs, and guidance without leaving the current setup flow.'
 	);
 	await expect(
 		page.locator( '.flavor-agent-settings__glance-item' )
-	).toHaveCount( 5 );
+	).toHaveCount( 6 );
 	await expect( page.locator( '.flavor-agent-settings' ) ).not.toContainText(
 		'Recent Activity'
 	);
@@ -41,6 +41,9 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	);
 
 	const chatSection = page.locator( '[data-flavor-agent-section="chat"]' );
+	const embeddingSection = page.locator(
+		'[data-flavor-agent-section="embeddings"]'
+	);
 	const patternSection = page.locator(
 		'[data-flavor-agent-section="patterns"]'
 	);
@@ -58,19 +61,29 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		'Required'
 	);
 	await expect( chatSection.locator( sectionSummarySelector ) ).toContainText(
-		'Chat is handled by Settings > Connectors; this screen configures embeddings and supporting services.'
+		'Text generation is configured in Settings > Connectors.'
+	);
+	await expect(
+		embeddingSection.locator( sectionSummarySelector )
+	).toContainText( 'Required' );
+	await expect(
+		embeddingSection.locator( sectionSummarySelector )
+	).toContainText(
+		'Configure one embedding model for Flavor Agent semantic features.'
 	);
 	await expect(
 		patternSection.locator( sectionSummarySelector )
 	).toContainText( 'Optional' );
 	await expect(
 		patternSection.locator( sectionSummarySelector )
-	).toContainText( 'Add vector search for pattern recommendations.' );
-	await expect( docsSection.locator( sectionSummarySelector ) ).toContainText(
-		'Optional'
+	).toContainText(
+		'Pattern recommendations use Pattern Storage plus the configured embedding model when needed.'
 	);
 	await expect( docsSection.locator( sectionSummarySelector ) ).toContainText(
-		'Ground responses with developer.wordpress.org docs.'
+		'Ready'
+	);
+	await expect( docsSection.locator( sectionSummarySelector ) ).toContainText(
+		'Internal developer.wordpress.org grounding is already configured.'
 	);
 	await expect(
 		guidelinesSection.locator( sectionSummarySelector )
@@ -106,16 +119,11 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		await expect( chatSection ).toHaveJSProperty( 'open', false );
 	}
 
-	const legacyOverridePanel = page
-		.locator( '.flavor-agent-settings-subpanel' )
-		.filter( {
-			has: page.locator( 'summary', {
-				hasText: 'Cloudflare Override',
-			} ),
-		} );
-
-	await expect( legacyOverridePanel ).toContainText(
-		'Older installs or explicit custom-endpoint overrides only. Leave these blank to use the built-in public docs endpoint.'
+	await expect( page.locator( '.flavor-agent-settings' ) ).not.toContainText(
+		'Cloudflare Override'
+	);
+	await expect( docsSection ).toContainText(
+		"Developer docs use Flavor Agent's built-in public endpoint. No Cloudflare credentials are required."
 	);
 	await expect(
 		page.locator( '.flavor-agent-guidelines__actions-panel' )
@@ -131,7 +139,10 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 
 	await expect( overviewPanel ).toBeVisible();
 	await expect( overviewPanel ).toContainText(
-		'Configure chat first. Settings > Connectors is the primary path and the only required section.'
+		'AI Model shows the text-generation provider configured in Settings > Connectors.'
+	);
+	await expect( overviewPanel ).toContainText(
+		'Embedding Model is configured once for Flavor Agent semantic features.'
 	);
 
 	await page
@@ -145,7 +156,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	await expect(
 		page.locator( '#tab-panel-flavor-agent-configuration' )
 	).toContainText(
-		'Cloudflare override fields are only for older installs or explicit custom-endpoint use.'
+		"Developer Docs uses Flavor Agent's built-in public developer.wordpress.org endpoint."
 	);
 
 	await page
@@ -255,7 +266,7 @@ test( '@wp70-site-editor settings page saves, validates, and persists safe field
 	).toContainText( 'Pattern settings saved.' );
 	await expect(
 		page.locator( '.flavor-agent-settings-save-summary' )
-	).toContainText( 'Docs grounding settings saved.' );
+	).toContainText( 'Developer docs settings saved.' );
 	await expect(
 		page.locator( '.flavor-agent-settings-save-summary' )
 	).toContainText( 'Guidelines saved.' );

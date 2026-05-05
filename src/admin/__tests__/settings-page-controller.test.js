@@ -362,8 +362,7 @@ describe( 'settings page controller', () => {
 	test( 'disabled sync button references the prerequisite guidance', () => {
 		const root = renderSettingsPage( {
 			prerequisitesReady: '0',
-			prerequisiteMessage:
-				'Add the Qdrant URL and API key before syncing.',
+			prerequisiteMessage: 'Add Pattern Storage before syncing.',
 		} );
 
 		initializeSettingsPage( {
@@ -379,15 +378,14 @@ describe( 'settings page controller', () => {
 		expect( button.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
 		expect( describedBy ).toBeTruthy();
 		expect( root.querySelector( `#${ describedBy }` ).textContent ).toBe(
-			'Add the Qdrant URL and API key before syncing.'
+			'Add Pattern Storage before syncing.'
 		);
 	} );
 
-	test( 'disabled sync button can reference missing embeddings guidance', () => {
+	test( 'disabled sync button can reference missing embedding model guidance', () => {
 		const root = renderSettingsPage( {
 			prerequisitesReady: '0',
-			prerequisiteMessage:
-				'Choose and complete an embeddings backend before syncing.',
+			prerequisiteMessage: 'Complete Embedding Model before syncing.',
 		} );
 
 		initializeSettingsPage( {
@@ -401,11 +399,11 @@ describe( 'settings page controller', () => {
 
 		expect( button.disabled ).toBe( true );
 		expect( root.querySelector( `#${ describedBy }` ).textContent ).toBe(
-			'Choose and complete an embeddings backend before syncing.'
+			'Complete Embedding Model before syncing.'
 		);
 	} );
 
-	test( 'sync button remains enabled when embeddings and qdrant are ready', () => {
+	test( 'sync button remains enabled when pattern prerequisites are ready', () => {
 		const root = renderSettingsPage( {
 			prerequisitesReady: '1',
 			prerequisiteMessage: '',

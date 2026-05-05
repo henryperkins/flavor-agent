@@ -7,14 +7,14 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 
 - Primary surface: a Flavor Agent-owned recommendation shelf prepended inside the native block inserter
 - Secondary surface: the inserter-toggle badge rendered by `src/patterns/InserterBadge.js`
-- Unavailable state: when pattern backends are missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
+- Unavailable state: when Pattern Storage or the Embedding Model is missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
 - There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains ranking/browse-only instead of participating in the lane/review/apply model
 - Pattern recommendations do not use `resolvedContextSignature` and do not accept `resolveSignatureOnly`; freshness for this surface stays request-time and backend-runtime scoped rather than review/apply scoped
 
 ## Surfacing Conditions
 
 - `window.flavorAgentData.canRecommendPatterns` must be true; that requires the selected pattern backend to be configured in `Settings > Flavor Agent` and a usable text-generation provider in `Settings > Connectors`
-- Qdrant backend readiness requires a compatible embedding backend (Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI) plus Qdrant URL/key
+- Qdrant storage readiness requires the Embedding Model (OpenAI Native or explicitly selected Cloudflare Workers AI) plus Qdrant URL/key
 - Cloudflare AI Search backend readiness requires a private site-owner Cloudflare AI Search pattern instance and token; it does not use plugin-owned embeddings or Qdrant
 - A post type must be available from `core/editor`
 - Passive fetch runs when the editor loads
@@ -35,7 +35,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 8. The Qdrant backend embeds the pattern query through the selected plugin-owned embedding provider and retrieves semantic and structural candidates from Qdrant
 9. The Cloudflare AI Search backend sends the query and `visiblePatternNames` filter to the private pattern AI Search instance, using Cloudflare-managed indexing/search instead of `EmbeddingClient` or `QdrantClient`
 10. The store saves the recommendations and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
-11. If pattern backends are unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
+11. If Pattern Storage or the Embedding Model is unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
 12. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
 13. The user inserts a recommended pattern directly from the Flavor Agent shelf, which dispatches the same core block insertion flow Gutenberg uses for pattern insertion
 
@@ -43,7 +43,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 
 | Pattern backend | Embeddings | Vector/index service | Search service | Required settings |
 | --- | --- | --- | --- | --- |
-| Qdrant | Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI | Qdrant | Qdrant | Embedding provider, Qdrant, Connectors chat |
+| Qdrant | OpenAI Native or explicitly selected Cloudflare Workers AI | Qdrant | Qdrant | Embedding provider, Qdrant, Connectors chat |
 | Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Private pattern AI Search, Connectors chat |
 
 ## What This Surface Can Do
@@ -63,7 +63,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - Synced/user pattern candidates keep their `core/block/{id}` names through indexing and recommendation output so the frontend can match them to Gutenberg's allowed-pattern data before insertion
 - Synced/user recommendation payloads are rehydrated from the current published `wp_block` post and require `current_user_can( 'read_post', $id )` before ranking or response output, even though the indexed corpus is already limited to published user patterns
 - When synced/user candidates in the current visible-pattern scope are filtered because the current request cannot pass `read_post`, the response returns a de-duplicated aggregate unreadable-synced count only. The UI can explain partial or empty results without exposing pattern names, IDs, titles, or content.
-- If the pattern backends are unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
+- If Pattern Storage or the Embedding Model is unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
 - If the backend returns ranked names that Gutenberg is not currently exposing through the allowed-pattern selector, the inserter keeps the result local and explanatory instead of patching registry metadata
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
 - Cloudflare AI Search sync uploads only public-safe current pattern content. If a synced pattern later becomes private, draft, trashed, or unreadable before the next sync, request-time rehydration drops it before ranking or response output.
@@ -88,7 +88,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 | Docs grounding | `AISearchClient::maybe_search_with_cache_fallbacks()` | Supplies cache-backed WordPress developer guidance for the ranking prompt and queues async warming on misses |
 | Qdrant embeddings | `EmbeddingClient::embed()` | Turns the query into a vector for the Qdrant backend only |
 | Qdrant vector search | `QdrantClient::search()` | Retrieves semantic and structural candidates for the Qdrant backend only |
-| Private AI Search | `PatternSearchClient::search_patterns()` | Retrieves filtered candidates from the private Cloudflare AI Search pattern backend |
+| Private AI Search | `PatternSearchClient::search_patterns()` | Retrieves filtered candidates from Cloudflare AI Search Pattern Storage |
 | Ranking | `ResponsesClient::rank()` | Produces the final ordered recommendation set |
 
 ## Related Abilities

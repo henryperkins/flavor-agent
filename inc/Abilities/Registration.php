@@ -582,14 +582,6 @@ final class Registration {
 										'configured' => [ 'type' => 'boolean' ],
 									],
 								],
-								'azure_openai'         => [
-									'type'       => 'object',
-									'properties' => [
-										'configured'     => [ 'type' => 'boolean' ],
-										'chatDeployment' => [ 'type' => [ 'string', 'null' ] ],
-										'embeddingDeployment' => [ 'type' => [ 'string', 'null' ] ],
-									],
-								],
 								'openai_native'        => [
 									'type'       => 'object',
 									'properties' => [

@@ -145,7 +145,7 @@ final class Fields {
 		];
 		$value          = (string) get_option(
 			$option,
-			$option === Provider::OPTION_NAME ? Provider::AZURE : $default
+			$option === Provider::OPTION_NAME ? Provider::NATIVE : $default
 		);
 		$autocomplete   = array_key_exists( 'autocomplete', $args )
 			? (string) $args['autocomplete']

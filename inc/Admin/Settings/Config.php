@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Admin\Settings;
 
-final class Config {
+final class Config
+{
 
 	public const OPTION_GROUP                                    = 'flavor_agent_settings';
 	public const PAGE_SLUG                                       = 'flavor-agent';
 	public const GROUP_CHAT                                      = 'chat';
+	public const GROUP_EMBEDDINGS                                = 'embeddings';
 	public const GROUP_PATTERNS                                  = 'patterns';
 	public const GROUP_DOCS                                      = 'docs';
 	public const GROUP_GUIDELINES                                = 'guidelines';
 	public const GROUP_EXPERIMENTS                               = 'experiments';
+	public const OPTION_REASONING_EFFORT                         = 'flavor_agent_reasoning_effort';
+	public const OPTION_LEGACY_AZURE_REASONING_EFFORT            = 'flavor_agent_azure_reasoning_effort';
 	public const OPTION_BLOCK_STRUCTURAL_ACTIONS                 = 'flavor_agent_block_structural_actions_enabled';
 	public const OPTION_PATTERN_RETRIEVAL_BACKEND                = 'flavor_agent_pattern_retrieval_backend';
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID  = 'flavor_agent_cloudflare_pattern_ai_search_account_id';
@@ -35,6 +39,5 @@ final class Config {
 	public const PATTERN_MAX_RECOMMENDATIONS_LIMIT   = 12;
 	public const PATTERN_AI_SEARCH_THRESHOLD_DEFAULT = 0.2;
 
-	private function __construct() {
-	}
+	private function __construct() {}
 }

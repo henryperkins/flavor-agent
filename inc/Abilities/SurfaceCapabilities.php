@@ -412,27 +412,27 @@ final class SurfaceCapabilities {
 
 	private static function pattern_unavailable_message( bool $can_manage_settings, bool $chat_available, string $pattern_backend, bool $pattern_backend_ready ): string {
 		if ( ! $can_manage_settings ) {
-			return __( 'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent pattern backends and a text-generation provider in Settings > Connectors.', 'flavor-agent' );
+			return __( 'Pattern recommendations are not configured yet. Ask an administrator to configure Pattern Storage in Settings > Flavor Agent and a text-generation provider in Settings > Connectors.', 'flavor-agent' );
 		}
 
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend ) {
 			if ( ! $pattern_backend_ready && ! $chat_available ) {
-				return __( 'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
+				return __( 'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
 			}
 
 			if ( ! $pattern_backend_ready ) {
-				return __( 'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent.', 'flavor-agent' );
+				return __( 'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent.', 'flavor-agent' );
 			}
 
 			return __( 'Pattern recommendations need a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
 		}
 
 		if ( ! $pattern_backend_ready && ! $chat_available ) {
-			return __( 'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
+			return __( 'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
 		}
 
 		if ( ! $pattern_backend_ready ) {
-			return __( 'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent.', 'flavor-agent' );
+			return __( 'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent.', 'flavor-agent' );
 		}
 
 		return __( 'Pattern recommendations need a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );

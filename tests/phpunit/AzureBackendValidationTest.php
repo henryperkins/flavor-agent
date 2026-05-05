@@ -8,33 +8,38 @@ use FlavorAgent\AzureOpenAI\BaseHttpClient;
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
-final class AzureBackendValidationTest extends TestCase {
+final class AzureBackendValidationTest extends TestCase
+{
 
 	private string|false $previous_openai_api_key;
 
-	protected function setUp(): void {
+	protected function setUp(): void
+	{
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->previous_openai_api_key = getenv( 'OPENAI_API_KEY' );
-		putenv( 'OPENAI_API_KEY' );
+		$this->previous_openai_api_key = getenv('OPENAI_API_KEY');
+		putenv('OPENAI_API_KEY');
 	}
 
-	protected function tearDown(): void {
-		if ( false === $this->previous_openai_api_key ) {
-			putenv( 'OPENAI_API_KEY' );
+	protected function tearDown(): void
+	{
+		if (false === $this->previous_openai_api_key) {
+			putenv('OPENAI_API_KEY');
 		} else {
-			putenv( 'OPENAI_API_KEY=' . $this->previous_openai_api_key );
+			putenv('OPENAI_API_KEY=' . $this->previous_openai_api_key);
 		}
 
 		parent::tearDown();
 	}
 
-	public function test_embedding_validation_returns_remote_error_message(): void {
+	public function test_embedding_validation_returns_remote_error_message(): void
+	{
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 404,
@@ -51,26 +56,29 @@ final class AzureBackendValidationTest extends TestCase {
 		$result = EmbeddingClient::validate_configuration(
 			'https://example.openai.azure.com/',
 			'azure-key',
-			'missing-deployment'
+			'missing-deployment',
+			Provider::AZURE
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'Embedding deployment not found', $result->get_error_message() );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('Embedding deployment not found', $result->get_error_message());
 		$this->assertSame(
 			'https://example.openai.azure.com/openai/v1/embeddings',
 			WordPressTestState::$last_remote_post['url']
 		);
 	}
 
-	public function test_parse_retry_after_header_supports_http_dates(): void {
+	public function test_parse_retry_after_header_supports_http_dates(): void
+	{
 		$now    = time();
-		$header = gmdate( 'D, d M Y H:i:s \G\M\T', $now + 7 );
-		$parsed = BaseHttpClient::parse_retry_after_header( $header, $now );
+		$header = gmdate('D, d M Y H:i:s \G\M\T', $now + 7);
+		$parsed = BaseHttpClient::parse_retry_after_header($header, $now);
 
-		$this->assertSame( 7, $parsed );
+		$this->assertSame(7, $parsed);
 	}
 
-	public function test_rank_delegates_to_the_wordpress_ai_client_for_selected_connector_providers(): void {
+	public function test_rank_delegates_to_the_wordpress_ai_client_for_selected_connector_providers(): void
+	{
 		WordPressTestState::$options = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];
@@ -93,19 +101,20 @@ final class AzureBackendValidationTest extends TestCase {
 
 		WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
 
-		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
+		$result = ResponsesClient::rank('connector system prompt', 'connector user prompt', 'high');
 
-		$this->assertSame( 'connector ranked output', $result );
-		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
-		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
-		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame('connector ranked output', $result);
+		$this->assertSame('anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null);
+		$this->assertSame('connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null);
+		$this->assertSame('high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null);
+		$this->assertSame([], WordPressTestState::$last_remote_post);
 	}
 
-	public function test_rank_uses_saved_reasoning_effort_for_selected_connector_providers(): void {
+	public function test_rank_uses_saved_reasoning_effort_for_selected_connector_providers(): void
+	{
 		WordPressTestState::$options = [
-			'flavor_agent_openai_provider'        => 'anthropic',
-			'flavor_agent_azure_reasoning_effort' => 'xhigh',
+			'flavor_agent_openai_provider'  => 'anthropic',
+			Config::OPTION_REASONING_EFFORT => 'xhigh',
 		];
 
 		WordPressTestState::$connectors = [
@@ -126,15 +135,16 @@ final class AzureBackendValidationTest extends TestCase {
 
 		WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
 
-		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt' );
+		$result = ResponsesClient::rank('connector system prompt', 'connector user prompt');
 
-		$this->assertSame( 'connector ranked output', $result );
-		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
-		$this->assertSame( 'xhigh', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame('connector ranked output', $result);
+		$this->assertSame('anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null);
+		$this->assertSame('xhigh', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null);
+		$this->assertSame([], WordPressTestState::$last_remote_post);
 	}
 
-	public function test_rank_maps_openai_native_to_the_openai_connector_without_generic_fallback(): void {
+	public function test_rank_maps_openai_native_to_the_openai_connector_without_generic_fallback(): void
+	{
 		WordPressTestState::$options = [
 			'flavor_agent_openai_provider' => Provider::NATIVE,
 		];
@@ -167,35 +177,36 @@ final class AzureBackendValidationTest extends TestCase {
 
 		WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector ranked output';
 
-		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
+		$result = ResponsesClient::rank('connector system prompt', 'connector user prompt', 'high');
 
-		$this->assertSame( 'OpenAI connector ranked output', $result );
-		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
-		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
-		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame('OpenAI connector ranked output', $result);
+		$this->assertSame('openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null);
+		$this->assertSame('connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null);
+		$this->assertSame('high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null);
+		$this->assertSame([], WordPressTestState::$last_remote_post);
 	}
 
-	public function test_rank_does_not_use_generic_wordpress_ai_client_for_direct_provider(): void {
+	public function test_rank_uses_generic_wordpress_ai_client_for_direct_provider(): void
+	{
 		WordPressTestState::$options = [
-			'flavor_agent_openai_provider'       => Provider::AZURE,
-			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'      => 'azure-key',
-			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
+			'flavor_agent_openai_provider'               => Provider::NATIVE,
+			'flavor_agent_openai_native_api_key'         => 'openai-key',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-small',
 		];
 
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = 'WordPress AI client preferred output';
 
-		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+		$result = ResponsesClient::rank('fallback system prompt', 'fallback user prompt');
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'missing_text_generation_provider', $result->get_error_code() );
-		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame('WordPress AI client preferred output', $result);
+		$this->assertArrayNotHasKey('provider', WordPressTestState::$last_ai_client_prompt);
+		$this->assertSame('fallback system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null);
+		$this->assertSame([], WordPressTestState::$last_remote_post);
 	}
 
-	public function test_rank_uses_unpinned_wordpress_ai_client_when_workers_ai_embeddings_are_selected(): void {
+	public function test_rank_uses_unpinned_wordpress_ai_client_when_workers_ai_embeddings_are_selected(): void
+	{
 		WordPressTestState::$options = [
 			Provider::OPTION_NAME                          => 'cloudflare_workers_ai',
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
@@ -206,17 +217,19 @@ final class AzureBackendValidationTest extends TestCase {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = 'Workers AI embedding path ranked output';
 
-		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
+		$result = ResponsesClient::rank('connector system prompt', 'connector user prompt', 'high');
 
-		$this->assertSame( 'Workers AI embedding path ranked output', $result );
-		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
-		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
-		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame('Workers AI embedding path ranked output', $result);
+		$this->assertArrayNotHasKey('provider', WordPressTestState::$last_ai_client_prompt);
+		$this->assertSame('connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null);
+		$this->assertSame('high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null);
+		$this->assertSame([], WordPressTestState::$last_remote_post);
 	}
 
-	public function test_embed_batch_returns_a_retryable_rate_limit_error_without_sleeping(): void {
+	public function test_embed_batch_returns_a_retryable_rate_limit_error_without_sleeping(): void
+	{
 		WordPressTestState::$options               = [
+			Provider::OPTION_NAME                     => Provider::AZURE,
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
@@ -239,11 +252,11 @@ final class AzureBackendValidationTest extends TestCase {
 			],
 		];
 
-		$result = EmbeddingClient::embed_batch( [ 'alpha', 'beta' ] );
+		$result = EmbeddingClient::embed_batch(['alpha', 'beta']);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'rate_limited', $result->get_error_code() );
-		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('rate_limited', $result->get_error_code());
+		$this->assertCount(1, WordPressTestState::$remote_post_calls);
 		$this->assertSame(
 			'https://example.openai.azure.com/openai/v1/embeddings',
 			WordPressTestState::$remote_post_calls[0]['url'] ?? null
@@ -252,14 +265,15 @@ final class AzureBackendValidationTest extends TestCase {
 			429,
 			$result->get_error_data()['status'] ?? null
 		);
-		$this->assertTrue( (bool) ( $result->get_error_data()['retryable'] ?? false ) );
+		$this->assertTrue((bool) ($result->get_error_data()['retryable'] ?? false));
 		$this->assertSame(
 			1,
 			$result->get_error_data()['retry_after'] ?? null
 		);
 	}
 
-	public function test_qdrant_search_returns_a_retryable_rate_limit_error(): void {
+	public function test_qdrant_search_returns_a_retryable_rate_limit_error(): void
+	{
 		WordPressTestState::$options              = [
 			'flavor_agent_qdrant_url' => 'https://example.qdrant.io',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
@@ -280,16 +294,18 @@ final class AzureBackendValidationTest extends TestCase {
 			),
 		];
 
-		$result = QdrantClient::search( [ 0.1, 0.2 ], 3, [], 'flavor-agent-test' );
+		$result = QdrantClient::search([0.1, 0.2], 3, [], 'flavor-agent-test');
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'qdrant_rate_limited', $result->get_error_code() );
-		$this->assertSame( 429, $result->get_error_data()['status'] ?? null );
-		$this->assertTrue( (bool) ( $result->get_error_data()['retryable'] ?? false ) );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('qdrant_rate_limited', $result->get_error_code());
+		$this->assertSame(429, $result->get_error_data()['status'] ?? null);
+		$this->assertTrue((bool) ($result->get_error_data()['retryable'] ?? false));
 	}
 
-	public function test_embed_batch_rejects_mixed_dimensions(): void {
+	public function test_embed_batch_rejects_mixed_dimensions(): void
+	{
 		WordPressTestState::$options              = [
+			Provider::OPTION_NAME                     => Provider::AZURE,
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
@@ -302,23 +318,24 @@ final class AzureBackendValidationTest extends TestCase {
 				[
 					'data' => [
 						[
-							'embedding' => [ 0.1, 0.2 ],
+							'embedding' => [0.1, 0.2],
 						],
 						[
-							'embedding' => [ 0.3, 0.4, 0.5 ],
+							'embedding' => [0.3, 0.4, 0.5],
 						],
 					],
 				]
 			),
 		];
 
-		$result = EmbeddingClient::embed_batch( [ 'alpha', 'beta' ] );
+		$result = EmbeddingClient::embed_batch(['alpha', 'beta']);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'embedding_dimension_mismatch', $result->get_error_code() );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('embedding_dimension_mismatch', $result->get_error_code());
 	}
 
-	public function test_openai_native_embedding_validation_uses_openai_endpoint_and_bearer_auth(): void {
+	public function test_openai_native_embedding_validation_uses_openai_endpoint_and_bearer_auth(): void
+	{
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -327,7 +344,7 @@ final class AzureBackendValidationTest extends TestCase {
 				[
 					'data' => [
 						[
-							'embedding' => [ 0.1, 0.2 ],
+							'embedding' => [0.1, 0.2],
 						],
 					],
 				]
@@ -341,32 +358,34 @@ final class AzureBackendValidationTest extends TestCase {
 			Provider::NATIVE
 		);
 
-		$this->assertIsArray( $result );
-		$this->assertSame( 2, $result['dimension'] ?? null );
-		$this->assertNotSame( '', $result['signature']['signature_hash'] ?? '' );
-		$this->assertSame( 'https://api.openai.com/v1/embeddings', WordPressTestState::$last_remote_post['url'] );
+		$this->assertIsArray($result);
+		$this->assertSame(2, $result['dimension'] ?? null);
+		$this->assertNotSame('', $result['signature']['signature_hash'] ?? '');
+		$this->assertSame('https://api.openai.com/v1/embeddings', WordPressTestState::$last_remote_post['url']);
 		$this->assertSame(
 			'Bearer native-key',
 			WordPressTestState::$last_remote_post['args']['headers']['Authorization'] ?? null
 		);
 	}
 
-	public function test_rank_does_not_fall_back_to_wordpress_ai_client_when_no_chat_connector_is_selected(): void {
+	public function test_rank_uses_generic_wordpress_ai_client_when_no_chat_connector_is_selected(): void
+	{
 		WordPressTestState::$ai_client_supported            = true;
-		WordPressTestState::$ai_client_generate_text_result = 'Unexpected generic output';
+		WordPressTestState::$ai_client_generate_text_result = 'Generic WordPress AI Client output';
 
-		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+		$result = ResponsesClient::rank('fallback system prompt', 'fallback user prompt');
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'missing_text_generation_provider', $result->get_error_code() );
-		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame('Generic WordPress AI Client output', $result);
+		$this->assertArrayNotHasKey('provider', WordPressTestState::$last_ai_client_prompt);
+		$this->assertSame('fallback system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null);
+		$this->assertSame([], WordPressTestState::$last_remote_post);
 	}
 
-	public function test_rank_uses_saved_reasoning_effort_for_matching_openai_connector(): void {
+	public function test_rank_uses_saved_reasoning_effort_for_matching_openai_connector(): void
+	{
 		WordPressTestState::$options                        = [
-			'flavor_agent_openai_provider'        => Provider::NATIVE,
-			'flavor_agent_azure_reasoning_effort' => 'high',
+			'flavor_agent_openai_provider'  => Provider::NATIVE,
+			Config::OPTION_REASONING_EFFORT => 'high',
 		];
 		WordPressTestState::$connectors                     = [
 			'openai' => [
@@ -385,18 +404,19 @@ final class AzureBackendValidationTest extends TestCase {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector output';
 
-		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+		$result = ResponsesClient::rank('fallback system prompt', 'fallback user prompt');
 
-		$this->assertSame( 'OpenAI connector output', $result );
-		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
-		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame('OpenAI connector output', $result);
+		$this->assertSame('openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null);
+		$this->assertSame('high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null);
+		$this->assertSame([], WordPressTestState::$last_remote_post);
 	}
 
-	public function test_rank_maps_saved_reasoning_effort_to_openai_custom_options_when_standard_builder_methods_are_unavailable(): void {
+	public function test_rank_maps_saved_reasoning_effort_to_openai_custom_options_when_standard_builder_methods_are_unavailable(): void
+	{
 		WordPressTestState::$options                        = [
-			'flavor_agent_openai_provider'        => Provider::NATIVE,
-			'flavor_agent_azure_reasoning_effort' => 'high',
+			'flavor_agent_openai_provider'  => Provider::NATIVE,
+			Config::OPTION_REASONING_EFFORT => 'high',
 		];
 		WordPressTestState::$connectors                     = [
 			'openai' => [
@@ -417,11 +437,11 @@ final class AzureBackendValidationTest extends TestCase {
 		];
 		WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector output';
 
-		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+		$result = ResponsesClient::rank('fallback system prompt', 'fallback user prompt');
 
-		$this->assertSame( 'OpenAI connector output', $result );
-		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
-		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame('OpenAI connector output', $result);
+		$this->assertSame('openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null);
+		$this->assertArrayNotHasKey('reasoning', WordPressTestState::$last_ai_client_prompt);
 		$this->assertSame(
 			[
 				'reasoning' => [
@@ -430,10 +450,11 @@ final class AzureBackendValidationTest extends TestCase {
 			],
 			WordPressTestState::$last_ai_client_prompt['customOptions'] ?? null
 		);
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame([], WordPressTestState::$last_remote_post);
 	}
 
-	public function test_embedding_validation_wraps_transport_timeout_with_backend_context(): void {
+	public function test_embedding_validation_wraps_transport_timeout_with_backend_context(): void
+	{
 		WordPressTestState::$remote_post_response = new \WP_Error(
 			'http_request_failed',
 			'cURL error 28: Operation timed out after 30002 milliseconds with 0 bytes received'
@@ -442,18 +463,20 @@ final class AzureBackendValidationTest extends TestCase {
 		$result = EmbeddingClient::validate_configuration(
 			'https://example.openai.azure.com/',
 			'azure-key',
-			'embed-deployment'
+			'embed-deployment',
+			Provider::AZURE
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'http_request_failed', $result->get_error_code() );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('http_request_failed', $result->get_error_code());
 		$this->assertStringContainsString(
 			'Azure OpenAI embeddings request timed out after 30 seconds while contacting example.openai.azure.com.',
 			$result->get_error_message()
 		);
 	}
 
-	public function test_embedding_validation_rejects_responses_payload_shape(): void {
+	public function test_embedding_validation_rejects_responses_payload_shape(): void
+	{
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -468,17 +491,19 @@ final class AzureBackendValidationTest extends TestCase {
 		$result = EmbeddingClient::validate_configuration(
 			'https://example.openai.azure.com/',
 			'azure-key',
-			'embed-deployment'
+			'embed-deployment',
+			Provider::AZURE
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertInstanceOf(\WP_Error::class, $result);
 		$this->assertSame(
 			'Unexpected Azure OpenAI embeddings validation response format.',
 			$result->get_error_message()
 		);
 	}
 
-	public function test_qdrant_validation_reports_parse_failures(): void {
+	public function test_qdrant_validation_reports_parse_failures(): void
+	{
 		WordPressTestState::$remote_get_response = [
 			'response' => [
 				'code' => 200,
@@ -491,15 +516,16 @@ final class AzureBackendValidationTest extends TestCase {
 			'qdrant-key'
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'Failed to parse Qdrant validation response.', $result->get_error_message() );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('Failed to parse Qdrant validation response.', $result->get_error_message());
 		$this->assertSame(
 			'https://example.cloud.qdrant.io:6333/collections',
 			WordPressTestState::$last_remote_get['url']
 		);
 	}
 
-	public function test_qdrant_validation_accepts_expected_collections_payload(): void {
+	public function test_qdrant_validation_accepts_expected_collections_payload(): void
+	{
 		WordPressTestState::$remote_get_response = [
 			'response' => [
 				'code' => 200,
@@ -519,10 +545,11 @@ final class AzureBackendValidationTest extends TestCase {
 			'qdrant-key'
 		);
 
-		$this->assertTrue( $result );
+		$this->assertTrue($result);
 	}
 
-	public function test_qdrant_validation_rejects_missing_status_flag(): void {
+	public function test_qdrant_validation_rejects_missing_status_flag(): void
+	{
 		WordPressTestState::$remote_get_response = [
 			'response' => [
 				'code' => 200,
@@ -541,14 +568,15 @@ final class AzureBackendValidationTest extends TestCase {
 			'qdrant-key'
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertInstanceOf(\WP_Error::class, $result);
 		$this->assertSame(
 			'Qdrant validation response did not contain the expected collections list.',
 			$result->get_error_message()
 		);
 	}
 
-	public function test_qdrant_probe_health_hits_requested_probe(): void {
+	public function test_qdrant_probe_health_hits_requested_probe(): void
+	{
 		WordPressTestState::$remote_get_response = [
 			'response' => [
 				'code' => 200,
@@ -580,19 +608,21 @@ final class AzureBackendValidationTest extends TestCase {
 		);
 	}
 
-	public function test_qdrant_probe_health_rejects_unknown_probe(): void {
+	public function test_qdrant_probe_health_rejects_unknown_probe(): void
+	{
 		$result = QdrantClient::probe_health(
 			'broken',
 			'https://example.cloud.qdrant.io:6333',
 			'qdrant-key'
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'qdrant_health_probe_invalid', $result->get_error_code() );
-		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('qdrant_health_probe_invalid', $result->get_error_code());
+		$this->assertSame([], WordPressTestState::$remote_get_calls);
 	}
 
-	public function test_qdrant_get_telemetry_returns_result_payload(): void {
+	public function test_qdrant_get_telemetry_returns_result_payload(): void
+	{
 		WordPressTestState::$options             = [
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
@@ -629,7 +659,8 @@ final class AzureBackendValidationTest extends TestCase {
 		);
 	}
 
-	public function test_qdrant_get_collection_optimizations_supports_detail_flags(): void {
+	public function test_qdrant_get_collection_optimizations_supports_detail_flags(): void
+	{
 		WordPressTestState::$options             = [
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
@@ -650,7 +681,7 @@ final class AzureBackendValidationTest extends TestCase {
 
 		$result = QdrantClient::get_collection_optimizations(
 			'flavor-agent-patterns-test',
-			[ 'queued', 'completed' ]
+			['queued', 'completed']
 		);
 
 		$this->assertSame(
@@ -665,7 +696,8 @@ final class AzureBackendValidationTest extends TestCase {
 		);
 	}
 
-	public function test_qdrant_get_collection_optimizations_rejects_unknown_detail_flags(): void {
+	public function test_qdrant_get_collection_optimizations_rejects_unknown_detail_flags(): void
+	{
 		WordPressTestState::$options = [
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
@@ -673,15 +705,16 @@ final class AzureBackendValidationTest extends TestCase {
 
 		$result = QdrantClient::get_collection_optimizations(
 			'flavor-agent-patterns-test',
-			[ 'queued', 'bogus' ]
+			['queued', 'bogus']
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'qdrant_optimizations_invalid_detail_flag', $result->get_error_code() );
-		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('qdrant_optimizations_invalid_detail_flag', $result->get_error_code());
+		$this->assertSame([], WordPressTestState::$remote_get_calls);
 	}
 
-	public function test_qdrant_ensure_collection_rejects_vector_size_mismatch(): void {
+	public function test_qdrant_ensure_collection_rejects_vector_size_mismatch(): void
+	{
 		WordPressTestState::$options             = [
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
@@ -707,13 +740,14 @@ final class AzureBackendValidationTest extends TestCase {
 			),
 		];
 
-		$result = QdrantClient::ensure_collection( 'flavor-agent-patterns-test', 2 );
+		$result = QdrantClient::ensure_collection('flavor-agent-patterns-test', 2);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'qdrant_collection_size_mismatch', $result->get_error_code() );
+		$this->assertInstanceOf(\WP_Error::class, $result);
+		$this->assertSame('qdrant_collection_size_mismatch', $result->get_error_code());
 	}
 
-	public function test_qdrant_ensure_collection_indexes_traits_payloads(): void {
+	public function test_qdrant_ensure_collection_indexes_traits_payloads(): void
+	{
 		WordPressTestState::$options               = [
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
@@ -742,7 +776,7 @@ final class AzureBackendValidationTest extends TestCase {
 			0,
 			4,
 			[
-				'response' => [ 'code' => 200 ],
+				'response' => ['code' => 200],
 				'body'     => wp_json_encode(
 					[
 						'status' => 'ok',
@@ -752,16 +786,16 @@ final class AzureBackendValidationTest extends TestCase {
 			]
 		);
 
-		$result = QdrantClient::ensure_collection( 'flavor-agent-patterns-test', 2 );
+		$result = QdrantClient::ensure_collection('flavor-agent-patterns-test', 2);
 
-		$this->assertTrue( $result );
+		$this->assertTrue($result);
 		$this->assertSame(
-			[ 'blockTypes', 'templateTypes', 'categories', 'traits' ],
+			['blockTypes', 'templateTypes', 'categories', 'traits'],
 			array_map(
-				static function ( array $call ): ?string {
-					$body = json_decode( (string) ( $call['args']['body'] ?? '' ), true );
+				static function (array $call): ?string {
+					$body = json_decode((string) ($call['args']['body'] ?? ''), true);
 
-					return is_array( $body ) ? ( $body['field_name'] ?? null ) : null;
+					return is_array($body) ? ($body['field_name'] ?? null) : null;
 				},
 				WordPressTestState::$remote_post_calls
 			)

@@ -49,7 +49,7 @@ final class Page {
 							<?php echo esc_html__( 'Flavor Agent Settings', 'flavor-agent' ); ?>
 						</h1>
 						<p class="flavor-agent-admin-hero__copy">
-							<?php echo esc_html__( 'Configure site-specific settings here. Use Help for setup reference and troubleshooting.', 'flavor-agent' ); ?>
+							<?php echo esc_html__( 'Review model readiness, embeddings, patterns, developer docs, and guidance without leaving the current setup flow.', 'flavor-agent' ); ?>
 						</p>
 						<div class="flavor-agent-admin-hero__actions">
 							<a class="button button-primary" href="<?php echo esc_attr( Utils::sanitize_url_value( $primary_url ) ); ?>">
@@ -72,16 +72,25 @@ final class Page {
 					Feedback::render_feedback_request_fields( $feedback_request_key );
 					self::render_settings_section_group(
 						Config::GROUP_CHAT,
-						__( '1. Embeddings & Connectors', 'flavor-agent' ),
+						__( '1. AI Model', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_CHAT, $state ),
 						$open_group,
 						static function () use ( $state, $feedback, $connectors_url ): void {
-							self::render_chat_provider_group( $state, $feedback, $connectors_url );
+							self::render_ai_model_group( $state, $feedback, $connectors_url );
+						}
+					);
+					self::render_settings_section_group(
+						Config::GROUP_EMBEDDINGS,
+						__( '2. Embedding Model', 'flavor-agent' ),
+						State::get_group_card_meta( Config::GROUP_EMBEDDINGS, $state ),
+						$open_group,
+						static function () use ( $state, $feedback ): void {
+							self::render_embedding_model_group( $state, $feedback );
 						}
 					);
 					self::render_settings_section_group(
 						Config::GROUP_PATTERNS,
-						__( '2. Pattern Recommendations', 'flavor-agent' ),
+						__( '3. Patterns', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_PATTERNS, $state ),
 						$open_group,
 						static function () use ( $state, $feedback ): void {
@@ -90,7 +99,7 @@ final class Page {
 					);
 					self::render_settings_section_group(
 						Config::GROUP_DOCS,
-						__( '3. Docs Grounding', 'flavor-agent' ),
+						__( '4. Developer Docs', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_DOCS, $state ),
 						$open_group,
 						static function () use ( $state, $feedback ): void {
@@ -99,7 +108,7 @@ final class Page {
 					);
 					self::render_settings_section_group(
 						Config::GROUP_GUIDELINES,
-						__( '4. Guidelines', 'flavor-agent' ),
+						__( '5. Guidelines', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_GUIDELINES, $state ),
 						$open_group,
 						static function () use ( $state, $feedback ): void {
@@ -108,7 +117,7 @@ final class Page {
 					);
 					self::render_settings_section_group(
 						Config::GROUP_EXPERIMENTS,
-						__( '5. Experimental Features', 'flavor-agent' ),
+						__( '6. Experimental Features', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_EXPERIMENTS, $state ),
 						$open_group,
 						static function () use ( $state, $feedback ): void {
@@ -130,10 +139,6 @@ final class Page {
 			</div>
 		</div>
 		<?php
-	}
-
-	public static function render_azure_section(): void {
-		// Guidance now lives in the screen Help panel to keep the page focused on controls.
 	}
 
 	public static function render_openai_provider_section(): void {
@@ -218,7 +223,14 @@ final class Page {
 			! empty( $changed_sections[ Config::GROUP_CHAT ] ) &&
 			! Feedback::feedback_group_has_tone( $feedback, Config::GROUP_CHAT, 'error' )
 		) {
-			$summary_lines[] = __( 'Chat provider saved.', 'flavor-agent' );
+			$summary_lines[] = __( 'AI model settings saved.', 'flavor-agent' );
+		}
+
+		if (
+			! empty( $changed_sections[ Config::GROUP_EMBEDDINGS ] ) &&
+			! Feedback::feedback_group_has_tone( $feedback, Config::GROUP_EMBEDDINGS, 'error' )
+		) {
+			$summary_lines[] = __( 'Embedding model settings saved.', 'flavor-agent' );
 		}
 
 		if (
@@ -234,7 +246,7 @@ final class Page {
 			! empty( $changed_sections[ Config::GROUP_DOCS ] ) &&
 			! Feedback::feedback_group_has_tone( $feedback, Config::GROUP_DOCS, 'error' )
 		) {
-			$summary_lines[] = __( 'Docs grounding settings saved.', 'flavor-agent' );
+			$summary_lines[] = __( 'Developer docs settings saved.', 'flavor-agent' );
 		}
 
 		if (
@@ -274,6 +286,7 @@ final class Page {
 		$chat_status        = ! empty( $state['runtime_chat']['configured'] )
 			? State::make_badge( __( 'Ready', 'flavor-agent' ), 'success' )
 			: State::make_badge( __( 'Needs setup', 'flavor-agent' ), 'warning' );
+		$embedding_status   = State::get_embedding_overview_status( $state );
 		$pattern_status     = State::get_pattern_overview_status( $state );
 		$docs_status        = State::get_docs_overview_status( $state );
 		$guidelines_status  = State::get_guidelines_overview_status( $state );
@@ -282,13 +295,19 @@ final class Page {
 		<div class="flavor-agent-settings__glance">
 			<?php
 			self::render_setup_status_card(
-				__( 'Embeddings & Connectors', 'flavor-agent' ),
+				__( 'AI Model', 'flavor-agent' ),
 				$chat_status['label'],
 				$chat_status['tone'],
 				'#' . State::get_section_dom_id( Config::GROUP_CHAT )
 			);
 			self::render_setup_status_card(
-				__( 'Pattern Recommendations', 'flavor-agent' ),
+				__( 'Embedding Model', 'flavor-agent' ),
+				$embedding_status['label'],
+				$embedding_status['tone'],
+				'#' . State::get_section_dom_id( Config::GROUP_EMBEDDINGS )
+			);
+			self::render_setup_status_card(
+				__( 'Patterns', 'flavor-agent' ),
 				$pattern_status['label'],
 				$pattern_status['tone'],
 				'#' . State::get_section_dom_id( Config::GROUP_PATTERNS ),
@@ -297,7 +316,7 @@ final class Page {
 				]
 			);
 			self::render_setup_status_card(
-				__( 'Docs Grounding', 'flavor-agent' ),
+				__( 'Developer Docs', 'flavor-agent' ),
 				$docs_status['label'],
 				$docs_status['tone'],
 				'#' . State::get_section_dom_id( Config::GROUP_DOCS )
@@ -476,8 +495,36 @@ final class Page {
 	/**
 	 * @param array<string, mixed> $feedback
 	 */
-	private static function render_chat_provider_group( array $state, array $feedback, string $connectors_url ): void {
+	private static function render_ai_model_group( array $state, array $feedback, string $connectors_url ): void {
 		self::render_section_status_blocks( Config::GROUP_CHAT, $state, $feedback );
+		$runtime_chat_label = trim( (string) ( $state['runtime_chat']['label'] ?? '' ) );
+		$runtime_chat_label = '' !== $runtime_chat_label ? $runtime_chat_label : __( 'Not configured', 'flavor-agent' );
+		?>
+		<p class="description">
+			<?php echo esc_html__( 'Text generation is configured in Settings > Connectors. Flavor Agent uses the active WordPress AI Client runtime for recommendations.', 'flavor-agent' ); ?>
+		</p>
+		<p class="flavor-agent-settings-inline-meta">
+			<?php
+			printf(
+				/* translators: %s: runtime chat provider label */
+				esc_html__( 'Current AI model path: %s.', 'flavor-agent' ),
+				esc_html( $runtime_chat_label )
+			);
+			?>
+		</p>
+		<p>
+			<a class="button button-secondary" href="<?php echo esc_attr( Utils::sanitize_url_value( $connectors_url ) ); ?>">
+				<?php echo esc_html__( 'Open Connectors', 'flavor-agent' ); ?>
+			</a>
+		</p>
+		<?php
+	}
+
+	/**
+	 * @param array<string, mixed> $feedback
+	 */
+	private static function render_embedding_model_group( array $state, array $feedback ): void {
+		self::render_section_status_blocks( Config::GROUP_EMBEDDINGS, $state, $feedback );
 		self::render_registered_section_callback( 'flavor_agent_openai_provider' );
 		self::render_registered_fields_table(
 			'flavor_agent_openai_provider',
@@ -487,35 +534,40 @@ final class Page {
 		);
 		?>
 		<p class="description">
-			<?php echo esc_html__( 'Shared chat credentials live in Settings > Connectors. The Azure, OpenAI, and Workers AI fields below configure plugin-owned embeddings for pattern sync.', 'flavor-agent' ); ?>
+			<?php echo esc_html__( 'Configure this once for Flavor Agent semantic features. Patterns use this embedding model when Pattern Storage is set to Qdrant.', 'flavor-agent' ); ?>
 		</p>
 		<?php
 
-		if ( Provider::is_connector( (string) $state['selected_provider'] ) ) {
+		if ( Provider::is_connector_or_saved_legacy_pin( (string) $state['selected_provider'] ) ) {
+			$legacy_label = Provider::legacy_connector_pin_label( (string) $state['selected_provider'] );
 			?>
-			<p class="description">
-				<?php
-				printf(
-					/* translators: %s: provider label */
-					esc_html__( '%s is connector-backed. Configure its shared credentials in Settings > Connectors.', 'flavor-agent' ),
-					esc_html( Provider::label( (string) $state['selected_provider'] ) )
-				);
-				?>
-			</p>
-			<p>
-				<a class="button button-secondary" href="<?php echo esc_attr( Utils::sanitize_url_value( $connectors_url ) ); ?>">
-					<?php echo esc_html__( 'Open Connectors', 'flavor-agent' ); ?>
-				</a>
-			</p>
+			<div class="notice notice-warning inline flavor-agent-settings-status">
+				<p>
+					<?php
+					printf(
+						/* translators: %s: legacy connector label */
+						esc_html__( 'A legacy chat connector pin is saved for %s. It is preserved for backwards compatibility and chat still fails closed if that connector is unavailable. If the saved legacy connector is not currently registered, reinstall or re-enable the connector in Settings > Connectors before using that chat path. Choose OpenAI Native or Cloudflare Workers AI to migrate Embedding Provider to a direct embedding backend.', 'flavor-agent' ),
+						esc_html( $legacy_label )
+					);
+					?>
+				</p>
+			</div>
 			<?php
-			self::render_azure_direct_settings_fields();
 			self::render_openai_native_direct_settings_fields();
 			self::render_cloudflare_workers_ai_direct_settings_fields();
 			return;
 		}
 
 		if ( Provider::is_azure( (string) $state['selected_provider'] ) ) {
-			self::render_azure_direct_settings_fields();
+			?>
+			<div class="notice notice-warning inline flavor-agent-settings-status">
+				<p>
+					<?php echo esc_html__( 'Azure OpenAI embedding settings are no longer editable in Flavor Agent. Choose OpenAI Native or Cloudflare Workers AI to migrate Embedding Provider to an editable backend.', 'flavor-agent' ); ?>
+				</p>
+			</div>
+			<?php
+			self::render_openai_native_direct_settings_fields();
+			self::render_cloudflare_workers_ai_direct_settings_fields();
 			return;
 		}
 
@@ -527,27 +579,10 @@ final class Page {
 		self::render_cloudflare_workers_ai_direct_settings_fields();
 	}
 
-	private static function render_azure_direct_settings_fields(): void {
-		self::render_subsection_heading(
-			__( 'Legacy Direct Azure Settings', 'flavor-agent' ),
-			__( 'Plugin-owned credentials used for pattern embeddings. Chat is handled by Settings > Connectors.', 'flavor-agent' )
-		);
-		self::render_registered_section_callback( 'flavor_agent_azure' );
-		self::render_registered_fields_table(
-			'flavor_agent_azure',
-			[
-				'flavor_agent_azure_openai_endpoint',
-				'flavor_agent_azure_openai_key',
-				'flavor_agent_azure_embedding_deployment',
-				'flavor_agent_azure_reasoning_effort',
-			]
-		);
-	}
-
 	private static function render_openai_native_direct_settings_fields(): void {
 		self::render_subsection_heading(
 			__( 'OpenAI Embeddings', 'flavor-agent' ),
-			__( 'Plugin-owned credentials used for pattern embeddings. Chat is handled by Settings > Connectors.', 'flavor-agent' )
+			__( 'Embedding credentials used by Flavor Agent semantic features.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_openai_native' );
 		self::render_registered_fields_table(
@@ -562,7 +597,7 @@ final class Page {
 	private static function render_cloudflare_workers_ai_direct_settings_fields(): void {
 		self::render_subsection_heading(
 			__( 'Cloudflare Workers AI Embeddings', 'flavor-agent' ),
-			__( 'Plugin-owned credentials used for pattern embeddings. Chat is handled by Settings > Connectors.', 'flavor-agent' )
+			__( 'Embedding credentials used by Flavor Agent semantic features.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_cloudflare_workers_ai' );
 		self::render_registered_fields_table(
@@ -580,6 +615,11 @@ final class Page {
 	 */
 	private static function render_pattern_recommendations_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_PATTERNS, $state, $feedback );
+		?>
+		<p class="description">
+			<?php echo esc_html__( 'Pattern setup does not choose another AI model. Choose storage here; Qdrant uses the Embedding Model configured above.', 'flavor-agent' ); ?>
+		</p>
+		<?php
 		self::render_registered_section_callback( 'flavor_agent_pattern_retrieval' );
 		self::render_registered_fields_table(
 			'flavor_agent_pattern_retrieval',
@@ -588,8 +628,8 @@ final class Page {
 			]
 		);
 		self::render_subsection_heading(
-			__( 'Qdrant Pattern Backend', 'flavor-agent' ),
-			__( 'Existing vector backend for pattern indexing and retrieval. Required while Qdrant is selected.', 'flavor-agent' )
+			__( 'Qdrant Pattern Storage', 'flavor-agent' ),
+			__( 'Vector storage for the pattern index. Uses the embedding model configured above.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_qdrant' );
 		self::render_registered_fields_table(
@@ -600,8 +640,8 @@ final class Page {
 			]
 		);
 		self::render_subsection_heading(
-			__( 'Cloudflare AI Search Pattern Backend', 'flavor-agent' ),
-			__( 'Private Cloudflare AI Search instance used for site pattern indexing and retrieval. This is separate from the built-in WordPress developer docs endpoint.', 'flavor-agent' )
+			__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
+			__( 'Advanced managed index for site pattern content. This is separate from the built-in WordPress developer docs endpoint.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
 		self::render_registered_fields_table(
@@ -641,6 +681,11 @@ final class Page {
 	 */
 	private static function render_docs_grounding_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_DOCS, $state, $feedback );
+		?>
+		<p class="description">
+			<?php echo esc_html__( 'Developer docs use Flavor Agent\'s built-in public endpoint. No Cloudflare credentials are required.', 'flavor-agent' ); ?>
+		</p>
+		<?php
 		self::render_registered_section_callback( 'flavor_agent_cloudflare' );
 		self::render_registered_fields_table(
 			'flavor_agent_cloudflare',
@@ -782,20 +827,19 @@ final class Page {
 
 	private static function render_cloudflare_legacy_override_panel(): void {
 		$has_saved_legacy_values = Validation::has_saved_cloudflare_legacy_values();
+
+		if ( ! $has_saved_legacy_values ) {
+			return;
+		}
 		?>
-		<details class="flavor-agent-settings-subpanel"<?php echo $has_saved_legacy_values ? ' open' : ''; ?>>
+		<details class="flavor-agent-settings-subpanel" open>
 			<summary class="flavor-agent-settings-subpanel__summary">
-				<?php echo esc_html__( 'Cloudflare Override', 'flavor-agent' ); ?>
+				<?php echo esc_html__( 'Legacy Developer Docs Cloudflare Override', 'flavor-agent' ); ?>
 			</summary>
 			<div class="flavor-agent-settings-subpanel__body">
 				<p class="description">
-					<?php echo esc_html__( 'Older installs or explicit custom-endpoint overrides only. Leave these blank to use the built-in public docs endpoint. Override values are live-probed before saving and are rejected unless the instance returns trusted developer.wordpress.org guidance.', 'flavor-agent' ); ?>
+					<?php echo esc_html__( 'Saved custom developer-docs override values are present. Clear all three fields to use the built-in public endpoint.', 'flavor-agent' ); ?>
 				</p>
-				<?php if ( $has_saved_legacy_values ) : ?>
-					<p class="description">
-						<?php echo esc_html__( 'Saved override values are present. Clear all three fields to stop using the override.', 'flavor-agent' ); ?>
-					</p>
-				<?php endif; ?>
 				<?php
 				self::render_registered_fields_table(
 					'flavor_agent_cloudflare',
@@ -979,7 +1023,7 @@ final class Page {
 		<div class="flavor-agent-settings-diagnostic">
 			<div class="flavor-agent-settings-diagnostic__header">
 				<p class="flavor-agent-settings-diagnostic__title">
-					<?php echo esc_html__( 'Docs Prewarm', 'flavor-agent' ); ?>
+					<?php echo esc_html__( 'Developer Docs Prewarm', 'flavor-agent' ); ?>
 				</p>
 				<p class="flavor-agent-settings-diagnostic__status">
 					<?php echo esc_html( $label ); ?>
@@ -1154,6 +1198,12 @@ final class Page {
 	}
 
 	private static function get_pattern_sync_prerequisite_message( array $page_state ): string {
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
+			return ! empty( $page_state['cloudflare_pattern_ai_search_configured'] )
+				? ''
+				: __( 'Add the private Cloudflare AI Search pattern storage settings before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+		}
+
 		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );
 		$qdrant_ready    = ! empty( $page_state['qdrant_configured'] );
 
@@ -1162,29 +1212,35 @@ final class Page {
 		}
 
 		if ( ! $embedding_ready && ! $qdrant_ready ) {
-			return __( 'Choose and complete an embeddings backend, then add Qdrant before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+			return __( 'Complete Embedding Model and Qdrant Pattern Storage before the Sync Pattern Catalog button can run.', 'flavor-agent' );
 		}
 
 		if ( ! $embedding_ready ) {
-			return __( 'Add a complete embeddings backend (OpenAI Native key and model, Azure endpoint, key, and deployment, or Cloudflare Workers AI account, token, and model) before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+			return __( 'Complete Embedding Model before the Sync Pattern Catalog button can run.', 'flavor-agent' );
 		}
 
-		return __( 'Add the Qdrant URL and API key before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+		return __( 'Add the Qdrant URL and API key in Pattern Storage before the Sync Pattern Catalog button can run.', 'flavor-agent' );
 	}
 
 	private static function get_pattern_sync_prerequisite_status_label( array $page_state ): string {
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
+			return ! empty( $page_state['cloudflare_pattern_ai_search_configured'] )
+				? __( 'Ready', 'flavor-agent' )
+				: __( 'Needs pattern storage', 'flavor-agent' );
+		}
+
 		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );
 		$qdrant_ready    = ! empty( $page_state['qdrant_configured'] );
 
 		if ( ! $embedding_ready && ! $qdrant_ready ) {
-			return __( 'Needs embeddings & Qdrant', 'flavor-agent' );
+			return __( 'Needs model & storage', 'flavor-agent' );
 		}
 
 		if ( ! $embedding_ready ) {
-			return __( 'Needs embeddings', 'flavor-agent' );
+			return __( 'Needs embedding model', 'flavor-agent' );
 		}
 
-		return __( 'Needs Qdrant', 'flavor-agent' );
+		return __( 'Needs pattern storage', 'flavor-agent' );
 	}
 
 	private static function get_pattern_sync_status_sentence( array $page_state ): string {

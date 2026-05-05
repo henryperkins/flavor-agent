@@ -44,6 +44,18 @@ final class FeatureBootstrapTest extends TestCase {
 		$this->assertNotEmpty( WordPressTestState::$filters['enqueue_block_editor_assets'][10] ?? [] );
 	}
 
+	public function test_missing_ai_feature_options_do_not_write_or_enable_recommendations(): void {
+		FeatureBootstrap::register_global_ability_category();
+		FeatureBootstrap::register_global_helper_abilities();
+
+		$this->assertArrayHasKey( 'flavor-agent', WordPressTestState::$registered_ability_categories );
+		$this->assertArrayHasKey( 'flavor-agent/introspect-block', WordPressTestState::$registered_abilities );
+		$this->assertArrayNotHasKey( 'flavor-agent/recommend-block', WordPressTestState::$registered_abilities );
+		$this->assertArrayNotHasKey( 'wpai_features_enabled', WordPressTestState::$options );
+		$this->assertArrayNotHasKey( 'wpai_feature_flavor-agent_enabled', WordPressTestState::$options );
+		$this->assertSame( [], WordPressTestState::$updated_options );
+	}
+
 	public function test_global_helper_ability_registration_registers_recommendation_abilities_when_enabled(): void {
 		WordPressTestState::$options = [
 			'wpai_features_enabled'             => true,

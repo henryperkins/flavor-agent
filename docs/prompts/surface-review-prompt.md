@@ -65,7 +65,7 @@ Output format: follow [../reference/review-response-protocol.md](../reference/re
 - **Surface-specific focus:**
   - Admin access (`manage_options`), menu/asset enqueue scoping, contextual Help, escaped output.
   - Settings API end-to-end: every option from `Registrar::register_settings()` to its renderer, sanitizer, and saved feedback flow.
-  - `Validation` for Azure, OpenAI Native, Qdrant, Cloudflare override, pattern thresholds, reasoning effort, guidelines.
+  - `Validation` for OpenAI Native, Cloudflare Workers AI, Qdrant, Cloudflare override, pattern thresholds, reasoning effort, guidelines.
   - Provider precedence: Connectors-first chat contract, OpenAI Native key-source precedence, dropdown choices/diagnostics not overclaiming a direct provider when a connector serves chat.
   - Status cards/sections: `State::get_page_state()`, default-open-section, accordion persistence vs urgent validation.
   - Pattern sync: REST nonce/permissions, duplicate-click, runtime-state updates, no full reload.

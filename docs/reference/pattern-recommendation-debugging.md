@@ -27,7 +27,7 @@ The current pattern pipeline has four distinct stages:
 3. `QdrantClient::search()` or `PatternSearchClient::search_patterns()` retrieves candidates
 4. `ResponsesClient::rank()` in `inc/AzureOpenAI/ResponsesClient.php` reranks those candidates through the WordPress AI Client / Connectors runtime into the final recommendation list
 
-The embedding provider behind Qdrant can be Azure OpenAI, OpenAI Native, or explicitly selected Cloudflare Workers AI. Workers AI is not used as an implicit fallback from the other provider selections. The Cloudflare AI Search backend uses Cloudflare-managed embeddings/indexing and does not call `EmbeddingClient` or `QdrantClient`.
+The embedding provider behind Qdrant can be OpenAI Native or explicitly selected Cloudflare Workers AI. Workers AI is not used as an implicit fallback from the other provider selections. The Cloudflare AI Search backend uses Cloudflare-managed embeddings/indexing and does not call `EmbeddingClient` or `QdrantClient`.
 
 If you identify which stage is failing, the rest of the debugging path usually becomes obvious.
 

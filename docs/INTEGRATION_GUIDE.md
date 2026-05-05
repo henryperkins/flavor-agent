@@ -29,7 +29,7 @@ Flavor Agent recommendation surfaces require these canonical WordPress AI contra
 - WordPress 7.0+ with the Abilities API available.
 - The WordPress AI plugin (`ai`) active, with `WordPress\AI\Abstracts\Abstract_Feature` and `WordPress\AI\Abstracts\Abstract_Ability` available.
 - A connector-backed text-generation provider configured in `Settings > Connectors`.
-- Flavor Agent activated and configured in `Settings > Flavor Agent` where a surface needs plugin-owned pattern retrieval or docs grounding settings.
+- Flavor Agent activated and configured in `Settings > Flavor Agent` where a surface needs the Flavor Agent embedding model or pattern storage. Developer Docs uses the built-in public endpoint by default.
 
 Flavor Agent checks these contracts in `FlavorAgent\AI\FeatureBootstrap`. If the contracts are missing, recommendation UI is unavailable and administrators see a setup notice.
 
@@ -134,6 +134,7 @@ Flavor Agent depends on these upstream AI plugin concepts:
 - `WordPress\AI\Abstracts\Abstract_Feature` for the `flavor-agent` feature wrapper.
 - `WordPress\AI\Abstracts\Abstract_Ability` for recommendation ability classes.
 - AI plugin feature toggles: `wpai_features_enabled` and `wpai_feature_flavor-agent_enabled`.
+- Flavor Agent reads those feature toggles and defaults missing values to disabled. The upstream AI plugin settings, host filters, or test fixtures must explicitly enable recommendation feature execution.
 - WordPress AI Client helpers for connector-backed text generation.
 
 Use the upstream `WordPress/ai` source when those contracts change, but keep Flavor Agent examples in the `flavor-agent/*` namespace.

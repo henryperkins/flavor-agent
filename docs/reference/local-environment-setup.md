@@ -116,11 +116,13 @@ The expected local runtime includes these active slugs:
 - `mcp-adapter`
 - `plugin-check`
 
-Configure text-generation credentials in `Settings > Connectors`. The OpenAI and Anthropic provider plugins own their provider-specific setup; do not use Flavor Agent's Azure/OpenAI Native embedding settings as a replacement for the Connectors runtime. Pattern recommendations still need a retrieval backend configured in `Settings > Flavor Agent`: Qdrant with plugin-owned embeddings, or a private Cloudflare AI Search instance for pattern retrieval.
+Configure text-generation credentials in `Settings > Connectors`. The OpenAI and Anthropic provider plugins own their provider-specific setup; do not use Flavor Agent's embedding settings as a replacement for the Connectors runtime. In `Settings > Flavor Agent`, configure one Embedding Model for semantic features, then choose Pattern Storage when testing pattern recommendations: Qdrant uses the Embedding Model plus Qdrant, while Cloudflare AI Search uses a private managed pattern index. Developer Docs uses Flavor Agent's built-in public endpoint and does not require local Cloudflare credentials unless you are testing a saved legacy override.
 
 ## WP 7.0 Browser Harness Scope
 
 `scripts/wp70-e2e.js` provisions a deterministic Docker-backed browser harness for editor and Site Editor regressions. It is not the full representative local runtime described above unless a test explicitly extends it with companion plugins.
+
+The bootstrap installs and activates the `ai` plugin from WordPress.org because Flavor Agent declares `Requires Plugins: ai` in its plugin header — without it `wp plugin activate flavor-agent` would refuse to run. To install additional companions for a specific spec (for example `gutenberg` or `ai-services`), set `FLAVOR_AGENT_WP70_COMPANION_PLUGINS` to a comma-separated slug list before running `npm run wp:e2e:wp70:bootstrap`; `ai` is always force-prepended to the list.
 
 Current WP 7.0 browser specs exercise Flavor Agent editor behavior and selected Abilities API routes, but they do not validate the dedicated MCP server or the AI plugin Settings UI. Use the representative local runtime for MCP/AI-plugin manual checks, or extend `scripts/wp70-e2e.js` only when adding a dedicated MCP or AI-plugin Playwright spec.
 

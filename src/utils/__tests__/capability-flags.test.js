@@ -156,7 +156,7 @@ describe( 'capability-flags', () => {
 						available: false,
 						reason: 'pattern_backend_unconfigured',
 						message:
-							'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+							'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
 						actions: [
 							{
 								label: 'Settings > Flavor Agent',
@@ -173,7 +173,7 @@ describe( 'capability-flags', () => {
 			actionLabel: 'Settings > Flavor Agent',
 		} );
 		expect( getCapabilityNotice( 'pattern' )?.message ).toContain(
-			'private Cloudflare AI Search pattern backend'
+			'Cloudflare AI Search Pattern Storage'
 		);
 	} );
 

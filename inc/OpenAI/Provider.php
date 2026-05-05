@@ -45,7 +45,6 @@ final class Provider {
 	 */
 	public static function direct_choices(): array {
 		return [
-			self::AZURE                               => 'Azure OpenAI',
 			self::NATIVE                              => 'OpenAI Native',
 			WorkersAIEmbeddingConfiguration::PROVIDER => 'Cloudflare Workers AI',
 		];
@@ -58,21 +57,60 @@ final class Provider {
 		return self::direct_choices() + self::selectable_connector_choices( $selected_provider );
 	}
 
-	public static function get(): string {
-		$provider = sanitize_key( (string) get_option( self::OPTION_NAME, self::AZURE ) );
+	/**
+	 * @return array<string, string>
+	 */
+	public static function embedding_settings_choices( ?string $selected_provider = null ): array {
+		$selected_provider = sanitize_key(
+			(string) (
+				$selected_provider
+				?? self::raw_saved_provider()
+			)
+		);
+		$choices           = self::direct_choices();
 
-		if ( isset( self::all_choices()[ $provider ] ) ) {
+		if ( self::is_azure( $selected_provider ) ) {
+			$choices = [
+				$selected_provider => sprintf(
+					'Removed provider: %s',
+					self::legacy_embedding_provider_choices()[ $selected_provider ]
+				),
+			] + $choices;
+		} elseif ( self::is_connector_or_saved_legacy_pin( $selected_provider ) ) {
+			$choices = [
+				$selected_provider => sprintf(
+					'Legacy connector pin: %s',
+					self::legacy_connector_pin_label( $selected_provider )
+				),
+			] + $choices;
+		}
+
+		return $choices;
+	}
+
+	public static function get(): string {
+		$provider = self::raw_saved_provider();
+
+		if ( isset( self::all_choices()[ $provider ] ) || self::is_saved_legacy_connector_pin( $provider ) ) {
 			return $provider;
 		}
 
-		return self::AZURE;
+		return self::NATIVE;
 	}
 
 	public static function label( ?string $provider = null ): string {
 		$provider = sanitize_key( (string) ( $provider ?? self::get() ) );
 		$choices  = self::all_choices();
 
-		return $choices[ $provider ] ?? self::direct_choices()[ self::AZURE ];
+		if ( isset( $choices[ $provider ] ) ) {
+			return $choices[ $provider ];
+		}
+
+		if ( self::is_saved_legacy_connector_pin( $provider ) ) {
+			return self::legacy_connector_pin_label( $provider );
+		}
+
+		return self::direct_choices()[ self::NATIVE ];
 	}
 
 	public static function is_azure( ?string $provider = null ): bool {
@@ -87,6 +125,41 @@ final class Provider {
 		$provider = sanitize_key( (string) ( $provider ?? self::get() ) );
 
 		return isset( self::registered_connector_choices()[ $provider ] );
+	}
+
+	public static function is_saved_legacy_connector_pin( ?string $provider = null ): bool {
+		$provider = sanitize_key( (string) ( $provider ?? self::raw_saved_provider() ) );
+
+		if (
+			'' === $provider
+			|| isset( self::direct_choices()[ $provider ] )
+			|| isset( self::legacy_embedding_provider_choices()[ $provider ] )
+		) {
+			return false;
+		}
+
+		return $provider === self::raw_saved_provider();
+	}
+
+	public static function is_connector_or_saved_legacy_pin( ?string $provider = null ): bool {
+		$provider = sanitize_key( (string) ( $provider ?? self::get() ) );
+
+		return self::is_connector( $provider ) || self::is_saved_legacy_connector_pin( $provider );
+	}
+
+	public static function legacy_connector_pin_label( string $provider ): string {
+		$provider          = sanitize_key( $provider );
+		$connector_choices = self::registered_connector_choices();
+
+		if ( isset( $connector_choices[ $provider ] ) ) {
+			return $connector_choices[ $provider ];
+		}
+
+		if ( isset( self::legacy_embedding_provider_choices()[ $provider ] ) ) {
+			return self::legacy_embedding_provider_choices()[ $provider ];
+		}
+
+		return '' !== $provider ? $provider : self::direct_choices()[ self::NATIVE ];
 	}
 
 	public static function is_wordpress_ai_client( ?string $provider = null ): bool {
@@ -214,9 +287,10 @@ final class Provider {
 
 	/**
 	 * Chat is owned by Settings > Connectors via the WordPress AI Client. Flavor
-	 * Agent only routes chat to the selected connector, or to the OpenAI connector
-	 * when OpenAI Native is selected for embeddings. Other generic Connector
-	 * providers are never used as fallbacks.
+	 * Agent pins saved connector selections and OpenAI Native to matching
+	 * connectors when supported, and otherwise lets direct embedding selections use
+	 * the configured generic WordPress AI Client runtime. Saved legacy connector
+	 * pins fail closed when their connector is unavailable.
 	 *
 	 * @param array<string, string> $overrides Reserved for parity with embedding_configuration().
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
@@ -234,14 +308,22 @@ final class Provider {
 
 		$provider = self::normalize_provider( $provider );
 
-		if ( WorkersAIEmbeddingConfiguration::PROVIDER === $provider && WordPressAIClient::is_supported() ) {
-			return self::wordpress_ai_client_configuration();
-		}
-
 		$connector_provider = self::selected_chat_connector( $provider );
 
-		if ( '' !== $connector_provider ) {
+		if (
+			'' !== $connector_provider &&
+			self::is_connector( $connector_provider ) &&
+			WordPressAIClient::is_supported( $connector_provider )
+		) {
 			return self::connector_chat_configuration( $connector_provider );
+		}
+
+		if ( self::is_saved_legacy_connector_pin( $provider ) ) {
+			return self::missing_chat_configuration( $provider );
+		}
+
+		if ( ! self::is_connector( $provider ) && WordPressAIClient::is_supported() ) {
+			return self::wordpress_ai_client_configuration();
 		}
 
 		return self::missing_chat_configuration( $provider );
@@ -262,7 +344,7 @@ final class Provider {
 			return WorkersAIEmbeddingConfiguration::get( $overrides );
 		}
 
-		if ( self::is_connector( $provider ) ) {
+		if ( self::is_connector_or_saved_legacy_pin( $provider ) ) {
 			return [
 				'provider'   => $provider,
 				'endpoint'   => '',
@@ -473,18 +555,31 @@ final class Provider {
 	public static function normalize_provider( string $provider ): string {
 		$provider = sanitize_key( $provider );
 
-		if ( isset( self::all_choices()[ $provider ] ) ) {
+		if ( isset( self::all_choices()[ $provider ] ) || self::is_saved_legacy_connector_pin( $provider ) ) {
 			return $provider;
 		}
 
-		return self::AZURE;
+		return self::NATIVE;
+	}
+
+	private static function raw_saved_provider(): string {
+		return sanitize_key( (string) get_option( self::OPTION_NAME, self::NATIVE ) );
 	}
 
 	/**
 	 * @return array<string, string>
 	 */
 	private static function all_choices(): array {
-		return self::direct_choices() + self::registered_connector_choices();
+		return self::direct_choices() + self::legacy_embedding_provider_choices() + self::registered_connector_choices();
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function legacy_embedding_provider_choices(): array {
+		return [
+			self::AZURE => 'Azure OpenAI',
+		];
 	}
 
 	private static function normalize_provider_for_request_meta( string $provider ): string {
@@ -517,7 +612,7 @@ final class Provider {
 			];
 		}
 
-		if ( ! self::is_connector( $provider ) ) {
+		if ( ! self::is_connector_or_saved_legacy_pin( $provider ) ) {
 			return [
 				'id'         => '',
 				'label'      => '',
@@ -689,12 +784,11 @@ final class Provider {
 	}
 
 	/**
-	 * Resolve the active chat runtime. The selected option may pin chat to a
-	 * specific connector. OpenAI Native maps to the OpenAI connector when that
-	 * connector is available. Workers AI is an embeddings-only direct provider,
-	 * so chat delegates to the configured WordPress AI Client runtime without
-	 * pinning a Cloudflare provider. No other Connectors-backed provider is used
-	 * as a fallback.
+	 * Resolve the active chat runtime. Chat belongs to Settings > Connectors. A
+	 * selected connector can still pin chat for legacy installs, OpenAI Native
+	 * maps to the OpenAI connector when available, and otherwise Flavor Agent uses
+	 * the configured WordPress AI Client runtime independently of the embedding
+	 * provider selected on this page.
 	 *
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
@@ -706,8 +800,16 @@ final class Provider {
 			return self::wordpress_ai_client_configuration();
 		}
 
-		if ( '' !== $connector_provider && WordPressAIClient::is_supported( $connector_provider ) ) {
+		if ( '' !== $connector_provider && self::is_connector( $connector_provider ) && WordPressAIClient::is_supported( $connector_provider ) ) {
 			return self::connector_chat_configuration( $connector_provider );
+		}
+
+		if ( self::is_saved_legacy_connector_pin( $selected_provider ) ) {
+			return self::missing_chat_configuration( $selected_provider );
+		}
+
+		if ( ! self::is_connector( $selected_provider ) && WordPressAIClient::is_supported() ) {
+			return self::wordpress_ai_client_configuration();
 		}
 
 		return self::missing_chat_configuration( $selected_provider );
@@ -716,7 +818,7 @@ final class Provider {
 	private static function selected_chat_connector( string $provider ): string {
 		$provider = self::normalize_provider( $provider );
 
-		if ( self::is_connector( $provider ) ) {
+		if ( self::is_connector_or_saved_legacy_pin( $provider ) ) {
 			return $provider;
 		}
 
@@ -738,6 +840,13 @@ final class Provider {
 		if (
 			WorkersAIEmbeddingConfiguration::PROVIDER === $selected_provider
 			&& self::WORDPRESS_AI_CLIENT_PROVIDER === $provider
+		) {
+			return true;
+		}
+
+		if (
+			self::WORDPRESS_AI_CLIENT_PROVIDER === $provider
+			&& ! self::is_connector_or_saved_legacy_pin( $selected_provider )
 		) {
 			return true;
 		}
@@ -847,7 +956,7 @@ final class Provider {
 		$selected_provider = sanitize_key(
 			(string) (
 				$selected_provider
-				?? get_option( self::OPTION_NAME, self::AZURE )
+				?? get_option( self::OPTION_NAME, self::NATIVE )
 			)
 		);
 		$registered        = self::registered_connector_choices();

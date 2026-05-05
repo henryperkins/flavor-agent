@@ -2229,32 +2229,16 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
 	}
 
-	public function test_recommend_patterns_uses_connector_chat_with_fallback_direct_embeddings(): void {
+	public function test_recommend_patterns_uses_generic_chat_with_direct_openai_native_embeddings(): void {
 		WordPressTestState::$options = [
-			Provider::OPTION_NAME                        => 'anthropic',
+			Provider::OPTION_NAME                        => Provider::NATIVE,
 			'flavor_agent_openai_native_api_key'         => 'native-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
 		];
 
-		WordPressTestState::$connectors = [
-			'anthropic' => [
-				'name'           => 'Anthropic',
-				'description'    => 'Anthropic connector',
-				'type'           => 'ai_provider',
-				'authentication' => [
-					'method'       => 'api_key',
-					'setting_name' => 'connectors_ai_anthropic_api_key',
-				],
-			],
-		];
-
 		WordPressTestState::$ai_client_supported = true;
-
-		WordPressTestState::$ai_client_provider_support = [
-			'anthropic' => true,
-		];
 
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
@@ -2294,7 +2278,7 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'qdrant_semantic', 'llm_ranker' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
-		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 	}
 

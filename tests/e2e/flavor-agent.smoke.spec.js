@@ -2595,7 +2595,7 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 			data.capabilities.surfaces.pattern.reason =
 				'pattern_backend_unconfigured';
 			data.capabilities.surfaces.pattern.message =
-				'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.';
+				'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.';
 		}
 
 		window.wp?.data
@@ -2637,14 +2637,14 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 		.locator( '.flavor-agent-capability-notice' )
 		.filter( {
 			hasText:
-				'Pattern recommendations need a compatible embedding backend and Qdrant',
+				'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage',
 		} )
 		.first();
 
 	await expect( patternCapabilityNotice ).toBeVisible();
 	await expect(
 		patternCapabilityNotice.getByText(
-			'Pattern recommendations need a compatible embedding backend and Qdrant'
+			'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage'
 		)
 	).toBeVisible();
 	await expect(

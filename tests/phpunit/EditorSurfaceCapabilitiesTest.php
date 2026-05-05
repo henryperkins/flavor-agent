@@ -41,7 +41,7 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame( '', $capabilities['pattern']['configurationLabel'] );
 		$this->assertSame( '', $capabilities['pattern']['configurationUrl'] );
 		$this->assertSame(
-			'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent pattern backends and a text-generation provider in Settings > Connectors.',
+			'Pattern recommendations are not configured yet. Ask an administrator to configure Pattern Storage in Settings > Flavor Agent and a text-generation provider in Settings > Connectors.',
 			$capabilities['pattern']['message']
 		);
 		$this->assertSame( [], $capabilities['content']['actions'] );
@@ -177,7 +177,7 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertFalse( $capabilities['pattern']['available'] );
 		$this->assertSame( 'pattern_backend_unconfigured', $capabilities['pattern']['reason'] );
 		$this->assertSame(
-			'Pattern recommendations need a private Cloudflare AI Search pattern backend in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+			'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
 			$capabilities['pattern']['message']
 		);
 	}
