@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+require_once __DIR__ . '/support/CapturingMcpAdapter.php';
+
 use FlavorAgent\MCP\ServerBootstrap;
+use FlavorAgent\Tests\Support\CapturingMcpAdapter;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -66,16 +69,5 @@ final class MCPServerBootstrapTest extends TestCase {
 		ServerBootstrap::register( $adapter );
 
 		$this->assertSame( [], $adapter->calls );
-	}
-}
-
-final class CapturingMcpAdapter {
-	/** @var array<int, array<int, mixed>> */
-	public array $calls = [];
-
-	public function create_server( mixed ...$args ): self {
-		$this->calls[] = $args;
-
-		return $this;
 	}
 }
