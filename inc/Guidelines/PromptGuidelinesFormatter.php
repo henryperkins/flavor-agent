@@ -8,9 +8,20 @@ final class PromptGuidelinesFormatter {
 
 	/**
 	 * @param array{site: string, copy: string, images: string, additional: string, blocks: array<string, string>} $guidelines
+	 * @param array<int, string>|null $categories
 	 */
-	public static function format( array $guidelines, string $block_name = '' ): string {
-		$lines = [];
+	public static function format( array $guidelines, string $block_name = '', ?array $categories = null ): string {
+		$lines              = [];
+		$allowed_categories = null === $categories
+			? null
+			: array_flip(
+				array_values(
+					array_filter(
+						$categories,
+						static fn ( string $category ): bool => '' !== $category
+					)
+				)
+			);
 
 		foreach (
 			[
@@ -20,6 +31,10 @@ final class PromptGuidelinesFormatter {
 				'additional' => 'Additional',
 			] as $category => $label
 		) {
+			if ( null !== $allowed_categories && ! isset( $allowed_categories[ $category ] ) ) {
+				continue;
+			}
+
 			$value = trim( (string) ( $guidelines[ $category ] ?? '' ) );
 
 			if ( '' !== $value ) {

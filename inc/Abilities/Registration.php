@@ -4,6 +4,14 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
+use FlavorAgent\AI\FeatureBootstrap;
+use FlavorAgent\AI\Abilities\RecommendBlockAbility;
+use FlavorAgent\AI\Abilities\RecommendContentAbility;
+use FlavorAgent\AI\Abilities\RecommendNavigationAbility;
+use FlavorAgent\AI\Abilities\RecommendPatternsAbility;
+use FlavorAgent\AI\Abilities\RecommendStyleAbility;
+use FlavorAgent\AI\Abilities\RecommendTemplateAbility;
+use FlavorAgent\AI\Abilities\RecommendTemplatePartAbility;
 use FlavorAgent\Context\BlockOperationValidator;
 
 final class Registration {
@@ -26,44 +34,74 @@ final class Registration {
 
 	public static function register_abilities(): void {
 		self::register_block_abilities();
-		self::register_content_abilities();
 		self::register_pattern_abilities();
 		self::register_template_abilities();
-		self::register_navigation_abilities();
-		self::register_style_abilities();
 		self::register_wordpress_docs_abilities();
 		self::register_infra_abilities();
 	}
 
-	private static function register_block_abilities(): void {
-		wp_register_ability(
-			'flavor-agent/recommend-block',
-			[
-				'label'               => __( 'Get block recommendations', 'flavor-agent' ),
-				'description'         => __( 'Suggest attribute and style changes for a block using theme design tokens.', 'flavor-agent' ),
-				'category'            => 'flavor-agent',
-				'execute_callback'    => [ BlockAbilities::class, 'recommend_block' ],
-				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
-				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [
-						'selectedBlock'        => self::selected_block_input_schema(),
-						'prompt'               => [
-							'type'        => 'string',
-							'description' => 'Optional user instruction',
-						],
-						'resolveSignatureOnly' => [
-							'type'        => 'boolean',
-							'description' => 'When true, only resolve the server-issued apply-context signature without calling the model.',
-						],
-					],
-					'required'   => [ 'selectedBlock' ],
-				],
-				'output_schema'       => self::suggestion_output_schema(),
-				'meta'                => self::public_recommendation_meta(),
-			]
-		);
+	public static function register_recommendation_abilities(): void {
+		if ( ! FeatureBootstrap::canonical_contracts_available() ) {
+			return;
+		}
 
+		foreach ( self::recommendation_ability_classes() as $ability_id => $definition ) {
+			wp_register_ability(
+				$ability_id,
+				[
+					'label'         => $definition['label'],
+					'description'   => $definition['description'],
+					'category'      => 'flavor-agent',
+					'ability_class' => $definition['ability_class'],
+				]
+			);
+		}
+	}
+
+	/**
+	 * @return array<string, array{label: string, description: string, ability_class: class-string}>
+	 */
+	public static function recommendation_ability_classes(): array {
+		return [
+			'flavor-agent/recommend-block'         => [
+				'label'         => __( 'Get block recommendations', 'flavor-agent' ),
+				'description'   => __( 'Suggest attribute and style changes for a block using theme design tokens.', 'flavor-agent' ),
+				'ability_class' => RecommendBlockAbility::class,
+			],
+			'flavor-agent/recommend-content'       => [
+				'label'         => __( 'Recommend editorial content', 'flavor-agent' ),
+				'description'   => __( 'Draft, edit, or critique blog posts, essays, and site copy in Henry Perkins\'s voice.', 'flavor-agent' ),
+				'ability_class' => RecommendContentAbility::class,
+			],
+			'flavor-agent/recommend-patterns'      => [
+				'label'         => __( 'Recommend patterns', 'flavor-agent' ),
+				'description'   => __( 'Rank registered and synced block patterns for the current editing context using LLM.', 'flavor-agent' ),
+				'ability_class' => RecommendPatternsAbility::class,
+			],
+			'flavor-agent/recommend-navigation'    => [
+				'label'         => __( 'Recommend navigation structure', 'flavor-agent' ),
+				'description'   => __( 'Suggest navigation menu structure, overlay behavior, and organization.', 'flavor-agent' ),
+				'ability_class' => RecommendNavigationAbility::class,
+			],
+			'flavor-agent/recommend-style'         => [
+				'label'         => __( 'Recommend site styles', 'flavor-agent' ),
+				'description'   => __( 'Suggest theme-safe style changes and theme style variations for supported Site Editor style surfaces.', 'flavor-agent' ),
+				'ability_class' => RecommendStyleAbility::class,
+			],
+			'flavor-agent/recommend-template'      => [
+				'label'         => __( 'Recommend template structure', 'flavor-agent' ),
+				'description'   => __( 'Suggest template-part arrangements and patterns for a template type.', 'flavor-agent' ),
+				'ability_class' => RecommendTemplateAbility::class,
+			],
+			'flavor-agent/recommend-template-part' => [
+				'label'         => __( 'Recommend template-part structure', 'flavor-agent' ),
+				'description'   => __( 'Suggest focused structural improvements and patterns for a single template part.', 'flavor-agent' ),
+				'ability_class' => RecommendTemplatePartAbility::class,
+			],
+		];
+	}
+
+	private static function register_block_abilities(): void {
 		wp_register_ability(
 			'flavor-agent/introspect-block',
 			[
@@ -146,161 +184,7 @@ final class Registration {
 		);
 	}
 
-	private static function register_content_abilities(): void {
-		wp_register_ability(
-			'flavor-agent/recommend-content',
-			[
-				'label'               => __( 'Recommend editorial content', 'flavor-agent' ),
-				'description'         => __( 'Draft, edit, or critique blog posts, essays, and site copy in Henry Perkins\'s voice.', 'flavor-agent' ),
-				'category'            => 'flavor-agent',
-				'execute_callback'    => [ ContentAbilities::class, 'recommend_content' ],
-				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
-				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [
-						'mode'         => [
-							'type'        => 'string',
-							'description' => 'Writing mode: draft, edit, or critique.',
-						],
-						'prompt'       => [
-							'type'        => 'string',
-							'description' => 'Optional user instruction for the content lane.',
-						],
-						'voiceProfile' => [
-							'type'        => 'string',
-							'description' => 'Optional extra voice guidance layered on top of the default Henry profile.',
-						],
-						'postContext'  => self::open_object_schema(
-							[
-								'postId'          => [
-									'type'        => 'integer',
-									'description' => 'Numeric post ID being recommended on. Required for server-side block rendering; absent or 0 uses the text fallback path.',
-								],
-								'postType'        => [ 'type' => 'string' ],
-								'title'           => [ 'type' => 'string' ],
-								'excerpt'         => [ 'type' => 'string' ],
-								'content'         => [ 'type' => 'string' ],
-								'slug'            => [ 'type' => 'string' ],
-								'status'          => [ 'type' => 'string' ],
-								'audience'        => [ 'type' => 'string' ],
-								'siteTitle'       => [ 'type' => 'string' ],
-								'siteDescription' => [ 'type' => 'string' ],
-								'categories'      => [
-									'type'  => 'array',
-									'items' => [ 'type' => 'string' ],
-								],
-								'tags'            => [
-									'type'  => 'array',
-									'items' => [ 'type' => 'string' ],
-								],
-							],
-							'Optional post-editor context for drafting, editing, or critique.'
-						),
-					],
-				],
-				'output_schema'       => [
-					'type'       => 'object',
-					'properties' => [
-						'mode'    => [ 'type' => 'string' ],
-						'title'   => [ 'type' => 'string' ],
-						'summary' => [ 'type' => 'string' ],
-						'content' => [ 'type' => 'string' ],
-						'notes'   => [
-							'type'  => 'array',
-							'items' => [ 'type' => 'string' ],
-						],
-						'issues'  => [
-							'type'  => 'array',
-							'items' => [
-								'type'       => 'object',
-								'properties' => [
-									'original' => [ 'type' => 'string' ],
-									'problem'  => [ 'type' => 'string' ],
-									'revision' => [ 'type' => 'string' ],
-								],
-							],
-						],
-					],
-				],
-				'meta'                => self::public_recommendation_meta(),
-			]
-		);
-	}
-
 	private static function register_pattern_abilities(): void {
-		wp_register_ability(
-			'flavor-agent/recommend-patterns',
-			[
-				'label'               => __( 'Recommend patterns', 'flavor-agent' ),
-				'description'         => __( 'Rank registered and synced block patterns for the current editing context using LLM.', 'flavor-agent' ),
-				'category'            => 'flavor-agent',
-				'execute_callback'    => [ PatternAbilities::class, 'recommend_patterns' ],
-				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
-				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [
-						'postType'            => [
-							'type'        => 'string',
-							'description' => 'Current post type',
-						],
-						'blockContext'        => [
-							'type'       => 'object',
-							'properties' => [
-								'blockName'  => [ 'type' => 'string' ],
-								'attributes' => [ 'type' => 'object' ],
-							],
-						],
-						'insertionContext'    => self::pattern_insertion_context_schema(),
-						'templateType'        => [ 'type' => 'string' ],
-						'prompt'              => [ 'type' => 'string' ],
-						'visiblePatternNames' => [
-							'type'  => 'array',
-							'items' => [ 'type' => 'string' ],
-						],
-					],
-					'required'   => [ 'postType' ],
-				],
-				'output_schema'       => [
-					'type'       => 'object',
-					'properties' => [
-						'recommendations' => [
-							'type'  => 'array',
-							'items' => [
-								'type'       => 'object',
-								'properties' => [
-									'name'                 => [ 'type' => 'string' ],
-									'title'                => [ 'type' => 'string' ],
-									'type'                 => [ 'type' => 'string' ],
-									'source'               => [ 'type' => 'string' ],
-									'syncedPatternId'      => [ 'type' => 'integer' ],
-									'syncStatus'           => [ 'type' => 'string' ],
-									'wpPatternSyncStatus'  => [ 'type' => 'string' ],
-									'score'                => [ 'type' => 'number' ],
-									'reason'               => [ 'type' => 'string' ],
-									'categories'           => [ 'type' => 'array' ],
-									'patternOverrides'     => [ 'type' => 'object' ],
-									'overrideCapabilities' => self::pattern_override_capabilities_schema(),
-									'content'              => [ 'type' => 'string' ],
-								],
-							],
-						],
-						'diagnostics'     => [
-							'type'       => 'object',
-							'properties' => [
-								'filteredCandidates' => [
-									'type'       => 'object',
-									'properties' => [
-										'unreadableSyncedPatterns' => [ 'type' => 'integer' ],
-									],
-								],
-							],
-						],
-					],
-				],
-				'meta'                => self::public_recommendation_meta(),
-			]
-		);
-
 		wp_register_ability(
 			'flavor-agent/list-patterns',
 			[
@@ -465,388 +349,6 @@ final class Registration {
 	}
 
 	private static function register_template_abilities(): void {
-		wp_register_ability(
-			'flavor-agent/recommend-template',
-			[
-				'label'               => __( 'Recommend template structure', 'flavor-agent' ),
-				'description'         => __( 'Suggest template-part arrangements and patterns for a template type.', 'flavor-agent' ),
-				'category'            => 'flavor-agent',
-				'execute_callback'    => [ TemplateAbilities::class, 'recommend_template' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
-				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [
-						'templateRef'          => [
-							'type'        => 'string',
-							'description' => 'Template identifier from the Site Editor.',
-						],
-						'templateType'         => [
-							'type'        => 'string',
-							'description' => 'Normalized template type (single, page, 404, etc.). Derived from templateRef if absent.',
-						],
-						'prompt'               => [ 'type' => 'string' ],
-						'resolveSignatureOnly' => [
-							'type'        => 'boolean',
-							'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
-						],
-						'visiblePatternNames'  => [
-							'type'  => 'array',
-							'items' => [ 'type' => 'string' ],
-						],
-						'editorSlots'          => [
-							'type'       => 'object',
-							'properties' => [
-								'assignedParts' => [
-									'type'  => 'array',
-									'items' => [
-										'type'       => 'object',
-										'properties' => [
-											'slug' => [ 'type' => 'string' ],
-											'area' => [ 'type' => 'string' ],
-										],
-									],
-								],
-								'emptyAreas'    => [
-									'type'  => 'array',
-									'items' => [ 'type' => 'string' ],
-								],
-								'allowedAreas'  => [
-									'type'  => 'array',
-									'items' => [ 'type' => 'string' ],
-								],
-							],
-						],
-						'editorStructure'      => [
-							'type'       => 'object',
-							'properties' => [
-								'topLevelBlockTree'       => [
-									'type'  => 'array',
-									'items' => [
-										'type'       => 'object',
-										'properties' => [
-											'path'       => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'integer' ],
-											],
-											'name'       => [ 'type' => 'string' ],
-											'label'      => [ 'type' => 'string' ],
-											'attributes' => [ 'type' => 'object' ],
-											'childCount' => [ 'type' => 'integer' ],
-											'slot'       => [
-												'type' => 'object',
-												'properties' => [
-													'slug' => [ 'type' => 'string' ],
-													'area' => [ 'type' => 'string' ],
-													'isEmpty' => [ 'type' => 'boolean' ],
-												],
-											],
-										],
-									],
-								],
-								'structureStats'          => [
-									'type'       => 'object',
-									'properties' => [
-										'blockCount'       => [ 'type' => 'integer' ],
-										'maxDepth'         => [ 'type' => 'integer' ],
-										'topLevelBlockCount' => [ 'type' => 'integer' ],
-										'hasNavigation'    => [ 'type' => 'boolean' ],
-										'hasQuery'         => [ 'type' => 'boolean' ],
-										'hasTemplateParts' => [ 'type' => 'boolean' ],
-										'firstTopLevelBlock' => [ 'type' => 'string' ],
-										'lastTopLevelBlock' => [ 'type' => 'string' ],
-									],
-								],
-								'currentPatternOverrides' => [ 'type' => 'object' ],
-								'currentViewportVisibility' => [ 'type' => 'object' ],
-							],
-						],
-					],
-					'required'   => [ 'templateRef' ],
-				],
-				'output_schema'       => [
-					'type'       => 'object',
-					'properties' => [
-						'suggestions'              => [
-							'type'  => 'array',
-							'items' => [
-								'type'       => 'object',
-								'properties' => [
-									'label'              => [ 'type' => 'string' ],
-									'description'        => [ 'type' => 'string' ],
-									'operations'         => [
-										'type'  => 'array',
-										'items' => [
-											'type'       => 'object',
-											'properties' => [
-												'type' => [ 'type' => 'string' ],
-												'slug' => [ 'type' => 'string' ],
-												'area' => [ 'type' => 'string' ],
-												'currentSlug' => [ 'type' => 'string' ],
-												'patternName' => [ 'type' => 'string' ],
-												'placement' => [ 'type' => 'string' ],
-												'targetPath' => [
-													'type' => 'array',
-													'items' => [ 'type' => 'integer' ],
-												],
-												'expectedTarget' => [
-													'type' => 'object',
-													'properties' => [
-														'name'       => [ 'type' => 'string' ],
-														'label'      => [ 'type' => 'string' ],
-														'attributes' => [ 'type' => 'object' ],
-														'childCount' => [ 'type' => 'integer' ],
-														'slot'       => [
-															'type'       => 'object',
-															'properties' => [
-																'slug'    => [ 'type' => 'string' ],
-																'area'    => [ 'type' => 'string' ],
-																'isEmpty' => [ 'type' => 'boolean' ],
-															],
-														],
-													],
-												],
-											],
-										],
-									],
-									'templateParts'      => [
-										'type'  => 'array',
-										'items' => [
-											'type'       => 'object',
-											'properties' => [
-												'slug'   => [ 'type' => 'string' ],
-												'area'   => [ 'type' => 'string' ],
-												'reason' => [ 'type' => 'string' ],
-											],
-										],
-									],
-									'patternSuggestions' => [
-										'type'  => 'array',
-										'items' => [ 'type' => 'string' ],
-									],
-								],
-							],
-						],
-						'explanation'              => [ 'type' => 'string' ],
-						'reviewContextSignature'   => [ 'type' => 'string' ],
-						'resolvedContextSignature' => [ 'type' => 'string' ],
-					],
-				],
-				'meta'                => self::public_recommendation_meta(),
-			]
-		);
-
-		wp_register_ability(
-			'flavor-agent/recommend-template-part',
-			[
-				'label'               => __( 'Recommend template-part structure', 'flavor-agent' ),
-				'description'         => __( 'Suggest focused structural improvements and patterns for a single template part.', 'flavor-agent' ),
-				'category'            => 'flavor-agent',
-				'execute_callback'    => [ TemplateAbilities::class, 'recommend_template_part' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
-				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [
-						'templatePartRef'      => [
-							'type'        => 'string',
-							'description' => 'Template-part identifier from the Site Editor.',
-						],
-						'prompt'               => [ 'type' => 'string' ],
-						'resolveSignatureOnly' => [
-							'type'        => 'boolean',
-							'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
-						],
-						'visiblePatternNames'  => [
-							'type'  => 'array',
-							'items' => [ 'type' => 'string' ],
-						],
-						'editorStructure'      => [
-							'type'       => 'object',
-							'properties' => [
-								'blockTree'               => [
-									'type'  => 'array',
-									'items' => [
-										'type'       => 'object',
-										'properties' => [
-											'path'       => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'integer' ],
-											],
-											'name'       => [ 'type' => 'string' ],
-											'label'      => [ 'type' => 'string' ],
-											'attributes' => [ 'type' => 'object' ],
-											'childCount' => [ 'type' => 'integer' ],
-											'children'   => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'object' ],
-											],
-										],
-									],
-								],
-								'allBlockPaths'           => [
-									'type'  => 'array',
-									'items' => [
-										'type'       => 'object',
-										'properties' => [
-											'path'       => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'integer' ],
-											],
-											'name'       => [ 'type' => 'string' ],
-											'label'      => [ 'type' => 'string' ],
-											'attributes' => [ 'type' => 'object' ],
-											'childCount' => [ 'type' => 'integer' ],
-										],
-									],
-								],
-								'topLevelBlocks'          => [
-									'type'  => 'array',
-									'items' => [ 'type' => 'string' ],
-								],
-								'blockCounts'             => [
-									'type' => 'object',
-								],
-								'structureStats'          => [
-									'type'       => 'object',
-									'properties' => [
-										'blockCount'      => [ 'type' => 'integer' ],
-										'maxDepth'        => [ 'type' => 'integer' ],
-										'hasNavigation'   => [ 'type' => 'boolean' ],
-										'containsLogo'    => [ 'type' => 'boolean' ],
-										'containsSiteTitle' => [ 'type' => 'boolean' ],
-										'containsSearch'  => [ 'type' => 'boolean' ],
-										'containsSocialLinks' => [ 'type' => 'boolean' ],
-										'containsQuery'   => [ 'type' => 'boolean' ],
-										'containsColumns' => [ 'type' => 'boolean' ],
-										'containsButtons' => [ 'type' => 'boolean' ],
-										'containsSpacer'  => [ 'type' => 'boolean' ],
-										'containsSeparator' => [ 'type' => 'boolean' ],
-										'firstTopLevelBlock' => [ 'type' => 'string' ],
-										'lastTopLevelBlock' => [ 'type' => 'string' ],
-										'hasSingleWrapperGroup' => [ 'type' => 'boolean' ],
-										'isNearlyEmpty'   => [ 'type' => 'boolean' ],
-									],
-								],
-								'currentPatternOverrides' => [ 'type' => 'object' ],
-								'operationTargets'        => [
-									'type'  => 'array',
-									'items' => [
-										'type'       => 'object',
-										'properties' => [
-											'path'  => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'integer' ],
-											],
-											'name'  => [ 'type' => 'string' ],
-											'label' => [ 'type' => 'string' ],
-											'allowedOperations' => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'string' ],
-											],
-											'allowedInsertions' => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'string' ],
-											],
-										],
-									],
-								],
-								'insertionAnchors'        => [
-									'type'  => 'array',
-									'items' => [
-										'type'       => 'object',
-										'properties' => [
-											'placement'  => [ 'type' => 'string' ],
-											'label'      => [ 'type' => 'string' ],
-											'blockName'  => [ 'type' => 'string' ],
-											'targetPath' => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'integer' ],
-											],
-										],
-									],
-								],
-								'structuralConstraints'   => [
-									'type'       => 'object',
-									'properties' => [
-										'contentOnlyPaths' => [
-											'type'  => 'array',
-											'items' => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'integer' ],
-											],
-										],
-										'lockedPaths'      => [
-											'type'  => 'array',
-											'items' => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'integer' ],
-											],
-										],
-										'hasContentOnly'   => [ 'type' => 'boolean' ],
-										'hasLockedBlocks'  => [ 'type' => 'boolean' ],
-									],
-								],
-							],
-						],
-					],
-					'required'   => [ 'templatePartRef' ],
-				],
-				'output_schema'       => [
-					'type'       => 'object',
-					'properties' => [
-						'suggestions'              => [
-							'type'  => 'array',
-							'items' => [
-								'type'       => 'object',
-								'properties' => [
-									'label'              => [ 'type' => 'string' ],
-									'description'        => [ 'type' => 'string' ],
-									'blockHints'         => [
-										'type'  => 'array',
-										'items' => [
-											'type'       => 'object',
-											'properties' => [
-												'path'   => [
-													'type' => 'array',
-													'items' => [ 'type' => 'integer' ],
-												],
-												'label'  => [ 'type' => 'string' ],
-												'blockName' => [ 'type' => 'string' ],
-												'reason' => [ 'type' => 'string' ],
-											],
-										],
-									],
-									'patternSuggestions' => [
-										'type'  => 'array',
-										'items' => [ 'type' => 'string' ],
-									],
-									'operations'         => [
-										'type'  => 'array',
-										'items' => [
-											'type'       => 'object',
-											'properties' => [
-												'type' => [ 'type' => 'string' ],
-												'patternName' => [ 'type' => 'string' ],
-												'placement' => [ 'type' => 'string' ],
-												'targetPath' => [
-													'type' => 'array',
-													'items' => [ 'type' => 'integer' ],
-												],
-												'expectedBlockName' => [ 'type' => 'string' ],
-												'expectedTarget' => [ 'type' => 'object' ],
-											],
-										],
-									],
-								],
-							],
-						],
-						'explanation'              => [ 'type' => 'string' ],
-						'reviewContextSignature'   => [ 'type' => 'string' ],
-						'resolvedContextSignature' => [ 'type' => 'string' ],
-					],
-				],
-				'meta'                => self::public_recommendation_meta(),
-			]
-		);
 
 		wp_register_ability(
 			'flavor-agent/list-template-parts',
@@ -888,149 +390,6 @@ final class Registration {
 					],
 				],
 				'meta'                => self::readonly_rest_meta(),
-			]
-		);
-	}
-
-	private static function register_navigation_abilities(): void {
-		wp_register_ability(
-			'flavor-agent/recommend-navigation',
-			[
-				'label'               => __( 'Recommend navigation structure', 'flavor-agent' ),
-				'description'         => __( 'Suggest navigation menu structure, overlay behavior, and organization.', 'flavor-agent' ),
-				'category'            => 'flavor-agent',
-				'execute_callback'    => [ NavigationAbilities::class, 'recommend_navigation' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
-				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [
-						'menuId'               => [
-							'type'        => 'integer',
-							'description' => 'Nav menu ID',
-						],
-						'navigationMarkup'     => [
-							'type'        => 'string',
-							'description' => 'Serialized navigation block markup',
-						],
-						'editorContext'        => [
-							'type'        => 'object',
-							'description' => 'Selected navigation block context snapshot from the editor.',
-						],
-						'resolveSignatureOnly' => [
-							'type'        => 'boolean',
-							'description' => 'When true, only resolve the server-backed review freshness signature without calling the model.',
-						],
-						'prompt'               => [ 'type' => 'string' ],
-					],
-				],
-				'output_schema'       => [
-					'type'       => 'object',
-					'properties' => [
-						'suggestions'            => [
-							'type'  => 'array',
-							'items' => [
-								'type'       => 'object',
-								'properties' => [
-									'label'       => [ 'type' => 'string' ],
-									'description' => [ 'type' => 'string' ],
-									'category'    => [ 'type' => 'string' ],
-									'changes'     => [
-										'type'  => 'array',
-										'items' => [
-											'type'       => 'object',
-											'properties' => [
-												'type'   => [ 'type' => 'string' ],
-												'target' => [ 'type' => 'string' ],
-												'detail' => [ 'type' => 'string' ],
-												'targetPath' => [
-													'type' => 'array',
-													'items' => [ 'type' => 'integer' ],
-												],
-											],
-										],
-									],
-								],
-							],
-						],
-						'explanation'            => [ 'type' => 'string' ],
-						'reviewContextSignature' => [ 'type' => 'string' ],
-					],
-				],
-				'meta'                => self::public_recommendation_meta(),
-			]
-		);
-	}
-
-	private static function register_style_abilities(): void {
-		wp_register_ability(
-			'flavor-agent/recommend-style',
-			[
-				'label'               => __( 'Recommend site styles', 'flavor-agent' ),
-				'description'         => __( 'Suggest theme-safe style changes and theme style variations for supported Site Editor style surfaces.', 'flavor-agent' ),
-				'category'            => 'flavor-agent',
-				'execute_callback'    => [ StyleAbilities::class, 'recommend_style' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
-				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [
-						'scope'                => self::open_object_schema(
-							[
-								'surface'        => [ 'type' => 'string' ],
-								'scopeKey'       => [ 'type' => 'string' ],
-								'globalStylesId' => [ 'type' => 'string' ],
-								'postType'       => [ 'type' => 'string' ],
-								'entityId'       => [ 'type' => 'string' ],
-								'entityKind'     => [ 'type' => 'string' ],
-								'entityName'     => [ 'type' => 'string' ],
-								'stylesheet'     => [ 'type' => 'string' ],
-								'blockName'      => [ 'type' => 'string' ],
-								'blockTitle'     => [ 'type' => 'string' ],
-							],
-							'Resolved style surface scope descriptor from the Site Editor.'
-						),
-						'styleContext'         => self::open_object_schema(
-							[
-								'currentConfig'         => self::open_object_schema(),
-								'mergedConfig'          => self::open_object_schema(),
-								'availableVariations'   => [
-									'type'  => 'array',
-									'items' => self::open_object_schema(),
-								],
-								'templateStructure'     => self::template_structure_schema(),
-								'templateVisibility'    => self::open_object_schema(),
-								'themeTokenDiagnostics' => self::open_object_schema(
-									[
-										'source'      => [ 'type' => 'string' ],
-										'settingsKey' => [ 'type' => 'string' ],
-										'reason'      => [ 'type' => 'string' ],
-									]
-								),
-								'designSemantics'       => self::open_object_schema(),
-								'styleBookTarget'       => self::open_object_schema(
-									[
-										'blockName'     => [ 'type' => 'string' ],
-										'blockTitle'    => [ 'type' => 'string' ],
-										'description'   => [ 'type' => 'string' ],
-										'currentStyles' => self::open_object_schema(),
-										'mergedStyles'  => self::open_object_schema(),
-									]
-								),
-							],
-							'Current style surface editor context needed for style recommendations.'
-						),
-						'prompt'               => [
-							'type'        => 'string',
-							'description' => 'Optional user instruction',
-						],
-						'resolveSignatureOnly' => [
-							'type'        => 'boolean',
-							'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
-						],
-					],
-					'required'   => [ 'scope', 'styleContext' ],
-				],
-				'output_schema'       => self::style_recommendation_output_schema(),
-				'meta'                => self::public_recommendation_meta(),
 			]
 		);
 	}
@@ -1265,18 +624,697 @@ final class Registration {
 		return current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' );
 	}
 
+	public static function recommendation_input_schema( string $ability_id ): array {
+		$document       = self::document_input_schema();
+		$client_request = self::client_request_input_schema();
+
+		return match ( $ability_id ) {
+			'flavor-agent/recommend-block' => [
+				'type'       => 'object',
+				'properties' => [
+					'editorContext'        => self::open_object_schema(
+						[],
+						'Block context snapshot from the editor.'
+					),
+					'clientId'             => [
+						'type'        => 'string',
+						'description' => 'Editor client ID for the selected block.',
+					],
+					'selectedBlock'        => self::selected_block_input_schema(),
+					'prompt'               => [
+						'type'        => 'string',
+						'description' => 'Optional user instruction',
+					],
+					'document'             => $document,
+					'clientRequest'        => $client_request,
+					'resolveSignatureOnly' => [
+						'type'        => 'boolean',
+						'description' => 'When true, only resolve the server-issued apply-context signature without calling the model.',
+					],
+				],
+			],
+			'flavor-agent/recommend-content' => [
+				'type'       => 'object',
+				'properties' => [
+					'mode'          => [
+						'type'        => 'string',
+						'description' => 'Writing mode: draft, edit, or critique.',
+					],
+					'prompt'        => [
+						'type'        => 'string',
+						'description' => 'Optional user instruction for the content lane.',
+					],
+					'voiceProfile'  => [
+						'type'        => 'string',
+						'description' => 'Optional extra voice guidance layered on top of the default Henry profile.',
+					],
+					'postContext'   => self::open_object_schema(
+						[
+							'postId'          => [ 'type' => 'integer' ],
+							'postType'        => [ 'type' => 'string' ],
+							'title'           => [ 'type' => 'string' ],
+							'excerpt'         => [ 'type' => 'string' ],
+							'content'         => [ 'type' => 'string' ],
+							'slug'            => [ 'type' => 'string' ],
+							'status'          => [ 'type' => 'string' ],
+							'audience'        => [ 'type' => 'string' ],
+							'siteTitle'       => [ 'type' => 'string' ],
+							'siteDescription' => [ 'type' => 'string' ],
+							'categories'      => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'string' ],
+							],
+							'tags'            => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'string' ],
+							],
+						],
+						'Optional post-editor context for drafting, editing, or critique.'
+					),
+					'document'      => $document,
+					'clientRequest' => $client_request,
+				],
+			],
+			'flavor-agent/recommend-patterns' => [
+				'type'       => 'object',
+				'properties' => [
+					'postType'            => [
+						'type'        => 'string',
+						'description' => 'Current post type',
+					],
+					'blockContext'        => self::open_object_schema(),
+					'insertionContext'    => self::pattern_insertion_context_schema(),
+					'templateType'        => [ 'type' => 'string' ],
+					'prompt'              => [ 'type' => 'string' ],
+					'visiblePatternNames' => [
+						'type'  => 'array',
+						'items' => [ 'type' => 'string' ],
+					],
+					'document'            => $document,
+					'clientRequest'       => $client_request,
+				],
+				'required'   => [ 'postType' ],
+			],
+			'flavor-agent/recommend-navigation' => [
+				'type'       => 'object',
+				'properties' => [
+					'menuId'               => [ 'type' => 'integer' ],
+					'navigationMarkup'     => [ 'type' => 'string' ],
+					'editorContext'        => self::open_object_schema(
+						[],
+						'Selected navigation block context snapshot from the editor.'
+					),
+					'blockClientId'        => [ 'type' => 'string' ],
+					'prompt'               => [ 'type' => 'string' ],
+					'document'             => $document,
+					'clientRequest'        => $client_request,
+					'resolveSignatureOnly' => [
+						'type'        => 'boolean',
+						'description' => 'When true, only resolve the server-backed review freshness signature without calling the model.',
+					],
+				],
+			],
+			'flavor-agent/recommend-style' => [
+				'type'       => 'object',
+				'properties' => [
+					'scope'                => self::open_object_schema(
+						[
+							'surface'        => [ 'type' => 'string' ],
+							'scopeKey'       => [ 'type' => 'string' ],
+							'globalStylesId' => [ 'type' => 'string' ],
+							'postType'       => [ 'type' => 'string' ],
+							'entityId'       => [ 'type' => 'string' ],
+							'entityKind'     => [ 'type' => 'string' ],
+							'entityName'     => [ 'type' => 'string' ],
+							'stylesheet'     => [ 'type' => 'string' ],
+							'blockName'      => [ 'type' => 'string' ],
+							'blockTitle'     => [ 'type' => 'string' ],
+						],
+						'Resolved style surface scope descriptor from the Site Editor.'
+					),
+					'styleContext'         => self::open_object_schema(
+						[
+							'currentConfig'         => self::open_object_schema(),
+							'mergedConfig'          => self::open_object_schema(),
+							'availableVariations'   => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(),
+							],
+							'templateStructure'     => self::template_structure_schema(),
+							'templateVisibility'    => self::open_object_schema(),
+							'themeTokenDiagnostics' => self::open_object_schema(),
+							'designSemantics'       => self::open_object_schema(),
+							'styleBookTarget'       => self::open_object_schema(
+								[
+									'blockName'     => [ 'type' => 'string' ],
+									'blockTitle'    => [ 'type' => 'string' ],
+									'description'   => [ 'type' => 'string' ],
+									'currentStyles' => self::open_object_schema(),
+									'mergedStyles'  => self::open_object_schema(),
+								]
+							),
+						],
+						'Current style surface editor context needed for style recommendations.'
+					),
+					'prompt'               => [ 'type' => 'string' ],
+					'document'             => $document,
+					'clientRequest'        => $client_request,
+					'resolveSignatureOnly' => [
+						'type'        => 'boolean',
+						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
+					],
+				],
+				'required'   => [ 'scope', 'styleContext' ],
+			],
+			'flavor-agent/recommend-template' => [
+				'type'       => 'object',
+				'properties' => [
+					'templateRef'          => [
+						'type'        => 'string',
+						'description' => 'Template identifier from the Site Editor.',
+					],
+					'templateType'         => [ 'type' => 'string' ],
+					'prompt'               => [ 'type' => 'string' ],
+					'visiblePatternNames'  => [
+						'type'  => 'array',
+						'items' => [ 'type' => 'string' ],
+					],
+					'editorSlots'          => self::open_object_schema(
+						[
+							'assignedParts' => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'slug' => [ 'type' => 'string' ],
+										'area' => [ 'type' => 'string' ],
+									]
+								),
+							],
+							'emptyAreas'    => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'string' ],
+							],
+							'allowedAreas'  => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'string' ],
+							],
+						]
+					),
+					'editorStructure'      => self::open_object_schema(
+						[
+							'blockTree'         => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'path'       => [
+											'type'  => 'array',
+											'items' => [ 'type' => 'integer' ],
+										],
+										'name'       => [ 'type' => 'string' ],
+										'label'      => [ 'type' => 'string' ],
+										'attributes' => [ 'type' => 'object' ],
+										'childCount' => [ 'type' => 'integer' ],
+									]
+								),
+							],
+							'topLevelBlockTree' => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'path'       => [
+											'type'  => 'array',
+											'items' => [ 'type' => 'integer' ],
+										],
+										'name'       => [ 'type' => 'string' ],
+										'label'      => [ 'type' => 'string' ],
+										'attributes' => [ 'type' => 'object' ],
+										'childCount' => [ 'type' => 'integer' ],
+									]
+								),
+							],
+							'allBlockPaths'     => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'path'       => [
+											'type'  => 'array',
+											'items' => [ 'type' => 'integer' ],
+										],
+										'name'       => [ 'type' => 'string' ],
+										'label'      => [ 'type' => 'string' ],
+										'attributes' => [ 'type' => 'object' ],
+										'childCount' => [ 'type' => 'integer' ],
+									]
+								),
+							],
+							'topLevelBlocks'    => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'string' ],
+							],
+							'structureStats'    => self::open_object_schema(
+								[
+									'blockCount'         => [ 'type' => 'integer' ],
+									'maxDepth'           => [ 'type' => 'integer' ],
+									'topLevelBlockCount' => [ 'type' => 'integer' ],
+									'hasNavigation'      => [ 'type' => 'boolean' ],
+								]
+							),
+							'operationTargets'  => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(),
+							],
+							'insertionAnchors'  => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(),
+							],
+						]
+					),
+					'document'             => $document,
+					'clientRequest'        => $client_request,
+					'resolveSignatureOnly' => [
+						'type'        => 'boolean',
+						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
+					],
+				],
+				'required'   => [ 'templateRef' ],
+			],
+			'flavor-agent/recommend-template-part' => [
+				'type'       => 'object',
+				'properties' => [
+					'templatePartRef'      => [
+						'type'        => 'string',
+						'description' => 'Template-part identifier from the Site Editor.',
+					],
+					'prompt'               => [ 'type' => 'string' ],
+					'visiblePatternNames'  => [
+						'type'  => 'array',
+						'items' => [ 'type' => 'string' ],
+					],
+					'editorStructure'      => self::template_part_editor_structure_schema(),
+					'document'             => $document,
+					'clientRequest'        => $client_request,
+					'resolveSignatureOnly' => [
+						'type'        => 'boolean',
+						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
+					],
+				],
+				'required'   => [ 'templatePartRef' ],
+			],
+			default => self::open_object_schema(),
+		};
+	}
+
+	public static function recommendation_output_schema( string $ability_id ): array {
+		return match ( $ability_id ) {
+			'flavor-agent/recommend-block' => self::suggestion_output_schema(),
+			'flavor-agent/recommend-content' => self::content_recommendation_output_schema(),
+			'flavor-agent/recommend-style' => self::style_recommendation_output_schema(),
+			'flavor-agent/recommend-patterns' => self::patterns_recommendation_output_schema(),
+			'flavor-agent/recommend-navigation' => self::navigation_recommendation_output_schema(),
+			'flavor-agent/recommend-template' => self::template_recommendation_output_schema(),
+			'flavor-agent/recommend-template-part' => self::template_part_recommendation_output_schema(),
+			default => self::open_object_schema(
+				[
+					'recommendations'          => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(),
+					],
+					'suggestions'              => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(),
+					],
+					'explanation'              => [ 'type' => 'string' ],
+					'summary'                  => [ 'type' => 'string' ],
+					'content'                  => [ 'type' => 'string' ],
+					'diagnostics'              => self::open_object_schema(),
+					'reviewContextSignature'   => [ 'type' => 'string' ],
+					'resolvedContextSignature' => [ 'type' => 'string' ],
+					'requestMeta'              => self::open_object_schema(),
+				]
+			),
+		};
+	}
+
+	private static function content_recommendation_output_schema(): array {
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'mode'        => [ 'type' => 'string' ],
+				'title'       => [ 'type' => 'string' ],
+				'summary'     => [ 'type' => 'string' ],
+				'content'     => [ 'type' => 'string' ],
+				'notes'       => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'issues'      => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'original' => [ 'type' => 'string' ],
+							'problem'  => [ 'type' => 'string' ],
+							'revision' => [ 'type' => 'string' ],
+						]
+					),
+				],
+				'requestMeta' => self::open_object_schema(),
+			],
+		];
+	}
+
+	private static function patterns_recommendation_output_schema(): array {
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'recommendations' => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'name'                 => [ 'type' => 'string' ],
+							'title'                => [ 'type' => 'string' ],
+							'type'                 => [ 'type' => 'string' ],
+							'source'               => [ 'type' => 'string' ],
+							'syncedPatternId'      => [ 'type' => 'integer' ],
+							'syncStatus'           => [ 'type' => 'string' ],
+							'wpPatternSyncStatus'  => [ 'type' => 'string' ],
+							'score'                => [ 'type' => 'number' ],
+							'reason'               => [ 'type' => 'string' ],
+							'categories'           => [ 'type' => 'array' ],
+							'patternOverrides'     => [ 'type' => 'object' ],
+							'overrideCapabilities' => self::pattern_override_capabilities_schema(),
+							'content'              => [ 'type' => 'string' ],
+						]
+					),
+				],
+				'diagnostics'     => self::open_object_schema(
+					[
+						'filteredCandidates' => self::open_object_schema(
+							[
+								'unreadableSyncedPatterns' => [ 'type' => 'integer' ],
+							]
+						),
+					]
+				),
+				'requestMeta'     => self::open_object_schema(),
+			],
+		];
+	}
+
+	private static function navigation_recommendation_output_schema(): array {
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'suggestions'            => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'label'       => [ 'type' => 'string' ],
+							'description' => [ 'type' => 'string' ],
+							'category'    => [ 'type' => 'string' ],
+							'changes'     => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'type'       => [ 'type' => 'string' ],
+										'target'     => [ 'type' => 'string' ],
+										'detail'     => [ 'type' => 'string' ],
+										'targetPath' => [
+											'type'  => 'array',
+											'items' => [ 'type' => 'integer' ],
+										],
+									]
+								),
+							],
+						]
+					),
+				],
+				'explanation'            => [ 'type' => 'string' ],
+				'reviewContextSignature' => [ 'type' => 'string' ],
+				'requestMeta'            => self::open_object_schema(),
+			],
+		];
+	}
+
+	private static function template_recommendation_output_schema(): array {
+		$expected_target = self::open_object_schema(
+			[
+				'name'       => [ 'type' => 'string' ],
+				'label'      => [ 'type' => 'string' ],
+				'attributes' => [ 'type' => 'object' ],
+				'childCount' => [ 'type' => 'integer' ],
+				'slot'       => self::open_object_schema(
+					[
+						'slug'    => [ 'type' => 'string' ],
+						'area'    => [ 'type' => 'string' ],
+						'isEmpty' => [ 'type' => 'boolean' ],
+					]
+				),
+			]
+		);
+
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'suggestions'              => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'label'       => [ 'type' => 'string' ],
+							'description' => [ 'type' => 'string' ],
+							'operations'  => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'type'           => [ 'type' => 'string' ],
+										'slug'           => [ 'type' => 'string' ],
+										'area'           => [ 'type' => 'string' ],
+										'currentSlug'    => [ 'type' => 'string' ],
+										'patternName'    => [ 'type' => 'string' ],
+										'placement'      => [ 'type' => 'string' ],
+										'targetPath'     => [
+											'type'  => 'array',
+											'items' => [ 'type' => 'integer' ],
+										],
+										'expectedTarget' => $expected_target,
+									]
+								),
+							],
+						]
+					),
+				],
+				'explanation'              => [ 'type' => 'string' ],
+				'reviewContextSignature'   => [ 'type' => 'string' ],
+				'resolvedContextSignature' => [ 'type' => 'string' ],
+				'requestMeta'              => self::open_object_schema(),
+			],
+		];
+	}
+
+	private static function template_part_recommendation_output_schema(): array {
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'suggestions'              => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'label'              => [ 'type' => 'string' ],
+							'description'        => [ 'type' => 'string' ],
+							'blockHints'         => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'path'      => [
+											'type'  => 'array',
+											'items' => [ 'type' => 'integer' ],
+										],
+										'label'     => [ 'type' => 'string' ],
+										'blockName' => [ 'type' => 'string' ],
+										'reason'    => [ 'type' => 'string' ],
+									]
+								),
+							],
+							'patternSuggestions' => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'string' ],
+							],
+							'operations'         => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'type'           => [ 'type' => 'string' ],
+										'patternName'    => [ 'type' => 'string' ],
+										'placement'      => [ 'type' => 'string' ],
+										'targetPath'     => [
+											'type'  => 'array',
+											'items' => [ 'type' => 'integer' ],
+										],
+										'expectedBlockName' => [ 'type' => 'string' ],
+										'expectedTarget' => [ 'type' => 'object' ],
+									]
+								),
+							],
+						]
+					),
+				],
+				'explanation'              => [ 'type' => 'string' ],
+				'reviewContextSignature'   => [ 'type' => 'string' ],
+				'resolvedContextSignature' => [ 'type' => 'string' ],
+				'requestMeta'              => self::open_object_schema(),
+			],
+		];
+	}
+
+	private static function template_part_editor_structure_schema(): array {
+		return self::open_object_schema(
+			[
+				'blockTree'             => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'path'       => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+							'name'       => [ 'type' => 'string' ],
+							'label'      => [ 'type' => 'string' ],
+							'attributes' => [ 'type' => 'object' ],
+							'childCount' => [ 'type' => 'integer' ],
+							'children'   => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'object' ],
+							],
+						]
+					),
+				],
+				'allBlockPaths'         => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'path'       => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+							'name'       => [ 'type' => 'string' ],
+							'label'      => [ 'type' => 'string' ],
+							'attributes' => [ 'type' => 'object' ],
+							'childCount' => [ 'type' => 'integer' ],
+						]
+					),
+				],
+				'topLevelBlocks'        => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'blockCounts'           => [ 'type' => 'object' ],
+				'structureStats'        => self::open_object_schema(
+					[
+						'blockCount'    => [ 'type' => 'integer' ],
+						'maxDepth'      => [ 'type' => 'integer' ],
+						'hasNavigation' => [ 'type' => 'boolean' ],
+					]
+				),
+				'operationTargets'      => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'path'              => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+							'name'              => [ 'type' => 'string' ],
+							'label'             => [ 'type' => 'string' ],
+							'allowedOperations' => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'string' ],
+							],
+						]
+					),
+				],
+				'insertionAnchors'      => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'placement'  => [ 'type' => 'string' ],
+							'label'      => [ 'type' => 'string' ],
+							'blockName'  => [ 'type' => 'string' ],
+							'targetPath' => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+						]
+					),
+				],
+				'structuralConstraints' => self::open_object_schema(
+					[
+						'contentOnlyPaths' => [
+							'type'  => 'array',
+							'items' => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+						],
+						'lockedPaths'      => [
+							'type'  => 'array',
+							'items' => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+						],
+						'hasContentOnly'   => [ 'type' => 'boolean' ],
+						'hasLockedBlocks'  => [ 'type' => 'boolean' ],
+					]
+				),
+			]
+		);
+	}
+
+	public static function recommendation_meta(): array {
+		return self::public_recommendation_meta();
+	}
+
 	private static function public_recommendation_meta(): array {
 		return [
 			'show_in_rest' => true,
 			'mcp'          => [
 				'public' => true,
+				'type'   => 'tool',
 			],
 			'annotations'  => [
-				'readOnlyHint' => true,
-				'destructive'  => false,
-				'idempotent'   => false,
+				'destructive' => false,
+				'idempotent'  => false,
 			],
 		];
+	}
+
+	private static function document_input_schema(): array {
+		return self::open_object_schema(
+			[
+				'scopeKey'   => [
+					'type'        => 'string',
+					'description' => 'Stable editor activity scope key.',
+				],
+				'postType'   => [ 'type' => 'string' ],
+				'entityId'   => [ 'type' => 'string' ],
+				'entityKind' => [ 'type' => 'string' ],
+				'entityName' => [ 'type' => 'string' ],
+				'stylesheet' => [ 'type' => 'string' ],
+			],
+			'Optional document scope metadata used for request diagnostic persistence.'
+		);
+	}
+
+	private static function client_request_input_schema(): array {
+		return self::open_object_schema(
+			[
+				'sessionId'    => [ 'type' => 'string' ],
+				'requestToken' => [ 'type' => 'integer' ],
+				'abortId'      => [ 'type' => 'string' ],
+				'aborted'      => [ 'type' => 'boolean' ],
+				'scopeKey'     => [ 'type' => 'string' ],
+			],
+			'Optional per-page request identity used to ignore stale or aborted diagnostic persistence.'
+		);
 	}
 
 	private static function readonly_rest_meta(): array {

@@ -54,7 +54,6 @@ describe( 'getExecutableSurfaceEffectiveStaleReason', () => {
 			} )
 		).toBeNull();
 	} );
-
 } );
 
 describe( 'getExecutableSurfaceStaleMessage', () => {

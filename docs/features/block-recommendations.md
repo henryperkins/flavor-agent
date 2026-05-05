@@ -45,8 +45,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/referen
 
 1. The user selects a block and optionally enters a prompt in `BlockRecommendationsContent`
 2. `collectBlockContext()` in `src/context/collector.js` builds the client-side block snapshot, including bindable attributes and native inspector panel availability
-3. `fetchBlockRecommendations()` in `src/store/index.js` posts that context to `POST /flavor-agent/v1/recommend-block`
-4. `FlavorAgent\REST\Agent_Controller::handle_recommend_block()` adapts the request to `FlavorAgent\Abilities\BlockAbilities::recommend_block()`
+3. `fetchBlockRecommendations()` in `src/store/index.js` executes the `flavor-agent/recommend-block` ability with that context
+4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the request to `FlavorAgent\Abilities\BlockAbilities::recommend_block()`
 5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, computes `resolvedContextSignature` from the server-normalized apply context plus the sanitized prompt, returns early for signature-only and disabled-block requests, and only then resolves cache-backed WordPress docs guidance before calling `FlavorAgent\LLM\ChatClient::chat()`
 6. `ChatClient::chat()` uses the selected connector-backed provider when available, maps OpenAI Native to the OpenAI connector when that connector is available, and otherwise returns a `missing_text_generation_provider` error instead of falling back to an unselected provider
 7. `FlavorAgent\LLM\Prompt` builds the prompt, parses the response, and enforces block-context guardrails, including the PHP block operation validator when structural proposals are present
@@ -63,8 +63,8 @@ User selects block + prompt
   -> BlockRecommendationsContent
   -> collectBlockContext()
   -> fetchBlockRecommendations()
-  -> POST /flavor-agent/v1/recommend-block
-  -> Agent_Controller::handle_recommend_block()
+  -> flavor-agent/recommend-block ability
+  -> RecommendationAbilityExecution
   -> BlockAbilities::recommend_block()
   -> ChatClient::chat()
   -> Prompt::parse_response()
@@ -284,7 +284,7 @@ The server normalizes that context with lock, content-only, and editing-mode def
       "latencyMs": 940,
       "usedFallback": false,
       "ability": "flavor-agent/recommend-block",
-      "route": "/flavor-agent/v1/recommend-block"
+      "route": "wp-abilities:flavor-agent/recommend-block"
     }
   },
   "clientId": "2b1c4f3f-1234-5678-9abc-def012345678"
@@ -363,9 +363,8 @@ The server normalizes that context with lock, content-only, and editing-mode def
 | Server enforcement       | `Prompt::enforce_block_context_rules()` in `inc/LLM/Prompt.php`                                                  | Filters parsed suggestions against panel, attribute, style, visibility, binding, and structural-operation rules                                                  |
 | Structural validator     | `BlockOperationValidator::validate_sequence()` in `inc/Context/BlockOperationValidator.php`                      | Validates proposed selected-block pattern operations against the normalized operation context                                                                    |
 
-## Related Routes And Abilities
+## Related Abilities
 
-- REST: `POST /flavor-agent/v1/recommend-block`
 - Ability: `flavor-agent/recommend-block`
 - Helper ability: `flavor-agent/introspect-block`
 

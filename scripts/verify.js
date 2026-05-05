@@ -697,11 +697,11 @@ async function main() {
 		counts,
 		options: {
 			only: opts.only,
-				skip: opts.skip,
-				skipE2E: opts.skipE2E,
-				bail: opts.bail,
-				strict: opts.strict,
-			},
+			skip: opts.skip,
+			skipE2E: opts.skipE2E,
+			bail: opts.bail,
+			strict: opts.strict,
+		},
 		steps: results,
 		artifacts: {
 			summaryPath: path.relative( REPO_ROOT, summaryPath ),

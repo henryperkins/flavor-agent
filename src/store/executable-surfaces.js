@@ -88,7 +88,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		actionPrefix: 'TEMPLATE',
 		surface: 'template',
 		abortKey: '_templateAbort',
-		endpoint: '/flavor-agent/v1/recommend-template',
+		abilityName: 'flavor-agent/recommend-template',
 		requestErrorMessage: 'Template recommendation request failed.',
 		applyFailureMessage: 'Template apply failed.',
 		unexpectedErrorMessage: 'Template apply failed unexpectedly.',
@@ -142,7 +142,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		actionPrefix: 'TEMPLATE_PART',
 		surface: 'template-part',
 		abortKey: '_templatePartAbort',
-		endpoint: '/flavor-agent/v1/recommend-template-part',
+		abilityName: 'flavor-agent/recommend-template-part',
 		requestErrorMessage: 'Template-part recommendation request failed.',
 		applyFailureMessage: 'Template-part apply failed.',
 		unexpectedErrorMessage: 'Template-part apply failed unexpectedly.',
@@ -196,7 +196,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		actionPrefix: 'GLOBAL_STYLES',
 		surface: 'global-styles',
 		abortKey: '_globalStylesAbort',
-		endpoint: '/flavor-agent/v1/recommend-style',
+		abilityName: 'flavor-agent/recommend-style',
 		requestErrorMessage: 'Global Styles recommendation request failed.',
 		applyFailureMessage: 'Global Styles apply failed.',
 		unexpectedErrorMessage: 'Global Styles apply failed unexpectedly.',
@@ -265,7 +265,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		actionPrefix: 'STYLE_BOOK',
 		surface: 'style-book',
 		abortKey: '_styleBookAbort',
-		endpoint: '/flavor-agent/v1/recommend-style',
+		abilityName: 'flavor-agent/recommend-style',
 		requestErrorMessage: 'Style Book recommendation request failed.',
 		applyFailureMessage: 'Style Book apply failed.',
 		unexpectedErrorMessage: 'Style Book apply failed unexpectedly.',
@@ -559,11 +559,11 @@ function getExecutableSurfaceDocumentFromInput( input = {}, registry = null ) {
 function createFetchConfig( def, actions ) {
 	return createExecutableSurfaceFetchConfig( {
 		abortKey: def.abortKey,
+		abilityName: def.abilityName,
 		buildRequestDocument: ( { input, registry } ) =>
 			getExecutableSurfaceDocumentFromInput( input, registry ),
 		dispatchRecommendations: ( params ) =>
 			dispatchRecommendationsForSurface( def, actions, params ),
-		endpoint: def.endpoint,
 		getRequestToken: ( select ) =>
 			( select[ def.methodNames.getRequestToken ]?.() || 0 ) + 1,
 		requestErrorMessage: def.requestErrorMessage,
@@ -574,8 +574,8 @@ function createFetchConfig( def, actions ) {
 function createApplyConfig( def, actions ) {
 	return createExecutableSurfaceApplyConfig( {
 		applyFailureMessage: def.applyFailureMessage,
+		abilityName: def.abilityName,
 		buildActivityEntry: def.buildActivityEntry,
-		endpoint: def.endpoint,
 		executeSuggestion: def.executeSuggestion,
 		getStoredRequestSignature: def.buildStoredRequestSignature,
 		getStoredResolvedContextSignature: ( select ) =>
@@ -588,7 +588,7 @@ function createApplyConfig( def, actions ) {
 
 function createReviewConfig( def, actions ) {
 	return createExecutableSurfaceReviewFreshnessConfig( {
-		endpoint: def.endpoint,
+		abilityName: def.abilityName,
 		getReviewRequestToken: ( select ) =>
 			select[ def.methodNames.getReviewRequestToken ]?.() || 0,
 		getStoredRequestSignature: def.buildStoredRequestSignature,

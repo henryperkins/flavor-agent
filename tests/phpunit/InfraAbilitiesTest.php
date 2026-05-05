@@ -80,6 +80,10 @@ final class InfraAbilitiesTest extends TestCase {
 		WordPressTestState::$capabilities        = [
 			'edit_posts' => true,
 		];
+		WordPressTestState::$options             = [
+			'wpai_features_enabled'             => true,
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
 		WordPressTestState::$ai_client_supported = true;
 
 		$status = InfraAbilities::check_status( [] );
@@ -126,6 +130,8 @@ final class InfraAbilitiesTest extends TestCase {
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
+			'wpai_features_enabled'                      => true,
+			'wpai_feature_flavor-agent_enabled'          => true,
 		];
 		WordPressTestState::$ai_client_supported        = true;
 		WordPressTestState::$ai_client_provider_support = [
@@ -177,6 +183,8 @@ final class InfraAbilitiesTest extends TestCase {
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
+			'wpai_features_enabled'                      => true,
+			'wpai_feature_flavor-agent_enabled'          => true,
 		];
 		WordPressTestState::$ai_client_supported = true;
 
@@ -186,6 +194,61 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertSame( 'env', $status['backends']['openai_native']['credentialSource'] );
 		$this->assertTrue( $status['backends']['openai_native']['connectorConfigured'] );
 		$this->assertSame( 'env', $status['backends']['openai_native']['connectorKeySource'] );
+	}
+
+	public function test_check_status_hides_recommendation_surfaces_when_ai_feature_is_disabled(): void {
+		WordPressTestState::$capabilities               = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+			'manage_options'     => true,
+		];
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$options                    = [
+			'flavor_agent_openai_provider'               => 'openai_native',
+			'connectors_ai_openai_api_key'               => 'connector-key',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
+			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                    => 'qdrant-key',
+			'wpai_features_enabled'                      => true,
+			'wpai_feature_flavor-agent_enabled'          => false,
+		];
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertFalse( $status['configured'] );
+		$this->assertSame( 'ai_feature_disabled', $status['surfaces']['block']['reason'] );
+		$this->assertFalse( $status['surfaces']['block']['available'] );
+		$this->assertFalse( $status['surfaces']['template']['available'] );
+		$this->assertFalse( $status['surfaces']['pattern']['available'] );
+
+		foreach ( [
+			'flavor-agent/recommend-block',
+			'flavor-agent/recommend-content',
+			'flavor-agent/recommend-patterns',
+			'flavor-agent/recommend-template',
+			'flavor-agent/recommend-template-part',
+			'flavor-agent/recommend-navigation',
+			'flavor-agent/recommend-style',
+		] as $ability_id ) {
+			$this->assertNotContains( $ability_id, $status['availableAbilities'] );
+		}
+
+		$this->assertContains( 'flavor-agent/introspect-block', $status['availableAbilities'] );
+		$this->assertTrue( $status['backends']['openai_native']['configured'] );
 	}
 
 	public function test_check_status_uses_connector_chat_and_direct_embeddings_for_patterns(): void {
@@ -200,6 +263,9 @@ final class InfraAbilitiesTest extends TestCase {
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
+			'connectors_ai_anthropic_api_key'            => 'anthropic-key',
+			'wpai_features_enabled'                      => true,
+			'wpai_feature_flavor-agent_enabled'          => true,
 		];
 
 		WordPressTestState::$connectors = [
@@ -250,6 +316,21 @@ final class InfraAbilitiesTest extends TestCase {
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
 			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			'connectors_ai_openai_api_key'                 => 'connector-key',
+			'wpai_features_enabled'                        => true,
+			'wpai_feature_flavor-agent_enabled'            => true,
+		];
+
+		WordPressTestState::$connectors = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
 		];
 
 		WordPressTestState::$ai_client_supported = true;
@@ -274,9 +355,12 @@ final class InfraAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$options = [
-			'flavor_agent_openai_provider' => 'anthropic',
-			'flavor_agent_qdrant_url'      => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'      => 'qdrant-key',
+			'flavor_agent_openai_provider'      => 'anthropic',
+			'flavor_agent_qdrant_url'           => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'           => 'qdrant-key',
+			'connectors_ai_anthropic_api_key'   => 'anthropic-key',
+			'wpai_features_enabled'             => true,
+			'wpai_feature_flavor-agent_enabled' => true,
 		];
 
 		WordPressTestState::$connectors = [
@@ -318,6 +402,8 @@ final class InfraAbilitiesTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'      => 'azure-key',
 			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
+			'wpai_features_enabled'              => true,
+			'wpai_feature_flavor-agent_enabled'  => true,
 		];
 
 		$status = InfraAbilities::check_status( [] );
@@ -348,7 +434,10 @@ final class InfraAbilitiesTest extends TestCase {
 			'edit_theme_options' => true,
 		];
 		WordPressTestState::$options                    = [
-			'flavor_agent_openai_provider' => 'openai',
+			'flavor_agent_openai_provider'      => 'openai',
+			'connectors_ai_openai_api_key'      => 'connector-key',
+			'wpai_features_enabled'             => true,
+			'wpai_feature_flavor-agent_enabled' => true,
 		];
 		WordPressTestState::$connectors                 = [
 			'openai' => [
@@ -361,6 +450,7 @@ final class InfraAbilitiesTest extends TestCase {
 				],
 			],
 		];
+		WordPressTestState::$ai_client_supported        = true;
 		WordPressTestState::$ai_client_provider_support = [
 			'openai' => true,
 		];
@@ -387,6 +477,10 @@ final class InfraAbilitiesTest extends TestCase {
 	public function test_check_status_marks_block_surface_unavailable_without_connectors_chat(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,
+		];
+		WordPressTestState::$options      = [
+			'wpai_features_enabled'             => true,
+			'wpai_feature_flavor-agent_enabled' => true,
 		];
 
 		$status = InfraAbilities::check_status( [] );

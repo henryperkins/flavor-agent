@@ -1,9 +1,6 @@
 const { test, expect } = require( '@playwright/test' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
-const {
-	getWp70HarnessConfig,
-	runWpCli,
-} = require( '../../scripts/wp70-e2e' );
+const { getWp70HarnessConfig, runWpCli } = require( '../../scripts/wp70-e2e' );
 
 const wp70Harness = getWp70HarnessConfig();
 
@@ -271,7 +268,7 @@ $entries = array(
 				'credentialSourceLabel' => 'Provider-managed',
 				'selectedProviderLabel' => 'Azure OpenAI',
 				'ability' => 'flavor-agent/recommend-block',
-				'route' => 'POST /flavor-agent/v1/recommend-block',
+				'route' => 'wp-abilities:flavor-agent/recommend-block',
 			),
 		),
 		'document' => array(
@@ -311,7 +308,7 @@ $entries = array(
 				'credentialSourceLabel' => 'Provider-managed',
 				'selectedProviderLabel' => 'Azure OpenAI',
 				'ability' => 'flavor-agent/recommend-template',
-				'route' => 'POST /flavor-agent/v1/recommend-template',
+				'route' => 'wp-abilities:flavor-agent/recommend-template',
 			),
 		),
 		'document' => array(
@@ -342,7 +339,7 @@ $entries = array(
 				'credentialSourceLabel' => 'Provider-managed',
 				'selectedProviderLabel' => 'Azure OpenAI',
 				'ability' => 'flavor-agent/recommend-content',
-				'route' => 'POST /flavor-agent/v1/recommend-content',
+				'route' => 'wp-abilities:flavor-agent/recommend-content',
 				'errorSummary' => array(
 					'wrappedMessage' => 'Provider timeout.',
 				),

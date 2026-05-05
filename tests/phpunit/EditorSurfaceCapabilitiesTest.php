@@ -16,6 +16,10 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		WordPressTestState::$options = [
+			'wpai_features_enabled'             => true,
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
 	}
 
 	public function test_non_admin_site_editor_does_not_receive_configuration_links(): void {
@@ -161,6 +165,8 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		];
 		WordPressTestState::$options      = [
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			'wpai_features_enabled'                  => true,
+			'wpai_feature_flavor-agent_enabled'      => true,
 		];
 
 		$capabilities = \flavor_agent_get_editor_surface_capabilities(

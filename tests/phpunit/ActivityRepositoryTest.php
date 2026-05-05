@@ -850,7 +850,7 @@ final class ActivityRepositoryTest extends TestCase {
 					'credentialSourceLabel' => 'Provider-managed',
 					'selectedProviderLabel' => 'Anthropic',
 					'ability'               => 'flavor-agent/recommend-block',
-					'route'                 => 'POST /flavor-agent/v1/recommend-block',
+					'route'                 => 'wp-abilities:flavor-agent/recommend-block',
 				],
 				'42'
 			)
@@ -879,7 +879,7 @@ final class ActivityRepositoryTest extends TestCase {
 				'credentialSource'   => 'Provider-managed',
 				'selectedProvider'   => 'Anthropic',
 				'requestAbility'     => 'flavor-agent/recommend-block',
-				'requestRoute'       => 'POST /flavor-agent/v1/recommend-block',
+				'requestRoute'       => 'wp-abilities:flavor-agent/recommend-block',
 				'requestReference'   => 'block:42:1',
 				'requestPrompt'      => 'Tighten the intro copy.',
 			],

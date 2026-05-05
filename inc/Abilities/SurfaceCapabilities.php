@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
+use FlavorAgent\AI\FeatureBootstrap;
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\LLM\ChatClient;
@@ -16,8 +17,15 @@ final class SurfaceCapabilities {
 	 * @return array<string, array<string, mixed>>
 	 */
 	public static function build( string $settings_url = '', string $connectors_url = '' ): array {
-		$block_available       = ChatClient::is_supported();
-		$chat_available        = Provider::chat_configured();
+		$can_manage_settings = current_user_can( 'manage_options' );
+
+		if ( ! FeatureBootstrap::recommendation_feature_enabled() ) {
+			return self::build_feature_disabled_surfaces( $can_manage_settings );
+		}
+
+		$global_ai_available   = self::global_ai_available();
+		$block_available       = $global_ai_available && ChatClient::is_supported();
+		$chat_available        = $global_ai_available && Provider::chat_configured();
 		$pattern_backend       = PatternRetrievalBackendFactory::selected_backend();
 		$pattern_backend_ready = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend
 			? PatternSearchClient::is_configured()
@@ -25,10 +33,9 @@ final class SurfaceCapabilities {
 				Provider::embedding_configured()
 				&& get_option( 'flavor_agent_qdrant_url' )
 				&& get_option( 'flavor_agent_qdrant_key' )
-			);
+		);
 		$pattern_available     = $chat_available && $pattern_backend_ready;
 		$can_edit_theme        = current_user_can( 'edit_theme_options' );
-		$can_manage_settings   = current_user_can( 'manage_options' );
 
 		$block_message         = $can_manage_settings
 			? __(
@@ -264,6 +271,59 @@ final class SurfaceCapabilities {
 				( $can_manage_settings && $can_edit_theme ) ? $connectors_url : ''
 			),
 		];
+	}
+
+	/**
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_feature_disabled_surfaces( bool $can_manage_settings ): array {
+		$url     = function_exists( 'admin_url' )
+			? admin_url( 'options-general.php?page=ai' )
+			: '';
+		$actions = self::build_actions(
+			$can_manage_settings,
+			[
+				[
+					'label' => 'Settings > AI',
+					'href'  => $url,
+				],
+			]
+		);
+		$message = $can_manage_settings
+			? __( 'Enable Flavor Agent in Settings > AI to use recommendation surfaces.', 'flavor-agent' )
+			: __( 'Flavor Agent recommendations are disabled. Ask an administrator to enable Flavor Agent in Settings > AI.', 'flavor-agent' );
+		$surface = static fn(): array => self::build_surface(
+			false,
+			'ai_feature_disabled',
+			'ai_feature',
+			$message,
+			$actions,
+			$can_manage_settings ? 'Settings > AI' : '',
+			$can_manage_settings ? $url : ''
+		);
+
+		return [
+			'block'        => $surface(),
+			'pattern'      => $surface(),
+			'content'      => $surface(),
+			'template'     => $surface(),
+			'templatePart' => $surface(),
+			'navigation'   => $surface(),
+			'globalStyles' => $surface(),
+			'styleBook'    => $surface(),
+		];
+	}
+
+	private static function global_ai_available(): bool {
+		if ( \function_exists( 'WordPress\\AI\\has_valid_ai_credentials' ) ) {
+			return \WordPress\AI\has_valid_ai_credentials();
+		}
+
+		if ( \function_exists( 'WordPress\\AI\\has_ai_credentials' ) ) {
+			return \WordPress\AI\has_ai_credentials();
+		}
+
+		return false;
 	}
 
 	public static function output_schema(): array {

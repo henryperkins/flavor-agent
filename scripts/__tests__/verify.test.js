@@ -393,12 +393,9 @@ describe( 'verify script helpers', () => {
 			try {
 				fs.writeFileSync(
 					envPath,
-					[
-						'# comment',
-						'',
-						'NOT_AN_ASSIGNMENT',
-						'GOOD=value',
-					].join( '\n' )
+					[ '# comment', '', 'NOT_AN_ASSIGNMENT', 'GOOD=value' ].join(
+						'\n'
+					)
 				);
 				const env = {};
 				expect( loadDotEnvFile( envPath, env ) ).toEqual( {
@@ -437,9 +434,11 @@ describe( 'verify script helpers', () => {
 			// The fallback resolves three levels up from REPO_ROOT, so it must
 			// at least produce an absolute path with the expected suffix.
 			expect( path.isAbsolute( context.wpRoot ) ).toBe( true );
-			expect( context.pluginsDir.endsWith(
-				path.join( 'wp-content', 'plugins' )
-			) ).toBe( true );
+			expect(
+				context.pluginsDir.endsWith(
+					path.join( 'wp-content', 'plugins' )
+				)
+			).toBe( true );
 		} );
 	} );
 
@@ -534,10 +533,7 @@ describe( 'verify script helpers', () => {
 
 		test( 'reports available when no requirements are declared', () => {
 			expect(
-				resolveStepAvailability(
-					{},
-					{ commandExists: () => false }
-				)
+				resolveStepAvailability( {}, { commandExists: () => false } )
 			).toEqual( { available: true } );
 		} );
 	} );
@@ -599,9 +595,77 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 			} );
 
 			expect( result.status ).toBe( 1 );
-			expect( result.stderr ).toContain(
-				'Expected a plugins directory'
+			expect( result.stderr ).toContain( 'Expected a plugins directory' );
+		} finally {
+			fs.rmSync( tempRoot, { recursive: true, force: true } );
+		}
+	} );
+
+	test( 'stages the plugin outside the WordPress plugins directory', () => {
+		const probe = spawnSync( 'bash', [ '--version' ] );
+		if ( probe.status !== 0 ) {
+			return;
+		}
+
+		const tempRoot = fs.mkdtempSync(
+			path.join( os.tmpdir(), 'verify-pc-sh-stage-' )
+		);
+		const wpRoot = path.join( tempRoot, 'wp' );
+		const pluginsDir = path.join( wpRoot, 'wp-content', 'plugins' );
+		const stageDir = path.join( tempRoot, 'stage' );
+		const binDir = path.join( tempRoot, 'bin' );
+		const argsFile = path.join( tempRoot, 'wp-args.txt' );
+
+		try {
+			fs.mkdirSync( pluginsDir, { recursive: true } );
+			fs.mkdirSync( stageDir, { recursive: true } );
+			fs.mkdirSync( binDir, { recursive: true } );
+			fs.writeFileSync( path.join( wpRoot, 'wp-config.php' ), '<?php\n' );
+			fs.writeFileSync(
+				path.join( binDir, 'composer' ),
+				'#!/usr/bin/env bash\nexit 0\n'
 			);
+			fs.writeFileSync(
+				path.join( binDir, 'wp' ),
+				'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$WP_ARGS_FILE"\n'
+			);
+			fs.chmodSync( path.join( binDir, 'composer' ), 0o755 );
+			fs.chmodSync( path.join( binDir, 'wp' ), 0o755 );
+
+			const result = spawnSync( 'bash', [ scriptPath, '--format=json' ], {
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					PATH: `${ binDir }${ path.delimiter }${ process.env.PATH }`,
+					PLUGIN_CHECK_KEEP_STAGE: '1',
+					PLUGIN_CHECK_STAGE_DIR: stageDir,
+					WP_ARGS_FILE: argsFile,
+					WP_PLUGIN_CHECK_PATH: wpRoot,
+				},
+			} );
+
+			expect( result.status ).toBe( 0 );
+
+			const wpArgs = fs.readFileSync( argsFile, 'utf8' ).trim().split( '\n' );
+			const stagedPluginDir = wpArgs[ 2 ];
+			expect( wpArgs[ 0 ] ).toBe( 'plugin' );
+			expect( wpArgs[ 1 ] ).toBe( 'check' );
+			expect(
+				stagedPluginDir.startsWith(
+					`${ stageDir }/flavor-agent-plugin-check-`
+				)
+			).toBe( true );
+			expect( stagedPluginDir.startsWith( pluginsDir ) ).toBe( false );
+			expect(
+				fs.existsSync(
+					path.join(
+						stagedPluginDir,
+						'2026-05-04-231958-local-command-caveatcaveat-the-messages-below.txt'
+					)
+				)
+			).toBe( false );
+			expect( wpArgs ).toContain( `--path=${ wpRoot }` );
+			expect( wpArgs ).toContain( '--format=json' );
 		} finally {
 			fs.rmSync( tempRoot, { recursive: true, force: true } );
 		}

@@ -135,19 +135,25 @@ export WORDPRESS_DB_USER=wordpress
 export WORDPRESS_DB_PASSWORD=wordpress
 ```
 
-The host user also needs traverse access to the Docker volume path and write access to `wp-content` for Plugin Check's temporary drop-in and staged plugin copy:
+The host user needs traverse access to the Docker volume path and read access to the WordPress files:
 
 ```bash
 sudo setfacl -m "u:$(id -un):--x" \
 	/var/lib/docker \
 	/var/lib/docker/volumes \
 	/var/lib/docker/volumes/wordpress_wordpress_data
-sudo setfacl -m "u:$(id -un):rwx" \
+sudo setfacl -R -m "u:$(id -un):rx" \
 	"${WP_PLUGIN_CHECK_PATH}/wp-content" \
 	"${WP_PLUGIN_CHECK_PATH}/wp-content/plugins"
 ```
 
 On the verified Docker-backed local stack, that mountpoint resolves to `/var/lib/docker/volumes/wordpress_wordpress_data/_data`.
+
+The wrapper stages the release copy outside the Docker volume in `${TMPDIR:-/tmp}` by default, so it does not require host write access to `wp-content/plugins`. To use a different writable staging directory, set:
+
+```bash
+export PLUGIN_CHECK_STAGE_DIR="$(pwd)/tmp/plugin-check"
+```
 
 Then run:
 

@@ -149,11 +149,16 @@ final class Guidelines {
 		return $blocks;
 	}
 
-	public static function format_prompt_context( string $block_name = '' ): string {
+	/**
+	 * @param array<int, string>|null $categories
+	 */
+	public static function format_prompt_context( string $block_name = '', ?array $categories = null ): string {
+		$categories = self::normalize_guideline_categories( $categories );
+
 		if ( function_exists( 'WordPress\\AI\\format_guidelines_for_prompt' ) ) {
 			try {
 				$upstream = (string) \WordPress\AI\format_guidelines_for_prompt(
-					self::GUIDELINE_CATEGORIES,
+					$categories,
 					'' !== $block_name ? $block_name : null
 				);
 
@@ -167,7 +172,7 @@ final class Guidelines {
 			}
 		}
 
-		return PromptGuidelinesFormatter::format( self::get_all(), $block_name );
+		return PromptGuidelinesFormatter::format( self::get_all(), $block_name, $categories );
 	}
 
 	/**
@@ -228,5 +233,28 @@ final class Guidelines {
 
 	private static function is_valid_block_name( string $block_name ): bool {
 		return 1 === preg_match( '/^[a-z][a-z0-9_\-]*(?:\/[a-z][a-z0-9_\-]*)?$/', $block_name );
+	}
+
+	/**
+	 * @param array<int, string>|null $categories
+	 * @return array<int, string>
+	 */
+	private static function normalize_guideline_categories( ?array $categories ): array {
+		if ( null === $categories || [] === $categories ) {
+			return self::GUIDELINE_CATEGORIES;
+		}
+
+		$allowed    = array_flip( self::GUIDELINE_CATEGORIES );
+		$normalized = [];
+
+		foreach ( $categories as $category ) {
+			$category = sanitize_key( (string) $category );
+
+			if ( isset( $allowed[ $category ] ) && ! in_array( $category, $normalized, true ) ) {
+				$normalized[] = $category;
+			}
+		}
+
+		return [] !== $normalized ? $normalized : self::GUIDELINE_CATEGORIES;
 	}
 }

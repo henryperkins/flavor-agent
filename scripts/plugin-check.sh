@@ -50,6 +50,7 @@ load_local_env
 wp_root="${WP_PLUGIN_CHECK_PATH:-$(cd -- "${plugin_dir}/../../.." && pwd)}"
 prepare_release_script="${script_dir}/prepare-release.sh"
 plugins_dir="${wp_root}/wp-content/plugins"
+stage_parent="${PLUGIN_CHECK_STAGE_DIR:-${TMPDIR:-/tmp}}"
 staged_plugin_dir=''
 
 if [[ ! -f "${wp_root}/wp-config.php" ]]; then
@@ -62,6 +63,16 @@ if [[ ! -d "${plugins_dir}" ]]; then
 	exit 1
 fi
 
+prepare_stage_parent() {
+	mkdir -p -- "${stage_parent}"
+	stage_parent="$(cd -- "${stage_parent}" && pwd)"
+
+	if [[ ! -w "${stage_parent}" ]]; then
+		echo "Expected a writable Plugin Check staging directory at ${stage_parent}. Set PLUGIN_CHECK_STAGE_DIR to override." >&2
+		exit 1
+	fi
+}
+
 cleanup() {
 	if [[ -n "${staged_plugin_dir}" && -d "${staged_plugin_dir}" && -z "${PLUGIN_CHECK_KEEP_STAGE:-}" ]]; then
 		rm -rf -- "${staged_plugin_dir}"
@@ -69,7 +80,7 @@ cleanup() {
 }
 
 stage_plugin() {
-	staged_plugin_dir="$(mktemp -d "${plugins_dir}/${plugin_slug}-plugin-check-XXXXXX")"
+	staged_plugin_dir="$(mktemp -d "${stage_parent%/}/${plugin_slug}-plugin-check-XXXXXX")"
 	bash "${prepare_release_script}" "${staged_plugin_dir}"
 }
 
@@ -83,13 +94,14 @@ describe_stage() {
 }
 
 trap cleanup EXIT
+prepare_stage_parent
 stage_plugin
 describe_stage
 
 args=(
 	plugin
 	check
-	"$(basename "${staged_plugin_dir}")"
+	"${staged_plugin_dir}"
 	"--path=${wp_root}"
 	"--exclude-directories=vendor,node_modules"
 	"--ignore-codes=WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound,WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound,WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in,WordPress.DB.SlowDBQuery.slow_db_query_tax_query"

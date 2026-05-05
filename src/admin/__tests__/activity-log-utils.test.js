@@ -156,7 +156,7 @@ describe( 'activity log utils', () => {
 						credentialSourceLabel: 'Settings > Flavor Agent',
 						selectedProviderLabel: 'Azure OpenAI',
 						ability: 'flavor-agent/recommend-block',
-						route: 'POST /flavor-agent/v1/recommend-block',
+						route: 'wp-abilities:flavor-agent/recommend-block',
 						usedFallback: false,
 						transport: {
 							host: 'judas2.openai.azure.com',
@@ -209,7 +209,7 @@ describe( 'activity log utils', () => {
 			connectorPlugin: 'Not recorded',
 			requestFallback: 'No fallback',
 			requestAbility: 'flavor-agent/recommend-block',
-			requestRoute: 'POST /flavor-agent/v1/recommend-block',
+			requestRoute: 'wp-abilities:flavor-agent/recommend-block',
 			transportEndpoint: 'judas2.openai.azure.com/openai/v1/responses',
 			timeout: '180 s',
 			requestPayload:
@@ -261,7 +261,7 @@ describe( 'activity log utils', () => {
 					credentialSource: 'Provider-managed',
 					selectedProvider: 'Anthropic',
 					requestAbility: 'flavor-agent/recommend-block',
-					requestRoute: 'POST /flavor-agent/v1/recommend-block',
+					requestRoute: 'wp-abilities:flavor-agent/recommend-block',
 					requestReference: 'block:99:2',
 					requestPrompt: 'Use a stronger hero.',
 				},
@@ -287,7 +287,7 @@ describe( 'activity log utils', () => {
 			credentialSource: 'Provider-managed',
 			selectedProvider: 'Anthropic',
 			requestAbility: 'flavor-agent/recommend-block',
-			requestRoute: 'POST /flavor-agent/v1/recommend-block',
+			requestRoute: 'wp-abilities:flavor-agent/recommend-block',
 			requestReference: 'block:99:2',
 			requestPrompt: 'Use a stronger hero.',
 		} );

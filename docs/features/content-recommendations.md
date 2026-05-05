@@ -7,10 +7,9 @@ Flavor Agent ships a first-party post/page document panel for this lane.
 The current surface and contract are:
 
 - UI: post/page editor `PluginDocumentSettingPanel` titled `Content Recommendations`
-- REST: `POST /flavor-agent/v1/recommend-content`
 - Ability: `flavor-agent/recommend-content`
 
-The REST + Abilities contract remains available so external agents or admin tools can use the same drafting, editing, and critique path.
+The Abilities contract remains available so external agents or admin tools can use the same drafting, editing, and critique path.
 
 ## 2. Surfacing And Gating Conditions
 
@@ -23,13 +22,13 @@ The REST + Abilities contract remains available so external agents or admin tool
 ## 3. End-To-End Flow
 
 1. `ContentRecommender()` reads the current post/page ID, post context, selected content mode, and prompt from the editor
-2. The store action `fetchContentRecommendations()` posts `mode`, optional `prompt`, and `postContext` to `POST /flavor-agent/v1/recommend-content`
-3. `Agent_Controller::handle_recommend_content()` forwards that payload to `ContentAbilities::recommend_content()`
+2. The store action `fetchContentRecommendations()` executes the `flavor-agent/recommend-content` ability with `mode`, optional `prompt`, and `postContext`
+3. `RecommendationAbilityExecution` forwards that payload to `ContentAbilities::recommend_content()`
 4. `ContentAbilities` normalizes the request, validates per-post edit access when `postContext.postId > 0`, and renders the current post content through `PostContentRenderer`
 5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt via `PromptBudget`. The user prompt includes the rendered current-post text under `Existing draft` and, when the author has eligible same-author published posts in the same post type, a `## Site voice samples` section with up to three openings (~1500 chars each, paragraph-snapped) drawn through `PostVoiceSampleCollector`. Voice samples is the only section the budget will drop under pressure. When rendered HTML exposes useful attribute-borne text that would otherwise be stripped from the current post, `PostContentRenderer` appends it as an `[Attribute references]` bullet list.
 6. `WritingPrompt::parse_response()` validates the returned JSON payload
 7. The panel renders summary/content/notes/issues through the shared status and recommendation shell, with explicit editorial-only copy and a copy-to-clipboard handoff for generated text
-8. When document scope is available, the REST handler persists successful and failed requests as read-only `request_diagnostic` activity rows, and the panel shows them in `Recent Content Requests`
+8. When document scope is available, the ability execution wrapper persists successful and failed requests as read-only `request_diagnostic` activity rows, and the panel shows them in `Recent Content Requests`
 
 ## 4. Capability Contract
 
@@ -72,10 +71,10 @@ Output:
 - The first-party UI is editorial-only. There is no preview/apply/undo flow tied to this surface, and copy-to-clipboard does not mutate editor content.
 - Scoped content requests are persisted as read-only activity diagnostics when possible. They can appear in the inline request history and the admin audit page, but they are not undoable.
 
-## 6. Primary Functions, Routes, And Abilities
+## 6. Primary Functions And Abilities
 
-- `inc/REST/Agent_Controller.php`
 - `inc/Abilities/ContentAbilities.php`
+- `inc/Abilities/RecommendationAbilityExecution.php`
 - `inc/Context/PostContentRenderer.php`
 - `inc/Context/PostVoiceSampleCollector.php`
 - `inc/Context/ServerCollector.php`
@@ -83,4 +82,3 @@ Output:
 - `src/content/ContentRecommender.js`
 - `src/store/index.js`
 - `flavor-agent/recommend-content`
-- `POST /flavor-agent/v1/recommend-content`

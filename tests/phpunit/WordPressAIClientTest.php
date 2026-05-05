@@ -185,6 +185,40 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
+	public function test_chat_applies_preferred_text_models_to_ai_client_prompt_fallback(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+		WordPressTestState::$ai_service_call_throws         = new \RuntimeException( 'AI service unavailable' );
+		WordPressTestState::$preferred_text_models          = [
+			'openai:gpt-5-mini',
+			'anthropic:claude-sonnet-4.6',
+		];
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
+			null,
+			null,
+			null,
+			[
+				'temperature' => 0.2,
+			]
+		);
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertSame(
+			[
+				'openai:gpt-5-mini',
+				'anthropic:claude-sonnet-4.6',
+			],
+			WordPressTestState::$last_ai_client_prompt['model_preferences'] ?? null
+		);
+		$this->assertSame(
+			0.2,
+			WordPressTestState::$last_ai_client_prompt['model_config']['temperature'] ?? null
+		);
+	}
+
 	public function test_chat_sends_compact_block_schema_for_generic_wordpress_ai_client_fallback(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';

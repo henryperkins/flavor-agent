@@ -27,92 +27,31 @@ final class AgentRoutesTest extends TestCase {
 			[
 				'/flavor-agent/v1/activity',
 				'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/undo',
-				'/flavor-agent/v1/recommend-block',
-				'/flavor-agent/v1/recommend-content',
-				'/flavor-agent/v1/recommend-navigation',
-				'/flavor-agent/v1/recommend-patterns',
-				'/flavor-agent/v1/recommend-style',
-				'/flavor-agent/v1/recommend-template',
-				'/flavor-agent/v1/recommend-template-part',
 				'/flavor-agent/v1/sync-patterns',
 			],
 			$registered_routes
 		);
 
-		$this->assertRouteMethods( '/flavor-agent/v1/recommend-block', [ 'POST' ] );
-		$this->assertRouteMethods( '/flavor-agent/v1/recommend-content', [ 'POST' ] );
-		$this->assertRouteMethods( '/flavor-agent/v1/recommend-patterns', [ 'POST' ] );
-		$this->assertRouteMethods( '/flavor-agent/v1/recommend-navigation', [ 'POST' ] );
-		$this->assertRouteMethods( '/flavor-agent/v1/recommend-style', [ 'POST' ] );
-		$this->assertRouteMethods( '/flavor-agent/v1/recommend-template', [ 'POST' ] );
-		$this->assertRouteMethods( '/flavor-agent/v1/recommend-template-part', [ 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/sync-patterns', [ 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/activity', [ 'GET', 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/undo', [ 'POST' ] );
 	}
 
-	public function test_recommendation_routes_enforce_capabilities_before_handlers_run(): void {
-		$this->assertForbidden(
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-block',
-				[
-					'clientId'      => 'block-1',
-					'editorContext' => [
-						'block' => [
-							'name' => 'core/paragraph',
-						],
-					],
-				]
-			)
-		);
+	public function test_recommendation_routes_are_not_registered_as_active_rest_routes(): void {
+		foreach ( [
+			'/flavor-agent/v1/recommend-block',
+			'/flavor-agent/v1/recommend-content',
+			'/flavor-agent/v1/recommend-patterns',
+			'/flavor-agent/v1/recommend-navigation',
+			'/flavor-agent/v1/recommend-style',
+			'/flavor-agent/v1/recommend-template',
+			'/flavor-agent/v1/recommend-template-part',
+		] as $route ) {
+			$this->assertArrayNotHasKey( $route, WordPressTestState::$rest_routes );
+		}
+	}
 
-		WordPressTestState::$capabilities = [
-			'edit_posts' => true,
-		];
-
-		$this->assertNotForbidden(
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-block',
-				[
-					'clientId'             => 'block-1',
-					'editorContext'        => [
-						'block' => [
-							'name' => 'core/paragraph',
-						],
-					],
-					'resolveSignatureOnly' => true,
-				]
-			)
-		);
-
-		$this->assertForbidden(
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-template',
-				[
-					'templateRef'          => 'theme//home',
-					'resolveSignatureOnly' => true,
-				]
-			)
-		);
-
-		WordPressTestState::$capabilities = [
-			'edit_theme_options' => true,
-		];
-
-		$this->assertNotForbidden(
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-template',
-				[
-					'templateRef'          => 'theme//home',
-					'resolveSignatureOnly' => true,
-				]
-			)
-		);
-
+	public function test_sync_pattern_route_enforces_manage_options(): void {
 		$this->assertForbidden(
 			$this->dispatch_route( 'POST', '/flavor-agent/v1/sync-patterns' )
 		);
@@ -157,121 +96,6 @@ final class AgentRoutesTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
-	}
-
-	public function test_required_arguments_and_validation_are_enforced_at_the_route_boundary(): void {
-		ActivityRepository::install();
-		WordPressTestState::$capabilities = [
-			'edit_posts'         => true,
-			'edit_theme_options' => true,
-		];
-
-		$this->assertRestErrorCode(
-			'rest_missing_callback_param',
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-block',
-				[
-					'clientId' => 'block-1',
-				]
-			)
-		);
-
-		$this->assertRestErrorCode(
-			'rest_missing_callback_param',
-			$this->dispatch_route( 'POST', '/flavor-agent/v1/recommend-patterns' )
-		);
-
-		$this->assertRestErrorCode(
-			'rest_invalid_param',
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-template',
-				[
-					'templateRef' => '',
-					'document'    => [
-						'scopeKey' => 'wp_template:theme//home',
-						'postType' => 'wp_template',
-						'entityId' => 'theme//home',
-					],
-				]
-			)
-		);
-
-		$this->assertRestErrorCode(
-			'rest_invalid_param',
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-template-part',
-				[
-					'templatePartRef' => '',
-					'document'        => [
-						'scopeKey' => 'wp_template_part:theme//header',
-						'postType' => 'wp_template_part',
-						'entityId' => 'theme//header',
-					],
-				]
-			)
-		);
-
-		$this->assertSame(
-			[],
-			WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? []
-		);
-
-		$this->assertRestErrorCode(
-			'rest_missing_callback_param',
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-style',
-				[
-					'scope' => [
-						'type' => 'global',
-					],
-				]
-			)
-		);
-
-		$this->assertRestErrorCode(
-			'rest_invalid_param',
-			$this->dispatch_route(
-				'POST',
-				'/flavor-agent/v1/recommend-template',
-				[
-					'templateRef'         => 'theme//home',
-					'visiblePatternNames' => [ 'theme/hero', 123 ],
-				]
-			)
-		);
-	}
-
-	public function test_route_sanitizers_normalize_request_values_before_callbacks(): void {
-		WordPressTestState::$capabilities = [
-			'edit_posts' => true,
-		];
-
-		$request  = null;
-		$response = $this->dispatch_route(
-			'POST',
-			'/flavor-agent/v1/recommend-block',
-			[
-				'clientId'             => ' <b>client-123</b> ',
-				'editorContext'        => [
-					'block' => [
-						'name' => 'core/paragraph',
-					],
-				],
-				'prompt'               => "Tighten <b>copy</b>\nwithout shouting.",
-				'resolveSignatureOnly' => 'yes',
-			],
-			$request
-		);
-
-		$this->assertInstanceOf( \WP_REST_Response::class, $response );
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 'client-123', $response->get_data()['clientId'] ?? null );
-		$this->assertSame( "Tighten copy\nwithout shouting.", $request?->get_param( 'prompt' ) );
-		$this->assertTrue( $request?->get_param( 'resolveSignatureOnly' ) );
 	}
 
 	private function assertRouteMethods( string $route, array $expected_methods ): void {

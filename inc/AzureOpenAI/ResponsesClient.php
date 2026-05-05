@@ -54,6 +54,7 @@ final class ResponsesClient {
 		?string $schema_name = null,
 		?array $model_options = null
 	): string|\WP_Error {
+		$instructions = self::apply_recommendation_system_instruction( $instructions );
 		Provider::record_runtime_chat_metrics( null );
 		Provider::record_runtime_chat_diagnostics( null );
 
@@ -104,5 +105,9 @@ final class ResponsesClient {
 		return in_array( $candidate, [ 'low', 'medium', 'high', 'xhigh' ], true )
 			? $candidate
 			: null;
+	}
+
+	private static function apply_recommendation_system_instruction( string $instructions ): string {
+		return (string) apply_filters( 'flavor_agent_recommendation_system_instruction', $instructions );
 	}
 }

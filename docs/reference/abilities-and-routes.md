@@ -10,10 +10,9 @@ Use it when you need to answer:
 
 ## How First-Party UI And Abilities Relate
 
-- The shipped Gutenberg editor UI uses the plugin REST routes plus the `flavor-agent` data store, while the wp-admin audit page is a separate `apiFetch` + `DataViews` app and does not use that store
-- The Abilities API exposes closely related contracts for external AI agents on supported WordPress 7.0+ installs
+- The shipped Gutenberg editor UI uses the `flavor-agent` data store and executes recommendation abilities through the WordPress Abilities API
+- The Abilities API is the sole active contract for the seven `recommend-*` surfaces on supported WordPress 7.0+ installs
 - Activity persistence and manual pattern sync are REST-only today; they do not have matching registered abilities
-- `POST /flavor-agent/v1/recommend-block` is the main response-shape exception: the REST route wraps the ability payload in `{ payload, clientId }`
 - Pattern, template, and template-part first-party surfaces also read the shared post-type entity contract from `src/utils/editor-entity-contracts.js`, which normalizes built-in field metadata and safe fallbacks when no live WordPress view config is exposed, so panel visibility, title-field expectations, template-part area labels, and the patched pattern category stay aligned with the current entity contract
 
 ## Registered Abilities
@@ -47,8 +46,8 @@ Use it when you need to answer:
 - On supported WordPress 7.0+ admin screens, core hydrates these server-registered abilities into the client-side abilities store
 - The seven AI recommendation abilities (`recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) also opt into the Abilities API default MCP server via `meta.mcp.public = true`
 - All twenty abilities declare behavior annotations. The seven AI recommendation abilities keep WP-format `meta.annotations.readonly` unset so core and `@wordpress/core-abilities` run calls stay POST for large prompt/editor payloads, while exposing direct MCP `readOnlyHint:true`, `destructive:false`, and `idempotent:false`; the 13 data-read abilities declare WP-format `readonly:true`, `destructive:false`, and `idempotent:true`.
-- `flavor-agent/recommend-block` accepts different input shapes depending on the caller: the REST route passes `editorContext` (with nested `block`, `siblingsBefore`, `siblingsAfter`, `themeTokens`), while the Abilities API registers `selectedBlock` (with `structuralIdentity`, `structuralAncestors`, `structuralBranch`, `childCount`, and `blockVisibility`). `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context
-- When `window.flavorAgentData.enableBlockStructuralActions` is true, the first-party REST `editorContext` also includes a client-computed `blockOperationContext` with selected-block target identity, target signature, lock/content-only state, and allowed pattern metadata from Gutenberg's allowed-pattern selector. The flag is resolved from the default-off admin setting, the developer constant, and the final override filter; executable structural block operations stay empty when the flag, pattern context, target, lock, or catalog validation fails.
+- `flavor-agent/recommend-block` accepts the first-party editor `editorContext` payload and the external-client `selectedBlock` alias. `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context.
+- When `window.flavorAgentData.enableBlockStructuralActions` is true, the first-party `editorContext` also includes a client-computed `blockOperationContext` with selected-block target identity, target signature, lock/content-only state, and allowed pattern metadata from Gutenberg's allowed-pattern selector. The flag is resolved from the default-off admin setting, the developer constant, and the final override filter; executable structural block operations stay empty when the flag, pattern context, target, lock, or catalog validation fails.
 - Normalized block suggestions may include `operations`, `proposedOperations`, and `rejectedOperations`. `operations` contains only `FlavorAgent\Context\BlockOperationValidator`-approved block structural operations from the v1 catalog (`insert_pattern` and `replace_block_with_pattern`); `proposedOperations` preserves sanitized model proposals for diagnostics; `rejectedOperations` records standardized validator rejection codes and sanitized proposal payloads. In the editor, the JS catalog revalidates the PHP-approved operation and fails closed with `client_server_operation_mismatch` if the browser validation identity disagrees before review/apply.
 - `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
 - The `surfaces` map uses the keys `block`, `pattern`, `content`, `template`, `templatePart`, `navigation`, `globalStyles`, and `styleBook`. Each entry returns `available`, `reason`, `owner`, `actions`, `configurationLabel`, `configurationUrl`, `message`, and `advisoryOnly`.
@@ -65,20 +64,13 @@ Use it when you need to answer:
 - The executable first-party editor surfaces (`block`, `template`, `template-part`, `global-styles`, and `style-book`) still compute a local request signature from the live context signature plus the composer prompt and scoped entity ref. That signature remains client-local and is not POSTed back to PHP.
 - The same five executable surfaces now also store a server `resolvedContextSignature` on normal responses. PHP computes that hash from the server-normalized apply context plus the sanitized prompt, so it still captures server-only context such as theme tokens, pattern candidates, and Style Book block-manifest details without making docs-cache churn part of freshness.
 - Template, template-part, Global Styles, Style Book, and advisory navigation responses also store a server `reviewContextSignature`. These review hashes cover docs-free server-owned context so background review freshness tracks real server drift without treating docs guidance churn as stale state.
-- `flavor-agent/recommend-block`, `flavor-agent/recommend-template`, `flavor-agent/recommend-template-part`, `flavor-agent/recommend-navigation`, and `flavor-agent/recommend-style` accept an optional boolean `resolveSignatureOnly`. When true, they resolve only the current server freshness signature(s) and return them (`resolvedContextSignature` for block, `reviewContextSignature` plus `resolvedContextSignature` for template/template-part/style, and `reviewContextSignature` for navigation) without doing docs lookup or model calls. REST callers of `POST /flavor-agent/v1/recommend-block` must read the signature from `payload.resolvedContextSignature` because the route wraps signature-only block responses as `{ payload, clientId }`.
+- `flavor-agent/recommend-block`, `flavor-agent/recommend-template`, `flavor-agent/recommend-template-part`, `flavor-agent/recommend-navigation`, and `flavor-agent/recommend-style` accept an optional boolean `resolveSignatureOnly`. When true, they resolve only the current server freshness signature(s) and return them (`resolvedContextSignature` for block, `reviewContextSignature` plus `resolvedContextSignature` for template/template-part/style, and `reviewContextSignature` for navigation) without doing docs lookup or model calls.
 - `flavor-agent/recommend-patterns` remains a request-time ranking surface. It does not accept `resolveSignatureOnly` and does not participate in review/apply freshness revalidation.
 
 ## REST Routes
 
 | Route | Permission | First-party caller | Backend owner | Notes |
 |---|---|---|---|---|
-| `POST /flavor-agent/v1/recommend-block` | `edit_posts` | `fetchBlockRecommendations()` | `BlockAbilities::recommend_block()` | Wraps both normal and signature-only responses as `{ payload, clientId }` |
-| `POST /flavor-agent/v1/recommend-content` | `edit_posts`; positive `postContext.postId` also requires `edit_post` for that post | `fetchContentRecommendations()` | `ContentAbilities::recommend_content()` | Thin REST adapter over the content recommendation ability; the first-party client sends `postId` so the server can render current-post blocks before prompt assembly |
-| `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | `fetchPatternRecommendations()` | `PatternAbilities::recommend_patterns()` | Thin REST adapter over the ability; requires scoped `visiblePatternNames`; no `resolveSignatureOnly` contract |
-| `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | `fetchNavigationRecommendations()` | `NavigationAbilities::recommend_navigation()` | Accepts `resolveSignatureOnly`; normal responses include a docs-free `reviewContextSignature` |
-| `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | `fetchTemplateRecommendations()` | `TemplateAbilities::recommend_template()` | Accepts `resolveSignatureOnly`; normal responses include docs-free `reviewContextSignature` and `resolvedContextSignature` |
-| `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | `fetchTemplatePartRecommendations()` | `TemplateAbilities::recommend_template_part()` | Accepts `resolveSignatureOnly`; normal responses include docs-free `reviewContextSignature` and `resolvedContextSignature` |
-| `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | `fetchGlobalStylesRecommendations()` and `fetchStyleBookRecommendations()` | `StyleAbilities::recommend_style()` | Accepts `resolveSignatureOnly`; normal responses include docs-free `reviewContextSignature` and `resolvedContextSignature` |
 | `GET /flavor-agent/v1/activity` | Contextual editor/theme capability; `manage_options` for global reads | `loadActivitySession()` and admin activity log | `ActivityRepository::query()` for scoped reads; `ActivityRepository::query_admin()` for global admin reads | Scoped queries power editor/theme history; global admin reads return pagination, summary, and filter-option metadata for the audit page |
 | `POST /flavor-agent/v1/activity` | Contextual editor/theme capability | Store-side activity persistence | `ActivityRepository::create()` | Persists server-backed activity entries, including executable apply rows and scoped read-only `request_diagnostic` audit rows |
 | `POST /flavor-agent/v1/activity/{id}/undo` | Contextual editor/theme capability | `undoActivity()` | `ActivityRepository::update_undo_status()` | Persists undo-status transitions |
@@ -764,23 +756,23 @@ The same response shape is used for Qdrant and Cloudflare AI Search syncs. The p
 ## Sequence Cheatsheet
 
 ```text
-Block UI -> store -> /recommend-block -> BlockAbilities -> ChatClient -> Prompt -> UI
-Pattern UI -> store -> /recommend-patterns -> PatternAbilities -> selected retrieval backend + Responses -> local inserter shelf
-Navigation UI -> store -> /recommend-navigation -> NavigationAbilities -> NavigationPrompt -> advisory UI
-Template UI -> store -> /recommend-template -> TemplateAbilities -> TemplatePrompt -> preview/apply/undo
-Template-part UI -> store -> /recommend-template-part -> TemplateAbilities -> TemplatePartPrompt -> preview/apply/undo
-Global Styles / Style Book UI -> store -> /recommend-style -> StyleAbilities -> StylePrompt -> preview/apply/undo
+Block UI -> store -> flavor-agent/recommend-block ability -> BlockAbilities -> ChatClient -> Prompt -> UI
+Pattern UI -> store -> flavor-agent/recommend-patterns ability -> PatternAbilities -> selected retrieval backend + Responses -> local inserter shelf
+Navigation UI -> store -> flavor-agent/recommend-navigation ability -> NavigationAbilities -> NavigationPrompt -> advisory UI
+Template UI -> store -> flavor-agent/recommend-template ability -> TemplateAbilities -> TemplatePrompt -> preview/apply/undo
+Template-part UI -> store -> flavor-agent/recommend-template-part ability -> TemplateAbilities -> TemplatePartPrompt -> preview/apply/undo
+Global Styles / Style Book UI -> store -> flavor-agent/recommend-style ability -> StyleAbilities -> StylePrompt -> preview/apply/undo
 Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/undo
 ```
 
-## Route Notes
+## Recommendation Ability Notes
 
-- The recommendation routes sanitize and normalize structured inputs before handing them to the ability layer
+- Recommendation abilities sanitize and normalize structured inputs before handing them to the surface backend
 - Normal `recommend-block` responses include `resolvedContextSignature`. Template, template-part, and style responses include docs-free `reviewContextSignature` and `resolvedContextSignature`, and navigation includes docs-free `reviewContextSignature` as its only server freshness field.
-- Signature-only requests return only the current freshness field(s) after normalizing the current server context and prompt; they skip docs grounding and model calls. The block REST route keeps its `{ payload, clientId }` wrapper even in signature-only mode.
-- `POST /flavor-agent/v1/recommend-patterns` remains outside that freshness contract and does not accept `resolveSignatureOnly`.
-- `POST /flavor-agent/v1/recommend-patterns` can return synced/user pattern recommendations by their `core/block/{id}` names when those names are present in the current `visiblePatternNames` set.
-- `POST /flavor-agent/v1/recommend-patterns` does not accept `editorStructure`; the current pattern route contract ignores it
+- Signature-only requests return only the current freshness field(s) after normalizing the current server context and prompt; they skip docs grounding and model calls.
+- `flavor-agent/recommend-patterns` remains outside that freshness contract and does not accept `resolveSignatureOnly`.
+- `flavor-agent/recommend-patterns` can return synced/user pattern recommendations by their `core/block/{id}` names when those names are present in the current `visiblePatternNames` set.
+- `flavor-agent/recommend-patterns` does not accept `editorStructure`; the current pattern ability contract ignores it
 - Template recommendation requests carry an editor-collected `editorStructure` with the live top-level block tree, zeroed empty-state stats when needed, current pattern-override summaries, and current viewport-visibility summaries; the server replaces that mutable slice atomically and derives insertion anchors from the live tree
 - Template recommendation requests also carry live `editorSlots.assignedParts` and `editorSlots.emptyAreas`; the server keeps canonical saved capability metadata and computes effective `allowedAreas` by merging those live areas with the saved template contract
 - Template-part requests accept a full live `editorStructure` slice: `blockTree`, `allBlockPaths`, `topLevelBlocks`, `blockCounts`, `structureStats`, `currentPatternOverrides`, `operationTargets`, `insertionAnchors`, and `structuralConstraints`

@@ -33,8 +33,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 1. `GlobalStylesRecommender()` verifies that the current Site Editor complementary area is `edit-site/global-styles`
 2. `getGlobalStylesUserConfig()` resolves the current `root/globalStyles` entity id, the current user config, and any available theme style variations
-3. `collectThemeTokens()`, `buildTemplateStructureSnapshot()`, and `collectViewportVisibilitySummary()` contribute theme-token diagnostics plus the live template structure/visibility snapshot that the active styles surface posts through `fetchGlobalStylesRecommendations()` or `fetchStyleBookRecommendations()` to `POST /flavor-agent/v1/recommend-style`
-4. `FlavorAgent\REST\Agent_Controller::handle_recommend_style()` adapts the request to `FlavorAgent\Abilities\StyleAbilities::recommend_style()`
+3. `collectThemeTokens()`, `buildTemplateStructureSnapshot()`, and `collectViewportVisibilitySummary()` contribute theme-token diagnostics plus the live template structure/visibility snapshot that the active styles surface sends through `fetchGlobalStylesRecommendations()` or `fetchStyleBookRecommendations()` to the `flavor-agent/recommend-style` ability
+4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the request to `FlavorAgent\Abilities\StyleAbilities::recommend_style()`
 5. `StyleAbilities::recommend_style()` folds the Site Editor scope, current configs, available variations or Style Book target details, live template structure/visibility, design semantics, `ServerCollector::for_tokens()`, and supported style paths into the style context, computes a docs-free `reviewContextSignature` from the review-oriented server context and `resolvedContextSignature` from the apply context plus the sanitized prompt, returns early for signature-only revalidation, and only then resolves docs guidance before calling `ResponsesClient::rank()`
 6. `FlavorAgent\LLM\StylePrompt` constrains the response to validated `set_styles`, `set_block_styles`, and Global Styles-only `set_theme_variation` operations
 7. The UI renders advisory or executable suggestion cards; executable cards enter preview before apply
@@ -49,8 +49,8 @@ User opens the Site Editor Styles sidebar
   -> getGlobalStylesUserConfig() + collectThemeTokens()
   -> buildRequestInput()
   -> fetchGlobalStylesRecommendations() or fetchStyleBookRecommendations()
-  -> POST /flavor-agent/v1/recommend-style
-  -> Agent_Controller::handle_recommend_style()
+  -> flavor-agent/recommend-style ability
+  -> RecommendationAbilityExecution
   -> StyleAbilities::recommend_style()
   -> ServerCollector::for_tokens()
   -> StylePrompt::parse_response()
@@ -231,13 +231,12 @@ User opens the Site Editor Styles sidebar
 | Store apply | `applyGlobalStylesSuggestion()` / `applyStyleBookSuggestion()` in `src/store/index.js` | Run deterministic apply and record activity |
 | Deterministic executor | `applyGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validates and executes the structured style operation set |
 | Undo validation | `getGlobalStylesActivityUndoState()` in `src/utils/style-operations.js` | Verifies the live state before undo is exposed |
-| REST handler | `Agent_Controller::handle_recommend_style()` | Adapts the REST request to the backend ability |
+| Ability wrapper | `RecommendationAbilityExecution::execute()` | Adapts the ability request to the backend handler |
 | Backend ability | `StyleAbilities::recommend_style()` | Builds context and returns validated style suggestions |
 | Prompt contract | `StylePrompt::build_system()` / `StylePrompt::build_user()` / `StylePrompt::parse_response()` | Defines and validates the structured style suggestion format |
 
-## Related Routes And Abilities
+## Related Abilities
 
-- REST: `POST /flavor-agent/v1/recommend-style`
 - Ability: `flavor-agent/recommend-style`
 - Readiness and diagnostics: `flavor-agent/check-status`
 

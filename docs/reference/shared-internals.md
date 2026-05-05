@@ -202,7 +202,7 @@ Small shared helpers for live template and template-part snapshot assembly. Thes
 
 ### `src/context/collector.js`
 
-Core composition point for block recommendation context. Combines block introspection, theme token summaries, sibling context, and structural context into a single payload for the `/flavor-agent/v1/recommend-block` route. Maintains a memoized annotated tree cache to avoid redundant structural analysis.
+Core composition point for block recommendation context. Combines block introspection, theme token summaries, sibling context, and structural context into a single payload for the `flavor-agent/recommend-block` ability. Maintains a memoized annotated tree cache to avoid redundant structural analysis.
 
 **Key exports:**
 

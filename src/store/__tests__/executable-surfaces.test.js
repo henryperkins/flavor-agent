@@ -12,7 +12,13 @@ jest.mock( '../executable-surface-runtime', () => {
 			} )
 		),
 		buildExecutableSurfaceApplyThunk: jest.fn(
-			( config, suggestion, currentRequestSignature, liveRequestInput, deps ) => ( {
+			(
+				config,
+				suggestion,
+				currentRequestSignature,
+				liveRequestInput,
+				deps
+			) => ( {
 				kind: 'apply',
 				config,
 				suggestion,
@@ -51,12 +57,13 @@ jest.mock( '../../utils/template-actions', () => ( {
 
 jest.mock( '../activity-session', () => ( {
 	getRequestDocumentFromScope: jest.fn( ( scope = null ) => {
-		const scopeKey =
-			typeof scope?.scopeKey === 'string' && scope.scopeKey.trim()
-				? scope.scopeKey.trim()
-				: typeof scope?.key === 'string' && scope.key.trim()
-					? scope.key.trim()
-					: '';
+		let scopeKey = '';
+
+		if ( typeof scope?.scopeKey === 'string' && scope.scopeKey.trim() ) {
+			scopeKey = scope.scopeKey.trim();
+		} else if ( typeof scope?.key === 'string' && scope.key.trim() ) {
+			scopeKey = scope.key.trim();
+		}
 
 		if ( ! scopeKey ) {
 			return null;
@@ -168,8 +175,7 @@ function buildSurfaceFixture( def ) {
 					templatePartRef: 'template-part-17',
 				},
 				reviewContextSignature: 'template-part-review-context',
-				resolvedContextSignature:
-					'template-part-resolved-context',
+				resolvedContextSignature: 'template-part-resolved-context',
 			};
 		case 'globalStyles':
 			return {
@@ -314,7 +320,7 @@ describe( 'executable-surface runtime config factories', () => {
 			abortKey: '_surfaceAbort',
 			buildRequestDocument,
 			dispatchRecommendations,
-			endpoint: '/fetch',
+			abilityName: 'test/fetch',
 			getRequestToken,
 			requestErrorMessage: 'Fetch failed.',
 			setStatusAction,
@@ -324,7 +330,7 @@ describe( 'executable-surface runtime config factories', () => {
 			abortKey: '_surfaceAbort',
 			buildRequestDocument,
 			dispatchRecommendations,
-			endpoint: '/fetch',
+			abilityName: 'test/fetch',
 			getRequestToken,
 			requestErrorMessage: 'Fetch failed.',
 			setErrorState: expect.any( Function ),
@@ -360,7 +366,7 @@ describe( 'executable-surface runtime config factories', () => {
 			} )
 		);
 		const config = createExecutableSurfaceReviewFreshnessConfig( {
-			endpoint: '/review',
+			abilityName: 'test/review',
 			getReviewRequestToken,
 			getStoredRequestSignature,
 			getStoredReviewContextSignature,
@@ -369,17 +375,19 @@ describe( 'executable-surface runtime config factories', () => {
 		} );
 
 		expect( config ).toMatchObject( {
-			endpoint: '/review',
+			abilityName: 'test/review',
 			getReviewRequestToken,
 			getStoredRequestSignature,
 			getStoredReviewContextSignature,
 			setReviewState: expect.any( Function ),
 			surface: 'surface',
 		} );
-		expect( config.setReviewState( 'stale', {
-			requestToken: 9,
-			staleReason: 'server-review',
-		} ) ).toEqual( {
+		expect(
+			config.setReviewState( 'stale', {
+				requestToken: 9,
+				staleReason: 'server-review',
+			} )
+		).toEqual( {
 			status: 'stale',
 			requestToken: 9,
 			staleReason: 'server-review',
@@ -418,7 +426,7 @@ describe( 'executable-surface runtime config factories', () => {
 		const config = createExecutableSurfaceApplyConfig( {
 			applyFailureMessage: 'Apply failed.',
 			buildActivityEntry,
-			endpoint: '/apply',
+			abilityName: 'test/apply',
 			executeSuggestion,
 			getStoredRequestSignature,
 			getStoredResolvedContextSignature,
@@ -430,7 +438,7 @@ describe( 'executable-surface runtime config factories', () => {
 		expect( config ).toMatchObject( {
 			applyFailureMessage: 'Apply failed.',
 			buildActivityEntry,
-			endpoint: '/apply',
+			abilityName: 'test/apply',
 			executeSuggestion,
 			getStoredRequestSignature,
 			getStoredResolvedContextSignature: expect.any( Function ),
@@ -438,16 +446,18 @@ describe( 'executable-surface runtime config factories', () => {
 			surface: 'surface',
 			unexpectedErrorMessage: 'Unexpected apply failure.',
 		} );
-		expect( config.setApplyState( 'success', {
-			error: null,
-			suggestionKey: 'suggestion-1',
-			operations: [
-				{
-					op: 'replace',
-				},
-			],
-			staleReason: 'server-review',
-		} ) ).toEqual( {
+		expect(
+			config.setApplyState( 'success', {
+				error: null,
+				suggestionKey: 'suggestion-1',
+				operations: [
+					{
+						op: 'replace',
+					},
+				],
+				staleReason: 'server-review',
+			} )
+		).toEqual( {
 			status: 'success',
 			error: null,
 			suggestionKey: 'suggestion-1',
@@ -699,11 +709,13 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				selectors[ def.methodNames.getReviewContextSignature ]( state )
 			).toBe( fixture.reviewContextSignature );
 			expect(
-				selectors[ def.methodNames.getResolvedContextSignature ]( state )
+				selectors[ def.methodNames.getResolvedContextSignature ](
+					state
+				)
 			).toBe( fixture.resolvedContextSignature );
-			expect( selectors[ def.methodNames.getRequestToken ]( state ) ).toBe(
-				7
-			);
+			expect(
+				selectors[ def.methodNames.getRequestToken ]( state )
+			).toBe( 7 );
 			expect( selectors[ def.methodNames.getResultToken ]( state ) ).toBe(
 				2
 			);
@@ -713,16 +725,18 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			expect(
 				selectors[ def.methodNames.getReviewFreshnessStatus ]( state )
 			).toBe( 'fresh' );
-			expect( selectors[ def.methodNames.isLoading ]( state ) ).toBe( true );
+			expect( selectors[ def.methodNames.isLoading ]( state ) ).toBe(
+				true
+			);
 			expect( selectors[ def.methodNames.getStatus ]( state ) ).toBe(
 				'loading'
 			);
 			expect(
 				selectors[ def.methodNames.getSelectedSuggestionKey ]( state )
 			).toBe( 'selected-suggestion' );
-			expect(
-				selectors[ def.methodNames.getApplyStatus ]( state )
-			).toBe( 'applying' );
+			expect( selectors[ def.methodNames.getApplyStatus ]( state ) ).toBe(
+				'applying'
+			);
 			expect( selectors[ def.methodNames.getApplyError ]( state ) ).toBe(
 				' apply failed '
 			);
@@ -730,7 +744,9 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				true
 			);
 			expect(
-				selectors[ def.methodNames.getLastAppliedSuggestionKey ]( state )
+				selectors[ def.methodNames.getLastAppliedSuggestionKey ](
+					state
+				)
 			).toBe( 'last-applied-suggestion' );
 			expect(
 				selectors[ def.methodNames.getLastAppliedOperations ]( state )
@@ -750,15 +766,14 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				expect( selectors[ name ]( state ) ).toBe( state[ key ] );
 			}
 
-			const interactionState = selectors[ def.methodNames.getInteractionState ](
-				state,
-				{
-					hasPreview: false,
-					hasSuccess: true,
-					hasUndoSuccess: true,
-					marker: 'preserved',
-				}
-			);
+			const interactionState = selectors[
+				def.methodNames.getInteractionState
+			]( state, {
+				hasPreview: false,
+				hasSuccess: true,
+				hasUndoSuccess: true,
+				marker: 'preserved',
+			} );
 
 			expect( normalizeStringMessage ).toHaveBeenCalledWith(
 				' request failed '
@@ -793,7 +808,9 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				def.methodNames.fetchRecommendations
 			]( fixture.input );
 
-			expect( buildExecutableSurfaceFetchThunk ).toHaveBeenCalledTimes( 1 );
+			expect( buildExecutableSurfaceFetchThunk ).toHaveBeenCalledTimes(
+				1
+			);
 			const [ fetchConfig, fetchInput, fetchThunkDeps ] =
 				buildExecutableSurfaceFetchThunk.mock.calls[ 0 ];
 
@@ -803,15 +820,18 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				abortKey: def.abortKey,
 				buildRequestDocument: expect.any( Function ),
 				dispatchRecommendations: expect.any( Function ),
-				endpoint: def.endpoint,
+				abilityName: def.abilityName,
 				getRequestToken: expect.any( Function ),
 				requestErrorMessage: def.requestErrorMessage,
 				setErrorState: expect.any( Function ),
 				setLoadingState: expect.any( Function ),
 			} );
-			expect( fetchConfig.getRequestToken( {
-				[ def.methodNames.getRequestToken ]: fetchRequestTokenSelector,
-			} ) ).toBe( 5 );
+			expect(
+				fetchConfig.getRequestToken( {
+					[ def.methodNames.getRequestToken ]:
+						fetchRequestTokenSelector,
+				} )
+			).toBe( 5 );
 			expect( fetchRequestTokenSelector ).toHaveBeenCalledTimes( 1 );
 			expect(
 				fetchConfig.buildRequestDocument( {
@@ -843,14 +863,10 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 					fixture.resolvedContextSignature
 				)
 			);
-			expect(
-				fetchConfig.setLoadingState( 21 )
-			).toEqual(
+			expect( fetchConfig.setLoadingState( 21 ) ).toEqual(
 				actions[ def.methodNames.setStatus ]( 'loading', null, 21 )
 			);
-			expect(
-				fetchConfig.setErrorState( 'request failed', 22 )
-			).toEqual(
+			expect( fetchConfig.setErrorState( 'request failed', 22 ) ).toEqual(
 				actions[ def.methodNames.setStatus ](
 					'error',
 					'request failed',
@@ -866,10 +882,16 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				def.methodNames.applySuggestion
 			]( applySuggestion, 'request-signature', fixture.input );
 
-			expect( buildExecutableSurfaceApplyThunk ).toHaveBeenCalledTimes( 1 );
-			const [ applyConfig, applyThunkSuggestion, applyRequestSignature,
-				applyLiveRequestInput, applyThunkDeps ] =
-				buildExecutableSurfaceApplyThunk.mock.calls[ 0 ];
+			expect( buildExecutableSurfaceApplyThunk ).toHaveBeenCalledTimes(
+				1
+			);
+			const [
+				applyConfig,
+				applyThunkSuggestion,
+				applyRequestSignature,
+				applyLiveRequestInput,
+				applyThunkDeps,
+			] = buildExecutableSurfaceApplyThunk.mock.calls[ 0 ];
 
 			expect( applyThunkSuggestion ).toBe( applySuggestion );
 			expect( applyRequestSignature ).toBe( 'request-signature' );
@@ -878,7 +900,7 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			expect( applyConfig ).toMatchObject( {
 				applyFailureMessage: def.applyFailureMessage,
 				buildActivityEntry: def.buildActivityEntry,
-				endpoint: def.endpoint,
+				abilityName: def.abilityName,
 				executeSuggestion: def.executeSuggestion,
 				getStoredRequestSignature: def.buildStoredRequestSignature,
 				getStoredResolvedContextSignature: expect.any( Function ),
@@ -888,8 +910,8 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			} );
 			expect(
 				applyConfig.getStoredResolvedContextSignature( {
-					[ def.methodNames.getResolvedContextSignature ]: jest.fn( () =>
-						fixture.resolvedContextSignature
+					[ def.methodNames.getResolvedContextSignature ]: jest.fn(
+						() => fixture.resolvedContextSignature
 					),
 				} )
 			).toBe( fixture.resolvedContextSignature );
@@ -917,8 +939,12 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 					'server-review'
 				)
 			);
-			expect( applyConfig.executeSuggestion ).toBe( def.executeSuggestion );
-			expect( applyConfig.buildActivityEntry ).toBe( def.buildActivityEntry );
+			expect( applyConfig.executeSuggestion ).toBe(
+				def.executeSuggestion
+			);
+			expect( applyConfig.buildActivityEntry ).toBe(
+				def.buildActivityEntry
+			);
 			expect( applyResult.kind ).toBe( 'apply' );
 
 			const reviewRequestTokenSelector = jest.fn( () => 6 );
@@ -929,30 +955,37 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			expect(
 				buildExecutableSurfaceReviewFreshnessThunk
 			).toHaveBeenCalledTimes( 1 );
-			const [ reviewConfig, reviewRequestSignature, reviewLiveRequestInput,
-				reviewThunkDeps ] =
-				buildExecutableSurfaceReviewFreshnessThunk.mock.calls[ 0 ];
+			const [
+				reviewConfig,
+				reviewRequestSignature,
+				reviewLiveRequestInput,
+				reviewThunkDeps,
+			] = buildExecutableSurfaceReviewFreshnessThunk.mock.calls[ 0 ];
 
-			expect( reviewRequestSignature ).toBe( 'current-request-signature' );
+			expect( reviewRequestSignature ).toBe(
+				'current-request-signature'
+			);
 			expect( reviewLiveRequestInput ).toBe( fixture.input );
 			expect( reviewThunkDeps ).toBe( reviewDeps );
 			expect( reviewConfig ).toMatchObject( {
-				endpoint: def.endpoint,
+				abilityName: def.abilityName,
 				getReviewRequestToken: expect.any( Function ),
 				getStoredRequestSignature: def.buildStoredRequestSignature,
 				getStoredReviewContextSignature: expect.any( Function ),
 				setReviewState: expect.any( Function ),
 				surface: def.surface,
 			} );
-			expect( reviewConfig.getReviewRequestToken( {
-				[ def.methodNames.getReviewRequestToken ]:
-					reviewRequestTokenSelector,
-			} ) ).toBe( 6 );
+			expect(
+				reviewConfig.getReviewRequestToken( {
+					[ def.methodNames.getReviewRequestToken ]:
+						reviewRequestTokenSelector,
+				} )
+			).toBe( 6 );
 			expect( reviewRequestTokenSelector ).toHaveBeenCalledTimes( 1 );
 			expect(
 				reviewConfig.getStoredReviewContextSignature( {
-					[ def.methodNames.getReviewContextSignature ]: jest.fn( () =>
-						fixture.reviewContextSignature
+					[ def.methodNames.getReviewContextSignature ]: jest.fn(
+						() => fixture.reviewContextSignature
 					),
 				} )
 			).toBe( fixture.reviewContextSignature );
@@ -1004,7 +1037,9 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			expect( afterLoading[ def.applyStatusKey ] ).toBe( 'idle' );
 			expect( afterLoading[ def.applyErrorKey ] ).toBeNull();
 			expect( afterLoading[ def.lastAppliedSuggestionKey ] ).toBeNull();
-			expect( afterLoading[ def.lastAppliedOperationsKey ] ).toEqual( [] );
+			expect( afterLoading[ def.lastAppliedOperationsKey ] ).toEqual(
+				[]
+			);
 			expect( afterLoading[ def.reviewRequestTokenKey ] ).toBe( 3 );
 			expect( afterLoading[ def.reviewFreshnessStatusKey ] ).toBe(
 				'idle'
@@ -1096,7 +1131,9 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			);
 			expect( afterRecommendations[ def.statusKey ] ).toBe( 'ready' );
 			expect( afterRecommendations[ def.errorKey ] ).toBeNull();
-			expect( afterRecommendations[ def.selectedSuggestionKey ] ).toBeNull();
+			expect(
+				afterRecommendations[ def.selectedSuggestionKey ]
+			).toBeNull();
 			expect( afterRecommendations[ def.applyStatusKey ] ).toBe( 'idle' );
 			expect( afterRecommendations[ def.applyErrorKey ] ).toBeNull();
 			expect(
@@ -1105,7 +1142,9 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			expect(
 				afterRecommendations[ def.lastAppliedOperationsKey ]
 			).toEqual( [] );
-			expect( afterRecommendations[ def.reviewStaleReasonKey ] ).toBeNull();
+			expect(
+				afterRecommendations[ def.reviewStaleReasonKey ]
+			).toBeNull();
 			expect( afterRecommendations[ def.staleReasonKey ] ).toBeNull();
 
 			const staleReviewState = {
@@ -1141,10 +1180,7 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 
 			const afterFreshReview = reduceExecutableSurfaceState(
 				afterStaleReview,
-				actions[ def.methodNames.setReviewFreshnessState ](
-					'fresh',
-					6
-				)
+				actions[ def.methodNames.setReviewFreshnessState ]( 'fresh', 6 )
 			);
 			expect( afterFreshReview[ def.reviewFreshnessStatusKey ] ).toBe(
 				'fresh'
@@ -1163,9 +1199,9 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 					'suggestion-1'
 				)
 			);
-			expect(
-				afterSelectedSuggestion[ def.selectedSuggestionKey ]
-			).toBe( 'suggestion-1' );
+			expect( afterSelectedSuggestion[ def.selectedSuggestionKey ] ).toBe(
+				'suggestion-1'
+			);
 			expect( afterSelectedSuggestion[ def.applyStatusKey ] ).toBe(
 				'idle'
 			);
@@ -1232,12 +1268,9 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			] );
 			expect( failedApply[ def.staleReasonKey ] ).toBe( 'apply-stale' );
 
-			const cleared = reduceExecutableSurfaceState(
-				failedApply,
-				{
-					type: def.types.clearRecommendations,
-				}
-			);
+			const cleared = reduceExecutableSurfaceState( failedApply, {
+				type: def.types.clearRecommendations,
+			} );
 			expect( cleared ).toMatchObject( {
 				[ def.collectionKey ]: [],
 				[ def.explanationKey ]: '',

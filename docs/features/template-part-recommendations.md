@@ -29,8 +29,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 1. `TemplatePartRecommender()` resolves the current template-part reference through the shared edited-entity resolver, then derives slug and area using both the template-part area lookup and the normalized `wp_template_part` entity contract returned by `usePostTypeEntityContract()`
 2. The component builds the request through `buildTemplatePartFetchInput()`, including `visiblePatternNames` plus a full live template-part structure snapshot from `buildEditorTemplatePartStructureSnapshot()`
-3. `fetchTemplatePartRecommendations()` in the store posts the request to `POST /flavor-agent/v1/recommend-template-part`
-4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template_part()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template_part()`
+3. `fetchTemplatePartRecommendations()` in the store executes the `flavor-agent/recommend-template-part` ability
+4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template_part()`
 5. `TemplateAbilities::recommend_template_part()` gathers canonical template-part metadata through `ServerCollector::for_template_part()`, atomically overlays the live unsaved structural slice from the editor, validates path-based targets and anchors against the full live path index, computes a docs-free `reviewContextSignature` from the server review context and `resolvedContextSignature` from the apply context plus the sanitized prompt, returns early for signature-only revalidation, and only then scopes docs grounding with `currentPatternOverrides` before calling `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
 6. The parsed response returns explanation text, advisory `blockHints`, advisory `patternSuggestions`, and optional structured `operations`
 7. `buildTemplatePartSuggestionViewModel()` validates the operation sequence before the UI offers preview or apply controls
@@ -44,8 +44,8 @@ User prompt in wp_template_part editor
   -> TemplatePartRecommender
   -> buildTemplatePartFetchInput()
   -> fetchTemplatePartRecommendations()
-  -> POST /flavor-agent/v1/recommend-template-part
-  -> Agent_Controller::handle_recommend_template_part()
+  -> flavor-agent/recommend-template-part ability
+  -> RecommendationAbilityExecution
   -> TemplateAbilities::recommend_template_part()
   -> ServerCollector::for_template_part()
   -> TemplatePartPrompt::parse_response()
@@ -273,13 +273,12 @@ Replace and remove operations only stay executable when their `targetPath` is li
 | Store apply | `applyTemplatePartSuggestion()` in `src/store/index.js` | Runs deterministic apply and records activity |
 | Deterministic executor | `applyTemplatePartSuggestionOperations()` in `src/utils/template-actions.js` | Executes validated operations against the live editor state |
 | Focus helpers | `selectBlockByPath()` and `openInserterForPattern()` | Drive the advisory links inside suggestion cards |
-| REST handler | `Agent_Controller::handle_recommend_template_part()` | Adapts the REST request to the backend ability |
+| Ability wrapper | `RecommendationAbilityExecution::execute()` | Adapts the ability request to the backend handler |
 | Backend ability | `TemplateAbilities::recommend_template_part()` | Builds context and returns template-part suggestions |
 | Prompt contract | `TemplatePartPrompt::build_user()` / `TemplatePartPrompt::parse_response()` | Defines and validates the structured output |
 
-## Related Routes And Abilities
+## Related Abilities
 
-- REST: `POST /flavor-agent/v1/recommend-template-part`
 - Ability: `flavor-agent/recommend-template-part`
 - Helper ability: `flavor-agent/list-template-parts`
 

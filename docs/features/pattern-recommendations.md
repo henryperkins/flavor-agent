@@ -27,8 +27,8 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 
 1. `PatternRecommender()` in `src/patterns/PatternRecommender.js` builds a base input from post type, template type, and the current visible pattern set
 2. The component triggers `fetchPatternRecommendations()` on editor load and on debounced inserter-search changes
-3. The store posts the request to `POST /flavor-agent/v1/recommend-patterns`
-4. `FlavorAgent\REST\Agent_Controller::handle_recommend_patterns()` adapts the REST request to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
+3. The store executes the `flavor-agent/recommend-patterns` ability with the request input
+4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the ability input to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state
 6. `PatternIndex::sync()` maintains the selected retrieval backend corpus made from registered block patterns plus public-safe published user `wp_block` patterns across sync states normalized to Gutenberg's user-pattern name format, `core/block/{id}`
 7. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` without foreground docs AI Search warming, retrieves candidates through the selected pattern backend, rehydrates synced candidates from current published readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()`, and filters out low-confidence results
@@ -81,7 +81,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 | Inserter shelf | `PatternRecommender()` in `src/patterns/PatternRecommender.js` | Renders the local recommendation shelf and dispatches core block insertion for matched allowed patterns |
 | Badge UI | `InserterBadge()` and `getInserterBadgeState()` | Render count/loading/error state next to the inserter toggle, counting only renderable allowed-pattern matches |
 | Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state |
-| REST handler | `Agent_Controller::handle_recommend_patterns()` | Adapts the REST request to the backend ability |
+| Ability wrapper | `RecommendationAbilityExecution::execute()` | Adapts the ability request to the backend handler and records request diagnostics |
 | Backend ability | `PatternAbilities::recommend_patterns()` | Runs validation, selected-backend retrieval, reranking, and filtering |
 | Pattern corpus | `PatternIndex::sync()` + `SyncedPatternRepository` | Indexes registered patterns plus public-safe published user `wp_block` patterns as `core/block/{id}` candidates in the selected backend |
 | Retrieval selector | `PatternRetrievalBackendFactory` | Chooses Qdrant or private Cloudflare AI Search retrieval from settings/runtime state |
@@ -91,9 +91,8 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 | Private AI Search | `PatternSearchClient::search_patterns()` | Retrieves filtered candidates from the private Cloudflare AI Search pattern backend |
 | Ranking | `ResponsesClient::rank()` | Produces the final ordered recommendation set |
 
-## Related Routes And Abilities
+## Related Abilities
 
-- REST: `POST /flavor-agent/v1/recommend-patterns`
 - Ability: `flavor-agent/recommend-patterns`
 - Helper ability: `flavor-agent/list-patterns`
 - Helper abilities: `flavor-agent/list-synced-patterns`, `flavor-agent/get-synced-pattern`

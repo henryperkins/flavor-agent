@@ -27,6 +27,9 @@ define( 'FLAVOR_AGENT_URL', plugin_dir_url( __FILE__ ) );
 
 require_once FLAVOR_AGENT_DIR . 'vendor/autoload.php';
 
+add_filter( 'wpai_default_feature_classes', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_feature_class' ] );
+add_action( 'admin_notices', [ FlavorAgent\AI\FeatureBootstrap::class, 'render_missing_contract_notice' ] );
+
 register_activation_hook(
 	FLAVOR_AGENT_FILE,
 	function () {
@@ -49,7 +52,6 @@ register_deactivation_hook(
 	}
 );
 
-add_action( 'enqueue_block_editor_assets', 'flavor_agent_enqueue_editor' );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );
 add_action( 'init', [ FlavorAgent\Cloudflare\AISearchClient::class, 'schedule_prewarm' ], 7 );
@@ -65,6 +67,7 @@ if (
 ) {
 	add_action( 'init', [ FlavorAgent\Support\CoreRoadmapGuidance::class, 'schedule_warm' ], 8, 0 );
 }
+// Helper abilities and audit/sync routes are infra, not AI-feature-gated; see docs/superpowers/specs/2026-05-04-canonical-ai-integration-design.md.
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 add_action( 'admin_enqueue_scripts', [ FlavorAgent\Settings::class, 'maybe_enqueue_admin_assets' ] );
 add_action( 'admin_menu', [ FlavorAgent\Admin\ActivityPage::class, 'add_menu' ] );
@@ -74,8 +77,8 @@ add_action(
 	FlavorAgent\Activity\Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK,
 	[ FlavorAgent\Activity\Repository::class, 'run_admin_projection_backfill' ]
 );
-add_action( 'wp_abilities_api_categories_init', [ FlavorAgent\Abilities\Registration::class, 'register_category' ] );
-add_action( 'wp_abilities_api_init', [ FlavorAgent\Abilities\Registration::class, 'register_abilities' ] );
+add_action( 'wp_abilities_api_categories_init', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_global_ability_category' ] );
+add_action( 'wp_abilities_api_init', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_global_helper_abilities' ] );
 
 // Pattern index lifecycle hooks.
 add_action( FlavorAgent\Patterns\PatternIndex::CRON_HOOK, [ FlavorAgent\Patterns\PatternIndex::class, 'sync' ] );
@@ -180,6 +183,10 @@ add_filter(
 );
 
 function flavor_agent_enqueue_editor(): void {
+	if ( ! FlavorAgent\AI\FeatureBootstrap::editor_runtime_available() ) {
+		return;
+	}
+
 	$asset_path = FLAVOR_AGENT_DIR . 'build/index.asset.php';
 	if ( ! file_exists( $asset_path ) ) {
 		return;
@@ -187,6 +194,13 @@ function flavor_agent_enqueue_editor(): void {
 
 	$asset    = include $asset_path;
 	$css_path = FLAVOR_AGENT_DIR . 'build/index.css';
+
+	wp_enqueue_script_module(
+		'@flavor-agent/abilities-bridge',
+		FLAVOR_AGENT_URL . 'assets/abilities-bridge.js',
+		[ '@wordpress/core-abilities', '@wordpress/abilities' ],
+		FLAVOR_AGENT_VERSION
+	);
 
 	wp_enqueue_script(
 		'flavor-agent-editor',

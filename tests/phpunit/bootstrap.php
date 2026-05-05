@@ -42,6 +42,9 @@ namespace FlavorAgent\Tests\Support {
 
 		public static ?\Throwable $ai_service_call_throws = null;
 
+		/** @var array<int, mixed> */
+		public static array $preferred_text_models = [];
+
 		public static string $wpai_formatted_guidelines = '';
 
 		/** @var array<int, array{categories: array<int, string>, blockName: string|null}> */
@@ -66,6 +69,8 @@ namespace FlavorAgent\Tests\Support {
 		public static array $transient_expirations = [];
 
 		public static array $registered_abilities = [];
+
+		public static array $raw_registered_abilities = [];
 
 		public static array $registered_ability_categories = [];
 
@@ -310,6 +315,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$last_ai_client_prompt       = [];
 			self::$ai_service_calls            = [];
 			self::$ai_service_call_throws      = null;
+			self::$preferred_text_models       = [];
 			self::$wpai_formatted_guidelines   = '';
 			self::$wpai_guideline_calls        = [];
 			self::$last_http_request_args      = [];
@@ -321,6 +327,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$transients                  = [];
 			self::$transient_expirations       = [];
 			self::$registered_abilities        = [];
+			self::$raw_registered_abilities    = [];
 			self::$registered_ability_categories = [];
 			self::$settings_errors             = [];
 			self::$rest_routes                 = [];
@@ -394,6 +401,112 @@ namespace WordPress\AiClient\Providers\Models\DTO {
 	}
 }
 
+namespace WordPress\AI\Abstracts {
+
+	if ( ! class_exists( 'WordPress\\AI\\Abstracts\\Abstract_Ability' ) ) {
+		abstract class Abstract_Ability {
+			/** @var array<string, mixed> */
+			protected array $properties;
+
+			public function __construct( protected string $name, array $properties = [] ) {
+				$this->properties = $properties;
+			}
+
+			public function get_system_instruction( ?string $filename = null, array $data = [] ): string {
+				unset( $filename );
+
+				$instruction = '';
+
+				if ( method_exists( $this, 'guideline_categories' ) && function_exists( 'WordPress\\AI\\format_guidelines_for_prompt' ) ) {
+					$instruction = (string) \WordPress\AI\format_guidelines_for_prompt(
+						$this->guideline_categories(),
+						is_string( $data['block_name'] ?? null ) && '' !== $data['block_name']
+							? $data['block_name']
+							: null
+					);
+				}
+
+				return (string) \apply_filters(
+					'wpai_system_instruction',
+					$instruction,
+					is_string( $data['ability'] ?? null ) && '' !== $data['ability'] ? $data['ability'] : $this->name,
+					$data
+				);
+			}
+
+			public function input_schema(): array {
+				return [];
+			}
+
+			public function output_schema(): array {
+				return [];
+			}
+
+			public function execute_callback( mixed $input ): mixed {
+				return $input;
+			}
+
+			public function permission_callback( mixed $input = null ): bool {
+				unset( $input );
+
+				return true;
+			}
+
+			public function meta(): array {
+				return [];
+			}
+
+			public function category(): string {
+				return '';
+			}
+
+			protected function guideline_categories(): array {
+				return [];
+			}
+		}
+	}
+
+	if ( ! class_exists( 'WordPress\\AI\\Abstracts\\Abstract_Feature' ) ) {
+		abstract class Abstract_Feature {
+			final public function __construct() {}
+
+			public static function get_id(): string {
+				return '';
+			}
+
+			abstract protected function load_metadata(): array;
+
+			abstract public function register(): void;
+
+			public function get_label(): string {
+				return (string) ( $this->load_metadata()['label'] ?? '' );
+			}
+
+			public function get_description(): string {
+				return (string) ( $this->load_metadata()['description'] ?? '' );
+			}
+
+			public function get_category(): string {
+				return (string) ( $this->load_metadata()['category'] ?? '' );
+			}
+
+			public function get_stability(): string {
+				return (string) ( $this->load_metadata()['stability'] ?? 'experimental' );
+			}
+		}
+	}
+}
+
+namespace WordPress\AI\Experiments {
+
+	if ( ! class_exists( 'WordPress\\AI\\Experiments\\Experiment_Category' ) ) {
+		final class Experiment_Category {
+			public const EDITOR = 'editor';
+			public const ADMIN  = 'admin';
+		}
+	}
+}
+
 namespace WordPress\AI {
 
 	use FlavorAgent\Tests\Support\WordPressTestState;
@@ -440,6 +553,12 @@ namespace WordPress\AI {
 			];
 
 			return WordPressTestState::$wpai_formatted_guidelines;
+		}
+	}
+
+	if ( ! function_exists( 'WordPress\\AI\\get_preferred_models_for_text_generation' ) ) {
+		function get_preferred_models_for_text_generation(): array {
+			return WordPressTestState::$preferred_text_models;
 		}
 	}
 
@@ -624,6 +743,11 @@ namespace {
 								? $config['customOptions']
 								: [];
 						}
+						$this->sync_state();
+
+						return $this;
+					case 'using_model_preference':
+						$this->state['model_preferences'] = $arguments;
 						$this->sync_state();
 
 						return $this;
@@ -2351,7 +2475,29 @@ namespace {
 
 	if ( ! function_exists( 'wp_register_ability' ) ) {
 		function wp_register_ability( string $id, array $args ): void {
-			WordPressTestState::$registered_abilities[ $id ] = $args;
+			WordPressTestState::$raw_registered_abilities[ $id ] = $args;
+			$ability_args                                      = $args;
+
+			$ability_class = $ability_args['ability_class'] ?? null;
+			if ( is_string( $ability_class ) && class_exists( $ability_class ) ) {
+				$ability = new $ability_class( $id, $ability_args );
+
+				foreach ( [ 'input_schema', 'output_schema', 'meta', 'category' ] as $method_name ) {
+					if ( is_callable( [ $ability, $method_name ] ) ) {
+						$ability_args[ $method_name ] = $ability->{$method_name}();
+					}
+				}
+
+				if ( is_callable( [ $ability, 'execute_callback' ] ) ) {
+					$ability_args['execute_callback'] = [ $ability, 'execute_callback' ];
+				}
+
+				if ( is_callable( [ $ability, 'permission_callback' ] ) ) {
+					$ability_args['permission_callback'] = [ $ability, 'permission_callback' ];
+				}
+			}
+
+			WordPressTestState::$registered_abilities[ $id ] = $ability_args;
 		}
 	}
 

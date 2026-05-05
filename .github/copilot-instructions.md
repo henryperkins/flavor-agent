@@ -64,9 +64,9 @@ For any change that touches more than one recommendation surface or any shared s
 
 ### Recommendation surfaces
 
-**Block recommendations** are a cross-layer flow. `src/context/collector.js` combines block introspection, theme token summaries, sibling context, and structural context. The store thunk posts that snapshot to `/flavor-agent/v1/recommend-block`. `inc/REST/Agent_Controller.php` is intentionally thin and delegates to ability handlers, so real backend behavior lives in `inc/Abilities/*`, `inc/Context/ServerCollector.php`, and the prompt/client classes under `inc/LLM/`.
+**Block recommendations** are a cross-layer flow. `src/context/collector.js` combines block introspection, theme token summaries, sibling context, and structural context. The store thunk executes the `flavor-agent/recommend-block` ability with that snapshot, so real backend behavior lives in `inc/Abilities/*`, `inc/Context/ServerCollector.php`, and the prompt/client classes under `inc/LLM/`.
 
-**Content recommendations** are a first-party post/page document-panel surface. `src/content/ContentRecommender.js` calls `/flavor-agent/v1/recommend-content` for draft, edit, and critique suggestions, then renders editorial-only output without mutating post content.
+**Content recommendations** are a first-party post/page document-panel surface. `src/content/ContentRecommender.js` executes `flavor-agent/recommend-content` for draft, edit, and critique suggestions, then renders editorial-only output without mutating post content.
 
 **Pattern recommendations** are a separate pipeline. `src/patterns/PatternRecommender.js` does an initial fetch plus debounced refreshes, always passing `visiblePatternNames` for the current inserter root. Server-side, the selected pattern retrieval backend returns candidates: Qdrant uses plugin-owned embeddings plus Qdrant search, while private Cloudflare AI Search uses query text plus `visiblePatternNames` filters without `EmbeddingClient` or `QdrantClient`. Candidates are reranked through the WordPress AI Client chat path, then returned. The client renders matching allowed patterns in a Flavor Agent-owned local inserter shelf and does not rewrite Gutenberg's native pattern registry or pattern metadata.
 
@@ -82,7 +82,7 @@ The plugin registers 20 abilities across block, pattern, template, navigation, d
 
 ### REST routes
 
-All routes live under `flavor-agent/v1/`: `recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-navigation`, `recommend-template`, `recommend-template-part`, `recommend-style`, `activity`, and `sync-patterns`. Block/pattern/content routes require `edit_posts`, navigation/template/style routes require `edit_theme_options`, activity uses contextual permissions, and sync requires `manage_options`.
+Remaining REST routes live under `flavor-agent/v1/`: `activity`, `activity/{id}/undo`, and `sync-patterns`. Recommendation surfaces are exposed through the Abilities API under `wp-abilities/v1`; block/pattern/content abilities require `edit_posts`, navigation/template/style abilities require `edit_theme_options`, activity uses contextual permissions, and sync requires `manage_options`.
 
 ### LLM provider architecture
 

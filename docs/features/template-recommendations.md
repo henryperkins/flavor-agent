@@ -29,8 +29,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 1. `TemplateRecommender()` resolves the current `wp_template` reference through the shared edited-entity resolver, reads the normalized `wp_template` entity contract through `usePostTypeEntityContract()`, and derives the template type
 2. The component derives editor slot state through `buildEditorTemplateSlotSnapshot()`, captures the template-global `visiblePatternNames`, and always sends an explicit live template snapshot through `buildEditorTemplateTopLevelStructureSnapshot()`, including zeroed empty-state stats, live pattern-override summaries, and viewport-visibility summaries
-3. `buildTemplateFetchInput()` creates the request payload and `fetchTemplateRecommendations()` posts it to `POST /flavor-agent/v1/recommend-template`
-4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template()`
+3. `buildTemplateFetchInput()` creates the request payload and `fetchTemplateRecommendations()` executes the `flavor-agent/recommend-template` ability
+4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template()`
 5. `TemplateAbilities::recommend_template()` gathers canonical template metadata through `ServerCollector::for_template()`, atomically overlays the mutable live slot and structure slices from the editor, merges effective `allowedAreas` from server-known capabilities plus unsaved live areas, computes a docs-free `reviewContextSignature` from the server review context and `resolvedContextSignature` from the apply context plus the sanitized prompt, returns early for signature-only revalidation, and only then scopes docs grounding with bounded `visiblePatternNames` before calling `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePrompt`
 6. The parsed response returns up to three suggestion cards, preserving validated structured operations for executable ideas and validated summaries for advisory ideas
 7. The UI builds an entity map so template-part slugs, areas, and pattern names inside descriptions and explanations become clickable actions
@@ -45,8 +45,8 @@ User prompt in wp_template editor
   -> buildEditorTemplateSlotSnapshot() + buildEditorTemplateTopLevelStructureSnapshot() + visiblePatternNames
   -> buildTemplateFetchInput()
   -> fetchTemplateRecommendations()
-  -> POST /flavor-agent/v1/recommend-template
-  -> Agent_Controller::handle_recommend_template()
+  -> flavor-agent/recommend-template ability
+  -> RecommendationAbilityExecution
   -> TemplateAbilities::recommend_template()
   -> ServerCollector::for_template()
   -> TemplatePrompt::parse_response()
@@ -220,13 +220,12 @@ Each suggestion may include at most one `insert_pattern` operation. Executable s
 | Store request          | `fetchTemplateRecommendations()` in `src/store/index.js`                       | Sends the recommendation request                                  |
 | Store apply            | `applyTemplateSuggestion()` in `src/store/index.js`                            | Runs deterministic apply and records activity                     |
 | Deterministic executor | `applyTemplateSuggestionOperations()` in `src/utils/template-actions.js`       | Validates and executes the structured operation set               |
-| REST handler           | `Agent_Controller::handle_recommend_template()`                                | Adapts the REST request to the backend ability                    |
+| Ability wrapper        | `RecommendationAbilityExecution::execute()`                                    | Adapts the ability request to the backend handler                 |
 | Backend ability        | `TemplateAbilities::recommend_template()`                                      | Builds context and returns validated template suggestions         |
 | Prompt contract        | `TemplatePrompt::build_user()` / `TemplatePrompt::parse_response()`            | Defines and validates the structured template suggestion format   |
 
-## Related Routes And Abilities
+## Related Abilities
 
-- REST: `POST /flavor-agent/v1/recommend-template`
 - Ability: `flavor-agent/recommend-template`
 - Helper ability: `flavor-agent/list-template-parts`
 

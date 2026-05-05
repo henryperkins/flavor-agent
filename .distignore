@@ -39,6 +39,7 @@ plugin-check.md
 plugin.zip
 playwright.config.js
 playwright.wp70.config.js
+20??-??-??-*-local-command-*.txt
 *.md
 !readme.txt
 repomix*.json

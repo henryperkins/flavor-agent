@@ -384,7 +384,9 @@ async function mockRecommendationRoute(
 	responseBody
 ) {
 	await page.route( urlPattern, async ( route ) => {
-		const requestData = route.request().postDataJSON();
+		const requestData = getAbilityRequestInput(
+			route.request().postDataJSON()
+		);
 
 		if ( ! requestData?.resolveSignatureOnly && recordedRequests ) {
 			recordedRequests.push( requestData );
@@ -396,6 +398,17 @@ async function mockRecommendationRoute(
 			body: JSON.stringify( responseBody ),
 		} );
 	} );
+}
+
+function getAbilityRequestInput( body = {} ) {
+	return body &&
+		typeof body === 'object' &&
+		! Array.isArray( body ) &&
+		body.input &&
+		typeof body.input === 'object' &&
+		! Array.isArray( body.input )
+		? body.input
+		: body;
 }
 
 function getPanelBody( locator ) {
@@ -898,7 +911,10 @@ async function ensurePostDocumentSettingsSidebarOpen( page ) {
 			?.openGeneralSidebar?.( 'edit-post/document' );
 		window.wp?.data
 			?.dispatch( 'core/interface' )
-			?.enableComplementaryArea?.( 'core/edit-post', 'edit-post/document' );
+			?.enableComplementaryArea?.(
+				'core/edit-post',
+				'edit-post/document'
+			);
 	} );
 
 	await page.waitForFunction( () => {
@@ -1411,9 +1427,8 @@ async function waitForAllowedPattern( page, patternName ) {
 		let getAllowedPatterns = null;
 
 		if ( typeof blockEditor.getAllowedPatterns === 'function' ) {
-			getAllowedPatterns = blockEditor.getAllowedPatterns.bind(
-				blockEditor
-			);
+			getAllowedPatterns =
+				blockEditor.getAllowedPatterns.bind( blockEditor );
 		} else if (
 			typeof blockEditor.__experimentalGetAllowedPatterns === 'function'
 		) {
@@ -1795,278 +1810,265 @@ async function getTemplatePartInsertState( page, insertedContent ) {
 // Playground WP 6.9.4 does not hydrate the session-scoped activity row after
 // reload, so the active release evidence for this workflow lives in the
 // Docker-backed WP 7.0 harness.
-test(
-	'@wp70-site-editor block inspector smoke applies, persists, and undoes AI recommendations',
-	async ( { page } ) => {
-		test.setTimeout( 180_000 );
-		resetWp70TemplateSmokeState();
+test( '@wp70-site-editor block inspector smoke applies, persists, and undoes AI recommendations', async ( {
+	page,
+} ) => {
+	test.setTimeout( 180_000 );
+	resetWp70TemplateSmokeState();
 
-		const TEST_RESOLVED_SIGNATURE =
-			'test-resolved-signature-block-inspector';
-		const capturedRequests = [];
+	const TEST_RESOLVED_SIGNATURE = 'test-resolved-signature-block-inspector';
+	const capturedRequests = [];
 
-		await page.route( '**/*recommend-block*', async ( route ) => {
-			const request = route.request();
-			let body = {};
-			try {
-				body = request.postDataJSON() || {};
-			} catch ( err ) {
-				body = {};
-			}
-			capturedRequests.push( {
-				url: request.url(),
-				resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
-			} );
-			await route.fulfill( {
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify( {
-					payload: {
-						...BLOCK_RESPONSE.payload,
-						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-					},
+	await page.route( '**/*recommend-block*', async ( route ) => {
+		const request = route.request();
+		let body = {};
+		try {
+			body = getAbilityRequestInput( request.postDataJSON() || {} );
+		} catch {
+			body = {};
+		}
+		capturedRequests.push( {
+			url: request.url(),
+			resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
+		} );
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( {
+				payload: {
+					...BLOCK_RESPONSE.payload,
 					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-				} ),
-			} );
+				},
+				resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+			} ),
 		} );
+	} );
 
-		await page.goto( '/wp-admin/post-new.php', {
-			waitUntil: 'domcontentloaded',
-		} );
-		await waitForWordPressReady( page );
-		await waitForFlavorAgent( page );
-		await dismissWelcomeGuide( page );
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
 
-		const clientId = await seedParagraphBlock( page );
-		await ensureSettingsSidebarOpen( page );
+	const clientId = await seedParagraphBlock( page );
+	await ensureSettingsSidebarOpen( page );
 
-		const promptInput = page.getByPlaceholder(
-			'Describe the outcome you want for this block.'
-		);
+	const promptInput = page.getByPlaceholder(
+		'Describe the outcome you want for this block.'
+	);
 
-		await ensurePanelOpen( page, 'AI Recommendations', promptInput );
-		await expect(
-			page.getByRole( 'button', { name: 'Get Suggestions' } )
-		).toBeVisible();
+	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await expect(
+		page.getByRole( 'button', { name: 'Get Suggestions' } )
+	).toBeVisible();
 
-		// Click "Get Suggestions" so the real fetch thunk runs against the mocked
-		// route. This stores the correct contextSignature + resolvedContextSignature
-		// so the apply-time freshness guards treat the result as fresh.
-		await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+	// Click "Get Suggestions" so the real fetch thunk runs against the mocked
+	// route. This stores the correct contextSignature + resolvedContextSignature
+	// so the apply-time freshness guards treat the result as fresh.
+	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
 
-		await expect
-			.poll( () => capturedRequests.length, { timeout: 15_000 } )
-			.toBeGreaterThanOrEqual( 1 );
+	await expect
+		.poll( () => capturedRequests.length, { timeout: 15_000 } )
+		.toBeGreaterThanOrEqual( 1 );
 
-		await expect(
-			page.getByText( BLOCK_RESPONSE.payload.explanation, {
-				exact: true,
-			} )
-		).toBeVisible( { timeout: 15_000 } );
-
-		const suggestionButton = page.getByRole( 'button', {
-			name: 'Update content',
+	await expect(
+		page.getByText( BLOCK_RESPONSE.payload.explanation, {
 			exact: true,
+		} )
+	).toBeVisible( { timeout: 15_000 } );
+
+	const suggestionButton = page.getByRole( 'button', {
+		name: 'Update content',
+		exact: true,
+	} );
+
+	await expect( suggestionButton ).toBeVisible();
+	await expect( suggestionButton ).toBeEnabled();
+	await suggestionButton.click();
+
+	// Poll apply state and block content together so we can surface the
+	// real failure reason if the suggestion doesn't apply.
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( { selectedClientId } ) => {
+					const flavorAgent = window.wp.data.select( 'flavor-agent' );
+					const content =
+						window.wp.data
+							.select( 'core/block-editor' )
+							.getBlockAttributes?.( selectedClientId )
+							?.content || '';
+
+					return {
+						content,
+						applyStatus:
+							flavorAgent.getBlockApplyStatus?.(
+								selectedClientId
+							) || '',
+						applyError:
+							flavorAgent.getBlockApplyError?.(
+								selectedClientId
+							) || '',
+					};
+				},
+				{ selectedClientId: clientId }
+			)
+		)
+		.toEqual( {
+			content: 'Hello from Flavor Agent',
+			applyStatus: 'success',
+			applyError: '',
 		} );
 
-		await expect( suggestionButton ).toBeVisible();
-		await expect( suggestionButton ).toBeEnabled();
-		await suggestionButton.click();
-
-		// Poll apply state and block content together so we can surface the
-		// real failure reason if the suggestion doesn't apply.
-		await expect
-			.poll( () =>
-				page.evaluate(
-					( { selectedClientId } ) => {
-						const flavorAgent =
-							window.wp.data.select( 'flavor-agent' );
-						const content =
-							window.wp.data
-								.select( 'core/block-editor' )
-								.getBlockAttributes?.( selectedClientId )
-								?.content || '';
-
-						return {
-							content,
-							applyStatus:
-								flavorAgent.getBlockApplyStatus?.(
-									selectedClientId
-								) || '',
-							applyError:
-								flavorAgent.getBlockApplyError?.(
-									selectedClientId
-								) || '',
-						};
-					},
-					{ selectedClientId: clientId }
-				)
-			)
-			.toEqual( {
-				content: 'Hello from Flavor Agent',
-				applyStatus: 'success',
-				applyError: '',
-			} );
-
-		await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
-		await expect
-			.poll( () =>
-				page.evaluate(
-					() =>
-						window.wp?.data
-							?.select( 'core/editor' )
-							?.getCurrentPostId?.() || null
-				)
-			)
-			.toBeTruthy();
-		await saveCurrentPost( page );
-
-		const editUrl = await getCurrentPostEditUrl( page );
-
-		await page.goto( editUrl, {
-			waitUntil: 'domcontentloaded',
-		} );
-		await waitForWordPressReady( page );
-		await waitForFlavorAgent( page );
-		await dismissWelcomeGuide( page );
-		await ensureSettingsSidebarOpen( page );
-		await page.waitForFunction(
-			() =>
-				(
+	await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
+	await expect
+		.poll( () =>
+			page.evaluate(
+				() =>
 					window.wp?.data
-						?.select( 'core/block-editor' )
-						?.getBlocks?.() || []
-				).length > 0
-		);
-		await page.evaluate( () => {
-			const blockEditor = window.wp.data.select( 'core/block-editor' );
-			const paragraph = ( blockEditor.getBlocks?.() || [] ).find(
-				( block ) => block?.name === 'core/paragraph'
-			);
+						?.select( 'core/editor' )
+						?.getCurrentPostId?.() || null
+			)
+		)
+		.toBeTruthy();
+	await saveCurrentPost( page );
 
-			if ( paragraph?.clientId ) {
-				window.wp.data
-					.dispatch( 'core/block-editor' )
-					.selectBlock( paragraph.clientId );
-			}
-		} );
+	const editUrl = await getCurrentPostEditUrl( page );
 
-		const refreshedPromptInput = page.getByPlaceholder(
-			'Describe the outcome you want for this block.'
+	await page.goto( editUrl, {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await ensureSettingsSidebarOpen( page );
+	await page.waitForFunction(
+		() =>
+			(
+				window.wp?.data?.select( 'core/block-editor' )?.getBlocks?.() ||
+				[]
+			).length > 0
+	);
+	await page.evaluate( () => {
+		const blockEditor = window.wp.data.select( 'core/block-editor' );
+		const paragraph = ( blockEditor.getBlocks?.() || [] ).find(
+			( block ) => block?.name === 'core/paragraph'
 		);
 
-		await ensurePanelOpen(
-			page,
-			'AI Recommendations',
-			refreshedPromptInput
-		);
-		await reloadActivitySessionForCurrentEditorScope( page );
-		await expect(
-			page.locator( '.flavor-agent-activity-row' )
-		).toContainText( 'Update content' );
-		const undoResult = await page.evaluate( async () => {
+		if ( paragraph?.clientId ) {
+			window.wp.data
+				.dispatch( 'core/block-editor' )
+				.selectBlock( paragraph.clientId );
+		}
+	} );
+
+	const refreshedPromptInput = page.getByPlaceholder(
+		'Describe the outcome you want for this block.'
+	);
+
+	await ensurePanelOpen( page, 'AI Recommendations', refreshedPromptInput );
+	await reloadActivitySessionForCurrentEditorScope( page );
+	await expect( page.locator( '.flavor-agent-activity-row' ) ).toContainText(
+		'Update content'
+	);
+	const undoResult = await page.evaluate( async () => {
+		const flavorAgent = window.wp.data.select( 'flavor-agent' );
+		const activity =
+			[ ...( flavorAgent.getActivityLog?.() || [] ) ]
+				.reverse()
+				.find(
+					( entry ) =>
+						entry?.surface === 'block' && entry?.undo?.canUndo
+				) || null;
+
+		if ( ! activity?.id ) {
+			return {
+				ok: false,
+				error: 'No undoable block activity was hydrated.',
+			};
+		}
+
+		return window.wp.data
+			.dispatch( 'flavor-agent' )
+			.undoActivity( activity.id );
+	} );
+
+	if ( ! undoResult?.ok ) {
+		const fallbackUndoResult = await page.evaluate( () => {
 			const flavorAgent = window.wp.data.select( 'flavor-agent' );
 			const activity =
 				[ ...( flavorAgent.getActivityLog?.() || [] ) ]
 					.reverse()
 					.find(
 						( entry ) =>
-							entry?.surface === 'block' &&
-							entry?.undo?.canUndo
+							entry?.surface === 'block' && entry?.undo?.canUndo
 					) || null;
+			const blockEditor = window.wp.data.select( 'core/block-editor' );
+			const block = ( blockEditor.getBlocks?.() || [] )[ 0 ] || null;
 
-			if ( ! activity?.id ) {
+			if ( ! activity?.id || ! block?.clientId ) {
 				return {
 					ok: false,
-					error: 'No undoable block activity was hydrated.',
+					error: 'No undoable block activity target was hydrated.',
 				};
 			}
 
-			return window.wp.data
+			window.wp.data
+				.dispatch( 'core/block-editor' )
+				.updateBlockAttributes(
+					block.clientId,
+					activity.before?.attributes || {}
+				);
+			window.wp.data
 				.dispatch( 'flavor-agent' )
-				.undoActivity( activity.id );
+				.updateActivityUndoState(
+					activity.id,
+					'undone',
+					null,
+					new Date().toISOString()
+				);
+
+			return { ok: true };
 		} );
 
-		if ( ! undoResult?.ok ) {
-			const fallbackUndoResult = await page.evaluate( () => {
-				const flavorAgent = window.wp.data.select( 'flavor-agent' );
-				const activity =
-					[ ...( flavorAgent.getActivityLog?.() || [] ) ]
-						.reverse()
-						.find(
-							( entry ) =>
-								entry?.surface === 'block' &&
-								entry?.undo?.canUndo
-						) || null;
-				const blockEditor = window.wp.data.select(
-					'core/block-editor'
-				);
-				const block =
-					( blockEditor.getBlocks?.() || [] )[ 0 ] || null;
-
-				if ( ! activity?.id || ! block?.clientId ) {
-					return {
-						ok: false,
-						error: 'No undoable block activity target was hydrated.',
-					};
-				}
-
-				window.wp.data
-					.dispatch( 'core/block-editor' )
-					.updateBlockAttributes(
-						block.clientId,
-						activity.before?.attributes || {}
-					);
-				window.wp.data
-					.dispatch( 'flavor-agent' )
-					.updateActivityUndoState(
-						activity.id,
-						'undone',
-						null,
-						new Date().toISOString()
-					);
-
-				return { ok: true };
-			} );
-
-			expect( fallbackUndoResult ).toEqual(
-				expect.objectContaining( {
-					ok: true,
-				} )
-			);
-		} else {
-			expect( undoResult ).toEqual(
-				expect.objectContaining( {
-					ok: true,
-				} )
-			);
-		}
-
-		await expect
-			.poll( () =>
-				page.evaluate( () => {
-					const flavorAgent = window.wp.data.select( 'flavor-agent' );
-					const blockEditor =
-						window.wp.data.select( 'core/block-editor' );
-					const paragraph = ( blockEditor.getBlocks?.() || [] ).find(
-						( block ) => block?.name === 'core/paragraph'
-					);
-					const activityLog = flavorAgent.getActivityLog?.() || [];
-					const lastActivity =
-						activityLog[ activityLog.length - 1 ] || null;
-
-					return {
-						content: paragraph?.attributes?.content || '',
-						undoStatus: lastActivity?.undo?.status || '',
-					};
-				} )
-			)
-			.toEqual( {
-				content: 'Hello world',
-				undoStatus: 'undone',
-			} );
+		expect( fallbackUndoResult ).toEqual(
+			expect.objectContaining( {
+				ok: true,
+			} )
+		);
+	} else {
+		expect( undoResult ).toEqual(
+			expect.objectContaining( {
+				ok: true,
+			} )
+		);
 	}
-);
+
+	await expect
+		.poll( () =>
+			page.evaluate( () => {
+				const flavorAgent = window.wp.data.select( 'flavor-agent' );
+				const blockEditor =
+					window.wp.data.select( 'core/block-editor' );
+				const paragraph = ( blockEditor.getBlocks?.() || [] ).find(
+					( block ) => block?.name === 'core/paragraph'
+				);
+				const activityLog = flavorAgent.getActivityLog?.() || [];
+				const lastActivity =
+					activityLog[ activityLog.length - 1 ] || null;
+
+				return {
+					content: paragraph?.attributes?.content || '',
+					undoStatus: lastActivity?.undo?.status || '',
+				};
+			} )
+		)
+		.toEqual( {
+			content: 'Hello world',
+			undoStatus: 'undone',
+		} );
+} );
 
 test( '@wp70-site-editor block structural review applies, blocks locked targets, and undoes', async ( {
 	page,
@@ -2081,8 +2083,8 @@ test( '@wp70-site-editor block structural review applies, blocks locked targets,
 		const request = route.request();
 		let body = {};
 		try {
-			body = request.postDataJSON() || {};
-		} catch ( err ) {
+			body = getAbilityRequestInput( request.postDataJSON() || {} );
+		} catch {
 			body = {};
 		}
 
@@ -2413,7 +2415,7 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 
 	await enableMockedRecommendationSurfaces( page, [ 'content' ] );
 	await page.route( '**/*recommend-content*', async ( route ) => {
-		const body = route.request().postDataJSON();
+		const body = getAbilityRequestInput( route.request().postDataJSON() );
 		capturedRequests.push( body );
 
 		if ( String( body?.prompt || '' ).includes( 'force an error' ) ) {
@@ -2429,43 +2431,45 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 		}
 
 		const mode = body?.mode || 'draft';
-		const response =
-			mode === 'critique'
-				? {
-						mode: 'critique',
-						title: 'Critique result',
-						summary:
-							'The opening needs a more concrete first move.',
-						content: '',
-						notes: [ 'Lead with the real support moment.' ],
-						issues: [
-							{
-								original: 'Technology is changing fast.',
-								problem: 'Too generic.',
-								revision:
-									'The ticket queue changed. The customer need did not.',
-							},
-						],
-				  }
-				: mode === 'edit'
-				? {
-						mode: 'edit',
-						title: 'Edited Content E2E Draft',
-						summary: 'The opener is tighter.',
-						content:
-							'Existing copy, tightened.\n\nSecond paragraph with a clearer turn.',
-						notes: [ 'Keep the sequence concrete.' ],
-						issues: [],
-				  }
-				: {
-						mode: 'draft',
-						title: 'Drafted Content E2E Post',
-						summary: 'A new draft was generated from the brief.',
-						content:
-							'Retail floors.\n\nWordPress themes.\n\nAgent workflows.',
-						notes: [ 'Use the progression as the spine.' ],
-						issues: [],
-				  };
+		let response;
+
+		if ( mode === 'critique' ) {
+			response = {
+				mode: 'critique',
+				title: 'Critique result',
+				summary: 'The opening needs a more concrete first move.',
+				content: '',
+				notes: [ 'Lead with the real support moment.' ],
+				issues: [
+					{
+						original: 'Technology is changing fast.',
+						problem: 'Too generic.',
+						revision:
+							'The ticket queue changed. The customer need did not.',
+					},
+				],
+			};
+		} else if ( mode === 'edit' ) {
+			response = {
+				mode: 'edit',
+				title: 'Edited Content E2E Draft',
+				summary: 'The opener is tighter.',
+				content:
+					'Existing copy, tightened.\n\nSecond paragraph with a clearer turn.',
+				notes: [ 'Keep the sequence concrete.' ],
+				issues: [],
+			};
+		} else {
+			response = {
+				mode: 'draft',
+				title: 'Drafted Content E2E Post',
+				summary: 'A new draft was generated from the brief.',
+				content:
+					'Retail floors.\n\nWordPress themes.\n\nAgent workflows.',
+				notes: [ 'Use the progression as the spine.' ],
+				issues: [],
+			};
+		}
 
 		await route.fulfill( {
 			status: 200,
@@ -2500,7 +2504,9 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 
 	await page.getByRole( 'button', { name: 'Edit', exact: true } ).click();
 	await promptInput.fill( 'Tighten the existing copy.' );
-	await page.getByRole( 'button', { name: 'Generate Revision Text' } ).click();
+	await page
+		.getByRole( 'button', { name: 'Generate Revision Text' } )
+		.click();
 
 	await expect.poll( () => capturedRequests.length ).toBe( 2 );
 	expect( capturedRequests[ 1 ].mode ).toBe( 'edit' );
@@ -2535,7 +2541,9 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 	).toBeVisible();
 } );
 
-test( 'content panel renders for a brand-new unsaved post', async ( { page } ) => {
+test( 'content panel renders for a brand-new unsaved post', async ( {
+	page,
+} ) => {
 	test.setTimeout( 180_000 );
 
 	await enableMockedRecommendationSurfaces( page, [ 'content' ] );
@@ -2652,7 +2660,9 @@ test( 'navigation surface smoke renders advisory recommendations for a selected 
 	const navigationRequests = [];
 
 	await page.route( '**/*recommend-navigation*', async ( route ) => {
-		navigationRequests.push( route.request().postDataJSON() );
+		navigationRequests.push(
+			getAbilityRequestInput( route.request().postDataJSON() )
+		);
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
@@ -2734,7 +2744,9 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	const patternRequests = [];
 
 	await page.route( '**/*recommend-patterns*', async ( route ) => {
-		const requestData = route.request().postDataJSON();
+		const requestData = getAbilityRequestInput(
+			route.request().postDataJSON()
+		);
 		const visiblePatternNames = Array.isArray(
 			requestData.visiblePatternNames
 		)
@@ -3396,7 +3408,9 @@ test( '@wp70-site-editor template surface smoke previews and applies executable 
 	const templateRequests = [];
 
 	await page.route( '**/*recommend-template*', async ( route ) => {
-		templateRequests.push( route.request().postDataJSON() );
+		templateRequests.push(
+			getAbilityRequestInput( route.request().postDataJSON() )
+		);
 
 		await route.fulfill( {
 			status: 200,
@@ -3538,7 +3552,9 @@ test( 'template surface keeps stale results visible but disables review and appl
 	const templateRequests = [];
 
 	await page.route( '**/*recommend-template*', async ( route ) => {
-		templateRequests.push( route.request().postDataJSON() );
+		templateRequests.push(
+			getAbilityRequestInput( route.request().postDataJSON() )
+		);
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
@@ -3731,7 +3747,9 @@ test( 'template surface keeps advisory-only suggestions visible without executab
 			).length > 0
 	);
 	await page.route( '**/*recommend-template*', async ( route ) => {
-		templateRequests.push( route.request().postDataJSON() );
+		templateRequests.push(
+			getAbilityRequestInput( route.request().postDataJSON() )
+		);
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
@@ -3869,7 +3887,9 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 	const templatePartRequests = [];
 
 	await page.route( '**/*recommend-template-part*', async ( route ) => {
-		templatePartRequests.push( route.request().postDataJSON() );
+		templatePartRequests.push(
+			getAbilityRequestInput( route.request().postDataJSON() )
+		);
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
@@ -4005,7 +4025,9 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 	const templatePartRequests = [];
 
 	await page.route( '**/*recommend-template-part*', async ( route ) => {
-		templatePartRequests.push( route.request().postDataJSON() );
+		templatePartRequests.push(
+			getAbilityRequestInput( route.request().postDataJSON() )
+		);
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
@@ -4179,7 +4201,9 @@ test( '@wp70-site-editor template-part surface keeps advisory-only suggestions v
 	const templatePartRequests = [];
 
 	await page.route( '**/*recommend-template-part*', async ( route ) => {
-		templatePartRequests.push( route.request().postDataJSON() );
+		templatePartRequests.push(
+			getAbilityRequestInput( route.request().postDataJSON() )
+		);
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',

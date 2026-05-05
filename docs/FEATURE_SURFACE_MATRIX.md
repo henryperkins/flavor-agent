@@ -30,22 +30,22 @@ Use this together with `docs/features/README.md` for per-surface flows and `docs
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | WordPress Abilities API          | Server-registered abilities under the `flavor-agent` category; hydrated by core on supported WordPress 7.0+ admin screens | Each ability is gated by capability and, where relevant, backend availability            | Twenty structured abilities for recommendations, content drafting/critique, pattern and synced-pattern inspection, block/theme design helpers, docs grounding, theme tokens, style intelligence, and backend status | `docs/reference/abilities-and-routes.md` |
 | Helper abilities and diagnostics | Server-registered helper abilities plus the settings-driven readiness/status contract                                     | Per-ability capability gates, plus Cloudflare and provider/backend gating where relevant | Block introspection and block-type listing, registered and synced pattern inspection, template-part listing, active theme plus presets/styles/tokens, backend readiness, and trusted WordPress docs search          | `docs/features/helper-abilities.md`      |
-| Flavor Agent REST API            | Routes under `flavor-agent/v1` consumed by the `flavor-agent` data store and admin scripts                                | Per-route capability callbacks plus route-specific validation and sanitization           | First-party request/response path for recommendations, server-backed activity, and manual pattern sync                                                                                                              | `docs/reference/abilities-and-routes.md` |
+| Flavor Agent REST API            | Routes under `flavor-agent/v1` consumed by the activity UI and settings admin scripts                                     | Per-route capability callbacks plus route-specific validation and sanitization           | Server-backed activity read/write/undo and manual pattern sync; recommendation requests use the Abilities API instead                                                                                              | `docs/reference/abilities-and-routes.md` |
 
-## Quick Mapping (10 REST routes)
+## Quick Mapping
 
-- Block Inspector -> `POST /flavor-agent/v1/recommend-block` -> `flavor-agent/recommend-block`
-- Content panel -> `POST /flavor-agent/v1/recommend-content` -> `flavor-agent/recommend-content`
-- Pattern Inserter -> `POST /flavor-agent/v1/recommend-patterns` -> `flavor-agent/recommend-patterns`
-- Navigation Inspector -> `POST /flavor-agent/v1/recommend-navigation` -> `flavor-agent/recommend-navigation`
-- Template panel -> `POST /flavor-agent/v1/recommend-template` -> `flavor-agent/recommend-template`
-- Template-part panel -> `POST /flavor-agent/v1/recommend-template-part` -> `flavor-agent/recommend-template-part`
-- Global Styles / Style Book panel -> `POST /flavor-agent/v1/recommend-style` -> `flavor-agent/recommend-style`
+- Block Inspector -> `flavor-agent/recommend-block`
+- Content panel -> `flavor-agent/recommend-content`
+- Pattern Inserter -> `flavor-agent/recommend-patterns`
+- Navigation Inspector -> `flavor-agent/recommend-navigation`
+- Template panel -> `flavor-agent/recommend-template`
+- Template-part panel -> `flavor-agent/recommend-template-part`
+- Global Styles / Style Book panel -> `flavor-agent/recommend-style`
 - Activity (read/write) -> `GET/POST /flavor-agent/v1/activity`
 - Activity undo -> `POST /flavor-agent/v1/activity/{id}/undo`
 - Pattern sync -> `POST /flavor-agent/v1/sync-patterns`
 
-Content recommendations also remain available as a REST + Abilities contract for external callers.
+Recommendation surfaces are available through the WordPress Abilities API. The old `flavor-agent/v1/recommend-*` REST paths were removed before public release.
 
 ## Update Rule
 

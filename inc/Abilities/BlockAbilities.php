@@ -180,8 +180,8 @@ final class BlockAbilities {
 	}
 
 	/**
-	 * Normalize recommend-block inputs from either the REST editorContext payload
-	 * or the Abilities selectedBlock payload into one canonical prompt context.
+	 * Normalize recommend-block inputs from either the first-party editorContext payload
+	 * or the external-client selectedBlock payload into one canonical prompt context.
 	 *
 	 * @return array{context: array, prompt: string}|\WP_Error
 	 */

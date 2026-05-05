@@ -54,7 +54,7 @@ describe( 'AIActivitySection', () => {
 										'Settings > Flavor Agent',
 									selectedProviderLabel: 'Azure OpenAI',
 									ability: 'flavor-agent/recommend-block',
-									route: 'POST /flavor-agent/v1/recommend-block',
+									route: 'wp-abilities:flavor-agent/recommend-block',
 									tokenUsage: {
 										total: 96,
 									},
@@ -187,7 +187,7 @@ describe( 'AIActivitySection', () => {
 			'Ability: flavor-agent/recommend-block'
 		);
 		expect( getContainer().textContent ).toContain(
-			'Route: POST /flavor-agent/v1/recommend-block'
+			'Route: wp-abilities:flavor-agent/recommend-block'
 		);
 		expect( getContainer().textContent ).toContain(
 			'Reference: block:42:1'

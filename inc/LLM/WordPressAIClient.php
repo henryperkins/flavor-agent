@@ -318,7 +318,30 @@ final class WordPressAIClient {
 			);
 		}
 
-		return self::apply_options_to_prompt_builder( $prompt, $options );
+		return self::apply_options_to_prompt_builder(
+			self::apply_model_preferences_to_prompt_builder( $prompt ),
+			$options
+		);
+	}
+
+	private static function apply_model_preferences_to_prompt_builder( object $prompt ): object {
+		if ( ! function_exists( 'WordPress\\AI\\get_preferred_models_for_text_generation' ) ) {
+			return $prompt;
+		}
+
+		$preferred_models = \WordPress\AI\get_preferred_models_for_text_generation();
+
+		if ( ! \is_array( $preferred_models ) || [] === $preferred_models ) {
+			return $prompt;
+		}
+
+		if ( ! is_callable( [ $prompt, 'using_model_preference' ] ) ) {
+			return $prompt;
+		}
+
+		$updated_prompt = $prompt->using_model_preference( ...$preferred_models );
+
+		return is_object( $updated_prompt ) ? $updated_prompt : $prompt;
 	}
 
 	/**

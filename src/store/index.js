@@ -5,7 +5,6 @@
  * contains suggestions scoped to Settings, Styles, and Block tabs
  * so Inspector injection components render in the right place.
  */
-import apiFetch from '@wordpress/api-fetch';
 import { rawHandler } from '@wordpress/blocks';
 import { createReduxStore, register } from '@wordpress/data';
 
@@ -75,8 +74,12 @@ import {
 	getAllowedPatterns,
 	getBlockPatterns,
 } from '../patterns/pattern-settings';
+import { executeFlavorAgentAbility } from './abilities-client';
 
 const STORE_NAME = 'flavor-agent';
+const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
+	.toString( 36 )
+	.slice( 2 ) }`;
 const DEFAULT_BLOCK_REQUEST_STATE = {
 	status: 'idle',
 	error: null,
@@ -513,9 +516,34 @@ function stripContextSignatureFromRequestInput( requestInput = null ) {
 	return requestData;
 }
 
+function buildClientRequestIdentity( {
+	abortId = null,
+	requestData = {},
+	requestToken = null,
+} = {} ) {
+	return {
+		sessionId: CLIENT_REQUEST_SESSION_ID,
+		requestToken: Number.isFinite( requestToken ) ? requestToken : null,
+		abortId:
+			abortId === null || abortId === undefined ? '' : String( abortId ),
+		scopeKey: requestData?.document?.scopeKey || '',
+	};
+}
+
+function attachClientRequestIdentity( requestData = {}, clientRequest = null ) {
+	if ( ! clientRequest ) {
+		return requestData;
+	}
+
+	return {
+		...requestData,
+		clientRequest,
+	};
+}
+
 async function guardSurfaceApplyResolvedFreshness( {
 	surface,
-	endpoint,
+	abilityName,
 	liveRequestInput,
 	storedResolvedContextSignature = null,
 	localDispatch,
@@ -552,13 +580,9 @@ async function guardSurfaceApplyResolvedFreshness( {
 	}
 
 	try {
-		const result = await apiFetch( {
-			path: endpoint,
-			method: 'POST',
-			data: {
-				...requestData,
-				resolveSignatureOnly: true,
-			},
+		const result = await executeFlavorAgentAbility( abilityName, {
+			...requestData,
+			resolveSignatureOnly: true,
 		} );
 		const resolvedContextSignature =
 			getResolvedContextSignatureFromResponse( result );
@@ -946,7 +970,7 @@ const EXECUTABLE_SURFACE_REVIEW_DEPS = {
 
 function getNavigationReviewConfig() {
 	return createExecutableSurfaceReviewFreshnessConfig( {
-		endpoint: '/flavor-agent/v1/recommend-navigation',
+		abilityName: 'flavor-agent/recommend-navigation',
 		getReviewRequestToken: ( select ) =>
 			select.getNavigationReviewRequestToken?.() || 0,
 		getStoredRequestSignature: getNavigationStoredRequestSignature,
@@ -983,9 +1007,9 @@ function getEmptySuggestionResponse() {
 
 async function runAbortableRecommendationRequest( {
 	abortKey,
+	abilityName,
 	buildRequest = () => ( {} ),
 	dispatch,
-	endpoint,
 	input,
 	onError,
 	onLoading,
@@ -1000,7 +1024,13 @@ async function runAbortableRecommendationRequest( {
 		request.abortId === null || request.abortId === undefined
 			? null
 			: String( request.abortId );
-	const requestData = request.requestData ?? input;
+	let requestData = request.requestData ?? input;
+	const clientRequest = buildClientRequestIdentity( {
+		abortId,
+		requestData,
+		requestToken: request.requestToken,
+	} );
+	requestData = attachClientRequestIdentity( requestData, clientRequest );
 	const controller = new AbortController();
 
 	if ( abortId === null ) {
@@ -1026,12 +1056,13 @@ async function runAbortableRecommendationRequest( {
 
 	for ( let attempt = 0; attempt <= maxRetries; attempt++ ) {
 		try {
-			const result = await apiFetch( {
-				path: endpoint,
-				method: 'POST',
-				data: requestData,
-				signal: controller.signal,
-			} );
+			const result = await executeFlavorAgentAbility(
+				abilityName,
+				requestData,
+				{
+					signal: controller.signal,
+				}
+			);
 
 			clearAbortController( abortKey, abortId, controller );
 			await onSuccess?.( {
@@ -1260,7 +1291,7 @@ const actions = {
 					};
 				},
 				dispatch,
-				endpoint: '/flavor-agent/v1/recommend-block',
+				abilityName: 'flavor-agent/recommend-block',
 				input: {
 					clientId,
 					context,
@@ -1340,7 +1371,7 @@ const actions = {
 					const resolvedContextSignature =
 						getResolvedContextSignatureFromResponse( result );
 					const payload = attachRequestMetaToRecommendationPayload(
-						result.payload || {}
+						isPlainObject( result ) ? result : {}
 					);
 					const editorContext = requestData.editorContext || {};
 					const blockOperationContext =
@@ -1467,7 +1498,7 @@ const actions = {
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface: 'block',
-					endpoint: '/flavor-agent/v1/recommend-block',
+					abilityName: 'flavor-agent/recommend-block',
 					liveRequestInput,
 					storedResolvedContextSignature:
 						select.getBlockResolvedContextSignature?.( clientId ) ||
@@ -1682,7 +1713,7 @@ const actions = {
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface: 'block',
-					endpoint: '/flavor-agent/v1/recommend-block',
+					abilityName: 'flavor-agent/recommend-block',
 					liveRequestInput,
 					storedResolvedContextSignature:
 						select.getBlockResolvedContextSignature?.( clientId ) ||
@@ -1954,7 +1985,7 @@ const actions = {
 					};
 				},
 				dispatch,
-				endpoint: '/flavor-agent/v1/recommend-patterns',
+				abilityName: 'flavor-agent/recommend-patterns',
 				input,
 				registry,
 				onError: ( {
@@ -2049,7 +2080,7 @@ const actions = {
 						( registrySelect.getContentRequestToken?.() || 0 ) + 1,
 				} ),
 				dispatch,
-				endpoint: '/flavor-agent/v1/recommend-content',
+				abilityName: 'flavor-agent/recommend-content',
 				input,
 				registry,
 				onError: ( { dispatch: localDispatch, err, requestToken } ) => {
@@ -2130,7 +2161,7 @@ const actions = {
 					};
 				},
 				dispatch,
-				endpoint: '/flavor-agent/v1/recommend-navigation',
+				abilityName: 'flavor-agent/recommend-navigation',
 				input,
 				registry,
 				onError: ( {
@@ -2261,14 +2292,13 @@ const actions = {
 			}
 
 			try {
-				const response = await apiFetch( {
-					path: '/flavor-agent/v1/recommend-block',
-					method: 'POST',
-					data: {
+				const response = await executeFlavorAgentAbility(
+					'flavor-agent/recommend-block',
+					{
 						...requestInput,
 						resolveSignatureOnly: true,
-					},
-				} );
+					}
+				);
 
 				const serverSig =
 					getResolvedContextSignatureFromResponse( response ) || '';

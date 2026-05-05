@@ -1,4 +1,8 @@
-import apiFetch from '@wordpress/api-fetch';
+import { executeFlavorAgentAbility } from './abilities-client';
+
+const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
+	.toString( 36 )
+	.slice( 2 ) }`;
 
 function normalizeRequestInput( requestInput ) {
 	return requestInput && typeof requestInput === 'object' ? requestInput : {};
@@ -17,20 +21,34 @@ function stripContextSignatureFromRequestInput( requestInput = null ) {
 	return requestData;
 }
 
+function buildClientRequestIdentity( {
+	abortId = null,
+	requestData = {},
+	requestToken = null,
+} = {} ) {
+	return {
+		sessionId: CLIENT_REQUEST_SESSION_ID,
+		requestToken: Number.isFinite( requestToken ) ? requestToken : null,
+		abortId:
+			abortId === null || abortId === undefined ? '' : String( abortId ),
+		scopeKey: requestData?.document?.scopeKey || '',
+	};
+}
+
 export function createExecutableSurfaceFetchConfig( {
 	abortKey,
+	abilityName,
 	buildRequestDocument,
 	dispatchRecommendations,
-	endpoint,
 	getRequestToken,
 	requestErrorMessage,
 	setStatusAction,
 } ) {
 	return {
 		abortKey,
+		abilityName,
 		buildRequestDocument,
 		dispatchRecommendations,
-		endpoint,
 		getRequestToken,
 		requestErrorMessage,
 		setErrorState: ( message, requestToken ) =>
@@ -41,7 +59,7 @@ export function createExecutableSurfaceFetchConfig( {
 }
 
 export function createExecutableSurfaceReviewFreshnessConfig( {
-	endpoint,
+	abilityName,
 	getReviewRequestToken,
 	getStoredRequestSignature,
 	getStoredReviewContextSignature,
@@ -49,7 +67,7 @@ export function createExecutableSurfaceReviewFreshnessConfig( {
 	surface,
 } ) {
 	return {
-		endpoint,
+		abilityName,
 		getReviewRequestToken,
 		getStoredRequestSignature,
 		getStoredReviewContextSignature,
@@ -63,8 +81,8 @@ export function createExecutableSurfaceReviewFreshnessConfig( {
 
 export function createExecutableSurfaceApplyConfig( {
 	applyFailureMessage,
+	abilityName,
 	buildActivityEntry,
-	endpoint,
 	executeSuggestion,
 	getStoredRequestSignature,
 	getStoredResolvedContextSignature,
@@ -74,8 +92,8 @@ export function createExecutableSurfaceApplyConfig( {
 } ) {
 	return {
 		applyFailureMessage,
+		abilityName,
 		buildActivityEntry,
-		endpoint,
 		executeSuggestion,
 		getStoredRequestSignature,
 		getStoredResolvedContextSignature,
@@ -102,10 +120,10 @@ export function createExecutableSurfaceApplyConfig( {
 
 export function createExecutableSurfaceFetchAction( {
 	abortKey,
+	abilityName,
 	attachRequestMetaToRecommendationPayload,
 	buildRequestDocument,
 	dispatchRecommendations,
-	endpoint,
 	getReviewContextSignatureFromResponse,
 	getResolvedContextSignatureFromResponse,
 	getRequestToken,
@@ -136,19 +154,33 @@ export function createExecutableSurfaceFetchAction( {
 							  } )
 							: null;
 
+					const requestToken = getRequestToken( registrySelect );
+					const finalRequestData = document
+						? {
+								...requestData,
+								document,
+						  }
+						: requestData;
+
 					return {
 						contextSignature,
-						requestData: document
-							? {
-									...requestData,
-									document,
-							  }
-							: requestData,
-						requestToken: getRequestToken( registrySelect ),
+						requestData: {
+							...finalRequestData,
+							clientRequest: buildClientRequestIdentity( {
+								abortId:
+									normalizedInput?.templateRef ||
+									normalizedInput?.templatePartRef ||
+									finalRequestData?.scope?.scopeKey ||
+									null,
+								requestData: finalRequestData,
+								requestToken,
+							} ),
+						},
+						requestToken,
 					};
 				},
 				dispatch,
-				endpoint,
+				abilityName,
 				input,
 				registry,
 				onError: ( { dispatch: localDispatch, err, requestToken } ) => {
@@ -207,7 +239,7 @@ export function buildExecutableSurfaceFetchThunk(
 }
 
 export function createExecutableSurfaceReviewFreshnessAction( {
-	endpoint,
+	abilityName,
 	getReviewContextSignatureFromResponse,
 	getReviewRequestToken,
 	getStoredRequestSignature,
@@ -250,13 +282,13 @@ export function createExecutableSurfaceReviewFreshnessAction( {
 
 			try {
 				// Server review freshness is based on docs-free server context, not grounded prompt churn.
-				const result = await apiFetch( {
-					path: endpoint,
-					method: 'POST',
-					data: {
-						...requestData,
-						resolveSignatureOnly: true,
-					},
+				const result = await executeFlavorAgentAbility( abilityName, {
+					...requestData,
+					resolveSignatureOnly: true,
+					clientRequest: buildClientRequestIdentity( {
+						requestData,
+						requestToken,
+					} ),
 				} );
 				const reviewContextSignature = normalizeStringMessage(
 					getReviewContextSignatureFromResponse( result )
@@ -322,9 +354,9 @@ export function buildExecutableSurfaceReviewFreshnessThunk(
 
 export function createExecutableSurfaceApplyAction( {
 	applyFailureMessage,
+	abilityName,
 	buildActivityEntry,
 	dispatchToastForActivity = null,
-	endpoint,
 	executeSuggestion,
 	getCurrentActivityScope,
 	getStoredRequestSignature,
@@ -373,7 +405,7 @@ export function createExecutableSurfaceApplyAction( {
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface,
-					endpoint,
+					abilityName,
 					liveRequestInput,
 					storedResolvedContextSignature:
 						getStoredResolvedContextSignature( select ),

@@ -52,13 +52,11 @@ describe( 'style-validation', () => {
 			'brand-color',
 			{ valid: false, value: null },
 		],
-		[
-			'rejects non-strings',
-			42,
-			{ valid: false, value: null },
-		],
+		[ 'rejects non-strings', 42, { valid: false, value: null } ],
 	] )( 'validateCssCustomPropertyReference: %s', ( _, value, expected ) => {
-		expect( validateCssCustomPropertyReference( value ) ).toEqual( expected );
+		expect( validateCssCustomPropertyReference( value ) ).toEqual(
+			expected
+		);
 	} );
 
 	test.each( [
@@ -251,8 +249,7 @@ describe( 'style-validation', () => {
 		).toEqual( {
 			valid: false,
 			value: null,
-			error:
-				'Unsupported freeform Global Styles validator: missing-validator.',
+			error: 'Unsupported freeform Global Styles validator: missing-validator.',
 		} );
 	} );
 } );

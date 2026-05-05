@@ -81,7 +81,7 @@ flavor-agent/
 
 ### Block Recommendations
 
-When a block is selected, the plugin injects an `AI Recommendations` panel into the native Inspector. Clicking `Get Suggestions` sends a block context snapshot to `POST /flavor-agent/v1/recommend-block`.
+When a block is selected, the plugin injects an `AI Recommendations` panel into the native Inspector. Clicking `Get Suggestions` executes the `flavor-agent/recommend-block` ability with a block context snapshot.
 
 The request includes:
 
@@ -98,7 +98,7 @@ Block attribute role detection now reads the stable `role` key only. Compatibili
 
 ### Pattern Recommendations
 
-Pattern recommendations are exposed through `POST /flavor-agent/v1/recommend-patterns` and the `flavor-agent/recommend-patterns` ability.
+Pattern recommendations are exposed through the `flavor-agent/recommend-patterns` ability.
 
 The client behavior is:
 
@@ -120,7 +120,7 @@ This surface is intentionally ranking/browse-only. Flavor Agent reports loading,
 
 ### Template Recommendations
 
-Template recommendations are exposed through `POST /flavor-agent/v1/recommend-template` and the `flavor-agent/recommend-template` ability.
+Template recommendations are exposed through the `flavor-agent/recommend-template` ability.
 
 The client behavior is:
 
@@ -139,7 +139,7 @@ The server behavior is:
 
 ### Template Part Recommendations
 
-Template-part recommendations are exposed through `POST /flavor-agent/v1/recommend-template-part` and the `flavor-agent/recommend-template-part` ability.
+Template-part recommendations are exposed through the `flavor-agent/recommend-template-part` ability.
 
 The client behavior is:
 
@@ -161,7 +161,7 @@ This surface remains advisory-first overall: unsupported or ambiguous recommenda
 
 ### Style Recommendations
 
-Global Styles and Style Book recommendations are exposed through `POST /flavor-agent/v1/recommend-style` and the `flavor-agent/recommend-style` ability.
+Global Styles and Style Book recommendations are exposed through the `flavor-agent/recommend-style` ability.
 
 The client behavior is:
 

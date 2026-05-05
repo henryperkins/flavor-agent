@@ -500,9 +500,8 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 #### REST API
 
-10 REST routes live under `/flavor-agent/v1/`. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+Three REST routes live under `/flavor-agent/v1/`. Recommendation surfaces use WordPress Abilities API contracts instead. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
-- **7 `recommend-*` routes** (POST) mirror the corresponding abilities: `recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-navigation`, `recommend-template`, `recommend-template-part`, `recommend-style`
 - **2 activity routes** adapt the activity repository: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`) and POST `activity/{id}/undo` (contextual)
 - **1 admin route**: POST `sync-patterns` (`manage_options`) — manual pattern reindex
 
@@ -576,8 +575,8 @@ User selects block -> InspectorInjector renders AI panel
      -> theme-tokens.js: collectThemeTokens + summarizeTokens
      -> structural-identity.js: buildStructuralContext
   -> store thunk: fetchBlockRecommendations(clientId, context, prompt)
-     -> POST /flavor-agent/v1/recommend-block
-        -> Agent_Controller -> BlockAbilities::recommend_block()
+     -> flavor-agent/recommend-block ability
+        -> BlockAbilities::recommend_block()
            -> ServerCollector::introspect_block_type() (server enrichment)
            -> AISearchClient::maybe_search_with_cache_fallbacks() (docs grounding)
            -> Prompt::build_system() + Prompt::build_user()
@@ -599,8 +598,8 @@ User selects block -> InspectorInjector renders AI panel
 Editor loads (or inserter search changes)
   -> PatternRecommender.js detects trigger
   -> store thunk: fetchPatternRecommendations(input)
-     -> POST /flavor-agent/v1/recommend-patterns
-        -> Agent_Controller -> PatternAbilities::recommend_patterns()
+     -> flavor-agent/recommend-patterns ability
+        -> PatternAbilities::recommend_patterns()
             -> PatternIndex: check state (ready/stale/error)
             -> selected backend corpus: registered patterns + published synced/user wp_block patterns as core/block/{id}
             -> Qdrant backend: EmbeddingClient::embed(query) + QdrantClient::search() x2 (semantic + structural)
@@ -622,8 +621,8 @@ User editing wp_template in Site Editor
   -> TemplateRecommender.js renders PluginDocumentSettingPanel
   -> User clicks "Get Suggestions"
    -> store thunk: fetchTemplateRecommendations(input)
-      -> POST /flavor-agent/v1/recommend-template
-         -> Agent_Controller -> TemplateAbilities::recommend_template()
+      -> flavor-agent/recommend-template ability
+         -> TemplateAbilities::recommend_template()
             -> ServerCollector::for_template(ref, type, visiblePatternNames)
                -> Walks parsed blocks for template-part slots
                -> Collects available parts, empty areas, candidate patterns (filtered by visiblePatternNames)
@@ -653,8 +652,8 @@ User selects core/navigation block
   -> NavigationRecommendations.js renders inline Inspector UI
   -> User clicks "Get Navigation Suggestions"
   -> store thunk: fetchNavigationRecommendations(input)
-     -> POST /flavor-agent/v1/recommend-navigation
-        -> Agent_Controller -> NavigationAbilities::recommend_navigation(input)
+     -> flavor-agent/recommend-navigation ability
+        -> NavigationAbilities::recommend_navigation(input)
      -> ServerCollector::for_navigation(menuId, markup)
         -> get_post(menuId) for wp_navigation content
         -> parse_blocks() to extract menu item tree
@@ -677,8 +676,8 @@ User editing wp_template_part in Site Editor
   -> TemplatePartRecommender.js renders PluginDocumentSettingPanel
   -> User clicks "Get Suggestions"
   -> store thunk fetchTemplatePartRecommendations(input)
-     -> POST /flavor-agent/v1/recommend-template-part
-        -> Agent_Controller -> TemplateAbilities::recommend_template_part()
+     -> flavor-agent/recommend-template-part ability
+        -> TemplateAbilities::recommend_template_part()
            -> ServerCollector::for_template_part(ref, visiblePatternNames)
            -> AISearchClient::maybe_search_with_cache_fallbacks()
            -> TemplatePartPrompt::build_system() + build_user()
@@ -700,8 +699,8 @@ User opens the Site Editor Styles sidebar
   -> GlobalStylesRecommender.js renders inside the native sidebar slot or document settings fallback
   -> User clicks "Get Style Suggestions"
   -> store thunk: fetchGlobalStylesRecommendations(input)
-     -> POST /flavor-agent/v1/recommend-style
-        -> Agent_Controller -> StyleAbilities::recommend_style()
+     -> flavor-agent/recommend-style ability
+        -> StyleAbilities::recommend_style()
            -> getGlobalStylesUserConfig() contributes the current entity id, user config, and available variations
            -> ServerCollector::for_tokens() contributes theme tokens plus token-source diagnostics
            -> StylePrompt::build_system() + build_user()
@@ -722,8 +721,8 @@ User opens the Style Book panel for a block type
   -> StyleBookRecommender.js portals into the Style Book panel via dom.js
   -> User clicks "Get Style Suggestions"
   -> store thunk: fetchStyleBookRecommendations(input)
-     -> POST /flavor-agent/v1/recommend-style (scope.surface = "style-book")
-        -> Agent_Controller -> StyleAbilities::recommend_style()
+     -> flavor-agent/recommend-style ability (scope.surface = "style-book")
+        -> StyleAbilities::recommend_style()
            -> Resolves style-book surface, target block name and styles
            -> ServerCollector::for_tokens() contributes theme tokens plus diagnostics
            -> StylePrompt::build_system() + build_user() (surface-aware rules)

@@ -240,6 +240,9 @@ describe( 'subscribeToStyleBookUi', () => {
 
 	test( 'a subscriber that unsubscribes during its callback does not break the iteration', () => {
 		const a = jest.fn();
+		// `b` is invoked synchronously inside subscribeToStyleBookUi, so `unsubB` must
+		// be a `let` initialized to `undefined` to avoid a TDZ ReferenceError.
+		// eslint-disable-next-line prefer-const
 		let unsubB;
 		const b = jest.fn( () => {
 			if ( unsubB ) {

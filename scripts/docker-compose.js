@@ -13,9 +13,13 @@ function commandExists( command ) {
 }
 
 function detectComposeCommand() {
-	const dockerComposePluginProbe = spawnSync( 'docker', [ 'compose', 'version' ], {
-		stdio: [ 'ignore', 'ignore', 'ignore' ],
-	} );
+	const dockerComposePluginProbe = spawnSync(
+		'docker',
+		[ 'compose', 'version' ],
+		{
+			stdio: [ 'ignore', 'ignore', 'ignore' ],
+		}
+	);
 	if ( dockerComposePluginProbe.status === 0 ) {
 		return { command: 'docker', args: [ 'compose' ] };
 	}

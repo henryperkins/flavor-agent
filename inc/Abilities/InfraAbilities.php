@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
+use FlavorAgent\AI\FeatureBootstrap;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Context\ServerCollector;
@@ -57,7 +58,10 @@ final class InfraAbilities {
 		$qdrant_configured           = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
 		$cloudflare_configured       = AISearchClient::is_configured();
 		$active_chat_configured      = ChatClient::is_supported();
-		$active_pattern_provider     = Provider::embedding_configured() && $active_chat_configured;
+		$recommendations_enabled     = FeatureBootstrap::recommendation_feature_enabled();
+		$active_pattern_provider     = $recommendations_enabled
+			&& Provider::embedding_configured()
+			&& $active_chat_configured;
 		$settings_url                = function_exists( 'admin_url' )
 			? admin_url( 'options-general.php?page=flavor-agent' )
 			: '';
@@ -66,16 +70,19 @@ final class InfraAbilities {
 			: '';
 
 		$abilities = self::available_abilities(
-			$active_chat_configured,
-			$active_chat_configured,
+			$recommendations_enabled && $active_chat_configured,
+			$recommendations_enabled && $active_chat_configured,
 			$active_pattern_provider,
 			$qdrant_configured,
 			$cloudflare_configured
 		);
 
 		return [
-			'configured'         => $active_chat_configured || ( $active_pattern_provider && $qdrant_configured ),
-			'model'              => $active_chat_configured ? Provider::active_chat_model() : null,
+			'configured'         => ( $recommendations_enabled && $active_chat_configured )
+				|| ( $active_pattern_provider && $qdrant_configured ),
+			'model'              => ( $recommendations_enabled && $active_chat_configured )
+				? Provider::active_chat_model()
+				: null,
 			'availableAbilities' => $abilities,
 			'surfaces'           => SurfaceCapabilities::build(
 				$settings_url,

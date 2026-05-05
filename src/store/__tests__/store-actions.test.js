@@ -86,6 +86,56 @@ const BASE_BLOCK_OPERATION_CONTEXT = {
 		},
 	],
 };
+const ABILITY_NAMES = {
+	block: 'flavor-agent/recommend-block',
+	content: 'flavor-agent/recommend-content',
+	navigation: 'flavor-agent/recommend-navigation',
+	patterns: 'flavor-agent/recommend-patterns',
+	style: 'flavor-agent/recommend-style',
+	template: 'flavor-agent/recommend-template',
+	templatePart: 'flavor-agent/recommend-template-part',
+};
+const ABILITY_RUN_PATHS = {
+	block: '/wp-abilities/v1/abilities/flavor-agent/recommend-block/run',
+	content: '/wp-abilities/v1/abilities/flavor-agent/recommend-content/run',
+	navigation:
+		'/wp-abilities/v1/abilities/flavor-agent/recommend-navigation/run',
+	patterns: '/wp-abilities/v1/abilities/flavor-agent/recommend-patterns/run',
+	style: '/wp-abilities/v1/abilities/flavor-agent/recommend-style/run',
+	template: '/wp-abilities/v1/abilities/flavor-agent/recommend-template/run',
+	templatePart:
+		'/wp-abilities/v1/abilities/flavor-agent/recommend-template-part/run',
+};
+const ABILITY_RUN_PATHS_BY_NAME = Object.fromEntries(
+	Object.entries( ABILITY_NAMES ).map( ( [ abilityKey, abilityName ] ) => [
+		abilityName,
+		ABILITY_RUN_PATHS[ abilityKey ],
+	] )
+);
+
+function expectAbilityRunRequest( abilityKey, input ) {
+	return expect.objectContaining( {
+		path: ABILITY_RUN_PATHS[ abilityKey ],
+		method: 'POST',
+		data: {
+			input: expect.objectContaining( input ),
+		},
+	} );
+}
+
+function installAbilitiesBridge() {
+	window.flavorAgentAbilities = {
+		executeAbility: jest.fn( ( abilityName, data ) =>
+			apiFetch( {
+				path: ABILITY_RUN_PATHS_BY_NAME[ abilityName ],
+				method: 'POST',
+				data: {
+					input: data,
+				},
+			} )
+		),
+	};
+}
 
 describe( 'store action thunks', () => {
 	beforeEach( () => {
@@ -122,6 +172,7 @@ describe( 'store action thunks', () => {
 				innerBlocks: [],
 			},
 		] );
+		installAbilitiesBridge();
 	} );
 
 	afterEach( () => {
@@ -131,6 +182,7 @@ describe( 'store action thunks', () => {
 		}
 
 		jest.useRealTimers();
+		delete window.flavorAgentAbilities;
 	} );
 
 	test( 'fetchBlockRecommendations stores the request signature without posting it to the API', async () => {
@@ -185,29 +237,42 @@ describe( 'store action thunks', () => {
 
 		expect( select.getBlockRequestToken ).toHaveBeenCalledWith( 'block-1' );
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-block',
-				method: 'POST',
-				data: {
-					editorContext: context,
-					prompt: 'Tighten this copy.',
-					clientId: 'block-1',
-					document: {
-						scopeKey: 'post:42',
-						postType: 'post',
-						entityId: '42',
-						entityKind: '',
-						entityName: '',
-						stylesheet: '',
-					},
+			expectAbilityRunRequest( 'block', {
+				editorContext: context,
+				prompt: 'Tighten this copy.',
+				clientId: 'block-1',
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+					entityKind: '',
+					entityName: '',
+					stylesheet: '',
 				},
 			} )
 		);
 		expect( apiFetch ).not.toHaveBeenCalledWith(
 			expect.objectContaining( {
-				data: expect.objectContaining( {
-					contextSignature,
-				} ),
+				data: {
+					input: expect.objectContaining( {
+						contextSignature,
+					} ),
+				},
+			} )
+		);
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				data: {
+					input: expect.objectContaining( {
+						editorContext: context,
+						clientId: 'block-1',
+						clientRequest: expect.objectContaining( {
+							requestToken: 3,
+							abortId: 'block-1',
+							scopeKey: 'post:42',
+						} ),
+					} ),
+				},
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -236,10 +301,7 @@ describe( 'store action thunks', () => {
 
 	test( 'fetchNavigationRecommendations reads request token from thunk selectors', async () => {
 		apiFetch.mockImplementation( ( { path, method } ) => {
-			if (
-				path === '/flavor-agent/v1/recommend-navigation' &&
-				method === 'POST'
-			) {
+			if ( path === ABILITY_RUN_PATHS.navigation && method === 'POST' ) {
 				return Promise.resolve( {
 					suggestions: [ { label: 'Group utility links' } ],
 					explanation: 'Mocked navigation response',
@@ -290,23 +352,19 @@ describe( 'store action thunks', () => {
 
 		expect( select.getNavigationRequestToken ).toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-navigation',
-				method: 'POST',
-				data: {
-					document: {
-						scopeKey: 'wp_template:theme//home',
-						postType: 'wp_template',
-						entityId: 'theme//home',
-						entityKind: '',
-						entityName: '',
-						stylesheet: '',
-					},
-					menuId: 42,
-					navigationMarkup:
-						'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
-					prompt: 'Simplify the header menu.',
+			expectAbilityRunRequest( 'navigation', {
+				document: {
+					scopeKey: 'wp_template:theme//home',
+					postType: 'wp_template',
+					entityId: 'theme//home',
+					entityKind: '',
+					entityName: '',
+					stylesheet: '',
 				},
+				menuId: 42,
+				navigationMarkup:
+					'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
+				prompt: 'Simplify the header menu.',
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -478,10 +536,7 @@ describe( 'store action thunks', () => {
 
 	test( 'fetchNavigationRecommendations dispatches fallback data on request failures', async () => {
 		apiFetch.mockImplementation( ( { path, method } ) => {
-			if (
-				path === '/flavor-agent/v1/recommend-navigation' &&
-				method === 'POST'
-			) {
+			if ( path === ABILITY_RUN_PATHS.navigation && method === 'POST' ) {
 				return Promise.reject( new Error( 'Network blew up.' ) );
 			}
 
@@ -577,21 +632,17 @@ describe( 'store action thunks', () => {
 
 		expect( select.getTemplateRequestToken ).toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-template',
-				method: 'POST',
-				data: {
-					templateRef: 'theme//home',
-					prompt: 'Tighten the structure.',
-					templateType: 'home',
-					document: {
-						scopeKey: 'wp_template:theme//home',
-						postType: 'wp_template',
-						entityId: 'theme//home',
-						entityKind: '',
-						entityName: '',
-						stylesheet: '',
-					},
+			expectAbilityRunRequest( 'template', {
+				templateRef: 'theme//home',
+				prompt: 'Tighten the structure.',
+				templateType: 'home',
+				document: {
+					scopeKey: 'wp_template:theme//home',
+					postType: 'wp_template',
+					entityId: 'theme//home',
+					entityKind: '',
+					entityName: '',
+					stylesheet: '',
 				},
 			} )
 		);
@@ -658,21 +709,17 @@ describe( 'store action thunks', () => {
 
 		expect( select.getGlobalStylesRequestToken ).toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-style',
-				method: 'POST',
-				data: {
-					scope: input.scope,
-					styleContext: input.styleContext,
-					prompt: input.prompt,
-					document: {
-						scopeKey: 'global_styles:17',
-						postType: 'global_styles',
-						entityId: '17',
-						entityKind: 'root',
-						entityName: 'globalStyles',
-						stylesheet: '',
-					},
+			expectAbilityRunRequest( 'style', {
+				scope: input.scope,
+				styleContext: input.styleContext,
+				prompt: input.prompt,
+				document: {
+					scopeKey: 'global_styles:17',
+					postType: 'global_styles',
+					entityId: '17',
+					entityKind: 'root',
+					entityName: 'globalStyles',
+					stylesheet: '',
 				},
 			} )
 		);
@@ -718,10 +765,7 @@ describe( 'store action thunks', () => {
 			},
 		} );
 		apiFetch.mockImplementation( ( { path, method } ) => {
-			if (
-				path === '/flavor-agent/v1/recommend-patterns' &&
-				method === 'POST'
-			) {
+			if ( path === ABILITY_RUN_PATHS.patterns && method === 'POST' ) {
 				return Promise.reject( { name: 'AbortError' } );
 			}
 
@@ -821,11 +865,7 @@ describe( 'store action thunks', () => {
 
 		expect( select.getPatternRequestToken ).toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-patterns',
-				method: 'POST',
-				data: requestData,
-			} )
+			expectAbilityRunRequest( 'patterns', requestData )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
@@ -875,10 +915,7 @@ describe( 'store action thunks', () => {
 
 	test( 'fetchContentRecommendations sends document scope and refreshes scoped activity', async () => {
 		apiFetch.mockImplementation( ( { path, method } ) => {
-			if (
-				path === '/flavor-agent/v1/recommend-content' &&
-				method === 'POST'
-			) {
+			if ( path === ABILITY_RUN_PATHS.content && method === 'POST' ) {
 				return Promise.resolve( {
 					mode: 'edit',
 					title: 'Retail floors to agent workflows',
@@ -935,25 +972,21 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-content',
-				method: 'POST',
-				data: {
-					mode: 'edit',
-					prompt: 'Tighten the opener and keep the rhythm brisk.',
-					postContext: {
-						postType: 'post',
-						title: 'Working draft',
-						content: 'Retail floors. WordPress themes.',
-					},
-					document: {
-						scopeKey: 'post:42',
-						postType: 'post',
-						entityId: '42',
-						entityKind: '',
-						entityName: '',
-						stylesheet: '',
-					},
+			expectAbilityRunRequest( 'content', {
+				mode: 'edit',
+				prompt: 'Tighten the opener and keep the rhythm brisk.',
+				postContext: {
+					postType: 'post',
+					title: 'Working draft',
+					content: 'Retail floors. WordPress themes.',
+				},
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+					entityKind: '',
+					entityName: '',
+					stylesheet: '',
 				},
 			} )
 		);
@@ -1032,21 +1065,17 @@ describe( 'store action thunks', () => {
 
 		expect( select.getStyleBookRequestToken ).toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-style',
-				method: 'POST',
-				data: {
-					scope: input.scope,
-					styleContext: input.styleContext,
-					prompt: input.prompt,
-					document: {
-						scopeKey: 'style_book:17:core/paragraph',
-						postType: 'global_styles',
-						entityId: '17',
-						entityKind: 'block',
-						entityName: 'styleBook',
-						stylesheet: '',
-					},
+			expectAbilityRunRequest( 'style', {
+				scope: input.scope,
+				styleContext: input.styleContext,
+				prompt: input.prompt,
+				document: {
+					scopeKey: 'style_book:17:core/paragraph',
+					postType: 'global_styles',
+					entityId: '17',
+					entityKind: 'block',
+					entityName: 'styleBook',
+					stylesheet: '',
 				},
 			} )
 		);
@@ -1112,14 +1141,10 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-template',
-				method: 'POST',
-				data: {
-					templateRef: 'theme//home',
-					prompt: 'Tighten the structure.',
-					resolveSignatureOnly: true,
-				},
+			expectAbilityRunRequest( 'template', {
+				templateRef: 'theme//home',
+				prompt: 'Tighten the structure.',
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -1185,20 +1210,16 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-navigation',
-				method: 'POST',
-				data: {
-					menuId: 42,
-					navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
-					prompt: 'Simplify the header navigation.',
-					editorContext: {
-						block: {
-							name: 'core/navigation',
-						},
+			expectAbilityRunRequest( 'navigation', {
+				menuId: 42,
+				navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
+				prompt: 'Simplify the header navigation.',
+				editorContext: {
+					block: {
+						name: 'core/navigation',
 					},
-					resolveSignatureOnly: true,
 				},
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -1315,22 +1336,18 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-style',
-				method: 'POST',
-				data: {
-					scope: {
-						surface: 'global-styles',
-						scopeKey: 'global_styles:17',
-						globalStylesId: '17',
-					},
-					styleContext: {
-						currentConfig: { styles: {} },
-						mergedConfig: { styles: {} },
-					},
-					prompt: 'Keep the palette restrained.',
-					resolveSignatureOnly: true,
+			expectAbilityRunRequest( 'style', {
+				scope: {
+					surface: 'global-styles',
+					scopeKey: 'global_styles:17',
+					globalStylesId: '17',
 				},
+				styleContext: {
+					currentConfig: { styles: {} },
+					mergedConfig: { styles: {} },
+				},
+				prompt: 'Keep the palette restrained.',
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -1390,15 +1407,11 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-template-part',
-				method: 'POST',
-				data: {
-					templatePartRef: 'theme//header',
-					prompt: 'Add a compact utility row.',
-					visiblePatternNames: [ 'theme/header-utility' ],
-					resolveSignatureOnly: true,
-				},
+			expectAbilityRunRequest( 'templatePart', {
+				templatePartRef: 'theme//header',
+				prompt: 'Add a compact utility row.',
+				visiblePatternNames: [ 'theme/header-utility' ],
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -1485,30 +1498,26 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-style',
-				method: 'POST',
-				data: {
-					scope: {
-						surface: 'style-book',
-						scopeKey: 'style_book:17:core/paragraph',
-						globalStylesId: '17',
-						entityId: 'core/paragraph',
-						blockName: 'core/paragraph',
-					},
-					styleContext: {
-						currentConfig: { styles: {} },
-						mergedConfig: { styles: {} },
-						styleBookTarget: {
-							blockName: 'core/paragraph',
-							blockTitle: 'Paragraph',
-							currentStyles: {},
-							mergedStyles: {},
-						},
-					},
-					prompt: 'Keep the paragraph understated.',
-					resolveSignatureOnly: true,
+			expectAbilityRunRequest( 'style', {
+				scope: {
+					surface: 'style-book',
+					scopeKey: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					entityId: 'core/paragraph',
+					blockName: 'core/paragraph',
 				},
+				styleContext: {
+					currentConfig: { styles: {} },
+					mergedConfig: { styles: {} },
+					styleBookTarget: {
+						blockName: 'core/paragraph',
+						blockTitle: 'Paragraph',
+						currentStyles: {},
+						mergedStyles: {},
+					},
+				},
+				prompt: 'Keep the paragraph understated.',
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -2404,9 +2413,9 @@ describe( 'store action thunks', () => {
 		} );
 		apiFetch.mockImplementation( ( { path, method, data } ) => {
 			if (
-				path === '/flavor-agent/v1/recommend-template' &&
+				path === ABILITY_RUN_PATHS.template &&
 				method === 'POST' &&
-				data?.resolveSignatureOnly
+				data?.input?.resolveSignatureOnly
 			) {
 				return Promise.resolve( {
 					resolvedContextSignature: 'resolved-template',
@@ -3911,19 +3920,15 @@ describe( 'store action thunks', () => {
 
 		expect( updateBlockAttributes ).not.toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-block',
-				method: 'POST',
-				data: {
-					clientId: 'block-1',
-					editorContext: {
-						block: {
-							name: 'core/paragraph',
-						},
+			expectAbilityRunRequest( 'block', {
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/paragraph',
 					},
-					prompt: 'Refresh content.',
-					resolveSignatureOnly: true,
 				},
+				prompt: 'Refresh content.',
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenCalledWith(
@@ -4099,14 +4104,12 @@ describe( 'store action thunks', () => {
 			select,
 		} );
 
-		expect( apiFetch ).toHaveBeenCalledWith( {
-			path: '/flavor-agent/v1/recommend-block',
-			method: 'POST',
-			data: {
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expectAbilityRunRequest( 'block', {
 				...requestInput,
 				resolveSignatureOnly: true,
-			},
-		} );
+			} )
+		);
 		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setBlockApplyState(
 				'block-1',
@@ -4641,23 +4644,19 @@ describe( 'store action thunks', () => {
 
 		expect( applyGlobalStyleSuggestionOperations ).not.toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-style',
-				method: 'POST',
-				data: {
-					scope: {
-						surface: 'global-styles',
-						scopeKey: 'global_styles:17',
-						globalStylesId: '17',
-						entityId: '17',
-					},
-					styleContext: {
-						currentConfig: { styles: {} },
-						mergedConfig: { styles: {} },
-					},
-					prompt: 'Keep the palette restrained.',
-					resolveSignatureOnly: true,
+			expectAbilityRunRequest( 'style', {
+				scope: {
+					surface: 'global-styles',
+					scopeKey: 'global_styles:17',
+					globalStylesId: '17',
+					entityId: '17',
 				},
+				styleContext: {
+					currentConfig: { styles: {} },
+					mergedConfig: { styles: {} },
+				},
+				prompt: 'Keep the palette restrained.',
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenCalledWith(
@@ -4803,30 +4802,26 @@ describe( 'store action thunks', () => {
 
 		expect( applyGlobalStyleSuggestionOperations ).not.toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-style',
-				method: 'POST',
-				data: {
-					scope: {
-						surface: 'style-book',
-						scopeKey: 'style_book:17:core/paragraph',
-						globalStylesId: '17',
-						entityId: 'core/paragraph',
-						blockName: 'core/paragraph',
-					},
-					styleContext: {
-						currentConfig: { styles: {} },
-						mergedConfig: { styles: {} },
-						styleBookTarget: {
-							blockName: 'core/paragraph',
-							blockTitle: 'Paragraph',
-							currentStyles: {},
-							mergedStyles: {},
-						},
-					},
-					prompt: 'Keep the paragraph understated.',
-					resolveSignatureOnly: true,
+			expectAbilityRunRequest( 'style', {
+				scope: {
+					surface: 'style-book',
+					scopeKey: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					entityId: 'core/paragraph',
+					blockName: 'core/paragraph',
 				},
+				styleContext: {
+					currentConfig: { styles: {} },
+					mergedConfig: { styles: {} },
+					styleBookTarget: {
+						blockName: 'core/paragraph',
+						blockTitle: 'Paragraph',
+						currentStyles: {},
+						mergedStyles: {},
+					},
+				},
+				prompt: 'Keep the paragraph understated.',
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenCalledWith(
@@ -4999,14 +4994,10 @@ describe( 'store action thunks', () => {
 
 		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-template',
-				method: 'POST',
-				data: {
-					templateRef: 'theme//home',
-					prompt: 'Clarify the structure.',
-					resolveSignatureOnly: true,
-				},
+			expectAbilityRunRequest( 'template', {
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenCalledWith(
@@ -5215,21 +5206,17 @@ describe( 'store action thunks', () => {
 
 		expect( select.getTemplatePartRequestToken ).toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-template-part',
-				method: 'POST',
-				data: {
-					templatePartRef: 'theme//header',
-					prompt: 'Add a compact utility row.',
-					visiblePatternNames: [ 'theme/header-utility' ],
-					document: {
-						scopeKey: 'wp_template_part:theme//header',
-						postType: 'wp_template_part',
-						entityId: 'theme//header',
-						entityKind: '',
-						entityName: '',
-						stylesheet: '',
-					},
+			expectAbilityRunRequest( 'templatePart', {
+				templatePartRef: 'theme//header',
+				prompt: 'Add a compact utility row.',
+				visiblePatternNames: [ 'theme/header-utility' ],
+				document: {
+					scopeKey: 'wp_template_part:theme//header',
+					postType: 'wp_template_part',
+					entityId: 'theme//header',
+					entityKind: '',
+					entityName: '',
+					stylesheet: '',
 				},
 			} )
 		);
@@ -5478,15 +5465,11 @@ describe( 'store action thunks', () => {
 
 		expect( applyTemplatePartSuggestionOperations ).not.toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-template-part',
-				method: 'POST',
-				data: {
-					templatePartRef: 'theme//header',
-					prompt: 'Keep the header compact.',
-					visiblePatternNames: [ 'theme/header-utility' ],
-					resolveSignatureOnly: true,
-				},
+			expectAbilityRunRequest( 'templatePart', {
+				templatePartRef: 'theme//header',
+				prompt: 'Keep the header compact.',
+				visiblePatternNames: [ 'theme/header-utility' ],
+				resolveSignatureOnly: true,
 			} )
 		);
 		expect( dispatch ).toHaveBeenCalledWith(

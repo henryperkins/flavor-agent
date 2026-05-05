@@ -29,8 +29,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 1. `NavigationRecommendations()` in `src/inspector/NavigationRecommendations.js` reads the selected block from `core/block-editor`
 2. `buildNavigationFetchInput()` extracts the prompt, menu ID, and/or serialized navigation markup
-3. `fetchNavigationRecommendations()` in the `flavor-agent` store posts the request to `POST /flavor-agent/v1/recommend-navigation`
-4. `FlavorAgent\REST\Agent_Controller::handle_recommend_navigation()` adapts the request to `FlavorAgent\Abilities\NavigationAbilities::recommend_navigation()`
+3. `fetchNavigationRecommendations()` in the `flavor-agent` store executes the `flavor-agent/recommend-navigation` ability
+4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the request to `FlavorAgent\Abilities\NavigationAbilities::recommend_navigation()`
 5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, a path-based current target inventory, overlay context, and overlay template-part metadata, computes a docs-free `reviewContextSignature`, returns early for signature-only revalidation, and only then collects WordPress docs grounding, builds prompt text, and calls `ResponsesClient::rank()`
 6. The parsed response returns advisory suggestion groups, an explanation string, and a `reviewContextSignature`
 7. The store caches the result against the current block client ID and the UI renders suggestion cards and per-change rows
@@ -71,13 +71,12 @@ Navigation participates in the server review-freshness contract even though it i
 | Input builder | `buildNavigationFetchInput()` | Normalizes the request contract from the selected navigation block |
 | Store request | `fetchNavigationRecommendations()` in `src/store/index.js` | Sends the request and stores block-scoped results |
 | Store revalidation | `revalidateNavigationReviewFreshness()` in `src/store/index.js` | Background `resolveSignatureOnly` check for server-side drift |
-| REST handler | `Agent_Controller::handle_recommend_navigation()` | Adapts the REST request to the backend ability |
+| Ability wrapper | `RecommendationAbilityExecution::execute()` | Adapts the ability request to the backend handler |
 | Backend ability | `NavigationAbilities::recommend_navigation()` | Builds context, prompt, and parsed advisory output; returns `reviewContextSignature` |
 | Prompt contract | `NavigationPrompt::build_user()` / `NavigationPrompt::parse_response()` | Defines the structure of the returned guidance |
 
-## Related Routes And Abilities
+## Related Abilities
 
-- REST: `POST /flavor-agent/v1/recommend-navigation`
 - Ability: `flavor-agent/recommend-navigation`
 
 ## Key Implementation Files
