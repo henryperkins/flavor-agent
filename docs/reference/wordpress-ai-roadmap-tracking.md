@@ -220,7 +220,7 @@ Strategic overlap with the Inspector-bound recommendation model in `src/index.js
 
 ### MCP And WebMCP
 
-Flavor Agent exposes seven recommendation abilities to the Abilities API default MCP server via `meta.mcp.public = true`: block, content, pattern, template, template-part, navigation, and style recommendations. It does not implement a separate custom MCP adapter; future upstream MCP routing work still pressures the plugin's provider and ability-routing layers.
+Flavor Agent exposes seven recommendation abilities to the Abilities API default MCP server via `meta.mcp.public = true`: block, content, pattern, template, template-part, navigation, and style recommendations. It also registers a dedicated MCP Adapter server at `/wp-json/mcp/flavor-agent` when the MCP Adapter is active, so the seven recommendation tools appear directly in `tools/list`. Future upstream MCP routing work still pressures provider and ability-routing layers, but Flavor Agent no longer relies only on the universal default-server bridge.
 
 | #                  | Title                                                                    | Status        |
 | ------------------ | ------------------------------------------------------------------------ | ------------- |

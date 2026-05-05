@@ -30,6 +30,7 @@ require_once FLAVOR_AGENT_DIR . 'vendor/autoload.php';
 
 add_filter( 'wpai_default_feature_classes', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_feature_class' ] );
 add_action( 'admin_notices', [ FlavorAgent\AI\FeatureBootstrap::class, 'render_missing_contract_notice' ] );
+add_action( 'mcp_adapter_init', [ FlavorAgent\MCP\ServerBootstrap::class, 'register' ] );
 
 register_activation_hook(
 	FLAVOR_AGENT_FILE,
