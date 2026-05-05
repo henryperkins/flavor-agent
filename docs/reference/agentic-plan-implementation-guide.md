@@ -2,7 +2,7 @@
 
 ## Execution Protocol
 
-Use this protocol for all docs under `docs/superpowers/**` and implementation plans that carry structured task steps.
+Use this protocol for any implementation plan that carries structured task steps. Long-form plans should live outside the durable docs tree (issue tracker, PR description, or temporary working notes) and be deleted after execution; this guide stays in `docs/reference/` because the conventions outlive any individual plan.
 
 - Follow a worker-oriented execution loop when implementing a plan.
 - Use one of:

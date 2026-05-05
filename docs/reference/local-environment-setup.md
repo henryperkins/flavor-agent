@@ -14,6 +14,23 @@ npm ci
 
 The local WordPress stack also expects Docker, Docker Compose, PHP, Composer, WP-CLI, and Playwright browsers to be available on the host when running the full verification pipeline.
 
+## WordPress Image Pinning
+
+The primary local stack defaults to `wordpress:beta`, which tracks the current RC/beta. WordPress does not publish a `nightly` Docker tag; `beta` is the closest bleeding-edge tag on Docker Hub. To pin a specific build (for example, to match CI), override `WORDPRESS_BASE_IMAGE` in `.env`:
+
+```env
+# Current RC/beta (default)
+WORDPRESS_BASE_IMAGE=wordpress:beta
+
+# Latest stable (downgrade if you need to test against ship-released WordPress)
+# WORDPRESS_BASE_IMAGE=wordpress:php8.2-apache
+
+# Pin a specific RC (matches the WP 7.0 E2E harness)
+# WORDPRESS_BASE_IMAGE=wordpress:beta-7.0-RC2-php8.2-apache
+```
+
+The separate `FLAVOR_AGENT_WP70_BASE_IMAGE` stays pinned to `wordpress:beta-7.0-RC2-php8.2-apache` for the reproducible WP 7.0 E2E harness (`npm run test:e2e:wp70`).
+
 ## Start And Install WordPress
 
 Start the Docker stack:
@@ -168,6 +185,33 @@ npm run lint:plugin
 ```
 
 If the host cannot access Docker volume paths, run `npm run verify -- --skip=lint-plugin` only as an explicit local waiver and record that Plugin Check was not exercised.
+
+## Build, Stop, And Reset
+
+Build the plugin once before testing in WordPress, since `build/` is gitignored:
+
+```bash
+npm run build       # production build
+npm start           # webpack watch for active development
+```
+
+Stop or reset the Docker stack:
+
+```bash
+npm run wp:stop     # stop containers
+npm run wp:reset    # docker compose down -v (destroys volumes)
+```
+
+On Windows, prefer Docker Desktop with the WSL2 backend. Start Docker Desktop before `npm run wp:start`.
+
+## Cleaning Up Playground Temp Directories (Windows)
+
+The WP Playground CLI (used by the Playground E2E harness) creates per-run temp directories under `%TEMP%` named like `node.exe-playground-cli-site-*`. These can accumulate to several GB over time because Playground does not always clean them up on exit. Run periodically:
+
+```powershell
+Get-ChildItem $env:TEMP -Filter "*playground*" -Directory |
+  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+```
 
 ## Verification
 

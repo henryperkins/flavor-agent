@@ -238,5 +238,5 @@ Each recommendation surface disables independently when its required backend is 
 - `docs/reference/abilities-and-routes.md` — canonical REST and Abilities contract map
 - `docs/reference/shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers
 - `docs/flavor-agent-readme.md` — architecture companion and editor-flow reference
-- `docs/local-wordpress-ide.md` — local Docker/devcontainer workflow
+- `docs/reference/local-environment-setup.md` — local Docker/devcontainer workflow and image pinning
 - `STATUS.md` — working feature inventory and verification log

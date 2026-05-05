@@ -1,6 +1,6 @@
 # Block Recommendations
 
-Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/reference/abilities-and-routes.md` for the exact route/ability contract, and `docs/reference/surfaces/block-recommendations.md` for the release stop line.
+Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/reference/abilities-and-routes.md` for the exact route/ability contract, and `docs/reference/release-surface-scope-review.md#block-recommendations` for the release stop line.
 
 ## Exact Surface
 

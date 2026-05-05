@@ -115,12 +115,12 @@ Action:
 
 ### 2. Update the WP 7.0 harness image when the stable Docker image exists
 
-The repo still pins the Docker-backed WP 7.0 harness to a pre-release image via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the current pinned tag and override instructions live in `docs/local-wordpress-ide.md`.
+The repo still pins the Docker-backed WP 7.0 harness to a pre-release image via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the current pinned tag and override instructions live in `docs/reference/local-environment-setup.md`.
 
 Grounding:
 
 - `scripts/wp70-e2e.js`
-- `docs/local-wordpress-ide.md`
+- `docs/reference/local-environment-setup.md`
 - `STATUS.md`
 
 Action:

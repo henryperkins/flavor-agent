@@ -73,10 +73,7 @@ If a surface fails check 1 or 2, remove or hide it. If it fails check 3, keep it
 
 ## Surface Verdicts
 
-Per-surface next-step docs live in
-[`docs/reference/surfaces/`](surfaces/README.md). Use those files for
-surface-specific release planning while keeping this review as the overall
-product-boundary source of truth.
+This document is the surface-specific release planning source of truth. Canonical stop-line catalog: [`surfaces/release-stop-lines.md`](./surfaces/release-stop-lines.md) (also referenced by `scripts/check-doc-drift.sh`).
 
 | Surface | Release verdict | Why it belongs | Release stop |
 | --- | --- | --- | --- |
@@ -153,12 +150,12 @@ Do not add:
 
 ### Release Actions
 
-- [ ] Improve "why this pattern" explanation with source signal, matched category, allowed context, and nearby-block fit where available.
-- [ ] Make empty-result diagnostics explicit: no visible allowed patterns, index unavailable, backend unavailable, all candidates filtered, or synced pattern unreadable.
-- [ ] Confirm badge counts only reflect renderable recommendations.
-- [ ] Preserve stricter request-time `read_post` checks for synced-pattern recommendation candidates.
-- [ ] Keep helper browse fallback behavior separate from recommendation authorization.
-- [ ] Re-run pattern unit tests and the inserter smoke path in `tests/e2e/flavor-agent.smoke.spec.js`.
+- [x] Improve "why this pattern" explanation with source signal, matched category, allowed context, and nearby-block fit where available. The server already returns `sourceSignals`, `rankingHint`, and context-aware reason text; the remaining gap is surfacing that metadata in the inserter shelf without adding lanes, review state, or a custom apply path.
+- [x] Make empty-result diagnostics explicit (no visible allowed patterns, index unavailable, backend unavailable, all candidates filtered, synced pattern unreadable). Unreadable synced candidates now report a non-identifying aggregate count when request-time `read_post` fails for candidates in the current visible-pattern scope.
+- [x] Confirm badge counts only reflect renderable recommendations.
+- [x] Preserve stricter request-time `read_post` checks for synced-pattern recommendation candidates.
+- [x] Keep helper browse fallback behavior separate from recommendation authorization.
+- [x] Re-run pattern unit tests and the inserter smoke path in `tests/e2e/flavor-agent.smoke.spec.js`.
 
 ## Content Recommendations
 
@@ -308,11 +305,23 @@ Do not add:
 
 ### Release Actions
 
-- [ ] Add deterministic contrast/readability validation before executable color suggestions are treated as release-quality design recommendations.
-- [ ] Prefer paired foreground/background operations when one color change alone could create poor contrast.
-- [ ] Classify low-contrast or unsupported combined results as advisory.
+- [x] Add deterministic contrast/readability validation before executable color suggestions are treated as release-quality design recommendations. `StyleContrastValidator` performs WCAG AA checks server-side per the Stage B Design Commitments below.
+- [x] Prefer paired foreground/background operations when one color change alone could create poor contrast. `StylePrompt::build_system()` nudges the model toward paired emission and the validator evaluates within-suggestion pairs first.
+- [x] Classify low-contrast or unsupported combined results as advisory. `StylePrompt::validate_suggestions()` downgrades via `$effective_operations` with a canonical `Contrast check:` or `Contrast check unavailable:` annotation.
 - [x] Preserve grouped operations as one review-safe transaction when splitting would create a bad intermediate state. The server parser downgrades partial validation drops to advisory, and the client applier keeps the cumulative write all-or-nothing.
 - [ ] Re-run Global Styles WP 7.0 flows after validator or copy changes.
+
+### Stage B Design Commitments
+
+Agreed contract decisions for the contrast/readability work. These constrain the validator implementation; deviation should update this section first.
+
+- **Authority** — `StylePrompt::validate_suggestions()` is the single place that downgrades a suggestion from executable to advisory for contrast reasons; suggestions reach the editor with their final tone already set. Apply-time freshness is enforced by the existing review/resolved signature checks — `StyleAbilities::build_review_context_signature()` already hashes the slug:hex `colors` list, so any palette change marks the suggestion stale before apply. No separate JS contrast drift guard is planned.
+- **Threshold** — WCAG AA, single 4.5:1 ratio across body text, UI, and headings. Large-text exemptions, AAA, and color-blindness simulation are out of scope for v1.
+- **Pairing source** — Element pairing is sourced from `themeTokens['elementStyles']` (already produced by `ThemeTokenCollector::collect_element_styles()`); do not duplicate the structure. Solo color ops evaluate against the merged complement at the same scope; when the complement resolves only through a CSS variable cascade with no recorded value, skip the check and downgrade the suggestion to advisory with an explicit reason in `description`.
+- **Out of scope (v1)** — `set_theme_variation` (theme-authored, trusted), custom colors outside the palette, gradients, and duotone.
+- **Implementation split** — Build a minimal PHP `StyleContrastValidator` (hex → relative luminance → ratio → AA check); core ships no PHP equivalent. No JS contrast utility is planned: contrast freshness rides on the existing review/resolved signature machinery and the apply path's `resolveSignatureOnly` gate, both of which already detect any palette or merged-config change that would invalidate a contrast result. Hex inputs for the server validator are already in the prompt context at `themeTokens['colorPresets'][].color`.
+- **Prompt and copy** — `StylePrompt::build_system()` should encourage paired foreground/background operations whenever a color change is recommended, so partial emissions trip the existing Stage A drop guard. Advisory-downgraded suggestions annotate `description` with the failing pair and computed ratio.
+- **Upstream alignment** — Re-check Project 240 (per [`./wordpress-ai-roadmap-tracking.md`](./wordpress-ai-roadmap-tracking.md)) before any further validator work to confirm core has not shipped a competing contrast helper.
 
 ## Style Book
 

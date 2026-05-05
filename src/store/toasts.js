@@ -6,7 +6,7 @@
  * activity entry id so its Undo button can dispatch `undoActivity(entryId)` —
  * the same canonical undo path that `<AIActivitySection />` uses.
  *
- * Per the spec at docs/superpowers/specs/2026-05-04-undo-toast-design.md:
+ * Toast contract:
  *   - Variants: success (only enqueue source from apply paths) and error
  *     (only on undo failure, via `updateToast`); warning is reserved.
  *   - Cap at 3 visible. Eviction skips the oldest "interacted" entry; if

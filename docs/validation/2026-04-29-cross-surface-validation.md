@@ -15,7 +15,7 @@ Cross-surface remediation pass for the uncommitted-review findings from the prio
 - Pattern inserter UI: `src/patterns/InserterBadge.js`, `src/patterns/PatternRecommender.js`, `src/patterns/recommendation-utils.js`.
 - Activity / undo store: `src/store/index.js`, `src/store/activity-history.js`, `src/store/activity-undo.js`, `src/store/block-targeting.js`, `src/store/update-helpers.js`.
 - Tests: `tests/phpunit/PatternAbilitiesTest.php`, `tests/phpunit/PatternIndexTest.php`, `tests/phpunit/PromptRulesTest.php`, `tests/phpunit/AISearchClientTest.php`, `tests/phpunit/AgentControllerTest.php`, `src/patterns/__tests__/InserterBadge.test.js`, `src/patterns/__tests__/recommendation-utils.test.js`, `src/store/update-helpers.test.js`, `src/store/__tests__/store-actions.test.js`, `src/store/__tests__/activity-history.test.js`, `src/store/__tests__/pattern-status.test.js`, `tests/e2e/flavor-agent.smoke.spec.js`, `src/test-utils/wp-components.js`.
-- Recommendation docs / contributor artifacts: `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/reference/abilities-and-routes.md`, `docs/reference/shared-internals.md`, `docs/reference/pattern-recommendation-audit-remediation-plan.md`, `docs/reference/pattern-recommendation-debugging.md`, `docs/features/block-recommendations.md`, `docs/features/pattern-recommendations.md`, `STATUS.md`.
+- Recommendation docs / contributor artifacts: `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/reference/abilities-and-routes.md`, `docs/reference/shared-internals.md`, `docs/reference/pattern-recommendation-debugging.md`, `docs/features/block-recommendations.md`, `docs/features/pattern-recommendations.md`, `STATUS.md`.
 
 ## Formal Gates Triggered
 

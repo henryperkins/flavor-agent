@@ -148,6 +148,20 @@ Point-in-time artifacts that do not belong in the reading order but are preserve
 
 1. `docs/audits/` — completed or in-flight audit prompts and reports. These do not reflect live plugin state; treat them as historical analysis. Delete or supersede rather than silently updating.
 2. `docs/research/` — external research snapshots (upstream WordPress announcements, design-trend writeups). Use as inspiration or compatibility context, not as the plugin's own spec.
-3. `docs/prompts/`, `docs/validation/`, and `docs/superpowers/` — prompt templates, saved validation evidence, and execution plans. Treat them as point-in-time operational artifacts unless a backbone doc links to one for current release evidence.
+3. `docs/prompts/` and `docs/validation/` — prompt templates and saved validation evidence. `docs/prompts/surface-review-prompt.md` is the single review prompt for editor and admin surfaces; validation files are kept only as release evidence and deleted after the corresponding release tag.
 
 If an audit or research doc becomes load-bearing for a decision, promote it into the backbone (`docs/reference/` or a per-surface feature doc) rather than leaving it in these directories.
+
+## Retention Policy
+
+Every durable doc should answer one current question: product truth, current user flow, programmatic contract, operator runbook, release gate, or release evidence. Dated plans, prompts, audits, and research snapshots should expire after their outcomes move into code, tests, `STATUS.md`, `docs/features/`, or durable `docs/reference/` files.
+
+Convention for retained reference docs: open with a title, then a one-line "This document is the contract reference for X." statement, then a "Use it when you need to answer:" bullet list. New `docs/reference/*.md` files should follow that shape so their status, scope, and update trigger are visible without a separate metadata block.
+
+Before adding a new Markdown file under `docs/`, prefer one of these paths:
+
+1. update an existing backbone, feature, or reference doc;
+2. create a short release/validation artifact with a clear deletion point;
+3. keep long implementation plans outside the durable docs tree unless they are actively being executed.
+
+If a document is kept long-term, add or preserve enough context for a future maintainer to know its status, owner, and update trigger.
