@@ -101,6 +101,12 @@ The expected local runtime includes these active slugs:
 
 Configure text-generation credentials in `Settings > Connectors`. The OpenAI and Anthropic provider plugins own their provider-specific setup; do not use Flavor Agent's Azure/OpenAI Native embedding settings as a replacement for the Connectors runtime. Pattern recommendations still need a retrieval backend configured in `Settings > Flavor Agent`: Qdrant with plugin-owned embeddings, or a private Cloudflare AI Search instance for pattern retrieval.
 
+## WP 7.0 Browser Harness Scope
+
+`scripts/wp70-e2e.js` provisions a deterministic Docker-backed browser harness for editor and Site Editor regressions. It is not the full representative local runtime described above unless a test explicitly extends it with companion plugins.
+
+Current WP 7.0 browser specs exercise Flavor Agent editor behavior and selected Abilities API routes, but they do not validate the dedicated MCP server or the AI plugin Settings UI. Use the representative local runtime for MCP/AI-plugin manual checks, or extend `scripts/wp70-e2e.js` only when adding a dedicated MCP or AI-plugin Playwright spec.
+
 ## Cloudflare Pattern AI Search Metadata
 
 Before selecting Cloudflare AI Search as the pattern retrieval backend, create a private AI Search instance for Flavor Agent pattern content and declare exactly these five custom metadata fields as filterable metadata in the Cloudflare dashboard:

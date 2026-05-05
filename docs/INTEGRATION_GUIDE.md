@@ -149,3 +149,5 @@ npm run verify -- --skip-e2e
 ```
 
 Representative local runtime checks require the companion plugin stack documented in `docs/reference/local-environment-setup.md`, including the AI plugin, AI Services, provider connectors, MCP Adapter, Gutenberg, Plugin Check, and Flavor Agent.
+
+The WP 7.0 browser harness is not the MCP/AI-plugin parity environment unless a specific test provisions those companion plugins; use `docs/reference/local-environment-setup.md#wp-70-browser-harness-scope` when deciding whether MCP evidence is covered.
