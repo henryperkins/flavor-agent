@@ -206,6 +206,7 @@ final class RegistrationTest extends TestCase {
 
 			$this->assertIsArray( $annotations, "{$ability_id} should declare meta.annotations." );
 			$this->assertArrayNotHasKey( 'readonly', $annotations, "{$ability_id} must keep WP-format readonly unset so core executes it with POST." );
+			$this->assertArrayNotHasKey( 'readOnlyHint', $annotations, "{$ability_id} must not claim direct MCP readOnlyHint because execution persists diagnostics and freshness tokens." );
 			$this->assertSame( $expected, $annotations, "{$ability_id} should declare LLM-invoking annotations." );
 		}
 	}
