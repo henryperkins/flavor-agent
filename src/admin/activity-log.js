@@ -10,6 +10,7 @@ import {
 import {
 	createRoot,
 	Fragment,
+	useCallback,
 	useEffect,
 	useMemo,
 	useState,
@@ -33,6 +34,8 @@ import {
 
 const ROOT_ID = 'flavor-agent-activity-log-root';
 const NOT_RECORDED = 'Not recorded';
+const ERROR_KIND_INVALID_DAY_FILTER = 'invalid-day-filter';
+const ERROR_KIND_FETCH = 'fetch';
 const RELATIVE_DAY_UNITS = new Set( [
 	'hours',
 	'days',
@@ -427,32 +430,35 @@ function EmptyState( { view } ) {
 	);
 }
 
-function ErrorState( { error, onRetry } ) {
+function ErrorState( { error, actionLabel, onAction } ) {
 	return (
 		<Card
 			className="flavor-agent-activity-log__empty flavor-agent-activity-log__error-state"
 			size="small"
 		>
 			<CardBody>
-				<div className="flavor-agent-activity-log__error-heading">
-					<span className="flavor-agent-activity-log__error-icon">
-						<Icon icon={ caution } />
-					</span>
-					<h3 className="flavor-agent-activity-log__section-title">
-						{ __( 'Activity log unavailable', 'flavor-agent' ) }
-					</h3>
-				</div>
-				<p className="flavor-agent-activity-log__copy">
-					{ error ||
-						__(
-							'Flavor Agent could not load the recent AI activity log.',
-							'flavor-agent'
-						) }
-				</p>
-				<div className="flavor-agent-activity-log__empty-actions">
-					<Button variant="secondary" onClick={ onRetry }>
-						{ __( 'Retry loading activity', 'flavor-agent' ) }
-					</Button>
+				<div role="alert">
+					<div className="flavor-agent-activity-log__error-heading">
+						<span className="flavor-agent-activity-log__error-icon">
+							<Icon icon={ caution } />
+						</span>
+						<h3 className="flavor-agent-activity-log__section-title">
+							{ __( 'Activity log unavailable', 'flavor-agent' ) }
+						</h3>
+					</div>
+					<p className="flavor-agent-activity-log__copy">
+						{ error ||
+							__(
+								'Flavor Agent could not load the recent AI activity log.',
+								'flavor-agent'
+							) }
+					</p>
+					<div className="flavor-agent-activity-log__empty-actions">
+						<Button variant="secondary" onClick={ onAction }>
+							{ actionLabel ||
+								__( 'Retry loading activity', 'flavor-agent' ) }
+						</Button>
+					</div>
 				</div>
 			</CardBody>
 		</Card>
@@ -640,6 +646,7 @@ function ActivityDetailRow( { label, value, kind, status } ) {
 }
 
 function ActivityDetailSection( { section, entry } ) {
+	const [ isOpen, setIsOpen ] = useState( Boolean( section.initialOpen ) );
 	const summary = section.summary( entry ) || '';
 	const visibleRows = section.rows.filter( ( [ , key, kind ] ) => {
 		if ( kind !== 'code' ) {
@@ -666,7 +673,8 @@ function ActivityDetailSection( { section, entry } ) {
 	return (
 		<details
 			className="flavor-agent-activity-log__detail-section"
-			open={ Boolean( section.initialOpen ) }
+			open={ isOpen }
+			onToggle={ ( event ) => setIsOpen( event.currentTarget.open ) }
 		>
 			<summary className="flavor-agent-activity-log__detail-summary">
 				<span className="flavor-agent-activity-log__detail-summary-label">
@@ -775,6 +783,7 @@ export function ActivityLogApp( { bootData } ) {
 		},
 	} ) );
 	const [ error, setError ] = useState( '' );
+	const [ errorKind, setErrorKind ] = useState( '' );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ reloadToken, setReloadToken ] = useState( 0 );
 	const [ selectedEntryId, setSelectedEntryId ] = useState( '' );
@@ -801,6 +810,22 @@ export function ActivityLogApp( { bootData } ) {
 		() => getPerPageSizes( defaultView.perPage, bootData.maxPerPage ),
 		[ bootData.maxPerPage, defaultView.perPage ]
 	);
+	const clearDayFilter = useCallback( () => {
+		setView( ( currentView ) => {
+			const normalizedView = normalizeStoredActivityView(
+				currentView,
+				viewOptions
+			);
+
+			return {
+				...normalizedView,
+				page: 1,
+				filters: normalizedView.filters.filter(
+					( filter ) => filter?.field !== 'day'
+				),
+			};
+		} );
+	}, [ viewOptions ] );
 
 	useEffect( () => {
 		let isCurrent = true;
@@ -825,6 +850,7 @@ export function ActivityLogApp( { bootData } ) {
 				},
 			} );
 			setError( getInvalidDayFilterError() );
+			setErrorKind( ERROR_KIND_INVALID_DAY_FILTER );
 			setIsLoading( false );
 
 			return () => {
@@ -835,6 +861,7 @@ export function ActivityLogApp( { bootData } ) {
 		async function loadEntries() {
 			setIsLoading( true );
 			setError( '' );
+			setErrorKind( '' );
 
 			try {
 				const response = await apiFetch( {
@@ -910,6 +937,7 @@ export function ActivityLogApp( { bootData } ) {
 							'flavor-agent'
 						)
 				);
+				setErrorKind( ERROR_KIND_FETCH );
 			} finally {
 				if ( isCurrent ) {
 					setIsLoading( false );
@@ -1261,7 +1289,16 @@ export function ActivityLogApp( { bootData } ) {
 	const emptyState = error ? (
 		<ErrorState
 			error={ error }
-			onRetry={ () => setReloadToken( ( value ) => value + 1 ) }
+			actionLabel={
+				errorKind === ERROR_KIND_INVALID_DAY_FILTER
+					? __( 'Reset date filter', 'flavor-agent' )
+					: __( 'Retry loading activity', 'flavor-agent' )
+			}
+			onAction={
+				errorKind === ERROR_KIND_INVALID_DAY_FILTER
+					? clearDayFilter
+					: () => setReloadToken( ( value ) => value + 1 )
+			}
 		/>
 	) : (
 		<EmptyState view={ effectiveView } />
@@ -1358,6 +1395,18 @@ export function ActivityLogApp( { bootData } ) {
 									/>
 								</div>
 								{ isLoading && <Spinner /> }
+								{ isLoading && (
+									<span
+										className="screen-reader-text"
+										role="status"
+										aria-live="polite"
+									>
+										{ __(
+											'Loading activity…',
+											'flavor-agent'
+										) }
+									</span>
+								) }
 							</div>
 							<div className="flavor-agent-activity-log__controls-actions">
 								<DataViews.FiltersToggle />

@@ -6,6 +6,7 @@ namespace FlavorAgent\Cloudflare;
 
 final class WorkersAIEmbeddingConfiguration {
 
+
 	public const PROVIDER         = 'cloudflare_workers_ai';
 	public const DEFAULT_MODEL    = '@cf/qwen/qwen3-embedding-0.6b';
 	public const MAX_BATCH_INPUTS = 32;
@@ -23,21 +24,34 @@ final class WorkersAIEmbeddingConfiguration {
 			$model = self::DEFAULT_MODEL;
 		}
 
-		$endpoint = '' !== $account_id
-			? sprintf( 'https://api.cloudflare.com/client/v4/accounts/%s/ai/v1', rawurlencode( $account_id ) )
-			: '';
+		$configured = '' !== $account_id && '' !== $api_token && '' !== $model;
+
+		if ( ! $configured ) {
+			return [
+				'provider'   => self::PROVIDER,
+				'endpoint'   => '',
+				'api_key'    => '',
+				'model'      => $model,
+				'configured' => false,
+				'headers'    => [],
+				'url'        => '',
+				'label'      => 'Cloudflare Workers AI embeddings',
+			];
+		}
+
+		$endpoint = sprintf( 'https://api.cloudflare.com/client/v4/accounts/%s/ai/v1', rawurlencode( $account_id ) );
 
 		return [
 			'provider'   => self::PROVIDER,
 			'endpoint'   => $endpoint,
 			'api_key'    => $api_token,
 			'model'      => $model,
-			'configured' => '' !== $account_id && '' !== $api_token && '' !== $model,
+			'configured' => true,
 			'headers'    => [
 				'Authorization' => 'Bearer ' . $api_token,
 				'Content-Type'  => 'application/json',
 			],
-			'url'        => '' !== $endpoint ? $endpoint . '/embeddings' : '',
+			'url'        => $endpoint . '/embeddings',
 			'label'      => 'Cloudflare Workers AI embeddings',
 		];
 	}

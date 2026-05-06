@@ -1,4 +1,5 @@
 const mockUseDispatch = jest.fn();
+const mockUseRegistry = jest.fn();
 const mockUseSelect = jest.fn();
 const mockCloneBlock = jest.fn();
 const mockCreateBlock = jest.fn();
@@ -13,6 +14,14 @@ const mockGetAllowedPatterns = jest.fn();
 const mockFindInserterContainer = jest.fn();
 const mockFindInserterSearchInput = jest.fn();
 const mockGetVisiblePatternNames = jest.fn();
+
+const fs = require( 'fs' );
+const path = require( 'path' );
+
+const EDITOR_CSS = fs.readFileSync(
+	path.join( __dirname, '../../editor.css' ),
+	'utf8'
+);
 
 jest.mock( '@wordpress/components', () =>
 	require( '../../test-utils/wp-components' ).mockWpComponents()
@@ -30,6 +39,7 @@ jest.mock( '@wordpress/blocks', () => ( {
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
+	useRegistry: ( ...args ) => mockUseRegistry( ...args ),
 	useSelect: ( ...args ) => mockUseSelect( ...args ),
 } ) );
 
@@ -173,6 +183,7 @@ describe( 'PatternRecommender', () => {
 			},
 		};
 		mockUseDispatch.mockReset();
+		mockUseRegistry.mockReset();
 		mockUseSelect.mockReset();
 		mockCloneBlock.mockReset();
 		mockCreateBlock.mockReset();
@@ -211,6 +222,9 @@ describe( 'PatternRecommender', () => {
 
 			return {};
 		} );
+		mockUseRegistry.mockImplementation( () => ( {
+			select: ( storeName ) => createSelectMap()[ storeName ] || {},
+		} ) );
 		mockUseSelect.mockImplementation( ( callback ) =>
 			callback( ( storeName ) => createSelectMap()[ storeName ] )
 		);
@@ -251,6 +265,13 @@ describe( 'PatternRecommender', () => {
 		window.MutationObserver = originalMutationObserver;
 		jest.runOnlyPendingTimers();
 		jest.useRealTimers();
+	} );
+
+	test( 'uses the defined editor text token for pattern shelf titles', () => {
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-pattern-shelf__title\s*\{[^}]*color:\s*var\(--flavor-agent-editor-text\)/s
+		);
+		expect( EDITOR_CSS ).not.toContain( '--flavor-agent-editor-ink' );
 	} );
 
 	test( 'disconnects the observers cleanly when the inserter search input never appears', () => {
@@ -832,19 +853,85 @@ describe( 'PatternRecommender', () => {
 		state.allowedPatterns = [ blockedPattern ];
 		mockFindInserterContainer.mockReturnValue( inserterContainer );
 
-		// Pre-filter pass-through (true), but a fresh select at click time
-		// rejects the template-part blocks.
-		const wpSelect = jest.fn().mockReturnValue( {
-			canInsertBlockType: ( blockName ) =>
-				blockName !== 'core/template-part',
+		// Pre-filter pass-through (true), but a fresh active-registry select at
+		// click time rejects the template-part blocks.
+		mockUseRegistry.mockImplementation( () => ( {
+			select: ( storeName ) => {
+				if ( storeName === 'core/block-editor' ) {
+					return {
+						canInsertBlockType: ( blockName ) =>
+							blockName !== 'core/template-part',
+					};
+				}
+
+				return createSelectMap()[ storeName ] || {};
+			},
+		} ) );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain( 'Photo blog page' );
+
+		act( () => {
+			Array.from( inserterContainer.querySelectorAll( 'button' ) )
+				.find( ( button ) => button.textContent === 'Insert' )
+				.click();
+		} );
+
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockCreateErrorNotice ).toHaveBeenCalledTimes( 1 );
+		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+			'Cannot insert pattern "Photo blog page" here. The following blocks are not allowed at this insertion point: core/template-part, core/template-part.',
+			{
+				type: 'snackbar',
+				id: 'inserter-notice',
+			}
+		);
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+	} );
+
+	test( 'validates pattern insertion against the active registry instead of the global data store', () => {
+		const inserterContainer = document.createElement( 'div' );
+		const blockedPattern = {
+			name: 'theme/template-with-parts',
+			title: 'Template with parts',
+			blocks: [
+				{ name: 'core/template-part', attributes: { slug: 'header' } },
+			],
+		};
+		const globalSelect = jest.fn().mockReturnValue( {
+			canInsertBlockType: () => true,
 		} );
 		const previousWp = window.wp;
-		window.wp = { data: { select: wpSelect } };
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: blockedPattern.name,
+				score: 0.97,
+				reason: 'Recommended template page.',
+			},
+		];
+		state.allowedPatterns = [ blockedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+		mockUseRegistry.mockImplementation( () => ( {
+			select: ( storeName ) => {
+				if ( storeName === 'core/block-editor' ) {
+					return {
+						canInsertBlockType: ( blockName ) =>
+							blockName !== 'core/template-part',
+					};
+				}
+
+				return createSelectMap()[ storeName ] || {};
+			},
+		} ) );
+		window.wp = { data: { select: globalSelect } };
 
 		try {
 			renderComponent();
-
-			expect( document.body.textContent ).toContain( 'Photo blog page' );
 
 			act( () => {
 				Array.from( inserterContainer.querySelectorAll( 'button' ) )
@@ -852,16 +939,15 @@ describe( 'PatternRecommender', () => {
 					.click();
 			} );
 
+			expect( globalSelect ).not.toHaveBeenCalled();
 			expect( mockInsertBlocks ).not.toHaveBeenCalled();
-			expect( mockCreateErrorNotice ).toHaveBeenCalledTimes( 1 );
 			expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
-				'Cannot insert pattern "Photo blog page" here. The following blocks are not allowed at this insertion point: core/template-part, core/template-part.',
+				'Cannot insert pattern "Template with parts" here. The following blocks are not allowed at this insertion point: core/template-part.',
 				{
 					type: 'snackbar',
 					id: 'inserter-notice',
 				}
 			);
-			expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
 		} finally {
 			window.wp = previousWp;
 		}

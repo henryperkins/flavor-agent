@@ -9,7 +9,13 @@
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
-import { useEffect, useMemo, useState, createPortal } from '@wordpress/element';
+import {
+	createPortal,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { Tooltip } from '@wordpress/components';
 
 import { findInserterToggle } from './inserter-dom';
@@ -61,26 +67,90 @@ export default function InserterBadge() {
 		[ patternState.error, patternState.status, renderableRecommendations ]
 	);
 	const [ anchor, setAnchor ] = useState( null );
+	const anchorRef = useRef( null );
 
 	useEffect( () => {
+		const clearAnchor = () => {
+			if ( anchorRef.current ) {
+				anchorRef.current.classList.remove(
+					'flavor-agent-inserter-badge-anchor'
+				);
+				anchorRef.current = null;
+			}
+
+			setAnchor( null );
+		};
+
 		if ( badgeState.status === 'hidden' ) {
-			setAnchor( null );
+			clearAnchor();
 			return;
 		}
 
-		const button = findInserterToggle();
-		const parent = button?.parentElement;
-		if ( ! parent ) {
-			setAnchor( null );
-			return;
-		}
+		let retryId = null;
+		const stopRetry = () => {
+			if ( retryId ) {
+				clearInterval( retryId );
+				retryId = null;
+			}
+		};
+		const startRetry = () => {
+			if ( retryId || typeof setInterval !== 'function' ) {
+				return;
+			}
 
-		// Use a CSS class instead of mutating inline styles.
-		parent.classList.add( 'flavor-agent-inserter-badge-anchor' );
-		setAnchor( parent );
+			retryId = setInterval( refreshAnchor, 250 );
+		};
+		const refreshAnchor = () => {
+			const button = findInserterToggle();
+			const nextAnchor = button?.parentElement || null;
+
+			if ( nextAnchor ) {
+				stopRetry();
+			} else {
+				startRetry();
+			}
+
+			if ( anchorRef.current === nextAnchor ) {
+				return;
+			}
+
+			if ( anchorRef.current ) {
+				anchorRef.current.classList.remove(
+					'flavor-agent-inserter-badge-anchor'
+				);
+			}
+
+			if ( nextAnchor ) {
+				// Use a CSS class instead of mutating inline styles.
+				nextAnchor.classList.add(
+					'flavor-agent-inserter-badge-anchor'
+				);
+			}
+
+			anchorRef.current = nextAnchor;
+			setAnchor( nextAnchor );
+		};
+
+		refreshAnchor();
+
+		const observerTarget = document.body || document.documentElement;
+		const MutationObserverConstructor =
+			typeof window !== 'undefined' ? window.MutationObserver : null;
+		const observer =
+			observerTarget && MutationObserverConstructor
+				? new MutationObserverConstructor( refreshAnchor )
+				: null;
+
+		observer?.observe( observerTarget, {
+			attributes: true,
+			childList: true,
+			subtree: true,
+		} );
 
 		return () => {
-			parent.classList.remove( 'flavor-agent-inserter-badge-anchor' );
+			observer?.disconnect();
+			stopRetry();
+			clearAnchor();
 		};
 	}, [ badgeState.status ] );
 

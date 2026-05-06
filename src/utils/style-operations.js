@@ -5,6 +5,11 @@ import {
 	buildBlockStyleExecutionContractFromSettings,
 	buildGlobalStylesExecutionContractFromSettings,
 } from '../context/theme-tokens';
+import {
+	getCurrentGlobalStylesId,
+	getCurrentThemeBaseGlobalStyles,
+	getCurrentThemeGlobalStylesVariations,
+} from '../global-styles/selectors';
 import { buildContextSignature } from './context-signature';
 import { deepStructuralEqual } from './structural-equality';
 import {
@@ -377,20 +382,6 @@ function removePath( value, path = [] ) {
 	return next;
 }
 
-function getCurrentGlobalStylesId( coreSelect ) {
-	const id = coreSelect?.__experimentalGetCurrentGlobalStylesId?.();
-
-	if ( typeof id === 'string' && id ) {
-		return id;
-	}
-
-	if ( Number.isInteger( id ) && id > 0 ) {
-		return String( id );
-	}
-
-	return null;
-}
-
 function getCurrentUserConfig( coreSelect, globalStylesId ) {
 	const record =
 		coreSelect?.getEditedEntityRecord?.(
@@ -409,8 +400,7 @@ function getCurrentUserConfig( coreSelect, globalStylesId ) {
 }
 
 function getCurrentMergedConfig( coreSelect, userConfig ) {
-	const baseConfig =
-		coreSelect?.__experimentalGetCurrentThemeBaseGlobalStyles?.() || null;
+	const baseConfig = getCurrentThemeBaseGlobalStyles( coreSelect );
 
 	if ( ! baseConfig ) {
 		return normalizeConfig( userConfig );
@@ -932,9 +922,7 @@ export function getGlobalStylesUserConfig( registry ) {
 			runtime.coreSelect,
 			runtime.userConfig
 		),
-		variations:
-			runtime.coreSelect?.__experimentalGetCurrentThemeGlobalStylesVariations?.() ||
-			[],
+		variations: getCurrentThemeGlobalStylesVariations( runtime.coreSelect ),
 	};
 }
 
@@ -981,9 +969,9 @@ export function applyGlobalStyleSuggestionOperations(
 		? getBlocksSelect( registry )
 		: null;
 
-	const availableVariations =
-		runtime.coreSelect?.__experimentalGetCurrentThemeGlobalStylesVariations?.() ||
-		[];
+	const availableVariations = getCurrentThemeGlobalStylesVariations(
+		runtime.coreSelect
+	);
 	const beforeConfig = runtime.userConfig;
 	let afterConfig = normalizeConfig( beforeConfig );
 	const appliedOperations = [];

@@ -11,8 +11,16 @@ jest.mock( '@wordpress/i18n', () => ( {
 	),
 } ) );
 
+const fs = require( 'fs' );
+const path = require( 'path' );
+
 import * as i18n from '@wordpress/i18n';
 import { initializeSettingsPage } from '../settings-page-controller';
+
+const SETTINGS_CSS = fs.readFileSync(
+	path.join( __dirname, '../settings.css' ),
+	'utf8'
+);
 
 function createStorage( initialValues = {} ) {
 	const values = new Map( Object.entries( initialValues ) );
@@ -204,6 +212,22 @@ describe( 'settings page controller', () => {
 	afterEach( () => {
 		delete window.flavorAgentAdmin;
 		document.body.innerHTML = '';
+	} );
+
+	test( 'declares tone styles for server-rendered settings status blocks', () => {
+		expect( SETTINGS_CSS ).toContain( '.flavor-agent-settings-status' );
+		expect( SETTINGS_CSS ).toContain(
+			'.flavor-agent-settings-status--warning'
+		);
+		expect( SETTINGS_CSS ).toContain(
+			'.flavor-agent-settings-status--error'
+		);
+		expect( SETTINGS_CSS ).toContain(
+			'.flavor-agent-settings-status--success'
+		);
+		expect( SETTINGS_CSS ).toContain(
+			'.flavor-agent-settings-status--accent'
+		);
 	} );
 
 	test( 'forced section overrides stored state and becomes the active accordion section', () => {

@@ -9,6 +9,7 @@ use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Embeddings\EmbeddingClient;
 use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Patterns\Retrieval\QdrantPatternRetrievalBackend;
@@ -2624,6 +2625,11 @@ final class PatternAbilitiesTest extends TestCase {
 			[
 				Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
+					(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
+					(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
+					(string) get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' )
+				),
 			]
 		);
 	}
@@ -2725,20 +2731,10 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	private function expected_cloudflare_ai_search_signature(): string {
-		return hash(
-			'sha256',
-			implode(
-				'|',
-				array_map(
-					'trim',
-					[
-						(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
-						Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
-						(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
-					]
-				)
-			)
+		return PatternSearchInstanceManager::credential_signature(
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' )
 		);
 	}
 

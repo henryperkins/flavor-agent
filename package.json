@@ -9,6 +9,7 @@
 	"main": "build/index.js",
 	"scripts": {
 		"build": "wp-scripts build",
+		"audit:screenshot": "node scripts/browser-run-screenshot.js",
 		"dist": "bash scripts/build-dist.sh",
 		"ensure:local-env": "node scripts/ensure-local-env.js",
 		"start": "wp-scripts start",

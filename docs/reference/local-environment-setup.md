@@ -126,9 +126,27 @@ The bootstrap installs and activates the `ai` plugin from WordPress.org because 
 
 Current WP 7.0 browser specs exercise Flavor Agent editor behavior and selected Abilities API routes, but they do not validate the dedicated MCP server or the AI plugin Settings UI. Use the representative local runtime for MCP/AI-plugin manual checks, or extend `scripts/wp70-e2e.js` only when adding a dedicated MCP or AI-plugin Playwright spec.
 
+## Remote Screenshot Audits
+
+For quick visual evidence from a public WordPress target, use the optional Cloudflare Browser Run utility:
+
+```bash
+export CLOUDFLARE_ACCOUNT_ID="..."
+export CLOUDFLARE_API_TOKEN="..."
+npm run audit:screenshot -- --preset=settings --base-url="https://example.test" --cookies-file=/tmp/wp-admin-cookies.json
+```
+
+Provide a reachable WordPress target with `--base-url`, a manifest `baseUrl`, or `BROWSER_RUN_DEFAULT_BASE_URL`. Localhost URLs are unsupported unless the operator supplies a reachable tunnel URL.
+
+Admin/editor screenshots require temporary cookies, `BROWSER_RUN_COOKIES_JSON`, or an explicit extra-headers JSON file. Do not commit those auth inputs or the generated screenshots. Artifacts are written under `output/browser-run/{timestamp}-{run-name}/` and are ignored through the existing `output/` convention.
+
+Browser Run screenshots are supporting visual evidence only. They do not replace the Playwright harnesses, and missing browser assertions still need the blocker or waiver record described in `docs/reference/cross-surface-validation-gates.md`. More usage examples live in `docs/reference/browser-run-screenshot-audits.md`.
+
 ## Cloudflare Pattern AI Search Metadata
 
-Before selecting Cloudflare AI Search as the pattern retrieval backend, create a private AI Search instance for Flavor Agent pattern content. Flavor Agent reuses the Cloudflare account/token saved for the Embedding Model and only asks for the pattern index name in Pattern Storage. Declare exactly these five custom metadata fields as filterable metadata in the Cloudflare dashboard:
+Before selecting Cloudflare AI Search as the pattern retrieval backend, save Cloudflare account ID, API token, and embedding model values under Embedding Model. When Cloudflare AI Search Pattern Storage is selected, Flavor Agent creates or adopts a dedicated managed AI Search instance named `flavor-agent-patterns-{site_hash}` in the `patterns` namespace. The token must have AI Search permissions in addition to Workers AI embedding access.
+
+The managed instance uses built-in storage, Cloudflare-managed R2 and Vectorize resources, hybrid keyword/vector indexing, 1024-token chunks, 15 percent overlap, and exactly these five custom metadata fields:
 
 | Field | Type |
 | --- | --- |
@@ -138,13 +156,7 @@ Before selecting Cloudflare AI Search as the pattern retrieval backend, create a
 | `synced_id` | Text |
 | `public_safe` | Boolean |
 
-Dashboard setup:
-
-1. Open the Cloudflare dashboard and select the account that owns the AI Search instance.
-2. Go to **AI > AI Search**, open the namespace used for local pattern testing, then open the private pattern-search instance.
-3. Open the instance metadata or indexing configuration and add the five custom metadata fields listed above.
-4. Mark each field as available for filtering so search requests can use `filters.pattern_name`.
-5. Save the instance configuration and wait for the dashboard to finish applying the schema before running the first Flavor Agent pattern sync.
+The normal setup path is to select Cloudflare AI Search Pattern Storage on `Settings > Flavor Agent`, then use the `Create managed pattern index` save action. Existing deterministic instances are adopted only when the schema, Flavor Agent owner marker, and effective embedding model prove compatibility. If an existing `flavor-agent-patterns-{site_hash}` instance has an incompatible schema, belongs to another install, or was created with a different embedding model, Flavor Agent blocks adoption; fix or remove that conflicting Cloudflare instance and save settings again. After changing the Embedding Model value, save Pattern Storage again so the managed AI Search signature is revalidated before the next sync.
 
 Use an Embedding Model token that also has **AI Search:Edit** and **AI Search:Run** permissions for this private pattern instance. Do not reuse the built-in public WordPress developer-docs AI Search endpoint for pattern content.
 

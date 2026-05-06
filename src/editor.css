@@ -2059,7 +2059,7 @@
   font-size: var(--wpds-font-size-sm, 13px);
   font-weight: 600;
   line-height: 1.35;
-  color: var(--flavor-agent-editor-ink);
+  color: var(--flavor-agent-editor-text);
 }
 
 .flavor-agent-pattern-shelf__reason {

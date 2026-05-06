@@ -1,6 +1,7 @@
 import { useDispatch, useSelect } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
+import { getCurrentGlobalStylesId } from '../global-styles/selectors';
 import { getStyleBookUiState, subscribeToStyleBookUi } from '../style-book/dom';
 import { STORE_NAME } from '../store';
 import {
@@ -27,8 +28,7 @@ export default function ActivitySessionBootstrap() {
 		return {
 			activeComplementaryArea:
 				interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '',
-			globalStylesId:
-				coreStore?.__experimentalGetCurrentGlobalStylesId?.() || '',
+			globalStylesId: getCurrentGlobalStylesId( coreStore ) || '',
 			postType:
 				editor?.getCurrentPostType?.() ||
 				editSite?.getEditedPostType?.() ||

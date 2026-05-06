@@ -339,21 +339,6 @@ final class Registrar {
 			]
 		);
 		add_settings_field(
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-			'Index Name',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_cloudflare_pattern_ai_search',
-			[
-				'option'       => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-				'label_for'    => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-				'placeholder'  => 'pattern-index',
-				'description'  => 'Unique Cloudflare AI Search pattern index name.',
-				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
 			'flavor_agent_pattern_recommendation_threshold',
 			'Ranking Threshold',
 			[ Settings::class, 'render_text_field' ],

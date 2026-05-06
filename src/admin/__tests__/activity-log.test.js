@@ -462,7 +462,57 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).toContain(
 			'Complete or reset the date filter to load activity.'
 		);
+		expect( getContainer().textContent ).toContain( 'Reset date filter' );
+		expect( getContainer().textContent ).not.toContain(
+			'Retry loading activity'
+		);
 		expect( getContainer().textContent ).toContain( 'Reset view' );
+	} );
+
+	test( 'clears invalid date filters from the error action before fetching activity', async () => {
+		window.localStorage.setItem(
+			VIEW_STORAGE_KEY,
+			JSON.stringify( {
+				...DEFAULT_ACTIVITY_VIEW,
+				filters: [
+					{
+						field: 'day',
+						operator: 'between',
+						value: [ '2026-03-31', '2026-03-01' ],
+					},
+				],
+			} )
+		);
+		apiFetch.mockResolvedValue(
+			buildResponse( [
+				createEntry( {
+					id: 'activity-recovered',
+					suggestion: 'Recovered from date filter',
+				} ),
+			] )
+		);
+
+		await renderApp();
+
+		const resetButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Reset date filter' );
+
+		expect( resetButton ).toBeDefined();
+		expect( apiFetch ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			resetButton.click();
+		} );
+		await flushEffects();
+
+		expect( getVisibleTitles() ).toEqual( [
+			'Recovered from date filter',
+		] );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].url ).not.toContain(
+			'dayOperator'
+		);
 	} );
 
 	test( 'keeps the detail sidebar synced to the server-backed visible feed', async () => {
@@ -541,6 +591,33 @@ describe( 'ActivityLogApp', () => {
 				( node ) => node.tagName === 'DT' || node.tagName === 'DD'
 			)
 		).toBe( true );
+	} );
+
+	test( 'preserves user-toggled detail sections across rerenders', async () => {
+		await renderApp( [
+			createEntry( { suggestion: 'Audit details row' } ),
+		] );
+
+		const overviewSection = getDetailSectionByLabel( 'Overview' );
+		const diagnosticsSection = getDetailSectionByLabel( 'Diagnostics' );
+
+		expect( overviewSection.open ).toBe( true );
+		expect( diagnosticsSection.open ).toBe( false );
+
+		act( () => {
+			overviewSection.querySelector( 'summary' ).click();
+			diagnosticsSection.querySelector( 'summary' ).click();
+		} );
+
+		expect( overviewSection.open ).toBe( false );
+		expect( diagnosticsSection.open ).toBe( true );
+
+		await act( async () => {
+			getRoot().render( <ActivityLogApp bootData={ BOOT_DATA } /> );
+		} );
+
+		expect( getDetailSectionByLabel( 'Overview' ).open ).toBe( false );
+		expect( getDetailSectionByLabel( 'Diagnostics' ).open ).toBe( true );
 	} );
 
 	test( 'hides empty code rows and shows populated code rows as pre blocks', async () => {
@@ -1073,7 +1150,34 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).not.toContain(
 			'No AI activity has been recorded yet.'
 		);
-		expect( getContainer().querySelector( '[role="alert"]' ) ).toBeNull();
+		expect(
+			getContainer().querySelector( '[role="alert"]' )
+		).not.toBeNull();
+	} );
+
+	test( 'announces activity loading state to assistive technologies', async () => {
+		let resolveFetch;
+		apiFetch.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolveFetch = resolve;
+			} )
+		);
+
+		await act( async () => {
+			getRoot().render( <ActivityLogApp bootData={ BOOT_DATA } /> );
+		} );
+
+		const loadingStatus = getContainer().querySelector(
+			'[role="status"][aria-live="polite"]'
+		);
+
+		expect( loadingStatus ).not.toBeNull();
+		expect( loadingStatus.textContent ).toBe( 'Loading activity…' );
+
+		await act( async () => {
+			resolveFetch( buildResponse( [ createEntry() ] ) );
+		} );
+		await flushEffects();
 	} );
 
 	test( 'retries loading activity from the inline error state', async () => {

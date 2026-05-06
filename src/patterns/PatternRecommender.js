@@ -18,7 +18,7 @@
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { cloneBlock } from '@wordpress/blocks';
 import { Button } from '@wordpress/components';
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch, useRegistry, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
 	createPortal,
@@ -305,6 +305,7 @@ function PatternInserterNotice( {
 }
 
 export default function PatternRecommender() {
+	const registry = useRegistry();
 	const canRecommend = getSurfaceCapability( 'pattern' ).available;
 	const postType = useSelect(
 		( select ) => select( editorStore ).getCurrentPostType(),
@@ -497,7 +498,7 @@ export default function PatternRecommender() {
 				return;
 			}
 
-			const blockEditor = window.wp?.data?.select?.( blockEditorStore );
+			const blockEditor = registry?.select?.( blockEditorStore );
 			const rejected = getRejectedPatternBlockNames(
 				pattern,
 				inserterRootClientId,
@@ -546,6 +547,7 @@ export default function PatternRecommender() {
 			insertBlocks,
 			insertionIndex,
 			inserterRootClientId,
+			registry,
 		]
 	);
 

@@ -1,4 +1,5 @@
 import { getStyleBookUiState } from '../style-book/dom';
+import { getCurrentGlobalStylesId } from '../global-styles/selectors';
 import {
 	BLOCK_TARGET_MOVED_ERROR,
 	getBlockByPath,
@@ -470,8 +471,7 @@ export function getCurrentActivityScope( registry ) {
 	const coreStore = registry?.select?.( 'core' ) || {};
 	const activeComplementaryArea =
 		interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '';
-	const globalStylesId =
-		coreStore?.__experimentalGetCurrentGlobalStylesId?.() || null;
+	const globalStylesId = getCurrentGlobalStylesId( coreStore );
 
 	if (
 		activeComplementaryArea === 'edit-site/global-styles' &&

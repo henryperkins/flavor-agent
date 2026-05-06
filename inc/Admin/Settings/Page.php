@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
@@ -575,15 +576,11 @@ final class Page {
 		);
 		self::render_subsection_heading(
 			__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
-			__( 'Managed pattern index using saved Cloudflare credentials.', 'flavor-agent' )
+			__( 'Managed pattern index using the saved Embedding Model credentials.', 'flavor-agent' )
 		);
+		self::render_cloudflare_pattern_ai_search_status_panel( $state, $feedback );
 		self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
-		self::render_registered_fields_table(
-			'flavor_agent_cloudflare_pattern_ai_search',
-			[
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-			]
-		);
+		self::render_cloudflare_pattern_ai_search_hidden_field();
 		?>
 		<details class="flavor-agent-settings-subpanel">
 			<summary class="flavor-agent-settings-subpanel__summary">
@@ -784,6 +781,160 @@ final class Page {
 		}
 	}
 
+	private static function render_cloudflare_pattern_ai_search_hidden_field(): void {
+		printf(
+			'<input type="hidden" name="%1$s" value="%2$s" />',
+			esc_attr( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ),
+			esc_attr( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) )
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $state
+	 * @param array<string, mixed> $feedback
+	 */
+	private static function render_cloudflare_pattern_ai_search_status_panel( array $state, array $feedback ): void {
+		$selected_backend = (string) ( $state['selected_pattern_backend'] ?? '' );
+
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== $selected_backend ) {
+			return;
+		}
+
+		$instance_id     = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
+		$embedding_ready = ! empty( $state['runtime_embedding']['configured'] );
+		$storage_ready   = ! empty( $state['cloudflare_pattern_ai_search_configured'] );
+		$error_code      = self::latest_pattern_ai_search_error_code( $feedback );
+
+		if ( $storage_ready ) {
+			self::render_cloudflare_pattern_ai_search_status(
+				'success',
+				__( 'Managed pattern index ready.', 'flavor-agent' ),
+				$instance_id
+			);
+			return;
+		}
+
+		if ( ! $embedding_ready ) {
+			self::render_cloudflare_pattern_ai_search_status(
+				'warning',
+				__( 'Needs Embedding Model credentials.', 'flavor-agent' ),
+				$instance_id
+			);
+			return;
+		}
+
+		if ( self::is_specific_pattern_ai_search_status_code( $error_code ) ) {
+			self::render_cloudflare_pattern_ai_search_status(
+				'error',
+				sprintf(
+					/* translators: %s: deterministic Cloudflare AI Search instance ID */
+					__( 'Managed pattern index needs attention. Flavor Agent will not adopt %s until ownership and schema can be proven. Fix or remove the conflicting Cloudflare AI Search instance, then save settings again.', 'flavor-agent' ),
+					PatternSearchInstanceManager::managed_instance_id()
+				),
+				$instance_id
+			);
+			return;
+		}
+
+		if ( '' !== $error_code ) {
+			self::render_cloudflare_pattern_ai_search_status(
+				'error',
+				__( 'Managed pattern index needs attention.', 'flavor-agent' ),
+				$instance_id
+			);
+			return;
+		}
+
+		self::render_cloudflare_pattern_ai_search_status(
+			'warning',
+			__( 'Create managed pattern index.', 'flavor-agent' ),
+			$instance_id
+		);
+	}
+
+	private static function render_cloudflare_pattern_ai_search_status( string $tone, string $message, string $instance_id ): void {
+		?>
+		<div class="flavor-agent-settings-status flavor-agent-settings-status--<?php echo esc_attr( $tone ); ?>">
+			<p><?php echo esc_html( $message ); ?></p>
+			<?php if ( '' !== $instance_id ) : ?>
+				<details>
+					<summary><?php echo esc_html__( 'Advanced details', 'flavor-agent' ); ?></summary>
+					<p><?php echo esc_html( sprintf( 'Instance ID: %s', $instance_id ) ); ?></p>
+				</details>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * @param array<string, mixed> $feedback
+	 */
+	private static function latest_pattern_ai_search_error_code( array $feedback ): string {
+		$feedback_code = self::latest_pattern_ai_search_error_code_from_entries(
+			Feedback::get_feedback_message_entries( $feedback, Config::GROUP_PATTERNS )
+		);
+
+		if ( '' !== $feedback_code ) {
+			return $feedback_code;
+		}
+
+		return self::latest_pattern_ai_search_error_code_from_entries(
+			get_settings_errors( Config::OPTION_GROUP )
+		);
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $entries
+	 */
+	private static function latest_pattern_ai_search_error_code_from_entries( array $entries ): string {
+		$fallback_code = '';
+
+		foreach ( array_reverse( $entries ) as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+
+			$code = self::normalize_pattern_ai_search_error_code( (string) ( $entry['code'] ?? '' ) );
+
+			if ( '' === $code ) {
+				continue;
+			}
+
+			if ( self::is_specific_pattern_ai_search_status_code( $code ) ) {
+				return $code;
+			}
+
+			if ( '' === $fallback_code ) {
+				$fallback_code = $code;
+			}
+		}
+
+		return $fallback_code;
+	}
+
+	private static function normalize_pattern_ai_search_error_code( string $code ): string {
+		$code = sanitize_key( $code );
+
+		if ( str_contains( $code, 'cloudflare_pattern_ai_search' ) ) {
+			return $code;
+		}
+
+		return '';
+	}
+
+	private static function is_specific_pattern_ai_search_status_code( string $code ): bool {
+		return in_array(
+			$code,
+			[
+				'cloudflare_pattern_ai_search_incompatible_schema',
+				'cloudflare_pattern_ai_search_owner_marker_missing',
+				'cloudflare_pattern_ai_search_owner_marker_mismatch',
+				'cloudflare_pattern_ai_search_embedding_model_mismatch',
+			],
+			true
+		);
+	}
+
 	/**
 	 * @param array<int, array{label: string, tone: string}> $badges
 	 */
@@ -948,7 +1099,7 @@ final class Page {
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
 			return ! empty( $page_state['cloudflare_pattern_ai_search_configured'] )
 				? ''
-				: __( 'Complete the Cloudflare credentials and Cloudflare AI Search pattern index name before syncing.', 'flavor-agent' );
+				: __( 'Save Embedding Model credentials and create the managed pattern index before syncing.', 'flavor-agent' );
 		}
 
 		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );

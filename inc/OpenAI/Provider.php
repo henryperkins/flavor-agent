@@ -17,6 +17,7 @@ use FlavorAgent\LLM\WordPressAIClient;
 final class Provider {
 
 
+
 	public const OPTION_NAME = 'flavor_agent_openai_provider';
 
 	private const WORDPRESS_AI_CLIENT_PROVIDER = 'wordpress_ai_client';
@@ -151,6 +152,10 @@ final class Provider {
 	}
 
 	/**
+	 * Embeddings are plugin-owned Cloudflare Workers AI only. The `$provider`
+	 * argument is retained for legacy callers but intentionally ignored.
+	 *
+	 * @param ?string $provider Deprecated and ignored.
 	 * @param array<string, string> $overrides
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
@@ -638,14 +643,6 @@ final class Provider {
 	}
 
 	/**
-	 * @param array<string, string> $overrides
-	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
-	 */
-	private static function runtime_embedding_configuration( array $overrides = [] ): array {
-		return WorkersAIEmbeddingConfiguration::get( $overrides );
-	}
-
-	/**
 	 * @return array<string, string>
 	 */
 	private static function registered_connector_choices(): array {
@@ -689,34 +686,6 @@ final class Provider {
 			'url'        => '',
 			'label'      => 'WordPress AI Client',
 		];
-	}
-
-	/**
-	 * @return array{
-	 *   name: string,
-	 *   description?: string,
-	 *   logo_url?: string,
-	 *   type: string,
-	 *   authentication: array<string, string>,
-	 *   plugin?: array<string, string>
-	 * }|null
-	 */
-	private static function openai_connector(): ?array {
-		if ( function_exists( 'wp_get_connector' ) ) {
-			try {
-				$connector = wp_get_connector( self::OPENAI_CONNECTOR_ID );
-
-				if ( is_array( $connector ) ) {
-					return $connector;
-				}
-			} catch ( \Throwable $throwable ) {
-				// Fall back to the bulk registry lookup below.
-			}
-		}
-
-		$connector = self::registered_connectors()[ self::OPENAI_CONNECTOR_ID ] ?? null;
-
-		return is_array( $connector ) ? $connector : null;
 	}
 
 	/**

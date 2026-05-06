@@ -6,6 +6,8 @@ namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\PatternSearchClient;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
@@ -231,14 +233,14 @@ final class State {
 				$index_ready     = self::cloudflare_pattern_ai_search_index_configured();
 
 				if ( ! $embedding_ready && ! $index_ready ) {
-					return self::make_badge( __( 'Needs model & index', 'flavor-agent' ), 'warning' );
+					return self::make_badge( __( 'Needs model & storage', 'flavor-agent' ), 'warning' );
 				}
 
 				if ( ! $embedding_ready ) {
 					return self::make_badge( __( 'Needs embedding model', 'flavor-agent' ), 'warning' );
 				}
 
-				return self::make_badge( __( 'Needs pattern index', 'flavor-agent' ), 'warning' );
+				return self::make_badge( __( 'Needs pattern storage', 'flavor-agent' ), 'warning' );
 			}
 
 			$embedding_ready = ! empty( $state['runtime_embedding']['configured'] );
@@ -357,7 +359,7 @@ final class State {
 				if ( empty( $state['cloudflare_pattern_ai_search_configured'] ) ) {
 					$status_blocks[] = [
 						'tone'    => 'warning',
-						'message' => __( 'Cloudflare AI Search pattern storage needs Cloudflare credentials and a pattern index name.', 'flavor-agent' ),
+						'message' => __( 'Cloudflare AI Search Pattern Storage needs saved Embedding Model credentials and a managed pattern index.', 'flavor-agent' ),
 					];
 				}
 			} elseif ( ! empty( $state['qdrant_configured'] ) && empty( $state['runtime_embedding']['configured'] ) ) {
@@ -540,7 +542,34 @@ final class State {
 	}
 
 	private static function cloudflare_pattern_ai_search_index_configured(): bool {
-		return '' !== trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
+		$instance_id = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
+
+		if ( '' === $instance_id ) {
+			return false;
+		}
+
+		$account_id      = trim( (string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) );
+		$api_token       = trim( (string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) );
+		$embedding_model = trim(
+			(string) get_option(
+				'flavor_agent_cloudflare_workers_ai_embedding_model',
+				WorkersAIEmbeddingConfiguration::DEFAULT_MODEL
+			)
+		);
+
+		if ( '' === $account_id || '' === $api_token ) {
+			return false;
+		}
+
+		$signature = PatternSearchInstanceManager::credential_signature(
+			$account_id,
+			$api_token,
+			$embedding_model
+		);
+
+		return $signature === trim(
+			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE, '' )
+		);
 	}
 
 	private static function runtime_chat_uses_connectors( array $state ): bool {

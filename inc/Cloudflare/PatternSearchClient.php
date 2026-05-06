@@ -309,29 +309,20 @@ final class PatternSearchClient extends BaseHttpClient {
 		?string $instance_id = null,
 		?string $api_token = null
 	): array|\WP_Error {
-		$account_id  = self::normalize_config_value(
-			$account_id ?? self::get_config_option_with_fallback(
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-				'flavor_agent_cloudflare_workers_ai_account_id'
-			)
+		$explicit_config = null !== $account_id && null !== $namespace_id && null !== $instance_id && null !== $api_token;
+		$account_id      = self::normalize_config_value(
+			$account_id ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' )
 		);
-		$namespace   = self::normalize_config_value(
-			$namespace_id ?? self::get_config_option_with_fallback(
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-				null,
-				Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
-			)
+		$namespace       = self::normalize_config_value(
+			$namespace_id ?? Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
 		);
-		$instance_id = self::normalize_config_value(
+		$instance_id     = self::normalize_config_value(
 			$instance_id ?? get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' )
 		);
-		$api_token   = self::normalize_config_value(
-			$api_token ?? self::get_config_option_with_fallback(
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-				'flavor_agent_cloudflare_workers_ai_api_token'
-			)
+		$api_token       = self::normalize_config_value(
+			$api_token ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' )
 		);
-		$missing     = [];
+		$missing         = [];
 
 		if ( '' === $account_id ) {
 			$missing[] = 'account ID';
@@ -363,6 +354,31 @@ final class PatternSearchClient extends BaseHttpClient {
 			);
 		}
 
+		if ( ! $explicit_config ) {
+			$embedding_model = self::normalize_config_value(
+				get_option(
+					'flavor_agent_cloudflare_workers_ai_embedding_model',
+					WorkersAIEmbeddingConfiguration::DEFAULT_MODEL
+				)
+			);
+			$signature       = PatternSearchInstanceManager::credential_signature(
+				$account_id,
+				$api_token,
+				$embedding_model
+			);
+			$validated       = self::normalize_config_value(
+				get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE, '' )
+			);
+
+			if ( '' === $validated || $validated !== $signature ) {
+				return new \WP_Error(
+					'cloudflare_pattern_ai_search_not_validated',
+					'Cloudflare AI Search Pattern Storage has not been validated for the current Embedding Model credentials.',
+					[ 'status' => 400 ]
+				);
+			}
+		}
+
 		$instance_url = sprintf(
 			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/namespaces/%s/instances/%s',
 			rawurlencode( $account_id ),
@@ -378,26 +394,6 @@ final class PatternSearchClient extends BaseHttpClient {
 			'itemsUrl'   => $instance_url . '/items',
 			'apiToken'   => $api_token,
 		];
-	}
-
-	private static function get_config_option_with_fallback(
-		string $option_name,
-		?string $fallback_option_name = null,
-		string $default = ''
-	): string {
-		$value = self::normalize_config_value( get_option( $option_name, '' ) );
-
-		if ( '' !== $value ) {
-			return $value;
-		}
-
-		if ( null === $fallback_option_name ) {
-			return self::normalize_config_value( $default );
-		}
-
-		$value = self::normalize_config_value( get_option( $fallback_option_name, '' ) );
-
-		return '' !== $value ? $value : self::normalize_config_value( $default );
 	}
 
 	/**
@@ -519,7 +515,12 @@ final class PatternSearchClient extends BaseHttpClient {
 			}
 
 			$metadata = self::normalize_metadata( $chunk['item']['metadata'] ?? [] );
-			$name     = sanitize_text_field( (string) ( $metadata['pattern_name'] ?? '' ) );
+
+			if ( 'flavor_agent_owner' === (string) ( $metadata['candidate_type'] ?? '' ) ) {
+				continue;
+			}
+
+			$name = sanitize_text_field( (string) ( $metadata['pattern_name'] ?? '' ) );
 
 			if ( '' === $name || ! isset( $visible[ $name ] ) ) {
 				continue;

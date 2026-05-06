@@ -9,6 +9,7 @@ use FlavorAgent\OpenAI\Provider;
 
 final class EmbeddingClient extends BaseHttpClient {
 
+
 	private const REQUEST_TIMEOUT = 60;
 
 	public static function validate_configuration(
@@ -79,6 +80,10 @@ final class EmbeddingClient extends BaseHttpClient {
 	 * @return float[][]|\WP_Error Array of vectors.
 	 */
 	public static function embed_batch( array $inputs ): array|\WP_Error {
+		if ( [] === $inputs ) {
+			return [];
+		}
+
 		$config = Provider::embedding_configuration();
 
 		if ( ! $config['configured'] ) {
@@ -150,7 +155,7 @@ final class EmbeddingClient extends BaseHttpClient {
 			return new \WP_Error( 'embedding_error', $msg, [ 'status' => 502 ] );
 		}
 
-		if ( JSON_ERROR_NONE !== $response['json_error'] || ! is_array( $data ) || empty( $data['data'] ) ) {
+		if ( JSON_ERROR_NONE !== $response['json_error'] || ! is_array( $data ) ) {
 			return new \WP_Error( 'embedding_parse_error', 'Failed to parse embedding response.', [ 'status' => 502 ] );
 		}
 

@@ -6,6 +6,7 @@ namespace FlavorAgent\Embeddings;
 
 final class ConfigurationValidator {
 
+
 	private const REQUEST_TIMEOUT = 30;
 
 	/**
@@ -53,14 +54,19 @@ final class ConfigurationValidator {
 		$has_auth_header = false;
 
 		foreach ( $headers as $header_name => $header_value ) {
-			if ( strtolower( $header_name ) === 'content-type' ) {
+			$header_name  = strtolower( trim( (string) $header_name ) );
+			$header_value = trim( (string) $header_value );
+
+			if ( 'content-type' === $header_name || '' === $header_value ) {
 				continue;
 			}
 
-			if ( trim( (string) $header_value ) !== '' ) {
-				$has_auth_header = true;
-				break;
+			if ( 'authorization' === $header_name && preg_match( '/^Bearer\s*$/i', $header_value ) ) {
+				continue;
 			}
+
+			$has_auth_header = true;
+			break;
 		}
 
 		if ( '' === $url || '' === $model || ! $has_auth_header ) {

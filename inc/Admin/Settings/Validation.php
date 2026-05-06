@@ -6,7 +6,7 @@ namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\Embeddings\EmbeddingClient;
 use FlavorAgent\Embeddings\QdrantClient;
-use FlavorAgent\Cloudflare\PatternSearchClient;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
@@ -17,6 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Validation {
+
 
 
 	private const SECRET_OPTION_NAMES = [
@@ -124,6 +125,18 @@ final class Validation {
 
 		if ( ! in_array( $backend, Config::PATTERN_BACKENDS, true ) ) {
 			$backend = Config::PATTERN_BACKEND_QDRANT;
+		}
+
+		if (
+			Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend &&
+			self::should_validate_submission() &&
+			! self::has_posted_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID )
+		) {
+			$resolved_values = self::resolve_pattern_ai_search_submission_values();
+
+			if ( is_wp_error( $resolved_values ) ) {
+				self::report_pattern_ai_search_validation_error( $resolved_values );
+			}
 		}
 
 		Feedback::mark_section_changed_by_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, $backend );
@@ -307,6 +320,10 @@ final class Validation {
 			$values[ $option_name ] = sanitize_text_field( $override_value );
 		}
 
+		$values['flavor_agent_cloudflare_workers_ai_embedding_model'] = self::normalize_workers_ai_embedding_model(
+			$values['flavor_agent_cloudflare_workers_ai_embedding_model'] ?? ''
+		);
+
 		if ( ! self::should_validate_submission() ) {
 			return $values;
 		}
@@ -438,29 +455,16 @@ final class Validation {
 				}
 
 				return [
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => self::read_posted_text_value(
-						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-						self::resolve_pattern_ai_search_credential_value(
-							$current_values,
-							Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-							$workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? ''
-						)
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => sanitize_text_field(
+						$workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? ''
 					),
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => self::read_posted_text_value(
-						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ]
-					),
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => self::read_posted_text_value(
 						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ]
 					),
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => self::read_posted_text_value(
-						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-						self::resolve_pattern_ai_search_credential_value(
-							$current_values,
-							Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-							$workers_ai_values['flavor_agent_cloudflare_workers_ai_api_token'] ?? ''
-						)
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => sanitize_text_field(
+						$workers_ai_values['flavor_agent_cloudflare_workers_ai_api_token'] ?? ''
 					),
 				];
 			}
@@ -474,16 +478,51 @@ final class Validation {
 			return $values;
 		}
 
-		if (
-			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ] ||
-			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ] ||
-			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] ||
-			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
-		) {
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== self::get_submitted_or_saved_pattern_backend() ) {
 			return $values;
 		}
 
-		if ( ! self::values_require_validation( $values, $current_values ) ) {
+		$workers_ai_values = self::resolve_workers_ai_submission_values();
+
+		if ( is_wp_error( $workers_ai_values ) ) {
+			self::report_workers_ai_validation_error( $workers_ai_values );
+			delete_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE );
+
+			return new \WP_Error(
+				'cloudflare_pattern_ai_search_embedding_credentials_invalid',
+				'Cloudflare AI Search Pattern Storage needs valid Embedding Model credentials before Flavor Agent can create a managed pattern index.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$account_id      = $workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? '';
+		$api_token       = $workers_ai_values['flavor_agent_cloudflare_workers_ai_api_token'] ?? '';
+		$embedding_model = $workers_ai_values['flavor_agent_cloudflare_workers_ai_embedding_model'] ?? WorkersAIEmbeddingConfiguration::DEFAULT_MODEL;
+
+		$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ] = sanitize_text_field( $account_id );
+		$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ]  = Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE;
+		$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]  = sanitize_text_field( $api_token );
+
+		if ( '' === $account_id || '' === $api_token ) {
+			delete_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE );
+
+			return $values;
+		}
+
+		$current_signature = PatternSearchInstanceManager::credential_signature(
+			$account_id,
+			$api_token,
+			$embedding_model
+		);
+		$saved_signature   = sanitize_text_field(
+			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE, '' )
+		);
+
+		if (
+			'' !== $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] &&
+			$saved_signature === $current_signature &&
+			! self::values_require_validation( $values, $current_values )
+		) {
 			return $values;
 		}
 
@@ -498,20 +537,32 @@ final class Validation {
 				: self::$pattern_ai_search_validation_state['values'];
 		}
 
-		$validation = PatternSearchClient::validate_configuration(
-			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ],
-			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ],
-			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ],
-			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
+		$managed = PatternSearchInstanceManager::ensure_managed_instance(
+			$account_id,
+			$api_token,
+			$embedding_model
 		);
+
+		if ( ! is_wp_error( $managed ) ) {
+			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] = $managed['instance_id'];
+			update_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, $managed['instance_id'], false );
+			update_option(
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
+				$current_signature,
+				false
+			);
+			self::report_pattern_ai_search_managed_status( (string) ( $managed['status'] ?? 'ready' ) );
+		} else {
+			delete_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE );
+		}
 
 		self::$pattern_ai_search_validation_state = [
 			'fingerprint' => $fingerprint,
 			'values'      => $values,
-			'error'       => is_wp_error( $validation ) ? $validation : null,
+			'error'       => is_wp_error( $managed ) ? $managed : null,
 		];
 
-		return is_wp_error( $validation ) ? $validation : $values;
+		return is_wp_error( $managed ) ? $managed : $values;
 	}
 
 	public static function should_validate_submission(): bool {
@@ -603,6 +654,10 @@ final class Validation {
 	private static function sanitize_text_option_value( mixed $value, string $option_name ): string {
 		$sanitized_value = sanitize_text_field( $value );
 
+		if ( 'flavor_agent_cloudflare_workers_ai_embedding_model' === $option_name ) {
+			return self::normalize_workers_ai_embedding_model( $sanitized_value );
+		}
+
 		if ( '' !== $sanitized_value || ! self::should_preserve_blank_secret( $option_name ) ) {
 			return $sanitized_value;
 		}
@@ -618,9 +673,15 @@ final class Validation {
 			[
 				'flavor_agent_cloudflare_workers_ai_account_id' => 'sanitize_text_field',
 				'flavor_agent_cloudflare_workers_ai_api_token' => 'sanitize_text_field',
-				'flavor_agent_cloudflare_workers_ai_embedding_model' => 'sanitize_text_field',
+				'flavor_agent_cloudflare_workers_ai_embedding_model' => [ self::class, 'normalize_workers_ai_embedding_model' ],
 			]
 		);
+	}
+
+	private static function normalize_workers_ai_embedding_model( mixed $value ): string {
+		$model = sanitize_text_field( $value );
+
+		return '' !== $model ? $model : WorkersAIEmbeddingConfiguration::DEFAULT_MODEL;
 	}
 
 	/**
@@ -641,55 +702,12 @@ final class Validation {
 	private static function get_current_pattern_ai_search_values(): array {
 		return self::get_current_option_values(
 			[
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => static fn( string $value ): string => self::resolve_saved_text_option(
-					$value,
-					'flavor_agent_cloudflare_workers_ai_account_id'
-				),
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => static fn( string $value ): string => self::resolve_saved_text_option(
-					$value,
-					'flavor_agent_cloudflare_workers_ai_api_token'
-				),
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => static fn( string $value ): string => self::resolve_saved_text_option(
-					$value,
-					null,
-					Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
-				),
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'sanitize_text_field',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'sanitize_text_field',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'sanitize_text_field',
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'sanitize_text_field',
 			]
 		);
-	}
-
-	/**
-	 * @param array<string, string> $current_values
-	 */
-	private static function resolve_pattern_ai_search_credential_value(
-		array $current_values,
-		string $option_name,
-		string $fallback_value
-	): string {
-		$current_value = sanitize_text_field( $current_values[ $option_name ] ?? '' );
-
-		return '' !== $current_value ? $current_value : sanitize_text_field( $fallback_value );
-	}
-
-	private static function resolve_saved_text_option(
-		string $value,
-		?string $fallback_option_name = null,
-		string $default = ''
-	): string {
-		$value = sanitize_text_field( $value );
-
-		if ( '' !== $value ) {
-			return $value;
-		}
-
-		if ( null === $fallback_option_name ) {
-			return sanitize_text_field( $default );
-		}
-
-		$fallback = sanitize_text_field( (string) get_option( $fallback_option_name, '' ) );
-
-		return '' !== $fallback ? $fallback : sanitize_text_field( $default );
 	}
 
 	/**
@@ -728,12 +746,16 @@ final class Validation {
 			return null;
 		}
 
-		return sanitize_text_field(
+		$preserved_value = sanitize_text_field(
 			(string) get_option(
 				$option_name,
 				self::UNPOSTED_PROVIDER_OPTION_DEFAULTS[ $option_name ]
 			)
 		);
+
+		return 'flavor_agent_cloudflare_workers_ai_embedding_model' === $option_name
+			? self::normalize_workers_ai_embedding_model( $preserved_value )
+			: $preserved_value;
 	}
 
 	private static function preserve_unposted_reasoning_effort_value(): ?string {
@@ -1037,6 +1059,54 @@ final class Validation {
 			__( 'We kept your previous private Cloudflare AI Search pattern settings because validation failed.', 'flavor-agent' )
 		);
 		self::$pattern_ai_search_validation_error_reported = true;
+	}
+
+	private static function report_pattern_ai_search_managed_status( string $status ): void {
+		$message = match ( $status ) {
+			'created' => __( 'Managed pattern index created.', 'flavor-agent' ),
+			'adopted',
+			'adopted_after_conflict' => __( 'Managed pattern index adopted.', 'flavor-agent' ),
+			default => __( 'Managed pattern index ready.', 'flavor-agent' ),
+		};
+
+		if ( '' !== Feedback::get_request_key_from_post() ) {
+			Feedback::record_section_feedback_message(
+				Config::GROUP_PATTERNS,
+				'success',
+				$message
+			);
+			return;
+		}
+
+		add_settings_error(
+			Config::OPTION_GROUP,
+			'flavor_agent_cloudflare_pattern_ai_search_managed_' . sanitize_key( $status ),
+			$message,
+			'success'
+		);
+	}
+
+	private static function get_submitted_or_saved_pattern_backend(): string {
+		if ( self::has_valid_submission_nonce() ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce is validated above; value is read-only and sanitized below.
+			$posted = wp_unslash( $_POST[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ] ?? '' );
+
+			if ( is_string( $posted ) ) {
+				$posted = sanitize_key( $posted );
+
+				if ( in_array( $posted, Config::PATTERN_BACKENDS, true ) ) {
+					return $posted;
+				}
+			}
+		}
+
+		$saved = sanitize_key(
+			(string) get_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, Config::PATTERN_BACKEND_QDRANT )
+		);
+
+		return in_array( $saved, Config::PATTERN_BACKENDS, true )
+			? $saved
+			: Config::PATTERN_BACKEND_QDRANT;
 	}
 
 	private static function parse_boolean_flag( mixed $value ): bool {

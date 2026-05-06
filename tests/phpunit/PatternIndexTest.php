@@ -7,6 +7,7 @@ namespace FlavorAgent\Tests;
 use FlavorAgent\Embeddings\EmbeddingClient;
 use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Admin\Settings\Config;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Tests\Support\WordPressTestState;
@@ -974,6 +975,103 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 'DELETE', $delete_call['args']['method'] ?? null );
 	}
 
+	public function test_cloudflare_ai_search_sync_preserves_owner_marker_and_unknown_remote_items(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+
+		$this->register_pattern( 'theme/hero', $hero );
+
+		$current_patterns = $this->current_patterns();
+		$hero_uuid        = PatternIndex::pattern_uuid( 'theme/hero' );
+		$removed_uuid     = PatternIndex::pattern_uuid( 'theme/retired-pattern' );
+
+		$this->save_ready_cloudflare_ai_search_state_for_patterns(
+			$current_patterns,
+			[
+				'fingerprint'          => 'outdated-fingerprint',
+				'indexed_count'        => 2,
+				'pattern_fingerprints' => [
+					$hero_uuid    => $this->expected_pattern_fingerprint( $hero ),
+					$removed_uuid => 'removed-pattern-fingerprint',
+				],
+			]
+		);
+
+		$this->queue_cloudflare_item_list(
+			[
+				PatternSearchInstanceManager::OWNER_MARKER_NAME,
+				'cloudflare-owner-marker-123',
+				$removed_uuid,
+				'manual-operator-note',
+			]
+		);
+		$this->queue_cloudflare_success_responses( 1 );
+
+		$result = PatternIndex::sync();
+
+		$this->assertSame( 0, $result['indexed'] );
+		$this->assertSame( 1, $result['removed'] );
+		$this->assertNull(
+			$this->find_optional_remote_post_call(
+				'/items/' . rawurlencode( PatternSearchInstanceManager::OWNER_MARKER_NAME ),
+				'DELETE'
+			)
+		);
+		$this->assertNull(
+			$this->find_optional_remote_post_call(
+				'/items/' . rawurlencode( 'cloudflare-owner-marker-123' ),
+				'DELETE'
+			)
+		);
+		$this->assertNull(
+			$this->find_optional_remote_post_call(
+				'/items/' . rawurlencode( 'manual-operator-note' ),
+				'DELETE'
+			)
+		);
+		$this->assertIsArray(
+			$this->find_remote_post_call( '/items/' . rawurlencode( $removed_uuid ), 'DELETE' )
+		);
+	}
+
+	public function test_cloudflare_ai_search_sync_reindexes_when_embedding_model_changes(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+
+		$this->register_pattern( 'theme/hero', $hero );
+
+		$current_patterns = $this->current_patterns();
+		$this->save_ready_cloudflare_ai_search_state_for_patterns(
+			$current_patterns,
+			[
+				'pattern_fingerprints' => [
+					PatternIndex::pattern_uuid( 'theme/hero' ) => $this->expected_pattern_fingerprint( $hero ),
+				],
+			]
+		);
+
+		update_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '@cf/baai/bge-m3', false );
+		update_option(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
+			PatternSearchInstanceManager::credential_signature(
+				'account-123',
+				'token-xyz',
+				'@cf/baai/bge-m3'
+			),
+			false
+		);
+
+		$this->queue_cloudflare_item_list( [ PatternIndex::pattern_uuid( 'theme/hero' ) ] );
+		$this->queue_cloudflare_success_responses( 1 );
+
+		$result = PatternIndex::sync();
+
+		$this->assertSame( 1, $result['indexed'] );
+		$this->assertIsArray(
+			$this->find_remote_post_call( '/items', 'POST' )
+		);
+	}
+
 	public function test_runtime_state_marks_pattern_backend_changes_stale(): void {
 		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
 		$this->save_ready_state_for_patterns( $this->current_patterns() );
@@ -1012,6 +1110,11 @@ final class PatternIndexTest extends TestCase {
 					'flavor_agent_qdrant_key' => '',
 					Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
+						'account-123',
+						'token-xyz',
+						'@cf/qwen/qwen3-embedding-0.6b'
+					),
 				]
 			);
 	}
@@ -1381,6 +1484,19 @@ final class PatternIndexTest extends TestCase {
 		$this->fail( "Could not find remote {$method} call ending with {$url_suffix}." );
 	}
 
+	private function find_optional_remote_post_call( string $url_suffix, string $method ): ?array {
+		foreach ( WordPressTestState::$remote_post_calls as $call ) {
+			if (
+				str_ends_with( (string) ( $call['url'] ?? '' ), $url_suffix )
+				&& strtoupper( (string) ( $call['args']['method'] ?? 'POST' ) ) === strtoupper( $method )
+			) {
+				return $call;
+			}
+		}
+
+		return null;
+	}
+
 	/**
 	 * @param array<string, mixed> $pattern
 	 */
@@ -1415,20 +1531,10 @@ final class PatternIndexTest extends TestCase {
 	}
 
 	private function expected_cloudflare_ai_search_signature(): string {
-		return hash(
-			'sha256',
-			implode(
-				'|',
-				array_map(
-					'trim',
-					[
-						(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
-						Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
-						(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
-					]
-				)
-			)
+		return PatternSearchInstanceManager::credential_signature(
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' )
 		);
 	}
 

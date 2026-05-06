@@ -128,6 +128,79 @@ describe( 'InserterBadge', () => {
 		).toBeNull();
 	} );
 
+	test( 'attaches to a toolbar anchor that appears after the badge becomes visible', async () => {
+		mockFindInserterToggle.mockReturnValue( null );
+
+		renderComponent();
+
+		expect(
+			document.querySelector( '.flavor-agent-inserter-badge--ready' )
+		).toBeNull();
+
+		const toolbar = document.createElement( 'div' );
+		const anchor = document.createElement( 'div' );
+		const button = document.createElement( 'button' );
+
+		toolbar.className = 'edit-post-header-toolbar';
+		anchor.appendChild( button );
+		toolbar.appendChild( anchor );
+		mockFindInserterToggle.mockReturnValue( button );
+
+		await act( async () => {
+			document.body.appendChild( toolbar );
+			await Promise.resolve();
+		} );
+
+		expect(
+			anchor.classList.contains( 'flavor-agent-inserter-badge-anchor' )
+		).toBe( true );
+		expect(
+			anchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+		).not.toBeNull();
+	} );
+
+	test( 'moves the anchor class when the toolbar toggle remounts', async () => {
+		const firstAnchor = document.createElement( 'div' );
+		const firstButton = document.createElement( 'button' );
+		const nextAnchor = document.createElement( 'div' );
+		const nextButton = document.createElement( 'button' );
+
+		firstAnchor.appendChild( firstButton );
+		nextAnchor.appendChild( nextButton );
+		document.body.appendChild( firstAnchor );
+		mockFindInserterToggle.mockReturnValue( firstButton );
+
+		renderComponent();
+
+		expect(
+			firstAnchor.classList.contains(
+				'flavor-agent-inserter-badge-anchor'
+			)
+		).toBe( true );
+
+		mockFindInserterToggle.mockReturnValue( nextButton );
+
+		await act( async () => {
+			firstAnchor.remove();
+			document.body.appendChild( nextAnchor );
+			await Promise.resolve();
+		} );
+
+		expect(
+			firstAnchor.classList.contains(
+				'flavor-agent-inserter-badge-anchor'
+			)
+		).toBe( false );
+		expect(
+			nextAnchor.classList.contains(
+				'flavor-agent-inserter-badge-anchor'
+			)
+		).toBe( true );
+		expect(
+			nextAnchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+		).not.toBeNull();
+	} );
+
 	test( 'adds and removes the anchor class around the resolved toggle parent', () => {
 		const toolbar = document.createElement( 'div' );
 		const anchor = document.createElement( 'div' );

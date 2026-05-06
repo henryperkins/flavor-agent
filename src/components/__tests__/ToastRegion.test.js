@@ -355,6 +355,116 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 	} );
 
+	test( 'mod+shift+z keydown from a same-origin iframe focuses the newest toast Undo button', () => {
+		setToasts( [
+			{
+				id: 'oldest',
+				variant: 'success',
+				title: 'First',
+				activityId: 'a1',
+				autoDismissMs: 6000,
+				interacted: false,
+			},
+			{
+				id: 'newest',
+				variant: 'success',
+				title: 'Second',
+				activityId: 'a2',
+				autoDismissMs: 6000,
+				interacted: false,
+			},
+		] );
+
+		const iframe = document.createElement( 'iframe' );
+		document.body.appendChild( iframe );
+
+		act( () => {
+			getRoot().render( <ToastRegion /> );
+		} );
+
+		const original = navigator.platform;
+
+		Object.defineProperty( navigator, 'platform', {
+			value: 'Linux x86_64',
+			configurable: true,
+		} );
+
+		act( () => {
+			iframe.contentDocument.dispatchEvent(
+				new iframe.contentWindow.KeyboardEvent( 'keydown', {
+					key: 'z',
+					ctrlKey: true,
+					shiftKey: true,
+					bubbles: true,
+				} )
+			);
+		} );
+
+		const undoButtons = getRegionRoot().querySelectorAll(
+			'.flavor-agent-toast__action'
+		);
+
+		expect( document.activeElement ).toBe(
+			undoButtons[ undoButtons.length - 1 ]
+		);
+
+		Object.defineProperty( navigator, 'platform', {
+			value: original,
+			configurable: true,
+		} );
+	} );
+
+	test( 'observes same-origin iframes added after mount for the undo shortcut', async () => {
+		setToasts( [
+			{
+				id: 'newest',
+				variant: 'success',
+				title: 'Second',
+				activityId: 'a2',
+				autoDismissMs: 6000,
+				interacted: false,
+			},
+		] );
+
+		act( () => {
+			getRoot().render( <ToastRegion /> );
+		} );
+
+		const iframe = document.createElement( 'iframe' );
+		document.body.appendChild( iframe );
+
+		await act( async () => {
+			await Promise.resolve();
+		} );
+
+		const original = navigator.platform;
+
+		Object.defineProperty( navigator, 'platform', {
+			value: 'Linux x86_64',
+			configurable: true,
+		} );
+
+		act( () => {
+			iframe.contentDocument.dispatchEvent(
+				new iframe.contentWindow.KeyboardEvent( 'keydown', {
+					key: 'z',
+					ctrlKey: true,
+					shiftKey: true,
+					bubbles: true,
+				} )
+			);
+		} );
+
+		expect( document.activeElement ).toBe(
+			getRegionRoot().querySelector( '.flavor-agent-toast__action' )
+		);
+
+		Object.defineProperty( navigator, 'platform', {
+			value: original,
+			configurable: true,
+		} );
+	} );
+
 	test( 'mod+shift+z keydown is a no-op when the queue is empty', () => {
 		act( () => {
 			getRoot().render( <ToastRegion /> );

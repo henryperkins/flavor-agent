@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Embeddings\EmbeddingClient;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
 final class CloudflareWorkersAIEmbeddingTest extends TestCase {
+
 
 
 	protected function setUp(): void {
@@ -49,10 +51,10 @@ final class CloudflareWorkersAIEmbeddingTest extends TestCase {
 
 		$this->assertSame( 'cloudflare_workers_ai', $config['provider'] );
 		$this->assertFalse( $config['configured'] );
-		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/account-123/ai/v1/embeddings',
-			$config['url']
-		);
+		$this->assertSame( '', $config['endpoint'] );
+		$this->assertSame( '', $config['api_key'] );
+		$this->assertSame( '', $config['url'] );
+		$this->assertSame( [], $config['headers'] );
 		$this->assertNotSame( 'https://api.openai.com/v1/embeddings', $config['url'] );
 	}
 
@@ -120,6 +122,37 @@ final class CloudflareWorkersAIEmbeddingTest extends TestCase {
 		);
 
 		$this->assertSame( $first['signature_hash'], $second['signature_hash'] );
+	}
+
+	public function test_embedding_signature_is_locked_to_workers_ai_provider(): void {
+		WordPressTestState::$connectors = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+
+		$connector_signature = EmbeddingClient::build_signature_for_dimension(
+			1024,
+			[
+				'provider' => 'anthropic',
+				'model'    => WorkersAIEmbeddingConfiguration::DEFAULT_MODEL,
+			]
+		);
+		$workers_signature   = EmbeddingClient::build_signature_for_dimension(
+			1024,
+			[
+				'provider' => WorkersAIEmbeddingConfiguration::PROVIDER,
+				'model'    => WorkersAIEmbeddingConfiguration::DEFAULT_MODEL,
+			]
+		);
+
+		$this->assertSame( WorkersAIEmbeddingConfiguration::PROVIDER, $connector_signature['provider'] );
+		$this->assertSame( $workers_signature['signature_hash'], $connector_signature['signature_hash'] );
 	}
 
 	public function test_saved_azure_provider_defaults_to_workers_ai_embeddings(): void {
@@ -192,6 +225,13 @@ final class CloudflareWorkersAIEmbeddingTest extends TestCase {
 		$this->assertSame( '@cf/qwen/qwen3-embedding-0.6b', $request_body['model'] ?? '' );
 	}
 
+	public function test_embed_batch_returns_empty_result_without_request_for_empty_inputs(): void {
+		$result = EmbeddingClient::embed_batch( [] );
+
+		$this->assertSame( [], $result );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
 	public function test_embed_batch_chunks_workers_ai_requests_at_model_limit(): void {
 		WordPressTestState::$options = [
 			Provider::OPTION_NAME                          => 'cloudflare_workers_ai',
@@ -201,7 +241,7 @@ final class CloudflareWorkersAIEmbeddingTest extends TestCase {
 		];
 
 		$inputs = array_map(
-			static fn ( int $index ): string => 'pattern text ' . $index,
+			static fn( int $index ): string => 'pattern text ' . $index,
 			range( 1, 65 )
 		);
 
@@ -211,7 +251,7 @@ final class CloudflareWorkersAIEmbeddingTest extends TestCase {
 				'body'     => wp_json_encode(
 					[
 						'data' => array_map(
-							static fn ( int $index ): array => [ 'embedding' => [ (float) $index, (float) ( $index + 1 ) ] ],
+							static fn( int $index ): array => [ 'embedding' => [ (float) $index, (float) ( $index + 1 ) ] ],
 							range( 1, $count )
 						),
 					]

@@ -13,6 +13,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class Feedback {
 
+	private const PATTERN_AI_SEARCH_STATUS_ERROR_CODES = [
+		'cloudflare_pattern_ai_search_incompatible_schema',
+		'cloudflare_pattern_ai_search_owner_marker_missing',
+		'cloudflare_pattern_ai_search_owner_marker_mismatch',
+		'cloudflare_pattern_ai_search_embedding_model_mismatch',
+	];
 
 	/**
 	 * @return array<string, mixed>
@@ -142,7 +148,7 @@ final class Feedback {
 
 	/**
 	 * @param array<string, mixed> $feedback
-	 * @return array<int, array{tone: string, message: string}>
+	 * @return array<int, array{tone: string, message: string, code?: string}>
 	 */
 	public static function get_feedback_message_entries( array $feedback, string $section ): array {
 		$messages = is_array( $feedback['messages'] ?? null ) ? $feedback['messages'] : [];
@@ -170,10 +176,20 @@ final class Feedback {
 				continue;
 			}
 
-			$entries[] = [
+			$normalized_entry = [
 				'tone'    => $tone,
 				'message' => $message,
 			];
+
+			if ( is_string( $entry['code'] ?? null ) ) {
+				$code = sanitize_key( (string) $entry['code'] );
+
+				if ( '' !== $code ) {
+					$normalized_entry['code'] = $code;
+				}
+			}
+
+			$entries[] = $normalized_entry;
 		}
 
 		return $entries;
@@ -249,7 +265,7 @@ final class Feedback {
 	}
 
 	/**
-	 * @param array<int, array{tone: string, message: string}> $entries
+	 * @param array<int, array{tone: string, message: string, code?: string}> $entries
 	 */
 	public static function record_section_feedback_messages(
 		string $section,
@@ -272,10 +288,20 @@ final class Feedback {
 				continue;
 			}
 
-			$new_entries[] = [
+			$new_entry = [
 				'tone'    => $tone,
 				'message' => $message,
 			];
+
+			if ( is_string( $entry['code'] ?? null ) ) {
+				$code = sanitize_key( (string) $entry['code'] );
+
+				if ( '' !== $code ) {
+					$new_entry['code'] = $code;
+				}
+			}
+
+			$new_entries[] = $new_entry;
 		}
 
 		if ( [] === $new_entries ) {
@@ -299,6 +325,7 @@ final class Feedback {
 		string $preserved_message
 	): void {
 		$safe_error_message = self::get_safe_validation_error_message( $settings_error_code, $error );
+		$status_code        = self::get_safe_validation_status_code( $settings_error_code, $error );
 
 		if ( '' !== self::get_request_key_from_post() ) {
 			self::record_section_feedback_messages(
@@ -307,6 +334,7 @@ final class Feedback {
 					[
 						'tone'    => 'error',
 						'message' => $safe_error_message,
+						'code'    => $status_code,
 					],
 					[
 						'tone'    => 'warning',
@@ -320,7 +348,7 @@ final class Feedback {
 
 		add_settings_error(
 			Config::OPTION_GROUP,
-			$settings_error_code,
+			$status_code,
 			$safe_error_message,
 			'error'
 		);
@@ -330,6 +358,19 @@ final class Feedback {
 			$preserved_message,
 			'warning'
 		);
+	}
+
+	private static function get_safe_validation_status_code( string $settings_error_code, \WP_Error $error ): string {
+		$error_code = sanitize_key( $error->get_error_code() );
+
+		if (
+			'flavor_agent_cloudflare_pattern_ai_search_validation' === $settings_error_code
+			&& in_array( $error_code, self::PATTERN_AI_SEARCH_STATUS_ERROR_CODES, true )
+		) {
+			return $error_code;
+		}
+
+		return $settings_error_code;
 	}
 
 	private static function get_safe_validation_error_message( string $settings_error_code, \WP_Error $error ): string {
@@ -344,7 +385,7 @@ final class Feedback {
 		return match ( $settings_error_code ) {
 			'flavor_agent_cloudflare_workers_ai_validation' => __( 'Cloudflare Workers AI validation failed. Check the account ID, API token, and embedding model, then try again.', 'flavor-agent' ),
 			'flavor_agent_qdrant_validation' => __( 'Qdrant validation failed. Check the cluster URL and API key, then try again.', 'flavor-agent' ),
-			'flavor_agent_cloudflare_pattern_ai_search_validation' => __( 'Private Cloudflare AI Search pattern validation failed. Check the Cloudflare credentials, pattern index name, and filterable metadata schema, then try again.', 'flavor-agent' ),
+			'flavor_agent_cloudflare_pattern_ai_search_validation' => __( 'Cloudflare AI Search Pattern Storage validation failed. Check the Embedding Model credentials and managed pattern index, then try again.', 'flavor-agent' ),
 			default => __( 'Validation failed. Check the saved values and try again.', 'flavor-agent' ),
 		};
 	}

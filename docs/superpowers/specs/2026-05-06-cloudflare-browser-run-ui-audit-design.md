@@ -2,18 +2,18 @@
 
 ## Status
 
-Approved target captured on 2026-05-06.
+Approved with an operator-supplied public target on 2026-05-06.
 
 ## Problem
 
 Flavor Agent UI audits often need quick visual evidence from wp-admin, the block editor, the Site Editor, settings, and multi-step recommendation workflows. The existing Playwright harnesses are still the source of automated assertions, but they require a local browser setup and are not always the fastest way to collect shareable screenshots during manual review or CI triage.
 
-Cloudflare Browser Run's `/screenshot` endpoint can capture rendered pages from a public URL. The public `wp.hperkins.com` WordPress install already has Flavor Agent active through the symlinked plugin at `/home/dev/wp-hperkins-com/wp-content/plugins/flavor-agent -> /home/dev/flavor-agent`, so it can serve as a reachable audit target without a local tunnel.
+Cloudflare Browser Run's `/screenshot` endpoint can capture rendered pages from a public URL. Operators can point the utility at a staging site or reachable tunnel without adding a local browser dependency to the review workflow.
 
 ## Goals
 
 - Add an optional screenshot audit utility for Flavor Agent UI review.
-- Use `https://wp.hperkins.com` as the default remote audit host.
+- Accept the remote audit host from `--base-url`, manifest `baseUrl`, absolute manifest URLs, or `BROWSER_RUN_DEFAULT_BASE_URL`.
 - Support named presets for common audit surfaces: Flavor Agent settings, wp-admin pages, block editor, Site Editor, and explicit workflow manifests.
 - Capture PNG artifacts plus traceable metadata for each screenshot.
 - Keep the utility out of default `npm run verify` and out of plugin runtime behavior.
@@ -30,21 +30,9 @@ Cloudflare Browser Run's `/screenshot` endpoint can capture rendered pages from 
 
 ## Target Environment
 
-The default audit target is:
+The audit target must be a WordPress site that Cloudflare Browser Run can reach. The utility should not mutate the site. It only requests URLs through Cloudflare Browser Run and writes local artifacts under the Flavor Agent checkout.
 
-```text
-https://wp.hperkins.com
-```
-
-The WordPress root is:
-
-```text
-/home/dev/wp-hperkins-com
-```
-
-Flavor Agent is expected to be active there through the existing symlinked plugin. The utility should not mutate the site. It only requests URLs through Cloudflare Browser Run and writes local artifacts under the Flavor Agent checkout.
-
-The script should accept an override base URL for staging or temporary environments:
+The script should accept a base URL for staging or temporary environments:
 
 ```bash
 npm run audit:screenshot -- --base-url="https://example.test"
@@ -57,9 +45,9 @@ Cloudflare Browser Run must be able to reach the target URL. Localhost URLs are 
 Expose the tool through an npm script:
 
 ```bash
-npm run audit:screenshot -- --preset=settings
-npm run audit:screenshot -- --preset=block-editor --url="/wp-admin/post.php?post=123&action=edit"
-npm run audit:screenshot -- --preset=site-editor --url="/wp-admin/site-editor.php"
+npm run audit:screenshot -- --preset=settings --base-url="https://example.test"
+npm run audit:screenshot -- --preset=block-editor --base-url="https://example.test" --url="/wp-admin/post.php?post=123&action=edit"
+npm run audit:screenshot -- --preset=site-editor --base-url="https://example.test" --url="/wp-admin/site-editor.php"
 npm run audit:screenshot -- --manifest=docs/audits/admin-ui-flow.json
 ```
 
@@ -111,7 +99,7 @@ Workflow manifests should be JSON files with explicit steps:
 ```json
 {
   "name": "settings-audit",
-  "baseUrl": "https://wp.hperkins.com",
+  "baseUrl": "https://example.test",
   "defaults": {
     "viewport": {
       "width": 1440,
@@ -149,7 +137,7 @@ Default request body:
 
 ```json
 {
-  "url": "https://wp.hperkins.com/wp-admin/options-general.php?page=flavor-agent",
+  "url": "https://example.test/wp-admin/options-general.php?page=flavor-agent",
   "viewport": {
     "width": 1440,
     "height": 1200,
@@ -228,7 +216,7 @@ Implementation should update:
 
 - `package.json` with the npm script.
 - `docs/reference/cross-surface-validation-gates.md` to describe Browser Run screenshots as optional supporting evidence.
-- `docs/reference/local-environment-setup.md` or a focused audit doc with the `wp.hperkins.com` target, required env vars, auth handling, and artifact location.
+- `docs/reference/local-environment-setup.md` or a focused audit doc with the target URL contract, required env vars, auth handling, and artifact location.
 
 ## Verification
 
@@ -242,10 +230,10 @@ Implementation should include a unit-testable parser/request-builder layer so be
 - metadata redaction
 - nonzero failure behavior
 
-Manual live verification should be one explicit command against `wp.hperkins.com` when Cloudflare credentials and a temporary admin auth input are available. If credentials or auth are unavailable, record that as a verification blocker rather than treating the live step as passed.
+Manual live verification should be one explicit command against an operator-supplied public target when Cloudflare credentials and a temporary admin auth input are available. If credentials or auth are unavailable, record that as a verification blocker rather than treating the live step as passed.
 
 ## References
 
 - Cloudflare Browser Run screenshot endpoint: https://developers.cloudflare.com/browser-run/quick-actions/screenshot-endpoint/
 - Cross-surface validation gates: `docs/reference/cross-surface-validation-gates.md`
-- Local public audit target: `/home/dev/wp-hperkins-com`
+- Cloudflare Browser Run documentation: https://developers.cloudflare.com/browser-run/

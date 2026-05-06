@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Cloudflare\PatternSearchClient;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -168,14 +169,76 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		);
 	}
 
-	public function test_saved_private_credentials_override_embedding_credentials(): void {
-		WordPressTestState::$options = [
+	public function test_search_drops_owner_marker_chunks_by_metadata(): void {
+		$this->seed_options();
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'    => 'opaque-owner-marker-id',
+								'score' => 1,
+								'text'  => 'Owner marker text.',
+								'item'  => [
+									'key'      => 'opaque-owner-marker-id',
+									'metadata' => [
+										'pattern_name'   => 'theme/hero',
+										'candidate_type' => 'flavor_agent_owner',
+										'source'         => 'flavor_agent',
+										'synced_id'      => PatternSearchInstanceManager::site_hash(),
+										'public_safe'    => true,
+									],
+								],
+							],
+							[
+								'id'    => 'chunk-1',
+								'score' => 0.87,
+								'text'  => 'Hero pattern copy.',
+								'item'  => [
+									'key'      => 'theme-hero.md',
+									'metadata' => [
+										'pattern_name'   => 'theme/hero',
+										'candidate_type' => 'pattern',
+										'source'         => 'theme',
+										'synced_id'      => 'theme-hero',
+										'public_safe'    => true,
+									],
+								],
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = PatternSearchClient::search_patterns(
+			'Build a hero section',
+			[ 'theme/hero' ],
+			7
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, $result );
+		$this->assertSame( 'pattern', $result[0]['metadata']['candidate_type'] ?? '' );
+	}
+
+	public function test_saved_private_pattern_ai_search_credentials_are_ignored(): void {
+		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'workers-account',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'pattern-account',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'pattern-namespace',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'pattern-token',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
+				'workers-account',
+				'workers-token',
+				'@cf/qwen/qwen3-embedding-0.6b'
+			),
 		];
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
@@ -196,13 +259,34 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 
 		$this->assertSame( [], $result );
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/pattern-account/ai-search/namespaces/pattern-namespace/instances/pattern-index/search',
+			'https://api.cloudflare.com/client/v4/accounts/workers-account/ai-search/namespaces/patterns/instances/pattern-index/search',
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertSame(
-			'Bearer pattern-token',
+			'Bearer workers-token',
 			WordPressTestState::$last_remote_post['args']['headers']['Authorization'] ?? null
 		);
+	}
+
+	public function test_saved_runtime_config_requires_matching_validated_signature(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+		];
+
+		$this->assertFalse( PatternSearchClient::is_configured() );
+
+		$result = PatternSearchClient::search_patterns(
+			'Build a hero section',
+			[ 'theme/hero' ],
+			3
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_pattern_ai_search_not_validated', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_upload_pattern_sends_multipart_file_metadata_and_wait_flag(): void {
@@ -453,10 +537,20 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 	}
 
 	private function seed_options(): void {
+		$account_id      = 'account-123';
+		$api_token       = 'token-xyz';
+		$embedding_model = '@cf/qwen/qwen3-embedding-0.6b';
+
 		WordPressTestState::$options = [
-			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
-			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_account_id' => $account_id,
+			'flavor_agent_cloudflare_workers_ai_api_token' => $api_token,
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => $embedding_model,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
+				$account_id,
+				$api_token,
+				$embedding_model
+			),
 		];
 	}
 

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Embeddings;
 
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\OpenAI\Provider;
 
 final class EmbeddingSignature {
+
 
 	public const HASH_LENGTH = 16;
 
@@ -19,7 +21,7 @@ final class EmbeddingSignature {
 		// Workers AI vectors are model/dimension compatible across accounts. Include account
 		// or API base here only if Flavor Agent adds account-scoped custom embedding models.
 		$payload = [
-			'provider'  => Provider::normalize_provider( (string) ( $config['provider'] ?? Provider::get() ) ),
+			'provider'  => WorkersAIEmbeddingConfiguration::PROVIDER,
 			'model'     => trim( (string) ( $config['model'] ?? '' ) ),
 			'dimension' => max( 0, $dimension ),
 		];

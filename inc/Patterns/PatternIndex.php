@@ -9,6 +9,7 @@ use FlavorAgent\Embeddings\EmbeddingClient;
 use FlavorAgent\Embeddings\EmbeddingSignature;
 use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Cloudflare\PatternSearchClient;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Context\SyncedPatternRepository;
 use FlavorAgent\OpenAI\Provider;
@@ -511,14 +512,11 @@ final class PatternIndex {
 	}
 
 	private static function cloudflare_ai_search_signature(): string {
-		$parts = [
+		return PatternSearchInstanceManager::credential_signature(
 			(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
-			Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 			(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
-		];
-
-		return hash( 'sha256', implode( '|', array_map( 'trim', $parts ) ) );
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' )
+		);
 	}
 
 	/**
@@ -875,7 +873,15 @@ final class PatternIndex {
 		foreach ( $remote_ids as $remote_id ) {
 			$remote_id = sanitize_text_field( (string) $remote_id );
 
-			if ( '' !== $remote_id && ! isset( $current_ids[ $remote_id ] ) ) {
+			if ( PatternSearchInstanceManager::OWNER_MARKER_NAME === $remote_id ) {
+				continue;
+			}
+
+			if ( '' === $remote_id || ! isset( $previous_pattern_fingerprints[ $remote_id ] ) ) {
+				continue;
+			}
+
+			if ( ! isset( $current_ids[ $remote_id ] ) ) {
 				$to_delete[] = $remote_id;
 			}
 		}

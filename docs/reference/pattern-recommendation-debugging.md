@@ -18,7 +18,7 @@ Check the selected pattern backend first:
 | Backend | First debugging path |
 | --- | --- |
 | `qdrant` | Inspect embeddings, Qdrant health, collection compatibility, and raw Qdrant hits. |
-| `cloudflare_ai_search` | Inspect the Embedding Model Cloudflare credentials, private pattern index name, filterable metadata schema, item sync state, search chunks, filters, and synced-pattern rehydration. |
+| `cloudflare_ai_search` | Inspect the Embedding Model Cloudflare credentials, managed `flavor-agent-patterns-{site_hash}` instance validation, filterable metadata schema, owner marker, item sync state, search chunks, filters, and synced-pattern rehydration. |
 
 The current pattern pipeline has four distinct stages:
 
@@ -56,6 +56,7 @@ For Cloudflare AI Search, the following should be true:
 
 - `PatternSearchClient::validate_configuration()` returns `true`
 - the private AI Search instance has `pattern_name`, `candidate_type`, `source`, `synced_id`, and `public_safe` declared as filterable metadata
+- the private AI Search instance embedding model matches the saved Embedding Model value
 - `PatternSearchClient::list_pattern_item_ids()` returns stable item IDs for the current corpus after sync
 - raw AI Search chunks for a prompt include relevant patterns and metadata with names in the current `visiblePatternNames` scope
 - registered pattern chunks have empty or non-synced `synced_id` metadata; synced/user pattern chunks have numeric `synced_id` metadata that resolves to a readable `wp_block` post
@@ -126,8 +127,9 @@ wp eval 'var_export( \FlavorAgent\AzureOpenAI\ResponsesClient::validate_configur
 
 Interpretation:
 
-- if validation reports missing credentials, fix the Embedding Model account/token or private pattern index name first
+- if validation reports missing credentials, fix the Embedding Model account ID, API token, or embedding model first, then save Pattern Storage again so Flavor Agent can create or adopt the managed AI Search pattern instance
 - if validation reports metadata/filter schema errors, add the five filterable metadata fields in the Cloudflare dashboard before the first sync
+- if validation reports `cloudflare_pattern_ai_search_embedding_model_mismatch`, remove or recreate the deterministic managed instance with the saved Embedding Model, then save Pattern Storage again
 - if Connectors/text-generation validation fails, raw retrieval can still be healthy while final recommendations fail
 
 ### 3. Inspect the live Qdrant collection definition
@@ -374,7 +376,7 @@ Interpretation:
 What it means:
 
 - pattern recommendations do not have embeddings, chat, Qdrant URL, or Qdrant key configured
-- or the selected Cloudflare AI Search pattern backend does not have Embedding Model account/token credentials and a private pattern index name configured
+- or the selected Cloudflare AI Search pattern backend does not have Embedding Model credentials and a validated managed AI Search pattern instance
 
 Where it is enforced:
 
@@ -394,7 +396,7 @@ What to check:
 Most likely fix:
 
 - configure text generation in `Settings > Connectors`
-- configure the selected pattern backend in `Settings > Flavor Agent`: plugin-owned embeddings and Qdrant for Qdrant, or the Embedding Model credentials plus a private Cloudflare AI Search pattern index name for AI Search
+- configure the selected pattern backend in `Settings > Flavor Agent`: plugin-owned embeddings and Qdrant for Qdrant, or the Embedding Model credentials plus the validated managed Cloudflare AI Search pattern instance for AI Search
 - if a connector-backed provider is pinned, confirm that connector path is still available
 
 ### `index_warming`
@@ -432,7 +434,7 @@ wp transient get flavor_agent_sync_lock
 Interpretation:
 
 - `embedding_signature_changed`, `collection_name_changed`, or `collection_size_mismatch` means Qdrant configuration drift, not transient request failure
-- `pattern_backend_changed`, `cloudflare_ai_search_instance_changed`, or `cloudflare_ai_search_signature_changed` means selected backend or private AI Search configuration drift
+- `pattern_backend_changed`, `cloudflare_ai_search_instance_changed`, or `cloudflare_ai_search_signature_changed` means selected backend, managed AI Search instance, account/token, or embedding-model drift
 - no scheduled cron event while the state stays stale suggests background rebuilds are not being queued or executed
 - a long-lived sync lock suggests the rebuild path did not clean up correctly
 
@@ -504,7 +506,7 @@ wp eval 'echo wp_json_encode( \FlavorAgent\Abilities\PatternAbilities::recommend
 Record this evidence for each backend you tune:
 
 - backend (`qdrant` or `cloudflare_ai_search`)
-- embedding model for Qdrant or AI Search pattern index name
+- embedding model for Qdrant or Cloudflare AI Search managed instance validation
 - active threshold option and value
 - number of candidates before rerank
 - number of renderable final recommendations
@@ -556,7 +558,7 @@ If raw chunks are wrong:
 - inspect the uploaded item metadata and markdown body
 - confirm `PatternIndex::sync()` uploaded changed items with stable item IDs and `wait_for_completion=true`
 - confirm stale remote item IDs were deleted after sync
-- confirm the AI Search namespace is the fixed `patterns` namespace and the runtime instance matches the selected pattern index name
+- confirm the AI Search namespace is the fixed `patterns` namespace and the runtime instance is the deterministic managed `flavor-agent-patterns-{site_hash}` instance
 
 ### Raw Qdrant hits look good but final recommendations still look wrong
 

@@ -1797,10 +1797,52 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'add_query_arg' ) ) {
+		function add_query_arg( array $args, string $url ): string {
+			$parts = wp_parse_url( $url );
+
+			if ( ! is_array( $parts ) ) {
+				$parts = [];
+			}
+
+			$query_args = [];
+			if ( isset( $parts['query'] ) && is_string( $parts['query'] ) ) {
+				parse_str( $parts['query'], $query_args );
+			}
+
+			foreach ( $args as $key => $value ) {
+				if ( null === $value ) {
+					unset( $query_args[ $key ] );
+					continue;
+				}
+
+				$query_args[ $key ] = $value;
+			}
+
+			$scheme   = isset( $parts['scheme'] ) ? (string) $parts['scheme'] . '://' : '';
+			$host     = isset( $parts['host'] ) ? (string) $parts['host'] : '';
+			$port     = isset( $parts['port'] ) ? ':' . (string) $parts['port'] : '';
+			$user     = isset( $parts['user'] ) ? (string) $parts['user'] : '';
+			$pass     = isset( $parts['pass'] ) ? ':' . (string) $parts['pass'] : '';
+			$auth     = '' !== $user ? $user . $pass . '@' : '';
+			$path     = isset( $parts['path'] ) ? (string) $parts['path'] : '';
+			$query    = http_build_query( $query_args, '', '&', PHP_QUERY_RFC3986 );
+			$fragment = isset( $parts['fragment'] ) ? '#' . (string) $parts['fragment'] : '';
+
+			return $scheme . $auth . $host . $port . $path . ( '' !== $query ? '?' . $query : '' ) . $fragment;
+		}
+	}
+
 	if ( ! function_exists( 'wp_parse_url' ) ) {
 		function wp_parse_url( string $url, int $component = -1 ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- This test bootstrap provides the WordPress compatibility wrapper when core is unavailable.
 			return parse_url( $url, $component );
+		}
+	}
+
+	if ( ! function_exists( 'wp_hash' ) ) {
+		function wp_hash( string $data, string $scheme = 'auth' ): string {
+			return hash( 'sha256', $data . '|' . $scheme );
 		}
 	}
 

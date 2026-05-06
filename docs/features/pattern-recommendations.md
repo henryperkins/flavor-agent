@@ -15,7 +15,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 
 - `window.flavorAgentData.canRecommendPatterns` must be true; that requires the selected pattern backend to be configured in `Settings > Flavor Agent` and a usable text-generation provider in `Settings > Connectors`
 - Qdrant storage readiness requires the Cloudflare Workers AI Embedding Model plus Qdrant URL/key
-- Cloudflare AI Search backend readiness requires the Embedding Model Cloudflare account/token plus a private site-owner Cloudflare AI Search pattern index name; it does not call plugin-owned embedding generation or Qdrant
+- Cloudflare AI Search backend readiness requires the Embedding Model Cloudflare account/token/model plus a managed site-owned Cloudflare AI Search pattern index validated against those credentials; it does not call plugin-owned embedding generation or Qdrant
 - A post type must be available from `core/editor`
 - Passive fetch runs when the editor loads
 - Active refresh runs when the inserter search input changes while the inserter is open
@@ -44,7 +44,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 | Pattern backend | Embeddings | Vector/index service | Search service | Required settings |
 | --- | --- | --- | --- | --- |
 | Qdrant | Cloudflare Workers AI | Qdrant | Qdrant | Cloudflare Workers AI embeddings, Qdrant, Connectors chat |
-| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Embedding Model credentials, private pattern index name, Connectors chat |
+| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Embedding Model credentials, managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
 
 ## What This Surface Can Do
 
@@ -66,7 +66,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - If Pattern Storage or the Embedding Model is unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
 - If the backend returns ranked names that Gutenberg is not currently exposing through the allowed-pattern selector, the inserter keeps the result local and explanatory instead of patching registry metadata
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
-- Cloudflare AI Search sync uploads only public-safe current pattern content. If a synced pattern later becomes private, draft, trashed, or unreadable before the next sync, request-time rehydration drops it before ranking or response output.
+- Cloudflare AI Search sync uploads only public-safe current pattern content. It preserves owner-marker items and unknown remote items, and deletes only stale item IDs that were recorded in the previous Flavor Agent pattern fingerprint state. If a synced pattern later becomes private, draft, trashed, or unreadable before the next sync, request-time rehydration drops it before ranking or response output.
 - WordPress docs grounding is cache-only and non-blocking; cache misses fall back to the existing retrieval-and-rerank path, schedule async cache warming, and never perform live AI Search in the foreground request
 - The badge fails closed when the inserter DOM anchor cannot be found and only counts recommendations that the current allowed-pattern selector can render
 - Pattern Overrides and `blockVisibility` stay recommendation-only inputs for ranking and explanation; they do not widen insertion scope beyond the native `visiblePatternNames` contract

@@ -17,6 +17,7 @@ use PHPUnit\Framework\TestCase;
 final class EmbeddingBackendValidationTest extends TestCase {
 
 
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -85,6 +86,25 @@ final class EmbeddingBackendValidationTest extends TestCase {
 		);
 	}
 
+	public function test_shared_configuration_validator_rejects_empty_bearer_authorization_header(): void {
+		$result = ConfigurationValidator::validate_with_response(
+			'https://api.cloudflare.com/client/v4/accounts/account-123/ai/v1/embeddings',
+			[
+				'Authorization' => 'Bearer ',
+				'Content-Type'  => 'application/json',
+			],
+			'@cf/qwen/qwen3-embedding-0.6b',
+			[ 'input' => [ 'validation' ] ],
+			'embedding_validation_error',
+			'Cloudflare Workers AI embeddings',
+			'embeddings'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_credentials', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
 	public function test_parse_retry_after_header_supports_http_dates(): void {
 		$now    = time();
 		$header = gmdate( 'D, d M Y H:i:s \G\M\T', $now + 7 );
@@ -110,20 +130,20 @@ final class EmbeddingBackendValidationTest extends TestCase {
 			],
 		];
 
-			WordPressTestState::$ai_client_provider_support = [
-				'anthropic' => true,
-			];
-			WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_supported        = true;
 
-			WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
+		WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
 
-			$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
 
-			$this->assertSame( 'connector ranked output', $result );
-			$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
-			$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
-			$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
-			$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame( 'connector ranked output', $result );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_rank_uses_saved_reasoning_effort_without_saved_provider_pinning(): void {
@@ -144,19 +164,19 @@ final class EmbeddingBackendValidationTest extends TestCase {
 			],
 		];
 
-			WordPressTestState::$ai_client_provider_support = [
-				'anthropic' => true,
-			];
-			WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_supported        = true;
 
-			WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
+		WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
 
-			$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt' );
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt' );
 
-			$this->assertSame( 'connector ranked output', $result );
-			$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
-			$this->assertSame( 'xhigh', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
-			$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame( 'connector ranked output', $result );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'xhigh', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_rank_ignores_saved_openai_native_provider(): void {
@@ -185,21 +205,21 @@ final class EmbeddingBackendValidationTest extends TestCase {
 			],
 		];
 
-			WordPressTestState::$ai_client_provider_support = [
-				'openai'    => true,
-				'anthropic' => true,
-			];
-			WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'openai'    => true,
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_supported        = true;
 
-			WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector ranked output';
+		WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector ranked output';
 
-			$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
 
-			$this->assertSame( 'OpenAI connector ranked output', $result );
-			$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
-			$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
-			$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
-			$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame( 'OpenAI connector ranked output', $result );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_rank_uses_generic_wordpress_ai_client_for_direct_provider(): void {
@@ -386,11 +406,11 @@ final class EmbeddingBackendValidationTest extends TestCase {
 	}
 
 	public function test_rank_does_not_use_openai_custom_options_for_unpinned_generic_runtime(): void {
-		WordPressTestState::$options                            = [
+		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider'  => 'openai_native',
 			Config::OPTION_REASONING_EFFORT => 'high',
 		];
-		WordPressTestState::$connectors                         = [
+		WordPressTestState::$connectors                     = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -401,22 +421,22 @@ final class EmbeddingBackendValidationTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support         = [
+		WordPressTestState::$ai_client_provider_support     = [
 			'openai' => true,
 		];
-			WordPressTestState::$ai_client_feature_support      = [
-				'reasoning' => false,
-			];
-			WordPressTestState::$ai_client_supported            = true;
-			WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector output';
+		WordPressTestState::$ai_client_feature_support      = [
+			'reasoning' => false,
+		];
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector output';
 
-			$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
 
-			$this->assertSame( 'OpenAI connector output', $result );
-			$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
-			$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
-			$this->assertArrayNotHasKey( 'customOptions', WordPressTestState::$last_ai_client_prompt );
-			$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame( 'OpenAI connector output', $result );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
+		$this->assertArrayNotHasKey( 'customOptions', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_embedding_validation_wraps_transport_timeout_with_backend_context(): void {

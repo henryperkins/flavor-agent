@@ -57,6 +57,17 @@ function isPrimaryShiftZ( event ) {
 	return isMacLike ? event.metaKey : event.ctrlKey;
 }
 
+function getSameOriginIframeDocument( iframe ) {
+	try {
+		const frameDocument =
+			iframe?.contentDocument || iframe?.contentWindow?.document || null;
+
+		return frameDocument?.addEventListener ? frameDocument : null;
+	} catch {
+		return null;
+	}
+}
+
 export default function ToastRegion() {
 	const toasts = useSelect( ( select ) => {
 		const flavorAgent = select( 'flavor-agent' );
@@ -104,6 +115,10 @@ export default function ToastRegion() {
 			return undefined;
 		}
 
+		const listeningDocuments = new Set();
+		const observedFrames = new WeakSet();
+		const frameCleanups = [];
+
 		const handleKeyDown = ( event ) => {
 			if ( ! isPrimaryShiftZ( event ) ) {
 				return;
@@ -112,10 +127,78 @@ export default function ToastRegion() {
 			handleFocusNewestUndo();
 		};
 
-		document.addEventListener( 'keydown', handleKeyDown, true );
+		const addDocumentListener = ( targetDocument ) => {
+			if (
+				! targetDocument?.addEventListener ||
+				listeningDocuments.has( targetDocument )
+			) {
+				return;
+			}
+
+			targetDocument.addEventListener( 'keydown', handleKeyDown, true );
+			listeningDocuments.add( targetDocument );
+		};
+
+		const observeFrame = ( iframe ) => {
+			if ( ! iframe || observedFrames.has( iframe ) ) {
+				return;
+			}
+
+			observedFrames.add( iframe );
+
+			const attachFrameDocument = () => {
+				addDocumentListener( getSameOriginIframeDocument( iframe ) );
+			};
+
+			attachFrameDocument();
+			iframe.addEventListener?.( 'load', attachFrameDocument );
+			frameCleanups.push( () => {
+				iframe.removeEventListener?.( 'load', attachFrameDocument );
+			} );
+		};
+
+		const scanFrames = ( rootNode = document ) => {
+			if ( rootNode?.tagName === 'IFRAME' ) {
+				observeFrame( rootNode );
+			}
+
+			if ( ! rootNode?.querySelectorAll ) {
+				return;
+			}
+
+			rootNode.querySelectorAll( 'iframe' ).forEach( observeFrame );
+		};
+
+		addDocumentListener( document );
+		scanFrames();
+
+		const observerTarget = document.body || document.documentElement;
+		const MutationObserverConstructor =
+			typeof window !== 'undefined' ? window.MutationObserver : null;
+		const observer =
+			observerTarget && MutationObserverConstructor
+				? new MutationObserverConstructor( ( mutations ) => {
+						mutations.forEach( ( mutation ) => {
+							mutation.addedNodes.forEach( scanFrames );
+						} );
+				  } )
+				: null;
+
+		observer?.observe( observerTarget, {
+			childList: true,
+			subtree: true,
+		} );
 
 		return () => {
-			document.removeEventListener( 'keydown', handleKeyDown, true );
+			observer?.disconnect();
+			frameCleanups.forEach( ( cleanup ) => cleanup() );
+			listeningDocuments.forEach( ( targetDocument ) => {
+				targetDocument.removeEventListener(
+					'keydown',
+					handleKeyDown,
+					true
+				);
+			} );
 		};
 	}, [ handleFocusNewestUndo ] );
 

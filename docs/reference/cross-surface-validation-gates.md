@@ -24,6 +24,8 @@ Before sign-off on any triggered gate:
 
 Full local sign-off also requires `lint-plugin` to run. If `output/verify/summary.json` is `incomplete` because `wp` or `WP_PLUGIN_CHECK_PATH` is unavailable, treat that as an environment blocker rather than a pass.
 
+Cloudflare Browser Run screenshots from `npm run audit:screenshot` may be attached as supporting visual evidence for settings, wp-admin, block editor, or Site Editor review. They do not replace Playwright harness proof and do not clear the blocker/waiver requirement for missing browser assertions. See `docs/reference/browser-run-screenshot-audits.md` for the required target URL, credentials, temporary auth inputs, and artifact location.
+
 ## Validation Gates
 
 | Gate                                  | Trigger                                                                                                                | Required evidence                                                                                                                                                                                                                                                                                       |
@@ -41,6 +43,7 @@ Full local sign-off also requires `lint-plugin` to run. If `output/verify/summar
 - `npm run test:e2e:playground` covers post editor, block Inspector, pattern inserter, and navigation flows.
 - `npm run test:e2e:wp70` covers Site Editor template, template-part, Global Styles, Style Book, and refresh/drift-sensitive flows.
 - A shared-subsystem change often needs both harnesses because the caller set spans both post editor and Site Editor surfaces.
+- `npm run audit:screenshot` captures optional Browser Run PNG evidence from a public target. Treat these screenshots as visual review artifacts only; they do not assert behavior.
 
 ## Release Matrix
 
