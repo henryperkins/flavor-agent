@@ -231,7 +231,7 @@ Good enough to merit release presence: yes.
 
 Release-quality as-is: conditional. It is release-credible only if bounded operation validation, freshness, review, apply, undo, and WP 7.0 browser evidence are current.
 
-Release closeout: complete for the bounded template scope as of 2026-05-02. See [`docs/validation/2026-05-02-template-surface-release-closeout.md`](../validation/2026-05-02-template-surface-release-closeout.md).
+Release closeout: complete for the bounded template scope as of 2026-05-02. The 2026-05-02 `npm run test:e2e:wp70` rerun returned `20 passed / 0 failed` covering template preview/apply/activity, refresh-safe undo, and inserted-pattern drift coverage.
 
 ### Stop Line
 
@@ -257,7 +257,7 @@ Template parts are the strongest Site Editor fit because headers, footers, and s
 
 Good enough to merit release presence: yes.
 
-Release-quality as-is: close; current browser evidence is captured in [`docs/validation/2026-05-02-template-surface-release-closeout.md`](../validation/2026-05-02-template-surface-release-closeout.md), which exercises template-part coverage in the wp70 harness. The most valuable improvement is better operation yield, not broader operation authority.
+Release-quality as-is: close; current browser evidence is the 2026-05-02 `npm run test:e2e:wp70` rerun (`20 passed / 0 failed`), which exercises template-part coverage in the wp70 harness. The most valuable improvement is better operation yield, not broader operation authority.
 
 ### Stop Line
 
@@ -269,7 +269,7 @@ Follow the canonical stop lines in [surfaces/release-stop-lines.md#template-part
 
 - [ ] Improve recommendation yield by giving the prompt better bounded context, not by loosening validators.
 - [ ] Confirm unsupported suggestions stay useful as manual ideas.
-- [x] Re-run WP 7.0 template-part browser flows. Captured in [`docs/validation/2026-05-02-template-surface-release-closeout.md`](../validation/2026-05-02-template-surface-release-closeout.md).
+- [x] Re-run WP 7.0 template-part browser flows. Captured by the 2026-05-02 `npm run test:e2e:wp70` rerun (`20 passed / 0 failed`).
 - [ ] Watch Block Bindings and Pattern Overrides before investing in deeper executable behavior.
 - [ ] Keep operation vocabulary synchronized with `docs/reference/template-operations.md`.
 

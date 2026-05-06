@@ -29,7 +29,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/referen
 - Learned-once sequence: intro -> scope/freshness -> prompt -> status -> explanation -> grouped lanes -> embedded navigation when present -> undo and history. `RecommendationHero` is reserved for stale refresh in the compact block shell.
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Block recommendations normally move `idle -> loading -> advisory-ready`; safe local attribute updates can then move directly to `success` because only the selected block's local attributes are mutated
-- Fresh results render explanation text before the grouped `Apply now`, `Review first`, and `Manual ideas` lanes; stale results surface a refresh hero before the grouped lanes
+- Fresh results render explanation text before the grouped `Apply now`, `Review first`, `Settings suggestions`, `Style suggestions`, and `Manual ideas` lanes; stale results surface a refresh hero before the grouped lanes
 - `Apply now` is limited to validator-computed local selected-block attribute updates tied to a known Inspector panel when panel mapping is known. Registered block style variations are the only executable block-level exception that may survive without a mapped panel when no specific panel applies.
 - `Review first` is limited to exactly one server-approved selected-block structural pattern operation that the browser operation catalog can reproduce against the live block context.
 - `Manual ideas` contains advisory-only structural or pattern guidance plus any suggestions blocked by panel, attribute, binding, content-only, freshness, or structural-operation validators.

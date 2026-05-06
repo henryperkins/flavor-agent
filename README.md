@@ -1,6 +1,6 @@
 # Flavor Agent
 
-Flavor Agent is a customer-facing AI system for WordPress teams that need useful recommendations without giving a model unchecked control of their site. It brings contextual assistance into Gutenberg and wp-admin surfaces where editors already work: blocks, content, patterns, templates, navigation, Global Styles, and Style Book. I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: multi-provider text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
+Flavor Agent is a customer-facing AI system for WordPress teams that need useful recommendations without giving a model unchecked control of their site. It brings contextual assistance into Gutenberg and wp-admin surfaces where editors already work: blocks, content, patterns, templates, navigation, Global Styles, and Style Book. I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
 
 > **Release status:** `0.1.0` is release-candidate ready in this repository. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 

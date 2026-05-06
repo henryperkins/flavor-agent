@@ -41,7 +41,7 @@ Flavor Agent chat requests enter through `ChatClient::chat()` for block/content 
 
 ## Reasoning Effort Routing
 
-`flavor_agent_reasoning_effort` is the neutral Connectors-routed chat preference used when Flavor Agent can express the setting through the selected provider's model configuration. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source. Flavor Agent does not read, copy, or submit connector credentials itself; authentication and final request dispatch remain owned by the WordPress AI Client and the selected provider plugin.
+`flavor_agent_reasoning_effort` is the neutral Connectors-routed chat preference used when Flavor Agent can express the setting through the selected provider's model configuration. Runtime calls use the explicit request value when supplied, then the saved neutral option, then a valid legacy `flavor_agent_azure_reasoning_effort` value as a one-way fallback/migration source, and finally `medium`. Flavor Agent does not read, copy, or submit connector credentials itself; authentication and final request dispatch remain owned by the WordPress AI Client and the selected provider plugin.
 
 At request time, `WordPressAIClient::chat()` first tries any standardized WP AI Client reasoning methods that may exist in a future core/client version. When those methods are unavailable and the resolved provider argument is a known pinned connector, it falls back to `ModelConfig::customOptions` for provider plugins that already support the needed payload shape. The normal admin/runtime path ignores saved provider IDs from older settings screens and does not pin chat to a connector. The normal unpinned Connectors runtime can still receive the neutral reasoning preference through standardized WP AI Client methods, but provider-specific custom-option fallback is applied only when a caller explicitly supplies or resolves one of these pinned provider IDs:
 
@@ -61,16 +61,16 @@ Anthropic is intentionally unmapped until its provider plugin documents the acce
 3. If Cloudflare Workers AI is incomplete, Embedding Model status is unavailable and Qdrant Pattern Storage is gated off.
 4. `EmbeddingClient::validate_configuration()` validates only the Cloudflare Workers AI account ID, API token, and embedding model.
 5. When validation sees a Workers AI dimension that differs from the saved Qdrant pattern index dimension, the settings screen warns that patterns must be re-synced before Qdrant-backed recommendations are reliable.
-6. The Cloudflare AI Search pattern backend can be ready when the Embedding Model account ID, API token, embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because pattern sync/retrieval uses managed indexing/search instead of `EmbeddingClient`; save-time setup still validates the shared Embedding Model credentials before creating or adopting that managed instance.
+6. The Cloudflare AI Search pattern backend can be ready when the Cloudflare Workers AI account ID, API token, embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because pattern sync/retrieval uses managed indexing/search instead of `EmbeddingClient`; save-time setup still validates the shared Workers AI credentials before creating or adopting that managed instance.
 
 ## Pattern Storage Backend Chain
 
-`flavor_agent_pattern_retrieval_backend` selects the pattern retrieval backend. Missing or invalid values default to `qdrant`.
+`flavor_agent_pattern_retrieval_backend` selects the pattern retrieval backend. Settings reads and UI readiness normalize missing or invalid values to `qdrant`; the request-time retrieval factory still fails closed with `unsupported_pattern_retrieval_backend` for an unknown non-empty saved value so recommendations do not silently use the wrong backend after state corruption.
 
 | Value                  | Retrieval behavior                                                                                                                                                                                                                        | Required setup                                                                  |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `qdrant`               | Pattern sync embeds changed pattern text with the active Embedding Model, stores vectors and payloads in Qdrant, and recommendation requests query Qdrant before reranking through Connectors chat.                                       | Embedding Model; Qdrant URL/key; Connectors chat.                               |
-| `cloudflare_ai_search` | Pattern sync uploads public-safe pattern markdown items to a private Cloudflare AI Search instance, and recommendation requests send query text plus `visiblePatternNames` as a metadata filter before reranking through Connectors chat. | Embedding Model account/token/model; validated managed `flavor-agent-patterns-{site_hash}` instance; Connectors chat. |
+| `cloudflare_ai_search` | Pattern sync uploads public-safe pattern markdown items to a private Cloudflare AI Search instance, and recommendation requests send query text plus `visiblePatternNames` as a nested AI Search retrieval metadata filter before reranking through Connectors chat. | Cloudflare Workers AI account/token/model signature; validated managed `flavor-agent-patterns-{site_hash}` instance; Connectors chat. |
 
 Cloudflare AI Search pattern retrieval is separate from the built-in public Cloudflare AI Search endpoint used for WordPress developer-doc grounding.
 
@@ -92,7 +92,7 @@ Authentication uses the `Authorization: Bearer` header against Cloudflare's Open
 
 ## Cloudflare AI Search Pattern Retrieval
 
-Requires the saved Cloudflare account, token, and model from the Embedding Model section and the private pattern index option to be non-empty when `flavor_agent_pattern_retrieval_backend` is `cloudflare_ai_search`:
+Requires the saved Cloudflare Workers AI account, API token, embedding model, and private pattern index option to be non-empty and validated when `flavor_agent_pattern_retrieval_backend` is `cloudflare_ai_search`:
 
 | Option                                                  | Purpose                                      |
 | ------------------------------------------------------- | -------------------------------------------- |
@@ -100,7 +100,7 @@ Requires the saved Cloudflare account, token, and model from the Embedding Model
 | `flavor_agent_cloudflare_workers_ai_api_token`          | Shared Cloudflare API token                  |
 | `flavor_agent_cloudflare_pattern_ai_search_instance_id` | Private pattern AI Search index name         |
 
-Authentication uses the `Authorization: Bearer` header against Cloudflare's AI Search REST API. Pattern sync uses stable item IDs, uploads changed public-safe registered patterns and published user `wp_block` patterns across synced, partial, and unsynced states with `wait_for_completion=true`, and deletes only stale remote items that were recorded in the previous Flavor Agent fingerprint state. Unknown remote items and the owner marker are preserved. Recommendation search sends the query text and `filters.pattern_name` derived from `visiblePatternNames`.
+Authentication uses the `Authorization: Bearer` header against Cloudflare's AI Search REST API. Pattern sync uses stable item IDs, uploads changed public-safe registered patterns and published user `wp_block` patterns across synced, partial, and unsynced states with `wait_for_completion=true`, and deletes only stale remote items that were recorded in the previous Flavor Agent fingerprint state. Unknown remote items and the owner marker are preserved. Recommendation search sends the query text and `ai_search_options.retrieval.filters.pattern_name` derived from `visiblePatternNames`.
 
 ## Old Provider Values
 

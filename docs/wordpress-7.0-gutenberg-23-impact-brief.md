@@ -4,7 +4,7 @@
 > Reviewed: 2026-04-30
 > Scope: dated upstream release posture plus the concrete impact on this repo's shipped code and docs
 > Status: retained as a point-in-time compatibility snapshot for the WordPress 7.0 / Gutenberg 23.0 release cycle. Use `docs/reference/gutenberg-feature-tracking.md` for ongoing Gutenberg/API tracking and `docs/reference/wordpress-ai-roadmap-tracking.md` for ongoing WordPress AI roadmap pressure.
-> Use `docs/wordpress-7.0-developer-docs-index.md` for the broader upstream source map, `docs/wp7-migration-opportunities.md` for the older migration snapshot, and `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` for the overlap-remediation backlog.
+> Use `docs/wordpress-7.0-developer-docs-index.md` for the broader upstream source map and `docs/wp7-migration-opportunities.md` for the older migration snapshot.
 
 ## Current Upstream Snapshot
 
@@ -22,7 +22,7 @@
 
 Flavor Agent already treats the WordPress AI Client plus Connectors as a real first-class runtime path.
 
-- `inc/LLM/WordPressAIClient.php` uses `wp_ai_client_prompt()` directly and fails clearly when the core AI client is unavailable.
+- `inc/LLM/WordPressAIClient.php` prefers the WordPress AI service prompt factory when available, falls back to `wp_ai_client_prompt()`, and fails clearly when the core AI client is unavailable.
 - `inc/OpenAI/Provider.php` already checks connector registration and connector-backed credentials such as `connectors_ai_openai_api_key`.
 - Live docs already frame `Settings > Connectors` as the fallback path rather than a side note.
 

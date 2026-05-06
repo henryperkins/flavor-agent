@@ -125,7 +125,7 @@ Replace the Cloudflare AI Search sentence in `readme.txt` setup ownership with t
 Replace the Cloudflare AI Search private pattern retrieval bullet with:
 
 ```text
-* Cloudflare AI Search for private pattern retrieval — Used when the Cloudflare AI Search pattern backend is selected and the Cloudflare Workers AI Embedding Model account ID, API token, and embedding model are saved in `Settings > Flavor Agent`. Flavor Agent creates or adopts the deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance in the `patterns` namespace and validates its metadata schema, owner marker, and embedding model before using it. Requests can include managed-instance list/create calls, owner-marker reads/uploads, pattern item uploads with title, description, categories, block/template metadata, inferred traits, public-safe pattern content, synced identifiers/status, recommendation query text, and visible pattern names as search filters. Sync uploads only public-safe registered patterns and published user `wp_block` patterns across synced, partial, and unsynced states; recommendation requests re-check current synced-pattern status/readability before ranking or returning results. Cloudflare Terms: https://www.cloudflare.com/terms/ Privacy: https://www.cloudflare.com/privacypolicy/
+* Cloudflare AI Search for private pattern retrieval — Used when the Cloudflare AI Search pattern backend is selected and the Cloudflare Workers AI Embedding Model account ID, API token, and embedding model are saved in `Settings > Flavor Agent`. Flavor Agent creates or adopts the deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance in the `patterns` namespace and validates its metadata schema, owner marker, and embedding model before using it. Requests can include managed-instance list/create calls, owner-marker reads/uploads, pattern item uploads with title, description, categories, block/template metadata, inferred traits, public-safe pattern content, synced identifiers/status, recommendation query text, and visible pattern names as nested AI Search retrieval filters. Sync uploads only public-safe registered patterns and published user `wp_block` patterns across synced, partial, and unsynced states, deletes only stale remote items previously recorded by Flavor Agent, and preserves unknown remote items and the owner marker; recommendation requests re-check current synced-pattern status/readability before ranking or returning results. Cloudflare Terms: https://www.cloudflare.com/terms/ Privacy: https://www.cloudflare.com/privacypolicy/
 ```
 
 - [ ] **Step 3: Update `docs/reference/external-service-disclosure.md`**
@@ -139,7 +139,7 @@ Requires selecting the Cloudflare AI Search pattern backend and saving Cloudflar
 Revise the `flavor_agent_reindex_patterns` scheduling row so its Cloudflare AI Search gate says:
 
 ```text
-No. `schedule_sync()` returns unless the selected pattern backend is configured: embeddings plus Qdrant for Qdrant, or Embedding Model account/token/model plus a validated managed Cloudflare AI Search pattern instance for Cloudflare AI Search.
+No. `schedule_sync()` returns unless the selected pattern backend is configured: embeddings plus Qdrant for Qdrant, or Cloudflare Workers AI account/token/model signature plus a validated managed Cloudflare AI Search pattern instance for Cloudflare AI Search.
 ```
 
 - [ ] **Step 4: Update `docs/reference/abilities-and-routes.md` readiness text**
@@ -147,19 +147,19 @@ No. `schedule_sync()` returns unless the selected pattern backend is configured:
 Replace the `flavor-agent/recommend-patterns` Cloudflare AI Search readiness fragment with:
 
 ```text
-Cloudflare AI Search backend requires Embedding Model credentials plus the validated managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance
+Cloudflare AI Search backend requires Cloudflare Workers AI account/token/model signature validation plus the validated managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance
 ```
 
 Replace the `configured` paragraph's Cloudflare AI Search sentence with:
 
 ```text
-For Cloudflare AI Search, that means the Embedding Model account ID, API token, embedding model, and validated managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are ready.
+For Cloudflare AI Search, that means the Cloudflare Workers AI account ID, API token, embedding model, and validated managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are ready.
 ```
 
 Replace the Cloudflare AI Search row in the backend matrix with:
 
 ```markdown
-| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | AI Search `filters.pattern_name` | Embedding Model credentials, validated managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
+| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | AI Search `ai_search_options.retrieval.filters.pattern_name` | Cloudflare Workers AI account/token plus embedding-model signature validation, validated managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
 ```
 
 - [ ] **Step 5: Update `docs/reference/provider-precedence.md`**
@@ -167,13 +167,13 @@ Replace the Cloudflare AI Search row in the backend matrix with:
 Replace the readiness bullet with:
 
 ```text
-6. The Cloudflare AI Search pattern backend can be ready when the Embedding Model account ID, API token, embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because pattern sync/retrieval uses managed indexing/search instead of `EmbeddingClient`; save-time setup still validates the shared Embedding Model credentials before creating or adopting that managed instance.
+6. The Cloudflare AI Search pattern backend can be ready when the Cloudflare Workers AI account ID, API token, embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because pattern sync/retrieval uses managed indexing/search instead of `EmbeddingClient`; save-time setup still validates the shared Workers AI credentials before creating or adopting that managed instance.
 ```
 
 Replace the `cloudflare_ai_search` table setup cell with:
 
 ```text
-Embedding Model account/token/model; validated managed `flavor-agent-patterns-{site_hash}` instance; Connectors chat.
+Cloudflare Workers AI account/token/model signature; validated managed `flavor-agent-patterns-{site_hash}` instance; Connectors chat.
 ```
 
 - [ ] **Step 6: Update `docs/reference/pattern-recommendation-debugging.md`**
@@ -193,13 +193,13 @@ Replace the missing-credentials interpretation with:
 Replace the unavailable-backend setup text with:
 
 ```text
-- or the selected Cloudflare AI Search pattern backend does not have Embedding Model credentials and a validated managed AI Search pattern instance
+- or the selected Cloudflare AI Search pattern backend does not have Cloudflare Workers AI account/token/model signature validation and a validated managed AI Search pattern instance
 ```
 
 Replace the setup checklist item with:
 
 ```text
-- configure the selected pattern backend in `Settings > Flavor Agent`: plugin-owned embeddings and Qdrant for Qdrant, or the Embedding Model credentials plus the validated managed Cloudflare AI Search pattern instance for AI Search
+- configure the selected pattern backend in `Settings > Flavor Agent`: plugin-owned embeddings and Qdrant for Qdrant, or Cloudflare Workers AI account/token/model signature validation plus the validated managed Cloudflare AI Search pattern instance for AI Search
 ```
 
 Replace the diagnostic metadata bullet with:

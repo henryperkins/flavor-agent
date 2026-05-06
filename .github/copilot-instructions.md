@@ -86,7 +86,7 @@ Remaining REST routes live under `flavor-agent/v1/`: `activity`, `activity/{id}/
 
 ### LLM provider architecture
 
-`LLM\ChatClient` routes chat through the WordPress AI Client (`wp_ai_client_prompt()`) and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages one plugin-owned Cloudflare Workers AI Embedding Model for Qdrant, Qdrant itself, private Cloudflare AI Search pattern retrieval, built-in public Cloudflare AI Search docs grounding limits/diagnostics, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` is a hidden compatibility option that settings saves canonicalize to `cloudflare_workers_ai`; saved OpenAI Native, Azure OpenAI, or connector values do not select chat or embeddings. Each recommendation surface disables independently when its required backend is unavailable.
+`LLM\ChatClient` routes chat through the WordPress AI service / `wp_ai_client_prompt()` fallback and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages one plugin-owned Cloudflare Workers AI Embedding Model for Qdrant, Qdrant itself, private Cloudflare AI Search pattern retrieval, built-in public Cloudflare AI Search docs grounding limits/diagnostics, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` is a hidden compatibility option that settings saves canonicalize to `cloudflare_workers_ai`; saved OpenAI Native, Azure OpenAI, or connector values do not select chat or embeddings. Each recommendation surface disables independently when its required backend is unavailable.
 
 ## Key conventions
 

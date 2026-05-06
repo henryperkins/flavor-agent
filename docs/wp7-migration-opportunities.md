@@ -6,7 +6,6 @@ Verified: 2026-04-20
 > Status: point-in-time migration assessment, not the live backlog. This doc has two parts: [Applied Changes](#applied-changes) records WP 7.0 migration work already shipped, and [Remaining Opportunities](#remaining-opportunities) lists still-open watch items and future-facing evaluations. Neither section is re-verified on every release — treat both as frozen snapshots and confirm against the current source tree before acting.
 > Verification basis: current source tree, targeted doc and source review, and official WordPress 7.0 release-cycle docs/dev notes re-checked on 2026-04-20.
 > Use `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `STATUS.md` for current priorities and shipped behavior.
-> Use `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` for the active remediation plan where Flavor Agent should stop duplicating Gutenberg or hand ownership back to core.
 
 ## Applied Changes
 
@@ -24,7 +23,7 @@ Removed `function_exists()` checks for functions available since WP 2.1-5.9:
 
 ### 2. Simplified AI Client Wrapper
 
-`inc/LLM/WordPressAIClient.php` — collapsed three-tier fallback (`wp_ai_client_prompt()` -> `AI_Client::prompt_with_wp_error()` -> error) to a direct `wp_ai_client_prompt()` call with early error return. The `class_exists(AI_Client::class)` middle tier is no longer needed since WP 7.0 guarantees the function.
+`inc/LLM/WordPressAIClient.php` — collapsed the old package fallback chain and now prefers `WordPress\AI\get_ai_service()->create_textgen_prompt()` when available, with a `wp_ai_client_prompt()` fallback and early error return. The `class_exists(AI_Client::class)` middle tier is no longer needed since WP 7.0 provides the AI client entry points.
 
 ### 3. Removed `__experimentalRole` Fallback
 

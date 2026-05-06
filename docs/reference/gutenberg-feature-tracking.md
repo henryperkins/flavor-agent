@@ -11,7 +11,6 @@ Use it when you need to answer:
 
 For project-board pressure on the AI program (project 240), use `wordpress-ai-roadmap-tracking.md`.
 For point-in-time WP 7.0 release-cycle compatibility analysis, use `docs/wordpress-7.0-gutenberg-23-impact-brief.md`.
-For the active overlap-remediation backlog, use `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md`.
 
 ## Source And Refresh
 
@@ -162,26 +161,25 @@ Concrete tasks driven by this matrix, in priority order. Strike through complete
 7. Watch RTC stable rollout. Once core RTC ships post-7.0-beta, add a freshness re-check in `src/store/index.js` apply actions immediately before mutation. Coordinate with `gutenberg#76377`. **Not yet covered by an existing workstream.**
 8. Evaluate handing template/template-part undo to core revisions (23.0) for surfaces where the activity-state-machine duplicates revision behavior. Design effort, not just plumbing. **Not yet covered by an existing workstream.**
 
-When any of these moves from "watch" to "act", add a workstream to `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` rather than tracking implementation details here.
+When any of these moves from "watch" to "act", record the workstream in `docs/SOURCE_OF_TRUTH.md` or the relevant feature doc rather than tracking implementation details here.
 
-## Mapping To The Remediation Plan
+## Workstream History
 
-`docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` is the action-oriented backlog. Cross-walk:
+The earlier overlap-remediation plan tracked these workstreams; results have been folded back into the live source tree.
 
-| Remediation workstream | Driver from this matrix |
-| --- | --- |
-| A — Pattern Surface Reset (Done 2026-04-23) | Pattern API stabilization |
-| B — Block Inspector Ownership Reset (Done 2026-04-23) | Inspector slot stabilization |
-| C — Provider Ownership Migration (Done 2026-04-28) | `Settings > Connectors` 22.7, `registerConnector` 22.8, AI Client 7.0 |
-| D — Guidelines Bridge and Migration (read bridge implemented 2026-04-28; write/public API migration pending) | `gutenberg#75171` Content Guidelines, 22.7 experimental REST + CPT |
-| E — Settings Screen Modernization (Pending) | DataForm/DataViews v2 in 7.0; `@wordpress/ui` (#76135) long-term |
+| Workstream | Status | Driver from this matrix |
+| --- | --- | --- |
+| A — Pattern Surface Reset | Done 2026-04-23 | Pattern API stabilization |
+| B — Block Inspector Ownership Reset | Done 2026-04-23 | Inspector slot stabilization |
+| C — Provider Ownership Migration | Done 2026-04-28 | `Settings > Connectors` 22.7, `registerConnector` 22.8, AI Client 7.0 |
+| D — Guidelines Bridge and Migration | Read bridge implemented 2026-04-28; write/public API migration pending | `gutenberg#75171` Content Guidelines, 22.7 experimental REST + CPT |
+| E — Settings Screen Modernization | Pending | DataForm/DataViews v2 in 7.0; `@wordpress/ui` (#76135) long-term |
 
-Action implications 4, 5, 7, and 8 above describe upstream pressures with no corresponding workstream yet. Implications 1 (`wp_ai_client_prevent_prompt`) and 2 (`meta.annotations`) shipped 2026-04-29 as small additive changes in `inc/LLM/WordPressAIClient.php` and `inc/Abilities/Registration.php`; implication 3 (`pattern compatibility audit`) shipped 2026-04-30 as a scoped cleanup in `src/patterns/pattern-settings.js` and `src/patterns/compat.js` (no workstream needed).
+Action implications 4, 5, 7, and 8 above describe upstream pressures with no corresponding workstream yet. Implications 1 (`wp_ai_client_prevent_prompt`) and 2 (`meta.annotations`) shipped 2026-04-29 as small additive changes in `inc/LLM/WordPressAIClient.php` and `inc/Abilities/Registration.php`; implication 3 (`pattern compatibility audit`) shipped 2026-04-30 as a scoped cleanup in `src/patterns/pattern-settings.js` and `src/patterns/compat.js`.
 
 ## Related References
 
 - `docs/reference/wordpress-ai-roadmap-tracking.md` — board pressure (project 240) and active overlap with Flavor Agent surfaces.
 - `docs/wordpress-7.0-gutenberg-23-impact-brief.md` — point-in-time compatibility brief for the WP 7.0 release cycle.
-- `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` — active workstream backlog for handing ownership back to core.
 - `docs/wordpress-7.0-developer-docs-index.md` — broader upstream source map for WP 7.0.
 - `docs/wp7-migration-opportunities.md` — older migration snapshot.

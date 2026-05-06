@@ -16,7 +16,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `GlobalStylesRecommender()` renders only when the native Styles sidebar is active and Style Book is not the current target
 - `StyleBookRecommender()` renders when the Site Editor Styles sidebar and Style Book UI are active; recommendation requests stay disabled with a scope notice until the native Style Book example target resolves to a registered block
-- Within those active Styles sidebar contexts, both panels stay visible with a capability notice when the corresponding localized capability flag is false; outside those contexts the components return `null`. Readiness uses the shared `SurfaceCapabilities` payload exposed through localized bootstrap data and `flavor-agent/check-status`
+- Within those active Styles sidebar contexts, both panels always mount the shared `CapabilityNotice`; that component renders nothing while the corresponding localized capability flag is ready and renders the setup/capability notice when it is false. Outside those contexts the recommender components return `null`. Readiness uses the shared `SurfaceCapabilities` payload exposed through localized bootstrap data and `flavor-agent/check-status`
 - Requests require an active Flavor Agent chat backend plus `edit_theme_options`
 - Apply and undo stay available only while the current scope and live user config still match the recorded activity contract
 

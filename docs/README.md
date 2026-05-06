@@ -70,10 +70,9 @@ Read these documents in this order:
 7. `docs/flavor-agent-readme.md`
    - Editor-flow and architecture walkthrough.
    - Use this as the architecture-oriented companion to the feature docs.
-8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, `docs/wp7-migration-opportunities.md`, and `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md`
-   - The first three are release-cycle research snapshots for upstream WordPress changes that matter to Flavor Agent.
-   - `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` is the active remediation backlog for places where Flavor Agent should stop duplicating Gutenberg or should hand ownership back to core.
-   - Use the snapshots for compatibility context; use the remediation plan for live overlap-reduction work.
+8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
+   - Release-cycle research snapshots for upstream WordPress changes that matter to Flavor Agent.
+   - Use the snapshots for compatibility context.
 
 ## Doc Ownership
 
@@ -115,11 +114,10 @@ Each top-level doc has one job:
 6. `docs/flavor-agent-readme.md` answers:
    - How does the broader editor architecture fit together?
    - How do the surface docs fit into the repo-level implementation story?
-7. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, `docs/wp7-migration-opportunities.md`, and `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` answer:
+7. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md` answer:
    - Which upstream WordPress 7.0 and Gutenberg changes matter to Flavor Agent?
    - Which release-cycle notes are authoritative or merely supplemental?
    - Which migration or tooling opportunities are worth tracking without treating them as shipped repo behavior?
-   - Which current overlap-remediation decisions are active and should guide implementation?
 
 ## Update Contract
 
@@ -131,7 +129,7 @@ When changing the plugin:
 4. Update the matching file in `docs/features/` if a shipped surface behavior changes.
 5. Update the matching file in `docs/reference/` if an ability, route, permission, response contract, provider chain, operation vocabulary, undo lifecycle, or release-validation rule changes.
 6. Update `docs/flavor-agent-readme.md` if the architecture-level editor flow or repo walkthrough changes.
-7. Update the relevant WordPress reference doc (`docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, `docs/wp7-migration-opportunities.md`, or `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md`) when upstream WordPress release-cycle research, migration guidance, or overlap-remediation direction changes.
+7. Update the relevant WordPress reference doc (`docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, or `docs/wp7-migration-opportunities.md`) when upstream WordPress release-cycle research or migration guidance changes.
 8. Delete or rewrite stale planning docs instead of letting two forward-looking plans compete.
 
 ## Current Backbone
@@ -144,7 +142,7 @@ Right now the intended doc stack is:
 4. Per-surface deep dives: `docs/features/README.md`
 5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
 6. Architecture companion: `docs/flavor-agent-readme.md`
-7. WordPress compatibility, migration snapshots, and overlap remediation: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, `docs/wp7-migration-opportunities.md`, and `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md`
+7. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
 
 If those seven documentation groups stay aligned, the repo has a solid documentation backbone.
 

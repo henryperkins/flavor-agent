@@ -256,7 +256,7 @@ Current lifecycle behavior:
 - Activation marks the catalog dirty and schedules a sync when the selected pattern backend is configured.
 - Theme switches, plugin activation/deactivation, upgrades, and relevant settings changes mark the index dirty and schedule a background refresh.
 - Deactivation clears the scheduled reindex hook and any active sync lock.
-- Uninstall removes plugin-owned provider, embedding, Qdrant, Cloudflare AI Search, docs grounding/runtime, pattern sync, activity, guideline, and experiment state, drops the activity table, and clears Flavor Agent scheduled hooks/transients.
+- Uninstall removes plugin-owned provider, embedding, Qdrant, Cloudflare AI Search, docs grounding/runtime, pattern sync, activity, guideline, and experiment option state, drops the activity table, and clears Flavor Agent scheduled hooks plus the static sync/core-roadmap transient keys. Dynamic docs grounding cache transients are not bulk-deleted by the uninstall handler.
 
 ## Development
 

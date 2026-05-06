@@ -290,11 +290,11 @@ Each bullet is keyed to the board item that drives it. Strike through completed 
 7. **`WordPress/abilities-api#149`** — Once execution lifecycle filters land, move `inc/Activity/Repository.php` instrumentation onto them to avoid double-logging when callers hit core's filter set in addition to the Flavor Agent wrapper. **Not yet covered by an existing workstream.**
 8. **WordPress 7.1 Guidelines API (`wp_register_guideline()`)** — Source guidelines into prompt assembly under `inc/LLM/` (`Prompt.php`, `TemplatePrompt.php`, `TemplatePartPrompt.php`, `NavigationPrompt.php`, `StylePrompt.php`, `WritingPrompt.php`) so Flavor Agent recommendations respect site-wide guidelines as soon as core's API ships. **Bridge implemented 2026-04-28 via Workstream D: Flavor Agent now has a core-first repository bridge, prompt formatter, and settings migration framing. Keep watching for the public `wp_register_guideline()` API and core's final write/defaults model before adding write migration.**
 
-### Mapping To The Remediation Plan
+### Workstream History
 
-`docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` is the action-oriented backlog for places where Flavor Agent should hand ownership back to core. This tracking doc is the upstream-pressure source for that backlog. Reference cross-walk:
+The earlier overlap-remediation plan tracked these workstreams; results have been folded back into the live source tree.
 
-| Remediation workstream              | Pending?                                                               | Driven by these board items                                                                                                                                           |
+| Workstream                          | Status                                                                 | Driven by these board items                                                                                                                                           |
 | ----------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A (Pattern Surface Reset)           | Done 2026-04-23                                                        | Pattern API stabilization (no specific item on the board today)                                                                                                       |
 | B (Block Inspector Ownership Reset) | Done 2026-04-23                                                        | None active on the board today                                                                                                                                        |
@@ -302,7 +302,7 @@ Each bullet is keyed to the board item that drives it. Strike through completed 
 | D (Guidelines Bridge and Migration) | Read bridge implemented 2026-04-28; write/public API migration pending | WordPress 7.1 Guidelines API (Trac, not on this board); bridge reads `wp_guideline` / `wp_guideline_type` now and defers write migration until the public API settles |
 | E (Settings Screen Modernization)   | Pending                                                                | `WordPress/ai#197`, `#451`, `#472`, `#428`, `#323` (these are core's own settings UX, but they pressure Flavor Agent's settings to align)                             |
 
-Action implications 1, 2, 4, 5, and 7 above describe upstream pressures with no corresponding workstream yet. When any of them moves from "watch" to "act", add a workstream to the remediation plan rather than tracking implementation details here.
+Action implications 1, 2, 4, 5, and 7 above describe upstream pressures with no corresponding workstream yet. When any of them moves from "watch" to "act", record the workstream in `docs/SOURCE_OF_TRUTH.md` or the relevant feature doc rather than tracking implementation details here.
 
 ## Related References
 
@@ -310,4 +310,3 @@ Action implications 1, 2, 4, 5, and 7 above describe upstream pressures with no 
 - `docs/FEATURE_SURFACE_MATRIX.md` — every shipped surface, gate, and apply/undo path.
 - `docs/reference/abilities-and-routes.md` — REST and Abilities contract map.
 - `docs/reference/provider-precedence.md` — backend selection, credential fallback chain, and Connectors-first runtime activation.
-- `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` — active backlog of places where Flavor Agent should stop duplicating Gutenberg.
