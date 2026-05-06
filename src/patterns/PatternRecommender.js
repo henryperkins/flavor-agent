@@ -98,6 +98,7 @@ function buildInsertionContext( editor, inserterRootClientId, insertionPoint ) {
 	const containerLayout = getNonEmptyString(
 		rootEntry?.attributes?.layout?.type
 	);
+	const rootBlock = getNonEmptyString( rootEntry?.blockName );
 	const siblingOrder = editor.getBlockOrder?.( inserterRootClientId ) || [];
 	const insertIndex = insertionPoint?.index ?? siblingOrder.length;
 	const nearbySiblings = [];
@@ -113,7 +114,7 @@ function buildInsertionContext( editor, inserterRootClientId, insertionPoint ) {
 	}
 
 	return {
-		rootBlock: rootEntry?.blockName || null,
+		...( rootBlock ? { rootBlock } : {} ),
 		ancestors: ancestorEntries
 			.map( ( entry ) => entry.blockName )
 			.filter( Boolean ),

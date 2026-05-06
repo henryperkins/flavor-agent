@@ -379,6 +379,27 @@ describe( 'PatternRecommender', () => {
 		expect( mockGetBlockAttributes ).toHaveBeenCalledWith( 'tpl-a' );
 	} );
 
+	test( 'omits rootBlock from root-level insertion context requests', () => {
+		state.blockEditor.insertionPoint = {
+			rootClientId: null,
+			index: 0,
+		};
+		state.blockEditor.blockNames = {};
+		state.blockEditor.blockRoots = {};
+		state.blockEditor.blockOrder = {};
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			postType: 'page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				ancestors: [],
+				nearbySiblings: [],
+			},
+		} );
+	} );
+
 	test( 'removes the input listener on unmount when a search field is found immediately', () => {
 		const searchInput = {
 			addEventListener: jest.fn(),
