@@ -37,15 +37,9 @@ final class Help {
 				'content'  => implode(
 					'',
 					[
-						'<p>' . esc_html__( 'This screen keeps inline copy short so the form stays focused on live settings and status.', 'flavor-agent' ) . '</p>',
-						'<ol>',
-						'<li>' . esc_html__( 'AI Model shows the text-generation provider configured in Settings > Connectors.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Embedding Model is configured once for Flavor Agent semantic features.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Patterns choose storage only; Qdrant uses the configured Embedding Model.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Developer Docs are already available through Flavor Agent\'s built-in public endpoint.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Use Guidelines for core-first site, writing, image, and block notes; legacy fields stay available for migration.', 'flavor-agent' ) . '</li>',
-						'</ol>',
-						'<p>' . esc_html__( 'Use Activity Log to review requests, sync runs, and diagnostics after saving changes.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Use Connectors for text generation. Flavor Agent shows the active chat path here.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and beta feature toggles.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback.', 'flavor-agent' ) . '</p>',
 					]
 				),
 				'priority' => 10,
@@ -56,14 +50,10 @@ final class Help {
 				'content'  => implode(
 					'',
 					[
-						'<p>' . esc_html__( 'Use Settings > Connectors for shared chat credentials and text-generation provider selection.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Use this screen for the Flavor Agent embedding model, pattern storage, sync tuning, developer-doc source limits, and guidelines migration tooling.', 'flavor-agent' ) . '</p>',
-						'<ul>',
-						'<li>' . esc_html__( 'Cloudflare Workers AI fields configure the Flavor Agent embedding model. Chat credentials and text generation live in Settings > Connectors.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Saved older embedding-provider values are ignored by the runtime and overwritten with Cloudflare Workers AI on the next settings save.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Pattern Sync needs the selected Pattern Storage to be ready. Qdrant storage also needs the Embedding Model.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Developer Docs uses Flavor Agent\'s built-in public developer.wordpress.org endpoint.', 'flavor-agent' ) . '</li>',
-						'</ul>',
+						'<p>' . esc_html__( 'Embedding credentials power semantic matching, including Qdrant pattern recommendations.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Pattern Storage chooses where the pattern catalog is indexed. Qdrant uses the configured Embedding Model.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Private AI Search pattern storage reuses the Embedding Model account and token, then only needs a unique pattern index name.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Qdrant and AI Search scores use different scales, so tune thresholds separately.', 'flavor-agent' ) . '</p>',
 					]
 				),
 				'priority' => 20,
@@ -74,11 +64,11 @@ final class Help {
 				'content'  => implode(
 					'',
 					[
-						'<p>' . esc_html__( 'When chat is unavailable, configure a text-generation provider in Settings > Connectors.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Embedding settings on this page do not provide chat. They serve Flavor Agent semantic features.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Pattern Sync stays unavailable until the selected storage path is configured. Qdrant storage also needs the Embedding Model. The sync panel explains stale reasons, technical details, and the current index state.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Developer Docs diagnostics summarize runtime grounding health, warm-queue activity, and the last docs prewarm run.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Guidelines import fills the legacy form first. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape for migration and rollback.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Developer Docs use the built-in developer.wordpress.org grounding path. Runtime warnings identify grounding, warm queue, or prewarm states that need attention.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Pattern Sync stays unavailable until the selected storage path is configured. The sync panel shows stale reasons, last errors, and technical index details.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'When core Guidelines are available, Flavor Agent reads them first.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Guidelines import fills the form. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Structural block actions are beta controls. Leave them off unless testing review-first insert and replace flows.', 'flavor-agent' ) . '</p>',
 					]
 				),
 				'priority' => 30,

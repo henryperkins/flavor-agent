@@ -22,7 +22,6 @@ final class Validation {
 	private const SECRET_OPTION_NAMES = [
 		'flavor_agent_cloudflare_workers_ai_api_token',
 		'flavor_agent_qdrant_key',
-		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 	];
 
 	private const SECRET_OPTION_COMPANIONS = [
@@ -32,11 +31,6 @@ final class Validation {
 		],
 		'flavor_agent_qdrant_key'                      => [
 			'flavor_agent_qdrant_url',
-		],
-		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => [
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 		],
 	];
 
@@ -431,22 +425,19 @@ final class Validation {
 		$values         = self::get_cached_submission_values(
 			'cloudflare_pattern_ai_search',
 			static function () use ( $current_values ): array {
+				$workers_ai_values = self::resolve_workers_ai_submission_values();
+
+				if ( is_wp_error( $workers_ai_values ) ) {
+					$workers_ai_values = self::get_current_workers_ai_values();
+				}
+
 				return [
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => self::read_posted_text_value(
-						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ]
-					),
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => self::read_posted_text_value(
-						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ]
-					),
+					'flavor_agent_cloudflare_workers_ai_account_id' => $workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? '',
+					'flavor_agent_cloudflare_workers_ai_api_token' => $workers_ai_values['flavor_agent_cloudflare_workers_ai_api_token'] ?? '',
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => self::read_posted_text_value(
 						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ]
-					),
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => self::read_posted_text_value(
-						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
 					),
 				];
 			}
@@ -461,10 +452,10 @@ final class Validation {
 		}
 
 		if (
-			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ] ||
+			'' === $values['flavor_agent_cloudflare_workers_ai_account_id'] ||
 			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ] ||
 			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] ||
-			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
+			'' === $values['flavor_agent_cloudflare_workers_ai_api_token']
 		) {
 			return $values;
 		}
@@ -485,10 +476,10 @@ final class Validation {
 		}
 
 		$validation = PatternSearchClient::validate_configuration(
-			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ],
+			$values['flavor_agent_cloudflare_workers_ai_account_id'],
 			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ],
 			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ],
-			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
+			$values['flavor_agent_cloudflare_workers_ai_api_token']
 		);
 
 		self::$pattern_ai_search_validation_state = [
@@ -627,10 +618,10 @@ final class Validation {
 	private static function get_current_pattern_ai_search_values(): array {
 		return self::get_current_option_values(
 			[
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'sanitize_text_field',
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'sanitize_text_field',
+				'flavor_agent_cloudflare_workers_ai_account_id' => 'sanitize_text_field',
+				'flavor_agent_cloudflare_workers_ai_api_token' => 'sanitize_text_field',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => static fn( string $value ): string => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'sanitize_text_field',
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'sanitize_text_field',
 			]
 		);
 	}

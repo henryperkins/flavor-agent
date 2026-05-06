@@ -16,7 +16,7 @@ async function getSettingsFieldValue( page, selector ) {
 	return page.locator( selector ).evaluate( ( element ) => element.value );
 }
 
-test( 'settings page keeps compact help-first IA without changing accordion behavior', async ( {
+test( '@wp70-site-editor settings page keeps compact help-first IA without changing accordion behavior', async ( {
 	page,
 } ) => {
 	await page.goto( '/wp-admin/options-general.php?page=flavor-agent', {
@@ -28,7 +28,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		page.getByRole( 'heading', { name: 'Flavor Agent Settings' } )
 	).toBeVisible();
 	await expect( page.locator( '.flavor-agent-admin-hero__copy' ) ).toHaveText(
-		'Review model readiness, embeddings, patterns, developer docs, and guidance without leaving the current setup flow.'
+		'Configure setup, storage, docs, and guidance.'
 	);
 	await expect(
 		page.locator( '.flavor-agent-settings__glance-item' )
@@ -58,44 +58,23 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		':scope > .flavor-agent-settings-section__summary';
 
 	await expect( chatSection.locator( sectionSummarySelector ) ).toContainText(
-		'Required'
-	);
-	await expect( chatSection.locator( sectionSummarySelector ) ).toContainText(
-		'Text generation is configured in Settings > Connectors.'
+		'Text-generation provider status.'
 	);
 	await expect(
 		embeddingSection.locator( sectionSummarySelector )
-	).toContainText( 'Required' );
-	await expect(
-		embeddingSection.locator( sectionSummarySelector )
-	).toContainText(
-		'Configure one embedding model for Flavor Agent semantic features.'
-	);
+	).toContainText( 'Embedding credentials for semantic features.' );
 	await expect(
 		patternSection.locator( sectionSummarySelector )
-	).toContainText( 'Optional' );
-	await expect(
-		patternSection.locator( sectionSummarySelector )
-	).toContainText(
-		'Pattern recommendations use Pattern Storage plus the configured embedding model when needed.'
-	);
+	).toContainText( 'Storage and sync for pattern recommendations.' );
 	await expect( docsSection.locator( sectionSummarySelector ) ).toContainText(
-		'Ready'
-	);
-	await expect( docsSection.locator( sectionSummarySelector ) ).toContainText(
-		'Internal developer.wordpress.org grounding is already configured.'
+		'Built-in developer.wordpress.org grounding.'
 	);
 	await expect(
 		guidelinesSection.locator( sectionSummarySelector )
-	).toContainText( 'Optional' );
-	await expect(
-		guidelinesSection.locator( sectionSummarySelector )
-	).toContainText(
-		'Store plugin-owned site, writing, image, and block guidance.'
-	);
+	).toContainText( 'Site and block guidance.' );
 	await expect(
 		experimentsSection.locator( sectionSummarySelector )
-	).toContainText( 'Optional' );
+	).toContainText( 'Beta feature toggles.' );
 
 	const chatInitiallyOpen = await chatSection.evaluate(
 		( section ) => section.open
@@ -123,8 +102,14 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		'Cloudflare Override'
 	);
 	await expect( docsSection ).toContainText(
-		"Developer docs use Flavor Agent's built-in public endpoint. No Cloudflare credentials are required."
+		'Built-in developer.wordpress.org grounding is active.'
 	);
+	await expect( docsSection ).not.toContainText( 'Developer Docs Source' );
+	await expect( docsSection ).not.toContainText(
+		'Built-in public Cloudflare AI Search endpoint'
+	);
+	await expect( docsSection ).not.toContainText( 'Runtime Grounding' );
+	await expect( docsSection ).not.toContainText( 'Developer Docs Prewarm' );
 	await expect(
 		page.locator( '.flavor-agent-guidelines__actions-panel' )
 	).toContainText( 'Import fills the form. Save Changes to persist.' );
@@ -139,10 +124,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 
 	await expect( overviewPanel ).toBeVisible();
 	await expect( overviewPanel ).toContainText(
-		'AI Model shows the text-generation provider configured in Settings > Connectors.'
-	);
-	await expect( overviewPanel ).toContainText(
-		'Embedding Model is configured once for Flavor Agent semantic features.'
+		'Use Connectors for text generation. Flavor Agent shows the active chat path here.'
 	);
 
 	await page
@@ -156,7 +138,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	await expect(
 		page.locator( '#tab-panel-flavor-agent-configuration' )
 	).toContainText(
-		"Developer Docs uses Flavor Agent's built-in public developer.wordpress.org endpoint."
+		'Pattern Storage chooses where the pattern catalog is indexed.'
 	);
 
 	await page
@@ -169,7 +151,17 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	).toBeVisible();
 	await expect(
 		page.locator( '#tab-panel-flavor-agent-troubleshooting' )
-	).toContainText( 'Guidelines import fills the legacy form first.' );
+	).toContainText(
+		'Developer Docs use the built-in developer.wordpress.org grounding path.'
+	);
+	await expect(
+		page.locator( '#tab-panel-flavor-agent-troubleshooting' )
+	).toContainText(
+		'When core Guidelines are available, Flavor Agent reads them first.'
+	);
+	await expect(
+		page.locator( '#tab-panel-flavor-agent-troubleshooting' )
+	).toContainText( 'Structural block actions are beta controls.' );
 
 	await expect(
 		page.locator( '#contextual-help-wrap .contextual-help-sidebar' )

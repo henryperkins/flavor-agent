@@ -30,9 +30,9 @@ final class Fields {
 				? sprintf(
 					'%1$s<br />%2$s',
 					(string) $description,
-					esc_html__( 'Saved value exists. For security, this field is intentionally blank. Leave it blank to keep the saved value, or enter a new value to replace it.', 'flavor-agent' )
+					esc_html__( 'Saved value hidden. Leave blank to keep it, or enter a replacement.', 'flavor-agent' )
 				)
-				: esc_html__( 'Saved value exists. For security, this field is intentionally blank. Leave it blank to keep the saved value, or enter a new value to replace it.', 'flavor-agent' );
+				: esc_html__( 'Saved value hidden. Leave blank to keep it, or enter a replacement.', 'flavor-agent' );
 		}
 
 		$description_id = '' !== $description ? $field_id . '-description' : '';

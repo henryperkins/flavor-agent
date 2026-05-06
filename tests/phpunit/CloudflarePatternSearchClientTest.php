@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Cloudflare\PatternSearchClient;
+use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -218,10 +219,74 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertStringContainsString( '"pattern_name":"theme/hero"', $body );
 		$this->assertStringContainsString( '"candidate_type":"pattern"', $body );
 		$this->assertStringContainsString( '"source":"theme"', $body );
-		$this->assertStringContainsString( '"synced_id":"theme-hero"', $body );
+		$this->assertStringContainsString( '"synced_id":""', $body );
 		$this->assertStringContainsString( '"public_safe":true', $body );
 		$this->assertStringNotContainsString( '"categories"', $body );
 		$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\ntrue", $body );
+	}
+
+	public function test_upload_registered_pattern_does_not_store_item_uuid_as_synced_id(): void {
+		$this->seed_options();
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode( [ 'success' => true ] ),
+		];
+
+		$item_id = PatternIndex::pattern_uuid( 'theme/hero' );
+		$result  = PatternSearchClient::upload_pattern(
+			[
+				'name'        => 'theme/hero',
+				'title'       => 'Hero Pattern',
+				'description' => 'Lead section for landing pages.',
+				'content'     => '<!-- wp:group --><div>Hero CTA</div><!-- /wp:group -->',
+				'source'      => 'theme',
+			],
+			$item_id,
+			true
+		);
+
+		$this->assertTrue( $result );
+
+		$body = WordPressTestState::$last_remote_post['args']['body'];
+
+		$this->assertStringContainsString( '"pattern_name":"theme/hero"', $body );
+		$this->assertStringContainsString( '"candidate_type":"pattern"', $body );
+		$this->assertStringContainsString( '"source":"theme"', $body );
+		$this->assertStringContainsString( '"synced_id":""', $body );
+		$this->assertStringNotContainsString( '"synced_id":"' . $item_id . '"', $body );
+	}
+
+	public function test_upload_synced_pattern_stores_actual_synced_pattern_id(): void {
+		$this->seed_options();
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode( [ 'success' => true ] ),
+		];
+
+		$result = PatternSearchClient::upload_pattern(
+			[
+				'name'            => 'core/block/94',
+				'title'           => 'Shared Banner',
+				'description'     => 'Reusable shared banner.',
+				'content'         => '<!-- wp:paragraph --><p>Shared banner</p><!-- /wp:paragraph -->',
+				'type'            => 'user',
+				'source'          => 'synced',
+				'syncedPatternId' => 94,
+			],
+			PatternIndex::pattern_uuid( 'core/block/94' ),
+			true
+		);
+
+		$this->assertTrue( $result );
+
+		$body = WordPressTestState::$last_remote_post['args']['body'];
+
+		$this->assertStringContainsString( '"pattern_name":"core/block/94"', $body );
+		$this->assertStringContainsString( '"candidate_type":"user"', $body );
+		$this->assertStringContainsString( '"source":"synced"', $body );
+		$this->assertStringContainsString( '"synced_id":"94"', $body );
 	}
 
 	public function test_repeated_uploads_use_the_same_item_id_without_client_side_duplicates(): void {
@@ -253,13 +318,13 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		foreach ( WordPressTestState::$remote_post_calls as $call ) {
 			$body = (string) ( $call['args']['body'] ?? '' );
 
-			$this->assertSame(
-				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/pattern-index/items',
-				$call['url'] ?? null
-			);
-			$this->assertStringContainsString( 'filename="stable-pattern-id.md"', $body );
-			$this->assertStringContainsString( '"synced_id":"stable-pattern-id"', $body );
-			$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\ntrue", $body );
+				$this->assertSame(
+					'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/pattern-index/items',
+					$call['url'] ?? null
+				);
+				$this->assertStringContainsString( 'filename="stable-pattern-id.md"', $body );
+				$this->assertStringContainsString( '"synced_id":""', $body );
+				$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\ntrue", $body );
 		}
 	}
 
@@ -352,10 +417,9 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 
 	private function seed_options(): void {
 		WordPressTestState::$options = [
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID  => 'account-123',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE   => 'patterns',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN   => 'token-xyz',
 		];
 	}
 

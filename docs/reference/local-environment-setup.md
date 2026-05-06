@@ -128,7 +128,7 @@ Current WP 7.0 browser specs exercise Flavor Agent editor behavior and selected 
 
 ## Cloudflare Pattern AI Search Metadata
 
-Before selecting Cloudflare AI Search as the pattern retrieval backend, create a private AI Search instance for Flavor Agent pattern content and declare exactly these five custom metadata fields as filterable metadata in the Cloudflare dashboard:
+Before selecting Cloudflare AI Search as the pattern retrieval backend, create a private AI Search instance for Flavor Agent pattern content. Flavor Agent reuses the Cloudflare account/token saved for the Embedding Model and only asks for the pattern index name in Pattern Storage. Declare exactly these five custom metadata fields as filterable metadata in the Cloudflare dashboard:
 
 | Field | Type |
 | --- | --- |
@@ -146,7 +146,7 @@ Dashboard setup:
 4. Mark each field as available for filtering so search requests can use `filters.pattern_name`.
 5. Save the instance configuration and wait for the dashboard to finish applying the schema before running the first Flavor Agent pattern sync.
 
-Use a token with **AI Search:Edit** and **AI Search:Run** permissions for this private pattern instance. Do not reuse the built-in public WordPress developer-docs AI Search endpoint for pattern content.
+Use an Embedding Model token that also has **AI Search:Edit** and **AI Search:Run** permissions for this private pattern instance. Do not reuse the built-in public WordPress developer-docs AI Search endpoint for pattern content.
 
 ## Plugin Check
 

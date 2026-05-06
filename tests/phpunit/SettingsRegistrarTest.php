@@ -106,6 +106,18 @@ final class SettingsRegistrarTest extends TestCase {
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 			$fields['flavor_agent_cloudflare_pattern_ai_search']
 		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+			$fields['flavor_agent_cloudflare_pattern_ai_search']
+		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+			$fields['flavor_agent_cloudflare_pattern_ai_search']
+		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
+			$fields['flavor_agent_cloudflare_pattern_ai_search']
+		);
 		$this->assertArrayHasKey(
 			Guidelines::OPTION_ADDITIONAL,
 			$fields['flavor_agent_guidelines']
@@ -133,7 +145,6 @@ final class SettingsRegistrarTest extends TestCase {
 		$secret_options = [
 			'flavor_agent_cloudflare_workers_ai_api_token',
 			'flavor_agent_qdrant_key',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 		];
 
 		foreach ( $secret_options as $option_name ) {

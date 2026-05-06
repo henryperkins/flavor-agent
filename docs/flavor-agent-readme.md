@@ -188,7 +188,7 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend uses private AI Search credentials and Cloudflare-managed indexing/search instead of plugin-owned embeddings or Qdrant.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend reuses the Embedding Model account/token and stores private pattern content in the saved AI Search pattern index.
 
 Flavor Agent uses its built-in public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not enter Cloudflare account, instance, or token values for Developer Docs.
 
@@ -205,10 +205,7 @@ Configured options:
 - `flavor_agent_pattern_recommendation_threshold`
 - `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search`
 - `flavor_agent_pattern_max_recommendations`
-- `flavor_agent_cloudflare_pattern_ai_search_account_id`
-- `flavor_agent_cloudflare_pattern_ai_search_namespace`
 - `flavor_agent_cloudflare_pattern_ai_search_instance_id`
-- `flavor_agent_cloudflare_pattern_ai_search_api_token`
 - `flavor_agent_cloudflare_ai_search_max_results`
 - `flavor_agent_guideline_site`
 - `flavor_agent_guideline_copy`

@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Admin\Settings;
 
-use FlavorAgent\Embeddings\QdrantClient;
-use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
+use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
@@ -29,9 +28,9 @@ final class Page {
 		$forced_group         = is_string( $feedback['focus_section'] ?? null ) ? $feedback['focus_section'] : '';
 		$chat_ready           = ! empty( $state['runtime_chat']['configured'] );
 		$primary_url          = $chat_ready ? $activity_url : $connectors_url;
-		$primary_label        = $chat_ready ? __( 'Activity Log', 'flavor-agent' ) : __( 'Connectors', 'flavor-agent' );
+		$primary_label        = $chat_ready ? __( 'Open Activity Log', 'flavor-agent' ) : __( 'Open Connectors', 'flavor-agent' );
 		$secondary_url        = $chat_ready ? $connectors_url : $activity_url;
-		$secondary_label      = $chat_ready ? __( 'Connectors', 'flavor-agent' ) : __( 'Activity Log', 'flavor-agent' );
+		$secondary_label      = $chat_ready ? __( 'Open Connectors', 'flavor-agent' ) : __( 'Open Activity Log', 'flavor-agent' );
 		$open_group           = '' !== $forced_group ? $forced_group : $default_group;
 		?>
 		<div class="wrap flavor-agent-settings-page">
@@ -50,7 +49,7 @@ final class Page {
 							<?php echo esc_html__( 'Flavor Agent Settings', 'flavor-agent' ); ?>
 						</h1>
 						<p class="flavor-agent-admin-hero__copy">
-							<?php echo esc_html__( 'Review model readiness, embeddings, patterns, developer docs, and guidance without leaving the current setup flow.', 'flavor-agent' ); ?>
+							<?php echo esc_html__( 'Configure setup, storage, docs, and guidance.', 'flavor-agent' ); ?>
 						</p>
 						<div class="flavor-agent-admin-hero__actions">
 							<a class="button button-primary" href="<?php echo esc_attr( Utils::sanitize_url_value( $primary_url ) ); ?>">
@@ -173,7 +172,7 @@ final class Page {
 	public static function render_experimental_features_section(): void {
 		printf(
 			'<p class="flavor-agent-settings-inline-meta">%s</p>',
-			esc_html__( 'Beta controls stay off by default and still require review before anything is applied.', 'flavor-agent' )
+			esc_html__( 'Beta feature toggles.', 'flavor-agent' )
 		);
 	}
 
@@ -490,13 +489,13 @@ final class Page {
 		$runtime_chat_label = '' !== $runtime_chat_label ? $runtime_chat_label : __( 'Not configured', 'flavor-agent' );
 		?>
 		<p class="description">
-			<?php echo esc_html__( 'Text generation is configured in Settings > Connectors. Flavor Agent uses the active WordPress AI Client runtime for recommendations.', 'flavor-agent' ); ?>
+			<?php echo esc_html__( 'Text generation is managed in Connectors.', 'flavor-agent' ); ?>
 		</p>
 		<p class="flavor-agent-settings-inline-meta">
 			<?php
 			printf(
 				/* translators: %s: runtime chat provider label */
-				esc_html__( 'Current AI model path: %s.', 'flavor-agent' ),
+				esc_html__( 'Current: %s.', 'flavor-agent' ),
 				esc_html( $runtime_chat_label )
 			);
 			?>
@@ -516,9 +515,6 @@ final class Page {
 		self::render_section_status_blocks( Config::GROUP_EMBEDDINGS, $state, $feedback );
 		?>
 		<input type="hidden" name="<?php echo esc_attr( Provider::OPTION_NAME ); ?>" value="<?php echo esc_attr( WorkersAIEmbeddingConfiguration::PROVIDER ); ?>" />
-			<p class="description">
-				<?php echo esc_html__( 'Configure Cloudflare Workers AI embeddings for Flavor Agent semantic features. Patterns use this embedding model when Pattern Storage is set to Qdrant.', 'flavor-agent' ); ?>
-			</p>
 			<p class="flavor-agent-settings-inline-meta">
 				<?php
 				printf(
@@ -534,8 +530,8 @@ final class Page {
 
 	private static function render_cloudflare_workers_ai_direct_settings_fields(): void {
 		self::render_subsection_heading(
-			__( 'Cloudflare Workers AI Embeddings', 'flavor-agent' ),
-			__( 'Embedding credentials used by Flavor Agent semantic features.', 'flavor-agent' )
+			__( 'Cloudflare Workers AI', 'flavor-agent' ),
+			__( 'Used for embeddings.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_cloudflare_workers_ai' );
 		self::render_registered_fields_table(
@@ -555,7 +551,7 @@ final class Page {
 		self::render_section_status_blocks( Config::GROUP_PATTERNS, $state, $feedback );
 		?>
 		<p class="description">
-			<?php echo esc_html__( 'Pattern setup does not choose another AI model. Choose storage here; Qdrant uses the Embedding Model configured above.', 'flavor-agent' ); ?>
+			<?php echo esc_html__( 'Choose where the pattern catalog is stored.', 'flavor-agent' ); ?>
 		</p>
 		<?php
 		self::render_registered_section_callback( 'flavor_agent_pattern_retrieval' );
@@ -567,7 +563,7 @@ final class Page {
 		);
 		self::render_subsection_heading(
 			__( 'Qdrant Pattern Storage', 'flavor-agent' ),
-			__( 'Vector storage for the pattern index. Uses the embedding model configured above.', 'flavor-agent' )
+			__( 'Vector storage for the pattern index.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_qdrant' );
 		self::render_registered_fields_table(
@@ -579,16 +575,13 @@ final class Page {
 		);
 		self::render_subsection_heading(
 			__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
-			__( 'Advanced managed index for site pattern content. This is separate from the built-in WordPress developer docs endpoint.', 'flavor-agent' )
+			__( 'Managed pattern index using the saved Embedding Model credentials.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
 		self::render_registered_fields_table(
 			'flavor_agent_cloudflare_pattern_ai_search',
 			[
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 			]
 		);
 		?>
@@ -621,7 +614,7 @@ final class Page {
 		self::render_section_status_blocks( Config::GROUP_DOCS, $state, $feedback );
 		?>
 		<p class="description">
-			<?php echo esc_html__( 'Developer docs use Flavor Agent\'s built-in public endpoint. No Cloudflare credentials are required.', 'flavor-agent' ); ?>
+			<?php echo esc_html__( 'Built-in developer.wordpress.org grounding is active.', 'flavor-agent' ); ?>
 		</p>
 		<?php
 		self::render_registered_section_callback( 'flavor_agent_cloudflare' );
@@ -631,8 +624,6 @@ final class Page {
 				'flavor_agent_cloudflare_ai_search_max_results',
 			]
 		);
-		self::render_docs_source_status();
-		self::render_prewarm_diagnostics_panel( $state );
 	}
 
 	/**
@@ -647,7 +638,7 @@ final class Page {
 			<?php if ( ! empty( $state['guidelines_storage']['core_available'] ) ) : ?>
 				<div class="flavor-agent-settings-status flavor-agent-settings-status--accent">
 					<p>
-						<?php echo esc_html__( 'Core Guidelines storage detected. Runtime recommendations read from the core Guidelines store first; the fields below remain as legacy migration tooling, JSON import/export, and rollback support.', 'flavor-agent' ); ?>
+						<?php echo esc_html__( 'Core Guidelines connected.', 'flavor-agent' ); ?>
 					</p>
 				</div>
 			<?php endif; ?>
@@ -763,53 +754,6 @@ final class Page {
 		<?php
 	}
 
-	private static function render_docs_source_status(): void {
-		$instance_id = AISearchClient::configured_instance_id();
-		?>
-		<div class="flavor-agent-settings-diagnostic">
-			<div class="flavor-agent-settings-diagnostic__header">
-				<p class="flavor-agent-settings-diagnostic__title">
-					<?php echo esc_html__( 'Developer Docs Source', 'flavor-agent' ); ?>
-				</p>
-				<p class="flavor-agent-settings-diagnostic__status">
-					<?php echo esc_html__( 'Ready', 'flavor-agent' ); ?>
-				</p>
-			</div>
-			<p class="flavor-agent-settings-diagnostic__meta">
-				<?php echo esc_html__( 'Built-in public Cloudflare AI Search endpoint', 'flavor-agent' ); ?>
-			</p>
-			<?php if ( null !== $instance_id ) : ?>
-				<p class="flavor-agent-settings-diagnostic__meta">
-					<?php
-					printf(
-						/* translators: %s: public Cloudflare AI Search instance ID */
-						esc_html__( 'Instance: %s', 'flavor-agent' ),
-						esc_html( $instance_id )
-					);
-					?>
-				</p>
-			<?php endif; ?>
-		</div>
-		<?php
-	}
-
-	private static function render_prewarm_diagnostics_panel( array $state ): void {
-		if ( empty( $state['docs_configured'] ) ) {
-			return;
-		}
-		?>
-		<details class="flavor-agent-settings-subpanel flavor-agent-settings-subpanel--diagnostics">
-			<summary class="flavor-agent-settings-subpanel__summary">
-				<?php echo esc_html__( 'Diagnostics', 'flavor-agent' ); ?>
-			</summary>
-			<div class="flavor-agent-settings-subpanel__body">
-				<?php self::render_runtime_grounding_diagnostics(); ?>
-				<?php self::render_prewarm_diagnostics(); ?>
-			</div>
-		</details>
-		<?php
-	}
-
 	private static function render_subsection_heading( string $title, string $description = '' ): void {
 		?>
 		<div class="flavor-agent-settings-subheading">
@@ -856,141 +800,6 @@ final class Page {
 				</span>
 			<?php endforeach; ?>
 		</span>
-		<?php
-	}
-
-	private static function render_runtime_grounding_diagnostics(): void {
-		if ( ! AISearchClient::is_configured() ) {
-			return;
-		}
-
-		$state  = AISearchClient::get_runtime_state();
-		$label  = State::get_runtime_grounding_status_label( (string) $state['status'] );
-		$served = '';
-
-		if ( '' !== (string) $state['lastServedAt'] ) {
-			$served = sprintf(
-				/* translators: 1: fallback type, 2: served mode, 3: timestamp */
-				__( 'Last served guidance: %1$s via %2$s at %3$s UTC', 'flavor-agent' ),
-				State::get_runtime_grounding_fallback_label( (string) $state['lastFallbackType'] ),
-				State::get_runtime_grounding_mode_label( (string) $state['lastServedMode'] ),
-				(string) $state['lastServedAt']
-			);
-		}
-
-		$queue_summary = '';
-
-		if ( (int) $state['queueDepth'] > 0 ) {
-			$queue_summary = sprintf(
-				/* translators: 1: queue depth, 2: next attempt timestamp */
-				__( 'Warm queue: %1$d pending. Next attempt: %2$s UTC', 'flavor-agent' ),
-				absint( (int) $state['queueDepth'] ),
-				'' !== (string) $state['nextQueueAttemptAt']
-					? (string) $state['nextQueueAttemptAt']
-					: __( 'pending', 'flavor-agent' )
-			);
-		}
-
-		$success_summary = '';
-
-		if ( '' !== (string) $state['lastTrustedSuccessAt'] ) {
-			$success_summary = sprintf(
-				/* translators: 1: timestamp, 2: runtime mode label */
-				__( 'Last trusted success: %1$s UTC via %2$s', 'flavor-agent' ),
-				(string) $state['lastTrustedSuccessAt'],
-				State::get_runtime_grounding_mode_label( (string) $state['lastTrustedSuccessMode'] )
-			);
-		}
-		?>
-		<div class="flavor-agent-settings-diagnostic">
-			<div class="flavor-agent-settings-diagnostic__header">
-				<p class="flavor-agent-settings-diagnostic__title">
-					<?php echo esc_html__( 'Runtime Grounding', 'flavor-agent' ); ?>
-				</p>
-				<p class="flavor-agent-settings-diagnostic__status">
-					<?php echo esc_html( $label ); ?>
-				</p>
-			</div>
-			<?php if ( '' !== $served ) : ?>
-				<p class="flavor-agent-settings-diagnostic__meta">
-					<?php echo esc_html( $served ); ?>
-				</p>
-			<?php endif; ?>
-			<?php if ( '' !== $queue_summary ) : ?>
-				<p class="flavor-agent-settings-diagnostic__meta">
-					<?php echo esc_html( $queue_summary ); ?>
-				</p>
-			<?php endif; ?>
-			<?php if ( '' !== $success_summary ) : ?>
-				<p class="flavor-agent-settings-diagnostic__meta">
-					<?php echo esc_html( $success_summary ); ?>
-				</p>
-			<?php endif; ?>
-			<?php if ( '' !== (string) $state['lastErrorMessage'] ) : ?>
-				<p class="flavor-agent-settings-diagnostic__meta">
-					<?php
-					printf(
-						/* translators: 1: runtime mode label, 2: error message */
-						esc_html__( 'Last error (%1$s): %2$s', 'flavor-agent' ),
-						esc_html( State::get_runtime_grounding_mode_label( (string) $state['lastErrorMode'] ) ),
-						esc_html( (string) $state['lastErrorMessage'] )
-					);
-					?>
-				</p>
-			<?php endif; ?>
-		</div>
-		<?php
-	}
-
-	private static function render_prewarm_diagnostics(): void {
-		if ( ! AISearchClient::is_configured() ) {
-			return;
-		}
-
-		$state = AISearchClient::get_prewarm_state();
-		$label = match ( $state['status'] ) {
-			'off'       => __( 'Off', 'flavor-agent' ),
-			'never'     => __( 'Never run', 'flavor-agent' ),
-			'ok'        => __( 'OK', 'flavor-agent' ),
-			'partial'   => __( 'Partial (some entities failed)', 'flavor-agent' ),
-			'failed'    => __( 'Failed', 'flavor-agent' ),
-			'throttled' => __( 'Throttled (skipped, too recent)', 'flavor-agent' ),
-			default     => (string) $state['status'],
-		};
-		?>
-		<div class="flavor-agent-settings-diagnostic">
-			<div class="flavor-agent-settings-diagnostic__header">
-				<p class="flavor-agent-settings-diagnostic__title">
-					<?php echo esc_html__( 'Developer Docs Prewarm', 'flavor-agent' ); ?>
-				</p>
-				<p class="flavor-agent-settings-diagnostic__status">
-					<?php echo esc_html( $label ); ?>
-				</p>
-			</div>
-			<?php if ( $state['timestamp'] !== '' ) : ?>
-				<p class="flavor-agent-settings-diagnostic__meta">
-					<?php
-					printf(
-						/* translators: %s: prewarm timestamp */
-						esc_html__( 'Last prewarm run: %s UTC', 'flavor-agent' ),
-						esc_html( $state['timestamp'] )
-					);
-					?>
-				</p>
-			<?php endif; ?>
-			<?php if ( $state['warmed'] > 0 || $state['failed'] > 0 ) : ?>
-				<p class="flavor-agent-settings-diagnostic__meta">
-					<?php
-					printf(
-						/* translators: 1: warmed count, 2: failed count */
-						esc_html__( '%1$d warmed, %2$d failed', 'flavor-agent' ),
-						absint( $state['warmed'] ),
-						absint( $state['failed'] )
-					);
-					?>
-				</p>
-			<?php endif; ?>
-		</div>
 		<?php
 	}
 
@@ -1139,7 +948,7 @@ final class Page {
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
 			return ! empty( $page_state['cloudflare_pattern_ai_search_configured'] )
 				? ''
-				: __( 'Add the private Cloudflare AI Search pattern storage settings before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+				: __( 'Complete the Embedding Model credentials and Cloudflare AI Search pattern index name before syncing.', 'flavor-agent' );
 		}
 
 		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );
@@ -1150,14 +959,14 @@ final class Page {
 		}
 
 		if ( ! $embedding_ready && ! $qdrant_ready ) {
-			return __( 'Complete Embedding Model and Qdrant Pattern Storage before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+			return __( 'Complete Embedding Model and Qdrant Pattern Storage before syncing.', 'flavor-agent' );
 		}
 
 		if ( ! $embedding_ready ) {
-			return __( 'Complete Embedding Model before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+			return __( 'Complete Embedding Model before syncing.', 'flavor-agent' );
 		}
 
-		return __( 'Add the Qdrant URL and API key in Pattern Storage before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+		return __( 'Add the Qdrant URL and API key before syncing.', 'flavor-agent' );
 	}
 
 	private static function get_pattern_sync_prerequisite_status_label( array $page_state ): string {

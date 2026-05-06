@@ -578,8 +578,8 @@ final class SettingsTest extends TestCase {
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'Cloudflare Workers AI Embeddings', $output );
-		$this->assertStringContainsString( 'Configure Cloudflare Workers AI embeddings for Flavor Agent semantic features.', $output );
+		$this->assertStringContainsString( 'Cloudflare Workers AI', $output );
+		$this->assertStringContainsString( 'Used for embeddings.', $output );
 		$this->assertStringContainsString(
 			'name="flavor_agent_cloudflare_workers_ai_account_id"',
 			$output
@@ -623,19 +623,19 @@ final class SettingsTest extends TestCase {
 
 		foreach (
 			[
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 				Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
 			] as $option_name
 		) {
 			$this->assertArrayHasKey( $option_name, $GLOBALS['wp_registered_settings'] );
 		}
 
+		$this->assertArrayNotHasKey( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID, $GLOBALS['wp_registered_settings'] );
+		$this->assertArrayNotHasKey( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, $GLOBALS['wp_registered_settings'] );
+		$this->assertArrayNotHasKey( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN, $GLOBALS['wp_registered_settings'] );
 		$this->assertSame(
-			[ Settings::class, 'sanitize_cloudflare_pattern_ai_search_api_token' ],
-			$GLOBALS['wp_registered_settings'][ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]['sanitize_callback']
+			[ Settings::class, 'sanitize_cloudflare_pattern_ai_search_instance_id' ],
+			$GLOBALS['wp_registered_settings'][ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ]['sanitize_callback']
 		);
 		$this->assertSame(
 			'number',
@@ -665,26 +665,14 @@ final class SettingsTest extends TestCase {
 			'value="' . Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH . '" selected=',
 			$output
 		);
-		$this->assertStringContainsString(
-			'Advanced managed index for site pattern content. This is separate from the built-in WordPress developer docs endpoint.',
-			$output
-		);
-		$this->assertStringContainsString(
-			'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID . '"',
-			$output
-		);
-		$this->assertStringContainsString(
-			'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE . '"',
-			$output
-		);
+		$this->assertStringContainsString( 'Managed pattern index using the saved Embedding Model credentials.', $output );
 		$this->assertStringContainsString(
 			'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID . '"',
 			$output
 		);
-		$this->assertStringContainsString(
-			'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN . '"',
-			$output
-		);
+		$this->assertStringNotContainsString( 'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID . '"', $output );
+		$this->assertStringNotContainsString( 'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE . '"', $output );
+		$this->assertStringNotContainsString( 'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN . '"', $output );
 		$this->assertStringContainsString(
 			'name="' . Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH . '"',
 			$output
@@ -708,20 +696,8 @@ final class SettingsTest extends TestCase {
 
 		$_POST = [];
 		$this->assertSame(
-			'account-123',
-			Settings::sanitize_cloudflare_pattern_ai_search_account_id( '<b>account-123</b>' )
-		);
-		$this->assertSame(
-			'patterns',
-			Settings::sanitize_cloudflare_pattern_ai_search_namespace( ' patterns ' )
-		);
-		$this->assertSame(
 			'pattern-index',
 			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( ' pattern-index ' )
-		);
-		$this->assertSame(
-			'token-xyz',
-			Settings::sanitize_cloudflare_pattern_ai_search_api_token( ' token-xyz ' )
 		);
 		$this->assertSame(
 			0.75,
@@ -746,17 +722,13 @@ final class SettingsTest extends TestCase {
 
 	public function test_sanitize_private_pattern_ai_search_settings_accept_verified_values_and_validate_once(): void {
 		WordPressTestState::$options               = [
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-old',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns-old',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-old',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-old',
 		];
 		$_POST                                     = [
 			'option_page' => Config::OPTION_GROUP,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-123',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-xyz',
 		];
 		WordPressTestState::$remote_post_responses = [
 			[
@@ -772,20 +744,8 @@ final class SettingsTest extends TestCase {
 		];
 
 		$this->assertSame(
-			'account-123',
-			Settings::sanitize_cloudflare_pattern_ai_search_account_id( 'account-123' )
-		);
-		$this->assertSame(
-			'patterns',
-			Settings::sanitize_cloudflare_pattern_ai_search_namespace( 'patterns' )
-		);
-		$this->assertSame(
 			'pattern-index',
 			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( 'pattern-index' )
-		);
-		$this->assertSame(
-			'token-xyz',
-			Settings::sanitize_cloudflare_pattern_ai_search_api_token( 'token-xyz' )
 		);
 		$this->assertSame( [], WordPressTestState::$settings_errors );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
@@ -797,17 +757,13 @@ final class SettingsTest extends TestCase {
 
 	public function test_sanitize_private_pattern_ai_search_settings_reverts_invalid_values(): void {
 		WordPressTestState::$options              = [
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-old',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns-old',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-new',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-new',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-old',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-old',
 		];
 		$_POST                                    = [
 			'option_page' => Config::OPTION_GROUP,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-new',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns-new',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-new',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-new',
 		];
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 403 ],
@@ -823,27 +779,15 @@ final class SettingsTest extends TestCase {
 		];
 
 		$this->assertSame(
-			'account-old',
-			Settings::sanitize_cloudflare_pattern_ai_search_account_id( 'account-new' )
-		);
-		$this->assertSame(
-			'patterns-old',
-			Settings::sanitize_cloudflare_pattern_ai_search_namespace( 'patterns-new' )
-		);
-		$this->assertSame(
 			'instance-old',
 			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( 'instance-new' )
-		);
-		$this->assertSame(
-			'token-old',
-			Settings::sanitize_cloudflare_pattern_ai_search_api_token( 'token-new' )
 		);
 		$this->assertSame(
 			[
 				[
 					'setting' => Config::OPTION_GROUP,
 					'code'    => 'flavor_agent_cloudflare_pattern_ai_search_validation',
-					'message' => 'Private Cloudflare AI Search pattern validation failed. Check the account, namespace, instance, API token, and filterable metadata schema, then try again.',
+					'message' => 'Private Cloudflare AI Search pattern validation failed. Check the Embedding Model credentials, pattern index name, and filterable metadata schema, then try again.',
 					'type'    => 'error',
 				],
 				[
@@ -861,11 +805,10 @@ final class SettingsTest extends TestCase {
 
 	public function test_page_state_tracks_private_pattern_ai_search_configuration(): void {
 		WordPressTestState::$options = [
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-123',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns',
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-xyz',
 		];
 
 		$state = State::get_page_state();
@@ -916,7 +859,7 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'data-saved-secret="true"', $output );
 		$this->assertStringContainsString( 'Saved', $output );
 		$this->assertStringNotContainsString( 'saved-secret-key', $output );
-		$this->assertStringContainsString( 'this field is intentionally blank', $output );
+		$this->assertStringContainsString( 'Saved value hidden. Leave blank to keep it, or enter a replacement.', $output );
 	}
 
 	public function test_register_settings_exposes_block_structural_actions_toggle(): void {
@@ -957,8 +900,9 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertStringContainsString( 'type="checkbox"', $output );
 		$this->assertStringContainsString( 'checked="checked"', $output );
+		$this->assertStringContainsString( 'Enable structural block actions', $output );
 		$this->assertStringContainsString(
-			'Enables review-first selected-block pattern insert and replace actions.',
+			'Adds review-first insert and replace actions for the selected block.',
 			$output
 		);
 	}
@@ -987,15 +931,17 @@ final class SettingsTest extends TestCase {
 		$this->assertCount( 3, $screen->help_tabs );
 		$this->assertSame( 'flavor-agent-overview', $screen->help_tabs[0]['id'] );
 		$this->assertSame( 'Overview', $screen->help_tabs[0]['title'] );
-		$this->assertStringContainsString( 'This screen keeps inline copy short', $screen->help_tabs[0]['content'] );
-		$this->assertStringContainsString( 'AI Model shows the text-generation provider configured in Settings &gt; Connectors.', $screen->help_tabs[0]['content'] );
-		$this->assertStringContainsString( 'Embedding Model is configured once for Flavor Agent semantic features.', $screen->help_tabs[0]['content'] );
+		$this->assertStringContainsString( 'Use Connectors for text generation. Flavor Agent shows the active chat path here.', $screen->help_tabs[0]['content'] );
+		$this->assertStringContainsString( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and beta feature toggles.', $screen->help_tabs[0]['content'] );
+		$this->assertStringContainsString( 'When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback.', $screen->help_tabs[0]['content'] );
 		$this->assertSame( 'flavor-agent-configuration', $screen->help_tabs[1]['id'] );
-		$this->assertStringContainsString( 'Settings &gt; Connectors', $screen->help_tabs[1]['content'] );
-		$this->assertStringContainsString( 'Developer Docs uses Flavor Agent&#039;s built-in public developer.wordpress.org endpoint.', $screen->help_tabs[1]['content'] );
-		$this->assertStringNotContainsString( 'Cloudflare override fields are only for older installs or explicit custom-endpoint use.', $screen->help_tabs[1]['content'] );
+		$this->assertStringContainsString( 'Pattern Storage chooses where the pattern catalog is indexed.', $screen->help_tabs[1]['content'] );
+		$this->assertStringContainsString( 'Private AI Search pattern storage reuses the Embedding Model account and token, then only needs a unique pattern index name.', $screen->help_tabs[1]['content'] );
+		$this->assertStringNotContainsString( 'Settings &gt; Connectors', $screen->help_tabs[1]['content'] );
 		$this->assertSame( 'flavor-agent-troubleshooting', $screen->help_tabs[2]['id'] );
-		$this->assertStringContainsString( 'Guidelines import fills the legacy form first', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'Developer Docs use the built-in developer.wordpress.org grounding path.', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'When core Guidelines are available, Flavor Agent reads them first.', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'Structural block actions are beta controls.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'Quick Links', $screen->help_sidebar );
 		$this->assertStringContainsString( 'options-connectors.php', $screen->help_sidebar );
 		$this->assertStringContainsString( 'flavor-agent-activity', $screen->help_sidebar );
@@ -1011,20 +957,29 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'Review model readiness, embeddings, patterns, developer docs, and guidance without leaving the current setup flow.',
+			'Configure setup, storage, docs, and guidance.',
 			$output
 		);
+		$this->assertStringContainsString( 'Open Activity Log', $output );
+		$this->assertStringContainsString( 'Open Connectors', $output );
 		$this->assertStringContainsString( 'Required', $output );
 		$this->assertStringContainsString( '1. AI Model', $output );
-		$this->assertStringContainsString( 'Text generation is configured in Settings &gt; Connectors.', $output );
+		$this->assertStringContainsString( 'Text-generation provider status.', $output );
+		$this->assertStringContainsString( 'Text generation is managed in Connectors.', $output );
 		$this->assertStringContainsString( '2. Embedding Model', $output );
-		$this->assertStringContainsString( 'Configure one embedding model for Flavor Agent semantic features.', $output );
+		$this->assertStringContainsString( 'Embedding credentials for semantic features.', $output );
+		$this->assertStringContainsString( 'Cloudflare Workers AI', $output );
+		$this->assertStringContainsString( 'Used for embeddings.', $output );
 		$this->assertStringContainsString( '3. Patterns', $output );
-		$this->assertStringContainsString( 'Pattern recommendations use Pattern Storage plus the configured embedding model when needed.', $output );
+		$this->assertStringContainsString( 'Storage and sync for pattern recommendations.', $output );
+		$this->assertStringContainsString( 'Choose where the pattern catalog is stored.', $output );
 		$this->assertStringContainsString( '4. Developer Docs', $output );
-		$this->assertStringContainsString( 'Developer docs use Flavor Agent&#039;s built-in public endpoint. No Cloudflare credentials are required.', $output );
+		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
+		$this->assertStringContainsString( '5. Guidelines', $output );
+		$this->assertStringContainsString( 'Site and block guidance.', $output );
+		$this->assertStringContainsString( '6. Experimental Features', $output );
+		$this->assertStringContainsString( 'Beta feature toggles.', $output );
 		$this->assertStringContainsString( 'Optional', $output );
-		$this->assertStringContainsString( 'Store plugin-owned site, writing, image, and block guidance.', $output );
 		$this->assertStringNotContainsString( 'Cloudflare Override', $output );
 		$this->assertStringNotContainsString( 'Override values are live-probed before saving', $output );
 		$this->assertStringNotContainsString( 'The instance must return trusted developer.wordpress.org chunks.', $output );
@@ -1035,6 +990,13 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'Recent Activity', $output );
 		$this->assertStringNotContainsString( 'Where To Configure What', $output );
 		$this->assertStringNotContainsString( 'Use Connectors for shared provider credentials.', $output );
+		$this->assertStringNotContainsString( 'Developer Docs Source', $output );
+		$this->assertStringNotContainsString( 'Built-in public Cloudflare AI Search endpoint', $output );
+		$this->assertStringNotContainsString( 'Instance:', $output );
+		$this->assertStringNotContainsString( 'Runtime Grounding', $output );
+		$this->assertStringNotContainsString( 'Developer Docs Prewarm', $output );
+		$this->assertStringNotContainsString( 'legacy migration tooling', $output );
+		$this->assertStringNotContainsString( 'JSON import/export, and rollback support', $output );
 		$this->assertStringContainsString(
 			'Sync Pattern Catalog',
 			$output
@@ -1058,7 +1020,7 @@ final class SettingsTest extends TestCase {
 		$status_blocks = State::get_section_status_blocks( Config::GROUP_PATTERNS, $state, [] );
 
 		$this->assertSame(
-			'Pattern storage is configured, but pattern recommendations still need the Embedding Model section to be ready.',
+			'Embedding Model is required before syncing patterns.',
 			$status_blocks[0]['message'] ?? ''
 		);
 
@@ -1067,7 +1029,7 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString(
-			'Pattern setup does not choose another AI model. Choose storage here; Qdrant uses the Embedding Model configured above.',
+			'Choose where the pattern catalog is stored.',
 			$output
 		);
 		$this->assertStringNotContainsString( 'Chat Provider', $output );
@@ -1078,12 +1040,13 @@ final class SettingsTest extends TestCase {
 		$state['selected_pattern_backend'] = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;
 		$state['patterns_ready']           = false;
 		$state['cloudflare_pattern_ai_search_configured'] = false;
+		$state['runtime_embedding']                       = [ 'configured' => true ];
 		$status        = State::get_pattern_overview_status( $state );
 		$status_blocks = State::get_section_status_blocks( Config::GROUP_PATTERNS, $state, [] );
 
-		$this->assertSame( 'Needs private AI Search', $status['label'] );
+		$this->assertSame( 'Needs pattern index', $status['label'] );
 		$this->assertSame(
-			'Cloudflare AI Search is selected, but pattern recommendations still need a private pattern AI Search account, namespace, instance, and API token before you can sync.',
+			'Cloudflare AI Search pattern storage needs the Embedding Model credentials and a pattern index name.',
 			$status_blocks[0]['message'] ?? ''
 		);
 	}
@@ -1424,7 +1387,7 @@ final class SettingsTest extends TestCase {
 	public function test_determine_default_open_group_prioritizes_cloudflare_pattern_storage_when_selected_and_missing(): void {
 		$state                             = $this->build_default_open_group_state();
 		$state['runtime_chat']             = [ 'configured' => true ];
-		$state['runtime_embedding']        = [ 'configured' => false ];
+		$state['runtime_embedding']        = [ 'configured' => true ];
 		$state['selected_pattern_backend'] = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;
 		$state['cloudflare_pattern_ai_search_configured'] = false;
 		$state['patterns_ready']                          = false;
@@ -1432,6 +1395,21 @@ final class SettingsTest extends TestCase {
 
 		$this->assertSame(
 			Config::GROUP_PATTERNS,
+			State::determine_default_open_group( $state )
+		);
+	}
+
+	public function test_determine_default_open_group_prioritizes_embedding_model_for_cloudflare_patterns_when_embeddings_are_missing(): void {
+		$state                             = $this->build_default_open_group_state();
+		$state['runtime_chat']             = [ 'configured' => true ];
+		$state['runtime_embedding']        = [ 'configured' => false ];
+		$state['selected_pattern_backend'] = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;
+		$state['cloudflare_pattern_ai_search_configured'] = false;
+		$state['patterns_ready']                          = false;
+		$state['qdrant_configured']                       = false;
+
+		$this->assertSame(
+			Config::GROUP_EMBEDDINGS,
 			State::determine_default_open_group( $state )
 		);
 	}
@@ -1549,9 +1527,13 @@ final class SettingsTest extends TestCase {
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'Developer Docs Source', $output );
-		$this->assertStringContainsString( 'Built-in public Cloudflare AI Search endpoint', $output );
-		$this->assertStringContainsString( 'c5d54c4a-27df-4034-80da-ca6054684fcd', $output );
+		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
+		$this->assertStringNotContainsString( 'Developer Docs Source', $output );
+		$this->assertStringNotContainsString( 'Built-in public Cloudflare AI Search endpoint', $output );
+		$this->assertStringNotContainsString( 'c5d54c4a-27df-4034-80da-ca6054684fcd', $output );
+		$this->assertStringNotContainsString( 'Instance:', $output );
+		$this->assertStringNotContainsString( 'Runtime Grounding', $output );
+		$this->assertStringNotContainsString( 'Developer Docs Prewarm', $output );
 		$this->assertStringNotContainsString( 'Legacy Developer Docs Cloudflare Override', $output );
 		$this->assertStringNotContainsString( 'name="flavor_agent_cloudflare_ai_search_account_id"', $output );
 		$this->assertStringNotContainsString( 'name="flavor_agent_cloudflare_ai_search_instance_id"', $output );
@@ -1627,8 +1609,9 @@ final class SettingsTest extends TestCase {
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'Core Guidelines storage detected.', $output );
-		$this->assertStringContainsString( 'legacy migration tooling', $output );
+		$this->assertStringContainsString( 'Core Guidelines connected.', $output );
+		$this->assertStringNotContainsString( 'legacy migration tooling', $output );
+		$this->assertStringNotContainsString( 'JSON import/export, and rollback support', $output );
 		$this->assertStringContainsString( 'name="flavor_agent_guideline_site"', $output );
 		$this->assertStringContainsString( 'Import JSON', $output );
 		$this->assertStringContainsString( 'Export JSON', $output );
@@ -1761,7 +1744,7 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_render_page_shows_runtime_grounding_diagnostics(): void {
+	public function test_render_page_keeps_runtime_grounding_diagnostics_out_of_inline_copy(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_docs_runtime_state' => [
 				'lastSearchAt'           => '2026-04-08 10:00:00',
@@ -1798,11 +1781,11 @@ final class SettingsTest extends TestCase {
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'Runtime Grounding', $output );
-		$this->assertStringContainsString( 'Retrying', $output );
-		$this->assertStringContainsString( 'Warm queue: 1 pending.', $output );
-		$this->assertStringContainsString( 'Last trusted success: 2026-04-08 09:45:00 UTC via foreground warm', $output );
-		$this->assertStringContainsString( 'Last error (async warm): Cloudflare timed out.', $output );
+		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
+		$this->assertStringNotContainsString( 'Runtime Grounding', $output );
+		$this->assertStringNotContainsString( 'Warm queue: 1 pending.', $output );
+		$this->assertStringNotContainsString( 'Last trusted success: 2026-04-08 09:45:00 UTC via foreground warm', $output );
+		$this->assertStringNotContainsString( 'Last error (async warm): Cloudflare timed out.', $output );
 	}
 
 	/**

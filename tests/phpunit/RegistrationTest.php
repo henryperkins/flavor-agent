@@ -740,6 +740,55 @@ final class RegistrationTest extends TestCase {
 		$this->assertTrue( $permission_callback( [] ) );
 	}
 
+	public function test_pattern_recommendation_permission_callback_checks_document_entity_scope(): void {
+		Registration::register_category();
+		Registration::register_recommendation_abilities();
+
+		$ability             = WordPressTestState::$registered_abilities['flavor-agent/recommend-patterns'] ?? null;
+		$permission_callback = $ability['permission_callback'] ?? null;
+
+		$this->assertIsCallable( $permission_callback );
+
+		WordPressTestState::$capabilities = [
+			'edit_posts'    => true,
+			'edit_post:42'  => false,
+			'edit_post:101' => true,
+		];
+
+		$this->assertFalse(
+			$permission_callback(
+				[
+					'document' => [
+						'scopeKey' => 'page:42',
+						'postType' => 'page',
+						'entityId' => '42',
+					],
+				]
+			)
+		);
+		$this->assertTrue(
+			$permission_callback(
+				[
+					'document' => [
+						'scopeKey' => 'case_study:101',
+						'postType' => 'case_study',
+						'entityId' => '101',
+					],
+				]
+			)
+		);
+		$this->assertTrue(
+			$permission_callback(
+				[
+					'document' => [
+						'scopeKey' => 'post:101',
+					],
+				]
+			)
+		);
+		$this->assertTrue( $permission_callback( [] ) );
+	}
+
 	public function test_theme_recommendation_permission_callback_requires_theme_capability_without_post_checks(): void {
 		Registration::register_category();
 		Registration::register_recommendation_abilities();

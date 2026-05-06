@@ -23,6 +23,7 @@ final class Config {
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE   = 'flavor_agent_cloudflare_pattern_ai_search_namespace';
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID = 'flavor_agent_cloudflare_pattern_ai_search_instance_id';
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN   = 'flavor_agent_cloudflare_pattern_ai_search_api_token';
+	public const DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE  = 'patterns';
 	public const OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH = 'flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search';
 	public const PATTERN_BACKEND_QDRANT                                       = 'qdrant';
 	public const PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH                         = 'cloudflare_ai_search';

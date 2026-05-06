@@ -1011,10 +1011,7 @@ final class PatternIndexTest extends TestCase {
 					'flavor_agent_qdrant_url' => '',
 					'flavor_agent_qdrant_key' => '',
 					Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-123',
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns',
 					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-xyz',
 				]
 			);
 	}
@@ -1118,7 +1115,7 @@ final class PatternIndexTest extends TestCase {
 					'fingerprint'                    => PatternIndex::compute_fingerprint( $patterns ),
 					'qdrant_url'                     => '',
 					'qdrant_collection'              => '',
-					'cloudflare_ai_search_namespace' => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ),
+					'cloudflare_ai_search_namespace' => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => $this->expected_cloudflare_ai_search_signature(),
 					'openai_provider'                => '',
@@ -1208,7 +1205,7 @@ final class PatternIndexTest extends TestCase {
 		}
 
 		if ( $collection_exists || $creation_succeeds ) {
-			for ( $i = 0; $i < 4; $i++ ) {
+			for ( $i = 0; $i < 5; $i++ ) {
 				$this->queue_qdrant_success( '/index', 'PUT' );
 			}
 		}
@@ -1425,10 +1422,10 @@ final class PatternIndexTest extends TestCase {
 				array_map(
 					'trim',
 					[
-						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID, '' ),
-						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ),
+						(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
+						Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
-						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN, '' ),
+						(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
 					]
 				)
 			)

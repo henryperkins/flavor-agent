@@ -502,20 +502,20 @@ final class PatternIndex {
 
 		return match ( $option ) {
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => 'pattern_backend_changed',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'cloudflare_ai_search_instance_changed',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'cloudflare_ai_search_signature_changed',
+			'flavor_agent_cloudflare_workers_ai_account_id',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'cloudflare_ai_search_signature_changed',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => 'embedding_signature_changed',
 			default => 'pattern_registry_changed',
 		};
 	}
 
 	private static function cloudflare_ai_search_signature(): string {
 		$parts = [
-			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID, '' ),
-			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ),
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
+			Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
-			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN, '' ),
+			(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
 		];
 
 		return hash( 'sha256', implode( '|', array_map( 'trim', $parts ) ) );
@@ -786,7 +786,7 @@ final class PatternIndex {
 	 * @param array<string, mixed>             $state
 	 */
 	private static function do_cloudflare_ai_search_sync( array $patterns, string $fingerprint, array $state ): array|\WP_Error {
-		$namespace                     = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ) );
+		$namespace                     = Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE;
 		$instance                      = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
 		$signature                     = self::cloudflare_ai_search_signature();
 		$previous_pattern_fingerprints = is_array( $state['pattern_fingerprints'] ?? null )
@@ -1021,7 +1021,7 @@ final class PatternIndex {
 
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend ) {
 			if (
-				(string) ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ) )
+				(string) ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
 				|| (string) ( $state['cloudflare_ai_search_instance'] ?? '' ) !== trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) )
 			) {
 				$reasons[] = 'cloudflare_ai_search_instance_changed';

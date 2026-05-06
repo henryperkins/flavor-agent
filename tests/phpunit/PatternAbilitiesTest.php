@@ -510,6 +510,62 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringNotContainsString( 'Hidden copy', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
+	public function test_recommend_patterns_cloudflare_ai_search_keeps_registered_uuid_metadata_in_registered_lane(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$this->save_cloudflare_ai_search_index_state();
+		$this->register_pattern(
+			'theme/hero',
+			[
+				'title'         => 'Current Hero',
+				'categories'    => [ 'featured' ],
+				'blockTypes'    => [ 'core/group' ],
+				'templateTypes' => [ 'home' ],
+				'content'       => '<!-- wp:group --><div>Current hero copy</div><!-- /wp:group -->',
+			]
+		);
+
+		WordPressTestState::$remote_post_responses = [
+			$this->cloudflare_ai_search_chunks_response(
+				[
+					$this->cloudflare_ai_search_chunk(
+						'theme/hero',
+						0.87,
+						'Indexed hero copy.',
+						[
+							'synced_id' => PatternIndex::pattern_uuid( 'theme/hero' ),
+						]
+					),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.84,
+								'reason' => 'Matches the current hero request.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'     => 'page',
+				'templateType' => 'home',
+				'prompt'       => 'Hero for a product launch.',
+			],
+			[ 'theme/hero' ]
+		);
+
+		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertSame( 'Current Hero', $result['recommendations'][0]['title'] ?? '' );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+	}
+
 	public function test_recommend_patterns_cloudflare_ai_search_rehydrates_synced_candidates_before_ranking(): void {
 		$this->configure_cloudflare_ai_search_backends();
 		$this->save_cloudflare_ai_search_index_state();
@@ -612,6 +668,45 @@ final class PatternAbilitiesTest extends TestCase {
 			'Private launch copy from Cloudflare',
 			(string) ( WordPressTestState::$remote_post_calls[0]['args']['body'] ?? '' )
 		);
+	}
+
+	public function test_recommend_patterns_cloudflare_ai_search_drops_synced_candidate_with_invalid_synced_metadata(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$this->save_cloudflare_ai_search_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:96' => false,
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->cloudflare_ai_search_chunks_response(
+				[
+					$this->cloudflare_ai_search_chunk(
+						'theme/shared',
+						0.96,
+						'Stale shared copy from Cloudflare.',
+						[
+							'candidate_type' => 'user',
+							'source'         => 'synced',
+							'synced_id'      => '096a70b9-47b7-585d-8100-800ae4ed7e4d',
+						]
+					),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'theme/shared', 'core/block/96' ]
+		);
+
+		$this->assertSame( [], $result['recommendations'] );
+		$this->assertSame(
+			0,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_recommend_patterns_cloudflare_ai_search_drops_synced_pattern_after_status_change_before_resync(): void {
@@ -1034,10 +1129,24 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$semantic_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertSame( 24, $semantic_request['limit'] ?? null );
-		$this->assertArrayNotHasKey( 'filter', $semantic_request );
+		$visible_name_filter = [
+			[
+				'key'   => 'name',
+				'match' => [
+					'any' => [ 'theme/hero', 'theme/footer-callout' ],
+				],
+			],
+		];
+		$this->assertSame(
+			[
+				'must' => $visible_name_filter,
+			],
+			$semantic_request['filter'] ?? null
+		);
 
 		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
 		$this->assertSame( 18, $structural_request['limit'] ?? null );
+		$this->assertSame( $visible_name_filter, $structural_request['filter']['must'] ?? null );
 		$this->assertSame(
 			[
 				[
@@ -2514,10 +2623,7 @@ final class PatternAbilitiesTest extends TestCase {
 			WordPressTestState::$options,
 			[
 				Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-123',
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns',
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-xyz',
 			]
 		);
 	}
@@ -2593,7 +2699,7 @@ final class PatternAbilitiesTest extends TestCase {
 					'fingerprint'                    => 'cloudflare-fingerprint-123',
 					'qdrant_url'                     => '',
 					'qdrant_collection'              => '',
-					'cloudflare_ai_search_namespace' => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ),
+					'cloudflare_ai_search_namespace' => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => $this->expected_cloudflare_ai_search_signature(),
 					'openai_provider'                => '',
@@ -2626,10 +2732,10 @@ final class PatternAbilitiesTest extends TestCase {
 				array_map(
 					'trim',
 					[
-						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID, '' ),
-						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' ),
+						(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
+						Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
-						(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN, '' ),
+						(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
 					]
 				)
 			)
@@ -2732,7 +2838,7 @@ final class PatternAbilitiesTest extends TestCase {
 				'pattern_name'   => $name,
 				'candidate_type' => 'pattern',
 				'source'         => 'registered',
-				'synced_id'      => str_replace( '/', '-', $name ),
+				'synced_id'      => '',
 				'public_safe'    => true,
 			],
 			$metadata_overrides

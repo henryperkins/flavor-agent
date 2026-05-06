@@ -233,19 +233,18 @@ final class InfraAbilitiesTest extends TestCase {
 			);
 	}
 
-	public function test_check_status_allows_cloudflare_pattern_ai_search_without_qdrant_or_embeddings(): void {
+	public function test_check_status_allows_cloudflare_pattern_ai_search_without_qdrant(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,
 		];
 
 		WordPressTestState::$options = [
-			'wpai_features_enabled'                  => true,
-			'wpai_feature_flavor-agent_enabled'      => true,
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'account-123',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'patterns',
+			'wpai_features_enabled'                        => true,
+			'wpai_feature_flavor-agent_enabled'            => true,
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'token-xyz',
 		];
 
 		WordPressTestState::$ai_client_supported = true;

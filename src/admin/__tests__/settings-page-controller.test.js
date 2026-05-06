@@ -1,3 +1,17 @@
+jest.mock( '@wordpress/i18n', () => ( {
+	__: jest.fn( ( value ) => value ),
+	sprintf: jest.fn( ( template, ...values ) =>
+		values.reduce( ( result, value, index ) => {
+			return result
+				.replaceAll( `%${ index + 1 }$s`, String( value ) )
+				.replaceAll( `%${ index + 1 }$d`, String( value ) )
+				.replace( '%s', String( value ) )
+				.replace( '%d', String( value ) );
+		}, template )
+	),
+} ) );
+
+import * as i18n from '@wordpress/i18n';
 import { initializeSettingsPage } from '../settings-page-controller';
 
 function createStorage( initialValues = {} ) {
@@ -179,6 +193,7 @@ function renderGuidelinesSettingsPage( {
 
 describe( 'settings page controller', () => {
 	beforeEach( () => {
+		jest.clearAllMocks();
 		document.body.innerHTML = '';
 		window.flavorAgentAdmin = {
 			nonce: 'test-nonce',
@@ -320,6 +335,7 @@ describe( 'settings page controller', () => {
 		expect(
 			root.querySelector( '#flavor-agent-sync-notice' ).textContent
 		).toContain( 'Synced 3 patterns, removed 1. Status: Ready.' );
+		expect( i18n.sprintf ).toHaveBeenCalled();
 	} );
 
 	test( 'sync failure keeps the panel open and surfaces the server error', async () => {
@@ -476,9 +492,12 @@ describe( 'settings page controller', () => {
 			expect( JSON.parse( hiddenInput.value ) ).toEqual( {} );
 			expect(
 				root.querySelector( '[data-guidelines-block-list]' ).textContent
-			).toContain(
-				'No block guidelines yet. Add one when a specific block needs extra rules.'
+			).toContain( 'No block guidelines yet.' );
+			expect( i18n.__ ).toHaveBeenCalledWith(
+				'No block guidelines yet.',
+				'flavor-agent'
 			);
+			expect( i18n.sprintf ).toHaveBeenCalled();
 		} finally {
 			window.confirm = originalConfirm;
 		}

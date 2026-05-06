@@ -9,6 +9,7 @@ use FlavorAgent\Embeddings\EmbeddingSignature;
 use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
+use FlavorAgent\Support\StringArray;
 
 final class QdrantPatternRetrievalBackend implements PatternRetrievalBackend {
 
@@ -80,10 +81,11 @@ final class QdrantPatternRetrievalBackend implements PatternRetrievalBackend {
 		$semantic_limit   = $visible_lookup ? self::FILTERED_SEMANTIC_LIMIT : self::DEFAULT_SEMANTIC_LIMIT;
 		$structural_limit = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
 		$collection_name  = (string) $state['qdrant_collection'];
+		$visible_filter   = $this->build_visible_name_filter( $visible_pattern_names );
 		$pass_a           = QdrantClient::search(
 			$query_vector,
 			$semantic_limit,
-			[],
+			$this->merge_required_filter( [], $visible_filter ),
 			$collection_name
 		);
 
@@ -100,7 +102,7 @@ final class QdrantPatternRetrievalBackend implements PatternRetrievalBackend {
 			$pass_b = QdrantClient::search(
 				$query_vector,
 				$structural_limit,
-				[ 'should' => $should_clauses ],
+				$this->merge_required_filter( [ 'should' => $should_clauses ], $visible_filter ),
 				$collection_name
 			);
 
@@ -110,6 +112,42 @@ final class QdrantPatternRetrievalBackend implements PatternRetrievalBackend {
 		}
 
 		return $this->dedupe_points( array_merge( $pass_a, $pass_b ) );
+	}
+
+	/**
+	 * @param string[] $visible_pattern_names
+	 * @return array<string, mixed>
+	 */
+	private function build_visible_name_filter( array $visible_pattern_names ): array {
+		$names = array_values( array_unique( StringArray::sanitize( $visible_pattern_names ) ) );
+
+		if ( [] === $names ) {
+			return [];
+		}
+
+		return [
+			'key'   => 'name',
+			'match' => [
+				'any' => $names,
+			],
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $filter
+	 * @param array<string, mixed> $required_filter
+	 * @return array<string, mixed>
+	 */
+	private function merge_required_filter( array $filter, array $required_filter ): array {
+		if ( [] === $required_filter ) {
+			return $filter;
+		}
+
+		$must           = is_array( $filter['must'] ?? null ) ? $filter['must'] : [];
+		$must[]         = $required_filter;
+		$filter['must'] = array_values( $must );
+
+		return $filter;
 	}
 
 	/**

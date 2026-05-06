@@ -310,16 +310,16 @@ final class PatternSearchClient extends BaseHttpClient {
 		?string $api_token = null
 	): array|\WP_Error {
 		$account_id  = self::normalize_config_value(
-			$account_id ?? get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID, '' )
+			$account_id ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' )
 		);
 		$namespace   = self::normalize_config_value(
-			$namespace_id ?? get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, '' )
+			$namespace_id ?? Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
 		);
 		$instance_id = self::normalize_config_value(
 			$instance_id ?? get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' )
 		);
 		$api_token   = self::normalize_config_value(
-			$api_token ?? get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN, '' )
+			$api_token ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' )
 		);
 		$missing     = [];
 
@@ -560,12 +560,48 @@ final class PatternSearchClient extends BaseHttpClient {
 	private static function build_metadata( array $pattern, string $item_id ): array {
 		return [
 			'pattern_name'   => self::pattern_name_from_pattern( $pattern, $item_id ),
-			'candidate_type' => self::metadata_text( $pattern['candidate_type'] ?? 'pattern', 'pattern' ),
+			'candidate_type' => self::metadata_text( $pattern['candidate_type'] ?? ( $pattern['type'] ?? 'pattern' ), 'pattern' ),
 			'source'         => self::metadata_text( $pattern['source'] ?? 'wordpress', 'wordpress' ),
-			'synced_id'      => self::metadata_text( $item_id, $item_id ),
+			'synced_id'      => self::synced_pattern_id_text( $pattern ),
 			'public_safe'    => ! array_key_exists( 'public_safe', $pattern )
 				|| rest_sanitize_boolean( $pattern['public_safe'] ),
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $pattern
+	 */
+	private static function synced_pattern_id_text( array $pattern ): string {
+		$id = self::positive_integer_value( $pattern['syncedPatternId'] ?? null );
+
+		if ( $id <= 0 ) {
+			foreach ( [ 'pattern_name', 'name', 'id' ] as $key ) {
+				$id = self::core_block_id_from_value( $pattern[ $key ] ?? null );
+
+				if ( $id > 0 ) {
+					break;
+				}
+			}
+		}
+
+		$type   = sanitize_key( (string) ( $pattern['type'] ?? ( $pattern['candidate_type'] ?? '' ) ) );
+		$source = sanitize_key( (string) ( $pattern['source'] ?? '' ) );
+
+		if ( $id <= 0 ) {
+			return '';
+		}
+
+		if ( 'user' !== $type && 'synced' !== $source ) {
+			foreach ( [ 'pattern_name', 'name', 'id' ] as $key ) {
+				if ( self::core_block_id_from_value( $pattern[ $key ] ?? null ) > 0 ) {
+					return (string) $id;
+				}
+			}
+
+			return '';
+		}
+
+		return (string) $id;
 	}
 
 	/**
@@ -690,6 +726,32 @@ final class PatternSearchClient extends BaseHttpClient {
 		}
 
 		return substr( $value, 0, 500 );
+	}
+
+	private static function positive_integer_value( mixed $value ): int {
+		if ( ! is_scalar( $value ) ) {
+			return 0;
+		}
+
+		$value = trim( (string) $value );
+
+		if ( ! preg_match( '/^\d+$/', $value ) ) {
+			return 0;
+		}
+
+		return absint( $value );
+	}
+
+	private static function core_block_id_from_value( mixed $value ): int {
+		if ( ! is_scalar( $value ) ) {
+			return 0;
+		}
+
+		if ( ! preg_match( '#^core/block/(\d+)$#', (string) $value, $matches ) ) {
+			return 0;
+		}
+
+		return absint( $matches[1] ?? 0 );
 	}
 
 	/**

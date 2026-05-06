@@ -121,39 +121,11 @@ final class Registrar {
 		);
 		register_setting(
 			Config::OPTION_GROUP,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_pattern_ai_search_account_id' ],
-				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_pattern_ai_search_namespace' ],
-				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 			[
 				'type'              => 'string',
 				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_pattern_ai_search_instance_id' ],
 				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_pattern_ai_search_api_token' ],
-				'default'           => '',
-				'autoload'          => false,
 			]
 		);
 		register_setting(
@@ -283,7 +255,7 @@ final class Registrar {
 					Config::PATTERN_BACKEND_QDRANT => 'Qdrant vector storage',
 					Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH => 'Cloudflare AI Search managed index',
 				],
-				'description' => 'Storage for the pattern catalog. This is infrastructure, not another AI model choice.',
+				'description' => 'Choose where the pattern catalog is stored.',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
 		);
@@ -297,7 +269,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_cloudflare_workers_ai_account_id',
 				'label_for'    => 'flavor_agent_cloudflare_workers_ai_account_id',
 				'placeholder'  => 'Cloudflare account ID',
-				'description'  => 'Cloudflare account that owns the Workers AI runtime.',
+				'description'  => 'Cloudflare account for Workers AI.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -313,7 +285,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_cloudflare_workers_ai_api_token',
 				'type'         => 'password',
 				'placeholder'  => 'Cloudflare API token',
-				'description'  => 'Cloudflare API token with Workers AI read access for embeddings.',
+				'description'  => 'Workers AI API token.',
 				'autocomplete' => 'new-password',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -329,7 +301,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_cloudflare_workers_ai_embedding_model',
 				'default'      => WorkersAIEmbeddingConfiguration::DEFAULT_MODEL,
 				'placeholder'  => WorkersAIEmbeddingConfiguration::DEFAULT_MODEL,
-				'description'  => 'Workers AI embedding model ID for Flavor Agent semantic features.',
+				'description'  => 'Workers AI embedding model ID.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -367,38 +339,8 @@ final class Registrar {
 			]
 		);
 		add_settings_field(
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-			'Account ID',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_cloudflare_pattern_ai_search',
-			[
-				'option'       => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-				'label_for'    => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-				'placeholder'  => 'Cloudflare account ID',
-				'description'  => 'Cloudflare account that owns the private AI Search instance used for site pattern content.',
-				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-			'Namespace',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_cloudflare_pattern_ai_search',
-			[
-				'option'       => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-				'label_for'    => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-				'placeholder'  => 'patterns',
-				'description'  => 'AI Search namespace containing the private pattern retrieval instance.',
-				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-			'AI Search Instance ID',
+			'Index Name',
 			[ Settings::class, 'render_text_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_cloudflare_pattern_ai_search',
@@ -406,24 +348,8 @@ final class Registrar {
 				'option'       => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 				'label_for'    => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 				'placeholder'  => 'pattern-index',
-				'description'  => 'Private AI Search instance ID or name used for site pattern indexing and retrieval.',
+				'description'  => 'Unique Cloudflare AI Search pattern index name.',
 				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-			'API Token',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_cloudflare_pattern_ai_search',
-			[
-				'option'       => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-				'label_for'    => Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-				'type'         => 'password',
-				'placeholder'  => 'Cloudflare API token',
-				'description'  => 'Cloudflare API token with Account > AI Search:Edit and Account > AI Search:Run permissions for the private pattern instance.',
-				'autocomplete' => 'new-password',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
 		);
@@ -461,7 +387,7 @@ final class Registrar {
 				'min'         => '0',
 				'max'         => '1',
 				'placeholder' => '0.20',
-				'description' => 'Cloudflare AI Search match threshold. Tune separately from the Qdrant ranking threshold because scores are not comparable.',
+				'description' => 'AI Search match threshold.',
 				'inputmode'   => 'decimal',
 			]
 		);
@@ -560,8 +486,8 @@ final class Registrar {
 			[
 				'option'      => Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
 				'label_for'   => Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
-				'label'       => 'Enable selected-block structural actions',
-				'description' => 'Enables review-first selected-block pattern insert and replace actions. Keep this off for ordinary production use unless you are intentionally testing the structural apply beta.',
+				'label'       => 'Enable structural block actions',
+				'description' => 'Adds review-first insert and replace actions for the selected block.',
 			]
 		);
 	}

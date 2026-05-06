@@ -706,7 +706,7 @@ final class EmbeddingBackendValidationTest extends TestCase {
 		];
 		WordPressTestState::$remote_post_responses = array_fill(
 			0,
-			4,
+			5,
 			[
 				'response' => [ 'code' => 200 ],
 				'body'     => wp_json_encode(
@@ -722,7 +722,7 @@ final class EmbeddingBackendValidationTest extends TestCase {
 
 		$this->assertTrue( $result );
 		$this->assertSame(
-			[ 'blockTypes', 'templateTypes', 'categories', 'traits' ],
+			[ 'name', 'blockTypes', 'templateTypes', 'categories', 'traits' ],
 			array_map(
 				static function ( array $call ): ?string {
 					$body = json_decode( (string) ( $call['args']['body'] ?? '' ), true );

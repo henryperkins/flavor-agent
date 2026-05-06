@@ -44,10 +44,10 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_workers_ai_api_token', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_workers_ai_embedding_model', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_flavor_agent_pattern_retrieval_backend', [ PatternIndex::class, 'handle_dependency_change' ] );
-		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_account_id', [ PatternIndex::class, 'handle_dependency_change' ] );
-		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_namespace', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookNotRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_account_id', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookNotRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_namespace', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_instance_id', [ PatternIndex::class, 'handle_dependency_change' ] );
-		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_api_token', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookNotRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_api_token', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_flavor_agent_qdrant_url', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_home', [ PatternIndex::class, 'handle_dependency_change' ] );
 	}
@@ -84,8 +84,7 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_workers_ai_api_token', WordPressTestState::$option_autoload );
 		$this->assertSame( '', WordPressTestState::$options['flavor_agent_qdrant_key'] );
 		$this->assertFalse( WordPressTestState::$option_autoload['flavor_agent_qdrant_key'] );
-		$this->assertSame( '', WordPressTestState::$options['flavor_agent_cloudflare_pattern_ai_search_api_token'] );
-		$this->assertFalse( WordPressTestState::$option_autoload['flavor_agent_cloudflare_pattern_ai_search_api_token'] );
+		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_pattern_ai_search_api_token', WordPressTestState::$options );
 	}
 
 	public function test_block_structural_actions_rollout_flag_defaults_off_and_is_filterable(): void {

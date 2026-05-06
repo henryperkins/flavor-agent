@@ -15,7 +15,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 
 - `window.flavorAgentData.canRecommendPatterns` must be true; that requires the selected pattern backend to be configured in `Settings > Flavor Agent` and a usable text-generation provider in `Settings > Connectors`
 - Qdrant storage readiness requires the Cloudflare Workers AI Embedding Model plus Qdrant URL/key
-- Cloudflare AI Search backend readiness requires a private site-owner Cloudflare AI Search pattern instance and token; it does not use plugin-owned embeddings or Qdrant
+- Cloudflare AI Search backend readiness requires the Embedding Model Cloudflare account/token plus a private site-owner Cloudflare AI Search pattern index name; it does not call plugin-owned embedding generation or Qdrant
 - A post type must be available from `core/editor`
 - Passive fetch runs when the editor loads
 - Active refresh runs when the inserter search input changes while the inserter is open
@@ -44,7 +44,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 | Pattern backend | Embeddings | Vector/index service | Search service | Required settings |
 | --- | --- | --- | --- | --- |
 | Qdrant | Cloudflare Workers AI | Qdrant | Qdrant | Cloudflare Workers AI embeddings, Qdrant, Connectors chat |
-| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Private pattern AI Search, Connectors chat |
+| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Embedding Model credentials, private pattern index name, Connectors chat |
 
 ## What This Surface Can Do
 

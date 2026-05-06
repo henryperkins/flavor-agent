@@ -1,9 +1,11 @@
+import { __, sprintf } from '@wordpress/i18n';
+
 const PATTERN_STATUS_LABELS = {
-	error: 'Error',
-	indexing: 'Syncing',
-	ready: 'Ready',
-	stale: 'Refresh needed',
-	uninitialized: 'Not synced',
+	error: __( 'Error', 'flavor-agent' ),
+	indexing: __( 'Syncing', 'flavor-agent' ),
+	ready: __( 'Ready', 'flavor-agent' ),
+	stale: __( 'Refresh needed', 'flavor-agent' ),
+	uninitialized: __( 'Not synced', 'flavor-agent' ),
 };
 
 const PATTERN_STATUS_TONES = {
@@ -15,17 +17,31 @@ const PATTERN_STATUS_TONES = {
 };
 
 const PATTERN_REASON_LABELS = {
-	embedding_signature_changed:
+	embedding_signature_changed: __(
 		'Embedding provider, model, or vector size changed.',
-	collection_name_changed:
+		'flavor-agent'
+	),
+	collection_name_changed: __(
 		'Pattern index collection naming changed and needs a rebuild.',
-	collection_missing:
+		'flavor-agent'
+	),
+	collection_missing: __(
 		'Pattern index collection is missing and needs a rebuild.',
-	collection_size_mismatch:
+		'flavor-agent'
+	),
+	collection_size_mismatch: __(
 		'Pattern index collection vector size no longer matches the active embedding configuration.',
-	qdrant_url_changed: 'Qdrant endpoint changed.',
-	openai_endpoint_changed: 'Embedding endpoint changed.',
-	pattern_registry_changed: 'Registered patterns changed.',
+		'flavor-agent'
+	),
+	qdrant_url_changed: __( 'Qdrant endpoint changed.', 'flavor-agent' ),
+	openai_endpoint_changed: __(
+		'Embedding endpoint changed.',
+		'flavor-agent'
+	),
+	pattern_registry_changed: __(
+		'Registered patterns changed.',
+		'flavor-agent'
+	),
 };
 
 const GUIDELINE_CATEGORY_FIELDS = {
@@ -98,14 +114,14 @@ function getPatternOverviewStatus( runtimeState, hasPrerequisites ) {
 
 	if ( ! hasPrerequisites ) {
 		return {
-			label: 'Needs setup',
+			label: __( 'Needs setup', 'flavor-agent' ),
 			tone: 'warning',
 		};
 	}
 
 	if ( state.last_error ) {
 		return {
-			label: 'Needs attention',
+			label: __( 'Needs attention', 'flavor-agent' ),
 			tone: 'error',
 		};
 	}
@@ -113,22 +129,22 @@ function getPatternOverviewStatus( runtimeState, hasPrerequisites ) {
 	switch ( normalizeText( state.status, 'uninitialized' ) ) {
 		case 'ready':
 			return {
-				label: 'Ready',
+				label: __( 'Ready', 'flavor-agent' ),
 				tone: 'success',
 			};
 		case 'stale':
 			return {
-				label: 'Refresh needed',
+				label: __( 'Refresh needed', 'flavor-agent' ),
 				tone: 'warning',
 			};
 		case 'indexing':
 			return {
-				label: 'Syncing',
+				label: __( 'Syncing', 'flavor-agent' ),
 				tone: 'accent',
 			};
 		default:
 			return {
-				label: 'Needs sync',
+				label: __( 'Needs sync', 'flavor-agent' ),
 				tone: 'warning',
 			};
 	}
@@ -139,22 +155,37 @@ function getPatternSyncStatusSentence( runtimeState, prerequisiteMessage ) {
 		runtimeState && typeof runtimeState === 'object' ? runtimeState : {};
 
 	if ( prerequisiteMessage ) {
-		return 'Pattern recommendations are not available until the required setup is complete.';
+		return __(
+			'Pattern recommendations are not available until the required setup is complete.',
+			'flavor-agent'
+		);
 	}
 
 	if ( state.last_error ) {
-		return 'Pattern recommendations need attention before they can be trusted.';
+		return __(
+			'Pattern recommendations need attention before they can be trusted.',
+			'flavor-agent'
+		);
 	}
 
 	switch ( normalizeText( state.status, 'uninitialized' ) ) {
 		case 'ready':
-			return 'Pattern recommendations are ready.';
+			return __( 'Pattern recommendations are ready.', 'flavor-agent' );
 		case 'stale':
-			return 'Pattern recommendations are usable but out of date.';
+			return __(
+				'Pattern recommendations are usable but out of date.',
+				'flavor-agent'
+			);
 		case 'indexing':
-			return 'Pattern recommendations are syncing now.';
+			return __(
+				'Pattern recommendations are syncing now.',
+				'flavor-agent'
+			);
 		default:
-			return 'Pattern recommendations are not available until you sync the catalog.';
+			return __(
+				'Pattern recommendations are not available until you sync the catalog.',
+				'flavor-agent'
+			);
 	}
 }
 
@@ -286,7 +317,7 @@ function updateSyncPanelState( root, runtimeState ) {
 			? getPatternSyncStatusLabel(
 					normalizeText( state.status, 'uninitialized' )
 			  )
-			: 'Needs setup',
+			: __( 'Needs setup', 'flavor-agent' ),
 		tone: syncBadgeTone,
 	};
 	const overviewState = getPatternOverviewStatus( state, hasPrerequisites );
@@ -323,7 +354,10 @@ function updateSyncPanelState( root, runtimeState ) {
 	updateMetric(
 		root,
 		'last_synced_at',
-		normalizeText( state.last_synced_at, 'Not synced yet' ),
+		normalizeText(
+			state.last_synced_at,
+			__( 'Not synced yet', 'flavor-agent' )
+		),
 		true
 	);
 
@@ -639,7 +673,7 @@ function initializeGuidelinesManager( root ) {
 
 		const placeholderOption = document.createElement( 'option' );
 		placeholderOption.value = '';
-		placeholderOption.textContent = 'Select a block';
+		placeholderOption.textContent = __( 'Select a block', 'flavor-agent' );
 		blockSelect.appendChild( placeholderOption );
 
 		if (
@@ -671,7 +705,7 @@ function initializeGuidelinesManager( root ) {
 	const resetEditor = () => {
 		editingBlock = '';
 		blockText.value = '';
-		saveButton.textContent = 'Add Block Guideline';
+		saveButton.textContent = __( 'Add Block Guideline', 'flavor-agent' );
 		cancelButton.hidden = true;
 		renderBlockSelect();
 		blockSelect.value = '';
@@ -680,7 +714,7 @@ function initializeGuidelinesManager( root ) {
 	const startEditing = ( blockName ) => {
 		editingBlock = normalizeText( blockName );
 		blockText.value = blockGuidelines[ editingBlock ] || '';
-		saveButton.textContent = 'Update Block Guideline';
+		saveButton.textContent = __( 'Update Block Guideline', 'flavor-agent' );
 		cancelButton.hidden = false;
 		renderBlockSelect();
 		blockSelect.value = editingBlock;
@@ -695,8 +729,10 @@ function initializeGuidelinesManager( root ) {
 		if ( entries.length === 0 ) {
 			const emptyState = document.createElement( 'p' );
 			emptyState.className = 'flavor-agent-guidelines__empty-state';
-			emptyState.textContent =
-				'No block guidelines yet. Add one when a specific block needs extra rules.';
+			emptyState.textContent = __(
+				'No block guidelines yet.',
+				'flavor-agent'
+			);
 			listRoot.appendChild( emptyState );
 			return;
 		}
@@ -736,7 +772,7 @@ function initializeGuidelinesManager( root ) {
 			const editButton = document.createElement( 'button' );
 			editButton.type = 'button';
 			editButton.className = 'button button-secondary';
-			editButton.textContent = 'Edit';
+			editButton.textContent = __( 'Edit', 'flavor-agent' );
 			editButton.addEventListener( 'click', () =>
 				startEditing( blockName )
 			);
@@ -744,7 +780,7 @@ function initializeGuidelinesManager( root ) {
 			const removeButton = document.createElement( 'button' );
 			removeButton.type = 'button';
 			removeButton.className = 'button button-link-delete';
-			removeButton.textContent = 'Remove';
+			removeButton.textContent = __( 'Remove', 'flavor-agent' );
 			removeButton.addEventListener( 'click', () => {
 				const label = blockLabels.get( blockName ) || blockName;
 
@@ -753,7 +789,14 @@ function initializeGuidelinesManager( root ) {
 					typeof window.confirm === 'function' &&
 					// eslint-disable-next-line no-alert
 					! window.confirm(
-						`Remove the block guideline for ${ label }?`
+						sprintf(
+							/* translators: %s: block label. */
+							__(
+								'Remove the block guideline for %s?',
+								'flavor-agent'
+							),
+							label
+						)
 					)
 				) {
 					return;
@@ -771,7 +814,10 @@ function initializeGuidelinesManager( root ) {
 				renderNotice(
 					noticeRoot,
 					'success',
-					'Block guideline removed. Save Changes to persist.'
+					__(
+						'Block guideline removed. Save Changes to persist.',
+						'flavor-agent'
+					)
 				);
 			} );
 
@@ -795,7 +841,10 @@ function initializeGuidelinesManager( root ) {
 			typeof payload.guideline_categories !== 'object'
 		) {
 			throw new Error(
-				'Check that your file contains a guideline_categories object.'
+				__(
+					'Check that your file contains a guideline_categories object.',
+					'flavor-agent'
+				)
 			);
 		}
 
@@ -840,7 +889,10 @@ function initializeGuidelinesManager( root ) {
 			renderNotice(
 				noticeRoot,
 				'error',
-				'Choose a block before saving a block guideline.'
+				__(
+					'Choose a block before saving a block guideline.',
+					'flavor-agent'
+				)
 			);
 			return;
 		}
@@ -851,7 +903,10 @@ function initializeGuidelinesManager( root ) {
 			renderNotice(
 				noticeRoot,
 				'error',
-				'Enter guideline text before saving a block guideline.'
+				__(
+					'Enter guideline text before saving a block guideline.',
+					'flavor-agent'
+				)
 			);
 			return;
 		}
@@ -863,7 +918,10 @@ function initializeGuidelinesManager( root ) {
 		renderNotice(
 			noticeRoot,
 			'success',
-			'Block guideline ready. Save Changes to persist.'
+			__(
+				'Block guideline ready. Save Changes to persist.',
+				'flavor-agent'
+			)
 		);
 	} );
 
@@ -889,7 +947,10 @@ function initializeGuidelinesManager( root ) {
 
 			if ( ! parsed ) {
 				throw new Error(
-					'Check that your file contains valid JSON and try again.'
+					__(
+						'Check that your file contains valid JSON and try again.',
+						'flavor-agent'
+					)
 				);
 			}
 
@@ -897,7 +958,10 @@ function initializeGuidelinesManager( root ) {
 			renderNotice(
 				noticeRoot,
 				'success',
-				'Guidelines imported into the form. Save Changes to persist.'
+				__(
+					'Guidelines imported into the form. Save Changes to persist.',
+					'flavor-agent'
+				)
 			);
 		} catch ( error ) {
 			renderNotice(
@@ -905,7 +969,7 @@ function initializeGuidelinesManager( root ) {
 				'error',
 				error instanceof Error
 					? error.message
-					: 'Could not import guidelines.'
+					: __( 'Could not import guidelines.', 'flavor-agent' )
 			);
 		}
 	} );
@@ -923,7 +987,11 @@ function initializeGuidelinesManager( root ) {
 		anchor.click();
 		document.body.removeChild( anchor );
 		URL.revokeObjectURL( objectUrl );
-		renderNotice( noticeRoot, 'success', 'Guidelines exported.' );
+		renderNotice(
+			noticeRoot,
+			'success',
+			__( 'Guidelines exported.', 'flavor-agent' )
+		);
 	} );
 }
 
@@ -956,7 +1024,16 @@ function buildSyncSuccessMessage( payload ) {
 		)
 	);
 
-	return `Synced ${ indexed } patterns, removed ${ removed }. Status: ${ statusLabel }.`;
+	return sprintf(
+		/* translators: 1: indexed pattern count, 2: removed pattern count, 3: sync status label. */
+		__(
+			'Synced %1$d patterns, removed %2$d. Status: %3$s.',
+			'flavor-agent'
+		),
+		indexed,
+		removed,
+		statusLabel
+	);
 }
 
 function initializePatternSync( root, fetchImpl ) {
@@ -1010,7 +1087,10 @@ function initializePatternSync( root, fetchImpl ) {
 	const setBusy = ( isBusy ) => {
 		updateButtonAccessibility( isBusy );
 		spinner.classList.toggle( 'is-active', isBusy );
-		setStatusText( statusNode, isBusy ? 'Syncing...' : '' );
+		setStatusText(
+			statusNode,
+			isBusy ? __( 'Syncing…', 'flavor-agent' ) : ''
+		);
 	};
 
 	updateButtonAccessibility();
@@ -1026,7 +1106,10 @@ function initializePatternSync( root, fetchImpl ) {
 
 		setBusy( true );
 		renderNotice( noticeRoot, '', '' );
-		setStatusText( liveRegion, 'Syncing pattern catalog.' );
+		setStatusText(
+			liveRegion,
+			__( 'Syncing pattern catalog.', 'flavor-agent' )
+		);
 
 		try {
 			const response = await fetchImpl(
@@ -1043,7 +1126,10 @@ function initializePatternSync( root, fetchImpl ) {
 
 			if ( ! response.ok ) {
 				throw new Error(
-					normalizeText( payload?.message, 'Sync failed.' )
+					normalizeText(
+						payload?.message,
+						__( 'Sync failed.', 'flavor-agent' )
+					)
 				);
 			}
 
@@ -1059,7 +1145,7 @@ function initializePatternSync( root, fetchImpl ) {
 			const message =
 				error instanceof Error && error.message
 					? error.message
-					: 'Sync failed.';
+					: __( 'Sync failed.', 'flavor-agent' );
 
 			renderNotice( noticeRoot, 'error', message );
 			setStatusText( liveRegion, message );

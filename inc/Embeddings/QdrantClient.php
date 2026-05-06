@@ -457,8 +457,8 @@ final class QdrantClient {
 
 	private static function ensure_payload_indexes( string $collection_name ): true|\WP_Error {
 		// Leave the content payload unindexed by only creating keyword indexes
-		// for the structural filter fields the recommendation flow needs.
-		foreach ( [ 'blockTypes', 'templateTypes', 'categories', 'traits' ] as $field ) {
+		// for the visibility and structural filter fields the recommendation flow needs.
+		foreach ( [ 'name', 'blockTypes', 'templateTypes', 'categories', 'traits' ] as $field ) {
 			$result = self::create_payload_index( $collection_name, $field, 'keyword' );
 			if ( is_wp_error( $result ) ) {
 				return $result;

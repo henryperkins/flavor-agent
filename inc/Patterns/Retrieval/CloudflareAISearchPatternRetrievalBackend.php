@@ -67,15 +67,20 @@ final class CloudflareAISearchPatternRetrievalBackend implements PatternRetrieva
 		$metadata       = is_array( $hit['metadata'] ?? null ) ? $hit['metadata'] : [];
 		$candidate_type = sanitize_key( (string) ( $metadata['candidate_type'] ?? '' ) );
 		$source         = sanitize_key( (string) ( $metadata['source'] ?? '' ) );
-		$synced_id      = absint( $metadata['synced_id'] ?? 0 );
+		$synced_id      = $this->positive_integer_value( $metadata['synced_id'] ?? null );
 		$core_block_id  = $this->core_block_id( $name );
+		$is_synced      = 'user' === $candidate_type || 'synced' === $source || $core_block_id > 0;
 
-		if ( $synced_id > 0 || $core_block_id > 0 || 'user' === $candidate_type || 'synced' === $source ) {
+		if ( $is_synced ) {
 			$id = $synced_id > 0 ? $synced_id : $core_block_id;
 
+			if ( $id <= 0 ) {
+				return [];
+			}
+
 			return [
-				'id'                  => $id > 0 ? 'core/block/' . $id : $name,
-				'name'                => $id > 0 ? 'core/block/' . $id : $name,
+				'id'                  => 'core/block/' . $id,
+				'name'                => 'core/block/' . $id,
 				'title'               => '',
 				'description'         => '',
 				'categories'          => [ 'reusable' ],
@@ -121,5 +126,19 @@ final class CloudflareAISearchPatternRetrievalBackend implements PatternRetrieva
 		}
 
 		return absint( $matches[1] ?? 0 );
+	}
+
+	private function positive_integer_value( mixed $value ): int {
+		if ( ! is_scalar( $value ) ) {
+			return 0;
+		}
+
+		$value = trim( (string) $value );
+
+		if ( ! preg_match( '/^\d+$/', $value ) ) {
+			return 0;
+		}
+
+		return absint( $value );
 	}
 }

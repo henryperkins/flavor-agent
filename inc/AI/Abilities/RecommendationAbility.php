@@ -132,19 +132,10 @@ abstract class RecommendationAbility extends Abstract_Ability {
 			return $post_id;
 		}
 
-		$post_id = $this->post_id_from_context(
-			$input['document'] ?? null,
-			[ 'postId', 'post_id' ]
-		);
+		$post_id = $this->post_id_from_document( $input['document'] ?? null );
 
 		if ( $post_id > 0 ) {
 			return $post_id;
-		}
-
-		$scope_post_id = $this->post_id_from_scope_key( $input['document'] ?? null );
-
-		if ( $scope_post_id > 0 ) {
-			return $scope_post_id;
 		}
 
 		foreach ( [ 'postId', 'post_id' ] as $field ) {
@@ -156,6 +147,25 @@ abstract class RecommendationAbility extends Abstract_Ability {
 		}
 
 		return 0;
+	}
+
+	private function post_id_from_document( mixed $document ): int {
+		$document = $this->normalize_map( $document );
+
+		if ( [] === $document ) {
+			return 0;
+		}
+
+		$post_id = $this->post_id_from_context(
+			$document,
+			[ 'postId', 'post_id', 'id', 'entityId' ]
+		);
+
+		if ( $post_id > 0 ) {
+			return $post_id;
+		}
+
+		return $this->post_id_from_scope_key( $document );
 	}
 
 	/**
@@ -180,7 +190,7 @@ abstract class RecommendationAbility extends Abstract_Ability {
 
 		$scope_key = \is_string( $context['scopeKey'] ?? null ) ? (string) $context['scopeKey'] : '';
 
-		if ( \preg_match( '/^post:(\d+)$/', $scope_key, $matches ) ) {
+		if ( \preg_match( '/^[A-Za-z0-9_-]+:(\d+)$/', $scope_key, $matches ) ) {
 			return (int) $matches[1];
 		}
 

@@ -61,7 +61,7 @@ When chat resolves to the `openai` connector, it uses the OpenAI mapping above. 
 3. If Cloudflare Workers AI is incomplete, Embedding Model status is unavailable and Qdrant Pattern Storage is gated off.
 4. `EmbeddingClient::validate_configuration()` validates only the Cloudflare Workers AI account ID, API token, and embedding model.
 5. When validation sees a Workers AI dimension that differs from the saved Qdrant pattern index dimension, the settings screen warns that patterns must be re-synced before Qdrant-backed recommendations are reliable.
-6. The Cloudflare AI Search pattern backend can still be ready when its private AI Search credentials are configured because it uses managed indexing/search instead of `EmbeddingClient`.
+6. The Cloudflare AI Search pattern backend can be ready when the Embedding Model account/token and the private pattern index name are configured because it uses managed indexing/search instead of `EmbeddingClient`.
 
 ## Pattern Storage Backend Chain
 
@@ -70,7 +70,7 @@ When chat resolves to the `openai` connector, it uses the OpenAI mapping above. 
 | Value                  | Retrieval behavior                                                                                                                                                                                                                        | Required setup                                                                  |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `qdrant`               | Pattern sync embeds changed pattern text with the active Embedding Model, stores vectors and payloads in Qdrant, and recommendation requests query Qdrant before reranking through Connectors chat.                                       | Embedding Model; Qdrant URL/key; Connectors chat.                               |
-| `cloudflare_ai_search` | Pattern sync uploads public-safe pattern markdown items to a private Cloudflare AI Search instance, and recommendation requests send query text plus `visiblePatternNames` as a metadata filter before reranking through Connectors chat. | Private Cloudflare AI Search account/namespace/instance/token; Connectors chat. |
+| `cloudflare_ai_search` | Pattern sync uploads public-safe pattern markdown items to a private Cloudflare AI Search instance, and recommendation requests send query text plus `visiblePatternNames` as a metadata filter before reranking through Connectors chat. | Embedding Model account/token; private pattern index name; Connectors chat. |
 
 Cloudflare AI Search pattern retrieval is separate from the built-in public Cloudflare AI Search endpoint used for WordPress developer-doc grounding.
 
@@ -92,14 +92,13 @@ Authentication uses the `Authorization: Bearer` header against Cloudflare's Open
 
 ## Cloudflare AI Search Pattern Retrieval
 
-Requires all four options to be non-empty when `flavor_agent_pattern_retrieval_backend` is `cloudflare_ai_search`:
+Requires the Cloudflare Workers AI Embedding Model credentials and the private pattern index option to be non-empty when `flavor_agent_pattern_retrieval_backend` is `cloudflare_ai_search`:
 
-| Option                                                  | Purpose                               |
-| ------------------------------------------------------- | ------------------------------------- |
-| `flavor_agent_cloudflare_pattern_ai_search_account_id`  | Cloudflare account ID                 |
-| `flavor_agent_cloudflare_pattern_ai_search_namespace`   | AI Search namespace                   |
-| `flavor_agent_cloudflare_pattern_ai_search_instance_id` | Private pattern AI Search instance ID |
-| `flavor_agent_cloudflare_pattern_ai_search_api_token`   | API token                             |
+| Option                                                  | Purpose                                      |
+| ------------------------------------------------------- | -------------------------------------------- |
+| `flavor_agent_cloudflare_workers_ai_account_id`         | Shared Cloudflare account ID                 |
+| `flavor_agent_cloudflare_workers_ai_api_token`          | Shared Cloudflare API token                  |
+| `flavor_agent_cloudflare_pattern_ai_search_instance_id` | Private pattern AI Search index name         |
 
 Authentication uses the `Authorization: Bearer` header against Cloudflare's AI Search REST API. Pattern sync uses stable item IDs, uploads changed public-safe registered and published synced/user patterns with `wait_for_completion=true`, and deletes stale remote items. Recommendation search sends the query text and `filters.pattern_name` derived from `visiblePatternNames`.
 

@@ -242,7 +242,7 @@ final class CloudflareWorkersAIEmbeddingTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$options = [
+		WordPressTestState::$options    = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];
 
