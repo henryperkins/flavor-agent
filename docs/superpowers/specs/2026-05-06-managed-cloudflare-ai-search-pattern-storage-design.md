@@ -17,6 +17,7 @@ The feature must not adopt or clean up arbitrary AI Search instances. Pattern sy
 - Adopt an existing instance only when it matches Flavor Agent ownership and compatibility checks.
 - Keep Pattern Storage as infrastructure, separate from AI Model and Embedding Model setup.
 - Preserve the current Cloudflare AI Search retrieval contract: filtered `pattern_name` search, hybrid retrieval, no plugin-owned embedding call, downstream Flavor Agent ranking.
+- Treat legacy pattern-specific Cloudflare AI Search account ID, namespace, and API token options as cleanup-only. Runtime search, sync, and managed setup must use the Embedding Model account ID/token plus the default `patterns` namespace.
 
 ## Non-Goals
 
@@ -84,7 +85,18 @@ Target create payload:
 }
 ```
 
-The `embedding_model` value should use the saved Embedding Model option when it is one of Cloudflare AI Search's supported embedding models, otherwise fall back to `@cf/qwen/qwen3-embedding-0.6b`.
+The `embedding_model` value should use the saved Embedding Model option when it is one of Cloudflare AI Search's supported embedding models, otherwise fall back to `@cf/qwen/qwen3-embedding-0.6b`. As of the 2026-05-06 Cloudflare API reference, supported AI Search embedding model IDs are:
+
+- `@cf/qwen/qwen3-embedding-0.6b`
+- `@cf/baai/bge-m3`
+- `@cf/baai/bge-large-en-v1.5`
+- `@cf/google/embeddinggemma-300m`
+- `google-ai-studio/gemini-embedding-001`
+- `google-ai-studio/gemini-embedding-2-preview`
+- `openai/text-embedding-3-small`
+- `openai/text-embedding-3-large`
+
+The implementation must not pass arbitrary validated Workers AI embedding model IDs to the AI Search instance create API.
 
 ## Query Rewrite
 
@@ -127,22 +139,24 @@ The owner marker should be stored through the Items API with metadata that fits 
 
 The owner marker must be excluded from stale cleanup, indexed pattern counts, and recommendation retrieval output.
 
+For an existing instance, Flavor Agent must read and validate the owner marker before adoption. It must not upload, overwrite, or repair the marker before ownership is proven. For a newly-created managed instance, Flavor Agent should upload the owner marker, read it back through the Items API, and only then save the instance ID.
+
 ## Adoption Rules
 
 When Pattern Storage is set to Cloudflare AI Search and Embedding Model credentials are present:
 
 1. List instances in the `patterns` namespace.
 2. Look for the deterministic managed instance ID.
-3. If it exists, validate the schema, Items API, and owner marker.
+3. If it exists, validate the schema and read the owner marker through the Items API.
 4. If all checks pass, save the instance ID and mark Cloudflare AI Search Pattern Storage configured.
-5. If no managed instance exists, create one with the approved payload, upload the owner marker, validate it, save the instance ID, and mark storage configured.
+5. If no managed instance exists, create one with the approved payload, upload the owner marker, read the marker back, save the instance ID, and mark storage configured.
 6. If the managed ID exists but fails ownership or schema checks, do not adopt it automatically. Surface a repair/create-new action and leave the previous saved instance in place.
 
 Instances outside the managed ID pattern must not be auto-selected, even if they are the only AI Search instances in the account.
 
 ## Runtime Sync
 
-Pattern sync continues to upload public-safe registered and synced pattern markdown through the Items API. The sync cleanup step must preserve the owner marker and only delete remote IDs that are known Flavor Agent pattern item IDs.
+Pattern sync continues to upload public-safe registered and synced pattern markdown through the Items API. The sync cleanup step must preserve the owner marker and only delete remote IDs that are known Flavor Agent pattern item IDs from the previous saved sync state. Unknown remote IDs, even inside the managed instance, must be preserved because a future Cloudflare API or manual operator action could have written non-pattern built-in-storage items. Do not infer ownership from an ID prefix alone.
 
 The current search request remains intentionally filtered:
 
@@ -187,15 +201,17 @@ The Cloudflare AI Search Pattern Storage setup should stop presenting the index 
 - Existing managed ID lacks built-in storage or Items API support: block adoption and offer to create a new managed instance.
 - Owner marker mismatch: block adoption to avoid deleting unrelated content.
 - Create conflict: re-list, re-validate, and adopt only if ownership checks now pass.
+- Unsupported saved embedding model for AI Search: create the managed instance with the default AI Search embedding model and keep the saved Embedding Model value unchanged for plugin-owned embeddings.
 
 ## Verification
 
-Implementation should include focused PHPUnit coverage for instance create/adopt/error paths, owner marker preservation during sync cleanup, settings readiness messaging, and unchanged retrieval request semantics. Docs validation should run because local setup and source-of-truth docs need to describe the new managed path.
+Implementation should include focused PHPUnit coverage for instance create/adopt/error paths, owner-marker mismatch and create-conflict recovery, unsupported embedding-model fallback, legacy pattern-specific credential ignore behavior, owner marker and unknown-item preservation during sync cleanup, settings readiness messaging, and unchanged retrieval request semantics. Docs validation should run because local setup and source-of-truth docs need to describe the new managed path.
 
 ## Cloudflare References
 
 - Built-in storage: https://developers.cloudflare.com/ai-search/configuration/data-source/built-in-storage/
 - Create instance API: https://developers.cloudflare.com/api/resources/ai_search/subresources/namespaces/subresources/instances/methods/create/
+- Items API: https://developers.cloudflare.com/ai-search/api/items/rest-api/
 - Metadata schema and filters: https://developers.cloudflare.com/ai-search/configuration/indexing/metadata/
 - Chunking: https://developers.cloudflare.com/ai-search/configuration/indexing/chunking/
 - Query rewriting: https://developers.cloudflare.com/ai-search/configuration/retrieval/query-rewriting/
