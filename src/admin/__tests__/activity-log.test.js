@@ -333,6 +333,11 @@ beforeEach( () => {
 	i18n.__.mockClear();
 	i18n.sprintf.mockClear();
 	window.localStorage.clear();
+	window.history.replaceState(
+		null,
+		'',
+		'/wp-admin/options-general.php?page=flavor-agent-activity'
+	);
 } );
 
 describe( 'ActivityLogApp', () => {
@@ -359,6 +364,27 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).not.toContain(
 			'No matching activity'
 		);
+	} );
+
+	test( 'selects the linked activity entry from the URL', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-2'
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-1',
+				suggestion: 'First activity entry',
+			} ),
+			createEntry( {
+				id: 'activity-2',
+				suggestion: 'Linked activity entry',
+			} ),
+		] );
+
+		expect( getSidebarTitle().textContent ).toBe( 'Linked activity entry' );
 	} );
 
 	test( 'renders summary cards from the server response instead of the visible page size', async () => {

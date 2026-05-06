@@ -181,4 +181,42 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 			$capabilities['pattern']['message']
 		);
 	}
+
+	public function test_pattern_surface_requires_synced_index_after_backends_are_configured(): void {
+		WordPressTestState::$capabilities        = [
+			'edit_theme_options' => true,
+			'manage_options'     => true,
+		];
+		WordPressTestState::$options             = [
+			'flavor_agent_openai_provider'                 => 'cloudflare_workers_ai',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			'connectors_ai_openai_api_key'                 => 'connector-key',
+			'wpai_features_enabled'                        => true,
+			'wpai_feature_flavor-agent_enabled'            => true,
+		];
+		WordPressTestState::$connectors          = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		$capabilities = \flavor_agent_get_editor_surface_capabilities(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php'
+		);
+
+		$this->assertFalse( $capabilities['pattern']['available'] );
+		$this->assertSame( 'needs_sync', $capabilities['pattern']['reason'] );
+	}
 }

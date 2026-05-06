@@ -78,6 +78,54 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( '', $parsed['block'][0]['proposedOperations'][0]['position'] );
 	}
 
+	public function test_parse_response_does_not_preserve_nested_operation_target_payloads(): void {
+		$parsed = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => [],
+					'styles'      => [],
+					'block'       => [
+						[
+							'label'            => 'Insert after selected block',
+							'description'      => 'A CTA pattern should follow the selected block.',
+							'type'             => 'structural_recommendation',
+							'attributeUpdates' => '{}',
+							'panel'            => '',
+							'operations'       => [
+								[
+									'type'        => 'insert_pattern',
+									'patternName' => 'theme/hero',
+									'target'      => [
+										'clientId'  => 'block-1',
+										'signature' => 'target-sig',
+										'surface'   => 'block',
+										'type'      => 'block',
+									],
+									'position'    => 'insert_after',
+								],
+							],
+							'currentValue'     => '',
+							'suggestedValue'   => '',
+							'isCurrentStyle'   => false,
+							'isRecommended'    => true,
+							'confidence'       => 0.8,
+							'preview'          => '',
+							'presetSlug'       => '',
+							'cssVar'           => '',
+						],
+					],
+					'explanation' => 'Nested operation targets should not become executable proposals.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $parsed );
+		$this->assertSame( 'insert_pattern', $parsed['block'][0]['proposedOperations'][0]['type'] );
+		$this->assertArrayNotHasKey( 'target', $parsed['block'][0]['proposedOperations'][0] );
+		$this->assertArrayNotHasKey( 'targetClientId', $parsed['block'][0]['proposedOperations'][0] );
+		$this->assertSame( 'theme/hero', $parsed['block'][0]['proposedOperations'][0]['patternName'] );
+	}
+
 	public function test_enforce_block_context_rules_returns_empty_payload_for_disabled_blocks(): void {
 		$result = Prompt::enforce_block_context_rules(
 			[

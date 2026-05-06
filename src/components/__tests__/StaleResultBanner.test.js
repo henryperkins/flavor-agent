@@ -121,4 +121,22 @@ describe( 'StaleResultBanner', () => {
 		const button = getContainer().querySelector( 'button' );
 		expect( button.textContent ).toBe( 'Re-fetch' );
 	} );
+
+	test( 'renders a leading caution icon by default', () => {
+		renderBanner( { message: 'Stale.' } );
+
+		const icon = getContainer().querySelector(
+			'.flavor-agent-stale-banner__icon'
+		);
+		expect( icon ).not.toBeNull();
+	} );
+
+	test( 'omits the leading icon when showIcon is false', () => {
+		renderBanner( { message: 'Stale.', showIcon: false } );
+
+		const icon = getContainer().querySelector(
+			'.flavor-agent-stale-banner__icon'
+		);
+		expect( icon ).toBeNull();
+	} );
 } );

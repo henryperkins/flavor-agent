@@ -359,7 +359,7 @@ final class State {
 				if ( empty( $state['cloudflare_pattern_ai_search_configured'] ) ) {
 					$status_blocks[] = [
 						'tone'    => 'warning',
-						'message' => __( 'Cloudflare AI Search Pattern Storage needs saved Embedding Model credentials and a managed pattern index.', 'flavor-agent' ),
+						'message' => __( 'Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index.', 'flavor-agent' ),
 					];
 				}
 			} elseif ( ! empty( $state['qdrant_configured'] ) && empty( $state['runtime_embedding']['configured'] ) ) {

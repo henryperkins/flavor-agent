@@ -144,6 +144,31 @@ describe( 'block operation catalog', () => {
 		} );
 	} );
 
+	test( 'rejects nested target-only operations because canonical targets are top-level', () => {
+		const result = validateBlockOperationSequence(
+			[
+				{
+					type: BLOCK_OPERATION_INSERT_PATTERN,
+					patternName: 'flavor-agent/cta-with-image',
+					target: {
+						clientId: 'block-1',
+						signature: 'sig:block-1',
+						surface: 'block',
+						type: 'block',
+					},
+					position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
+				},
+			],
+			baseContext
+		);
+
+		expect( result.ok ).toBe( false );
+		expect( result.operations ).toEqual( [] );
+		expect( getRejectedCodes( result ) ).toEqual( [
+			BLOCK_OPERATION_ERROR_MISSING_TARGET_CLIENT_ID,
+		] );
+	} );
+
 	test( 'validates replace operations against the catalog and allowed pattern actions', () => {
 		expect(
 			validateBlockOperationSequence(

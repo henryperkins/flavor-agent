@@ -576,7 +576,7 @@ final class Page {
 		);
 		self::render_subsection_heading(
 			__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
-			__( 'Managed pattern index using the saved Embedding Model credentials.', 'flavor-agent' )
+			__( 'Managed pattern index using the saved Cloudflare credentials from the Embedding Model section.', 'flavor-agent' )
 		);
 		self::render_cloudflare_pattern_ai_search_status_panel( $state, $feedback );
 		self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
@@ -817,7 +817,7 @@ final class Page {
 		if ( ! $embedding_ready ) {
 			self::render_cloudflare_pattern_ai_search_status(
 				'warning',
-				__( 'Needs Embedding Model credentials.', 'flavor-agent' ),
+				__( 'Needs Cloudflare credentials from the Embedding Model section.', 'flavor-agent' ),
 				$instance_id
 			);
 			return;
@@ -1099,7 +1099,7 @@ final class Page {
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
 			return ! empty( $page_state['cloudflare_pattern_ai_search_configured'] )
 				? ''
-				: __( 'Save Embedding Model credentials and create the managed pattern index before syncing.', 'flavor-agent' );
+				: __( 'Save Cloudflare credentials in Embedding Model and create the managed pattern index before syncing.', 'flavor-agent' );
 		}
 
 		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );

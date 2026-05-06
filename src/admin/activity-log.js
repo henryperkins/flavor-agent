@@ -48,6 +48,17 @@ function getBootData() {
 	return window.flavorAgentActivityLog || null;
 }
 
+function getLinkedActivityEntryId() {
+	if ( typeof window === 'undefined' ) {
+		return '';
+	}
+
+	const searchParams = new URLSearchParams( window.location?.search || '' );
+	const activityId = searchParams.get( 'activity' ) || '';
+
+	return typeof activityId === 'string' ? activityId.trim() : '';
+}
+
 function getInvalidDayFilterError() {
 	return __(
 		'Complete or reset the date filter to load activity.',
@@ -786,7 +797,10 @@ export function ActivityLogApp( { bootData } ) {
 	const [ errorKind, setErrorKind ] = useState( '' );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ reloadToken, setReloadToken ] = useState( 0 );
-	const [ selectedEntryId, setSelectedEntryId ] = useState( '' );
+	const linkedActivityEntryId = useMemo( getLinkedActivityEntryId, [] );
+	const [ selectedEntryId, setSelectedEntryId ] = useState(
+		linkedActivityEntryId
+	);
 
 	const requestedView = useMemo(
 		() => normalizeStoredActivityView( view, viewOptions ),
@@ -1265,7 +1279,7 @@ export function ActivityLogApp( { bootData } ) {
 
 	useEffect( () => {
 		if ( responseData.entries.length === 0 ) {
-			if ( selectedEntryId ) {
+			if ( selectedEntryId && ! isLoading ) {
 				setSelectedEntryId( '' );
 			}
 			return;
@@ -1278,7 +1292,7 @@ export function ActivityLogApp( { bootData } ) {
 		) {
 			setSelectedEntryId( responseData.entries[ 0 ].id );
 		}
-	}, [ responseData.entries, selectedEntryId ] );
+	}, [ isLoading, responseData.entries, selectedEntryId ] );
 
 	const summaryCards = getSummaryCards( responseData.summary );
 	const isViewModified = ! areActivityViewsEqual(

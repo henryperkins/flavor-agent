@@ -13,7 +13,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 
 ## Surfacing Conditions
 
-- `window.flavorAgentData.canRecommendPatterns` must be true; that requires the selected pattern backend to be configured in `Settings > Flavor Agent` and a usable text-generation provider in `Settings > Connectors`
+- `window.flavorAgentData.canRecommendPatterns` must be true; that requires a usable text-generation provider in `Settings > Connectors` plus a selected Pattern Storage backend with a ready usable pattern index in `Settings > Flavor Agent`
 - Qdrant storage readiness requires the Cloudflare Workers AI Embedding Model plus Qdrant URL/key
 - Cloudflare AI Search backend readiness requires the Embedding Model Cloudflare account/token/model plus a managed site-owned Cloudflare AI Search pattern index validated against those credentials; it does not call plugin-owned embedding generation or Qdrant
 - A post type must be available from `core/editor`
@@ -44,7 +44,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 | Pattern backend | Embeddings | Vector/index service | Search service | Required settings |
 | --- | --- | --- | --- | --- |
 | Qdrant | Cloudflare Workers AI | Qdrant | Qdrant | Cloudflare Workers AI embeddings, Qdrant, Connectors chat |
-| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Embedding Model credentials, managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
+| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Cloudflare credentials from the Embedding Model section, managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
 
 ## What This Surface Can Do
 
@@ -110,7 +110,8 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - `src/utils/template-types.js` — template slug normalization; see `docs/reference/shared-internals.md`
 - `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
-- `inc/REST/Agent_Controller.php`
+- `src/store/abilities-client.js`
+- `inc/Abilities/RecommendationAbilityExecution.php`
 - `inc/Abilities/PatternAbilities.php`
 - `inc/Patterns/PatternIndex.php`
 - `inc/Patterns/Retrieval/PatternRetrievalBackendFactory.php`

@@ -536,16 +536,43 @@ async function injectStyleBookExample( page, { blockName, blockTitle } ) {
 
 	await page.evaluate(
 		( { nextBlockName, nextBlockTitle } ) => {
+			const fixtureSelector = '[data-flavor-agent-style-book-fixture]';
+			const existingFixture = document.querySelector( fixtureSelector );
+			const fixture = existingFixture || document.createElement( 'div' );
+			const encodedBlockName = encodeURIComponent( nextBlockName );
 			const existingIframe = document.querySelector(
-				'.editor-style-book__iframe'
+				'.editor-style-book__iframe, iframe[title="Style Book"], iframe[data-wp-style-book]'
+			);
+			const existingIframeWasInFixture = Boolean(
+				existingIframe && existingFixture?.contains( existingIframe )
 			);
 			const iframe = existingIframe || document.createElement( 'iframe' );
 
-			iframe.className = 'editor-style-book__iframe';
-			iframe.setAttribute( 'title', 'Style Book' );
+			fixture.className = 'edit-site-global-styles-screen-style-book';
+			fixture.setAttribute(
+				'data-flavor-agent-style-book-fixture',
+				'true'
+			);
+			fixture.innerHTML = '';
+
+			const selectedNavigationItem = document.createElement( 'a' );
+
+			selectedNavigationItem.href = `#example-${ encodedBlockName }`;
+			selectedNavigationItem.setAttribute( 'aria-current', 'page' );
+			selectedNavigationItem.textContent = nextBlockTitle;
+			fixture.appendChild( selectedNavigationItem );
 
 			if ( ! existingIframe ) {
-				document.body.appendChild( iframe );
+				iframe.setAttribute( 'title', 'Style Book' );
+				iframe.setAttribute( 'data-wp-style-book', 'true' );
+			}
+
+			if ( ! existingIframe || existingIframeWasInFixture ) {
+				fixture.appendChild( iframe );
+			}
+
+			if ( ! existingFixture ) {
+				document.body.appendChild( fixture );
 			}
 
 			const iframeDocument = iframe.contentDocument;
@@ -555,17 +582,18 @@ async function injectStyleBookExample( page, { blockName, blockTitle } ) {
 			}
 
 			iframeDocument.open();
-			iframeDocument.write( `<!doctype html>
-<html>
-  <body>
-    <div class="editor-style-book__example is-selected" id="example-${ encodeURIComponent(
-		nextBlockName
-	) }">
-      <div class="editor-style-book__example-title">${ nextBlockTitle }</div>
-    </div>
-  </body>
-</html>` );
+			iframeDocument.write( '<!doctype html><html><body></body></html>' );
 			iframeDocument.close();
+
+			const example = iframeDocument.createElement( 'section' );
+			const title = iframeDocument.createElement( 'div' );
+
+			example.id = `example-${ encodedBlockName }`;
+			example.setAttribute( 'data-wp-style-book-example', nextBlockName );
+			title.setAttribute( 'data-style-book-example-title', 'true' );
+			title.textContent = nextBlockTitle;
+			example.appendChild( title );
+			iframeDocument.body.appendChild( example );
 		},
 		{
 			nextBlockName: blockName,

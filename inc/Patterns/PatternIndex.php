@@ -96,6 +96,86 @@ final class PatternIndex {
 		return ! empty( $state['last_synced_at'] );
 	}
 
+	/**
+	 * @return array{ready: bool, reason: string, state: array<string, mixed>}
+	 */
+	public static function recommendation_index_readiness( ?array $state = null ): array {
+		$state = null === $state ? self::get_runtime_state() : $state;
+
+		if ( ! self::recommendation_backends_configured() ) {
+			return [
+				'ready'  => false,
+				'reason' => 'pattern_backend_unconfigured',
+				'state'  => $state,
+			];
+		}
+
+		$status           = sanitize_key( (string) ( $state['status'] ?? '' ) );
+		$has_usable_index = self::has_usable_index( $state );
+
+		if ( 'ready' === $status ) {
+			return [
+				'ready'  => true,
+				'reason' => 'ready',
+				'state'  => $state,
+			];
+		}
+
+		if ( 'uninitialized' === $status ) {
+			return [
+				'ready'  => false,
+				'reason' => 'needs_sync',
+				'state'  => $state,
+			];
+		}
+
+		if ( 'indexing' === $status ) {
+			return [
+				'ready'  => $has_usable_index,
+				'reason' => $has_usable_index ? 'ready' : 'index_warming',
+				'state'  => $state,
+			];
+		}
+
+		if ( 'stale' === $status ) {
+			if ( self::has_compatibility_drift( $state ) ) {
+				return [
+					'ready'  => false,
+					'reason' => 'index_warming',
+					'state'  => $state,
+				];
+			}
+
+			return [
+				'ready'  => $has_usable_index,
+				'reason' => $has_usable_index ? 'ready' : 'needs_sync',
+				'state'  => $state,
+			];
+		}
+
+		if ( 'error' === $status ) {
+			if ( $has_usable_index ) {
+				return [
+					'ready'  => true,
+					'reason' => 'ready',
+					'state'  => $state,
+				];
+			}
+
+			return [
+				'ready'  => false,
+				'reason' => self::has_retryable_error( $state ) ? 'index_warming' : 'index_unavailable',
+				'state'  => $state,
+			];
+		}
+
+		return [
+			'ready'  => false,
+			'reason' => 'index_unavailable',
+			'state'  => $state,
+		];
+	}
+
 	public static function save_state( array $state ): void {
 		$state['pattern_backend']                = self::normalize_pattern_backend( (string) ( $state['pattern_backend'] ?? '' ) );
 		$state['embedding_dimension']            = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
@@ -204,7 +284,13 @@ final class PatternIndex {
 	}
 
 	public static function handle_dependency_change( ...$args ): void {
-		self::mark_dirty( self::dependency_change_reason( $args ) );
+		$reason = self::dependency_change_reason( $args );
+
+		if ( '' === $reason ) {
+			return;
+		}
+
+		self::mark_dirty( $reason );
 		self::schedule_sync( true );
 	}
 
@@ -505,8 +591,12 @@ final class PatternIndex {
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => 'pattern_backend_changed',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'cloudflare_ai_search_instance_changed',
 			'flavor_agent_cloudflare_workers_ai_account_id',
-			'flavor_agent_cloudflare_workers_ai_api_token' => 'cloudflare_ai_search_signature_changed',
-			'flavor_agent_cloudflare_workers_ai_embedding_model' => 'embedding_signature_changed',
+			'flavor_agent_cloudflare_workers_ai_api_token' => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === self::selected_pattern_backend()
+				? 'cloudflare_ai_search_signature_changed'
+				: '',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === self::selected_pattern_backend()
+				? 'cloudflare_ai_search_signature_changed'
+				: 'embedding_signature_changed',
 			default => 'pattern_registry_changed',
 		};
 	}

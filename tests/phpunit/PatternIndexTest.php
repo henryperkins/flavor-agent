@@ -1084,6 +1084,51 @@ final class PatternIndexTest extends TestCase {
 		$this->assertTrue( PatternIndex::has_compatibility_drift( $state ) );
 	}
 
+	public function test_qdrant_workers_ai_account_and_token_changes_do_not_mark_ready_index_stale(): void {
+		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
+		$this->save_ready_state_for_patterns( $this->current_patterns() );
+		WordPressTestState::$scheduled_events = [];
+
+		WordPressTestState::$options['flavor_agent_cloudflare_workers_ai_api_token'] = 'rotated-token';
+		PatternIndex::handle_dependency_change(
+			'token-xyz',
+			'rotated-token',
+			'flavor_agent_cloudflare_workers_ai_api_token'
+		);
+
+		WordPressTestState::$options['flavor_agent_cloudflare_workers_ai_account_id'] = 'rotated-account';
+		PatternIndex::handle_dependency_change(
+			'account-123',
+			'rotated-account',
+			'flavor_agent_cloudflare_workers_ai_account_id'
+		);
+
+		$state = PatternIndex::get_state();
+
+		$this->assertSame( 'ready', $state['status'] );
+		$this->assertSame( [], $state['stale_reasons'] );
+		$this->assertSame( [], WordPressTestState::$scheduled_events );
+	}
+
+	public function test_cloudflare_ai_search_workers_ai_token_change_marks_signature_drift(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
+		$this->save_ready_cloudflare_ai_search_state_for_patterns( $this->current_patterns() );
+		WordPressTestState::$scheduled_events = [];
+
+		WordPressTestState::$options['flavor_agent_cloudflare_workers_ai_api_token'] = 'rotated-token';
+		PatternIndex::handle_dependency_change(
+			'token-xyz',
+			'rotated-token',
+			'flavor_agent_cloudflare_workers_ai_api_token'
+		);
+
+		$state = PatternIndex::get_state();
+
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'cloudflare_ai_search_signature_changed', $state['stale_reasons'] );
+	}
+
 	private function configure_backends(): void {
 			WordPressTestState::$options = array_merge(
 				WordPressTestState::$options,

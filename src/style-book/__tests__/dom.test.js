@@ -50,6 +50,26 @@ describe( 'style-book/dom selectors', () => {
 			);
 		} );
 
+		test( 'prefers the Site Editor Styles region when multiple aria-labelled regions exist', () => {
+			document.body.innerHTML = `
+				<div role="region" aria-label="Styles" id="theme-styles"></div>
+				<div class="edit-site-sidebar">
+					<div role="region" aria-label="Styles" id="site-editor-styles"></div>
+				</div>
+			`;
+			expect( findStylesSidebarMountNode( document )?.id ).toBe(
+				'site-editor-styles'
+			);
+		} );
+
+		test( 'avoids choosing between multiple unrelated Styles regions', () => {
+			document.body.innerHTML = `
+				<div role="region" aria-label="Styles" id="theme-styles"></div>
+				<div role="region" aria-label="Styles" id="block-styles"></div>
+			`;
+			expect( findStylesSidebarMountNode( document ) ).toBeNull();
+		} );
+
 		test( 'returns null when no candidate exists', () => {
 			expect( findStylesSidebarMountNode( document ) ).toBeNull();
 		} );
@@ -67,6 +87,18 @@ describe( 'style-book/dom selectors', () => {
 				<iframe class="editor-style-book__iframe" id="sb"></iframe>
 			`;
 			expect( findStyleBookIframe( document )?.id ).toBe( 'sb' );
+		} );
+
+		test( 'falls back to a titled iframe inside the Style Book subtree', () => {
+			document.body.innerHTML = `
+				<iframe title="Style Book preview" id="unrelated"></iframe>
+				<div class="edit-site-global-styles-screen-style-book">
+					<iframe title="Style Book" id="semantic-style-book"></iframe>
+				</div>
+			`;
+			expect( findStyleBookIframe( document )?.id ).toBe(
+				'semantic-style-book'
+			);
 		} );
 
 		test( 'returns null when no style-book iframe is present', () => {
@@ -113,6 +145,68 @@ describe( 'style-book/dom selectors', () => {
 				blockName: 'core/paragraph',
 				blockTitle: '',
 			} );
+		} );
+
+		test( 'resolves selected examples from semantic data attributes', () => {
+			document.body.innerHTML =
+				'<iframe class="editor-style-book__iframe"></iframe>';
+			const iframe = document.querySelector( 'iframe' );
+			setIframeMarkup(
+				iframe,
+				`<section data-wp-style-book-example="core/quote" aria-current="true" data-style-book-block-title="Quote"></section>`
+			);
+
+			expect( getSelectedStyleBookTarget( document ) ).toEqual( {
+				blockName: 'core/quote',
+				blockTitle: 'Quote',
+			} );
+		} );
+
+		test( 'resolves the active target from selected Style Book navigation state', () => {
+			document.body.innerHTML = `
+				<div class="edit-site-global-styles-screen-style-book">
+					<a href="#example-core%2Fparagraph" aria-current="page">Paragraph</a>
+				</div>
+				<iframe class="editor-style-book__iframe"></iframe>
+			`;
+			const iframe = document.querySelector( 'iframe' );
+			setIframeMarkup(
+				iframe,
+				`<section id="example-core%2Fparagraph">
+					<div class="editor-style-book__example-title">Paragraph block</div>
+				</section>`
+			);
+
+			expect( getSelectedStyleBookTarget( document ) ).toEqual( {
+				blockName: 'core/paragraph',
+				blockTitle: 'Paragraph',
+			} );
+		} );
+
+		test( 'keeps selected navigation fallback constrained to Style Book containers', () => {
+			document.body.innerHTML = `
+				<a href="#example-core%2Fheading" aria-current="page">Heading</a>
+				<iframe class="editor-style-book__iframe"></iframe>
+			`;
+			const iframe = document.querySelector( 'iframe' );
+			setIframeMarkup(
+				iframe,
+				`<section id="example-core%2Fheading"></section>`
+			);
+
+			expect( getSelectedStyleBookTarget( document ) ).toBeNull();
+		} );
+
+		test( 'ignores malformed encoded example ids without throwing', () => {
+			document.body.innerHTML =
+				'<iframe class="editor-style-book__iframe"></iframe>';
+			const iframe = document.querySelector( 'iframe' );
+			setIframeMarkup(
+				iframe,
+				`<div class="editor-style-book__example is-selected" id="example-core%2Gparagraph"></div>`
+			);
+
+			expect( getSelectedStyleBookTarget( document ) ).toBeNull();
 		} );
 
 		test( 'returns null when the selected example id has no example- prefix', () => {

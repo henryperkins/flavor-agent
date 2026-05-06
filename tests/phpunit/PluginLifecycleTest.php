@@ -52,6 +52,41 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertHookRegistered( 'update_option_home', [ PatternIndex::class, 'handle_dependency_change' ] );
 	}
 
+	public function test_plugin_bootstrap_does_not_register_native_recommended_pattern_category(): void {
+		do_action( 'init' );
+
+		$this->assertArrayNotHasKey(
+			'recommended',
+			WordPressTestState::$registered_block_pattern_categories,
+			'Pattern recommendations must render in Flavor Agent local shelves without registering a native Gutenberg pattern category.'
+		);
+	}
+
+	public function test_plugin_bootstrap_does_not_reorder_native_pattern_categories(): void {
+		$settings = [
+			'blockPatternCategories' => [
+				[
+					'name'  => 'theme',
+					'label' => 'Theme',
+				],
+				[
+					'name'  => 'recommended',
+					'label' => 'Recommended',
+				],
+				[
+					'name'  => 'text',
+					'label' => 'Text',
+				],
+			],
+		];
+
+		$this->assertSame(
+			$settings,
+			apply_filters( 'block_editor_settings_all', $settings ),
+			'Flavor Agent must not reorder Gutenberg native pattern categories for the local recommendation shelf.'
+		);
+	}
+
 	public function test_plugin_bootstrap_does_not_register_ai_feature_option_seeding_on_admin_init(): void {
 		$this->assertHookRegistered( 'admin_init', [ \FlavorAgent\Settings::class, 'register_settings' ] );
 		$this->assertHookNotRegistered( 'admin_init', [ \FlavorAgent\AI\FeatureBootstrap::class, 'seed_ai_feature_options' ] );
@@ -106,6 +141,31 @@ final class PluginLifecycleTest extends TestCase {
 				'https://example.test/wp-admin/options-connectors.php'
 			)['enableBlockStructuralActions']
 		);
+	}
+
+	public function test_editor_bootstrap_exposes_activity_log_url_for_admins(): void {
+		WordPressTestState::$capabilities['manage_options'] = true;
+
+		$data = flavor_agent_get_editor_bootstrap_data(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php'
+		);
+
+		$this->assertSame(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent-activity',
+			$data['activityLogUrl']
+		);
+	}
+
+	public function test_editor_bootstrap_omits_activity_log_url_for_non_admins(): void {
+		WordPressTestState::$capabilities['manage_options'] = false;
+
+		$data = flavor_agent_get_editor_bootstrap_data(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php'
+		);
+
+		$this->assertSame( '', $data['activityLogUrl'] );
 	}
 
 	public function test_activation_installs_activity_storage_and_schedules_background_work(): void {

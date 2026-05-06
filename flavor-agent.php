@@ -136,47 +136,6 @@ add_action(
 	[ FlavorAgent\Activity\Repository::class, 'prune' ]
 );
 
-// Recommended pattern category for AI-ranked patterns in the inserter.
-add_action(
-	'init',
-	function () {
-		register_block_pattern_category(
-			'recommended',
-			[
-				'label' => __( 'Recommended', 'flavor-agent' ),
-			]
-		);
-	}
-);
-
-add_filter(
-	'block_editor_settings_all',
-	function ( $settings ) {
-		// Prefer stable key when core promotes it; fall back to experimental.
-		$cats_key = isset( $settings['blockPatternCategories'] )
-			? 'blockPatternCategories'
-			: '__experimentalBlockPatternCategories';
-
-		$cats        = $settings[ $cats_key ] ?? [];
-		$recommended = null;
-		$rest        = [];
-
-		foreach ( $cats as $cat ) {
-			if ( ( $cat['name'] ?? '' ) === 'recommended' ) {
-				$recommended = $cat;
-			} else {
-				$rest[] = $cat;
-			}
-		}
-
-		if ( $recommended ) {
-			$settings[ $cats_key ] = array_merge( [ $recommended ], $rest );
-		}
-
-		return $settings;
-	}
-);
-
 function flavor_agent_enqueue_editor(): void {
 	if ( ! FlavorAgent\AI\FeatureBootstrap::editor_runtime_available() ) {
 		return;
@@ -276,6 +235,7 @@ function flavor_agent_get_editor_bootstrap_data(
 		'nonce'                        => wp_create_nonce( 'wp_rest' ),
 		'settingsUrl'                  => $settings_url,
 		'connectorsUrl'                => $connectors_url,
+		'activityLogUrl'               => $can_manage_settings ? admin_url( 'options-general.php?page=flavor-agent-activity' ) : '',
 		'canManageFlavorAgentSettings' => $can_manage_settings,
 		'enableBlockStructuralActions' => flavor_agent_block_structural_actions_enabled(),
 		'capabilities'                 => [

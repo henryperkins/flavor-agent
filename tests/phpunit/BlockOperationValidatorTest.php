@@ -140,6 +140,23 @@ final class BlockOperationValidatorTest extends TestCase {
 				$base,
 				BlockOperationValidator::ERROR_STALE_TARGET,
 			],
+			'nested target only'         => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'theme/hero',
+						'target'      => [
+							'clientId'  => 'block-1',
+							'signature' => 'target-sig',
+							'surface'   => 'block',
+							'type'      => 'block',
+						],
+						'position'    => 'insert_after',
+					],
+				],
+				$base,
+				BlockOperationValidator::ERROR_MISSING_TARGET_CLIENT_ID,
+			],
 			'target signature mismatch'  => [
 				[
 					[

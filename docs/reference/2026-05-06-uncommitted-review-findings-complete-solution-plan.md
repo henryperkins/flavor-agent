@@ -125,7 +125,7 @@ Replace the Cloudflare AI Search sentence in `readme.txt` setup ownership with t
 Replace the Cloudflare AI Search private pattern retrieval bullet with:
 
 ```text
-* Cloudflare AI Search for private pattern retrieval — Used when the Cloudflare AI Search pattern backend is selected and the Cloudflare Workers AI Embedding Model account ID, API token, and embedding model are saved in `Settings > Flavor Agent`. Flavor Agent creates or adopts the deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance in the `patterns` namespace and validates its metadata schema, owner marker, and embedding model before using it. Requests can include validation search probes, owner-marker reads/uploads, pattern item uploads with title, description, categories, block/template metadata, inferred traits, public-safe pattern content, synced identifiers/status, recommendation query text, and visible pattern names as search filters. Sync uploads only public-safe registered and published synced patterns; recommendation requests re-check current synced-pattern status/readability before ranking or returning results. Cloudflare Terms: https://www.cloudflare.com/terms/ Privacy: https://www.cloudflare.com/privacypolicy/
+* Cloudflare AI Search for private pattern retrieval — Used when the Cloudflare AI Search pattern backend is selected and the Cloudflare Workers AI Embedding Model account ID, API token, and embedding model are saved in `Settings > Flavor Agent`. Flavor Agent creates or adopts the deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance in the `patterns` namespace and validates its metadata schema, owner marker, and embedding model before using it. Requests can include managed-instance list/create calls, owner-marker reads/uploads, pattern item uploads with title, description, categories, block/template metadata, inferred traits, public-safe pattern content, synced identifiers/status, recommendation query text, and visible pattern names as search filters. Sync uploads only public-safe registered patterns and published user `wp_block` patterns across synced, partial, and unsynced states; recommendation requests re-check current synced-pattern status/readability before ranking or returning results. Cloudflare Terms: https://www.cloudflare.com/terms/ Privacy: https://www.cloudflare.com/privacypolicy/
 ```
 
 - [ ] **Step 3: Update `docs/reference/external-service-disclosure.md`**
@@ -167,7 +167,7 @@ Replace the Cloudflare AI Search row in the backend matrix with:
 Replace the readiness bullet with:
 
 ```text
-6. The Cloudflare AI Search pattern backend can be ready when the Embedding Model account ID, API token, embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because it uses managed indexing/search instead of `EmbeddingClient`.
+6. The Cloudflare AI Search pattern backend can be ready when the Embedding Model account ID, API token, embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because pattern sync/retrieval uses managed indexing/search instead of `EmbeddingClient`; save-time setup still validates the shared Embedding Model credentials before creating or adopting that managed instance.
 ```
 
 Replace the `cloudflare_ai_search` table setup cell with:

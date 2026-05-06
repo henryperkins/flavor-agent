@@ -8,15 +8,15 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Global Styles mounts: portal into `.editor-global-styles-sidebar__panel`, with `PluginDocumentSettingPanel` fallback named `AI Style Suggestions`
 - Style Book location: Site Editor Styles sidebar while the native Style Book example is active
 - Style Book mounts: portal into the same styles sidebar slot, with `PluginDocumentSettingPanel` fallback named `AI Style Book Suggestions`
-- Global Styles scope contract: the current `root/globalStyles` entity resolved from `core.__experimentalGetCurrentGlobalStylesId()` plus `getEditedEntityRecord( 'root', 'globalStyles', id )`
-- Style Book scope contract: the same `root/globalStyles` entity plus the active Style Book target block name/title
+- Global Styles scope contract: `getGlobalStylesUserConfig()` resolves the current `root/globalStyles` entity id, user config, merged config, and available variations
+- Style Book scope contract: the same `root/globalStyles` entity plus the active Style Book target block name/title when one resolves; when the Style Book UI is active, the panel can render a scope notice before a valid registered example block is selected
 - Shared identifiers: JS surfaces `global-styles` and `style-book`, localized capability keys `globalStyles` and `styleBook`, activity scope keys `global_styles:<id>` and `style_book:<id>:<blockName>`
 
 ## Surfacing Conditions
 
 - `GlobalStylesRecommender()` renders only when the native Styles sidebar is active and Style Book is not the current target
-- `StyleBookRecommender()` renders only when the native Style Book example target is active
-- Both panels stay visible with a capability notice when the corresponding localized capability flag is false; readiness uses the shared `SurfaceCapabilities` payload exposed through localized bootstrap data and `flavor-agent/check-status`
+- `StyleBookRecommender()` renders when the Site Editor Styles sidebar and Style Book UI are active; recommendation requests stay disabled with a scope notice until the native Style Book example target resolves to a registered block
+- Within those active Styles sidebar contexts, both panels stay visible with a capability notice when the corresponding localized capability flag is false; outside those contexts the components return `null`. Readiness uses the shared `SurfaceCapabilities` payload exposed through localized bootstrap data and `flavor-agent/check-status`
 - Requests require an active Flavor Agent chat backend plus `edit_theme_options`
 - Apply and undo stay available only while the current scope and live user config still match the recorded activity contract
 
@@ -192,7 +192,7 @@ User opens the Site Editor Styles sidebar
 - `applyGlobalStylesSuggestion()` and `applyStyleBookSuggestion()` keep the local stale guard first, then re-post the same request with `resolveSignatureOnly: true` and only allow the deterministic executor to run when the current `resolvedContextSignature` still matches the stored result; docs grounding changes alone do not stale review or apply state.
 - The current ready-result prompt is hydrated back into the composer once per result token, which keeps preloaded or restored results fresh on mount and only marks them stale after the user edits the prompt or the live style context changes.
 - `styleContext.templateStructure` and `styleContext.templateVisibility` always come from the live editor canvas. They are sent alongside `currentConfig`, `mergedConfig`, design semantics, and supported-path metadata so style prompts and docs grounding stay aligned with the unsaved template the user is actually previewing.
-- Style Book docs grounding uses the shared cache/fallback collector. Exact, family, and block-scoped entity cache hits are reused immediately; on generic or missing fallback guidance, a full request may perform a foreground docs warm before queuing async warming. Docs churn still stays out of the review and apply freshness signatures.
+- Global Styles and Style Book docs grounding use the shared cache/fallback collector. Exact, family, and block-scoped entity cache hits are reused immediately; on generic or missing fallback guidance, a full request may perform a foreground docs warm before queuing async warming. Docs churn still stays out of the review and apply freshness signatures.
 - When a result becomes stale, the surfaces keep the previous cards visible for comparison but disable review/apply until the user refreshes against the live context.
 
 ## What This Surface Can Do
@@ -255,7 +255,8 @@ User opens the Site Editor Styles sidebar
 - `src/store/activity-history.js` — scope resolution for Global Styles and Style Book; see `docs/reference/shared-internals.md`
 - `src/components/ActivitySessionBootstrap.js`
 - `src/components/AIActivitySection.js`
-- `inc/REST/Agent_Controller.php`
+- `src/store/abilities-client.js`
+- `inc/Abilities/RecommendationAbilityExecution.php`
 - `inc/Abilities/StyleAbilities.php`
 - `inc/Abilities/SurfaceCapabilities.php`
 - `inc/LLM/StylePrompt.php`

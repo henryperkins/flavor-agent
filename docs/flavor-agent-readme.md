@@ -93,7 +93,7 @@ The request includes:
 
 The response is parsed into `settings`, `styles`, and `block` suggestion groups. Applying a suggestion now uses a safe nested merge path so partial `style` and `metadata` updates do not wipe unrelated state. Loading and error state are tracked per selected block, and the backend now mirrors the same `disabled` / `contentOnly` restriction matrix that the editor enforces client-side.
 
-This surface now has three deliberate layers. The main block panel keeps direct apply for safe local attribute changes, broader block ideas render through the shared advisory section, and stale results stay visible with an explicit refresh action instead of silently clearing. Delegated native Inspector sub-panels now mirror the current settings/style result passively instead of acting as separate apply surfaces, and selected `core/navigation` blocks add a nested advisory-only `Recommended Next Changes` flow. Content-only blocks suppress style execution while still allowing contract-valid advisory block ideas to remain visible.
+This surface now has three deliberate layers. The main block panel keeps direct apply for safe local attribute changes, broader block ideas render through the shared advisory section, and stale results stay visible with an explicit refresh action instead of silently clearing. Delegated native Inspector sub-panels now mirror the current settings/style result passively instead of acting as separate apply surfaces, and selected `core/navigation` blocks add a nested advisory-only `Navigation Ideas` flow. Content-only blocks suppress style execution while still allowing contract-valid advisory block ideas to remain visible.
 
 Block attribute role detection now reads the stable `role` key only. Compatibility with deprecated `__experimentalRole` is intentionally no longer preserved on the WordPress 7.0+ support floor.
 
@@ -126,7 +126,7 @@ Template recommendations are exposed through the `flavor-agent/recommend-templat
 The client behavior is:
 
 - Available only while editing a `wp_template` entity in the Site Editor.
-- Suggestions use the shared featured-hero plus `Review first` / `Manual ideas` split; the user explicitly opens review and confirms each validated operation set before the template is mutated.
+- Fresh suggestions render explanation text plus `Review first` / `Manual ideas` lanes; stale same-template results use the shared refresh hero. The user explicitly opens review and confirms each validated operation set before the template is mutated.
 - Supported executable operations are `assign_template_part`, `replace_template_part`, and `insert_pattern`.
 - Template candidate patterns are narrowed by current inserter-root `visiblePatternNames` when the editor exposes that context.
 - Same-template drift keeps prior results visible as stale reference material and disables review/apply until refresh.
@@ -166,7 +166,7 @@ Global Styles and Style Book recommendations are exposed through the `flavor-age
 
 The client behavior is:
 
-- Available only while the Site Editor Styles sidebar is active for the current `root/globalStyles` entity; Style Book additionally requires an active example target block.
+- Available only while the Site Editor Styles sidebar is active for the current `root/globalStyles` entity; Style Book can render before a valid example target resolves, but recommendation requests require an active registered example target block.
 - Prefers portal-first native Styles sidebar mounts and falls back to `PluginDocumentSettingPanel` shells implemented in `src/global-styles/GlobalStylesRecommender.js` and `src/style-book/StyleBookRecommender.js`.
 - Uses the shared `flavor-agent` data store for request state, preview state, apply state, editor-scoped activity hydration, and undo.
 - Uses the shared featured-hero plus `Review first` / `Manual ideas` split, generic `Confirm Apply` review CTA, and scoped stale/refresh treatment. Preview/apply controls only appear for validated `set_styles`, `set_block_styles`, and `set_theme_variation` operations.
@@ -188,7 +188,7 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend reuses the Embedding Model account/token and stores private pattern content in the saved AI Search pattern index.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend reuses the Embedding Model account/token to create or adopt a managed private AI Search pattern index, then uploads sanitized public-safe registered and published user pattern markdown.
 
 Flavor Agent uses its built-in public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not enter Cloudflare account, instance, or token values for Developer Docs.
 
@@ -212,10 +212,11 @@ Configured options:
 - `flavor_agent_guideline_images`
 - `flavor_agent_guideline_additional`
 - `flavor_agent_guideline_blocks`
+- `flavor_agent_block_structural_actions_enabled`
 
 `flavor_agent_openai_provider` is kept as a compatibility option for older saved chat/provider state. The settings screen writes `cloudflare_workers_ai` for the embedding path on save.
 
-`flavor_agent_reasoning_effort` is the neutral saved option used by the Connectors-routed chat runtime when present. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source, and the Azure-named option is no longer the active setting. Flavor Agent maps the neutral value to Codex `reasoningEffort` and OpenAI `reasoning.effort` model custom options today; Anthropic is intentionally left unmapped until its provider contract is documented. Developer Docs always uses the built-in public docs endpoint and exposes only source status plus the max grounding source count.
+`flavor_agent_reasoning_effort` is the neutral saved option used by the Connectors-routed chat runtime when present. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source, and the Azure-named option is no longer the active setting. Flavor Agent first tries standardized WordPress AI Client reasoning methods; provider-specific model custom-option fallback is limited to known pinned provider IDs today: Codex `reasoningEffort` and OpenAI `reasoning.effort`. Anthropic is intentionally left unmapped until its provider contract is documented. Developer Docs always uses the built-in public docs endpoint and exposes only source status plus the max grounding source count.
 
 The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and refreshes the live sync status panel in place.
 
@@ -244,7 +245,7 @@ Implemented abilities:
 - `flavor-agent/recommend-navigation`
 - `flavor-agent/check-status`
 
-All currently registered abilities in the tree are implemented. On WordPress 7.0 admin screens, core now enqueues `@wordpress/core-abilities`, so these server-registered abilities are also hydrated into the client-side `core/abilities` store automatically. Flavor Agent's first-party editor UI still uses its own REST endpoints and `flavor-agent` data store so prompt scoping, preview/apply, and undo stay tightly bounded.
+All ability contracts in the tree are implemented. The 13 helper/read abilities register whenever the Abilities API exists; the seven recommendation abilities register only when the WordPress AI plugin contracts are available and Flavor Agent is enabled. On WordPress 7.0 admin screens, core now enqueues `@wordpress/core-abilities`, so registered server-side abilities are also hydrated into the client-side `core/abilities` store automatically. Flavor Agent's first-party editor UI uses the `flavor-agent` data store with an abilities bridge so prompt scoping, preview/apply, and undo stay tightly bounded.
 
 ## Pattern Index Lifecycle
 
@@ -255,7 +256,7 @@ Current lifecycle behavior:
 - Activation marks the catalog dirty and schedules a sync when the selected pattern backend is configured.
 - Theme switches, plugin activation/deactivation, upgrades, and relevant settings changes mark the index dirty and schedule a background refresh.
 - Deactivation clears the scheduled reindex hook and any active sync lock.
-- Uninstall removes legacy/direct provider, Qdrant, and Cloudflare grounding options, pattern index state, docs warm state/queue, the sync lock, and selected scheduled hooks.
+- Uninstall removes plugin-owned provider, embedding, Qdrant, Cloudflare AI Search, docs grounding/runtime, pattern sync, activity, guideline, and experiment state, drops the activity table, and clears Flavor Agent scheduled hooks/transients.
 
 ## Development
 

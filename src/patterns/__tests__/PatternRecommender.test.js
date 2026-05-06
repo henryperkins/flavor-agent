@@ -540,10 +540,13 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		expect( document.body.textContent ).toContain( 'Hero' );
-		expect( document.body.textContent ).toContain(
-			'AI-ranked patterns stay local to this shelf.'
-		);
+		const shelfText = inserterContainer.textContent;
+
+		expect( shelfText ).toContain( 'Hero' );
+		expect( shelfText ).toContain( 'Flavor Agent' );
+		expect( shelfText ).toContain( '1 recommendation' );
+		expect( shelfText ).not.toContain( 'native pattern registry' );
+		expect( shelfText ).not.toContain( 'Gutenberg' );
 	} );
 
 	test( 'renders an error notice with retry inside the inserter when ranking fails', () => {
@@ -609,13 +612,14 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		expect( document.body.textContent ).toContain( 'Hero' );
-		expect( document.body.textContent ).toContain(
-			'Recommended hero pattern.'
-		);
-		expect( document.body.textContent ).toContain(
-			'AI-ranked patterns stay local to this shelf.'
-		);
+		const shelfText = inserterContainer.textContent;
+
+		expect( shelfText ).toContain( 'Hero' );
+		expect( shelfText ).toContain( 'Recommended hero pattern.' );
+		expect( shelfText ).toContain( 'Flavor Agent' );
+		expect( shelfText ).toContain( '1 recommendation' );
+		expect( shelfText ).not.toContain( 'native pattern registry' );
+		expect( shelfText ).not.toContain( 'Gutenberg' );
 
 		act( () => {
 			Array.from( inserterContainer.querySelectorAll( 'button' ) )

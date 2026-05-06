@@ -93,30 +93,21 @@ function getContextTargetSignature( context = {} ) {
 }
 
 function getOperationTargetClientId( rawOperation = {} ) {
-	return toNonEmptyString(
-		rawOperation.targetClientId || rawOperation.target?.clientId
-	);
+	return toNonEmptyString( rawOperation.targetClientId );
 }
 
 function getOperationTargetSignature( rawOperation = {} ) {
-	return toNonEmptyString(
-		rawOperation.targetSignature || rawOperation.target?.signature
-	);
+	return toNonEmptyString( rawOperation.targetSignature );
 }
 
 function getOperationTargetSurface( rawOperation = {} ) {
 	return toNonEmptyString(
-		rawOperation.surface ||
-			rawOperation.targetSurface ||
-			rawOperation.target?.surface ||
-			'block'
+		rawOperation.surface || rawOperation.targetSurface || 'block'
 	);
 }
 
 function getOperationTargetType( rawOperation = {} ) {
-	return toNonEmptyString(
-		rawOperation.targetType || rawOperation.target?.type || 'block'
-	);
+	return toNonEmptyString( rawOperation.targetType || 'block' );
 }
 
 function getAllowedActions( pattern = {} ) {

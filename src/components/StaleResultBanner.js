@@ -9,6 +9,7 @@
  * Replaces per-surface inline stale rendering with a single treatment.
  */
 import { Button } from '@wordpress/components';
+import { caution } from '@wordpress/icons';
 
 import { joinClassNames } from '../utils/format-count';
 import { REFRESH_ACTION_LABEL } from './surface-labels';
@@ -19,6 +20,7 @@ export default function StaleResultBanner( {
 	isRefreshing = false,
 	refreshLabel = REFRESH_ACTION_LABEL,
 	variant = 'inline',
+	showIcon = true,
 	className = '',
 } ) {
 	if ( ! message ) {
@@ -37,6 +39,14 @@ export default function StaleResultBanner( {
 			role="status"
 			aria-live="polite"
 		>
+			{ showIcon && (
+				<span
+					className="flavor-agent-stale-banner__icon"
+					aria-hidden="true"
+				>
+					{ caution }
+				</span>
+			) }
 			<p className="flavor-agent-stale-banner__message">{ message }</p>
 
 			{ typeof onRefresh === 'function' && (
@@ -47,7 +57,7 @@ export default function StaleResultBanner( {
 					disabled={ isRefreshing }
 					className="flavor-agent-stale-banner__refresh"
 				>
-					{ isRefreshing ? `${ refreshLabel }\u2026` : refreshLabel }
+					{ isRefreshing ? `${ refreshLabel }…` : refreshLabel }
 				</Button>
 			) }
 		</div>

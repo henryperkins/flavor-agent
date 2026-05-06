@@ -26,14 +26,14 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `flavor-agent/introspect-block`, `flavor-agent/list-allowed-blocks`, `flavor-agent/list-patterns`, `flavor-agent/get-pattern`, `flavor-agent/list-synced-patterns`, `flavor-agent/get-synced-pattern`, `flavor-agent/get-active-theme`, `flavor-agent/get-theme-presets`, `flavor-agent/get-theme-styles`, `flavor-agent/get-theme-tokens`, and `flavor-agent/check-status` require `edit_posts`
 - `flavor-agent/list-template-parts` allows callers with either `edit_posts` or `edit_theme_options`; `includeContent: true` is silently coerced to metadata-only when the caller lacks `edit_theme_options`
-- `flavor-agent/search-wordpress-docs` requires `manage_options` and a valid docs backend; by default that is the managed public Cloudflare AI Search endpoint, with legacy Cloudflare credentials still supported for backwards compatibility
+- `flavor-agent/search-wordpress-docs` requires `manage_options`; it uses Flavor Agent's built-in public WordPress Developer Docs AI Search endpoint, not site-owner Cloudflare credentials
 - `flavor-agent/check-status` only reports what is currently available; it does not change configuration or retry backends
 - `flavor-agent/search-wordpress-docs` accepts a query plus optional `maxResults` and `entityKey` fields
 
 ## Shared Interaction Model
 
-- These helpers are read-only from the editor's point of view
-- They do not create editor activity entries and do not participate in inline undo
+- These helper/read abilities are read-only from the editor's point of view
+- They do not create editor activity entries and do not participate in inline undo; recommendation abilities are separate and may persist request-diagnostic activity
 - They are intended as building blocks for external agents and admin-facing diagnostics rather than direct end-user editor flows
 
 ## End-To-End Flow
@@ -58,10 +58,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Guardrails And Failure Modes
 
-- Docs search fails closed only if no valid docs backend resolves, for example when the managed public endpoint is disabled or invalid and no working legacy Cloudflare credentials are available
+- Docs search fails closed for empty queries, invalid or unavailable public endpoint config, HTTP/search/parse errors, or responses that yield no trusted `developer.wordpress.org` guidance
 - Only `developer.wordpress.org` guidance is accepted by the docs-search pipeline
 - Empty docs queries return a `missing_query` error
-- `search-wordpress-docs` may warm exact-query or entity cache entries, but that background behavior never blocks the caller
+- `search-wordpress-docs` may warm exact-query or entity cache entries through the public endpoint for the caller's explicit request; recommendation-time pattern grounding separately disables foreground warming
 - There is no direct apply or undo path for any helper ability
 
 ## Current Contract Notes

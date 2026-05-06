@@ -32,272 +32,6 @@ function getExecutionSummary( entry ) {
 	return parts.join( ' · ' );
 }
 
-function getExecutionPathLabel( entry ) {
-	return getRequestMeta( entry )?.pathLabel || '';
-}
-
-function getNumericMetric( value ) {
-	if ( typeof value === 'number' && Number.isFinite( value ) ) {
-		return value;
-	}
-
-	if ( typeof value === 'string' && value.trim() ) {
-		const parsed = Number( value );
-
-		if ( Number.isFinite( parsed ) ) {
-			return parsed;
-		}
-	}
-
-	return null;
-}
-
-function getTokenUsageLabel( requestMeta ) {
-	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
-		return '';
-	}
-
-	const totalTokens = getNumericMetric( requestMeta?.tokenUsage?.total );
-
-	if ( totalTokens !== null ) {
-		return `${ totalTokens } total tokens`;
-	}
-
-	const inputTokens = getNumericMetric( requestMeta?.tokenUsage?.input );
-	const outputTokens = getNumericMetric( requestMeta?.tokenUsage?.output );
-
-	if ( inputTokens === null && outputTokens === null ) {
-		return '';
-	}
-
-	return [
-		inputTokens !== null ? `${ inputTokens } input` : null,
-		outputTokens !== null ? `${ outputTokens } output` : null,
-	]
-		.filter( Boolean )
-		.join( ' / ' );
-}
-
-function getLatencyLabel( requestMeta ) {
-	const latencyMs = getNumericMetric( requestMeta?.latencyMs );
-
-	return latencyMs !== null ? `${ latencyMs } ms` : '';
-}
-
-function getTransportEndpointLabel( requestMeta ) {
-	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
-		return '';
-	}
-
-	const host =
-		typeof requestMeta?.transport?.host === 'string'
-			? requestMeta.transport.host.trim()
-			: '';
-	const path =
-		typeof requestMeta?.transport?.path === 'string'
-			? requestMeta.transport.path.trim()
-			: '';
-
-	if ( ! host ) {
-		return '';
-	}
-
-	return `${ host }${ path || '' }`;
-}
-
-function getTimeoutLabel( requestMeta ) {
-	const timeoutSeconds = getNumericMetric(
-		requestMeta?.transport?.timeoutSeconds
-	);
-
-	return timeoutSeconds !== null ? `${ timeoutSeconds } s` : '';
-}
-
-function getPayloadSummaryLabel( requestMeta ) {
-	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
-		return '';
-	}
-
-	const bodyBytes = getNumericMetric(
-		requestMeta?.requestSummary?.bodyBytes
-	);
-	const instructionsChars = getNumericMetric(
-		requestMeta?.requestSummary?.instructionsChars
-	);
-	const inputChars = getNumericMetric(
-		requestMeta?.requestSummary?.inputChars
-	);
-	const maxOutputTokens = getNumericMetric(
-		requestMeta?.requestSummary?.maxOutputTokens
-	);
-	const reasoningEffort =
-		typeof requestMeta?.requestSummary?.reasoningEffort === 'string'
-			? requestMeta.requestSummary.reasoningEffort.trim()
-			: '';
-
-	const parts = [
-		bodyBytes !== null ? `${ bodyBytes } bytes` : null,
-		instructionsChars !== null
-			? `${ instructionsChars } instruction chars`
-			: null,
-		inputChars !== null ? `${ inputChars } input chars` : null,
-		maxOutputTokens !== null
-			? `${ maxOutputTokens } max output tokens`
-			: null,
-		reasoningEffort ? `reasoning ${ reasoningEffort }` : null,
-	];
-
-	return parts.filter( Boolean ).join( ' · ' );
-}
-
-function getResponseSummaryLabel( requestMeta ) {
-	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
-		return '';
-	}
-
-	const httpStatus = getNumericMetric(
-		requestMeta?.responseSummary?.httpStatus
-	);
-	const bodyBytes = getNumericMetric(
-		requestMeta?.responseSummary?.bodyBytes
-	);
-	const processingMs = getNumericMetric(
-		requestMeta?.responseSummary?.processingMs
-	);
-	const retryAfter = getNumericMetric(
-		requestMeta?.responseSummary?.retryAfter
-	);
-	const region =
-		typeof requestMeta?.responseSummary?.region === 'string'
-			? requestMeta.responseSummary.region.trim()
-			: '';
-
-	const parts = [
-		httpStatus !== null ? `HTTP ${ httpStatus }` : null,
-		bodyBytes !== null ? `${ bodyBytes } bytes` : null,
-		processingMs !== null ? `${ processingMs } ms processing` : null,
-		retryAfter !== null ? `${ retryAfter } s retry-after` : null,
-		region ? `region ${ region }` : null,
-	];
-
-	return parts.filter( Boolean ).join( ' · ' );
-}
-
-function getProviderRequestIdLabel( requestMeta ) {
-	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
-		return '';
-	}
-
-	return typeof requestMeta?.responseSummary?.providerRequestId === 'string'
-		? requestMeta.responseSummary.providerRequestId.trim()
-		: '';
-}
-
-function getWrappedTransportErrorLabel( requestMeta ) {
-	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
-		return '';
-	}
-
-	return typeof requestMeta?.errorSummary?.wrappedMessage === 'string'
-		? requestMeta.errorSummary.wrappedMessage.trim()
-		: '';
-}
-
-function getExecutionDetailLines( entry ) {
-	const requestMeta = getRequestMeta( entry );
-	const selectedProvider =
-		requestMeta?.selectedProviderLabel ||
-		requestMeta?.selectedProvider ||
-		'';
-	const credentialSource =
-		requestMeta?.credentialSourceLabel ||
-		requestMeta?.credentialSource ||
-		'';
-	const lines = [];
-
-	if ( getExecutionPathLabel( entry ) ) {
-		lines.push( `Provider path: ${ getExecutionPathLabel( entry ) }` );
-	}
-
-	if ( requestMeta?.ownerLabel ) {
-		lines.push( `Configured in: ${ requestMeta.ownerLabel }` );
-	}
-
-	if ( credentialSource ) {
-		lines.push( `Credential source: ${ credentialSource }` );
-	}
-
-	if ( selectedProvider ) {
-		lines.push( `Selected provider: ${ selectedProvider }` );
-	}
-
-	if ( requestMeta?.usedFallback && selectedProvider ) {
-		lines.push( `Fallback from selected ${ selectedProvider }.` );
-	}
-
-	if ( requestMeta?.ability ) {
-		lines.push( `Ability: ${ requestMeta.ability }` );
-	}
-
-	if ( requestMeta?.route ) {
-		lines.push( `Route: ${ requestMeta.route }` );
-	}
-
-	if ( getTransportEndpointLabel( requestMeta ) ) {
-		lines.push( `Endpoint: ${ getTransportEndpointLabel( requestMeta ) }` );
-	}
-
-	if ( getTimeoutLabel( requestMeta ) ) {
-		lines.push( `Timeout: ${ getTimeoutLabel( requestMeta ) }` );
-	}
-
-	if ( getPayloadSummaryLabel( requestMeta ) ) {
-		lines.push( `Payload: ${ getPayloadSummaryLabel( requestMeta ) }` );
-	}
-
-	if ( getResponseSummaryLabel( requestMeta ) ) {
-		lines.push( `Response: ${ getResponseSummaryLabel( requestMeta ) }` );
-	}
-
-	if ( getProviderRequestIdLabel( requestMeta ) ) {
-		lines.push(
-			`Provider request ID: ${ getProviderRequestIdLabel( requestMeta ) }`
-		);
-	}
-
-	if ( getWrappedTransportErrorLabel( requestMeta ) ) {
-		lines.push(
-			`Transport detail: ${ getWrappedTransportErrorLabel(
-				requestMeta
-			) }`
-		);
-	}
-
-	if (
-		typeof entry?.request?.reference === 'string' &&
-		entry.request.reference.trim()
-	) {
-		lines.push( `Reference: ${ entry.request.reference.trim() }` );
-	}
-
-	if (
-		typeof entry?.request?.prompt === 'string' &&
-		entry.request.prompt.trim()
-	) {
-		lines.push( `Prompt: ${ entry.request.prompt.trim() }` );
-	}
-
-	if ( getTokenUsageLabel( requestMeta ) ) {
-		lines.push( `Token usage: ${ getTokenUsageLabel( requestMeta ) }` );
-	}
-
-	if ( getLatencyLabel( requestMeta ) ) {
-		lines.push( `Latency: ${ getLatencyLabel( requestMeta ) }` );
-	}
-
-	return lines;
-}
-
 function getStatusLabel( entry ) {
 	if ( isDiagnosticEntry( entry ) && entry?.undo?.status !== 'failed' ) {
 		return 'Review';
@@ -387,12 +121,40 @@ function describeActivity( entry ) {
 	return 'Block action';
 }
 
-function getDiagnosticDetailLines( entry ) {
-	return Array.isArray( entry?.diagnostic?.detailLines )
-		? entry.diagnostic.detailLines.filter(
-				( line ) => typeof line === 'string' && line.trim() !== ''
-		  )
-		: [];
+function getLocalizedActivityLogUrl() {
+	if ( typeof window === 'undefined' ) {
+		return '';
+	}
+
+	const activityLogUrl = window.flavorAgentData?.activityLogUrl;
+
+	return typeof activityLogUrl === 'string' ? activityLogUrl.trim() : '';
+}
+
+function buildActivityLogEntryUrl( activityLogUrl, activityId ) {
+	if (
+		typeof activityLogUrl !== 'string' ||
+		! activityLogUrl.trim() ||
+		typeof activityId !== 'string' ||
+		! activityId.trim()
+	) {
+		return '';
+	}
+
+	try {
+		const url = new URL(
+			activityLogUrl,
+			typeof window !== 'undefined'
+				? window.location?.href
+				: 'https://example.test/'
+		);
+
+		url.searchParams.set( 'activity', activityId );
+
+		return url.toString();
+	} catch {
+		return '';
+	}
 }
 
 export default function AIActivitySection( {
@@ -406,6 +168,7 @@ export default function AIActivitySection( {
 	maxVisible = Number.POSITIVE_INFINITY,
 	showMore = true,
 	className = '',
+	activityLogUrl = '',
 } ) {
 	const [ isOpen, setIsOpen ] = useState( initialOpen );
 	const [ showAll, setShowAll ] = useState( false );
@@ -444,6 +207,8 @@ export default function AIActivitySection( {
 	const visibleEntries = hasOverflow
 		? entries.slice( 0, maxVisible )
 		: entries;
+	const resolvedActivityLogUrl =
+		activityLogUrl || getLocalizedActivityLogUrl();
 
 	return (
 		<div
@@ -486,8 +251,10 @@ export default function AIActivitySection( {
 						const hasPendingUndoSync =
 							entry?.persistence?.status !== 'server' &&
 							entry?.persistence?.syncType === 'undo';
-						const executionDetailLines =
-							getExecutionDetailLines( entry );
+						const activityEntryUrl = buildActivityLogEntryUrl(
+							resolvedActivityLogUrl,
+							entry?.id
+						);
 
 						return (
 							<div
@@ -506,33 +273,6 @@ export default function AIActivitySection( {
 											{ getExecutionSummary( entry ) }
 										</div>
 									) }
-									{ executionDetailLines.length > 0 && (
-										<details className="flavor-agent-activity-row__details">
-											<summary className="flavor-agent-activity-row__meta">
-												Execution details
-											</summary>
-											{ executionDetailLines.map(
-												( line, index ) => (
-													<div
-														key={ `${ entry.id }:execution:${ index }` }
-														className="flavor-agent-activity-row__meta"
-													>
-														{ line }
-													</div>
-												)
-											) }
-										</details>
-									) }
-									{ getDiagnosticDetailLines( entry ).map(
-										( line, index ) => (
-											<div
-												key={ `${ entry.id }:diagnostic:${ index }` }
-												className="flavor-agent-activity-row__meta"
-											>
-												{ line }
-											</div>
-										)
-									) }
 									{ hasPendingUndoSync && (
 										<div className="flavor-agent-activity-row__meta">
 											Activity audit sync pending.
@@ -550,6 +290,17 @@ export default function AIActivitySection( {
 								<span className="flavor-agent-pill">
 									{ getStatusLabel( entry ) }
 								</span>
+
+								{ activityEntryUrl && (
+									<Button
+										size="small"
+										variant="link"
+										href={ activityEntryUrl }
+										className="flavor-agent-activity-row__link"
+									>
+										View activity
+									</Button>
+								) }
 
 								{ canUndo && (
 									<Button

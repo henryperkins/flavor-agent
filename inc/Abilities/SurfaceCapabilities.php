@@ -6,9 +6,9 @@ namespace FlavorAgent\Abilities;
 
 use FlavorAgent\AI\FeatureBootstrap;
 use FlavorAgent\Admin\Settings\Config;
-use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 
 final class SurfaceCapabilities {
@@ -23,19 +23,15 @@ final class SurfaceCapabilities {
 			return self::build_feature_disabled_surfaces( $can_manage_settings );
 		}
 
-		$global_ai_available   = self::global_ai_available();
-		$block_available       = $global_ai_available && ChatClient::is_supported();
-		$chat_available        = $global_ai_available && Provider::chat_configured();
-		$pattern_backend       = PatternRetrievalBackendFactory::selected_backend();
-		$pattern_backend_ready = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend
-			? PatternSearchClient::is_configured()
-			: (bool) (
-				Provider::embedding_configured()
-				&& get_option( 'flavor_agent_qdrant_url' )
-				&& get_option( 'flavor_agent_qdrant_key' )
-		);
-		$pattern_available     = $chat_available && $pattern_backend_ready;
-		$can_edit_theme        = current_user_can( 'edit_theme_options' );
+		$global_ai_available = self::global_ai_available();
+		$block_available     = $global_ai_available && ChatClient::is_supported();
+		$chat_available      = $global_ai_available && Provider::chat_configured();
+		$pattern_backend     = PatternRetrievalBackendFactory::selected_backend();
+		$pattern_readiness   = PatternIndex::recommendation_index_readiness();
+		$pattern_index_ready = (bool) $pattern_readiness['ready'];
+		$pattern_reason      = (string) $pattern_readiness['reason'];
+		$pattern_available   = $chat_available && $pattern_index_ready;
+		$can_edit_theme      = current_user_can( 'edit_theme_options' );
 
 		$block_message         = $can_manage_settings
 			? __(
@@ -50,7 +46,7 @@ final class SurfaceCapabilities {
 			$can_manage_settings,
 			$chat_available,
 			$pattern_backend,
-			$pattern_backend_ready
+			$pattern_reason
 		);
 		$content_message       = $can_manage_settings
 			? __(
@@ -127,7 +123,7 @@ final class SurfaceCapabilities {
 			),
 			'pattern'      => self::build_surface(
 				$pattern_available,
-				$pattern_available ? 'ready' : 'pattern_backend_unconfigured',
+				$pattern_available ? 'ready' : self::pattern_unavailable_reason( $chat_available, $pattern_reason ),
 				'plugin_settings',
 				$pattern_message,
 				self::build_actions(
@@ -410,28 +406,52 @@ final class SurfaceCapabilities {
 		);
 	}
 
-	private static function pattern_unavailable_message( bool $can_manage_settings, bool $chat_available, string $pattern_backend, bool $pattern_backend_ready ): string {
+	private static function pattern_unavailable_reason( bool $chat_available, string $pattern_reason ): string {
+		if ( $chat_available || 'ready' !== $pattern_reason ) {
+			return $pattern_reason;
+		}
+
+		return 'plugin_provider_unconfigured';
+	}
+
+	private static function pattern_unavailable_message( bool $can_manage_settings, bool $chat_available, string $pattern_backend, string $pattern_reason ): string {
 		if ( ! $can_manage_settings ) {
 			return __( 'Pattern recommendations are not configured yet. Ask an administrator to configure Pattern Storage in Settings > Flavor Agent and a text-generation provider in Settings > Connectors.', 'flavor-agent' );
 		}
 
+		if ( 'needs_sync' === $pattern_reason ) {
+			if ( ! $chat_available ) {
+				return __( 'Pattern recommendations need the first pattern catalog sync in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
+			}
+
+			return __( 'Pattern recommendations need the first pattern catalog sync in Settings > Flavor Agent.', 'flavor-agent' );
+		}
+
+		if ( 'index_warming' === $pattern_reason ) {
+			return __( 'Pattern catalog is building. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.', 'flavor-agent' );
+		}
+
+		if ( 'index_unavailable' === $pattern_reason ) {
+			return __( 'Pattern catalog sync failed. Review the last sync error in Settings > Flavor Agent.', 'flavor-agent' );
+		}
+
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend ) {
-			if ( ! $pattern_backend_ready && ! $chat_available ) {
+			if ( 'pattern_backend_unconfigured' === $pattern_reason && ! $chat_available ) {
 				return __( 'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
 			}
 
-			if ( ! $pattern_backend_ready ) {
+			if ( 'pattern_backend_unconfigured' === $pattern_reason ) {
 				return __( 'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent.', 'flavor-agent' );
 			}
 
 			return __( 'Pattern recommendations need a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
 		}
 
-		if ( ! $pattern_backend_ready && ! $chat_available ) {
+		if ( 'pattern_backend_unconfigured' === $pattern_reason && ! $chat_available ) {
 			return __( 'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.', 'flavor-agent' );
 		}
 
-		if ( ! $pattern_backend_ready ) {
+		if ( 'pattern_backend_unconfigured' === $pattern_reason ) {
 			return __( 'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent.', 'flavor-agent' );
 		}
 

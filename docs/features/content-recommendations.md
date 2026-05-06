@@ -14,9 +14,8 @@ The Abilities contract remains available so external agents or admin tools can u
 ## 2. Surfacing And Gating Conditions
 
 - Requires `edit_posts`; when `postContext.postId` is positive, also requires `edit_post` for that post
-- Requires a compatible text-generation provider through `Settings > Connectors`
-- The first-party panel renders only for posts and pages
-- `draft` mode accepts a prompt, title, or other working context
+- The first-party panel renders only for posts and pages; fetching requires a compatible text-generation provider through `Settings > Connectors`
+- `draft` mode requires a prompt, current draft content, or a working title
 - `edit` and `critique` modes require `postContext.content`
 
 ## 3. End-To-End Flow
@@ -24,7 +23,7 @@ The Abilities contract remains available so external agents or admin tools can u
 1. `ContentRecommender()` reads the current post/page ID, post context, selected content mode, and prompt from the editor
 2. The store action `fetchContentRecommendations()` executes the `flavor-agent/recommend-content` ability with `mode`, optional `prompt`, and `postContext`
 3. `RecommendationAbilityExecution` forwards that payload to `ContentAbilities::recommend_content()`
-4. `ContentAbilities` normalizes the request, validates per-post edit access when `postContext.postId > 0`, and renders the current post content through `PostContentRenderer`
+4. `ContentAbilities` normalizes the request, validates per-post edit access when `postContext.postId > 0`, and passes draft content through `PostContentRenderer`; positive post IDs enable server-side block rendering, while missing or `0` post IDs use the fallback text path
 5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt via `PromptBudget`. The user prompt includes the rendered current-post text under `Existing draft` and, when the author has eligible same-author published posts in the same post type, a `## Site voice samples` section with up to three openings (~1500 chars each, paragraph-snapped) drawn through `PostVoiceSampleCollector`. Voice samples is the only section the budget will drop under pressure. When rendered HTML exposes useful attribute-borne text that would otherwise be stripped from the current post, `PostContentRenderer` appends it as an `[Attribute references]` bullet list.
 6. `WritingPrompt::parse_response()` validates the returned JSON payload
 7. The panel renders summary/content/notes/issues through the shared status and recommendation shell, with explicit editorial-only copy and a copy-to-clipboard handoff for generated text

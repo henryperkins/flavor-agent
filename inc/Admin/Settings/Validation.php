@@ -490,7 +490,7 @@ final class Validation {
 
 			return new \WP_Error(
 				'cloudflare_pattern_ai_search_embedding_credentials_invalid',
-				'Cloudflare AI Search Pattern Storage needs valid Embedding Model credentials before Flavor Agent can create a managed pattern index.',
+				'Cloudflare AI Search Pattern Storage needs valid Cloudflare credentials from the Embedding Model section before Flavor Agent can create a managed pattern index.',
 				[ 'status' => 400 ]
 			);
 		}

@@ -7,7 +7,10 @@ namespace FlavorAgent\Tests;
 use FlavorAgent\Abilities\InfraAbilities;
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
+use FlavorAgent\Embeddings\EmbeddingClient;
+use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -119,23 +122,24 @@ final class InfraAbilitiesTest extends TestCase {
 			'wpai_feature_flavor-agent_enabled'            => true,
 		];
 		WordPressTestState::$ai_client_supported = true;
+		$this->save_ready_qdrant_pattern_index();
 
-			$status = InfraAbilities::check_status( [] );
+		$status = InfraAbilities::check_status( [] );
 
-			$this->assertTrue( $status['configured'] );
-			$this->assertSame( 'provider-managed', $status['model'] );
-			$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
-			$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
-			$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
-			$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
-			$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
-			$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
-			$this->assertArrayNotHasKey( 'openai_native', $status['backends'] );
-			$this->assertSame(
-				'@cf/qwen/qwen3-embedding-0.6b',
-				$status['backends']['cloudflare_workers_ai']['embeddingModel']
-			);
-			$this->assertTrue( $status['backends']['cloudflare_workers_ai']['configured'] );
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'provider-managed', $status['model'] );
+		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
+		$this->assertArrayNotHasKey( 'openai_native', $status['backends'] );
+		$this->assertSame(
+			'@cf/qwen/qwen3-embedding-0.6b',
+			$status['backends']['cloudflare_workers_ai']['embeddingModel']
+		);
+		$this->assertTrue( $status['backends']['cloudflare_workers_ai']['configured'] );
 	}
 
 	public function test_check_status_hides_recommendation_surfaces_when_ai_feature_is_disabled(): void {
@@ -203,35 +207,36 @@ final class InfraAbilitiesTest extends TestCase {
 			'edit_theme_options' => true,
 		];
 
-			WordPressTestState::$options = [
-				'flavor_agent_openai_provider'      => 'cloudflare_workers_ai',
-				'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
-				'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
-				'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-				'flavor_agent_qdrant_url'           => 'https://example.cloud.qdrant.io:6333',
-				'flavor_agent_qdrant_key'           => 'qdrant-key',
-				'wpai_features_enabled'             => true,
-				'wpai_feature_flavor-agent_enabled' => true,
-			];
+		WordPressTestState::$options = [
+			'flavor_agent_openai_provider'                 => 'cloudflare_workers_ai',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			'wpai_features_enabled'                        => true,
+			'wpai_feature_flavor-agent_enabled'            => true,
+		];
 
-			WordPressTestState::$ai_client_supported = true;
-			add_filter( 'wpai_has_ai_credentials', '__return_true' );
+		WordPressTestState::$ai_client_supported = true;
+		add_filter( 'wpai_has_ai_credentials', '__return_true' );
+		$this->save_ready_qdrant_pattern_index();
 
-			$status = InfraAbilities::check_status( [] );
+		$status = InfraAbilities::check_status( [] );
 
-			$this->assertTrue( $status['configured'] );
-			$this->assertSame( 'provider-managed', $status['model'] );
-			$this->assertTrue( $status['surfaces']['template']['available'] );
-			$this->assertTrue( $status['surfaces']['pattern']['available'] );
-			$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
-			$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
-			$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
-			$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
-			$this->assertTrue( $status['backends']['cloudflare_workers_ai']['configured'] );
-			$this->assertSame(
-				'@cf/qwen/qwen3-embedding-0.6b',
-				$status['backends']['cloudflare_workers_ai']['embeddingModel']
-			);
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'provider-managed', $status['model'] );
+		$this->assertTrue( $status['surfaces']['template']['available'] );
+		$this->assertTrue( $status['surfaces']['pattern']['available'] );
+		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
+		$this->assertTrue( $status['backends']['cloudflare_workers_ai']['configured'] );
+		$this->assertSame(
+			'@cf/qwen/qwen3-embedding-0.6b',
+			$status['backends']['cloudflare_workers_ai']['embeddingModel']
+		);
 	}
 
 	public function test_check_status_allows_cloudflare_pattern_ai_search_without_qdrant(): void {
@@ -256,6 +261,7 @@ final class InfraAbilitiesTest extends TestCase {
 
 		WordPressTestState::$ai_client_supported = true;
 		add_filter( 'wpai_has_ai_credentials', '__return_true' );
+		$this->save_ready_cloudflare_ai_search_pattern_index();
 
 		$status = InfraAbilities::check_status( [] );
 
@@ -297,6 +303,7 @@ final class InfraAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$ai_client_supported = true;
+		$this->save_ready_qdrant_pattern_index();
 
 		$status = InfraAbilities::check_status( [] );
 
@@ -309,6 +316,47 @@ final class InfraAbilitiesTest extends TestCase {
 			'@cf/qwen/qwen3-embedding-0.6b',
 			$status['backends']['cloudflare_workers_ai']['embeddingModel']
 		);
+	}
+
+	public function test_check_status_does_not_advertise_pattern_recommendations_before_first_sync(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+
+		WordPressTestState::$options = [
+			'flavor_agent_openai_provider'                 => 'cloudflare_workers_ai',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			'connectors_ai_openai_api_key'                 => 'connector-key',
+			'wpai_features_enabled'                        => true,
+			'wpai_feature_flavor-agent_enabled'            => true,
+		];
+
+		WordPressTestState::$connectors = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+
+		WordPressTestState::$ai_client_supported = true;
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertTrue( $status['configured'] );
+		$this->assertFalse( $status['surfaces']['pattern']['available'] );
+		$this->assertSame( 'needs_sync', $status['surfaces']['pattern']['reason'] );
+		$this->assertNotContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
+		$this->assertSame( 'uninitialized', PatternIndex::get_state()['status'] );
 	}
 
 	public function test_check_status_uses_provider_managed_model_for_selected_connector_provider(): void {
@@ -463,6 +511,61 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertSame(
 			'missing_theme_capability',
 			$status['surfaces']['globalStyles']['reason']
+		);
+	}
+
+	private function save_ready_qdrant_pattern_index(): void {
+		$embedding_config    = Provider::embedding_configuration();
+		$embedding_signature = EmbeddingClient::build_signature_for_dimension( 2, $embedding_config );
+
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'               => 'ready',
+					'pattern_backend'      => Config::PATTERN_BACKEND_QDRANT,
+					'qdrant_url'           => (string) get_option( 'flavor_agent_qdrant_url', '' ),
+					'qdrant_collection'    => QdrantClient::get_collection_name( $embedding_signature ),
+					'openai_provider'      => $embedding_config['provider'],
+					'openai_endpoint'      => $embedding_config['endpoint'],
+					'embedding_model'      => $embedding_config['model'],
+					'embedding_dimension'  => 2,
+					'embedding_signature'  => $embedding_signature['signature_hash'],
+					'last_synced_at'       => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'      => '2000-01-01T00:00:00+00:00',
+					'indexed_count'        => 1,
+					'stale_reason'         => '',
+					'stale_reasons'        => [],
+					'pattern_fingerprints' => [],
+				]
+			)
+		);
+	}
+
+	private function save_ready_cloudflare_ai_search_pattern_index(): void {
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'                         => 'ready',
+					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+					'qdrant_url'                     => '',
+					'qdrant_collection'              => '',
+					'cloudflare_ai_search_namespace' => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
+					'cloudflare_ai_search_signature' => PatternSearchInstanceManager::credential_signature(
+						(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
+						(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),
+						(string) get_option( 'flavor_agent_cloudflare_workers_ai_embedding_model', '' )
+					),
+					'last_synced_at'                 => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'                => '2000-01-01T00:00:00+00:00',
+					'indexed_count'                  => 1,
+					'stale_reason'                   => '',
+					'stale_reasons'                  => [],
+					'pattern_fingerprints'           => [],
+				]
+			)
 		);
 	}
 }

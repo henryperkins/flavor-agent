@@ -56,4 +56,58 @@ describe( 'InlineActionFeedback', () => {
 
 		expect( onAction ).toHaveBeenCalledTimes( 1 );
 	} );
+
+	test( 'defaults to the success tone when no tone is provided', () => {
+		act( () => {
+			getRoot().render(
+				<InlineActionFeedback message="Applied." label="Applied" />
+			);
+		} );
+
+		const status = getContainer().querySelector( '[role="status"]' );
+		const pill = getContainer().querySelector( '.flavor-agent-pill' );
+
+		expect( status?.className ).toContain(
+			'flavor-agent-inline-feedback--success'
+		);
+		expect( pill?.className ).toContain( 'flavor-agent-pill--success' );
+	} );
+
+	test( 'maps non-success tones to matching container and pill modifiers', () => {
+		act( () => {
+			getRoot().render(
+				<InlineActionFeedback
+					message="Apply blocked."
+					label="Blocked"
+					tone="error"
+				/>
+			);
+		} );
+
+		const status = getContainer().querySelector( '[role="status"]' );
+		const pill = getContainer().querySelector( '.flavor-agent-pill' );
+
+		expect( status?.className ).toContain(
+			'flavor-agent-inline-feedback--error'
+		);
+		expect( pill?.className ).toContain( 'flavor-agent-pill--error' );
+	} );
+
+	test( 'renders a leading icon inside the pill when showIcon is true', () => {
+		act( () => {
+			getRoot().render(
+				<InlineActionFeedback
+					message="Applied."
+					label="Applied"
+					showIcon
+				/>
+			);
+		} );
+
+		const pillIcon = getContainer().querySelector(
+			'.flavor-agent-pill__icon'
+		);
+
+		expect( pillIcon ).not.toBeNull();
+	} );
 } );

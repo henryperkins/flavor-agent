@@ -37,7 +37,7 @@ Flavor Agent is for WordPress builders, editors, and plugin developers who want 
 2. Install dependencies with Node 20/npm 10 or Node 24/npm 11, plus Composer.
 3. Build production assets with `npm run build`.
 4. Activate **Flavor Agent** in WordPress.
-5. Configure text generation in `Settings > Connectors`; optionally configure pattern retrieval, embeddings, docs grounding, and guidelines in `Settings > Flavor Agent`.
+5. Configure text generation in `Settings > Connectors`; optionally configure pattern retrieval, embeddings, developer-doc grounding limits/diagnostics, and guidelines in `Settings > Flavor Agent`.
 
 For a representative development environment, use the local setup notes in [`docs/reference/local-environment-setup.md`](docs/reference/local-environment-setup.md). WordPress 7.0 is still pre-release as of this draft; the Docker-backed Site Editor harness pins a pre-release image until the stable 7.0 image exists.
 
@@ -60,21 +60,21 @@ Re-run the verification gates on the exact commit you tag.
 
 ## Architecture at a glance
 
-Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin apps under `src/`, and compiled assets in `build/`. The runtime registers 20 WordPress Abilities across recommendation, helper, docs, style, pattern, template, navigation, and infrastructure categories, while the remaining plugin REST API stays intentionally thin for activity persistence, undo, and pattern sync.
+Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin apps under `src/`, and compiled assets in `build/`. The runtime defines 20 WordPress Ability contracts across recommendation, helper, docs, style, pattern, template, navigation, and infrastructure categories; helper/read abilities register whenever the Abilities API exists, while recommendation abilities also require the WordPress AI feature gate. The remaining plugin REST API stays intentionally thin for activity persistence, undo, and pattern sync.
 
 The editor app mounts first-party UI into native Gutenberg and Site Editor locations: block Inspector panels, post/page document panels, the pattern inserter, template and template-part panels, Global Styles, Style Book, and navigation-block advisory sections. Activity records are written server-side and reused by inline editor history plus the wp-admin audit page.
 
-Provider ownership is explicit: text generation flows through the WordPress AI Client and `Settings > Connectors`; plugin-owned settings cover embeddings, Qdrant, private Cloudflare AI Search pattern retrieval, public/override WordPress docs grounding, guidelines, and pattern sync.
+Provider ownership is explicit: text generation flows through the WordPress AI Client and `Settings > Connectors`; plugin-owned settings cover embeddings, Qdrant, private Cloudflare AI Search pattern retrieval, built-in public WordPress docs grounding limits/diagnostics, guidelines, and pattern sync.
 
 ## Provider matrix
 
-| Capability               | OpenAI                                                 | Azure OpenAI                                                                             | Anthropic and other Connectors          | Cloudflare Workers AI                                         | Cloudflare AI Search                                | Qdrant                          |
-| ------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- | ------------------------------- |
-| Text generation          | Via `Settings > Connectors`                            | Via connector when available                                                             | Via `Settings > Connectors`             | Not used for chat by Flavor Agent                             | Not used for chat                                   | Not used for chat               |
-| Embeddings               | Plugin-owned OpenAI Native option for Qdrant           | Legacy saved Azure embedding options for older Qdrant installs; no new editable settings | Not used for embeddings                 | Explicitly selected plugin-owned embedding backend for Qdrant | Not used for embeddings                             | Stores/searches vectors         |
-| Pattern retrieval        | Reranking can use connector-backed chat                | Reranking can use connector-backed chat                                                  | Reranking can use connector-backed chat | Embeddings only when explicitly selected                      | Private pattern retrieval backend option            | Vector retrieval backend option |
-| WordPress docs grounding | Not used                                               | Not used                                                                                 | Not used                                | Not used                                                      | Trusted `developer.wordpress.org` grounding         | Not used                        |
-| Configuration owner      | Connectors or `Settings > Flavor Agent` for embeddings | Legacy saved Flavor Agent options only; new setup uses OpenAI Native or Workers AI       | `Settings > Connectors`                 | `Settings > Flavor Agent`                                     | `Settings > Flavor Agent` or built-in docs endpoint | `Settings > Flavor Agent`       |
+| Capability               | OpenAI and Azure OpenAI Connectors          | Anthropic and other Connectors          | Cloudflare Workers AI                                         | Cloudflare AI Search                                | Qdrant                          |
+| ------------------------ | ------------------------------------------- | --------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- | ------------------------------- |
+| Text generation          | Via `Settings > Connectors`                 | Via `Settings > Connectors`             | Not used for chat by Flavor Agent                             | Not used for chat                                   | Not used for chat               |
+| Embeddings               | Not used for embeddings by Flavor Agent     | Not used for embeddings                 | Only plugin-owned embedding backend for Qdrant                | Not used for embeddings                             | Stores/searches vectors         |
+| Pattern retrieval        | Reranking can use connector-backed chat     | Reranking can use connector-backed chat | Embeddings only when the Qdrant backend is selected           | Private pattern retrieval backend option            | Vector retrieval backend option |
+| WordPress docs grounding | Not used                                    | Not used                                | Not used                                                      | Trusted `developer.wordpress.org` grounding         | Not used                        |
+| Configuration owner      | `Settings > Connectors`                     | `Settings > Connectors`                 | `Settings > Flavor Agent`                                     | `Settings > Flavor Agent` or built-in docs endpoint | `Settings > Flavor Agent`       |
 
 See the external-service disclosure in [`readme.txt`](readme.txt) and [`docs/reference/external-service-disclosure.md`](docs/reference/external-service-disclosure.md) for service-specific data and trigger details.
 

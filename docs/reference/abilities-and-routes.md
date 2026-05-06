@@ -11,7 +11,7 @@ Use it when you need to answer:
 ## How First-Party UI And Abilities Relate
 
 - The shipped Gutenberg editor UI uses the `flavor-agent` data store and executes recommendation abilities through the WordPress Abilities API
-- The Abilities API is the sole active contract for the seven `recommend-*` surfaces on supported WordPress 7.0+ installs
+- The Abilities API is the sole active contract for the seven `recommend-*` surfaces when the WordPress AI plugin contracts are available and the Flavor Agent AI feature is enabled
 - Activity persistence and manual pattern sync are REST-only today; they do not have matching registered abilities
 - Pattern, template, and template-part first-party surfaces also read the shared post-type entity contract from `src/utils/editor-entity-contracts.js`, which normalizes built-in field metadata and safe fallbacks when no live WordPress view config is exposed, so panel visibility, title-field expectations, template-part area labels, and the patched pattern category stay aligned with the current entity contract
 
@@ -20,10 +20,10 @@ Use it when you need to answer:
 | Ability | Permission | Extra gate | What it returns or does | First-party surface |
 |---|---|---|---|---|
 | `flavor-agent/recommend-block` | `edit_posts` | Meaningful output requires `ChatClient::is_supported()` | Block recommendation payload with `settings`, `styles`, `block`, and `explanation` | Block Inspector recommendations |
-| `flavor-agent/recommend-content` | `edit_posts`; positive `postContext.postId` also requires `edit_post` for that post | Connectors text-generation provider configured | Draft, edit, or critique payload for blog posts, essays, and site copy in Henry Perkins's voice, with notes and line-level rewrites. Positive `postId` requests render current-post blocks server-side before prompting; absent or `0` uses the text fallback path. | Post/page Content Recommendations panel plus external-agent contract |
+| `flavor-agent/recommend-content` | `edit_posts`; positive `postContext.postId` also requires `edit_post` for that post | Connectors text-generation provider configured | Draft, edit, or critique payload for blog posts, essays, and site copy in Henry Perkins's voice, with notes and critique issues containing original text, problem, and suggested revision. Positive `postId` requests render current-post blocks server-side before prompting; absent or `0` uses the text fallback path. | Post/page Content Recommendations panel plus external-agent contract |
 | `flavor-agent/introspect-block` | `edit_posts` | None beyond capability | Block registry manifest: supports, Inspector panels, attributes, styles, and variations | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/list-allowed-blocks` | `edit_posts` | None beyond capability | Site-wide registered block manifests plus `total`, with optional search, category, pagination, and variation controls; not filtered by current inserter context | No direct first-party UI; helper and external-agent surface |
-| `flavor-agent/recommend-patterns` | `edit_posts`; positive post/page/custom post document entity IDs also require `edit_post` for that entity | Selected pattern backend configured, Connectors text generation, usable pattern index. Qdrant backend requires Cloudflare Workers AI embeddings plus Qdrant; Cloudflare AI Search backend requires Embedding Model credentials plus the validated managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance | Ranked registered and synced/user patterns that are in the supplied visible scope and currently readable | Pattern inserter recommendations |
+| `flavor-agent/recommend-patterns` | `edit_posts`; positive post/page/custom post document entity IDs also require `edit_post` for that entity | Selected pattern backend configured, Connectors text generation, usable pattern index. Qdrant backend requires Cloudflare Workers AI embeddings plus Qdrant; Cloudflare AI Search backend requires a configured managed pattern AI Search instance plus the Cloudflare account/API token/embedding-model signature used to validate that private pattern index | Ranked registered and synced/user patterns that are in the supplied visible scope and currently readable | Pattern inserter recommendations |
 | `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional category, block-type, template-type, search, pagination, and `includeContent` controls, plus `total` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-pattern` | `edit_posts` | None beyond capability | One registered block pattern by name; `patternId` is an alias for the returned string `id` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/list-synced-patterns` | `edit_posts` | Per-post read access with published browse fallback | Caller-readable or published `wp_block` pattern entities filtered by `syncStatus` (`synced`, `partial`, `unsynced`, or `all`), with optional search, pagination, `includeContent`, and `total` | No direct first-party UI; helper and external-agent surface |
@@ -33,7 +33,7 @@ Use it when you need to answer:
 | `flavor-agent/recommend-style` | `edit_theme_options` | Connectors text-generation provider configured | Shared style suggestions for Global Styles and Style Book, constrained to validated `theme.json` paths, theme-backed values, and Global Styles-only theme variations | Site Editor Global Styles and Style Book panels |
 | `flavor-agent/list-template-parts` | `edit_posts` or `edit_theme_options` | None beyond capability | Registered template parts, optionally filtered by area, with content returned only to theme-capable callers | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-navigation` | `edit_theme_options` | Connectors text-generation provider configured for useful output | Advisory navigation suggestion groups plus explanation | Navigation guidance inside the block panel |
-| `flavor-agent/search-wordpress-docs` | `manage_options` | Managed public docs backend available (legacy Cloudflare credentials optional) | Trusted WordPress developer-doc guidance, optionally warming entity cache | No direct first-party editor UI; admin and external-agent surface |
+| `flavor-agent/search-wordpress-docs` | `manage_options` | Uses Flavor Agent's built-in public WordPress Developer Docs AI Search endpoint; execution fails closed if the endpoint is invalid/unavailable or returns no trusted `developer.wordpress.org` guidance | Trusted WordPress developer-doc guidance, optionally warming entity cache | No direct first-party editor UI; admin and external-agent surface |
 | `flavor-agent/get-active-theme` | `edit_posts` | None beyond capability | Active theme name, stylesheet, template, and version | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-theme-presets` | `edit_posts` | None beyond capability | Theme preset families from global settings: color, gradient, typography, spacing, shadow, and duotone | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-theme-styles` | `edit_posts` | None beyond capability | Applied global theme styles plus extracted element and pseudo-state summaries | No direct first-party UI; helper and external-agent surface |
@@ -42,22 +42,22 @@ Use it when you need to answer:
 
 ## Ability Notes
 
-- All twenty abilities are registered in `inc/Abilities/Registration.php`
-- On supported WordPress 7.0+ admin screens, core hydrates these server-registered abilities into the client-side abilities store
-- The seven AI recommendation abilities (`recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) also opt into the Abilities API default MCP server via `meta.mcp.public = true`
-- When the MCP Adapter is active, Flavor Agent also registers a dedicated server at `/wp-json/mcp/flavor-agent`. The dedicated server exposes the seven recommendation abilities as first-class MCP tools so external agents see them directly in `tools/list`; the universal MCP default server remains available for generic ability discovery and execution.
+- `inc/Abilities/Registration.php` defines 20 ability contracts. The 13 helper/read abilities register during `wp_abilities_api_init` when `wp_register_ability()` is available; the `flavor-agent` category registers separately during `wp_abilities_api_categories_init` when `wp_register_ability_category()` is available. The seven AI recommendation abilities (`recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) register only when the WordPress AI plugin feature contracts are available and the Flavor Agent AI feature is enabled in `Settings > AI`.
+- On supported WordPress 7.0+ admin screens, Flavor Agent prefers `window.flavorAgentAbilities.executeAbility` from its small `@wordpress/abilities` bridge; if that bridge is unavailable or reports the ability missing, the first-party store POSTs directly to the canonical Abilities REST run route
+- Registered recommendation abilities also opt into the Abilities API default MCP server via `meta.mcp.public = true`
+- When the MCP Adapter is active and the recommendation feature is enabled, Flavor Agent also registers a dedicated server at `/wp-json/mcp/flavor-agent`. The dedicated server exposes the seven recommendation abilities as first-class MCP tools so external agents see them directly in `tools/list`; the universal MCP default server remains available for generic ability discovery and execution.
 - The dedicated server transport gate allows callers with either `edit_posts` or `edit_theme_options`, then each tool's own ability permission callback applies the exact surface policy. This avoids blocking theme-scoped tools for users who can edit site styles/templates but do not have post-editing capability.
-- All twenty abilities declare behavior annotations. The seven AI recommendation abilities keep WP-format `meta.annotations.readonly` unset so core and `@wordpress/core-abilities` run calls stay POST for large prompt/editor payloads; they declare `destructive:false` and `idempotent:false`, and they do not claim direct MCP `readOnlyHint:true` because execution can persist request diagnostics and freshness tokens. The 13 data-read abilities declare WP-format `readonly:true`, `destructive:false`, and `idempotent:true`.
+- All 20 defined abilities declare behavior annotations. The seven AI recommendation abilities keep WP-format `meta.annotations.readonly` unset so core and `@wordpress/core-abilities` run calls stay POST for large prompt/editor payloads; they declare `destructive:false` and `idempotent:false`, and they do not claim direct MCP `readOnlyHint:true` because execution can persist request diagnostics and freshness tokens. The 13 data-read abilities declare WP-format `readonly:true`, `destructive:false`, and `idempotent:true`.
 - `flavor-agent/recommend-block` accepts the first-party editor `editorContext` payload and the external-client `selectedBlock` alias. `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context.
 - When `window.flavorAgentData.enableBlockStructuralActions` is true, the first-party `editorContext` also includes a client-computed `blockOperationContext` with selected-block target identity, target signature, lock/content-only state, and allowed pattern metadata from Gutenberg's allowed-pattern selector. The flag is resolved from the default-off admin setting, the developer constant, and the final override filter; executable structural block operations stay empty when the flag, pattern context, target, lock, or catalog validation fails.
 - Normalized block suggestions may include `operations`, `proposedOperations`, and `rejectedOperations`. `operations` contains only `FlavorAgent\Context\BlockOperationValidator`-approved block structural operations from the v1 catalog (`insert_pattern` and `replace_block_with_pattern`); `proposedOperations` preserves sanitized model proposals for diagnostics; `rejectedOperations` records standardized validator rejection codes and sanitized proposal payloads. In the editor, the JS catalog revalidates the PHP-approved operation and fails closed with `client_server_operation_mismatch` if the browser validation identity disagrees before review/apply.
-- `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
+- `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs. Recommendation ability availability also requires the Flavor Agent AI feature gate.
 - The `surfaces` map uses the keys `block`, `pattern`, `content`, `template`, `templatePart`, `navigation`, `globalStyles`, and `styleBook`. Each entry returns `available`, `reason`, `owner`, `actions`, `configurationLabel`, `configurationUrl`, `message`, and `advisoryOnly`.
 - `flavor-agent/get-pattern` resolves only by registered pattern name. The returned `id` is the same string as `name`, and `patternId` is a convenience alias for that same value.
 - `flavor-agent/list-patterns` supports `search`, `limit`, `offset`, and `includeContent`, returns `total`, and omits `content` by default.
 - `flavor-agent/list-synced-patterns` accepts `synced`, `partial`, `unsynced`, or `all`. It queries `wp_block` posts with `post_status = any`, keeps the helper browse fallback that allows published posts when `read_post` is denied, supports `search`, `limit`, `offset`, and `includeContent`, returns `total`, and omits `content` by default.
 - `flavor-agent/get-synced-pattern` uses the same helper browse fallback for published `wp_block` patterns. That fallback is not reused by recommendation ranking.
-- `flavor-agent/recommend-patterns` requires `visiblePatternNames` from the current inserter root; missing or empty scope returns an empty recommendation list. Post/page/custom post document scopes from the editor should carry `document.entityId` and `document.scopeKey`, and positive entity IDs require `current_user_can( 'edit_post', $id )` after the base `edit_posts` check. It indexes registered patterns plus public-safe published synced/user `wp_block` patterns in the selected pattern backend, then rehydrates synced candidates through current published `wp_block` state and `read_post` access before ranking or response output. Synced/user candidates keep Gutenberg's `core/block/{id}` names and carry `type: user`, `source: synced`, `syncedPatternId`, and `syncStatus` metadata in recommendation payloads. The response may include `diagnostics.filteredCandidates.unreadableSyncedPatterns`, a de-duplicated aggregate count of visible-scope synced/user candidates skipped because the current request could not read the source `wp_block`. This diagnostic is intentionally non-identifying and is safe for the inserter UI to display.
+- `flavor-agent/recommend-patterns` requires `visiblePatternNames` from the current inserter root; missing or empty scope returns an empty recommendation list. Post/page/custom post document scopes from the editor should carry `document.entityId` and `document.scopeKey`, and positive entity IDs require `current_user_can( 'edit_post', $id )` after the base `edit_posts` check. It indexes registered patterns plus public-safe published user `wp_block` patterns across synced, partial, and unsynced states in the selected pattern backend, then rehydrates user candidates through current published `wp_block` state and `read_post` access before ranking or response output. User candidates keep Gutenberg's `core/block/{id}` names and carry `type: user`, `source: synced`, `syncedPatternId`, and `syncStatus` metadata in recommendation payloads. The response may include `diagnostics.filteredCandidates.unreadableSyncedPatterns`, a de-duplicated aggregate count of visible-scope user candidates skipped because the current request could not read the source `wp_block`. This diagnostic is intentionally non-identifying and is safe for the inserter UI to display.
 - Pattern recommendations support two retrieval backends. The default Qdrant backend embeds queries with Cloudflare Workers AI and searches Qdrant with a `name` payload filter derived from `visiblePatternNames` before both semantic and structural passes. The Cloudflare AI Search backend sends query text plus `filters.pattern_name` derived from `visiblePatternNames` to a private site-owner Cloudflare AI Search pattern instance and does not call `EmbeddingClient` or `QdrantClient`. Both backends still rerank through `ResponsesClient::rank()` / the WordPress AI Client chat runtime.
 - Pattern recommendation request diagnostics include `pattern_backend`, `patternBackend`, and `embedding_provider` metadata. For Qdrant, `embedding_provider` is `cloudflare_workers_ai`. For Cloudflare AI Search, it identifies Cloudflare AI Search managed embeddings/private pattern index ownership.
 - `flavor-agent/list-allowed-blocks` returns the whole registered block registry rather than context-aware inserter results. It now also supports `search`, `category`, `limit`, `offset`, `includeVariations`, and `maxVariations`, returns `total`, and omits `variations` by default. `introspect-block` still returns up to 10 variations; `list-allowed-blocks` truncates only when `includeVariations` is enabled.
@@ -83,7 +83,7 @@ Use it when you need to answer:
 - Activity persistence is REST-only today. There is no matching registered ability for create/read/undo.
 - `POST /flavor-agent/v1/activity` persists the request provenance that the UI shows later: backend/provider label, model, provider path, configuration owner, credential source, selected provider, fallback usage, route, ability, prompt, reference, token usage, and latency when the originating client includes them.
 - The repository projects the admin-audit fields it needs for filtering into schema-versioned table columns (`admin_post_type`, `admin_operation_type`, `admin_provider`, `admin_provider_path`, `admin_configuration_owner`, `admin_credential_source`, `admin_selected_provider`, `admin_request_ability`, `admin_request_route`, `admin_request_reference`, `admin_request_prompt`, and related identifiers) so `Settings > AI Activity` does not need to decode every historical `request_json` payload to filter by provenance.
-- `GET /flavor-agent/v1/activity?global=1` is the only route that exposes the wp-admin audit feed. It rejects malformed active admin date filters with `400` instead of broadening the query; the wp-admin UI also blocks incomplete or inverted persisted date filters until the filter is completed or reset. Its `filterOptions.operationType` values are grouped by effective action type such as `insert` and `replace`. It is still intentionally a first audit slice rather than a full observability console: the response includes timeline entries, summary counts, pagination, and filter options, but not diff-oriented inspection or broader operator workflows.
+- `GET /flavor-agent/v1/activity?global=1` is the only route that exposes the wp-admin audit feed. It rejects malformed active admin date filters with `400` instead of broadening the query; the wp-admin UI also blocks incomplete or inverted persisted date filters until the filter is completed or reset. Its `filterOptions.operationType` values include effective action groups such as `insert` and `replace` plus read-only diagnostics such as `request-diagnostic`. It is still intentionally a first audit slice rather than a full observability console: the response includes timeline entries, summary counts, pagination, filter options, and before/after state payloads that the admin UI renders as structured diff summaries, but not a rich visual diff viewer or broader operator workflows.
 
 ## Example Contracts
 
@@ -132,14 +132,14 @@ Use it when you need to answer:
 }
 ```
 
-`configured` means the active chat runtime is available, or the selected pattern pipeline is ready. For Qdrant, that means Cloudflare Workers AI embeddings and Qdrant are both configured. For Cloudflare AI Search, that means the Embedding Model account ID, API token, embedding model, and validated managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are ready. It is not a standalone docs-search readiness flag. WordPress docs search availability is reflected in `availableAbilities` and `backends.cloudflare_ai_search`.
+`configured` means the Flavor Agent recommendation feature is enabled and either chat recommendations are ready or the selected pattern recommendation pipeline is ready. Docs-search readiness is not included in `configured`; `backends.cloudflare_ai_search` describes the built-in public WordPress docs AI Search endpoint, while private pattern AI Search readiness is represented by the selected pattern index/backend readiness.
 
 ### Pattern Recommendation Backend Matrix
 
 | Pattern backend | Embeddings | Vector/index service | Search service | Visible scope filter | Required settings |
 | --- | --- | --- | --- | --- | --- |
 | Qdrant | Cloudflare Workers AI | Qdrant | Qdrant | Qdrant payload filter on `name` | Cloudflare Workers AI embeddings, Qdrant, Connectors chat |
-| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | AI Search `filters.pattern_name` | Embedding Model credentials, validated managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
+| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | AI Search `filters.pattern_name` | Cloudflare credentials from the Embedding Model section, validated managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
 
 ### List-Allowed-Blocks Response Shape
 
@@ -280,7 +280,7 @@ The request-side `syncStatus` filter accepts `synced`, `partial`, `unsynced`, or
 
 `elementStyles.base`, `hover`, and `focus` expose only color maps. `focusVisible` preserves the full `:focus-visible` pseudo-state object.
 
-### Block Recommendation REST Request
+### Block Recommendation Ability Input
 
 ```json
 {
@@ -365,7 +365,8 @@ The normalized block operation metadata is `catalogVersion`, `type`, `patternNam
         "area": "header"
       }
     ],
-    "emptyAreas": ["sidebar"]
+    "emptyAreas": ["sidebar"],
+    "allowedAreas": ["header", "footer", "sidebar"]
   },
   "editorStructure": {
     "topLevelBlockTree": [
@@ -410,7 +411,7 @@ The normalized block operation metadata is `catalogVersion`, `type`, `patternNam
 }
 ```
 
-The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The server keeps canonical saved capability metadata and computes the effective `allowedAreas` set by merging those live areas with the saved template contract. Empty templates still send `editorSlots` and `editorStructure` with empty arrays and zeroed stats.
+The client sends live slot data including `assignedParts`, `emptyAreas`, and `allowedAreas`. The server keeps canonical saved capability metadata and computes the effective `allowedAreas` set by merging that live snapshot with the saved template contract. Empty templates still send `editorSlots` and `editorStructure` with empty arrays and zeroed stats.
 
 ### Template-Part Ability Request
 
@@ -720,11 +721,18 @@ The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The s
   "indexed": 6,
   "removed": 2,
   "fingerprint": "1b52d1f7c8a7e3f1",
-  "status": "ready"
+  "status": "ready",
+  "runtimeState": {
+    "status": "ready",
+    "pattern_backend": "qdrant"
+  },
+  "requestMeta": {
+    "route": "POST /flavor-agent/v1/sync-patterns"
+  }
 }
 ```
 
-The same response shape is used for Qdrant and Cloudflare AI Search syncs. The persisted `flavor_agent_pattern_index_state` records `pattern_backend`, Qdrant state fields for Qdrant, and `cloudflare_ai_search_namespace`, `cloudflare_ai_search_instance`, and `cloudflare_ai_search_signature` for Cloudflare AI Search.
+The same response shape is used for Qdrant and Cloudflare AI Search syncs, and the REST route appends the live `runtimeState` plus `requestMeta.route` for activity/provenance consumers. The persisted `flavor_agent_pattern_index_state` records `pattern_backend`, Qdrant state fields for Qdrant, and `cloudflare_ai_search_namespace`, `cloudflare_ai_search_instance`, and `cloudflare_ai_search_signature` for Cloudflare AI Search.
 
 ### Activity Entry Shape
 
@@ -768,7 +776,7 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 - `flavor-agent/recommend-patterns` can return synced/user pattern recommendations by their `core/block/{id}` names when those names are present in the current `visiblePatternNames` set.
 - `flavor-agent/recommend-patterns` does not accept `editorStructure`; the current pattern ability contract ignores it
 - Template recommendation requests carry an editor-collected `editorStructure` with the live top-level block tree, zeroed empty-state stats when needed, current pattern-override summaries, and current viewport-visibility summaries; the server replaces that mutable slice atomically and derives insertion anchors from the live tree
-- Template recommendation requests also carry live `editorSlots.assignedParts` and `editorSlots.emptyAreas`; the server keeps canonical saved capability metadata and computes effective `allowedAreas` by merging those live areas with the saved template contract
+- Template recommendation requests also carry live `editorSlots.assignedParts`, `editorSlots.emptyAreas`, and `editorSlots.allowedAreas`; the server keeps canonical saved capability metadata and computes effective `allowedAreas` by merging those live areas with the saved template contract
 - Template-part requests accept a full live `editorStructure` slice: `blockTree`, `allBlockPaths`, `topLevelBlocks`, `blockCounts`, `structureStats`, `currentPatternOverrides`, `operationTargets`, `insertionAnchors`, and `structuralConstraints`
 - Template-part executable paths are validated against `editorStructure.allBlockPaths`, so deep unsaved paths remain valid even when the prompt-facing `blockTree` is depth-limited
 - Global Styles and Style Book requests carry live `styleContext.templateStructure` and `styleContext.templateVisibility` snapshots from the current editor canvas so style docs grounding and prompt shaping stay aligned with the template the user is actually looking at

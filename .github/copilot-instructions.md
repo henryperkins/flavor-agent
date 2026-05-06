@@ -78,7 +78,7 @@ For any change that touches more than one recommendation surface or any shared s
 
 ### Abilities API integration
 
-The plugin registers 20 abilities across block, pattern, template, navigation, docs, infra, content, and style categories, including design inspection helpers, via `wp_abilities_api_categories_init` and `wp_abilities_api_init`. On WP 7.0 admin screens, core auto-hydrates server-side abilities into the client-side `@wordpress/core-abilities` store.
+Defines 20 abilities across block, pattern, template, navigation, docs, infra, content, and style categories, including design inspection helpers. The plugin wires them via `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Helper/read abilities register whenever the Abilities API exists; recommendation abilities also require the WordPress AI plugin feature contracts and the Flavor Agent feature gate. On WP 7.0 admin screens, core auto-hydrates registered server-side abilities into the client-side `@wordpress/core-abilities` store.
 
 ### REST routes
 
@@ -86,7 +86,7 @@ Remaining REST routes live under `flavor-agent/v1/`: `activity`, `activity/{id}/
 
 ### LLM provider architecture
 
-`LLM\ChatClient` routes chat through the WordPress AI Client (`wp_ai_client_prompt()`) and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages one plugin-owned Cloudflare Workers AI Embedding Model for Qdrant, Qdrant itself, private Cloudflare AI Search pattern retrieval, public Cloudflare AI Search docs grounding, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` is a hidden compatibility option that settings saves canonicalize to `cloudflare_workers_ai`; saved OpenAI Native, Azure OpenAI, or connector values do not select chat or embeddings. Each recommendation surface disables independently when its required backend is unavailable.
+`LLM\ChatClient` routes chat through the WordPress AI Client (`wp_ai_client_prompt()`) and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages one plugin-owned Cloudflare Workers AI Embedding Model for Qdrant, Qdrant itself, private Cloudflare AI Search pattern retrieval, built-in public Cloudflare AI Search docs grounding limits/diagnostics, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` is a hidden compatibility option that settings saves canonicalize to `cloudflare_workers_ai`; saved OpenAI Native, Azure OpenAI, or connector values do not select chat or embeddings. Each recommendation surface disables independently when its required backend is unavailable.
 
 ## Key conventions
 
@@ -106,7 +106,7 @@ Pattern settings keys and inserter DOM selectors are centralized in `src/pattern
 
 `visiblePatternNames` should come from the current inserter root for pattern recommendations. The template recommender intentionally captures it at template-global scope instead, since template suggestions span the whole template rather than a specific insertion point.
 
-Settings sanitization has an established pattern: OpenAI Native, Cloudflare Workers AI, Qdrant, and Cloudflare AI Search validation only runs when submitted values actually change, validation results are deduplicated within a single save request via fingerprinted static state, and failed validation keeps the previously saved value while surfacing a Settings API error. Legacy Azure embedding options are not rendered or save-validated.
+Settings sanitization has an established pattern: Cloudflare Workers AI, Qdrant, and Cloudflare AI Search validation only runs when submitted values actually change, validation results are deduplicated within a single save request via fingerprinted static state, and failed validation keeps the previously saved value while surfacing a Settings API error. Legacy OpenAI Native and Azure embedding options are not rendered or save-validated; chat for those services belongs to `Settings > Connectors`.
 
 PHP unit tests do not boot a real WordPress environment. `tests/phpunit/bootstrap.php` provides a stub harness for core functions and classes. JS unit tests live next to source as `*.test.js` files or in `__tests__/` directories.
 

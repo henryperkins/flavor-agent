@@ -92,7 +92,7 @@ For Flavor Agent, this is a documentation and compatibility watch item more than
 
 WordPress 7.0 now ships `@wordpress/abilities` plus `@wordpress/core-abilities` for client-side ability registration, querying, and execution. Because Flavor Agent already registers its abilities in PHP with `meta.show_in_rest`, those abilities are now automatically hydrated into the admin-side `core/abilities` store when core loads `@wordpress/core-abilities`.
 
-No code change is required for the current first-party UI. The plugin can keep using feature-specific REST endpoints and its own `@wordpress/data` store for scoped permission checks, preview/apply flow, and undo. The new client-side store is mainly an additional integration surface for future admin-only tooling or browser-agent workflows.
+No code change is required for the current first-party UI. The plugin keeps its feature-specific `@wordpress/data` store for scoped state, preview/apply flow, and undo, but first-party recommendation execution now goes through the WordPress Abilities API instead of plugin-owned recommend-* REST endpoints. The client-side abilities store is mainly an additional integration surface for future admin-only tooling or browser-agent workflows.
 
 ### Playground MCP Workflows (optional)
 
@@ -138,7 +138,7 @@ WP 7.0 defaults unsynced patterns and template parts to `contentOnly` mode. The 
 ## Not Applicable
 
 - **Interactivity API** - plugin uses React, not directives
-- **DataViews/DataForm** - no migration opportunity for the Settings page itself; the separate `Settings > AI Activity` admin surface already uses DataViews/DataForm
+- **DataViews and DataForm** - no migration opportunity for the Settings page itself; the separate `Settings > AI Activity` admin surface already uses DataViews for the feed and custom read-only details instead of DataForm
 - **PHP-only block registration** - plugin doesn't register blocks
 - **Real-time collaboration** - not relevant to AI recommendations
 - **Most April 2026 roundup UI bullets** - items like waveform visuals, hidden form inputs, or command-palette grouping do not currently change Flavor Agent contracts or compatibility posture

@@ -6,21 +6,21 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Recommendations`
 - Scope: only while editing a `wp_template` entity
-- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, a shared lower review-before-apply panel, recent activity, and inline undo
+- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, grouped `Review first` / `Manual ideas` lanes, a stale-result refresh hero when needed, a shared lower review-before-apply panel, recent activity, and inline undo
 
 ## Surfacing Conditions
 
 - `TemplateRecommender()` must resolve a current template reference through `core/editor` or `core/edit-site`
 - The shared `wp_template` entity contract from `usePostTypeEntityContract()` must resolve so the panel can align with the current Site Editor template shape while still falling back to built-in field metadata when no live view config is exposed
-- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by the shared surface-capability contract and flips on when a compatible text-generation provider is configured in `Settings > Connectors`
+- Once the `wp_template` reference and entity contract resolve, the panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by the shared surface-capability contract and flips on when a compatible text-generation provider is configured in `Settings > Connectors`
 - The panel clears recommendations on hard template changes, but keeps same-template drifted results visible as stale until the user refreshes or a fresh result arrives
 
 ## Shared Interaction Model
 
-- Learned-once sequence: prompt -> featured recommendation -> grouped lanes -> review where needed -> apply where allowed -> undo and history
+- Learned-once sequence: prompt -> explanation -> grouped lanes -> review where needed -> apply where allowed -> undo and history. `RecommendationHero` is reserved for stale refresh in the compact template shell.
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only after the user explicitly opens preview on a validated suggestion
-- The strongest validated suggestion now appears first in a shared recommendation hero; executable suggestions stay in the `Review first` lane and non-deterministic ideas move to `Manual ideas`
+- Fresh template results render explanation text first, then executable suggestions in the `Review first` lane and non-deterministic ideas in `Manual ideas`; stale same-template results surface a refresh hero before those lanes
 - Preview uses the shared `AIReviewSection` shell in a dedicated lower panel and post-apply / post-undo feedback uses the shared status notice pattern
 - Executable suggestions still require validated operations, while advisory-only suggestions survive server-side parsing when their template-part or pattern summaries validate without a safe deterministic apply path
 - Template freshness now uses the local request signature plus docs-free server review/apply hashes. PHP stores `reviewContextSignature` for background review revalidation and `resolvedContextSignature` for apply safety, so docs warming alone does not invalidate either server freshness check.
@@ -245,7 +245,8 @@ Each suggestion may include at most one `insert_pattern` operation. Executable s
 - `src/components/AIReviewSection.js` — shared review-before-apply panel; see `docs/reference/shared-internals.md`
 - `src/components/AIAdvisorySection.js` — shared advisory-only section; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
-- `inc/REST/Agent_Controller.php`
+- `src/store/abilities-client.js`
+- `inc/Abilities/RecommendationAbilityExecution.php`
 - `inc/Abilities/TemplateAbilities.php`
 - `inc/LLM/TemplatePrompt.php`
 - `inc/Context/ServerCollector.php`

@@ -194,15 +194,13 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 			aria-live="polite"
 		>
 			<div className="flavor-agent-pattern-summary__header">
-				<span className="flavor-agent-pill">Flavor Agent</span>
+				<span className="flavor-agent-pill flavor-agent-pill--lane">
+					Flavor Agent
+				</span>
 				<span className="flavor-agent-pill">
 					{ formatCount( items.length, 'recommendation' ) }
 				</span>
 			</div>
-			<p className="flavor-agent-pattern-summary__copy">
-				AI-ranked patterns stay local to this shelf. Gutenberg&apos;s
-				native pattern registry stays unchanged.
-			</p>
 			<PatternFilteredCandidateNotice diagnostics={ diagnostics } />
 			<div className="flavor-agent-pattern-shelf__items">
 				{ items.map( ( { pattern, recommendation } ) => {
@@ -242,6 +240,7 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 								variant="secondary"
 								size="small"
 								onClick={ () => onInsert( pattern ) }
+								className="flavor-agent-card__apply"
 							>
 								Insert
 							</Button>
@@ -281,12 +280,19 @@ function PatternInserterNotice( {
 			aria-live="polite"
 		>
 			<div className="flavor-agent-pattern-summary__header">
-				<span className="flavor-agent-pill">Flavor Agent</span>
+				<span className="flavor-agent-pill flavor-agent-pill--lane">
+					Flavor Agent
+				</span>
 				{ status === 'empty' && (
 					<span className="flavor-agent-pill">No matches yet</span>
 				) }
 				{ status === 'error' && (
-					<span className="flavor-agent-pill">Ranking failed</span>
+					<span className="flavor-agent-pill flavor-agent-pill--stale">
+						Ranking failed
+					</span>
+				) }
+				{ status === 'loading' && (
+					<span className="flavor-agent-pill">Ranking…</span>
 				) }
 			</div>
 			<p className="flavor-agent-pattern-summary__copy">

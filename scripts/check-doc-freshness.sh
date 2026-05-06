@@ -133,8 +133,8 @@ check_absent \
 	"${live_docs[@]}"
 
 check_present \
-	'ability reference should still declare twenty abilities' \
-	'All twenty abilities are registered' \
+	'ability reference should still declare twenty ability contracts and feature gating' \
+	'`inc/Abilities/Registration\.php` defines 20 ability contracts' \
 	"${repo_root}/docs/reference/abilities-and-routes.md"
 
 check_present \
@@ -181,7 +181,7 @@ check_present_in_each \
 
 check_present_in_each \
 	'ability count drifted between CLAUDE.md and copilot-instructions.md' \
-	'20 abilities across block, pattern, template, navigation, docs, infra, content, and style categories, including design inspection helpers' \
+	'Defines 20 abilities across block, pattern, template, navigation, docs, infra, content, and style categories, including design inspection helpers' \
 	"${repo_root}/CLAUDE.md" \
 	"${repo_root}/.github/copilot-instructions.md"
 

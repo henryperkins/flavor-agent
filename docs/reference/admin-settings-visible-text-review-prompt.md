@@ -32,7 +32,7 @@ Ownership boundaries:
 - Settings > Connectors owns shared chat credentials and text-generation provider selection.
 - Settings > Flavor Agent owns Flavor Agent setup status, embedding model configuration, pattern storage/sync settings, developer-doc grounding, guidelines migration, and experimental feature toggles.
 - Pattern Storage copy should describe storage/index infrastructure, not another AI model selector.
-- Developer Docs should describe the built-in developer.wordpress.org grounding path. Legacy Cloudflare developer-doc override fields should stay hidden unless saved legacy values require migration.
+- Developer Docs should describe the built-in developer.wordpress.org grounding path, not Cloudflare credential setup.
 
 Review method:
 1. Inventory every user-visible string on the settings page, including hero text, status cards, section titles, field labels, field descriptions, notices, badges, empty states, button labels, validation errors, sync/status diagnostics, and JavaScript-driven strings.

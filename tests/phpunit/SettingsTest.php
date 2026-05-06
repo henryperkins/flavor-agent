@@ -688,7 +688,7 @@ final class SettingsTest extends TestCase {
 			'value="' . Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH . '" selected=',
 			$output
 		);
-		$this->assertStringContainsString( 'Managed pattern index using the saved Embedding Model credentials.', $output );
+		$this->assertStringContainsString( 'Managed pattern index using the saved Cloudflare credentials from the Embedding Model section.', $output );
 		$this->assertStringContainsString(
 			'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID . '"',
 			$output
@@ -941,7 +941,7 @@ final class SettingsTest extends TestCase {
 				[
 					'setting' => Config::OPTION_GROUP,
 					'code'    => 'flavor_agent_cloudflare_pattern_ai_search_validation',
-					'message' => 'Cloudflare AI Search Pattern Storage validation failed. Check the Embedding Model credentials and managed pattern index, then try again.',
+					'message' => 'Cloudflare AI Search Pattern Storage validation failed. Check the Cloudflare credentials from the Embedding Model section and managed pattern index, then try again.',
 					'type'    => 'error',
 				],
 				[
@@ -1195,7 +1195,7 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback.', $screen->help_tabs[0]['content'] );
 		$this->assertSame( 'flavor-agent-configuration', $screen->help_tabs[1]['id'] );
 		$this->assertStringContainsString( 'Pattern Storage chooses where the pattern catalog is indexed.', $screen->help_tabs[1]['content'] );
-		$this->assertStringContainsString( 'Private AI Search pattern storage reuses the Embedding Model account and token.', $screen->help_tabs[1]['content'] );
+		$this->assertStringContainsString( 'Private AI Search pattern storage reuses the Cloudflare account and token from the Embedding Model section.', $screen->help_tabs[1]['content'] );
 		$this->assertStringNotContainsString( 'Settings &gt; Connectors', $screen->help_tabs[1]['content'] );
 		$this->assertSame( 'flavor-agent-troubleshooting', $screen->help_tabs[2]['id'] );
 		$this->assertStringContainsString( 'Developer Docs use the built-in developer.wordpress.org grounding path.', $screen->help_tabs[2]['content'] );
@@ -1305,7 +1305,7 @@ final class SettingsTest extends TestCase {
 
 		$this->assertSame( 'Needs pattern storage', $status['label'] );
 		$this->assertSame(
-			'Cloudflare AI Search Pattern Storage needs saved Embedding Model credentials and a managed pattern index.',
+			'Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index.',
 			$status_blocks[0]['message'] ?? ''
 		);
 	}

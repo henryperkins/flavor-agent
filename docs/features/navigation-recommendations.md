@@ -11,7 +11,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Surfacing Conditions
 
 - The selected block must be `core/navigation`
-- The section stays visible with a notice when `window.flavorAgentData.canRecommendNavigation` is false; the localized flag comes from the shared surface-capability contract and requires both `edit_theme_options` and a compatible text-generation provider in `Settings > Connectors`
+- For selected `core/navigation` blocks, the section stays visible when `window.flavorAgentData.canRecommendNavigation` is false, but it shows only the shared capability notice; the prompt, composer, and results remain hidden until the flag is true. The localized flag comes from the shared surface-capability contract and requires both `edit_theme_options` and a compatible text-generation provider in `Settings > Connectors`
 - The request button is only enabled when `buildNavigationFetchInput()` can send a selected `core/navigation` block as either a serialized block markup payload, an `attributes.ref` menu ID, or both
 
 ## Shared Interaction Model
@@ -87,7 +87,8 @@ Navigation participates in the server review-freshness contract even though it i
 - `src/components/RecommendationHero.js` — shared featured next-step shell; see `docs/reference/shared-internals.md`
 - `src/components/RecommendationLane.js` — shared grouped-lane shell; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
-- `inc/REST/Agent_Controller.php`
+- `src/store/abilities-client.js`
+- `inc/Abilities/RecommendationAbilityExecution.php`
 - `inc/Abilities/NavigationAbilities.php`
 - `inc/LLM/NavigationPrompt.php`
 - `inc/Context/ServerCollector.php`

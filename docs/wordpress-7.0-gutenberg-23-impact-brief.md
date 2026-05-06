@@ -80,11 +80,11 @@ Impact:
 
 - No new compatibility work is required for WordPress 7.0.
 
-### DataViews and DataForm admin surface
+### DataViews admin surface
 
 The plugin's `Settings > AI Activity` admin screen is already built on the same WordPress-native data-view stack that 7.0 keeps evolving.
 
-- `src/admin/activity-log.js` imports `DataForm` and `DataViews` from `@wordpress/dataviews/wp`.
+- `src/admin/activity-log.js` imports `DataViews` from `@wordpress/dataviews/wp` and renders custom read-only detail sections beside the feed.
 
 Impact:
 

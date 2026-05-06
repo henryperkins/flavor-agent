@@ -5,15 +5,13 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\AI\FeatureBootstrap;
-use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Cloudflare\AISearchClient;
-use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\WordPressAIClient;
 use FlavorAgent\OpenAI\Provider;
-use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
+use FlavorAgent\Patterns\PatternIndex;
 
 final class InfraAbilities {
 
@@ -50,24 +48,21 @@ final class InfraAbilities {
 		$qdrant_url                     = get_option( 'flavor_agent_qdrant_url', '' );
 		$qdrant_key                     = get_option( 'flavor_agent_qdrant_key', '' );
 		$cloudflare_ai_search_id        = AISearchClient::configured_instance_id();
-		$pattern_backend                = PatternRetrievalBackendFactory::selected_backend();
+		$pattern_readiness              = PatternIndex::recommendation_index_readiness();
 
-		$qdrant_configured          = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
-		$cloudflare_configured      = AISearchClient::is_configured();
-		$active_chat_configured     = ChatClient::is_supported();
-		$recommendations_enabled    = FeatureBootstrap::recommendation_feature_enabled();
-		$pattern_backend_configured = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $pattern_backend
-			? PatternSearchClient::is_configured()
-			: ( Provider::embedding_configured() && $qdrant_configured );
-		$patterns_configured        = $recommendations_enabled
+		$qdrant_configured       = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
+		$cloudflare_configured   = AISearchClient::is_configured();
+		$active_chat_configured  = ChatClient::is_supported();
+		$recommendations_enabled = FeatureBootstrap::recommendation_feature_enabled();
+		$patterns_configured     = $recommendations_enabled
 			&& $active_chat_configured
-			&& $pattern_backend_configured;
-			$settings_url           = function_exists( 'admin_url' )
-				? admin_url( 'options-general.php?page=flavor-agent' )
-				: '';
-			$connectors_url         = function_exists( 'admin_url' )
-				? admin_url( 'options-connectors.php' )
-				: '';
+			&& ! empty( $pattern_readiness['ready'] );
+		$settings_url            = function_exists( 'admin_url' )
+			? admin_url( 'options-general.php?page=flavor-agent' )
+			: '';
+		$connectors_url          = function_exists( 'admin_url' )
+			? admin_url( 'options-connectors.php' )
+			: '';
 
 		$abilities = self::available_abilities(
 			$recommendations_enabled && $active_chat_configured,

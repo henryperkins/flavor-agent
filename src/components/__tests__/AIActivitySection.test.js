@@ -11,6 +11,10 @@ import AIActivitySection from '../AIActivitySection';
 const { getContainer, getRoot } = setupReactTest();
 
 describe( 'AIActivitySection', () => {
+	beforeEach( () => {
+		delete window.flavorAgentData;
+	} );
+
 	test( 'suppresses the section by default when there is no activity history yet', () => {
 		act( () => {
 			getRoot().render(
@@ -170,40 +174,14 @@ describe( 'AIActivitySection', () => {
 		expect( getContainer().textContent ).toContain(
 			'Azure OpenAI responses · gpt-5.3-chat'
 		);
-		expect( getContainer().textContent ).toContain( 'Execution details' );
 		expect( getContainer().textContent ).toContain(
-			'Azure OpenAI via Settings > Flavor Agent'
+			'WordPress AI Client · provider-managed'
 		);
-		expect( getContainer().textContent ).toContain(
-			'Configured in: Settings > Flavor Agent'
+		expect( getContainer().textContent ).not.toContain(
+			'Execution details'
 		);
-		expect( getContainer().textContent ).toContain(
-			'Credential source: Settings > Flavor Agent'
-		);
-		expect( getContainer().textContent ).toContain(
-			'Selected provider: Azure OpenAI'
-		);
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Ability: flavor-agent/recommend-block'
-		);
-		expect( getContainer().textContent ).toContain(
-			'Route: wp-abilities:flavor-agent/recommend-block'
-		);
-		expect( getContainer().textContent ).toContain(
-			'Reference: block:42:1'
-		);
-		expect( getContainer().textContent ).toContain(
-			'Prompt: Tighten the intro copy.'
-		);
-		expect( getContainer().textContent ).toContain(
-			'Token usage: 96 total tokens'
-		);
-		expect( getContainer().textContent ).toContain( 'Latency: 420 ms' );
-		expect( getContainer().textContent ).toContain(
-			'WordPress AI Client via Settings > Connectors'
-		);
-		expect( getContainer().textContent ).toContain(
-			'Fallback from selected Azure OpenAI.'
 		);
 		expect( getContainer().textContent ).toContain(
 			'Global Styles action'
@@ -220,6 +198,95 @@ describe( 'AIActivitySection', () => {
 		undoButton.click();
 
 		expect( onUndo ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'renders compact rows with an activity-log link instead of inline request diagnostics', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					activityLogUrl="https://example.test/wp-admin/options-general.php?page=flavor-agent-activity"
+					maxVisible={ Number.POSITIVE_INFINITY }
+					entries={ [
+						{
+							id: 'diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion:
+								'With no mapped Inspector panels available, the most reliable improvements are structural.',
+							surface: 'block',
+							target: {
+								blockName: 'core/paragraph',
+							},
+							request: {
+								ai: {
+									backendLabel: 'WordPress AI Client',
+									model: 'provider-managed',
+									pathLabel:
+										'WordPress AI Client via Settings > Connectors',
+									transport: {
+										host: 'wordpress-ai-client',
+										path: '/generate-text',
+									},
+									requestSummary: {
+										bodyBytes: 30856,
+									},
+									responseSummary: {
+										bodyBytes: 1564,
+										processingMs: 17280,
+									},
+									tokenUsage: {
+										total: 0,
+									},
+									latencyMs: 17280,
+								},
+								reference:
+									'block:page:4:1a029524-5c72-4c0c-aba3-43208fda9cfb',
+							},
+							diagnostic: {
+								detailLines: [
+									'The block context exposed no mapped inspector panels for this request.',
+								],
+							},
+							undo: {
+								canUndo: false,
+								status: 'review',
+							},
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'With no mapped Inspector panels available'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Block request diagnostic · paragraph'
+		);
+		expect( getContainer().textContent ).toContain(
+			'WordPress AI Client · provider-managed'
+		);
+		expect( getContainer().textContent ).toContain( 'Review' );
+		expect( getContainer().textContent ).toContain( 'View activity' );
+		expect( getContainer().textContent ).not.toContain(
+			'Execution details'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Provider path: WordPress AI Client via Settings > Connectors'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Payload: 30856 bytes'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Token usage: 0 total tokens'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'The block context exposed no mapped inspector panels for this request.'
+		);
+		expect(
+			getContainer().querySelector(
+				'a[href="https://example.test/wp-admin/options-general.php?page=flavor-agent-activity&activity=diagnostic-1"]'
+			)
+		).toBeTruthy();
 	} );
 
 	test( 'hides undo controls when an undo handler is not provided', () => {
@@ -318,19 +385,21 @@ describe( 'AIActivitySection', () => {
 			'Azure OpenAI responses · gpt-5.4-mini'
 		);
 		expect( getContainer().textContent ).toContain( 'Request failed' );
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Flavor Agent returned 1 style, but none in the block lane.'
 		);
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Endpoint: judas2.openai.azure.com/openai/v1/responses'
 		);
-		expect( getContainer().textContent ).toContain( 'Timeout: 180 s' );
-		expect( getContainer().textContent ).toContain(
-			'Payload: 18420 bytes · 17200 instruction chars · 512 input chars · reasoning high'
+		expect( getContainer().textContent ).not.toContain( 'Timeout: 180 s' );
+		expect( getContainer().textContent ).not.toContain(
+			'Payload: 18420 bytes'
 		);
-		expect( getContainer().textContent ).toContain( 'Response: HTTP 504' );
-		expect( getContainer().textContent ).toContain(
-			'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received'
+		expect( getContainer().textContent ).not.toContain(
+			'Response: HTTP 504'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Transport detail: cURL error 28'
 		);
 		expect( getContainer().textContent ).not.toContain(
 			'Undo unavailable'

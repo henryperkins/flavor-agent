@@ -52,7 +52,7 @@ final class Help {
 					[
 						'<p>' . esc_html__( 'Embedding credentials power semantic matching, including Qdrant pattern recommendations.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Pattern Storage chooses where the pattern catalog is indexed. Qdrant uses the configured Embedding Model.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Private AI Search pattern storage reuses the Embedding Model account and token. Flavor Agent creates and owns a dedicated pattern index when Cloudflare AI Search Pattern Storage is selected.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Private AI Search pattern storage reuses the Cloudflare account and token from the Embedding Model section. Flavor Agent creates and owns a dedicated pattern index when Cloudflare AI Search Pattern Storage is selected.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Qdrant and AI Search scores use different scales, so tune thresholds separately.', 'flavor-agent' ) . '</p>',
 					]
 				),

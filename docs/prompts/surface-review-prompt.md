@@ -65,12 +65,12 @@ Output format: follow [../reference/review-response-protocol.md](../reference/re
 - **Surface-specific focus:**
   - Admin access (`manage_options`), menu/asset enqueue scoping, contextual Help, escaped output.
   - Settings API end-to-end: every option from `Registrar::register_settings()` to its renderer, sanitizer, and saved feedback flow.
-  - `Validation` for Cloudflare Workers AI, Qdrant, Cloudflare override, pattern thresholds, reasoning effort, guidelines.
+  - `Validation` for Cloudflare Workers AI, Qdrant, private Cloudflare AI Search Pattern Storage, pattern thresholds, reasoning effort, guidelines.
   - Provider precedence: Connectors-first chat contract, Workers AI-only embeddings, and diagnostics not overclaiming a direct provider when Connectors serves chat.
   - Status cards/sections: `State::get_page_state()`, default-open-section, accordion persistence vs urgent validation.
   - Pattern sync: REST nonce/permissions, duplicate-click, runtime-state updates, no full reload.
   - Guidelines import/export, block guideline storage and escaping.
-  - Docs grounding (built-in + Cloudflare override) prewarm/diagnostics.
+  - Docs grounding (built-in public endpoint) prewarm/diagnostics.
   - WPDS shims, overflow/responsive, color-independent state distinguishability.
 
 ### AI Activity Log
@@ -82,7 +82,7 @@ Output format: follow [../reference/review-response-protocol.md](../reference/re
   - REST contract: `GET /activity`, `POST /activity`, undo/update — argument defaults, sanitization, enum/boolean parsing, `per_page` caps, sort fields, response shape stability.
   - Repository correctness: bounded queries, predictable pagination, total counts, projection backfill freshness, SQL placeholders, timezone/midnight behavior, summary counts computed over filtered set (not paged).
   - Activity state model and undo semantics matching `docs/reference/activity-state-machine.md`.
-  - DataViews/DataForm rendering: filter mapping, search, sort, pagination, per-page, persisted view state, target links.
+  - DataViews feed and custom detail rendering: filter mapping, search, sort, pagination, per-page, persisted view state, target links.
   - Metadata/provenance consistency across create/update/undo/query/serialization.
   - Six-card summary grid responsive states; review/blocked/failed/undone/applied distinguishability without color.
 

@@ -29,7 +29,7 @@ The admin Embedding Model section no longer renders this as a provider picker. I
 
 ## Chat Runtime Chain
 
-`ChatClient::chat()` is the only chat entry point. After Workstream C, it is a thin wrapper around `ResponsesClient::rank()`, which always routes through `WordPressAIClient::chat()`.
+Flavor Agent chat requests enter through `ChatClient::chat()` for block/content and through direct `ResponsesClient::rank()` calls for pattern, template, template-part, navigation, Global Styles, and Style Book ranking. Both paths route through `WordPressAIClient::chat()`.
 
 1. Flavor Agent ignores saved provider values from older settings screens.
 2. Chat requests use the configured WordPress AI Client runtime without pinning a provider.
@@ -43,25 +43,25 @@ The admin Embedding Model section no longer renders this as a provider picker. I
 
 `flavor_agent_reasoning_effort` is the neutral Connectors-routed chat preference used when Flavor Agent can express the setting through the selected provider's model configuration. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source. Flavor Agent does not read, copy, or submit connector credentials itself; authentication and final request dispatch remain owned by the WordPress AI Client and the selected provider plugin.
 
-At request time, `WordPressAIClient::chat()` first tries any standardized WP AI Client reasoning methods that may exist in a future core/client version. When those methods are unavailable, it falls back to `ModelConfig::customOptions` for provider plugins that already support the needed payload shape:
+At request time, `WordPressAIClient::chat()` first tries any standardized WP AI Client reasoning methods that may exist in a future core/client version. When those methods are unavailable and the resolved provider argument is a known pinned connector, it falls back to `ModelConfig::customOptions` for provider plugins that already support the needed payload shape. The normal admin/runtime path ignores saved provider IDs from older settings screens and does not pin chat to a connector. The normal unpinned Connectors runtime can still receive the neutral reasoning preference through standardized WP AI Client methods, but provider-specific custom-option fallback is applied only when a caller explicitly supplies or resolves one of these pinned provider IDs:
 
 | Selected chat provider | Fallback custom option     |
-| ---------------------- | -------------------------- | ------ | ---- | --------- |
-| `codex`                | `reasoningEffort: <low     | medium | high | xhigh>`   |
-| `openai`               | `reasoning: { effort: <low | medium | high | xhigh> }` |
+| ---------------------- | -------------------------- |
+| `codex`                | `reasoningEffort` with one of `low`, `medium`, `high`, or `xhigh` |
+| `openai`               | `reasoning.effort` with one of `low`, `medium`, `high`, or `xhigh` |
 
-When chat resolves to the `openai` connector, it uses the OpenAI mapping above. Anthropic is intentionally unmapped until its provider plugin documents the accepted reasoning/thinking payload contract; Flavor Agent should add that mapping with provider-specific tests when the contract is known.
+Anthropic is intentionally unmapped until its provider plugin documents the accepted reasoning/thinking payload contract; Flavor Agent should add that mapping with provider-specific tests when the contract is known.
 
 ## Embedding Runtime Chain
 
-`Provider::embedding_configuration()` resolves the active plugin-owned Embedding Model. These embeddings are used by Flavor Agent semantic features that need plugin-managed vectors. The Qdrant pattern storage backend uses this Embedding Model; the Cloudflare AI Search pattern backend uses Cloudflare AI Search managed embeddings/indexing and does not call `EmbeddingClient`.
+`Provider::embedding_configuration()` resolves the active plugin-owned Embedding Model. These embeddings are used by Flavor Agent semantic features that need plugin-managed vectors. The Qdrant pattern storage backend uses this Embedding Model. The Cloudflare AI Search pattern backend uses Cloudflare AI Search managed embeddings/indexing for pattern sync and retrieval and does not call `EmbeddingClient` there; save-time setup still validates the shared Embedding Model credentials with `EmbeddingClient::validate_configuration()` before creating or adopting the managed AI Search instance.
 
 1. Flavor Agent resolves runtime embeddings from the Cloudflare Workers AI account ID, API token, and embedding model options.
 2. Saved `openai_native`, `azure_openai`, or connector-backed provider values do not change the runtime embedding path.
 3. If Cloudflare Workers AI is incomplete, Embedding Model status is unavailable and Qdrant Pattern Storage is gated off.
 4. `EmbeddingClient::validate_configuration()` validates only the Cloudflare Workers AI account ID, API token, and embedding model.
 5. When validation sees a Workers AI dimension that differs from the saved Qdrant pattern index dimension, the settings screen warns that patterns must be re-synced before Qdrant-backed recommendations are reliable.
-6. The Cloudflare AI Search pattern backend can be ready when the Embedding Model account ID, API token, embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because it uses managed indexing/search instead of `EmbeddingClient`.
+6. The Cloudflare AI Search pattern backend can be ready when the Embedding Model account ID, API token, embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because pattern sync/retrieval uses managed indexing/search instead of `EmbeddingClient`; save-time setup still validates the shared Embedding Model credentials before creating or adopting that managed instance.
 
 ## Pattern Storage Backend Chain
 
@@ -92,7 +92,7 @@ Authentication uses the `Authorization: Bearer` header against Cloudflare's Open
 
 ## Cloudflare AI Search Pattern Retrieval
 
-Requires the Cloudflare Workers AI Embedding Model credentials and the private pattern index option to be non-empty when `flavor_agent_pattern_retrieval_backend` is `cloudflare_ai_search`:
+Requires the saved Cloudflare account, token, and model from the Embedding Model section and the private pattern index option to be non-empty when `flavor_agent_pattern_retrieval_backend` is `cloudflare_ai_search`:
 
 | Option                                                  | Purpose                                      |
 | ------------------------------------------------------- | -------------------------------------------- |
@@ -100,7 +100,7 @@ Requires the Cloudflare Workers AI Embedding Model credentials and the private p
 | `flavor_agent_cloudflare_workers_ai_api_token`          | Shared Cloudflare API token                  |
 | `flavor_agent_cloudflare_pattern_ai_search_instance_id` | Private pattern AI Search index name         |
 
-Authentication uses the `Authorization: Bearer` header against Cloudflare's AI Search REST API. Pattern sync uses stable item IDs, uploads changed public-safe registered and published synced/user patterns with `wait_for_completion=true`, and deletes stale remote items. Recommendation search sends the query text and `filters.pattern_name` derived from `visiblePatternNames`.
+Authentication uses the `Authorization: Bearer` header against Cloudflare's AI Search REST API. Pattern sync uses stable item IDs, uploads changed public-safe registered patterns and published user `wp_block` patterns across synced, partial, and unsynced states with `wait_for_completion=true`, and deletes only stale remote items that were recorded in the previous Flavor Agent fingerprint state. Unknown remote items and the owner marker are preserved. Recommendation search sends the query text and `filters.pattern_name` derived from `visiblePatternNames`.
 
 ## Old Provider Values
 
