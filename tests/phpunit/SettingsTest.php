@@ -665,7 +665,7 @@ final class SettingsTest extends TestCase {
 			'value="' . Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH . '" selected=',
 			$output
 		);
-		$this->assertStringContainsString( 'Managed pattern index using the saved Embedding Model credentials.', $output );
+		$this->assertStringContainsString( 'Managed pattern index using saved Cloudflare credentials.', $output );
 		$this->assertStringContainsString(
 			'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID . '"',
 			$output
@@ -755,6 +755,47 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_sanitize_private_pattern_ai_search_settings_uses_saved_private_credentials_when_present(): void {
+		WordPressTestState::$options               = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'workers-account',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'pattern-account',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'pattern-namespace',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-old',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'pattern-token',
+		];
+		$_POST                                     = [
+			'option_page' => Config::OPTION_GROUP,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+		];
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode(
+					[
+						'result' => [
+							'chunks' => [],
+						],
+					]
+				),
+			],
+		];
+
+		$this->assertSame(
+			'pattern-index',
+			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( 'pattern-index' )
+		);
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+		$this->assertSame(
+			'https://api.cloudflare.com/client/v4/accounts/pattern-account/ai-search/namespaces/pattern-namespace/instances/pattern-index/search',
+			WordPressTestState::$remote_post_calls[0]['url']
+		);
+		$this->assertSame(
+			'Bearer pattern-token',
+			WordPressTestState::$remote_post_calls[0]['args']['headers']['Authorization'] ?? null
+		);
+	}
+
 	public function test_sanitize_private_pattern_ai_search_settings_reverts_invalid_values(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-new',
@@ -787,7 +828,7 @@ final class SettingsTest extends TestCase {
 				[
 					'setting' => Config::OPTION_GROUP,
 					'code'    => 'flavor_agent_cloudflare_pattern_ai_search_validation',
-					'message' => 'Private Cloudflare AI Search pattern validation failed. Check the Embedding Model credentials, pattern index name, and filterable metadata schema, then try again.',
+					'message' => 'Private Cloudflare AI Search pattern validation failed. Check the Cloudflare credentials, pattern index name, and filterable metadata schema, then try again.',
 					'type'    => 'error',
 				],
 				[
@@ -1046,7 +1087,7 @@ final class SettingsTest extends TestCase {
 
 		$this->assertSame( 'Needs pattern index', $status['label'] );
 		$this->assertSame(
-			'Cloudflare AI Search pattern storage needs the Embedding Model credentials and a pattern index name.',
+			'Cloudflare AI Search pattern storage needs Cloudflare credentials and a pattern index name.',
 			$status_blocks[0]['message'] ?? ''
 		);
 	}

@@ -66,7 +66,7 @@ final class ConfigurationValidator {
 		if ( '' === $url || '' === $model || ! $has_auth_header ) {
 			return new \WP_Error(
 				'missing_credentials',
-				'OpenAI credentials are not configured. Go to Settings > Flavor Agent.',
+				'Cloudflare Workers AI credentials are not configured. Go to Settings > Flavor Agent.',
 				[ 'status' => 400 ]
 			);
 		}

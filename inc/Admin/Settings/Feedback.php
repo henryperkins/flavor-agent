@@ -344,7 +344,7 @@ final class Feedback {
 		return match ( $settings_error_code ) {
 			'flavor_agent_cloudflare_workers_ai_validation' => __( 'Cloudflare Workers AI validation failed. Check the account ID, API token, and embedding model, then try again.', 'flavor-agent' ),
 			'flavor_agent_qdrant_validation' => __( 'Qdrant validation failed. Check the cluster URL and API key, then try again.', 'flavor-agent' ),
-			'flavor_agent_cloudflare_pattern_ai_search_validation' => __( 'Private Cloudflare AI Search pattern validation failed. Check the Embedding Model credentials, pattern index name, and filterable metadata schema, then try again.', 'flavor-agent' ),
+			'flavor_agent_cloudflare_pattern_ai_search_validation' => __( 'Private Cloudflare AI Search pattern validation failed. Check the Cloudflare credentials, pattern index name, and filterable metadata schema, then try again.', 'flavor-agent' ),
 			default => __( 'Validation failed. Check the saved values and try again.', 'flavor-agent' ),
 		};
 	}

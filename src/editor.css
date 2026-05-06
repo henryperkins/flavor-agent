@@ -145,7 +145,7 @@
 .flavor-agent-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--flavor-agent-editor-space-16);
+  gap: var(--flavor-agent-editor-space-12);
   padding-top: var(--flavor-agent-editor-space-4);
   font-family: var(--flavor-agent-editor-font-sans);
 }
@@ -171,7 +171,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--flavor-agent-editor-space-8);
-  padding: var(--flavor-agent-editor-space-12);
+  padding: 10px;
   border-radius: var(--flavor-agent-editor-radius-lg);
   background: transparent;
 }
@@ -194,7 +194,7 @@
 .flavor-agent-panel__intro-copy {
   margin: 0;
   font-size: var(--wpds-font-size-sm, 12px);
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--flavor-agent-editor-muted);
   max-width: none;
 }
@@ -202,8 +202,8 @@
 .flavor-agent-panel__composer {
   display: flex;
   flex-direction: column;
-  gap: var(--flavor-agent-editor-space-12);
-  padding: var(--flavor-agent-editor-space-12);
+  gap: var(--flavor-agent-editor-space-8);
+  padding: 10px;
   border-color: var(--flavor-agent-editor-stroke-subtle);
   background: var(--flavor-agent-editor-panel-bg);
 }
@@ -366,8 +366,8 @@
 .flavor-agent-panel__group {
   display: flex;
   flex-direction: column;
-  gap: var(--flavor-agent-editor-space-12);
-  padding: var(--flavor-agent-editor-space-12);
+  gap: var(--flavor-agent-editor-space-8);
+  padding: 10px;
   border-radius: var(--flavor-agent-editor-radius-lg);
 }
 
@@ -471,23 +471,12 @@
 .flavor-agent-recommendation-hero {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
   border-radius: var(--wpds-border-radius-md, 4px);
-  border: 1px solid
-    color-mix(
-      in srgb,
-      var(--flavor-agent-editor-accent) 22%,
-      var(--flavor-agent-editor-stroke-subtle)
-    );
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.72),
-      rgba(255, 253, 247, 1)
-    ),
-    var(--flavor-agent-editor-surface-mint);
-  box-shadow: var(--flavor-agent-shadow-xs, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--flavor-agent-editor-stroke-subtle);
+  background: var(--flavor-agent-editor-panel-bg);
+  box-shadow: none;
 }
 
 .flavor-agent-recommendation-hero__header {
@@ -556,13 +545,7 @@
       var(--flavor-agent-editor-accent-line) 50%,
       var(--flavor-agent-editor-stroke-subtle)
     );
-  background:
-    linear-gradient(
-      0deg,
-      rgba(237, 247, 247, 0.55),
-      rgba(237, 247, 247, 0.55)
-    ),
-    var(--flavor-agent-editor-panel-bg);
+  background: var(--flavor-agent-editor-panel-bg);
 }
 
 .flavor-agent-activity-row__info {
@@ -1205,8 +1188,8 @@
 .flavor-agent-card {
   display: flex;
   flex-direction: column;
-  gap: var(--flavor-agent-editor-space-8);
-  padding: var(--flavor-agent-editor-space-12);
+  gap: 6px;
+  padding: 10px;
   margin-bottom: 0;
   background: var(--wpds-color-bg-surface-neutral-strong, #ffffff);
   border-radius: var(--flavor-agent-editor-radius-lg);
@@ -1216,7 +1199,7 @@
 
 .flavor-agent-card--template {
   margin-top: 0;
-  padding: var(--flavor-agent-editor-space-12);
+  padding: 10px;
 }
 
 .flavor-agent-card__header {
@@ -1224,7 +1207,7 @@
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
 }
 
 .flavor-agent-card__header--spaced {
@@ -1256,7 +1239,7 @@
 .flavor-agent-card__description {
   font-size: var(--wpds-font-size-sm, 12px);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--flavor-agent-editor-muted);
 }
 
@@ -2033,7 +2016,7 @@
   padding: 8px 10px;
   border-radius: var(--wpds-border-radius-lg, 8px);
   border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
-  background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
+  background: var(--wpds-color-bg-surface, #fff);
 }
 
 .flavor-agent-pattern-summary__header {
@@ -2062,7 +2045,8 @@
   gap: 10px;
   padding: 8px;
   border-radius: var(--wpds-border-radius-md, 6px);
-  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral-weak, #e0e0e0);
+  background: var(--wpds-color-bg-surface, #fff);
 }
 
 .flavor-agent-pattern-shelf__body {
@@ -2263,34 +2247,12 @@
   padding-inline: 0;
 }
 
-/* ---------------------------------------------------------------
- * AI provenance wash — applied to the recommendation lane group
- * surface so AI suggestions read as AI suggestions even before the
- * chip edges resolve.
- * --------------------------------------------------------------- */
-
 .flavor-agent-recommendation-lane {
-  background:
-    linear-gradient(
-      0deg,
-      rgba(11, 123, 128, 0.025),
-      rgba(11, 123, 128, 0.025)
-    ),
-    var(--flavor-agent-editor-panel-bg);
+  background: var(--flavor-agent-editor-panel-bg);
 }
 
-/* ---------------------------------------------------------------
- * Activity section — mint-cream wash for the activity tail.
- * --------------------------------------------------------------- */
-
 .flavor-agent-activity-section {
-  background:
-    linear-gradient(
-      0deg,
-      rgba(237, 247, 247, 0.4),
-      rgba(237, 247, 247, 0.4)
-    ),
-    var(--flavor-agent-editor-panel-bg);
+  background: var(--flavor-agent-editor-panel-bg);
   border-color: color-mix(
     in srgb,
     var(--flavor-agent-editor-accent-line) 60%,

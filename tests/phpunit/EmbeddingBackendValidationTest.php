@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Embeddings\BaseHttpClient;
+use FlavorAgent\Embeddings\ConfigurationValidator;
 use FlavorAgent\Embeddings\EmbeddingClient;
 use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
@@ -61,6 +62,25 @@ final class EmbeddingBackendValidationTest extends TestCase {
 		$this->assertSame( 'missing_credentials', $result->get_error_code() );
 		$this->assertSame(
 			'Cloudflare Workers AI embedding credentials are not configured. Go to Settings > Flavor Agent.',
+			$result->get_error_message()
+		);
+	}
+
+	public function test_shared_configuration_validator_missing_credentials_message_mentions_workers_ai(): void {
+		$result = ConfigurationValidator::validate_with_response(
+			'',
+			[],
+			'',
+			[ 'input' => [ 'validation' ] ],
+			'embedding_validation_error',
+			'Cloudflare Workers AI embeddings',
+			'embeddings'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_credentials', $result->get_error_code() );
+		$this->assertSame(
+			'Cloudflare Workers AI credentials are not configured. Go to Settings > Flavor Agent.',
 			$result->get_error_message()
 		);
 	}

@@ -1,7 +1,5 @@
-/* Warm-cream paper foundation — bleeds across the wp-admin gutters so the
-   hero and cards float on the brand page background, not stock #f0f0f1. */
 body.settings_page_flavor-agent-activity {
-  background: var(--flavor-agent-surface-page, #fffdf8);
+  background: var(--wp-admin-theme-color-bg, #f0f0f1);
 }
 
 .flavor-agent-activity-log {
@@ -46,57 +44,37 @@ body.settings_page_flavor-agent-activity {
     --flavor-agent-surface-frost,
     rgba(255, 255, 255, 0.74)
   );
-  --flavor-agent-activity-log-shell: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.85),
-      rgba(255, 253, 247, 1)
-    ),
-    var(--flavor-agent-surface-brand-strong, #f4efe2);
+  --flavor-agent-activity-log-shell: var(
+    --wpds-color-bg-surface,
+    #ffffff
+  );
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   color: var(--flavor-agent-activity-log-text);
   font-family: var(--flavor-agent-font-sans);
 }
 
-/* Generic shells — the feed card, sidebar card, and empty/error cards share
-   a soft warm-cream gradient over the brand-strong tint with a hairline
-   accent border and a small brand shadow. Earlier flat white shells looked
-   like stock wp-admin chrome; the warm gradient is the audit-log brand. */
 .flavor-agent-activity-log__feed-card,
 .flavor-agent-activity-log__sidebar-card,
 .flavor-agent-activity-log__empty {
   border: 1px solid var(--flavor-agent-activity-log-border);
-  border-radius: var(--flavor-agent-radius-2xl, 22px);
+  border-radius: var(--wpds-border-radius-lg, 8px);
   background: var(--flavor-agent-activity-log-shell);
-  box-shadow: var(--flavor-agent-shadow-xs, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
+  box-shadow: none;
   overflow: hidden;
 }
 
-/* Hero masthead — radial teal glow over the warm-cream → mint-cream wash,
-   22px radius, brand shadow. This is the brand moment of the audit page. */
 .flavor-agent-activity-log__masthead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 24px 28px;
+  gap: 16px;
+  padding: 16px 18px;
   border: 1px solid var(--flavor-agent-activity-log-border);
-  border-radius: var(--flavor-agent-radius-2xl, 22px);
-  background:
-    radial-gradient(
-      circle at top right,
-      rgba(11, 123, 128, 0.18),
-      transparent 38%
-    ),
-    linear-gradient(135deg, #f7f0df 0%, #fffdf8 60%, #edf7f7 100%);
-  box-shadow: var(
-    --flavor-agent-shadow-sm,
-    0 1px 2px 0 rgba(0, 0, 0, 0.05),
-    0 2px 3px 0 rgba(0, 0, 0, 0.04),
-    0 6px 6px 0 rgba(0, 0, 0, 0.03),
-    0 8px 8px 0 rgba(0, 0, 0, 0.02)
-  );
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  background: var(--wpds-color-bg-surface, #fff);
+  box-shadow: none;
 }
 
 .flavor-agent-activity-log__masthead-copy {
@@ -119,7 +97,7 @@ body.settings_page_flavor-agent-activity {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .flavor-agent-activity-log__page-title,
@@ -129,11 +107,11 @@ body.settings_page_flavor-agent-activity {
 }
 
 .flavor-agent-activity-log__page-title {
-  font-family: var(--flavor-agent-font-serif);
-  font-size: clamp(26px, 2.4vw, 32px);
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 22px;
   font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1.05;
+  letter-spacing: 0;
+  line-height: 1.25;
 }
 
 .flavor-agent-activity-log__section-title {
@@ -148,7 +126,7 @@ body.settings_page_flavor-agent-activity {
   color: var(--flavor-agent-activity-log-muted);
   font-family: var(--flavor-agent-font-sans);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
   max-width: 60ch;
 }
 
@@ -178,31 +156,24 @@ body.settings_page_flavor-agent-activity {
   justify-content: flex-end;
 }
 
-/* Overview is a layout container only — the brand chrome lives on the
-   summary cards (frosted bordered tiles) and the toolbar shell below it. */
 .flavor-agent-activity-log__overview {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
-/* Glance metrics — frosted bordered cards on the warm-cream page. We keep
-   six metrics so the admin page mirrors the server-side summary; auto-fit
-   wraps to 3-up / 2-up / 1-up at narrower widths. */
 .flavor-agent-activity-log__summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .flavor-agent-activity-log__summary-item {
   min-width: 0;
-  padding: 14px 18px;
+  padding: 12px;
   border: 1px solid var(--flavor-agent-activity-log-border-soft);
-  border-radius: var(--flavor-agent-radius-xl, 16px);
-  background: var(--flavor-agent-activity-log-frost);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  background: var(--wpds-color-bg-surface, #fff);
 }
 
 .flavor-agent-activity-log__summary-label {
@@ -215,32 +186,29 @@ body.settings_page_flavor-agent-activity {
 }
 
 .flavor-agent-activity-log__summary-value {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--flavor-agent-activity-log-ink);
-  font-family: var(--flavor-agent-font-serif);
-  font-size: 22px;
+  font-family: var(--flavor-agent-font-sans);
+  font-size: 18px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.2;
 }
 
-/* Toolbar shell — wraps the search/filter row in the same warm-cream
-   gradient + 22px radius the feed card uses, so search and the table read
-   as one continuous brand surface. */
 .flavor-agent-activity-log__toolbar {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--flavor-agent-activity-log-border);
-  border-radius: var(--flavor-agent-radius-2xl, 22px);
+  border-radius: var(--wpds-border-radius-lg, 8px);
   background: var(--flavor-agent-activity-log-shell);
-  box-shadow: var(--flavor-agent-shadow-xs, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
+  box-shadow: none;
   overflow: hidden;
 }
 
 .flavor-agent-activity-log__controls {
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .flavor-agent-activity-log__controls-main {
@@ -262,29 +230,24 @@ body.settings_page_flavor-agent-activity {
   max-width: none;
 }
 
-/* Brand-styled search field — 40px height, 12px radius, accent border,
-   inset top highlight. We target both the WP InputControl wrapper and the
-   raw input so DataViews' own search and any direct input use the rule. */
 .flavor-agent-activity-log__search .components-input-control__container,
 .flavor-agent-activity-log__search input[type="search"],
 .flavor-agent-activity-log__search input[type="text"] {
-  min-height: 40px;
-  padding: 0 14px;
+  min-height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--flavor-agent-activity-log-accent-line);
-  border-radius: var(--flavor-agent-radius-lg, 12px);
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  border-radius: var(--wpds-border-radius-md, 4px);
+  background: var(--wpds-color-bg-surface, #fff);
+  box-shadow: none;
   font-family: var(--flavor-agent-font-sans);
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--flavor-agent-activity-log-text);
 }
 
 .flavor-agent-activity-log__search input:focus {
   outline: none;
   border-color: var(--flavor-agent-activity-log-accent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    var(--flavor-agent-focus-ring);
+  box-shadow: var(--flavor-agent-focus-ring);
 }
 
 .flavor-agent-activity-log__controls-actions {
@@ -294,7 +257,7 @@ body.settings_page_flavor-agent-activity {
 }
 
 .flavor-agent-activity-log__filters {
-  padding: 0 18px 14px;
+  padding: 0 12px 12px;
 }
 
 .flavor-agent-activity-log__filters:empty {
@@ -312,16 +275,13 @@ body.settings_page_flavor-agent-activity {
   gap: 8px;
 }
 
-/* Filter chips — pill, 40px high, brand accent on active. DataViews
-   emits `aria-pressed="true"` for the active chip, so we key the active
-   state off that. The count span (when present) is mono. */
 .flavor-agent-activity-log .dataviews-filters__summary-chip-container button,
 .flavor-agent-activity-log .dataviews-filters__summary-chip {
-  min-height: 32px;
-  padding: 0 14px;
-  border-radius: var(--flavor-agent-radius-full, 999px);
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: var(--wpds-border-radius-md, 4px);
   border: 1px solid var(--flavor-agent-activity-log-accent-line);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--wpds-color-bg-surface, #fff);
   color: var(--flavor-agent-activity-log-text);
   font-family: var(--flavor-agent-font-sans);
   font-size: 12.5px;
@@ -364,9 +324,9 @@ body.settings_page_flavor-agent-activity {
   .dataviews-view-config__toggle-wrapper
   > .components-button {
   min-width: auto;
-  min-height: 32px;
-  padding-inline: 12px 14px;
-  border-radius: var(--flavor-agent-radius-full, 999px);
+  min-height: 30px;
+  padding-inline: 10px 12px;
+  border-radius: var(--wpds-border-radius-md, 4px);
 }
 
 .flavor-agent-activity-log .dataviews-filters__visibility-toggle::after,
@@ -393,7 +353,7 @@ body.settings_page_flavor-agent-activity {
 .flavor-agent-activity-log__content {
   display: grid;
   align-items: start;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.95fr);
 }
 
@@ -416,11 +376,9 @@ body.settings_page_flavor-agent-activity {
   max-height: 68vh;
 }
 
-/* DataViews table — accent eyebrow column headers + warm cream rows.
-   Targets the table layout DataViews emits inside .dataviews-view-table. */
 .flavor-agent-activity-log .dataviews-view-table {
   font-family: var(--flavor-agent-font-sans);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .flavor-agent-activity-log .dataviews-view-table th {
@@ -430,7 +388,7 @@ body.settings_page_flavor-agent-activity {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--flavor-agent-activity-log-accent-strong);
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
   border-bottom: 1px solid var(--flavor-agent-activity-log-border-soft);
 }
 
@@ -445,7 +403,7 @@ body.settings_page_flavor-agent-activity {
 }
 
 .flavor-agent-activity-log .dataviews-view-table tr:hover td {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
 }
 
 .flavor-agent-activity-log__pagination {
@@ -461,7 +419,7 @@ body.settings_page_flavor-agent-activity {
 
 .flavor-agent-activity-log__sidebar-card .components-card__header,
 .flavor-agent-activity-log__sidebar-card .components-card__body {
-  padding: 18px;
+  padding: 14px;
   background: transparent;
 }
 
@@ -652,7 +610,7 @@ body.settings_page_flavor-agent-activity {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: var(--flavor-agent-radius-full);
+  border-radius: var(--wpds-border-radius-md, 4px);
   font-size: var(--wpds-font-size-sm, 12px);
   font-weight: 600;
   line-height: 1.2;
@@ -731,7 +689,7 @@ body.settings_page_flavor-agent-activity {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 24px;
+  padding: 16px;
 }
 
 .flavor-agent-activity-log__empty-actions {
@@ -774,7 +732,7 @@ body.settings_page_flavor-agent-activity {
 
 .flavor-agent-activity-log .dataviews-view-activity {
   margin: 0;
-  padding: 16px 18px 18px;
+  padding: 14px;
 }
 
 .flavor-agent-activity-log .dataviews-view-activity__group {
@@ -900,7 +858,7 @@ body.settings_page_flavor-agent-activity {
 
 @media (max-width: 782px) {
   .flavor-agent-activity-log__masthead {
-    padding: 20px 22px;
+    padding: 16px;
   }
 
   .flavor-agent-activity-log__controls,
@@ -944,21 +902,12 @@ body.settings_page_flavor-agent-activity {
   }
 }
 
-/* ---------------------------------------------------------------
- * Brand-scoped button overrides — only inside the activity log.
- *
- * Native WP <Button> primaries follow --wp-admin-theme-color so they take
- * whatever admin scheme the user has selected. Inside the audit page, the
- * masthead and controls actions read as Flavor Agent: pill shape, brand
- * teal primary, frosted secondary.
- * --------------------------------------------------------------- */
-
 .flavor-agent-activity-log .components-button.is-primary,
 .flavor-agent-activity-log .components-button.is-secondary,
 .flavor-agent-activity-log .components-button.is-tertiary {
-  min-height: 36px;
-  padding: 0 16px;
-  border-radius: var(--flavor-agent-radius-full, 999px);
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--wpds-border-radius-sm, 2px);
   font-family: var(--flavor-agent-font-sans);
   font-size: 13px;
   font-weight: 600;
@@ -978,7 +927,7 @@ body.settings_page_flavor-agent-activity {
 }
 
 .flavor-agent-activity-log .components-button.is-secondary {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--wpds-color-bg-surface, #fff);
   border: 1px solid var(--flavor-agent-activity-log-accent-line);
   color: var(--flavor-agent-activity-log-text);
 }

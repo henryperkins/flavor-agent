@@ -130,7 +130,7 @@ final class EmbeddingClient extends BaseHttpClient {
 	 * @return array|\WP_Error Decoded response body.
 	 */
 	private static function request( string $url, array $headers, string $body, string $label ): array|\WP_Error {
-		$response = self::post_json_with_retry(
+		$response = self::post_json(
 			$url,
 			$headers,
 			$body,

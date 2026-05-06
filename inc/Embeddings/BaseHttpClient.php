@@ -18,7 +18,7 @@ abstract class BaseHttpClient {
 	 *   body_bytes: int
 	 * }|\WP_Error
 	 */
-	protected static function post_json_with_retry(
+	protected static function post_json(
 		string $url,
 		array $headers,
 		string $body,
@@ -56,7 +56,7 @@ abstract class BaseHttpClient {
 	 *   body_bytes: int
 	 * }|\WP_Error
 	 */
-	protected static function request_with_retry(
+	protected static function request_json(
 		string $url,
 		array $args,
 		string $label,
@@ -89,7 +89,7 @@ abstract class BaseHttpClient {
 	 *   body_bytes: int
 	 * }|\WP_Error
 	 */
-	protected static function post_multipart_with_retry(
+	protected static function post_multipart(
 		string $url,
 		array $headers,
 		array $fields,
@@ -100,7 +100,7 @@ abstract class BaseHttpClient {
 		$boundary                = 'flavor-agent-' . md5( $url . '|' . microtime( true ) );
 		$headers['Content-Type'] = 'multipart/form-data; boundary=' . $boundary;
 
-		return self::request_with_retry(
+		return self::request_json(
 			$url,
 			[
 				'method'  => 'POST',

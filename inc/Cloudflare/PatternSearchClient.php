@@ -98,7 +98,7 @@ final class PatternSearchClient extends BaseHttpClient {
 		$metadata = self::build_metadata( $pattern, $item_id );
 		$body     = self::build_pattern_markdown( $pattern, $metadata );
 
-		$response = self::post_multipart_with_retry(
+		$response = self::post_multipart(
 			$config['itemsUrl'],
 			self::authorization_headers( $config['apiToken'] ),
 			[
@@ -144,7 +144,7 @@ final class PatternSearchClient extends BaseHttpClient {
 			);
 		}
 
-		$response = self::request_with_retry(
+		$response = self::request_json(
 			$config['itemsUrl'] . '/' . rawurlencode( $item_id ),
 			[
 				'method'  => 'DELETE',
@@ -184,7 +184,7 @@ final class PatternSearchClient extends BaseHttpClient {
 		$page     = 1;
 
 		while ( true ) {
-			$response = self::request_with_retry(
+			$response = self::request_json(
 				self::append_query_args(
 					$config['itemsUrl'],
 					[
@@ -310,16 +310,26 @@ final class PatternSearchClient extends BaseHttpClient {
 		?string $api_token = null
 	): array|\WP_Error {
 		$account_id  = self::normalize_config_value(
-			$account_id ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' )
+			$account_id ?? self::get_config_option_with_fallback(
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+				'flavor_agent_cloudflare_workers_ai_account_id'
+			)
 		);
 		$namespace   = self::normalize_config_value(
-			$namespace_id ?? Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
+			$namespace_id ?? self::get_config_option_with_fallback(
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+				null,
+				Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
+			)
 		);
 		$instance_id = self::normalize_config_value(
 			$instance_id ?? get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' )
 		);
 		$api_token   = self::normalize_config_value(
-			$api_token ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' )
+			$api_token ?? self::get_config_option_with_fallback(
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
+				'flavor_agent_cloudflare_workers_ai_api_token'
+			)
 		);
 		$missing     = [];
 
@@ -370,6 +380,26 @@ final class PatternSearchClient extends BaseHttpClient {
 		];
 	}
 
+	private static function get_config_option_with_fallback(
+		string $option_name,
+		?string $fallback_option_name = null,
+		string $default = ''
+	): string {
+		$value = self::normalize_config_value( get_option( $option_name, '' ) );
+
+		if ( '' !== $value ) {
+			return $value;
+		}
+
+		if ( null === $fallback_option_name ) {
+			return self::normalize_config_value( $default );
+		}
+
+		$value = self::normalize_config_value( get_option( $fallback_option_name, '' ) );
+
+		return '' !== $value ? $value : self::normalize_config_value( $default );
+	}
+
 	/**
 	 * @param array{searchUrl:string,apiToken:string} $config
 	 * @param array<int, string>                      $visible_pattern_names
@@ -388,7 +418,7 @@ final class PatternSearchClient extends BaseHttpClient {
 			self::build_search_request_body( $query, $visible_pattern_names, $max_results )
 		);
 
-		$response = self::post_json_with_retry(
+		$response = self::post_json(
 			$config['searchUrl'],
 			self::json_headers( $config['apiToken'] ),
 			$body,

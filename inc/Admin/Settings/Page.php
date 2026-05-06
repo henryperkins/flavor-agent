@@ -575,7 +575,7 @@ final class Page {
 		);
 		self::render_subsection_heading(
 			__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
-			__( 'Managed pattern index using the saved Embedding Model credentials.', 'flavor-agent' )
+			__( 'Managed pattern index using saved Cloudflare credentials.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
 		self::render_registered_fields_table(
@@ -948,7 +948,7 @@ final class Page {
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
 			return ! empty( $page_state['cloudflare_pattern_ai_search_configured'] )
 				? ''
-				: __( 'Complete the Embedding Model credentials and Cloudflare AI Search pattern index name before syncing.', 'flavor-agent' );
+				: __( 'Complete the Cloudflare credentials and Cloudflare AI Search pattern index name before syncing.', 'flavor-agent' );
 		}
 
 		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );

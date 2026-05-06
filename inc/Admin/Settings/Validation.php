@@ -21,6 +21,7 @@ final class Validation {
 
 	private const SECRET_OPTION_NAMES = [
 		'flavor_agent_cloudflare_workers_ai_api_token',
+		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
 		'flavor_agent_qdrant_key',
 	];
 
@@ -28,6 +29,11 @@ final class Validation {
 		'flavor_agent_cloudflare_workers_ai_api_token' => [
 			'flavor_agent_cloudflare_workers_ai_account_id',
 			'flavor_agent_cloudflare_workers_ai_embedding_model',
+		],
+		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => [
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 		],
 		'flavor_agent_qdrant_key'                      => [
 			'flavor_agent_qdrant_url',
@@ -432,12 +438,29 @@ final class Validation {
 				}
 
 				return [
-					'flavor_agent_cloudflare_workers_ai_account_id' => $workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? '',
-					'flavor_agent_cloudflare_workers_ai_api_token' => $workers_ai_values['flavor_agent_cloudflare_workers_ai_api_token'] ?? '',
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => self::read_posted_text_value(
+						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+						self::resolve_pattern_ai_search_credential_value(
+							$current_values,
+							Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
+							$workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? ''
+						)
+					),
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => self::read_posted_text_value(
+						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ]
+					),
 					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => self::read_posted_text_value(
 						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ]
+					),
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => self::read_posted_text_value(
+						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
+						self::resolve_pattern_ai_search_credential_value(
+							$current_values,
+							Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
+							$workers_ai_values['flavor_agent_cloudflare_workers_ai_api_token'] ?? ''
+						)
 					),
 				];
 			}
@@ -452,10 +475,10 @@ final class Validation {
 		}
 
 		if (
-			'' === $values['flavor_agent_cloudflare_workers_ai_account_id'] ||
+			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ] ||
 			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ] ||
 			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] ||
-			'' === $values['flavor_agent_cloudflare_workers_ai_api_token']
+			'' === $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
 		) {
 			return $values;
 		}
@@ -476,10 +499,10 @@ final class Validation {
 		}
 
 		$validation = PatternSearchClient::validate_configuration(
-			$values['flavor_agent_cloudflare_workers_ai_account_id'],
+			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ],
 			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ],
 			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ],
-			$values['flavor_agent_cloudflare_workers_ai_api_token']
+			$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]
 		);
 
 		self::$pattern_ai_search_validation_state = [
@@ -618,12 +641,55 @@ final class Validation {
 	private static function get_current_pattern_ai_search_values(): array {
 		return self::get_current_option_values(
 			[
-				'flavor_agent_cloudflare_workers_ai_account_id' => 'sanitize_text_field',
-				'flavor_agent_cloudflare_workers_ai_api_token' => 'sanitize_text_field',
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => static fn( string $value ): string => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => static fn( string $value ): string => self::resolve_saved_text_option(
+					$value,
+					'flavor_agent_cloudflare_workers_ai_account_id'
+				),
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => static fn( string $value ): string => self::resolve_saved_text_option(
+					$value,
+					'flavor_agent_cloudflare_workers_ai_api_token'
+				),
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => static fn( string $value ): string => self::resolve_saved_text_option(
+					$value,
+					null,
+					Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
+				),
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'sanitize_text_field',
 			]
 		);
+	}
+
+	/**
+	 * @param array<string, string> $current_values
+	 */
+	private static function resolve_pattern_ai_search_credential_value(
+		array $current_values,
+		string $option_name,
+		string $fallback_value
+	): string {
+		$current_value = sanitize_text_field( $current_values[ $option_name ] ?? '' );
+
+		return '' !== $current_value ? $current_value : sanitize_text_field( $fallback_value );
+	}
+
+	private static function resolve_saved_text_option(
+		string $value,
+		?string $fallback_option_name = null,
+		string $default = ''
+	): string {
+		$value = sanitize_text_field( $value );
+
+		if ( '' !== $value ) {
+			return $value;
+		}
+
+		if ( null === $fallback_option_name ) {
+			return sanitize_text_field( $default );
+		}
+
+		$fallback = sanitize_text_field( (string) get_option( $fallback_option_name, '' ) );
+
+		return '' !== $fallback ? $fallback : sanitize_text_field( $default );
 	}
 
 	/**
