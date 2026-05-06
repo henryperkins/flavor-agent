@@ -172,6 +172,68 @@ test( '@wp70-site-editor settings page keeps compact help-first IA without chang
 	await expect(
 		page.locator( '#contextual-help-wrap .contextual-help-sidebar' )
 	).toContainText( 'Open Activity Log' );
+
+	await page.setViewportSize( { width: 390, height: 900 } );
+	await page.reload( { waitUntil: 'domcontentloaded' } );
+	await waitForWordPressReady( page );
+
+	await expect(
+		page.locator( '.flavor-agent-settings-section__summary' ).first()
+	).toBeVisible();
+	await expect
+		.poll( async () =>
+			page
+				.locator( '.flavor-agent-settings-section__summary' )
+				.evaluateAll( ( summaries ) =>
+					summaries.map( ( summary ) => {
+						const summaryBox = summary.getBoundingClientRect();
+						const side = summary.querySelector(
+							'.flavor-agent-settings-section__summary-side'
+						);
+						const sideBox = side?.getBoundingClientRect();
+						const overflowingBadges = Array.from(
+							summary.querySelectorAll(
+								'.flavor-agent-settings-section__badge'
+							)
+						).filter( ( badge ) => {
+							const box = badge.getBoundingClientRect();
+
+							return (
+								box.left < summaryBox.left - 1 ||
+								box.right > summaryBox.right + 1 ||
+								badge.scrollWidth > badge.clientWidth + 1
+							);
+						} );
+
+						return {
+							summaryText:
+								summary
+									.querySelector(
+										'.flavor-agent-settings-section__title'
+									)
+									?.textContent?.trim() || '',
+							sideFits:
+								! sideBox ||
+								( sideBox.left >= summaryBox.left - 1 &&
+									sideBox.right <= summaryBox.right + 1 ),
+							sideNoOverflow:
+								! side ||
+								side.scrollWidth <= side.clientWidth + 1,
+							overflowingBadgeCount: overflowingBadges.length,
+						};
+					} )
+				)
+		)
+		.toEqual(
+			expect.arrayContaining( [
+				expect.objectContaining( {
+					summaryText: '2. Embedding Model',
+					sideFits: true,
+					sideNoOverflow: true,
+					overflowingBadgeCount: 0,
+				} ),
+			] )
+		);
 } );
 
 test( '@wp70-site-editor settings page saves, validates, and persists safe fields', async ( {

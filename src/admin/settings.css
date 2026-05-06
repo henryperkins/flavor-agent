@@ -122,18 +122,22 @@
 	align-items: center;
 	gap: 8px;
 	flex-shrink: 0;
+	min-width: 0;
 }
 
 .flavor-agent-settings-section__badges {
 	display: flex;
+	flex: 1 1 auto;
 	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 8px;
+	min-width: 0;
 }
 
 .flavor-agent-settings-section__badge {
 	display: inline-flex;
 	align-items: center;
+	max-width: 100%;
 	min-height: 28px;
 	padding: 0 8px;
 	border-radius: var(--wpds-border-radius-md, 4px);
@@ -142,8 +146,11 @@
 	font-size: var(--wpds-font-size-xs, 11px);
 	font-weight: 700;
 	letter-spacing: 0.04em;
+	line-height: 1.25;
 	text-transform: uppercase;
-	white-space: nowrap;
+	text-align: start;
+	overflow-wrap: normal;
+	word-break: normal;
 }
 
 .flavor-agent-settings-section__badge--accent {
@@ -720,6 +727,11 @@
 
 	.flavor-agent-settings-section__badges {
 		justify-content: flex-start;
+	}
+
+	.flavor-agent-settings-section__badge {
+		min-height: 28px;
+		padding-block: 6px;
 	}
 
 	.flavor-agent-settings-table th,

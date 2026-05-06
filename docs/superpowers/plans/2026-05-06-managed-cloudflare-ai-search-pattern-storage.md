@@ -14,6 +14,11 @@
 
 Design source: `docs/superpowers/specs/2026-05-06-managed-cloudflare-ai-search-pattern-storage-design.md`.
 
+Cloudflare API references checked on 2026-05-06:
+
+- Namespace instances list/create: `https://developers.cloudflare.com/api/resources/ai_search/subresources/namespaces/subresources/instances/`
+- Items list/upload: `https://developers.cloudflare.com/api/resources/ai_search/subresources/namespaces/subresources/instances/subresources/items/`
+
 The managed instance target is:
 
 ```json
@@ -89,6 +94,7 @@ Additional constraints from the approved design:
 - Modify: `tests/phpunit/SettingsTest.php`
 - Modify: `tests/phpunit/SettingsRegistrarTest.php`
 - Modify: `tests/phpunit/UninstallTest.php`
+- Modify: `tests/phpunit/bootstrap.php`
 - Modify: `docs/SOURCE_OF_TRUTH.md`
 - Modify: `docs/features/pattern-recommendations.md`
 - Modify: `docs/features/settings-backends-and-sync.md`
@@ -99,8 +105,16 @@ Additional constraints from the approved design:
 **Files:**
 - Create: `tests/phpunit/CloudflarePatternSearchInstanceManagerTest.php`
 - Create: `inc/Cloudflare/PatternSearchInstanceManager.php`
+- Modify: `tests/phpunit/bootstrap.php`
 
 - [ ] **Step 1: Write failing tests for ID, payload, and adoption**
+
+Before adding the manager tests, update `tests/phpunit/bootstrap.php` with lightweight WordPress helper stubs used by the manager when the tests run outside a full WordPress load:
+
+- Add `add_query_arg()` if it is not already defined. It only needs to support the array-argument shape used by this feature: merge query arguments into a URL, omit `null` values, preserve existing query arguments, and use `rawurlencode()`/RFC 3986 encoding so assertions for `search=`, `page=`, `per_page=`, and `metadata_filter=` are stable.
+- Add `wp_hash()` if it is not already defined. For tests, return a deterministic hash such as `hash( 'sha256', (string) $data . '|' . (string) $scheme )` so credential-signature tests do not fatal and do not require WordPress salts.
+
+These stubs are test-harness compatibility only. Production WordPress provides both functions.
 
 Create `tests/phpunit/CloudflarePatternSearchInstanceManagerTest.php`:
 
@@ -195,29 +209,31 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 				'body'     => wp_json_encode(
 					[
 						'result' => [
-							'id'       => 'cloudflare-owner-marker-123',
-							'metadata' => [
-								'pattern_name'   => PatternSearchInstanceManager::OWNER_MARKER_NAME,
-								'candidate_type' => 'flavor_agent_owner',
-								'source'         => 'flavor_agent',
-								'synced_id'      => PatternSearchInstanceManager::site_hash(),
-								'public_safe'    => true,
+							[
+								'id'       => 'cloudflare-owner-marker-123',
+								'metadata' => [
+									'pattern_name'   => PatternSearchInstanceManager::OWNER_MARKER_NAME,
+									'candidate_type' => 'flavor_agent_owner',
+									'source'         => 'flavor_agent',
+									'synced_id'      => PatternSearchInstanceManager::site_hash(),
+									'public_safe'    => true,
+								],
 							],
-						]
+						],
 					]
 				),
 			],
 		];
-			WordPressTestState::$remote_post_responses = [
+		WordPressTestState::$remote_post_responses = [
 			[
 				'response' => [ 'code' => 200 ],
 				'body'     => wp_json_encode( [ 'result' => PatternSearchInstanceManager::build_create_payload( '@cf/qwen/qwen3-embedding-0.6b' ) ] ),
 			],
 			[
 				'response' => [ 'code' => 200 ],
-					'body'     => wp_json_encode( [ 'result' => [ 'id' => 'cloudflare-owner-marker-123' ] ] ),
-				],
-			];
+				'body'     => wp_json_encode( [ 'result' => [ 'id' => 'cloudflare-owner-marker-123' ] ] ),
+			],
+		];
 
 		$result = PatternSearchInstanceManager::ensure_managed_instance(
 			'account-123',
@@ -231,12 +247,12 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 		$this->assertStringContainsString( '/ai-search/namespaces/patterns/instances', WordPressTestState::$remote_get_calls[0]['url'] );
 		$this->assertStringContainsString( '/ai-search/namespaces/patterns/instances', WordPressTestState::$remote_post_calls[0]['url'] );
 		$this->assertStringContainsString( '/items', WordPressTestState::$remote_post_calls[1]['url'] );
-			$this->assertStringContainsString( '/items?', WordPressTestState::$remote_get_calls[1]['url'] );
-			$this->assertStringContainsString( 'metadata_filter=', WordPressTestState::$remote_get_calls[1]['url'] );
-		}
+		$this->assertStringContainsString( '/items?', WordPressTestState::$remote_get_calls[1]['url'] );
+		$this->assertStringContainsString( 'metadata_filter=', WordPressTestState::$remote_get_calls[1]['url'] );
+	}
 
 	public function test_ensure_managed_instance_rejects_matching_id_without_schema(): void {
-	WordPressTestState::$remote_get_responses = [
+		WordPressTestState::$remote_get_responses = [
 			[
 				'response' => [ 'code' => 200 ],
 				'body'     => wp_json_encode(
@@ -266,7 +282,7 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 	}
 
 	public function test_ensure_managed_instance_adopts_only_when_existing_owner_marker_matches(): void {
-			WordPressTestState::$remote_get_responses = [
+		WordPressTestState::$remote_get_responses = [
 			[
 				'response' => [ 'code' => 200 ],
 				'body'     => wp_json_encode(
@@ -285,13 +301,15 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 				'body'     => wp_json_encode(
 					[
 						'result' => [
-							'id'       => 'cloudflare-owner-marker-123',
-							'metadata' => [
-								'pattern_name'   => PatternSearchInstanceManager::OWNER_MARKER_NAME,
-								'candidate_type' => 'flavor_agent_owner',
-								'source'         => 'flavor_agent',
-								'synced_id'      => PatternSearchInstanceManager::site_hash(),
-								'public_safe'    => true,
+							[
+								'id'       => 'cloudflare-owner-marker-123',
+								'metadata' => [
+									'pattern_name'   => PatternSearchInstanceManager::OWNER_MARKER_NAME,
+									'candidate_type' => 'flavor_agent_owner',
+									'source'         => 'flavor_agent',
+									'synced_id'      => PatternSearchInstanceManager::site_hash(),
+									'public_safe'    => true,
+								],
 							],
 						],
 					]
@@ -330,13 +348,15 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 				'body'     => wp_json_encode(
 					[
 						'result' => [
-							'id'       => 'other-site-owner-marker',
-							'metadata' => [
-								'pattern_name'   => PatternSearchInstanceManager::OWNER_MARKER_NAME,
-								'candidate_type' => 'flavor_agent_owner',
-								'source'         => 'flavor_agent',
-								'synced_id'      => 'different-site',
-								'public_safe'    => true,
+							[
+								'id'       => 'other-site-owner-marker',
+								'metadata' => [
+									'pattern_name'   => PatternSearchInstanceManager::OWNER_MARKER_NAME,
+									'candidate_type' => 'flavor_agent_owner',
+									'source'         => 'flavor_agent',
+									'synced_id'      => 'different-site',
+									'public_safe'    => true,
+								],
 							],
 						],
 					]
@@ -362,7 +382,7 @@ Also add a create-conflict regression in the same test class:
 - Queue the initial list response as empty.
 - Queue the create response as HTTP `409`.
 - Queue a second list response containing the managed instance with the approved schema.
-- Queue an owner-marker GET response with matching metadata.
+- Queue an owner-marker metadata-filter response with matching metadata.
 - Assert the result status is `adopted_after_conflict`.
 - Repeat the conflict path with a mismatched owner marker and assert it returns `cloudflare_pattern_ai_search_owner_marker_mismatch`.
 
@@ -384,6 +404,8 @@ composer run test:php -- --filter CloudflarePatternSearchInstanceManagerTest
 
 Expected: exit `1` with `Class "FlavorAgent\Cloudflare\PatternSearchInstanceManager" not found`.
 
+If the failure is instead an undefined test-bootstrap helper such as `add_query_arg()` or `wp_hash()`, add the stubs described in Step 1 first and rerun until the only expected failure is the missing manager class.
+
 - [ ] **Step 3: Add the manager class**
 
 Create `inc/Cloudflare/PatternSearchInstanceManager.php`:
@@ -397,6 +419,7 @@ namespace FlavorAgent\Cloudflare;
 
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Embeddings\BaseHttpClient;
+use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 
 final class PatternSearchInstanceManager extends BaseHttpClient {
 	public const OWNER_MARKER_NAME = '__flavor_agent_owner__';
@@ -911,6 +934,7 @@ $metadata = [
 ```
 
 - `create_instance()` includes the Cloudflare HTTP status in error data. When the create response is `409`, `ensure_managed_instance()` re-lists and adopts only if schema and owner-marker validation pass.
+- `credential_signature()` must be deterministic for one site and change when the current Workers AI account ID, API token, or embedding model changes. It may use `wp_hash()` to avoid storing the raw token in the signature payload, but tests must provide the `wp_hash()` stub from Step 1.
 
 - [ ] **Step 5: Run manager tests**
 
@@ -938,6 +962,7 @@ Expected: exit `0`.
 - Modify: `tests/phpunit/SettingsRegistrarTest.php`
 - Modify: `tests/phpunit/CloudflarePatternSearchClientTest.php`
 - Modify: `tests/phpunit/UninstallTest.php`
+- Modify: `tests/phpunit/bootstrap.php`
 
 - [ ] **Step 1: Add failing settings tests**
 
@@ -1026,6 +1051,26 @@ Add a stale-readiness regression for credential changes:
 - Assert the old instance ID may remain for debugging, but `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE` is cleared or no longer matches the current credential signature.
 - Assert `PatternSearchClient::is_configured()` and the admin state report Cloudflare AI Search Pattern Storage as not ready, and that a settings error is recorded.
 
+Add a Workers AI validation failure regression:
+
+- Post Cloudflare AI Search as the Pattern Storage backend with new Workers AI account/token/model values.
+- Queue the Workers AI embedding validation response as an authentication or permission failure before any manager responses.
+- Invoke the sanitizers in the same order as the real settings group.
+- Assert no `PatternSearchInstanceManager` list/create/upload requests are attempted, no PHP fatal occurs, the old managed instance ID is preserved only as debug context, `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE` is deleted or absent, and both Embedding Model and Pattern Storage readiness are not reported as ready.
+
+Add a backend-only submission regression:
+
+- Seed valid saved Workers AI credentials.
+- Build `$_POST` with `option_page`, nonce, and `Config::OPTION_PATTERN_RETRIEVAL_BACKEND` set to Cloudflare AI Search, but omit the hidden `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID` field.
+- Queue the manager list/create/owner-marker responses for a successful create or adoption.
+- Call `Settings::sanitize_pattern_retrieval_backend()` only.
+- Assert the managed instance ID is persisted to `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID`, `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE` is persisted, and `PatternSearchClient::is_configured()` reports ready after the save.
+
+Add PatternSearchClient signature-gate regressions in `tests/phpunit/CloudflarePatternSearchClientTest.php`:
+
+- Saved runtime options with a managed instance ID but no matching `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE` must make `PatternSearchClient::is_configured()` return false and runtime search/sync config return `cloudflare_pattern_ai_search_not_validated`.
+- `PatternSearchClient::validate_configuration( 'account-123', 'patterns', 'pattern-index', 'token-xyz' )` with explicit arguments must still perform the validation probe without requiring a saved validated signature. This keeps manual probes and focused client tests from becoming circular.
+
 In `tests/phpunit/SettingsRegistrarTest.php`, update the critical fields assertion so the Cloudflare AI Search Pattern Storage section no longer renders `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID` as a default table field:
 
 ```php
@@ -1080,10 +1125,21 @@ In `inc/Admin/Settings/Validation.php`, update `resolve_pattern_ai_search_submis
 
 Do not resolve account ID, API token, or namespace from `flavor_agent_cloudflare_pattern_ai_search_*` legacy options. They remain cleanup-only. `resolve_pattern_ai_search_submission_values()` should pull `$workers_ai_values = self::resolve_workers_ai_submission_values()` and build the managed setup request from those values plus `Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE`.
 
-Call:
+Call only after `resolve_workers_ai_submission_values()` returns an array. Do not index into a `WP_Error`:
 
 ```php
 $workers_ai_values = self::resolve_workers_ai_submission_values();
+
+if ( is_wp_error( $workers_ai_values ) ) {
+	self::report_workers_ai_validation_error( $workers_ai_values );
+	delete_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE );
+
+	return new \WP_Error(
+		'cloudflare_pattern_ai_search_embedding_credentials_invalid',
+		'Cloudflare AI Search Pattern Storage needs valid Embedding Model credentials before Flavor Agent can create a managed pattern index.',
+		[ 'status' => 400 ]
+	);
+}
 
 $managed = PatternSearchInstanceManager::ensure_managed_instance(
 	$workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? '',
@@ -1098,6 +1154,11 @@ If successful, set:
 $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ] = Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE;
 $values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] = $managed['instance_id'];
 update_option(
+	Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
+	$managed['instance_id'],
+	false
+);
+update_option(
 	Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
 	PatternSearchInstanceManager::credential_signature(
 		$workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? '',
@@ -1108,7 +1169,11 @@ update_option(
 );
 ```
 
+The explicit `update_option()` for `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID` is required because `sanitize_pattern_retrieval_backend()` can trigger managed setup when a backend-only or direct submission omits the hidden instance field. In the normal settings form, returning `$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ]` still lets the registered instance sanitizer save the same value through the Settings API.
+
 If it returns `WP_Error`, preserve the previous saved instance value only as debug context, delete `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE`, and report the error through the existing settings error channel. The admin state and runtime config must treat this as not ready.
+
+If the error came from invalid Workers AI credential validation, do not call the manager at all. Report the Workers AI validation error in the Embedding Model section, add Pattern Storage feedback explaining that valid Embedding Model credentials are required, and clear the validated signature so the old instance cannot be used with unvalidated credentials.
 
 Make sure this managed setup path runs when an operator selects Cloudflare AI Search even though the manual index-name field is no longer visible:
 
@@ -1126,6 +1191,12 @@ In `inc/Cloudflare/PatternSearchClient.php`, update `get_config()` so runtime se
 Remove the fallback precedence for `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID`, `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE`, and `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN` from runtime config. Leave those option names in `UninstallOptions` for cleanup.
 
 Before returning config, compute `PatternSearchInstanceManager::credential_signature()` from the current Workers AI account ID, API token, and embedding model. If it does not match `Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE`, return a `WP_Error( 'cloudflare_pattern_ai_search_not_validated', ... )` so `PatternSearchClient::is_configured()`, sync, and search cannot use an old instance ID with new credentials.
+
+Apply this validated-signature gate only to saved runtime configuration reads. Explicit configuration probes must remain possible:
+
+- When `get_config()` is called with all four explicit arguments from `PatternSearchClient::validate_configuration( $account_id, $namespace_id, $instance_id, $api_token )`, skip the saved-signature comparison and build the probe URLs from those explicit values.
+- When `get_config()` is called without explicit arguments by runtime search, upload, list, delete, sync, or `PatternSearchClient::is_configured()`, require the saved validated signature to match the current Workers AI account ID, API token, and embedding model.
+- Do not restore legacy pattern-specific account ID, namespace, or API-token fallback in either path. Explicit arguments are only for validation probes and tests.
 
 In `inc/Admin/Settings/State.php`, update Cloudflare AI Search readiness helpers so `cloudflare_pattern_ai_search_index_configured()` requires both a non-empty managed instance ID and a matching validated credential signature. Keep `determine_default_open_group()` opening `patterns` when Cloudflare AI Search is selected but this readiness check fails.
 
@@ -1148,6 +1219,7 @@ Add a managed status panel in the Pattern Storage section and cover it with `Set
 - **Needs Embedding Model credentials:** show the existing Embedding Model prerequisite action when Workers AI account ID/token are missing.
 - **Create action:** when Cloudflare AI Search is selected, Workers AI credentials are present, and no validated signature exists, show a submit action labelled "Create managed pattern index" that posts the hidden instance field and runs the manager through the normal settings save path.
 - **Failed or incompatible:** when the latest settings save recorded a manager `WP_Error`, show the settings error plus "Managed pattern index needs attention"; keep the old instance ID only in advanced/debug text, not as a ready state.
+- **Recovery for incompatible managed ID:** when the error code is `cloudflare_pattern_ai_search_incompatible_schema`, `cloudflare_pattern_ai_search_owner_marker_missing`, or `cloudflare_pattern_ai_search_owner_marker_mismatch`, show operator guidance that Flavor Agent will not adopt the existing deterministic Cloudflare AI Search instance because ownership or schema could not be proven. Provide a clear retry path: fix or remove the conflicting `flavor-agent-patterns-{site_hash}` instance in Cloudflare, then use the same settings save action to retry create/adopt. Do not upload a marker, overwrite the conflicting instance, generate a random fallback ID, or mark storage ready automatically.
 - **Creating/adopting:** during the submitted save cycle, use the existing settings error/notice channel to report "creating", "adopted", or "ready" status from the manager result.
 
 Update any old copy that says operators must complete a Cloudflare AI Search pattern index name before syncing. The sync prerequisite should now say Embedding Model credentials must be saved and the managed pattern index must be ready.
@@ -1293,6 +1365,12 @@ Update the Patterns bullet to say:
 - **Patterns** -- Pattern Storage selector, Qdrant URL/key, managed Cloudflare AI Search pattern-index status, backend-specific ranking thresholds, max results, and the `Sync Pattern Catalog` status/metrics/manual trigger panel. Pattern Storage is infrastructure, not another AI model choice.
 ```
 
+Add the managed readiness invariant near the settings contract:
+
+```markdown
+Cloudflare AI Search Pattern Storage is ready only after Flavor Agent validates the managed instance against the currently saved Embedding Model account ID, API token, and embedding model. Changing those credentials invalidates the previous managed signature until the instance is created or adopted again.
+```
+
 - [ ] **Step 2: Update local environment setup**
 
 In `docs/reference/local-environment-setup.md`, replace the manual dashboard setup under "Cloudflare Pattern AI Search Metadata" with:
@@ -1304,6 +1382,12 @@ The managed instance uses built-in storage, Cloudflare-managed R2 and Vectorize 
 ```
 
 Keep the existing five-field metadata table.
+
+In `docs/features/settings-backends-and-sync.md`, replace manual index-name setup language with the managed status states used in the UI: needs Embedding Model credentials, create managed pattern index, ready, and failed/incompatible. Make clear that the old pattern-specific Cloudflare account ID, namespace, and token options are cleanup-only.
+
+Also document incompatible-instance recovery: if an existing deterministic `flavor-agent-patterns-{site_hash}` instance fails schema or owner-marker validation, Flavor Agent blocks adoption to avoid deleting unrelated data. The operator must fix or remove that conflicting Cloudflare instance and then retry the normal settings save/create action.
+
+In `docs/features/pattern-recommendations.md`, note that Cloudflare AI Search sync preserves unknown remote items and owner-marker items, and only deletes stale item IDs that were recorded in the previous Flavor Agent pattern fingerprint state.
 
 - [ ] **Step 3: Run docs check**
 
