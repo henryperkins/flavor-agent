@@ -1,12 +1,12 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-05-03
+> Last updated: 2026-05-06
 
 ## Working
 
 ### Abilities API (WordPress 7.0+)
 
-Flavor Agent defines 20 ability contracts. The 13 helper/read abilities register whenever the Abilities API is available; the 7 recommendation abilities register and work when the WordPress AI plugin feature contracts are available and Flavor Agent is enabled in `Settings > AI`. The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`) — lives in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
+Flavor Agent defines 20 ability contracts. The 13 helper/read abilities register whenever the Abilities API is available; the 7 recommendation abilities register only when the WordPress AI plugin feature contracts are available and the Flavor Agent feature is enabled through the AI plugin feature toggles. Useful recommendation output still depends on the per-surface capability and backend gates documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md). The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`) — lives there too.
 
 - **Block**: `recommend-block`, `introspect-block`, `list-allowed-blocks`
 - **Content**: `recommend-content`
@@ -19,9 +19,9 @@ Flavor Agent defines 20 ability contracts. The 13 helper/read abilities register
 
 ### REST API
 
-All three REST routes under `/flavor-agent/v1/` are working. Recommendation surfaces use the WordPress Abilities API instead. Permissions and handlers are documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
+All three REST route paths under `/flavor-agent/v1/` are working. Recommendation surfaces use the WordPress Abilities API instead. Permissions and handlers are documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
 
-- **2 activity routes**: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`) and POST `activity/{id}/undo` (contextual)
+- **2 activity route paths / 3 activity methods**: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`) and POST `activity/{id}/undo` (contextual)
 - **1 admin route**: POST `sync-patterns` (`manage_options`)
 
 ### Editor UI
@@ -35,8 +35,8 @@ All three REST routes under `/flavor-agent/v1/` are working. Recommendation surf
 - Site Editor template recommendation panel for `wp_template` documents with richer top-level structural context, validated template-part assignment/replacement, bounded pattern insertion operations that can target `start`, `end`, `before_block_path`, or `after_block_path` anchors, explicit placement requirements for every executable template insert, and shared `wp_template` entity-contract gating so the surface tracks the current Site Editor document contract even when live view metadata is absent
 - Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, executable-target and structural-constraint aware prompt context, review-confirm-apply support for validated bounded operations (`insert_pattern`, `replace_block_with_pattern`, and `remove_block`), and shared `wp_template_part` entity-contract alignment for area labels and current-document resolution
 - Site Editor style recommendation panels for the native Styles sidebar, with portal-first mounts plus document-panel fallbacks, shared `Review first` / `Manual ideas` framing, `Confirm Apply` review CTA, bounded `set_styles`, `set_block_styles`, and Global Styles-only `set_theme_variation` operations, shared capability/status messaging when the style backend is unavailable, and explicit `theme.json`-safe guardrails that keep raw CSS and `customCSS` out of scope
-- Inspector-panel navigation recommendations for selected `core/navigation` blocks with richer advisory structure, overlay, location, and accessibility guidance inside a nested `Recommended Next Changes` section that intentionally keeps the shared `Manual ideas` taxonomy
-- Recommendation-surface interaction model: the main block panel remains direct-apply for safe local block updates, template/template-part/Global Styles/Style Book remain review-before-apply, navigation remains advisory-only, the block Styles tab remains projection-only, and patterns remain ranking/browse-only; the shared normalized request vocabulary stays `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
+- Inspector-panel navigation recommendations for selected `core/navigation` blocks with richer advisory structure, overlay, location, and accessibility guidance inside the mounted `Navigation Ideas` embedded flow, with `Recommended next change` used for the featured card and manual follow-through required
+- Recommendation-surface interaction model: the main block panel remains direct-apply for safe local block updates, template/template-part/Global Styles/Style Book remain review-before-apply, navigation remains advisory-only, delegated native block Inspector subpanels remain passive mirrors of the main result, and patterns remain ranking/browse-only; the shared normalized request vocabulary stays `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Block, template, and template-part apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel, while Global Styles and Style Book render the same shared history model as `Recent AI Style Actions` and `Recent AI Style Book Actions`; all surfaces include backend/model execution summaries, provider-path ownership labels, and selected-provider fallback notes when the runtime backend differs from the configured provider
 - AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template, template-part, Global Styles, and Style Book undo still rely on stable locators or recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable, and refresh-safe scope hydration now retries once with explicit scope metadata when Site Editor selectors lag after reload
 - A shape-only `src/review/notes-adapter.js` now exists for future Notes/comment projection without taking a runtime dependency on unstable editor APIs

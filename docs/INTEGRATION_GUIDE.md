@@ -51,9 +51,9 @@ The seven recommendation abilities are:
 
 | Ability | Primary capability | Surface |
 |---|---|---|
-| `flavor-agent/recommend-block` | `edit_posts`, or `edit_post` when a positive post ID is present | Block Inspector recommendations |
-| `flavor-agent/recommend-content` | `edit_posts`, or `edit_post` when a positive post ID is present | Content recommendations |
-| `flavor-agent/recommend-patterns` | `edit_posts`, plus configured pattern backend for useful output | Pattern recommendations |
+| `flavor-agent/recommend-block` | `edit_posts`, plus `edit_post` when a positive post ID is resolved from request/document context | Block Inspector recommendations |
+| `flavor-agent/recommend-content` | `edit_posts`, plus `edit_post` when a positive post ID is resolved from request/document context | Content recommendations |
+| `flavor-agent/recommend-patterns` | `edit_posts`, plus `edit_post` when a positive post ID is resolved from request/document context; useful output also requires a configured pattern backend | Pattern recommendations |
 | `flavor-agent/recommend-navigation` | `edit_theme_options` | Navigation guidance |
 | `flavor-agent/recommend-style` | `edit_theme_options` | Global Styles and Style Book |
 | `flavor-agent/recommend-template` | `edit_theme_options` | Template recommendations |

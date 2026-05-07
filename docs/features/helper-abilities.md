@@ -58,7 +58,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Guardrails And Failure Modes
 
-- Docs search fails closed for empty queries, invalid or unavailable public endpoint config, HTTP/search/parse errors, or responses that yield no trusted `developer.wordpress.org` guidance
+- Docs search fails closed for empty queries, invalid or unavailable public endpoint config, HTTP/search/parse errors, or untrusted source filtering; a successful search with no trusted chunks returns an empty `guidance` array
 - Only `developer.wordpress.org` guidance is accepted by the docs-search pipeline
 - Empty docs queries return a `missing_query` error
 - `search-wordpress-docs` may warm exact-query or entity cache entries through the public endpoint for the caller's explicit request; recommendation-time pattern grounding separately disables foreground warming

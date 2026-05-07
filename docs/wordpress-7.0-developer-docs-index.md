@@ -18,7 +18,7 @@ This index covers official, release-specific WordPress 7.0 developer documentati
 - the Make/Playground blog for the official Playground MCP announcement
 - the Make/AI blog for the community connector testing call that confirms the emerging third-party provider ecosystem
 
-This workspace did not have Cloudflare AI Search credentials configured, so discovery was done from the official WordPress site search and REST API endpoints above.
+This release-cycle research snapshot did not use Flavor Agent's built-in docs endpoint; discovery was done from the official WordPress site search and REST API endpoints above.
 
 Excluded on purpose:
 

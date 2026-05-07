@@ -9,13 +9,13 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - Secondary surface: the inserter-toggle badge rendered by `src/patterns/InserterBadge.js`
 - Unavailable state: when Pattern Storage or the Embedding Model is missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
 - There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains ranking/browse-only instead of participating in the lane/review/apply model
-- Pattern recommendations do not use `resolvedContextSignature` and do not accept `resolveSignatureOnly`; freshness for this surface stays request-time and backend-runtime scoped rather than review/apply scoped
+- Pattern recommendations do not use `resolvedContextSignature` and have no declared `resolveSignatureOnly` contract; freshness for this surface stays request-time and backend-runtime scoped rather than review/apply scoped
 
 ## Surfacing Conditions
 
 - `window.flavorAgentData.canRecommendPatterns` must be true; that requires a usable text-generation provider in `Settings > Connectors` plus a selected Pattern Storage backend with a ready usable pattern index in `Settings > Flavor Agent`
 - Qdrant storage readiness requires the Cloudflare Workers AI Embedding Model plus Qdrant URL/key
-- Cloudflare AI Search backend readiness requires the Embedding Model Cloudflare account/token/model plus a managed site-owned Cloudflare AI Search pattern index validated against those credentials; it does not call plugin-owned embedding generation or Qdrant
+- Cloudflare AI Search backend readiness requires the Embedding Model Cloudflare account/token plus the normalized AI Search embedding model and a managed site-owned Cloudflare AI Search pattern instance validated against those values; it does not call plugin-owned embedding generation or Qdrant
 - A post type must be available from `core/editor`
 - Passive fetch runs when the editor loads
 - Active refresh runs when the inserter search input changes while the inserter is open

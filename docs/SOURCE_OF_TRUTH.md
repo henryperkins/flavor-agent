@@ -90,8 +90,8 @@ Generated assets (`build/`, `dist/`, `vendor/`, `node_modules/`) and per-file in
 | -------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | WordPress AI Client + Connectors | Primary chat runtime and connector registry                       | Block/content/template/template-part/navigation/style requests and pattern reranking                                 | Core-managed in `Settings > Connectors`                                                                                          |
 | Provider selection               | Hidden compatibility option                                       | Overwritten with Cloudflare Workers AI on settings save; old saved values do not select chat or embeddings          | `flavor_agent_openai_provider`                                                                                                   |
-| Cloudflare Workers AI Embeddings | Pattern embedding and Cloudflare account credentials              | Pattern index + pattern recommendations when the Qdrant backend needs plugin-owned embeddings; shared account/token for the Cloudflare AI Search pattern backend | `flavor_agent_cloudflare_workers_ai_account_id`, `_api_token`, `_embedding_model`                                                |
-| Qdrant                           | Vector similarity search                                          | Pattern recommendations                                                                                              | `flavor_agent_qdrant_url`, `_key`                                                                                                |
+| Cloudflare Workers AI Embeddings | Pattern embedding and Cloudflare account credentials              | Pattern index + pattern recommendations when the Qdrant backend needs plugin-owned embeddings; shared account/token and effective model for the Cloudflare AI Search pattern backend | `flavor_agent_cloudflare_workers_ai_account_id`, `_api_token`, `_embedding_model`                                                |
+| Qdrant                           | Vector similarity search                                          | Pattern recommendations when the Qdrant Pattern Storage backend is selected                                           | `flavor_agent_qdrant_url`, `_key`                                                                                                |
 | Private Cloudflare AI Search     | Managed pattern indexing and retrieval                            | Pattern recommendations when the Cloudflare AI Search pattern backend is selected                                    | Managed `flavor-agent-patterns-{site_hash}` AI Search instance; account/token come from the Embedding Model settings             |
 | Cloudflare AI Search             | WordPress dev-doc grounding                                       | Supplemental doc context for block, pattern, template, template-part, navigation, Global Styles, and Style Book recs | Managed public search endpoint plus `flavor_agent_cloudflare_ai_search_max_results`                                              |
 
@@ -218,7 +218,7 @@ The code defines 20 abilities with full JSON Schema input/output definitions, gr
 
 - Explicit search via `search-wordpress-docs` ability (`manage_options` only).
 - Recommendation-time grounding checks exact-query cache (6h TTL), family cache, and warmed entity cache (12h TTL) before remote search. Pattern recommendations explicitly disable foreground docs warming and stay cache-only/non-blocking; block, template, template-part, navigation, Global Styles, and Style Book requests may do one bounded foreground warm on generic or missing fallback guidance before queueing async warming.
-- Recommendation-time grounding can also merge a compact WordPress AI/Core roadmap signal from the GitHub project board into the same guidance stream when the opt-in `flavor_agent_enable_core_roadmap_guidance` filter is enabled and a cached roadmap warm is available. Roadmap chunks are cached separately, tagged as `core-roadmap`, capped so developer-doc chunks remain in the first prompt window, and can be skipped per request with `skipCoreRoadmapGuidance`.
+- Recommendation-time grounding can also merge a compact WordPress AI/Core roadmap signal from the GitHub project board into the same guidance stream when the opt-in `flavor_agent_enable_core_roadmap_guidance` filter is enabled and a cached roadmap warm is available. Roadmap chunks are cached separately, tagged as `core-roadmap`, and capped so developer-doc chunks remain in the first prompt window. Current recommendation ability inputs do not expose a request-level roadmap skip flag.
 - Strict source filtering: only `developer.wordpress.org` chunks accepted. URL trust validation (HTTPS, no credentials, sourceKey/URL identity checks). Source keys with an `ai-search/<instanceId>/` prefix are now recognized alongside the plain `developer.wordpress.org/` prefix.
 - Developer Docs prewarm: scheduling fires on plugin activation and normal bootstrap, but the WP-Cron job only seeds the entity cache when the `flavor_agent_cloudflare_ai_search_allow_public_prewarm` opt-in filter returns true; otherwise the built-in public endpoint stays available for user-triggered docs grounding without background prewarm. When prewarm runs, exact entity misses still fall back to prewarmed generic editor/template/template-part guidance families before returning empty. Throttled by source fingerprint and 1-hour cooldown. Admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts.
 
@@ -226,7 +226,7 @@ The code defines 20 abilities with full JSON Schema input/output definitions, gr
 
 Three REST routes live under `/flavor-agent/v1/`. Recommendation surfaces use WordPress Abilities API contracts instead. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
-- **2 activity routes** adapt the activity repository: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`) and POST `activity/{id}/undo` (contextual)
+- **3 activity route methods** adapt the activity repository: GET `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`), POST `activity` (contextual), and POST `activity/{id}/undo` (contextual)
 - **1 admin route**: POST `sync-patterns` (`manage_options`) — manual pattern reindex
 
 #### Admin Settings
@@ -234,7 +234,7 @@ Three REST routes live under `/flavor-agent/v1/`. Recommendation surfaces use Wo
 Settings page at `Settings > Flavor Agent` renders six top-level accordion groups with status cards and native Help guidance:
 
 - **AI Model** -- Text-generation readiness from `Settings > Connectors`, the current WordPress AI Client runtime path, and a link to the Connectors screen.
-- **Embedding Model** -- Cloudflare Workers AI account/token/model for Flavor Agent semantic features. Reasoning effort remains a backwards-compatible saved option used by the Connectors-routed chat runtime, falling back to `medium` when no saved or request value is present, but it is no longer an editable Embedding Model control. Text-generation provider and model readiness belong to `Settings > Connectors`.
+- **Embedding Model** -- Cloudflare Workers AI account/token/effective model for Flavor Agent semantic features. Reasoning effort remains a backwards-compatible saved option used by the Connectors-routed chat runtime, falling back to `medium` when no saved or request value is present, but it is no longer an editable Embedding Model control. Text-generation provider and model readiness belong to `Settings > Connectors`.
 - **Patterns** -- Pattern Storage selector, Qdrant URL/key, managed Cloudflare AI Search pattern-index status, backend-specific ranking thresholds, max results, and the `Sync Pattern Catalog` status/metrics/manual trigger panel. Pattern Storage is infrastructure, not another AI model choice.
 - **Developer Docs** -- Built-in public Cloudflare AI Search developer-doc grounding, source status, max result count, runtime grounding diagnostics, and docs prewarm diagnostics.
 - **Guidelines** -- Site/copy/image/additional guidelines, block-specific notes for content-role blocks, and JSON import/export tooling. Runtime recommendations read the core/Gutenberg Guidelines store first when the `wp_guideline` model is present, with legacy Flavor Agent options retained as migration/admin tooling and fallback storage.
@@ -244,10 +244,11 @@ Block, content, template, template-part, navigation, Global Styles, Style Book, 
 
 The legacy-named reasoning effort setting is applied to Connectors-routed chat as a neutral preference first through standardized WordPress AI Client reasoning methods when available. Provider-specific model custom-option fallback is limited to known pinned provider IDs today: Codex `reasoningEffort` and OpenAI `reasoning.effort`. Anthropic remains unmapped until its provider plugin publishes the accepted reasoning/thinking payload contract.
 
-When the Cloudflare Workers AI account ID, API token, or embedding model changes and all three fields are present, the settings save flow validates the Workers AI embedding model and preserves the previous values if validation fails.
+Cloudflare Workers AI requires an account ID and API token, plus an effective embedding model. If the model setting is blank or absent, Flavor Agent uses the default Workers AI embedding model `@cf/qwen/qwen3-embedding-0.6b`.
+When the Cloudflare Workers AI account ID, API token, or effective embedding model changes and the account/token are present, the settings save flow validates the Workers AI embedding model and preserves the previous values if validation fails.
 When the Qdrant URL or key changes and both fields are present, the settings save flow validates the `/collections` endpoint and preserves the previous values if validation fails.
-Cloudflare AI Search Pattern Storage is ready only after Flavor Agent validates the managed instance against the currently saved Cloudflare account ID, API token, and embedding model from the Embedding Model section. Changing those credentials invalidates the previous managed signature until the instance is created or adopted again.
-When Cloudflare AI Search Pattern Storage is selected and valid Cloudflare credentials from the Embedding Model section are present, the settings save flow creates or adopts the deterministic managed `flavor-agent-patterns-{site_hash}` AI Search instance in the `patterns` namespace. Existing managed instances are adopted only when their metadata schema, Flavor Agent owner marker, and effective embedding model prove compatibility; incompatible deterministic instances are blocked until the operator fixes or removes the conflicting Cloudflare instance and saves settings again.
+Cloudflare AI Search Pattern Storage is ready only after Flavor Agent validates the managed instance against the currently saved Cloudflare account ID, API token, and normalized AI Search embedding model derived from the Embedding Model section. Blank or unsupported Embedding Model values are normalized to Cloudflare AI Search's supported default `@cf/qwen/qwen3-embedding-0.6b` for the private pattern index. Changing the account, token, or normalized model invalidates the previous managed signature until the instance is created or adopted again.
+When Cloudflare AI Search Pattern Storage is selected and valid Cloudflare account/token values from the Embedding Model section are present, the settings save flow creates or adopts the deterministic managed `flavor-agent-patterns-{site_hash}` AI Search instance in the `patterns` namespace. Existing managed instances are adopted only when their metadata schema, Flavor Agent owner marker, and normalized AI Search embedding model prove compatibility; incompatible deterministic instances are blocked until the operator fixes or removes the conflicting Cloudflare instance and saves settings again. Newly created managed instances are created with the expected schema/model, then the owner marker is written and validated before the managed signature is recorded.
 Flavor Agent uses its built-in public Cloudflare AI Search `/search` endpoint for docs grounding, so site owners do not configure Cloudflare credentials for Developer Docs.
 Unchanged or partial private backend credential submissions skip remote validation.
 Successful saves still use the standard Settings API notice flow, and failed Cloudflare Workers AI, Qdrant, or Cloudflare AI Search validation surfaces a plugin-scoped error notice on the same screen.
@@ -278,7 +279,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path because the current Playground 7.0 beta editor runtime breaks before plugin bootstrap, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. The harness pins a pre-release image via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the canonical tag and override instructions live in `docs/reference/local-environment-setup.md`.
 7. **Activity history is still only a first audit slice**: The new `Settings > AI Activity` page provides a recent DataViews timeline with custom read-only detail sections, request diagnostics, and structured before/after state summaries for privileged users, but there are still no abilities-backed row actions/discovery layer and no broader observability workflow beyond the stored timeline.
 8. **Uninstall cleanup is explicit and option-focused**: `uninstall.php` clears Flavor Agent cron hooks plus the static sync/core-roadmap transient keys, drops the plugin-owned activity table, and deletes registered plugin-owned provider, embedding, Qdrant, Cloudflare AI Search, docs runtime, pattern index, activity, guideline, and experiment options. Dynamic docs grounding cache transients are not bulk-deleted by the uninstall handler.
-9. **Provider-backed verification is still environment-dependent**: A fresh Azure-backed recommendation pass was recorded on 2026-04-04 and captured in `STATUS.md`, but future live verification still depends on the configured Connectors chat runtime plus plugin-owned embedding credentials and should be rerun whenever those paths change.
+9. **Provider-backed verification is still environment-dependent**: Live recommendation verification depends on whichever text-generation runtime is configured in `Settings > Connectors`, plus plugin-owned embedding credentials and the selected pattern storage backend, and should be rerun whenever those paths change.
 
 ### Current Open Backlog
 
@@ -308,7 +309,7 @@ User selects block -> InspectorInjector renders AI panel
            -> ChatClient::chat() (WordPress AI Client / Settings > Connectors)
            -> Prompt::parse_response()
            -> Prompt::enforce_block_context_rules()
-        <- JSON response: { settings, styles, block, explanation }
+        <- JSON response: { settings, styles, block, explanation, preFilteringCounts, executionContract, resolvedContextSignature, requestMeta }
   -> store: SET_BLOCK_RECOMMENDATIONS
   -> UI: main block panel lanes + passive delegated SuggestionChips mirrors
   -> User clicks "Apply" on a suggestion
@@ -332,7 +333,7 @@ Editor loads (or inserter search changes)
            -> Dedupe/normalize, take top candidates
             -> ResponsesClient::rank(instructions, candidates)
             -> Parse ranking, apply backend-specific threshold, rehydrate synced/user payloads through published status/read_post access
-        <- JSON response: [{ name, score, reason, ... }]
+        <- JSON response: { recommendations: [{ name, score, reason, ... }], diagnostics, requestMeta }
   -> store: SET_PATTERN_RECS + setPatternStatus('ready')
   -> PatternRecommender.js matches allowed patterns for the current inserter root
   -> UI: local shelf + inserter badge
@@ -355,7 +356,7 @@ User editing wp_template in Site Editor
            -> TemplatePrompt::build_system() + build_user()
            -> ResponsesClient::rank(instructions, input)
            -> TemplatePrompt::parse_response() (validates against context, normalizes executable operations)
-        <- JSON response: { suggestions, explanation }
+         <- JSON response: { suggestions, explanation, reviewContextSignature, resolvedContextSignature, requestMeta }
   -> store: SET_TEMPLATE_RECS
   -> UI: compact scope/composer shell + linked explanation + `Review first` / `Manual ideas` lanes + review state; stale results use a refresh `RecommendationHero`
      -> Template-part links -> selectBlockBySlugOrArea()
@@ -390,7 +391,7 @@ User selects core/navigation block
      -> NavigationPrompt::build_system() + build_user()
      -> ResponsesClient::rank(instructions, input)
      -> NavigationPrompt::parse_response() (validates categories, change types)
-     <- JSON response: { suggestions, explanation }
+      <- JSON response: { suggestions, explanation, reviewContextSignature, requestMeta }
   -> UI renders advisory-only structure, overlay, and accessibility guidance
 ```
 
@@ -408,7 +409,7 @@ User editing wp_template_part in Site Editor
            -> TemplatePartPrompt::build_system() + build_user()
            -> ResponsesClient::rank(instructions, input) via WordPress AI Client / Connectors
            -> TemplatePartPrompt::parse_response() (validates block hints, pattern names, placements)
-        <- JSON response: { suggestions, explanation }
+        <- JSON response: { suggestions, explanation, reviewContextSignature, resolvedContextSignature, requestMeta }
   -> store saves request/result state for current templatePartRef
   -> UI renders advisory links plus preview-confirm-apply for validated bounded operations
   -> applyTemplatePartSuggestion()
@@ -433,7 +434,7 @@ User opens the Site Editor Styles sidebar
            -> StylePrompt::build_system() + build_user()
            -> ResponsesClient::rank(instructions, input)
            -> StylePrompt::parse_response() (validates supported paths, preset usage, and variation references)
-        <- JSON response: { suggestions, explanation }
+        <- JSON response: { suggestions, explanation, reviewContextSignature, resolvedContextSignature, requestMeta }
   -> store saves request/result state for the current global_styles scope
   -> UI renders advisory or executable cards plus preview-confirm-apply for validated style operations; stale review/apply state is demoted through signature revalidation
   -> applyGlobalStylesSuggestion()
@@ -457,7 +458,7 @@ User opens the Style Book panel for a block type
            -> StylePrompt::build_system() + build_user() (surface-aware rules)
            -> ResponsesClient::rank(instructions, input)
            -> StylePrompt::parse_response() (validates block-scoped paths, preset usage, and variation references)
-        <- JSON response: { suggestions, explanation }
+        <- JSON response: { suggestions, explanation, reviewContextSignature, resolvedContextSignature, requestMeta }
   -> store saves request/result state for the current style_book scope
   -> UI renders advisory or executable cards plus preview-confirm-apply for validated style operations; stale review/apply state is demoted through signature revalidation
   -> applyStyleBookSuggestion()

@@ -47,7 +47,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 User opens the Site Editor Styles sidebar
   -> GlobalStylesRecommender or StyleBookRecommender
   -> getGlobalStylesUserConfig() + collectThemeTokens()
-  -> buildRequestInput()
+  -> buildStyleRecommendationRequestInput()
   -> fetchGlobalStylesRecommendations() or fetchStyleBookRecommendations()
   -> flavor-agent/recommend-style ability
   -> RecommendationAbilityExecution
@@ -226,7 +226,7 @@ User opens the Site Editor Styles sidebar
 | UI shell | `GlobalStylesRecommender()` in `src/global-styles/GlobalStylesRecommender.js` | Renders the Global Styles panel, prompt, featured recommendation, grouped lanes, review flow, activity, and undo |
 | UI shell | `StyleBookRecommender()` in `src/style-book/StyleBookRecommender.js` | Renders the Style Book panel, prompt, featured recommendation, grouped lanes, review flow, activity, and undo |
 | Scope/runtime helpers | `getGlobalStylesUserConfig()` in `src/utils/style-operations.js` | Resolves the current `root/globalStyles` entity and available variations |
-| Input builder | `buildRequestInput()` in `src/global-styles/GlobalStylesRecommender.js` and `src/style-book/StyleBookRecommender.js` | Normalizes the recommendation request payload |
+| Input builder | `buildStyleRecommendationRequestInput()` in `src/style-surfaces/request-input.js` | Normalizes the recommendation request payload shared by Global Styles and Style Book |
 | Store request | `fetchGlobalStylesRecommendations()` / `fetchStyleBookRecommendations()` in `src/store/index.js` | Send the recommendation request |
 | Store apply | `applyGlobalStylesSuggestion()` / `applyStyleBookSuggestion()` in `src/store/index.js` | Run deterministic apply and record activity |
 | Deterministic executor | `applyGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validates and executes the structured style operation set |

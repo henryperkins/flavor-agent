@@ -54,7 +54,7 @@ If a surface fails check 1 or 2, remove or hide it. If it fails check 3, keep it
 ## Current Release Blockers
 
 - Block structural apply should remain default-off unless the release explicitly labels it beta and carries fresh WP 7.0 browser evidence.
-- Style and Style Book can claim validated `theme.json` operations today, but should not make strong design-quality or accessibility-quality claims until deterministic contrast/readability validation exists.
+- Style and Style Book can claim validated `theme.json` operations and deterministic color-contrast downgrades today, but should not make broad design-quality or accessibility-quality claims beyond that bounded validator.
 - Unmerged remote feature branches are behind current `master`; cherry-pick small proven changes only. Do not merge broad stale branches as-is.
 
 ## Feature Branch Stop Points
@@ -354,7 +354,7 @@ Do not add:
 ### Release Actions
 
 - [ ] Improve target detection and unavailable-state copy.
-- [ ] Share contrast/readability validation with Global Styles.
+- [x] Share the existing bounded color-contrast validator with Global Styles through `StylePrompt`; do not expand that into broad accessibility claims without additional validators.
 - [ ] Confirm active block example context is included in the prompt and review details.
 - [ ] Re-run Style Book WP 7.0 flows after target or validator changes.
 

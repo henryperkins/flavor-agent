@@ -17,7 +17,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Shared Interaction Model
 
-- Learned-once sequence: prompt -> explanation -> grouped lanes -> review where needed -> apply where allowed -> undo and history. `RecommendationHero` is reserved for stale refresh in the compact template shell.
+- Learned-once sequence: scope/freshness -> prompt -> status/stale refresh -> explanation -> grouped lanes -> lower review panel where needed -> apply where allowed -> undo and history. `RecommendationHero` is reserved for stale refresh in the compact template shell.
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only after the user explicitly opens preview on a validated suggestion
 - Fresh template results render explanation text first, then executable suggestions in the `Review first` lane and non-deterministic ideas in `Manual ideas`; stale same-template results surface a refresh hero before those lanes

@@ -91,7 +91,7 @@ The request includes:
 - Nearby sibling blocks.
 - Content-only lock state and current `metadata.blockVisibility`, when present.
 
-The response is parsed into `settings`, `styles`, and `block` suggestion groups. Applying a suggestion now uses a safe nested merge path so partial `style` and `metadata` updates do not wipe unrelated state. Loading and error state are tracked per selected block, and the backend now mirrors the same `disabled` / `contentOnly` restriction matrix that the editor enforces client-side.
+The response is parsed into `settings`, `styles`, and `block` suggestion groups. Safe local attribute suggestions use a nested merge path so partial `style` and `metadata` updates do not wipe unrelated state. Validator-approved structural selected-block pattern operations use the separate review-first structural apply path. Loading and error state are tracked per selected block, and the backend now mirrors the same `disabled` / `contentOnly` restriction matrix that the editor enforces client-side.
 
 This surface now has three deliberate layers. The main block panel keeps direct apply for safe local attribute changes, broader block ideas render through the shared advisory section, and stale results stay visible with an explicit refresh action instead of silently clearing. Delegated native Inspector sub-panels now mirror the current settings/style result passively instead of acting as separate apply surfaces, and selected `core/navigation` blocks add a nested advisory-only `Navigation Ideas` flow. Content-only blocks suppress style execution while still allowing contract-valid advisory block ideas to remain visible.
 

@@ -105,7 +105,7 @@ Local request-signature builder shared by the executable recommendation surfaces
 
 **Consumers:** `src/store/index.js`, `src/inspector/BlockRecommendationsPanel.js`, `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`, `src/inspector/SuggestionChips.js`
 
-`src/store/index.js` now pairs these local request signatures with server freshness signatures. Block stores `resolvedContextSignature` for apply safety and background server freshness demotion, template/template-part/Global Styles/Style Book also store a docs-free `reviewContextSignature` for background review revalidation, and navigation stores a docs-free `reviewContextSignature` without an apply hash. Apply actions keep the existing local stale check first, then re-post the same request with `resolveSignatureOnly: true` and compare the returned server apply-context signature before any deterministic mutation runs.
+`src/store/index.js` now pairs these local request signatures with server freshness signatures. Block stores `resolvedContextSignature` for apply safety and background server freshness demotion, template/template-part/Global Styles/Style Book also store a docs-free `reviewContextSignature` for background review revalidation, and navigation stores a docs-free `reviewContextSignature` without an apply hash. Apply actions keep the existing local stale check first, then re-execute the same ability with `resolveSignatureOnly: true` and compare the returned server apply-context signature before any deterministic mutation runs.
 
 ### `inc/Support/RecommendationResolvedSignature.php`
 
@@ -162,7 +162,7 @@ Renders a review-before-apply confirmation panel for executable AI operations. D
 These components provide the reusable top-of-panel shell for the full recommendation surfaces.
 
 - `SurfacePanelIntro.js` renders the short surface-specific intro copy block for expanded full-panel shells. Compact shells may replace it with `SurfaceScopeBar`, composer helper text, and short inline notes when the surface contract remains clear.
-- `SurfaceScopeBar.js` renders current/stale scope state plus the refresh affordance when a result exists. On executable surfaces, freshness still starts with local request-signature comparison, then hybrid review surfaces (template/template-part/Global Styles/Style Book) can layer server review staleness from `reviewContextSignature` revalidation while block layers background server staleness from the wrapped REST `payload.resolvedContextSignature`. Store apply actions continue using server `resolvedContextSignature` revalidation before mutation. Stale-state messaging is intentionally surface-owned; the shared status notice does not render stale notices.
+- `SurfaceScopeBar.js` renders current/stale scope state plus the refresh affordance when a result exists. On executable surfaces, freshness still starts with local request-signature comparison, then hybrid review surfaces (template/template-part/Global Styles/Style Book) can layer server review staleness from `reviewContextSignature` revalidation while block layers background server staleness from the ability response's `resolvedContextSignature`. Store apply actions continue using server `resolvedContextSignature` revalidation before mutation. Stale-state messaging is intentionally surface-owned; the shared status notice does not render stale notices.
 - `SurfaceComposer.js` wraps the prompt field, starter prompts, submit action, helper text, and keyboard submission handling. Executable surfaces hydrate the composer prompt from the stored ready-result prompt once per result token so preloaded results start in a fresh state and only become stale after the user edits the prompt or the live context signature changes.
 - Keyboard-only verification notes for `SurfaceComposer`: (1) tab order remains prompt textarea -> starter prompts (if present) -> submit action, (2) prompt focus ring stays clearly visible in default and high-contrast admin themes, and (3) visible labels/helper copy continue to communicate purpose even when placeholder text is absent.
 
@@ -416,7 +416,7 @@ Deep and shallow structural equality helpers used for comparing block attributes
 
 Client-side diagnostic mirror for the block structural operation catalog. It defines the v1 selected-block pattern operation vocabulary (`insert_pattern` and `replace_block_with_pattern`), adapts nested `blockOperationContext` into validator input, rejects multiple proposed operations in M2, and mirrors PHP rejection codes so the UI can explain why structural proposals stayed advisory.
 
-**Consumers:** `src/store/update-helpers.js`, block recommendation actionability tests, future block review/apply state.
+**Consumers:** `src/store/update-helpers.js`, block recommendation actionability tests, and the current block structural review/apply path.
 
 ### `inc/Context/BlockOperationValidator.php`
 
