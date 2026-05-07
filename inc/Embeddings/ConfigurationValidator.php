@@ -111,13 +111,9 @@ final class ConfigurationValidator {
 		$data   = json_decode( $raw, true );
 
 		if ( $status !== 200 ) {
-			$message = is_array( $data ) && isset( $data['error']['message'] ) && is_string( $data['error']['message'] )
-				? $data['error']['message']
-				: $fallback_message . " returned HTTP {$status}";
-
 			return new \WP_Error(
 				$error_code,
-				$message,
+				self::build_http_error_message( $data, $status, $fallback_message ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -168,6 +164,54 @@ final class ConfigurationValidator {
 		}
 
 		return $error;
+	}
+
+	public static function build_http_error_message( mixed $payload, int $status, string $label ): string {
+		if ( self::is_workers_ai_authentication_status( $status, $label ) ) {
+			return self::workers_ai_authentication_message();
+		}
+
+		$remote_message = self::extract_remote_error_message( $payload );
+
+		return '' !== $remote_message ? $remote_message : "{$label} returned HTTP {$status}";
+	}
+
+	private static function is_workers_ai_authentication_status( int $status, string $label ): bool {
+		return in_array( $status, [ 401, 403 ], true )
+			&& str_contains( strtolower( $label ), 'cloudflare workers ai' );
+	}
+
+	private static function workers_ai_authentication_message(): string {
+		return 'Cloudflare Workers AI authentication failed. Check the account ID, API token, and Workers AI Read/Edit permissions in Settings > Flavor Agent.';
+	}
+
+	private static function extract_remote_error_message( mixed $payload ): string {
+		if ( ! is_array( $payload ) ) {
+			return '';
+		}
+
+		$error = $payload['error'] ?? null;
+		if ( is_array( $error ) && isset( $error['message'] ) && is_string( $error['message'] ) ) {
+			return trim( $error['message'] );
+		}
+
+		$errors = $payload['errors'] ?? null;
+		if ( is_array( $errors ) ) {
+			foreach ( $errors as $candidate ) {
+				if ( is_array( $candidate ) && isset( $candidate['message'] ) && is_string( $candidate['message'] ) ) {
+					$message = trim( $candidate['message'] );
+					if ( '' !== $message ) {
+						return $message;
+					}
+				}
+			}
+		}
+
+		if ( isset( $payload['message'] ) && is_string( $payload['message'] ) ) {
+			return trim( $payload['message'] );
+		}
+
+		return '';
 	}
 
 	/**

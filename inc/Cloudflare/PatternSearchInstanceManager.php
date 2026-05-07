@@ -6,10 +6,12 @@ namespace FlavorAgent\Cloudflare;
 
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Embeddings\BaseHttpClient;
+use FlavorAgent\Patterns\PatternIndex;
 
 final class PatternSearchInstanceManager extends BaseHttpClient {
 
-	public const OWNER_MARKER_NAME = '__flavor_agent_owner__';
+	public const OWNER_MARKER_NAME   = '__flavor_agent_owner__';
+	public const PROVISION_CRON_HOOK = 'flavor_agent_provision_pattern_ai_search';
 
 	private const REQUEST_TIMEOUT                      = 20;
 	private const SITE_HASH_LENGTH                     = 16;
@@ -28,6 +30,10 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		return 'flavor-agent-patterns-' . self::site_hash();
 	}
 
+	public static function is_managed_instance_id( string $instance_id ): bool {
+		return self::managed_instance_id() === trim( sanitize_text_field( $instance_id ) );
+	}
+
 	public static function site_hash(): string {
 		$url = function_exists( 'home_url' ) ? home_url() : 'local';
 
@@ -44,6 +50,118 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		];
 
 		return hash( 'sha256', implode( "\n", $payload ) );
+	}
+
+	/**
+	 * @return array{
+	 *   status: string,
+	 *   signature: string,
+	 *   requested_at: string,
+	 *   completed_at: string,
+	 *   managed_status: string,
+	 *   last_error_code: string,
+	 *   last_error: string
+	 * }
+	 */
+	public static function get_provisioning_state(): array {
+		$state = get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE, [] );
+
+		if ( ! is_array( $state ) ) {
+			$state = [];
+		}
+
+		return [
+			'status'          => sanitize_key( (string) ( $state['status'] ?? '' ) ),
+			'signature'       => sanitize_text_field( (string) ( $state['signature'] ?? '' ) ),
+			'requested_at'    => sanitize_text_field( (string) ( $state['requested_at'] ?? '' ) ),
+			'completed_at'    => sanitize_text_field( (string) ( $state['completed_at'] ?? '' ) ),
+			'managed_status'  => sanitize_key( (string) ( $state['managed_status'] ?? '' ) ),
+			'last_error_code' => sanitize_key( (string) ( $state['last_error_code'] ?? '' ) ),
+			'last_error'      => sanitize_text_field( (string) ( $state['last_error'] ?? '' ) ),
+		];
+	}
+
+	public static function schedule_managed_instance_provisioning( string $signature ): void {
+		self::save_provisioning_state(
+			[
+				'status'       => 'provisioning',
+				'signature'    => $signature,
+				'requested_at' => gmdate( 'c' ),
+			]
+		);
+
+		if ( ! wp_next_scheduled( self::PROVISION_CRON_HOOK ) ) {
+			wp_schedule_single_event( time() + 5, self::PROVISION_CRON_HOOK );
+		}
+	}
+
+	public static function process_managed_instance_provisioning(): void {
+		$state = self::get_provisioning_state();
+
+		if ( 'provisioning' !== $state['status'] ) {
+			return;
+		}
+
+		if (
+			Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== sanitize_key(
+				(string) get_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, Config::PATTERN_BACKEND_QDRANT )
+			)
+		) {
+			return;
+		}
+
+		$account_id      = trim( (string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) );
+		$api_token       = trim( (string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) );
+		$embedding_model = trim(
+			(string) get_option(
+				'flavor_agent_cloudflare_workers_ai_embedding_model',
+				WorkersAIEmbeddingConfiguration::DEFAULT_MODEL
+			)
+		);
+		$signature       = self::credential_signature( $account_id, $api_token, $embedding_model );
+
+		if ( '' !== $state['signature'] && $state['signature'] !== $signature ) {
+			delete_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE );
+			self::save_provisioning_state(
+				[
+					'status'          => 'stale',
+					'signature'       => $state['signature'],
+					'last_error_code' => 'cloudflare_pattern_ai_search_signature_changed',
+					'last_error'      => 'Embedding Model credentials changed before managed pattern index provisioning finished. Save settings again to restart provisioning.',
+					'completed_at'    => gmdate( 'c' ),
+				]
+			);
+			return;
+		}
+
+		$managed = self::ensure_managed_instance( $account_id, $api_token, $embedding_model );
+
+		if ( is_wp_error( $managed ) ) {
+			delete_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE );
+			self::save_provisioning_state(
+				[
+					'status'          => 'error',
+					'signature'       => $signature,
+					'last_error_code' => (string) $managed->get_error_code(),
+					'last_error'      => $managed->get_error_message(),
+					'completed_at'    => gmdate( 'c' ),
+				]
+			);
+			return;
+		}
+
+		update_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, $managed['instance_id'], false );
+		update_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE, $signature, false );
+		self::save_provisioning_state(
+			[
+				'status'         => 'ready',
+				'signature'      => $signature,
+				'managed_status' => (string) ( $managed['status'] ?? 'ready' ),
+				'completed_at'   => gmdate( 'c' ),
+			]
+		);
+		PatternIndex::mark_dirty( 'cloudflare_ai_search_signature_changed' );
+		PatternIndex::schedule_sync( true );
 	}
 
 	/**
@@ -178,6 +296,35 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		return in_array( $embedding_model, self::SUPPORTED_AI_SEARCH_EMBEDDING_MODELS, true )
 			? $embedding_model
 			: WorkersAIEmbeddingConfiguration::DEFAULT_MODEL;
+	}
+
+	public static function embedding_model_supported_by_ai_search( string $embedding_model ): bool {
+		$embedding_model = trim( sanitize_text_field( $embedding_model ) );
+
+		return '' !== $embedding_model
+			&& in_array( $embedding_model, self::SUPPORTED_AI_SEARCH_EMBEDDING_MODELS, true );
+	}
+
+	/**
+	 * @param array<string, string> $state
+	 */
+	private static function save_provisioning_state( array $state ): void {
+		update_option(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE,
+			array_merge(
+				[
+					'status'          => '',
+					'signature'       => '',
+					'requested_at'    => '',
+					'completed_at'    => '',
+					'managed_status'  => '',
+					'last_error_code' => '',
+					'last_error'      => '',
+				],
+				array_map( 'sanitize_text_field', $state )
+			),
+			false
+		);
 	}
 
 	/**

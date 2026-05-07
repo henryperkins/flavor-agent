@@ -151,8 +151,14 @@ final class EmbeddingClient extends BaseHttpClient {
 		$data   = $response['data'];
 
 		if ( $status !== 200 ) {
-			$msg = is_array( $data ) ? ( $data['error']['message'] ?? "{$label} returned HTTP {$status}" ) : "{$label} returned HTTP {$status}";
-			return new \WP_Error( 'embedding_error', $msg, [ 'status' => 502 ] );
+			return new \WP_Error(
+				'embedding_error',
+				ConfigurationValidator::build_http_error_message( $data, $status, $label ),
+				[
+					'status'      => 502,
+					'http_status' => $status,
+				]
+			);
 		}
 
 		if ( JSON_ERROR_NONE !== $response['json_error'] || ! is_array( $data ) ) {

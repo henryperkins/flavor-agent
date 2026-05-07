@@ -289,6 +289,45 @@ describe( 'AIActivitySection', () => {
 		).toBeTruthy();
 	} );
 
+	test( 'truncates verbose activity row titles', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					maxVisible={ Number.POSITIVE_INFINITY }
+					entries={ [
+						{
+							id: 'diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion:
+								'With no mapped Inspector panels available, the most reliable improvements are structural: split the home-page shell into semantic sections and convert it to reusable section patterns so it naturally adopts the theme preset system.',
+							surface: 'block',
+							target: {
+								blockName: 'core/paragraph',
+							},
+							undo: {
+								canUndo: false,
+								status: 'review',
+							},
+						},
+					] }
+				/>
+			);
+		} );
+
+		const label = getContainer().querySelector(
+			'.flavor-agent-activity-row__label'
+		);
+
+		expect( label.textContent.length ).toBeLessThanOrEqual( 96 );
+		expect( label.textContent ).toMatch(
+			/^With no mapped Inspector panels available/
+		);
+		expect( label.textContent ).toMatch( /\.\.\.$/ );
+		expect( label.textContent ).not.toContain(
+			'convert it to reusable section patterns'
+		);
+	} );
+
 	test( 'hides undo controls when an undo handler is not provided', () => {
 		act( () => {
 			getRoot().render(

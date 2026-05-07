@@ -1,6 +1,8 @@
 import { Button } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
+import { truncateActivityTitle } from '../utils/activity-title';
+
 function isDiagnosticEntry( entry ) {
 	return entry?.type === 'request_diagnostic';
 }
@@ -263,7 +265,9 @@ export default function AIActivitySection( {
 							>
 								<div className="flavor-agent-activity-row__info">
 									<div className="flavor-agent-activity-row__label">
-										{ entry?.suggestion || 'AI action' }
+										{ truncateActivityTitle(
+											entry?.suggestion || 'AI action'
+										) }
 									</div>
 									<div className="flavor-agent-activity-row__meta">
 										{ describeActivity( entry ) }

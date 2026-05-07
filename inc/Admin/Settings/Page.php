@@ -800,10 +800,18 @@ final class Page {
 			return;
 		}
 
-		$instance_id     = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
-		$embedding_ready = ! empty( $state['runtime_embedding']['configured'] );
-		$storage_ready   = ! empty( $state['cloudflare_pattern_ai_search_configured'] );
-		$error_code      = self::latest_pattern_ai_search_error_code( $feedback );
+		$instance_id         = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
+		$embedding_ready     = ! empty( $state['runtime_embedding']['configured'] );
+		$storage_ready       = ! empty( $state['cloudflare_pattern_ai_search_configured'] );
+		$provisioning        = is_array( $state['cloudflare_pattern_ai_search_provisioning'] ?? null )
+			? $state['cloudflare_pattern_ai_search_provisioning']
+			: [];
+		$provisioning_status = (string) ( $provisioning['status'] ?? '' );
+		$error_code          = self::latest_pattern_ai_search_error_code( $feedback );
+
+		if ( '' === $error_code && 'error' === $provisioning_status ) {
+			$error_code = (string) ( $provisioning['last_error_code'] ?? '' );
+		}
 
 		if ( $storage_ready ) {
 			self::render_cloudflare_pattern_ai_search_status(
@@ -823,6 +831,15 @@ final class Page {
 			return;
 		}
 
+		if ( 'provisioning' === $provisioning_status ) {
+			self::render_cloudflare_pattern_ai_search_status(
+				'warning',
+				__( 'Managed pattern index is provisioning in the background. Refresh this page shortly.', 'flavor-agent' ),
+				$instance_id
+			);
+			return;
+		}
+
 		if ( self::is_specific_pattern_ai_search_status_code( $error_code ) ) {
 			self::render_cloudflare_pattern_ai_search_status(
 				'error',
@@ -831,6 +848,24 @@ final class Page {
 					__( 'Managed pattern index needs attention. Flavor Agent will not adopt %s until ownership and schema can be proven. Fix or remove the conflicting Cloudflare AI Search instance, then save settings again.', 'flavor-agent' ),
 					PatternSearchInstanceManager::managed_instance_id()
 				),
+				$instance_id
+			);
+			return;
+		}
+
+		if ( ! empty( $state['cloudflare_pattern_ai_search_signature_mismatch'] ) ) {
+			self::render_cloudflare_pattern_ai_search_status(
+				'warning',
+				__( 'Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate.', 'flavor-agent' ),
+				$instance_id
+			);
+			return;
+		}
+
+		if ( 'error' === $provisioning_status ) {
+			self::render_cloudflare_pattern_ai_search_status(
+				'error',
+				__( 'Managed pattern index provisioning failed. Check the Cloudflare credentials from Embedding Model, then save settings again.', 'flavor-agent' ),
 				$instance_id
 			);
 			return;
@@ -1097,9 +1132,28 @@ final class Page {
 
 	private static function get_pattern_sync_prerequisite_message( array $page_state ): string {
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
-			return ! empty( $page_state['cloudflare_pattern_ai_search_configured'] )
-				? ''
-				: __( 'Save Cloudflare credentials in Embedding Model and create the managed pattern index before syncing.', 'flavor-agent' );
+			if ( ! empty( $page_state['cloudflare_pattern_ai_search_configured'] ) ) {
+				return '';
+			}
+
+			$provisioning = is_array( $page_state['cloudflare_pattern_ai_search_provisioning'] ?? null )
+				? $page_state['cloudflare_pattern_ai_search_provisioning']
+				: [];
+			$status       = (string) ( $provisioning['status'] ?? '' );
+
+			if ( 'provisioning' === $status ) {
+				return __( 'Managed pattern index is provisioning in the background. Wait for validation before syncing.', 'flavor-agent' );
+			}
+
+			if ( ! empty( $page_state['cloudflare_pattern_ai_search_signature_mismatch'] ) ) {
+				return __( 'Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate.', 'flavor-agent' );
+			}
+
+			if ( 'error' === $status ) {
+				return __( 'Managed pattern index provisioning failed. Check Cloudflare credentials in Embedding Model, then save settings again.', 'flavor-agent' );
+			}
+
+			return __( 'Save Cloudflare credentials in Embedding Model and create the managed pattern index before syncing.', 'flavor-agent' );
 		}
 
 		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );
@@ -1122,9 +1176,19 @@ final class Page {
 
 	private static function get_pattern_sync_prerequisite_status_label( array $page_state ): string {
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
-			return ! empty( $page_state['cloudflare_pattern_ai_search_configured'] )
-				? __( 'Ready', 'flavor-agent' )
-				: __( 'Needs pattern storage', 'flavor-agent' );
+			if ( ! empty( $page_state['cloudflare_pattern_ai_search_configured'] ) ) {
+				return __( 'Ready', 'flavor-agent' );
+			}
+
+			$provisioning = is_array( $page_state['cloudflare_pattern_ai_search_provisioning'] ?? null )
+				? $page_state['cloudflare_pattern_ai_search_provisioning']
+				: [];
+
+			if ( 'provisioning' === (string) ( $provisioning['status'] ?? '' ) ) {
+				return __( 'Provisioning', 'flavor-agent' );
+			}
+
+			return __( 'Needs pattern storage', 'flavor-agent' );
 		}
 
 		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );

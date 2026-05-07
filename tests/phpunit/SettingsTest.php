@@ -759,57 +759,96 @@ final class SettingsTest extends TestCase {
 		$this->assertTrue( (bool) ( $feedback['changed_sections']['patterns'] ?? false ) );
 	}
 
-	public function test_sanitize_private_pattern_ai_search_settings_accept_verified_values_and_validate_once(): void {
-		WordPressTestState::$options               = [
+	public function test_pattern_backend_sanitizer_does_not_provision_private_ai_search_index(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+		];
+		$_POST                       = [
+			'option_page'                            => Config::OPTION_GROUP,
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+		];
+
+		$this->assertSame(
+			Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			Settings::sanitize_pattern_retrieval_backend( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH )
+		);
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertArrayNotHasKey( 'flavor_agent_provision_pattern_ai_search', WordPressTestState::$scheduled_events );
+	}
+
+	public function test_sanitize_private_pattern_ai_search_settings_schedules_managed_provisioning_without_remote_requests(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+		];
+		$_POST                       = [
+			'option_page'                            => Config::OPTION_GROUP,
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => '',
+		];
+
+		$this->assertSame(
+			PatternSearchInstanceManager::managed_instance_id(),
+			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( '' )
+		);
+
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertArrayHasKey( 'flavor_agent_provision_pattern_ai_search', WordPressTestState::$scheduled_events );
+		$this->assertSame(
+			'provisioning',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
+		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
+			WordPressTestState::$options
+		);
+	}
+
+	public function test_sanitize_private_pattern_ai_search_settings_warns_when_embedding_model_falls_back_for_ai_search(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/future/workers-ai-only-model',
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+		];
+		$_POST                       = [
+			'option_page'                            => Config::OPTION_GROUP,
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => '',
+		];
+
+		Settings::sanitize_cloudflare_pattern_ai_search_instance_id( '' );
+
+		$this->assertContains(
+			[
+				'setting' => Config::OPTION_GROUP,
+				'code'    => 'cloudflare_pattern_ai_search_embedding_model_fallback',
+				'message' => 'Cloudflare AI Search Pattern Storage will use @cf/qwen/qwen3-embedding-0.6b because the saved Embedding Model is not supported by Cloudflare AI Search.',
+				'type'    => 'warning',
+			],
+			WordPressTestState::$settings_errors
+		);
+	}
+
+	public function test_sanitize_private_pattern_ai_search_settings_schedules_managed_provisioning_once_per_save(): void {
+		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-old',
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 		];
-		$_POST                                     = [
+		$_POST                       = [
 			'option_page'                            => Config::OPTION_GROUP,
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => '',
-		];
-		WordPressTestState::$remote_get_responses  = [
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => wp_json_encode( [ 'result' => [] ] ),
-			],
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => wp_json_encode(
-					[
-						'result' => [
-							[
-								'id'       => 'cloudflare-owner-marker-123',
-								'metadata' => [
-									'pattern_name'   => PatternSearchInstanceManager::OWNER_MARKER_NAME,
-									'candidate_type' => 'flavor_agent_owner',
-									'source'         => 'flavor_agent',
-									'synced_id'      => PatternSearchInstanceManager::site_hash(),
-									'public_safe'    => true,
-								],
-							],
-						],
-					]
-				),
-			],
-		];
-		WordPressTestState::$remote_post_responses = [
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => wp_json_encode(
-					[
-						'result' => PatternSearchInstanceManager::build_create_payload( '@cf/qwen/qwen3-embedding-0.6b' ),
-					]
-				),
-			],
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => wp_json_encode( [ 'result' => [ 'id' => 'cloudflare-owner-marker-123' ] ] ),
-			],
 		];
 
 		$this->assertSame(
@@ -822,17 +861,22 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertSame(
 			$this->patternAiSearchSignature(),
-			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE ] ?? ''
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['signature'] ?? ''
 		);
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
-		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances',
-			WordPressTestState::$remote_post_calls[0]['url']
+		$this->assertArrayHasKey(
+			PatternSearchInstanceManager::PROVISION_CRON_HOOK,
+			WordPressTestState::$scheduled_events
 		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
+			WordPressTestState::$options
+		);
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_sanitize_private_pattern_ai_search_settings_ignores_saved_private_credentials(): void {
-		WordPressTestState::$options               = [
+		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'workers-account',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
@@ -842,49 +886,10 @@ final class SettingsTest extends TestCase {
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'pattern-token',
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 		];
-		$_POST                                     = [
+		$_POST                       = [
 			'option_page'                            => Config::OPTION_GROUP,
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => '',
-		];
-		WordPressTestState::$remote_get_responses  = [
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => wp_json_encode( [ 'result' => [] ] ),
-			],
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => wp_json_encode(
-					[
-						'result' => [
-							[
-								'id'       => 'cloudflare-owner-marker-123',
-								'metadata' => [
-									'pattern_name'   => PatternSearchInstanceManager::OWNER_MARKER_NAME,
-									'candidate_type' => 'flavor_agent_owner',
-									'source'         => 'flavor_agent',
-									'synced_id'      => PatternSearchInstanceManager::site_hash(),
-									'public_safe'    => true,
-								],
-							],
-						],
-					]
-				),
-			],
-		];
-		WordPressTestState::$remote_post_responses = [
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => wp_json_encode(
-					[
-						'result' => PatternSearchInstanceManager::build_create_payload( '@cf/qwen/qwen3-embedding-0.6b' ),
-					]
-				),
-			],
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => wp_json_encode( [ 'result' => [ 'id' => 'cloudflare-owner-marker-123' ] ] ),
-			],
 		];
 
 		$this->assertSame(
@@ -892,17 +897,22 @@ final class SettingsTest extends TestCase {
 			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( '' )
 		);
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/workers-account/ai-search/namespaces/patterns/instances',
-			WordPressTestState::$remote_post_calls[0]['url']
+			PatternSearchInstanceManager::credential_signature(
+				'workers-account',
+				'workers-token',
+				'@cf/qwen/qwen3-embedding-0.6b'
+			),
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['signature'] ?? ''
 		);
 		$this->assertSame(
-			'Bearer workers-token',
-			WordPressTestState::$remote_post_calls[0]['args']['headers']['Authorization'] ?? null
+			[],
+			WordPressTestState::$remote_get_calls
 		);
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
-	public function test_sanitize_private_pattern_ai_search_settings_reverts_invalid_values(): void {
-		WordPressTestState::$options             = [
+	public function test_sanitize_private_pattern_ai_search_settings_clears_stale_signature_and_schedules_revalidation(): void {
+		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-new',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-new',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
@@ -910,90 +920,41 @@ final class SettingsTest extends TestCase {
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => 'old-signature',
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 		];
-		$_POST                                   = [
+		$_POST                       = [
 			'option_page'                            => Config::OPTION_GROUP,
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-new',
 		];
-		WordPressTestState::$remote_get_response = [
-			'response' => [ 'code' => 403 ],
-			'body'     => wp_json_encode(
-				[
-					'errors' => [
-						[
-							'message' => 'Authentication failed for token-new',
-						],
-					],
-				]
-			),
-		];
 
 		$this->assertSame(
-			'instance-old',
+			PatternSearchInstanceManager::managed_instance_id(),
 			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( 'instance-new' )
 		);
 		$this->assertArrayNotHasKey(
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
 			WordPressTestState::$options
 		);
-		$this->assertSame(
-			[
-				[
-					'setting' => Config::OPTION_GROUP,
-					'code'    => 'flavor_agent_cloudflare_pattern_ai_search_validation',
-					'message' => 'Cloudflare AI Search Pattern Storage validation failed. Check the Cloudflare credentials from the Embedding Model section and managed pattern index, then try again.',
-					'type'    => 'error',
-				],
-				[
-					'setting' => Config::OPTION_GROUP,
-					'code'    => 'flavor_agent_cloudflare_pattern_ai_search_validation_preserved',
-					'message' => 'We kept your previous private Cloudflare AI Search pattern settings because validation failed.',
-					'type'    => 'warning',
-				],
-			],
-			WordPressTestState::$settings_errors
+		$this->assertArrayHasKey(
+			PatternSearchInstanceManager::PROVISION_CRON_HOOK,
+			WordPressTestState::$scheduled_events
 		);
-		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 		$this->assertStringNotContainsString( 'token-new', wp_json_encode( WordPressTestState::$settings_errors ) );
 	}
 
-	public function test_pattern_ai_search_conflict_status_uses_specific_settings_error_code(): void {
-		WordPressTestState::$options             = [
+	public function test_pattern_ai_search_conflict_status_uses_specific_provisioning_error_code(): void {
+		WordPressTestState::$options = [
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE => [
+				'status'          => 'error',
+				'last_error_code' => 'cloudflare_pattern_ai_search_incompatible_schema',
+			],
 		];
-		$_POST                                   = [
-			'option_page'                            => Config::OPTION_GROUP,
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => '',
-		];
-		WordPressTestState::$remote_get_response = [
-			'response' => [ 'code' => 200 ],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						[
-							'id'              => PatternSearchInstanceManager::managed_instance_id(),
-							'custom_metadata' => [
-								[
-									'field_name' => 'category',
-									'data_type'  => 'text',
-								],
-							],
-						],
-					],
-				]
-			),
-		];
-
-		Settings::sanitize_cloudflare_pattern_ai_search_instance_id( '' );
-
-		$this->assertSame(
-			'cloudflare_pattern_ai_search_incompatible_schema',
-			WordPressTestState::$settings_errors[0]['code'] ?? ''
-		);
 
 		ob_start();
 		Settings::render_page();
@@ -1005,39 +966,30 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_pattern_ai_search_conflict_status_uses_specific_request_scoped_feedback_code(): void {
-		WordPressTestState::$current_user_id     = 1;
-		WordPressTestState::$options             = [
+		WordPressTestState::$current_user_id = 1;
+		WordPressTestState::$options         = [
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
 		];
-		$_POST                                   = [
-			'option_page'                            => Config::OPTION_GROUP,
-			'flavor_agent_settings_feedback_key'     => 'pattern-conflict',
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => '',
-		];
-		WordPressTestState::$remote_get_response = [
-			'response' => [ 'code' => 200 ],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						[
-							'id'              => PatternSearchInstanceManager::managed_instance_id(),
-							'custom_metadata' => [
-								[
-									'field_name' => 'category',
-									'data_type'  => 'text',
-								],
-							],
-						],
-					],
-				]
-			),
+		$_POST                               = [
+			'option_page'                        => Config::OPTION_GROUP,
+			'flavor_agent_settings_feedback_key' => 'pattern-conflict',
 		];
 
-		Settings::sanitize_cloudflare_pattern_ai_search_instance_id( '' );
+		Feedback::record_section_feedback_messages(
+			Config::GROUP_PATTERNS,
+			[
+				[
+					'tone'    => 'error',
+					'message' => 'Conflict detected.',
+					'code'    => 'cloudflare_pattern_ai_search_incompatible_schema',
+				],
+			],
+			true
+		);
 
 		$feedback = WordPressTestState::$transients[ Feedback::get_storage_key( 'pattern-conflict' ) ] ?? [];
 
@@ -1060,19 +1012,61 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'token-xyz', $output );
 	}
 
-	public function test_page_state_tracks_private_pattern_ai_search_configuration(): void {
+	public function test_pattern_ai_search_status_explains_saved_instance_signature_mismatch(): void {
 		WordPressTestState::$options = [
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-new',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
+				'account-123',
+				'token-old',
+				'@cf/qwen/qwen3-embedding-0.6b'
+			),
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString(
+			'Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate.',
+			$output
+		);
+		$this->assertStringNotContainsString( 'Create managed pattern index.', $output );
+	}
+
+	public function test_page_state_requires_private_pattern_ai_search_managed_instance_id(): void {
+		$base_options = [
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => $this->patternAiSearchSignature(),
 		];
+
+		WordPressTestState::$options = array_merge(
+			$base_options,
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+			]
+		);
 
 		$state = State::get_page_state();
 
 		$this->assertSame( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH, $state['selected_pattern_backend'] );
+		$this->assertFalse( $state['cloudflare_pattern_ai_search_configured'] );
+
+		WordPressTestState::$options = array_merge(
+			$base_options,
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+			]
+		);
+
+		$state = State::get_page_state();
+
 		$this->assertTrue( $state['cloudflare_pattern_ai_search_configured'] );
 	}
 

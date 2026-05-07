@@ -42,22 +42,24 @@ final class State {
 			: self::parse_boolean_flag( get_option( Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, false ) );
 
 		return [
-			'selected_provider'                       => $selected_provider,
-			'selected_pattern_backend'                => $selected_pattern_backend,
-			'selected_chat'                           => $selected_chat,
-			'runtime_chat'                            => $runtime_chat,
-			'selected_embedding'                      => $selected_embedding,
-			'runtime_embedding'                       => $runtime_embedding,
-			'qdrant_configured'                       => $qdrant_configured,
-			'cloudflare_pattern_ai_search_configured' => self::cloudflare_pattern_ai_search_configured(),
-			'pattern_state'                           => $pattern_state,
-			'patterns_ready'                          => $patterns_ready_for_sync,
-			'docs_configured'                         => $docs_configured,
-			'prewarm_state'                           => $prewarm_state,
-			'runtime_docs_grounding'                  => $runtime_docs_grounding,
-			'guidelines_enabled'                      => $guidelines_enabled,
-			'guidelines_storage'                      => $guidelines_storage,
-			'block_structural_actions_enabled'        => $structural_actions_on,
+			'selected_provider'                         => $selected_provider,
+			'selected_pattern_backend'                  => $selected_pattern_backend,
+			'selected_chat'                             => $selected_chat,
+			'runtime_chat'                              => $runtime_chat,
+			'selected_embedding'                        => $selected_embedding,
+			'runtime_embedding'                         => $runtime_embedding,
+			'qdrant_configured'                         => $qdrant_configured,
+			'cloudflare_pattern_ai_search_configured'   => self::cloudflare_pattern_ai_search_configured(),
+			'cloudflare_pattern_ai_search_provisioning' => PatternSearchInstanceManager::get_provisioning_state(),
+			'cloudflare_pattern_ai_search_signature_mismatch' => self::cloudflare_pattern_ai_search_signature_mismatch(),
+			'pattern_state'                             => $pattern_state,
+			'patterns_ready'                            => $patterns_ready_for_sync,
+			'docs_configured'                           => $docs_configured,
+			'prewarm_state'                             => $prewarm_state,
+			'runtime_docs_grounding'                    => $runtime_docs_grounding,
+			'guidelines_enabled'                        => $guidelines_enabled,
+			'guidelines_storage'                        => $guidelines_storage,
+			'block_structural_actions_enabled'          => $structural_actions_on,
 		];
 	}
 
@@ -357,10 +359,32 @@ final class State {
 		if ( Config::GROUP_PATTERNS === $group ) {
 			if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $state['selected_pattern_backend'] ?? '' ) ) {
 				if ( empty( $state['cloudflare_pattern_ai_search_configured'] ) ) {
-					$status_blocks[] = [
-						'tone'    => 'warning',
-						'message' => __( 'Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index.', 'flavor-agent' ),
-					];
+					$provisioning_state  = is_array( $state['cloudflare_pattern_ai_search_provisioning'] ?? null )
+						? $state['cloudflare_pattern_ai_search_provisioning']
+						: [];
+					$provisioning_status = (string) ( $provisioning_state['status'] ?? '' );
+
+					if ( 'provisioning' === $provisioning_status ) {
+						$status_blocks[] = [
+							'tone'    => 'warning',
+							'message' => __( 'Managed Cloudflare AI Search pattern index is provisioning. Sync will unlock after validation finishes.', 'flavor-agent' ),
+						];
+					} elseif ( ! empty( $state['cloudflare_pattern_ai_search_signature_mismatch'] ) ) {
+						$status_blocks[] = [
+							'tone'    => 'warning',
+							'message' => __( 'Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate.', 'flavor-agent' ),
+						];
+					} elseif ( 'error' === $provisioning_status ) {
+						$status_blocks[] = [
+							'tone'    => 'error',
+							'message' => __( 'Managed Cloudflare AI Search pattern index provisioning failed. Check the status panel, then save settings again.', 'flavor-agent' ),
+						];
+					} else {
+						$status_blocks[] = [
+							'tone'    => 'warning',
+							'message' => __( 'Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index.', 'flavor-agent' ),
+						];
+					}
 				}
 			} elseif ( ! empty( $state['qdrant_configured'] ) && empty( $state['runtime_embedding']['configured'] ) ) {
 				$status_blocks[] = [
@@ -548,6 +572,10 @@ final class State {
 			return false;
 		}
 
+		if ( ! PatternSearchInstanceManager::is_managed_instance_id( $instance_id ) ) {
+			return false;
+		}
+
 		$account_id      = trim( (string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) );
 		$api_token       = trim( (string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) );
 		$embedding_model = trim(
@@ -569,6 +597,45 @@ final class State {
 
 		return $signature === trim(
 			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE, '' )
+		);
+	}
+
+	private static function cloudflare_pattern_ai_search_signature_mismatch(): bool {
+		$instance_id = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
+
+		if ( '' === $instance_id ) {
+			return false;
+		}
+
+		if ( ! PatternSearchInstanceManager::is_managed_instance_id( $instance_id ) ) {
+			return false;
+		}
+
+		$saved_signature = trim(
+			(string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE, '' )
+		);
+
+		if ( '' === $saved_signature ) {
+			return false;
+		}
+
+		$account_id      = trim( (string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ) );
+		$api_token       = trim( (string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ) );
+		$embedding_model = trim(
+			(string) get_option(
+				'flavor_agent_cloudflare_workers_ai_embedding_model',
+				WorkersAIEmbeddingConfiguration::DEFAULT_MODEL
+			)
+		);
+
+		if ( '' === $account_id || '' === $api_token ) {
+			return false;
+		}
+
+		return $saved_signature !== PatternSearchInstanceManager::credential_signature(
+			$account_id,
+			$api_token,
+			$embedding_model
 		);
 	}
 

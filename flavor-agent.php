@@ -53,6 +53,7 @@ register_deactivation_hook(
 		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::PREWARM_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK );
+		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\PatternSearchInstanceManager::PROVISION_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Support\CoreRoadmapGuidance::WARM_CRON_HOOK );
 	}
 );
@@ -87,6 +88,7 @@ add_action( 'wp_abilities_api_init', [ FlavorAgent\AI\FeatureBootstrap::class, '
 
 // Pattern index lifecycle hooks.
 add_action( FlavorAgent\Patterns\PatternIndex::CRON_HOOK, [ FlavorAgent\Patterns\PatternIndex::class, 'sync' ] );
+add_action( FlavorAgent\Cloudflare\PatternSearchInstanceManager::PROVISION_CRON_HOOK, [ FlavorAgent\Cloudflare\PatternSearchInstanceManager::class, 'process_managed_instance_provisioning' ] );
 add_action( 'after_switch_theme', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
 add_action( 'activated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
 add_action( 'deactivated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );

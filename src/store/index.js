@@ -830,7 +830,7 @@ function buildBlockRecommendationFailureDiagnostics(
 
 	return {
 		type: 'failure',
-		title: `Block request failed: ${ message }`,
+		title: 'Block request failed',
 		detailLines,
 		requestMeta,
 		errorCode,

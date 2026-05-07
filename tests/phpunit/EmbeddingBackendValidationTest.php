@@ -56,6 +56,71 @@ final class EmbeddingBackendValidationTest extends TestCase {
 		);
 	}
 
+	public function test_embedding_validation_returns_actionable_authentication_message_for_unauthorized_response(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 401,
+			],
+			'body'     => wp_json_encode(
+				[
+					'success' => false,
+					'errors'  => [
+						[
+							'code'    => 10000,
+							'message' => 'Authentication error',
+						],
+					],
+				]
+			),
+		];
+
+		$result = EmbeddingClient::validate_configuration(
+			'account-123',
+			'workers-token',
+			'@cf/qwen/qwen3-embedding-0.6b'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'Cloudflare Workers AI authentication failed. Check the account ID, API token, and Workers AI Read/Edit permissions in Settings > Flavor Agent.',
+			$result->get_error_message()
+		);
+	}
+
+	public function test_embedding_batch_returns_actionable_authentication_message_for_unauthorized_response(): void {
+		WordPressTestState::$options                 = [
+			Provider::OPTION_NAME                          => 'cloudflare_workers_ai',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+		];
+		WordPressTestState::$remote_post_responses[] = [
+			'response' => [
+				'code' => 401,
+			],
+			'body'     => wp_json_encode(
+				[
+					'success' => false,
+					'errors'  => [
+						[
+							'code'    => 10000,
+							'message' => 'Authentication error',
+						],
+					],
+				]
+			),
+		];
+
+		$result = EmbeddingClient::embed_batch( [ 'pattern query' ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'embedding_error', $result->get_error_code() );
+		$this->assertSame(
+			'Cloudflare Workers AI authentication failed. Check the account ID, API token, and Workers AI Read/Edit permissions in Settings > Flavor Agent.',
+			$result->get_error_message()
+		);
+	}
+
 	public function test_embedding_validation_returns_workers_ai_missing_credentials_message(): void {
 		$result = EmbeddingClient::validate_configuration();
 

@@ -1904,7 +1904,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				blockRequestDiagnostics: {
 					'block-1': {
 						type: 'failure',
-						title: 'Block request failed: Azure OpenAI responses request timed out after 180 seconds.',
+						title: 'Block request failed',
 						detailLines: [
 							'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
 						],
@@ -1938,8 +1938,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( latestActivityProps.entries[ 0 ] ).toEqual(
 			expect.objectContaining( {
 				type: 'request_diagnostic',
-				suggestion:
-					'Block request failed: Azure OpenAI responses request timed out after 180 seconds.',
+				suggestion: 'Block request failed',
 				target: expect.objectContaining( {
 					clientId: 'block-1',
 					blockName: 'core/paragraph',

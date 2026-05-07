@@ -7,7 +7,7 @@ namespace FlavorAgent\Activity;
 final class Repository {
 
 	public const SCHEMA_OPTION                       = 'flavor_agent_activity_schema_version';
-	public const SCHEMA_VERSION                      = 3;
+	public const SCHEMA_VERSION                      = 4;
 	public const PRUNE_CRON_HOOK                     = 'flavor_agent_prune_activity';
 	public const ADMIN_PROJECTION_BACKFILL_CRON_HOOK = 'flavor_agent_backfill_activity_admin_projection';
 	public const DEFAULT_RETENTION_DAYS              = 90;
@@ -789,9 +789,27 @@ final class Repository {
 	 * @param array<string, mixed> $row
 	 */
 	private static function row_requires_admin_projection_backfill( array $row ): bool {
-		return '' === trim( (string) ( $row['admin_operation_type'] ?? '' ) )
+		if ( '' === trim( (string) ( $row['admin_operation_type'] ?? '' ) )
 			|| '' === trim( (string) ( $row['admin_operation_label'] ?? '' ) )
-			|| '' === trim( (string) ( $row['admin_search_text'] ?? '' ) );
+			|| '' === trim( (string) ( $row['admin_search_text'] ?? '' ) ) ) {
+			return true;
+		}
+
+		if ( 'request_diagnostic' !== trim( (string) ( $row['activity_type'] ?? '' ) ) ) {
+			return false;
+		}
+
+		$diagnostic_search_text = self::build_admin_diagnostic_search_text(
+			Serializer::decode_json( isset( $row['after_state'] ) ? (string) $row['after_state'] : '' ),
+			Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' ),
+			Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' )
+		);
+
+		return '' !== $diagnostic_search_text
+			&& ! str_contains(
+				strtolower( (string) ( $row['admin_search_text'] ?? '' ) ),
+				strtolower( $diagnostic_search_text )
+			);
 	}
 
 	/**
@@ -799,38 +817,44 @@ final class Repository {
 	 * @return array<string, mixed>
 	 */
 	private static function build_admin_projection_from_entry( array $entry ): array {
-		$target            = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
-		$before            = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
-		$after             = is_array( $entry['after'] ?? null ) ? $entry['after'] : [];
-		$request           = is_array( $entry['request'] ?? null ) ? $entry['request'] : [];
-		$document          = is_array( $entry['document'] ?? null ) ? $entry['document'] : [];
-		$entity            = Serializer::derive_entity( $entry );
-		$scope_key         = trim( (string) ( $document['scopeKey'] ?? '' ) );
-		$surface           = trim( (string) ( $entry['surface'] ?? '' ) );
-		$activity_type     = trim( (string) ( $entry['type'] ?? '' ) );
-		$operation         = self::derive_admin_operation_metadata(
+		$target                 = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$before                 = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
+		$after                  = is_array( $entry['after'] ?? null ) ? $entry['after'] : [];
+		$request                = is_array( $entry['request'] ?? null ) ? $entry['request'] : [];
+		$undo                   = is_array( $entry['undo'] ?? null ) ? $entry['undo'] : [];
+		$document               = is_array( $entry['document'] ?? null ) ? $entry['document'] : [];
+		$entity                 = Serializer::derive_entity( $entry );
+		$scope_key              = trim( (string) ( $document['scopeKey'] ?? '' ) );
+		$surface                = trim( (string) ( $entry['surface'] ?? '' ) );
+		$activity_type          = trim( (string) ( $entry['type'] ?? '' ) );
+		$operation              = self::derive_admin_operation_metadata(
 			$before,
 			$after,
 			$surface,
 			$activity_type
 		);
-		$request_meta      = self::get_admin_request_meta( $request );
-		$prompt            = trim( (string) ( $request['prompt'] ?? '' ) );
-		$request_reference = trim( (string) ( $request['reference'] ?? '' ) );
-		$post_type         = self::get_admin_post_type(
+		$request_meta           = self::get_admin_request_meta( $request );
+		$prompt                 = trim( (string) ( $request['prompt'] ?? '' ) );
+		$request_reference      = trim( (string) ( $request['reference'] ?? '' ) );
+		$post_type              = self::get_admin_post_type(
 			[
 				'document_scope_key' => $scope_key,
 			],
 			$document
 		);
-		$entity_id         = self::get_admin_entity_id(
+		$entity_id              = self::get_admin_entity_id(
 			[
 				'document_scope_key' => $scope_key,
 			],
 			$document
 		);
-		$block_path        = self::format_block_path( $target );
-		$search_text       = self::build_admin_base_search_text(
+		$block_path             = self::format_block_path( $target );
+		$diagnostic_search_text = self::build_admin_diagnostic_search_text(
+			$after,
+			$request,
+			$undo
+		);
+		$search_text            = self::build_admin_base_search_text(
 			trim( (string) ( $entry['suggestion'] ?? '' ) ),
 			trim( (string) ( $entity['ref'] ?? '' ) ),
 			$surface,
@@ -843,7 +867,8 @@ final class Repository {
 			$operation['label'],
 			$request_meta,
 			$prompt,
-			$request_reference
+			$request_reference,
+			$diagnostic_search_text
 		);
 
 		return [
@@ -2044,39 +2069,45 @@ final class Repository {
 		string $resolved_status,
 		\DateTimeZone $timezone
 	): array {
-		$target            = Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' );
-		$document          = Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' );
-		$before            = Serializer::decode_json( isset( $row['before_state'] ) ? (string) $row['before_state'] : '' );
-		$after             = Serializer::decode_json( isset( $row['after_state'] ) ? (string) $row['after_state'] : '' );
-		$request           = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
-		$post_type         = self::get_admin_post_type( $row, $document );
-		$entity_id         = self::get_admin_entity_id( $row, $document );
-		$operation         = self::derive_admin_operation_metadata(
+		$target                 = Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' );
+		$document               = Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' );
+		$before                 = Serializer::decode_json( isset( $row['before_state'] ) ? (string) $row['before_state'] : '' );
+		$after                  = Serializer::decode_json( isset( $row['after_state'] ) ? (string) $row['after_state'] : '' );
+		$request                = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
+		$undo                   = Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' );
+		$post_type              = self::get_admin_post_type( $row, $document );
+		$entity_id              = self::get_admin_entity_id( $row, $document );
+		$operation              = self::derive_admin_operation_metadata(
 			$before,
 			$after,
 			trim( (string) ( $row['surface'] ?? '' ) ),
 			trim( (string) ( $row['activity_type'] ?? '' ) ),
 			$row
 		);
-		$operation_type    = $operation['value'];
-		$operation_label   = $operation['label'];
-		$request_meta      = self::get_admin_request_meta( $request, $row );
-		$timestamp_data    = self::get_timestamp_data(
+		$operation_type         = $operation['value'];
+		$operation_label        = $operation['label'];
+		$request_meta           = self::get_admin_request_meta( $request, $row );
+		$timestamp_data         = self::get_timestamp_data(
 			self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
 			$timezone
 		);
-		$user_id           = (int) ( $row['user_id'] ?? 0 );
-		$user_label        = self::resolve_admin_user_label( $user_id );
-		$surface           = trim( (string) ( $row['surface'] ?? '' ) );
-		$surface_label     = self::format_surface_label( $surface );
-		$status_label      = 'failed' === $resolved_status && self::is_review_only_row( $row )
+		$user_id                = (int) ( $row['user_id'] ?? 0 );
+		$user_label             = self::resolve_admin_user_label( $user_id );
+		$surface                = trim( (string) ( $row['surface'] ?? '' ) );
+		$surface_label          = self::format_surface_label( $surface );
+		$status_label           = 'failed' === $resolved_status && self::is_review_only_row( $row )
 			? 'Request failed'
 			: self::format_status_label( $resolved_status );
-		$block_path        = trim( (string) ( $row['admin_block_path'] ?? '' ) );
-		$block_path        = '' !== $block_path ? $block_path : self::format_block_path( $target );
-		$request_prompt    = trim( (string) ( $row['admin_request_prompt'] ?? ( $request['prompt'] ?? '' ) ) );
-		$request_reference = trim( (string) ( $row['admin_request_reference'] ?? ( $request['reference'] ?? '' ) ) );
-		$base_search_text  = self::resolve_admin_base_search_text(
+		$block_path             = trim( (string) ( $row['admin_block_path'] ?? '' ) );
+		$block_path             = '' !== $block_path ? $block_path : self::format_block_path( $target );
+		$request_prompt         = trim( (string) ( $row['admin_request_prompt'] ?? ( $request['prompt'] ?? '' ) ) );
+		$request_reference      = trim( (string) ( $row['admin_request_reference'] ?? ( $request['reference'] ?? '' ) ) );
+		$diagnostic_search_text = self::build_admin_diagnostic_search_text(
+			$after,
+			$request,
+			$undo
+		);
+		$base_search_text       = self::resolve_admin_base_search_text(
 			$row,
 			$surface,
 			$target,
@@ -2087,7 +2118,8 @@ final class Repository {
 			$operation_label,
 			$request_meta,
 			$request_prompt,
-			$request_reference
+			$request_reference,
+			$diagnostic_search_text
 		);
 
 		return [
@@ -3703,11 +3735,15 @@ final class Repository {
 		string $operation_label,
 		array $request_meta,
 		string $request_prompt,
-		string $request_reference
+		string $request_reference,
+		string $diagnostic_search_text = ''
 	): string {
 		$projected_search_text = trim( (string) ( $row['admin_search_text'] ?? '' ) );
 
-		if ( '' !== $projected_search_text ) {
+		if (
+			'' !== $projected_search_text
+			&& ( '' === $diagnostic_search_text || str_contains( strtolower( $projected_search_text ), strtolower( $diagnostic_search_text ) ) )
+		) {
 			return $projected_search_text;
 		}
 
@@ -3724,7 +3760,8 @@ final class Repository {
 			$operation_label,
 			$request_meta,
 			$request_prompt,
-			$request_reference
+			$request_reference,
+			$diagnostic_search_text
 		);
 	}
 
@@ -3754,7 +3791,8 @@ final class Repository {
 		string $operation_label,
 		array $request_meta,
 		string $request_prompt,
-		string $request_reference
+		string $request_reference,
+		string $diagnostic_search_text = ''
 	): string {
 		return implode(
 			' ',
@@ -3770,6 +3808,7 @@ final class Repository {
 						$operation_type,
 						$operation_label
 					),
+					$diagnostic_search_text,
 					$request_prompt,
 					$request_reference,
 					$request_meta['provider'],
@@ -3782,6 +3821,36 @@ final class Repository {
 					$request_meta['requestRoute'],
 				],
 				static fn ( $value ): bool => is_string( $value ) && '' !== trim( $value )
+			)
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $after
+	 * @param array<string, mixed> $request
+	 * @param array<string, mixed> $undo
+	 */
+	private static function build_admin_diagnostic_search_text(
+		array $after,
+		array $request,
+		array $undo
+	): string {
+		$values = [
+			self::get_first_string( $after, [ [ 'diagnosticDetail' ] ] ),
+			self::get_first_string( $after, [ [ 'explanation' ] ] ),
+			self::get_first_string( $request, [ [ 'error', 'code' ] ] ),
+			self::get_first_string( $request, [ [ 'error', 'message' ] ] ),
+			self::get_first_string( $request, [ [ 'ai', 'errorSummary', 'wrappedMessage' ] ] ),
+			self::get_first_string( $request, [ [ 'errorSummary', 'wrappedMessage' ] ] ),
+			self::get_first_string( $request, [ [ 'error', 'data', 'requestMeta', 'errorSummary', 'wrappedMessage' ] ] ),
+			self::get_first_string( $undo, [ [ 'error' ] ] ),
+		];
+
+		return implode(
+			' ',
+			array_filter(
+				array_unique( $values ),
+				static fn ( string $value ): bool => '' !== trim( $value )
 			)
 		);
 	}

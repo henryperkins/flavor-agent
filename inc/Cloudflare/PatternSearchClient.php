@@ -354,6 +354,21 @@ final class PatternSearchClient extends BaseHttpClient {
 			);
 		}
 
+		if ( ! $explicit_config && ! PatternSearchInstanceManager::is_managed_instance_id( $instance_id ) ) {
+			return new \WP_Error(
+				'cloudflare_pattern_ai_search_unmanaged_instance',
+				sprintf(
+					'Cloudflare AI Search Pattern Storage must use the managed Flavor Agent instance %s.',
+					PatternSearchInstanceManager::managed_instance_id()
+				),
+				[
+					'status'            => 400,
+					'expected_instance' => PatternSearchInstanceManager::managed_instance_id(),
+					'actual_instance'   => $instance_id,
+				]
+			);
+		}
+
 		if ( ! $explicit_config ) {
 			$embedding_model = self::normalize_config_value(
 				get_option(

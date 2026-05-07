@@ -579,7 +579,7 @@ describe( 'store action thunks', () => {
 				requestToken: 8,
 				diagnostics: expect.objectContaining( {
 					type: 'failure',
-					title: 'Block request failed: The block recommendation endpoint returned a non-JSON response.',
+					title: 'Block request failed',
 					errorCode: 'invalid_json',
 					errorMessage:
 						'The block recommendation endpoint returned a non-JSON response.',

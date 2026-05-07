@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
+use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -329,6 +331,254 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 		$this->assertStringContainsString( 'per_page=100', WordPressTestState::$remote_get_calls[0]['url'] );
 		$this->assertStringContainsString( 'page=2', WordPressTestState::$remote_get_calls[1]['url'] );
 		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_process_managed_instance_provisioning_validates_saved_request_and_marks_ready(): void {
+		$signature                   = $this->provisioning_signature();
+		WordPressTestState::$options = $this->provisioning_options( $signature );
+		$this->seed_usable_pattern_index();
+
+		$this->queue_successful_managed_instance_creation();
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertSame(
+			PatternSearchInstanceManager::managed_instance_id(),
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] ?? ''
+		);
+		$this->assertSame(
+			$signature,
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE ] ?? ''
+		);
+		$this->assertSame(
+			'ready',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
+		);
+		$this->assertSame(
+			'created',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['managed_status'] ?? ''
+		);
+		$this->assertNotFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+
+		$index_state = PatternIndex::get_state();
+
+		$this->assertSame( 'stale', $index_state['status'] );
+		$this->assertSame( 'cloudflare_ai_search_signature_changed', $index_state['stale_reason'] );
+		$this->assertSame( 'cloudflare_ai_search_signature_changed', $index_state['stale_reasons'][0] ?? '' );
+
+		$scheduled = wp_next_scheduled( PatternIndex::CRON_HOOK );
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertSame( $scheduled, wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+	}
+
+	public function test_process_managed_instance_provisioning_records_remote_error_without_validating_signature(): void {
+		$signature                   = $this->provisioning_signature();
+		WordPressTestState::$options = $this->provisioning_options(
+			$signature,
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => 'old-signature',
+			]
+		);
+
+		WordPressTestState::$remote_get_response = [
+			'response' => [ 'code' => 403 ],
+			'body'     => wp_json_encode(
+				[
+					'errors' => [
+						[
+							'message' => 'Authentication failed',
+						],
+					],
+				]
+			),
+		];
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
+			WordPressTestState::$options
+		);
+		$this->assertSame(
+			'error',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
+		);
+		$this->assertSame(
+			'cloudflare_pattern_ai_search_instance_list_error',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['last_error_code'] ?? ''
+		);
+		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+	}
+
+	public function test_process_managed_instance_provisioning_marks_stale_when_credentials_change_before_callback(): void {
+		$stale_signature             = PatternSearchInstanceManager::credential_signature(
+			'account-123',
+			'token-old',
+			'@cf/qwen/qwen3-embedding-0.6b'
+		);
+		WordPressTestState::$options = $this->provisioning_options(
+			$stale_signature,
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => 'old-signature',
+			]
+		);
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertSame(
+			'stale',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
+		);
+		$this->assertSame(
+			'cloudflare_pattern_ai_search_signature_changed',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['last_error_code'] ?? ''
+		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
+			WordPressTestState::$options
+		);
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+	}
+
+	public function test_process_managed_instance_provisioning_returns_when_backend_changes_before_callback(): void {
+		$signature                   = $this->provisioning_signature();
+		WordPressTestState::$options = $this->provisioning_options(
+			$signature,
+			[
+				Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_QDRANT,
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => 'existing-signature',
+			]
+		);
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertSame(
+			'provisioning',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
+		);
+		$this->assertSame(
+			$signature,
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['signature'] ?? ''
+		);
+		$this->assertSame(
+			'existing-signature',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE ] ?? ''
+		);
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+	}
+
+	public function test_process_managed_instance_provisioning_schedules_once_after_failed_retry_succeeds(): void {
+		$signature                   = $this->provisioning_signature();
+		WordPressTestState::$options = $this->provisioning_options( $signature );
+
+		WordPressTestState::$remote_get_response = [
+			'response' => [ 'code' => 403 ],
+			'body'     => wp_json_encode(
+				[
+					'errors' => [
+						[
+							'message' => 'Authentication failed',
+						],
+					],
+				]
+			),
+		];
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertSame(
+			'error',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
+		);
+		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+
+		WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ] = [
+			'status'    => 'provisioning',
+			'signature' => $signature,
+		];
+		WordPressTestState::$remote_get_response = [];
+		$this->queue_successful_managed_instance_creation();
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertSame(
+			$signature,
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE ] ?? ''
+		);
+		$this->assertSame( 1, $this->scheduled_event_count( PatternIndex::CRON_HOOK ) );
+	}
+
+	private function provisioning_signature(): string {
+		return PatternSearchInstanceManager::credential_signature(
+			'account-123',
+			'token-xyz',
+			'@cf/qwen/qwen3-embedding-0.6b'
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $overrides
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function provisioning_options( string $signature, array $overrides = [] ): array {
+		return array_merge(
+			[
+				Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+				'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+				'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+				'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE => [
+					'status'    => 'provisioning',
+					'signature' => $signature,
+				],
+			],
+			$overrides
+		);
+	}
+
+	private function seed_usable_pattern_index(): void {
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'         => 'ready',
+					'last_synced_at' => gmdate( 'c' ),
+				]
+			)
+		);
+	}
+
+	private function queue_successful_managed_instance_creation(): void {
+		WordPressTestState::$remote_get_responses  = [
+			$this->instance_list_response( [] ),
+			$this->owner_marker_response(),
+		];
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode(
+					[
+						'result' => PatternSearchInstanceManager::build_create_payload( '@cf/qwen/qwen3-embedding-0.6b' ),
+					]
+				),
+			],
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode( [ 'result' => [ 'id' => 'cloudflare-owner-marker-123' ] ] ),
+			],
+		];
+	}
+
+	private function scheduled_event_count( string $hook ): int {
+		return isset( WordPressTestState::$scheduled_events[ $hook ] ) ? 1 : 0;
 	}
 
 	/**

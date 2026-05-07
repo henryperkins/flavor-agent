@@ -494,7 +494,10 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'Current Hero', $result['recommendations'][0]['title'] ?? '' );
 		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
-		$this->assertStringContainsString( '/ai-search/namespaces/patterns/instances/pattern-index/search', WordPressTestState::$remote_post_calls[0]['url'] ?? '' );
+		$this->assertStringContainsString(
+			sprintf( '/ai-search/namespaces/patterns/instances/%s/search', PatternSearchInstanceManager::managed_instance_id() ),
+			WordPressTestState::$remote_post_calls[0]['url'] ?? ''
+		);
 		$this->assertStringNotContainsString( '/embeddings', wp_json_encode( WordPressTestState::$remote_post_calls ) );
 		$this->assertStringNotContainsString( 'qdrant', wp_json_encode( WordPressTestState::$remote_post_calls ) );
 
@@ -2624,7 +2627,7 @@ final class PatternAbilitiesTest extends TestCase {
 			WordPressTestState::$options,
 			[
 				Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
 					(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),
 					(string) get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' ),

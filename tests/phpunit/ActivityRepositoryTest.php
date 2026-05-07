@@ -642,6 +642,137 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	public function test_query_admin_search_matches_generic_request_diagnostic_detail(): void {
+		Repository::install();
+
+		Repository::create(
+			[
+				'id'              => 'activity-template-diagnostic',
+				'type'            => 'request_diagnostic',
+				'surface'         => 'template',
+				'target'          => [
+					'templateRef' => 'theme//home',
+				],
+				'suggestion'      => 'Template recommendation request',
+				'before'          => [],
+				'after'           => [
+					'explanation'      => 'Use fewer competing sections.',
+					'diagnosticDetail' => 'Clarify header hierarchy',
+				],
+				'request'         => [
+					'prompt'    => 'Tighten the structure.',
+					'reference' => 'template:wp_template:theme//home:theme//home',
+				],
+				'document'        => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+				'executionResult' => 'review',
+				'undo'            => [
+					'status' => 'review',
+				],
+				'timestamp'       => '2026-03-24T10:00:00Z',
+			]
+		);
+
+		$projected_result = Repository::query_admin(
+			[
+				'search' => 'Clarify header hierarchy',
+			]
+		);
+
+		WordPressTestState::$options['flavor_agent_activity_admin_projection_backfill_cursor'] = 0;
+
+		$fallback_result = Repository::query_admin(
+			[
+				'search' => 'Clarify header hierarchy',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-template-diagnostic' ],
+			array_column( $projected_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			[ 'activity-template-diagnostic' ],
+			array_column( $fallback_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			'Template recommendation request',
+			$projected_result['entries'][0]['suggestion'] ?? null
+		);
+	}
+
+	public function test_query_admin_search_matches_generic_failed_request_diagnostic_error_detail(): void {
+		Repository::install();
+
+		Repository::create(
+			[
+				'id'              => 'activity-block-diagnostic-failure',
+				'type'            => 'request_diagnostic',
+				'surface'         => 'block',
+				'target'          => [
+					'clientId'  => 'block-a',
+					'blockName' => 'core/paragraph',
+				],
+				'suggestion'      => 'Block request failed',
+				'before'          => [],
+				'after'           => [
+					'resultCount' => 0,
+				],
+				'request'         => [
+					'prompt'    => 'Make this feel more editorial.',
+					'reference' => 'block:post:42:block-a',
+					'ai'        => [
+						'errorSummary' => [
+							'wrappedMessage' => 'cURL error 28: Operation timed out after 180001 milliseconds.',
+						],
+					],
+					'error'     => [
+						'code'    => 'timeout',
+						'message' => 'Azure OpenAI responses timeout after 180 seconds.',
+					],
+				],
+				'document'        => [
+					'scopeKey' => 'post:42',
+					'postType' => 'post',
+					'entityId' => '42',
+				],
+				'executionResult' => 'review',
+				'undo'            => [
+					'status' => 'failed',
+					'error'  => 'Azure OpenAI responses timeout after 180 seconds.',
+				],
+				'timestamp'       => '2026-03-24T10:00:00Z',
+			]
+		);
+
+		$error_result     = Repository::query_admin(
+			[
+				'search' => 'timeout after 180 seconds',
+			]
+		);
+		$transport_result = Repository::query_admin(
+			[
+				'search' => 'cURL error 28',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-block-diagnostic-failure' ],
+			array_column( $error_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			[ 'activity-block-diagnostic-failure' ],
+			array_column( $transport_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			'Block request failed',
+			$error_result['entries'][0]['suggestion'] ?? null
+		);
+	}
+
 	public function test_query_admin_supports_relative_day_filters(): void {
 		Repository::install();
 

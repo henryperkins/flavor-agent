@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Support\CoreRoadmapGuidance;
@@ -33,6 +34,7 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertHookRegistered( 'rest_api_init', [ \FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 		$this->assertHookRegistered( 'admin_init', [ \FlavorAgent\Settings::class, 'register_settings' ] );
 		$this->assertHookRegistered( PatternIndex::CRON_HOOK, [ PatternIndex::class, 'sync' ] );
+		$this->assertHookRegistered( PatternSearchInstanceManager::PROVISION_CRON_HOOK, [ PatternSearchInstanceManager::class, 'process_managed_instance_provisioning' ] );
 		$this->assertHookNotRegistered( 'update_option_flavor_agent_openai_provider', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookNotRegistered( 'update_option_flavor_agent_azure_chat_deployment', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookNotRegistered( 'update_option_flavor_agent_azure_openai_endpoint', [ PatternIndex::class, 'handle_dependency_change' ] );
@@ -200,6 +202,7 @@ final class PluginLifecycleTest extends TestCase {
 			ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK => [ 'hook' => ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK ],
 			AISearchClient::PREWARM_CRON_HOOK      => [ 'hook' => AISearchClient::PREWARM_CRON_HOOK ],
 			AISearchClient::CONTEXT_WARM_CRON_HOOK => [ 'hook' => AISearchClient::CONTEXT_WARM_CRON_HOOK ],
+			PatternSearchInstanceManager::PROVISION_CRON_HOOK => [ 'hook' => PatternSearchInstanceManager::PROVISION_CRON_HOOK ],
 			CoreRoadmapGuidance::WARM_CRON_HOOK    => [ 'hook' => CoreRoadmapGuidance::WARM_CRON_HOOK ],
 		];
 		WordPressTestState::$transients['flavor_agent_sync_lock'] = time();
@@ -213,6 +216,7 @@ final class PluginLifecycleTest extends TestCase {
 				ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK,
 				AISearchClient::PREWARM_CRON_HOOK,
 				AISearchClient::CONTEXT_WARM_CRON_HOOK,
+				PatternSearchInstanceManager::PROVISION_CRON_HOOK,
 				CoreRoadmapGuidance::WARM_CRON_HOOK,
 			],
 			WordPressTestState::$cleared_cron_hooks

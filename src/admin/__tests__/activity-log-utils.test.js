@@ -114,6 +114,30 @@ describe( 'activity log utils', () => {
 		} );
 	} );
 
+	test( 'normalizeActivityEntries truncates verbose stored suggestion titles', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				type: 'request_diagnostic',
+				surface: 'block',
+				suggestion:
+					'With no mapped Inspector panels available, the most reliable improvements are structural: split the home-page shell into semantic sections and convert it to reusable section patterns so it naturally adopts the theme preset system.',
+				undo: {
+					status: 'review',
+					canUndo: false,
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ].title.length ).toBeLessThanOrEqual( 96 );
+		expect( entries[ 0 ].title ).toMatch(
+			/^With no mapped Inspector panels available/
+		);
+		expect( entries[ 0 ].title ).toMatch( /\.\.\.$/ );
+		expect( entries[ 0 ].title ).not.toContain(
+			'convert it to reusable section patterns'
+		);
+	} );
+
 	test( 'normalizeActivityEntries marks failed request diagnostics as request failures', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {

@@ -35,12 +35,13 @@ final class UninstallTest extends TestCase {
 			'flavor_agent_core_roadmap_guidance_schedule_lock' => 1,
 		];
 		WordPressTestState::$scheduled_events                              = [
-			'flavor_agent_reindex_patterns'           => [ 'hook' => 'flavor_agent_reindex_patterns' ],
-			'flavor_agent_prune_activity'             => [ 'hook' => 'flavor_agent_prune_activity' ],
+			'flavor_agent_reindex_patterns'            => [ 'hook' => 'flavor_agent_reindex_patterns' ],
+			'flavor_agent_prune_activity'              => [ 'hook' => 'flavor_agent_prune_activity' ],
 			'flavor_agent_backfill_activity_admin_projection' => [ 'hook' => 'flavor_agent_backfill_activity_admin_projection' ],
-			'flavor_agent_prewarm_docs'               => [ 'hook' => 'flavor_agent_prewarm_docs' ],
-			'flavor_agent_warm_docs_context'          => [ 'hook' => 'flavor_agent_warm_docs_context' ],
-			'flavor_agent_warm_core_roadmap_guidance' => [ 'hook' => 'flavor_agent_warm_core_roadmap_guidance' ],
+			'flavor_agent_prewarm_docs'                => [ 'hook' => 'flavor_agent_prewarm_docs' ],
+			'flavor_agent_warm_docs_context'           => [ 'hook' => 'flavor_agent_warm_docs_context' ],
+			'flavor_agent_provision_pattern_ai_search' => [ 'hook' => 'flavor_agent_provision_pattern_ai_search' ],
+			'flavor_agent_warm_core_roadmap_guidance'  => [ 'hook' => 'flavor_agent_warm_core_roadmap_guidance' ],
 		];
 		WordPressTestState::$db_tables[ ActivityRepository::table_name() ] = [
 			[
@@ -64,6 +65,7 @@ final class UninstallTest extends TestCase {
 				'flavor_agent_backfill_activity_admin_projection',
 				'flavor_agent_prewarm_docs',
 				'flavor_agent_warm_docs_context',
+				'flavor_agent_provision_pattern_ai_search',
 				'flavor_agent_warm_core_roadmap_guidance',
 			],
 			WordPressTestState::$cleared_cron_hooks

@@ -46,6 +46,7 @@ final class UninstallOptions {
 			'flavor_agent_cloudflare_pattern_ai_search_namespace',
 			'flavor_agent_cloudflare_pattern_ai_search_instance_id',
 			'flavor_agent_cloudflare_pattern_ai_search_validated_signature',
+			'flavor_agent_cloudflare_pattern_ai_search_provisioning_state',
 			'flavor_agent_cloudflare_pattern_ai_search_api_token',
 			// Legacy Developer Docs Cloudflare options are cleanup-only; runtime ignores them.
 			'flavor_agent_cloudflare_ai_search_account_id',

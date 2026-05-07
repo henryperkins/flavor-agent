@@ -30,6 +30,36 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertStringContainsString( 'namespace', $result->get_error_message() );
 	}
 
+	public function test_saved_configuration_rejects_non_managed_instance_id_even_with_valid_signature(): void {
+		$account_id      = 'account-123';
+		$api_token       = 'token-xyz';
+		$embedding_model = '@cf/qwen/qwen3-embedding-0.6b';
+
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => $account_id,
+			'flavor_agent_cloudflare_workers_ai_api_token' => $api_token,
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => $embedding_model,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
+				$account_id,
+				$api_token,
+				$embedding_model
+			),
+		];
+
+		$this->assertFalse( PatternSearchClient::is_configured() );
+
+		$result = PatternSearchClient::search_patterns(
+			'hero section',
+			[ 'theme/hero' ],
+			1
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_pattern_ai_search_unmanaged_instance', $result->get_error_code() );
+		$this->assertStringContainsString( PatternSearchInstanceManager::managed_instance_id(), $result->get_error_message() );
+	}
+
 	public function test_validate_configuration_probes_namespaced_search_url(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
@@ -143,7 +173,10 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 			$result[0]
 		);
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/pattern-index/search',
+			sprintf(
+				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/%s/search',
+				PatternSearchInstanceManager::managed_instance_id()
+			),
 			WordPressTestState::$last_remote_post['url']
 		);
 
@@ -232,7 +265,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'pattern-account',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'pattern-namespace',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'pattern-token',
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
 				'workers-account',
@@ -259,7 +292,10 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 
 		$this->assertSame( [], $result );
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/workers-account/ai-search/namespaces/patterns/instances/pattern-index/search',
+			sprintf(
+				'https://api.cloudflare.com/client/v4/accounts/workers-account/ai-search/namespaces/patterns/instances/%s/search',
+				PatternSearchInstanceManager::managed_instance_id()
+			),
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertSame(
@@ -273,7 +309,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
 		];
 
 		$this->assertFalse( PatternSearchClient::is_configured() );
@@ -316,7 +352,10 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 
 		$this->assertTrue( $result );
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/pattern-index/items',
+			sprintf(
+				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/%s/items',
+				PatternSearchInstanceManager::managed_instance_id()
+			),
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertSame( 'POST', WordPressTestState::$last_remote_post['args']['method'] ?? null );
@@ -440,7 +479,10 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 			$body = (string) ( $call['args']['body'] ?? '' );
 
 				$this->assertSame(
-					'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/pattern-index/items',
+					sprintf(
+						'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/%s/items',
+						PatternSearchInstanceManager::managed_instance_id()
+					),
 					$call['url'] ?? null
 				);
 				$this->assertStringContainsString( 'filename="stable-pattern-id.md"', $body );
@@ -501,7 +543,10 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 
 		$this->assertTrue( $result );
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/pattern-index/items/theme-hero',
+			sprintf(
+				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/%s/items/theme-hero',
+				PatternSearchInstanceManager::managed_instance_id()
+			),
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertSame( 'DELETE', WordPressTestState::$last_remote_post['args']['method'] ?? null );
@@ -545,7 +590,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 			'flavor_agent_cloudflare_workers_ai_account_id' => $account_id,
 			'flavor_agent_cloudflare_workers_ai_api_token' => $api_token,
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => $embedding_model,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
 				$account_id,
 				$api_token,

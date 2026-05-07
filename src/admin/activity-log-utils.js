@@ -4,6 +4,7 @@ import {
 	getResolvedActivityUndoState,
 	ORDERED_UNDO_BLOCKED_ERROR,
 } from '../store/activity-history';
+import { truncateActivityTitle } from '../utils/activity-title';
 
 export const VIEW_STORAGE_KEY = 'flavor-agent:activity-log:view';
 
@@ -983,7 +984,7 @@ function getUndoReason( status, resolvedUndo = null, entry = null ) {
 
 function getActivityTitle( entry ) {
 	if ( typeof entry?.suggestion === 'string' && entry.suggestion.trim() ) {
-		return entry.suggestion.trim();
+		return truncateActivityTitle( entry.suggestion );
 	}
 
 	const operationType = deriveOperationType( entry );

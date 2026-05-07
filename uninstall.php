@@ -17,6 +17,7 @@ wp_clear_scheduled_hook( 'flavor_agent_prune_activity' );
 wp_clear_scheduled_hook( 'flavor_agent_backfill_activity_admin_projection' );
 wp_clear_scheduled_hook( 'flavor_agent_prewarm_docs' );
 wp_clear_scheduled_hook( 'flavor_agent_warm_docs_context' );
+wp_clear_scheduled_hook( 'flavor_agent_provision_pattern_ai_search' );
 wp_clear_scheduled_hook( 'flavor_agent_warm_core_roadmap_guidance' );
 delete_transient( 'flavor_agent_sync_lock' );
 delete_transient( 'flavor_agent_core_roadmap_guidance_v1' );

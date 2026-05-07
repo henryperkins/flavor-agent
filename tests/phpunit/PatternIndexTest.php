@@ -873,7 +873,7 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 'ready', $result['status'] );
 		$this->assertSame( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH, $state['pattern_backend'] );
 		$this->assertSame( 'patterns', $state['cloudflare_ai_search_namespace'] );
-		$this->assertSame( 'pattern-index', $state['cloudflare_ai_search_instance'] );
+		$this->assertSame( PatternSearchInstanceManager::managed_instance_id(), $state['cloudflare_ai_search_instance'] );
 		$this->assertNotSame( '', $state['cloudflare_ai_search_signature'] );
 		$this->assertSame( PatternIndex::compute_fingerprint( $patterns ), $state['fingerprint'] );
 		$this->assertSame( 2, $state['indexed_count'] );
@@ -1154,7 +1154,7 @@ final class PatternIndexTest extends TestCase {
 					'flavor_agent_qdrant_url' => '',
 					'flavor_agent_qdrant_key' => '',
 					Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'pattern-index',
+					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
 					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
 						'account-123',
 						'token-xyz',

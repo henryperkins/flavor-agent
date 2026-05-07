@@ -535,15 +535,16 @@ final class RecommendationAbilityExecution {
 				'type'            => 'request_diagnostic',
 				'surface'         => $surface,
 				'target'          => \array_merge( $target, [ 'requestRef' => $reference ] ),
-				'suggestion'      => self::build_request_diagnostic_title( $surface, $payload ),
+				'suggestion'      => self::build_request_diagnostic_title( $surface ),
 				'before'          => [
 					'prompt' => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
 				],
 				'after'           => [
-					'prompt'         => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'resultCount'    => self::get_request_result_count( $surface, $payload ),
-					'explanation'    => \trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) ),
-					'requestContext' => $request_context,
+					'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'resultCount'      => self::get_request_result_count( $surface, $payload ),
+					'explanation'      => \trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) ),
+					'diagnosticDetail' => self::build_request_diagnostic_detail( $surface, $payload ),
+					'requestContext'   => $request_context,
 				],
 				'request'         => [
 					'prompt'    => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
@@ -590,7 +591,7 @@ final class RecommendationAbilityExecution {
 				'type'            => 'request_diagnostic',
 				'surface'         => $surface,
 				'target'          => \array_merge( $target, [ 'requestRef' => $reference ] ),
-				'suggestion'      => self::build_failed_request_diagnostic_title( $surface, $message ),
+				'suggestion'      => self::build_failed_request_diagnostic_title( $surface ),
 				'before'          => [
 					'prompt' => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
 				],
@@ -622,10 +623,24 @@ final class RecommendationAbilityExecution {
 		);
 	}
 
+	private static function build_request_diagnostic_title( string $surface ): string {
+		return match ( $surface ) {
+			'content' => \__( 'Content recommendation request', 'flavor-agent' ),
+			'navigation' => \__( 'Navigation recommendation request', 'flavor-agent' ),
+			'pattern' => \__( 'Pattern recommendation request', 'flavor-agent' ),
+			'block' => \__( 'Block recommendation request', 'flavor-agent' ),
+			'template' => \__( 'Template recommendation request', 'flavor-agent' ),
+			'template-part' => \__( 'Template-part recommendation request', 'flavor-agent' ),
+			'global-styles' => \__( 'Global Styles recommendation request', 'flavor-agent' ),
+			'style-book' => \__( 'Style Book recommendation request', 'flavor-agent' ),
+			default => \__( 'AI request diagnostic', 'flavor-agent' ),
+		};
+	}
+
 	/**
 	 * @param array<string, mixed> $payload
 	 */
-	private static function build_request_diagnostic_title( string $surface, array $payload ): string {
+	private static function build_request_diagnostic_detail( string $surface, array $payload ): string {
 		if ( 'content' === $surface ) {
 			$title = \trim( (string) ( $payload['title'] ?? '' ) );
 
@@ -633,65 +648,46 @@ final class RecommendationAbilityExecution {
 				return $title;
 			}
 
-			$summary = \trim( (string) ( $payload['summary'] ?? '' ) );
-
-			return '' !== $summary ? $summary : 'Content recommendation request';
+			return \trim( (string) ( $payload['summary'] ?? '' ) );
 		}
 
 		if ( 'navigation' === $surface ) {
 			$suggestions = \is_array( $payload['suggestions'] ?? null ) ? $payload['suggestions'] : [];
-			$label       = \trim( (string) ( $suggestions[0]['label'] ?? '' ) );
 
-			return '' !== $label ? $label : 'Navigation recommendation request';
+			return \trim( (string) ( $suggestions[0]['label'] ?? '' ) );
 		}
 
 		if ( 'pattern' === $surface ) {
 			$recommendations = \is_array( $payload['recommendations'] ?? null ) ? $payload['recommendations'] : [];
-			$label           = \trim( (string) ( $recommendations[0]['title'] ?? $recommendations[0]['name'] ?? '' ) );
 
-			return '' !== $label ? $label : 'Pattern recommendation request';
+			return \trim( (string) ( $recommendations[0]['title'] ?? $recommendations[0]['name'] ?? '' ) );
 		}
 
 		if ( 'block' === $surface ) {
-			$explanation = \trim( (string) ( $payload['explanation'] ?? '' ) );
-
-			return '' !== $explanation ? $explanation : 'Block recommendation request';
+			return \trim( (string) ( $payload['explanation'] ?? '' ) );
 		}
 
 		if ( \in_array( $surface, [ 'template', 'template-part', 'global-styles', 'style-book' ], true ) ) {
 			$suggestions = \is_array( $payload['suggestions'] ?? null ) ? $payload['suggestions'] : [];
-			$label       = \trim( (string) ( $suggestions[0]['label'] ?? $payload['explanation'] ?? '' ) );
 
-			if ( '' !== $label ) {
-				return $label;
-			}
-
-			return match ( $surface ) {
-				'template' => 'Template recommendation request',
-				'template-part' => 'Template-part recommendation request',
-				'global-styles' => 'Global Styles recommendation request',
-				'style-book' => 'Style Book recommendation request',
-				default => 'AI request diagnostic',
-			};
+			return \trim( (string) ( $suggestions[0]['label'] ?? $payload['explanation'] ?? '' ) );
 		}
 
-		return 'AI request diagnostic';
+		return \trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) );
 	}
 
-	private static function build_failed_request_diagnostic_title( string $surface, string $message ): string {
-		$label = match ( $surface ) {
-			'content' => 'Content request failed',
-			'navigation' => 'Navigation request failed',
-			'pattern' => 'Pattern request failed',
-			'block' => 'Block request failed',
-			'template' => 'Template request failed',
-			'template-part' => 'Template-part request failed',
-			'global-styles' => 'Global Styles request failed',
-			'style-book' => 'Style Book request failed',
-			default => 'AI request failed',
+	private static function build_failed_request_diagnostic_title( string $surface ): string {
+		return match ( $surface ) {
+			'content' => \__( 'Content request failed', 'flavor-agent' ),
+			'navigation' => \__( 'Navigation request failed', 'flavor-agent' ),
+			'pattern' => \__( 'Pattern request failed', 'flavor-agent' ),
+			'block' => \__( 'Block request failed', 'flavor-agent' ),
+			'template' => \__( 'Template request failed', 'flavor-agent' ),
+			'template-part' => \__( 'Template-part request failed', 'flavor-agent' ),
+			'global-styles' => \__( 'Global Styles request failed', 'flavor-agent' ),
+			'style-book' => \__( 'Style Book request failed', 'flavor-agent' ),
+			default => \__( 'AI request failed', 'flavor-agent' ),
 		};
-
-		return '' !== $message ? $label . ': ' . $message : $label;
 	}
 
 	/**
