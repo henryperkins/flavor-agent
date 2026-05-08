@@ -479,35 +479,3 @@ function pickMeaningfulAttributes( attrs ) {
 	}
 	return result;
 }
-
-/**
- * Build a deduplicated block capability index for all unique block types
- * present in a tree.
- *
- * @param {object[]} tree Introspected block tree.
- * @return {Record<string, object>} Block capability index keyed by block name.
- */
-export function buildCapabilityIndex( tree ) {
-	const index = {};
-
-	function walk( nodes ) {
-		for ( const node of nodes ) {
-			if ( ! index[ node.name ] ) {
-				index[ node.name ] = {
-					title: node.title,
-					inspectorPanels: node.inspectorPanels,
-					styles: node.styles,
-					variations: node.variations.slice( 0, 5 ),
-					contentAttributes: Object.keys( node.contentAttributes ),
-					configAttributes: Object.keys( node.configAttributes ),
-					supportsSummary: Object.keys( node.inspectorPanels ),
-				};
-			}
-			if ( node.innerBlocks.length ) {
-				walk( node.innerBlocks );
-			}
-		}
-	}
-	walk( tree );
-	return index;
-}

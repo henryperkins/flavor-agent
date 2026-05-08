@@ -3175,4 +3175,3 @@ const store = createReduxStore( STORE_NAME, { reducer, actions, selectors } );
 register( store );
 
 export { actions, reducer, selectors, STORE_NAME };
-export default store;

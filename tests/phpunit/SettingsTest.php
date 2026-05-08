@@ -811,6 +811,38 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_sanitize_private_pattern_ai_search_settings_does_not_update_instance_option_during_sanitization(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'instance-old',
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+		];
+		$_POST                       = [
+			'option_page'                            => Config::OPTION_GROUP,
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => '',
+		];
+
+		$this->assertSame(
+			PatternSearchInstanceManager::managed_instance_id(),
+			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( '' )
+		);
+		$this->assertSame(
+			'instance-old',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] ?? ''
+		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
+			WordPressTestState::$updated_options
+		);
+		$this->assertArrayHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE,
+			WordPressTestState::$updated_options
+		);
+	}
+
 	public function test_sanitize_private_pattern_ai_search_settings_warns_when_embedding_model_falls_back_for_ai_search(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
@@ -856,8 +888,12 @@ final class SettingsTest extends TestCase {
 			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( '' )
 		);
 		$this->assertSame(
-			PatternSearchInstanceManager::managed_instance_id(),
+			'instance-old',
 			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] ?? ''
+		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
+			WordPressTestState::$updated_options
 		);
 		$this->assertSame(
 			$this->patternAiSearchSignature(),
@@ -873,6 +909,50 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_sanitize_private_pattern_ai_search_settings_clears_stale_provisioning_when_credentials_are_missing(): void {
+		WordPressTestState::$options          = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => '',
+			'flavor_agent_cloudflare_workers_ai_api_token' => '',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE => [
+				'status'          => 'error',
+				'last_error_code' => 'missing_cloudflare_pattern_ai_search_credentials',
+			],
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => 'old-signature',
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+		];
+		WordPressTestState::$scheduled_events = [
+			PatternSearchInstanceManager::PROVISION_CRON_HOOK => [
+				'hook'      => PatternSearchInstanceManager::PROVISION_CRON_HOOK,
+				'timestamp' => time() + 5,
+				'args'      => [],
+			],
+		];
+		$_POST                                = [
+			'option_page'                            => Config::OPTION_GROUP,
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => '',
+		];
+
+		$this->assertSame(
+			PatternSearchInstanceManager::managed_instance_id(),
+			Settings::sanitize_cloudflare_pattern_ai_search_instance_id( '' )
+		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE,
+			WordPressTestState::$options
+		);
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
+			WordPressTestState::$options
+		);
+		$this->assertArrayNotHasKey(
+			PatternSearchInstanceManager::PROVISION_CRON_HOOK,
+			WordPressTestState::$scheduled_events
+		);
 	}
 
 	public function test_sanitize_private_pattern_ai_search_settings_ignores_saved_private_credentials(): void {
@@ -1300,6 +1380,29 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'Needs pattern storage', $status['label'] );
 		$this->assertSame(
 			'Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index.',
+			$status_blocks[0]['message'] ?? ''
+		);
+	}
+
+	public function test_pattern_setup_copy_prioritizes_missing_embeddings_over_stale_ai_search_error(): void {
+		$state                             = $this->build_default_open_group_state();
+		$state['selected_pattern_backend'] = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;
+		$state['patterns_ready']           = false;
+		$state['cloudflare_pattern_ai_search_configured']   = false;
+		$state['runtime_embedding']                         = [ 'configured' => false ];
+		$state['cloudflare_pattern_ai_search_provisioning'] = [
+			'status'          => 'error',
+			'last_error_code' => 'missing_cloudflare_pattern_ai_search_credentials',
+		];
+
+		$status_blocks = State::get_section_status_blocks( Config::GROUP_PATTERNS, $state, [] );
+
+		$this->assertSame(
+			'Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index.',
+			$status_blocks[0]['message'] ?? ''
+		);
+		$this->assertStringNotContainsString(
+			'provisioning failed',
 			$status_blocks[0]['message'] ?? ''
 		);
 	}
@@ -1792,13 +1895,15 @@ final class SettingsTest extends TestCase {
 		Validation::resolve_workers_ai_submission_values();
 
 		$reflection = new \ReflectionClass( Validation::class );
-		$property   = $reflection->getProperty( 'submission_request_fingerprint' );
+		$property   = $reflection->getProperty( 'submission_value_cache' );
 		$property->setAccessible( true );
 		$state = $property->getValue();
 
-		$this->assertIsArray( $state );
-		$this->assertArrayNotHasKey( 'raw_post', $state );
-		$this->assertStringNotContainsString( 'posted-secret-key', (string) wp_json_encode( $state ) );
+		$fingerprint = $state['cloudflare_workers_ai']['request_fingerprint'] ?? null;
+
+		$this->assertIsString( $fingerprint );
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{32}$/', $fingerprint );
+		$this->assertStringNotContainsString( 'posted-secret-key', $fingerprint );
 	}
 
 	public function test_render_page_uses_public_developer_docs_source_and_hides_legacy_credentials(): void {

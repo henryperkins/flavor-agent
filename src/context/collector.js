@@ -392,13 +392,6 @@ function getParentContext( clientId, annotatedTree, identityIndex ) {
 let cachedThemeTokenResult = null;
 
 /**
- * Invalidate the theme-token cache.  Call after Global Styles edits.
- */
-export function invalidateThemeTokenCache() {
-	cachedThemeTokenResult = null;
-}
-
-/**
  * Return a cached token summary, rebuilding only when the underlying
  * raw tokens change.
  *

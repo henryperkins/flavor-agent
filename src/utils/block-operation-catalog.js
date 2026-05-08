@@ -10,7 +10,6 @@ export const BLOCK_OPERATION_ACTION_REPLACE = 'replace';
 
 export const BLOCK_OPERATION_TARGET_BLOCK = 'block';
 
-export const BLOCK_OPERATION_ERROR_NO_OPERATIONS = 'no_operations';
 export const BLOCK_OPERATION_ERROR_INVALID_OPERATION_PAYLOAD =
 	'invalid_operation_payload';
 export const BLOCK_OPERATION_ERROR_UNKNOWN_OPERATION_TYPE =

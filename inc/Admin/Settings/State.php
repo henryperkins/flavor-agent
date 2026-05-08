@@ -335,7 +335,7 @@ final class State {
 					'tone'    => 'warning',
 					'message' => __( 'Text generation is not configured. Open Connectors to choose a provider.', 'flavor-agent' ),
 				];
-			} elseif ( empty( $state['selected_chat']['configured'] ) && Provider::is_connector_or_saved_legacy_pin( (string) $state['selected_provider'] ) ) {
+			} elseif ( empty( $state['selected_chat']['configured'] ) && Provider::is_connector( (string) $state['selected_provider'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
 					'message' => sprintf(
@@ -364,7 +364,12 @@ final class State {
 						: [];
 					$provisioning_status = (string) ( $provisioning_state['status'] ?? '' );
 
-					if ( 'provisioning' === $provisioning_status ) {
+					if ( empty( $state['runtime_embedding']['configured'] ) ) {
+						$status_blocks[] = [
+							'tone'    => 'warning',
+							'message' => __( 'Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index.', 'flavor-agent' ),
+						];
+					} elseif ( 'provisioning' === $provisioning_status ) {
 						$status_blocks[] = [
 							'tone'    => 'warning',
 							'message' => __( 'Managed Cloudflare AI Search pattern index is provisioning. Sync will unlock after validation finishes.', 'flavor-agent' ),
@@ -474,64 +479,6 @@ final class State {
 			'openai_endpoint_changed' => __( 'Embedding endpoint changed.', 'flavor-agent' ),
 			'pattern_registry_changed' => __( 'Registered patterns changed.', 'flavor-agent' ),
 			default => $reason,
-		};
-	}
-
-	public static function get_prewarm_status_label( string $status ): string {
-		return match ( $status ) {
-			'off'       => __( 'Off', 'flavor-agent' ),
-			'never'     => __( 'Never run', 'flavor-agent' ),
-			'ok'        => __( 'OK', 'flavor-agent' ),
-			'partial'   => __( 'Partial', 'flavor-agent' ),
-			'failed'    => __( 'Failed', 'flavor-agent' ),
-			'throttled' => __( 'Throttled', 'flavor-agent' ),
-			default     => $status,
-		};
-	}
-
-	public static function get_prewarm_status_tone( string $status ): string {
-		return match ( $status ) {
-			'ok'      => 'success',
-			'partial' => 'warning',
-			'failed'  => 'error',
-			default   => 'neutral',
-		};
-	}
-
-	public static function get_runtime_grounding_status_label( string $status ): string {
-		return match ( $status ) {
-			'off'      => __( 'Off', 'flavor-agent' ),
-			'idle'     => __( 'Idle', 'flavor-agent' ),
-			'cache'    => __( 'Cache ready', 'flavor-agent' ),
-			'healthy'  => __( 'Healthy', 'flavor-agent' ),
-			'warming'  => __( 'Warming', 'flavor-agent' ),
-			'retrying' => __( 'Retrying', 'flavor-agent' ),
-			'degraded' => __( 'Degraded', 'flavor-agent' ),
-			'error'    => __( 'Error', 'flavor-agent' ),
-			default    => $status,
-		};
-	}
-
-	public static function get_runtime_grounding_mode_label( string $mode ): string {
-		return match ( $mode ) {
-			'cache'      => __( 'cache', 'flavor-agent' ),
-			'direct'     => __( 'direct search', 'flavor-agent' ),
-			'foreground' => __( 'foreground warm', 'flavor-agent' ),
-			'async'      => __( 'async warm', 'flavor-agent' ),
-			'prewarm'    => __( 'prewarm', 'flavor-agent' ),
-			default      => str_replace( '_', ' ', $mode ),
-		};
-	}
-
-	public static function get_runtime_grounding_fallback_label( string $fallback_type ): string {
-		return match ( $fallback_type ) {
-			'exact'   => __( 'exact cache', 'flavor-agent' ),
-			'family'  => __( 'family cache', 'flavor-agent' ),
-			'entity'  => __( 'entity cache', 'flavor-agent' ),
-			'generic' => __( 'generic guidance', 'flavor-agent' ),
-			'fresh'   => __( 'fresh live warm', 'flavor-agent' ),
-			'none'    => __( 'no guidance', 'flavor-agent' ),
-			default   => str_replace( '_', ' ', $fallback_type ),
 		};
 	}
 

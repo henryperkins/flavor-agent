@@ -155,20 +155,8 @@ final class Settings {
 		return Validation::sanitize_qdrant_key( $value );
 	}
 
-	public static function sanitize_cloudflare_pattern_ai_search_account_id( mixed $value ): string {
-		return Validation::sanitize_cloudflare_pattern_ai_search_account_id( $value );
-	}
-
-	public static function sanitize_cloudflare_pattern_ai_search_namespace( mixed $value ): string {
-		return Validation::sanitize_cloudflare_pattern_ai_search_namespace( $value );
-	}
-
 	public static function sanitize_cloudflare_pattern_ai_search_instance_id( mixed $value ): string {
 		return Validation::sanitize_cloudflare_pattern_ai_search_instance_id( $value );
-	}
-
-	public static function sanitize_cloudflare_pattern_ai_search_api_token( mixed $value ): string {
-		return Validation::sanitize_cloudflare_pattern_ai_search_api_token( $value );
 	}
 
 	public static function sanitize_guideline_site( mixed $value ): string {

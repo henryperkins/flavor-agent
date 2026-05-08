@@ -82,29 +82,6 @@ final class Provider {
 		return isset( self::registered_connector_choices()[ $provider ] );
 	}
 
-	public static function is_saved_legacy_connector_pin( ?string $provider = null ): bool {
-		unset( $provider );
-
-		return false;
-	}
-
-	public static function is_connector_or_saved_legacy_pin( ?string $provider = null ): bool {
-		$provider = sanitize_key( (string) ( $provider ?? self::get() ) );
-
-		return self::is_connector( $provider ) || self::is_saved_legacy_connector_pin( $provider );
-	}
-
-	public static function legacy_connector_pin_label( string $provider ): string {
-		$provider          = sanitize_key( $provider );
-		$connector_choices = self::registered_connector_choices();
-
-		if ( isset( $connector_choices[ $provider ] ) ) {
-			return $connector_choices[ $provider ];
-		}
-
-		return '' !== $provider ? $provider : self::direct_choices()[ WorkersAIEmbeddingConfiguration::PROVIDER ];
-	}
-
 	public static function is_wordpress_ai_client( ?string $provider = null ): bool {
 		return sanitize_key( (string) ( $provider ?? self::get() ) ) === self::WORDPRESS_AI_CLIENT_PROVIDER;
 	}
@@ -138,10 +115,6 @@ final class Provider {
 			WordPressAIClient::is_supported( $connector_provider )
 		) {
 			return self::connector_chat_configuration( $connector_provider );
-		}
-
-		if ( self::is_saved_legacy_connector_pin( $provider ) ) {
-			return self::missing_chat_configuration( $provider );
 		}
 
 		if ( ! self::is_connector( $provider ) && WordPressAIClient::is_supported() ) {
@@ -300,12 +273,6 @@ final class Provider {
 		self::$has_fresh_runtime_chat_diagnostics = true;
 	}
 
-	public static function active_embedding_model(): ?string {
-		$model = trim( self::embedding_configuration()['model'] );
-
-		return $model !== '' ? $model : null;
-	}
-
 	/**
 	 * @return array{provider: string, providerLabel: string, backendLabel: string, model: string, configured: bool, owner: string, ownerLabel: string, pathLabel: string}
 	 */
@@ -375,7 +342,7 @@ final class Provider {
 			];
 		}
 
-		if ( ! self::is_connector_or_saved_legacy_pin( $provider ) ) {
+		if ( ! self::is_connector( $provider ) ) {
 			return [
 				'id'         => '',
 				'label'      => '',
@@ -576,7 +543,7 @@ final class Provider {
 	private static function selected_chat_connector( string $provider ): string {
 		$provider = self::normalize_provider( $provider );
 
-		if ( self::is_connector_or_saved_legacy_pin( $provider ) ) {
+		if ( self::is_connector( $provider ) ) {
 			return $provider;
 		}
 
@@ -600,7 +567,7 @@ final class Provider {
 
 		if (
 			self::WORDPRESS_AI_CLIENT_PROVIDER === $provider
-			&& ! self::is_connector_or_saved_legacy_pin( $selected_provider )
+			&& ! self::is_connector( $selected_provider )
 		) {
 			return true;
 		}

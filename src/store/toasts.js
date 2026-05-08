@@ -376,5 +376,3 @@ export const TOAST_DEFAULTS = Object.freeze( {
 	errorMs: DEFAULT_ERROR_MS,
 	maxVisible: MAX_VISIBLE,
 } );
-
-export const TOAST_ACTION_TYPES = ACTION_TYPES;

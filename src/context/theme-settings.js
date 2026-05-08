@@ -283,10 +283,6 @@ export function getThemeTokenSourceDetails(
 	};
 }
 
-export function getThemeTokenSource( settings ) {
-	return getThemeTokenSourceDetails( settings ).source;
-}
-
 export function getThemeTokenFeatures( settings ) {
 	return getThemeTokenSourceDetails( settings ).features;
 }

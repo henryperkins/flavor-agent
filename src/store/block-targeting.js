@@ -53,18 +53,6 @@ export function getBlockPathByClientId(
 	return null;
 }
 
-function blockPathsMatch( left = [], right = [] ) {
-	if ( ! Array.isArray( left ) || ! Array.isArray( right ) ) {
-		return false;
-	}
-
-	if ( left.length !== right.length ) {
-		return false;
-	}
-
-	return left.every( ( value, index ) => value === right[ index ] );
-}
-
 export function resolveActivityBlockTarget(
 	blockEditorSelect = {},
 	target = {}
@@ -102,24 +90,4 @@ export function resolveActivityBlockTarget(
 		blockPath: null,
 		resolvedBy: null,
 	};
-}
-
-export function hasResolvedActivityBlockMoved(
-	resolvedTarget = {},
-	target = {}
-) {
-	if (
-		resolvedTarget?.resolvedBy !== 'clientId' ||
-		! target?.clientId ||
-		! Array.isArray( target?.blockPath ) ||
-		! Array.isArray( resolvedTarget?.blockPath )
-	) {
-		return false;
-	}
-
-	return ! blockPathsMatch( target.blockPath, resolvedTarget.blockPath );
-}
-
-export function resolveActivityBlock( blockEditorSelect = {}, target = {} ) {
-	return resolveActivityBlockTarget( blockEditorSelect, target ).block;
 }
