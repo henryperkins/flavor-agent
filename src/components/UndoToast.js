@@ -241,16 +241,11 @@ export default function UndoToast( {
 		: undefined;
 
 	return (
-		// The toast wrapper is announced as a `status` region but also owns
-		// the hover/focus/keyboard handlers that pause auto-dismiss and route
-		// Escape to onDismiss. The interactive controls (Undo, Close) live
-		// inside; the hover/focus handlers exist on the wrapper because the
-		// pause behavior must apply when the pointer enters or focus lands
-		// anywhere within the toast — not only on the buttons themselves.
-		// eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+		// The wrapper owns hover/focus/keyboard handlers for auto-dismiss and
+		// Escape handling. The status region below stays text-only so assistive
+		// tech does not announce Undo/Dismiss controls as changing status text.
+		// eslint-disable-next-line jsx-a11y/no-static-element-interactions
 		<div
-			role="status"
-			aria-live="polite"
 			className={ className }
 			onMouseEnter={ handleMouseEnter }
 			onMouseLeave={ handleMouseLeave }
@@ -270,7 +265,11 @@ export default function UndoToast( {
 				{ iconElement }
 			</span>
 
-			<span className="flavor-agent-toast__msg">
+			<span
+				className="flavor-agent-toast__msg"
+				role="status"
+				aria-live="polite"
+			>
 				<strong className="flavor-agent-toast__title">{ title }</strong>
 				{ detail && (
 					<span className="flavor-agent-toast__detail">

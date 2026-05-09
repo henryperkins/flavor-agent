@@ -23,6 +23,7 @@ import {
 import { useDispatch, useSelect } from '@wordpress/data';
 
 import UndoToast from './UndoToast';
+import { TOAST_DEFAULTS } from '../store/toasts';
 
 function getRegionRoot() {
 	if ( typeof document === 'undefined' ) {
@@ -213,7 +214,10 @@ export default function ToastRegion() {
 			const toast = toasts.find( ( entry ) => entry.id === toastId );
 
 			if ( typeof undoToastAction === 'function' ) {
-				undoToastAction( toastId, toast?.activityId || null );
+				undoToastAction( toastId, toast?.activityId || null, {
+					activityDocument: toast?.activityDocument || null,
+					activityScopeKey: toast?.activityScopeKey || null,
+				} );
 			}
 		},
 		[ toasts, undoToastAction ]
@@ -237,7 +241,10 @@ export default function ToastRegion() {
 		[ markToastInteracted ]
 	);
 
-	const renderedToasts = useMemo( () => toasts.slice( 0, 3 ), [ toasts ] );
+	const renderedToasts = useMemo(
+		() => toasts.slice( 0, TOAST_DEFAULTS.maxVisible ),
+		[ toasts ]
+	);
 
 	if ( ! root ) {
 		return null;

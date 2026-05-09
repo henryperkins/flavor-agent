@@ -1188,13 +1188,17 @@ function ReviewSuggestionCard( {
 				<div
 					id={ reviewDetailsId }
 					className="flavor-agent-card__description"
-					role="status"
 				>
-					<strong>Selected structural review</strong>
-					<p>
-						This review is scoped to the current block, request
-						token, and request signature.
-					</p>
+					<div
+						className="flavor-agent-card__description-status"
+						role="status"
+					>
+						<strong>Selected structural review</strong>
+						<p>
+							This review is scoped to the current block, request
+							token, and request signature.
+						</p>
+					</div>
 					{ canApplyReviewedStructure && (
 						<Button
 							variant="primary"

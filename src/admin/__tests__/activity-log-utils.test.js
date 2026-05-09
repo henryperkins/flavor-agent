@@ -654,6 +654,21 @@ describe( 'activity log utils', () => {
 		] );
 	} );
 
+	test( 'normalizeStoredActivityView coerces unsupported sort fields to timestamp', () => {
+		const normalized = normalizeStoredActivityView( {
+			...DEFAULT_ACTIVITY_VIEW,
+			sort: {
+				field: 'mysteryField',
+				direction: 'asc',
+			},
+		} );
+
+		expect( normalized.sort ).toEqual( {
+			field: 'timestamp',
+			direction: 'asc',
+		} );
+	} );
+
 	test( 'normalizeStoredActivityView drops explicit-field filters with text operators', () => {
 		const normalized = normalizeStoredActivityView( {
 			...DEFAULT_ACTIVITY_VIEW,

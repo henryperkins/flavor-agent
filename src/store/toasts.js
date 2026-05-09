@@ -213,6 +213,9 @@ export function buildToastForActivity( {
 	extras = null,
 } = {} ) {
 	const activityId = persistedEntry?.id || null;
+	const activityDocument = persistedEntry?.document?.scopeKey
+		? { ...persistedEntry.document }
+		: null;
 
 	return {
 		id: generateToastId(),
@@ -221,6 +224,8 @@ export function buildToastForActivity( {
 		title: getSurfaceTitle( surface ),
 		detail: buildToastDetail( surface, suggestion, extras ),
 		activityId,
+		activityScopeKey: activityDocument?.scopeKey || null,
+		activityDocument,
 		undoLabel: 'Undo',
 		autoDismissMs: DEFAULT_SUCCESS_MS,
 		interacted: false,

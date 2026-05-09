@@ -88,6 +88,19 @@ const FILTER_FIELD_OPERATORS = new Map( [
 	[ 'blockPath', TEXT_FILTER_OPERATORS ],
 	[ 'day', DAY_FILTER_OPERATORS ],
 ] );
+const SORT_FIELDS = new Set( [
+	'timestamp',
+	'status',
+	'surface',
+	'postType',
+	'userId',
+	'operationType',
+	'provider',
+	'providerPath',
+	'configurationOwner',
+	'credentialSource',
+	'selectedProvider',
+] );
 
 function isValidStoredFilter( filter ) {
 	if ( ! isPlainObject( filter ) ) {
@@ -1375,7 +1388,8 @@ export function normalizeStoredActivityView( view, options = {} ) {
 	const sort = isPlainObject( view.sort )
 		? {
 				field:
-					typeof view.sort.field === 'string' && view.sort.field
+					typeof view.sort.field === 'string' &&
+					SORT_FIELDS.has( view.sort.field )
 						? view.sort.field
 						: defaultView.sort.field,
 				direction: view.sort.direction === 'asc' ? 'asc' : 'desc',

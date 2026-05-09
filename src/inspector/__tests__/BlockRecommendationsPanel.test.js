@@ -1130,6 +1130,25 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain(
 			'Apply reviewed structure'
 		);
+		expect(
+			getContainer()
+				.querySelector( `#${ reviewDetailsId }` )
+				?.getAttribute( 'role' )
+		).toBeNull();
+		expect(
+			getContainer()
+				.querySelector(
+					`#${ reviewDetailsId } .flavor-agent-card__description-status`
+				)
+				?.getAttribute( 'role' )
+		).toBe( 'status' );
+		expect(
+			getContainer()
+				.querySelector(
+					`#${ reviewDetailsId } .flavor-agent-card__description-status`
+				)
+				?.querySelector( 'button' )
+		).toBeNull();
 
 		const applyButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
@@ -2122,6 +2141,11 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect(
 			getContainer()
 				.querySelector( '.flavor-agent-scope-bar' )
+				?.getAttribute( 'role' )
+		).toBeNull();
+		expect(
+			getContainer()
+				.querySelector( '.flavor-agent-scope-bar__announcement' )
 				?.getAttribute( 'role' )
 		).toBe( 'status' );
 		expect(

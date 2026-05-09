@@ -151,7 +151,9 @@ function GlobalStylesPanel( {
 				hasResult={ hasResult }
 				announceChanges
 				staleReason={ staleReason }
-				onRefresh={ isStale ? onRequest : undefined }
+				onRefresh={
+					isStale && capabilityAvailable ? onRequest : undefined
+				}
 				isRefreshing={ isLoading }
 			/>
 			<AIStatusNotice
@@ -194,7 +196,7 @@ function GlobalStylesPanel( {
 				/>
 			) }
 
-			{ isStale && (
+			{ isStale && capabilityAvailable && (
 				<RecommendationHero
 					title="Refresh recommendations for Global Styles"
 					description="Flavor Agent kept the previous result visible so you can compare it against the current Global Styles config."
@@ -672,6 +674,8 @@ export default function GlobalStylesRecommender() {
 
 	const notice = baseNotice || fallbackNotice;
 	const isStyleBookActive = Boolean( styleBookUiState?.isActive );
+	const capability = getSurfaceCapability( 'global-styles' );
+	const capabilityAvailable = capability.available && Boolean( scope );
 	const dismissStatusNotice = useCallback( () => {
 		switch ( notice?.source ) {
 			case 'request':
@@ -695,12 +699,12 @@ export default function GlobalStylesRecommender() {
 	] );
 
 	useEffect( () => {
-		if ( typeof document === 'undefined' ) {
+		if ( ! isGlobalStylesActive || typeof document === 'undefined' ) {
 			return undefined;
 		}
 
 		return subscribeToStyleBookUi( document, setStyleBookUiState );
-	}, [] );
+	}, [ isGlobalStylesActive ] );
 
 	useEffect( () => {
 		if (
@@ -805,12 +809,17 @@ export default function GlobalStylesRecommender() {
 	] );
 
 	const handleRequest = useCallback( () => {
-		if ( ! currentRequestInput ) {
+		if ( ! currentRequestInput || ! capability.available || ! scope ) {
 			return;
 		}
 
 		fetchGlobalStylesRecommendations( currentRequestInput );
-	}, [ fetchGlobalStylesRecommendations, currentRequestInput ] );
+	}, [
+		capability.available,
+		fetchGlobalStylesRecommendations,
+		currentRequestInput,
+		scope,
+	] );
 
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
@@ -838,12 +847,11 @@ export default function GlobalStylesRecommender() {
 		return null;
 	}
 
-	const capability = getSurfaceCapability( 'global-styles' );
 	const panel = (
 		<GlobalStylesPanel
 			prompt={ prompt }
 			setPrompt={ setPrompt }
-			capabilityAvailable={ capability.available && Boolean( scope ) }
+			capabilityAvailable={ capabilityAvailable }
 			visibilityConstraintCount={ templateVisibility?.blockCount || 0 }
 			isLoading={ isLoading }
 			isApplying={ isApplying }

@@ -56,6 +56,37 @@ describe( 'global styles selector adapter', () => {
 		).toEqual( [] );
 	} );
 
+	test( 'fails closed when Global Styles selector calls throw', () => {
+		const throwingCoreSelect = {
+			getCurrentGlobalStylesId: () => {
+				throw new Error( 'selector unavailable' );
+			},
+			__experimentalGetCurrentGlobalStylesId: () => {
+				throw new Error( 'experimental unavailable' );
+			},
+			getCurrentThemeBaseGlobalStyles: () => {
+				throw new Error( 'base unavailable' );
+			},
+			__experimentalGetCurrentThemeBaseGlobalStyles: () => {
+				throw new Error( 'experimental base unavailable' );
+			},
+			getCurrentThemeGlobalStylesVariations: () => {
+				throw new Error( 'variations unavailable' );
+			},
+			__experimentalGetCurrentThemeGlobalStylesVariations: () => {
+				throw new Error( 'experimental variations unavailable' );
+			},
+		};
+
+		expect( getCurrentGlobalStylesId( throwingCoreSelect ) ).toBeNull();
+		expect(
+			getCurrentThemeBaseGlobalStyles( throwingCoreSelect )
+		).toBeNull();
+		expect(
+			getCurrentThemeGlobalStylesVariations( throwingCoreSelect )
+		).toEqual( [] );
+	} );
+
 	test( 'documents the selector adapter as the allowed Global Styles experimental boundary', () => {
 		const guidance = fs.readFileSync(
 			path.join( REPO_ROOT, 'CLAUDE.md' ),

@@ -112,6 +112,7 @@ Defined in `inc/LLM/StylePrompt.php`. These operations target Global Styles or S
 - `path` values must match the supported style paths enumerated in the prompt
 - Preset-backed paths must use preset values (slug + CSS variable), not raw values
 - At most one `set_theme_variation` per suggestion, and it must appear before any `set_styles` or `set_block_styles` overrides
+- Executable `set_theme_variation` operations may be followed by non-readable style overrides such as typography, but must not be combined with readable `color.text` or `color.background` overrides. The server downgrades that mixed shape to advisory; the client apply path rejects it before mutating Global Styles.
 - `variationIndex` must reference an available variation by index; `variationTitle` must match
 
 ### Enrichment

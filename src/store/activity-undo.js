@@ -604,15 +604,46 @@ export function getNextLastUndoneActivityId( currentValue, action ) {
 	return currentValue;
 }
 
+function getUndoTargetScope( options = {}, fallbackScope = null ) {
+	const document =
+		options?.document && typeof options.document === 'object'
+			? options.document
+			: {};
+	const optionScopeKey =
+		typeof options?.scopeKey === 'string' ? options.scopeKey.trim() : '';
+	const documentScopeKey =
+		typeof document?.scopeKey === 'string' ? document.scopeKey.trim() : '';
+	const scopeKey = optionScopeKey || documentScopeKey;
+
+	if ( ! scopeKey ) {
+		return fallbackScope;
+	}
+
+	return {
+		...( fallbackScope || {} ),
+		...document,
+		key: scopeKey,
+		scopeKey,
+		postType: document?.postType || fallbackScope?.postType || '',
+		entityId: document?.entityId || fallbackScope?.entityId || '',
+		entityKind: document?.entityKind || fallbackScope?.entityKind || '',
+		entityName: document?.entityName || fallbackScope?.entityName || '',
+		stylesheet: document?.stylesheet || fallbackScope?.stylesheet || '',
+	};
+}
+
 export function createUndoActivityAction( {
 	getCurrentActivityScope,
 	setActivitySession,
 	setUndoState,
 	updateActivityUndoState,
 } ) {
-	return function undoActivity( activityId ) {
+	return function undoActivity( activityId, options = {} ) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
-			const scope = getCurrentActivityScope( registry );
+			const scope = getUndoTargetScope(
+				options,
+				getCurrentActivityScope( registry )
+			);
 
 			syncActivitySession(
 				localDispatch,

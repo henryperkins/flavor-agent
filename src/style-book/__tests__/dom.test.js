@@ -321,6 +321,28 @@ describe( 'subscribeToStyleBookUi', () => {
 		unsubscribe();
 	} );
 
+	test( 'observes the Styles sidebar root instead of the whole document body when available', () => {
+		const originalObserver = window.MutationObserver;
+		const observeTargets = [];
+
+		document.body.innerHTML =
+			'<div id="sidebar" class="editor-global-styles-sidebar"></div>';
+		window.MutationObserver = jest.fn().mockImplementation( () => ( {
+			observe: ( target ) => observeTargets.push( target ),
+			disconnect: jest.fn(),
+		} ) );
+
+		const unsubscribe = subscribeToStyleBookUi( document, jest.fn() );
+
+		try {
+			expect( observeTargets[ 0 ]?.id ).toBe( 'sidebar' );
+			expect( observeTargets ).not.toContain( document.body );
+		} finally {
+			unsubscribe();
+			window.MutationObserver = originalObserver;
+		}
+	} );
+
 	test( 'shares observers across multiple subscribers and tears them down on last unsubscribe', () => {
 		const a = jest.fn();
 		const b = jest.fn();

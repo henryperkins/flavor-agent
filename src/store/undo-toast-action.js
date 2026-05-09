@@ -13,7 +13,7 @@ function buildErrorPatch( errorHint ) {
 }
 
 export function createUndoToastAction( actions ) {
-	return ( toastId, activityId ) =>
+	return ( toastId, activityId, options = {} ) =>
 		async ( { dispatch } ) => {
 			if ( ! activityId ) {
 				dispatch( actions.dismissToast( toastId ) );
@@ -23,7 +23,12 @@ export function createUndoToastAction( actions ) {
 			let result;
 
 			try {
-				result = await dispatch( actions.undoActivity( activityId ) );
+				result = await dispatch(
+					actions.undoActivity( activityId, {
+						document: options?.activityDocument || null,
+						scopeKey: options?.activityScopeKey || null,
+					} )
+				);
 			} catch ( error ) {
 				dispatch(
 					actions.updateToast(

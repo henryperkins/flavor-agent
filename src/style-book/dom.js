@@ -501,11 +501,19 @@ function reconcileSharedIframeObserver() {
 
 function attachSharedObservers( root ) {
 	sharedRoot = root;
+	const observerTarget =
+		findStylesSidebarMountNode( root ) || root.body || root.documentElement;
+
+	if ( ! observerTarget ) {
+		reconcileSharedIframeObserver();
+		return;
+	}
+
 	sharedDocumentObserver = new window.MutationObserver( () => {
 		reconcileSharedIframeObserver();
 		notifyAllSubscribers();
 	} );
-	sharedDocumentObserver.observe( root.body || root.documentElement, {
+	sharedDocumentObserver.observe( observerTarget, {
 		childList: true,
 		subtree: true,
 		attributes: true,

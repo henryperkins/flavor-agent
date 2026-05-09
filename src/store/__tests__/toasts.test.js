@@ -164,7 +164,14 @@ describe( 'buildToastForActivity', () => {
 	it( 'block surface produces a success toast with the persisted entry id', () => {
 		const result = buildToastForActivity( {
 			surface: 'block',
-			persistedEntry: { id: 'activity-42' },
+			persistedEntry: {
+				id: 'activity-42',
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				},
+			},
 			suggestion: {
 				blockName: 'core/heading',
 				attributeName: 'fontWeight',
@@ -178,6 +185,12 @@ describe( 'buildToastForActivity', () => {
 			title: 'Block updated',
 			detail: 'core/heading · attr=fontWeight',
 			activityId: 'activity-42',
+			activityScopeKey: 'post:42',
+			activityDocument: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
 			autoDismissMs: TOAST_DEFAULTS.successMs,
 			interacted: false,
 		} );

@@ -10,9 +10,17 @@ function normalizeGlobalStylesId( value ) {
 	return null;
 }
 
+function safelyCallSelector( coreSelect, selectorName ) {
+	try {
+		return coreSelect?.[ selectorName ]?.();
+	} catch {
+		return undefined;
+	}
+}
+
 export function getCurrentGlobalStylesId( coreSelect ) {
 	const stableId = normalizeGlobalStylesId(
-		coreSelect?.getCurrentGlobalStylesId?.()
+		safelyCallSelector( coreSelect, 'getCurrentGlobalStylesId' )
 	);
 
 	if ( stableId ) {
@@ -20,28 +28,38 @@ export function getCurrentGlobalStylesId( coreSelect ) {
 	}
 
 	return normalizeGlobalStylesId(
-		coreSelect?.__experimentalGetCurrentGlobalStylesId?.()
+		safelyCallSelector(
+			coreSelect,
+			'__experimentalGetCurrentGlobalStylesId'
+		)
 	);
 }
 
 export function getCurrentThemeBaseGlobalStyles( coreSelect ) {
 	return (
-		coreSelect?.getCurrentThemeBaseGlobalStyles?.() ||
-		coreSelect?.__experimentalGetCurrentThemeBaseGlobalStyles?.() ||
+		safelyCallSelector( coreSelect, 'getCurrentThemeBaseGlobalStyles' ) ||
+		safelyCallSelector(
+			coreSelect,
+			'__experimentalGetCurrentThemeBaseGlobalStyles'
+		) ||
 		null
 	);
 }
 
 export function getCurrentThemeGlobalStylesVariations( coreSelect ) {
-	const stableVariations =
-		coreSelect?.getCurrentThemeGlobalStylesVariations?.();
+	const stableVariations = safelyCallSelector(
+		coreSelect,
+		'getCurrentThemeGlobalStylesVariations'
+	);
 
 	if ( Array.isArray( stableVariations ) ) {
 		return stableVariations;
 	}
 
-	const experimentalVariations =
-		coreSelect?.__experimentalGetCurrentThemeGlobalStylesVariations?.();
+	const experimentalVariations = safelyCallSelector(
+		coreSelect,
+		'__experimentalGetCurrentThemeGlobalStylesVariations'
+	);
 
 	return Array.isArray( experimentalVariations )
 		? experimentalVariations

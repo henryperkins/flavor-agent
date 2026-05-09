@@ -9,9 +9,10 @@ function buildStubActions() {
 			id,
 			patch,
 		} ) ),
-		undoActivity: jest.fn( ( activityId ) => ( {
+		undoActivity: jest.fn( ( activityId, options ) => ( {
 			type: 'UNDO',
 			activityId,
+			options,
 		} ) ),
 	};
 }
@@ -40,6 +41,27 @@ describe( 'undoToastAction — result handling', () => {
 		expect( result ).toBe( true );
 		expect( actions.dismissToast ).toHaveBeenCalledWith( 'toast-1' );
 		expect( actions.updateToast ).not.toHaveBeenCalled();
+	} );
+
+	it( 'passes the toast activity scope through to undoActivity', async () => {
+		const actions = buildStubActions();
+		const undoToastAction = createUndoToastAction( actions );
+		const dispatch = buildDispatchMock( { ok: true } );
+		const activityDocument = {
+			scopeKey: 'global_styles:17',
+			postType: 'global_styles',
+			entityId: '17',
+		};
+
+		await undoToastAction( 'toast-1', 'activity-1', {
+			activityDocument,
+			activityScopeKey: 'global_styles:17',
+		} )( { dispatch } );
+
+		expect( actions.undoActivity ).toHaveBeenCalledWith( 'activity-1', {
+			document: activityDocument,
+			scopeKey: 'global_styles:17',
+		} );
 	} );
 
 	it( 'keeps the toast and surfaces the error variant when undoActivity returns ok=false', async () => {

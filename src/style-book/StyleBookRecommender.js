@@ -164,7 +164,9 @@ function StyleBookPanel( {
 				hasResult={ hasResult }
 				announceChanges
 				staleReason={ staleReason }
-				onRefresh={ isStale ? onRequest : undefined }
+				onRefresh={
+					isStale && capabilityAvailable ? onRequest : undefined
+				}
 				isRefreshing={ isLoading }
 			/>
 			<AIStatusNotice
@@ -203,7 +205,7 @@ function StyleBookPanel( {
 				/>
 			) }
 
-			{ isStale && (
+			{ isStale && capabilityAvailable && (
 				<RecommendationHero
 					title="Refresh recommendations for this Style Book example"
 					description="Flavor Agent kept the previous result visible so you can compare it against the active Style Book example."
@@ -733,6 +735,9 @@ export default function StyleBookRecommender() {
 	}
 
 	const notice = baseNotice || fallbackNotice;
+	const capability = getSurfaceCapability( 'style-book' );
+	const capabilityAvailable =
+		capability.available && Boolean( scope ) && Boolean( blockType );
 	const dismissStatusNotice = useCallback( () => {
 		switch ( notice?.source ) {
 			case 'request':
@@ -756,12 +761,12 @@ export default function StyleBookRecommender() {
 	] );
 
 	useEffect( () => {
-		if ( typeof document === 'undefined' ) {
+		if ( ! isGlobalStylesActive || typeof document === 'undefined' ) {
 			return undefined;
 		}
 
 		return subscribeToStyleBookUi( document, setStyleBookUiState );
-	}, [] );
+	}, [ isGlobalStylesActive ] );
 
 	useEffect( () => {
 		if (
@@ -865,12 +870,16 @@ export default function StyleBookRecommender() {
 	] );
 
 	const handleRequest = useCallback( () => {
-		if ( ! currentRequestInput ) {
+		if ( ! currentRequestInput || ! capabilityAvailable ) {
 			return;
 		}
 
 		fetchStyleBookRecommendations( currentRequestInput );
-	}, [ fetchStyleBookRecommendations, currentRequestInput ] );
+	}, [
+		capabilityAvailable,
+		fetchStyleBookRecommendations,
+		currentRequestInput,
+	] );
 
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
@@ -898,14 +907,11 @@ export default function StyleBookRecommender() {
 		return null;
 	}
 
-	const capability = getSurfaceCapability( 'style-book' );
 	const panel = (
 		<StyleBookPanel
 			prompt={ prompt }
 			setPrompt={ setPrompt }
-			capabilityAvailable={
-				capability.available && Boolean( scope ) && Boolean( blockType )
-			}
+			capabilityAvailable={ capabilityAvailable }
 			isLoading={ isLoading }
 			isApplying={ isApplying }
 			isUndoing={ isUndoing }

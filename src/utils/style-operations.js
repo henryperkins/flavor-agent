@@ -4,6 +4,8 @@ import { store as blocksStore } from '@wordpress/blocks';
 import {
 	buildBlockStyleExecutionContractFromSettings,
 	buildGlobalStylesExecutionContractFromSettings,
+	collectThemeTokensFromSettings,
+	summarizeTokens,
 } from '../context/theme-tokens';
 import {
 	getCurrentGlobalStylesId,
@@ -18,6 +20,15 @@ import {
 	sanitizeStyleKey,
 	validateFreeformStyleValueByKind,
 } from './style-validation';
+
+const CONTRAST_AA_THRESHOLD = 4.5;
+const CONTRAST_SUPPORTED_ELEMENTS = [ 'button', 'link', 'heading' ];
+const CONTRAST_SCOPE_ORDER = [
+	'root',
+	'elements.button',
+	'elements.link',
+	'elements.heading',
+];
 
 function getCoreSelect( registry ) {
 	return registry?.select?.( 'core' ) || select( 'core' ) || {};
@@ -108,6 +119,400 @@ function parsePresetValue( value ) {
 	}
 
 	return { type, slug };
+}
+
+function normalizeHexValue( value ) {
+	if ( typeof value !== 'string' ) {
+		return null;
+	}
+
+	const matches = value.match(
+		/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+	);
+
+	if ( ! matches ) {
+		return null;
+	}
+
+	let digits = matches[ 1 ];
+
+	if ( digits.length === 3 || digits.length === 4 ) {
+		digits = digits
+			.split( '' )
+			.map( ( char ) => `${ char }${ char }` )
+			.join( '' );
+	}
+
+	return `#${ digits.slice( 0, 6 ).toLowerCase() }`;
+}
+
+function buildColorPresetIndex( themeTokens = {} ) {
+	const index = new Map();
+	const presets = Array.isArray( themeTokens?.colorPresets )
+		? themeTokens.colorPresets
+		: [];
+
+	for ( const preset of presets ) {
+		const slug = sanitizeStyleKey( preset?.slug );
+
+		if ( slug ) {
+			index.set( slug, preset?.color || '' );
+		}
+	}
+
+	return index;
+}
+
+function resolveColorValue( value, themeTokens = {} ) {
+	const normalizedHex = normalizeHexValue( value );
+
+	if ( normalizedHex ) {
+		return {
+			resolved: true,
+			hex: normalizedHex,
+		};
+	}
+
+	if ( typeof value !== 'string' || ! value ) {
+		return {
+			resolved: false,
+			hex: null,
+		};
+	}
+
+	const presetMatch =
+		value.match( /^var:preset\|color\|([a-z0-9_-]+)$/i ) ||
+		value.match( /^var\(--wp--preset--color--([a-z0-9_-]+)\)$/i );
+
+	if ( ! presetMatch ) {
+		return {
+			resolved: false,
+			hex: null,
+		};
+	}
+
+	const rawHex = buildColorPresetIndex( themeTokens ).get(
+		sanitizeStyleKey( presetMatch[ 1 ] )
+	);
+	const presetHex = normalizeHexValue( rawHex );
+
+	return {
+		resolved: Boolean( presetHex ),
+		hex: presetHex,
+	};
+}
+
+function colorPairPathSide( path = [] ) {
+	if ( ! Array.isArray( path ) || path.length < 2 ) {
+		return '';
+	}
+
+	const tail = path.slice( -2 );
+
+	return tail[ 0 ] === 'color' &&
+		( tail[ 1 ] === 'text' || tail[ 1 ] === 'background' )
+		? tail[ 1 ]
+		: '';
+}
+
+function getContrastScopeKeyForOperation( operation = {} ) {
+	const path = Array.isArray( operation?.path ) ? operation.path : [];
+
+	if ( ! colorPairPathSide( path ) ) {
+		return null;
+	}
+
+	const type = sanitizeStyleKey( operation?.type );
+
+	if ( type === 'set_block_styles' ) {
+		const blockName =
+			typeof operation?.blockName === 'string'
+				? operation.blockName.trim()
+				: '';
+
+		return blockName ? `blocks.${ blockName }` : null;
+	}
+
+	if ( type !== 'set_styles' ) {
+		return null;
+	}
+
+	if ( path.length === 2 ) {
+		return 'root';
+	}
+
+	if ( path.length === 4 && path[ 0 ] === 'elements' ) {
+		const element = sanitizeStyleKey( path[ 1 ] );
+
+		return CONTRAST_SUPPORTED_ELEMENTS.includes( element )
+			? `elements.${ element }`
+			: 'unsupported';
+	}
+
+	return 'unsupported';
+}
+
+function hasThemeVariationOperation( operations = [] ) {
+	return operations.some(
+		( operation ) =>
+			sanitizeStyleKey( operation?.type ) === 'set_theme_variation'
+	);
+}
+
+function hasReadableColorOperation( operations = [] ) {
+	return operations.some( ( operation ) => {
+		const type = sanitizeStyleKey( operation?.type );
+
+		return (
+			( type === 'set_styles' || type === 'set_block_styles' ) &&
+			Boolean( colorPairPathSide( operation?.path ) )
+		);
+	} );
+}
+
+function getContrastScopeKeysInOrder( scopeKeys = [] ) {
+	const known = [];
+	const blocks = [];
+
+	for ( const key of scopeKeys ) {
+		const orderIndex = CONTRAST_SCOPE_ORDER.indexOf( key );
+
+		if ( orderIndex !== -1 ) {
+			known[ orderIndex ] = key;
+		} else if ( key.startsWith( 'blocks.' ) ) {
+			blocks.push( key );
+		}
+	}
+
+	return [
+		...known.filter( Boolean ),
+		...blocks.sort( ( left, right ) => left.localeCompare( right ) ),
+	];
+}
+
+function getScopeSpecificComplementValue(
+	scopeKey,
+	side,
+	mergedStyles = {},
+	themeTokens = {}
+) {
+	if ( scopeKey === 'root' ) {
+		return null;
+	}
+
+	if ( scopeKey.startsWith( 'elements.' ) ) {
+		const element = scopeKey.slice( 'elements.'.length );
+		const mergedElement = mergedStyles?.elements?.[ element ]?.color || {};
+
+		if ( Object.hasOwn( mergedElement, side ) ) {
+			return mergedElement[ side ];
+		}
+
+		return themeTokens?.elementStyles?.[ element ]?.base?.[ side ] ?? null;
+	}
+
+	if ( scopeKey.startsWith( 'blocks.' ) ) {
+		const blockName = scopeKey.slice( 'blocks.'.length );
+
+		return mergedStyles?.blocks?.[ blockName ]?.color?.[ side ] ?? null;
+	}
+
+	return null;
+}
+
+function getMergedComplementHex( scopeKey, side, context = {} ) {
+	const themeTokens = context?.themeTokens || {};
+	const mergedStyles = context?.mergedConfig?.styles || {};
+	const scopedValue = getScopeSpecificComplementValue(
+		scopeKey,
+		side,
+		mergedStyles,
+		themeTokens
+	);
+
+	if ( scopedValue !== null && scopedValue !== undefined ) {
+		const scopedColor = resolveColorValue( scopedValue, themeTokens );
+
+		if ( scopedColor.resolved ) {
+			return scopedColor.hex;
+		}
+	}
+
+	const rootValue = mergedStyles?.color?.[ side ];
+
+	if ( rootValue !== null && rootValue !== undefined ) {
+		const rootColor = resolveColorValue( rootValue, themeTokens );
+
+		if ( rootColor.resolved ) {
+			return rootColor.hex;
+		}
+	}
+
+	return null;
+}
+
+function getUnavailableContrastResult( side, scopeKey ) {
+	return {
+		ok: false,
+		error: `Contrast check unavailable: unresolved ${ side } at ${ scopeKey }.`,
+	};
+}
+
+function resolveContrastSide( operation, side, scopeKey, context ) {
+	if ( operation ) {
+		const resolved = resolveColorValue(
+			operation?.value,
+			context.themeTokens
+		);
+
+		return resolved.resolved
+			? {
+					ok: true,
+					hex: resolved.hex,
+			  }
+			: getUnavailableContrastResult( side, scopeKey );
+	}
+
+	const hex = getMergedComplementHex( scopeKey, side, context );
+
+	return hex
+		? {
+				ok: true,
+				hex,
+		  }
+		: getUnavailableContrastResult( side, scopeKey );
+}
+
+function getRelativeLuminance( hex ) {
+	const normalized = normalizeHexValue( hex ) || '#000000';
+	const channels = [ 0, 2, 4 ].map( ( index ) => {
+		const channel =
+			parseInt( normalized.slice( index + 1, index + 3 ), 16 ) / 255;
+
+		return channel <= 0.03928
+			? channel / 12.92
+			: Math.pow( ( channel + 0.055 ) / 1.055, 2.4 );
+	} );
+
+	return (
+		0.2126 * channels[ 0 ] + 0.7152 * channels[ 1 ] + 0.0722 * channels[ 2 ]
+	);
+}
+
+function getContrastRatio( foregroundHex, backgroundHex ) {
+	const foreground = getRelativeLuminance( foregroundHex );
+	const background = getRelativeLuminance( backgroundHex );
+	const lighter = Math.max( foreground, background );
+	const darker = Math.min( foreground, background );
+
+	return ( lighter + 0.05 ) / ( darker + 0.05 );
+}
+
+function getContrastLabel( operation, hexFallback ) {
+	const parsed = parsePresetValue( operation?.value );
+
+	return parsed?.type === 'color' ? parsed.slug : hexFallback;
+}
+
+function validateReadableColorContrast( operations = [], context = {} ) {
+	const groups = {};
+	let unsupported = false;
+
+	if (
+		hasThemeVariationOperation( operations ) &&
+		hasReadableColorOperation( operations )
+	) {
+		return {
+			ok: false,
+			error: 'Contrast check unavailable: theme variation and color overrides must be reviewed separately.',
+		};
+	}
+
+	for ( const operation of operations ) {
+		const scopeKey = getContrastScopeKeyForOperation( operation );
+
+		if ( ! scopeKey ) {
+			continue;
+		}
+
+		if ( scopeKey === 'unsupported' ) {
+			unsupported = true;
+			continue;
+		}
+
+		const side = colorPairPathSide( operation?.path );
+
+		if ( ! side ) {
+			continue;
+		}
+
+		groups[ scopeKey ] = groups[ scopeKey ] || {};
+		groups[ scopeKey ][ side ] = [
+			...( groups[ scopeKey ][ side ] || [] ),
+			operation,
+		];
+	}
+
+	if ( unsupported ) {
+		return {
+			ok: false,
+			error: 'Contrast check unavailable: unsupported readable color path.',
+		};
+	}
+
+	for ( const scopeKey of getContrastScopeKeysInOrder(
+		Object.keys( groups )
+	) ) {
+		const sides = groups[ scopeKey ];
+		const backgroundOperations = sides.background || [];
+		const textOperations = sides.text || [];
+		const backgroundOperation =
+			backgroundOperations[ backgroundOperations.length - 1 ] || null;
+		const textOperation =
+			textOperations[ textOperations.length - 1 ] || null;
+		const background = resolveContrastSide(
+			backgroundOperation,
+			'background',
+			scopeKey,
+			context
+		);
+
+		if ( ! background.ok ) {
+			return background;
+		}
+
+		const text = resolveContrastSide(
+			textOperation,
+			'text',
+			scopeKey,
+			context
+		);
+
+		if ( ! text.ok ) {
+			return text;
+		}
+
+		const ratio = getContrastRatio( text.hex, background.hex );
+
+		if ( ratio < CONTRAST_AA_THRESHOLD ) {
+			return {
+				ok: false,
+				error: `Contrast check: ${ ratio.toFixed(
+					1
+				) }:1 between "${ getContrastLabel(
+					textOperation,
+					text.hex
+				) }" and "${ getContrastLabel(
+					backgroundOperation,
+					background.hex
+				) }" at ${ scopeKey }, below the 4.5:1 minimum.`,
+			};
+		}
+	}
+
+	return {
+		ok: true,
+	};
 }
 
 function buildPresetValue( presetType, presetSlug ) {
@@ -1001,6 +1406,24 @@ export function applyGlobalStyleSuggestionOperations(
 
 		afterConfig = nextState.afterConfig;
 		appliedOperations.push( nextState.appliedOperation );
+	}
+
+	const themeTokens = summarizeTokens(
+		collectThemeTokensFromSettings( blockEditorSettings )
+	);
+	const contrastValidation = validateReadableColorContrast(
+		appliedOperations,
+		{
+			themeTokens,
+			mergedConfig: getCurrentMergedConfig(
+				runtime.coreSelect,
+				afterConfig
+			),
+		}
+	);
+
+	if ( ! contrastValidation.ok ) {
+		return contrastValidation;
 	}
 
 	runtime.coreDispatch.editEntityRecord(

@@ -12,6 +12,9 @@ jest.mock( '@wordpress/i18n', () => ( {
 	__: ( text ) => text,
 } ) );
 
+const fs = require( 'fs' );
+const path = require( 'path' );
+
 const mockToasts = [];
 const mockDispatch = {
 	dismissToast: jest.fn(),
@@ -147,7 +150,53 @@ describe( 'ToastRegion — wiring', () => {
 
 		expect( mockDispatch.undoToastAction ).toHaveBeenCalledWith(
 			't1',
-			'activity-42'
+			'activity-42',
+			{
+				activityDocument: null,
+				activityScopeKey: null,
+			}
+		);
+	} );
+
+	test( 'clicking Undo includes the toast activity scope', () => {
+		setToasts( [
+			{
+				id: 't1',
+				variant: 'success',
+				title: 'Global styles updated',
+				activityId: 'activity-42',
+				activityScopeKey: 'global_styles:17',
+				activityDocument: {
+					scopeKey: 'global_styles:17',
+					postType: 'global_styles',
+					entityId: '17',
+				},
+				autoDismissMs: 6000,
+				interacted: false,
+			},
+		] );
+
+		act( () => {
+			getRoot().render( <ToastRegion /> );
+		} );
+
+		act( () => {
+			getRegionRoot()
+				.querySelector( '.flavor-agent-toast__action' )
+				.click();
+		} );
+
+		expect( mockDispatch.undoToastAction ).toHaveBeenCalledWith(
+			't1',
+			'activity-42',
+			{
+				activityDocument: {
+					scopeKey: 'global_styles:17',
+					postType: 'global_styles',
+					entityId: '17',
+				},
+				activityScopeKey: 'global_styles:17',
+			}
 		);
 	} );
 
@@ -227,6 +276,18 @@ describe( 'ToastRegion — wiring', () => {
 		);
 
 		expect( undoBtn.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+	} );
+} );
+
+describe( 'ToastRegion — queue cap contract', () => {
+	test( 'uses the toast store maxVisible constant instead of a local cap literal', () => {
+		const source = fs.readFileSync(
+			path.join( __dirname, '../ToastRegion.js' ),
+			'utf8'
+		);
+
+		expect( source ).toContain( 'TOAST_DEFAULTS.maxVisible' );
+		expect( source ).not.toContain( 'slice( 0, 3 )' );
 	} );
 } );
 

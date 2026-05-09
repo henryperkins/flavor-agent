@@ -22,7 +22,10 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 import {
 	buildGlobalStylesActivityEntry,
 	buildStyleBookActivityEntry,
+	createUndoActivityAction,
 } from '../activity-undo';
+import { writePersistedActivityLog } from '../activity-history';
+import { undoGlobalStyleSuggestionOperations } from '../../utils/style-operations';
 
 describe( 'buildStyleBookActivityEntry', () => {
 	const baseUserConfig = {
@@ -206,5 +209,125 @@ describe( 'buildGlobalStylesActivityEntry', () => {
 		// no trimming here.
 		expect( entry.before.userConfig ).toEqual( beforeConfig );
 		expect( entry.after.userConfig ).toEqual( afterConfig );
+	} );
+} );
+
+describe( 'createUndoActivityAction', () => {
+	beforeEach( () => {
+		window.sessionStorage.clear();
+		undoGlobalStyleSuggestionOperations.mockReturnValue( { ok: true } );
+	} );
+
+	test( 'targets the provided toast activity scope before resolving the undo entry', async () => {
+		const targetDocument = {
+			scopeKey: 'global_styles:17',
+			postType: 'global_styles',
+			entityId: '17',
+		};
+		const targetEntry = {
+			id: 'activity-17',
+			surface: 'global-styles',
+			document: targetDocument,
+			target: {
+				globalStylesId: '17',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+			persistence: {
+				status: 'local',
+			},
+			timestamp: '2026-05-09T10:00:00.000Z',
+		};
+		let scopeKey = 'post:99';
+		let activityLog = [];
+		const dispatched = [];
+		const setActivitySession = jest.fn( ( nextScopeKey, entries ) => ( {
+			type: 'SET_ACTIVITY_SESSION',
+			scopeKey: nextScopeKey,
+			entries,
+		} ) );
+		const setUndoState = jest.fn( ( status, error, activityId ) => ( {
+			type: 'SET_UNDO_STATE',
+			status,
+			error,
+			activityId,
+		} ) );
+		const updateActivityUndoState = jest.fn(
+			( activityId, status, error, timestamp, persistence ) => ( {
+				type: 'UPDATE_UNDO_STATE',
+				activityId,
+				status,
+				error,
+				timestamp,
+				persistence,
+			} )
+		);
+		const undoActivity = createUndoActivityAction( {
+			getCurrentActivityScope: () => ( {
+				scopeKey: 'post:99',
+				postType: 'post',
+				entityId: '99',
+			} ),
+			setActivitySession,
+			setUndoState,
+			updateActivityUndoState,
+		} );
+		const dispatch = jest.fn( ( action ) => {
+			dispatched.push( action );
+
+			if ( action?.type === 'SET_ACTIVITY_SESSION' ) {
+				scopeKey = action.scopeKey;
+				activityLog = action.entries;
+			}
+
+			return action;
+		} );
+		const select = {
+			getActivityScopeKey: () => scopeKey,
+			getActivityLog: () => activityLog,
+		};
+
+		writePersistedActivityLog( targetDocument.scopeKey, [ targetEntry ] );
+
+		const result = await undoActivity( 'activity-17', {
+			document: targetDocument,
+			scopeKey: targetDocument.scopeKey,
+		} )( {
+			dispatch,
+			registry: {},
+			select,
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( setActivitySession ).toHaveBeenCalledWith(
+			'global_styles:17',
+			expect.arrayContaining( [
+				expect.objectContaining( {
+					document: targetDocument,
+					id: 'activity-17',
+				} ),
+			] )
+		);
+		expect( undoGlobalStyleSuggestionOperations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				id: 'activity-17',
+			} ),
+			{}
+		);
+		expect( setUndoState ).toHaveBeenCalledWith(
+			'success',
+			null,
+			'activity-17'
+		);
+		expect(
+			dispatched.some(
+				( action ) =>
+					action?.type === 'SET_UNDO_STATE' &&
+					action.status === 'error' &&
+					action.error === 'There is no AI action available to undo.'
+			)
+		).toBe( false );
 	} );
 } );

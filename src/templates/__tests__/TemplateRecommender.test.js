@@ -615,6 +615,11 @@ describe( 'TemplateRecommender', () => {
 			getContainer()
 				.querySelector( '.flavor-agent-scope-bar' )
 				?.getAttribute( 'role' )
+		).toBeNull();
+		expect(
+			getContainer()
+				.querySelector( '.flavor-agent-scope-bar__announcement' )
+				?.getAttribute( 'role' )
 		).toBe( 'status' );
 	} );
 

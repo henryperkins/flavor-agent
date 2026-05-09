@@ -4,18 +4,19 @@ declare(strict_types=1);
 
 namespace {
 
-	if ( ! defined( 'ABSPATH' ) ) {
-		if ( ! defined( 'FLAVOR_AGENT_TESTS_RUNNING' ) ) {
+	if (! defined('ABSPATH')) {
+		if (! defined('FLAVOR_AGENT_TESTS_RUNNING')) {
 			exit;
 		}
 
-		define( 'ABSPATH', __DIR__ . '/' );
+		define('ABSPATH', __DIR__ . '/');
 	}
 }
 
 namespace FlavorAgent\Tests\Support {
 
-	final class WordPressTestState {
+	final class WordPressTestState
+	{
 
 		public static array $global_settings = [];
 
@@ -154,31 +155,34 @@ namespace FlavorAgent\Tests\Support {
 		/**
 		 * @param array<string, string> $errors
 		 */
-		public static function set_connector_api_errors( array $errors ): void {
+		public static function set_connector_api_errors(array $errors): void
+		{
 			self::$connector_api_errors = $errors;
 		}
 
-		public static function get_connector_api_error( string $function_name ): ?string {
-			return self::$connector_api_errors[ $function_name ] ?? null;
+		public static function get_connector_api_error(string $function_name): ?string
+		{
+			return self::$connector_api_errors[$function_name] ?? null;
 		}
 
 		/**
 		 * @param array<string, mixed> $prompt_state
 		 */
-		public static function ai_client_prompt_supports_text_generation( array $prompt_state ): bool {
+		public static function ai_client_prompt_supports_text_generation(array $prompt_state): bool
+		{
 			if (
-				array_key_exists( 'reasoning', self::$ai_client_feature_support )
+				array_key_exists('reasoning', self::$ai_client_feature_support)
 				&& ! self::$ai_client_feature_support['reasoning']
-				&& isset( $prompt_state['reasoning'] )
+				&& isset($prompt_state['reasoning'])
 				&& '' !== (string) $prompt_state['reasoning']
 			) {
 				return false;
 			}
 
 			if (
-				array_key_exists( 'json_schema', self::$ai_client_feature_support )
+				array_key_exists('json_schema', self::$ai_client_feature_support)
 				&& ! self::$ai_client_feature_support['json_schema']
-				&& is_array( $prompt_state['json_schema'] ?? null )
+				&& is_array($prompt_state['json_schema'] ?? null)
 			) {
 				return false;
 			}
@@ -186,14 +190,14 @@ namespace FlavorAgent\Tests\Support {
 			$provider = $prompt_state['provider'] ?? '';
 
 			if (
-				is_string( $provider )
+				is_string($provider)
 				&& '' !== $provider
-				&& array_key_exists( $provider, self::$ai_client_provider_support )
+				&& array_key_exists($provider, self::$ai_client_provider_support)
 			) {
-				return (bool) self::$ai_client_provider_support[ $provider ];
+				return (bool) self::$ai_client_provider_support[$provider];
 			}
 
-			if ( self::$ai_client_supported ) {
+			if (self::$ai_client_supported) {
 				return true;
 			}
 
@@ -207,20 +211,21 @@ namespace FlavorAgent\Tests\Support {
 		 * `output_text` into the AI Client mock surface so tests that previously
 		 * exercised the direct-HTTP chat path now exercise the Connectors path.
 		 */
-		public static function pending_chat_output_text(): ?string {
-			if ( isset( self::$remote_post_response['body'] ) && is_string( self::$remote_post_response['body'] ) ) {
-				$decoded = json_decode( self::$remote_post_response['body'], true );
+		public static function pending_chat_output_text(): ?string
+		{
+			if (isset(self::$remote_post_response['body']) && is_string(self::$remote_post_response['body'])) {
+				$decoded = json_decode(self::$remote_post_response['body'], true);
 
-				if ( self::is_chat_output_text_payload( $decoded ) ) {
+				if (self::is_chat_output_text_payload($decoded)) {
 					return (string) $decoded['output_text'];
 				}
 			}
 
-			foreach ( self::$remote_post_responses as $queued ) {
-				if ( is_array( $queued ) && isset( $queued['body'] ) && is_string( $queued['body'] ) ) {
-					$decoded = json_decode( $queued['body'], true );
+			foreach (self::$remote_post_responses as $queued) {
+				if (is_array($queued) && isset($queued['body']) && is_string($queued['body'])) {
+					$decoded = json_decode($queued['body'], true);
 
-					if ( self::is_chat_output_text_payload( $decoded ) ) {
+					if (self::is_chat_output_text_payload($decoded)) {
 						return (string) $decoded['output_text'];
 					}
 				}
@@ -234,30 +239,31 @@ namespace FlavorAgent\Tests\Support {
 		 * remote_post_call so tests that assert on $remote_post_calls[N]['args']['body']
 		 * continue to work after Workstream C moved chat onto the AI Client.
 		 */
-		public static function consume_pending_chat_response_for_ai_client( object $prompt_state ): ?string {
-			if ( isset( self::$remote_post_response['body'] ) && is_string( self::$remote_post_response['body'] ) ) {
-				$decoded = json_decode( self::$remote_post_response['body'], true );
+		public static function consume_pending_chat_response_for_ai_client(object $prompt_state): ?string
+		{
+			if (isset(self::$remote_post_response['body']) && is_string(self::$remote_post_response['body'])) {
+				$decoded = json_decode(self::$remote_post_response['body'], true);
 
-				if ( self::is_chat_output_text_payload( $decoded ) ) {
-					self::record_synthetic_chat_remote_post_call( $prompt_state );
+				if (self::is_chat_output_text_payload($decoded)) {
+					self::record_synthetic_chat_remote_post_call($prompt_state);
 
 					return (string) $decoded['output_text'];
 				}
 			}
 
-			foreach ( self::$remote_post_responses as $index => $queued ) {
-				if ( ! is_array( $queued ) || ! isset( $queued['body'] ) || ! is_string( $queued['body'] ) ) {
+			foreach (self::$remote_post_responses as $index => $queued) {
+				if (! is_array($queued) || ! isset($queued['body']) || ! is_string($queued['body'])) {
 					continue;
 				}
 
-				$decoded = json_decode( $queued['body'], true );
+				$decoded = json_decode($queued['body'], true);
 
-				if ( ! self::is_chat_output_text_payload( $decoded ) ) {
+				if (! self::is_chat_output_text_payload($decoded)) {
 					continue;
 				}
 
-				array_splice( self::$remote_post_responses, $index, 1 );
-				self::record_synthetic_chat_remote_post_call( $prompt_state );
+				array_splice(self::$remote_post_responses, $index, 1);
+				self::record_synthetic_chat_remote_post_call($prompt_state);
 
 				return (string) $decoded['output_text'];
 			}
@@ -265,25 +271,27 @@ namespace FlavorAgent\Tests\Support {
 			return null;
 		}
 
-		private static function is_chat_output_text_payload( mixed $decoded ): bool {
-			return is_array( $decoded )
-				&& isset( $decoded['output_text'] )
-				&& is_string( $decoded['output_text'] );
+		private static function is_chat_output_text_payload(mixed $decoded): bool
+		{
+			return is_array($decoded)
+				&& isset($decoded['output_text'])
+				&& is_string($decoded['output_text']);
 		}
 
-		private static function record_synthetic_chat_remote_post_call( object $prompt_state ): void {
+		private static function record_synthetic_chat_remote_post_call(object $prompt_state): void
+		{
 			$prompt = (array) $prompt_state;
 
 			$body = wp_json_encode(
 				array_filter(
 					[
 						'model'        => 'provider-managed',
-						'instructions' => isset( $prompt['system'] ) ? (string) $prompt['system'] : '',
-						'input'        => isset( $prompt['text'] ) ? (string) $prompt['text'] : '',
-						'reasoning'    => isset( $prompt['reasoning'] ) && '' !== $prompt['reasoning']
-							? [ 'effort' => (string) $prompt['reasoning'] ]
+						'instructions' => isset($prompt['system']) ? (string) $prompt['system'] : '',
+						'input'        => isset($prompt['text']) ? (string) $prompt['text'] : '',
+						'reasoning'    => isset($prompt['reasoning']) && '' !== $prompt['reasoning']
+							? ['effort' => (string) $prompt['reasoning']]
 							: null,
-						'text'         => isset( $prompt['json_schema'] ) && is_array( $prompt['json_schema'] )
+						'text'         => isset($prompt['json_schema']) && is_array($prompt['json_schema'])
 							? [
 								'format' => [
 									'type'   => 'json_schema',
@@ -300,14 +308,15 @@ namespace FlavorAgent\Tests\Support {
 			self::$last_remote_post = [
 				'url'  => 'flavor-agent://wordpress-ai-client/responses',
 				'args' => [
-					'body'    => is_string( $body ) ? $body : '',
+					'body'    => is_string($body) ? $body : '',
 					'headers' => [],
 				],
 			];
 			self::$remote_post_calls[] = self::$last_remote_post;
 		}
 
-		public static function reset(): void {
+		public static function reset(): void
+		{
 			self::$global_settings             = [];
 			self::$global_styles               = [];
 			self::$active_theme                = [];
@@ -376,32 +385,35 @@ namespace FlavorAgent\Tests\Support {
 
 namespace WordPress\AI_Client\Builders\Exception {
 
-	if ( ! class_exists( 'WordPress\\AI_Client\\Builders\\Exception\\Prompt_Prevented_Exception' ) ) {
+	if (! class_exists('WordPress\\AI_Client\\Builders\\Exception\\Prompt_Prevented_Exception')) {
 		final class Prompt_Prevented_Exception extends \RuntimeException {}
 	}
 }
 
 namespace WordPress\AiClient\Providers\Models\DTO {
 
-	if ( ! class_exists( 'WordPress\\AiClient\\Providers\\Models\\DTO\\ModelConfig' ) ) {
-		final class ModelConfig {
+	if (! class_exists('WordPress\\AiClient\\Providers\\Models\\DTO\\ModelConfig')) {
+		final class ModelConfig
+		{
 
 			/**
 			 * @param array<string, mixed> $config
 			 */
-			public function __construct( private array $config = [] ) {}
+			public function __construct(private array $config = []) {}
 
 			/**
 			 * @param array<string, mixed> $config
 			 */
-			public static function fromArray( array $config ): self {
-				return new self( $config );
+			public static function fromArray(array $config): self
+			{
+				return new self($config);
 			}
 
 			/**
 			 * @return array<string, mixed>
 			 */
-			public function toArray(): array {
+			public function toArray(): array
+			{
 				return $this->config;
 			}
 		}
@@ -412,20 +424,24 @@ namespace WordPress\AiClient {
 
 	use FlavorAgent\Tests\Support\WordPressTestState;
 
-	if ( ! class_exists( 'WordPress\\AiClient\\AiClient' ) ) {
-		final class AiClient {
+	if (! class_exists('WordPress\\AiClient\\AiClient')) {
+		final class AiClient
+		{
 
-			public static function defaultRegistry(): FakeProviderModelRegistry {
+			public static function defaultRegistry(): FakeProviderModelRegistry
+			{
 				return new FakeProviderModelRegistry();
 			}
 		}
 	}
 
-	if ( ! class_exists( 'WordPress\\AiClient\\FakeProviderModelRegistry' ) ) {
-		final class FakeProviderModelRegistry {
+	if (! class_exists('WordPress\\AiClient\\FakeProviderModelRegistry')) {
+		final class FakeProviderModelRegistry
+		{
 
-			public function getProviderModel( string $provider, string $model ): object {
-				if ( WordPressTestState::$ai_client_model_resolution_error instanceof \WP_Error ) {
+			public function getProviderModel(string $provider, string $model): object
+			{
+				if (WordPressTestState::$ai_client_model_resolution_error instanceof \WP_Error) {
 					return WordPressTestState::$ai_client_model_resolution_error;
 				}
 
@@ -440,24 +456,27 @@ namespace WordPress\AiClient {
 
 namespace WordPress\AI\Abstracts {
 
-	if ( ! class_exists( 'WordPress\\AI\\Abstracts\\Abstract_Ability' ) ) {
-		abstract class Abstract_Ability {
+	if (! class_exists('WordPress\\AI\\Abstracts\\Abstract_Ability')) {
+		abstract class Abstract_Ability
+		{
 			/** @var array<string, mixed> */
 			protected array $properties;
 
-			public function __construct( protected string $name, array $properties = [] ) {
+			public function __construct(protected string $name, array $properties = [])
+			{
 				$this->properties = $properties;
 			}
 
-			public function get_system_instruction( ?string $filename = null, array $data = [] ): string {
-				unset( $filename );
+			public function get_system_instruction(?string $filename = null, array $data = []): string
+			{
+				unset($filename);
 
 				$instruction = '';
 
-				if ( method_exists( $this, 'guideline_categories' ) && function_exists( 'WordPress\\AI\\format_guidelines_for_prompt' ) ) {
+				if (method_exists($this, 'guideline_categories') && function_exists('WordPress\\AI\\format_guidelines_for_prompt')) {
 					$instruction = (string) \WordPress\AI\format_guidelines_for_prompt(
 						$this->guideline_categories(),
-						is_string( $data['block_name'] ?? null ) && '' !== $data['block_name']
+						is_string($data['block_name'] ?? null) && '' !== $data['block_name']
 							? $data['block_name']
 							: null
 					);
@@ -466,48 +485,57 @@ namespace WordPress\AI\Abstracts {
 				return (string) \apply_filters(
 					'wpai_system_instruction',
 					$instruction,
-					is_string( $data['ability'] ?? null ) && '' !== $data['ability'] ? $data['ability'] : $this->name,
+					is_string($data['ability'] ?? null) && '' !== $data['ability'] ? $data['ability'] : $this->name,
 					$data
 				);
 			}
 
-			public function input_schema(): array {
+			public function input_schema(): array
+			{
 				return [];
 			}
 
-			public function output_schema(): array {
+			public function output_schema(): array
+			{
 				return [];
 			}
 
-			public function execute_callback( mixed $input ): mixed {
+			public function execute_callback(mixed $input): mixed
+			{
 				return $input;
 			}
 
-			public function permission_callback( mixed $input = null ): bool {
-				unset( $input );
+			public function permission_callback(mixed $input = null): bool
+			{
+				unset($input);
 
 				return true;
 			}
 
-			public function meta(): array {
+			public function meta(): array
+			{
 				return [];
 			}
 
-			public function category(): string {
+			public function category(): string
+			{
 				return '';
 			}
 
-			protected function guideline_categories(): array {
+			protected function guideline_categories(): array
+			{
 				return [];
 			}
 		}
 	}
 
-	if ( ! class_exists( 'WordPress\\AI\\Abstracts\\Abstract_Feature' ) ) {
-		abstract class Abstract_Feature {
+	if (! class_exists('WordPress\\AI\\Abstracts\\Abstract_Feature')) {
+		abstract class Abstract_Feature
+		{
 			final public function __construct() {}
 
-			public static function get_id(): string {
+			public static function get_id(): string
+			{
 				return '';
 			}
 
@@ -515,20 +543,24 @@ namespace WordPress\AI\Abstracts {
 
 			abstract public function register(): void;
 
-			public function get_label(): string {
-				return (string) ( $this->load_metadata()['label'] ?? '' );
+			public function get_label(): string
+			{
+				return (string) ($this->load_metadata()['label'] ?? '');
 			}
 
-			public function get_description(): string {
-				return (string) ( $this->load_metadata()['description'] ?? '' );
+			public function get_description(): string
+			{
+				return (string) ($this->load_metadata()['description'] ?? '');
 			}
 
-			public function get_category(): string {
-				return (string) ( $this->load_metadata()['category'] ?? '' );
+			public function get_category(): string
+			{
+				return (string) ($this->load_metadata()['category'] ?? '');
 			}
 
-			public function get_stability(): string {
-				return (string) ( $this->load_metadata()['stability'] ?? 'experimental' );
+			public function get_stability(): string
+			{
+				return (string) ($this->load_metadata()['stability'] ?? 'experimental');
 			}
 		}
 	}
@@ -536,8 +568,9 @@ namespace WordPress\AI\Abstracts {
 
 namespace WordPress\AI\Experiments {
 
-	if ( ! class_exists( 'WordPress\\AI\\Experiments\\Experiment_Category' ) ) {
-		final class Experiment_Category {
+	if (! class_exists('WordPress\\AI\\Experiments\\Experiment_Category')) {
+		final class Experiment_Category
+		{
 			public const EDITOR = 'editor';
 			public const ADMIN  = 'admin';
 		}
@@ -548,44 +581,48 @@ namespace WordPress\AI {
 
 	use FlavorAgent\Tests\Support\WordPressTestState;
 
-	final class FakeAIService {
+	final class FakeAIService
+	{
 
 		/**
 		 * @param array<string, mixed> $options
 		 */
-		public function create_textgen_prompt( ?string $prompt = null, array $options = [] ): \WP_AI_Client_Prompt_Builder {
-			if ( null !== WordPressTestState::$ai_service_call_throws ) {
+		public function create_textgen_prompt(?string $prompt = null, array $options = []): \WP_AI_Client_Prompt_Builder
+		{
+			if (null !== WordPressTestState::$ai_service_call_throws) {
 				throw WordPressTestState::$ai_service_call_throws;
 			}
 
 			WordPressTestState::$ai_service_calls[] = [
-				'prompt'  => is_string( $prompt ) ? $prompt : '',
+				'prompt'  => is_string($prompt) ? $prompt : '',
 				'options' => $options,
 			];
 
-			$builder = \wp_ai_client_prompt( $prompt );
+			$builder = \wp_ai_client_prompt($prompt);
 
 			if (
-				isset( $options['system_instruction'] )
-				&& is_callable( [ $builder, 'using_system_instruction' ] )
+				isset($options['system_instruction'])
+				&& is_callable([$builder, 'using_system_instruction'])
 			) {
-				$builder = $builder->using_system_instruction( (string) $options['system_instruction'] );
+				$builder = $builder->using_system_instruction((string) $options['system_instruction']);
 			}
 
 			return $builder;
 		}
 	}
 
-	if ( ! function_exists( 'WordPress\\AI\\get_ai_service' ) ) {
-		function get_ai_service(): FakeAIService {
+	if (! function_exists('WordPress\\AI\\get_ai_service')) {
+		function get_ai_service(): FakeAIService
+		{
 			return new FakeAIService();
 		}
 	}
 
-	if ( ! function_exists( 'WordPress\\AI\\format_guidelines_for_prompt' ) ) {
-		function format_guidelines_for_prompt( array $categories, ?string $block_name = null ): string {
+	if (! function_exists('WordPress\\AI\\format_guidelines_for_prompt')) {
+		function format_guidelines_for_prompt(array $categories, ?string $block_name = null): string
+		{
 			WordPressTestState::$wpai_guideline_calls[] = [
-				'categories' => array_values( array_map( 'strval', $categories ) ),
+				'categories' => array_values(array_map('strval', $categories)),
 				'blockName'  => $block_name,
 			];
 
@@ -593,48 +630,51 @@ namespace WordPress\AI {
 		}
 	}
 
-	if ( ! function_exists( 'WordPress\\AI\\get_preferred_models_for_text_generation' ) ) {
-		function get_preferred_models_for_text_generation(): array {
+	if (! function_exists('WordPress\\AI\\get_preferred_models_for_text_generation')) {
+		function get_preferred_models_for_text_generation(): array
+		{
 			return WordPressTestState::$preferred_text_models;
 		}
 	}
 
-	if ( ! function_exists( 'WordPress\\AI\\has_ai_credentials' ) ) {
-		function has_ai_credentials(): bool {
-			$connectors      = \function_exists( 'wp_get_connectors' ) ? \wp_get_connectors() : [];
+	if (! function_exists('WordPress\\AI\\has_ai_credentials')) {
+		function has_ai_credentials(): bool
+		{
+			$connectors      = \function_exists('wp_get_connectors') ? \wp_get_connectors() : [];
 			$has_credentials = false;
 
-			foreach ( $connectors as $connector_data ) {
-				if ( ! is_array( $connector_data ) || 'ai_provider' !== (string) ( $connector_data['type'] ?? '' ) ) {
+			foreach ($connectors as $connector_data) {
+				if (! is_array($connector_data) || 'ai_provider' !== (string) ($connector_data['type'] ?? '')) {
 					continue;
 				}
 
-				$auth         = is_array( $connector_data['authentication'] ?? null ) ? $connector_data['authentication'] : [];
-				$setting_name = is_string( $auth['setting_name'] ?? null ) ? $auth['setting_name'] : '';
+				$auth         = is_array($connector_data['authentication'] ?? null) ? $connector_data['authentication'] : [];
+				$setting_name = is_string($auth['setting_name'] ?? null) ? $auth['setting_name'] : '';
 
-				if ( '' !== $setting_name && '' !== (string) \get_option( $setting_name, '' ) ) {
+				if ('' !== $setting_name && '' !== (string) \get_option($setting_name, '')) {
 					$has_credentials = true;
 					break;
 				}
 			}
 
-			return (bool) \apply_filters( 'wpai_has_ai_credentials', $has_credentials, $connectors );
+			return (bool) \apply_filters('wpai_has_ai_credentials', $has_credentials, $connectors);
 		}
 	}
 
-	if ( ! function_exists( 'WordPress\\AI\\has_valid_ai_credentials' ) ) {
-		function has_valid_ai_credentials(): bool {
-			if ( ! has_ai_credentials() ) {
+	if (! function_exists('WordPress\\AI\\has_valid_ai_credentials')) {
+		function has_valid_ai_credentials(): bool
+		{
+			if (! has_ai_credentials()) {
 				return false;
 			}
 
-			$valid = \apply_filters( 'wpai_pre_has_valid_credentials_check', null );
+			$valid = \apply_filters('wpai_pre_has_valid_credentials_check', null);
 
-			if ( null !== $valid ) {
+			if (null !== $valid) {
 				return (bool) $valid;
 			}
 
-			return \wp_ai_client_prompt( 'Test' )->is_supported_for_text_generation();
+			return \wp_ai_client_prompt('Test')->is_supported_for_text_generation();
 		}
 	}
 }
@@ -643,9 +683,11 @@ namespace WordPress\AI_Client {
 
 	use FlavorAgent\Tests\Support\WordPressTestState;
 
-	final class AI_Client {
+	final class AI_Client
+	{
 
-		public static function prompt_with_wp_error( string $text ): FakePromptBuilder {
+		public static function prompt_with_wp_error(string $text): FakePromptBuilder
+		{
 			WordPressTestState::$last_ai_client_prompt = [
 				'text' => $text,
 				'transport' => 'legacy_class',
@@ -655,67 +697,76 @@ namespace WordPress\AI_Client {
 		}
 	}
 
-	final class FakePromptBuilder {
+	final class FakePromptBuilder
+	{
 
-		public function using_system_instruction( string $text ): self {
+		public function using_system_instruction(string $text): self
+		{
 			WordPressTestState::$last_ai_client_prompt['system'] = $text;
 
 			return $this;
 		}
 
-		public function using_provider( string $provider ): self {
+		public function using_provider(string $provider): self
+		{
 			WordPressTestState::$last_ai_client_prompt['provider'] = $provider;
 
 			return $this;
 		}
 
-		public function using_model( object $model ): self {
-			WordPressTestState::$last_ai_client_prompt['provider'] = (string) ( $model->provider ?? '' );
-			WordPressTestState::$last_ai_client_prompt['model']    = (string) ( $model->model ?? '' );
+		public function using_model(object $model): self
+		{
+			WordPressTestState::$last_ai_client_prompt['provider'] = (string) ($model->provider ?? '');
+			WordPressTestState::$last_ai_client_prompt['model']    = (string) ($model->model ?? '');
 
 			return $this;
 		}
 
-		public function using_reasoning_effort( $reasoning ): self {
-			WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array( $reasoning )
-				? (string) ( $reasoning['effort'] ?? '' )
+		public function using_reasoning_effort($reasoning): self
+		{
+			WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array($reasoning)
+				? (string) ($reasoning['effort'] ?? '')
 				: (string) $reasoning;
 
 			return $this;
 		}
 
-		public function using_reasoning( $reasoning ): self {
-			WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array( $reasoning )
-				? (string) ( $reasoning['effort'] ?? '' )
+		public function using_reasoning($reasoning): self
+		{
+			WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array($reasoning)
+				? (string) ($reasoning['effort'] ?? '')
 				: (string) $reasoning;
 
 			return $this;
 		}
 
-		public function as_json_response( ?array $schema ): self {
-			WordPressTestState::$last_ai_client_prompt['json_schema'] = is_array( $schema )
+		public function as_json_response(?array $schema): self
+		{
+			WordPressTestState::$last_ai_client_prompt['json_schema'] = is_array($schema)
 				? $schema
 				: null;
 
 			return $this;
 		}
 
-		public function is_supported_for_text_generation(): bool {
+		public function is_supported_for_text_generation(): bool
+		{
 			return WordPressTestState::ai_client_prompt_supports_text_generation(
 				WordPressTestState::$last_ai_client_prompt
 			);
 		}
 
-		public function generate_text(): mixed {
+		public function generate_text(): mixed
+		{
 			WordPressTestState::$last_http_request_args = apply_filters(
 				'http_request_args',
-				[ 'timeout' => 30 ],
+				['timeout' => 30],
 				'https://api.openai.com/v1/responses'
 			);
 
 			$explicit = WordPressTestState::$ai_client_generate_text_result;
 
-			if ( '' !== $explicit && null !== $explicit ) {
+			if ('' !== $explicit && null !== $explicit) {
 				return $explicit;
 			}
 
@@ -726,7 +777,8 @@ namespace WordPress\AI_Client {
 			return null !== $translated ? $translated : $explicit;
 		}
 
-		public function generate_text_result(): mixed {
+		public function generate_text_result(): mixed
+		{
 			return $this->generate_text();
 		}
 	}
@@ -736,8 +788,9 @@ namespace {
 
 	use FlavorAgent\Tests\Support\WordPressTestState;
 
-	if ( ! class_exists( 'WP_AI_Client_Prompt_Builder' ) ) {
-		class WP_AI_Client_Prompt_Builder {
+	if (! class_exists('WP_AI_Client_Prompt_Builder')) {
+		class WP_AI_Client_Prompt_Builder
+		{
 
 			/**
 			 * @var array<string, mixed>
@@ -747,29 +800,31 @@ namespace {
 			/**
 			 * @param array<string, mixed> $state
 			 */
-			public function __construct( array $state = [] ) {
+			public function __construct(array $state = [])
+			{
 				$this->state = $state;
 				$this->sync_state();
 			}
 
-			public function __call( string $name, array $arguments ) {
-				switch ( $name ) {
+			public function __call(string $name, array $arguments)
+			{
+				switch ($name) {
 					case 'using_system_instruction':
-						$this->state['system'] = (string) ( $arguments[0] ?? '' );
+						$this->state['system'] = (string) ($arguments[0] ?? '');
 						$this->sync_state();
 
 						return $this;
 					case 'using_provider':
-						$this->state['provider'] = (string) ( $arguments[0] ?? '' );
+						$this->state['provider'] = (string) ($arguments[0] ?? '');
 						$this->sync_state();
 
 						return $this;
 					case 'using_model':
 						$model = $arguments[0] ?? null;
 
-						if ( is_object( $model ) ) {
-							$this->state['provider'] = (string) ( $model->provider ?? '' );
-							$this->state['model']    = (string) ( $model->model ?? '' );
+						if (is_object($model)) {
+							$this->state['provider'] = (string) ($model->provider ?? '');
+							$this->state['model']    = (string) ($model->model ?? '');
 						}
 						$this->sync_state();
 
@@ -778,8 +833,8 @@ namespace {
 					case 'using_reasoning':
 						$reasoning = $arguments[0] ?? '';
 
-						$this->state['reasoning'] = is_array( $reasoning )
-							? (string) ( $reasoning['effort'] ?? '' )
+						$this->state['reasoning'] = is_array($reasoning)
+							? (string) ($reasoning['effort'] ?? '')
 							: (string) $reasoning;
 						$this->sync_state();
 
@@ -787,13 +842,13 @@ namespace {
 					case 'using_model_config':
 						$config = $arguments[0] ?? null;
 
-						if ( is_object( $config ) && is_callable( [ $config, 'toArray' ] ) ) {
+						if (is_object($config) && is_callable([$config, 'toArray'])) {
 							$config = $config->toArray();
 						}
 
-						if ( is_array( $config ) ) {
+						if (is_array($config)) {
 							$this->state['model_config']  = $config;
-							$this->state['customOptions'] = is_array( $config['customOptions'] ?? null )
+							$this->state['customOptions'] = is_array($config['customOptions'] ?? null)
 								? $config['customOptions']
 								: [];
 						}
@@ -806,7 +861,7 @@ namespace {
 
 						return $this;
 					case 'as_json_response':
-						$this->state['json_schema'] = is_array( $arguments[0] ?? null )
+						$this->state['json_schema'] = is_array($arguments[0] ?? null)
 							? $arguments[0]
 							: null;
 						$this->sync_state();
@@ -815,21 +870,21 @@ namespace {
 					case 'is_supported_for_text_generation':
 						$this->sync_state();
 
-						if ( (bool) apply_filters( 'wp_ai_client_prevent_prompt', false, $this ) ) {
+						if ((bool) apply_filters('wp_ai_client_prevent_prompt', false, $this)) {
 							return false;
 						}
 
-						return WordPressTestState::ai_client_prompt_supports_text_generation( $this->state );
+						return WordPressTestState::ai_client_prompt_supports_text_generation($this->state);
 					case 'generate_text':
 					case 'generate_text_result':
 						$this->sync_state();
 						WordPressTestState::$last_http_request_args = apply_filters(
 							'http_request_args',
-							[ 'timeout' => 30 ],
+							['timeout' => 30],
 							'https://api.openai.com/v1/responses'
 						);
 
-						if ( (bool) apply_filters( 'wp_ai_client_prevent_prompt', false, $this ) ) {
+						if ((bool) apply_filters('wp_ai_client_prevent_prompt', false, $this)) {
 							throw new \WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception(
 								'Prompt execution was prevented by a filter.'
 							);
@@ -837,7 +892,7 @@ namespace {
 
 						$explicit = WordPressTestState::$ai_client_generate_text_result;
 
-						if ( '' !== $explicit && null !== $explicit ) {
+						if ('' !== $explicit && null !== $explicit) {
 							return $explicit;
 						}
 
@@ -846,35 +901,38 @@ namespace {
 						);
 
 						return null !== $translated ? $translated : $explicit;
-					}
-
-					throw new \BadMethodCallException(
-						sprintf(
-							'Unknown AI client method %s.',
-							esc_html( sanitize_text_field( $name ) )
-						)
-					);
 				}
 
-			private function sync_state(): void {
+				throw new \BadMethodCallException(
+					sprintf(
+						'Unknown AI client method %s.',
+						esc_html(sanitize_text_field($name))
+					)
+				);
+			}
+
+			private function sync_state(): void
+			{
 				WordPressTestState::$last_ai_client_prompt = $this->state;
 			}
 		}
 	}
 
-	if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
-		function wp_ai_client_prompt( $prompt = null ): WP_AI_Client_Prompt_Builder {
+	if (! function_exists('wp_ai_client_prompt')) {
+		function wp_ai_client_prompt($prompt = null): WP_AI_Client_Prompt_Builder
+		{
 			return new WP_AI_Client_Prompt_Builder(
 				[
-					'text'      => is_string( $prompt ) ? $prompt : '',
+					'text'      => is_string($prompt) ? $prompt : '',
 					'transport' => 'core_function',
 				]
 			);
 		}
 	}
 
-	if ( ! class_exists( 'WP_Error' ) ) {
-		class WP_Error {
+	if (! class_exists('WP_Error')) {
+		class WP_Error
+		{
 
 			/**
 			 * @var array<string, string[]>
@@ -886,40 +944,45 @@ namespace {
 			 */
 			public array $error_data = [];
 
-			public function __construct( string $code = '', string $message = '', $data = null ) {
-				if ( '' === $code ) {
+			public function __construct(string $code = '', string $message = '', $data = null)
+			{
+				if ('' === $code) {
 					return;
 				}
 
-				$this->errors[ $code ] = [ $message ];
+				$this->errors[$code] = [$message];
 
-				if ( null !== $data ) {
-					$this->error_data[ $code ] = $data;
+				if (null !== $data) {
+					$this->error_data[$code] = $data;
 				}
 			}
 
-			public function get_error_code(): string {
-				$code = array_key_first( $this->errors );
+			public function get_error_code(): string
+			{
+				$code = array_key_first($this->errors);
 
-				return is_string( $code ) ? $code : '';
+				return is_string($code) ? $code : '';
 			}
 
-			public function get_error_message( string $code = '' ): string {
+			public function get_error_message(string $code = ''): string
+			{
 				$resolved_code = '' !== $code ? $code : $this->get_error_code();
 
-				return $this->errors[ $resolved_code ][0] ?? '';
+				return $this->errors[$resolved_code][0] ?? '';
 			}
 
-			public function get_error_data( string $code = '' ) {
+			public function get_error_data(string $code = '')
+			{
 				$resolved_code = '' !== $code ? $code : $this->get_error_code();
 
-				return $this->error_data[ $resolved_code ] ?? null;
+				return $this->error_data[$resolved_code] ?? null;
 			}
 		}
 	}
 
-	if ( ! class_exists( 'WP_REST_Request' ) ) {
-		class WP_REST_Request {
+	if (! class_exists('WP_REST_Request')) {
+		class WP_REST_Request
+		{
 
 			/**
 			 * @var array<string, mixed>
@@ -930,35 +993,42 @@ namespace {
 
 			private string $route;
 
-			public function __construct( string $method = 'GET', string $route = '/' ) {
-				$this->method = strtoupper( $method );
+			public function __construct(string $method = 'GET', string $route = '/')
+			{
+				$this->method = strtoupper($method);
 				$this->route  = $route;
 			}
 
-			public function get_param( string $key ) {
-				return $this->params[ $key ] ?? null;
+			public function get_param(string $key)
+			{
+				return $this->params[$key] ?? null;
 			}
 
-			public function has_param( string $key ): bool {
-				return array_key_exists( $key, $this->params );
+			public function has_param(string $key): bool
+			{
+				return array_key_exists($key, $this->params);
 			}
 
-			public function set_param( string $key, $value ): void {
-				$this->params[ $key ] = $value;
+			public function set_param(string $key, $value): void
+			{
+				$this->params[$key] = $value;
 			}
 
-			public function get_method(): string {
+			public function get_method(): string
+			{
 				return $this->method;
 			}
 
-			public function get_route(): string {
+			public function get_route(): string
+			{
 				return $this->route;
 			}
 		}
 	}
 
-	if ( ! class_exists( 'WP_REST_Response' ) ) {
-		class WP_REST_Response {
+	if (! class_exists('WP_REST_Response')) {
+		class WP_REST_Response
+		{
 
 			/**
 			 * @var mixed
@@ -967,71 +1037,78 @@ namespace {
 
 			private int $status;
 
-			public function __construct( $data = null, int $status = 200 ) {
+			public function __construct($data = null, int $status = 200)
+			{
 				$this->data   = $data;
 				$this->status = $status;
 			}
 
-			public function get_data() {
+			public function get_data()
+			{
 				return $this->data;
 			}
 
-			public function get_status(): int {
+			public function get_status(): int
+			{
 				return $this->status;
 			}
 		}
 	}
 
-	if ( ! defined( 'OBJECT' ) ) {
-		define( 'OBJECT', 'OBJECT' );
+	if (! defined('OBJECT')) {
+		define('OBJECT', 'OBJECT');
 	}
 
-	if ( ! defined( 'ARRAY_A' ) ) {
-		define( 'ARRAY_A', 'ARRAY_A' );
+	if (! defined('ARRAY_A')) {
+		define('ARRAY_A', 'ARRAY_A');
 	}
 
-	if ( ! class_exists( 'wpdb' ) ) {
-		class wpdb {
+	if (! class_exists('wpdb')) {
+		class wpdb
+		{
 
 			public string $prefix = 'wp_';
 
 			public int $insert_id = 0;
 
-			public function get_charset_collate(): string {
+			public function get_charset_collate(): string
+			{
 				return 'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci';
 			}
 
-			public function esc_like( string $text ): string {
-				return addcslashes( $text, '_%\\' );
+			public function esc_like(string $text): string
+			{
+				return addcslashes($text, '_%\\');
 			}
 
-			public function prepare( string $query, ...$args ): string {
+			public function prepare(string $query, ...$args): string
+			{
 				$flat_args = [];
 
-				foreach ( $args as $arg ) {
-					if ( is_array( $arg ) ) {
-						$flat_args = array_merge( $flat_args, $arg );
+				foreach ($args as $arg) {
+					if (is_array($arg)) {
+						$flat_args = array_merge($flat_args, $arg);
 					} else {
 						$flat_args[] = $arg;
 					}
 				}
 
-				foreach ( $flat_args as $arg ) {
-					if ( ! preg_match( '/%[sdi]/', $query, $matches ) ) {
+				foreach ($flat_args as $arg) {
+					if (! preg_match('/%[sdi]/', $query, $matches)) {
 						break;
 					}
 
-					$placeholder = (string) ( $matches[0] ?? '%s' );
-					if ( '%d' === $placeholder ) {
+					$placeholder = (string) ($matches[0] ?? '%s');
+					if ('%d' === $placeholder) {
 						$replacement = (string) (int) $arg;
-					} elseif ( '%i' === $placeholder ) {
-						$replacement = str_replace( '`', '``', (string) $arg );
+					} elseif ('%i' === $placeholder) {
+						$replacement = str_replace('`', '``', (string) $arg);
 					} else {
-						$replacement = "'" . str_replace( "'", "\\'", (string) $arg ) . "'";
+						$replacement = "'" . str_replace("'", "\\'", (string) $arg) . "'";
 					}
 
 					$query = preg_replace(
-						'/' . preg_quote( $placeholder, '/' ) . '/',
+						'/' . preg_quote($placeholder, '/') . '/',
 						$replacement,
 						$query,
 						1
@@ -1041,38 +1118,39 @@ namespace {
 				return $query;
 			}
 
-			public function query( string $query ) {
+			public function query(string $query)
+			{
 				WordPressTestState::$db_queries[] = $query;
 
-				if ( preg_match( '/CREATE TABLE\s+([^\s(]+)/i', $query, $matches ) ) {
-					$table = (string) ( $matches[1] ?? '' );
+				if (preg_match('/CREATE TABLE\s+([^\s(]+)/i', $query, $matches)) {
+					$table = (string) ($matches[1] ?? '');
 
-					if ( '' !== $table && ! isset( WordPressTestState::$db_tables[ $table ] ) ) {
-						WordPressTestState::$db_tables[ $table ] = [];
+					if ('' !== $table && ! isset(WordPressTestState::$db_tables[$table])) {
+						WordPressTestState::$db_tables[$table] = [];
 					}
 				}
 
-				if ( preg_match( '/DROP TABLE IF EXISTS\s+([^\s]+)/i', $query, $matches ) ) {
-					$table = (string) ( $matches[1] ?? '' );
-					unset( WordPressTestState::$db_tables[ $table ] );
+				if (preg_match('/DROP TABLE IF EXISTS\s+([^\s]+)/i', $query, $matches)) {
+					$table = (string) ($matches[1] ?? '');
+					unset(WordPressTestState::$db_tables[$table]);
 
 					return 1;
 				}
 
-				if ( preg_match( '/DELETE FROM\s+([^\s]+)\s+WHERE\s+created_at\s*<\s*\'([^\']+)\'/i', $query, $matches ) ) {
-					$table  = (string) ( $matches[1] ?? '' );
-					$cutoff = (string) ( $matches[2] ?? '' );
+				if (preg_match('/DELETE FROM\s+([^\s]+)\s+WHERE\s+created_at\s*<\s*\'([^\']+)\'/i', $query, $matches)) {
+					$table  = (string) ($matches[1] ?? '');
+					$cutoff = (string) ($matches[2] ?? '');
 
-					if ( isset( WordPressTestState::$db_tables[ $table ] ) ) {
-						$before_count = count( WordPressTestState::$db_tables[ $table ] );
-						WordPressTestState::$db_tables[ $table ] = array_values(
+					if (isset(WordPressTestState::$db_tables[$table])) {
+						$before_count = count(WordPressTestState::$db_tables[$table]);
+						WordPressTestState::$db_tables[$table] = array_values(
 							array_filter(
-								WordPressTestState::$db_tables[ $table ],
-								static fn ( array $row ): bool => (string) ( $row['created_at'] ?? '' ) >= $cutoff
+								WordPressTestState::$db_tables[$table],
+								static fn(array $row): bool => (string) ($row['created_at'] ?? '') >= $cutoff
 							)
 						);
 
-						return $before_count - count( WordPressTestState::$db_tables[ $table ] );
+						return $before_count - count(WordPressTestState::$db_tables[$table]);
 					}
 
 					return 0;
@@ -1081,7 +1159,8 @@ namespace {
 				return 1;
 			}
 
-			public function insert( string $table, array $data, array $format = [] ) {
+			public function insert(string $table, array $data, array $format = [])
+			{
 				WordPressTestState::$db_insert_id += 1;
 				$row = array_merge(
 					[
@@ -1090,11 +1169,11 @@ namespace {
 					$data
 				);
 
-				if ( ! isset( WordPressTestState::$db_tables[ $table ] ) ) {
-					WordPressTestState::$db_tables[ $table ] = [];
+				if (! isset(WordPressTestState::$db_tables[$table])) {
+					WordPressTestState::$db_tables[$table] = [];
 				}
 
-				WordPressTestState::$db_tables[ $table ][] = $row;
+				WordPressTestState::$db_tables[$table][] = $row;
 				$this->insert_id = WordPressTestState::$db_insert_id;
 
 				return 1;
@@ -1107,87 +1186,90 @@ namespace {
 				array $format = [],
 				array $where_format = []
 			) {
-				if ( ! isset( WordPressTestState::$db_tables[ $table ] ) ) {
+				if (! isset(WordPressTestState::$db_tables[$table])) {
 					return 0;
 				}
 
 				$updated = 0;
 
-				foreach ( WordPressTestState::$db_tables[ $table ] as $index => $row ) {
-					if ( ! $this->row_matches( $row, $where ) ) {
+				foreach (WordPressTestState::$db_tables[$table] as $index => $row) {
+					if (! $this->row_matches($row, $where)) {
 						continue;
 					}
 
-					WordPressTestState::$db_tables[ $table ][ $index ] = array_merge( $row, $data );
+					WordPressTestState::$db_tables[$table][$index] = array_merge($row, $data);
 					++$updated;
 				}
 
 				return $updated;
 			}
 
-			public function get_row( string $query, string $output = OBJECT ) {
-				$results = $this->get_results( $query, $output );
+			public function get_row(string $query, string $output = OBJECT)
+			{
+				$results = $this->get_results($query, $output);
 
 				return $results[0] ?? null;
 			}
 
-				public function get_var( string $query ) {
-					WordPressTestState::$db_queries[] = $query;
-
-					if ( preg_match( "/SHOW TABLES LIKE '([^']+)'/i", $query, $matches ) ) {
-					$table = stripslashes( (string) ( $matches[1] ?? '' ) );
-
-						return array_key_exists( $table, WordPressTestState::$db_tables )
-							? $table
-							: null;
-					}
-
-					if ( preg_match( '/SELECT\s+COUNT\(\*\)\s+FROM\s+/i', $query ) ) {
-						$select_all_query = preg_replace(
-							'/SELECT\s+COUNT\(\*\)/i',
-							'SELECT *',
-							$query,
-							1
-						) ?? $query;
-
-						return count( $this->get_results( $select_all_query, ARRAY_A ) );
-					}
-
-					return null;
-				}
-
-			public function get_results( string $query, string $output = OBJECT ): array {
+			public function get_var(string $query)
+			{
 				WordPressTestState::$db_queries[] = $query;
 
-				if ( ! preg_match( '/FROM\s+([^\s]+)/i', $query, $matches ) ) {
+				if (preg_match("/SHOW TABLES LIKE '([^']+)'/i", $query, $matches)) {
+					$table = stripslashes((string) ($matches[1] ?? ''));
+
+					return array_key_exists($table, WordPressTestState::$db_tables)
+						? $table
+						: null;
+				}
+
+				if (preg_match('/SELECT\s+COUNT\(\*\)\s+FROM\s+/i', $query)) {
+					$select_all_query = preg_replace(
+						'/SELECT\s+COUNT\(\*\)/i',
+						'SELECT *',
+						$query,
+						1
+					) ?? $query;
+
+					return count($this->get_results($select_all_query, ARRAY_A));
+				}
+
+				return null;
+			}
+
+			public function get_results(string $query, string $output = OBJECT): array
+			{
+				WordPressTestState::$db_queries[] = $query;
+
+				if (! preg_match('/FROM\s+([^\s]+)/i', $query, $matches)) {
 					return [];
 				}
 
-					$table = (string) ( $matches[1] ?? '' );
-					$rows  = array_values( WordPressTestState::$db_tables[ $table ] ?? [] );
-					$all_rows = $rows;
-					$has_entity_pairs = false;
+				$table = (string) ($matches[1] ?? '');
+				$rows  = array_values(WordPressTestState::$db_tables[$table] ?? []);
+				$all_rows = $rows;
+				$has_entity_pairs = false;
 
-				if ( preg_match( '/\b1\s*=\s*0\b/', $query ) ) {
+				if (preg_match('/\b1\s*=\s*0\b/', $query)) {
 					$rows = [];
 				}
 
-				if ( preg_match( "/document_scope_key\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-					$scope_key = stripslashes( (string) ( $matches[1] ?? '' ) );
+				if (preg_match("/document_scope_key\s*=\s*'([^']*)'/i", $query, $matches)) {
+					$scope_key = stripslashes((string) ($matches[1] ?? ''));
 					$rows      = array_values(
 						array_filter(
 							$rows,
-							static fn ( array $row ): bool => (string) ( $row['document_scope_key'] ?? '' ) === $scope_key
+							static fn(array $row): bool => (string) ($row['document_scope_key'] ?? '') === $scope_key
 						)
 					);
 				}
 
-					if ( preg_match( "/surface\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-						$surface = stripslashes( (string) ( $matches[1] ?? '' ) );
-						$rows    = array_values(
-							array_filter(
+				if (preg_match("/surface\s*=\s*'([^']*)'/i", $query, $matches)) {
+					$surface = stripslashes((string) ($matches[1] ?? ''));
+					$rows    = array_values(
+						array_filter(
 							$rows,
-							static fn ( array $row ): bool => (string) ( $row['surface'] ?? '' ) === $surface
+							static fn(array $row): bool => (string) ($row['surface'] ?? '') === $surface
 						)
 					);
 				}
@@ -1203,24 +1285,24 @@ namespace {
 					$entity_pairs = array_values(
 						array_filter(
 							array_map(
-								static fn ( array $match ): array => [
-									'entity_type' => stripslashes( (string) ( $match[1] ?? '' ) ),
-									'entity_ref'  => stripslashes( (string) ( $match[2] ?? '' ) ),
+								static fn(array $match): array => [
+									'entity_type' => stripslashes((string) ($match[1] ?? '')),
+									'entity_ref'  => stripslashes((string) ($match[2] ?? '')),
 								],
 								$matches
 							),
-							static fn ( array $pair ): bool => '' !== $pair['entity_type'] || '' !== $pair['entity_ref']
+							static fn(array $pair): bool => '' !== $pair['entity_type'] || '' !== $pair['entity_ref']
 						)
 					);
 					$has_entity_pairs = [] !== $entity_pairs;
 					$rows             = array_values(
 						array_filter(
 							$rows,
-							static function ( array $row ) use ( $entity_pairs ): bool {
-								foreach ( $entity_pairs as $pair ) {
+							static function (array $row) use ($entity_pairs): bool {
+								foreach ($entity_pairs as $pair) {
 									if (
-										(string) ( $row['entity_type'] ?? '' ) === $pair['entity_type']
-										&& (string) ( $row['entity_ref'] ?? '' ) === $pair['entity_ref']
+										(string) ($row['entity_type'] ?? '') === $pair['entity_type']
+										&& (string) ($row['entity_ref'] ?? '') === $pair['entity_ref']
 									) {
 										return true;
 									}
@@ -1232,23 +1314,23 @@ namespace {
 					);
 				}
 
-				if ( ! $has_entity_pairs ) {
-					if ( preg_match( "/entity_type\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-						$entity_type = stripslashes( (string) ( $matches[1] ?? '' ) );
+				if (! $has_entity_pairs) {
+					if (preg_match("/entity_type\s*=\s*'([^']*)'/i", $query, $matches)) {
+						$entity_type = stripslashes((string) ($matches[1] ?? ''));
 						$rows        = array_values(
 							array_filter(
 								$rows,
-								static fn ( array $row ): bool => (string) ( $row['entity_type'] ?? '' ) === $entity_type
+								static fn(array $row): bool => (string) ($row['entity_type'] ?? '') === $entity_type
 							)
 						);
 					}
 
-					if ( preg_match( "/surface\s*<>\s*'([^']*)'/i", $query, $matches ) ) {
-						$surface = stripslashes( (string) ( $matches[1] ?? '' ) );
+					if (preg_match("/surface\s*<>\s*'([^']*)'/i", $query, $matches)) {
+						$surface = stripslashes((string) ($matches[1] ?? ''));
 						$rows    = array_values(
 							array_filter(
 								$rows,
-								static fn ( array $row ): bool => (string) ( $row['surface'] ?? '' ) !== $surface
+								static fn(array $row): bool => (string) ($row['surface'] ?? '') !== $surface
 							)
 						);
 					}
@@ -1264,138 +1346,138 @@ namespace {
 							'admin_selected_provider',
 						] as $column
 					) {
-						if ( preg_match( "/(?:\\w+\\.)?{$column}\\s*=\\s*'([^']*)'/i", $query, $matches ) ) {
-							$value = stripslashes( (string) ( $matches[1] ?? '' ) );
+						if (preg_match("/(?:\\w+\\.)?{$column}\\s*=\\s*'([^']*)'/i", $query, $matches)) {
+							$value = stripslashes((string) ($matches[1] ?? ''));
 							$rows  = array_values(
 								array_filter(
 									$rows,
-									static fn ( array $row ): bool => (string) ( $row[ $column ] ?? '' ) === $value
+									static fn(array $row): bool => (string) ($row[$column] ?? '') === $value
 								)
 							);
 						}
 
-						if ( preg_match( "/(?:\\w+\\.)?{$column}\\s*<>\\s*'([^']*)'/i", $query, $matches ) ) {
-							$value = stripslashes( (string) ( $matches[1] ?? '' ) );
+						if (preg_match("/(?:\\w+\\.)?{$column}\\s*<>\\s*'([^']*)'/i", $query, $matches)) {
+							$value = stripslashes((string) ($matches[1] ?? ''));
 							$rows  = array_values(
 								array_filter(
 									$rows,
-									static fn ( array $row ): bool => (string) ( $row[ $column ] ?? '' ) !== $value
+									static fn(array $row): bool => (string) ($row[$column] ?? '') !== $value
 								)
 							);
 						}
 					}
 
-					if ( preg_match( '/(?:\w+\.)?user_id\s*=\s*(\d+)/i', $query, $matches ) ) {
-						$user_id = (int) ( $matches[1] ?? 0 );
+					if (preg_match('/(?:\w+\.)?user_id\s*=\s*(\d+)/i', $query, $matches)) {
+						$user_id = (int) ($matches[1] ?? 0);
 						$rows    = array_values(
 							array_filter(
 								$rows,
-								static fn ( array $row ): bool => (int) ( $row['user_id'] ?? 0 ) === $user_id
+								static fn(array $row): bool => (int) ($row['user_id'] ?? 0) === $user_id
 							)
 						);
 					}
 
-					if ( preg_match( '/(?:\w+\.)?user_id\s*<>\s*(\d+)/i', $query, $matches ) ) {
-						$user_id = (int) ( $matches[1] ?? 0 );
+					if (preg_match('/(?:\w+\.)?user_id\s*<>\s*(\d+)/i', $query, $matches)) {
+						$user_id = (int) ($matches[1] ?? 0);
 						$rows    = array_values(
 							array_filter(
 								$rows,
-								static fn ( array $row ): bool => (int) ( $row['user_id'] ?? 0 ) !== $user_id
+								static fn(array $row): bool => (int) ($row['user_id'] ?? 0) !== $user_id
 							)
 						);
 					}
 
-					if ( preg_match( "/entity_ref\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-						$entity_ref = stripslashes( (string) ( $matches[1] ?? '' ) );
+					if (preg_match("/entity_ref\s*=\s*'([^']*)'/i", $query, $matches)) {
+						$entity_ref = stripslashes((string) ($matches[1] ?? ''));
 						$rows       = array_values(
 							array_filter(
 								$rows,
-								static fn ( array $row ): bool => (string) ( $row['entity_ref'] ?? '' ) === $entity_ref
+								static fn(array $row): bool => (string) ($row['entity_ref'] ?? '') === $entity_ref
 							)
 						);
 					}
 				}
 
-					if ( preg_match( "/activity_id\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-						$activity_id = stripslashes( (string) ( $matches[1] ?? '' ) );
-						$rows        = array_values(
-							array_filter(
+				if (preg_match("/activity_id\s*=\s*'([^']*)'/i", $query, $matches)) {
+					$activity_id = stripslashes((string) ($matches[1] ?? ''));
+					$rows        = array_values(
+						array_filter(
 							$rows,
-							static fn ( array $row ): bool => (string) ( $row['activity_id'] ?? '' ) === $activity_id
-							)
-						);
-					}
+							static fn(array $row): bool => (string) ($row['activity_id'] ?? '') === $activity_id
+						)
+					);
+				}
 
-					if ( preg_match_all( "/(?:\\w+\\.)?created_at\\s*(>=|<=|<|>)\\s*'([^']+)'/i", $query, $matches, PREG_SET_ORDER ) ) {
-						foreach ( $matches as $match ) {
-							$operator = (string) ( $match[1] ?? '>=' );
-							$value    = stripslashes( (string) ( $match[2] ?? '' ) );
-							$rows     = array_values(
-								array_filter(
-									$rows,
-									static function ( array $row ) use ( $operator, $value ): bool {
-										$created_at = (string) ( $row['created_at'] ?? '' );
-
-										return match ( $operator ) {
-											'>'     => $created_at > $value,
-											'<='    => $created_at <= $value,
-											'<'     => $created_at < $value,
-											default => $created_at >= $value,
-										};
-									}
-								)
-							);
-						}
-					}
-
-					if ( preg_match( "/LOWER\\(t\\.admin_search_text\\)\\s+LIKE\\s+'([^']*)'/i", $query, $matches ) ) {
-						$needle = strtolower( trim( stripslashes( (string) ( $matches[1] ?? '' ) ), '%' ) );
-						$rows   = array_values(
+				if (preg_match_all("/(?:\\w+\\.)?created_at\\s*(>=|<=|<|>)\\s*'([^']+)'/i", $query, $matches, PREG_SET_ORDER)) {
+					foreach ($matches as $match) {
+						$operator = (string) ($match[1] ?? '>=');
+						$value    = stripslashes((string) ($match[2] ?? ''));
+						$rows     = array_values(
 							array_filter(
 								$rows,
-								static function ( array $row ) use ( $needle ): bool {
-									if ( '' === $needle ) {
-										return true;
-									}
+								static function (array $row) use ($operator, $value): bool {
+									$created_at = (string) ($row['created_at'] ?? '');
 
-									foreach (
-										[
-											'admin_search_text',
-											'surface',
-											'admin_post_type',
-											'admin_entity_id',
-											'admin_provider',
-											'admin_provider_path',
-											'admin_configuration_owner',
-											'admin_credential_source',
-											'admin_selected_provider',
-										] as $column
-									) {
-										if ( str_contains( strtolower( (string) ( $row[ $column ] ?? '' ) ), $needle ) ) {
-											return true;
-										}
-									}
-
-									return false;
+									return match ($operator) {
+										'>'     => $created_at > $value,
+										'<='    => $created_at <= $value,
+										'<'     => $created_at < $value,
+										default => $created_at >= $value,
+									};
 								}
 							)
 						);
 					}
+				}
 
-				if ( preg_match( "/activity_id\s+IN\s*\\(([^\\)]+)\\)/i", $query, $matches ) ) {
+				if (preg_match("/LOWER\\(t\\.admin_search_text\\)\\s+LIKE\\s+'([^']*)'/i", $query, $matches)) {
+					$needle = strtolower(trim(stripslashes((string) ($matches[1] ?? '')), '%'));
+					$rows   = array_values(
+						array_filter(
+							$rows,
+							static function (array $row) use ($needle): bool {
+								if ('' === $needle) {
+									return true;
+								}
+
+								foreach (
+									[
+										'admin_search_text',
+										'surface',
+										'admin_post_type',
+										'admin_entity_id',
+										'admin_provider',
+										'admin_provider_path',
+										'admin_configuration_owner',
+										'admin_credential_source',
+										'admin_selected_provider',
+									] as $column
+								) {
+									if (str_contains(strtolower((string) ($row[$column] ?? '')), $needle)) {
+										return true;
+									}
+								}
+
+								return false;
+							}
+						)
+					);
+				}
+
+				if (preg_match("/activity_id\s+IN\s*\\(([^\\)]+)\\)/i", $query, $matches)) {
 					$activity_ids = array_values(
 						array_filter(
 							array_map(
-								static fn ( string $value ): string => trim( stripslashes( $value ), " \t\n\r\0\x0B'" ),
-								explode( ',', (string) ( $matches[1] ?? '' ) )
+								static fn(string $value): string => trim(stripslashes($value), " \t\n\r\0\x0B'"),
+								explode(',', (string) ($matches[1] ?? ''))
 							)
 						)
 					);
 					$rows         = array_values(
 						array_filter(
 							$rows,
-							static fn ( array $row ): bool => in_array(
-								(string) ( $row['activity_id'] ?? '' ),
+							static fn(array $row): bool => in_array(
+								(string) ($row['activity_id'] ?? ''),
 								$activity_ids,
 								true
 							)
@@ -1403,20 +1485,20 @@ namespace {
 					);
 				}
 
-				if ( preg_match( "/FIND_IN_SET\\s*\\(\\s*activity_id\\s*,\\s*'([^']*)'\\s*\\)\\s*>\\s*0/i", $query, $matches ) ) {
+				if (preg_match("/FIND_IN_SET\\s*\\(\\s*activity_id\\s*,\\s*'([^']*)'\\s*\\)\\s*>\\s*0/i", $query, $matches)) {
 					$activity_ids = array_values(
 						array_filter(
 							array_map(
-								static fn ( string $value ): string => trim( stripslashes( $value ) ),
-								explode( ',', (string) ( $matches[1] ?? '' ) )
+								static fn(string $value): string => trim(stripslashes($value)),
+								explode(',', (string) ($matches[1] ?? ''))
 							)
 						)
 					);
 					$rows         = array_values(
 						array_filter(
 							$rows,
-							static fn ( array $row ): bool => in_array(
-								(string) ( $row['activity_id'] ?? '' ),
+							static fn(array $row): bool => in_array(
+								(string) ($row['activity_id'] ?? ''),
 								$activity_ids,
 								true
 							)
@@ -1424,209 +1506,213 @@ namespace {
 					);
 				}
 
-					if ( preg_match( '/COUNT\(\*\)\s+AS\s+total/i', $query ) && str_contains( $query, 'AS admin_status' ) ) {
-						$grouped = [];
+				if (preg_match('/COUNT\(\*\)\s+AS\s+total/i', $query) && str_contains($query, 'AS admin_status')) {
+					$grouped = [];
 
-						foreach ( $rows as $row ) {
-							$status = $this->resolve_activity_admin_status( $row, $all_rows );
+					foreach ($rows as $row) {
+						$status = $this->resolve_activity_admin_status($row, $all_rows);
 
-							if ( ! isset( $grouped[ $status ] ) ) {
-								$grouped[ $status ] = 0;
-							}
-
-							++$grouped[ $status ];
+						if (! isset($grouped[$status])) {
+							$grouped[$status] = 0;
 						}
 
-						ksort( $grouped );
-
-						return array_map(
-							static fn ( string $status, int $total ): array => [
-								'admin_status' => $status,
-								'total'        => $total,
-							],
-							array_keys( $grouped ),
-							array_values( $grouped )
-						);
+						++$grouped[$status];
 					}
 
-					if ( preg_match( '/SELECT\s+(.+?)\s+AS\s+value(?:,\s+(.+?)\s+AS\s+label)?\s+FROM\s+/is', $query, $matches ) ) {
-						$value_column = $this->normalize_select_column( (string) ( $matches[1] ?? '' ) );
-						$label_column = isset( $matches[2] ) ? $this->normalize_select_column( (string) $matches[2] ) : '';
-						$grouped      = [];
+					ksort($grouped);
 
-						foreach ( $rows as $row ) {
-							$value = (string) ( $row[ $value_column ] ?? '' );
-							$label = '' !== $label_column ? (string) ( $row[ $label_column ] ?? '' ) : '';
+					return array_map(
+						static fn(string $status, int $total): array => [
+							'admin_status' => $status,
+							'total'        => $total,
+						],
+						array_keys($grouped),
+						array_values($grouped)
+					);
+				}
 
-							if ( '' === $value || isset( $grouped[ $value . "\0" . $label ] ) ) {
-								continue;
-							}
+				if (preg_match('/SELECT\s+(.+?)\s+AS\s+value(?:,\s+(.+?)\s+AS\s+label)?\s+FROM\s+/is', $query, $matches)) {
+					$value_column = $this->normalize_select_column((string) ($matches[1] ?? ''));
+					$label_column = isset($matches[2]) ? $this->normalize_select_column((string) $matches[2]) : '';
+					$grouped      = [];
 
-							$grouped[ $value . "\0" . $label ] = [
-								'value' => $value,
-								'label' => $label,
-							];
+					foreach ($rows as $row) {
+						$value = (string) ($row[$value_column] ?? '');
+						$label = '' !== $label_column ? (string) ($row[$label_column] ?? '') : '';
+
+						if ('' === $value || isset($grouped[$value . "\0" . $label])) {
+							continue;
 						}
 
-						usort(
-							$grouped,
-							static fn ( array $left, array $right ): int => strnatcasecmp(
-								(string) ( $left['label'] ?: $left['value'] ),
-								(string) ( $right['label'] ?: $right['value'] )
-							)
-						);
-
-						return array_values( $grouped );
-					}
-
-					$order_column    = 'created_at';
-					$order_direction = 'ASC';
-
-					if ( preg_match( '/ORDER BY\s+(?:\w+\.)?([a-z_]+)\s+(ASC|DESC)/i', $query, $matches ) ) {
-						$order_column    = strtolower( (string) ( $matches[1] ?? 'created_at' ) );
-						$order_direction = strtoupper( (string) ( $matches[2] ?? 'ASC' ) );
+						$grouped[$value . "\0" . $label] = [
+							'value' => $value,
+							'label' => $label,
+						];
 					}
 
 					usort(
-						$rows,
-						static function ( array $left, array $right ) use ( $order_column, $order_direction ): int {
-							if ( in_array( $order_column, [ 'id', 'user_id' ], true ) ) {
-								$result = (int) ( $left[ $order_column ] ?? 0 ) <=> (int) ( $right[ $order_column ] ?? 0 );
-							} else {
-								$left_value  = (string) ( $left[ $order_column ] ?? '' );
-								$right_value = (string) ( $right[ $order_column ] ?? '' );
-								$result      = strcmp( $left_value, $right_value );
-							}
-
-							if ( 0 === $result ) {
-								$result = (int) ( $left['id'] ?? 0 ) <=> (int) ( $right['id'] ?? 0 );
-							}
-
-							return 'DESC' === $order_direction ? -1 * $result : $result;
-						}
+						$grouped,
+						static fn(array $left, array $right): int => strnatcasecmp(
+							(string) ($left['label'] ?: $left['value']),
+							(string) ($right['label'] ?: $right['value'])
+						)
 					);
 
-					if ( preg_match( '/LIMIT\s+(\d+)(?:\s+OFFSET\s+(\d+))?/i', $query, $matches ) ) {
-						$rows = array_slice(
-							$rows,
-							(int) ( $matches[2] ?? 0 ),
-							(int) ( $matches[1] ?? 0 )
-						);
+					return array_values($grouped);
+				}
+
+				$order_column    = 'created_at';
+				$order_direction = 'ASC';
+
+				if (preg_match('/ORDER BY\s+(?:\w+\.)?([a-z_]+)\s+(ASC|DESC)/i', $query, $matches)) {
+					$order_column    = strtolower((string) ($matches[1] ?? 'created_at'));
+					$order_direction = strtoupper((string) ($matches[2] ?? 'ASC'));
+				}
+
+				usort(
+					$rows,
+					static function (array $left, array $right) use ($order_column, $order_direction): int {
+						if (in_array($order_column, ['id', 'user_id'], true)) {
+							$result = (int) ($left[$order_column] ?? 0) <=> (int) ($right[$order_column] ?? 0);
+						} else {
+							$left_value  = (string) ($left[$order_column] ?? '');
+							$right_value = (string) ($right[$order_column] ?? '');
+							$result      = strcmp($left_value, $right_value);
+						}
+
+						if (0 === $result) {
+							$result = (int) ($left['id'] ?? 0) <=> (int) ($right['id'] ?? 0);
+						}
+
+						return 'DESC' === $order_direction ? -1 * $result : $result;
 					}
+				);
 
-				if ( preg_match( '/SELECT\s+(.+?)\s+FROM\s+/is', $query, $matches ) ) {
-					$select_clause = trim( (string) ( $matches[1] ?? '*' ) );
+				if (preg_match('/LIMIT\s+(\d+)(?:\s+OFFSET\s+(\d+))?/i', $query, $matches)) {
+					$rows = array_slice(
+						$rows,
+						(int) ($matches[2] ?? 0),
+						(int) ($matches[1] ?? 0)
+					);
+				}
 
-					if ( '*' !== $select_clause ) {
+				if (preg_match('/SELECT\s+(.+?)\s+FROM\s+/is', $query, $matches)) {
+					$select_clause = trim((string) ($matches[1] ?? '*'));
+
+					if ('*' !== $select_clause) {
 						$columns = array_values(
 							array_filter(
 								array_map(
-									static fn ( string $column ): string => trim(
-										str_replace( '`', '', $column )
+									static fn(string $column): string => trim(
+										str_replace('`', '', $column)
 									),
-									explode( ',', $select_clause )
+									explode(',', $select_clause)
 								),
-								static fn ( string $column ): bool => '' !== $column
+								static fn(string $column): bool => '' !== $column
 							)
 						);
 						$rows    = array_map(
-							static fn ( array $row ): array => array_intersect_key(
+							static fn(array $row): array => array_intersect_key(
 								$row,
-								array_flip( $columns )
+								array_flip($columns)
 							),
 							$rows
 						);
 					}
 				}
 
-				if ( ARRAY_A === $output ) {
+				if (ARRAY_A === $output) {
 					return $rows;
 				}
 
 				return array_map(
-					static fn ( array $row ): object => (object) $row,
+					static fn(array $row): object => (object) $row,
 					$rows
 				);
 			}
 
-				private function row_matches( array $row, array $where ): bool {
-					foreach ( $where as $column => $value ) {
-						if ( (string) ( $row[ $column ] ?? '' ) !== (string) $value ) {
-							return false;
+			private function row_matches(array $row, array $where): bool
+			{
+				foreach ($where as $column => $value) {
+					if ((string) ($row[$column] ?? '') !== (string) $value) {
+						return false;
 					}
 				}
 
-					return true;
+				return true;
+			}
+
+			private function normalize_select_column(string $column): string
+			{
+				$column = trim($column);
+
+				if (str_contains($column, '.')) {
+					$parts  = explode('.', $column);
+					$column = (string) end($parts);
 				}
 
-				private function normalize_select_column( string $column ): string {
-					$column = trim( $column );
+				return trim(str_replace('`', '', $column));
+			}
 
-					if ( str_contains( $column, '.' ) ) {
-						$parts  = explode( '.', $column );
-						$column = (string) end( $parts );
-					}
+			/**
+			 * @param array<string, mixed> $row
+			 * @param array<int, array<string, mixed>> $all_rows
+			 */
+			private function resolve_activity_admin_status(array $row, array $all_rows): string
+			{
+				$undo = json_decode((string) ($row['undo_state'] ?? ''), true);
+				$undo_status = is_array($undo) ? (string) ($undo['status'] ?? 'available') : 'available';
+				$is_review = 'request_diagnostic' === (string) ($row['activity_type'] ?? '')
+					|| 'review' === (string) ($row['execution_result'] ?? '');
 
-					return trim( str_replace( '`', '', $column ) );
+				if ($is_review) {
+					return 'failed' === $undo_status ? 'failed' : 'review';
 				}
 
-				/**
-				 * @param array<string, mixed> $row
-				 * @param array<int, array<string, mixed>> $all_rows
-				 */
-				private function resolve_activity_admin_status( array $row, array $all_rows ): string {
-					$undo = json_decode( (string) ( $row['undo_state'] ?? '' ), true );
-					$undo_status = is_array( $undo ) ? (string) ( $undo['status'] ?? 'available' ) : 'available';
-					$is_review = 'request_diagnostic' === (string) ( $row['activity_type'] ?? '' )
-						|| 'review' === (string) ( $row['execution_result'] ?? '' );
-
-					if ( $is_review ) {
-						return 'failed' === $undo_status ? 'failed' : 'review';
-					}
-
-					if ( 'undone' === $undo_status ) {
-						return 'undone';
-					}
-
-					foreach ( $all_rows as $candidate ) {
-						if (
-							(string) ( $candidate['entity_type'] ?? '' ) !== (string) ( $row['entity_type'] ?? '' )
-							|| (string) ( $candidate['entity_ref'] ?? '' ) !== (string) ( $row['entity_ref'] ?? '' )
-							|| (
-								'' === (string) ( $row['entity_type'] ?? '' )
-								&& '' === (string) ( $row['entity_ref'] ?? '' )
-							)
-						) {
-							continue;
-						}
-
-						$is_newer = (string) ( $candidate['created_at'] ?? '' ) > (string) ( $row['created_at'] ?? '' )
-							|| (
-								(string) ( $candidate['created_at'] ?? '' ) === (string) ( $row['created_at'] ?? '' )
-								&& (int) ( $candidate['id'] ?? 0 ) > (int) ( $row['id'] ?? 0 )
-							);
-
-						if ( ! $is_newer ) {
-							continue;
-						}
-
-						$candidate_undo = json_decode( (string) ( $candidate['undo_state'] ?? '' ), true );
-						$candidate_status = is_array( $candidate_undo ) ? (string) ( $candidate_undo['status'] ?? 'available' ) : 'available';
-						$candidate_review = 'request_diagnostic' === (string) ( $candidate['activity_type'] ?? '' )
-							|| 'review' === (string) ( $candidate['execution_result'] ?? '' );
-
-						if ( ! $candidate_review && 'undone' !== $candidate_status ) {
-							return 'blocked';
-						}
-					}
-
-					return 'failed' === $undo_status ? 'failed' : 'applied';
+				if ('undone' === $undo_status) {
+					return 'undone';
 				}
+
+				foreach ($all_rows as $candidate) {
+					if (
+						(string) ($candidate['entity_type'] ?? '') !== (string) ($row['entity_type'] ?? '')
+						|| (string) ($candidate['entity_ref'] ?? '') !== (string) ($row['entity_ref'] ?? '')
+						|| (
+							'' === (string) ($row['entity_type'] ?? '')
+							&& '' === (string) ($row['entity_ref'] ?? '')
+						)
+					) {
+						continue;
+					}
+
+					$is_newer = (string) ($candidate['created_at'] ?? '') > (string) ($row['created_at'] ?? '')
+						|| (
+							(string) ($candidate['created_at'] ?? '') === (string) ($row['created_at'] ?? '')
+							&& (int) ($candidate['id'] ?? 0) > (int) ($row['id'] ?? 0)
+						);
+
+					if (! $is_newer) {
+						continue;
+					}
+
+					$candidate_undo = json_decode((string) ($candidate['undo_state'] ?? ''), true);
+					$candidate_status = is_array($candidate_undo) ? (string) ($candidate_undo['status'] ?? 'available') : 'available';
+					$candidate_review = 'request_diagnostic' === (string) ($candidate['activity_type'] ?? '')
+						|| 'review' === (string) ($candidate['execution_result'] ?? '');
+
+					if (! $candidate_review && 'undone' !== $candidate_status) {
+						return 'blocked';
+					}
+				}
+
+				return 'failed' === $undo_status ? 'failed' : 'applied';
 			}
 		}
+	}
 
-	if ( ! class_exists( 'WP_Block_Type_Registry' ) ) {
-		class WP_Block_Type_Registry {
+	if (! class_exists('WP_Block_Type_Registry')) {
+		class WP_Block_Type_Registry
+		{
 
 			private static ?self $instance = null;
 
@@ -1635,50 +1721,56 @@ namespace {
 			 */
 			private array $registered = [];
 
-			public static function get_instance(): self {
-				if ( null === self::$instance ) {
+			public static function get_instance(): self
+			{
+				if (null === self::$instance) {
 					self::$instance = new self();
 				}
 
 				return self::$instance;
 			}
 
-			public function get_registered( string $block_name ): ?object {
-				return $this->registered[ $block_name ] ?? null;
+			public function get_registered(string $block_name): ?object
+			{
+				return $this->registered[$block_name] ?? null;
 			}
 
 			/**
 			 * @return array<string, object>
 			 */
-			public function get_all_registered(): array {
+			public function get_all_registered(): array
+			{
 				return $this->registered;
 			}
 
-			public function register( string $block_name, array $args ): void {
+			public function register(string $block_name, array $args): void
+			{
 				$block_type = (object) $args;
 				$block_type->name = $block_name;
 
-				if ( array_key_exists( 'allowedBlocks', $args ) ) {
+				if (array_key_exists('allowedBlocks', $args)) {
 					$block_type->allowed_blocks = $args['allowedBlocks'];
-					unset( $block_type->allowedBlocks );
+					unset($block_type->allowedBlocks);
 				}
 
-				if ( array_key_exists( 'apiVersion', $args ) ) {
+				if (array_key_exists('apiVersion', $args)) {
 					$block_type->api_version = $args['apiVersion'];
-					unset( $block_type->apiVersion );
+					unset($block_type->apiVersion);
 				}
 
-				$this->registered[ $block_name ] = $block_type;
+				$this->registered[$block_name] = $block_type;
 			}
 
-			public function reset(): void {
+			public function reset(): void
+			{
 				$this->registered = [];
 			}
 		}
 	}
 
-	if ( ! class_exists( 'WP_Block_Patterns_Registry' ) ) {
-		class WP_Block_Patterns_Registry {
+	if (! class_exists('WP_Block_Patterns_Registry')) {
+		class WP_Block_Patterns_Registry
+		{
 
 			private static ?self $instance = null;
 
@@ -1687,413 +1779,411 @@ namespace {
 			 */
 			private array $registered = [];
 
-			public static function get_instance(): self {
-				if ( null === self::$instance ) {
+			public static function get_instance(): self
+			{
+				if (null === self::$instance) {
 					self::$instance = new self();
 				}
 
 				return self::$instance;
 			}
 
-			public function register( string $pattern_name, array $pattern_properties ): void {
-				$this->registered[ $pattern_name ] = array_merge( $pattern_properties, [ 'name' => $pattern_name ] );
+			public function register(string $pattern_name, array $pattern_properties): void
+			{
+				$this->registered[$pattern_name] = array_merge($pattern_properties, ['name' => $pattern_name]);
 			}
 
 			/**
 			 * @return array<int, array<string, mixed>>
 			 */
-			public function get_all_registered(): array {
-				return array_values( $this->registered );
+			public function get_all_registered(): array
+			{
+				return array_values($this->registered);
 			}
 
-			public function reset(): void {
+			public function reset(): void
+			{
 				$this->registered = [];
 			}
 		}
 	}
 
-	if ( ! class_exists( 'WP_Screen' ) ) {
-		class WP_Screen {
+	if (! class_exists('WP_Screen')) {
+		class WP_Screen
+		{
 
 			/** @var array<int, array<string, mixed>> */
 			public array $help_tabs = [];
 
 			public string $help_sidebar = '';
 
-			public function add_help_tab( array $args ): void {
+			public function add_help_tab(array $args): void
+			{
 				$this->help_tabs[] = $args;
 			}
 
-			public function set_help_sidebar( string $content ): void {
+			public function set_help_sidebar(string $content): void
+			{
 				$this->help_sidebar = $content;
 			}
 		}
 	}
 
-	if ( ! class_exists( 'WP_Theme' ) ) {
-		class WP_Theme {
+	if (! class_exists('WP_Theme')) {
+		class WP_Theme
+		{
 
 			/**
 			 * @param array<string, mixed> $data
 			 */
 			public function __construct(
 				private array $data = []
-			) {
-			}
+			) {}
 
-			public function get( string $field ) {
-				return match ( $field ) {
+			public function get(string $field)
+			{
+				return match ($field) {
 					'Name'       => $this->data['name'] ?? '',
 					'Version'    => $this->data['version'] ?? '',
 					'Stylesheet' => $this->data['stylesheet'] ?? '',
 					'Template'   => $this->data['template'] ?? '',
-					default      => $this->data[ $field ] ?? '',
+					default      => $this->data[$field] ?? '',
 				};
 			}
 
-			public function get_stylesheet(): string {
-				return (string) ( $this->data['stylesheet'] ?? '' );
+			public function get_stylesheet(): string
+			{
+				return (string) ($this->data['stylesheet'] ?? '');
 			}
 
-			public function get_template(): string {
-				return (string) ( $this->data['template'] ?? '' );
+			public function get_template(): string
+			{
+				return (string) ($this->data['template'] ?? '');
 			}
 		}
 	}
 
-	if ( ! function_exists( 'get_option' ) ) {
-		function get_option( string $name, $default = false ) {
-			return WordPressTestState::$options[ $name ] ?? $default;
+	if (! function_exists('get_option')) {
+		function get_option(string $name, $default = false)
+		{
+			return WordPressTestState::$options[$name] ?? $default;
 		}
 	}
 
-	if ( ! function_exists( 'register_post_type' ) ) {
-		function register_post_type( string $post_type, array $args = [] ): object {
-			WordPressTestState::$registered_post_types[ $post_type ] = $args;
-
-			return (object) array_merge( [ 'name' => $post_type ], $args );
+	if (! function_exists('post_type_exists')) {
+		function post_type_exists(string $post_type): bool
+		{
+			return array_key_exists($post_type, WordPressTestState::$registered_post_types);
 		}
 	}
 
-	if ( ! function_exists( 'post_type_exists' ) ) {
-		function post_type_exists( string $post_type ): bool {
-			return array_key_exists( $post_type, WordPressTestState::$registered_post_types );
+	if (! function_exists('taxonomy_exists')) {
+		function taxonomy_exists(string $taxonomy): bool
+		{
+			return array_key_exists($taxonomy, WordPressTestState::$registered_taxonomies);
 		}
 	}
 
-	if ( ! function_exists( 'register_taxonomy' ) ) {
-		function register_taxonomy( string $taxonomy, $object_type, array $args = [] ): object {
-			WordPressTestState::$registered_taxonomies[ $taxonomy ] = [
-				'object_type' => $object_type,
-				'args'        => $args,
-			];
-
-			return (object) array_merge( [ 'name' => $taxonomy ], $args );
-		}
-	}
-
-	if ( ! function_exists( 'taxonomy_exists' ) ) {
-		function taxonomy_exists( string $taxonomy ): bool {
-			return array_key_exists( $taxonomy, WordPressTestState::$registered_taxonomies );
-		}
-	}
-
-	if ( ! function_exists( 'wp_is_connector_registered' ) ) {
-		function wp_is_connector_registered( string $id ): bool {
-			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
-			if ( null !== $error_message ) {
-				throw new \RuntimeException( esc_html( sanitize_text_field( $error_message ) ) );
-			}
-
-			return array_key_exists( $id, WordPressTestState::$connectors );
-		}
-	}
-
-	if ( ! function_exists( 'wp_get_connector' ) ) {
-		function wp_get_connector( string $id ): ?array {
-			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
-			if ( null !== $error_message ) {
-				throw new \RuntimeException( esc_html( sanitize_text_field( $error_message ) ) );
-			}
-
-			$connector = WordPressTestState::$connectors[ $id ] ?? null;
-
-			return is_array( $connector ) ? $connector : null;
-		}
-	}
-
-	if ( ! function_exists( 'wp_get_connectors' ) ) {
-		function wp_get_connectors(): array {
-			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
-			if ( null !== $error_message ) {
-				throw new \RuntimeException( esc_html( sanitize_text_field( $error_message ) ) );
+	if (! function_exists('wp_get_connectors')) {
+		function wp_get_connectors(): array
+		{
+			$error_message = WordPressTestState::get_connector_api_error(__FUNCTION__);
+			if (null !== $error_message) {
+				throw new \RuntimeException(esc_html(sanitize_text_field($error_message)));
 			}
 
 			return WordPressTestState::$connectors;
 		}
 	}
 
-	if ( ! function_exists( 'wp_parse_args' ) ) {
-		function wp_parse_args( $args, array $defaults = [] ): array {
-			if ( is_object( $args ) ) {
-				$args = get_object_vars( $args );
+	if (! function_exists('wp_parse_args')) {
+		function wp_parse_args($args, array $defaults = []): array
+		{
+			if (is_object($args)) {
+				$args = get_object_vars($args);
 			}
 
-			if ( ! is_array( $args ) ) {
+			if (! is_array($args)) {
 				$args = [];
 			}
 
-			return array_merge( $defaults, $args );
+			return array_merge($defaults, $args);
 		}
 	}
 
-	if ( ! function_exists( 'add_query_arg' ) ) {
-		function add_query_arg( array $args, string $url ): string {
-			$parts = wp_parse_url( $url );
+	if (! function_exists('add_query_arg')) {
+		function add_query_arg(array $args, string $url): string
+		{
+			$parts = wp_parse_url($url);
 
-			if ( ! is_array( $parts ) ) {
+			if (! is_array($parts)) {
 				$parts = [];
 			}
 
 			$query_args = [];
-			if ( isset( $parts['query'] ) && is_string( $parts['query'] ) ) {
-				parse_str( $parts['query'], $query_args );
+			if (isset($parts['query']) && is_string($parts['query'])) {
+				parse_str($parts['query'], $query_args);
 			}
 
-			foreach ( $args as $key => $value ) {
-				if ( null === $value ) {
-					unset( $query_args[ $key ] );
+			foreach ($args as $key => $value) {
+				if (null === $value) {
+					unset($query_args[$key]);
 					continue;
 				}
 
-				$query_args[ $key ] = $value;
+				$query_args[$key] = $value;
 			}
 
-			$scheme   = isset( $parts['scheme'] ) ? (string) $parts['scheme'] . '://' : '';
-			$host     = isset( $parts['host'] ) ? (string) $parts['host'] : '';
-			$port     = isset( $parts['port'] ) ? ':' . (string) $parts['port'] : '';
-			$user     = isset( $parts['user'] ) ? (string) $parts['user'] : '';
-			$pass     = isset( $parts['pass'] ) ? ':' . (string) $parts['pass'] : '';
+			$scheme   = isset($parts['scheme']) ? (string) $parts['scheme'] . '://' : '';
+			$host     = isset($parts['host']) ? (string) $parts['host'] : '';
+			$port     = isset($parts['port']) ? ':' . (string) $parts['port'] : '';
+			$user     = isset($parts['user']) ? (string) $parts['user'] : '';
+			$pass     = isset($parts['pass']) ? ':' . (string) $parts['pass'] : '';
 			$auth     = '' !== $user ? $user . $pass . '@' : '';
-			$path     = isset( $parts['path'] ) ? (string) $parts['path'] : '';
-			$query    = http_build_query( $query_args, '', '&', PHP_QUERY_RFC3986 );
-			$fragment = isset( $parts['fragment'] ) ? '#' . (string) $parts['fragment'] : '';
+			$path     = isset($parts['path']) ? (string) $parts['path'] : '';
+			$query    = http_build_query($query_args, '', '&', PHP_QUERY_RFC3986);
+			$fragment = isset($parts['fragment']) ? '#' . (string) $parts['fragment'] : '';
 
-			return $scheme . $auth . $host . $port . $path . ( '' !== $query ? '?' . $query : '' ) . $fragment;
+			return $scheme . $auth . $host . $port . $path . ('' !== $query ? '?' . $query : '') . $fragment;
 		}
 	}
 
-	if ( ! function_exists( 'wp_parse_url' ) ) {
-		function wp_parse_url( string $url, int $component = -1 ) {
+	if (! function_exists('wp_parse_url')) {
+		function wp_parse_url(string $url, int $component = -1)
+		{
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- This test bootstrap provides the WordPress compatibility wrapper when core is unavailable.
-			return parse_url( $url, $component );
+			return parse_url($url, $component);
 		}
 	}
 
-	if ( ! function_exists( 'wp_hash' ) ) {
-		function wp_hash( string $data, string $scheme = 'auth' ): string {
-			return hash( 'sha256', $data . '|' . $scheme );
+	if (! function_exists('wp_hash')) {
+		function wp_hash(string $data, string $scheme = 'auth'): string
+		{
+			return hash('sha256', $data . '|' . $scheme);
 		}
 	}
 
-	if ( ! function_exists( 'home_url' ) ) {
-		function home_url( string $path = '', ?string $scheme = null ): string {
+	if (! function_exists('home_url')) {
+		function home_url(string $path = '', ?string $scheme = null): string
+		{
 			$base = 'https://example.test';
 
-			if ( $path === '' ) {
+			if ($path === '') {
 				return $base;
 			}
 
-			return rtrim( $base, '/' ) . '/' . ltrim( $path, '/' );
+			return rtrim($base, '/') . '/' . ltrim($path, '/');
 		}
 	}
 
-	if ( ! function_exists( 'plugin_dir_path' ) ) {
-		function plugin_dir_path( string $file ): string {
-			return dirname( $file ) . '/';
+	if (! function_exists('plugin_dir_path')) {
+		function plugin_dir_path(string $file): string
+		{
+			return dirname($file) . '/';
 		}
 	}
 
-	if ( ! function_exists( 'plugin_dir_url' ) ) {
-		function plugin_dir_url( string $file ): string {
-			unset( $file );
+	if (! function_exists('plugin_dir_url')) {
+		function plugin_dir_url(string $file): string
+		{
+			unset($file);
 
 			return 'https://example.test/wp-content/plugins/flavor-agent/';
 		}
 	}
 
-	if ( ! function_exists( 'register_activation_hook' ) ) {
-		function register_activation_hook( string $file, $callback ): void {
-			if ( is_callable( $callback ) ) {
-				WordPressTestState::$activation_hooks[ $file ] = $callback;
+	if (! function_exists('register_activation_hook')) {
+		function register_activation_hook(string $file, $callback): void
+		{
+			if (is_callable($callback)) {
+				WordPressTestState::$activation_hooks[$file] = $callback;
 			}
 		}
 	}
 
-	if ( ! function_exists( 'register_deactivation_hook' ) ) {
-		function register_deactivation_hook( string $file, $callback ): void {
-			if ( is_callable( $callback ) ) {
-				WordPressTestState::$deactivation_hooks[ $file ] = $callback;
+	if (! function_exists('register_deactivation_hook')) {
+		function register_deactivation_hook(string $file, $callback): void
+		{
+			if (is_callable($callback)) {
+				WordPressTestState::$deactivation_hooks[$file] = $callback;
 			}
 		}
 	}
 
-	if ( ! function_exists( 'untrailingslashit' ) ) {
-		function untrailingslashit( string $value ): string {
-			return rtrim( $value, '/' );
+	if (! function_exists('untrailingslashit')) {
+		function untrailingslashit(string $value): string
+		{
+			return rtrim($value, '/');
 		}
 	}
 
-	if ( ! function_exists( 'get_current_blog_id' ) ) {
-		function get_current_blog_id(): int {
+	if (! function_exists('get_current_blog_id')) {
+		function get_current_blog_id(): int
+		{
 			return 1;
 		}
 	}
 
-	if ( ! function_exists( 'wp_get_environment_type' ) ) {
-		function wp_get_environment_type(): string {
+	if (! function_exists('wp_get_environment_type')) {
+		function wp_get_environment_type(): string
+		{
 			return 'tests';
 		}
 	}
 
-	if ( ! function_exists( 'is_admin' ) ) {
-		function is_admin(): bool {
+	if (! function_exists('is_admin')) {
+		function is_admin(): bool
+		{
 			return false;
 		}
 	}
 
-	if ( ! function_exists( 'wp_doing_cron' ) ) {
-		function wp_doing_cron(): bool {
+	if (! function_exists('wp_doing_cron')) {
+		function wp_doing_cron(): bool
+		{
 			return false;
 		}
 	}
 
-	if ( ! function_exists( 'get_transient' ) ) {
-		function get_transient( string $name ) {
-			return array_key_exists( $name, WordPressTestState::$transients )
-				? WordPressTestState::$transients[ $name ]
+	if (! function_exists('get_transient')) {
+		function get_transient(string $name)
+		{
+			return array_key_exists($name, WordPressTestState::$transients)
+				? WordPressTestState::$transients[$name]
 				: false;
 		}
 	}
 
-	if ( ! function_exists( 'set_transient' ) ) {
-		function set_transient( string $name, $value, int $expiration = 0 ): bool {
-			WordPressTestState::$transients[ $name ]            = $value;
-			WordPressTestState::$transient_expirations[ $name ] = $expiration;
+	if (! function_exists('set_transient')) {
+		function set_transient(string $name, $value, int $expiration = 0): bool
+		{
+			WordPressTestState::$transients[$name]            = $value;
+			WordPressTestState::$transient_expirations[$name] = $expiration;
 
 			return true;
 		}
 	}
 
-	if ( ! function_exists( 'delete_transient' ) ) {
-		function delete_transient( string $name ): bool {
-			unset( WordPressTestState::$transients[ $name ] );
-			unset( WordPressTestState::$transient_expirations[ $name ] );
+	if (! function_exists('delete_transient')) {
+		function delete_transient(string $name): bool
+		{
+			unset(WordPressTestState::$transients[$name]);
+			unset(WordPressTestState::$transient_expirations[$name]);
 
 			return true;
 		}
 	}
 
-	if ( ! function_exists( 'current_user_can' ) ) {
-		function current_user_can( string $capability, ...$args ): bool {
-			if ( [] !== $args ) {
+	if (! function_exists('current_user_can')) {
+		function current_user_can(string $capability, ...$args): bool
+		{
+			if ([] !== $args) {
 				$specific_key = $capability . ':' . implode(
 					':',
 					array_map(
-						static fn ( $arg ): string => is_scalar( $arg ) || null === $arg
+						static fn($arg): string => is_scalar($arg) || null === $arg
 							? (string) $arg
-							: wp_json_encode( $arg ),
+							: wp_json_encode($arg),
 						$args
 					)
 				);
 
-				if ( array_key_exists( $specific_key, WordPressTestState::$capabilities ) ) {
-					return (bool) WordPressTestState::$capabilities[ $specific_key ];
+				if (array_key_exists($specific_key, WordPressTestState::$capabilities)) {
+					return (bool) WordPressTestState::$capabilities[$specific_key];
 				}
 			}
 
-			if ( is_callable( WordPressTestState::$capabilities[ $capability ] ?? null ) ) {
+			if (is_callable(WordPressTestState::$capabilities[$capability] ?? null)) {
 				return (bool) call_user_func(
-					WordPressTestState::$capabilities[ $capability ],
+					WordPressTestState::$capabilities[$capability],
 					...$args
 				);
 			}
 
-			return (bool) ( WordPressTestState::$capabilities[ $capability ] ?? false );
+			return (bool) (WordPressTestState::$capabilities[$capability] ?? false);
 		}
 	}
 
-	if ( ! function_exists( 'get_current_user_id' ) ) {
-		function get_current_user_id(): int {
+	if (! function_exists('get_current_user_id')) {
+		function get_current_user_id(): int
+		{
 			return WordPressTestState::$current_user_id;
 		}
 	}
 
-	if ( ! function_exists( '__' ) ) {
-		function __( string $text, string $domain = 'default' ): string {
+	if (! function_exists('__')) {
+		function __(string $text, string $domain = 'default'): string
+		{
 			return $text;
 		}
 	}
 
-	if ( ! function_exists( 'esc_html' ) ) {
-		function esc_html( string $text ): string {
-			return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	if (! function_exists('esc_html')) {
+		function esc_html(string $text): string
+		{
+			return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
 		}
 	}
 
-	if ( ! function_exists( 'esc_attr' ) ) {
-		function esc_attr( string $text ): string {
-			return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	if (! function_exists('esc_attr')) {
+		function esc_attr(string $text): string
+		{
+			return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
 		}
 	}
 
-	if ( ! function_exists( 'esc_url' ) ) {
-		function esc_url( string $url ): string {
-			$url    = trim( $url );
-			$scheme = parse_url( $url, PHP_URL_SCHEME );
+	if (! function_exists('esc_url')) {
+		function esc_url(string $url): string
+		{
+			$url    = trim($url);
+			$scheme = parse_url($url, PHP_URL_SCHEME);
 
 			if (
-				is_string( $scheme ) &&
-				! in_array( strtolower( $scheme ), [ 'http', 'https', 'ftp', 'ftps', 'mailto' ], true )
+				is_string($scheme) &&
+				! in_array(strtolower($scheme), ['http', 'https', 'ftp', 'ftps', 'mailto'], true)
 			) {
 				return '';
 			}
 
-			return esc_attr( $url );
+			return esc_attr($url);
 		}
 	}
 
-	if ( ! function_exists( 'esc_textarea' ) ) {
-		function esc_textarea( string $text ): string {
-			return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	if (! function_exists('esc_textarea')) {
+		function esc_textarea(string $text): string
+		{
+			return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
 		}
 	}
 
-	if ( ! function_exists( 'esc_html__' ) ) {
-		function esc_html__( string $text, string $domain = 'default' ): string {
-			unset( $domain );
+	if (! function_exists('esc_html__')) {
+		function esc_html__(string $text, string $domain = 'default'): string
+		{
+			unset($domain);
 
-			return esc_html( $text );
+			return esc_html($text);
 		}
 	}
 
-	if ( ! function_exists( 'esc_attr__' ) ) {
-		function esc_attr__( string $text, string $domain = 'default' ): string {
-			unset( $domain );
+	if (! function_exists('esc_attr__')) {
+		function esc_attr__(string $text, string $domain = 'default'): string
+		{
+			unset($domain);
 
-			return esc_attr( $text );
+			return esc_attr($text);
 		}
 	}
 
-	if ( ! function_exists( 'selected' ) ) {
-		function selected( $selected, $current = true, bool $display = true ): string {
+	if (! function_exists('selected')) {
+		function selected($selected, $current = true, bool $display = true): string
+		{
 			$result = '';
 
-			if ( (string) $selected === (string) $current ) {
+			if ((string) $selected === (string) $current) {
 				$result = 'selected="selected"';
 			}
 
-			if ( $display && '' !== $result ) {
+			if ($display && '' !== $result) {
 				echo 'selected="selected"';
 			}
 
@@ -2101,15 +2191,16 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'checked' ) ) {
-		function checked( $checked, $current = true, bool $display = true ): string {
+	if (! function_exists('checked')) {
+		function checked($checked, $current = true, bool $display = true): string
+		{
 			$result = '';
 
-			if ( (string) $checked === (string) $current ) {
+			if ((string) $checked === (string) $current) {
 				$result = 'checked="checked"';
 			}
 
-			if ( $display && '' !== $result ) {
+			if ($display && '' !== $result) {
 				echo 'checked="checked"';
 			}
 
@@ -2117,83 +2208,89 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( '__return_true' ) ) {
-		function __return_true(): bool {
+	if (! function_exists('__return_true')) {
+		function __return_true(): bool
+		{
 			return true;
 		}
 	}
 
-	if ( ! function_exists( '__return_false' ) ) {
-		function __return_false(): bool {
+	if (! function_exists('__return_false')) {
+		function __return_false(): bool
+		{
 			return false;
 		}
 	}
 
-	if ( ! function_exists( 'add_filter' ) ) {
-		function add_filter( string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
-			if ( ! isset( WordPressTestState::$filters[ $hook_name ] ) ) {
-				WordPressTestState::$filters[ $hook_name ] = [];
+	if (! function_exists('add_filter')) {
+		function add_filter(string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1): bool
+		{
+			if (! isset(WordPressTestState::$filters[$hook_name])) {
+				WordPressTestState::$filters[$hook_name] = [];
 			}
 
-			if ( ! isset( WordPressTestState::$filters[ $hook_name ][ $priority ] ) ) {
-				WordPressTestState::$filters[ $hook_name ][ $priority ] = [];
+			if (! isset(WordPressTestState::$filters[$hook_name][$priority])) {
+				WordPressTestState::$filters[$hook_name][$priority] = [];
 			}
 
-			WordPressTestState::$filters[ $hook_name ][ $priority ][] = [
+			WordPressTestState::$filters[$hook_name][$priority][] = [
 				'callback'      => $callback,
-				'accepted_args' => max( 0, $accepted_args ),
+				'accepted_args' => max(0, $accepted_args),
 			];
 
 			return true;
 		}
 	}
 
-	if ( ! function_exists( 'add_action' ) ) {
-		function add_action( string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
-			return add_filter( $hook_name, $callback, $priority, $accepted_args );
+	if (! function_exists('add_action')) {
+		function add_action(string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1): bool
+		{
+			return add_filter($hook_name, $callback, $priority, $accepted_args);
 		}
 	}
 
-	if ( ! function_exists( 'do_action' ) ) {
-		function do_action( string $hook_name, ...$args ): void {
-			WordPressTestState::$do_action_counts[ $hook_name ] =
-				( WordPressTestState::$do_action_counts[ $hook_name ] ?? 0 ) + 1;
+	if (! function_exists('do_action')) {
+		function do_action(string $hook_name, ...$args): void
+		{
+			WordPressTestState::$do_action_counts[$hook_name] =
+				(WordPressTestState::$do_action_counts[$hook_name] ?? 0) + 1;
 
-			if ( empty( WordPressTestState::$filters[ $hook_name ] ) ) {
+			if (empty(WordPressTestState::$filters[$hook_name])) {
 				return;
 			}
 
-			$callbacks = WordPressTestState::$filters[ $hook_name ];
-			ksort( $callbacks );
+			$callbacks = WordPressTestState::$filters[$hook_name];
+			ksort($callbacks);
 
-			foreach ( $callbacks as $entries ) {
-				foreach ( $entries as $entry ) {
-					$accepted_args = (int) ( $entry['accepted_args'] ?? 1 );
+			foreach ($callbacks as $entries) {
+				foreach ($entries as $entry) {
+					$accepted_args = (int) ($entry['accepted_args'] ?? 1);
 					$callback_args = 0 === $accepted_args
 						? []
-						: array_slice( $args, 0, $accepted_args );
-					call_user_func_array( $entry['callback'], $callback_args );
+						: array_slice($args, 0, $accepted_args);
+					call_user_func_array($entry['callback'], $callback_args);
 				}
 			}
 		}
 	}
 
-	if ( ! function_exists( 'apply_filters' ) ) {
-		function apply_filters( string $hook_name, $value, ...$args ) {
-			if ( empty( WordPressTestState::$filters[ $hook_name ] ) ) {
+	if (! function_exists('apply_filters')) {
+		function apply_filters(string $hook_name, $value, ...$args)
+		{
+			if (empty(WordPressTestState::$filters[$hook_name])) {
 				return $value;
 			}
 
-			$callbacks = WordPressTestState::$filters[ $hook_name ];
-			ksort( $callbacks );
+			$callbacks = WordPressTestState::$filters[$hook_name];
+			ksort($callbacks);
 
-			foreach ( $callbacks as $entries ) {
-				foreach ( $entries as $entry ) {
-					$accepted_args = (int) ( $entry['accepted_args'] ?? 1 );
+			foreach ($callbacks as $entries) {
+				foreach ($entries as $entry) {
+					$accepted_args = (int) ($entry['accepted_args'] ?? 1);
 					$callback_args = 0 === $accepted_args
 						? []
-						: array_slice( array_merge( [ $value ], $args ), 0, $accepted_args );
-					$value         = call_user_func_array( $entry['callback'], $callback_args );
+						: array_slice(array_merge([$value], $args), 0, $accepted_args);
+					$value         = call_user_func_array($entry['callback'], $callback_args);
 				}
 			}
 
@@ -2201,27 +2298,28 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'remove_filter' ) ) {
-		function remove_filter( string $hook_name, callable $callback, int $priority = 10 ): bool {
-			$entries = WordPressTestState::$filters[ $hook_name ][ $priority ] ?? null;
+	if (! function_exists('remove_filter')) {
+		function remove_filter(string $hook_name, callable $callback, int $priority = 10): bool
+		{
+			$entries = WordPressTestState::$filters[$hook_name][$priority] ?? null;
 
-			if ( ! is_array( $entries ) ) {
+			if (! is_array($entries)) {
 				return false;
 			}
 
-			foreach ( $entries as $index => $entry ) {
-				if ( ( $entry['callback'] ?? null ) !== $callback ) {
+			foreach ($entries as $index => $entry) {
+				if (($entry['callback'] ?? null) !== $callback) {
 					continue;
 				}
 
-				unset( WordPressTestState::$filters[ $hook_name ][ $priority ][ $index ] );
+				unset(WordPressTestState::$filters[$hook_name][$priority][$index]);
 
-				if ( [] === WordPressTestState::$filters[ $hook_name ][ $priority ] ) {
-					unset( WordPressTestState::$filters[ $hook_name ][ $priority ] );
+				if ([] === WordPressTestState::$filters[$hook_name][$priority]) {
+					unset(WordPressTestState::$filters[$hook_name][$priority]);
 				}
 
-				if ( [] === WordPressTestState::$filters[ $hook_name ] ) {
-					unset( WordPressTestState::$filters[ $hook_name ] );
+				if ([] === WordPressTestState::$filters[$hook_name]) {
+					unset(WordPressTestState::$filters[$hook_name]);
 				}
 
 				return true;
@@ -2231,41 +2329,20 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'remove_all_filters' ) ) {
-		function remove_all_filters( ?string $hook_name = null, $priority = false ): bool {
-			if ( null === $hook_name ) {
-				WordPressTestState::$filters = [];
-				return true;
-			}
-
-			if ( false === $priority ) {
-				unset( WordPressTestState::$filters[ $hook_name ] );
-				return true;
-			}
-
-			unset( WordPressTestState::$filters[ $hook_name ][ (int) $priority ] );
-
-			if ( [] === ( WordPressTestState::$filters[ $hook_name ] ?? [] ) ) {
-				unset( WordPressTestState::$filters[ $hook_name ] );
-			}
-
-			return true;
-		}
-	}
-
-	if ( ! function_exists( 'has_action' ) ) {
-		function has_action( string $hook_name, $callback = false ) {
-			if ( empty( WordPressTestState::$filters[ $hook_name ] ) ) {
+	if (! function_exists('has_action')) {
+		function has_action(string $hook_name, $callback = false)
+		{
+			if (empty(WordPressTestState::$filters[$hook_name])) {
 				return false;
 			}
 
-			if ( false === $callback ) {
+			if (false === $callback) {
 				return true;
 			}
 
-			foreach ( WordPressTestState::$filters[ $hook_name ] as $priority => $entries ) {
-				foreach ( $entries as $entry ) {
-					if ( ( $entry['callback'] ?? null ) === $callback ) {
+			foreach (WordPressTestState::$filters[$hook_name] as $priority => $entries) {
+				foreach ($entries as $entry) {
+					if (($entry['callback'] ?? null) === $callback) {
 						return $priority;
 					}
 				}
@@ -2275,83 +2352,86 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'has_filter' ) ) {
-		function has_filter( string $hook_name, $callback = false ) {
-			return has_action( $hook_name, $callback );
-		}
-	}
-
-	if ( ! function_exists( 'is_wp_error' ) ) {
-		function is_wp_error( $value ): bool {
+	if (! function_exists('is_wp_error')) {
+		function is_wp_error($value): bool
+		{
 			return $value instanceof WP_Error;
 		}
 	}
 
-	if ( ! function_exists( 'sanitize_key' ) ) {
-		function sanitize_key( string $key ): string {
-			$key = strtolower( $key );
+	if (! function_exists('sanitize_key')) {
+		function sanitize_key(string $key): string
+		{
+			$key = strtolower($key);
 
-			return preg_replace( '/[^a-z0-9_-]/', '', $key ) ?? '';
+			return preg_replace('/[^a-z0-9_-]/', '', $key) ?? '';
 		}
 	}
 
-	if ( ! function_exists( 'sanitize_title' ) ) {
-		function sanitize_title( string $title ): string {
-			$title = strtolower( sanitize_text_field( $title ) );
-			$title = preg_replace( '/[^a-z0-9_\s-]/', '', $title ) ?? '';
-			$title = preg_replace( '/[\s-]+/', '-', $title ) ?? '';
+	if (! function_exists('sanitize_title')) {
+		function sanitize_title(string $title): string
+		{
+			$title = strtolower(sanitize_text_field($title));
+			$title = preg_replace('/[^a-z0-9_\s-]/', '', $title) ?? '';
+			$title = preg_replace('/[\s-]+/', '-', $title) ?? '';
 
-			return trim( $title, '-' );
+			return trim($title, '-');
 		}
 	}
 
-	if ( ! function_exists( 'sanitize_text_field' ) ) {
-		function sanitize_text_field( $value ): string {
+	if (! function_exists('sanitize_text_field')) {
+		function sanitize_text_field($value): string
+		{
 			return trim(
 				preg_replace(
 					'/\s+/u',
 					' ',
-					wp_strip_all_tags( (string) $value )
+					wp_strip_all_tags((string) $value)
 				) ?? ''
 			);
 		}
 	}
 
-	if ( ! function_exists( 'absint' ) ) {
-		function absint( $maybeint ): int {
-			return abs( (int) $maybeint );
+	if (! function_exists('absint')) {
+		function absint($maybeint): int
+		{
+			return abs((int) $maybeint);
 		}
 	}
 
-	if ( ! function_exists( 'sanitize_url' ) ) {
-		function sanitize_url( $url, array $protocols = [] ): string {
-			return filter_var( (string) $url, FILTER_SANITIZE_URL ) ?: '';
+	if (! function_exists('sanitize_url')) {
+		function sanitize_url($url, array $protocols = []): string
+		{
+			return filter_var((string) $url, FILTER_SANITIZE_URL) ?: '';
 		}
 	}
 
-	if ( ! function_exists( 'sanitize_textarea_field' ) ) {
-		function sanitize_textarea_field( $value ): string {
+	if (! function_exists('sanitize_textarea_field')) {
+		function sanitize_textarea_field($value): string
+		{
 			return trim(
 				preg_replace(
 					'/[^\S\r\n]+/u',
 					' ',
-					wp_strip_all_tags( (string) $value )
+					wp_strip_all_tags((string) $value)
 				) ?? ''
 			);
 		}
 	}
 
-	if ( ! function_exists( 'rest_sanitize_boolean' ) ) {
-		function rest_sanitize_boolean( $value ): bool {
-			return in_array( $value, [ true, 1, '1', 'true', 'yes', 'on' ], true );
+	if (! function_exists('rest_sanitize_boolean')) {
+		function rest_sanitize_boolean($value): bool
+		{
+			return in_array($value, [true, 1, '1', 'true', 'yes', 'on'], true);
 		}
 	}
 
-	if ( ! function_exists( 'sanitize_html_class' ) ) {
-		function sanitize_html_class( string $class, string $fallback = '' ): string {
-			$sanitized = preg_replace( '/[^A-Za-z0-9_-]/', '', $class ) ?? '';
+	if (! function_exists('sanitize_html_class')) {
+		function sanitize_html_class(string $class, string $fallback = ''): string
+		{
+			$sanitized = preg_replace('/[^A-Za-z0-9_-]/', '', $class) ?? '';
 
-			if ( '' === $sanitized ) {
+			if ('' === $sanitized) {
 				return $fallback;
 			}
 
@@ -2359,80 +2439,89 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'wp_kses_post' ) ) {
-		function wp_kses_post( string $content ): string {
+	if (! function_exists('wp_kses_post')) {
+		function wp_kses_post(string $content): string
+		{
 			return $content;
 		}
 	}
 
-	if ( ! function_exists( 'admin_url' ) ) {
-		function admin_url( string $path = '' ): string {
-			$normalized = ltrim( $path, '/' );
+	if (! function_exists('admin_url')) {
+		function admin_url(string $path = ''): string
+		{
+			$normalized = ltrim($path, '/');
 
 			return 'https://example.test/wp-admin/' . $normalized;
 		}
 	}
 
-	if ( ! function_exists( 'rest_url' ) ) {
-		function rest_url( string $path = '' ): string {
-			$normalized = ltrim( $path, '/' );
+	if (! function_exists('rest_url')) {
+		function rest_url(string $path = ''): string
+		{
+			$normalized = ltrim($path, '/');
 
 			return 'https://example.test/wp-json/' . $normalized;
 		}
 	}
 
-	if ( ! function_exists( 'wp_create_nonce' ) ) {
-		function wp_create_nonce( string $action = '-1' ): string {
+	if (! function_exists('wp_create_nonce')) {
+		function wp_create_nonce(string $action = '-1'): string
+		{
 			return 'nonce-' . $action;
 		}
 	}
 
-	if ( ! function_exists( 'wp_get_theme' ) ) {
-		function wp_get_theme( ?string $stylesheet = null, ?string $theme_root = null ) {
-			unset( $stylesheet, $theme_root );
+	if (! function_exists('wp_get_theme')) {
+		function wp_get_theme(?string $stylesheet = null, ?string $theme_root = null)
+		{
+			unset($stylesheet, $theme_root);
 
-			return new \WP_Theme( WordPressTestState::$active_theme );
+			return new \WP_Theme(WordPressTestState::$active_theme);
 		}
 	}
 
-	if ( ! function_exists( 'get_current_screen' ) ) {
-		function get_current_screen() {
+	if (! function_exists('get_current_screen')) {
+		function get_current_screen()
+		{
 			return WordPressTestState::$current_screen;
 		}
 	}
 
-	if ( ! function_exists( 'wp_get_global_settings' ) ) {
-		function wp_get_global_settings(): array {
+	if (! function_exists('wp_get_global_settings')) {
+		function wp_get_global_settings(): array
+		{
 			return WordPressTestState::$global_settings;
 		}
 	}
 
-	if ( ! function_exists( 'wp_get_global_styles' ) ) {
-		function wp_get_global_styles(): array {
+	if (! function_exists('wp_get_global_styles')) {
+		function wp_get_global_styles(): array
+		{
 			return WordPressTestState::$global_styles;
 		}
 	}
 
-	if ( ! function_exists( 'get_block_templates' ) ) {
-		function get_block_templates( array $query = [], string $template_type = 'wp_template' ): array {
-			$templates = WordPressTestState::$block_templates[ $template_type ] ?? [];
+	if (! function_exists('get_block_templates')) {
+		function get_block_templates(array $query = [], string $template_type = 'wp_template'): array
+		{
+			$templates = WordPressTestState::$block_templates[$template_type] ?? [];
 			$result    = [];
 
-			foreach ( $templates as $template ) {
-				$template = is_object( $template ) ? $template : (object) $template;
+			foreach ($templates as $template) {
+				$template = is_object($template) ? $template : (object) $template;
 
-				if ( isset( $query['area'] ) && (string) ( $template->area ?? '' ) !== (string) $query['area'] ) {
+				if (isset($query['area']) && (string) ($template->area ?? '') !== (string) $query['area']) {
 					continue;
 				}
 
 				if (
-					! empty( $query['slug__in'] ) &&
-					! in_array( (string) ( $template->slug ?? '' ), (array) $query['slug__in'], true )
+					! empty($query['slug__in']) &&
+					! in_array((string) ($template->slug ?? ''), (array) $query['slug__in'], true)
 				) {
 					continue;
 				}
 
-				if ( isset( $query['wp_id'] ) && (int) ( $template->wp_id ?? 0 ) !== (int) $query['wp_id'] ) {
+				if (isset($query['wp_id']) && (int) ($template->wp_id ?? 0) !== (int) $query['wp_id']) {
 					continue;
 				}
 
@@ -2443,10 +2532,11 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'get_block_template' ) ) {
-		function get_block_template( string $id, string $template_type = 'wp_template' ) {
-			foreach ( get_block_templates( [], $template_type ) as $template ) {
-				if ( (string) ( $template->id ?? '' ) === $id ) {
+	if (! function_exists('get_block_template')) {
+		function get_block_template(string $id, string $template_type = 'wp_template')
+		{
+			foreach (get_block_templates([], $template_type) as $template) {
+				if ((string) ($template->id ?? '') === $id) {
 					return $template;
 				}
 			}
@@ -2455,82 +2545,83 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'get_posts' ) ) {
-		function get_posts( array $args = [] ): array {
+	if (! function_exists('get_posts')) {
+		function get_posts(array $args = []): array
+		{
 			WordPressTestState::$get_posts_calls[] = $args;
 
-			$posts     = array_values( WordPressTestState::$posts );
-			$post_type = isset( $args['post_type'] ) ? (string) $args['post_type'] : '';
-			$post_status = isset( $args['post_status'] ) ? $args['post_status'] : 'publish';
-			$search      = isset( $args['s'] ) ? sanitize_text_field( (string) $args['s'] ) : '';
-			$orderby     = isset( $args['orderby'] ) ? sanitize_key( (string) $args['orderby'] ) : 'date';
-			$order       = strtoupper( (string) ( $args['order'] ?? 'DESC' ) );
+			$posts     = array_values(WordPressTestState::$posts);
+			$post_type = isset($args['post_type']) ? (string) $args['post_type'] : '';
+			$post_status = isset($args['post_status']) ? $args['post_status'] : 'publish';
+			$search      = isset($args['s']) ? sanitize_text_field((string) $args['s']) : '';
+			$orderby     = isset($args['orderby']) ? sanitize_key((string) $args['orderby']) : 'date';
+			$order       = strtoupper((string) ($args['order'] ?? 'DESC'));
 
-			if ( '' !== $post_type ) {
+			if ('' !== $post_type) {
 				$posts = array_values(
 					array_filter(
 						$posts,
-						static fn ( object $post ): bool => (string) ( $post->post_type ?? '' ) === $post_type
+						static fn(object $post): bool => (string) ($post->post_type ?? '') === $post_type
 					)
 				);
 			}
 
-		if ( 'any' !== $post_status ) {
-			$allowed_statuses = is_array( $post_status ) ? $post_status : [ $post_status ];
-			$posts            = array_values(
-				array_filter(
+			if ('any' !== $post_status) {
+				$allowed_statuses = is_array($post_status) ? $post_status : [$post_status];
+				$posts            = array_values(
+					array_filter(
 						$posts,
-						static fn ( object $post ): bool => in_array(
-							(string) ( $post->post_status ?? '' ),
-							array_map( 'strval', $allowed_statuses ),
+						static fn(object $post): bool => in_array(
+							(string) ($post->post_status ?? ''),
+							array_map('strval', $allowed_statuses),
 							true
 						)
-				)
-			);
-		}
+					)
+				);
+			}
 
-		if ( isset( $args['author'] ) ) {
-			$author_id = (int) $args['author'];
-			$posts     = array_values(
-				array_filter(
-					$posts,
-					static fn ( object $post ): bool => (int) ( $post->post_author ?? 0 ) === $author_id
-				)
-			);
-		}
+			if (isset($args['author'])) {
+				$author_id = (int) $args['author'];
+				$posts     = array_values(
+					array_filter(
+						$posts,
+						static fn(object $post): bool => (int) ($post->post_author ?? 0) === $author_id
+					)
+				);
+			}
 
-		if ( ! empty( $args['post__not_in'] ) && is_array( $args['post__not_in'] ) ) {
-			$excluded = array_map( 'intval', $args['post__not_in'] );
-			$posts    = array_values(
-				array_filter(
-					$posts,
-					static fn ( object $post ): bool => ! in_array( (int) ( $post->ID ?? 0 ), $excluded, true )
-				)
-			);
-		}
+			if (! empty($args['post__not_in']) && is_array($args['post__not_in'])) {
+				$excluded = array_map('intval', $args['post__not_in']);
+				$posts    = array_values(
+					array_filter(
+						$posts,
+						static fn(object $post): bool => ! in_array((int) ($post->ID ?? 0), $excluded, true)
+					)
+				);
+			}
 
-		if ( isset( $args['has_password'] ) && false === $args['has_password'] ) {
-			$posts = array_values(
-				array_filter(
-					$posts,
-					static fn ( object $post ): bool => '' === (string) ( $post->post_password ?? '' )
-				)
-			);
-		}
+			if (isset($args['has_password']) && false === $args['has_password']) {
+				$posts = array_values(
+					array_filter(
+						$posts,
+						static fn(object $post): bool => '' === (string) ($post->post_password ?? '')
+					)
+				);
+			}
 
-		if ( '' !== $search ) {
-			$search = strtolower( $search );
+			if ('' !== $search) {
+				$search = strtolower($search);
 				$posts  = array_values(
 					array_filter(
 						$posts,
-						static function ( object $post ) use ( $search ): bool {
+						static function (object $post) use ($search): bool {
 							$haystacks = [
-								strtolower( (string) ( $post->post_title ?? '' ) ),
-								strtolower( (string) ( $post->post_name ?? '' ) ),
+								strtolower((string) ($post->post_title ?? '')),
+								strtolower((string) ($post->post_name ?? '')),
 							];
 
-							foreach ( $haystacks as $haystack ) {
-								if ( str_contains( $haystack, $search ) ) {
+							foreach ($haystacks as $haystack) {
+								if (str_contains($haystack, $search)) {
 									return true;
 								}
 							}
@@ -2543,16 +2634,16 @@ namespace {
 
 			usort(
 				$posts,
-				static function ( object $left, object $right ) use ( $orderby, $order ): int {
-					$comparison = match ( $orderby ) {
+				static function (object $left, object $right) use ($orderby, $order): int {
+					$comparison = match ($orderby) {
 						'title' => strcasecmp(
-							(string) ( $left->post_title ?? '' ),
-							(string) ( $right->post_title ?? '' )
+							(string) ($left->post_title ?? ''),
+							(string) ($right->post_title ?? '')
 						),
-						'id' => (int) ( $left->ID ?? 0 ) <=> (int) ( $right->ID ?? 0 ),
+						'id' => (int) ($left->ID ?? 0) <=> (int) ($right->ID ?? 0),
 						default => strcmp(
-							(string) ( $left->post_date_gmt ?? '' ),
-							(string) ( $right->post_date_gmt ?? '' )
+							(string) ($left->post_date_gmt ?? ''),
+							(string) ($right->post_date_gmt ?? '')
 						),
 					};
 
@@ -2560,188 +2651,200 @@ namespace {
 				}
 			);
 
-			$offset = isset( $args['offset'] ) ? max( 0, (int) $args['offset'] ) : 0;
-			$limit  = isset( $args['posts_per_page'] ) && (int) $args['posts_per_page'] >= 0
+			$offset = isset($args['offset']) ? max(0, (int) $args['offset']) : 0;
+			$limit  = isset($args['posts_per_page']) && (int) $args['posts_per_page'] >= 0
 				? (int) $args['posts_per_page']
 				: null;
 
-			if ( $offset > 0 || null !== $limit ) {
-				$posts = array_slice( $posts, $offset, $limit );
+			if ($offset > 0 || null !== $limit) {
+				$posts = array_slice($posts, $offset, $limit);
 			}
 
 			return $posts;
 		}
 	}
 
-	if ( ! function_exists( 'get_post_meta' ) ) {
-		function get_post_meta( int $post_id, string $key = '', bool $single = false ) {
-			$meta = WordPressTestState::$post_meta[ $post_id ] ?? [];
+	if (! function_exists('get_post_meta')) {
+		function get_post_meta(int $post_id, string $key = '', bool $single = false)
+		{
+			$meta = WordPressTestState::$post_meta[$post_id] ?? [];
 
-			if ( '' === $key ) {
+			if ('' === $key) {
 				return $meta;
 			}
 
-			if ( ! array_key_exists( $key, $meta ) ) {
+			if (! array_key_exists($key, $meta)) {
 				return $single ? '' : [];
 			}
 
-			$value = $meta[ $key ];
+			$value = $meta[$key];
 
-			if ( $single ) {
+			if ($single) {
 				return $value;
 			}
 
-			return is_array( $value ) ? $value : [ $value ];
+			return is_array($value) ? $value : [$value];
 		}
 	}
 
-	if ( ! function_exists( 'wp_json_encode' ) ) {
-		function wp_json_encode( $value, int $flags = 0, int $depth = 512 ) {
-			return json_encode( $value, $flags | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE, $depth );
+	if (! function_exists('wp_json_encode')) {
+		function wp_json_encode($value, int $flags = 0, int $depth = 512)
+		{
+			return json_encode($value, $flags | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE, $depth);
 		}
 	}
 
-	if ( ! function_exists( 'wp_register_ability' ) ) {
-		function wp_register_ability( string $id, array $args ): void {
-			WordPressTestState::$raw_registered_abilities[ $id ] = $args;
+	if (! function_exists('wp_register_ability')) {
+		function wp_register_ability(string $id, array $args): void
+		{
+			WordPressTestState::$raw_registered_abilities[$id] = $args;
 			$ability_args                                      = $args;
 
 			$ability_class = $ability_args['ability_class'] ?? null;
-			if ( is_string( $ability_class ) && class_exists( $ability_class ) ) {
-				$ability = new $ability_class( $id, $ability_args );
+			if (is_string($ability_class) && class_exists($ability_class)) {
+				$ability = new $ability_class($id, $ability_args);
 
-				foreach ( [ 'input_schema', 'output_schema', 'meta', 'category' ] as $method_name ) {
-					if ( is_callable( [ $ability, $method_name ] ) ) {
-						$ability_args[ $method_name ] = $ability->{$method_name}();
+				foreach (['input_schema', 'output_schema', 'meta', 'category'] as $method_name) {
+					if (is_callable([$ability, $method_name])) {
+						$ability_args[$method_name] = $ability->{$method_name}();
 					}
 				}
 
-				if ( is_callable( [ $ability, 'execute_callback' ] ) ) {
-					$ability_args['execute_callback'] = [ $ability, 'execute_callback' ];
+				if (is_callable([$ability, 'execute_callback'])) {
+					$ability_args['execute_callback'] = [$ability, 'execute_callback'];
 				}
 
-				if ( is_callable( [ $ability, 'permission_callback' ] ) ) {
-					$ability_args['permission_callback'] = [ $ability, 'permission_callback' ];
+				if (is_callable([$ability, 'permission_callback'])) {
+					$ability_args['permission_callback'] = [$ability, 'permission_callback'];
 				}
 			}
 
-			WordPressTestState::$registered_abilities[ $id ] = $ability_args;
+			WordPressTestState::$registered_abilities[$id] = $ability_args;
 		}
 	}
 
-	if ( ! function_exists( 'wp_register_ability_category' ) ) {
-		function wp_register_ability_category( string $id, array $args ): void {
-			WordPressTestState::$registered_ability_categories[ $id ] = $args;
+	if (! function_exists('wp_register_ability_category')) {
+		function wp_register_ability_category(string $id, array $args): void
+		{
+			WordPressTestState::$registered_ability_categories[$id] = $args;
 		}
 	}
 
-	if ( ! function_exists( 'register_rest_route' ) ) {
-		function register_rest_route( string $namespace, string $route, array $args = [], bool $override = false ): bool {
-			unset( $override );
+	if (! function_exists('register_rest_route')) {
+		function register_rest_route(string $namespace, string $route, array $args = [], bool $override = false): bool
+		{
+			unset($override);
 
-			$route_path   = '/' . trim( $namespace, '/' ) . '/' . ltrim( $route, '/' );
+			$route_path   = '/' . trim($namespace, '/') . '/' . ltrim($route, '/');
 			$is_list      = [] === $args
-				|| array_keys( $args ) === range( 0, count( $args ) - 1 );
+				|| array_keys($args) === range(0, count($args) - 1);
 			$route_config = [
-				'namespace' => trim( $namespace, '/' ),
-				'route'     => '/' . ltrim( $route, '/' ),
+				'namespace' => trim($namespace, '/'),
+				'route'     => '/' . ltrim($route, '/'),
 				'path'      => $route_path,
-				'endpoints' => $is_list ? $args : [ $args ],
+				'endpoints' => $is_list ? $args : [$args],
 				'raw'       => $args,
 			];
 
-			WordPressTestState::$rest_routes[ $route_path ] = $route_config;
+			WordPressTestState::$rest_routes[$route_path] = $route_config;
 
 			return true;
 		}
 	}
 
-	if ( ! function_exists( 'register_block_pattern_category' ) ) {
-		function register_block_pattern_category( string $name, array $properties ): bool {
-			WordPressTestState::$registered_block_pattern_categories[ $name ] = $properties;
+	if (! function_exists('register_block_pattern_category')) {
+		function register_block_pattern_category(string $name, array $properties): bool
+		{
+			WordPressTestState::$registered_block_pattern_categories[$name] = $properties;
 
 			return true;
 		}
 	}
 
-	if ( ! function_exists( 'wp_remote_post' ) ) {
-		function wp_remote_post( string $url, array $args = [] ) {
+	if (! function_exists('wp_remote_post')) {
+		function wp_remote_post(string $url, array $args = [])
+		{
 			WordPressTestState::$last_remote_post = [
 				'url'  => $url,
 				'args' => $args,
 			];
 			WordPressTestState::$remote_post_calls[] = WordPressTestState::$last_remote_post;
 
-			if ( [] !== WordPressTestState::$remote_post_responses ) {
-				return array_shift( WordPressTestState::$remote_post_responses );
+			if ([] !== WordPressTestState::$remote_post_responses) {
+				return array_shift(WordPressTestState::$remote_post_responses);
 			}
 
-			if ( empty( WordPressTestState::$remote_post_response ) ) {
-				return new WP_Error( 'missing_remote_stub', 'No remote response stub configured.' );
+			if (empty(WordPressTestState::$remote_post_response)) {
+				return new WP_Error('missing_remote_stub', 'No remote response stub configured.');
 			}
 
 			return WordPressTestState::$remote_post_response;
 		}
 	}
 
-	if ( ! function_exists( 'wp_remote_get' ) ) {
-		function wp_remote_get( string $url, array $args = [] ) {
+	if (! function_exists('wp_remote_get')) {
+		function wp_remote_get(string $url, array $args = [])
+		{
 			WordPressTestState::$last_remote_get = [
 				'url'  => $url,
 				'args' => $args,
 			];
 			WordPressTestState::$remote_get_calls[] = WordPressTestState::$last_remote_get;
 
-			if ( [] !== WordPressTestState::$remote_get_responses ) {
-				return array_shift( WordPressTestState::$remote_get_responses );
+			if ([] !== WordPressTestState::$remote_get_responses) {
+				return array_shift(WordPressTestState::$remote_get_responses);
 			}
 
-			if ( empty( WordPressTestState::$remote_get_response ) ) {
-				return new WP_Error( 'missing_remote_stub', 'No remote response stub configured.' );
+			if (empty(WordPressTestState::$remote_get_response)) {
+				return new WP_Error('missing_remote_stub', 'No remote response stub configured.');
 			}
 
 			return WordPressTestState::$remote_get_response;
 		}
 	}
 
-	if ( ! function_exists( 'wp_remote_request' ) ) {
-		function wp_remote_request( string $url, array $args = [] ) {
-			$method = strtoupper( (string) ( $args['method'] ?? 'GET' ) );
+	if (! function_exists('wp_remote_request')) {
+		function wp_remote_request(string $url, array $args = [])
+		{
+			$method = strtoupper((string) ($args['method'] ?? 'GET'));
 
-			if ( 'GET' === $method ) {
-				return wp_remote_get( $url, $args );
+			if ('GET' === $method) {
+				return wp_remote_get($url, $args);
 			}
 
-			return wp_remote_post( $url, $args );
+			return wp_remote_post($url, $args);
 		}
 	}
 
-	if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
-		function wp_remote_retrieve_body( $response ): string {
-			return is_array( $response ) ? (string) ( $response['body'] ?? '' ) : '';
+	if (! function_exists('wp_remote_retrieve_body')) {
+		function wp_remote_retrieve_body($response): string
+		{
+			return is_array($response) ? (string) ($response['body'] ?? '') : '';
 		}
 	}
 
-	if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
-		function wp_remote_retrieve_response_code( $response ): int {
-			if ( ! is_array( $response ) ) {
+	if (! function_exists('wp_remote_retrieve_response_code')) {
+		function wp_remote_retrieve_response_code($response): int
+		{
+			if (! is_array($response)) {
 				return 0;
 			}
 
-			return (int) ( $response['response']['code'] ?? 0 );
+			return (int) ($response['response']['code'] ?? 0);
 		}
 	}
 
-	if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
-		function wp_remote_retrieve_header( $response, string $header ) {
-			if ( ! is_array( $response ) || ! is_array( $response['headers'] ?? null ) ) {
+	if (! function_exists('wp_remote_retrieve_header')) {
+		function wp_remote_retrieve_header($response, string $header)
+		{
+			if (! is_array($response) || ! is_array($response['headers'] ?? null)) {
 				return false;
 			}
 
-			$normalized_header = strtolower( $header );
+			$normalized_header = strtolower($header);
 
-			foreach ( $response['headers'] as $key => $value ) {
-				if ( strtolower( (string) $key ) === $normalized_header ) {
+			foreach ($response['headers'] as $key => $value) {
+				if (strtolower((string) $key) === $normalized_header) {
 					return $value;
 				}
 			}
@@ -2750,25 +2853,28 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'wp_strip_all_tags' ) ) {
-		function wp_strip_all_tags( string $text ): string {
+	if (! function_exists('wp_strip_all_tags')) {
+		function wp_strip_all_tags(string $text): string
+		{
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- This test bootstrap defines the WordPress wrapper when core is unavailable.
-			return strip_tags( $text );
+			return strip_tags($text);
 		}
 	}
 
-	if ( ! function_exists( 'wp_unslash' ) ) {
-		function wp_unslash( $value ) {
-			if ( is_array( $value ) ) {
-				return array_map( 'wp_unslash', $value );
+	if (! function_exists('wp_unslash')) {
+		function wp_unslash($value)
+		{
+			if (is_array($value)) {
+				return array_map('wp_unslash', $value);
 			}
 
-			return is_string( $value ) ? stripslashes( $value ) : $value;
+			return is_string($value) ? stripslashes($value) : $value;
 		}
 	}
 
-	if ( ! function_exists( 'add_settings_error' ) ) {
-		function add_settings_error( string $setting, string $code, string $message, string $type = 'error' ): void {
+	if (! function_exists('add_settings_error')) {
+		function add_settings_error(string $setting, string $code, string $message, string $type = 'error'): void
+		{
 			WordPressTestState::$settings_errors[] = [
 				'setting' => $setting,
 				'code'    => $code,
@@ -2778,73 +2884,77 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'get_settings_errors' ) ) {
-		function get_settings_errors( string $setting = '', bool $sanitize = false ): array {
-			if ( ! empty( $_GET['settings-updated'] ) ) {
-				$transient_errors = get_transient( 'settings_errors' );
+	if (! function_exists('get_settings_errors')) {
+		function get_settings_errors(string $setting = '', bool $sanitize = false): array
+		{
+			if (! empty($_GET['settings-updated'])) {
+				$transient_errors = get_transient('settings_errors');
 
-				if ( is_array( $transient_errors ) && [] !== $transient_errors ) {
+				if (is_array($transient_errors) && [] !== $transient_errors) {
 					WordPressTestState::$settings_errors = array_merge(
 						WordPressTestState::$settings_errors,
 						$transient_errors
 					);
-					delete_transient( 'settings_errors' );
+					delete_transient('settings_errors');
 				}
 			}
 
-			if ( '' === $setting ) {
+			if ('' === $setting) {
 				return WordPressTestState::$settings_errors;
 			}
 
 			return array_values(
 				array_filter(
 					WordPressTestState::$settings_errors,
-					static fn ( array $details ): bool => ( $details['setting'] ?? '' ) === $setting
+					static fn(array $details): bool => ($details['setting'] ?? '') === $setting
 				)
 			);
 		}
 	}
 
-	if ( ! function_exists( 'settings_errors' ) ) {
-		function settings_errors( string $setting = '', bool $sanitize = false, bool $hide_on_update = false ): void {
-			if ( $hide_on_update && ! empty( $_GET['settings-updated'] ) ) {
+	if (! function_exists('settings_errors')) {
+		function settings_errors(string $setting = '', bool $sanitize = false, bool $hide_on_update = false): void
+		{
+			if ($hide_on_update && ! empty($_GET['settings-updated'])) {
 				return;
 			}
 
-			$settings_errors = get_settings_errors( $setting, $sanitize );
+			$settings_errors = get_settings_errors($setting, $sanitize);
 
-			if ( [] === $settings_errors ) {
+			if ([] === $settings_errors) {
 				return;
 			}
 
-			foreach ( $settings_errors as $details ) {
-				$type = (string) ( $details['type'] ?? 'error' );
+			foreach ($settings_errors as $details) {
+				$type = (string) ($details['type'] ?? 'error');
 
-				if ( 'updated' === $type ) {
+				if ('updated' === $type) {
 					$type = 'success';
 				}
 
 				printf(
 					"<div class='notice notice-%s settings-error'><p><strong>%s</strong></p></div>\n",
-					esc_attr( $type ),
-					esc_html( (string) ( $details['message'] ?? '' ) )
+					esc_attr($type),
+					esc_html((string) ($details['message'] ?? ''))
 				);
 			}
 		}
 	}
 
-	if ( ! function_exists( 'settings_fields' ) ) {
-		function settings_fields( string $option_group ): void {
+	if (! function_exists('settings_fields')) {
+		function settings_fields(string $option_group): void
+		{
 			printf(
 				'<input type="hidden" name="option_page" value="%s" /><input type="hidden" name="action" value="update" />',
-				esc_attr( $option_group )
+				esc_attr($option_group)
 			);
 		}
 	}
 
-	if ( ! function_exists( 'register_setting' ) ) {
-		function register_setting( string $option_group, string $option_name, array $args = [] ): void {
-			$GLOBALS['wp_registered_settings'][ $option_name ] = array_merge(
+	if (! function_exists('register_setting')) {
+		function register_setting(string $option_group, string $option_name, array $args = []): void
+		{
+			$GLOBALS['wp_registered_settings'][$option_name] = array_merge(
 				$args,
 				[
 					'option_group' => $option_group,
@@ -2854,14 +2964,14 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'add_settings_section' ) ) {
+	if (! function_exists('add_settings_section')) {
 		function add_settings_section(
 			string $id,
 			string $title,
 			callable $callback,
 			string $page
 		): void {
-			$GLOBALS['wp_settings_sections'][ $page ][ $id ] = [
+			$GLOBALS['wp_settings_sections'][$page][$id] = [
 				'id'       => $id,
 				'title'    => $title,
 				'callback' => $callback,
@@ -2869,7 +2979,7 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'add_settings_field' ) ) {
+	if (! function_exists('add_settings_field')) {
 		function add_settings_field(
 			string $id,
 			string $title,
@@ -2878,7 +2988,7 @@ namespace {
 			string $section = 'default',
 			array $args = []
 		): void {
-			$GLOBALS['wp_settings_fields'][ $page ][ $section ][ $id ] = [
+			$GLOBALS['wp_settings_fields'][$page][$section][$id] = [
 				'id'       => $id,
 				'title'    => $title,
 				'callback' => $callback,
@@ -2887,35 +2997,32 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'do_settings_sections' ) ) {
-		function do_settings_sections( string $page ): void {
-			unset( $page );
-		}
-	}
-
-	if ( ! function_exists( 'submit_button' ) ) {
-		function submit_button( string $text = 'Save Changes' ): void {
+	if (! function_exists('submit_button')) {
+		function submit_button(string $text = 'Save Changes'): void
+		{
 			printf(
 				'<button type="submit">%s</button>',
-				esc_html( $text )
+				esc_html($text)
 			);
 		}
 	}
 
-	if ( ! function_exists( 'get_post' ) ) {
-		function get_post( $post_id = null ) {
-			if ( $post_id === null ) {
+	if (! function_exists('get_post')) {
+		function get_post($post_id = null)
+		{
+			if ($post_id === null) {
 				return null;
 			}
 
-			$id = (int) ( is_object( $post_id ) ? ( $post_id->ID ?? 0 ) : $post_id );
+			$id = (int) (is_object($post_id) ? ($post_id->ID ?? 0) : $post_id);
 
-			return WordPressTestState::$posts[ $id ] ?? null;
+			return WordPressTestState::$posts[$id] ?? null;
 		}
 	}
 
-	if ( ! class_exists( 'WP_Post' ) ) {
-		class WP_Post {
+	if (! class_exists('WP_Post')) {
+		class WP_Post
+		{
 
 			public int $ID = 0;
 
@@ -2929,20 +3036,21 @@ namespace {
 
 			public string $post_type = 'post';
 
-		public int $post_author = 0;
+			public int $post_author = 0;
 
-		public string $post_password = '';
+			public string $post_password = '';
 
-		public string $post_date = '';
+			public string $post_date = '';
 
-		public string $post_date_gmt = '';
+			public string $post_date_gmt = '';
 
-		/**
-		 * @param array<string, mixed> $fields
+			/**
+			 * @param array<string, mixed> $fields
 			 */
-			public function __construct( array $fields = [] ) {
-				foreach ( $fields as $key => $value ) {
-					if ( property_exists( $this, $key ) ) {
+			public function __construct(array $fields = [])
+			{
+				foreach ($fields as $key => $value) {
+					if (property_exists($this, $key)) {
 						$this->{$key} = $value;
 					}
 				}
@@ -2950,26 +3058,28 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'mysql2date' ) ) {
-		function mysql2date( string $format, string $date, bool $translate = true ): string {
-			unset( $translate );
+	if (! function_exists('mysql2date')) {
+		function mysql2date(string $format, string $date, bool $translate = true): string
+		{
+			unset($translate);
 
-			if ( '' === $date ) {
+			if ('' === $date) {
 				return '';
 			}
 
-			$timestamp = strtotime( $date );
-			if ( false === $timestamp ) {
+			$timestamp = strtotime($date);
+			if (false === $timestamp) {
 				return '';
 			}
 
-			return date( $format, $timestamp );
+			return date($format, $timestamp);
 		}
 	}
 
-	if ( ! function_exists( 'setup_postdata' ) ) {
-		function setup_postdata( $post ): bool {
-			if ( $post instanceof WP_Post ) {
+	if (! function_exists('setup_postdata')) {
+		function setup_postdata($post): bool
+		{
+			if ($post instanceof WP_Post) {
 				WordPressTestState::$current_post = $post;
 
 				return true;
@@ -2979,56 +3089,59 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'wp_reset_postdata' ) ) {
-		function wp_reset_postdata(): void {
+	if (! function_exists('wp_reset_postdata')) {
+		function wp_reset_postdata(): void
+		{
 			WordPressTestState::$current_post = null;
 		}
 	}
 
-	if ( ! function_exists( 'register_block_type' ) ) {
-		function register_block_type( string $name, array $args = [] ): object {
-			\WP_Block_Type_Registry::get_instance()->register( $name, $args );
-			$registered = \WP_Block_Type_Registry::get_instance()->get_registered( $name );
+	if (! function_exists('register_block_type')) {
+		function register_block_type(string $name, array $args = []): object
+		{
+			\WP_Block_Type_Registry::get_instance()->register($name, $args);
+			$registered = \WP_Block_Type_Registry::get_instance()->get_registered($name);
 
-			return is_object( $registered )
+			return is_object($registered)
 				? $registered
-				: (object) array_merge( $args, [ 'name' => $name ] );
+				: (object) array_merge($args, ['name' => $name]);
 		}
 	}
 
-	if ( ! function_exists( 'render_block' ) ) {
-		function render_block( array $block ): string {
+	if (! function_exists('render_block')) {
+		function render_block(array $block): string
+		{
 			$name = $block['blockName'] ?? null;
 
-			if ( null === $name ) {
-				return (string) ( $block['innerHTML'] ?? '' );
+			if (null === $name) {
+				return (string) ($block['innerHTML'] ?? '');
 			}
 
 			$rendered_inner  = '';
-			$inner_blocks    = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+			$inner_blocks    = is_array($block['innerBlocks'] ?? null) ? $block['innerBlocks'] : [];
 			$inner_block_idx = 0;
-			$inner_content   = $block['innerContent'] ?? [ $block['innerHTML'] ?? '' ];
+			$inner_content   = $block['innerContent'] ?? [$block['innerHTML'] ?? ''];
 
-			if ( ! is_array( $inner_content ) ) {
-				$inner_content = [ (string) $inner_content ];
+			if (! is_array($inner_content)) {
+				$inner_content = [(string) $inner_content];
 			}
 
-			foreach ( $inner_content as $chunk ) {
-				if ( is_string( $chunk ) ) {
+			foreach ($inner_content as $chunk) {
+				if (is_string($chunk)) {
 					$rendered_inner .= $chunk;
 					continue;
 				}
 
-				$next = $inner_blocks[ $inner_block_idx++ ] ?? null;
-				if ( is_array( $next ) ) {
-					$rendered_inner .= render_block( $next );
+				$next = $inner_blocks[$inner_block_idx++] ?? null;
+				if (is_array($next)) {
+					$rendered_inner .= render_block($next);
 				}
 			}
 
-			$registered      = \WP_Block_Type_Registry::get_instance()->get_registered( (string) $name );
-			$render_callback = is_object( $registered ) ? ( $registered->render_callback ?? null ) : null;
+			$registered      = \WP_Block_Type_Registry::get_instance()->get_registered((string) $name);
+			$render_callback = is_object($registered) ? ($registered->render_callback ?? null) : null;
 
-			if ( is_callable( $render_callback ) ) {
+			if (is_callable($render_callback)) {
 				return (string) call_user_func(
 					$render_callback,
 					$block['attrs'] ?? [],
@@ -3041,31 +3154,32 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'parse_blocks' ) ) {
-		function parse_blocks( string $content ): array {
-			if ( '' === $content ) {
+	if (! function_exists('parse_blocks')) {
+		function parse_blocks(string $content): array
+		{
+			if ('' === $content) {
 				return [];
 			}
 
 			$blocks = [];
 			$offset = 0;
-			$length = strlen( $content );
+			$length = strlen($content);
 
-			while ( $offset < $length ) {
-				$next = _flavor_agent_parse_next_block( $content, $offset );
+			while ($offset < $length) {
+				$next = _flavor_agent_parse_next_block($content, $offset);
 
-				if ( null === $next ) {
-					$remainder = substr( $content, $offset );
-					if ( '' !== $remainder ) {
-						$blocks[] = _flavor_agent_make_freeform_block( $remainder );
+				if (null === $next) {
+					$remainder = substr($content, $offset);
+					if ('' !== $remainder) {
+						$blocks[] = _flavor_agent_make_freeform_block($remainder);
 					}
 					break;
 				}
 
-				if ( $next['start'] > $offset ) {
-					$freeform = substr( $content, $offset, $next['start'] - $offset );
-					if ( '' !== $freeform ) {
-						$blocks[] = _flavor_agent_make_freeform_block( $freeform );
+				if ($next['start'] > $offset) {
+					$freeform = substr($content, $offset, $next['start'] - $offset);
+					if ('' !== $freeform) {
+						$blocks[] = _flavor_agent_make_freeform_block($freeform);
 					}
 				}
 
@@ -3077,44 +3191,46 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( '_flavor_agent_make_freeform_block' ) ) {
-		function _flavor_agent_make_freeform_block( string $html ): array {
+	if (! function_exists('_flavor_agent_make_freeform_block')) {
+		function _flavor_agent_make_freeform_block(string $html): array
+		{
 			return [
 				'blockName'    => null,
 				'attrs'        => [],
 				'innerBlocks'  => [],
 				'innerHTML'    => $html,
-				'innerContent' => [ $html ],
+				'innerContent' => [$html],
 			];
 		}
 	}
 
-	if ( ! function_exists( '_flavor_agent_parse_next_block' ) ) {
-		function _flavor_agent_parse_next_block( string $content, int $offset ): ?array {
+	if (! function_exists('_flavor_agent_parse_next_block')) {
+		function _flavor_agent_parse_next_block(string $content, int $offset): ?array
+		{
 			$pattern = '/<!--\s+wp:([a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?)\s*(\{.*?\})?\s*(\/)?-->/s';
 
-			if ( ! preg_match( $pattern, $content, $match, PREG_OFFSET_CAPTURE, $offset ) ) {
+			if (! preg_match($pattern, $content, $match, PREG_OFFSET_CAPTURE, $offset)) {
 				return null;
 			}
 
 			$full_match   = $match[0][0];
 			$match_pos    = $match[0][1];
 			$short_name   = $match[1][0];
-			$block_name   = str_contains( $short_name, '/' ) ? $short_name : 'core/' . $short_name;
+			$block_name   = str_contains($short_name, '/') ? $short_name : 'core/' . $short_name;
 			$attrs_json   = $match[2][0] ?? '';
-			$self_closing = ! empty( $match[3][0] );
+			$self_closing = ! empty($match[3][0]);
 
 			$attrs = [];
-			if ( '' !== $attrs_json ) {
-				$decoded = json_decode( $attrs_json, true );
-				if ( is_array( $decoded ) ) {
+			if ('' !== $attrs_json) {
+				$decoded = json_decode($attrs_json, true);
+				if (is_array($decoded)) {
 					$attrs = $decoded;
 				}
 			}
 
-			$opening_end = $match_pos + strlen( $full_match );
+			$opening_end = $match_pos + strlen($full_match);
 
-			if ( $self_closing ) {
+			if ($self_closing) {
 				return [
 					'start'  => $match_pos,
 					'end'    => $opening_end,
@@ -3129,39 +3245,39 @@ namespace {
 			}
 
 			$close_tag      = '<!-- /wp:' . $short_name . ' -->';
-			$same_open_regex = '/<!--\s+wp:' . preg_quote( $short_name, '/' ) . '(?:\s+\{.*?\})?\s*(\/)?-->/s';
+			$same_open_regex = '/<!--\s+wp:' . preg_quote($short_name, '/') . '(?:\s+\{.*?\})?\s*(\/)?-->/s';
 			$depth           = 1;
 			$scan_pos        = $opening_end;
 			$close_pos       = -1;
 
-			while ( $scan_pos < strlen( $content ) ) {
-				$next_open  = preg_match( $same_open_regex, $content, $same_open_match, PREG_OFFSET_CAPTURE, $scan_pos )
+			while ($scan_pos < strlen($content)) {
+				$next_open  = preg_match($same_open_regex, $content, $same_open_match, PREG_OFFSET_CAPTURE, $scan_pos)
 					? $same_open_match[0][1]
 					: false;
-				$next_close = strpos( $content, $close_tag, $scan_pos );
+				$next_close = strpos($content, $close_tag, $scan_pos);
 
-				if ( false === $next_close ) {
+				if (false === $next_close) {
 					break;
 				}
 
-				if ( false !== $next_open && $next_open < $next_close ) {
-					if ( empty( $same_open_match[1][0] ) ) {
+				if (false !== $next_open && $next_open < $next_close) {
+					if (empty($same_open_match[1][0])) {
 						++$depth;
 					}
-					$scan_pos = $next_open + strlen( (string) $same_open_match[0][0] );
+					$scan_pos = $next_open + strlen((string) $same_open_match[0][0]);
 					continue;
 				}
 
 				--$depth;
-				if ( 0 === $depth ) {
+				if (0 === $depth) {
 					$close_pos = $next_close;
 					break;
 				}
 
-				$scan_pos = $next_close + strlen( $close_tag );
+				$scan_pos = $next_close + strlen($close_tag);
 			}
 
-			if ( $close_pos < 0 ) {
+			if ($close_pos < 0) {
 				return [
 					'start'  => $match_pos,
 					'end'    => $opening_end,
@@ -3181,21 +3297,21 @@ namespace {
 			$inner_html    = '';
 			$inner_blocks  = [];
 
-			while ( $inner_offset < $inner_end ) {
-				$child = _flavor_agent_parse_next_block( $content, $inner_offset );
+			while ($inner_offset < $inner_end) {
+				$child = _flavor_agent_parse_next_block($content, $inner_offset);
 
-				if ( null === $child || $child['start'] >= $inner_end ) {
-					$tail = substr( $content, $inner_offset, $inner_end - $inner_offset );
-					if ( '' !== $tail ) {
+				if (null === $child || $child['start'] >= $inner_end) {
+					$tail = substr($content, $inner_offset, $inner_end - $inner_offset);
+					if ('' !== $tail) {
 						$inner_content[] = $tail;
 						$inner_html     .= $tail;
 					}
 					break;
 				}
 
-				if ( $child['start'] > $inner_offset ) {
-					$prefix = substr( $content, $inner_offset, $child['start'] - $inner_offset );
-					if ( '' !== $prefix ) {
+				if ($child['start'] > $inner_offset) {
+					$prefix = substr($content, $inner_offset, $child['start'] - $inner_offset);
+					if ('' !== $prefix) {
 						$inner_content[] = $prefix;
 						$inner_html     .= $prefix;
 					}
@@ -3208,7 +3324,7 @@ namespace {
 
 			return [
 				'start'  => $match_pos,
-				'end'    => $close_pos + strlen( $close_tag ),
+				'end'    => $close_pos + strlen($close_tag),
 				'parsed' => [
 					'blockName'    => $block_name,
 					'attrs'        => $attrs,
@@ -3220,54 +3336,59 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'str_starts_with' ) ) {
-		function str_starts_with( string $haystack, string $needle ): bool {
-			return strncmp( $haystack, $needle, strlen( $needle ) ) === 0;
+	if (! function_exists('str_starts_with')) {
+		function str_starts_with(string $haystack, string $needle): bool
+		{
+			return strncmp($haystack, $needle, strlen($needle)) === 0;
 		}
 	}
 
-	if ( ! function_exists( 'update_option' ) ) {
-		function update_option( string $name, $value, $autoload = null ): bool {
-			WordPressTestState::$options[ $name ] = $value;
-			WordPressTestState::$updated_options[ $name ] = $value;
-			if ( null !== $autoload ) {
-				WordPressTestState::$option_autoload[ $name ] = $autoload;
+	if (! function_exists('update_option')) {
+		function update_option(string $name, $value, $autoload = null): bool
+		{
+			WordPressTestState::$options[$name] = $value;
+			WordPressTestState::$updated_options[$name] = $value;
+			if (null !== $autoload) {
+				WordPressTestState::$option_autoload[$name] = $autoload;
 			}
 
 			return true;
 		}
 	}
 
-	if ( ! function_exists( 'add_option' ) ) {
-		function add_option( string $name, $value = '', string $deprecated = '', $autoload = 'yes' ): bool {
-			unset( $deprecated );
+	if (! function_exists('add_option')) {
+		function add_option(string $name, $value = '', string $deprecated = '', $autoload = 'yes'): bool
+		{
+			unset($deprecated);
 
-			if ( array_key_exists( $name, WordPressTestState::$options ) ) {
+			if (array_key_exists($name, WordPressTestState::$options)) {
 				return false;
 			}
 
-			WordPressTestState::$options[ $name ]         = $value;
-			WordPressTestState::$option_autoload[ $name ] = $autoload;
+			WordPressTestState::$options[$name]         = $value;
+			WordPressTestState::$option_autoload[$name] = $autoload;
 
 			return true;
 		}
 	}
 
-	if ( ! function_exists( 'delete_option' ) ) {
-		function delete_option( string $name ): bool {
+	if (! function_exists('delete_option')) {
+		function delete_option(string $name): bool
+		{
 			unset(
-				WordPressTestState::$options[ $name ],
-				WordPressTestState::$updated_options[ $name ],
-				WordPressTestState::$option_autoload[ $name ]
+				WordPressTestState::$options[$name],
+				WordPressTestState::$updated_options[$name],
+				WordPressTestState::$option_autoload[$name]
 			);
 
 			return true;
 		}
 	}
 
-	if ( ! function_exists( 'wp_schedule_event' ) ) {
-		function wp_schedule_event( int $timestamp, string $recurrence, string $hook, array $args = [] ): bool {
-			WordPressTestState::$scheduled_events[ $hook ] = [
+	if (! function_exists('wp_schedule_event')) {
+		function wp_schedule_event(int $timestamp, string $recurrence, string $hook, array $args = []): bool
+		{
+			WordPressTestState::$scheduled_events[$hook] = [
 				'hook'       => $hook,
 				'timestamp'  => $timestamp,
 				'recurrence' => $recurrence,
@@ -3278,9 +3399,10 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'wp_schedule_single_event' ) ) {
-		function wp_schedule_single_event( int $timestamp, string $hook, array $args = [] ): bool {
-			WordPressTestState::$scheduled_events[ $hook ] = [
+	if (! function_exists('wp_schedule_single_event')) {
+		function wp_schedule_single_event(int $timestamp, string $hook, array $args = []): bool
+		{
+			WordPressTestState::$scheduled_events[$hook] = [
 				'hook'      => $hook,
 				'timestamp' => $timestamp,
 				'args'      => $args,
@@ -3290,28 +3412,30 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'wp_next_scheduled' ) ) {
-		function wp_next_scheduled( string $hook, array $args = [] ) {
-			if ( isset( WordPressTestState::$scheduled_events[ $hook ] ) ) {
-				return WordPressTestState::$scheduled_events[ $hook ]['timestamp'];
+	if (! function_exists('wp_next_scheduled')) {
+		function wp_next_scheduled(string $hook, array $args = [])
+		{
+			if (isset(WordPressTestState::$scheduled_events[$hook])) {
+				return WordPressTestState::$scheduled_events[$hook]['timestamp'];
 			}
 
 			return false;
 		}
 	}
 
-	if ( ! function_exists( 'wp_clear_scheduled_hook' ) ) {
-		function wp_clear_scheduled_hook( string $hook, array $args = [] ): int {
+	if (! function_exists('wp_clear_scheduled_hook')) {
+		function wp_clear_scheduled_hook(string $hook, array $args = []): int
+		{
 			WordPressTestState::$cleared_cron_hooks[] = $hook;
-			unset( WordPressTestState::$scheduled_events[ $hook ] );
+			unset(WordPressTestState::$scheduled_events[$hook]);
 
 			return 1;
 		}
 	}
 
-	require dirname( __DIR__, 2 ) . '/vendor/autoload.php';
+	require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
-	if ( ! isset( $GLOBALS['wpdb'] ) || ! $GLOBALS['wpdb'] instanceof wpdb ) {
+	if (! isset($GLOBALS['wpdb']) || ! $GLOBALS['wpdb'] instanceof wpdb) {
 		$GLOBALS['wpdb'] = new wpdb();
 	}
 

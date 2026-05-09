@@ -34,12 +34,20 @@ export default function SurfaceScopeBar( {
 
 	const showFreshness = hasResult;
 	const resolvedStaleMessage = staleReason || staleMessage;
-	const liveRegionProps = announceChanges
-		? {
-				role: 'status',
-				'aria-live': 'polite',
-		  }
-		: {};
+	let freshnessLabel = '';
+
+	if ( showFreshness ) {
+		freshnessLabel = isFresh ? CURRENT_STATUS_LABEL : STALE_STATUS_LABEL;
+	}
+
+	const announcementText = [
+		scopeLabel,
+		...scopeDetails,
+		freshnessLabel,
+		! isFresh && hasResult ? resolvedStaleMessage : '',
+	]
+		.filter( Boolean )
+		.join( '. ' );
 
 	return (
 		<div
@@ -48,8 +56,16 @@ export default function SurfaceScopeBar( {
 				! isFresh && hasResult ? 'flavor-agent-scope-bar--stale' : '',
 				className
 			) }
-			{ ...liveRegionProps }
 		>
+			{ announceChanges && announcementText && (
+				<span
+					className="screen-reader-text flavor-agent-scope-bar__announcement"
+					role="status"
+					aria-live="polite"
+				>
+					{ announcementText }
+				</span>
+			) }
 			<div className="flavor-agent-scope-bar__scope">
 				{ scopeLabel && (
 					<span className="flavor-agent-scope-bar__label">

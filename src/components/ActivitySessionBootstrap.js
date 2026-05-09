@@ -64,12 +64,15 @@ export default function ActivitySessionBootstrap() {
 	}
 
 	useEffect( () => {
-		if ( typeof document === 'undefined' ) {
+		if (
+			editorState.activeComplementaryArea !== 'edit-site/global-styles' ||
+			typeof document === 'undefined'
+		) {
 			return undefined;
 		}
 
 		return subscribeToStyleBookUi( document, setStyleBookUiState );
-	}, [] );
+	}, [ editorState.activeComplementaryArea ] );
 	const { loadActivitySession } = useDispatch( STORE_NAME );
 	const previousScope = useRef( scope );
 	const scopeKey = scope?.key ?? null;

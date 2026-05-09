@@ -652,6 +652,39 @@ describe( 'StyleBookRecommender', () => {
 		expect( sidebar.querySelector( 'button' )?.disabled ).toBe( true );
 	} );
 
+	test( 'does not expose stale refresh when Style Book recommendations are unavailable', () => {
+		mockSurfaceCapability = {
+			available: false,
+		};
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Tighten paragraph rhythm',
+					description: 'Keep the example more compact.',
+					category: 'spacing',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Existing explanation',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: 'stale-signature',
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect(
+			Array.from( sidebar.querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent.includes( 'Refresh' )
+			)
+		).toBeUndefined();
+		expect( mockFetchStyleBookRecommendations ).not.toHaveBeenCalled();
+	} );
+
 	test( 'does not render a document panel fallback when the Styles sidebar mount is missing', () => {
 		sidebar.remove();
 
@@ -859,6 +892,11 @@ describe( 'StyleBookRecommender', () => {
 		expect(
 			sidebar
 				.querySelector( '.flavor-agent-scope-bar' )
+				?.getAttribute( 'role' )
+		).toBeNull();
+		expect(
+			sidebar
+				.querySelector( '.flavor-agent-scope-bar__announcement' )
 				?.getAttribute( 'role' )
 		).toBe( 'status' );
 	} );

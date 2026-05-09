@@ -723,39 +723,49 @@ function ActivityEntryDetails( { entry } ) {
 
 	return (
 		<Card className="flavor-agent-activity-log__sidebar-card">
-			<CardHeader>
-				<div className="flavor-agent-activity-log__sidebar-heading">
-					<div>
-						<h3 className="flavor-agent-activity-log__section-title">
-							{ entry.title }
-						</h3>
-						<p className="flavor-agent-activity-log__copy">
-							{ entry.description }
-						</p>
-					</div>
-					{ entry.targetUrl && (
-						<div className="flavor-agent-activity-log__sidebar-actions">
-							<Button
-								href={ entry.targetUrl }
-								variant="secondary"
+			<div
+				id="flavor-agent-activity-log-details"
+				className="flavor-agent-activity-log__details-region"
+				role="region"
+				aria-labelledby="flavor-agent-activity-log-details-title"
+			>
+				<CardHeader>
+					<div className="flavor-agent-activity-log__sidebar-heading">
+						<div>
+							<h3
+								id="flavor-agent-activity-log-details-title"
+								className="flavor-agent-activity-log__section-title"
 							>
-								{ entry.targetLinkLabel }
-							</Button>
+								{ entry.title }
+							</h3>
+							<p className="flavor-agent-activity-log__copy">
+								{ entry.description }
+							</p>
 						</div>
-					) }
-				</div>
-			</CardHeader>
-			<CardBody>
-				<div className="flavor-agent-activity-log__detail-sections">
-					{ DETAIL_SECTIONS.map( ( section ) => (
-						<ActivityDetailSection
-							key={ section.id }
-							section={ section }
-							entry={ entry }
-						/>
-					) ) }
-				</div>
-			</CardBody>
+						{ entry.targetUrl && (
+							<div className="flavor-agent-activity-log__sidebar-actions">
+								<Button
+									href={ entry.targetUrl }
+									variant="secondary"
+								>
+									{ entry.targetLinkLabel }
+								</Button>
+							</div>
+						) }
+					</div>
+				</CardHeader>
+				<CardBody>
+					<div className="flavor-agent-activity-log__detail-sections">
+						{ DETAIL_SECTIONS.map( ( section ) => (
+							<ActivityDetailSection
+								key={ section.id }
+								section={ section }
+								entry={ entry }
+							/>
+						) ) }
+					</div>
+				</CardBody>
+			</div>
 		</Card>
 	);
 }
@@ -1030,9 +1040,18 @@ export function ActivityLogApp( { bootData } ) {
 				enableGlobalSearch: true,
 				render: ( { item } ) => (
 					<span
+						id={ `flavor-agent-activity-log-entry-title-${ item.id }` }
 						className={ `flavor-agent-activity-log__entry-title${
 							item.id === selectedEntryId ? ' is-current' : ''
 						}` }
+						aria-current={
+							item.id === selectedEntryId ? 'true' : undefined
+						}
+						aria-controls={
+							item.id === selectedEntryId
+								? 'flavor-agent-activity-log-details'
+								: undefined
+						}
 					>
 						{ item.title }
 					</span>

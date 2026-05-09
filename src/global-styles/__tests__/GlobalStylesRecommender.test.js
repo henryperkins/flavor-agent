@@ -652,6 +652,40 @@ describe( 'GlobalStylesRecommender', () => {
 		expect( sidebar.querySelector( 'button' )?.disabled ).toBe( true );
 	} );
 
+	test( 'does not expose stale refresh when Global Styles recommendations are unavailable', () => {
+		mockSurfaceCapability = {
+			available: false,
+		};
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Use accent canvas',
+					description:
+						'Apply the accent preset to the site background.',
+					category: 'color',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Prefer accent palette values.',
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: 'stale-signature',
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect(
+			Array.from( sidebar.querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent.includes( 'Refresh' )
+			)
+		).toBeUndefined();
+		expect( mockFetchGlobalStylesRecommendations ).not.toHaveBeenCalled();
+	} );
+
 	test( 'mounts into the Styles sidebar after it appears later', async () => {
 		sidebar.remove();
 
@@ -802,6 +836,11 @@ describe( 'GlobalStylesRecommender', () => {
 		expect(
 			sidebar
 				.querySelector( '.flavor-agent-scope-bar' )
+				?.getAttribute( 'role' )
+		).toBeNull();
+		expect(
+			sidebar
+				.querySelector( '.flavor-agent-scope-bar__announcement' )
 				?.getAttribute( 'role' )
 		).toBe( 'status' );
 	} );

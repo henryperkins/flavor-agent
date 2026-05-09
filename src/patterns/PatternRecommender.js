@@ -188,11 +188,17 @@ function getPatternEmptyMessage(
 
 function PatternShelf( { items, onInsert, diagnostics } ) {
 	return (
-		<div
-			className="flavor-agent-pattern-summary flavor-agent-pattern-shelf"
-			role="status"
-			aria-live="polite"
-		>
+		<div className="flavor-agent-pattern-summary flavor-agent-pattern-shelf">
+			<div
+				className="screen-reader-text flavor-agent-pattern-shelf__status"
+				role="status"
+				aria-live="polite"
+			>
+				{ `Flavor Agent. ${ formatCount(
+					items.length,
+					'recommendation'
+				) }.` }
+			</div>
 			<div className="flavor-agent-pattern-summary__header">
 				<span className="flavor-agent-pill flavor-agent-pill--lane">
 					Flavor Agent
@@ -274,11 +280,7 @@ function PatternInserterNotice( {
 	}
 
 	return (
-		<div
-			className="flavor-agent-pattern-summary"
-			role="status"
-			aria-live="polite"
-		>
+		<div className="flavor-agent-pattern-summary">
 			<div className="flavor-agent-pattern-summary__header">
 				<span className="flavor-agent-pill flavor-agent-pill--lane">
 					Flavor Agent
@@ -295,7 +297,11 @@ function PatternInserterNotice( {
 					<span className="flavor-agent-pill">Ranking…</span>
 				) }
 			</div>
-			<p className="flavor-agent-pattern-summary__copy">
+			<p
+				className="flavor-agent-pattern-summary__copy"
+				role="status"
+				aria-live="polite"
+			>
 				{ resolvedMessage }
 			</p>
 			{ status === 'error' && typeof onRetry === 'function' && (

@@ -47,7 +47,7 @@ describe( 'style-operations', () => {
 							{
 								name: 'Accent',
 								slug: 'accent',
-								color: '#ff5500',
+								color: '#222222',
 							},
 							{
 								name: 'Contrast',
@@ -358,6 +358,32 @@ describe( 'style-operations', () => {
 		expect( currentRecord.styles.typography ).toBeUndefined();
 	} );
 
+	test( 'applyGlobalStyleSuggestionOperations rejects low-contrast color changes before editing', () => {
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'color', 'background' ],
+					value: 'var:preset|color|contrast',
+					valueType: 'preset',
+					presetSlug: 'contrast',
+					presetType: 'color',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: expect.stringContaining( 'Contrast check' ),
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+		expect( currentRecord.styles.color.background ).toBe(
+			'var:preset|color|base'
+		);
+	} );
+
 	test( 'applyGlobalStyleSuggestionOperations rejects unsupported live style paths', () => {
 		blockEditorSettings = {
 			...blockEditorSettings,
@@ -620,6 +646,15 @@ describe( 'style-operations', () => {
 					{
 						type: 'set_block_styles',
 						blockName: 'core/paragraph',
+						path: [ 'color', 'background' ],
+						value: 'var:preset|color|contrast',
+						valueType: 'preset',
+						presetSlug: 'contrast',
+						presetType: 'color',
+					},
+					{
+						type: 'set_block_styles',
+						blockName: 'core/paragraph',
 						path: [ 'color', 'text' ],
 						value: 'var:preset|color|accent',
 						valueType: 'preset',
@@ -636,6 +671,10 @@ describe( 'style-operations', () => {
 		expect(
 			result.afterConfig.styles.blocks[ 'core/paragraph' ].color.text
 		).toBe( 'var:preset|color|accent' );
+		expect(
+			result.afterConfig.styles.blocks[ 'core/paragraph' ].color
+				.background
+		).toBe( 'var:preset|color|contrast' );
 		expect( coreDispatch.editEntityRecord ).toHaveBeenCalledWith(
 			'root',
 			'globalStyles',
@@ -645,6 +684,7 @@ describe( 'style-operations', () => {
 					blocks: {
 						'core/paragraph': {
 							color: {
+								background: 'var:preset|color|contrast',
 								text: 'var:preset|color|accent',
 							},
 						},
@@ -717,9 +757,15 @@ describe( 'style-operations', () => {
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
 	} );
 
-	test( 'applyGlobalStyleSuggestionOperations applies a theme variation before later style overrides', () => {
+	test( 'applyGlobalStyleSuggestionOperations rejects theme variations mixed with readable color overrides before editing', () => {
+		const initialRecord = JSON.parse( JSON.stringify( currentRecord ) );
 		const result = applyGlobalStyleSuggestionOperations( {
 			operations: [
+				{
+					type: 'set_theme_variation',
+					variationIndex: 1,
+					variationTitle: 'Midnight',
+				},
 				{
 					type: 'set_styles',
 					path: [ 'color', 'text' ],
@@ -727,6 +773,28 @@ describe( 'style-operations', () => {
 					valueType: 'preset',
 					presetSlug: 'contrast',
 					presetType: 'color',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: 'Contrast check unavailable: theme variation and color overrides must be reviewed separately.',
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+		expect( currentRecord ).toEqual( initialRecord );
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations applies a theme variation before later non-color style overrides', () => {
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'typography', 'lineHeight' ],
+					value: '1.7',
+					valueType: 'freeform',
 				},
 				{
 					type: 'set_theme_variation',
@@ -742,8 +810,8 @@ describe( 'style-operations', () => {
 		).toEqual( [ 'set_theme_variation', 'set_styles' ] );
 		expect( result.afterConfig.styles.color ).toEqual( {
 			background: 'var:preset|color|accent',
-			text: 'var:preset|color|contrast',
 		} );
+		expect( result.afterConfig.styles.typography.lineHeight ).toBe( '1.7' );
 	} );
 
 	test( 'buildGlobalStylesRecommendationContextSignature ignores variations for style-book scope', () => {

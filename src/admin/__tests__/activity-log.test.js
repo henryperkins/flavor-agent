@@ -387,6 +387,49 @@ describe( 'ActivityLogApp', () => {
 		expect( getSidebarTitle().textContent ).toBe( 'Linked activity entry' );
 	} );
 
+	test( 'exposes selected activity state and labels the details region', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-2'
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-1',
+				suggestion: 'First activity entry',
+			} ),
+			createEntry( {
+				id: 'activity-2',
+				suggestion: 'Linked activity entry',
+			} ),
+		] );
+
+		const titleField = getDataViewsMockState().latestProps.fields.find(
+			( field ) => field.id === 'title'
+		);
+		const selectedTitle = titleField.render( {
+			item: {
+				id: 'activity-2',
+				title: 'Linked activity entry',
+			},
+		} );
+		const heading = getSidebarTitle();
+		const detailsRegion = getContainer().querySelector(
+			'.flavor-agent-activity-log__details-region'
+		);
+
+		expect( selectedTitle.props[ 'aria-current' ] ).toBe( 'true' );
+		expect( selectedTitle.props[ 'aria-controls' ] ).toBe(
+			'flavor-agent-activity-log-details'
+		);
+		expect( heading.id ).toBe( 'flavor-agent-activity-log-details-title' );
+		expect( detailsRegion.getAttribute( 'role' ) ).toBe( 'region' );
+		expect( detailsRegion.getAttribute( 'aria-labelledby' ) ).toBe(
+			'flavor-agent-activity-log-details-title'
+		);
+	} );
+
 	test( 'renders summary cards from the server response instead of the visible page size', async () => {
 		await renderApp(
 			buildResponse(

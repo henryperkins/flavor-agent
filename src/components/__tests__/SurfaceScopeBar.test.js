@@ -63,6 +63,8 @@ describe( 'SurfaceScopeBar', () => {
 	} );
 
 	test( 'can opt into live announcements when a surface needs transient status updates', () => {
+		const onRefresh = jest.fn();
+
 		act( () => {
 			getRoot().render(
 				<SurfaceScopeBar
@@ -70,6 +72,7 @@ describe( 'SurfaceScopeBar', () => {
 					isFresh={ false }
 					hasResult
 					announceChanges
+					onRefresh={ onRefresh }
 				/>
 			);
 		} );
@@ -77,9 +80,20 @@ describe( 'SurfaceScopeBar', () => {
 		const scopeBar = getContainer().querySelector(
 			'.flavor-agent-scope-bar'
 		);
+		const announcement = getContainer().querySelector(
+			'.flavor-agent-scope-bar__announcement'
+		);
 
-		expect( scopeBar?.getAttribute( 'role' ) ).toBe( 'status' );
-		expect( scopeBar?.getAttribute( 'aria-live' ) ).toBe( 'polite' );
+		expect( scopeBar?.getAttribute( 'role' ) ).toBeNull();
+		expect( scopeBar?.getAttribute( 'aria-live' ) ).toBeNull();
+		expect( announcement?.getAttribute( 'role' ) ).toBe( 'status' );
+		expect( announcement?.getAttribute( 'aria-live' ) ).toBe( 'polite' );
+		expect( announcement?.querySelector( 'button' ) ).toBeNull();
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-scope-bar__status button'
+			)
+		).not.toBeNull();
 	} );
 
 	test( 'shows "Stale" pill and message when not fresh', () => {

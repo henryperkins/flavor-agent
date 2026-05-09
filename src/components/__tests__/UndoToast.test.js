@@ -92,6 +92,21 @@ describe( 'UndoToast — rendering', () => {
 		).toBeTruthy();
 	} );
 
+	test( 'keeps the live status region text-only', () => {
+		renderToast();
+
+		const toast = getToast();
+		const statusRegion = getContainer().querySelector(
+			'.flavor-agent-toast__msg'
+		);
+
+		expect( toast.getAttribute( 'role' ) ).toBeNull();
+		expect( toast.getAttribute( 'aria-live' ) ).toBeNull();
+		expect( statusRegion.getAttribute( 'role' ) ).toBe( 'status' );
+		expect( statusRegion.getAttribute( 'aria-live' ) ).toBe( 'polite' );
+		expect( statusRegion.querySelector( 'button' ) ).toBeNull();
+	} );
+
 	test( 'renders the error variant with the error hint', () => {
 		renderToast( {
 			variant: 'error',

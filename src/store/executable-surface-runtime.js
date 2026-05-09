@@ -402,6 +402,8 @@ function createExecutableSurfaceApplyAction( {
 				return staleApplyResult;
 			}
 
+			localDispatch( setApplyState( 'applying' ) );
+
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface,
@@ -417,8 +419,6 @@ function createExecutableSurfaceApplyAction( {
 			if ( ! resolvedFreshness.ok ) {
 				return resolvedFreshness;
 			}
-
-			localDispatch( setApplyState( 'applying' ) );
 
 			let result;
 

@@ -564,6 +564,11 @@ describe( 'PatternRecommender', () => {
 			'Pattern recommendation request failed.'
 		);
 		expect( document.body.textContent ).toContain( 'Retry' );
+		expect(
+			inserterContainer
+				.querySelector( '[role="status"]' )
+				?.querySelector( 'button' )
+		).toBeNull();
 
 		act( () => {
 			Array.from( inserterContainer.querySelectorAll( 'button' ) )
@@ -620,6 +625,11 @@ describe( 'PatternRecommender', () => {
 		expect( shelfText ).toContain( '1 recommendation' );
 		expect( shelfText ).not.toContain( 'native pattern registry' );
 		expect( shelfText ).not.toContain( 'Gutenberg' );
+		expect(
+			inserterContainer
+				.querySelector( '[role="status"]' )
+				?.querySelector( 'button' )
+		).toBeNull();
 
 		act( () => {
 			Array.from( inserterContainer.querySelectorAll( 'button' ) )

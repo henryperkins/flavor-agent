@@ -90,6 +90,14 @@ beforeEach( () => {
 } );
 
 describe( 'ActivitySessionBootstrap', () => {
+	test( 'does not subscribe to Style Book DOM outside the Styles sidebar', () => {
+		act( () => {
+			getRoot().render( <ActivitySessionBootstrap /> );
+		} );
+
+		expect( mockSubscribeToStyleBookUi ).not.toHaveBeenCalled();
+	} );
+
 	test( 'only enables unsaved activity migration on an in-place unsaved-to-saved transition', () => {
 		act( () => {
 			getRoot().render( <ActivitySessionBootstrap /> );
