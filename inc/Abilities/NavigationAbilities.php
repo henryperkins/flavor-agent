@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\AzureOpenAI\ResponsesClient;
-use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\NavigationPrompt;
 use FlavorAgent\LLM\ResponseSchema;

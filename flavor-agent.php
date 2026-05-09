@@ -233,8 +233,6 @@ function flavor_agent_get_editor_bootstrap_data(
 	$can_manage_settings  = current_user_can( 'manage_options' );
 
 	return [
-		'restUrl'                      => rest_url( 'flavor-agent/v1/' ),
-		'nonce'                        => wp_create_nonce( 'wp_rest' ),
 		'settingsUrl'                  => $settings_url,
 		'connectorsUrl'                => $connectors_url,
 		'activityLogUrl'               => $can_manage_settings ? admin_url( 'options-general.php?page=flavor-agent-activity' ) : '',

@@ -13,9 +13,9 @@ import {
 } from '../utils/live-structure-snapshots';
 export { formatCount } from '../utils/format-count';
 
-export const ENTITY_PART = 'part';
-export const ENTITY_AREA = 'area';
-export const ENTITY_PATTERN = 'pattern';
+const ENTITY_PART = 'part';
+const ENTITY_AREA = 'area';
+const ENTITY_PATTERN = 'pattern';
 
 export const ENTITY_ACTION_SELECT_PART = 'select-part';
 export const ENTITY_ACTION_SELECT_AREA = 'select-area';
@@ -44,11 +44,11 @@ export function getSuggestionCardKey( suggestion = {}, index ) {
 	return `${ suggestion.label || 'suggestion' }-${ index }`;
 }
 
-export function getTemplatePartKey( slug = '', area = '' ) {
+function getTemplatePartKey( slug = '', area = '' ) {
 	return `${ slug }|${ area }`;
 }
 
-export function getTemplateOperationKey( operation = {} ) {
+function getTemplateOperationKey( operation = {} ) {
 	switch ( operation?.type ) {
 		case TEMPLATE_OPERATION_ASSIGN:
 			return `${ operation.type }|${ operation.slug || '' }|${

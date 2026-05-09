@@ -44,7 +44,7 @@ export function getRequestDocumentFromScope( scope ) {
 	return buildActivityDocument( scope );
 }
 
-export function alignActivityEntriesToScope( entries, scope ) {
+function alignActivityEntriesToScope( entries, scope ) {
 	const document = buildActivityDocument( scope );
 
 	if ( ! document ) {
@@ -113,7 +113,7 @@ export function persistActivitySession( select ) {
 	writePersistedActivityLog( scopeKey, select.getActivityLog?.() || [] );
 }
 
-export function getApiErrorStatus( error ) {
+function getApiErrorStatus( error ) {
 	const dataStatus = Number( error?.data?.status );
 
 	if ( Number.isInteger( dataStatus ) && dataStatus > 0 ) {
@@ -151,7 +151,7 @@ export function getApiErrorCode( error ) {
 	return '';
 }
 
-export function buildActivityQueryPath( {
+function buildActivityQueryPath( {
 	scopeKey,
 	surface = '',
 	entityType = '',
@@ -268,7 +268,7 @@ export async function fetchServerActivityEntries( scopeKey ) {
 	return limitActivityLog( response?.entries || [] );
 }
 
-export function scheduleActivitySessionReload(
+function scheduleActivitySessionReload(
 	runtime,
 	options = {},
 	storeName = 'flavor-agent'
@@ -297,7 +297,7 @@ export function scheduleActivitySessionReload(
 	}, 150 );
 }
 
-export async function persistServerActivityEntry( entry ) {
+async function persistServerActivityEntry( entry ) {
 	const response = await apiFetch( {
 		path: '/flavor-agent/v1/activity',
 		method: 'POST',
@@ -358,7 +358,7 @@ export function isServerBackedActivityEntry( entry ) {
 	return entry?.persistence?.status === 'server';
 }
 
-export function isRetryableActivitySyncError( error ) {
+function isRetryableActivitySyncError( error ) {
 	const status = getApiErrorStatus( error );
 
 	if ( status === 0 || status === 408 || status === 425 || status === 429 ) {
@@ -457,7 +457,7 @@ async function persistPendingActivityEntry( entry ) {
 	}
 }
 
-export async function persistPendingActivityEntries( entries = [] ) {
+async function persistPendingActivityEntries( entries = [] ) {
 	const persistedEntries = [];
 	const failedEntries = [];
 	const terminalEntries = [];

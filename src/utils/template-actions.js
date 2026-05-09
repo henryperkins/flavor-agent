@@ -2648,7 +2648,7 @@ function getReviewOnlyUndoState( activity, existingUndo ) {
 	};
 }
 
-export function resolveTemplatePartUndoTarget(
+function resolveTemplatePartUndoTarget(
 	operation,
 	areaLookup = getTemplatePartAreaLookup(),
 	blockEditorSelect = select( blockEditorStore )
@@ -2741,7 +2741,7 @@ function prepareUndoTemplatePartOperation(
 	};
 }
 
-export function resolveInsertedPatternSlice(
+function resolveInsertedPatternSlice(
 	operation,
 	blockEditorSelect = select( blockEditorStore )
 ) {
@@ -3274,7 +3274,7 @@ export function undoTemplatePartSuggestionOperations( activity ) {
  * @param {string} area Template area slug.
  * @return {Object|null} Matching block or null.
  */
-export function findBlockByArea( area ) {
+function findBlockByArea( area ) {
 	const blocks = getBlocks();
 	const empty = findTemplatePart(
 		blocks,
@@ -3293,7 +3293,7 @@ export function findBlockByArea( area ) {
  * @param {string} slug Template part slug.
  * @return {Object|null} Matching block or null.
  */
-export function findBlockBySlug( slug ) {
+function findBlockBySlug( slug ) {
 	return findTemplatePart(
 		getBlocks(),
 		( b ) => b.attributes?.slug === slug

@@ -124,7 +124,7 @@ export function getEditedPostTypeEntity( select, expectedPostType = null ) {
 	};
 }
 
-export function getPostTypeFieldDefinitions( postType ) {
+function getPostTypeFieldDefinitions( postType ) {
 	switch ( normalizePostType( postType ) ) {
 		case 'post':
 			return [
@@ -177,7 +177,7 @@ function hasViewConfigData( viewConfigRecord = EMPTY_OBJECT ) {
 	);
 }
 
-export function getPostTypeFieldMap( postType ) {
+function getPostTypeFieldMap( postType ) {
 	return getPostTypeFieldDefinitions( postType ).reduce(
 		( fieldMap, field ) => {
 			if ( field?.id ) {
@@ -205,7 +205,7 @@ export function normalizeViewConfigContract( viewConfig ) {
 	};
 }
 
-export function getLockedViewFilterValue( view, field ) {
+function getLockedViewFilterValue( view, field ) {
 	if ( typeof field !== 'string' || field === '' ) {
 		return '';
 	}
@@ -249,7 +249,7 @@ export function getLockedViewOptions( viewList = [], field ) {
 		.filter( Boolean );
 }
 
-export function buildOptionLabelMap( options = [] ) {
+function buildOptionLabelMap( options = [] ) {
 	return options.reduce( ( labelMap, option ) => {
 		if ( option?.value && option?.label ) {
 			labelMap[ option.value ] = option.label;

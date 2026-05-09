@@ -195,10 +195,6 @@ final class Serializer {
 		return $normalized;
 	}
 
-	public static function build_default_undo( string $timestamp ): array {
-		return self::normalize_undo_for_storage( [], $timestamp );
-	}
-
 	/**
 	 * @param array<string, mixed> $row
 	 * @return array<string, mixed>

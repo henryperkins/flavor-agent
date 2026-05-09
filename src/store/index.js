@@ -410,12 +410,6 @@ function getNavigationHasResult( state, blockClientId = null ) {
 	);
 }
 
-function getContentHasResult( state ) {
-	return Boolean(
-		state.contentStatus === 'ready' && state.contentRecommendation
-	);
-}
-
 function getBlockHasResult( state, clientId ) {
 	const requestState = getStoredBlockRequestState( state, clientId );
 
@@ -1250,17 +1244,6 @@ const actions = {
 
 	clearContentError() {
 		return { type: 'CLEAR_CONTENT_ERROR' };
-	},
-
-	clearContentRecommendation() {
-		return ( { dispatch } ) => {
-			if ( actions._contentAbort ) {
-				actions._contentAbort.abort();
-				actions._contentAbort = null;
-			}
-
-			dispatch( { type: 'CLEAR_CONTENT_RECOMMENDATION' } );
-		};
 	},
 
 	loadActivitySession( options = {} ) {
@@ -2826,16 +2809,6 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: state.contentStatus,
 				contentError: null,
 			};
-		case 'CLEAR_CONTENT_RECOMMENDATION':
-			return {
-				...state,
-				contentRecommendation: null,
-				contentStatus: 'idle',
-				contentError: null,
-				contentRequestPrompt: '',
-				contentRequestToken: state.contentRequestToken + 1,
-				contentResultToken: state.contentResultToken + 1,
-			};
 		case 'SET_PATTERN_RECS':
 			if (
 				isStalePatternRequest(
@@ -2974,8 +2947,6 @@ const executableSurfaceSelectors = createExecutableSurfaceSelectors( {
 } );
 
 const selectors = {
-	getBlockRequestState: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ),
 	getBlockStatus: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).status,
 	getBlockError: ( state, clientId ) =>
@@ -2992,29 +2963,12 @@ const selectors = {
 		getStoredBlockRequestState( state, clientId ).applyStatus,
 	getBlockApplyError: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).applyError,
-	getBlockLastAppliedSuggestionKey: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).lastAppliedSuggestionKey,
 	getBlockStaleReason: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).staleReason,
 	isBlockLoading: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).status === 'loading',
-	isBlockApplying: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).applyStatus ===
-		'applying',
-	getStatus: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).status,
-	getError: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).error,
-	isLoading: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).status === 'loading',
 	getBlockRecommendations: ( state, clientId ) =>
 		state.blockRecommendations[ clientId ] || null,
-	getSettingsSuggestions: ( state, clientId ) =>
-		state.blockRecommendations[ clientId ]?.settings || [],
-	getStylesSuggestions: ( state, clientId ) =>
-		state.blockRecommendations[ clientId ]?.styles || [],
-	getBlockSuggestions: ( state, clientId ) =>
-		state.blockRecommendations[ clientId ]?.block || [],
 	getActivityScopeKey: ( state ) => state.activityScopeKey,
 	getActivityLog: ( state ) => state.activityLog,
 	getLatestAppliedActivity: ( state ) =>
@@ -3030,17 +2984,11 @@ const selectors = {
 	getPatternStatus: ( state ) => state.patternStatus,
 	getPatternError: ( state ) => state.patternError,
 	getPatternRequestToken: ( state ) => state.patternRequestToken,
-	getPatternResultToken: ( state ) => state.patternResultToken,
-	getPatternRequestSignature: ( state ) => state.patternRequestSignature,
-	isPatternLoading: ( state ) => state.patternStatus === 'loading',
 	getContentRecommendation: ( state ) => state.contentRecommendation,
 	getContentStatus: ( state ) => state.contentStatus,
 	getContentError: ( state ) => state.contentError,
 	getContentMode: ( state ) => state.contentMode,
-	getContentRequestPrompt: ( state ) => state.contentRequestPrompt,
 	getContentRequestToken: ( state ) => state.contentRequestToken,
-	getContentResultToken: ( state ) => state.contentResultToken,
-	isContentLoading: ( state ) => state.contentStatus === 'loading',
 	getNavigationRecommendations: ( state, blockClientId = null ) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? []
@@ -3096,25 +3044,10 @@ const selectors = {
 
 		return getSurfaceContract( surface );
 	},
-	isSurfaceAdvisoryOnly: ( state, surface ) => {
-		void state;
-
-		return Boolean( getSurfaceContract( surface )?.advisoryOnly );
-	},
-	isSurfacePreviewRequired: ( state, surface ) => {
-		void state;
-
-		return Boolean( getSurfaceContract( surface )?.previewRequired );
-	},
 	isSurfaceApplyAllowed: ( state, surface, options = {} ) => {
 		void state;
 
 		return isSurfaceApplyAllowedForState( surface, options );
-	},
-	getSurfaceInteractionState: ( state, surface, options = {} ) => {
-		void state;
-
-		return getNormalizedInteractionState( surface, options );
 	},
 	getSurfaceStatusNotice: ( state, surface, options = {} ) => {
 		void state;
@@ -3150,22 +3083,6 @@ const selectors = {
 			hasSuggestions:
 				selectors.getNavigationRecommendations( state, blockClientId )
 					.length > 0,
-			...options,
-		} ),
-	getContentInteractionState: ( state, options = {} ) =>
-		getNormalizedInteractionState( 'content', {
-			requestStatus: state.contentStatus,
-			requestError: normalizeStringMessage( state.contentError ),
-			hasResult: getContentHasResult( state ),
-			hasSuggestions: Boolean(
-				state.contentRecommendation?.content ||
-					state.contentRecommendation?.summary ||
-					state.contentRecommendation?.title ||
-					( Array.isArray( state.contentRecommendation?.notes ) &&
-						state.contentRecommendation.notes.length > 0 ) ||
-					( Array.isArray( state.contentRecommendation?.issues ) &&
-						state.contentRecommendation.issues.length > 0 )
-			),
 			...options,
 		} ),
 };

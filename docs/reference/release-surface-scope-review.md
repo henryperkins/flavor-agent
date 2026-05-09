@@ -73,7 +73,7 @@ If a surface fails check 1 or 2, remove or hide it. If it fails check 3, keep it
 
 ## Surface Verdicts
 
-This document is the surface-specific release planning source of truth. Canonical stop-line catalog: [`surfaces/release-stop-lines.md`](./surfaces/release-stop-lines.md) (also referenced by `scripts/check-doc-drift.sh`).
+This document is the surface-specific release planning source of truth. Canonical stop-line catalog: [`surfaces/release-stop-lines.md`](./surfaces/release-stop-lines.md).
 
 | Surface | Release verdict | Why it belongs | Release stop |
 | --- | --- | --- | --- |

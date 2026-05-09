@@ -1954,26 +1954,6 @@ SYSTEM;
 		);
 	}
 
-	/**
-	 * @return string[]
-	 */
-	private static function extract_style_variation_names( string $class_name ): array {
-		if ( '' === $class_name ) {
-			return [];
-		}
-
-		preg_match_all( '/\bis-style-([a-z0-9_-]+)\b/i', $class_name, $matches );
-
-		return array_values(
-			array_unique(
-				array_map(
-					'sanitize_key',
-					$matches[1] ?? []
-				)
-			)
-		);
-	}
-
 	private static function validate_freeform_style_value( string $validator, mixed $value ): mixed {
 		$custom_property = self::validate_css_custom_property_reference( $value );
 

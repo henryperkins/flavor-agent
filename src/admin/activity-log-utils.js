@@ -671,7 +671,7 @@ function getBlockPathLabel( entry ) {
 	return blockName ? `${ blockName } · ${ blockPath }` : blockPath;
 }
 
-export function formatSurfaceLabel( surface = '' ) {
+function formatSurfaceLabel( surface = '' ) {
 	switch ( surface ) {
 		case 'content':
 			return __( 'Content', 'flavor-agent' );
@@ -694,7 +694,7 @@ export function formatSurfaceLabel( surface = '' ) {
 	}
 }
 
-export function summarizeActivityState( state ) {
+function summarizeActivityState( state ) {
 	if ( ! isPlainObject( state ) || Object.keys( state ).length === 0 ) {
 		return EMPTY_VALUE;
 	}
@@ -1095,7 +1095,7 @@ function getActivityDescription( entry, entityLabel, documentLabel ) {
 	return segments.filter( Boolean ).join( ' · ' );
 }
 
-export function getActivityStatus( entry, allEntries = [] ) {
+function getActivityStatus( entry, allEntries = [] ) {
 	const explicitStatus =
 		typeof entry?.status === 'string' ? entry.status.trim() : '';
 
@@ -1143,7 +1143,7 @@ export function getActivityStatus( entry, allEntries = [] ) {
 	}
 }
 
-export function getActivityStatusLabel( entry, allEntries = [] ) {
+function getActivityStatusLabel( entry, allEntries = [] ) {
 	const status =
 		typeof entry === 'string'
 			? entry
@@ -1436,7 +1436,7 @@ export function writePersistedActivityView( view, storage, options = {} ) {
 	}
 }
 
-export function normalizeActivityEntry(
+function normalizeActivityEntry(
 	entry,
 	allEntries = [],
 	{

@@ -65,26 +65,6 @@ final class WordPressAIPolicy {
 		};
 	}
 
-	/**
-	 * @param array<int, string> $categories
-	 */
-	public static function upstream_guidelines_for_prompt( array $categories, string $block_name = '' ): string {
-		if ( ! function_exists( 'WordPress\\AI\\format_guidelines_for_prompt' ) ) {
-			return '';
-		}
-
-		try {
-			return trim(
-				(string) \WordPress\AI\format_guidelines_for_prompt(
-					array_values( array_map( 'strval', $categories ) ),
-					'' !== $block_name ? $block_name : null
-				)
-			);
-		} catch ( \Throwable $throwable ) {
-			return '';
-		}
-	}
-
 	public static function pre_normalize_content( string $content ): string {
 		return (string) apply_filters( 'wpai_pre_normalize_content', $content );
 	}
