@@ -1958,6 +1958,18 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'Saved value exists. For security, this field is intentionally blank.', $output );
 	}
 
+	public function test_page_state_treats_wordpress_ai_client_runtime_as_ready_for_chat(): void {
+		WordPressTestState::$ai_client_supported = true;
+
+		$state = State::get_page_state();
+		$meta  = State::get_group_card_meta( Config::GROUP_CHAT, $state );
+
+		$this->assertSame( 'wordpress_ai_client', $state['runtime_chat']['provider'] ?? null );
+		$this->assertTrue( $state['runtime_chat']['configured'] ?? false );
+		$this->assertSame( 'Ready', $meta['status']['label'] ?? null );
+		$this->assertSame( 'success', $meta['status']['tone'] ?? null );
+	}
+
 	public function test_render_page_consumes_request_scoped_feedback_only_for_the_matching_user(): void {
 		WordPressTestState::$current_user_id = 1;
 		$_POST                               = [

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\AI\FeatureModelSelection;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Support\MetricsNormalizer;
 use FlavorAgent\Support\RequestTrace;
 use FlavorAgent\Support\WordPressAIPolicy;
 use WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception;
+use WordPress\AiClient\AiClient;
 use WordPress\AiClient\Providers\Models\DTO\ModelConfig;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -51,19 +53,22 @@ final class WordPressAIClient {
 		?array $model_options = null,
 		string $ability_name = ''
 	): string|\WP_Error {
+		Provider::record_runtime_chat_configuration( null );
 		Provider::record_runtime_chat_metrics( null );
 		Provider::record_runtime_chat_diagnostics( null );
-		$model_options = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
-		$system_prompt = WordPressAIPolicy::system_instruction(
+		$selection         = self::resolve_provider_model_selection( $provider );
+		$resolved_provider = $selection['provider'];
+		$model_options     = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
+		$system_prompt     = WordPressAIPolicy::system_instruction(
 			$system_prompt,
 			$ability_name,
 			[
-				'provider'        => is_string( $provider ) ? sanitize_key( $provider ) : '',
+				'provider'        => $resolved_provider,
 				'reasoningEffort' => self::normalize_reasoning_effort_value( $reasoning_effort ),
 				'hasSchema'       => is_array( $schema ) && [] !== $schema,
 			]
 		);
-		$prompt        = self::make_prompt(
+		$prompt            = self::make_prompt(
 			$user_prompt,
 			[
 				'system_instruction' => $system_prompt,
@@ -74,7 +79,7 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$prompt = self::apply_provider_selection( $prompt, $provider );
+		$prompt = self::apply_provider_model_selection( $prompt, $selection );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -92,7 +97,7 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$prompt = self::apply_reasoning_effort( $prompt, $provider, $reasoning_effort );
+		$prompt = self::apply_reasoning_effort( $prompt, $resolved_provider, $reasoning_effort );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -107,17 +112,18 @@ final class WordPressAIClient {
 
 		$schema_union_count      = is_array( $schema ) ? self::count_schema_unions( $schema ) : 0;
 		$request_timeout_seconds = self::request_timeout_seconds(
-			$provider,
+			$resolved_provider,
 			$reasoning_effort,
 			$schema
 		);
 		$request_diagnostics     = self::build_request_diagnostics(
 			$system_prompt,
 			$user_prompt,
-			$provider,
+			$resolved_provider,
 			$reasoning_effort,
 			$schema,
-			$request_timeout_seconds
+			$request_timeout_seconds,
+			$selection
 		);
 		$trace_consumed          = RequestTrace::is_consumed();
 		$owns_trace              = $trace_consumed && ! RequestTrace::is_active();
@@ -125,7 +131,7 @@ final class WordPressAIClient {
 			? self::build_chat_trace_context(
 				$system_prompt,
 				$user_prompt,
-				$provider,
+				$resolved_provider,
 				$reasoning_effort,
 				$schema,
 				$request_timeout_seconds,
@@ -378,6 +384,115 @@ final class WordPressAIClient {
 		$updated_prompt = $prompt->using_model_config( $model_config );
 
 		return is_object( $updated_prompt ) ? $updated_prompt : $prompt;
+	}
+
+	/**
+	 * @return array{provider: string, model: string, source: string, modelResolutionStatus: string}
+	 */
+	private static function resolve_provider_model_selection( ?string $provider ): array {
+		$explicit_provider = is_string( $provider ) ? sanitize_key( $provider ) : '';
+
+		if ( '' !== $explicit_provider ) {
+			return [
+				'provider'              => $explicit_provider,
+				'model'                 => '',
+				'source'                => 'explicit',
+				'modelResolutionStatus' => 'provider',
+			];
+		}
+
+		$developer_selection = FeatureModelSelection::get();
+
+		if ( '' !== $developer_selection['provider'] ) {
+			return [
+				'provider'              => $developer_selection['provider'],
+				'model'                 => $developer_selection['model'],
+				'source'                => 'ai_plugin_feature_developer',
+				'modelResolutionStatus' => '' !== $developer_selection['model'] ? 'requested_model' : 'provider',
+			];
+		}
+
+		return [
+			'provider'              => '',
+			'model'                 => '',
+			'source'                => 'default',
+			'modelResolutionStatus' => 'default',
+		];
+	}
+
+	/**
+	 * @param array{provider: string, model: string, source: string, modelResolutionStatus: string, modelResolutionError?: string} $selection
+	 * @return object|\WP_Error
+	 */
+	private static function apply_provider_model_selection( object $prompt, array &$selection ) {
+		$provider = $selection['provider'];
+		$model    = $selection['model'];
+
+		if ( '' === $provider ) {
+			Provider::record_runtime_chat_configuration( null );
+
+			return $prompt;
+		}
+
+		if ( '' !== $model && class_exists( AiClient::class ) && is_callable( [ AiClient::class, 'defaultRegistry' ] ) && is_callable( [ $prompt, 'using_model' ] ) ) {
+			try {
+				$registry       = AiClient::defaultRegistry();
+				$provider_model = is_object( $registry ) && is_callable( [ $registry, 'getProviderModel' ] )
+					? $registry->getProviderModel( $provider, $model )
+					: null;
+
+				if ( is_wp_error( $provider_model ) ) {
+					$selection['modelResolutionStatus'] = 'model_resolution_failed_provider_fallback';
+					$selection['modelResolutionError']  = $provider_model->get_error_message();
+					$selection['model']                 = '';
+					$model                              = '';
+				} elseif ( is_object( $provider_model ) ) {
+					$updated_prompt = self::call_prompt_method( $prompt, 'using_model', [ $provider_model ] );
+
+					if ( is_wp_error( $updated_prompt ) ) {
+						$selection['modelResolutionStatus'] = 'model_resolution_failed_provider_fallback';
+						$selection['modelResolutionError']  = $updated_prompt->get_error_message();
+						$selection['model']                 = '';
+						$model                              = '';
+					} elseif ( is_object( $updated_prompt ) ) {
+						$selection['modelResolutionStatus'] = 'model';
+						Provider::record_runtime_chat_configuration(
+							[
+								'provider' => $provider,
+								'model'    => $model,
+							]
+						);
+
+						return $updated_prompt;
+					}
+				}
+			} catch ( \Throwable $throwable ) {
+				$selection['modelResolutionStatus'] = 'model_resolution_failed_provider_fallback';
+				$selection['modelResolutionError']  = $throwable->getMessage();
+				$selection['model']                 = '';
+				$model                              = '';
+			}
+		}
+
+		$updated_prompt = self::apply_provider_selection( $prompt, $provider );
+
+		if ( is_wp_error( $updated_prompt ) ) {
+			return $updated_prompt;
+		}
+
+		if ( 'requested_model' === (string) ( $selection['modelResolutionStatus'] ?? '' ) ) {
+			$selection['modelResolutionStatus'] = 'provider';
+		}
+		$selection['model'] = '';
+
+		Provider::record_runtime_chat_configuration(
+			[
+				'provider' => $provider,
+				'model'    => '',
+			]
+		);
+
+		return $updated_prompt;
 	}
 
 	/**
@@ -1068,6 +1183,7 @@ final class WordPressAIClient {
 
 	/**
 	 * @param array<string, mixed>|null $schema
+	 * @param array{provider: string, model: string, source: string, modelResolutionStatus: string, modelResolutionError?: string} $selection
 	 * @return array<string, mixed>
 	 */
 	private static function build_request_diagnostics(
@@ -1076,14 +1192,18 @@ final class WordPressAIClient {
 		?string $provider,
 		?string $reasoning_effort,
 		?array $schema,
-		int $timeout_seconds
+		int $timeout_seconds,
+		array $selection
 	): array {
+		$provider         = is_string( $provider ) ? sanitize_key( $provider ) : '';
 		$request_payload  = [
-			'provider'     => is_string( $provider ) ? sanitize_key( $provider ) : '',
+			'provider'     => $provider,
 			'instructions' => $system_prompt,
 			'input'        => $user_prompt,
 		];
 		$reasoning_effort = self::normalize_reasoning_effort_value( $reasoning_effort );
+		$resolved_model   = trim( (string) ( $selection['model'] ?? '' ) );
+		$resolution_error = trim( (string) ( $selection['modelResolutionError'] ?? '' ) );
 
 		if ( null !== $reasoning_effort ) {
 			$request_payload['reasoning'] = [ 'effort' => $reasoning_effort ];
@@ -1106,10 +1226,17 @@ final class WordPressAIClient {
 			],
 			'requestSummary' => array_filter(
 				[
-					'bodyBytes'         => self::json_byte_length( $request_payload ),
-					'instructionsChars' => strlen( $system_prompt ),
-					'inputChars'        => strlen( $user_prompt ),
-					'reasoningEffort'   => $reasoning_effort,
+					'bodyBytes'             => self::json_byte_length( $request_payload ),
+					'instructionsChars'     => strlen( $system_prompt ),
+					'inputChars'            => strlen( $user_prompt ),
+					'reasoningEffort'       => $reasoning_effort,
+					'resolvedProvider'      => $provider,
+					'resolvedModel'         => '' !== $provider
+						? ( '' !== $resolved_model ? $resolved_model : 'provider-managed' )
+						: '',
+					'modelSelectionSource'  => sanitize_key( (string) ( $selection['source'] ?? '' ) ),
+					'modelResolutionStatus' => sanitize_key( (string) ( $selection['modelResolutionStatus'] ?? '' ) ),
+					'modelResolutionError'  => $resolution_error,
 				],
 				static fn ( mixed $value ): bool => null !== $value && '' !== $value
 			),

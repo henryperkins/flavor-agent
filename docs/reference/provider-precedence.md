@@ -32,12 +32,14 @@ The admin Embedding Model section no longer renders this as a provider picker. I
 Flavor Agent chat requests enter through `ChatClient::chat()` for block/content and through direct `ResponsesClient::rank()` calls for pattern, template, template-part, navigation, Global Styles, and Style Book ranking. Both paths route through `WordPressAIClient::chat()`.
 
 1. Flavor Agent ignores saved provider values from older settings screens.
-2. Chat requests use the configured WordPress AI Client runtime without pinning a provider.
-3. When no WordPress AI Client text-generation runtime is available, `ChatClient::chat()` returns a `missing_text_generation_provider` `WP_Error` whose message is _"Configure a text-generation provider in Settings > Connectors to enable Flavor Agent recommendations."_
+2. Explicit provider arguments to `WordPressAIClient::chat()` have highest precedence and pin that request to the supplied provider.
+3. When no explicit provider is supplied, Flavor Agent reads the AI plugin Developer Tools per-feature option `wpai_feature_flavor-agent_field_developer`. A selected provider pins the request to that provider; a selected model is resolved through the WordPress AI Client registry with provider-managed fallback if the model is unavailable.
+4. If no explicit provider and no AI-plugin per-feature selection exists, chat requests use the configured WordPress AI Client runtime without pinning a provider.
+5. When no WordPress AI Client text-generation runtime is available, `ChatClient::chat()` returns a `missing_text_generation_provider` `WP_Error` whose message is _"Configure a text-generation provider in Settings > Connectors to enable Flavor Agent recommendations."_
 
 `ChatClient::is_supported()` returns `true` when the WordPress AI Client has a configured text-generation runtime. This is the gate for every chat-dependent ability: `flavor-agent/recommend-block`, `recommend-content`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, `recommend-style`, and the pattern-ranking phase of `flavor-agent/recommend-patterns` for both pattern retrieval backends.
 
-`Provider::chat_configuration()` reports the unpinned WordPress AI Client chat runtime when that runtime is available.
+`Provider::chat_configuration()` reports the unpinned WordPress AI Client chat runtime when that runtime is available. Per-request Activity Log metadata records the resolved runtime separately: `requestSummary.resolvedProvider`, `requestSummary.resolvedModel`, `requestSummary.modelSelectionSource`, and `requestSummary.modelResolutionStatus` show whether a request used an explicit provider, the AI plugin per-feature selection, or the default provider-managed runtime.
 
 ## Reasoning Effort Routing
 

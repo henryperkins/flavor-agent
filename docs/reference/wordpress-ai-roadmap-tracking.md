@@ -79,6 +79,8 @@ This overlay is separate from the project-board status tables above. Milestone a
 
 AI plugin `0.9.0` was verified in the local test container on 2026-05-09. Flavor Agent now treats the AI plugin Developer Tools per-feature option `wpai_feature_flavor-agent_field_developer` as the canonical feature-level provider/model preference when present, while explicit per-call provider arguments keep highest precedence.
 
+AI plugin `0.9.0` also shipped adjacent experiments and surfaces including Comment Moderation, Content Resizing, WP-CLI alt-text plumbing, and settings UI work. The only required Flavor Agent code integration from this release is honoring the per-feature developer provider/model setting; the other shipped surfaces remain watch items because Flavor Agent does not call those experiments directly.
+
 | Milestone URL                | Plugin version | Due        | Open / closed       | Read for Flavor Agent                                                                                                                                                                                                                                |
 | ---------------------------- | -------------- | ---------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WordPress/ai` milestone #17 | `0.9.0`        | 2026-05-07 | 31 open / 15 closed | The version immediately before `1.0.0`; logging, Ability schema hardening, Settings UI, provider model bucketing, and Connectors-flow work become near-term plugin assumptions.                                                                      |
@@ -207,6 +209,12 @@ Compete with the block recommendation flow in `src/inspector/BlockRecommendation
 | `WordPress/ai#187` | Support multilingual rewriting and translation via AI                       | Backlog       |
 | `WordPress/ai#188` | Add persona-driven content generation experiments                           | Backlog       |
 | `WordPress/ai#192` | Add extension points for custom prompt templates                            | Backlog       |
+
+Guidelines-specific follow-up:
+
+| Item | Status | Flavor Agent decision |
+| --- | --- | --- |
+| AI plugin Guidelines service content type filter | Filed upstream as `WordPress/ai#529` after 0.9.0 verification | Flavor Agent filters `wp_guideline_type=content` locally; upstream AI plugin service needs the same content type guard to avoid artifact-guideline shadowing. |
 
 ### Site And Admin Agent Direction
 

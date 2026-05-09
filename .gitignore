@@ -15,4 +15,5 @@ tmp/
 
 # Claude Code runtime artifacts
 .claude/*.lock
+.claude/agent-memory/
 .playwright-mcp/

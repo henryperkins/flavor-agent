@@ -147,6 +147,8 @@ namespace FlavorAgent\Tests\Support {
 
 		public static mixed $ai_client_generate_text_result = '';
 
+		public static mixed $ai_client_model_resolution_error = null;
+
 		public static ?object $current_post = null;
 
 		/**
@@ -359,6 +361,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$ai_client_provider_support  = [];
 			self::$ai_client_feature_support   = [];
 			self::$ai_client_generate_text_result = '';
+			self::$ai_client_model_resolution_error = null;
 			self::$current_post                = null;
 
 			$GLOBALS['wp_settings_fields']   = [];
@@ -400,6 +403,36 @@ namespace WordPress\AiClient\Providers\Models\DTO {
 			 */
 			public function toArray(): array {
 				return $this->config;
+			}
+		}
+	}
+}
+
+namespace WordPress\AiClient {
+
+	use FlavorAgent\Tests\Support\WordPressTestState;
+
+	if ( ! class_exists( 'WordPress\\AiClient\\AiClient' ) ) {
+		final class AiClient {
+
+			public static function defaultRegistry(): FakeProviderModelRegistry {
+				return new FakeProviderModelRegistry();
+			}
+		}
+	}
+
+	if ( ! class_exists( 'WordPress\\AiClient\\FakeProviderModelRegistry' ) ) {
+		final class FakeProviderModelRegistry {
+
+			public function getProviderModel( string $provider, string $model ): object {
+				if ( WordPressTestState::$ai_client_model_resolution_error instanceof \WP_Error ) {
+					return WordPressTestState::$ai_client_model_resolution_error;
+				}
+
+				return (object) [
+					'provider' => $provider,
+					'model'    => $model,
+				];
 			}
 		}
 	}
@@ -636,6 +669,13 @@ namespace WordPress\AI_Client {
 			return $this;
 		}
 
+		public function using_model( object $model ): self {
+			WordPressTestState::$last_ai_client_prompt['provider'] = (string) ( $model->provider ?? '' );
+			WordPressTestState::$last_ai_client_prompt['model']    = (string) ( $model->model ?? '' );
+
+			return $this;
+		}
+
 		public function using_reasoning_effort( $reasoning ): self {
 			WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array( $reasoning )
 				? (string) ( $reasoning['effort'] ?? '' )
@@ -721,6 +761,16 @@ namespace {
 						return $this;
 					case 'using_provider':
 						$this->state['provider'] = (string) ( $arguments[0] ?? '' );
+						$this->sync_state();
+
+						return $this;
+					case 'using_model':
+						$model = $arguments[0] ?? null;
+
+						if ( is_object( $model ) ) {
+							$this->state['provider'] = (string) ( $model->provider ?? '' );
+							$this->state['model']    = (string) ( $model->model ?? '' );
+						}
 						$this->sync_state();
 
 						return $this;

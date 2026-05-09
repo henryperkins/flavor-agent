@@ -250,6 +250,36 @@ final class Provider {
 	}
 
 	/**
+	 * @param array<string, mixed>|null $configuration
+	 */
+	public static function record_runtime_chat_configuration( ?array $configuration ): void {
+		if ( ! is_array( $configuration ) ) {
+			self::$last_runtime_chat_configuration      = null;
+			self::$has_fresh_runtime_chat_configuration = true;
+
+			return;
+		}
+
+		$provider = self::normalize_provider_for_request_meta(
+			(string) ( $configuration['provider'] ?? self::WORDPRESS_AI_CLIENT_PROVIDER )
+		);
+		$model    = trim( (string) ( $configuration['model'] ?? '' ) );
+		$label    = self::provider_label_for_request_meta( $provider );
+
+		self::$last_runtime_chat_configuration      = [
+			'provider'   => $provider,
+			'endpoint'   => '',
+			'api_key'    => '',
+			'model'      => '' !== $model ? $model : 'provider-managed',
+			'configured' => true,
+			'headers'    => [],
+			'url'        => '',
+			'label'      => $label,
+		];
+		self::$has_fresh_runtime_chat_configuration = true;
+	}
+
+	/**
 	 * @param array<string, mixed>|null $metrics
 	 */
 	public static function record_runtime_chat_metrics( ?array $metrics ): void {

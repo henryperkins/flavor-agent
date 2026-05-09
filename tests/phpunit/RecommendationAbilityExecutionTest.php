@@ -69,6 +69,49 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		);
 	}
 
+	public function test_execute_persists_resolved_provider_fields_in_request_diagnostic_activity(): void {
+		RecommendationAbilityExecution::execute(
+			'template',
+			'flavor-agent/recommend-template',
+			[
+				'templateRef' => 'theme//home',
+				'prompt'      => 'Tighten the structure.',
+				'document'    => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+			],
+			static fn(): array => [
+				'suggestions' => [],
+				'explanation' => 'Use fewer competing sections.',
+				'requestMeta' => [
+					'provider'       => 'anthropic',
+					'model'          => 'claude-sonnet-4-6',
+					'requestSummary' => [
+						'resolvedProvider'      => 'anthropic',
+						'resolvedModel'         => 'claude-sonnet-4-6',
+						'modelSelectionSource'  => 'ai_plugin_feature_developer',
+						'modelResolutionStatus' => 'model',
+					],
+				],
+			]
+		);
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'request_diagnostic', $entries[0]['activity_type'] ?? null );
+
+		$request = json_decode( (string) ( $entries[0]['request_json'] ?? '' ), true );
+		$this->assertSame( 'anthropic', $request['ai']['provider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $request['ai']['model'] ?? null );
+		$this->assertSame( 'anthropic', $request['ai']['requestSummary']['resolvedProvider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $request['ai']['requestSummary']['resolvedModel'] ?? null );
+		$this->assertSame( 'ai_plugin_feature_developer', $request['ai']['requestSummary']['modelSelectionSource'] ?? null );
+		$this->assertSame( 'model', $request['ai']['requestSummary']['modelResolutionStatus'] ?? null );
+	}
+
 	/**
 	 * @dataProvider request_diagnostic_title_cases
 	 *

@@ -17,6 +17,18 @@ final class WordPressAIClientTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
+	private static function register_ai_provider_connector( string $provider, string $name ): void {
+		WordPressTestState::$connectors[ $provider ] = [
+			'name'           => $name,
+			'description'    => $name . ' connector',
+			'type'           => 'ai_provider',
+			'authentication' => [
+				'method'       => 'api_key',
+				'setting_name' => 'connectors_ai_' . $provider . '_api_key',
+			],
+		];
+	}
+
 	public function test_is_supported_accepts_magic_method_prompt_builders(): void {
 		$prompt = wp_ai_client_prompt( 'Flavor Agent availability check.' );
 
@@ -649,6 +661,180 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 12, $meta['tokenUsage']['input'] ?? null );
 		$this->assertSame( 30, $meta['tokenUsage']['output'] ?? null );
 		$this->assertSame( 'anthropic-request-123', $meta['responseSummary']['providerRequestId'] ?? null );
+	}
+
+	public function test_chat_uses_ai_plugin_feature_developer_provider_and_model_when_no_provider_is_explicit(): void {
+		self::register_ai_provider_connector( 'anthropic', 'Anthropic' );
+		WordPressTestState::$options                        = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'anthropic',
+				'model'    => 'claude-sonnet-4-6',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$this->assertSame( 'anthropic', \FlavorAgent\OpenAI\Provider::chat_configuration( 'anthropic' )['provider'] ?? null );
+
+		$result = WordPressAIClient::chat( 'System.', 'User.' );
+		$meta   = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', WordPressTestState::$last_ai_client_prompt['model'] ?? null );
+		$this->assertSame( 'anthropic', $meta['provider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $meta['model'] ?? null );
+		$this->assertSame( 'anthropic', $meta['requestSummary']['resolvedProvider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $meta['requestSummary']['resolvedModel'] ?? null );
+		$this->assertSame( 'ai_plugin_feature_developer', $meta['requestSummary']['modelSelectionSource'] ?? null );
+		$this->assertSame( 'model', $meta['requestSummary']['modelResolutionStatus'] ?? null );
+		$this->assertArrayNotHasKey( 'selectedProvider', $meta['requestSummary'] ?? [] );
+	}
+
+	public function test_chat_uses_ai_plugin_feature_developer_provider_without_model(): void {
+		self::register_ai_provider_connector( 'openai', 'OpenAI' );
+		WordPressTestState::$options                        = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'openai',
+				'model'    => '',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$this->assertSame( 'openai', \FlavorAgent\OpenAI\Provider::chat_configuration( 'openai' )['provider'] ?? null );
+
+		$result = WordPressAIClient::chat( 'System.', 'User.' );
+		$meta   = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertArrayNotHasKey( 'model', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'openai', $meta['provider'] ?? null );
+		$this->assertSame( 'provider-managed', $meta['model'] ?? null );
+		$this->assertSame( 'openai', $meta['requestSummary']['resolvedProvider'] ?? null );
+		$this->assertSame( 'provider-managed', $meta['requestSummary']['resolvedModel'] ?? null );
+		$this->assertSame( 'ai_plugin_feature_developer', $meta['requestSummary']['modelSelectionSource'] ?? null );
+		$this->assertSame( 'provider', $meta['requestSummary']['modelResolutionStatus'] ?? null );
+	}
+
+	public function test_chat_explicit_provider_overrides_ai_plugin_feature_developer_selection(): void {
+		self::register_ai_provider_connector( 'anthropic', 'Anthropic' );
+		self::register_ai_provider_connector( 'openai', 'OpenAI' );
+		WordPressTestState::$options                        = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'anthropic',
+				'model'    => 'claude-sonnet-4-6',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$result = WordPressAIClient::chat( 'System.', 'User.', 'openai' );
+		$meta   = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertArrayNotHasKey( 'model', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'openai', $meta['provider'] ?? null );
+		$this->assertSame( 'provider-managed', $meta['model'] ?? null );
+		$this->assertSame( 'openai', $meta['requestSummary']['resolvedProvider'] ?? null );
+		$this->assertSame( 'provider-managed', $meta['requestSummary']['resolvedModel'] ?? null );
+		$this->assertSame( 'explicit', $meta['requestSummary']['modelSelectionSource'] ?? null );
+		$this->assertSame( 'provider', $meta['requestSummary']['modelResolutionStatus'] ?? null );
+	}
+
+	public function test_chat_falls_back_to_provider_when_developer_selected_model_resolution_fails(): void {
+		self::register_ai_provider_connector( 'anthropic', 'Anthropic' );
+		WordPressTestState::$options                          = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'anthropic',
+				'model'    => 'claude-sonnet-4-6',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support       = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_model_resolution_error = new \WP_Error(
+			'model_not_found',
+			'The configured model is no longer available.'
+		);
+		WordPressTestState::$ai_client_generate_text_result   = '{"explanation":"OK."}';
+
+		$result = WordPressAIClient::chat( 'System.', 'User.' );
+		$meta   = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertArrayNotHasKey( 'model', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'anthropic', $meta['provider'] ?? null );
+		$this->assertSame( 'provider-managed', $meta['model'] ?? null );
+		$this->assertSame( 'anthropic', $meta['requestSummary']['resolvedProvider'] ?? null );
+		$this->assertSame( 'provider-managed', $meta['requestSummary']['resolvedModel'] ?? null );
+		$this->assertSame( 'ai_plugin_feature_developer', $meta['requestSummary']['modelSelectionSource'] ?? null );
+		$this->assertSame( 'model_resolution_failed_provider_fallback', $meta['requestSummary']['modelResolutionStatus'] ?? null );
+		$this->assertSame( 'The configured model is no longer available.', $meta['requestSummary']['modelResolutionError'] ?? null );
+	}
+
+	public function test_chat_uses_developer_selected_provider_for_reasoning_effort_custom_options(): void {
+		self::register_ai_provider_connector( 'codex', 'Codex' );
+		WordPressTestState::$options                        = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'codex',
+				'model'    => '',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'codex' => true,
+		];
+		WordPressTestState::$ai_client_feature_support      = [
+			'reasoning' => false,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$result = WordPressAIClient::chat( 'System.', 'User.', null, 'high' );
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame(
+			[ 'reasoningEffort' => 'high' ],
+			WordPressTestState::$last_ai_client_prompt['customOptions'] ?? null
+		);
+	}
+
+	public function test_chat_trace_context_uses_developer_selected_provider(): void {
+		self::register_ai_provider_connector( 'codex', 'Codex' );
+		WordPressTestState::$options                        = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'codex',
+				'model'    => '',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'codex' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+		$events = [];
+
+		add_filter( 'flavor_agent_diagnostic_trace_enabled', '__return_false' );
+		add_action(
+			'flavor_agent_diagnostic_trace',
+			static function ( array $entry ) use ( &$events ): void {
+				$events[] = $entry;
+			}
+		);
+
+		WordPressAIClient::chat( 'System.', 'User.', null, 'high' );
+
+		$this->assertNotEmpty( $events );
+		$this->assertSame( 'codex', $events[0]['context']['provider'] ?? null );
+		$this->assertSame( 'high', $events[0]['context']['reasoningEffort'] ?? null );
 	}
 
 	private static function count_schema_unions( array $schema ): int {

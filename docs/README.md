@@ -65,7 +65,6 @@ Read these documents in this order:
    - `activity-state-machine.md` — undo states, transitions, ordered undo, and pruning.
    - `wordpress-ai-roadmap-tracking.md` — snapshot of WordPress org project 240 and the active overlap between upstream AI work and Flavor Agent surfaces, plus a refresh procedure.
    - `gutenberg-feature-tracking.md` — version-keyed map of Gutenberg releases, stabilized APIs, and forward-looking iteration issues mapped to Flavor Agent code paths, plus a refresh procedure.
-   - `2026-05-09-gutenberg-23-1-ai-0-9-validation.md` — container release baseline snapshot for Gutenberg 23.1.1, AI 0.9.0, and WP 7.1-alpha-62341.
    - `local-environment-setup.md` — representative local WordPress nightly/trunk setup and companion-plugin activation checklist.
    - `agentic-plan-implementation-guide.md` — durable rules for temporary implementation plans.
 7. `docs/flavor-agent-readme.md`
@@ -141,7 +140,7 @@ Right now the intended doc stack is:
 2. Current state: `STATUS.md`
 3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
 4. Per-surface deep dives: `docs/features/README.md`
-5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, 2026-05-09-gutenberg-23-1-ai-0-9-validation, agentic-plan-implementation-guide)
+5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
 6. Architecture companion: `docs/flavor-agent-readme.md`
 7. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
 
