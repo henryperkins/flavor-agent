@@ -45,6 +45,7 @@ function flushPromises() {
 function renderSettingsPage( {
 	defaultSection = 'chat',
 	forceSection = '',
+	includePatternBackendPreview = false,
 	prerequisiteMessage = '',
 	prerequisitesReady = '1',
 } = {} ) {
@@ -70,6 +71,45 @@ function renderSettingsPage( {
 					<summary>Docs</summary>
 				</details>
 			</section>
+
+			${
+				includePatternBackendPreview
+					? `
+						<fieldset
+							data-flavor-agent-pattern-backend-segments
+							data-saved-backend="qdrant"
+						>
+							<label class="flavor-agent-pattern-backend-segment">
+								<input
+									type="radio"
+									name="flavor_agent_pattern_retrieval_backend"
+									value="qdrant"
+									checked
+								/>
+								Qdrant
+								<span data-pattern-backend-active-pill>Active</span>
+							</label>
+							<label class="flavor-agent-pattern-backend-segment">
+								<input
+									type="radio"
+									name="flavor_agent_pattern_retrieval_backend"
+									value="cloudflare_ai_search"
+								/>
+								Cloudflare AI Search
+							</label>
+						</fieldset>
+						<p id="flavor-agent-pattern-backend-preview-hint" data-pattern-backend-preview-hint hidden>
+							Save Changes to switch pattern storage.
+						</p>
+						<div class="flavor-agent-pattern-backend-block" data-pattern-backend="qdrant">
+							Qdrant fields
+						</div>
+						<div class="flavor-agent-pattern-backend-block" data-pattern-backend="cloudflare_ai_search" hidden>
+							Cloudflare fields
+						</div>
+					`
+					: ''
+			}
 
 			<a
 				data-pattern-overview-status="true"
@@ -98,6 +138,7 @@ function renderSettingsPage( {
 					class="flavor-agent-settings-subpanel__body flavor-agent-sync-panel"
 					data-pattern-prerequisites-ready="${ prerequisitesReady }"
 					data-pattern-prerequisite-message="${ prerequisiteMessage }"
+					data-pattern-backend-preview-matches-saved="1"
 				>
 					<p id="flavor-agent-sync-summary" class="flavor-agent-sync-panel__summary">
 						Pattern recommendations are not available until you sync the catalog.
@@ -362,6 +403,70 @@ describe( 'settings page controller', () => {
 		expect( i18n.sprintf ).toHaveBeenCalled();
 	} );
 
+	test( 'queued sync polls until the live panel leaves indexing', async () => {
+		const root = renderSettingsPage();
+		const fetchImpl = jest
+			.fn()
+			.mockResolvedValueOnce( {
+				ok: true,
+				text: async () =>
+					JSON.stringify( {
+						queued: true,
+						scheduled: true,
+						runtimeState: {
+							status: 'indexing',
+							indexed_count: 0,
+							last_synced_at: null,
+						},
+						status: 'indexing',
+					} ),
+			} )
+			.mockResolvedValueOnce( {
+				ok: true,
+				text: async () =>
+					JSON.stringify( {
+						runtimeState: {
+							status: 'ready',
+							indexed_count: 12,
+							last_synced_at: '2026-04-07T12:00:00Z',
+						},
+						status: 'ready',
+					} ),
+			} );
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl,
+			storage: createStorage(),
+		} );
+
+		root.querySelector( '#flavor-agent-sync-button' ).click();
+		await flushPromises();
+		await flushPromises();
+
+		expect( fetchImpl ).toHaveBeenNthCalledWith(
+			1,
+			'https://example.test/wp-json/flavor-agent/v1/sync-patterns',
+			expect.objectContaining( {
+				method: 'POST',
+			} )
+		);
+		expect( fetchImpl ).toHaveBeenNthCalledWith(
+			2,
+			'https://example.test/wp-json/flavor-agent/v1/sync-patterns',
+			expect.objectContaining( {
+				method: 'GET',
+			} )
+		);
+		expect(
+			root.querySelector( '[data-pattern-status-badge="panel"]' )
+				.textContent
+		).toBe( 'Ready' );
+		expect(
+			root.querySelector( '#flavor-agent-sync-notice' ).textContent
+		).toContain( 'Pattern catalog sync queued. Status: Syncing.' );
+	} );
+
 	test( 'sync failure keeps the panel open and surfaces the server error', async () => {
 		const root = renderSettingsPage();
 		const fetchImpl = jest.fn().mockResolvedValue( {
@@ -460,6 +565,60 @@ describe( 'settings page controller', () => {
 		expect( button.disabled ).toBe( false );
 		expect( button.getAttribute( 'aria-disabled' ) ).toBe( 'false' );
 		expect( button.hasAttribute( 'aria-describedby' ) ).toBe( false );
+	} );
+
+	test( 'restored pattern backend radio state controls the visible backend and sync availability on load', () => {
+		const root = renderSettingsPage( {
+			includePatternBackendPreview: true,
+			prerequisitesReady: '1',
+			prerequisiteMessage: '',
+		} );
+		const qdrantRadio = root.querySelector( 'input[value="qdrant"]' );
+		const cloudflareRadio = root.querySelector(
+			'input[value="cloudflare_ai_search"]'
+		);
+
+		qdrantRadio.checked = false;
+		cloudflareRadio.checked = true;
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+
+		const qdrantBlock = root.querySelector(
+			'[data-pattern-backend="qdrant"]'
+		);
+		const cloudflareBlock = root.querySelector(
+			'[data-pattern-backend="cloudflare_ai_search"]'
+		);
+		const hint = root.querySelector(
+			'[data-pattern-backend-preview-hint]'
+		);
+		const syncBody = root.querySelector( '.flavor-agent-sync-panel' );
+		const button = root.querySelector( '#flavor-agent-sync-button' );
+		const qdrantSegment = qdrantRadio.closest(
+			'.flavor-agent-pattern-backend-segment'
+		);
+		const cloudflareSegment = cloudflareRadio.closest(
+			'.flavor-agent-pattern-backend-segment'
+		);
+
+		expect( qdrantBlock.hidden ).toBe( true );
+		expect( cloudflareBlock.hidden ).toBe( false );
+		expect( hint.hidden ).toBe( false );
+		expect( syncBody.dataset.patternBackendPreviewMatchesSaved ).toBe(
+			'0'
+		);
+		expect( button.disabled ).toBe( true );
+		expect( button.getAttribute( 'aria-describedby' ) ).toBe( hint.id );
+		expect( qdrantSegment.classList ).not.toContain(
+			'is-preview-selected'
+		);
+		expect( cloudflareSegment.classList ).toContain(
+			'is-preview-selected'
+		);
 	} );
 
 	test( 'guidelines manager adds, edits, and removes block guidelines in the hidden field', () => {

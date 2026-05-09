@@ -1,5 +1,4 @@
 import { useDispatch, useSelect } from '@wordpress/data';
-import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import {
 	createPortal,
 	useCallback,
@@ -56,11 +55,7 @@ import {
 import { normalizeTemplateType } from '../utils/template-types';
 import { getSuggestionKey } from '../inspector/suggestion-keys';
 import { buildStyleRecommendationRequestInput } from '../style-surfaces/request-input';
-import {
-	findStylesSidebarMountNode,
-	getStyleBookUiState,
-	subscribeToStyleBookUi,
-} from './dom';
+import { getStyleBookUiState, subscribeToStyleBookUi } from './dom';
 import {
 	getStyleSuggestionToneLabel,
 	isInlineStyleNotice,
@@ -236,11 +231,12 @@ function StyleBookPanel( {
 				/>
 			) }
 
-			{ explanation && suggestions.length > 0 && (
-				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-					{ explanation }
-				</p>
-			) }
+			{ explanation &&
+				( suggestions.length > 0 || hasMatchingResult ) && (
+					<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+						{ explanation }
+					</p>
+				) }
 
 			{ executableSuggestions.length > 0 && (
 				<RecommendationLane
@@ -369,6 +365,7 @@ export default function StyleBookRecommender() {
 		[ blockEditorSettings ]
 	);
 	const isStyleBookUiActive = Boolean( styleBookUiState?.isActive );
+	const sidebarMountNode = styleBookUiState?.sidebarMountNode || null;
 	const styleBookTargetBlockName = styleBookUiState?.target?.blockName || '';
 	const styleBookTargetBlockTitle =
 		styleBookUiState?.target?.blockTitle || '';
@@ -770,69 +767,23 @@ export default function StyleBookRecommender() {
 		if (
 			! isGlobalStylesActive ||
 			! isStyleBookUiActive ||
+			! sidebarMountNode ||
 			typeof document === 'undefined'
 		) {
 			setPortalNode( null );
 			return undefined;
 		}
 
-		if ( typeof window.MutationObserver !== 'function' ) {
-			setPortalNode( null );
-			return undefined;
-		}
-
-		let nextPortalNode = null;
-		const ensurePortalNode = () => {
-			const panel = findStylesSidebarMountNode( document );
-
-			if ( ! panel ) {
-				if ( nextPortalNode ) {
-					nextPortalNode.remove();
-					nextPortalNode = null;
-				}
-
-				setPortalNode( null );
-				return;
-			}
-
-			if (
-				nextPortalNode &&
-				nextPortalNode.isConnected &&
-				nextPortalNode.parentNode === panel
-			) {
-				return;
-			}
-
-			if ( nextPortalNode ) {
-				nextPortalNode.remove();
-			}
-
-			nextPortalNode = document.createElement( 'div' );
-			nextPortalNode.className = 'flavor-agent-style-book-sidebar-slot';
-			panel.appendChild( nextPortalNode );
-			setPortalNode( nextPortalNode );
-		};
-
-		const observer = new window.MutationObserver( () => {
-			ensurePortalNode();
-		} );
-
-		ensurePortalNode();
-		observer.observe( document.body, {
-			childList: true,
-			subtree: true,
-		} );
+		const nextPortalNode = document.createElement( 'div' );
+		nextPortalNode.className = 'flavor-agent-style-book-sidebar-slot';
+		sidebarMountNode.appendChild( nextPortalNode );
+		setPortalNode( nextPortalNode );
 
 		return () => {
-			observer.disconnect();
-
-			if ( nextPortalNode ) {
-				nextPortalNode.remove();
-			}
-
+			nextPortalNode.remove();
 			setPortalNode( null );
 		};
-	}, [ isGlobalStylesActive, isStyleBookUiActive ] );
+	}, [ isGlobalStylesActive, isStyleBookUiActive, sidebarMountNode ] );
 
 	const previousScopeKey = useRef( scope?.scopeKey || null );
 	const previousRecommendationContextSignature = useRef(
@@ -984,18 +935,9 @@ export default function StyleBookRecommender() {
 		/>
 	);
 
-	// Use the native Styles sidebar when available and fall back to a
-	// document panel only when the sidebar mount point is unavailable.
 	if ( portalNode ) {
 		return createPortal( panel, portalNode );
 	}
 
-	return (
-		<PluginDocumentSettingPanel
-			name="flavor-agent-style-book"
-			title="AI Style Book Suggestions"
-		>
-			{ panel }
-		</PluginDocumentSettingPanel>
-	);
+	return null;
 }

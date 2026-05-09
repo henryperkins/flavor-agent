@@ -236,6 +236,71 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( 'template part `header`', $prompt );
 	}
 
+	public function test_build_user_trims_global_style_configs_to_model_relevant_branches(): void {
+		$context = $this->build_context();
+
+		$context['styleContext']['currentConfig'] = [
+			'settings' => [
+				'color'      => [
+					'palette' => [
+						'custom' => false,
+					],
+				],
+				'typography' => [
+					'fontSizes' => [],
+				],
+				'spacing'    => [
+					'units' => [ 'px' ],
+				],
+				'layout'     => [
+					'contentSize' => 'should-not-include-layout',
+				],
+			],
+			'styles'   => [
+				'color' => [
+					'background' => '#ffffff',
+				],
+			],
+			'_links'   => [
+				'self' => [
+					[
+						'href' => 'should-not-include-link',
+					],
+				],
+			],
+		];
+
+		$context['styleContext']['mergedConfig'] = [
+			'settings' => [
+				'color'   => [
+					'background' => true,
+				],
+				'custom'  => [
+					'flag' => 'should-not-include-custom',
+				],
+				'spacing' => [
+					'blockGap' => true,
+				],
+			],
+			'styles'   => [
+				'typography' => [
+					'lineHeight' => '1.5',
+				],
+			],
+		];
+
+		$prompt = StylePrompt::build_user( $context );
+
+		$this->assertStringContainsString( '"palette":{"custom":false}', $prompt );
+		$this->assertStringContainsString( '"units":["px"]', $prompt );
+		$this->assertStringContainsString( '"styles":{"color":{"background":"#ffffff"}}', $prompt );
+		$this->assertStringContainsString( '"blockGap":true', $prompt );
+		$this->assertStringContainsString( '"styles":{"typography":{"lineHeight":"1.5"}}', $prompt );
+		$this->assertStringNotContainsString( 'should-not-include-layout', $prompt );
+		$this->assertStringNotContainsString( 'should-not-include-link', $prompt );
+		$this->assertStringNotContainsString( 'should-not-include-custom', $prompt );
+	}
+
 	public function test_build_user_includes_style_book_target_context(): void {
 		$context                                    = $this->build_context();
 		$context['scope']['surface']                = 'style-book';
@@ -613,6 +678,42 @@ final class StylePromptTest extends TestCase {
 		$this->assertSame(
 			'Midnight',
 			$result['suggestions'][0]['operations'][0]['variationTitle'] ?? null
+		);
+	}
+
+	public function test_parse_response_accepts_title_only_theme_variation_operations(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Switch to Midnight',
+							'description' => 'Use the Midnight variation as the new base.',
+							'category'    => 'variation',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'           => 'set_theme_variation',
+									'variationTitle' => 'Midnight',
+								],
+							],
+						],
+					],
+					'explanation' => 'Use the preset-backed Midnight variation.',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'executable', $result['suggestions'][0]['tone'] );
+		$this->assertSame(
+			[
+				'type'           => 'set_theme_variation',
+				'variationIndex' => 1,
+				'variationTitle' => 'Midnight',
+			],
+			$result['suggestions'][0]['operations'][0]
 		);
 	}
 

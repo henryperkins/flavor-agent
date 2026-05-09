@@ -76,7 +76,8 @@ Use it when you need to answer:
 | `GET /flavor-agent/v1/activity` | Contextual editor/theme capability; `manage_options` for global reads | `loadActivitySession()` and admin activity log | `ActivityRepository::query()` for scoped reads; `ActivityRepository::query_admin()` for global admin reads | Scoped queries power editor/theme history; global admin reads return pagination, summary, and filter-option metadata for the audit page |
 | `POST /flavor-agent/v1/activity` | Contextual editor/theme capability | Store-side activity persistence | `ActivityRepository::create()` | Persists server-backed activity entries, including executable apply rows and scoped read-only `request_diagnostic` audit rows |
 | `POST /flavor-agent/v1/activity/{id}/undo` | Contextual editor/theme capability | `undoActivity()` | `ActivityRepository::update_undo_status()` | Persists undo-status transitions |
-| `POST /flavor-agent/v1/sync-patterns` | `manage_options` | `src/admin/settings-page-controller.js` | `PatternIndex::sync()` | Manual admin-only pattern catalog rebuild with live settings-panel state refresh |
+| `POST /flavor-agent/v1/sync-patterns` | `manage_options` | `src/admin/settings-page-controller.js` | `PatternIndex::enqueue_sync()` | Queues the admin-only pattern catalog rebuild through WP-Cron and returns live settings-panel state |
+| `GET /flavor-agent/v1/sync-patterns` | `manage_options` | `src/admin/settings-page-controller.js` | `PatternIndex::get_runtime_state()` | Returns current pattern sync state for settings-panel polling |
 
 ## Activity Route Notes
 
@@ -718,12 +719,12 @@ The client sends live slot data including `assignedParts`, `emptyAreas`, and `al
 
 ```json
 {
-  "indexed": 6,
-  "removed": 2,
-  "fingerprint": "1b52d1f7c8a7e3f1",
-  "status": "ready",
+  "queued": true,
+  "scheduled": true,
+  "scheduledAt": "2026-05-09T12:00:05+00:00",
+  "status": "indexing",
   "runtimeState": {
-    "status": "ready",
+    "status": "indexing",
     "pattern_backend": "qdrant"
   },
   "requestMeta": {
@@ -732,7 +733,7 @@ The client sends live slot data including `assignedParts`, `emptyAreas`, and `al
 }
 ```
 
-The same response shape is used for Qdrant and Cloudflare AI Search syncs, and the REST route appends the live `runtimeState` plus `requestMeta.route` for activity/provenance consumers. The persisted `flavor_agent_pattern_index_state` records `pattern_backend`, Qdrant state fields for Qdrant, and `cloudflare_ai_search_namespace`, `cloudflare_ai_search_instance`, and `cloudflare_ai_search_signature` for Cloudflare AI Search.
+The POST response shape is backend-neutral because it only reports queue status. The GET response returns the live `runtimeState` plus `requestMeta.route` for settings polling. The persisted `flavor_agent_pattern_index_state` records `pattern_backend`, Qdrant state fields for Qdrant, and `cloudflare_ai_search_namespace`, `cloudflare_ai_search_instance`, and `cloudflare_ai_search_signature` for Cloudflare AI Search.
 
 ### Activity Entry Shape
 
@@ -783,7 +784,7 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 - Docs grounding stays surface-specific: template requests scope guidance with live slot occupancy, top-level structure, visible patterns, pattern overrides, and viewport visibility; template-part requests scope guidance with operation targets, insertion anchors, structural constraints, and live block paths; style requests scope guidance with supported style paths, available variations or the active Style Book target, design semantics, and the live template structure/visibility snapshot
 - Navigation response groups now validate structural `changes[].targetPath` values against the current menu target inventory instead of trusting free-form target text alone
 - Activity permissions are contextual: post-like scopes use `edit_posts` or `edit_post`, while template, template-part, navigation, Global Styles, and Style Book scopes require `edit_theme_options`
-- Manual sync is intentionally admin-only because it mutates shared vector-index state
+- Manual sync is intentionally admin-only because it queues mutation of shared vector-index state
 
 ## Primary Source Files
 

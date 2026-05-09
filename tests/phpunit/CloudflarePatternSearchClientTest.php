@@ -258,6 +258,118 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertSame( 'pattern', $result[0]['metadata']['candidate_type'] ?? '' );
 	}
 
+	public function test_search_omits_pattern_name_filter_when_visible_scope_exceeds_cloudflare_limit(): void {
+		$this->seed_options();
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'    => 'chunk-visible',
+								'score' => 0.9,
+								'text'  => 'Visible pattern copy.',
+								'item'  => [
+									'key'      => 'theme-hero.md',
+									'metadata' => [
+										'pattern_name'   => 'theme/hero',
+										'candidate_type' => 'pattern',
+										'source'         => 'theme',
+										'synced_id'      => 'theme-hero',
+										'public_safe'    => true,
+									],
+								],
+							],
+							[
+								'id'    => 'chunk-out-of-scope',
+								'score' => 0.85,
+								'text'  => 'Out-of-scope pattern copy.',
+								'item'  => [
+									'key'      => 'theme-out.md',
+									'metadata' => [
+										'pattern_name'   => 'theme/out-of-scope',
+										'candidate_type' => 'pattern',
+										'source'         => 'theme',
+										'synced_id'      => 'theme-out',
+										'public_safe'    => true,
+									],
+								],
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$visible_names = [ 'theme/hero' ];
+		for ( $i = 0; $i < 100; $i++ ) {
+			$visible_names[] = "theme/extra-$i";
+		}
+
+		$result = PatternSearchClient::search_patterns(
+			'Build a hero section',
+			$visible_names,
+			7
+		);
+
+		$request_body = json_decode(
+			WordPressTestState::$last_remote_post['args']['body'],
+			true
+		);
+
+		// Filter is omitted when visible scope exceeds Cloudflare's $in limit.
+		$this->assertArrayNotHasKey(
+			'filters',
+			$request_body['ai_search_options']['retrieval'] ?? []
+		);
+
+		// Rest of the retrieval envelope is unchanged.
+		$this->assertSame( 'hybrid', $request_body['ai_search_options']['retrieval']['retrieval_type'] ?? null );
+		$this->assertSame( 'rrf', $request_body['ai_search_options']['retrieval']['fusion_method'] ?? null );
+		$this->assertTrue( $request_body['ai_search_options']['retrieval']['return_on_failure'] ?? false );
+
+		// normalize_chunks() must still enforce visibility: only the in-scope
+		// chunk survives, the out-of-scope one is dropped.
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, $result );
+		$this->assertSame( 'theme/hero', $result[0]['name'] ?? null );
+	}
+
+	public function test_search_includes_pattern_name_filter_at_cloudflare_limit_boundary(): void {
+		$this->seed_options();
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [],
+					],
+				]
+			),
+		];
+
+		$visible_names = [];
+		for ( $i = 0; $i < 99; $i++ ) {
+			$visible_names[] = "theme/pattern-$i";
+		}
+
+		PatternSearchClient::search_patterns( 'header section', $visible_names, 5 );
+
+		$request_body = json_decode(
+			WordPressTestState::$last_remote_post['args']['body'],
+			true
+		);
+
+		$filter = $request_body['ai_search_options']['retrieval']['filters']['pattern_name'] ?? null;
+
+		$this->assertIsArray( $filter );
+		$this->assertArrayHasKey( '$in', $filter );
+		$this->assertCount( 99, $filter['$in'] );
+	}
+
 	public function test_saved_private_pattern_ai_search_credentials_are_ignored(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'workers-account',
@@ -497,8 +609,16 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		WordPressTestState::$remote_get_responses = [
 			$this->item_list_response(
 				[
-					[ 'id' => 'theme-hero' ],
-					[ 'id' => 'theme-footer' ],
+					[
+						'id'     => 'cloudflare-item-hero',
+						'key'    => 'theme-hero.md',
+						'status' => 'completed',
+					],
+					[
+						'id'     => 'cloudflare-item-footer',
+						'key'    => 'theme-footer.md',
+						'status' => 'completed',
+					],
 				],
 				2,
 				1,
@@ -507,7 +627,11 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 			),
 			$this->item_list_response(
 				[
-					[ 'id' => 'theme-pricing' ],
+					[
+						'id'     => 'cloudflare-item-pricing',
+						'key'    => 'theme-pricing.md',
+						'status' => 'completed',
+					],
 				],
 				1,
 				2,

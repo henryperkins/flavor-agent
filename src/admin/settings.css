@@ -818,3 +818,91 @@
 		justify-content: flex-start;
 	}
 }
+
+.flavor-agent-pattern-backend-segments {
+	display: inline-flex;
+	margin: 8px 0 0;
+	padding: 4px;
+	border: 1px solid var(--wpds-color-stroke-surface-neutral-weak, #e0e0e0);
+	border-radius: var(--wpds-border-radius-lg, 8px);
+	background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
+	gap: 4px;
+}
+
+.flavor-agent-pattern-backend-segment {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 14px;
+	border-radius: var(--wpds-border-radius-md, 4px);
+	color: var(--flavor-agent-brand-text);
+	font-size: var(--wpds-font-size-md, 13px);
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background-color 0.15s ease,
+		color 0.15s ease,
+		box-shadow 0.15s ease;
+}
+
+.flavor-agent-pattern-backend-segment:hover {
+	background: var(--wpds-color-bg-surface, #fff);
+}
+
+.flavor-agent-pattern-backend-segment__input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	border: 0;
+	clip: rect(0 0 0 0);
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.flavor-agent-pattern-backend-segment.is-preview-selected {
+	background: var(--wpds-color-bg-surface, #fff);
+	color: var(--flavor-agent-brand-accent-strong);
+	box-shadow:
+		0 0 0 1px var(--flavor-agent-brand-accent),
+		0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.flavor-agent-pattern-backend-segment:has(
+		.flavor-agent-pattern-backend-segment__input:focus-visible
+	) {
+	outline: 2px solid var(--flavor-agent-brand-accent);
+	outline-offset: 2px;
+}
+
+.flavor-agent-pattern-backend-segment__pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 6px;
+	min-height: 18px;
+	border-radius: var(--wpds-border-radius-md, 4px);
+	background: var(--wpds-color-bg-surface-success-weak, #eaffed);
+	color: var(--wpds-color-fg-content-success-weak, #007f30);
+	font-size: var(--wpds-font-size-xs, 11px);
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	line-height: 1.25;
+	text-transform: uppercase;
+}
+
+.flavor-agent-pattern-backend-hint {
+	margin: 8px 0 0;
+	color: var(--wpds-color-fg-content-warning-weak, #926300);
+	font-size: var(--wpds-font-size-sm, 12px);
+	font-style: italic;
+}
+
+.flavor-agent-pattern-backend-hint[hidden] {
+	display: none;
+}
+
+.flavor-agent-pattern-backend-block[hidden] {
+	display: none;
+}

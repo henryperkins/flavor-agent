@@ -32,7 +32,7 @@ final class AgentRoutesTest extends TestCase {
 			$registered_routes
 		);
 
-		$this->assertRouteMethods( '/flavor-agent/v1/sync-patterns', [ 'POST' ] );
+		$this->assertRouteMethods( '/flavor-agent/v1/sync-patterns', [ 'GET', 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/activity', [ 'GET', 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/undo', [ 'POST' ] );
 	}
@@ -55,6 +55,9 @@ final class AgentRoutesTest extends TestCase {
 		$this->assertForbidden(
 			$this->dispatch_route( 'POST', '/flavor-agent/v1/sync-patterns' )
 		);
+		$this->assertForbidden(
+			$this->dispatch_route( 'GET', '/flavor-agent/v1/sync-patterns' )
+		);
 
 		WordPressTestState::$capabilities = [
 			'manage_options' => true,
@@ -62,6 +65,9 @@ final class AgentRoutesTest extends TestCase {
 
 		$this->assertNotForbidden(
 			$this->dispatch_route( 'POST', '/flavor-agent/v1/sync-patterns' )
+		);
+		$this->assertNotForbidden(
+			$this->dispatch_route( 'GET', '/flavor-agent/v1/sync-patterns' )
 		);
 	}
 

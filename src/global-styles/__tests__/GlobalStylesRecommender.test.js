@@ -43,10 +43,6 @@ jest.mock( '@wordpress/blocks', () => ( {
 	store: 'core/blocks',
 } ) );
 
-jest.mock( '@wordpress/editor', () => ( {
-	PluginDocumentSettingPanel: ( { children } ) => children,
-} ) );
-
 jest.mock( '../../components/CapabilityNotice', () => () => null );
 jest.mock( '../../components/AIStatusNotice', () => {
 	const { createElement } = require( '@wordpress/element' );
@@ -126,17 +122,6 @@ jest.mock( '../../utils/capability-flags', () => ( {
 } ) );
 
 jest.mock( '../../style-book/dom', () => ( {
-	findStylesSidebarMountNode: ( root ) => {
-		const resolvedRoot = root || global.document;
-
-		return (
-			resolvedRoot.querySelector(
-				'.editor-global-styles-sidebar__panel'
-			) ||
-			resolvedRoot.querySelector( '.editor-global-styles-sidebar' ) ||
-			resolvedRoot.querySelector( '[role="region"][aria-label="Styles"]' )
-		);
-	},
 	getStyleBookUiState: ( ...args ) => mockGetStyleBookUiState( ...args ),
 	subscribeToStyleBookUi: ( ...args ) =>
 		mockSubscribeToStyleBookUi( ...args ),
@@ -188,8 +173,20 @@ let currentBlockEditorSettings = null;
 let currentGlobalStylesData = null;
 let currentStoreState = null;
 let currentStyleBookUiState = null;
+let styleBookUiSubscriber = null;
 let currentEditedTemplateId = null;
 let currentEditedBlocks = null;
+
+function getMockStyleBookUiState() {
+	return {
+		...currentStyleBookUiState,
+		sidebarMountNode:
+			document.querySelector( '.editor-global-styles-sidebar__panel' ) ||
+			document.querySelector( '.editor-global-styles-sidebar' ) ||
+			document.querySelector( '[role="region"][aria-label="Styles"]' ) ||
+			null,
+	};
+}
 
 function createGlobalStylesData( globalStylesId = '17' ) {
 	return {
@@ -348,6 +345,7 @@ beforeEach( () => {
 		isActive: false,
 		target: null,
 	};
+	styleBookUiSubscriber = null;
 	mockSurfaceCapability = {
 		available: true,
 	};
@@ -360,9 +358,10 @@ beforeEach( () => {
 		status: 'available',
 		error: null,
 	} );
-	mockGetStyleBookUiState.mockImplementation( () => currentStyleBookUiState );
+	mockGetStyleBookUiState.mockImplementation( getMockStyleBookUiState );
 	mockSubscribeToStyleBookUi.mockImplementation( ( _root, onChange ) => {
-		onChange( currentStyleBookUiState );
+		styleBookUiSubscriber = onChange;
+		onChange( getMockStyleBookUiState() );
 		return () => {};
 	} );
 
@@ -671,6 +670,7 @@ describe( 'GlobalStylesRecommender', () => {
 
 		await act( async () => {
 			document.body.appendChild( sidebar );
+			styleBookUiSubscriber?.( getMockStyleBookUiState() );
 			await Promise.resolve();
 		} );
 
@@ -678,6 +678,16 @@ describe( 'GlobalStylesRecommender', () => {
 		expect(
 			sidebar.querySelector( '.flavor-agent-global-styles-sidebar-slot' )
 		).not.toBeNull();
+	} );
+
+	test( 'does not render a document panel fallback when the Styles sidebar mount is missing', () => {
+		sidebar.remove();
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( getContainer().textContent ).toBe( '' );
 	} );
 
 	test( 'mounts into the Styles sidebar wrapper when the panel class is absent', () => {
@@ -828,6 +838,31 @@ describe( 'GlobalStylesRecommender', () => {
 					sidebar.querySelector( '.flavor-agent-panel__note' )
 				)
 		).toBe( DOCUMENT_POSITION_FOLLOWING );
+	} );
+
+	test( 'renders the Global Styles explanation for an empty successful response', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [],
+			explanation:
+				'No safe theme-backed operations matched this style request.',
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: buildContextSignature(
+				createGlobalStylesData( '17' )
+			),
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain(
+			'No safe theme-backed operations matched this style request.'
+		);
+		expect( sidebar.textContent ).toContain(
+			'No safe Global Styles changes were returned for this prompt.'
+		);
 	} );
 
 	test( 'does not show the current scope badge when the latest Global Styles request failed', () => {

@@ -412,6 +412,7 @@ export function getSelectedStyleBookTarget( root = document ) {
 export function getStyleBookUiState( root = document ) {
 	return {
 		isActive: Boolean( findStyleBookIframe( root ) ),
+		sidebarMountNode: findStylesSidebarMountNode( root ),
 		target: getSelectedStyleBookTarget( root ),
 	};
 }

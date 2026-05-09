@@ -1,5 +1,4 @@
 import { useDispatch, useSelect } from '@wordpress/data';
-import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import {
 	createPortal,
 	useCallback,
@@ -40,11 +39,7 @@ import {
 	getExecutableSurfaceStaleMessage,
 } from '../utils/recommendation-stale-reasons';
 import { buildGlobalStyleDesignSemantics } from '../utils/style-design-semantics';
-import {
-	findStylesSidebarMountNode,
-	getStyleBookUiState,
-	subscribeToStyleBookUi,
-} from '../style-book/dom';
+import { getStyleBookUiState, subscribeToStyleBookUi } from '../style-book/dom';
 import { buildStyleRecommendationRequestInput } from '../style-surfaces/request-input';
 import {
 	getStyleSuggestionToneLabel,
@@ -227,11 +222,12 @@ function GlobalStylesPanel( {
 				/>
 			) }
 
-			{ explanation && suggestions.length > 0 && (
-				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-					{ explanation }
-				</p>
-			) }
+			{ explanation &&
+				( suggestions.length > 0 || hasMatchingResult ) && (
+					<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+						{ explanation }
+					</p>
+				) }
 
 			{ executableSuggestions.length > 0 && (
 				<RecommendationLane
@@ -351,6 +347,7 @@ export default function GlobalStylesRecommender() {
 		( select ) => select( 'core/block-editor' )?.getSettings?.() || {},
 		[]
 	);
+	const sidebarMountNode = styleBookUiState?.sidebarMountNode || null;
 	const themeTokenDiagnostics = useMemo(
 		() => collectThemeTokenDiagnosticsFromSettings( blockEditorSettings ),
 		[ blockEditorSettings ]
@@ -709,70 +706,23 @@ export default function GlobalStylesRecommender() {
 		if (
 			! isGlobalStylesActive ||
 			isStyleBookActive ||
+			! sidebarMountNode ||
 			typeof document === 'undefined'
 		) {
 			setPortalNode( null );
 			return undefined;
 		}
 
-		if ( typeof window.MutationObserver !== 'function' ) {
-			setPortalNode( null );
-			return undefined;
-		}
-
-		let nextPortalNode = null;
-		const ensurePortalNode = () => {
-			const panel = findStylesSidebarMountNode( document );
-
-			if ( ! panel ) {
-				if ( nextPortalNode ) {
-					nextPortalNode.remove();
-					nextPortalNode = null;
-				}
-
-				setPortalNode( null );
-				return;
-			}
-
-			if (
-				nextPortalNode &&
-				nextPortalNode.isConnected &&
-				nextPortalNode.parentNode === panel
-			) {
-				return;
-			}
-
-			if ( nextPortalNode ) {
-				nextPortalNode.remove();
-			}
-
-			nextPortalNode = document.createElement( 'div' );
-			nextPortalNode.className =
-				'flavor-agent-global-styles-sidebar-slot';
-			panel.appendChild( nextPortalNode );
-			setPortalNode( nextPortalNode );
-		};
-
-		const observer = new window.MutationObserver( () => {
-			ensurePortalNode();
-		} );
-
-		ensurePortalNode();
-		observer.observe( document.body, {
-			childList: true,
-			subtree: true,
-		} );
+		const nextPortalNode = document.createElement( 'div' );
+		nextPortalNode.className = 'flavor-agent-global-styles-sidebar-slot';
+		sidebarMountNode.appendChild( nextPortalNode );
+		setPortalNode( nextPortalNode );
 
 		return () => {
-			observer.disconnect();
-
-			if ( nextPortalNode ) {
-				nextPortalNode.remove();
-			}
-
+			nextPortalNode.remove();
 			setPortalNode( null );
 		};
-	}, [ isGlobalStylesActive, isStyleBookActive ] );
+	}, [ isGlobalStylesActive, isStyleBookActive, sidebarMountNode ] );
 
 	const previousGlobalStylesId = useRef( scope?.globalStylesId || null );
 	const previousRecommendationContextSignature = useRef(
@@ -923,18 +873,9 @@ export default function GlobalStylesRecommender() {
 		/>
 	);
 
-	// Use the native Styles sidebar when available and fall back to a
-	// document panel only when the sidebar mount point is unavailable.
 	if ( portalNode ) {
 		return createPortal( panel, portalNode );
 	}
 
-	return (
-		<PluginDocumentSettingPanel
-			name="flavor-agent-global-styles"
-			title="AI Style Suggestions"
-		>
-			{ panel }
-		</PluginDocumentSettingPanel>
-	);
+	return null;
 }

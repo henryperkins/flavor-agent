@@ -258,6 +258,8 @@ export function buildGlobalStylesRecommendationContextSignature( {
 	templateVisibility,
 	designSemantics,
 } ) {
+	// Style Book requests cannot apply theme variations, so variation drift should
+	// not invalidate otherwise matching block-scoped recommendations.
 	const includeVariations = scope?.surface !== 'style-book';
 
 	return buildContextSignature( {

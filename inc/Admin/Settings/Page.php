@@ -550,38 +550,54 @@ final class Page {
 	 */
 	private static function render_pattern_recommendations_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_PATTERNS, $state, $feedback );
+
+		$selected_backend  = (string) ( $state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
+		$qdrant_active     = Config::PATTERN_BACKEND_QDRANT === $selected_backend;
+		$cloudflare_active = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend;
 		?>
 		<p class="description">
 			<?php echo esc_html__( 'Choose where the pattern catalog is stored.', 'flavor-agent' ); ?>
 		</p>
 		<?php
 		self::render_registered_section_callback( 'flavor_agent_pattern_retrieval' );
-		self::render_registered_fields_table(
-			'flavor_agent_pattern_retrieval',
-			[
-				Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
-			]
-		);
-		self::render_subsection_heading(
-			__( 'Qdrant Pattern Storage', 'flavor-agent' ),
-			__( 'Vector storage for the pattern index.', 'flavor-agent' )
-		);
-		self::render_registered_section_callback( 'flavor_agent_qdrant' );
-		self::render_registered_fields_table(
-			'flavor_agent_qdrant',
-			[
-				'flavor_agent_qdrant_url',
-				'flavor_agent_qdrant_key',
-			]
-		);
-		self::render_subsection_heading(
-			__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
-			__( 'Managed pattern index using the saved Cloudflare credentials from the Embedding Model section.', 'flavor-agent' )
-		);
-		self::render_cloudflare_pattern_ai_search_status_panel( $state, $feedback );
-		self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
-		self::render_cloudflare_pattern_ai_search_hidden_field();
+		self::render_pattern_backend_segmented_control( $selected_backend );
 		?>
+		<div
+			class="flavor-agent-pattern-backend-block"
+			data-pattern-backend="<?php echo esc_attr( Config::PATTERN_BACKEND_QDRANT ); ?>"
+			<?php echo $qdrant_active ? '' : 'hidden'; ?>
+		>
+			<?php
+			self::render_subsection_heading(
+				__( 'Qdrant Pattern Storage', 'flavor-agent' ),
+				__( 'Vector storage for the pattern index.', 'flavor-agent' )
+			);
+			self::render_qdrant_pattern_storage_status_panel( $state );
+			self::render_registered_section_callback( 'flavor_agent_qdrant' );
+			self::render_registered_fields_table(
+				'flavor_agent_qdrant',
+				[
+					'flavor_agent_qdrant_url',
+					'flavor_agent_qdrant_key',
+				]
+			);
+			?>
+		</div>
+		<div
+			class="flavor-agent-pattern-backend-block"
+			data-pattern-backend="<?php echo esc_attr( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH ); ?>"
+			<?php echo $cloudflare_active ? '' : 'hidden'; ?>
+		>
+			<?php
+			self::render_subsection_heading(
+				__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
+				__( 'Managed pattern index using the saved Cloudflare credentials from the Embedding Model section.', 'flavor-agent' )
+			);
+			self::render_cloudflare_pattern_ai_search_status_panel( $state, $feedback );
+			self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
+			self::render_cloudflare_pattern_ai_search_hidden_field();
+			?>
+		</div>
 		<details class="flavor-agent-settings-subpanel">
 			<summary class="flavor-agent-settings-subpanel__summary">
 				<?php echo esc_html__( 'Advanced Ranking', 'flavor-agent' ); ?>
@@ -789,17 +805,82 @@ final class Page {
 		);
 	}
 
+	private static function render_pattern_backend_segmented_control( string $saved_backend ): void {
+		$option  = Config::OPTION_PATTERN_RETRIEVAL_BACKEND;
+		$hint_id = $option . '-preview-hint';
+		$choices = [
+			Config::PATTERN_BACKEND_QDRANT               => __( 'Qdrant', 'flavor-agent' ),
+			Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH => __( 'Cloudflare AI Search', 'flavor-agent' ),
+		];
+		?>
+		<fieldset
+			class="flavor-agent-pattern-backend-segments"
+			data-flavor-agent-pattern-backend-segments
+			data-saved-backend="<?php echo esc_attr( $saved_backend ); ?>"
+			aria-describedby="<?php echo esc_attr( $hint_id ); ?>"
+		>
+			<legend class="screen-reader-text">
+				<?php echo esc_html__( 'Pattern storage backend', 'flavor-agent' ); ?>
+			</legend>
+			<?php foreach ( $choices as $value => $label ) : ?>
+				<?php
+				$is_saved   = $value === $saved_backend;
+				$input_id   = $option . '-' . str_replace( '_', '-', $value );
+				$segment_id = $input_id . '-segment';
+				?>
+				<label
+					id="<?php echo esc_attr( $segment_id ); ?>"
+					class="flavor-agent-pattern-backend-segment<?php echo $is_saved ? ' is-preview-selected' : ''; ?>"
+					for="<?php echo esc_attr( $input_id ); ?>"
+				>
+					<input type="radio" class="flavor-agent-pattern-backend-segment__input" id="<?php echo esc_attr( $input_id ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" <?php checked( $is_saved ); ?> />
+					<span class="flavor-agent-pattern-backend-segment__label">
+						<?php echo esc_html( $label ); ?>
+					</span>
+					<?php if ( $is_saved ) : ?>
+						<span
+							class="flavor-agent-pattern-backend-segment__pill"
+							data-pattern-backend-active-pill
+						>
+							<?php echo esc_html__( 'Active', 'flavor-agent' ); ?>
+						</span>
+					<?php endif; ?>
+				</label>
+			<?php endforeach; ?>
+		</fieldset>
+		<p
+			id="<?php echo esc_attr( $hint_id ); ?>"
+			class="flavor-agent-pattern-backend-hint"
+			data-pattern-backend-preview-hint
+			aria-live="polite"
+			hidden
+		>
+			<?php echo esc_html__( 'Save Changes to switch pattern storage.', 'flavor-agent' ); ?>
+		</p>
+		<?php
+	}
+
+	/**
+	 * @param array<string, mixed> $state
+	 */
+	private static function render_qdrant_pattern_storage_status_panel( array $state ): void {
+		$configured = ! empty( $state['qdrant_configured'] );
+		$tone       = $configured ? 'success' : 'warning';
+		$message    = $configured
+			? __( 'Qdrant pattern storage ready.', 'flavor-agent' )
+			: __( 'Add Qdrant URL and API key to sync the pattern catalog.', 'flavor-agent' );
+		?>
+		<div class="flavor-agent-settings-status flavor-agent-settings-status--<?php echo esc_attr( $tone ); ?>">
+			<p><?php echo esc_html( $message ); ?></p>
+		</div>
+		<?php
+	}
+
 	/**
 	 * @param array<string, mixed> $state
 	 * @param array<string, mixed> $feedback
 	 */
 	private static function render_cloudflare_pattern_ai_search_status_panel( array $state, array $feedback ): void {
-		$selected_backend = (string) ( $state['selected_pattern_backend'] ?? '' );
-
-		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== $selected_backend ) {
-			return;
-		}
-
 		$instance_id         = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
 		$embedding_ready     = ! empty( $state['runtime_embedding']['configured'] );
 		$storage_ready       = ! empty( $state['cloudflare_pattern_ai_search_configured'] );
@@ -1025,6 +1106,7 @@ final class Page {
 
 	private static function render_sync_panel( array $page_state ): void {
 		$state                  = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
+		$saved_backend          = (string) ( $page_state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
 		$has_prerequisites      = ! empty( $page_state['patterns_ready'] );
 		$status_label           = $has_prerequisites
 			? State::get_pattern_sync_status_label( (string) $state['status'] )
@@ -1070,6 +1152,8 @@ final class Page {
 				class="flavor-agent-settings-subpanel__body flavor-agent-sync-panel"
 				data-pattern-prerequisites-ready="<?php echo $has_prerequisites ? '1' : '0'; ?>"
 				data-pattern-prerequisite-message="<?php echo esc_attr( $prerequisite_message ); ?>"
+				data-pattern-saved-backend="<?php echo esc_attr( $saved_backend ); ?>"
+				data-pattern-backend-preview-matches-saved="1"
 			>
 				<p id="flavor-agent-sync-summary" class="flavor-agent-sync-panel__summary">
 					<?php echo esc_html( $sync_summary_sentence ); ?>

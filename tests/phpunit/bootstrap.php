@@ -2085,6 +2085,22 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'checked' ) ) {
+		function checked( $checked, $current = true, bool $display = true ): string {
+			$result = '';
+
+			if ( (string) $checked === (string) $current ) {
+				$result = 'checked="checked"';
+			}
+
+			if ( $display && '' !== $result ) {
+				echo 'checked="checked"';
+			}
+
+			return $result;
+		}
+	}
+
 	if ( ! function_exists( '__return_true' ) ) {
 		function __return_true(): bool {
 			return true;

@@ -44,10 +44,6 @@ jest.mock( '@wordpress/blocks', () => ( {
 	store: 'core/blocks',
 } ) );
 
-jest.mock( '@wordpress/editor', () => ( {
-	PluginDocumentSettingPanel: ( { children } ) => children,
-} ) );
-
 jest.mock( '../../components/CapabilityNotice', () => () => null );
 jest.mock( '../../components/AIStatusNotice', () => {
 	const { createElement } = require( '@wordpress/element' );
@@ -136,17 +132,6 @@ jest.mock( '../../utils/style-operations', () => ( {
 } ) );
 
 jest.mock( '../dom', () => ( {
-	findStylesSidebarMountNode: ( root ) => {
-		const resolvedRoot = root || global.document;
-
-		return (
-			resolvedRoot.querySelector(
-				'.editor-global-styles-sidebar__panel'
-			) ||
-			resolvedRoot.querySelector( '.editor-global-styles-sidebar' ) ||
-			resolvedRoot.querySelector( '[role="region"][aria-label="Styles"]' )
-		);
-	},
 	getStyleBookUiState: ( ...args ) => mockGetStyleBookUiState( ...args ),
 	subscribeToStyleBookUi: ( ...args ) =>
 		mockSubscribeToStyleBookUi( ...args ),
@@ -183,6 +168,17 @@ let currentStyleBookUiState = null;
 let styleBookUiSubscriber = null;
 let currentEditedTemplateId = null;
 let currentEditedBlocks = null;
+
+function getMockStyleBookUiState() {
+	return {
+		...currentStyleBookUiState,
+		sidebarMountNode:
+			document.querySelector( '.editor-global-styles-sidebar__panel' ) ||
+			document.querySelector( '.editor-global-styles-sidebar' ) ||
+			document.querySelector( '[role="region"][aria-label="Styles"]' ) ||
+			null,
+	};
+}
 
 function createStyleVariations() {
 	return [
@@ -387,10 +383,10 @@ beforeEach( () => {
 		status: 'available',
 		error: null,
 	} );
-	mockGetStyleBookUiState.mockImplementation( () => currentStyleBookUiState );
+	mockGetStyleBookUiState.mockImplementation( getMockStyleBookUiState );
 	mockSubscribeToStyleBookUi.mockImplementation( ( _root, onChange ) => {
 		styleBookUiSubscriber = onChange;
-		onChange( currentStyleBookUiState );
+		onChange( getMockStyleBookUiState() );
 		return () => {};
 	} );
 
@@ -656,6 +652,16 @@ describe( 'StyleBookRecommender', () => {
 		expect( sidebar.querySelector( 'button' )?.disabled ).toBe( true );
 	} );
 
+	test( 'does not render a document panel fallback when the Styles sidebar mount is missing', () => {
+		sidebar.remove();
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( document.body.textContent ).toBe( '' );
+	} );
+
 	test( 'passes the undo guidance to the recent style-book activity section', () => {
 		currentStoreState = {
 			...currentStoreState,
@@ -891,6 +897,30 @@ describe( 'StyleBookRecommender', () => {
 		).toBe( DOCUMENT_POSITION_FOLLOWING );
 	} );
 
+	test( 'renders the Style Book explanation for an empty successful response', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [],
+			explanation:
+				'No safe block style operations matched this Style Book target.',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+			selectedSuggestionKey: null,
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain(
+			'No safe block style operations matched this Style Book target.'
+		);
+		expect( sidebar.textContent ).toContain(
+			'No safe Style Book changes were returned for this prompt.'
+		);
+	} );
+
 	test( 'does not show the current scope badge when the latest Style Book request failed', () => {
 		currentStoreState = {
 			...currentStoreState,
@@ -964,7 +994,7 @@ describe( 'StyleBookRecommender', () => {
 		};
 
 		act( () => {
-			styleBookUiSubscriber( currentStyleBookUiState );
+			styleBookUiSubscriber( getMockStyleBookUiState() );
 		} );
 
 		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );

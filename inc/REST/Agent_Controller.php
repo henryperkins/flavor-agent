@@ -14,7 +14,10 @@ final class Agent_Controller {
 	private const NAMESPACE = 'flavor-agent/v1';
 
 	private const REQUEST_META_ROUTES = [
-		'sync-patterns' => [
+		'get-sync-patterns' => [
+			'route' => 'GET /flavor-agent/v1/sync-patterns',
+		],
+		'sync-patterns'     => [
 			'route' => 'POST /flavor-agent/v1/sync-patterns',
 		],
 	];
@@ -41,9 +44,16 @@ final class Agent_Controller {
 			self::NAMESPACE,
 			'/sync-patterns',
 			[
-				'methods'             => 'POST',
-				'callback'            => [ __CLASS__, 'handle_sync_patterns' ],
-				'permission_callback' => static fn(): bool => \current_user_can( 'manage_options' ),
+				[
+					'methods'             => 'GET',
+					'callback'            => [ __CLASS__, 'handle_get_sync_patterns' ],
+					'permission_callback' => static fn(): bool => \current_user_can( 'manage_options' ),
+				],
+				[
+					'methods'             => 'POST',
+					'callback'            => [ __CLASS__, 'handle_sync_patterns' ],
+					'permission_callback' => static fn(): bool => \current_user_can( 'manage_options' ),
+				],
 			]
 		);
 
@@ -325,7 +335,7 @@ final class Agent_Controller {
 	}
 
 	public static function handle_sync_patterns( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		$result = PatternIndex::sync();
+		$result = PatternIndex::enqueue_sync();
 
 		if ( \is_wp_error( $result ) ) {
 			return self::append_request_meta_to_error_for_route( $result, 'sync-patterns' );
@@ -335,6 +345,19 @@ final class Agent_Controller {
 
 		return new \WP_REST_Response(
 			self::append_request_meta_for_route( $result, 'sync-patterns' ),
+			200
+		);
+	}
+
+	public static function handle_get_sync_patterns( \WP_REST_Request $request ): \WP_REST_Response {
+		unset( $request );
+
+		$result = [
+			'runtimeState' => PatternIndex::get_runtime_state(),
+		];
+
+		return new \WP_REST_Response(
+			self::append_request_meta_for_route( $result, 'get-sync-patterns' ),
 			200
 		);
 	}

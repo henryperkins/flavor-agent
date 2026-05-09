@@ -149,7 +149,7 @@ Runtime embeddings use Cloudflare Workers AI. Older OpenAI Native, Azure OpenAI,
 - **Context sent:** Resolved Global Styles scope descriptor, current user config, current merged config, available theme style variations, theme-token source diagnostics, theme tokens, and supported site-level style paths.
 - **LLM:** Connectors-routed WordPress AI Client chat via `ResponsesClient::rank()`; saved provider values from older settings screens do not pin the chat provider.
 - **Response:** Up to 4 suggestions, each with `label`, `description`, `category`, `tone`, optional validated `operations`, and `explanation`. Supported executable operations are `set_styles` (global-styles surface only) and `set_theme_variation`.
-- **UI:** `src/global-styles/GlobalStylesRecommender.js` is portal-first in the native Global Styles sidebar and falls back to a document settings panel when the sidebar slot is missing. It uses the shared full-surface shell with `Review first` / `Manual ideas`, a lower review panel, and scoped recent activity.
+- **UI:** `src/global-styles/GlobalStylesRecommender.js` mounts only through the native Global Styles sidebar slot and returns `null` when that Site Editor mount point is missing. It uses the shared full-surface shell with `Review first` / `Manual ideas`, a lower review panel, and scoped recent activity.
 - **Apply:** Deterministic client helpers validate supported paths, preset requirements, and still-available theme variations before updating the active `root/globalStyles` entity through `editEntityRecord()`. Applied changes persist before/after user config plus operation metadata for scoped undo.
 - **Guardrails:** Raw CSS, `customCSS`, unsupported style paths, arbitrary preset-less values where a preset family is required, width/height transforms, and pseudo-element-only operations remain out of scope for the first Epic 3 slice.
 
@@ -194,7 +194,7 @@ Runtime embeddings use Cloudflare Workers AI. Older OpenAI Native, Azure OpenAI,
 
 #### Pattern Index Lifecycle
 
-- **Sync:** Diffs current registered patterns plus published user `wp_block` patterns across synced, partial, and unsynced states normalized as `core/block/{id}` against the selected backend using per-pattern fingerprints. Qdrant sync embeds changed patterns through `EmbeddingClient`, which chunks Workers AI requests at 32 inputs, then upserts/deletes Qdrant points. Cloudflare AI Search sync uploads changed public-safe pattern markdown items with stable IDs and `wait_for_completion=true`, then deletes only stale item IDs that were recorded in the previous Flavor Agent pattern fingerprint state. Owner-marker items and unknown remote items are preserved. Both paths detect config changes for full reindex.
+- **Sync:** Diffs current registered patterns plus published user `wp_block` patterns across synced, partial, and unsynced states normalized as `core/block/{id}` against the selected backend using per-pattern fingerprints. Qdrant sync embeds changed patterns through `EmbeddingClient`, which chunks Workers AI requests at 32 inputs, then upserts/deletes Qdrant points. Cloudflare AI Search sync uploads changed public-safe pattern markdown items with `wait_for_completion=false`, uses the item `key` as Flavor Agent's stable pattern ID, deletes stale/retryable items by Cloudflare's generated item `id`, and preserves owner-marker and unknown remote items. AI Search state remains `indexing` until listed current pattern items report `completed`; pending/missing items schedule a follow-up sync, and retryable item-processing failures such as `workers_ai_out_of_capacity_error` schedule a retry instead of marking the index ready. Both paths detect config changes for full reindex.
 - **Triggers:** Plugin activation, theme switch, plugin activate/deactivate, upgrades, settings changes, and synced-pattern save/delete/trash/untrash events.
 - **Scheduling:** WP cron with 300s cooldown and transient lock.
 - **Admin UI:** Manual sync button on settings page with status display.
@@ -225,7 +225,7 @@ The code defines 20 abilities with full JSON Schema input/output definitions, gr
 Three REST routes live under `/flavor-agent/v1/`. Recommendation surfaces use WordPress Abilities API contracts instead. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 - **3 activity route methods** adapt the activity repository: GET `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`), POST `activity` (contextual), and POST `activity/{id}/undo` (contextual)
-- **1 admin route**: POST `sync-patterns` (`manage_options`) — manual pattern reindex
+- **1 admin route path**: POST `sync-patterns` (`manage_options`) queues the manual pattern reindex; GET `sync-patterns` (`manage_options`) returns current sync state for polling
 
 #### Admin Settings
 

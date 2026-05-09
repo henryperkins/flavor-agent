@@ -137,18 +137,18 @@ final class AgentControllerTest extends TestCase {
 
 
 
-	public function test_handle_sync_patterns_appends_sync_route_metadata(): void {
+	public function test_handle_sync_patterns_enqueues_sync_without_running_remote_work(): void {
 		$this->configure_pattern_recommendation_backends();
 		$this->save_ready_pattern_index_state();
-		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-		];
 
 		$request  = new \WP_REST_Request( 'POST', '/flavor-agent/v1/sync-patterns' );
 		$response = Agent_Controller::handle_sync_patterns( $request );
 
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['queued'] ?? false );
+		$this->assertSame( 'indexing', $response->get_data()['status'] ?? null );
+		$this->assertSame( 'indexing', $response->get_data()['runtimeState']['status'] ?? null );
 		$this->assertSame(
 			'POST /flavor-agent/v1/sync-patterns',
 			$response->get_data()['requestMeta']['route'] ?? null
@@ -157,6 +157,28 @@ final class AgentControllerTest extends TestCase {
 			'ability',
 			$response->get_data()['requestMeta'] ?? []
 		);
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_handle_get_sync_patterns_returns_runtime_state_without_enqueuing(): void {
+		$this->configure_pattern_recommendation_backends();
+		$this->save_ready_pattern_index_state();
+
+		$request  = new \WP_REST_Request( 'GET', '/flavor-agent/v1/sync-patterns' );
+		$response = Agent_Controller::handle_get_sync_patterns( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'ready', $response->get_data()['runtimeState']['status'] ?? null );
+		$this->assertSame(
+			'GET /flavor-agent/v1/sync-patterns',
+			$response->get_data()['requestMeta']['route'] ?? null
+		);
+		$this->assertArrayNotHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_handle_create_activity_persists_structured_entries(): void {

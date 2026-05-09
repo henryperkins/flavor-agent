@@ -161,7 +161,7 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 - Navigation keeps `Navigation Ideas` as an embedded wrapper title and `Recommended next change` as the featured-card title, while the actual advisory taxonomy remains the shared manual-follow-through tone. Treat this as an intentional nested-surface exception, not drift.
 - Delegated Settings and Styles sub-panels remain passive mirrors. They reflect safe local results from the main block request and intentionally do not own composer, refresh, capability, activity, or apply state.
 - Pattern recommendations remain ranking/browse-only and intentionally stay outside the lane/review/apply/undo contract. The surface is local to Flavor Agent's inserter shelf and must not register, reorder, or mutate Gutenberg's native pattern category registry.
-- Style Book and Global Styles remain portal-first Styles-sidebar surfaces with document-panel fallback; some mount-context divergence from inspector/document panels is expected and acceptable.
+- Style Book and Global Styles remain native Styles-sidebar surfaces. They do not use post-editor document-panel fallback, so a missing sidebar mount is treated as a mount regression rather than an alternate surface.
 
 ## Recommended Normalization Pass
 

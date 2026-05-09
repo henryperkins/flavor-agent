@@ -9,15 +9,19 @@ use FlavorAgent\Embeddings\BaseHttpClient;
 
 final class PatternSearchClient extends BaseHttpClient {
 
-	private const REQUEST_TIMEOUT             = 20;
-	private const UPLOAD_TIMEOUT              = 60;
-	private const LIST_PER_PAGE               = 50;
-	private const DEFAULT_MAX_RESULTS         = 50;
-	private const MAX_MAX_RESULTS             = 50;
-	private const DEFAULT_MATCH_THRESHOLD     = 0.2;
-	private const VALIDATION_PROBE_QUERY      = 'Flavor Agent pattern recommendation validation';
-	private const VALIDATION_PROBE_PATTERN    = '__flavor_agent_validation_probe__';
-	private const SCHEMA_METADATA_FIELD_NAMES = [
+	private const REQUEST_TIMEOUT          = 20;
+	private const UPLOAD_TIMEOUT           = 60;
+	private const LIST_PER_PAGE            = 50;
+	private const DEFAULT_MAX_RESULTS      = 50;
+	private const MAX_MAX_RESULTS          = 50;
+	private const DEFAULT_MATCH_THRESHOLD  = 0.2;
+	private const VALIDATION_PROBE_QUERY   = 'Flavor Agent pattern recommendation validation';
+	private const VALIDATION_PROBE_PATTERN = '__flavor_agent_validation_probe__';
+	// Cloudflare AI Search returns HTTP 500 with code 7073 ("All search methods
+	// failed: vector, keyword") when the `$in` array on a metadata filter has
+	// 100 or more values. 99 is the verified inclusive max.
+	private const FILTER_PATTERN_NAME_MAX_VALUES = 99;
+	private const SCHEMA_METADATA_FIELD_NAMES    = [
 		'pattern_name',
 		'candidate_type',
 		'source',
@@ -174,14 +178,32 @@ final class PatternSearchClient extends BaseHttpClient {
 	 * @return string[]|\WP_Error
 	 */
 	public static function list_pattern_item_ids(): array|\WP_Error {
+		$items = self::list_pattern_items();
+
+		if ( is_wp_error( $items ) ) {
+			return $items;
+		}
+
+		return array_values(
+			array_map(
+				static fn ( array $item ): string => $item['pattern_id'],
+				$items
+			)
+		);
+	}
+
+	/**
+	 * @return array<int, array{item_id:string,item_key:string,pattern_id:string,status:string,error:string}>|\WP_Error
+	 */
+	public static function list_pattern_items(): array|\WP_Error {
 		$config = self::get_config();
 
 		if ( is_wp_error( $config ) ) {
 			return $config;
 		}
 
-		$item_ids = [];
-		$page     = 1;
+		$items_by_pattern_id = [];
+		$page                = 1;
 
 		while ( true ) {
 			$response = self::request_json(
@@ -231,15 +253,27 @@ final class PatternSearchClient extends BaseHttpClient {
 					continue;
 				}
 
-				$item_id = self::normalize_item_id( (string) ( $item['id'] ?? '' ) );
+				$item_id    = self::normalize_item_id( (string) ( $item['id'] ?? '' ) );
+				$item_key   = self::normalize_item_key( (string) ( $item['key'] ?? '' ) );
+				$pattern_id = self::pattern_id_from_item_key( $item_key );
 
-				if ( '' !== $item_id ) {
-					$item_ids[ $item_id ] = $item_id;
+				if ( '' === $pattern_id ) {
+					$pattern_id = $item_id;
+				}
+
+				if ( '' !== $item_id && '' !== $pattern_id ) {
+					$items_by_pattern_id[ $pattern_id ] = [
+						'item_id'    => $item_id,
+						'item_key'   => $item_key,
+						'pattern_id' => $pattern_id,
+						'status'     => sanitize_key( (string) ( $item['status'] ?? '' ) ),
+						'error'      => sanitize_key( (string) ( $item['error'] ?? '' ) ),
+					];
 				}
 			}
 
 			$count       = max( 0, (int) ( $result_info['count'] ?? count( $items ) ) );
-			$total_count = max( 0, (int) ( $result_info['total_count'] ?? count( $item_ids ) ) );
+			$total_count = max( 0, (int) ( $result_info['total_count'] ?? count( $items_by_pattern_id ) ) );
 			$per_page    = max( 1, (int) ( $result_info['per_page'] ?? self::LIST_PER_PAGE ) );
 
 			if ( 0 === $count || ( $page * $per_page ) >= $total_count ) {
@@ -249,7 +283,7 @@ final class PatternSearchClient extends BaseHttpClient {
 			++$page;
 		}
 
-		return array_values( $item_ids );
+		return array_values( $items_by_pattern_id );
 	}
 
 	/**
@@ -468,6 +502,24 @@ final class PatternSearchClient extends BaseHttpClient {
 		array $visible_pattern_names,
 		int $max_results
 	): array {
+		$retrieval = [
+			'retrieval_type'    => 'hybrid',
+			'max_num_results'   => $max_results,
+			'match_threshold'   => self::get_match_threshold(),
+			'context_expansion' => 0,
+			'fusion_method'     => 'rrf',
+			'return_on_failure' => true,
+		];
+
+		// Cloudflare rejects `$in` arrays of 100+ values with code 7073. When the
+		// visible scope exceeds the limit, drop the server-side filter and let
+		// normalize_chunks() enforce visibility on the returned chunks.
+		if ( count( $visible_pattern_names ) <= self::FILTER_PATTERN_NAME_MAX_VALUES ) {
+			$retrieval['filters'] = [
+				'pattern_name' => [ '$in' => array_values( $visible_pattern_names ) ],
+			];
+		}
+
 		return [
 			'messages'          => [
 				[
@@ -479,17 +531,7 @@ final class PatternSearchClient extends BaseHttpClient {
 				'query_rewrite' => [
 					'enabled' => false,
 				],
-				'retrieval'     => [
-					'retrieval_type'    => 'hybrid',
-					'max_num_results'   => $max_results,
-					'match_threshold'   => self::get_match_threshold(),
-					'context_expansion' => 0,
-					'fusion_method'     => 'rrf',
-					'return_on_failure' => true,
-					'filters'           => [
-						'pattern_name' => [ '$in' => array_values( $visible_pattern_names ) ],
-					],
-				],
+				'retrieval'     => $retrieval,
 			],
 		];
 	}
@@ -855,6 +897,26 @@ final class PatternSearchClient extends BaseHttpClient {
 
 	private static function normalize_item_id( string $item_id ): string {
 		return sanitize_text_field( $item_id );
+	}
+
+	private static function normalize_item_key( string $item_key ): string {
+		return sanitize_text_field( $item_key );
+	}
+
+	private static function pattern_id_from_item_key( string $item_key ): string {
+		$item_key = trim( $item_key );
+
+		if ( '' === $item_key ) {
+			return '';
+		}
+
+		$filename = basename( $item_key );
+
+		if ( str_ends_with( $filename, '.md' ) ) {
+			$filename = substr( $filename, 0, -3 );
+		}
+
+		return self::normalize_item_id( $filename );
 	}
 
 	private static function filename_for_item_id( string $item_id ): string {

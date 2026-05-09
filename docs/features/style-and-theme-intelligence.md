@@ -5,9 +5,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Exact Surface
 
 - Global Styles location: Site Editor Global Styles sidebar while the active complementary area is `edit-site/global-styles`
-- Global Styles mounts: portal into `.editor-global-styles-sidebar__panel`, with `PluginDocumentSettingPanel` fallback named `AI Style Suggestions`
+- Global Styles mounts: portal into `.editor-global-styles-sidebar__panel`; if the native Styles sidebar mount cannot be resolved, the recommender returns `null`
 - Style Book location: Site Editor Styles sidebar while the native Style Book example is active
-- Style Book mounts: portal into the same styles sidebar slot, with `PluginDocumentSettingPanel` fallback named `AI Style Book Suggestions`
+- Style Book mounts: portal into the same styles sidebar slot; if the native Styles sidebar mount cannot be resolved, the recommender returns `null`
 - Global Styles scope contract: `getGlobalStylesUserConfig()` resolves the current `root/globalStyles` entity id, user config, merged config, and available variations
 - Style Book scope contract: the same `root/globalStyles` entity plus the active Style Book target block name/title when one resolves; when the Style Book UI is active, the panel can render a scope notice before a valid registered example block is selected
 - Shared identifiers: JS surfaces `global-styles` and `style-book`, localized capability keys `globalStyles` and `styleBook`, activity scope keys `global_styles:<id>` and `style_book:<id>:<blockName>`
@@ -27,7 +27,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Global Styles suggestions move `idle -> loading -> advisory-ready` when results arrive, then `preview-ready` only after the user explicitly opens review on an executable suggestion
 - Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the shared status notice pattern
 - Global Styles and Style Book now share the same scope badges, prompt shell, featured recommendation hero, `Review first` / `Manual ideas` lanes, compact operation previews, and inline apply/undo notice placement inside the active review shell
-- These surfaces intentionally stay portal-first when the native Styles sidebar is available and only fall back to document panels when that sidebar mount point cannot be resolved
+- These surfaces intentionally stay native Styles-sidebar only; missing sidebar mount nodes are treated as mount regressions rather than falling back to post-editor document panels
 
 ## End-To-End Flow
 

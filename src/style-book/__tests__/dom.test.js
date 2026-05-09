@@ -250,6 +250,7 @@ describe( 'style-book/dom selectors', () => {
 		test( 'reports inactive state with no target when no iframe exists', () => {
 			expect( getStyleBookUiState( document ) ).toEqual( {
 				isActive: false,
+				sidebarMountNode: null,
 				target: null,
 			} );
 		} );
@@ -267,8 +268,21 @@ describe( 'style-book/dom selectors', () => {
 
 			expect( getStyleBookUiState( document ) ).toEqual( {
 				isActive: true,
+				sidebarMountNode: null,
 				target: { blockName: 'core/heading', blockTitle: 'Heading' },
 			} );
+		} );
+
+		test( 'reports the resolved Styles sidebar mount node', () => {
+			document.body.innerHTML = `
+				<div id="panel" class="editor-global-styles-sidebar__panel"></div>
+				<iframe class="editor-style-book__iframe"></iframe>
+			`;
+
+			const state = getStyleBookUiState( document );
+
+			expect( state.isActive ).toBe( true );
+			expect( state.sidebarMountNode?.id ).toBe( 'panel' );
 		} );
 	} );
 } );
@@ -300,6 +314,7 @@ describe( 'subscribeToStyleBookUi', () => {
 		expect( callback ).toHaveBeenCalledTimes( 1 );
 		expect( callback ).toHaveBeenCalledWith( {
 			isActive: false,
+			sidebarMountNode: null,
 			target: null,
 		} );
 

@@ -685,7 +685,7 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'value="' . Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH . '" selected=',
+			'value="' . Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH . '" checked=',
 			$output
 		);
 		$this->assertStringContainsString( 'Managed pattern index using the saved Cloudflare credentials from the Embedding Model section.', $output );

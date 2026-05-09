@@ -864,6 +864,7 @@ final class PatternIndexTest extends TestCase {
 
 		$this->queue_cloudflare_item_list( [] );
 		$this->queue_cloudflare_success_responses( 2 );
+		$this->queue_cloudflare_completed_items_for_patterns( $patterns );
 
 		$result = PatternIndex::sync();
 		$state  = PatternIndex::get_state();
@@ -879,7 +880,7 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 2, $state['indexed_count'] );
 		$this->assertNotEmpty( $state['last_synced_at'] );
 		$this->assertCount( 2, $state['pattern_fingerprints'] );
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 2, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 
 		$request_bodies = $this->remote_post_request_bodies();
@@ -890,7 +891,7 @@ final class PatternIndexTest extends TestCase {
 		$footer_uuid = PatternIndex::pattern_uuid( 'theme/footer-callout' );
 		$this->assertStringContainsString( 'filename="' . $hero_uuid . '.md"', (string) $request_bodies );
 		$this->assertStringContainsString( 'filename="' . $footer_uuid . '.md"', (string) $request_bodies );
-		$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\ntrue", (string) $request_bodies );
+		$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\nfalse", (string) $request_bodies );
 	}
 
 	public function test_cloudflare_ai_search_sync_uploads_public_safe_synced_patterns_only(): void {
@@ -915,6 +916,7 @@ final class PatternIndexTest extends TestCase {
 
 		$this->queue_cloudflare_item_list( [] );
 		$this->queue_cloudflare_success_responses( 4 );
+		$this->queue_cloudflare_completed_items_for_patterns( $this->current_patterns() );
 
 		$result = PatternIndex::sync();
 
@@ -959,8 +961,30 @@ final class PatternIndexTest extends TestCase {
 			]
 		);
 
-		$this->queue_cloudflare_item_list( [ $hero_uuid, $removed_uuid ] );
+		$this->queue_cloudflare_item_records(
+			[
+				[
+					'id'     => 'cloudflare-hero-item',
+					'key'    => $hero_uuid . '.md',
+					'status' => 'completed',
+				],
+				[
+					'id'     => 'cloudflare-removed-item',
+					'key'    => $removed_uuid . '.md',
+					'status' => 'completed',
+				],
+			]
+		);
 		$this->queue_cloudflare_success_responses( 1 );
+		$this->queue_cloudflare_item_records(
+			[
+				[
+					'id'     => 'cloudflare-hero-item',
+					'key'    => $hero_uuid . '.md',
+					'status' => 'completed',
+				],
+			]
+		);
 
 		$result = PatternIndex::sync();
 		$state  = PatternIndex::get_state();
@@ -971,7 +995,7 @@ final class PatternIndexTest extends TestCase {
 		$this->assertArrayNotHasKey( $removed_uuid, $state['pattern_fingerprints'] );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 
-		$delete_call = $this->find_remote_post_call( '/items/' . rawurlencode( $removed_uuid ), 'DELETE' );
+		$delete_call = $this->find_remote_post_call( '/items/' . rawurlencode( 'cloudflare-removed-item' ), 'DELETE' );
 		$this->assertSame( 'DELETE', $delete_call['args']['method'] ?? null );
 	}
 
@@ -997,15 +1021,50 @@ final class PatternIndexTest extends TestCase {
 			]
 		);
 
-		$this->queue_cloudflare_item_list(
+		$this->queue_cloudflare_item_records(
 			[
-				PatternSearchInstanceManager::OWNER_MARKER_NAME,
-				'cloudflare-owner-marker-123',
-				$removed_uuid,
-				'manual-operator-note',
+				[
+					'id'     => 'cloudflare-hero-item',
+					'key'    => $hero_uuid . '.md',
+					'status' => 'completed',
+				],
+				[
+					'id'     => 'cloudflare-owner-marker-123',
+					'key'    => PatternSearchInstanceManager::OWNER_MARKER_NAME . '.md',
+					'status' => 'completed',
+				],
+				[
+					'id'     => 'cloudflare-removed-item',
+					'key'    => $removed_uuid . '.md',
+					'status' => 'completed',
+				],
+				[
+					'id'     => 'manual-operator-note',
+					'key'    => 'manual-operator-note.md',
+					'status' => 'completed',
+				],
 			]
 		);
 		$this->queue_cloudflare_success_responses( 1 );
+		$this->queue_cloudflare_item_records(
+			[
+				[
+					'id'     => 'cloudflare-hero-item',
+					'key'    => $hero_uuid . '.md',
+					'status' => 'completed',
+				],
+				[
+					'id'     => 'cloudflare-owner-marker-123',
+					'key'    => PatternSearchInstanceManager::OWNER_MARKER_NAME . '.md',
+					'status' => 'completed',
+				],
+				[
+					'id'     => 'manual-operator-note',
+					'key'    => 'manual-operator-note.md',
+					'status' => 'completed',
+				],
+			]
+		);
 
 		$result = PatternIndex::sync();
 
@@ -1030,8 +1089,104 @@ final class PatternIndexTest extends TestCase {
 			)
 		);
 		$this->assertIsArray(
-			$this->find_remote_post_call( '/items/' . rawurlencode( $removed_uuid ), 'DELETE' )
+			$this->find_remote_post_call( '/items/' . rawurlencode( 'cloudflare-removed-item' ), 'DELETE' )
 		);
+	}
+
+	public function test_cloudflare_ai_search_sync_keeps_indexing_while_uploaded_items_are_pending(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+
+		$this->register_pattern( 'theme/hero', $hero );
+
+		$hero_uuid = PatternIndex::pattern_uuid( 'theme/hero' );
+
+		$this->queue_cloudflare_item_list( [] );
+		$this->queue_cloudflare_success_responses( 1 );
+		$this->queue_cloudflare_item_records(
+			[
+				[
+					'id'     => 'cloudflare-hero-item',
+					'key'    => $hero_uuid . '.md',
+					'status' => 'queued',
+				],
+			]
+		);
+
+		$result = PatternIndex::sync();
+		$state  = PatternIndex::get_state();
+
+		$this->assertSame( 'indexing', $result['status'] );
+		$this->assertSame( 1, $result['pending'] );
+		$this->assertSame( 'indexing', $state['status'] );
+		$this->assertNull( $state['last_synced_at'] );
+		$this->assertNotFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+	}
+
+	public function test_cloudflare_ai_search_sync_retries_workers_ai_capacity_failures(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+
+		$this->register_pattern( 'theme/hero', $hero );
+
+		$hero_uuid  = PatternIndex::pattern_uuid( 'theme/hero' );
+		$error_item = [
+			'id'     => 'cloudflare-hero-error',
+			'key'    => $hero_uuid . '.md',
+			'status' => 'error',
+			'error'  => 'workers_ai_out_of_capacity_error',
+		];
+
+		$this->queue_cloudflare_item_records( [ $error_item ] );
+		$this->queue_cloudflare_success_responses( 2 );
+		$this->queue_cloudflare_item_records( [ $error_item ] );
+
+		$result = PatternIndex::sync();
+		$state  = PatternIndex::get_state();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_pattern_ai_search_item_processing_error', $result->get_error_code() );
+		$this->assertSame( 'error', $state['status'] );
+		$this->assertTrue( PatternIndex::has_retryable_error( $state ) );
+		$this->assertSame( 60, $state['last_error_retry_after'] );
+		$this->assertNull( $state['last_synced_at'] );
+		$this->assertNotFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+		$this->assertIsArray(
+			$this->find_remote_post_call( '/items/' . rawurlencode( 'cloudflare-hero-error' ), 'DELETE' )
+		);
+	}
+
+	public function test_cloudflare_ai_search_processing_failure_clears_previous_ready_timestamp(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+
+		$this->register_pattern( 'theme/hero', $hero );
+
+		$current_patterns = $this->current_patterns();
+		$this->save_ready_cloudflare_ai_search_state_for_patterns( $current_patterns );
+		PatternIndex::mark_dirty( 'manual_cloudflare_ai_search_status_verification' );
+
+		$hero_uuid  = PatternIndex::pattern_uuid( 'theme/hero' );
+		$error_item = [
+			'id'     => 'cloudflare-hero-error',
+			'key'    => $hero_uuid . '.md',
+			'status' => 'error',
+			'error'  => 'workers_ai_out_of_capacity_error',
+		];
+
+		$this->queue_cloudflare_item_records( [ $error_item ] );
+		$this->queue_cloudflare_success_responses( 2 );
+		$this->queue_cloudflare_item_records( [ $error_item ] );
+
+		$result    = PatternIndex::sync();
+		$readiness = PatternIndex::recommendation_index_readiness();
+		$state     = PatternIndex::get_state();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'error', $state['status'] );
+		$this->assertNull( $state['last_synced_at'] );
+		$this->assertFalse( $readiness['ready'] );
+		$this->assertSame( 'index_warming', $readiness['reason'] );
 	}
 
 	public function test_cloudflare_ai_search_sync_reindexes_when_embedding_model_changes(): void {
@@ -1063,6 +1218,7 @@ final class PatternIndexTest extends TestCase {
 
 		$this->queue_cloudflare_item_list( [ PatternIndex::pattern_uuid( 'theme/hero' ) ] );
 		$this->queue_cloudflare_success_responses( 1 );
+		$this->queue_cloudflare_completed_items_for_patterns( $current_patterns );
 
 		$result = PatternIndex::sync();
 
@@ -1314,6 +1470,46 @@ final class PatternIndexTest extends TestCase {
 				'body'     => wp_json_encode( [ 'success' => true ] ),
 			];
 		}
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $items
+	 */
+	private function queue_cloudflare_item_records( array $items ): void {
+		WordPressTestState::$remote_get_responses[] = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result'      => $items,
+					'result_info' => [
+						'count'       => count( $items ),
+						'page'        => 1,
+						'total_count' => count( $items ),
+						'per_page'    => 50,
+					],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $patterns
+	 */
+	private function queue_cloudflare_completed_items_for_patterns( array $patterns ): void {
+		$this->queue_cloudflare_item_records(
+			array_map(
+				static function ( array $pattern ): array {
+					$uuid = PatternIndex::pattern_uuid( (string) ( $pattern['name'] ?? '' ) );
+
+					return [
+						'id'     => 'cloudflare-' . $uuid,
+						'key'    => $uuid . '.md',
+						'status' => 'completed',
+					];
+				},
+				$patterns
+			)
+		);
 	}
 
 	private function queue_ensure_collection( bool $collection_exists = true, bool $creation_succeeds = true ): void {

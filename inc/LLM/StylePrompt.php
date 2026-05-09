@@ -150,9 +150,9 @@ SYSTEM;
 			$budget->add_section( 'site_guidelines', $guidelines_context, 88 );
 		}
 
-		// Current and merged config carry the live state the model must reason about; required so the response is grounded.
-		$budget->add_section( 'current_config', "## Current Global Styles user config\n" . wp_json_encode( $style_context['currentConfig'] ?? [] ), 90, true );
-		$budget->add_section( 'merged_config', "## Current merged style config\n" . wp_json_encode( $style_context['mergedConfig'] ?? [] ), 85 );
+		// Current and merged config carry the live style state; keep them focused so large site metadata does not dominate the prompt.
+		$budget->add_section( 'current_config', "## Current Global Styles user config\n" . wp_json_encode( self::trim_style_config_for_prompt( $style_context['currentConfig'] ?? [] ) ), 90, true );
+		$budget->add_section( 'merged_config', "## Current merged style config\n" . wp_json_encode( self::trim_style_config_for_prompt( $style_context['mergedConfig'] ?? [] ) ), 85 );
 
 		if ( 'style-book' === $surface && [] !== $style_book_target ) {
 			$target_lines = [ '## Style Book target' ];
@@ -379,6 +379,30 @@ Expected response:
 EXAMPLE
 			,
 		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function trim_style_config_for_prompt( mixed $config ): array {
+		if ( ! is_array( $config ) ) {
+			return [];
+		}
+
+		$trimmed  = [];
+		$settings = is_array( $config['settings'] ?? null ) ? $config['settings'] : [];
+
+		foreach ( [ 'color', 'typography', 'spacing' ] as $settings_key ) {
+			if ( array_key_exists( $settings_key, $settings ) ) {
+				$trimmed['settings'][ $settings_key ] = $settings[ $settings_key ];
+			}
+		}
+
+		if ( array_key_exists( 'styles', $config ) ) {
+			$trimmed['styles'] = is_array( $config['styles'] ) ? $config['styles'] : [];
+		}
+
+		return $trimmed;
 	}
 
 	/**
@@ -1054,17 +1078,14 @@ EXAMPLE
 					continue;
 				}
 
-				$variation_index = isset( $operation['variationIndex'] ) ? (int) $operation['variationIndex'] : -1;
-				$variation_title = sanitize_text_field( (string) ( $operation['variationTitle'] ?? '' ) );
-				$variation       = $variations[ $variation_index ] ?? null;
+				$variation = self::resolve_variation_operation( $operation, $variations );
 
-				if ( ! is_array( $variation ) || '' === $variation_title ) {
+				if ( [] === $variation ) {
 					continue;
 				}
 
-				if ( sanitize_text_field( (string) ( $variation['title'] ?? '' ) ) !== $variation_title ) {
-					continue;
-				}
+				$variation_index = $variation['index'];
+				$variation_title = $variation['title'];
 
 				if ( [] === $validated_variation ) {
 					$validated_variation = [
@@ -1079,6 +1100,47 @@ EXAMPLE
 		return [] !== $validated_variation
 			? array_merge( [ $validated_variation ], $validated_styles )
 			: $validated_styles;
+	}
+
+	/**
+	 * @param array<string, mixed> $operation
+	 * @param array<int, array<string, mixed>> $variations
+	 * @return array{index: int, title: string}|array{}
+	 */
+	private static function resolve_variation_operation( array $operation, array $variations ): array {
+		$variation_index = isset( $operation['variationIndex'] ) ? (int) $operation['variationIndex'] : -1;
+		$variation_title = sanitize_text_field( (string) ( $operation['variationTitle'] ?? '' ) );
+
+		if ( '' === $variation_title ) {
+			return [];
+		}
+
+		$indexed_variation = $variations[ $variation_index ] ?? null;
+
+		if (
+			is_array( $indexed_variation )
+			&& sanitize_text_field( (string) ( $indexed_variation['title'] ?? '' ) ) === $variation_title
+		) {
+			return [
+				'index' => $variation_index,
+				'title' => $variation_title,
+			];
+		}
+
+		foreach ( $variations as $index => $variation ) {
+			if ( ! is_array( $variation ) ) {
+				continue;
+			}
+
+			if ( sanitize_text_field( (string) ( $variation['title'] ?? '' ) ) === $variation_title ) {
+				return [
+					'index' => (int) $index,
+					'title' => $variation_title,
+				];
+			}
+		}
+
+		return [];
 	}
 
 	/**

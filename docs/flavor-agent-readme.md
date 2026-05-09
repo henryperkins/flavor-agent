@@ -167,7 +167,7 @@ Global Styles and Style Book recommendations are exposed through the `flavor-age
 The client behavior is:
 
 - Available only while the Site Editor Styles sidebar is active for the current `root/globalStyles` entity; Style Book can render before a valid example target resolves, but recommendation requests require an active registered example target block.
-- Prefers portal-first native Styles sidebar mounts and falls back to `PluginDocumentSettingPanel` shells implemented in `src/global-styles/GlobalStylesRecommender.js` and `src/style-book/StyleBookRecommender.js`.
+- Mounts through the native Styles sidebar slot only; if that mount point is unavailable, `src/global-styles/GlobalStylesRecommender.js` and `src/style-book/StyleBookRecommender.js` return `null` instead of using post-editor document-panel fallbacks.
 - Uses the shared `flavor-agent` data store for request state, preview state, apply state, editor-scoped activity hydration, and undo.
 - Uses the shared featured-hero plus `Review first` / `Manual ideas` split, generic `Confirm Apply` review CTA, and scoped stale/refresh treatment. Preview/apply controls only appear for validated `set_styles`, `set_block_styles`, and `set_theme_variation` operations.
 
@@ -218,7 +218,7 @@ Configured options:
 
 `flavor_agent_reasoning_effort` is the neutral saved option used by the Connectors-routed chat runtime when present. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source, and the Azure-named option is no longer the active setting. Flavor Agent first tries standardized WordPress AI Client reasoning methods; provider-specific model custom-option fallback is limited to known pinned provider IDs today: Codex `reasoningEffort` and OpenAI `reasoning.effort`. Anthropic is intentionally left unmapped until its provider contract is documented. Developer Docs always uses the built-in public docs endpoint and exposes only source status plus the max grounding source count.
 
-The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and refreshes the live sync status panel in place.
+The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` to queue the WP-Cron sync job, then polls `GET /flavor-agent/v1/sync-patterns` to refresh the live sync status panel in place.
 
 ## Abilities Status
 

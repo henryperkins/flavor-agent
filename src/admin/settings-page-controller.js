@@ -1,5 +1,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 
+const PATTERN_SYNC_POLL_INTERVAL_MS = 5000;
+
 const PATTERN_STATUS_LABELS = {
 	error: __( 'Error', 'flavor-agent' ),
 	indexing: __( 'Syncing', 'flavor-agent' ),
@@ -1015,14 +1017,23 @@ async function readJsonResponse( response ) {
 }
 
 function buildSyncSuccessMessage( payload ) {
-	const indexed = Math.max( 0, Number( payload?.indexed || 0 ) );
-	const removed = Math.max( 0, Number( payload?.removed || 0 ) );
 	const statusLabel = getPatternSyncStatusLabel(
 		normalizeText(
 			payload?.runtimeState?.status,
 			normalizeText( payload?.status, 'ready' )
 		)
 	);
+
+	if ( payload?.queued ) {
+		return sprintf(
+			/* translators: %s: sync status label. */
+			__( 'Pattern catalog sync queued. Status: %s.', 'flavor-agent' ),
+			statusLabel
+		);
+	}
+
+	const indexed = Math.max( 0, Number( payload?.indexed || 0 ) );
+	const removed = Math.max( 0, Number( payload?.removed || 0 ) );
 
 	return sprintf(
 		/* translators: 1: indexed pattern count, 2: removed pattern count, 3: sync status label. */
@@ -1034,6 +1045,98 @@ function buildSyncSuccessMessage( payload ) {
 		removed,
 		statusLabel
 	);
+}
+
+function initializePatternBackendPreview( root ) {
+	const fieldset = root.querySelector(
+		'[data-flavor-agent-pattern-backend-segments]'
+	);
+	if ( ! fieldset ) {
+		return;
+	}
+
+	const savedBackend = normalizeText( fieldset.dataset.savedBackend );
+	if ( '' === savedBackend ) {
+		return;
+	}
+
+	const radios = Array.from(
+		fieldset.querySelectorAll( 'input[type="radio"]' )
+	);
+	const blocks = Array.from(
+		root.querySelectorAll( '.flavor-agent-pattern-backend-block' )
+	);
+	if ( 0 === radios.length || 0 === blocks.length ) {
+		return;
+	}
+
+	const hint = root.querySelector( '[data-pattern-backend-preview-hint]' );
+	const syncBody = root.querySelector( '.flavor-agent-sync-panel' );
+
+	const dispatchPreviewChange = ( previewedBackend ) => {
+		root.dispatchEvent(
+			new CustomEvent( 'flavor-agent:pattern-backend-preview-changed', {
+				detail: {
+					previewedBackend,
+					savedBackend,
+					matches: previewedBackend === savedBackend,
+				},
+			} )
+		);
+	};
+
+	const applyPreview = ( previewedBackend ) => {
+		const matches = previewedBackend === savedBackend;
+
+		radios.forEach( ( radio ) => {
+			radio
+				.closest( '.flavor-agent-pattern-backend-segment' )
+				?.classList.toggle(
+					'is-preview-selected',
+					normalizeText( radio.value ) === previewedBackend
+				);
+		} );
+
+		blocks.forEach( ( block ) => {
+			const isMatch =
+				normalizeText( block.dataset.patternBackend ) ===
+				previewedBackend;
+			block.hidden = ! isMatch;
+		} );
+
+		if ( hint ) {
+			hint.hidden = matches;
+		}
+
+		if ( syncBody ) {
+			syncBody.dataset.patternBackendPreviewMatchesSaved = matches
+				? '1'
+				: '0';
+		}
+
+		dispatchPreviewChange( previewedBackend );
+	};
+
+	const handleChange = ( event ) => {
+		const target = event?.target;
+		const value =
+			target && 'value' in target ? normalizeText( target.value ) : '';
+		if ( '' === value ) {
+			return;
+		}
+		applyPreview( value );
+	};
+
+	radios.forEach( ( radio ) => {
+		radio.addEventListener( 'change', handleChange );
+	} );
+
+	const checkedRadio = radios.find( ( radio ) => radio.checked );
+	const initialBackend = checkedRadio
+		? normalizeText( checkedRadio.value )
+		: savedBackend;
+
+	applyPreview( initialBackend || savedBackend );
 }
 
 function initializePatternSync( root, fetchImpl ) {
@@ -1059,20 +1162,49 @@ function initializePatternSync( root, fetchImpl ) {
 	const statusNode = root.querySelector( '#flavor-agent-sync-status' );
 	const liveRegion = root.querySelector( '#flavor-agent-sync-live-region' );
 	const syncPanel = root.querySelector( '[data-flavor-agent-sync-panel]' );
+	const syncEndpoint = `${ config.restUrl }flavor-agent/v1/sync-patterns`;
+	let pollTimeout = null;
 
-	const canSync =
-		normalizeText( syncBody.dataset.patternPrerequisitesReady ) === '1';
 	const prerequisiteCopy = syncBody.querySelector(
 		'[data-pattern-prerequisite-copy]'
 	);
+	const previewHint = root.querySelector(
+		'[data-pattern-backend-preview-hint]'
+	);
+
+	const isPreviewMatchingSaved = () =>
+		normalizeText(
+			syncBody.dataset.patternBackendPreviewMatchesSaved,
+			'1'
+		) === '1';
+
+	const canSyncNow = () => {
+		const prerequisitesReady =
+			normalizeText( syncBody.dataset.patternPrerequisitesReady ) === '1';
+		return prerequisitesReady && isPreviewMatchingSaved();
+	};
 
 	const updateButtonAccessibility = ( isBusy = false ) => {
+		const canSync = canSyncNow();
 		const isDisabled = isBusy || ! canSync;
 
 		button.disabled = isDisabled;
 		button.setAttribute( 'aria-disabled', isDisabled ? 'true' : 'false' );
 
-		if ( canSync || ! prerequisiteCopy ) {
+		if ( canSync ) {
+			button.removeAttribute( 'aria-describedby' );
+			return;
+		}
+
+		if ( ! isPreviewMatchingSaved() && previewHint ) {
+			if ( ! previewHint.id ) {
+				previewHint.id = 'flavor-agent-pattern-backend-preview-hint';
+			}
+			button.setAttribute( 'aria-describedby', previewHint.id );
+			return;
+		}
+
+		if ( ! prerequisiteCopy ) {
 			button.removeAttribute( 'aria-describedby' );
 			return;
 		}
@@ -1093,10 +1225,69 @@ function initializePatternSync( root, fetchImpl ) {
 		);
 	};
 
+	const shouldPollSyncState = ( runtimeState ) =>
+		normalizeText( runtimeState?.status ) === 'indexing';
+
+	const clearSyncPolling = () => {
+		if ( pollTimeout ) {
+			clearTimeout( pollTimeout );
+			pollTimeout = null;
+		}
+	};
+
+	const pollSyncState = async () => {
+		clearSyncPolling();
+
+		try {
+			const response = await fetchImpl( syncEndpoint, {
+				method: 'GET',
+				headers: {
+					'X-WP-Nonce': config.nonce,
+				},
+			} );
+			const payload = await readJsonResponse( response );
+
+			if ( ! response.ok ) {
+				throw new Error(
+					normalizeText(
+						payload?.message,
+						__( 'Unable to refresh sync status.', 'flavor-agent' )
+					)
+				);
+			}
+
+			if ( payload?.runtimeState ) {
+				updateSyncPanelState( root, payload.runtimeState );
+			}
+
+			if ( shouldPollSyncState( payload?.runtimeState ) ) {
+				pollTimeout = setTimeout(
+					pollSyncState,
+					PATTERN_SYNC_POLL_INTERVAL_MS
+				);
+			}
+		} catch ( error ) {
+			const message =
+				error instanceof Error && error.message
+					? error.message
+					: __( 'Unable to refresh sync status.', 'flavor-agent' );
+
+			renderNotice( noticeRoot, 'error', message );
+			setStatusText( liveRegion, message );
+		}
+	};
+
 	updateButtonAccessibility();
 
+	root.addEventListener(
+		'flavor-agent:pattern-backend-preview-changed',
+		() => {
+			updateButtonAccessibility();
+		}
+	);
+
 	button.addEventListener( 'click', async () => {
-		if ( ! canSync ) {
+		if ( ! canSyncNow() ) {
 			return;
 		}
 
@@ -1104,6 +1295,7 @@ function initializePatternSync( root, fetchImpl ) {
 			syncPanel.open = true;
 		}
 
+		clearSyncPolling();
 		setBusy( true );
 		renderNotice( noticeRoot, '', '' );
 		setStatusText(
@@ -1112,16 +1304,13 @@ function initializePatternSync( root, fetchImpl ) {
 		);
 
 		try {
-			const response = await fetchImpl(
-				`${ config.restUrl }flavor-agent/v1/sync-patterns`,
-				{
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						'X-WP-Nonce': config.nonce,
-					},
-				}
-			);
+			const response = await fetchImpl( syncEndpoint, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': config.nonce,
+				},
+			} );
 			const payload = await readJsonResponse( response );
 
 			if ( ! response.ok ) {
@@ -1141,6 +1330,10 @@ function initializePatternSync( root, fetchImpl ) {
 
 			renderNotice( noticeRoot, 'success', successMessage );
 			setStatusText( liveRegion, successMessage );
+
+			if ( shouldPollSyncState( payload?.runtimeState ) ) {
+				pollSyncState();
+			}
 		} catch ( error ) {
 			const message =
 				error instanceof Error && error.message
@@ -1172,6 +1365,7 @@ export function initializeSettingsPage( {
 	}
 
 	initializeSectionState( root, storage );
+	initializePatternBackendPreview( root );
 	initializePatternSync( root, fetchImpl );
 	initializeGuidelinesManager( root );
 

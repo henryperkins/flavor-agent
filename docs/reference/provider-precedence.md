@@ -102,7 +102,7 @@ Requires the saved Cloudflare Workers AI account, API token, effective embedding
 | `flavor_agent_cloudflare_workers_ai_api_token`          | Shared Cloudflare API token                  |
 | `flavor_agent_cloudflare_pattern_ai_search_instance_id` | Managed pattern AI Search instance ID        |
 
-Authentication uses the `Authorization: Bearer` header against Cloudflare's AI Search REST API. Pattern sync uses stable item IDs, uploads changed public-safe registered patterns and published user `wp_block` patterns across synced, partial, and unsynced states with `wait_for_completion=true`, and deletes only stale remote items that were recorded in the previous Flavor Agent fingerprint state. Unknown remote items and the owner marker are preserved. Recommendation search sends the query text and `ai_search_options.retrieval.filters.pattern_name` derived from `visiblePatternNames`.
+Authentication uses the `Authorization: Bearer` header against Cloudflare's AI Search REST API. Pattern sync uploads changed public-safe registered patterns and published user `wp_block` patterns across synced, partial, and unsynced states with `wait_for_completion=false`, uses each remote item `key` as the stable Flavor Agent pattern ID, and deletes stale/retryable items by Cloudflare's generated item `id`. Unknown remote items and the owner marker are preserved. The index is ready only after listed current pattern items report `completed`; pending, missing, or retryable item-processing failures schedule follow-up syncs. Recommendation search sends the query text and `ai_search_options.retrieval.filters.pattern_name` derived from `visiblePatternNames`.
 
 ## Old Provider Values
 

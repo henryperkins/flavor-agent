@@ -1082,6 +1082,10 @@ describe( 'store action thunks', () => {
 			explanation: 'Mocked Style Book response',
 			reviewContextSignature: 'review-style-book',
 			resolvedContextSignature: 'resolved-style-book',
+			requestMeta: {
+				provider: 'openai',
+				model: 'gpt-4.1-mini',
+			},
 		} );
 
 		const dispatch = jest.fn();
@@ -1146,10 +1150,25 @@ describe( 'store action thunks', () => {
 			actions.setStyleBookRecommendations(
 				input.scope,
 				{
-					suggestions: [ { label: 'Tighten paragraph rhythm' } ],
+					settings: [],
+					styles: [],
+					block: [],
+					suggestions: [
+						{
+							label: 'Tighten paragraph rhythm',
+							requestMeta: {
+								provider: 'openai',
+								model: 'gpt-4.1-mini',
+							},
+						},
+					],
 					explanation: 'Mocked Style Book response',
 					reviewContextSignature: 'review-style-book',
 					resolvedContextSignature: 'resolved-style-book',
+					requestMeta: {
+						provider: 'openai',
+						model: 'gpt-4.1-mini',
+					},
 				},
 				input.prompt,
 				2,

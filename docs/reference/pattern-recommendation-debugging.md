@@ -57,7 +57,7 @@ For Cloudflare AI Search, the following should be true:
 - `PatternSearchClient::validate_configuration()` returns `true`
 - the private AI Search instance has `pattern_name`, `candidate_type`, `source`, `synced_id`, and `public_safe` declared as filterable metadata
 - the private AI Search instance embedding model matches the effective Embedding Model value
-- `PatternSearchClient::list_pattern_item_ids()` returns stable item IDs for the current corpus after sync
+- `PatternSearchClient::list_pattern_item_ids()` returns stable pattern IDs from the remote item keys for the current corpus after sync, and the corresponding AI Search items report `completed`
 - raw AI Search chunks for a prompt include relevant patterns and metadata with names in the current `visiblePatternNames` scope
 - registered pattern chunks have empty or non-synced `synced_id` metadata; synced/user pattern chunks have numeric `synced_id` metadata that resolves to a readable `wp_block` post
 - synced/user pattern hits use payload names like `core/block/{id}` with `source: synced`
@@ -131,6 +131,7 @@ Interpretation:
 - if validation reports metadata/filter schema errors, confirm the managed instance was created or adopted with the expected five custom metadata fields (`pattern_name`, `candidate_type`, `source`, `synced_id`, `public_safe`); fix or remove incompatible instances, then save Pattern Storage again
 - if validation reports `cloudflare_pattern_ai_search_owner_marker_missing`, save Pattern Storage again after any marker-upload fix; Flavor Agent repairs a compatible deterministic instance only when the prior provisioning signature matches and the instance has no uploaded items
 - if validation reports `cloudflare_pattern_ai_search_embedding_model_mismatch`, remove or recreate the deterministic managed instance with the normalized AI Search embedding model derived from the saved Embedding Model, then save Pattern Storage again
+- if pattern sync reports `cloudflare_pattern_ai_search_item_processing_error` with `workers_ai_out_of_capacity_error`, Cloudflare accepted the item upload but Workers AI could not process one or more items yet; Flavor Agent keeps the index unavailable and schedules a retry instead of treating the catalog as ready
 - if Connectors/text-generation validation fails, raw retrieval can still be healthy while final recommendations fail
 
 ### 3. Inspect the live Qdrant collection definition
@@ -556,8 +557,9 @@ What to compare:
 If raw chunks are wrong:
 
 - inspect the uploaded item metadata and markdown body
-- confirm `PatternIndex::sync()` uploaded changed items with stable item IDs and `wait_for_completion=true`
-- confirm stale remote item IDs were deleted after sync
+- confirm `PatternIndex::sync()` uploaded changed items with `wait_for_completion=false`
+- confirm current pattern items have `status: completed`; queued/pending items keep the index in `indexing`, and retryable capacity errors schedule another sync
+- confirm stale remote items were deleted by Cloudflare's generated item `id`, not by Flavor Agent's stable pattern ID
 - confirm the AI Search namespace is the fixed `patterns` namespace and the runtime instance is the deterministic managed `flavor-agent-patterns-{site_hash}` instance
 
 ### Raw Qdrant hits look good but final recommendations still look wrong

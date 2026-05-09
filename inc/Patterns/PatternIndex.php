@@ -20,11 +20,16 @@ final class PatternIndex {
 	public const STATE_OPTION = 'flavor_agent_pattern_index_state';
 	public const CRON_HOOK    = 'flavor_agent_reindex_patterns';
 
-	private const LOCK_TRANSIENT              = 'flavor_agent_sync_lock';
-	private const LOCK_TTL                    = 300;
-	private const COOLDOWN                    = 300;
-	private const BATCH_SIZE                  = 100;
-	private const COMPATIBILITY_STALE_REASONS = [
+	private const LOCK_TRANSIENT                              = 'flavor_agent_sync_lock';
+	private const LOCK_TTL                                    = 300;
+	private const COOLDOWN                                    = 300;
+	private const BATCH_SIZE                                  = 100;
+	private const CLOUDFLARE_AI_SEARCH_PENDING_RETRY_AFTER    = 30;
+	private const CLOUDFLARE_AI_SEARCH_PROCESSING_RETRY_AFTER = 60;
+	private const CLOUDFLARE_AI_SEARCH_RETRYABLE_ITEM_ERRORS  = [
+		'workers_ai_out_of_capacity_error',
+	];
+	private const COMPATIBILITY_STALE_REASONS                 = [
 		'pattern_backend_changed',
 		'embedding_signature_changed',
 		'qdrant_url_changed',
@@ -481,7 +486,7 @@ final class PatternIndex {
 	}
 
 	/**
-	 * Run a full sync. Called by the manual REST route and cron hook.
+	 * Run a full sync. Called by the cron hook and direct runtime/test callers.
 	 *
 	 * @return array|\WP_Error Sync result with indexed/removed counts.
 	 */
@@ -495,6 +500,46 @@ final class PatternIndex {
 		} finally {
 			self::release_lock();
 		}
+	}
+
+	/**
+	 * Queue a sync for WP-Cron and return immediately.
+	 *
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function enqueue_sync(): array|\WP_Error {
+		if ( ! self::recommendation_backends_configured() ) {
+			return new \WP_Error(
+				'pattern_sync_unconfigured',
+				'Pattern recommendations are not configured for syncing.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$scheduled_before = wp_next_scheduled( self::CRON_HOOK );
+
+		self::schedule_sync_after( 5 );
+
+		$scheduled_at = wp_next_scheduled( self::CRON_HOOK );
+
+		if ( false === $scheduled_at ) {
+			return new \WP_Error(
+				'pattern_sync_schedule_failed',
+				'Pattern catalog sync could not be scheduled.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		self::mark_sync_queued();
+
+		$state = self::get_state();
+
+		return [
+			'queued'      => true,
+			'scheduled'   => false === $scheduled_before || $scheduled_before !== $scheduled_at,
+			'scheduledAt' => gmdate( 'c', (int) $scheduled_at ),
+			'status'      => (string) ( $state['status'] ?? 'indexing' ),
+		];
 	}
 
 	/**
@@ -930,27 +975,48 @@ final class PatternIndex {
 		$state['last_error']      = null;
 		$state['stale_reason']    = '';
 		$state['stale_reasons']   = [];
+		if ( $requires_full_reindex ) {
+			$state['last_synced_at']       = null;
+			$state['indexed_count']        = 0;
+			$state['pattern_fingerprints'] = [];
+		}
 		self::save_state( $state );
 
-		$remote_ids = PatternSearchClient::list_pattern_item_ids();
-		if ( is_wp_error( $remote_ids ) ) {
-			self::save_error_state( $remote_ids );
-			return $remote_ids;
+		$remote_items = PatternSearchClient::list_pattern_items();
+		if ( is_wp_error( $remote_items ) ) {
+			self::save_error_state( $remote_items );
+			return $remote_items;
 		}
+		$remote_items_by_pattern_id = self::index_cloudflare_ai_search_items_by_pattern_id( $remote_items );
 
 		$to_upload = [];
 		foreach ( $current_pattern_fingerprints as $uuid => $pattern_fingerprint ) {
+			$remote_item = $remote_items_by_pattern_id[ $uuid ] ?? null;
+
 			if (
 				$requires_full_reindex
 				|| ! isset( $previous_pattern_fingerprints[ $uuid ] )
 				|| $previous_pattern_fingerprints[ $uuid ] !== $pattern_fingerprint
+				|| null === $remote_item
+				|| self::cloudflare_ai_search_item_needs_retry( $remote_item )
 			) {
 				$to_upload[] = $uuid;
 			}
 		}
 
 		foreach ( $to_upload as $uuid ) {
-			$upload = PatternSearchClient::upload_pattern( $current[ $uuid ], $uuid, true );
+			$remote_item = $remote_items_by_pattern_id[ $uuid ] ?? null;
+
+			if ( is_array( $remote_item ) && self::cloudflare_ai_search_item_needs_retry( $remote_item ) ) {
+				$delete = PatternSearchClient::delete_pattern( $remote_item['item_id'] );
+
+				if ( is_wp_error( $delete ) ) {
+					self::save_error_state( $delete );
+					return $delete;
+				}
+			}
+
+			$upload = PatternSearchClient::upload_pattern( $current[ $uuid ], $uuid, false );
 
 			if ( is_wp_error( $upload ) ) {
 				self::save_error_state( $upload );
@@ -960,24 +1026,24 @@ final class PatternIndex {
 
 		$current_ids = array_fill_keys( array_keys( $current ), true );
 		$to_delete   = [];
-		foreach ( $remote_ids as $remote_id ) {
-			$remote_id = sanitize_text_field( (string) $remote_id );
+		foreach ( $remote_items as $remote_item ) {
+			$remote_pattern_id = sanitize_text_field( (string) ( $remote_item['pattern_id'] ?? '' ) );
 
-			if ( PatternSearchInstanceManager::OWNER_MARKER_NAME === $remote_id ) {
+			if ( PatternSearchInstanceManager::OWNER_MARKER_NAME === $remote_pattern_id ) {
 				continue;
 			}
 
-			if ( '' === $remote_id || ! isset( $previous_pattern_fingerprints[ $remote_id ] ) ) {
+			if ( '' === $remote_pattern_id || ! isset( $previous_pattern_fingerprints[ $remote_pattern_id ] ) ) {
 				continue;
 			}
 
-			if ( ! isset( $current_ids[ $remote_id ] ) ) {
-				$to_delete[] = $remote_id;
+			if ( ! isset( $current_ids[ $remote_pattern_id ] ) ) {
+				$to_delete[] = $remote_item['item_id'];
 			}
 		}
 
-		foreach ( $to_delete as $uuid ) {
-			$delete = PatternSearchClient::delete_pattern( $uuid );
+		foreach ( $to_delete as $item_id ) {
+			$delete = PatternSearchClient::delete_pattern( $item_id );
 
 			if ( is_wp_error( $delete ) ) {
 				self::save_error_state( $delete );
@@ -985,30 +1051,76 @@ final class PatternIndex {
 			}
 		}
 
-		self::save_state(
-			[
-				'status'                         => 'ready',
-				'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
-				'fingerprint'                    => $fingerprint,
-				'qdrant_url'                     => '',
-				'qdrant_collection'              => '',
-				'cloudflare_ai_search_namespace' => $namespace,
-				'cloudflare_ai_search_instance'  => $instance,
-				'cloudflare_ai_search_signature' => $signature,
-				'openai_provider'                => '',
-				'openai_endpoint'                => '',
-				'embedding_model'                => '',
-				'embedding_dimension'            => 0,
-				'embedding_signature'            => '',
-				'last_synced_at'                 => gmdate( 'c' ),
-				'last_attempt_at'                => $state['last_attempt_at'],
-				'indexed_count'                  => count( $current ),
-				'last_error'                     => null,
-				'stale_reason'                   => '',
-				'stale_reasons'                  => [],
-				'pattern_fingerprints'           => $current_pattern_fingerprints,
-			]
-		);
+		$latest_remote_items = ( [] !== $to_upload || [] !== $to_delete )
+			? PatternSearchClient::list_pattern_items()
+			: $remote_items;
+
+		if ( is_wp_error( $latest_remote_items ) ) {
+			self::save_error_state( $latest_remote_items );
+			return $latest_remote_items;
+		}
+
+		$processing_status = self::cloudflare_ai_search_processing_status( $current_ids, $latest_remote_items );
+		$next_state        = [
+			'status'                         => 'ready',
+			'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			'fingerprint'                    => $fingerprint,
+			'qdrant_url'                     => '',
+			'qdrant_collection'              => '',
+			'cloudflare_ai_search_namespace' => $namespace,
+			'cloudflare_ai_search_instance'  => $instance,
+			'cloudflare_ai_search_signature' => $signature,
+			'openai_provider'                => '',
+			'openai_endpoint'                => '',
+			'embedding_model'                => '',
+			'embedding_dimension'            => 0,
+			'embedding_signature'            => '',
+			'last_synced_at'                 => gmdate( 'c' ),
+			'last_attempt_at'                => $state['last_attempt_at'],
+			'indexed_count'                  => count( $current ),
+			'last_error'                     => null,
+			'stale_reason'                   => '',
+			'stale_reasons'                  => [],
+			'pattern_fingerprints'           => $current_pattern_fingerprints,
+		];
+
+		if ( 0 < $processing_status['failed'] ) {
+			self::save_state(
+				array_merge(
+					$next_state,
+					[
+						'status'         => 'indexing',
+						'last_synced_at' => null,
+					]
+				)
+			);
+			$error = self::cloudflare_ai_search_processing_error( $processing_status );
+			self::save_error_state( $error );
+			return $error;
+		}
+
+		if ( 0 < $processing_status['pending'] || 0 < $processing_status['missing'] ) {
+			self::save_state(
+				array_merge(
+					$next_state,
+					[
+						'status'         => 'indexing',
+						'last_synced_at' => null,
+					]
+				)
+			);
+			self::schedule_sync_after( self::CLOUDFLARE_AI_SEARCH_PENDING_RETRY_AFTER );
+
+			return [
+				'indexed'     => count( $to_upload ),
+				'removed'     => count( $to_delete ),
+				'fingerprint' => $fingerprint,
+				'status'      => 'indexing',
+				'pending'     => $processing_status['pending'] + $processing_status['missing'],
+			];
+		}
+
+		self::save_state( $next_state );
 
 		return [
 			'indexed'     => count( $to_upload ),
@@ -1186,6 +1298,116 @@ final class PatternIndex {
 		return array_values( array_unique( $reasons ) );
 	}
 
+	private static function mark_sync_queued(): void {
+		$state = self::clear_error_metadata( self::get_state() );
+
+		$state['status']        = 'indexing';
+		$state['stale_reason']  = '';
+		$state['stale_reasons'] = [];
+
+		if ( ! self::has_usable_index( $state ) ) {
+			$state['last_synced_at'] = null;
+			$state['indexed_count']  = 0;
+		}
+
+		self::save_state( $state );
+	}
+
+	/**
+	 * @param array<int, array{item_id:string,item_key:string,pattern_id:string,status:string,error:string}> $items
+	 * @return array<string, array{item_id:string,item_key:string,pattern_id:string,status:string,error:string}>
+	 */
+	private static function index_cloudflare_ai_search_items_by_pattern_id( array $items ): array {
+		$indexed = [];
+
+		foreach ( $items as $item ) {
+			$pattern_id = sanitize_text_field( (string) ( $item['pattern_id'] ?? '' ) );
+
+			if ( '' !== $pattern_id ) {
+				$indexed[ $pattern_id ] = $item;
+			}
+		}
+
+		return $indexed;
+	}
+
+	/**
+	 * @param array{status?: string} $item
+	 */
+	private static function cloudflare_ai_search_item_needs_retry( array $item ): bool {
+		return in_array(
+			sanitize_key( (string) ( $item['status'] ?? '' ) ),
+			[ 'error', 'skipped', 'outdated' ],
+			true
+		);
+	}
+
+	/**
+	 * @param array<string, true> $current_ids
+	 * @param array<int, array{item_id:string,item_key:string,pattern_id:string,status:string,error:string}> $items
+	 * @return array{completed:int,pending:int,failed:int,missing:int,errors:array<string, int>}
+	 */
+	private static function cloudflare_ai_search_processing_status( array $current_ids, array $items ): array {
+		$items_by_pattern_id = self::index_cloudflare_ai_search_items_by_pattern_id( $items );
+		$status              = [
+			'completed' => 0,
+			'pending'   => 0,
+			'failed'    => 0,
+			'missing'   => 0,
+			'errors'    => [],
+		];
+
+		foreach ( array_keys( $current_ids ) as $pattern_id ) {
+			$item = $items_by_pattern_id[ $pattern_id ] ?? null;
+
+			if ( null === $item ) {
+				++$status['missing'];
+				continue;
+			}
+
+			$item_status = sanitize_key( (string) ( $item['status'] ?? '' ) );
+
+			if ( 'completed' === $item_status ) {
+				++$status['completed'];
+				continue;
+			}
+
+			if ( 'error' === $item_status ) {
+				++$status['failed'];
+				$error                      = sanitize_key( (string) ( $item['error'] ?? '' ) );
+				$error                      = '' !== $error ? $error : 'unknown';
+				$status['errors'][ $error ] = (int) ( $status['errors'][ $error ] ?? 0 ) + 1;
+				continue;
+			}
+
+			++$status['pending'];
+		}
+
+		return $status;
+	}
+
+	/**
+	 * @param array{failed:int,errors:array<string, int>} $processing_status
+	 */
+	private static function cloudflare_ai_search_processing_error( array $processing_status ): \WP_Error {
+		$errors    = array_keys( $processing_status['errors'] );
+		$retryable = [] !== $errors && [] === array_diff( $errors, self::CLOUDFLARE_AI_SEARCH_RETRYABLE_ITEM_ERRORS );
+
+		return new \WP_Error(
+			'cloudflare_pattern_ai_search_item_processing_error',
+			sprintf(
+				'Cloudflare AI Search could not process %d pattern item(s).',
+				max( 1, (int) $processing_status['failed'] )
+			),
+			[
+				'status'      => $retryable ? 503 : 502,
+				'retryable'   => $retryable,
+				'retry_after' => $retryable ? self::CLOUDFLARE_AI_SEARCH_PROCESSING_RETRY_AFTER : null,
+				'errors'      => $processing_status['errors'],
+			]
+		);
+	}
+
 	private static function save_error_state( string|\WP_Error $error ): void {
 		$state = self::get_state();
 
@@ -1237,8 +1459,16 @@ final class PatternIndex {
 		$retry_after = isset( $data['retry_after'] ) && $data['retry_after'] !== null
 			? max( 1, min( 60, (int) $data['retry_after'] ) )
 			: 5;
+		self::schedule_sync_after( $retry_after );
+	}
+
+	private static function schedule_sync_after( int $delay ): void {
+		if ( ! self::recommendation_backends_configured() ) {
+			return;
+		}
+
 		$hook        = self::CRON_HOOK;
-		$target_time = time() + $retry_after;
+		$target_time = time() + max( 1, min( 60, $delay ) );
 		$scheduled   = wp_next_scheduled( $hook );
 
 		if ( false !== $scheduled && $scheduled <= $target_time ) {

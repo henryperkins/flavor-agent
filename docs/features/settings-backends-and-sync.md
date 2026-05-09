@@ -61,15 +61,16 @@ The reasoning effort setting is attached to Connectors-routed chat as a neutral 
 
 1. The admin clicks the `Sync Pattern Catalog` button
 2. `src/admin/settings-page-controller.js` posts to `POST /flavor-agent/v1/sync-patterns`
-3. `FlavorAgent\REST\Agent_Controller::handle_sync_patterns()` calls `FlavorAgent\Patterns\PatternIndex::sync()`
-4. The settings-page controller updates the sync badge, summary, metrics, and inline notice from the returned runtime state without a full reload
+3. `FlavorAgent\REST\Agent_Controller::handle_sync_patterns()` queues `flavor_agent_reindex_patterns` through `FlavorAgent\Patterns\PatternIndex::enqueue_sync()` and returns without running the batch in the REST request
+4. `FlavorAgent\Patterns\PatternIndex::sync()` runs from WP-Cron and owns the selected backend rebuild
+5. The settings-page controller updates the sync badge, summary, metrics, and inline notice from the returned runtime state, then polls `GET /flavor-agent/v1/sync-patterns` until the state leaves `indexing`
 
 Backend-specific sync behavior:
 
 | Pattern backend      | Sync behavior                                                                                                                                                                                                               |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Qdrant               | Diffs current registered patterns plus public-safe published user `wp_block` patterns across synced, partial, and unsynced states, embeds changed patterns with Cloudflare Workers AI, upserts Qdrant points, and deletes stale points.                       |
-| Cloudflare AI Search | Diffs the same public-safe corpus, uploads changed patterns as markdown items to the managed private AI Search instance with stable item IDs and `wait_for_completion=true`, lists remote item IDs, and deletes only stale IDs that were recorded in the previous Flavor Agent fingerprint state. Unknown remote items and owner-marker items are preserved. |
+| Cloudflare AI Search | Diffs the same public-safe corpus, uploads changed patterns as markdown items to the managed private AI Search instance with `wait_for_completion=false`, uses each remote item `key` as the stable Flavor Agent pattern ID, and deletes stale/retryable items by Cloudflare's generated item `id`. Unknown remote items and owner-marker items are preserved. The sync remains `indexing` until current pattern items report `completed`; pending or missing items schedule another sync, and retryable processing failures such as `workers_ai_out_of_capacity_error` schedule a retry. |
 
 ## Guidelines Bridge Flow
 
@@ -90,7 +91,7 @@ Backend-specific sync behavior:
 | Theme tokens          | `InfraAbilities::get_theme_tokens()`                                                  | Exposes the current theme token snapshot through an ability                                                |
 | Docs grounding        | `WordPressDocsAbilities::search_wordpress_docs()`                                     | Exposes trusted developer-doc grounding through an ability                                                 |
 | Guidelines bridge     | `Guidelines::get_all()` / `Guidelines::format_prompt_context()`                       | Reads core Guidelines first when available, falls back to legacy options, and formats guidance for prompts |
-| Manual sync UI        | `src/admin/settings-page.js` + `src/admin/settings-page-controller.js`                | Owns settings-page sync interactions, live status updates, and section-open persistence                    |
+| Manual sync UI        | `src/admin/settings-page.js` + `src/admin/settings-page-controller.js`                | Owns settings-page sync enqueueing, polling, live status updates, and section-open persistence            |
 | Pattern sync backend  | `PatternIndex::sync()`                                                                | Rebuilds the selected pattern backend catalog                                                              |
 
 ## Guardrails And Failure Modes
@@ -108,7 +109,7 @@ Backend-specific sync behavior:
 
 ## Related Routes And Abilities
 
-- REST: `POST /flavor-agent/v1/sync-patterns`
+- REST: `POST /flavor-agent/v1/sync-patterns` queues a sync; `GET /flavor-agent/v1/sync-patterns` returns the current runtime state for polling
 - Ability: `flavor-agent/check-status`
 - Ability: `flavor-agent/get-theme-tokens`
 - Ability: `flavor-agent/search-wordpress-docs`
