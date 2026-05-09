@@ -25,8 +25,8 @@ Primary sources:
 
 Secondary signals (paraphrase primary sources, not authoritative): WP Tavern, agency blogs. Treat any version-specific feature claim that is not on `make.wordpress.org` or in a tracking issue as unconfirmed.
 
-Snapshot date: 2026-04-29.
-Latest Gutenberg release at snapshot: `23.0.0` (2026-04-22).
+Snapshot date: 2026-05-09.
+Latest Gutenberg release at snapshot: `23.1.1` (verified in the local test container).
 WordPress core: `7.0` targeted 2026-05-20, still pre-release at snapshot.
 
 To refresh:
@@ -59,7 +59,7 @@ When this doc is updated, run `npm run check:docs` if any other live contributor
 | 22.8 | 2026-03-25 | `registerConnector()` / `unregisterConnector()`; Button pseudo-state styling in Global Styles; Site Identity moves into Design panel; AVIF in client uploads; command palette in admin bar |
 | 23.0 | 2026-04-22 | Revisions row for templates, template parts, patterns; `__rtc_compatible_meta_box`; DataForm date-range; `wordpress/ui` CSS-defense module; Site Identity panel consolidation |
 | (WordPress 7.0) | targeted 2026-05-20 | AI Client `wp_ai_client_prompt()` + `wp_ai_client_prevent_prompt` filter; client-side Abilities API (`@wordpress/abilities`, `@wordpress/core-abilities`); ability `meta.annotations.{readonly,destructive,idempotent}`; DataForm/DataViews v2; RTC opt-in for beta; Interactivity API `withSyncEvent()` and `state.navigation` deprecation |
-| 23.1 | projected ~2026-05-06 | Not yet posted at snapshot; track via 7.1 iteration issues below |
+| 23.1 | 2026-05 | Core Abilities exposes a readiness promise; Guidelines classes/routes moved from content-guidelines naming to guidelines naming while retaining `wp_guideline` and `wp_guideline_type`; Guidelines became type-aware; network-active connector plugins count as active. |
 | 23.2 | projected ~2026-05-20 | Same |
 
 WordPress core release cadence at snapshot: WP 7.0 May 20, 2026; WP 7.1 August 19, 2026; WP 7.2 December 10, 2026 (per the WordPress.org roadmap).

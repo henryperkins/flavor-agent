@@ -12,9 +12,9 @@ Use it when you need to answer:
 
 - Project: `https://github.com/orgs/WordPress/projects/240` (WordPress AI Planning & Roadmap)
 - Public board: yes (read-only access requires `gh auth refresh -s read:project`)
-- Snapshot date: 2026-04-28
+- Snapshot date: 2026-05-09
 - Snapshot shape: 304 items total, 230 Done, 73 active across Triage, Backlog, In discussion / Needs decision, To do, In progress, and Needs review.
-- AI plugin milestone overlay refreshed: 2026-05-03. `WordPress/ai` milestone #17 is `0.9.0` (due 2026-05-07; 31 open, 15 closed), and milestone #7 is `1.0.0` (due 2026-05-21; 23 open, 0 closed; upstream description: "WordPress 7.0 Stable Release Candidate"). `0.9.0` is the version immediately before `1.0.0`; treat both milestone item sets as core AI plugin release targets rather than speculative board items.
+- AI plugin milestone overlay refreshed: 2026-05-09. `WordPress/ai` milestone #17 is `0.9.0` (verified in the local test container), and milestone #7 is `1.0.0` (due 2026-05-21; 23 open, 0 closed; upstream description: "WordPress 7.0 Stable Release Candidate"). `0.9.0` is the version immediately before `1.0.0`; treat both milestone item sets as core AI plugin release targets rather than speculative board items.
 - Active items live almost entirely in `WordPress/ai` (the core AI plugin / AI Experiments showcase repository); `WordPress/wp-ai-client`, `WordPress/abilities-api`, and `WordPress/php-ai-client` have no active items on this board as of the snapshot date.
 - Teams visible on the board: `LLM Integrations`, `Abilities API`, `Integration Bridges`, `Showcase Plugin`. Showcase Plugin owns 294 of 304 items.
 
@@ -76,6 +76,8 @@ The headline strategic read: WordPress core's AI direction is being prototyped a
 ## AI Plugin Release Milestone Overlay
 
 This overlay is separate from the project-board status tables above. Milestone assignment now gives the near-term release train for the core AI plugin (`WordPress/ai`), so Flavor Agent should treat these as plugin-version targets even when the project board still describes the same issue as a discussion, backlog, or future-release item.
+
+AI plugin `0.9.0` was verified in the local test container on 2026-05-09. Flavor Agent now treats the AI plugin Developer Tools per-feature option `wpai_feature_flavor-agent_field_developer` as the canonical feature-level provider/model preference when present, while explicit per-call provider arguments keep highest precedence.
 
 | Milestone URL                | Plugin version | Due        | Open / closed       | Read for Flavor Agent                                                                                                                                                                                                                                |
 | ---------------------------- | -------------- | ---------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
