@@ -17,6 +17,7 @@ use FlavorAgent\OpenAI\Provider;
 final class PatternIndex {
 
 
+
 	public const STATE_OPTION = 'flavor_agent_pattern_index_state';
 	public const CRON_HOOK    = 'flavor_agent_reindex_patterns';
 
@@ -490,16 +491,55 @@ final class PatternIndex {
 	 *
 	 * @return array|\WP_Error Sync result with indexed/removed counts.
 	 */
-	public static function sync(): array|\WP_Error {
+	public static function sync( bool $clear_scheduled_before = false ): array|\WP_Error {
 		if ( ! self::acquire_lock() ) {
 			return new \WP_Error( 'sync_locked', 'A sync is already in progress.', [ 'status' => 409 ] );
 		}
 
 		try {
+			if ( $clear_scheduled_before ) {
+				wp_clear_scheduled_hook( self::CRON_HOOK );
+			}
+
 			return self::do_sync();
 		} finally {
 			self::release_lock();
 		}
+	}
+
+	/**
+	 * Run an admin-requested sync immediately instead of waiting for WP-Cron.
+	 *
+	 * @return array|\WP_Error Sync result with indexed/removed counts.
+	 */
+	public static function sync_now(): array|\WP_Error {
+		if ( ! self::recommendation_backends_configured() ) {
+			return new \WP_Error(
+				'pattern_sync_unconfigured',
+				'Pattern recommendations are not configured for syncing.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		return self::sync( true );
+	}
+
+	/**
+	 * Execute a due background sync from a foreground status check.
+	 *
+	 * This keeps the settings screen from getting stuck when WP-Cron is disabled
+	 * or not spawned promptly by the local environment.
+	 *
+	 * @return array|\WP_Error|null Sync result, error, or null when no sync is due.
+	 */
+	public static function run_due_sync(): array|\WP_Error|null {
+		$scheduled_at = wp_next_scheduled( self::CRON_HOOK );
+
+		if ( false === $scheduled_at || (int) $scheduled_at > time() ) {
+			return null;
+		}
+
+		return self::sync( true );
 	}
 
 	/**

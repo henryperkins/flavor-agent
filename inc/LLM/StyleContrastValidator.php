@@ -147,10 +147,12 @@ final class StyleContrastValidator {
 			];
 		}
 
-		if ( preg_match( '/^#[0-9a-f]{6}([0-9a-f]{2})?$/i', $value ) === 1 ) {
+		$normalized_hex = self::normalize_hex_value( $value );
+
+		if ( null !== $normalized_hex ) {
 			return [
 				'resolved' => true,
-				'hex'      => strtolower( substr( $value, 0, 7 ) ),
+				'hex'      => $normalized_hex,
 				'reason'   => null,
 			];
 		}
@@ -303,10 +305,11 @@ final class StyleContrastValidator {
 	 * @return array{resolved: bool, hex: string|null, reason: string|null}
 	 */
 	private static function resolve_preset_slug( string $slug, array $theme_tokens ): array {
-		$index = self::build_preset_index( $theme_tokens );
-		$hex   = $index[ $slug ] ?? '';
+		$index          = self::build_preset_index( $theme_tokens );
+		$raw_hex        = $index[ $slug ] ?? '';
+		$normalized_hex = '' === $raw_hex ? null : self::normalize_hex_value( $raw_hex );
 
-		if ( '' === $hex || preg_match( '/^#[0-9a-f]{6}([0-9a-f]{2})?$/i', $hex ) !== 1 ) {
+		if ( null === $normalized_hex ) {
 			return [
 				'resolved' => false,
 				'hex'      => null,
@@ -316,9 +319,30 @@ final class StyleContrastValidator {
 
 		return [
 			'resolved' => true,
-			'hex'      => strtolower( substr( $hex, 0, 7 ) ),
+			'hex'      => $normalized_hex,
 			'reason'   => null,
 		];
+	}
+
+	private static function normalize_hex_value( string $value ): ?string {
+		if ( preg_match( '/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $value ) !== 1 ) {
+			return null;
+		}
+
+		$digits = substr( $value, 1 );
+		$length = strlen( $digits );
+
+		if ( 3 === $length || 4 === $length ) {
+			$expanded = '';
+
+			foreach ( str_split( $digits ) as $char ) {
+				$expanded .= $char . $char;
+			}
+
+			$digits = $expanded;
+		}
+
+		return strtolower( '#' . substr( $digits, 0, 6 ) );
 	}
 
 	/**

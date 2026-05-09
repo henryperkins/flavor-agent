@@ -51,13 +51,16 @@ export default function UndoToast( {
 	undoDisabled = false,
 	onInteractionChange = null,
 } ) {
-	const [ isPaused, setIsPaused ] = useState( false );
+	const [ isHovered, setIsHovered ] = useState( false );
+	const [ isFocusWithin, setIsFocusWithin ] = useState( false );
+	const isPaused = isHovered || isFocusWithin;
 	const [ reducedMotion, setReducedMotion ] = useState(
 		getReducedMotionPreference()
 	);
 	const remainingRef = useRef( autoDismissMs );
 	const startedAtRef = useRef( 0 );
 	const onDismissRef = useRef( onDismiss );
+	const timerConfigRef = useRef( { autoDismissMs, id, variant } );
 
 	useEffect( () => {
 		onDismissRef.current = onDismiss;
@@ -90,6 +93,10 @@ export default function UndoToast( {
 
 	// Schedule / clear / pause / resume the auto-dismiss timer.
 	//
+	// A toast can keep the same id while changing variant, such as success →
+	// error after an undo failure. Reset the remaining duration before scheduling
+	// so the replacement state gets its own full auto-dismiss window.
+	//
 	// While running, the effect schedules a `setTimeout`. Its cleanup clears
 	// the timer AND subtracts the elapsed run-time from `remainingRef` so the
 	// next run picks up where this one left off. Pausing (isPaused → true) or
@@ -98,6 +105,17 @@ export default function UndoToast( {
 	// where the elapsed bookkeeping happens. This guarantees the cumulative
 	// non-paused duration drives dismiss, not wall-clock.
 	useEffect( () => {
+		const previousConfig = timerConfigRef.current;
+		const configChanged =
+			previousConfig.autoDismissMs !== autoDismissMs ||
+			previousConfig.id !== id ||
+			previousConfig.variant !== variant;
+
+		if ( configChanged ) {
+			remainingRef.current = autoDismissMs;
+			timerConfigRef.current = { autoDismissMs, id, variant };
+		}
+
 		if ( reducedMotion || isPaused ) {
 			return undefined;
 		}
@@ -119,14 +137,7 @@ export default function UndoToast( {
 				remainingRef.current - elapsed
 			);
 		};
-	}, [ isPaused, reducedMotion, id ] );
-
-	// Reset the remaining duration when the variant changes (e.g. a success
-	// toast becoming an error toast after an undo failure carries a fresh
-	// `autoDismissMs` from the store).
-	useEffect( () => {
-		remainingRef.current = autoDismissMs;
-	}, [ autoDismissMs, variant ] );
+	}, [ autoDismissMs, isPaused, reducedMotion, id, variant ] );
 
 	const reportInteraction = useCallback(
 		( interacted ) => {
@@ -138,17 +149,20 @@ export default function UndoToast( {
 	);
 
 	const handleMouseEnter = useCallback( () => {
-		setIsPaused( true );
+		setIsHovered( true );
 		reportInteraction( true );
 	}, [ reportInteraction ] );
 
 	const handleMouseLeave = useCallback( () => {
-		setIsPaused( false );
-		reportInteraction( false );
-	}, [ reportInteraction ] );
+		setIsHovered( false );
+
+		if ( ! isFocusWithin ) {
+			reportInteraction( false );
+		}
+	}, [ isFocusWithin, reportInteraction ] );
 
 	const handleFocus = useCallback( () => {
-		setIsPaused( true );
+		setIsFocusWithin( true );
 		reportInteraction( true );
 	}, [ reportInteraction ] );
 
@@ -159,10 +173,13 @@ export default function UndoToast( {
 				return;
 			}
 
-			setIsPaused( false );
-			reportInteraction( false );
+			setIsFocusWithin( false );
+
+			if ( ! isHovered ) {
+				reportInteraction( false );
+			}
 		},
-		[ reportInteraction ]
+		[ isHovered, reportInteraction ]
 	);
 
 	const handleKeyDown = useCallback(

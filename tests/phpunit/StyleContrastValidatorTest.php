@@ -31,6 +31,60 @@ final class StyleContrastValidatorTest extends TestCase {
 		);
 	}
 
+	public function test_resolver_form_3_expands_three_digit_shorthand_hex(): void {
+		$this->assertSame(
+			[
+				'resolved' => true,
+				'hex'      => '#ffffff',
+				'reason'   => null,
+			],
+			StyleContrastValidator::resolve_color_value( '#fff', [ 'colorPresets' => [] ] )
+		);
+	}
+
+	public function test_resolver_form_3_expands_three_digit_shorthand_hex_uppercase(): void {
+		$this->assertSame(
+			[
+				'resolved' => true,
+				'hex'      => '#aabbcc',
+				'reason'   => null,
+			],
+			StyleContrastValidator::resolve_color_value( '#ABC', [ 'colorPresets' => [] ] )
+		);
+	}
+
+	public function test_resolver_form_3_expands_four_digit_shorthand_and_drops_alpha(): void {
+		$this->assertSame(
+			[
+				'resolved' => true,
+				'hex'      => '#112233',
+				'reason'   => null,
+			],
+			StyleContrastValidator::resolve_color_value( '#1234', [ 'colorPresets' => [] ] )
+		);
+	}
+
+	public function test_resolver_form_1_resolves_palette_preset_with_three_digit_shorthand(): void {
+		$this->assertSame(
+			[
+				'resolved' => true,
+				'hex'      => '#000000',
+				'reason'   => null,
+			],
+			StyleContrastValidator::resolve_color_value(
+				'var:preset|color|ink',
+				[
+					'colorPresets' => [
+						[
+							'slug'  => 'ink',
+							'color' => '#000',
+						],
+					],
+				]
+			)
+		);
+	}
+
 	public function test_resolver_form_1_resolves_flavor_agent_preset_reference(): void {
 		$this->assertSame(
 			[

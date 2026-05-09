@@ -11,6 +11,7 @@ use FlavorAgent\Patterns\PatternIndex;
 
 final class Agent_Controller {
 
+
 	private const NAMESPACE = 'flavor-agent/v1';
 
 	private const REQUEST_META_ROUTES = [
@@ -335,6 +336,8 @@ final class Agent_Controller {
 	}
 
 	public static function handle_sync_patterns( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		unset( $request );
+
 		$result = PatternIndex::enqueue_sync();
 
 		if ( \is_wp_error( $result ) ) {
@@ -351,6 +354,8 @@ final class Agent_Controller {
 
 	public static function handle_get_sync_patterns( \WP_REST_Request $request ): \WP_REST_Response {
 		unset( $request );
+
+		PatternIndex::run_due_sync();
 
 		$result = [
 			'runtimeState' => PatternIndex::get_runtime_state(),

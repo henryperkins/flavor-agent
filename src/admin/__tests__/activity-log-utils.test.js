@@ -6,6 +6,7 @@ import {
 	buildActivityTargetUrl,
 	formatActivityTimestamp,
 	normalizeActivityEntries,
+	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
 } from '../activity-log-utils';
@@ -637,6 +638,114 @@ describe( 'activity log utils', () => {
 				nextView
 			)
 		).toBe( true );
+	} );
+
+	test( 'normalizeStoredActivityView drops filters with unknown fields', () => {
+		const normalized = normalizeStoredActivityView( {
+			...DEFAULT_ACTIVITY_VIEW,
+			filters: [
+				{ field: 'surface', operator: 'is', value: 'block' },
+				{ field: 'mysteryField', operator: 'is', value: 'foo' },
+			],
+		} );
+
+		expect( normalized.filters ).toEqual( [
+			{ field: 'surface', operator: 'is', value: 'block' },
+		] );
+	} );
+
+	test( 'normalizeStoredActivityView drops explicit-field filters with text operators', () => {
+		const normalized = normalizeStoredActivityView( {
+			...DEFAULT_ACTIVITY_VIEW,
+			filters: [
+				{ field: 'surface', operator: 'contains', value: 'bl' },
+				{ field: 'status', operator: 'startsWith', value: 'app' },
+			],
+		} );
+
+		expect( normalized.filters ).toEqual( [] );
+	} );
+
+	test( 'normalizeStoredActivityView drops text-field filters with explicit operators', () => {
+		const normalized = normalizeStoredActivityView( {
+			...DEFAULT_ACTIVITY_VIEW,
+			filters: [
+				{ field: 'entityId', operator: 'is', value: '42' },
+				{ field: 'blockPath', operator: 'isNot', value: '0/' },
+			],
+		} );
+
+		expect( normalized.filters ).toEqual( [] );
+	} );
+
+	test( 'normalizeStoredActivityView keeps valid text-field filters', () => {
+		const normalized = normalizeStoredActivityView( {
+			...DEFAULT_ACTIVITY_VIEW,
+			filters: [
+				{ field: 'entityId', operator: 'contains', value: '42' },
+				{ field: 'blockPath', operator: 'startsWith', value: '0/' },
+				{ field: 'entityId', operator: 'notContains', value: 'abc' },
+			],
+		} );
+
+		expect( normalized.filters ).toEqual( [
+			{ field: 'entityId', operator: 'contains', value: '42' },
+			{ field: 'blockPath', operator: 'startsWith', value: '0/' },
+			{ field: 'entityId', operator: 'notContains', value: 'abc' },
+		] );
+	} );
+
+	test( 'normalizeStoredActivityView keeps valid day filters and drops day filters with non-day operators', () => {
+		const normalized = normalizeStoredActivityView( {
+			...DEFAULT_ACTIVITY_VIEW,
+			filters: [
+				{ field: 'day', operator: 'on', value: '2026-01-01' },
+				{
+					field: 'day',
+					operator: 'between',
+					value: [ '2026-01-01', '2026-01-31' ],
+				},
+				{
+					field: 'day',
+					operator: 'inThePast',
+					value: { value: 7, unit: 'days' },
+				},
+				{ field: 'day', operator: 'is', value: '2026-01-01' },
+				{ field: 'day', operator: 'contains', value: '2026' },
+			],
+		} );
+
+		expect( normalized.filters ).toEqual( [
+			{ field: 'day', operator: 'on', value: '2026-01-01' },
+			{
+				field: 'day',
+				operator: 'between',
+				value: [ '2026-01-01', '2026-01-31' ],
+			},
+			{
+				field: 'day',
+				operator: 'inThePast',
+				value: { value: 7, unit: 'days' },
+			},
+		] );
+	} );
+
+	test( 'normalizeStoredActivityView drops malformed filter entries', () => {
+		const normalized = normalizeStoredActivityView( {
+			...DEFAULT_ACTIVITY_VIEW,
+			filters: [
+				{ field: 'surface', operator: 'is', value: 'block' },
+				null,
+				'not-an-object',
+				{},
+				{ field: 'surface' },
+				{ operator: 'is', value: 'x' },
+			],
+		} );
+
+		expect( normalized.filters ).toEqual( [
+			{ field: 'surface', operator: 'is', value: 'block' },
+		] );
 	} );
 
 	test( 'clampActivityViewPage keeps pagination in range', () => {

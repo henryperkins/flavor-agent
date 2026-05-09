@@ -17,6 +17,7 @@ use PHPUnit\Framework\TestCase;
 final class AgentControllerTest extends TestCase {
 
 
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -137,16 +138,17 @@ final class AgentControllerTest extends TestCase {
 
 
 
-	public function test_handle_sync_patterns_enqueues_sync_without_running_remote_work(): void {
+	public function test_handle_sync_patterns_queues_sync_without_remote_work(): void {
 		$this->configure_pattern_recommendation_backends();
-		$this->save_ready_pattern_index_state();
 
 		$request  = new \WP_REST_Request( 'POST', '/flavor-agent/v1/sync-patterns' );
 		$response = Agent_Controller::handle_sync_patterns( $request );
 
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertTrue( $response->get_data()['queued'] ?? false );
+		$this->assertTrue( $response->get_data()['queued'] ?? null );
+		$this->assertTrue( $response->get_data()['scheduled'] ?? null );
+		$this->assertNotEmpty( $response->get_data()['scheduledAt'] ?? '' );
 		$this->assertSame( 'indexing', $response->get_data()['status'] ?? null );
 		$this->assertSame( 'indexing', $response->get_data()['runtimeState']['status'] ?? null );
 		$this->assertSame(
@@ -158,8 +160,53 @@ final class AgentControllerTest extends TestCase {
 			$response->get_data()['requestMeta'] ?? []
 		);
 		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame(
+			gmdate( 'c', WordPressTestState::$scheduled_events[ PatternIndex::CRON_HOOK ]['timestamp'] ),
+			$response->get_data()['scheduledAt'] ?? null
+		);
 		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_handle_get_sync_patterns_runs_due_sync_before_returning_runtime_state(): void {
+		$this->configure_pattern_recommendation_backends();
+
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'         => 'indexing',
+					'last_synced_at' => null,
+				]
+			)
+		);
+		WordPressTestState::$scheduled_events[ PatternIndex::CRON_HOOK ] = [
+			'hook'      => PatternIndex::CRON_HOOK,
+			'timestamp' => time() - 1,
+			'args'      => [],
+		];
+
+		$this->queue_signature_probe();
+		$this->queue_ensure_collection( false );
+		$this->queue_scroll( [] );
+		$this->queue_embeddings(
+			[
+				[ 0.11, 0.22 ],
+				[ 0.33, 0.44 ],
+				[ 0.55, 0.66 ],
+			]
+		);
+		$this->queue_qdrant_success( '/points', 'PUT' );
+
+		$request  = new \WP_REST_Request( 'GET', '/flavor-agent/v1/sync-patterns' );
+		$response = Agent_Controller::handle_get_sync_patterns( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'ready', $response->get_data()['runtimeState']['status'] ?? null );
+		$this->assertArrayNotHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertNotEmpty( WordPressTestState::$remote_get_calls );
+		$this->assertNotEmpty( WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_handle_get_sync_patterns_returns_runtime_state_without_enqueuing(): void {
@@ -610,6 +657,98 @@ final class AgentControllerTest extends TestCase {
 		if ( [] === WordPressTestState::$remote_get_responses ) {
 			WordPressTestState::$remote_get_response = $this->qdrant_collection_response( 2 );
 		}
+	}
+
+	private function queue_signature_probe(): void {
+		$this->queue_embeddings(
+			[
+				[ 0.01, 0.02 ],
+			]
+		);
+	}
+
+	private function queue_ensure_collection( bool $collection_exists = true ): void {
+		WordPressTestState::$remote_get_responses[] = $collection_exists
+			? $this->qdrant_collection_response( 2 )
+			: $this->qdrant_response(
+				404,
+				[
+					'status' => [
+						'error' => 'Collection not found',
+					],
+				]
+			);
+
+		if ( ! $collection_exists ) {
+			WordPressTestState::$remote_post_responses[] = $this->qdrant_response(
+				200,
+				[
+					'status' => 'ok',
+					'result' => [],
+				]
+			);
+		}
+
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->queue_qdrant_success( '/index', 'PUT' );
+		}
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $points
+	 */
+	private function queue_scroll( array $points ): void {
+		WordPressTestState::$remote_post_responses[] = $this->qdrant_response(
+			200,
+			[
+				'status' => 'ok',
+				'result' => [
+					'points'           => $points,
+					'next_page_offset' => null,
+				],
+			]
+		);
+	}
+
+	/**
+	 * @param array<int, array<int, float>> $vectors
+	 */
+	private function queue_embeddings( array $vectors ): void {
+		WordPressTestState::$remote_post_responses[] = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'data' => array_map(
+						static fn( array $vector ): array => [
+							'embedding' => $vector,
+						],
+						$vectors
+					),
+				]
+			),
+		];
+	}
+
+	private function queue_qdrant_success( string $url_suffix, string $method ): void {
+		unset( $url_suffix, $method );
+
+		WordPressTestState::$remote_post_responses[] = $this->qdrant_response(
+			200,
+			[
+				'status' => 'ok',
+				'result' => [],
+			]
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function qdrant_response( int $status, array $body ): array {
+		return [
+			'response' => [ 'code' => $status ],
+			'body'     => wp_json_encode( $body ),
+		];
 	}
 
 

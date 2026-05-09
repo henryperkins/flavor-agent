@@ -59,6 +59,58 @@ function normalizePositiveInteger( value, fallback, max = Infinity ) {
 	return Math.min( value, max );
 }
 
+const EXPLICIT_FILTER_OPERATORS = new Set( [ 'is', 'isNot' ] );
+const TEXT_FILTER_OPERATORS = new Set( [
+	'contains',
+	'notContains',
+	'startsWith',
+] );
+const DAY_FILTER_OPERATORS = new Set( [
+	'between',
+	'on',
+	'before',
+	'after',
+	'inThePast',
+	'over',
+] );
+const FILTER_FIELD_OPERATORS = new Map( [
+	[ 'surface', EXPLICIT_FILTER_OPERATORS ],
+	[ 'status', EXPLICIT_FILTER_OPERATORS ],
+	[ 'postType', EXPLICIT_FILTER_OPERATORS ],
+	[ 'provider', EXPLICIT_FILTER_OPERATORS ],
+	[ 'providerPath', EXPLICIT_FILTER_OPERATORS ],
+	[ 'configurationOwner', EXPLICIT_FILTER_OPERATORS ],
+	[ 'credentialSource', EXPLICIT_FILTER_OPERATORS ],
+	[ 'selectedProvider', EXPLICIT_FILTER_OPERATORS ],
+	[ 'userId', EXPLICIT_FILTER_OPERATORS ],
+	[ 'operationType', EXPLICIT_FILTER_OPERATORS ],
+	[ 'entityId', TEXT_FILTER_OPERATORS ],
+	[ 'blockPath', TEXT_FILTER_OPERATORS ],
+	[ 'day', DAY_FILTER_OPERATORS ],
+] );
+
+function isValidStoredFilter( filter ) {
+	if ( ! isPlainObject( filter ) ) {
+		return false;
+	}
+
+	if ( typeof filter.field !== 'string' ) {
+		return false;
+	}
+
+	const allowedOperators = FILTER_FIELD_OPERATORS.get( filter.field );
+
+	if ( ! allowedOperators ) {
+		return false;
+	}
+
+	if ( typeof filter.operator !== 'string' ) {
+		return false;
+	}
+
+	return allowedOperators.has( filter.operator );
+}
+
 function getDefaultActivityView( {
 	defaultPerPage = DEFAULT_ACTIVITY_VIEW.perPage,
 	maxPerPage = DEFAULT_ACTIVITY_VIEW.perPage,
@@ -1355,7 +1407,9 @@ export function normalizeStoredActivityView( view, options = {} ) {
 			defaultView.perPage,
 			normalizePositiveInteger( options.maxPerPage, defaultView.perPage )
 		),
-		filters: Array.isArray( view.filters ) ? view.filters : [],
+		filters: Array.isArray( view.filters )
+			? view.filters.filter( isValidStoredFilter )
+			: [],
 		fields: Array.isArray( view.fields ) ? view.fields : defaultView.fields,
 		sort,
 		groupBy,

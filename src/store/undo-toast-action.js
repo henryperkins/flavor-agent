@@ -1,0 +1,47 @@
+import { TOAST_DEFAULTS } from './toasts';
+
+const FALLBACK_ERROR_HINT = 'The change could not be reverted.';
+
+function buildErrorPatch( errorHint ) {
+	return {
+		variant: 'error',
+		title: 'Undo failed',
+		errorHint: errorHint || FALLBACK_ERROR_HINT,
+		autoDismissMs: TOAST_DEFAULTS.errorMs,
+		interacted: false,
+	};
+}
+
+export function createUndoToastAction( actions ) {
+	return ( toastId, activityId ) =>
+		async ( { dispatch } ) => {
+			if ( ! activityId ) {
+				dispatch( actions.dismissToast( toastId ) );
+				return false;
+			}
+
+			let result;
+
+			try {
+				result = await dispatch( actions.undoActivity( activityId ) );
+			} catch ( error ) {
+				dispatch(
+					actions.updateToast(
+						toastId,
+						buildErrorPatch( error?.message )
+					)
+				);
+				return false;
+			}
+
+			if ( result?.ok ) {
+				dispatch( actions.dismissToast( toastId ) );
+				return true;
+			}
+
+			dispatch(
+				actions.updateToast( toastId, buildErrorPatch( result?.error ) )
+			);
+			return false;
+		};
+}

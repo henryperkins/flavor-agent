@@ -334,4 +334,132 @@ describe( 'UndoToast — auto-dismiss timer', () => {
 
 		expect( props.onDismiss ).not.toHaveBeenCalled();
 	} );
+
+	test( 'variant changes reset the remaining auto-dismiss duration', () => {
+		const props = renderToast( {
+			autoDismissMs: 6000,
+			variant: 'success',
+		} );
+
+		act( () => {
+			jest.advanceTimersByTime( 5500 );
+		} );
+
+		act( () => {
+			getRoot().render(
+				<UndoToast
+					{ ...props }
+					variant="error"
+					title="Undo failed"
+					errorHint="Server returned 500."
+					autoDismissMs={ 8000 }
+				/>
+			);
+		} );
+
+		act( () => {
+			jest.advanceTimersByTime( 500 );
+		} );
+
+		expect( props.onDismiss ).not.toHaveBeenCalled();
+
+		act( () => {
+			jest.advanceTimersByTime( 7500 );
+		} );
+
+		expect( props.onDismiss ).toHaveBeenCalledWith( 'toast-1' );
+	} );
+} );
+
+describe( 'UndoToast — hover + focus pause coordination', () => {
+	beforeEach( () => {
+		jest.useFakeTimers();
+		setReducedMotion( false );
+	} );
+
+	afterEach( () => {
+		jest.useRealTimers();
+	} );
+
+	test( 'mouseleave does not resume the timer while focus remains inside the toast', () => {
+		const props = renderToast( { autoDismissMs: 6000 } );
+
+		act( () => {
+			getToast().dispatchEvent(
+				new window.MouseEvent( 'mouseover', { bubbles: true } )
+			);
+		} );
+
+		expect( getProgress().className ).toContain( 'is-paused' );
+
+		act( () => {
+			getUndoButton().focus();
+		} );
+
+		expect( getProgress().className ).toContain( 'is-paused' );
+
+		// Pointer leaves the toast while focus remains on the Undo button.
+		act( () => {
+			getToast().dispatchEvent(
+				new window.MouseEvent( 'mouseout', { bubbles: true } )
+			);
+		} );
+
+		expect( getProgress().className ).toContain( 'is-paused' );
+
+		act( () => {
+			jest.advanceTimersByTime( 60000 );
+		} );
+
+		expect( props.onDismiss ).not.toHaveBeenCalled();
+	} );
+
+	test( 'focus leaving the toast resumes the timer when not hovered', () => {
+		const props = renderToast( { autoDismissMs: 6000 } );
+
+		act( () => {
+			getUndoButton().focus();
+		} );
+
+		expect( getProgress().className ).toContain( 'is-paused' );
+
+		act( () => {
+			getUndoButton().blur();
+		} );
+
+		expect( getProgress().className ).not.toContain( 'is-paused' );
+
+		act( () => {
+			jest.advanceTimersByTime( 6000 );
+		} );
+
+		expect( props.onDismiss ).toHaveBeenCalledWith( 'toast-1' );
+	} );
+
+	test( 'blur stays paused when pointer is still hovering the toast', () => {
+		const props = renderToast( { autoDismissMs: 6000 } );
+
+		act( () => {
+			getToast().dispatchEvent(
+				new window.MouseEvent( 'mouseover', { bubbles: true } )
+			);
+		} );
+
+		act( () => {
+			getUndoButton().focus();
+		} );
+
+		// Focus leaves while pointer is still inside.
+		act( () => {
+			getUndoButton().blur();
+		} );
+
+		expect( getProgress().className ).toContain( 'is-paused' );
+
+		act( () => {
+			jest.advanceTimersByTime( 60000 );
+		} );
+
+		expect( props.onDismiss ).not.toHaveBeenCalled();
+	} );
 } );

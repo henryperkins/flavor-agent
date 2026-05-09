@@ -60,8 +60,8 @@ import {
 	toastsActionCreators,
 	toastsDefaultState,
 	toastsSelectors,
-	TOAST_DEFAULTS,
 } from './toasts';
+import { createUndoToastAction } from './undo-toast-action';
 import {
 	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
@@ -2361,33 +2361,7 @@ const actions = {
 Object.assign( actions, createExecutableSurfaceStateActionCreators( actions ) );
 Object.assign( actions, toastsActionCreators );
 Object.assign( actions, {
-	undoToastAction( toastId, activityId ) {
-		return async ( { dispatch: localDispatch } ) => {
-			if ( ! activityId ) {
-				localDispatch( actions.dismissToast( toastId ) );
-				return false;
-			}
-
-			try {
-				await localDispatch( actions.undoActivity( activityId ) );
-				localDispatch( actions.dismissToast( toastId ) );
-				return true;
-			} catch ( error ) {
-				localDispatch(
-					actions.updateToast( toastId, {
-						variant: 'error',
-						title: 'Undo failed',
-						errorHint:
-							error?.message ||
-							'The change could not be reverted.',
-						autoDismissMs: TOAST_DEFAULTS.errorMs,
-						interacted: false,
-					} )
-				);
-				return false;
-			}
-		};
-	},
+	undoToastAction: createUndoToastAction( actions ),
 } );
 Object.assign(
 	actions,
