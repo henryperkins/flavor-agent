@@ -145,7 +145,13 @@
 	.flavor-agent-panel *::after,
 	.flavor-agent-toast-region *,
 	.flavor-agent-toast-region *::before,
-	.flavor-agent-toast-region *::after {
+	.flavor-agent-toast-region *::after,
+	.flavor-agent-settings *,
+	.flavor-agent-settings *::before,
+	.flavor-agent-settings *::after,
+	.flavor-agent-activity-log *,
+	.flavor-agent-activity-log *::before,
+	.flavor-agent-activity-log *::after {
 		animation-duration: 0.001ms !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.001ms !important;

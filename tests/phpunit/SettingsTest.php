@@ -1368,6 +1368,32 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_sync_panel_renders_button_disabled_while_indexing(): void {
+		$state                   = $this->build_default_open_group_state();
+		$state['patterns_ready'] = true;
+		$state['pattern_state']  = array_merge(
+			PatternIndex::get_state(),
+			[
+				'status'         => 'indexing',
+				'last_synced_at' => null,
+				'indexed_count'  => 0,
+				'last_error'     => null,
+			]
+		);
+		$method                  = new \ReflectionMethod( Page::class, 'render_sync_panel' );
+		$method->setAccessible( true );
+
+		ob_start();
+		$method->invoke( null, $state );
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'data-pattern-sync-status="indexing"', $output );
+		$this->assertMatchesRegularExpression(
+			'/<button(?=[^>]*id="flavor-agent-sync-button")(?=[^>]*disabled="disabled")(?=[^>]*aria-disabled="true")(?=[^>]*aria-describedby="flavor-agent-sync-summary")[^>]*>/',
+			$output
+		);
+	}
+
 	public function test_pattern_setup_copy_points_to_embeddings_not_chat_provider(): void {
 		$state                      = $this->build_default_open_group_state();
 		$state['patterns_ready']    = false;
@@ -1506,6 +1532,22 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'base-class extra-class', $result['class'] );
 		$this->assertSame( 'https://example.com', $result['href'] );
 		$this->assertSame( 'badge', $result['data-test-role'] );
+	}
+
+	public function test_render_html_attributes_escapes_url_bearing_attributes_with_url_context(): void {
+		ob_start();
+		Utils::render_html_attributes(
+			[
+				'href'       => 'javascript:alert(1)',
+				'src'        => 'data:text/html,unsafe',
+				'data-label' => 'javascript:alert(1)',
+			]
+		);
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( ' href=""', $output );
+		$this->assertStringContainsString( ' src=""', $output );
+		$this->assertStringContainsString( ' data-label="javascript:alert(1)"', $output );
 	}
 
 	public function test_encode_json_payload_returns_fallback_for_unencodable_values(): void {

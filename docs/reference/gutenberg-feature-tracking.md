@@ -101,6 +101,7 @@ These rows record stabilized or shipped APIs that Flavor Agent does not currentl
 | `__experimentalRegisterBlockPattern` | No stable replacement; no current top-level tracking issue (gutenberg#48743 closed 2026-02-11). Stabilization continues piecemeal. | n/a | `src/patterns/compat.js`, `src/patterns/pattern-settings.js` |
 | `__experimentalAdditionalBlockPatterns` / `__experimentalAdditionalBlockPatternCategories` | No stable replacement | n/a | `src/patterns/pattern-settings.js` |
 | Inserter DOM selectors (no API equivalent) | No public API | gutenberg#40316 (legacy) | `src/patterns/inserter-dom.js` |
+| Global Styles current entity/base/variation selectors | Stable selectors are probed first; experimental fallbacks remain required on current Gutenberg trunk | n/a | `src/global-styles/selectors.js` |
 
 Do not collapse these tiers without a stable replacement landing first.
 

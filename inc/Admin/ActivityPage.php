@@ -55,10 +55,10 @@ final class ActivityPage {
 							?>
 						</p>
 						<p>
-							<a class="button button-secondary" href="<?php echo esc_attr( admin_url( 'options-general.php?page=flavor-agent' ) ); ?>">
+							<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'options-general.php?page=flavor-agent' ) ); ?>">
 								<?php echo esc_html__( 'Flavor Agent settings', 'flavor-agent' ); ?>
 							</a>
-							<a class="button button-secondary" href="<?php echo esc_attr( admin_url( 'options-connectors.php' ) ); ?>">
+							<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'options-connectors.php' ) ); ?>">
 								<?php echo esc_html__( 'Connectors', 'flavor-agent' ); ?>
 							</a>
 						</p>

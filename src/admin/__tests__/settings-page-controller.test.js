@@ -21,6 +21,10 @@ const SETTINGS_CSS = fs.readFileSync(
 	path.join( __dirname, '../settings.css' ),
 	'utf8'
 );
+const TOKENS_CSS = fs.readFileSync(
+	path.join( __dirname, '../../tokens.css' ),
+	'utf8'
+);
 
 function createStorage( initialValues = {} ) {
 	const values = new Map( Object.entries( initialValues ) );
@@ -48,6 +52,7 @@ function renderSettingsPage( {
 	includePatternBackendPreview = false,
 	prerequisiteMessage = '',
 	prerequisitesReady = '1',
+	syncStatus = 'uninitialized',
 } = {} ) {
 	document.body.innerHTML = `
 		<div
@@ -136,10 +141,11 @@ function renderSettingsPage( {
 				</summary>
 				<div
 					class="flavor-agent-settings-subpanel__body flavor-agent-sync-panel"
-					data-pattern-prerequisites-ready="${ prerequisitesReady }"
-					data-pattern-prerequisite-message="${ prerequisiteMessage }"
-					data-pattern-backend-preview-matches-saved="1"
-				>
+						data-pattern-prerequisites-ready="${ prerequisitesReady }"
+						data-pattern-prerequisite-message="${ prerequisiteMessage }"
+						data-pattern-sync-status="${ syncStatus }"
+						data-pattern-backend-preview-matches-saved="1"
+					>
 					<p id="flavor-agent-sync-summary" class="flavor-agent-sync-panel__summary">
 						Pattern recommendations are not available until you sync the catalog.
 					</p>
@@ -268,6 +274,21 @@ describe( 'settings page controller', () => {
 		);
 		expect( SETTINGS_CSS ).toContain(
 			'.flavor-agent-settings-status--accent'
+		);
+	} );
+
+	test( 'shared reduced-motion reset covers wp-admin roots', () => {
+		expect( TOKENS_CSS ).toMatch(
+			/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.flavor-agent-settings \*/s
+		);
+		expect( TOKENS_CSS ).toMatch(
+			/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.flavor-agent-settings \*::before/s
+		);
+		expect( TOKENS_CSS ).toMatch(
+			/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.flavor-agent-activity-log \*/s
+		);
+		expect( TOKENS_CSS ).toMatch(
+			/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.flavor-agent-activity-log \*::after/s
 		);
 	} );
 
@@ -465,6 +486,62 @@ describe( 'settings page controller', () => {
 		expect(
 			root.querySelector( '#flavor-agent-sync-notice' ).textContent
 		).toContain( 'Pattern catalog sync queued. Status: Syncing.' );
+		expect(
+			root.querySelector( '#flavor-agent-sync-button' ).disabled
+		).toBe( false );
+		expect(
+			root.querySelector( '.flavor-agent-sync-panel' ).dataset
+				.patternSyncStatus
+		).toBe( 'ready' );
+	} );
+
+	test( 'queued sync keeps the button disabled and ignores another click while polling', async () => {
+		const root = renderSettingsPage();
+		const fetchImpl = jest
+			.fn()
+			.mockResolvedValueOnce( {
+				ok: true,
+				text: async () =>
+					JSON.stringify( {
+						queued: true,
+						scheduled: true,
+						runtimeState: {
+							status: 'indexing',
+							indexed_count: 0,
+							last_synced_at: null,
+						},
+						status: 'indexing',
+					} ),
+			} )
+			.mockImplementationOnce(
+				() =>
+					new Promise( () => {
+						// Keep the GET poll open so the control stays in the polling state.
+					} )
+			);
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl,
+			storage: createStorage(),
+		} );
+
+		const button = root.querySelector( '#flavor-agent-sync-button' );
+
+		button.click();
+		await flushPromises();
+		await flushPromises();
+
+		expect( button.disabled ).toBe( true );
+		expect( button.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+
+		button.click();
+
+		expect(
+			fetchImpl.mock.calls.filter(
+				( [ , options ] ) => options?.method === 'POST'
+			)
+		).toHaveLength( 1 );
 	} );
 
 	test( 'sync failure keeps the panel open and surfaces the server error', async () => {
@@ -502,6 +579,13 @@ describe( 'settings page controller', () => {
 		expect(
 			root.querySelector( '#flavor-agent-sync-status' ).textContent
 		).toBe( '' );
+		expect(
+			root.querySelector( '#flavor-agent-sync-button' ).disabled
+		).toBe( false );
+		expect(
+			root.querySelector( '.flavor-agent-sync-panel' ).dataset
+				.patternSyncStatus
+		).toBe( 'error' );
 	} );
 
 	test( 'disabled sync button references the prerequisite guidance', () => {
@@ -565,6 +649,28 @@ describe( 'settings page controller', () => {
 		expect( button.disabled ).toBe( false );
 		expect( button.getAttribute( 'aria-disabled' ) ).toBe( 'false' );
 		expect( button.hasAttribute( 'aria-describedby' ) ).toBe( false );
+	} );
+
+	test( 'sync button remains disabled when the initial runtime status is indexing', () => {
+		const root = renderSettingsPage( {
+			prerequisitesReady: '1',
+			prerequisiteMessage: '',
+			syncStatus: 'indexing',
+		} );
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+
+		const button = root.querySelector( '#flavor-agent-sync-button' );
+
+		expect( button.disabled ).toBe( true );
+		expect( button.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		expect( button.getAttribute( 'aria-describedby' ) ).toBe(
+			'flavor-agent-sync-summary'
+		);
 	} );
 
 	test( 'restored pattern backend radio state controls the visible backend and sync availability on load', () => {

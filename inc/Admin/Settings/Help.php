@@ -86,12 +86,12 @@ final class Help {
 				'<p><strong>' . esc_html__( 'Quick Links', 'flavor-agent' ) . '</strong></p>',
 				sprintf(
 					'<p><a href="%1$s">%2$s</a></p>',
-					esc_attr( $connectors_url ),
+					esc_url( $connectors_url ),
 					esc_html__( 'Open Connectors', 'flavor-agent' )
 				),
 				sprintf(
 					'<p><a href="%1$s">%2$s</a></p>',
-					esc_attr( $activity_url ),
+					esc_url( $activity_url ),
 					esc_html__( 'Open Activity Log', 'flavor-agent' )
 				),
 			]

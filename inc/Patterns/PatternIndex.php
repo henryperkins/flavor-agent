@@ -1002,12 +1002,16 @@ final class PatternIndex {
 			];
 		}
 
-		$requires_full_reindex = ! $has_usable_index
+		// Resumable cycles only need a full reindex when we have no record of
+		// prior uploads or the backend identity changed. Keying on
+		// $has_usable_index here would loop forever: pending items hold
+		// last_synced_at = null, so the next cron firing would wipe the
+		// fingerprint cache and re-upload every pattern.
+		$requires_full_reindex = empty( $previous_pattern_fingerprints )
 			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH
 			|| ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== $namespace
 			|| ( $state['cloudflare_ai_search_instance'] ?? '' ) !== $instance
-			|| ( $state['cloudflare_ai_search_signature'] ?? '' ) !== $signature
-			|| empty( $previous_pattern_fingerprints );
+			|| ( $state['cloudflare_ai_search_signature'] ?? '' ) !== $signature;
 
 		$state['status']          = 'indexing';
 		$state['pattern_backend'] = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;

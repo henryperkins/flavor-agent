@@ -1,8 +1,13 @@
+const fs = require( 'fs' );
+const path = require( 'path' );
+
 import {
 	getCurrentGlobalStylesId,
 	getCurrentThemeBaseGlobalStyles,
 	getCurrentThemeGlobalStylesVariations,
 } from '../selectors';
+
+const REPO_ROOT = path.join( __dirname, '../../..' );
 
 describe( 'global styles selector adapter', () => {
 	test( 'prefers stable current Global Styles selectors before experimental fallbacks', () => {
@@ -49,5 +54,14 @@ describe( 'global styles selector adapter', () => {
 				getCurrentThemeGlobalStylesVariations: () => null,
 			} )
 		).toEqual( [] );
+	} );
+
+	test( 'documents the selector adapter as the allowed Global Styles experimental boundary', () => {
+		const guidance = fs.readFileSync(
+			path.join( REPO_ROOT, 'CLAUDE.md' ),
+			'utf8'
+		);
+
+		expect( guidance ).toContain( 'src/global-styles/selectors.js' );
 	} );
 } );

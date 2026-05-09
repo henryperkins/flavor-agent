@@ -2047,6 +2047,22 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'esc_url' ) ) {
+		function esc_url( string $url ): string {
+			$url    = trim( $url );
+			$scheme = parse_url( $url, PHP_URL_SCHEME );
+
+			if (
+				is_string( $scheme ) &&
+				! in_array( strtolower( $scheme ), [ 'http', 'https', 'ftp', 'ftps', 'mailto' ], true )
+			) {
+				return '';
+			}
+
+			return esc_attr( $url );
+		}
+	}
+
 	if ( ! function_exists( 'esc_textarea' ) ) {
 		function esc_textarea( string $text ): string {
 			return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );

@@ -270,6 +270,20 @@ Theme editor settings adapter. Resolves the active theme features key (stable `f
 
 **Consumers:** `src/context/theme-tokens.js`
 
+### `src/global-styles/selectors.js`
+
+Global Styles selector adapter. Reads stable `core` selectors first and keeps the current `__experimental*` fallbacks documented in one file while upstream Global Styles APIs continue to settle.
+
+**Key exports:**
+
+| Export                                      | Role                                                                             |
+| ------------------------------------------- | -------------------------------------------------------------------------------- |
+| `getCurrentGlobalStylesId(coreSelect)`      | Returns the active Global Styles entity ID, preferring the stable selector       |
+| `getCurrentThemeBaseGlobalStyles(coreSelect)` | Returns the theme base Global Styles config, preferring the stable selector    |
+| `getCurrentThemeGlobalStylesVariations(coreSelect)` | Returns available style variations, preferring the stable selector     |
+
+**Consumers:** `src/store/activity-history.js`, `src/components/ActivitySessionBootstrap.js`, `src/utils/style-operations.js`
+
 ### `src/utils/editor-context-metadata.js`
 
 Walks block trees to collect pattern override summaries and viewport visibility summaries for LLM context enrichment.
@@ -590,6 +604,7 @@ template-operation-sequence.js -> store/index.js + template-recommender-helpers 
 - `src/patterns/inserter-dom.js`
 - `src/patterns/inserter-badge-state.js`
 - `src/patterns/recommendation-utils.js`
+- `src/global-styles/selectors.js`
 - `src/context/collector.js`
 - `src/context/theme-settings.js`
 - `src/utils/context-signature.js`

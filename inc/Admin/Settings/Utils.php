@@ -45,6 +45,15 @@ final class Utils {
 	 */
 	public static function render_html_attributes( array $attributes ): void {
 		foreach ( $attributes as $attribute_name => $attribute_value ) {
+			if ( in_array( strtolower( $attribute_name ), [ 'href', 'src' ], true ) ) {
+				printf(
+					' %s="%s"',
+					esc_attr( $attribute_name ),
+					esc_url( $attribute_value )
+				);
+				continue;
+			}
+
 			printf(
 				' %s="%s"',
 				esc_attr( $attribute_name ),

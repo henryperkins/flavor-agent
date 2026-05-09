@@ -1123,6 +1123,54 @@ final class PatternIndexTest extends TestCase {
 		$this->assertNotFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
 	}
 
+	public function test_cloudflare_ai_search_sync_does_not_reupload_when_items_remain_pending_across_cron_retries(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+		$this->register_pattern( 'theme/hero', $hero );
+
+		$hero_uuid    = PatternIndex::pattern_uuid( 'theme/hero' );
+		$pending_item = [
+			'id'     => 'cloudflare-hero-item',
+			'key'    => $hero_uuid . '.md',
+			'status' => 'pending',
+		];
+
+		// Cycle 1: empty list -> upload -> re-list (pending).
+		$this->queue_cloudflare_item_list( [] );
+		$this->queue_cloudflare_success_responses( 1 );
+		$this->queue_cloudflare_item_records( [ $pending_item ] );
+
+		// Cycle 2 stubs cover both behaviors so the bug surfaces as the upload
+		// assertion rather than as a missing-stub error: with the fix, only the
+		// first GET is consumed; without it, the loop also re-uploads and re-lists.
+		$this->queue_cloudflare_item_records( [ $pending_item ] );
+		$this->queue_cloudflare_success_responses( 1 );
+		$this->queue_cloudflare_item_records( [ $pending_item ] );
+
+		$first_result = PatternIndex::sync();
+		$this->assertSame( 'indexing', $first_result['status'] );
+		$this->assertSame( 1, $first_result['pending'] );
+
+		$first_state = PatternIndex::get_state();
+		$this->assertSame( 1, count( $first_state['pattern_fingerprints'] ) );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+
+		$second_result = PatternIndex::sync();
+		$this->assertSame( 'indexing', $second_result['status'] );
+
+		$this->assertCount(
+			1,
+			WordPressTestState::$remote_post_calls,
+			'Pending items must not trigger re-upload on subsequent sync cycles.'
+		);
+
+		$second_state = PatternIndex::get_state();
+		$this->assertSame( 'indexing', $second_state['status'] );
+		$this->assertNull( $second_state['last_synced_at'] );
+		$this->assertSame( 1, count( $second_state['pattern_fingerprints'] ) );
+		$this->assertSame( 1, $second_state['indexed_count'] );
+	}
+
 	public function test_cloudflare_ai_search_sync_retries_workers_ai_capacity_failures(): void {
 		$this->configure_cloudflare_ai_search_backends();
 		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );

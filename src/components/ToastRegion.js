@@ -7,9 +7,9 @@
  * Iframe accessibility: the post editor canvas is iframed in WP 6.x+, and the
  * Site Editor / Style Book canvases live in iframes as well. Tab focus does
  * not naturally cross from iframe content into a host-body overlay, so we
- * register a `mod+shift+z` keydown listener on the host document that focuses
- * the newest visible toast's Undo button. `mod+z` itself stays bound to the
- * browser/native undo (we cannot intercept that consistently across iframes).
+ * register a `mod+alt+shift+u` keydown listener on the host document that
+ * focuses the newest visible toast's Undo button. The custom chord avoids
+ * conventional undo/redo bindings such as `mod+z` and `mod+shift+z`.
  */
 
 import {
@@ -41,12 +41,12 @@ function getRegionRoot() {
 	return root;
 }
 
-function isPrimaryShiftZ( event ) {
-	if ( event.key !== 'z' && event.key !== 'Z' ) {
+function isToastUndoFocusShortcut( event ) {
+	if ( event.key !== 'u' && event.key !== 'U' ) {
 		return false;
 	}
 
-	if ( ! event.shiftKey ) {
+	if ( ! event.shiftKey || ! event.altKey ) {
 		return false;
 	}
 
@@ -91,7 +91,7 @@ export default function ToastRegion() {
 
 	const handleFocusNewestUndo = useCallback( () => {
 		if ( ! regionRef.current ) {
-			return;
+			return false;
 		}
 
 		const undoButtons = regionRef.current.querySelectorAll(
@@ -99,7 +99,7 @@ export default function ToastRegion() {
 		);
 
 		if ( undoButtons.length === 0 ) {
-			return;
+			return false;
 		}
 
 		// Newest is the last child (column flow, append-at-end).
@@ -107,7 +107,10 @@ export default function ToastRegion() {
 
 		if ( newest && typeof newest.focus === 'function' ) {
 			newest.focus();
+			return true;
 		}
+
+		return false;
 	}, [] );
 
 	useEffect( () => {
@@ -120,11 +123,14 @@ export default function ToastRegion() {
 		const frameCleanups = [];
 
 		const handleKeyDown = ( event ) => {
-			if ( ! isPrimaryShiftZ( event ) ) {
+			if ( ! isToastUndoFocusShortcut( event ) ) {
 				return;
 			}
 
-			handleFocusNewestUndo();
+			if ( handleFocusNewestUndo() ) {
+				event.preventDefault?.();
+				event.stopPropagation?.();
+			}
 		};
 
 		const addDocumentListener = ( targetDocument ) => {
@@ -260,4 +266,4 @@ export default function ToastRegion() {
 	);
 }
 
-export { isPrimaryShiftZ };
+export { isToastUndoFocusShortcut };

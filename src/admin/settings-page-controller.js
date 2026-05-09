@@ -304,21 +304,19 @@ function updateSyncPanelState( root, runtimeState ) {
 	);
 	const state =
 		runtimeState && typeof runtimeState === 'object' ? runtimeState : {};
+	const currentStatus = normalizeText( state.status, 'uninitialized' );
+	syncBody.dataset.patternSyncStatus = currentStatus;
 	let syncBadgeTone = 'warning';
 
 	if ( hasPrerequisites ) {
 		syncBadgeTone = state.last_error
 			? 'error'
-			: getPatternSyncStatusTone(
-					normalizeText( state.status, 'uninitialized' )
-			  );
+			: getPatternSyncStatusTone( currentStatus );
 	}
 
 	const syncBadgeState = {
 		label: hasPrerequisites
-			? getPatternSyncStatusLabel(
-					normalizeText( state.status, 'uninitialized' )
-			  )
+			? getPatternSyncStatusLabel( currentStatus )
 			: __( 'Needs setup', 'flavor-agent' ),
 		tone: syncBadgeTone,
 	};
@@ -392,8 +390,8 @@ function updateSyncPanelState( root, runtimeState ) {
 	if (
 		syncPanel &&
 		( lastError ||
-			normalizeText( state.status ) === 'stale' ||
-			normalizeText( state.status ) === 'indexing' )
+			currentStatus === 'stale' ||
+			currentStatus === 'indexing' )
 	) {
 		syncPanel.open = true;
 	}
@@ -1164,6 +1162,14 @@ function initializePatternSync( root, fetchImpl ) {
 	const syncPanel = root.querySelector( '[data-flavor-agent-sync-panel]' );
 	const syncEndpoint = `${ config.restUrl }flavor-agent/v1/sync-patterns`;
 	let pollTimeout = null;
+	const getCurrentSyncStatus = () =>
+		normalizeText( syncBody.dataset.patternSyncStatus, 'uninitialized' );
+	const setCurrentSyncStatus = ( status ) => {
+		syncBody.dataset.patternSyncStatus = normalizeText(
+			status,
+			'uninitialized'
+		);
+	};
 
 	const prerequisiteCopy = syncBody.querySelector(
 		'[data-pattern-prerequisite-copy]'
@@ -1171,6 +1177,7 @@ function initializePatternSync( root, fetchImpl ) {
 	const previewHint = root.querySelector(
 		'[data-pattern-backend-preview-hint]'
 	);
+	const syncSummary = root.querySelector( '#flavor-agent-sync-summary' );
 
 	const isPreviewMatchingSaved = () =>
 		normalizeText(
@@ -1179,10 +1186,15 @@ function initializePatternSync( root, fetchImpl ) {
 		) === '1';
 
 	const canSyncNow = () => {
-		const prerequisitesReady =
-			normalizeText( syncBody.dataset.patternPrerequisitesReady ) === '1';
-		return prerequisitesReady && isPreviewMatchingSaved();
+		return (
+			havePatternPrerequisites() &&
+			isPreviewMatchingSaved() &&
+			getCurrentSyncStatus() !== 'indexing'
+		);
 	};
+
+	const havePatternPrerequisites = () =>
+		normalizeText( syncBody.dataset.patternPrerequisitesReady ) === '1';
 
 	const updateButtonAccessibility = ( isBusy = false ) => {
 		const canSync = canSyncNow();
@@ -1204,16 +1216,25 @@ function initializePatternSync( root, fetchImpl ) {
 			return;
 		}
 
-		if ( ! prerequisiteCopy ) {
-			button.removeAttribute( 'aria-describedby' );
+		if ( ! havePatternPrerequisites() && prerequisiteCopy ) {
+			if ( ! prerequisiteCopy.id ) {
+				prerequisiteCopy.id = 'flavor-agent-sync-prerequisites';
+			}
+
+			button.setAttribute( 'aria-describedby', prerequisiteCopy.id );
 			return;
 		}
 
-		if ( ! prerequisiteCopy.id ) {
-			prerequisiteCopy.id = 'flavor-agent-sync-prerequisites';
+		if ( getCurrentSyncStatus() === 'indexing' && syncSummary ) {
+			if ( ! syncSummary.id ) {
+				syncSummary.id = 'flavor-agent-sync-summary';
+			}
+
+			button.setAttribute( 'aria-describedby', syncSummary.id );
+			return;
 		}
 
-		button.setAttribute( 'aria-describedby', prerequisiteCopy.id );
+		button.removeAttribute( 'aria-describedby' );
 	};
 
 	const setBusy = ( isBusy ) => {
@@ -1265,15 +1286,21 @@ function initializePatternSync( root, fetchImpl ) {
 					pollSyncState,
 					PATTERN_SYNC_POLL_INTERVAL_MS
 				);
+				setBusy( true );
+				return;
 			}
+
+			setBusy( false );
 		} catch ( error ) {
 			const message =
 				error instanceof Error && error.message
 					? error.message
 					: __( 'Unable to refresh sync status.', 'flavor-agent' );
 
+			setCurrentSyncStatus( 'error' );
 			renderNotice( noticeRoot, 'error', message );
 			setStatusText( liveRegion, message );
+			setBusy( false );
 		}
 	};
 
@@ -1297,11 +1324,14 @@ function initializePatternSync( root, fetchImpl ) {
 
 		clearSyncPolling();
 		setBusy( true );
+		setCurrentSyncStatus( 'indexing' );
 		renderNotice( noticeRoot, '', '' );
 		setStatusText(
 			liveRegion,
 			__( 'Syncing pattern catalog.', 'flavor-agent' )
 		);
+
+		let keepBusyAfterRequest = false;
 
 		try {
 			const response = await fetchImpl( syncEndpoint, {
@@ -1331,7 +1361,14 @@ function initializePatternSync( root, fetchImpl ) {
 			renderNotice( noticeRoot, 'success', successMessage );
 			setStatusText( liveRegion, successMessage );
 
-			if ( shouldPollSyncState( payload?.runtimeState ) ) {
+			const responseStatus = normalizeText(
+				payload?.runtimeState?.status,
+				normalizeText( payload?.status, 'ready' )
+			);
+			setCurrentSyncStatus( responseStatus );
+			keepBusyAfterRequest = responseStatus === 'indexing';
+
+			if ( keepBusyAfterRequest ) {
 				pollSyncState();
 			}
 		} catch ( error ) {
@@ -1340,6 +1377,7 @@ function initializePatternSync( root, fetchImpl ) {
 					? error.message
 					: __( 'Sync failed.', 'flavor-agent' );
 
+			setCurrentSyncStatus( 'error' );
 			renderNotice( noticeRoot, 'error', message );
 			setStatusText( liveRegion, message );
 
@@ -1347,7 +1385,7 @@ function initializePatternSync( root, fetchImpl ) {
 				syncPanel.open = true;
 			}
 		} finally {
-			setBusy( false );
+			setBusy( keepBusyAfterRequest );
 		}
 	} );
 }

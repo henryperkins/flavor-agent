@@ -31,7 +31,7 @@ jest.mock( '@wordpress/data', () => ( {
 const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
-import ToastRegion, { isPrimaryShiftZ } from '../ToastRegion';
+import ToastRegion, { isToastUndoFocusShortcut } from '../ToastRegion';
 
 const { getRoot } = setupReactTest();
 
@@ -231,7 +231,19 @@ describe( 'ToastRegion — wiring', () => {
 } );
 
 describe( 'ToastRegion — keyboard shortcut', () => {
-	test( 'isPrimaryShiftZ matches shift + ctrl + z on non-mac platforms', () => {
+	test( 'toast undo focus shortcut does not claim the conventional redo chord', () => {
+		expect(
+			isToastUndoFocusShortcut( {
+				key: 'z',
+				shiftKey: true,
+				altKey: false,
+				ctrlKey: true,
+				metaKey: false,
+			} )
+		).toBe( false );
+	} );
+
+	test( 'toast undo focus shortcut matches shift + alt + ctrl + u on non-mac platforms', () => {
 		const original = navigator.platform;
 
 		Object.defineProperty( navigator, 'platform', {
@@ -240,26 +252,38 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 
 		expect(
-			isPrimaryShiftZ( {
-				key: 'z',
+			isToastUndoFocusShortcut( {
+				key: 'u',
 				shiftKey: true,
+				altKey: true,
 				ctrlKey: true,
 				metaKey: false,
 			} )
 		).toBe( true );
 		expect(
-			isPrimaryShiftZ( {
-				key: 'z',
+			isToastUndoFocusShortcut( {
+				key: 'u',
 				shiftKey: true,
+				altKey: true,
 				ctrlKey: false,
 				metaKey: true,
 			} )
 		).toBe( false );
 		expect(
-			isPrimaryShiftZ( { key: 'z', shiftKey: false, ctrlKey: true } )
+			isToastUndoFocusShortcut( {
+				key: 'u',
+				shiftKey: false,
+				altKey: true,
+				ctrlKey: true,
+			} )
 		).toBe( false );
 		expect(
-			isPrimaryShiftZ( { key: 'a', shiftKey: true, ctrlKey: true } )
+			isToastUndoFocusShortcut( {
+				key: 'a',
+				shiftKey: true,
+				altKey: true,
+				ctrlKey: true,
+			} )
 		).toBe( false );
 
 		Object.defineProperty( navigator, 'platform', {
@@ -268,7 +292,7 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 	} );
 
-	test( 'isPrimaryShiftZ matches shift + cmd + z on mac platforms', () => {
+	test( 'toast undo focus shortcut matches shift + option + cmd + u on mac platforms', () => {
 		const original = navigator.platform;
 
 		Object.defineProperty( navigator, 'platform', {
@@ -277,17 +301,19 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 
 		expect(
-			isPrimaryShiftZ( {
-				key: 'z',
+			isToastUndoFocusShortcut( {
+				key: 'u',
 				shiftKey: true,
+				altKey: true,
 				ctrlKey: false,
 				metaKey: true,
 			} )
 		).toBe( true );
 		expect(
-			isPrimaryShiftZ( {
-				key: 'z',
+			isToastUndoFocusShortcut( {
+				key: 'u',
 				shiftKey: true,
+				altKey: true,
 				ctrlKey: true,
 				metaKey: false,
 			} )
@@ -299,7 +325,43 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 	} );
 
-	test( 'mod+shift+z keydown focuses the newest toast Undo button', () => {
+	test( 'mod+shift+z keydown does not move focus away from editor redo', () => {
+		setToasts( [
+			{
+				id: 'newest',
+				variant: 'success',
+				title: 'Second',
+				activityId: 'a2',
+				autoDismissMs: 6000,
+				interacted: false,
+			},
+		] );
+
+		const editorButton = document.createElement( 'button' );
+		editorButton.textContent = 'Editor control';
+		document.body.appendChild( editorButton );
+
+		act( () => {
+			getRoot().render( <ToastRegion /> );
+		} );
+
+		editorButton.focus();
+
+		act( () => {
+			document.dispatchEvent(
+				new window.KeyboardEvent( 'keydown', {
+					key: 'z',
+					ctrlKey: true,
+					shiftKey: true,
+					bubbles: true,
+				} )
+			);
+		} );
+
+		expect( document.activeElement ).toBe( editorButton );
+	} );
+
+	test( 'toast undo focus shortcut keydown focuses the newest toast Undo button', () => {
 		setToasts( [
 			{
 				id: 'oldest',
@@ -333,7 +395,8 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		act( () => {
 			document.dispatchEvent(
 				new window.KeyboardEvent( 'keydown', {
-					key: 'z',
+					key: 'u',
+					altKey: true,
 					ctrlKey: true,
 					shiftKey: true,
 					bubbles: true,
@@ -355,7 +418,7 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 	} );
 
-	test( 'mod+shift+z keydown from a same-origin iframe focuses the newest toast Undo button', () => {
+	test( 'toast undo focus shortcut keydown from a same-origin iframe focuses the newest toast Undo button', () => {
 		setToasts( [
 			{
 				id: 'oldest',
@@ -392,7 +455,8 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		act( () => {
 			iframe.contentDocument.dispatchEvent(
 				new iframe.contentWindow.KeyboardEvent( 'keydown', {
-					key: 'z',
+					key: 'u',
+					altKey: true,
 					ctrlKey: true,
 					shiftKey: true,
 					bubbles: true,
@@ -414,7 +478,7 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 	} );
 
-	test( 'observes same-origin iframes added after mount for the undo shortcut', async () => {
+	test( 'observes same-origin iframes added after mount for the undo focus shortcut', async () => {
 		setToasts( [
 			{
 				id: 'newest',
@@ -447,7 +511,8 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		act( () => {
 			iframe.contentDocument.dispatchEvent(
 				new iframe.contentWindow.KeyboardEvent( 'keydown', {
-					key: 'z',
+					key: 'u',
+					altKey: true,
 					ctrlKey: true,
 					shiftKey: true,
 					bubbles: true,
@@ -465,7 +530,7 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 	} );
 
-	test( 'mod+shift+z keydown is a no-op when the queue is empty', () => {
+	test( 'toast undo focus shortcut keydown is a no-op when the queue is empty', () => {
 		act( () => {
 			getRoot().render( <ToastRegion /> );
 		} );
@@ -474,7 +539,8 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 			act( () => {
 				document.dispatchEvent(
 					new window.KeyboardEvent( 'keydown', {
-						key: 'z',
+						key: 'u',
+						altKey: true,
 						ctrlKey: true,
 						shiftKey: true,
 						bubbles: true,

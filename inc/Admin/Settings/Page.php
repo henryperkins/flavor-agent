@@ -53,10 +53,10 @@ final class Page {
 							<?php echo esc_html__( 'Configure setup, storage, docs, and guidance.', 'flavor-agent' ); ?>
 						</p>
 						<div class="flavor-agent-admin-hero__actions">
-							<a class="button button-primary" href="<?php echo esc_attr( Utils::sanitize_url_value( $primary_url ) ); ?>">
+							<a class="button button-primary" href="<?php echo esc_url( Utils::sanitize_url_value( $primary_url ) ); ?>">
 								<?php echo esc_html( $primary_label ); ?>
 							</a>
-							<a class="button button-secondary" href="<?php echo esc_attr( Utils::sanitize_url_value( $secondary_url ) ); ?>">
+							<a class="button button-secondary" href="<?php echo esc_url( Utils::sanitize_url_value( $secondary_url ) ); ?>">
 								<?php echo esc_html( $secondary_label ); ?>
 							</a>
 						</div>
@@ -502,7 +502,7 @@ final class Page {
 			?>
 		</p>
 		<p>
-			<a class="button button-secondary" href="<?php echo esc_attr( Utils::sanitize_url_value( $connectors_url ) ); ?>">
+			<a class="button button-secondary" href="<?php echo esc_url( Utils::sanitize_url_value( $connectors_url ) ); ?>">
 				<?php echo esc_html__( 'Open Connectors', 'flavor-agent' ); ?>
 			</a>
 		</p>
@@ -1105,41 +1105,45 @@ final class Page {
 	}
 
 	private static function render_sync_panel( array $page_state ): void {
-		$state                  = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
-		$saved_backend          = (string) ( $page_state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
-		$has_prerequisites      = ! empty( $page_state['patterns_ready'] );
-		$status_label           = $has_prerequisites
+		$state              = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
+		$saved_backend      = (string) ( $page_state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
+		$has_prerequisites  = ! empty( $page_state['patterns_ready'] );
+		$status_label       = $has_prerequisites
 			? State::get_pattern_sync_status_label( (string) $state['status'] )
 			: self::get_pattern_sync_prerequisite_status_label( $page_state );
-		$status_tone            = ! $has_prerequisites
+		$status_tone        = ! $has_prerequisites
 			? 'warning'
 			: ( ! empty( $state['last_error'] ) ? 'error' : State::get_pattern_sync_status_tone( (string) $state['status'] ) );
-		$last_synced_label      = $state['last_synced_at'] ? (string) $state['last_synced_at'] : __( 'Not synced yet', 'flavor-agent' );
-		$stale_reason_label     = ! empty( $state['stale_reason'] )
+		$last_synced_label  = $state['last_synced_at'] ? (string) $state['last_synced_at'] : __( 'Not synced yet', 'flavor-agent' );
+		$stale_reason_label = ! empty( $state['stale_reason'] )
 			? State::get_pattern_sync_reason_label( (string) $state['stale_reason'] )
 			: '';
-		$collection_name        = $state['qdrant_collection']
+		$collection_name    = $state['qdrant_collection']
 			? (string) $state['qdrant_collection']
 			: QdrantClient::get_collection_name(
 				[
 					'signature_hash' => (string) ( $state['embedding_signature'] ?? '' ),
 				]
 			);
+
 		$prerequisite_message   = self::get_pattern_sync_prerequisite_message( $page_state );
 		$prerequisite_id        = 'flavor-agent-sync-prerequisites';
 		$sync_summary_sentence  = self::get_pattern_sync_status_sentence( $page_state );
+		$is_syncing             = 'indexing' === sanitize_key( (string) ( $state['status'] ?? '' ) );
 		$sync_button_attributes = [
 			'type'          => 'button',
 			'id'            => 'flavor-agent-sync-button',
 			'class'         => 'button button-primary',
-			'aria-disabled' => $has_prerequisites ? 'false' : 'true',
+			'aria-disabled' => ( $has_prerequisites && ! $is_syncing ) ? 'false' : 'true',
 		];
 
-		if ( ! $has_prerequisites ) {
+		if ( ! $has_prerequisites || $is_syncing ) {
 			$sync_button_attributes['disabled'] = 'disabled';
 
-			if ( '' !== $prerequisite_message ) {
+			if ( ! $has_prerequisites && '' !== $prerequisite_message ) {
 				$sync_button_attributes['aria-describedby'] = $prerequisite_id;
+			} elseif ( $is_syncing ) {
+				$sync_button_attributes['aria-describedby'] = 'flavor-agent-sync-summary';
 			}
 		}
 		?>
@@ -1152,6 +1156,7 @@ final class Page {
 				class="flavor-agent-settings-subpanel__body flavor-agent-sync-panel"
 				data-pattern-prerequisites-ready="<?php echo $has_prerequisites ? '1' : '0'; ?>"
 				data-pattern-prerequisite-message="<?php echo esc_attr( $prerequisite_message ); ?>"
+				data-pattern-sync-status="<?php echo esc_attr( sanitize_key( (string) ( $state['status'] ?? 'uninitialized' ) ) ); ?>"
 				data-pattern-saved-backend="<?php echo esc_attr( $saved_backend ); ?>"
 				data-pattern-backend-preview-matches-saved="1"
 			>
