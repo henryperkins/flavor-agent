@@ -5,6 +5,7 @@ const mockFetchBlockRecommendations = jest.fn();
 const mockApplyBlockStructuralSuggestion = jest.fn();
 const mockRevalidateBlockReviewFreshness = jest.fn();
 const mockCollectBlockContext = jest.fn();
+const mockGetBlocks = jest.fn();
 const mockClearBlockError = jest.fn();
 const mockClearUndoError = jest.fn();
 const mockUndoActivity = jest.fn();
@@ -49,6 +50,14 @@ jest.mock( '../../store', () => ( {
 
 jest.mock( '../../context/collector', () => ( {
 	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
+	getLiveBlockContextData: ( _select, clientId ) => {
+		const context = mockCollectBlockContext( clientId );
+
+		return {
+			context,
+			signature: context ? JSON.stringify( context ) : '',
+		};
+	},
 	getLiveBlockContextSignature: ( _select, clientId ) => {
 		const context = mockCollectBlockContext( clientId );
 
@@ -167,11 +176,23 @@ function selectStore( storeName ) {
 				( clientId ) =>
 					getState().blockEditor.editingModes[ clientId ] || 'default'
 			),
+			getBlockIndex: jest.fn( ( clientId ) => {
+				const explicitIndex =
+					getState().blockEditor.blockIndexes?.[ clientId ];
+
+				if ( Number.isInteger( explicitIndex ) ) {
+					return explicitIndex;
+				}
+
+				return getState().blockEditor.blocks.findIndex(
+					( block ) => block?.clientId === clientId
+				);
+			} ),
 			getBlockParents: jest.fn(
 				( clientId ) =>
 					getState().blockEditor.blockParents[ clientId ] || []
 			),
-			getBlocks: jest.fn( () => getState().blockEditor.blocks ),
+			getBlocks: mockGetBlocks,
 			getSelectedBlockClientId: jest.fn(
 				() => getState().blockEditor.selectedBlockClientId
 			),
@@ -311,6 +332,7 @@ beforeEach( () => {
 	jest.clearAllMocks();
 	jest.useFakeTimers();
 	mockSuggestionChips.mockReset();
+	mockGetBlocks.mockImplementation( () => getState().blockEditor.blocks );
 	mockShouldRenderNavigationRecommendations = false;
 	currentState = createState();
 	window.flavorAgentData = {
@@ -357,6 +379,109 @@ afterEach( () => {
 } );
 
 describe( 'BlockRecommendationsDocumentPanel', () => {
+	test( 'uses provided request data without recomputing live block context', () => {
+		const context = {
+			block: {
+				name: 'core/paragraph',
+			},
+		};
+		const contextSignature = JSON.stringify( context );
+
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [],
+						prompt: 'Improve this block.',
+					},
+				},
+				blockContextSignatures: {
+					'block-1': contextSignature,
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+		mockCollectBlockContext.mockClear();
+
+		act( () => {
+			getRoot().render(
+				<BlockRecommendationsContent
+					clientId="block-1"
+					prompt="Improve this block."
+					requestData={ {
+						liveContext: context,
+						liveContextSignature: contextSignature,
+						currentRequestSignature: 'provided-signature',
+						currentRequestInput: {
+							clientId: 'block-1',
+							editorContext: context,
+							contextSignature,
+							prompt: 'Improve this block.',
+						},
+					} }
+				/>
+			);
+		} );
+
+		expect( mockCollectBlockContext ).not.toHaveBeenCalled();
+	} );
+
+	test( 'does not read the full block tree while scoping block activity', () => {
+		const childBlock = {
+			clientId: 'child-1',
+			name: 'core/paragraph',
+			attributes: {},
+			innerBlocks: [],
+		};
+		const parentBlock = {
+			clientId: 'parent-1',
+			name: 'core/group',
+			attributes: {},
+			innerBlocks: [ childBlock ],
+		};
+
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+				blocks: [ parentBlock ],
+				blockLookup: {
+					'parent-1': parentBlock,
+					'child-1': childBlock,
+				},
+				blockIndexes: {
+					'parent-1': 0,
+					'child-1': 0,
+				},
+				blockParents: {
+					'child-1': [ 'parent-1' ],
+				},
+			},
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						surface: 'block',
+						type: 'request_diagnostic',
+						target: {
+							blockPath: [ 0, 0 ],
+						},
+						undo: {
+							canUndo: false,
+							status: 'review',
+						},
+					},
+				],
+			},
+		} );
+		mockGetBlocks.mockClear();
+
+		renderContent( 'child-1' );
+
+		expect( mockGetBlocks ).not.toHaveBeenCalled();
+	} );
+
 	test( 'renders the last selected block panel after selection clears', () => {
 		renderPanel();
 		expect( getContainer().textContent ).toBe( '' );

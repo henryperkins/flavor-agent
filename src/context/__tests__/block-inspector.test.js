@@ -15,6 +15,7 @@ jest.mock( '@wordpress/block-editor', () => ( {
 
 const { select } = require( '@wordpress/data' );
 const {
+	introspectBlockTree,
 	introspectBlockInstance,
 	introspectBlockType,
 	resolveInspectorPanels,
@@ -172,5 +173,39 @@ describe( 'resolveInspectorPanels', () => {
 		const manifest = introspectBlockType( 'core/spacer' );
 
 		expect( manifest.inspectorPanels.general ).toEqual( [ 'height' ] );
+	} );
+
+	test( 'caps default tree introspection breadth', () => {
+		const topLevelIds = Array.from(
+			{ length: 40 },
+			( _value, index ) => `block-${ index }`
+		);
+
+		blocksSelectors.getBlockType.mockReturnValue( {
+			title: 'Paragraph',
+			category: 'text',
+			description: 'Paragraph block',
+			supports: {},
+			attributes: {},
+		} );
+		blockEditorSelectors.getBlockOrder = jest.fn( ( rootClientId ) =>
+			rootClientId ? [] : topLevelIds
+		);
+		blockEditorSelectors.getBlockName = jest
+			.fn()
+			.mockReturnValue( 'core/paragraph' );
+		blockEditorSelectors.getBlockAttributes = jest
+			.fn()
+			.mockReturnValue( {} );
+		blockEditorSelectors.getBlockEditingMode = jest
+			.fn()
+			.mockReturnValue( 'default' );
+		blockEditorSelectors.getBlockParents = jest.fn().mockReturnValue( [] );
+		blockEditorSelectors.getBlockCount = jest.fn().mockReturnValue( 0 );
+
+		const tree = introspectBlockTree();
+
+		expect( tree ).toHaveLength( 32 );
+		expect( blockEditorSelectors.getBlockName ).toHaveBeenCalledTimes( 32 );
 	} );
 } );

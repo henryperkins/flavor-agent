@@ -255,8 +255,10 @@ function seedFlavorAgentOptions( harness ) {
 		'wpai_feature_flavor-agent_enabled': '1',
 		flavor_agent_openai_provider: 'cloudflare_workers_ai',
 		flavor_agent_cloudflare_workers_ai_account_id: 'playground-account',
-		flavor_agent_cloudflare_workers_ai_api_token: 'playground-workers-token',
-		flavor_agent_cloudflare_workers_ai_embedding_model: '@cf/qwen/qwen3-embedding-0.6b',
+		flavor_agent_cloudflare_workers_ai_api_token:
+			'playground-workers-token',
+		flavor_agent_cloudflare_workers_ai_embedding_model:
+			'@cf/qwen/qwen3-embedding-0.6b',
 		flavor_agent_qdrant_url: 'https://example.test/qdrant',
 		flavor_agent_qdrant_key: 'playground-qdrant-key',
 	};

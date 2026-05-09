@@ -18,11 +18,14 @@ const AUDIT_BASE_URL = 'https://audit.example';
 
 describe( 'browser-run-screenshot helpers', () => {
 	test( 'requires a base URL for relative preset URLs without an environment default', () => {
-		const options = parseArgs( [
-			'node',
-			'scripts/browser-run-screenshot.js',
-			'--preset=settings',
-		], {} );
+		const options = parseArgs(
+			[
+				'node',
+				'scripts/browser-run-screenshot.js',
+				'--preset=settings',
+			],
+			{}
+		);
 
 		expect( () =>
 			createAuditPlan( options, {
@@ -202,13 +205,16 @@ describe( 'browser-run-screenshot helpers', () => {
 	} );
 
 	test( 'requires Cloudflare credentials and explicit admin authentication', () => {
-		const options = parseArgs( [
-			'node',
-			'scripts/browser-run-screenshot.js',
-			'--preset=settings',
-		], {
-			BROWSER_RUN_DEFAULT_BASE_URL: AUDIT_BASE_URL,
-		} );
+		const options = parseArgs(
+			[
+				'node',
+				'scripts/browser-run-screenshot.js',
+				'--preset=settings',
+			],
+			{
+				BROWSER_RUN_DEFAULT_BASE_URL: AUDIT_BASE_URL,
+			}
+		);
 		const plan = createAuditPlan( options );
 
 		expect( () =>

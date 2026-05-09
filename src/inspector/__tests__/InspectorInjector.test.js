@@ -22,6 +22,14 @@ jest.mock( '@wordpress/data', () => ( {
 
 jest.mock( '../../context/collector', () => ( {
 	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
+	getLiveBlockContextData: ( _select, clientId ) => {
+		const context = mockCollectBlockContext( clientId );
+
+		return {
+			context,
+			signature: context ? JSON.stringify( context ) : '',
+		};
+	},
 	getLiveBlockContextSignature: ( _select, clientId ) => {
 		const context = mockCollectBlockContext( clientId );
 
@@ -167,6 +175,13 @@ beforeEach( () => {
 } );
 
 describe( 'InspectorInjector', () => {
+	test( 'does not collect recommendation context for unselected blocks', () => {
+		renderComponent( { isSelected: false } );
+
+		expect( mockCollectBlockContext ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).toBe( 'Block Edit' );
+	} );
+
 	test( 'renders block-scoped passive delegated chip groups for fresh results', () => {
 		renderComponent();
 
@@ -292,6 +307,8 @@ describe( 'InspectorInjector', () => {
 			'AI position suggestions'
 		);
 		const colorChipProps = getLatestChipProps( 'AI color suggestions' );
+		const panelProps =
+			mockRenderBlockRecommendationsPanel.mock.calls.at( -1 )[ 0 ];
 
 		expect( getContainer().textContent ).toContain(
 			'AI position suggestions stale passive'
@@ -299,18 +316,16 @@ describe( 'InspectorInjector', () => {
 		expect( getContainer().textContent ).toContain(
 			'AI color suggestions stale passive'
 		);
-		expect( positionChipProps?.currentRequestSignature ).toBe(
+		expect( panelProps?.requestData?.currentRequestSignature ).toBe(
 			expectedRequestSignature
 		);
-		expect( positionChipProps?.currentRequestInput ).toEqual(
+		expect( panelProps?.requestData?.currentRequestInput ).toEqual(
 			expectedRequestInput
 		);
-		expect( colorChipProps?.currentRequestSignature ).toBe(
-			expectedRequestSignature
-		);
-		expect( colorChipProps?.currentRequestInput ).toEqual(
-			expectedRequestInput
-		);
+		expect( positionChipProps?.currentRequestSignature ).toBeUndefined();
+		expect( positionChipProps?.currentRequestInput ).toBeUndefined();
+		expect( colorChipProps?.currentRequestSignature ).toBeUndefined();
+		expect( colorChipProps?.currentRequestInput ).toBeUndefined();
 	} );
 
 	test( 'preserves the in-flight prompt draft when a new recommendation result arrives', () => {

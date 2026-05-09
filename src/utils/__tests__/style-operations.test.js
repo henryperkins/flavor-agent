@@ -384,6 +384,51 @@ describe( 'style-operations', () => {
 		);
 	} );
 
+	test( 'applyGlobalStyleSuggestionOperations rejects transparent preset colors in contrast validation', () => {
+		blockEditorSettings = {
+			...blockEditorSettings,
+			features: {
+				...blockEditorSettings.features,
+				color: {
+					...blockEditorSettings.features.color,
+					palette: {
+						...blockEditorSettings.features.color.palette,
+						theme: blockEditorSettings.features.color.palette.theme.map(
+							( preset ) =>
+								preset.slug === 'contrast'
+									? { ...preset, color: '#00000080' }
+									: preset
+						),
+					},
+				},
+			},
+		};
+
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'color', 'background' ],
+					value: 'var:preset|color|contrast',
+					valueType: 'preset',
+					presetSlug: 'contrast',
+					presetType: 'color',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: expect.stringContaining( 'Contrast check unavailable' ),
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+		expect( currentRecord.styles.color.background ).toBe(
+			'var:preset|color|base'
+		);
+	} );
+
 	test( 'applyGlobalStyleSuggestionOperations rejects unsupported live style paths', () => {
 		blockEditorSettings = {
 			...blockEditorSettings,

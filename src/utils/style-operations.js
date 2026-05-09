@@ -134,7 +134,7 @@ function normalizeHexValue( value ) {
 		return null;
 	}
 
-	let digits = matches[ 1 ];
+	let digits = matches[ 1 ].toLowerCase();
 
 	if ( digits.length === 3 || digits.length === 4 ) {
 		digits = digits
@@ -143,7 +143,11 @@ function normalizeHexValue( value ) {
 			.join( '' );
 	}
 
-	return `#${ digits.slice( 0, 6 ).toLowerCase() }`;
+	if ( digits.length === 8 && digits.slice( 6 ) !== 'ff' ) {
+		return null;
+	}
+
+	return `#${ digits.slice( 0, 6 ) }`;
 }
 
 function buildColorPresetIndex( themeTokens = {} ) {

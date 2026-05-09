@@ -13,21 +13,15 @@ import {
 import { useSelect } from '@wordpress/data';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 
-import {
-	collectBlockContext,
-	getLiveBlockContextSignature,
-} from '../context/collector';
 import { STORE_NAME } from '../store';
 import { BlockRecommendationsPanel } from './BlockRecommendationsPanel';
-import {
-	buildBlockRecommendationRequestData,
-	getBlockRecommendationFreshness,
-} from './block-recommendation-request';
+import { getBlockRecommendationFreshness } from './block-recommendation-request';
 import SuggestionChips from './SuggestionChips';
 import {
 	SETTINGS_PANEL_DELEGATIONS,
 	STYLE_PANEL_DELEGATIONS,
 } from './panel-delegation';
+import useBlockRecommendationRequestData from './use-block-recommendation-request-data';
 
 const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
@@ -36,177 +30,176 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			clientId: null,
 			value: '',
 		} );
-		const {
-			recommendations,
-			editingMode,
-			isInsideContentOnly,
-			status,
-			storedContextSignature,
-			storedStaleReason,
-		} = useSelect(
-			( sel ) => {
-				const editor = sel( blockEditorStore );
-				const store = sel( STORE_NAME );
-				const parentIds = editor.getBlockParents?.( clientId ) || [];
+		useEffect( () => {
+			setPromptState( ( currentPromptState ) => {
+				if (
+					currentPromptState.clientId === null &&
+					currentPromptState.value === ''
+				) {
+					return currentPromptState;
+				}
 
 				return {
-					recommendations: store.getBlockRecommendations( clientId ),
-					status: store.getBlockStatus( clientId ),
-					storedContextSignature:
-						store.getBlockRecommendationContextSignature(
-							clientId
-						),
-					storedStaleReason:
-						store.getBlockStaleReason?.( clientId ) || null,
-					editingMode: editor.getBlockEditingMode( clientId ),
-					isInsideContentOnly: parentIds.some(
-						( parentId ) =>
-							editor.getBlockEditingMode?.( parentId ) ===
-							'contentOnly'
-					),
+					clientId: null,
+					value: '',
 				};
-			},
-			[ clientId ]
-		);
-		const liveContextSignature = useSelect(
-			( select ) => getLiveBlockContextSignature( select, clientId ),
-			[ clientId ]
-		);
-		const liveContext = useMemo( () => {
-			// Keep the collected context tied to selector-driven signature
-			// changes without reading the signature value directly here.
-			void liveContextSignature;
+			} );
+		}, [ clientId ] );
 
-			return clientId ? collectBlockContext( clientId ) : null;
-		}, [ clientId, liveContextSignature ] );
-		const prompt =
-			promptState.clientId === clientId
-				? promptState.value
-				: recommendations?.prompt || '';
-		const handlePromptChange = useCallback(
-			( nextPrompt ) => {
-				setPromptState( {
-					clientId,
-					value: nextPrompt,
-				} );
-			},
-			[ clientId ]
+		if ( ! isSelected ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		return (
+			<SelectedAIRecommendations
+				BlockEdit={ BlockEdit }
+				blockEditProps={ props }
+				promptState={ promptState }
+				setPromptState={ setPromptState }
+			/>
 		);
-		const { hasFreshResult, hasStoredResult, isStaleResult } = useMemo(
-			() =>
-				getBlockRecommendationFreshness( {
-					clientId,
-					recommendations,
-					status,
-					storedContextSignature,
-					storedStaleReason,
-					liveContextSignature,
-					prompt,
-				} ),
-			[
+	};
+}, 'withAIRecommendations' );
+
+function SelectedAIRecommendations( {
+	BlockEdit,
+	blockEditProps,
+	promptState,
+	setPromptState,
+} ) {
+	const { clientId } = blockEditProps;
+	const {
+		recommendations,
+		editingMode,
+		isInsideContentOnly,
+		status,
+		storedContextSignature,
+		storedStaleReason,
+	} = useSelect(
+		( sel ) => {
+			const editor = sel( blockEditorStore );
+			const store = sel( STORE_NAME );
+			const parentIds = editor.getBlockParents?.( clientId ) || [];
+
+			return {
+				recommendations: store.getBlockRecommendations( clientId ),
+				status: store.getBlockStatus( clientId ),
+				storedContextSignature:
+					store.getBlockRecommendationContextSignature( clientId ),
+				storedStaleReason:
+					store.getBlockStaleReason?.( clientId ) || null,
+				editingMode: editor.getBlockEditingMode( clientId ),
+				isInsideContentOnly: parentIds.some(
+					( parentId ) =>
+						editor.getBlockEditingMode?.( parentId ) ===
+						'contentOnly'
+				),
+			};
+		},
+		[ clientId ]
+	);
+	const prompt =
+		promptState.clientId === clientId
+			? promptState.value
+			: recommendations?.prompt || '';
+	const handlePromptChange = useCallback(
+		( nextPrompt ) => {
+			setPromptState( {
 				clientId,
-				liveContextSignature,
-				prompt,
+				value: nextPrompt,
+			} );
+		},
+		[ clientId, setPromptState ]
+	);
+	const isDisabled = editingMode === 'disabled';
+	const requestData = useBlockRecommendationRequestData( {
+		clientId,
+		enabled: ! isDisabled,
+		prompt,
+	} );
+	const { liveContextSignature } = requestData;
+	const { hasFreshResult, hasStoredResult, isStaleResult } = useMemo(
+		() =>
+			getBlockRecommendationFreshness( {
+				clientId,
 				recommendations,
 				status,
 				storedContextSignature,
 				storedStaleReason,
-			]
-		);
-		const {
-			requestSignature: currentRequestSignature,
-			requestInput: currentRequestInput,
-		} = useMemo(
-			() =>
-				buildBlockRecommendationRequestData( {
-					clientId,
-					liveContext,
-					liveContextSignature,
-					prompt,
-				} ),
-			[ clientId, liveContext, liveContextSignature, prompt ]
-		);
-		const isDisabled = editingMode === 'disabled';
-		const hasMatchingResult = hasStoredResult && hasFreshResult;
-		const isContentRestricted =
-			editingMode === 'contentOnly' || isInsideContentOnly;
-		const hasVisibleResult = hasMatchingResult || isStaleResult;
-		const visibleRecommendations = hasVisibleResult
-			? recommendations
-			: null;
-		const visibleSettingsRecommendations = hasVisibleResult
-			? recommendations?.settings || []
+				liveContextSignature,
+				prompt,
+			} ),
+		[
+			clientId,
+			liveContextSignature,
+			prompt,
+			recommendations,
+			status,
+			storedContextSignature,
+			storedStaleReason,
+		]
+	);
+	const hasMatchingResult = hasStoredResult && hasFreshResult;
+	const isContentRestricted =
+		editingMode === 'contentOnly' || isInsideContentOnly;
+	const hasVisibleResult = hasMatchingResult || isStaleResult;
+	const visibleRecommendations = hasVisibleResult ? recommendations : null;
+	const visibleSettingsRecommendations = hasVisibleResult
+		? recommendations?.settings || []
+		: [];
+	const visibleDelegatedStyleRecommendations =
+		! isContentRestricted && hasVisibleResult
+			? recommendations?.styles || []
 			: [];
-		const visibleDelegatedStyleRecommendations =
-			! isContentRestricted && hasVisibleResult
-				? recommendations?.styles || []
-				: [];
 
-		useEffect( () => {
-			setPromptState( {
-				clientId: null,
-				value: '',
-			} );
-		}, [ clientId ] );
+	if ( isDisabled ) {
+		return <BlockEdit { ...blockEditProps } />;
+	}
 
-		if ( ! isSelected || isDisabled ) {
-			return <BlockEdit { ...props } />;
-		}
+	const hasInlineRecs =
+		visibleRecommendations &&
+		( visibleSettingsRecommendations.length > 0 ||
+			visibleDelegatedStyleRecommendations.length > 0 ||
+			visibleRecommendations.block?.length > 0 );
 
-		const hasInlineRecs =
-			visibleRecommendations &&
-			( visibleSettingsRecommendations.length > 0 ||
-				visibleDelegatedStyleRecommendations.length > 0 ||
-				visibleRecommendations.block?.length > 0 );
+	return (
+		<>
+			<BlockEdit { ...blockEditProps } />
 
-		return (
-			<>
-				<BlockEdit { ...props } />
+			<InspectorControls>
+				<BlockRecommendationsPanel
+					clientId={ clientId }
+					prompt={ prompt }
+					onPromptChange={ handlePromptChange }
+					requestData={ requestData }
+				/>
+			</InspectorControls>
 
-				<InspectorControls>
-					<BlockRecommendationsPanel
-						clientId={ clientId }
-						prompt={ prompt }
-						onPromptChange={ handlePromptChange }
-					/>
-				</InspectorControls>
-
-				{ hasInlineRecs && (
-					<>
-						{ SETTINGS_PANEL_DELEGATIONS.map( ( config ) => (
-							<SubPanelSuggestions
-								key={ `settings-${ config.group }` }
-								{ ...config }
-								clientId={ clientId }
-								suggestions={ visibleSettingsRecommendations }
-								isStale={ isStaleResult }
-								currentRequestSignature={
-									currentRequestSignature
-								}
-								currentRequestInput={ currentRequestInput }
-							/>
-						) ) }
-						{ STYLE_PANEL_DELEGATIONS.map( ( config ) => (
-							<SubPanelSuggestions
-								key={ `styles-${ config.group }-${ config.panel }` }
-								{ ...config }
-								clientId={ clientId }
-								suggestions={
-									visibleDelegatedStyleRecommendations
-								}
-								isStale={ isStaleResult }
-								currentRequestSignature={
-									currentRequestSignature
-								}
-								currentRequestInput={ currentRequestInput }
-							/>
-						) ) }
-					</>
-				) }
-			</>
-		);
-	};
-}, 'withAIRecommendations' );
+			{ hasInlineRecs && (
+				<>
+					{ SETTINGS_PANEL_DELEGATIONS.map( ( config ) => (
+						<SubPanelSuggestions
+							key={ `settings-${ config.group }` }
+							{ ...config }
+							clientId={ clientId }
+							suggestions={ visibleSettingsRecommendations }
+							isStale={ isStaleResult }
+						/>
+					) ) }
+					{ STYLE_PANEL_DELEGATIONS.map( ( config ) => (
+						<SubPanelSuggestions
+							key={ `styles-${ config.group }-${ config.panel }` }
+							{ ...config }
+							clientId={ clientId }
+							suggestions={ visibleDelegatedStyleRecommendations }
+							isStale={ isStaleResult }
+						/>
+					) ) }
+				</>
+			) }
+		</>
+	);
+}
 
 function SubPanelSuggestions( {
 	group,
@@ -216,8 +209,6 @@ function SubPanelSuggestions( {
 	suggestions,
 	label,
 	title,
-	currentRequestSignature = null,
-	currentRequestInput = null,
 } ) {
 	const filtered = useMemo(
 		() => ( suggestions || [] ).filter( ( s ) => s.panel === panel ),
@@ -236,8 +227,6 @@ function SubPanelSuggestions( {
 				label={ label }
 				title={ title }
 				tone="Apply now"
-				currentRequestSignature={ currentRequestSignature }
-				currentRequestInput={ currentRequestInput }
 			/>
 		</InspectorControls>
 	);

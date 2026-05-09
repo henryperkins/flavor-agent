@@ -340,6 +340,11 @@ final class StyleContrastValidator {
 			}
 
 			$digits = $expanded;
+			$length = strlen( $digits );
+		}
+
+		if ( 8 === $length && 'ff' !== strtolower( substr( $digits, 6, 2 ) ) ) {
+			return null;
 		}
 
 		return strtolower( '#' . substr( $digits, 0, 6 ) );

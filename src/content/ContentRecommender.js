@@ -1,16 +1,18 @@
 import { Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
-import { useCallback, useState } from '@wordpress/element';
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import RecommendationHero from '../components/RecommendationHero';
+import StaleResultBanner from '../components/StaleResultBanner';
 import SurfaceComposer from '../components/SurfaceComposer';
 import { STORE_NAME } from '../store';
 import { getSurfaceCapability } from '../utils/capability-flags';
+import { getContentRecommendationFreshness } from './content-recommendation-request';
 
 const SUPPORTED_POST_TYPES = new Set( [ 'post', 'page' ] );
 const CONTENT_MODES = [ 'draft', 'edit', 'critique' ];
@@ -156,6 +158,8 @@ export default function ContentRecommender() {
 		contentError,
 		contentMode,
 		contentRecommendation,
+		contentRecommendationRequestSignature,
+		contentRequestPrompt,
 		contentStatus,
 		postContext,
 	} = useSelect( ( select ) => {
@@ -169,6 +173,9 @@ export default function ContentRecommender() {
 			contentError: store.getContentError?.() || null,
 			contentMode: store.getContentMode?.() || 'draft',
 			contentRecommendation: store.getContentRecommendation?.() || null,
+			contentRecommendationRequestSignature:
+				store.getContentRecommendationRequestSignature?.() || '',
+			contentRequestPrompt: store.getContentRequestPrompt?.() || '',
 			contentStatus: store.getContentStatus?.() || 'idle',
 			postContext: {
 				postId: editor?.getCurrentPostId?.() || null,
@@ -185,9 +192,41 @@ export default function ContentRecommender() {
 		useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
 	const [ copiedContent, setCopiedContent ] = useState( '' );
+	const hydratedSignatureRef = useRef( '' );
+
+	useEffect( () => {
+		if (
+			contentStatus !== 'ready' ||
+			! contentRecommendationRequestSignature
+		) {
+			return;
+		}
+
+		if (
+			hydratedSignatureRef.current ===
+			contentRecommendationRequestSignature
+		) {
+			return;
+		}
+
+		hydratedSignatureRef.current = contentRecommendationRequestSignature;
+		setPrompt( contentRequestPrompt || '' );
+	}, [
+		contentRecommendationRequestSignature,
+		contentRequestPrompt,
+		contentStatus,
+	] );
 	const hasSupportedPost = SUPPORTED_POST_TYPES.has( postContext.postType );
-	const hasResult =
-		contentStatus === 'ready' && Boolean( contentRecommendation );
+	const freshness = getContentRecommendationFreshness( {
+		contentRecommendation,
+		storedRequestSignature: contentRecommendationRequestSignature,
+		currentMode: contentMode,
+		currentPrompt: prompt,
+		currentPostContext: postContext,
+		status: contentStatus,
+	} );
+	const hasResult = freshness.hasStoredResult;
+	const isStaleResult = freshness.isStaleResult;
 	const hasOutput =
 		hasResult && hasRecommendationOutput( contentRecommendation );
 	const statusNotice = useSelect(
@@ -195,6 +234,7 @@ export default function ContentRecommender() {
 			select( STORE_NAME ).getSurfaceStatusNotice( 'content', {
 				requestStatus: contentStatus,
 				requestError: contentError,
+				isStale: isStaleResult,
 				hasResult,
 				hasSuggestions: hasOutput,
 				emptyMessage:
@@ -203,7 +243,7 @@ export default function ContentRecommender() {
 						: '',
 				onDismissAction: Boolean( contentError ),
 			} ),
-		[ contentError, contentStatus, hasOutput, hasResult ]
+		[ contentError, contentStatus, hasOutput, hasResult, isStaleResult ]
 	);
 	const handleFetch = useCallback( () => {
 		fetchContentRecommendations( {
@@ -320,6 +360,14 @@ export default function ContentRecommender() {
 							onDismiss={ clearContentError }
 						/>
 
+						{ isStaleResult && (
+							<StaleResultBanner
+								message={ `This ${ documentNoun } changed since the last ${ activeMode.label.toLowerCase() } request — refresh before relying on the previous text.` }
+								onRefresh={ handleFetch }
+								isRefreshing={ contentStatus === 'loading' }
+							/>
+						) }
+
 						{ hasResult && (
 							<RecommendationHero
 								eyebrow=""
@@ -343,6 +391,9 @@ export default function ContentRecommender() {
 									hasGeneratedContent
 										? handleCopyContent
 										: undefined
+								}
+								primaryActionDisabled={
+									isStaleResult && hasGeneratedContent
 								}
 								className="flavor-agent-content-recommender__result"
 							>

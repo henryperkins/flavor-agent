@@ -11,6 +11,7 @@ import { createReduxStore, register } from '@wordpress/data';
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import {
 	buildBlockRecommendationRequestSignature,
+	buildContentRecommendationRequestSignature,
 	buildNavigationRecommendationRequestSignature,
 	buildPatternRecommendationRequestSignature,
 } from '../utils/recommendation-request-signature';
@@ -97,6 +98,7 @@ const DEFAULT_STATE = {
 	blockRecommendations: {},
 	blockRequestState: {},
 	contentRecommendation: null,
+	contentRecommendationRequestSignature: '',
 	contentStatus: 'idle',
 	contentError: null,
 	contentMode: 'draft',
@@ -1224,7 +1226,8 @@ const actions = {
 		payload,
 		prompt = '',
 		mode = 'draft',
-		requestToken = null
+		requestToken = null,
+		requestSignature = ''
 	) {
 		return {
 			type: 'SET_CONTENT_RECOMMENDATION',
@@ -1232,6 +1235,7 @@ const actions = {
 			prompt,
 			mode,
 			requestToken,
+			requestSignature,
 		};
 	},
 
@@ -2075,6 +2079,12 @@ const actions = {
 							getCurrentActivityScope( registry )
 						),
 					},
+					requestSignature:
+						buildContentRecommendationRequestSignature( {
+							mode: requestInput?.mode || 'draft',
+							prompt: requestInput?.prompt || '',
+							postContext: requestInput?.postContext || null,
+						} ),
 					requestToken:
 						( registrySelect.getContentRequestToken?.() || 0 ) + 1,
 				} ),
@@ -2109,6 +2119,7 @@ const actions = {
 				onSuccess: ( {
 					dispatch: localDispatch,
 					requestData,
+					requestSignature,
 					requestToken,
 					result,
 				} ) => {
@@ -2117,7 +2128,8 @@ const actions = {
 							result,
 							requestData.prompt || '',
 							requestData.mode || 'draft',
-							requestToken
+							requestToken,
+							requestSignature || ''
 						)
 					);
 					return reloadStoreActivitySession(
@@ -2238,13 +2250,13 @@ const actions = {
 			} );
 	},
 
-	undoActivity( activityId ) {
+	undoActivity( activityId, options = {} ) {
 		return createUndoActivityAction( {
 			getCurrentActivityScope,
 			setActivitySession: actions.setActivitySession,
 			setUndoState: actions.setUndoState,
 			updateActivityUndoState: actions.updateActivityUndoState,
-		} )( activityId );
+		} )( activityId, options );
 	},
 
 	revalidateBlockReviewFreshness(
@@ -2757,6 +2769,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 			return {
 				...state,
 				contentRecommendation: action.payload || null,
+				contentRecommendationRequestSignature:
+					typeof action.requestSignature === 'string'
+						? action.requestSignature
+						: '',
 				contentRequestPrompt: action.prompt ?? '',
 				contentMode: action.mode || 'draft',
 				contentRequestToken:
@@ -2959,6 +2975,9 @@ const selectors = {
 	getPatternError: ( state ) => state.patternError,
 	getPatternRequestToken: ( state ) => state.patternRequestToken,
 	getContentRecommendation: ( state ) => state.contentRecommendation,
+	getContentRecommendationRequestSignature: ( state ) =>
+		state.contentRecommendationRequestSignature || '',
+	getContentRequestPrompt: ( state ) => state.contentRequestPrompt || '',
 	getContentStatus: ( state ) => state.contentStatus,
 	getContentError: ( state ) => state.contentError,
 	getContentMode: ( state ) => state.contentMode,

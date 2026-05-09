@@ -322,13 +322,13 @@ function extractActiveStyle( className, registeredStyles = [] ) {
  *
  * @param {?string} rootClientId Root client ID, or null for top level.
  * @param {number}  maxDepth     Maximum tree depth to traverse.
- * @param {number}  maxChildren  Maximum children per node (Infinity for unlimited).
+ * @param {number}  maxChildren  Maximum children per node.
  * @return {object[]}            Introspected child block tree.
  */
 export function introspectBlockTree(
 	rootClientId = null,
-	maxDepth = 10,
-	maxChildren = Infinity
+	maxDepth = 4,
+	maxChildren = 32
 ) {
 	if ( maxDepth <= 0 ) {
 		return [];

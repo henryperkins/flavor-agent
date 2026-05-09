@@ -470,7 +470,11 @@ export function invalidateAnnotatedTreeCache() {
  * @return {object[]} Annotated tree with structuralIdentity attached to every node.
  */
 export function getAnnotatedBlockTree( maxDepth = 10 ) {
-	const rawTree = introspectBlockTree( null, maxDepth );
+	const rawTree = introspectBlockTree(
+		null,
+		maxDepth,
+		Number.POSITIVE_INFINITY
+	);
 	const fp = fingerprintTree( rawTree );
 
 	if ( cachedAnnotatedTree?.fingerprint === fp ) {
@@ -775,13 +779,32 @@ function subscribeToBlockContextSources( registrySelect, clientId ) {
  * @return {string} Fresh block context signature, or an empty string.
  */
 export function getLiveBlockContextSignature( registrySelect, clientId ) {
+	return getLiveBlockContextData( registrySelect, clientId ).signature;
+}
+
+/**
+ * Build the live context and signature from one subscribed selector pass.
+ *
+ * @param {Function} registrySelect Registry-aware selector function from useSelect.
+ * @param {string}   clientId       Selected block client ID.
+ * @return {{context: object|null, signature: string}} Live context data.
+ */
+export function getLiveBlockContextData( registrySelect, clientId ) {
 	if ( ! subscribeToBlockContextSources( registrySelect, clientId ) ) {
-		return '';
+		return {
+			context: null,
+			signature: '',
+		};
 	}
 
 	const context = collectBlockContext( clientId );
 
-	return context ? buildBlockRecommendationContextSignature( context ) : '';
+	return {
+		context,
+		signature: context
+			? buildBlockRecommendationContextSignature( context )
+			: '',
+	};
 }
 
 function getSiblingNames( clientId, direction, count ) {

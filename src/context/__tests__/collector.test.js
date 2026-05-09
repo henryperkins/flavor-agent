@@ -1098,7 +1098,11 @@ describe( 'getAnnotatedBlockTree', () => {
 
 		const result = getAnnotatedBlockTree( 10 );
 
-		expect( mockIntrospectBlockTree ).toHaveBeenCalledWith( null, 10 );
+		expect( mockIntrospectBlockTree ).toHaveBeenCalledWith(
+			null,
+			10,
+			Number.POSITIVE_INFINITY
+		);
 		expect( mockAnnotateStructuralIdentity ).toHaveBeenCalledWith(
 			mockTree
 		);

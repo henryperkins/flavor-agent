@@ -19,14 +19,7 @@ import {
 	getResolvedActivityEntries,
 } from '../store/activity-history';
 import { getBlockSuggestionExecutionInfo } from '../store/update-helpers';
-import {
-	collectBlockContext,
-	getLiveBlockContextSignature,
-} from '../context/collector';
-import {
-	buildBlockRecommendationRequestData,
-	getBlockRecommendationFreshness,
-} from './block-recommendation-request';
+import { getBlockRecommendationFreshness } from './block-recommendation-request';
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -61,6 +54,7 @@ import {
 	buildBlockReviewState,
 	isBlockReviewStateCurrent,
 } from './block-review-state';
+import useBlockRecommendationRequestData from './use-block-recommendation-request-data';
 
 const EMPTY_BLOCK_SUGGESTIONS = [];
 const EMPTY_SURFACE_SUGGESTIONS = [];
@@ -86,50 +80,25 @@ const HIDDEN_ADVISORY_BLOCKER_REASONS = new Set( [
 ] );
 const BLOCK_REVIEW_REVALIDATION_DEBOUNCE_MS = 300;
 
-export function findBlockPath( blocks, clientId, path = [] ) {
-	for ( let index = 0; index < blocks.length; index++ ) {
-		const block = blocks[ index ];
-		const nextPath = [ ...path, index ];
-
-		if ( block?.clientId === clientId ) {
-			return nextPath;
-		}
-
-		if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
-			const nestedPath = findBlockPath(
-				block.innerBlocks,
-				clientId,
-				nextPath
-			);
-
-			if ( nestedPath ) {
-				return nestedPath;
-			}
-		}
+export function getBlockPathFromEditor( blockEditor, clientId ) {
+	if ( ! clientId || ! blockEditor?.getBlock?.( clientId ) ) {
+		return null;
 	}
 
-	return null;
-}
+	const path = [];
+	const parentIds = blockEditor.getBlockParents?.( clientId ) || [];
 
-function findBlockByClientId( blocks, clientId ) {
-	for ( const block of blocks ) {
-		if ( block?.clientId === clientId ) {
-			return block;
+	for ( const pathClientId of [ ...parentIds, clientId ] ) {
+		const index = blockEditor.getBlockIndex?.( pathClientId );
+
+		if ( ! Number.isInteger( index ) || index < 0 ) {
+			return null;
 		}
 
-		if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
-			const nestedBlock = findBlockByClientId(
-				block.innerBlocks,
-				clientId
-			);
-
-			if ( nestedBlock ) {
-				return nestedBlock;
-			}
-		}
+		path.push( index );
 	}
 
-	return null;
+	return path;
 }
 
 export function blockPathMatches( left, right ) {
@@ -142,20 +111,19 @@ function getCanRecommendBlocks() {
 
 function useBlockRecommendationState( clientId ) {
 	const canRecommendBlocks = getCanRecommendBlocks();
-	const editorBlocks = useSelect( ( select ) => {
-		return select( blockEditorStore )?.getBlocks?.() || [];
-	}, [] );
-	const blockEditorSelection = useMemo(
-		() => ( {
+	const blockEditorSelection = useSelect( ( select ) => {
+		const blockEditor = select( blockEditorStore );
+
+		return {
 			getBlock: ( targetClientId ) =>
-				findBlockByClientId( editorBlocks, targetClientId ),
+				blockEditor.getBlock?.( targetClientId ) || null,
 			getBlockAttributes: ( targetClientId ) =>
-				findBlockByClientId( editorBlocks, targetClientId )
-					?.attributes || null,
-			getBlocks: () => editorBlocks,
-		} ),
-		[ editorBlocks ]
-	);
+				blockEditor.getBlockAttributes?.( targetClientId ) ||
+				blockEditor.getBlock?.( targetClientId )?.attributes ||
+				null,
+			getBlocks: () => blockEditor.getBlocks?.() || [],
+		};
+	}, [] );
 
 	const {
 		recommendations,
@@ -174,13 +142,16 @@ function useBlockRecommendationState( clientId ) {
 		lastUndoneActivityId,
 		editingMode,
 		isInsideContentOnly,
+		currentBlockPath,
 		block,
 	} = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
 			const blockEditor = select( blockEditorStore );
-			const blocks = blockEditor.getBlocks?.() || [];
-			const currentBlockPath = findBlockPath( blocks, clientId );
+			const resolvedBlockPath = getBlockPathFromEditor(
+				blockEditor,
+				clientId
+			);
 			const activityLog = store.getActivityLog() || [];
 			const blockEntries = activityLog.filter(
 				( entry ) =>
@@ -188,7 +159,7 @@ function useBlockRecommendationState( clientId ) {
 					( entry?.target?.clientId === clientId ||
 						blockPathMatches(
 							entry?.target?.blockPath,
-							currentBlockPath
+							resolvedBlockPath
 						) )
 			);
 			const resolvedBlock = blockEditor.getBlock?.( clientId ) || null;
@@ -219,18 +190,20 @@ function useBlockRecommendationState( clientId ) {
 						blockEditor.getBlockEditingMode?.( parentId ) ===
 						'contentOnly'
 				),
+				currentBlockPath: resolvedBlockPath,
 				block: resolvedBlock,
 			};
 		},
 		[ clientId ]
 	);
-	const resolvedBlockActivities = useMemo(
-		() =>
-			getResolvedActivityEntries( blockActivityLog, ( entry ) =>
-				getBlockActivityUndoState( entry, blockEditorSelection )
-			),
-		[ blockActivityLog, blockEditorSelection ]
-	);
+	const resolvedBlockActivities = useMemo( () => {
+		void block;
+		void currentBlockPath;
+
+		return getResolvedActivityEntries( blockActivityLog, ( entry ) =>
+			getBlockActivityUndoState( entry, blockEditorSelection )
+		);
+	}, [ block, blockActivityLog, blockEditorSelection, currentBlockPath ] );
 	const blockActivityEntries = useMemo(
 		() => [ ...resolvedBlockActivities ].reverse(),
 		[ resolvedBlockActivities ]
@@ -350,6 +323,7 @@ export function BlockRecommendationsContent( {
 	introCopy = 'Ask for a specific outcome or fetch recommendations based on the current block context.',
 	prompt = undefined,
 	onPromptChange = undefined,
+	requestData = null,
 } ) {
 	const {
 		canRecommendBlocks,
@@ -381,15 +355,6 @@ export function BlockRecommendationsContent( {
 		revalidateBlockReviewFreshness,
 		undoActivity,
 	} = useDispatch( STORE_NAME );
-	const liveContextSignature = useSelect(
-		( select ) => getLiveBlockContextSignature( select, clientId ),
-		[ clientId ]
-	);
-	const liveContext = useMemo( () => {
-		void liveContextSignature;
-
-		return clientId ? collectBlockContext( clientId ) : null;
-	}, [ clientId, liveContextSignature ] );
 	const isPromptControlled = typeof prompt === 'string';
 	const [ uncontrolledPrompt, setUncontrolledPrompt ] = useState(
 		() => recommendations?.prompt || ''
@@ -399,6 +364,17 @@ export function BlockRecommendationsContent( {
 	const handlePromptChange = isPromptControlled
 		? onPromptChange
 		: setUncontrolledPrompt;
+	const {
+		currentRequestInput,
+		currentRequestSignature,
+		liveContext,
+		liveContextSignature,
+	} = useBlockRecommendationRequestData( {
+		clientId,
+		enabled: Boolean( clientId ),
+		prompt: currentPrompt,
+		requestData,
+	} );
 	// Keep a ref to the latest stored prompt without re-running the
 	// re-init effect on every result. The effect only fires when the
 	// edited block changes (or controlled-mode toggles), preserving
@@ -419,19 +395,6 @@ export function BlockRecommendationsContent( {
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
-	const {
-		requestSignature: currentRequestSignature,
-		requestInput: currentRequestInput,
-	} = useMemo(
-		() =>
-			buildBlockRecommendationRequestData( {
-				clientId,
-				liveContext,
-				liveContextSignature,
-				prompt: currentPrompt,
-			} ),
-		[ clientId, currentPrompt, liveContext, liveContextSignature ]
-	);
 	const {
 		clientStaleReason,
 		effectiveStaleReason,

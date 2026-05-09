@@ -20,12 +20,12 @@ final class StyleContrastValidatorTest extends TestCase {
 		);
 	}
 
-	public function test_resolver_form_3_truncates_alpha_channel(): void {
+	public function test_resolver_form_3_rejects_non_opaque_alpha_channel(): void {
 		$this->assertSame(
 			[
-				'resolved' => true,
-				'hex'      => '#112233',
-				'reason'   => null,
+				'resolved' => false,
+				'hex'      => null,
+				'reason'   => 'unknown-form',
 			],
 			StyleContrastValidator::resolve_color_value( '#11223344', [ 'colorPresets' => [] ] )
 		);
@@ -53,14 +53,25 @@ final class StyleContrastValidatorTest extends TestCase {
 		);
 	}
 
-	public function test_resolver_form_3_expands_four_digit_shorthand_and_drops_alpha(): void {
+	public function test_resolver_form_3_rejects_non_opaque_shorthand_alpha_channel(): void {
+		$this->assertSame(
+			[
+				'resolved' => false,
+				'hex'      => null,
+				'reason'   => 'unknown-form',
+			],
+			StyleContrastValidator::resolve_color_value( '#1234', [ 'colorPresets' => [] ] )
+		);
+	}
+
+	public function test_resolver_form_3_accepts_fully_opaque_shorthand_alpha_channel(): void {
 		$this->assertSame(
 			[
 				'resolved' => true,
-				'hex'      => '#112233',
+				'hex'      => '#ffffff',
 				'reason'   => null,
 			],
-			StyleContrastValidator::resolve_color_value( '#1234', [ 'colorPresets' => [] ] )
+			StyleContrastValidator::resolve_color_value( '#ffff', [ 'colorPresets' => [] ] )
 		);
 	}
 
@@ -727,6 +738,48 @@ final class StyleContrastValidatorTest extends TestCase {
 							[
 								'slug'  => 'base',
 								'color' => '#ffffff',
+							],
+						],
+						'elementStyles' => [],
+					],
+					'mergedConfig' => [
+						'styles' => [
+							'color' => [
+								'background' => '#ffffff',
+								'text'       => '#000000',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertFalse( $result['passed'] );
+		$this->assertSame( 'unavailable', $result['kind'] );
+		$this->assertStringContainsString( 'background', (string) $result['reason'] );
+		$this->assertStringContainsString( 'root', (string) $result['reason'] );
+	}
+
+	public function test_evaluate_rejects_transparent_color_value_for_contrast(): void {
+		$result = StyleContrastValidator::evaluate(
+			[
+				[
+					'type'  => 'set_styles',
+					'path'  => [ 'color', 'background' ],
+					'value' => 'var:preset|color|transparent',
+				],
+			],
+			[
+				'styleContext' => [
+					'themeTokens'  => [
+						'colorPresets'  => [
+							[
+								'slug'  => 'base',
+								'color' => '#ffffff',
+							],
+							[
+								'slug'  => 'transparent',
+								'color' => '#00000000',
 							],
 						],
 						'elementStyles' => [],

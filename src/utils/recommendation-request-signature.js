@@ -76,6 +76,42 @@ export function buildNavigationRecommendationRequestSignature( {
 	} );
 }
 
+function normalizePostContext( postContext ) {
+	if ( ! postContext || typeof postContext !== 'object' ) {
+		return {};
+	}
+
+	return {
+		postId: postContext.postId ?? null,
+		postType: normalizeStringValue( postContext.postType ),
+		title: normalizeStringValue( postContext.title ),
+		excerpt: normalizeStringValue( postContext.excerpt ),
+		content: normalizeStringValue( postContext.content ),
+		slug: normalizeStringValue( postContext.slug ),
+		status: normalizeStringValue( postContext.status ),
+	};
+}
+
+export function buildContentRecommendationRequestSignature( {
+	mode = 'draft',
+	prompt = '',
+	postContext = null,
+} = {} ) {
+	const normalizedPostContext = normalizePostContext( postContext );
+	const scopeKey = String(
+		normalizedPostContext.postId ?? normalizedPostContext.postType ?? ''
+	);
+
+	return buildContextSignature( {
+		surface: 'content',
+		mode: normalizeStringValue( mode ) || 'draft',
+		prompt: normalizeStringValue( prompt ),
+		postContext: normalizedPostContext,
+		scopeKey,
+		entityRef: scopeKey,
+	} );
+}
+
 export function buildPatternRecommendationRequestSignature( input = {} ) {
 	const normalizedInput =
 		input && typeof input === 'object' && ! Array.isArray( input )

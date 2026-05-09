@@ -7,6 +7,8 @@ import {
 } from '@wordpress/element';
 
 const FEEDBACK_MS = 1200;
+// Tracks an apply in progress when the caller has no stable suggestion key;
+// no individual chip should render as pending in that fallback path.
 const PENDING_FALLBACK_KEY = Symbol( 'pending' );
 
 export default function useSuggestionApplyFeedback( {

@@ -31,6 +31,7 @@ const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import ContentRecommender from '../ContentRecommender';
+import { buildContentRecommendationRequestSignature } from '../../utils/recommendation-request-signature';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -59,6 +60,8 @@ function createState( overrides = {} ) {
 			contentError: null,
 			contentMode: 'draft',
 			contentRecommendation: null,
+			contentRecommendationRequestSignature: '',
+			contentRequestPrompt: '',
 			contentStatus: 'idle',
 			surfaceStatusNotice: null,
 			...overrides.store,
@@ -112,6 +115,13 @@ function selectStore( storeName ) {
 			getContentMode: jest.fn( () => getState().store.contentMode ),
 			getContentRecommendation: jest.fn(
 				() => getState().store.contentRecommendation
+			),
+			getContentRecommendationRequestSignature: jest.fn(
+				() =>
+					getState().store.contentRecommendationRequestSignature || ''
+			),
+			getContentRequestPrompt: jest.fn(
+				() => getState().store.contentRequestPrompt || ''
 			),
 			getContentStatus: jest.fn( () => getState().store.contentStatus ),
 			getSurfaceStatusNotice: jest.fn( ( surface, options ) =>
@@ -244,10 +254,27 @@ describe( 'ContentRecommender', () => {
 			configurable: true,
 		} );
 
+		const storedPostContext = {
+			postId: 42,
+			postType: 'post',
+			title: 'Working draft',
+			excerpt: '',
+			content: 'Retail floors. WordPress themes.',
+			slug: 'working-draft',
+			status: 'draft',
+		};
+
 		currentState = createState( {
 			store: {
 				contentStatus: 'ready',
 				contentMode: 'critique',
+				contentRequestPrompt: 'Stress-test the intro.',
+				contentRecommendationRequestSignature:
+					buildContentRecommendationRequestSignature( {
+						mode: 'critique',
+						prompt: 'Stress-test the intro.',
+						postContext: storedPostContext,
+					} ),
 				contentRecommendation: {
 					mode: 'critique',
 					title: 'Retail floors to agent workflows',
@@ -425,6 +452,159 @@ describe( 'ContentRecommender', () => {
 		} );
 
 		expect( getContainer().textContent ).toBe( '' );
+	} );
+
+	test( 'shows a stale banner and disables copy when the prompt drifts from the stored result', () => {
+		const storedPostContext = {
+			postId: 42,
+			postType: 'post',
+			title: 'Working draft',
+			excerpt: '',
+			content: 'Retail floors. WordPress themes.',
+			slug: 'working-draft',
+			status: 'draft',
+		};
+
+		currentState = createState( {
+			store: {
+				contentMode: 'draft',
+				contentRequestPrompt: 'Tighten the opener.',
+				contentRecommendationRequestSignature:
+					buildContentRecommendationRequestSignature( {
+						mode: 'draft',
+						prompt: 'Tighten the opener.',
+						postContext: storedPostContext,
+					} ),
+				contentStatus: 'ready',
+				contentRecommendation: {
+					mode: 'draft',
+					title: 'Draft text',
+					summary: 'Lead with retail.',
+					content: 'Retail floors first. Then themes.',
+				},
+			},
+		} );
+
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		// Type a new prompt — the stored signature now drifts.
+		const textarea = getContainer().querySelector( 'textarea' );
+
+		act( () => {
+			textarea.value = 'A different ask entirely.';
+			textarea.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+
+		const text = getContainer().textContent;
+
+		expect( text ).toMatch( /no longer matches|changed since/i );
+
+		const refreshButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => /refresh/i.test( button.textContent ) );
+		expect( refreshButton ).not.toBeUndefined();
+
+		const copyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => /copy/i.test( button.textContent ) );
+		expect( copyButton ).not.toBeUndefined();
+		expect( copyButton.disabled ).toBe( true );
+	} );
+
+	test( 'shows a stale banner when the post content changes after a result', () => {
+		const storedPostContext = {
+			postId: 42,
+			postType: 'post',
+			title: 'Working draft',
+			excerpt: '',
+			content: 'Retail floors. WordPress themes.',
+			slug: 'working-draft',
+			status: 'draft',
+		};
+
+		currentState = createState( {
+			editor: {
+				postId: 42,
+				postType: 'post',
+				attributes: {
+					...storedPostContext,
+					content: 'Retail floors. WordPress themes. Cloud changes.',
+				},
+			},
+			store: {
+				contentMode: 'draft',
+				contentRequestPrompt: 'Tighten the opener.',
+				contentRecommendationRequestSignature:
+					buildContentRecommendationRequestSignature( {
+						mode: 'draft',
+						prompt: 'Tighten the opener.',
+						postContext: storedPostContext,
+					} ),
+				contentStatus: 'ready',
+				contentRecommendation: {
+					mode: 'draft',
+					title: 'Draft text',
+					summary: 'Lead with retail.',
+					content: 'Retail floors first. Then themes.',
+				},
+			},
+		} );
+
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		const text = getContainer().textContent;
+
+		expect( text ).toMatch( /no longer matches|changed since/i );
+	} );
+
+	test( 'keeps copy enabled and hides the stale banner when the live request still matches the stored signature', () => {
+		const storedPostContext = {
+			postId: 42,
+			postType: 'post',
+			title: 'Working draft',
+			excerpt: '',
+			content: 'Retail floors. WordPress themes.',
+			slug: 'working-draft',
+			status: 'draft',
+		};
+
+		currentState = createState( {
+			store: {
+				contentMode: 'draft',
+				contentRequestPrompt: 'Tighten the opener.',
+				contentRecommendationRequestSignature:
+					buildContentRecommendationRequestSignature( {
+						mode: 'draft',
+						prompt: 'Tighten the opener.',
+						postContext: storedPostContext,
+					} ),
+				contentStatus: 'ready',
+				contentRecommendation: {
+					mode: 'draft',
+					title: 'Draft text',
+					summary: 'Lead with retail.',
+					content: 'Retail floors first. Then themes.',
+				},
+			},
+		} );
+
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		const text = getContainer().textContent;
+
+		expect( text ).not.toMatch( /no longer matches|changed since/i );
+
+		const copyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Copy generated text' );
+		expect( copyButton ).not.toBeUndefined();
+		expect( copyButton.disabled ).toBe( false );
 	} );
 
 	test( 'renders for a brand-new unsaved post in a supported type', () => {

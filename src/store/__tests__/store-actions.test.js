@@ -40,6 +40,7 @@ import {
 import { buildBlockRecommendationContextSignature } from '../../utils/block-recommendation-context';
 import {
 	buildBlockRecommendationRequestSignature,
+	buildContentRecommendationRequestSignature,
 	buildGlobalStylesRecommendationRequestSignature,
 	buildNavigationRecommendationRequestSignature,
 	buildPatternRecommendationRequestSignature,
@@ -50,6 +51,7 @@ import {
 import { getBlockStructuralActivitySignature } from '../../utils/block-structural-actions';
 import {
 	createActivityEntry,
+	writePersistedActivityLog,
 	readPersistedActivityLog,
 } from '../activity-history';
 import { actions, reducer, selectors } from '../index';
@@ -1067,7 +1069,16 @@ describe( 'store action thunks', () => {
 				},
 				'Tighten the opener and keep the rhythm brisk.',
 				'edit',
-				3
+				3,
+				buildContentRecommendationRequestSignature( {
+					mode: 'edit',
+					prompt: 'Tighten the opener and keep the rhythm brisk.',
+					postContext: {
+						postType: 'post',
+						title: 'Working draft',
+						content: 'Retail floors. WordPress themes.',
+					},
+				} )
 			)
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -5672,6 +5683,102 @@ describe( 'store action thunks', () => {
 				status: 'undone',
 			} )
 		);
+		expect( result ).toEqual( { ok: true } );
+	} );
+
+	test( 'undoActivity applies a toast undo scope override when provided', async () => {
+		const updateBlockAttributes = jest.fn();
+		const targetDocument = {
+			scopeKey: 'post:100',
+			postType: 'post',
+			entityId: '100',
+		};
+		const targetEntry = {
+			id: 'activity-17',
+			type: 'apply_suggestion',
+			surface: 'block',
+			document: targetDocument,
+			target: {
+				clientId: 'block-1',
+			},
+			before: {
+				attributes: {
+					content: 'Old copy',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'New copy',
+				},
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+			persistence: {
+				status: 'local',
+			},
+		};
+		let activityLog = [];
+		let scopeKey = 'post:99';
+		const dispatch = jest.fn( ( action ) => {
+			if ( action?.type === 'SET_ACTIVITY_SESSION' ) {
+				scopeKey = action.scopeKey;
+				activityLog = action.entries;
+			}
+
+			return action;
+		} );
+		const select = {
+			getActivityScopeKey: () => scopeKey,
+			getActivityLog: () => activityLog,
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlock: jest.fn().mockReturnValue( {
+								clientId: 'block-1',
+								name: 'core/paragraph',
+								attributes: {
+									content: 'New copy',
+								},
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'New copy',
+							} ),
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-1',
+									name: 'core/paragraph',
+									attributes: {
+										content: 'New copy',
+									},
+								},
+							] ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		writePersistedActivityLog( targetDocument.scopeKey, [ targetEntry ] );
+
+		const result = await actions.undoActivity( 'activity-17', {
+			document: targetDocument,
+			scopeKey: targetDocument.scopeKey,
+		} )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( scopeKey ).toBe( targetDocument.scopeKey );
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
+			content: 'Old copy',
+		} );
 		expect( result ).toEqual( { ok: true } );
 	} );
 

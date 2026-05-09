@@ -468,7 +468,10 @@ function readTagFiles( files ) {
 function resolveUrl( url, baseUrl ) {
 	try {
 		const absoluteUrl = new URL( url );
-		if ( absoluteUrl.protocol !== 'http:' && absoluteUrl.protocol !== 'https:' ) {
+		if (
+			absoluteUrl.protocol !== 'http:' &&
+			absoluteUrl.protocol !== 'https:'
+		) {
 			throw new Error( 'URL must use http or https' );
 		}
 		return absoluteUrl.toString();
