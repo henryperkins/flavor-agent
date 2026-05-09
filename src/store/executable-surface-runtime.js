@@ -118,7 +118,7 @@ export function createExecutableSurfaceApplyConfig( {
 	};
 }
 
-export function createExecutableSurfaceFetchAction( {
+function createExecutableSurfaceFetchAction( {
 	abortKey,
 	abilityName,
 	attachRequestMetaToRecommendationPayload,
@@ -238,7 +238,7 @@ export function buildExecutableSurfaceFetchThunk(
 	} )( input );
 }
 
-export function createExecutableSurfaceReviewFreshnessAction( {
+function createExecutableSurfaceReviewFreshnessAction( {
 	abilityName,
 	getReviewContextSignatureFromResponse,
 	getReviewRequestToken,
@@ -352,7 +352,7 @@ export function buildExecutableSurfaceReviewFreshnessThunk(
 	} )( currentRequestSignature, liveRequestInput );
 }
 
-export function createExecutableSurfaceApplyAction( {
+function createExecutableSurfaceApplyAction( {
 	applyFailureMessage,
 	abilityName,
 	buildActivityEntry,

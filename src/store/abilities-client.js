@@ -44,6 +44,21 @@ function shouldFallbackToRest( error ) {
 	);
 }
 
+async function isBridgeReady( bridgeApi ) {
+	const ready = bridgeApi?.ready;
+
+	if ( ! ready || typeof ready.then !== 'function' ) {
+		return true;
+	}
+
+	try {
+		await ready;
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 async function executeAbilityViaRest( abilityName, data, { signal } = {} ) {
 	const request = {
 		path: buildAbilityRunPath( abilityName ),
@@ -75,19 +90,20 @@ export async function executeFlavorAgentAbility(
 		throw error;
 	}
 
-	const bridge =
-		typeof window !== 'undefined'
-			? window.flavorAgentAbilities?.executeAbility
-			: null;
+	const bridgeApi =
+		typeof window !== 'undefined' ? window.flavorAgentAbilities : null;
+	const bridge = bridgeApi?.executeAbility;
 
 	if ( typeof bridge === 'function' && ! signal ) {
-		try {
-			return normalizeAbilityExecutionResult(
-				await bridge( abilityName, data )
-			);
-		} catch ( error ) {
-			if ( ! shouldFallbackToRest( error ) ) {
-				throw error;
+		if ( await isBridgeReady( bridgeApi ) ) {
+			try {
+				return normalizeAbilityExecutionResult(
+					await bridge( abilityName, data )
+				);
+			} catch ( error ) {
+				if ( ! shouldFallbackToRest( error ) ) {
+					throw error;
+				}
 			}
 		}
 	}

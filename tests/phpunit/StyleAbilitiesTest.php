@@ -1069,7 +1069,7 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertSame( 'balanced', $family['overallDensityHint'] ?? null );
 	}
 
-	public function test_supported_block_style_paths_follow_registered_block_supports(): void {
+	public function test_supported_block_style_paths_follow_block_support_manifest(): void {
 		WordPressTestState::$global_settings = [
 			'color'      => [
 				'palette' => [
@@ -1119,39 +1119,40 @@ final class StyleAbilitiesTest extends TestCase {
 			],
 		];
 
-		\WP_Block_Type_Registry::get_instance()->register(
-			'core/paragraph',
+		$paths = $this->invoke_private_array_method(
+			StyleAbilities::class,
+			'supported_block_style_paths_from_manifest',
 			[
-				'title'    => 'Paragraph',
-				'supports' => [
-					'color'      => [
-						'background' => true,
-						'text'       => true,
-					],
-					'typography' => [
-						'fontSize'   => true,
-						'fontFamily' => true,
-						'lineHeight' => true,
-					],
-					'spacing'    => [
-						'blockGap' => true,
-					],
-					'border'     => [
-						'color'  => true,
-						'radius' => true,
-						'style'  => true,
-						'width'  => true,
-					],
-					'shadow'     => true,
-					'customCSS'  => true,
-					'background' => [
-						'backgroundImage' => true,
+				[
+					'title'    => 'Paragraph',
+					'supports' => [
+						'color'      => [
+							'background' => true,
+							'text'       => true,
+						],
+						'typography' => [
+							'fontSize'   => true,
+							'fontFamily' => true,
+							'lineHeight' => true,
+						],
+						'spacing'    => [
+							'blockGap' => true,
+						],
+						'border'     => [
+							'color'  => true,
+							'radius' => true,
+							'style'  => true,
+							'width'  => true,
+						],
+						'shadow'     => true,
+						'customCSS'  => true,
+						'background' => [
+							'backgroundImage' => true,
+						],
 					],
 				],
 			]
 		);
-
-		$paths = StyleAbilities::supported_block_style_paths( 'core/paragraph' );
 
 		$this->assertContains(
 			[

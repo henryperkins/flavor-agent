@@ -7,7 +7,6 @@ namespace FlavorAgent\Tests;
 use FlavorAgent\Admin\ActivityPage;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 
 final class ActivityPageTest extends TestCase {
 
@@ -45,72 +44,6 @@ final class ActivityPageTest extends TestCase {
 		$this->assertStringContainsString(
 			'options-connectors.php',
 			$output
-		);
-	}
-
-	public function test_bootstrap_uses_page_load_hook_instead_of_global_admin_enqueue_for_assets(): void {
-		$bootstrap = file_get_contents( dirname( __DIR__, 2 ) . '/flavor-agent.php' );
-
-		$this->assertIsString( $bootstrap );
-		$this->assertStringContainsString(
-			"add_action( 'admin_menu', [ FlavorAgent\\Admin\\ActivityPage::class, 'add_menu' ] );",
-			$bootstrap
-		);
-		$this->assertStringNotContainsString(
-			"add_action( 'admin_enqueue_scripts', [ FlavorAgent\\Admin\\ActivityPage::class, 'maybe_enqueue_assets' ] );",
-			$bootstrap
-		);
-	}
-
-	public function test_should_enqueue_assets_accepts_settings_and_admin_hook_variants(): void {
-		$method = new ReflectionMethod( ActivityPage::class, 'should_enqueue_assets' );
-		$method->setAccessible( true );
-
-		$this->assertTrue(
-			$method->invoke( null, 'settings_page_flavor-agent-activity', 'admin_page_flavor-agent-activity' )
-		);
-		$this->assertTrue(
-			$method->invoke( null, 'admin_page_flavor-agent-activity', 'settings_page_flavor-agent-activity' )
-		);
-	}
-
-	public function test_should_enqueue_assets_falls_back_to_request_slug_and_current_screen(): void {
-		$method = new ReflectionMethod( ActivityPage::class, 'should_enqueue_assets' );
-		$method->setAccessible( true );
-
-		$_GET = [
-			'page' => 'flavor-agent-activity',
-		];
-
-		$this->assertTrue(
-			$method->invoke( null, 'dashboard_page_demo', 'settings_page_flavor-agent-activity' )
-		);
-
-		$_GET                               = [];
-		WordPressTestState::$current_screen = (object) [
-			'id'   => 'settings_page_flavor-agent-activity',
-			'base' => 'settings_page_flavor-agent-activity',
-		];
-
-		$this->assertTrue(
-			$method->invoke( null, 'dashboard_page_demo', 'admin_page_flavor-agent-activity' )
-		);
-	}
-
-	public function test_should_enqueue_assets_rejects_other_admin_pages(): void {
-		$method = new ReflectionMethod( ActivityPage::class, 'should_enqueue_assets' );
-		$method->setAccessible( true );
-
-		$_GET                               = [
-			'page' => 'plugins',
-		];
-		WordPressTestState::$current_screen = (object) [
-			'id'   => 'plugins',
-			'base' => 'plugins',
-		];
-
-		$this->assertFalse(
-			$method->invoke( null, 'plugins.php', 'settings_page_flavor-agent-activity' )
 		);
 	}
 }

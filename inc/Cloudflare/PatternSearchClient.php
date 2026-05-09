@@ -11,7 +11,7 @@ final class PatternSearchClient extends BaseHttpClient {
 
 	private const REQUEST_TIMEOUT             = 20;
 	private const UPLOAD_TIMEOUT              = 60;
-	private const LIST_PER_PAGE               = 100;
+	private const LIST_PER_PAGE               = 50;
 	private const DEFAULT_MAX_RESULTS         = 50;
 	private const MAX_MAX_RESULTS             = 50;
 	private const DEFAULT_MATCH_THRESHOLD     = 0.2;
@@ -102,7 +102,7 @@ final class PatternSearchClient extends BaseHttpClient {
 			$config['itemsUrl'],
 			self::authorization_headers( $config['apiToken'] ),
 			[
-				'metadata'            => self::encode_json( $metadata ),
+				'metadata'            => self::encode_item_upload_metadata( $metadata ),
 				'wait_for_completion' => $wait ? 'true' : 'false',
 			],
 			[

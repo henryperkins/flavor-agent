@@ -20,7 +20,7 @@ export const ACTIONABILITY_SOURCE_VALIDATOR = 'validator';
 
 export const ACTIONABILITY_REASON_SAFE_LOCAL_ATTRIBUTE_UPDATE =
 	'safe-local-attribute-update';
-export const ACTIONABILITY_REASON_VALID_STRUCTURAL_OPERATION =
+const ACTIONABILITY_REASON_VALID_STRUCTURAL_OPERATION =
 	'valid-structural-operation';
 export const ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT =
 	'missing-pattern-context';
@@ -171,7 +171,7 @@ function getNonExecutableReason( hasProposedUpdates, rejectedOperations ) {
 		: ACTIONABILITY_REASON_MANUAL_COPY_ONLY;
 }
 
-export function buildActionability( tier, reasons = [], options = {} ) {
+function buildActionability( tier, reasons = [], options = {} ) {
 	const resolvedTier = TIER_LABELS[ tier ]
 		? tier
 		: ACTIONABILITY_TIER_ADVISORY;

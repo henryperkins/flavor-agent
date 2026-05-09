@@ -39,22 +39,6 @@ final class ActivityPage {
 		self::enqueue_assets();
 	}
 
-	public static function maybe_enqueue_assets( string $page_hook ): void {
-		$registered_hook = function_exists( 'get_plugin_page_hookname' )
-			? get_plugin_page_hookname( self::PAGE_SLUG, 'options-general.php' )
-			: '';
-
-		if ( ! is_string( $registered_hook ) ) {
-			$registered_hook = '';
-		}
-
-		if ( ! self::should_enqueue_assets( $page_hook, $registered_hook ) ) {
-			return;
-		}
-
-		self::enqueue_assets();
-	}
-
 	public static function render_page(): void {
 		?>
 		<div class="wrap">
@@ -85,36 +69,6 @@ final class ActivityPage {
 		<?php
 	}
 
-	private static function should_enqueue_assets( string $page_hook, string $registered_hook ): bool {
-		if ( self::matches_known_page_hook( $page_hook, $registered_hook ) ) {
-			return true;
-		}
-
-		if ( self::PAGE_SLUG === self::get_requested_page_slug() ) {
-			return true;
-		}
-
-		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-
-		if ( ! is_object( $screen ) ) {
-			return false;
-		}
-
-		$screen_id   = is_string( $screen->id ?? null ) ? $screen->id : '';
-		$screen_base = is_string( $screen->base ?? null ) ? $screen->base : '';
-
-		return self::matches_known_page_hook( $screen_id, $registered_hook )
-			|| self::matches_known_page_hook( $screen_base, $registered_hook );
-	}
-
-	private static function matches_known_page_hook( string $page_hook, string $registered_hook ): bool {
-		if ( '' === $page_hook ) {
-			return false;
-		}
-
-		return in_array( $page_hook, self::get_known_page_hooks( $registered_hook ), true );
-	}
-
 	/**
 	 * @return array<int, string>
 	 */
@@ -130,13 +84,6 @@ final class ActivityPage {
 				)
 			)
 		);
-	}
-
-	private static function get_requested_page_slug(): string {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Read-only admin screen detection.
-		$page = wp_unslash( $_GET['page'] ?? '' );
-
-		return is_string( $page ) ? sanitize_key( $page ) : '';
 	}
 
 	private static function enqueue_assets(): void {

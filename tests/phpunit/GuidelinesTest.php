@@ -131,6 +131,16 @@ final class GuidelinesTest extends TestCase {
 			Guidelines::get_all()
 		);
 		$this->assertSame( 'wp_guideline', WordPressTestState::$get_posts_calls[0]['post_type'] ?? '' );
+		$this->assertSame(
+			[
+				[
+					'taxonomy' => 'wp_guideline_type',
+					'field'    => 'slug',
+					'terms'    => 'content',
+				],
+			],
+			WordPressTestState::$get_posts_calls[0]['tax_query'] ?? []
+		);
 	}
 
 	public function test_storage_status_reports_active_core_repository(): void {

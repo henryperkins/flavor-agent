@@ -8,9 +8,9 @@ export const BLOCK_OPERATION_ACTION_INSERT_BEFORE = 'insert_before';
 export const BLOCK_OPERATION_ACTION_INSERT_AFTER = 'insert_after';
 export const BLOCK_OPERATION_ACTION_REPLACE = 'replace';
 
-export const BLOCK_OPERATION_TARGET_BLOCK = 'block';
+const BLOCK_OPERATION_TARGET_BLOCK = 'block';
 
-export const BLOCK_OPERATION_ERROR_INVALID_OPERATION_PAYLOAD =
+const BLOCK_OPERATION_ERROR_INVALID_OPERATION_PAYLOAD =
 	'invalid_operation_payload';
 export const BLOCK_OPERATION_ERROR_UNKNOWN_OPERATION_TYPE =
 	'unknown_operation_type';
@@ -36,7 +36,7 @@ export const BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED =
 export const BLOCK_OPERATION_ERROR_CLIENT_SERVER_OPERATION_MISMATCH =
 	'client_server_operation_mismatch';
 
-export const BLOCK_OPERATION_CATALOG = Object.freeze( {
+const BLOCK_OPERATION_CATALOG = Object.freeze( {
 	version: BLOCK_OPERATION_CATALOG_VERSION,
 	operations: {
 		[ BLOCK_OPERATION_INSERT_PATTERN ]: {

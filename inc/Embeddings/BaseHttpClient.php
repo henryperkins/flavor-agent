@@ -112,6 +112,35 @@ abstract class BaseHttpClient {
 		);
 	}
 
+	/**
+	 * AI Search item uploads accept custom metadata as a JSON string whose values
+	 * are string form fields, even when the configured metadata schema casts them.
+	 *
+	 * @param array<string, mixed> $metadata
+	 */
+	protected static function encode_item_upload_metadata( array $metadata ): string {
+		$normalized = [];
+
+		foreach ( $metadata as $key => $value ) {
+			if ( '' === $key ) {
+				continue;
+			}
+
+			if ( is_bool( $value ) ) {
+				$normalized[ $key ] = $value ? 'true' : 'false';
+				continue;
+			}
+
+			if ( null === $value || is_scalar( $value ) ) {
+				$normalized[ $key ] = (string) $value;
+			}
+		}
+
+		$encoded = wp_json_encode( $normalized );
+
+		return is_string( $encoded ) ? $encoded : '';
+	}
+
 	public static function parse_retry_after_header( string|false $header, ?int $now = null ): ?int {
 		if ( false === $header ) {
 			return null;

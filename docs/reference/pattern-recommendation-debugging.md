@@ -129,6 +129,7 @@ Interpretation:
 
 - if validation reports missing credentials, fix the Cloudflare account ID or API token in the Embedding Model section first, then save Pattern Storage again so Flavor Agent can create or adopt the managed AI Search pattern instance; blank or unsupported model values use `@cf/qwen/qwen3-embedding-0.6b` for the private AI Search pattern index
 - if validation reports metadata/filter schema errors, confirm the managed instance was created or adopted with the expected five custom metadata fields (`pattern_name`, `candidate_type`, `source`, `synced_id`, `public_safe`); fix or remove incompatible instances, then save Pattern Storage again
+- if validation reports `cloudflare_pattern_ai_search_owner_marker_missing`, save Pattern Storage again after any marker-upload fix; Flavor Agent repairs a compatible deterministic instance only when the prior provisioning signature matches and the instance has no uploaded items
 - if validation reports `cloudflare_pattern_ai_search_embedding_model_mismatch`, remove or recreate the deterministic managed instance with the normalized AI Search embedding model derived from the saved Embedding Model, then save Pattern Storage again
 - if Connectors/text-generation validation fails, raw retrieval can still be healthy while final recommendations fail
 

@@ -1300,7 +1300,7 @@ final class PatternIndexTest extends TestCase {
 						'count'       => count( $item_ids ),
 						'page'        => 1,
 						'total_count' => count( $item_ids ),
-						'per_page'    => 100,
+						'per_page'    => 50,
 					],
 				]
 			),

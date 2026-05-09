@@ -97,13 +97,6 @@ final class PromptBudget {
 	}
 
 	/**
-	 * Get the maximum token budget for this instance.
-	 */
-	public function get_max_tokens(): int {
-		return $this->max_tokens;
-	}
-
-	/**
 	 * Get the current total estimated token count across all sections.
 	 */
 	public function get_current_tokens(): int {
@@ -148,30 +141,6 @@ final class PromptBudget {
 
 		// Single section or empty — return as-is, even if still over budget.
 		return self::join_sections( $included );
-	}
-
-	/**
-	 * Get a diagnostic summary of sections and their budget impact.
-	 *
-	 * @return array{max_tokens: int, current_tokens: int, within_budget: bool, sections: array<int, array{key: string, tokens: int, priority: int, required: bool}>}
-	 */
-	public function get_diagnostics(): array {
-		$section_diagnostics = [];
-		foreach ( $this->sections as $section ) {
-			$section_diagnostics[] = [
-				'key'      => $section['key'],
-				'tokens'   => self::estimate_tokens( $section['content'] ),
-				'priority' => $section['priority'],
-				'required' => (bool) ( $section['required'] ?? false ),
-			];
-		}
-
-		return [
-			'max_tokens'     => $this->max_tokens,
-			'current_tokens' => $this->get_current_tokens(),
-			'within_budget'  => $this->is_within_budget(),
-			'sections'       => $section_diagnostics,
-		];
 	}
 
 	/**

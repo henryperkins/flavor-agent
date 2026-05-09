@@ -14,6 +14,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	public const PROVISION_CRON_HOOK = 'flavor_agent_provision_pattern_ai_search';
 
 	private const REQUEST_TIMEOUT                      = 20;
+	private const LIST_ITEMS_PER_PAGE                  = 50;
 	private const SITE_HASH_LENGTH                     = 16;
 	private const SUPPORTED_AI_SEARCH_EMBEDDING_MODELS = [
 		'@cf/qwen/qwen3-embedding-0.6b',
@@ -60,7 +61,8 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	 *   completed_at: string,
 	 *   managed_status: string,
 	 *   last_error_code: string,
-	 *   last_error: string
+	 *   last_error: string,
+	 *   owner_marker_repair: string
 	 * }
 	 */
 	public static function get_provisioning_state(): array {
@@ -71,22 +73,26 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		}
 
 		return [
-			'status'          => sanitize_key( (string) ( $state['status'] ?? '' ) ),
-			'signature'       => sanitize_text_field( (string) ( $state['signature'] ?? '' ) ),
-			'requested_at'    => sanitize_text_field( (string) ( $state['requested_at'] ?? '' ) ),
-			'completed_at'    => sanitize_text_field( (string) ( $state['completed_at'] ?? '' ) ),
-			'managed_status'  => sanitize_key( (string) ( $state['managed_status'] ?? '' ) ),
-			'last_error_code' => sanitize_key( (string) ( $state['last_error_code'] ?? '' ) ),
-			'last_error'      => sanitize_text_field( (string) ( $state['last_error'] ?? '' ) ),
+			'status'              => sanitize_key( (string) ( $state['status'] ?? '' ) ),
+			'signature'           => sanitize_text_field( (string) ( $state['signature'] ?? '' ) ),
+			'requested_at'        => sanitize_text_field( (string) ( $state['requested_at'] ?? '' ) ),
+			'completed_at'        => sanitize_text_field( (string) ( $state['completed_at'] ?? '' ) ),
+			'managed_status'      => sanitize_key( (string) ( $state['managed_status'] ?? '' ) ),
+			'last_error_code'     => sanitize_key( (string) ( $state['last_error_code'] ?? '' ) ),
+			'last_error'          => sanitize_text_field( (string) ( $state['last_error'] ?? '' ) ),
+			'owner_marker_repair' => sanitize_key( (string) ( $state['owner_marker_repair'] ?? '' ) ),
 		];
 	}
 
 	public static function schedule_managed_instance_provisioning( string $signature ): void {
+		$previous_state = self::get_provisioning_state();
+
 		self::save_provisioning_state(
 			[
-				'status'       => 'provisioning',
-				'signature'    => $signature,
-				'requested_at' => gmdate( 'c' ),
+				'status'              => 'provisioning',
+				'signature'           => $signature,
+				'requested_at'        => gmdate( 'c' ),
+				'owner_marker_repair' => self::can_repair_missing_owner_marker_from_state( $previous_state, $signature ) ? '1' : '',
 			]
 		);
 
@@ -134,7 +140,12 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			return;
 		}
 
-		$managed = self::ensure_managed_instance( $account_id, $api_token, $embedding_model );
+		$managed = self::ensure_managed_instance(
+			$account_id,
+			$api_token,
+			$embedding_model,
+			'1' === $state['owner_marker_repair']
+		);
 
 		if ( is_wp_error( $managed ) ) {
 			delete_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE );
@@ -202,14 +213,19 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	/**
 	 * @return array{instance_id: string, status: string}|\WP_Error
 	 */
-	public static function ensure_managed_instance( string $account_id, string $api_token, string $embedding_model ): array|\WP_Error {
+	public static function ensure_managed_instance(
+		string $account_id,
+		string $api_token,
+		string $embedding_model,
+		bool $repair_missing_owner_marker = false
+	): array|\WP_Error {
 		$config = self::normalize_credentials( $account_id, $api_token );
 
 		if ( is_wp_error( $config ) ) {
 			return $config;
 		}
 
-		$instances = self::list_instances( $config['account_id'], $config['api_token'] );
+		$instances = self::list_instances_after_ensuring_namespace( $config['account_id'], $config['api_token'] );
 
 		if ( is_wp_error( $instances ) ) {
 			return $instances;
@@ -225,6 +241,19 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			$marker = self::validate_owner_marker( $config['account_id'], $config['api_token'], self::managed_instance_id() );
 
 			if ( is_wp_error( $marker ) ) {
+				if ( $repair_missing_owner_marker && self::is_owner_marker_missing_error( $marker ) ) {
+					$repaired = self::repair_missing_owner_marker( $config['account_id'], $config['api_token'], self::managed_instance_id() );
+
+					if ( is_wp_error( $repaired ) ) {
+						return $repaired;
+					}
+
+					return [
+						'instance_id' => self::managed_instance_id(),
+						'status'      => 'repaired_owner_marker',
+					];
+				}
+
 				return $marker;
 			}
 
@@ -238,7 +267,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 
 		if ( is_wp_error( $created ) ) {
 			if ( self::is_create_conflict_error( $created ) ) {
-					return self::try_adopt_after_create_conflict( $config['account_id'], $config['api_token'], $embedding_model );
+				return self::try_adopt_after_create_conflict( $config['account_id'], $config['api_token'], $embedding_model );
 			}
 
 			return $created;
@@ -313,18 +342,34 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE,
 			array_merge(
 				[
-					'status'          => '',
-					'signature'       => '',
-					'requested_at'    => '',
-					'completed_at'    => '',
-					'managed_status'  => '',
-					'last_error_code' => '',
-					'last_error'      => '',
+					'status'              => '',
+					'signature'           => '',
+					'requested_at'        => '',
+					'completed_at'        => '',
+					'managed_status'      => '',
+					'last_error_code'     => '',
+					'last_error'          => '',
+					'owner_marker_repair' => '',
 				],
 				array_map( 'sanitize_text_field', $state )
 			),
 			false
 		);
+	}
+
+		/**
+		 * @param array{signature: string, last_error_code: string} $state
+		 */
+	private static function can_repair_missing_owner_marker_from_state( array $state, string $signature ): bool {
+		return $signature === $state['signature']
+			&& in_array(
+				$state['last_error_code'],
+				[
+					'cloudflare_pattern_ai_search_owner_marker_error',
+					'cloudflare_pattern_ai_search_owner_marker_missing',
+				],
+				true
+			);
 	}
 
 	/**
@@ -348,6 +393,13 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		];
 	}
 
+	private static function namespaces_url( string $account_id ): string {
+		return sprintf(
+			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/namespaces',
+			rawurlencode( $account_id )
+		);
+	}
+
 	private static function instances_url( string $account_id ): string {
 		return sprintf(
 			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/namespaces/%s/instances',
@@ -365,6 +417,25 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	 */
 	private static function authorization_headers( string $api_token ): array {
 		return [ 'Authorization' => 'Bearer ' . $api_token ];
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>|\WP_Error
+	 */
+	private static function list_instances_after_ensuring_namespace( string $account_id, string $api_token ): array|\WP_Error {
+		$instances = self::list_instances( $account_id, $api_token );
+
+		if ( ! is_wp_error( $instances ) || ! self::is_namespace_not_found_error( $instances ) ) {
+			return $instances;
+		}
+
+		$namespace = self::create_namespace( $account_id, $api_token );
+
+		if ( is_wp_error( $namespace ) ) {
+			return $namespace;
+		}
+
+		return self::list_instances( $account_id, $api_token );
 	}
 
 	/**
@@ -400,8 +471,8 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			if ( 200 !== $response['status'] || ! is_array( $response['data'] ) ) {
 				return new \WP_Error(
 					'cloudflare_pattern_ai_search_instance_list_error',
-					'Cloudflare AI Search instance list failed.',
-					[ 'status' => 502 ]
+					self::remote_failure_message( 'Cloudflare AI Search instance list failed.', $response ),
+					self::remote_failure_data( $response )
 				);
 			}
 
@@ -422,6 +493,35 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		return $instances;
 	}
 
+	private static function create_namespace( string $account_id, string $api_token ): true|\WP_Error {
+		$response = self::post_json(
+			self::namespaces_url( $account_id ),
+			array_merge( self::authorization_headers( $api_token ), [ 'Content-Type' => 'application/json' ] ),
+			self::encode_json(
+				[
+					'name'        => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+					'description' => 'Flavor Agent managed pattern storage.',
+				]
+			),
+			'Cloudflare AI Search namespace create',
+			self::REQUEST_TIMEOUT
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		if ( in_array( $response['status'], [ 200, 201, 409 ], true ) ) {
+			return true;
+		}
+
+		return new \WP_Error(
+			'cloudflare_pattern_ai_search_namespace_create_error',
+			self::remote_failure_message( 'Cloudflare AI Search managed pattern namespace could not be created.', $response ),
+			self::remote_failure_data( $response )
+		);
+	}
+
 	private static function create_instance( string $account_id, string $api_token, string $embedding_model ): true|\WP_Error {
 		$response = self::post_json(
 			self::instances_url( $account_id ),
@@ -438,11 +538,8 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		if ( ! in_array( $response['status'], [ 200, 201 ], true ) ) {
 			return new \WP_Error(
 				'cloudflare_pattern_ai_search_instance_create_error',
-				'Cloudflare AI Search managed pattern index could not be created.',
-				[
-					'status'      => 502,
-					'http_status' => $response['status'],
-				]
+				self::remote_failure_message( 'Cloudflare AI Search managed pattern index could not be created.', $response ),
+				self::remote_failure_data( $response )
 			);
 		}
 
@@ -555,7 +652,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			self::instance_items_url( $account_id, $instance_id ),
 			self::authorization_headers( $api_token ),
 			[
-				'metadata'            => self::encode_json( self::owner_marker_metadata() ),
+				'metadata'            => self::encode_item_upload_metadata( self::owner_marker_metadata() ),
 				'wait_for_completion' => 'true',
 			],
 			[
@@ -575,8 +672,8 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		if ( ! in_array( $response['status'], [ 200, 201 ], true ) ) {
 			return new \WP_Error(
 				'cloudflare_pattern_ai_search_owner_marker_error',
-				'Flavor Agent could not write the Cloudflare AI Search owner marker.',
-				[ 'status' => 502 ]
+				self::remote_failure_message( 'Flavor Agent could not write the Cloudflare AI Search owner marker.', $response ),
+				self::remote_failure_data( $response )
 			);
 		}
 
@@ -601,8 +698,8 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		if ( 200 !== $response['status'] || ! is_array( $response['data'] ) ) {
 			return new \WP_Error(
 				'cloudflare_pattern_ai_search_owner_marker_error',
-				'Flavor Agent could not read the Cloudflare AI Search owner marker.',
-				[ 'status' => 502 ]
+				self::remote_failure_message( 'Flavor Agent could not read the Cloudflare AI Search owner marker.', $response ),
+				self::remote_failure_data( $response )
 			);
 		}
 
@@ -637,6 +734,93 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		);
 	}
 
+	private static function repair_missing_owner_marker( string $account_id, string $api_token, string $instance_id ): true|\WP_Error {
+		$item_ids = self::list_builtin_item_ids( $account_id, $api_token, $instance_id );
+
+		if ( is_wp_error( $item_ids ) ) {
+			return $item_ids;
+		}
+
+		if ( [] !== $item_ids ) {
+			return new \WP_Error(
+				'cloudflare_pattern_ai_search_owner_marker_missing',
+				'The existing Cloudflare AI Search managed pattern index is missing the Flavor Agent owner marker and already contains items. Remove the conflicting Cloudflare instance and save settings again.',
+				[
+					'status'     => 409,
+					'item_count' => count( $item_ids ),
+				]
+			);
+		}
+
+		$marker = self::write_owner_marker( $account_id, $api_token, $instance_id );
+
+		if ( is_wp_error( $marker ) ) {
+			return $marker;
+		}
+
+		return self::validate_owner_marker( $account_id, $api_token, $instance_id );
+	}
+
+	/**
+	 * @return array<int, string>|\WP_Error
+	 */
+	private static function list_builtin_item_ids( string $account_id, string $api_token, string $instance_id ): array|\WP_Error {
+		$item_ids = [];
+		$page     = 1;
+
+		do {
+			$response = self::request_json(
+				add_query_arg(
+					[
+						'page'     => $page,
+						'per_page' => self::LIST_ITEMS_PER_PAGE,
+						'source'   => 'builtin',
+					],
+					self::instance_items_url( $account_id, $instance_id )
+				),
+				[
+					'method'  => 'GET',
+					'headers' => self::authorization_headers( $api_token ),
+				],
+				'Cloudflare AI Search managed pattern item list',
+				self::REQUEST_TIMEOUT
+			);
+
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+
+			if ( 200 !== $response['status'] || ! is_array( $response['data'] ) ) {
+				return new \WP_Error(
+					'cloudflare_pattern_ai_search_owner_marker_repair_item_list_error',
+					self::remote_failure_message( 'Flavor Agent could not inspect the Cloudflare AI Search managed pattern index before repairing ownership.', $response ),
+					self::remote_failure_data( $response )
+				);
+			}
+
+			$result = is_array( $response['data']['result'] ?? null ) ? $response['data']['result'] : [];
+			foreach ( $result as $item ) {
+				if ( ! is_array( $item ) ) {
+					continue;
+				}
+
+				$item_id = trim( sanitize_text_field( (string) ( $item['id'] ?? '' ) ) );
+
+				if ( '' !== $item_id ) {
+					$item_ids[ $item_id ] = $item_id;
+				}
+			}
+
+			$result_info = is_array( $response['data']['result_info'] ?? null ) ? $response['data']['result_info'] : [];
+			$total_count = max( 0, (int) ( $result_info['total_count'] ?? count( $result ) ) );
+			$page_size   = max( 1, (int) ( $result_info['per_page'] ?? self::LIST_ITEMS_PER_PAGE ) );
+			$total_pages = max( 1, (int) ceil( $total_count / $page_size ) );
+			++$page;
+		} while ( $page <= $total_pages );
+
+		return array_values( $item_ids );
+	}
+
 	/**
 	 * @return array{pattern_name: string, candidate_type: string, source: string, synced_id: string, public_safe: bool}
 	 */
@@ -656,11 +840,99 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		return is_array( $data ) && 409 === (int) ( $data['http_status'] ?? 0 );
 	}
 
+	private static function is_owner_marker_missing_error( \WP_Error $error ): bool {
+		return 'cloudflare_pattern_ai_search_owner_marker_missing' === $error->get_error_code();
+	}
+
+	/**
+	 * @param array{status: int, data: mixed, body_bytes?: int} $response
+	 */
+	private static function remote_failure_message( string $fallback, array $response ): string {
+		$status         = (int) ( $response['status'] ?? 0 );
+		$remote_message = self::extract_remote_error_message( $response['data'] ?? null );
+		$fallback       = rtrim( trim( $fallback ), ". \t\n\r\0\x0B" );
+
+		if ( 0 < $status && '' !== $remote_message ) {
+			return sprintf( '%1$s (HTTP %2$d): %3$s.', $fallback, $status, rtrim( $remote_message, ". \t\n\r\0\x0B" ) );
+		}
+
+		if ( 0 < $status ) {
+			return sprintf( '%1$s (HTTP %2$d).', $fallback, $status );
+		}
+
+		return $fallback . '.';
+	}
+
+	/**
+	 * @param array{status: int, data: mixed, body_bytes?: int} $response
+	 * @return array{status: int, http_status: int, response_body_bytes: int, remote_error_message: string}
+	 */
+	private static function remote_failure_data( array $response ): array {
+		return [
+			'status'               => 502,
+			'http_status'          => (int) ( $response['status'] ?? 0 ),
+			'response_body_bytes'  => (int) ( $response['body_bytes'] ?? 0 ),
+			'remote_error_message' => self::extract_remote_error_message( $response['data'] ?? null ),
+		];
+	}
+
+	private static function is_namespace_not_found_error( \WP_Error $error ): bool {
+		$data = $error->get_error_data();
+
+		if ( ! is_array( $data ) || 404 !== (int) ( $data['http_status'] ?? 0 ) ) {
+			return false;
+		}
+
+		$remote_message = strtolower( (string) ( $data['remote_error_message'] ?? '' ) );
+
+		return str_contains( $remote_message, 'namespace_not_found' )
+			|| str_contains( strtolower( $error->get_error_message() ), 'namespace_not_found' );
+	}
+
+	private static function extract_remote_error_message( mixed $data ): string {
+		if ( ! is_array( $data ) ) {
+			return '';
+		}
+
+		$messages = [];
+
+		if ( isset( $data['message'] ) && is_scalar( $data['message'] ) ) {
+			$messages[] = (string) $data['message'];
+		}
+
+		if ( isset( $data['error'] ) && is_array( $data['error'] ) && isset( $data['error']['message'] ) && is_scalar( $data['error']['message'] ) ) {
+			$messages[] = (string) $data['error']['message'];
+		}
+
+		if ( isset( $data['errors'] ) && is_array( $data['errors'] ) ) {
+			foreach ( $data['errors'] as $error ) {
+				if ( is_array( $error ) && isset( $error['message'] ) && is_scalar( $error['message'] ) ) {
+					$messages[] = (string) $error['message'];
+				} elseif ( is_scalar( $error ) ) {
+					$messages[] = (string) $error;
+				}
+			}
+		}
+
+		$messages = array_values(
+			array_unique(
+				array_filter(
+					array_map(
+						static fn( string $message ): string => trim( sanitize_text_field( $message ) ),
+						$messages
+					)
+				)
+			)
+		);
+
+		return implode( '; ', $messages );
+	}
+
 	/**
 	 * @return array{instance_id: string, status: string}|\WP_Error
 	 */
 	private static function try_adopt_after_create_conflict( string $account_id, string $api_token, string $embedding_model ): array|\WP_Error {
-		$instances = self::list_instances( $account_id, $api_token );
+		$instances = self::list_instances_after_ensuring_namespace( $account_id, $api_token );
 
 		if ( is_wp_error( $instances ) ) {
 			return $instances;

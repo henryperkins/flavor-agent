@@ -4260,6 +4260,8 @@ describe( 'store action thunks', () => {
 			select,
 		} );
 
+		await Promise.resolve();
+
 		storedState = {
 			contextSignature: 'context-new',
 			prompt: 'Refresh content.',

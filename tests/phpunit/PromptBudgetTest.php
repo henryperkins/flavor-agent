@@ -91,22 +91,6 @@ final class PromptBudgetTest extends TestCase {
 		$this->assertFalse( $budget->is_within_budget() );
 	}
 
-	public function test_get_diagnostics_structure(): void {
-		$budget = new PromptBudget( 5000 );
-		$budget->add_section( 'a', 'Section A', 80 );
-		$budget->add_section( 'b', 'Section B', 30 );
-
-		$diag = $budget->get_diagnostics();
-
-		$this->assertArrayHasKey( 'max_tokens', $diag );
-		$this->assertArrayHasKey( 'current_tokens', $diag );
-		$this->assertArrayHasKey( 'within_budget', $diag );
-		$this->assertArrayHasKey( 'sections', $diag );
-		$this->assertCount( 2, $diag['sections'] );
-		$this->assertSame( 'a', $diag['sections'][0]['key'] );
-		$this->assertSame( 80, $diag['sections'][0]['priority'] );
-	}
-
 	public function test_add_section_skips_empty_content(): void {
 		$budget = new PromptBudget();
 		$budget->add_section( 'empty', '', 50 );
@@ -128,7 +112,9 @@ final class PromptBudgetTest extends TestCase {
 
 	public function test_min_tokens_floor_enforced(): void {
 		$budget = new PromptBudget( 10 );
-		$this->assertSame( 2000, $budget->get_max_tokens() );
+		$budget->add_section( 'floor', str_repeat( 'x', 4000 ), 50 );
+
+		$this->assertTrue( $budget->is_within_budget() );
 	}
 
 	public function test_required_sections_are_never_dropped_even_over_budget(): void {
@@ -142,7 +128,7 @@ final class PromptBudgetTest extends TestCase {
 		$this->assertStringContainsString( str_repeat( 'a', 100 ), $result );
 		$this->assertStringContainsString( str_repeat( 'b', 100 ), $result );
 		$this->assertStringNotContainsString( 'optional content', $result );
-		$this->assertGreaterThan( $budget->get_max_tokens(), PromptBudget::estimate_tokens( $result ) );
+		$this->assertGreaterThan( 2000, PromptBudget::estimate_tokens( $result ) );
 	}
 
 	public function test_lower_priority_required_outlasts_higher_priority_optional(): void {
@@ -165,17 +151,6 @@ final class PromptBudgetTest extends TestCase {
 
 		$this->assertStringContainsString( str_repeat( 'h', 100 ), $result );
 		$this->assertStringNotContainsString( str_repeat( 'l', 100 ), $result );
-	}
-
-	public function test_diagnostics_includes_required_flag(): void {
-		$budget = new PromptBudget();
-		$budget->add_section( 'critical', 'kept', 100, true );
-		$budget->add_section( 'optional', 'maybe', 10, false );
-
-		$diagnostics = $budget->get_diagnostics();
-
-		$this->assertTrue( $diagnostics['sections'][0]['required'] );
-		$this->assertFalse( $diagnostics['sections'][1]['required'] );
 	}
 
 	public function test_equal_priority_drops_last_inserted_first(): void {

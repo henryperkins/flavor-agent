@@ -848,7 +848,11 @@ final class Page {
 					__( 'Managed pattern index needs attention. Flavor Agent will not adopt %s until ownership and schema can be proven. Fix or remove the conflicting Cloudflare AI Search instance, then save settings again.', 'flavor-agent' ),
 					PatternSearchInstanceManager::managed_instance_id()
 				),
-				$instance_id
+				$instance_id,
+				[
+					'error_code'    => $error_code,
+					'error_message' => (string) ( $provisioning['last_error'] ?? '' ),
+				]
 			);
 			return;
 		}
@@ -866,7 +870,11 @@ final class Page {
 			self::render_cloudflare_pattern_ai_search_status(
 				'error',
 				__( 'Managed pattern index provisioning failed. Check the Cloudflare credentials from Embedding Model, then save settings again.', 'flavor-agent' ),
-				$instance_id
+				$instance_id,
+				[
+					'error_code'    => (string) ( $provisioning['last_error_code'] ?? '' ),
+					'error_message' => (string) ( $provisioning['last_error'] ?? '' ),
+				]
 			);
 			return;
 		}
@@ -875,7 +883,10 @@ final class Page {
 			self::render_cloudflare_pattern_ai_search_status(
 				'error',
 				__( 'Managed pattern index needs attention.', 'flavor-agent' ),
-				$instance_id
+				$instance_id,
+				[
+					'error_code' => $error_code,
+				]
 			);
 			return;
 		}
@@ -887,14 +898,37 @@ final class Page {
 		);
 	}
 
-	private static function render_cloudflare_pattern_ai_search_status( string $tone, string $message, string $instance_id ): void {
+	/**
+	 * @param array{error_code?: string, error_message?: string} $details
+	 */
+	private static function render_cloudflare_pattern_ai_search_status( string $tone, string $message, string $instance_id, array $details = [] ): void {
+		$advanced_details = [];
+
+		if ( '' !== $instance_id ) {
+			$advanced_details[] = sprintf( 'Instance ID: %s', $instance_id );
+		}
+
+		$error_code = sanitize_key( (string) ( $details['error_code'] ?? '' ) );
+
+		if ( '' !== $error_code ) {
+			$advanced_details[] = sprintf( 'Error code: %s', $error_code );
+		}
+
+		$error_message = trim( sanitize_text_field( (string) ( $details['error_message'] ?? '' ) ) );
+
+		if ( '' !== $error_message ) {
+			$advanced_details[] = sprintf( 'Error message: %s', $error_message );
+		}
+
 		?>
 		<div class="flavor-agent-settings-status flavor-agent-settings-status--<?php echo esc_attr( $tone ); ?>">
 			<p><?php echo esc_html( $message ); ?></p>
-			<?php if ( '' !== $instance_id ) : ?>
+			<?php if ( [] !== $advanced_details ) : ?>
 				<details>
 					<summary><?php echo esc_html__( 'Advanced details', 'flavor-agent' ); ?></summary>
-					<p><?php echo esc_html( sprintf( 'Instance ID: %s', $instance_id ) ); ?></p>
+					<?php foreach ( $advanced_details as $detail ) : ?>
+						<p><?php echo esc_html( $detail ); ?></p>
+					<?php endforeach; ?>
 				</details>
 			<?php endif; ?>
 		</div>

@@ -75,18 +75,6 @@ final class Validation {
 	 */
 	private static array $submission_value_cache = [];
 
-	public static function reset(): void {
-		self::$workers_ai_validation_state                        = null;
-		self::$workers_ai_validation_error_reported               = false;
-		self::$workers_ai_dimension_warning_reported              = false;
-		self::$qdrant_validation_state                            = null;
-		self::$qdrant_validation_error_reported                   = false;
-		self::$pattern_ai_search_validation_state                 = null;
-		self::$pattern_ai_search_validation_error_reported        = false;
-		self::$pattern_ai_search_embedding_model_warning_reported = false;
-		self::$submission_value_cache                             = [];
-	}
-
 	public static function sanitize_grounding_result_count( mixed $value ): int {
 		$count = max( 1, min( 8, (int) $value ) );
 		Feedback::mark_section_changed_by_option( 'flavor_agent_cloudflare_ai_search_max_results', $count );

@@ -90,6 +90,79 @@ describe( 'abilities client', () => {
 		} );
 	} );
 
+	test( 'executeFlavorAgentAbility waits for bridge readiness before executing', async () => {
+		let resolveReady;
+		const ready = new Promise( ( resolve ) => {
+			resolveReady = resolve;
+		} );
+		const executeAbility = jest.fn().mockResolvedValue( {
+			payload: {
+				explanation: 'Ready bridge result',
+			},
+		} );
+
+		window.flavorAgentAbilities = { ready, executeAbility };
+
+		const request = executeFlavorAgentAbility(
+			'flavor-agent/recommend-block',
+			{
+				prompt: 'Tighten this copy.',
+			}
+		);
+
+		await Promise.resolve();
+		expect( executeAbility ).not.toHaveBeenCalled();
+
+		resolveReady();
+
+		await expect( request ).resolves.toEqual( {
+			explanation: 'Ready bridge result',
+		} );
+		expect( executeAbility ).toHaveBeenCalledWith(
+			'flavor-agent/recommend-block',
+			{
+				prompt: 'Tighten this copy.',
+			}
+		);
+		expect( apiFetch ).not.toHaveBeenCalled();
+	} );
+
+	test( 'executeFlavorAgentAbility falls back to REST when bridge readiness rejects', async () => {
+		const readyError = new Error( 'Core abilities failed to hydrate.' );
+		const ready = Promise.reject( readyError );
+		const executeAbility = jest.fn();
+
+		ready.catch( () => {} );
+		window.flavorAgentAbilities = {
+			ready,
+			executeAbility,
+		};
+		apiFetch.mockResolvedValue( {
+			result: {
+				explanation: 'REST readiness fallback result',
+			},
+		} );
+
+		await expect(
+			executeFlavorAgentAbility( 'flavor-agent/recommend-block', {
+				prompt: 'Tighten this copy.',
+			} )
+		).resolves.toEqual( {
+			explanation: 'REST readiness fallback result',
+		} );
+
+		expect( executeAbility ).not.toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/wp-abilities/v1/abilities/flavor-agent/recommend-block/run',
+			method: 'POST',
+			data: {
+				input: {
+					prompt: 'Tighten this copy.',
+				},
+			},
+		} );
+	} );
+
 	test.each( [
 		'ability_permission_denied',
 		'ability_invalid_input',

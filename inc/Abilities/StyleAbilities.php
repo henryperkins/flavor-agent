@@ -773,19 +773,6 @@ final class StyleAbilities {
 	}
 
 	/**
-	 * @return array<int, array<string, mixed>>
-	 */
-	public static function supported_block_style_paths( string $block_name ): array {
-		$block_manifest = ServerCollector::introspect_block_type( sanitize_text_field( $block_name ) );
-
-		if ( ! is_array( $block_manifest ) ) {
-			return [];
-		}
-
-		return self::supported_block_style_paths_from_manifest( $block_manifest );
-	}
-
-	/**
 	 * @param array<string, mixed> $block_manifest
 	 * @return array<int, array<string, mixed>>
 	 */

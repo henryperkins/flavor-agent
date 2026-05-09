@@ -44,7 +44,7 @@ import {
 	syncActivitySession,
 } from './activity-session';
 
-export function getEntityActivityEntries( activityLog, activity ) {
+function getEntityActivityEntries( activityLog, activity ) {
 	const entityKey = getActivityEntityKey( activity );
 
 	if ( ! entityKey ) {
@@ -222,7 +222,7 @@ export function buildBlockStructuralActivityEntry( {
 	} );
 }
 
-export function buildTemplateActivityEntry( {
+function buildTemplateActivityEntry( {
 	operations,
 	requestPrompt = '',
 	requestMeta = null,
@@ -250,7 +250,7 @@ export function buildTemplateActivityEntry( {
 	} );
 }
 
-export function buildTemplatePartActivityEntry( {
+function buildTemplatePartActivityEntry( {
 	operations,
 	requestPrompt = '',
 	requestMeta = null,
@@ -458,7 +458,7 @@ export function buildStyleBookActivityEntryFromStore( {
 	} );
 }
 
-export function undoBlockActivity( activity, registry ) {
+function undoBlockActivity( activity, registry ) {
 	const target = activity?.target || {};
 	const blockEditorSelect = registry?.select?.( 'core/block-editor' ) || {};
 	const blockEditorDispatch =
@@ -570,7 +570,7 @@ export function undoBlockActivity( activity, registry ) {
 	return { ok: true };
 }
 
-export function getActivityRuntimeUndoResolver( surface, registry ) {
+function getActivityRuntimeUndoResolver( surface, registry ) {
 	const blockEditorSelect = registry?.select?.( 'core/block-editor' ) || {};
 
 	switch ( surface ) {

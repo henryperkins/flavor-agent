@@ -380,7 +380,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertStringContainsString( '"candidate_type":"pattern"', $body );
 		$this->assertStringContainsString( '"source":"theme"', $body );
 		$this->assertStringContainsString( '"synced_id":""', $body );
-		$this->assertStringContainsString( '"public_safe":true', $body );
+		$this->assertStringContainsString( '"public_safe":"true"', $body );
 		$this->assertStringNotContainsString( '"categories"', $body );
 		$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\ntrue", $body );
 	}
@@ -521,7 +521,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertSame( [ 'theme-hero', 'theme-footer', 'theme-pricing' ], $result );
 		$this->assertStringContainsString( 'page=1', WordPressTestState::$remote_get_calls[0]['url'] ?? '' );
 		$this->assertStringContainsString( 'page=2', WordPressTestState::$remote_get_calls[1]['url'] ?? '' );
-		$this->assertStringContainsString( 'per_page=100', WordPressTestState::$remote_get_calls[0]['url'] ?? '' );
+		$this->assertStringContainsString( 'per_page=50', WordPressTestState::$remote_get_calls[0]['url'] ?? '' );
 		$this->assertStringContainsString( 'source=builtin', WordPressTestState::$remote_get_calls[0]['url'] ?? '' );
 	}
 

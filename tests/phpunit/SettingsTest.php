@@ -1045,6 +1045,30 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'token-xyz', $output );
 	}
 
+	public function test_pattern_ai_search_status_panel_shows_provisioning_error_details(): void {
+		WordPressTestState::$options = [
+			Config::OPTION_PATTERN_RETRIEVAL_BACKEND       => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE => [
+				'status'          => 'error',
+				'last_error_code' => 'cloudflare_pattern_ai_search_instance_list_error',
+				'last_error'      => 'Cloudflare AI Search instance list failed (HTTP 403): Authentication failed.',
+			],
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Managed pattern index provisioning failed', $output );
+		$this->assertStringContainsString( 'Error code: cloudflare_pattern_ai_search_instance_list_error', $output );
+		$this->assertStringContainsString( 'Error message: Cloudflare AI Search instance list failed (HTTP 403): Authentication failed.', $output );
+		$this->assertStringNotContainsString( 'token-xyz', $output );
+	}
+
 	public function test_pattern_ai_search_conflict_status_uses_specific_request_scoped_feedback_code(): void {
 		WordPressTestState::$current_user_id = 1;
 		WordPressTestState::$options         = [
@@ -2200,8 +2224,23 @@ final class SettingsTest extends TestCase {
 	}
 
 	private function reset_validation_state(): void {
-		Validation::reset();
-		Assets::reset();
+		$this->set_static_property( Validation::class, 'workers_ai_validation_state', null );
+		$this->set_static_property( Validation::class, 'workers_ai_validation_error_reported', false );
+		$this->set_static_property( Validation::class, 'workers_ai_dimension_warning_reported', false );
+		$this->set_static_property( Validation::class, 'qdrant_validation_state', null );
+		$this->set_static_property( Validation::class, 'qdrant_validation_error_reported', false );
+		$this->set_static_property( Validation::class, 'pattern_ai_search_validation_state', null );
+		$this->set_static_property( Validation::class, 'pattern_ai_search_validation_error_reported', false );
+		$this->set_static_property( Validation::class, 'pattern_ai_search_embedding_model_warning_reported', false );
+		$this->set_static_property( Validation::class, 'submission_value_cache', [] );
+		$this->set_static_property( Assets::class, 'admin_assets_enqueued', false );
+	}
+
+	private function set_static_property( string $class_name, string $property_name, mixed $value ): void {
+		$reflection = new \ReflectionClass( $class_name );
+		$property   = $reflection->getProperty( $property_name );
+		$property->setAccessible( true );
+		$property->setValue( null, $value );
 	}
 
 	private function patternAiSearchSignature(

@@ -142,10 +142,6 @@ final class Assets {
 		];
 	}
 
-	public static function reset(): void {
-		self::$admin_assets_enqueued = false;
-	}
-
 	private static function matches_known_page_hook( string $page_hook, string $registered_hook ): bool {
 		if ( '' === $page_hook ) {
 			return false;

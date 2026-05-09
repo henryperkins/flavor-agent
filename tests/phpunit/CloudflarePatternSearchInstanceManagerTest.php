@@ -139,6 +139,8 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 		$this->assertStringContainsString( '/ai-search/namespaces/patterns/instances', WordPressTestState::$remote_get_calls[0]['url'] );
 		$this->assertStringContainsString( '/ai-search/namespaces/patterns/instances', WordPressTestState::$remote_post_calls[0]['url'] );
 		$this->assertStringContainsString( '/items', WordPressTestState::$remote_post_calls[1]['url'] );
+		$this->assertStringContainsString( '"pattern_name":"__flavor_agent_owner__"', WordPressTestState::$remote_post_calls[1]['args']['body'] );
+		$this->assertStringContainsString( '"public_safe":"true"', WordPressTestState::$remote_post_calls[1]['args']['body'] );
 		$this->assertStringContainsString( '/items?', WordPressTestState::$remote_get_calls[1]['url'] );
 		$this->assertStringContainsString( 'metadata_filter=', WordPressTestState::$remote_get_calls[1]['url'] );
 
@@ -163,6 +165,45 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 			[ '$eq' => PatternSearchInstanceManager::site_hash() ],
 			$filter['synced_id'] ?? null
 		);
+	}
+
+	public function test_ensure_managed_instance_creates_namespace_when_missing_before_instance_creation(): void {
+		WordPressTestState::$remote_get_responses  = [
+			$this->namespace_not_found_response(),
+			$this->instance_list_response( [] ),
+			$this->owner_marker_response(),
+		];
+		WordPressTestState::$remote_post_responses = [
+			$this->namespace_create_response(),
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode(
+					[
+						'result' => PatternSearchInstanceManager::build_create_payload( '@cf/qwen/qwen3-embedding-0.6b' ),
+					]
+				),
+			],
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode( [ 'result' => [ 'id' => 'cloudflare-owner-marker-123' ] ] ),
+			],
+		];
+
+		$result = PatternSearchInstanceManager::ensure_managed_instance(
+			'account-123',
+			'token-xyz',
+			'@cf/qwen/qwen3-embedding-0.6b'
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( PatternSearchInstanceManager::managed_instance_id(), $result['instance_id'] );
+		$this->assertSame( 'created', $result['status'] );
+		$this->assertStringContainsString( '/ai-search/namespaces/patterns/instances', WordPressTestState::$remote_get_calls[0]['url'] );
+		$this->assertStringContainsString( '/ai-search/namespaces', WordPressTestState::$remote_post_calls[0]['url'] );
+		$this->assertStringNotContainsString( '/instances', WordPressTestState::$remote_post_calls[0]['url'] );
+		$this->assertStringContainsString( '"name":"patterns"', (string) WordPressTestState::$remote_post_calls[0]['args']['body'] );
+		$this->assertStringContainsString( '/ai-search/namespaces/patterns/instances', WordPressTestState::$remote_get_calls[1]['url'] );
+		$this->assertStringContainsString( '/ai-search/namespaces/patterns/instances', WordPressTestState::$remote_post_calls[1]['url'] );
 	}
 
 	public function test_ensure_managed_instance_rejects_matching_id_without_schema(): void {
@@ -373,6 +414,99 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 		$this->assertSame( $scheduled, wp_next_scheduled( PatternIndex::CRON_HOOK ) );
 	}
 
+	public function test_process_managed_instance_provisioning_repairs_empty_instance_missing_owner_marker_after_prior_marker_failure(): void {
+		$signature                   = $this->provisioning_signature();
+		WordPressTestState::$options = $this->provisioning_options(
+			$signature,
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE => [
+					'status'          => 'error',
+					'signature'       => $signature,
+					'last_error_code' => 'cloudflare_pattern_ai_search_owner_marker_missing',
+					'last_error'      => 'The existing Cloudflare AI Search managed pattern index is missing the Flavor Agent owner marker.',
+				],
+			]
+		);
+		$this->seed_usable_pattern_index();
+
+		PatternSearchInstanceManager::schedule_managed_instance_provisioning( $signature );
+
+		WordPressTestState::$remote_get_responses  = [
+			$this->instance_list_response( [ $this->managed_instance() ] ),
+			$this->owner_marker_response_empty(),
+			$this->item_list_response( [] ),
+			$this->owner_marker_response(),
+		];
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode( [ 'result' => [ 'id' => 'cloudflare-owner-marker-123' ] ] ),
+			],
+		];
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertSame(
+			$signature,
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE ] ?? ''
+		);
+		$this->assertSame(
+			'ready',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
+		);
+		$this->assertSame(
+			'repaired_owner_marker',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['managed_status'] ?? ''
+		);
+		$this->assertStringContainsString( 'source=builtin', WordPressTestState::$remote_get_calls[2]['url'] ?? '' );
+		$this->assertStringContainsString( 'per_page=50', WordPressTestState::$remote_get_calls[2]['url'] ?? '' );
+		$this->assertStringContainsString( '"public_safe":"true"', WordPressTestState::$remote_post_calls[0]['args']['body'] ?? '' );
+		$this->assertNotFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+	}
+
+	public function test_process_managed_instance_provisioning_does_not_repair_missing_owner_marker_when_instance_has_items(): void {
+		$signature                   = $this->provisioning_signature();
+		WordPressTestState::$options = $this->provisioning_options(
+			$signature,
+			[
+				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE => [
+					'status'          => 'error',
+					'signature'       => $signature,
+					'last_error_code' => 'cloudflare_pattern_ai_search_owner_marker_missing',
+					'last_error'      => 'The existing Cloudflare AI Search managed pattern index is missing the Flavor Agent owner marker.',
+				],
+			]
+		);
+
+		PatternSearchInstanceManager::schedule_managed_instance_provisioning( $signature );
+
+		WordPressTestState::$remote_get_responses = [
+			$this->instance_list_response( [ $this->managed_instance() ] ),
+			$this->owner_marker_response_empty(),
+			$this->item_list_response( [ [ 'id' => 'unknown-pattern' ] ] ),
+		];
+
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+
+		$this->assertArrayNotHasKey(
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE,
+			WordPressTestState::$options
+		);
+		$this->assertSame(
+			'error',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
+		);
+		$this->assertSame(
+			'cloudflare_pattern_ai_search_owner_marker_missing',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['last_error_code'] ?? ''
+		);
+		$this->assertStringContainsString(
+			'already contains items',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['last_error'] ?? ''
+		);
+		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+	}
+
 	public function test_process_managed_instance_provisioning_records_remote_error_without_validating_signature(): void {
 		$signature                   = $this->provisioning_signature();
 		WordPressTestState::$options = $this->provisioning_options(
@@ -408,6 +542,10 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 		$this->assertSame(
 			'cloudflare_pattern_ai_search_instance_list_error',
 			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['last_error_code'] ?? ''
+		);
+		$this->assertSame(
+			'Cloudflare AI Search instance list failed (HTTP 403): Authentication failed.',
+			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['last_error'] ?? ''
 		);
 		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
 	}
@@ -605,11 +743,65 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 		];
 	}
 
+	private function namespace_not_found_response(): array {
+		return [
+			'response' => [ 'code' => 404 ],
+			'body'     => wp_json_encode(
+				[
+					'errors' => [
+						[
+							'message' => 'namespace_not_found',
+						],
+					],
+				]
+			),
+		];
+	}
+
+	private function namespace_create_response(): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result'  => [
+						'name'        => 'patterns',
+						'description' => 'Flavor Agent managed pattern storage.',
+					],
+					'success' => true,
+				]
+			),
+		];
+	}
+
+	private function item_list_response( array $items, int $page = 1, ?int $total_count = null, int $per_page = 100 ): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result'      => $items,
+					'result_info' => [
+						'count'       => count( $items ),
+						'page'        => $page,
+						'total_count' => $total_count ?? count( $items ),
+						'per_page'    => $per_page,
+					],
+				]
+			),
+		];
+	}
+
 	private function managed_instance( string $embedding_model = '@cf/qwen/qwen3-embedding-0.6b' ): array {
 		return [
 			'id'              => PatternSearchInstanceManager::managed_instance_id(),
 			'custom_metadata' => PatternSearchInstanceManager::build_create_payload( $embedding_model )['custom_metadata'],
 			'embedding_model' => $embedding_model,
+		];
+	}
+
+	private function owner_marker_response_empty(): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode( [ 'result' => [] ] ),
 		];
 	}
 
