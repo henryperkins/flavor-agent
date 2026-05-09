@@ -172,6 +172,36 @@ describe( 'SuggestionChips', () => {
 		);
 	} );
 
+	test( 'skips the live block-context fallback work when the parent supplies request data', () => {
+		const currentRequestInput = {
+			clientId: 'block-1',
+			editorContext: {
+				block: { name: 'core/heading' },
+			},
+			contextSignature: 'live-context:block-1:prompt-drift',
+			prompt: 'Make the block feel more editorial.',
+		};
+
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					currentRequestSignature="live-signature:block-1"
+					currentRequestInput={ currentRequestInput }
+					suggestions={ [
+						{
+							label: 'Use accent color',
+							panel: 'color',
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect( mockCollectBlockContext ).not.toHaveBeenCalled();
+	} );
+
 	test( 'shows stale guidance that points back to the main AI Recommendations panel', () => {
 		act( () => {
 			getRoot().render(
@@ -237,6 +267,7 @@ describe( 'SuggestionChips', () => {
 		).toContain( 'Use accent color' );
 		expect( getContainer().querySelector( 'button' ) ).toBeNull();
 		expect( mockApplySuggestion ).not.toHaveBeenCalled();
+		expect( mockCollectBlockContext ).not.toHaveBeenCalled();
 	} );
 
 	test( 'disables an applied chip while inline feedback is visible', async () => {

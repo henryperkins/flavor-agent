@@ -2,7 +2,13 @@ import { Button, PanelBody, Notice } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
-import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { starFilled as icon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
@@ -393,14 +399,20 @@ export function BlockRecommendationsContent( {
 	const handlePromptChange = isPromptControlled
 		? onPromptChange
 		: setUncontrolledPrompt;
+	// Keep a ref to the latest stored prompt without re-running the
+	// re-init effect on every result. The effect only fires when the
+	// edited block changes (or controlled-mode toggles), preserving
+	// any in-flight draft the user has typed since the last fetch.
+	const recommendationsPromptRef = useRef( recommendations?.prompt || '' );
+	recommendationsPromptRef.current = recommendations?.prompt || '';
 
 	useEffect( () => {
 		if ( isPromptControlled ) {
 			return;
 		}
 
-		setUncontrolledPrompt( recommendations?.prompt || '' );
-	}, [ clientId, isPromptControlled, recommendations?.prompt ] );
+		setUncontrolledPrompt( recommendationsPromptRef.current );
+	}, [ clientId, isPromptControlled ] );
 	const hasApplySuccess =
 		Boolean( latestBlockActivity ) &&
 		latestBlockActivity?.id === latestUndoableActivityId;

@@ -313,6 +313,83 @@ describe( 'InspectorInjector', () => {
 		);
 	} );
 
+	test( 'preserves the in-flight prompt draft when a new recommendation result arrives', () => {
+		const BlockEdit = () => <div>Block Edit</div>;
+		const Wrapped = withAIRecommendations( BlockEdit );
+
+		act( () => {
+			getRoot().render( <Wrapped clientId="block-1" isSelected /> );
+		} );
+
+		expect(
+			mockRenderBlockRecommendationsPanel.mock.calls.at( -1 )[ 0 ].prompt
+		).toBe( 'Keep the current direction.' );
+
+		act( () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( button ) => button.textContent === 'Change block prompt'
+				)
+				?.click();
+		} );
+
+		expect(
+			mockRenderBlockRecommendationsPanel.mock.calls.at( -1 )[ 0 ].prompt
+		).toBe( 'Make the block feel more editorial.' );
+
+		// Simulate a new fetch result landing with a different stored prompt
+		// while the user has typed a fresh draft. The same Wrapped reference
+		// is reused so React updates the component instead of unmounting it.
+		currentState = {
+			...getState(),
+			store: {
+				...getState().store,
+				blockRecommendations: {
+					...getState().store.blockRecommendations,
+					prompt: 'A canonicalized prompt from the server.',
+				},
+			},
+		};
+
+		act( () => {
+			getRoot().render( <Wrapped clientId="block-1" isSelected /> );
+		} );
+
+		expect(
+			mockRenderBlockRecommendationsPanel.mock.calls.at( -1 )[ 0 ].prompt
+		).toBe( 'Make the block feel more editorial.' );
+	} );
+
+	test( 'rehydrates the prompt from stored recommendations after switching blocks', () => {
+		const BlockEdit = () => <div>Block Edit</div>;
+		const Wrapped = withAIRecommendations( BlockEdit );
+
+		act( () => {
+			getRoot().render( <Wrapped clientId="block-1" isSelected /> );
+		} );
+
+		act( () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( button ) => button.textContent === 'Change block prompt'
+				)
+				?.click();
+		} );
+
+		expect(
+			mockRenderBlockRecommendationsPanel.mock.calls.at( -1 )[ 0 ].prompt
+		).toBe( 'Make the block feel more editorial.' );
+
+		// Same Wrapped reference, new clientId — verifies the reset effect.
+		act( () => {
+			getRoot().render( <Wrapped clientId="block-2" isSelected /> );
+		} );
+
+		expect(
+			mockRenderBlockRecommendationsPanel.mock.calls.at( -1 )[ 0 ].prompt
+		).toBe( 'Keep the current direction.' );
+	} );
+
 	test( 'does not mount styles recommendations when the block is inside a contentOnly parent', () => {
 		currentState = {
 			...getState(),

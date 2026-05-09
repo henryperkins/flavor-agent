@@ -1699,6 +1699,108 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).not.toContain( 'core/paragraph' );
 	} );
 
+	test( 'preserves an in-flight uncontrolled prompt draft when a new recommendation result lands', () => {
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						prompt: 'Keep the current direction.',
+					},
+				},
+				blockStatuses: { 'block-1': 'ready' },
+			},
+		} );
+
+		renderContent();
+
+		const textarea = getTextarea();
+		const descriptor = Object.getOwnPropertyDescriptor(
+			window.HTMLTextAreaElement.prototype,
+			'value'
+		);
+
+		act( () => {
+			descriptor.set.call( textarea, 'Tighten the hero copy.' );
+			textarea.dispatchEvent(
+				new window.Event( 'input', { bubbles: true } )
+			);
+		} );
+
+		expect( getTextarea().value ).toBe( 'Tighten the hero copy.' );
+
+		// New result lands while the user is still drafting.
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						prompt: 'A canonicalized prompt from the server.',
+					},
+				},
+				blockStatuses: { 'block-1': 'ready' },
+			},
+		} );
+
+		renderContent();
+
+		expect( getTextarea().value ).toBe( 'Tighten the hero copy.' );
+	} );
+
+	test( 'rehydrates the uncontrolled prompt from the stored result when the edited block changes', () => {
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						prompt: 'Keep the current direction.',
+					},
+					'block-2': {
+						prompt: 'Make this section more visual.',
+					},
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+					'block-2': 'ready',
+				},
+			},
+			blockEditor: {
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/paragraph',
+						attributes: {},
+						innerBlocks: [],
+					},
+					'block-2': {
+						clientId: 'block-2',
+						name: 'core/paragraph',
+						attributes: {},
+						innerBlocks: [],
+					},
+				},
+			},
+		} );
+
+		renderContent( 'block-1' );
+
+		const textarea = getTextarea();
+		const descriptor = Object.getOwnPropertyDescriptor(
+			window.HTMLTextAreaElement.prototype,
+			'value'
+		);
+
+		act( () => {
+			descriptor.set.call( textarea, 'Tighten the hero copy.' );
+			textarea.dispatchEvent(
+				new window.Event( 'input', { bubbles: true } )
+			);
+		} );
+
+		expect( getTextarea().value ).toBe( 'Tighten the hero copy.' );
+
+		renderContent( 'block-2' );
+
+		expect( getTextarea().value ).toBe( 'Make this section more visual.' );
+	} );
+
 	test( 'clarifies that content-restricted blocks can still surface manual guidance', () => {
 		currentState = createState( {
 			blockEditor: {

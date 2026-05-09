@@ -11,13 +11,7 @@ import {
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 
 import {
 	collectBlockContext,
@@ -42,14 +36,12 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			clientId: null,
 			value: '',
 		} );
-		const hydratedResultKeyRef = useRef( null );
 		const {
 			recommendations,
 			editingMode,
 			isInsideContentOnly,
 			status,
 			storedContextSignature,
-			storedRequestToken,
 			storedStaleReason,
 		} = useSelect(
 			( sel ) => {
@@ -64,8 +56,6 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						store.getBlockRecommendationContextSignature(
 							clientId
 						),
-					storedRequestToken:
-						store.getBlockRequestToken?.( clientId ) || 0,
 					storedStaleReason:
 						store.getBlockStaleReason?.( clientId ) || null,
 					editingMode: editor.getBlockEditingMode( clientId ),
@@ -102,12 +92,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			},
 			[ clientId ]
 		);
-		const {
-			hasFreshResult,
-			hasStoredResult,
-			isStaleResult,
-			storedRequestSignature,
-		} = useMemo(
+		const { hasFreshResult, hasStoredResult, isStaleResult } = useMemo(
 			() =>
 				getBlockRecommendationFreshness( {
 					clientId,
@@ -158,40 +143,11 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				: [];
 
 		useEffect( () => {
-			hydratedResultKeyRef.current = null;
 			setPromptState( {
 				clientId: null,
 				value: '',
 			} );
 		}, [ clientId ] );
-
-		useEffect( () => {
-			const hydrationKey =
-				status === 'ready' && clientId && recommendations
-					? `${ clientId }:${
-							storedRequestToken || storedRequestSignature
-					  }`
-					: '';
-
-			if (
-				! hydrationKey ||
-				hydratedResultKeyRef.current === hydrationKey
-			) {
-				return;
-			}
-
-			hydratedResultKeyRef.current = hydrationKey;
-			setPromptState( {
-				clientId,
-				value: recommendations?.prompt || '',
-			} );
-		}, [
-			clientId,
-			recommendations,
-			status,
-			storedRequestSignature,
-			storedRequestToken,
-		] );
 
 		if ( ! isSelected || isDisabled ) {
 			return <BlockEdit { ...props } />;

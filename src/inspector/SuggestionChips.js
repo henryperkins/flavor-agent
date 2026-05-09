@@ -41,36 +41,61 @@ export default function SuggestionChips( {
 	tone = '',
 } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
+	// Passive mirrors never apply, and interactive chips called with both
+	// signature + input from the parent already have everything they need.
+	// Skip the live block-tree walk + selector subscriptions in those cases.
+	const hasParentRequestData =
+		Boolean( currentRequestSignature ) && Boolean( currentRequestInput );
+	const shouldComputeFallback = interactive && ! hasParentRequestData;
 	const liveContextSignature = useSelect(
-		( select ) => getLiveBlockContextSignature( select, clientId ),
-		[ clientId ]
+		( select ) =>
+			shouldComputeFallback
+				? getLiveBlockContextSignature( select, clientId )
+				: '',
+		[ clientId, shouldComputeFallback ]
 	);
 	const liveContext = useMemo( () => {
+		if ( ! shouldComputeFallback ) {
+			return null;
+		}
+
 		void liveContextSignature;
 
 		return clientId ? collectBlockContext( clientId ) : null;
-	}, [ clientId, liveContextSignature ] );
+	}, [ clientId, liveContextSignature, shouldComputeFallback ] );
 	const requestPrompt = useSelect(
 		( select ) => {
+			if ( ! shouldComputeFallback ) {
+				return '';
+			}
+
 			const store = select( STORE_NAME );
 
 			return store.getBlockRecommendations?.( clientId )?.prompt || '';
 		},
-		[ clientId ]
+		[ clientId, shouldComputeFallback ]
 	);
 	const {
 		requestSignature: fallbackRequestSignature,
 		requestInput: fallbackRequestInput,
-	} = useMemo(
-		() =>
-			buildBlockRecommendationRequestData( {
-				clientId,
-				liveContext,
-				liveContextSignature,
-				prompt: requestPrompt,
-			} ),
-		[ clientId, liveContext, liveContextSignature, requestPrompt ]
-	);
+	} = useMemo( () => {
+		if ( ! shouldComputeFallback ) {
+			return { requestSignature: null, requestInput: null };
+		}
+
+		return buildBlockRecommendationRequestData( {
+			clientId,
+			liveContext,
+			liveContextSignature,
+			prompt: requestPrompt,
+		} );
+	}, [
+		clientId,
+		liveContext,
+		liveContextSignature,
+		requestPrompt,
+		shouldComputeFallback,
+	] );
 	const resolvedRequestSignature =
 		currentRequestSignature || fallbackRequestSignature;
 	const resolvedRequestInput = currentRequestInput || fallbackRequestInput;
