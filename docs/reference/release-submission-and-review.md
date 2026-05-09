@@ -26,31 +26,36 @@ Five gates between "internally release-quality" and "approved":
 
 Skipping any of these — or treating them as internal doc work rather than reviewer-facing artifacts — invites rejection or extra rounds.
 
-## Current Submission Blockers
+## Current Submission Readiness
 
-Snapshot of work that must land before the plugin can credibly enter the review queue:
+Snapshot of work that must stay true before the plugin can credibly enter the review queue:
 
-- `readme.txt` now exists as a reviewer-facing artifact with setup, FAQ, and external-service disclosure language. Before submission it still needs final screenshot captions/assets and any final version/changelog polish against the frozen scope.
-- `lint-plugin` is currently optional in ad-hoc `npm run verify` usage (`--skip=lint-plugin` when WP-CLI or a WordPress root is unavailable). For the submission half of the plan it must be a required, weekly-tracked KPI run against a representative WordPress 7.0 environment; any skipped Plugin Check run is a recorded blocker or waiver, not a green release signal.
+- `readme.txt` now exists as a reviewer-facing artifact with setup, FAQ, external-service disclosure language, and the current `0.1.0` changelog.
+- `readme.txt` now includes the maintained source-code/build-tooling location required when the release zip ships compiled JS assets without the full `src/` tree.
+- `lint-plugin` must run against a representative WordPress 7.0 environment for release evidence. Any skipped Plugin Check run is a recorded blocker or waiver, not a green release signal.
 - The external-service disclosure inventory lives at `docs/reference/external-service-disclosure.md`. It enumerates outbound call sites (OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, GitHub) with trigger, data sent, and setup/explicit-action gates, and must stay 1:1 with the disclosure block in `readme.txt`.
 - Cron-driven outbound calls (`flavor_agent_reindex_patterns`, `flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`, `flavor_agent_warm_core_roadmap_guidance`) are audited in `docs/reference/external-service-disclosure.md`. Keep tests and docs aligned so none can phone home on activation before the corresponding backend is configured or explicitly enabled.
-- No banner, icon, or screenshot assets exist yet for the WordPress.org listing. They cannot be produced until scope is fully frozen, since they show the product visually.
+- No banner, icon, or screenshot assets exist yet for the WordPress.org listing. They are not required in the first review zip; after approval they should be committed to the WordPress.org SVN `assets/` directory before the public listing is polished.
 
-Treat each of the above as a release stop in the same sense as the cross-surface validation gates: they are additive to product-coherence work, not part of it.
+Treat the first four items as release stops in the same sense as the cross-surface validation gates: they are additive to product-coherence work, not part of it. Treat listing assets as post-approval polish unless the submission strategy changes to include screenshots before first review.
 
 ## Submission Artifacts
 
 ### `readme.txt`
 
-Required sections, in order:
+Required for the first review zip, in order:
 
 - Header (Plugin Name, Contributors, Tags, Requires at least, Tested up to, Requires PHP, Stable tag, License, License URI)
 - Description
 - Installation
 - Frequently Asked Questions
-- Screenshots (numbered captions matching the files in `assets/`)
+- Development/source-code location when compiled assets ship without the full `src/` tree
 - Changelog
 - Upgrade Notice (only when an upgrade requires user action)
+
+Required after listing screenshots are created:
+
+- Screenshots (numbered captions matching `assets/screenshot-N.png` files in SVN)
 
 Header constraints specific to this plugin:
 
@@ -72,7 +77,7 @@ The intended slug is `flavor-agent`. Slug availability must be confirmed against
 
 ### Banner And Icon
 
-Live in `assets/` in SVN, not in the plugin zip. Required files:
+Live in `assets/` in SVN, not in the plugin zip. These are required for a polished public listing after approval, not for the first review zip unless the submission strategy changes to include listing assets before approval.
 
 - `banner-772x250.png` (standard)
 - `banner-1544x500.png` (retina)
@@ -81,7 +86,7 @@ Live in `assets/` in SVN, not in the plugin zip. Required files:
 
 ### Screenshots
 
-Live in `assets/` in SVN as `screenshot-1.png`, `screenshot-2.png`, etc. Captions are written in `readme.txt` under `== Screenshots ==`, in numeric order. Captions describe the surface and the user action; they do not over-claim.
+Live in `assets/` in SVN as `screenshot-1.png`, `screenshot-2.png`, etc. Captions should be added to `readme.txt` under `== Screenshots ==` only when the matching local screenshot files exist. Do not add screenshot captions without corresponding local `assets/screenshot-N.png` files.
 
 The minimum set should cover the surfaces the surface scope review keeps for release: a block recommendation in the Inspector, a pattern recommendation in the inserter, a content recommendation in the post editor, a template recommendation in the Site Editor, a Global Styles review/apply panel, the AI Activity admin audit page, and the Settings page. Screenshots that show review-first flows should show the review state, not the applied state, to match the product framing.
 

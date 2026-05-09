@@ -47,13 +47,7 @@ final class ServerBootstrap {
 		);
 
 		if ( \is_wp_error( $result ) ) {
-			\error_log(
-				\sprintf(
-					'[flavor-agent] MCP server registration failed: %s - %s',
-					$result->get_error_code(),
-					$result->get_error_message()
-				)
-			);
+			self::handle_registration_failure( $result );
 		}
 	}
 
@@ -61,6 +55,31 @@ final class ServerBootstrap {
 		unset( $request );
 
 		return \current_user_can( 'edit_posts' ) || \current_user_can( 'edit_theme_options' );
+	}
+
+	private static function handle_registration_failure( \WP_Error $result ): void {
+		\do_action( 'flavor_agent_mcp_server_registration_failed', $result );
+
+		if ( ! self::should_log_registration_failure( $result ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- MCP registration failures otherwise make the server unavailable with no first-party diagnostic signal.
+		\error_log(
+			\sprintf(
+				'[flavor-agent] MCP server registration failed: %s - %s',
+				$result->get_error_code(),
+				$result->get_error_message()
+			)
+		);
+	}
+
+	private static function should_log_registration_failure( \WP_Error $result ): bool {
+		return (bool) \apply_filters(
+			'flavor_agent_mcp_server_registration_failure_logging_enabled',
+			true,
+			$result
+		);
 	}
 
 	private static function plugin_version(): string {

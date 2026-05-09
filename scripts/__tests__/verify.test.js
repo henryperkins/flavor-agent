@@ -646,7 +646,10 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 
 			expect( result.status ).toBe( 0 );
 
-			const wpArgs = fs.readFileSync( argsFile, 'utf8' ).trim().split( '\n' );
+			const wpArgs = fs
+				.readFileSync( argsFile, 'utf8' )
+				.trim()
+				.split( '\n' );
 			const stagedPluginDir = wpArgs[ 2 ];
 			expect( wpArgs[ 0 ] ).toBe( 'plugin' );
 			expect( wpArgs[ 1 ] ).toBe( 'check' );
@@ -662,6 +665,17 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 						stagedPluginDir,
 						'2026-05-04-231958-local-command-caveatcaveat-the-messages-below.txt'
 					)
+				)
+			).toBe( false );
+			expect(
+				fs.existsSync( path.join( stagedPluginDir, '.agents' ) )
+			).toBe( false );
+			expect(
+				fs.existsSync( path.join( stagedPluginDir, 'repomix' ) )
+			).toBe( false );
+			expect(
+				fs.existsSync(
+					path.join( stagedPluginDir, 'eslint.config.js' )
 				)
 			).toBe( false );
 			expect( wpArgs ).toContain( `--path=${ wpRoot }` );

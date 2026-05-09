@@ -70,6 +70,10 @@ Use the WordPress Abilities API. Recommendation integrations call `POST /wp-json
 
 Only data needed for the requested surface is sent after setup or explicit user action. This can include prompts, post/page content, selected block context, template/navigation/style context, guidelines, docs snippets, pattern text, and pattern metadata. See the External services section above for service-specific details.
 
+== Development ==
+
+Source code and build tooling are maintained at https://github.com/henryperkins/flavor-agent. The submitted plugin zip contains compiled editor/admin assets in `build/`; those assets are built from the repository source with `npm ci`, `composer install`, and `npm run build`.
+
 == Changelog ==
 
 = 0.1.0 =

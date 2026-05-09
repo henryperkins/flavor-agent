@@ -105,6 +105,11 @@ const MOCKED_RECOMMENDATION_SURFACES = Object.freeze( {
 		capability: 'styleBook',
 	},
 } );
+
+function recommendationAbilityRoute( abilitySlug ) {
+	return new RegExp( `${ abilitySlug }(?:/|\\?|$)` );
+}
+
 const GLOBAL_STYLES_RESPONSE = {
 	resolvedContextSignature: GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE,
 	explanation:
@@ -1847,30 +1852,33 @@ test( '@wp70-site-editor block inspector smoke applies, persists, and undoes AI 
 	const TEST_RESOLVED_SIGNATURE = 'test-resolved-signature-block-inspector';
 	const capturedRequests = [];
 
-	await page.route( '**/*recommend-block*', async ( route ) => {
-		const request = route.request();
-		let body = {};
-		try {
-			body = getAbilityRequestInput( request.postDataJSON() || {} );
-		} catch {
-			body = {};
-		}
-		capturedRequests.push( {
-			url: request.url(),
-			resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
-		} );
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				payload: {
-					...BLOCK_RESPONSE.payload,
+	await page.route(
+		recommendationAbilityRoute( 'recommend-block' ),
+		async ( route ) => {
+			const request = route.request();
+			let body = {};
+			try {
+				body = getAbilityRequestInput( request.postDataJSON() || {} );
+			} catch {
+				body = {};
+			}
+			capturedRequests.push( {
+				url: request.url(),
+				resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
+			} );
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					payload: {
+						...BLOCK_RESPONSE.payload,
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					},
 					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-				},
-				resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-			} ),
-		} );
-	} );
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/post-new.php', {
 		waitUntil: 'domcontentloaded',
@@ -2107,78 +2115,81 @@ test( '@wp70-site-editor block structural review applies, blocks locked targets,
 	const TEST_RESOLVED_SIGNATURE = 'test-resolved-signature-block-structural';
 	const capturedRequests = [];
 
-	await page.route( '**/*recommend-block*', async ( route ) => {
-		const request = route.request();
-		let body = {};
-		try {
-			body = getAbilityRequestInput( request.postDataJSON() || {} );
-		} catch {
-			body = {};
-		}
+	await page.route(
+		recommendationAbilityRoute( 'recommend-block' ),
+		async ( route ) => {
+			const request = route.request();
+			let body = {};
+			try {
+				body = getAbilityRequestInput( request.postDataJSON() || {} );
+			} catch {
+				body = {};
+			}
 
-		capturedRequests.push( {
-			resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
-		} );
+			capturedRequests.push( {
+				resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
+			} );
 
-		if ( body?.resolveSignatureOnly ) {
+			if ( body?.resolveSignatureOnly ) {
+				await route.fulfill( {
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify( {
+						payload: {
+							resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+						},
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					} ),
+				} );
+				return;
+			}
+
+			const operationContext =
+				body?.editorContext?.blockOperationContext || {};
+			const targetClientId = operationContext.targetClientId || '';
+			const targetBlockName =
+				operationContext.targetBlockName || 'core/paragraph';
+			const targetSignature = operationContext.targetSignature || '';
+			const operation = {
+				catalogVersion: 1,
+				type: 'insert_pattern',
+				patternName: BLOCK_STRUCTURAL_PATTERN_NAME,
+				targetClientId,
+				targetType: 'block',
+				targetSignature,
+				expectedTarget: {
+					clientId: targetClientId,
+					name: targetBlockName,
+				},
+				position: 'insert_after',
+			};
+
 			await route.fulfill( {
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify( {
 					payload: {
+						settings: [],
+						styles: [],
+						block: [
+							{
+								label: 'Insert structural pattern',
+								description:
+									'Insert a reviewed pattern after the selected block.',
+								type: 'pattern_replacement',
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						explanation: 'Mocked structural block recs',
 						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
 					},
 					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
 				} ),
 			} );
-			return;
 		}
-
-		const operationContext =
-			body?.editorContext?.blockOperationContext || {};
-		const targetClientId = operationContext.targetClientId || '';
-		const targetBlockName =
-			operationContext.targetBlockName || 'core/paragraph';
-		const targetSignature = operationContext.targetSignature || '';
-		const operation = {
-			catalogVersion: 1,
-			type: 'insert_pattern',
-			patternName: BLOCK_STRUCTURAL_PATTERN_NAME,
-			targetClientId,
-			targetType: 'block',
-			targetSignature,
-			expectedTarget: {
-				clientId: targetClientId,
-				name: targetBlockName,
-			},
-			position: 'insert_after',
-		};
-
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				payload: {
-					settings: [],
-					styles: [],
-					block: [
-						{
-							label: 'Insert structural pattern',
-							description:
-								'Insert a reviewed pattern after the selected block.',
-							type: 'pattern_replacement',
-							operations: [ operation ],
-							proposedOperations: [ operation ],
-							rejectedOperations: [],
-						},
-					],
-					explanation: 'Mocked structural block recs',
-					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-				},
-				resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-			} ),
-		} );
-	} );
+	);
 
 	await page.goto( '/wp-admin/post-new.php', {
 		waitUntil: 'domcontentloaded',
@@ -2442,69 +2453,74 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 	const postId = createdPost.stdout.trim();
 
 	await enableMockedRecommendationSurfaces( page, [ 'content' ] );
-	await page.route( '**/*recommend-content*', async ( route ) => {
-		const body = getAbilityRequestInput( route.request().postDataJSON() );
-		capturedRequests.push( body );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-content' ),
+		async ( route ) => {
+			const body = getAbilityRequestInput(
+				route.request().postDataJSON()
+			);
+			capturedRequests.push( body );
 
-		if ( String( body?.prompt || '' ).includes( 'force an error' ) ) {
+			if ( String( body?.prompt || '' ).includes( 'force an error' ) ) {
+				await route.fulfill( {
+					status: 500,
+					contentType: 'application/json',
+					body: JSON.stringify( {
+						code: 'content_test_error',
+						message: 'Content route failed.',
+					} ),
+				} );
+				return;
+			}
+
+			const mode = body?.mode || 'draft';
+			let response;
+
+			if ( mode === 'critique' ) {
+				response = {
+					mode: 'critique',
+					title: 'Critique result',
+					summary: 'The opening needs a more concrete first move.',
+					content: '',
+					notes: [ 'Lead with the real support moment.' ],
+					issues: [
+						{
+							original: 'Technology is changing fast.',
+							problem: 'Too generic.',
+							revision:
+								'The ticket queue changed. The customer need did not.',
+						},
+					],
+				};
+			} else if ( mode === 'edit' ) {
+				response = {
+					mode: 'edit',
+					title: 'Edited Content E2E Draft',
+					summary: 'The opener is tighter.',
+					content:
+						'Existing copy, tightened.\n\nSecond paragraph with a clearer turn.',
+					notes: [ 'Keep the sequence concrete.' ],
+					issues: [],
+				};
+			} else {
+				response = {
+					mode: 'draft',
+					title: 'Drafted Content E2E Post',
+					summary: 'A new draft was generated from the brief.',
+					content:
+						'Retail floors.\n\nWordPress themes.\n\nAgent workflows.',
+					notes: [ 'Use the progression as the spine.' ],
+					issues: [],
+				};
+			}
+
 			await route.fulfill( {
-				status: 500,
+				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify( {
-					code: 'content_test_error',
-					message: 'Content route failed.',
-				} ),
+				body: JSON.stringify( response ),
 			} );
-			return;
 		}
-
-		const mode = body?.mode || 'draft';
-		let response;
-
-		if ( mode === 'critique' ) {
-			response = {
-				mode: 'critique',
-				title: 'Critique result',
-				summary: 'The opening needs a more concrete first move.',
-				content: '',
-				notes: [ 'Lead with the real support moment.' ],
-				issues: [
-					{
-						original: 'Technology is changing fast.',
-						problem: 'Too generic.',
-						revision:
-							'The ticket queue changed. The customer need did not.',
-					},
-				],
-			};
-		} else if ( mode === 'edit' ) {
-			response = {
-				mode: 'edit',
-				title: 'Edited Content E2E Draft',
-				summary: 'The opener is tighter.',
-				content:
-					'Existing copy, tightened.\n\nSecond paragraph with a clearer turn.',
-				notes: [ 'Keep the sequence concrete.' ],
-				issues: [],
-			};
-		} else {
-			response = {
-				mode: 'draft',
-				title: 'Drafted Content E2E Post',
-				summary: 'A new draft was generated from the brief.',
-				content:
-					'Retail floors.\n\nWordPress themes.\n\nAgent workflows.',
-				notes: [ 'Use the progression as the spine.' ],
-				issues: [],
-			};
-		}
-
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( response ),
-		} );
-	} );
+	);
 
 	await page.goto( `/wp-admin/post.php?post=${ postId }&action=edit`, {
 		waitUntil: 'domcontentloaded',
@@ -2687,34 +2703,37 @@ test( 'navigation surface smoke renders advisory recommendations for a selected 
 } ) => {
 	const navigationRequests = [];
 
-	await page.route( '**/*recommend-navigation*', async ( route ) => {
-		navigationRequests.push(
-			getAbilityRequestInput( route.request().postDataJSON() )
-		);
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				explanation:
-					'Keep utility links together and simplify the top level.',
-				suggestions: [
-					{
-						label: 'Group utility links',
-						description:
-							'Move account and contact items into one submenu.',
-						category: 'structure',
-						changes: [
-							{
-								type: 'group',
-								target: 'Account and Contact',
-								detail: 'Keep the top level shorter.',
-							},
-						],
-					},
-				],
-			} ),
-		} );
-	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-navigation' ),
+		async ( route ) => {
+			navigationRequests.push(
+				getAbilityRequestInput( route.request().postDataJSON() )
+			);
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					explanation:
+						'Keep utility links together and simplify the top level.',
+					suggestions: [
+						{
+							label: 'Group utility links',
+							description:
+								'Move account and contact items into one submenu.',
+							category: 'structure',
+							changes: [
+								{
+									type: 'group',
+									target: 'Account and Contact',
+									detail: 'Keep the top level shorter.',
+								},
+							],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/post-new.php', {
 		waitUntil: 'domcontentloaded',
@@ -2771,50 +2790,58 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 } ) => {
 	const patternRequests = [];
 
-	await page.route( '**/*recommend-patterns*', async ( route ) => {
-		const requestData = getAbilityRequestInput(
-			route.request().postDataJSON()
-		);
-		const visiblePatternNames = Array.isArray(
-			requestData.visiblePatternNames
-		)
-			? requestData.visiblePatternNames
-			: [];
-		const recommendationName =
-			visiblePatternNames.find( ( name ) => name.includes( 'hero' ) ) ||
-			visiblePatternNames[ 0 ] ||
-			'playground/recommended-pattern';
+	await page.route(
+		recommendationAbilityRoute( 'recommend-patterns' ),
+		async ( route ) => {
+			const requestData = getAbilityRequestInput(
+				route.request().postDataJSON()
+			);
+			const visiblePatternNames = Array.isArray(
+				requestData.visiblePatternNames
+			)
+				? requestData.visiblePatternNames
+				: [];
+			const recommendationName =
+				visiblePatternNames.find( ( name ) =>
+					name.includes( 'hero' )
+				) ||
+				visiblePatternNames[ 0 ] ||
+				'playground/recommended-pattern';
 
-		patternRequests.push( {
-			...requestData,
-			mockedRecommendationName: recommendationName,
-		} );
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				recommendations: [
-					{
-						name: recommendationName,
-						score: 0.97,
-						reason: PATTERN_REASON,
-						categories: [ 'hero' ],
-						ranking: {
-							sourceSignals: [ 'qdrant_semantic', 'llm_ranker' ],
-							rankingHint: {
-								matchesNearbyBlock: true,
+			patternRequests.push( {
+				...requestData,
+				mockedRecommendationName: recommendationName,
+			} );
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					recommendations: [
+						{
+							name: recommendationName,
+							score: 0.97,
+							reason: PATTERN_REASON,
+							categories: [ 'hero' ],
+							ranking: {
+								sourceSignals: [
+									'qdrant_semantic',
+									'llm_ranker',
+								],
+								rankingHint: {
+									matchesNearbyBlock: true,
+								},
 							},
 						},
+					],
+					diagnostics: {
+						filteredCandidates: {
+							unreadableSyncedPatterns: 0,
+						},
 					},
-				],
-				diagnostics: {
-					filteredCandidates: {
-						unreadableSyncedPatterns: 0,
-					},
-				},
-			} ),
-		} );
-	} );
+				} ),
+			} );
+		}
+	);
 
 	await enableMockedRecommendationSurfaces( page, [ 'pattern' ] );
 	await page.goto( '/wp-admin/post-new.php', {
@@ -3435,37 +3462,43 @@ test( '@wp70-site-editor template surface smoke previews and applies executable 
 	let templateTarget = null;
 	const templateRequests = [];
 
-	await page.route( '**/*recommend-template*', async ( route ) => {
-		templateRequests.push(
-			getAbilityRequestInput( route.request().postDataJSON() )
-		);
+	await page.route(
+		recommendationAbilityRoute( 'recommend-template' ),
+		async ( route ) => {
+			templateRequests.push(
+				getAbilityRequestInput( route.request().postDataJSON() )
+			);
 
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
-				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-				suggestions: [
-					{
-						label: 'Clarify template hierarchy',
-						description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-						operations: [
-							{
-								type: 'insert_pattern',
-								patternName: TEMPLATE_PATTERN_NAME,
-								placement: 'before_block_path',
-								targetPath: TEMPLATE_MAIN_CONTENT_TARGET_PATH,
-								expectedTarget: TEMPLATE_MAIN_CONTENT_TARGET,
-							},
-						],
-						templateParts: [],
-						patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
-					},
-				],
-			} ),
-		} );
-	} );
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
+					explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+					suggestions: [
+						{
+							label: 'Clarify template hierarchy',
+							description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+							operations: [
+								{
+									type: 'insert_pattern',
+									patternName: TEMPLATE_PATTERN_NAME,
+									placement: 'before_block_path',
+									targetPath:
+										TEMPLATE_MAIN_CONTENT_TARGET_PATH,
+									expectedTarget:
+										TEMPLATE_MAIN_CONTENT_TARGET,
+								},
+							],
+							templateParts: [],
+							patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',
@@ -3579,34 +3612,38 @@ test( 'template surface keeps stale results visible but disables review and appl
 } ) => {
 	const templateRequests = [];
 
-	await page.route( '**/*recommend-template*', async ( route ) => {
-		templateRequests.push(
-			getAbilityRequestInput( route.request().postDataJSON() )
-		);
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
-				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-				suggestions: [
-					{
-						label: 'Clarify template hierarchy',
-						description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-						operations: [
-							{
-								type: 'insert_pattern',
-								patternName: TEMPLATE_PATTERN_NAME,
-								placement: 'end',
-							},
-						],
-						templateParts: [],
-						patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
-					},
-				],
-			} ),
-		} );
-	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-template' ),
+		async ( route ) => {
+			templateRequests.push(
+				getAbilityRequestInput( route.request().postDataJSON() )
+			);
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
+					explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+					suggestions: [
+						{
+							label: 'Clarify template hierarchy',
+							description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+							operations: [
+								{
+									type: 'insert_pattern',
+									patternName: TEMPLATE_PATTERN_NAME,
+									placement: 'end',
+								},
+							],
+							templateParts: [],
+							patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',
@@ -3774,35 +3811,39 @@ test( 'template surface keeps advisory-only suggestions visible without executab
 				[]
 			).length > 0
 	);
-	await page.route( '**/*recommend-template*', async ( route ) => {
-		templateRequests.push(
-			getAbilityRequestInput( route.request().postDataJSON() )
-		);
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
-				explanation: 'One advisory idea is available.',
-				suggestions: [
-					{
-						label: 'Explore an editorial collage',
-						description:
-							'Consider a more magazine-like grouping before the footer.',
-						operations: [],
-						templateParts: [
-							{
-								slug: 'footer',
-								area: 'footer',
-								reason: 'Tighten the entry sequence before the primary content.',
-							},
-						],
-						patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
-					},
-				],
-			} ),
-		} );
-	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-template' ),
+		async ( route ) => {
+			templateRequests.push(
+				getAbilityRequestInput( route.request().postDataJSON() )
+			);
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
+					explanation: 'One advisory idea is available.',
+					suggestions: [
+						{
+							label: 'Explore an editorial collage',
+							description:
+								'Consider a more magazine-like grouping before the footer.',
+							operations: [],
+							templateParts: [
+								{
+									slug: 'footer',
+									area: 'footer',
+									reason: 'Tighten the entry sequence before the primary content.',
+								},
+							],
+							patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await enableTemplateDocumentSidebar( page );
 	await registerTemplatePattern( page, {
@@ -3914,44 +3955,47 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 } ) => {
 	const templatePartRequests = [];
 
-	await page.route( '**/*recommend-template-part*', async ( route ) => {
-		templatePartRequests.push(
-			getAbilityRequestInput( route.request().postDataJSON() )
-		);
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature:
-					TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
-				explanation:
-					'Add a compact utility row at the end of the header part.',
-				suggestions: [
-					{
-						label: 'Add utility row',
-						description:
-							'Insert a compact row at the end of this header part.',
-						blockHints: [
-							{
-								path: [ 0 ],
-								label: 'Header wrapper',
-								reason: 'Keep the insertion inside the existing container.',
-							},
-						],
-						patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
-						operations: [
-							{
-								type: 'insert_pattern',
-								patternName: TEMPLATE_PART_PATTERN_NAME,
-								placement: 'after_block_path',
-								targetPath: [ 0, 1 ],
-							},
-						],
-					},
-				],
-			} ),
-		} );
-	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-template-part' ),
+		async ( route ) => {
+			templatePartRequests.push(
+				getAbilityRequestInput( route.request().postDataJSON() )
+			);
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
+					explanation:
+						'Add a compact utility row at the end of the header part.',
+					suggestions: [
+						{
+							label: 'Add utility row',
+							description:
+								'Insert a compact row at the end of this header part.',
+							blockHints: [
+								{
+									path: [ 0 ],
+									label: 'Header wrapper',
+									reason: 'Keep the insertion inside the existing container.',
+								},
+							],
+							patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
+							operations: [
+								{
+									type: 'insert_pattern',
+									patternName: TEMPLATE_PART_PATTERN_NAME,
+									placement: 'after_block_path',
+									targetPath: [ 0, 1 ],
+								},
+							],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',
@@ -4052,44 +4096,47 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 } ) => {
 	const templatePartRequests = [];
 
-	await page.route( '**/*recommend-template-part*', async ( route ) => {
-		templatePartRequests.push(
-			getAbilityRequestInput( route.request().postDataJSON() )
-		);
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature:
-					TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
-				explanation:
-					'Add a compact utility row at the end of the header part.',
-				suggestions: [
-					{
-						label: 'Add utility row',
-						description:
-							'Insert a compact row at the end of this header part.',
-						blockHints: [
-							{
-								path: [ 0 ],
-								label: 'Header wrapper',
-								reason: 'Keep the insertion inside the existing container.',
-							},
-						],
-						patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
-						operations: [
-							{
-								type: 'insert_pattern',
-								patternName: TEMPLATE_PART_PATTERN_NAME,
-								placement: 'after_block_path',
-								targetPath: [ 0, 1 ],
-							},
-						],
-					},
-				],
-			} ),
-		} );
-	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-template-part' ),
+		async ( route ) => {
+			templatePartRequests.push(
+				getAbilityRequestInput( route.request().postDataJSON() )
+			);
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
+					explanation:
+						'Add a compact utility row at the end of the header part.',
+					suggestions: [
+						{
+							label: 'Add utility row',
+							description:
+								'Insert a compact row at the end of this header part.',
+							blockHints: [
+								{
+									path: [ 0 ],
+									label: 'Header wrapper',
+									reason: 'Keep the insertion inside the existing container.',
+								},
+							],
+							patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
+							operations: [
+								{
+									type: 'insert_pattern',
+									patternName: TEMPLATE_PART_PATTERN_NAME,
+									placement: 'after_block_path',
+									targetPath: [ 0, 1 ],
+								},
+							],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',
@@ -4228,37 +4275,40 @@ test( '@wp70-site-editor template-part surface keeps advisory-only suggestions v
 } ) => {
 	const templatePartRequests = [];
 
-	await page.route( '**/*recommend-template-part*', async ( route ) => {
-		templatePartRequests.push(
-			getAbilityRequestInput( route.request().postDataJSON() )
-		);
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature:
-					TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
-				explanation: 'One advisory idea is available.',
-				suggestions: [
-					{
-						label: 'Introduce utility links',
-						description:
-							'Add a compact utility-links pattern near the navigation block.',
-						blockHints: [
-							{
-								path: [ 0 ],
-								label: 'Header wrapper',
-								blockName: 'core/group',
-								reason: 'Keep the change inside the existing header container.',
-							},
-						],
-						patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
-						operations: [],
-					},
-				],
-			} ),
-		} );
-	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-template-part' ),
+		async ( route ) => {
+			templatePartRequests.push(
+				getAbilityRequestInput( route.request().postDataJSON() )
+			);
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
+					explanation: 'One advisory idea is available.',
+					suggestions: [
+						{
+							label: 'Introduce utility links',
+							description:
+								'Add a compact utility-links pattern near the navigation block.',
+							blockHints: [
+								{
+									path: [ 0 ],
+									label: 'Header wrapper',
+									blockName: 'core/group',
+									reason: 'Keep the change inside the existing header container.',
+								},
+							],
+							patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
+							operations: [],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',
@@ -4349,33 +4399,39 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 } ) => {
 	resetWp70TemplateSmokeState();
 
-	await page.route( '**/*recommend-template*', async ( route ) => {
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
-				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-				suggestions: [
-					{
-						label: 'Clarify template hierarchy',
-						description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-						operations: [
-							{
-								type: 'insert_pattern',
-								patternName: TEMPLATE_PATTERN_NAME,
-								placement: 'before_block_path',
-								targetPath: TEMPLATE_MAIN_CONTENT_TARGET_PATH,
-								expectedTarget: TEMPLATE_MAIN_CONTENT_TARGET,
-							},
-						],
-						templateParts: [],
-						patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
-					},
-				],
-			} ),
-		} );
-	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-template' ),
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
+					explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+					suggestions: [
+						{
+							label: 'Clarify template hierarchy',
+							description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+							operations: [
+								{
+									type: 'insert_pattern',
+									patternName: TEMPLATE_PATTERN_NAME,
+									placement: 'before_block_path',
+									targetPath:
+										TEMPLATE_MAIN_CONTENT_TARGET_PATH,
+									expectedTarget:
+										TEMPLATE_MAIN_CONTENT_TARGET,
+								},
+							],
+							templateParts: [],
+							patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',
@@ -4505,33 +4561,39 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 
 	const editedInsertedContent = 'Inserted content edited after apply';
 
-	await page.route( '**/*recommend-template*', async ( route ) => {
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
-				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-				suggestions: [
-					{
-						label: 'Clarify template hierarchy',
-						description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-						operations: [
-							{
-								type: 'insert_pattern',
-								patternName: TEMPLATE_PATTERN_NAME,
-								placement: 'before_block_path',
-								targetPath: TEMPLATE_MAIN_CONTENT_TARGET_PATH,
-								expectedTarget: TEMPLATE_MAIN_CONTENT_TARGET,
-							},
-						],
-						templateParts: [],
-						patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
-					},
-				],
-			} ),
-		} );
-	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-template' ),
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
+					explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+					suggestions: [
+						{
+							label: 'Clarify template hierarchy',
+							description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+							operations: [
+								{
+									type: 'insert_pattern',
+									patternName: TEMPLATE_PATTERN_NAME,
+									placement: 'before_block_path',
+									targetPath:
+										TEMPLATE_MAIN_CONTENT_TARGET_PATH,
+									expectedTarget:
+										TEMPLATE_MAIN_CONTENT_TARGET,
+								},
+							],
+							templateParts: [],
+							patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
+						},
+					],
+				} ),
+			} );
+		}
+	);
 
 	await page.goto( '/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',

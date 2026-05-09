@@ -1,12 +1,14 @@
 .claude
 .codex
 .cursor
+.agents
 .devcontainer
 .github
 .git
 .gitattributes
 .vscode
 .eslintrc.js
+eslint.config.js
 .gitignore
 .distignore
 .env*
@@ -43,6 +45,7 @@ playwright.wp70.config.js
 *.md
 !readme.txt
 repomix*.json
+repomix
 scripts
 src
 STATUS.md
