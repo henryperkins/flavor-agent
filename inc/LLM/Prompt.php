@@ -40,6 +40,10 @@ final class Prompt {
 		'pc',
 	];
 
+	private const THEME_TOKEN_PROMPT_MAX_ITEMS = 60;
+
+	private const THEME_TOKEN_PROMPT_MAX_MAP_ITEMS = 8;
+
 	private const BLOCK_OPERATION_PROMPT_MAX_PATTERNS = 20;
 
 	private const BLOCK_OPERATION_PROMPT_ALLOWED_ACTIONS = [
@@ -168,14 +172,16 @@ SYSTEM;
 		array $docs_guidance = [],
 		array $execution_contract = []
 	): string {
-		$block  = $context['block'] ?? [];
-		$tokens = $context['themeTokens'] ?? [];
+		$max_tokens = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'block' );
+		$budget     = new PromptBudget( $max_tokens );
+		$block      = $context['block'] ?? [];
+		$tokens     = $context['themeTokens'] ?? [];
 
-			$parts = [];
+		$parts = [];
 
-			$parts[] = '## Block';
-			$parts[] = 'Name: ' . ( $block['name'] ?? 'unknown' );
-			$parts[] = 'Title: ' . ( $block['title'] ?? '' );
+		$parts[] = '## Block';
+		$parts[] = 'Name: ' . ( $block['name'] ?? 'unknown' );
+		$parts[] = 'Title: ' . ( $block['title'] ?? '' );
 
 		if ( array_key_exists( 'inspectorPanels', $block ) ) {
 			$parts[] = 'Available panels: ' . wp_json_encode(
@@ -245,9 +251,11 @@ SYSTEM;
 			$parts[] = 'Child blocks: ' . (int) $block['childCount'];
 		}
 
-			$structural_identity = is_array( $block['structuralIdentity'] ?? null ) ? $block['structuralIdentity'] : [];
+		$budget->add_section( 'block', implode( "\n", $parts ), 100, true );
+		$parts = [];
+
+		$structural_identity = is_array( $block['structuralIdentity'] ?? null ) ? $block['structuralIdentity'] : [];
 		if ( ! empty( $structural_identity ) ) {
-			$parts[] = '';
 			$parts[] = '## Structural identity';
 
 			if ( ! empty( $structural_identity['role'] ) ) {
@@ -277,6 +285,9 @@ SYSTEM;
 			if ( ! empty( $structural_identity['evidence'] ) ) {
 				$parts[] = 'Evidence: ' . wp_json_encode( $structural_identity['evidence'] );
 			}
+
+			$budget->add_section( 'structural_identity', implode( "\n", $parts ), 86 );
+			$parts = [];
 		}
 
 		if ( ! empty( $block['editingMode'] ) && $block['editingMode'] !== 'default' ) {
@@ -286,7 +297,6 @@ SYSTEM;
 		$restrictions = self::get_block_restrictions( $block );
 
 		if ( $restrictions['contentOnly'] ) {
-			$parts[] = '';
 			$parts[] = '## Content-only restrictions';
 			$parts[] = ! empty( $block['isInsideContentOnly'] )
 				? 'This block is inside a contentOnly container.'
@@ -305,69 +315,70 @@ SYSTEM;
 			$parts[] = 'Block visibility: ' . wp_json_encode( $block['blockVisibility'] );
 		}
 
+		$budget->add_section( 'block_constraints', implode( "\n", $parts ), 92, $restrictions['contentOnly'] );
+		$parts = [];
+
 		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context( (string) ( $block['name'] ?? '' ) );
 		if ( '' !== $guidelines_context ) {
-			$parts[] = '';
-			$parts[] = $guidelines_context;
+			$budget->add_section( 'site_guidelines', $guidelines_context, 82 );
 		}
 
-		$parts[] = '';
 		$parts[] = '## Theme Tokens';
 
 		if ( ! empty( $tokens['colors'] ) ) {
-			$parts[] = 'Colors: ' . implode( ', ', array_slice( (array) $tokens['colors'], 0, 60 ) );
+			$parts[] = 'Colors: ' . implode( ', ', self::limit_prompt_list( $tokens['colors'] ) );
 		}
 
 		if ( ! empty( $tokens['colorPresets'] ) ) {
-			$parts[] = 'Color preset details: ' . wp_json_encode( array_slice( (array) $tokens['colorPresets'], 0, 60 ) );
+			$parts[] = 'Color preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['colorPresets'] ) );
 		}
 
 		if ( ! empty( $tokens['gradients'] ) ) {
-			$parts[] = 'Gradients: ' . implode( ', ', array_slice( (array) $tokens['gradients'], 0, 60 ) );
+			$parts[] = 'Gradients: ' . implode( ', ', self::limit_prompt_list( $tokens['gradients'] ) );
 		}
 
 		if ( ! empty( $tokens['gradientPresets'] ) ) {
-			$parts[] = 'Gradient preset details: ' . wp_json_encode( array_slice( (array) $tokens['gradientPresets'], 0, 60 ) );
+			$parts[] = 'Gradient preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['gradientPresets'] ) );
 		}
 
 		if ( ! empty( $tokens['fontSizes'] ) ) {
-			$parts[] = 'Font sizes: ' . implode( ', ', array_slice( (array) $tokens['fontSizes'], 0, 60 ) );
+			$parts[] = 'Font sizes: ' . implode( ', ', self::limit_prompt_list( $tokens['fontSizes'] ) );
 		}
 
 		if ( ! empty( $tokens['fontSizePresets'] ) ) {
-			$parts[] = 'Font size preset details: ' . wp_json_encode( array_slice( (array) $tokens['fontSizePresets'], 0, 60 ) );
+			$parts[] = 'Font size preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['fontSizePresets'] ) );
 		}
 
 		if ( ! empty( $tokens['fontFamilies'] ) ) {
-			$parts[] = 'Font families: ' . implode( ', ', array_slice( (array) $tokens['fontFamilies'], 0, 60 ) );
+			$parts[] = 'Font families: ' . implode( ', ', self::limit_prompt_list( $tokens['fontFamilies'] ) );
 		}
 
 		if ( ! empty( $tokens['fontFamilyPresets'] ) ) {
-			$parts[] = 'Font family preset details: ' . wp_json_encode( array_slice( (array) $tokens['fontFamilyPresets'], 0, 60 ) );
+			$parts[] = 'Font family preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['fontFamilyPresets'] ) );
 		}
 
 		if ( ! empty( $tokens['spacing'] ) ) {
-			$parts[] = 'Spacing: ' . implode( ', ', array_slice( (array) $tokens['spacing'], 0, 60 ) );
+			$parts[] = 'Spacing: ' . implode( ', ', self::limit_prompt_list( $tokens['spacing'] ) );
 		}
 
 		if ( ! empty( $tokens['spacingPresets'] ) ) {
-			$parts[] = 'Spacing preset details: ' . wp_json_encode( array_slice( (array) $tokens['spacingPresets'], 0, 60 ) );
+			$parts[] = 'Spacing preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['spacingPresets'] ) );
 		}
 
 		if ( ! empty( $tokens['shadows'] ) ) {
-			$parts[] = 'Shadows: ' . implode( ', ', array_slice( (array) $tokens['shadows'], 0, 60 ) );
+			$parts[] = 'Shadows: ' . implode( ', ', self::limit_prompt_list( $tokens['shadows'] ) );
 		}
 
 		if ( ! empty( $tokens['shadowPresets'] ) ) {
-			$parts[] = 'Shadow preset details: ' . wp_json_encode( array_slice( (array) $tokens['shadowPresets'], 0, 60 ) );
+			$parts[] = 'Shadow preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['shadowPresets'] ) );
 		}
 
 		if ( ! empty( $tokens['duotone'] ) ) {
-			$parts[] = 'Duotone presets: ' . implode( ', ', (array) $tokens['duotone'] );
+			$parts[] = 'Duotone presets: ' . implode( ', ', self::limit_prompt_list( $tokens['duotone'] ) );
 		}
 
 		if ( ! empty( $tokens['duotonePresets'] ) ) {
-			$parts[] = 'Duotone preset details: ' . wp_json_encode( $tokens['duotonePresets'] );
+			$parts[] = 'Duotone preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['duotonePresets'] ) );
 		}
 
 		if ( ! empty( $tokens['diagnostics'] ) ) {
@@ -383,16 +394,18 @@ SYSTEM;
 		}
 
 		if ( ! empty( $tokens['elementStyles'] ) ) {
-			$parts[] = 'Global element styles: ' . wp_json_encode( $tokens['elementStyles'] );
+			$parts[] = 'Global element styles: ' . wp_json_encode( self::limit_prompt_map( $tokens['elementStyles'] ) );
 		}
 
 		if ( ! empty( $tokens['blockPseudoStyles'] ) ) {
-			$parts[] = 'Block pseudo-class styles (hover/focus/active): ' . wp_json_encode( $tokens['blockPseudoStyles'] );
+			$parts[] = 'Block pseudo-class styles (hover/focus/active): ' . wp_json_encode( self::limit_prompt_map( $tokens['blockPseudoStyles'] ) );
 		}
+
+		$budget->add_section( 'theme_tokens', implode( "\n", $parts ), 35 );
+		$parts = [];
 
 		$has_sibling_summaries = ! empty( $context['siblingSummariesBefore'] ) || ! empty( $context['siblingSummariesAfter'] );
 		if ( $has_sibling_summaries || ! empty( $context['siblingsBefore'] ) || ! empty( $context['siblingsAfter'] ) ) {
-			$parts[] = '';
 			$parts[] = '## Surrounding blocks';
 
 			$before_summaries = self::format_sibling_summaries(
@@ -415,15 +428,19 @@ SYSTEM;
 			} elseif ( ! empty( $context['siblingsAfter'] ) ) {
 				$parts[] = 'After: ' . implode( ', ', (array) $context['siblingsAfter'] );
 			}
+
+			$budget->add_section( 'surrounding_blocks', implode( "\n", $parts ), 78 );
+			$parts = [];
 		}
 
 		$parent_context = self::format_parent_context(
 			is_array( $context['parentContext'] ?? null ) ? $context['parentContext'] : null
 		);
 		if ( '' !== $parent_context ) {
-			$parts[] = '';
 			$parts[] = '## Parent container';
 			$parts[] = $parent_context;
+			$budget->add_section( 'parent_container', implode( "\n", $parts ), 80 );
+			$parts = [];
 		}
 
 		$structural_ancestors = self::format_structural_ancestors(
@@ -431,31 +448,33 @@ SYSTEM;
 			is_array( $block['structuralIdentity'] ?? null ) ? $block['structuralIdentity'] : []
 		);
 		if ( '' !== $structural_ancestors ) {
-			$parts[] = '';
 			$parts[] = '## Structural ancestors';
 			$parts[] = $structural_ancestors;
+			$budget->add_section( 'structural_ancestors', implode( "\n", $parts ), 72 );
+			$parts = [];
 		}
 
 		$structural_branch = self::format_structural_branch(
 			is_array( $context['structuralBranch'] ?? null ) ? $context['structuralBranch'] : []
 		);
 		if ( '' !== $structural_branch ) {
-			$parts[] = '';
 			$parts[] = '## Structural branch';
 			$parts[] = $structural_branch;
+			$budget->add_section( 'structural_branch', implode( "\n", $parts ), 70 );
+			$parts = [];
 		}
 
 		$block_operation_context = self::format_block_operation_context(
 			is_array( $context['blockOperationContext'] ?? null ) ? $context['blockOperationContext'] : []
 		);
 		if ( '' !== $block_operation_context ) {
-			$parts[] = '';
 			$parts[] = '## Allowed block pattern actions';
 			$parts[] = $block_operation_context;
+			$budget->add_section( 'block_operations', implode( "\n", $parts ), 84 );
+			$parts = [];
 		}
 
 		if ( ! empty( $docs_guidance ) ) {
-			$parts[] = '';
 			$parts[] = '## WordPress Developer Guidance';
 
 			foreach ( array_slice( $docs_guidance, 0, 3 ) as $guidance ) {
@@ -469,15 +488,34 @@ SYSTEM;
 					$parts[] = '- ' . $summary;
 				}
 			}
+
+			$budget->add_section( 'docs_guidance', implode( "\n", $parts ), 30 );
+			$parts = [];
 		}
 
 		if ( ! empty( $prompt ) ) {
-			$parts[] = '';
 			$parts[] = '## User instruction';
 			$parts[] = $prompt;
+			$budget->add_section( 'user_instruction', implode( "\n", $parts ), 98, true );
 		}
 
-		return implode( "\n", $parts );
+		return $budget->assemble();
+	}
+
+	private static function limit_prompt_list( mixed $value, int $limit = self::THEME_TOKEN_PROMPT_MAX_ITEMS ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		return array_slice( $value, 0, max( 0, $limit ) );
+	}
+
+	private static function limit_prompt_map( mixed $value, int $limit = self::THEME_TOKEN_PROMPT_MAX_MAP_ITEMS ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		return array_slice( $value, 0, max( 0, $limit ), true );
 	}
 
 	private static function format_structural_ancestors( array $ancestors, array $selected_identity = [] ): string {

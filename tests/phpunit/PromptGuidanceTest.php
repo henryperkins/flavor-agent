@@ -376,6 +376,80 @@ final class PromptGuidanceTest extends TestCase {
 		$this->assertStringNotContainsString( 'shadow-60', $prompt );
 	}
 
+	public function test_block_prompt_uses_budget_filter_and_drops_low_priority_context_first(): void {
+		$captured       = [];
+		$budget_filter  = static fn(): int => 2000;
+		$capture_filter = static function ( int $value, string $surface ) use ( &$captured ): int {
+			$captured[] = $surface;
+
+			return $value;
+		};
+		add_filter( 'flavor_agent_prompt_budget_max_tokens', $capture_filter, 9, 2 );
+		add_filter( 'flavor_agent_prompt_budget_max_tokens', $budget_filter, 10 );
+
+		try {
+			$prompt = Prompt::build_user(
+				[
+					'block'            => [
+						'name'              => 'core/paragraph',
+						'title'             => 'Paragraph',
+						'currentAttributes' => [
+							'content' => 'Intro paragraph.',
+						],
+					],
+					'themeTokens'      => [
+						'colors' => $this->buildTokenSequence( 'color', 24 ),
+					],
+					'structuralBranch' => [
+						[
+							'block'    => 'core/group',
+							'children' => [
+								[
+									'block' => 'core/paragraph',
+								],
+							],
+						],
+					],
+				],
+				'Tighten the copy.',
+				[
+					[
+						'title'   => 'Long docs',
+						'excerpt' => str_repeat( 'Documentation guidance. ', 600 ),
+					],
+				]
+			);
+		} finally {
+			remove_filter( 'flavor_agent_prompt_budget_max_tokens', $capture_filter, 9 );
+			remove_filter( 'flavor_agent_prompt_budget_max_tokens', $budget_filter, 10 );
+		}
+
+		$this->assertContains( 'block', $captured );
+		$this->assertStringContainsString( '## Block', $prompt );
+		$this->assertStringContainsString( '## User instruction', $prompt );
+		$this->assertStringContainsString( 'Tighten the copy.', $prompt );
+		$this->assertStringNotContainsString( '## WordPress Developer Guidance', $prompt );
+	}
+
+	public function test_block_prompt_keeps_up_to_twenty_allowed_patterns_without_budget_pressure(): void {
+		$prompt = Prompt::build_user(
+			[
+				'block'                 => [
+					'name' => 'core/paragraph',
+				],
+				'blockOperationContext' => [
+					'targetClientId'  => 'paragraph-1',
+					'targetBlockName' => 'core/paragraph',
+					'targetSignature' => 'signature-123',
+					'allowedPatterns' => $this->buildAllowedPatterns( 21 ),
+				],
+			]
+		);
+
+		$this->assertStringContainsString( 'theme/pattern-19', $prompt );
+		$this->assertStringNotContainsString( 'theme/pattern-20', $prompt );
+	}
+
 	private function buildTokenSequence( string $prefix, int $count ): array {
 		$tokens = [];
 
@@ -384,5 +458,22 @@ final class PromptGuidanceTest extends TestCase {
 		}
 
 		return $tokens;
+	}
+
+	private function buildAllowedPatterns( int $count ): array {
+		$patterns = [];
+
+		for ( $index = 0; $index < $count; $index++ ) {
+			$patterns[] = [
+				'name'           => sprintf( 'theme/pattern-%02d', $index ),
+				'title'          => sprintf( 'Pattern %02d', $index ),
+				'source'         => 'theme',
+				'categories'     => [ 'featured' ],
+				'blockTypes'     => [ 'core/paragraph' ],
+				'allowedActions' => [ 'insert_after' ],
+			];
+		}
+
+		return $patterns;
 	}
 }
