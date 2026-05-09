@@ -340,6 +340,7 @@ export default function NavigationRecommendations( {
 		revalidateNavigationReviewFreshness,
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
+	const isPromptInitializedRef = useRef( false );
 	const previousClientId = useRef( clientId );
 	const hydratedResultKeyRef = useRef( '' );
 	const liveContextSignature = useSelect(
@@ -465,6 +466,7 @@ export default function NavigationRecommendations( {
 
 		previousClientId.current = clientId;
 		hydratedResultKeyRef.current = '';
+		isPromptInitializedRef.current = false;
 
 		clearNavigationRecommendations();
 		setPrompt( '' );
@@ -483,6 +485,7 @@ export default function NavigationRecommendations( {
 		}
 
 		hydratedResultKeyRef.current = hydrationKey;
+		isPromptInitializedRef.current = true;
 		setPrompt( requestPrompt || '' );
 	}, [
 		clientId,
@@ -525,7 +528,9 @@ export default function NavigationRecommendations( {
 		requestInput,
 	] );
 	const handleRefresh = useCallback( () => {
-		const refreshPrompt = prompt.trim() || requestPrompt || '';
+		const refreshPrompt = isPromptInitializedRef.current
+			? prompt
+			: requestPrompt || '';
 		const refreshInput = buildNavigationFetchInput( {
 			block: navigationBlock,
 			blockClientId: clientId,
@@ -554,6 +559,11 @@ export default function NavigationRecommendations( {
 		prompt,
 		requestPrompt,
 	] );
+
+	const handlePromptChange = useCallback( ( nextPrompt ) => {
+		isPromptInitializedRef.current = true;
+		setPrompt( nextPrompt );
+	}, [] );
 
 	if ( navigationBlock?.name !== 'core/navigation' ) {
 		return null;
@@ -647,7 +657,7 @@ export default function NavigationRecommendations( {
 						<SurfaceComposer
 							title="Ask About Navigation"
 							prompt={ prompt }
-							onPromptChange={ setPrompt }
+							onPromptChange={ handlePromptChange }
 							onFetch={ handleFetch }
 							placeholder="Describe the structure or behavior you want."
 							label="What do you want to improve about this navigation?"
@@ -755,7 +765,7 @@ export default function NavigationRecommendations( {
 							<SurfaceComposer
 								title="Ask Flavor Agent"
 								prompt={ prompt }
-								onPromptChange={ setPrompt }
+								onPromptChange={ handlePromptChange }
 								onFetch={ handleFetch }
 								placeholder="Describe the structure or behavior you want."
 								label="What do you want to improve about this navigation?"

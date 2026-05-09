@@ -355,6 +355,22 @@ final class Repository {
 		$sort_field     = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
 		$sort_direction = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
 		$timezone       = self::resolve_activity_timezone();
+		$linked_activity_id = trim( (string) ( $filters['activity'] ?? '' ) );
+
+		if ( '' !== $linked_activity_id ) {
+			$linked_activity_page = self::resolve_admin_activity_page_for_id(
+				$filters,
+				$linked_activity_id,
+				$per_page,
+				$sort_field,
+				$sort_direction,
+				$timezone
+			);
+
+			if ( $linked_activity_page > 0 ) {
+				$page = $linked_activity_page;
+			}
+		}
 
 		if ( ! self::admin_projection_backfill_pending() ) {
 			return self::query_admin_projected(
@@ -424,6 +440,76 @@ final class Repository {
 				$filter_context
 			),
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return int
+	 */
+	private static function resolve_admin_activity_page_for_id(
+		array $filters,
+		string $linked_activity_id,
+		int $per_page,
+		string $sort_field,
+		string $sort_direction,
+		\DateTimeZone $timezone
+	): int {
+		if ( '' === $linked_activity_id || $per_page <= 0 ) {
+			return 0;
+		}
+
+		$candidate_rows = self::query_candidate_rows( $filters );
+		$history_rows   = self::requires_full_history_resolution( $filters )
+			? self::query_admin_history_rows( $candidate_rows )
+			: $candidate_rows;
+		$status_map        = self::resolve_admin_row_statuses( $history_rows );
+		$resolved_records  = self::resolve_admin_records(
+			$candidate_rows,
+			$status_map,
+			$timezone
+		);
+		$filter_context    = self::build_admin_filter_context( $filters, $timezone );
+		$evaluated_records = self::evaluate_admin_records(
+			$resolved_records,
+			$filter_context
+		);
+		$filtered_records  = array_values(
+			array_map(
+				static fn ( array $evaluated_record ): array => $evaluated_record['record'],
+				array_filter(
+					$evaluated_records,
+					static fn ( array $evaluated_record ): bool => self::record_matches_admin_filters(
+						$evaluated_record,
+						$filter_context['activeFilters']
+					)
+				)
+			)
+		);
+
+		if ( [] === $filtered_records ) {
+			return 0;
+		}
+
+		self::sort_admin_records(
+			$filtered_records,
+			$sort_field,
+			$sort_direction
+		);
+
+		$index = array_search(
+			$linked_activity_id,
+			array_map(
+				static fn ( array $record ): string => (string) ( $record['id'] ?? '' ),
+				$filtered_records
+			),
+			true
+		);
+
+		if ( false === $index ) {
+			return 0;
+		}
+
+		return intdiv( (int) $index, $per_page ) + 1;
 	}
 
 	/**

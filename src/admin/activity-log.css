@@ -892,18 +892,25 @@ body.settings_page_flavor-agent-activity {
     width: 100%;
   }
 
-  .flavor-agent-activity-log__controls-main {
-    align-items: stretch;
-  }
+	.flavor-agent-activity-log__controls-main {
+		align-items: stretch;
+	}
 
-  .flavor-agent-activity-log .dataviews-filters__container-visibility-toggle,
-  .flavor-agent-activity-log .dataviews-filters__visibility-toggle,
-  .flavor-agent-activity-log .dataviews-view-config__toggle-wrapper,
-  .flavor-agent-activity-log
-    .dataviews-view-config__toggle-wrapper
-    > .components-button {
-    width: 100%;
-  }
+	.flavor-agent-activity-log__toolbar-control {
+		flex-wrap: wrap;
+		white-space: normal;
+	}
+
+	.flavor-agent-activity-log .dataviews-filters__container-visibility-toggle,
+	.flavor-agent-activity-log .dataviews-filters__visibility-toggle,
+	.flavor-agent-activity-log .dataviews-view-config__toggle-wrapper,
+	.flavor-agent-activity-log
+		.dataviews-view-config__toggle-wrapper
+		> .components-button {
+		width: auto;
+		flex: 1 1 auto;
+		min-width: 0;
+	}
 }
 
 .flavor-agent-activity-log .components-button.is-primary,

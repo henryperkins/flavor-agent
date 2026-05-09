@@ -336,7 +336,7 @@ function isValidActivityDay( value ) {
 	);
 }
 
-function getActivityRequestUrl( bootData, view ) {
+function getActivityRequestUrl( bootData, view, linkedActivityId ) {
 	const params = new URLSearchParams( {
 		global: '1',
 		page: String( view.page || 1 ),
@@ -350,6 +350,10 @@ function getActivityRequestUrl( bootData, view ) {
 	if ( view.sort?.field ) {
 		params.set( 'sortField', view.sort.field );
 		params.set( 'sortDirection', view.sort.direction || 'desc' );
+	}
+
+	if ( typeof linkedActivityId === 'string' && '' !== linkedActivityId.trim() ) {
+		params.set( 'activity', linkedActivityId.trim() );
 	}
 
 	appendExplicitFilter( params, 'surface', getViewFilter( view, 'surface' ) );
@@ -808,6 +812,9 @@ export function ActivityLogApp( { bootData } ) {
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ reloadToken, setReloadToken ] = useState( 0 );
 	const linkedActivityEntryId = useMemo( getLinkedActivityEntryId, [] );
+	const [ requestActivityId, setRequestActivityId ] = useState(
+		linkedActivityEntryId
+	);
 	const [ selectedEntryId, setSelectedEntryId ] = useState(
 		linkedActivityEntryId
 	);
@@ -826,8 +833,8 @@ export function ActivityLogApp( { bootData } ) {
 		[ requestedView, responseData.paginationInfo, viewOptions ]
 	);
 	const requestUrl = useMemo(
-		() => getActivityRequestUrl( bootData, requestedView ),
-		[ bootData, requestedView ]
+		() => getActivityRequestUrl( bootData, requestedView, requestActivityId ),
+		[ bootData, requestedView, requestActivityId ]
 	);
 	const invalidDayFilter = hasInvalidDayFilter( requestedView );
 	const perPageSizes = useMemo(
@@ -1298,6 +1305,10 @@ export function ActivityLogApp( { bootData } ) {
 
 	useEffect( () => {
 		if ( responseData.entries.length === 0 ) {
+			if ( requestActivityId ) {
+				setRequestActivityId( '' );
+			}
+
 			if ( selectedEntryId && ! isLoading ) {
 				setSelectedEntryId( '' );
 			}
@@ -1311,7 +1322,16 @@ export function ActivityLogApp( { bootData } ) {
 		) {
 			setSelectedEntryId( responseData.entries[ 0 ].id );
 		}
-	}, [ isLoading, responseData.entries, selectedEntryId ] );
+
+		if (
+			requestActivityId &&
+			! responseData.entries.some(
+				( entry ) => entry.id === requestActivityId
+			)
+		) {
+			setRequestActivityId( '' );
+		}
+	}, [ isLoading, requestActivityId, responseData.entries, selectedEntryId ] );
 
 	const summaryCards = getSummaryCards( responseData.summary );
 	const isViewModified = ! areActivityViewsEqual(
@@ -1379,7 +1399,13 @@ export function ActivityLogApp( { bootData } ) {
 				data={ responseData.entries }
 				fields={ fields }
 				view={ effectiveView }
-				onChangeView={ setView }
+				onChangeView={ ( nextView ) => {
+					if ( requestActivityId ) {
+						setRequestActivityId( '' );
+					}
+
+					setView( nextView );
+				} }
 				getItemId={ ( item ) => item.id }
 				paginationInfo={ responseData.paginationInfo }
 				defaultLayouts={ {
@@ -1390,7 +1416,13 @@ export function ActivityLogApp( { bootData } ) {
 					},
 				} }
 				isItemClickable={ () => true }
-				onClickItem={ ( item ) => setSelectedEntryId( item.id ) }
+				onClickItem={ ( item ) => {
+					if ( requestActivityId ) {
+						setRequestActivityId( '' );
+					}
+
+					setSelectedEntryId( item.id );
+				} }
 				config={ {
 					perPageSizes,
 				} }

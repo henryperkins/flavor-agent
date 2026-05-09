@@ -160,6 +160,11 @@ final class Agent_Controller {
 							'default'           => ActivityRepository::DEFAULT_PER_PAGE,
 							'sanitize_callback' => 'absint',
 						],
+						'activity'                   => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
 						'search'                     => [
 							'required'          => false,
 							'type'              => 'string',
@@ -465,6 +470,7 @@ final class Agent_Controller {
 					'dayOperator'                => $request->get_param( 'dayOperator' ),
 					'dayRelativeValue'           => $request->get_param( 'dayRelativeValue' ),
 					'dayRelativeUnit'            => $request->get_param( 'dayRelativeUnit' ),
+					'activity'                   => $request->get_param( 'activity' ),
 				]
 			);
 
