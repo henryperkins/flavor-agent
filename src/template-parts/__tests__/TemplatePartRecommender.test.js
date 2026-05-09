@@ -423,6 +423,63 @@ describe( 'TemplatePartRecommender', () => {
 		);
 	} );
 
+	test( 'labels template-part review controls with the suggestion name', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Replace navigation block',
+						description:
+							'Swap the existing navigation block for a utility-links pattern.',
+						operations: [
+							{
+								type: 'replace_block_with_pattern',
+								patternName: 'theme/utility-links',
+								expectedBlockName: 'core/navigation',
+								targetPath: [ 0 ],
+							},
+						],
+					},
+					{
+						label: 'Add header search',
+						description: 'Insert search into the header.',
+						operations: [
+							{
+								type: 'insert_pattern',
+								patternName: 'theme/search',
+								placement: 'end',
+							},
+						],
+					},
+				],
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
+				templatePartStatus: 'ready',
+			},
+		} );
+
+		await renderPanel();
+
+		const reviewButtons = Array.from(
+			getContainer().querySelectorAll(
+				'.flavor-agent-card--template .flavor-agent-card__apply'
+			)
+		);
+		const selectedButton = reviewButtons.find(
+			( button ) => button.textContent === 'Reviewing'
+		);
+		const searchButton = reviewButtons.find(
+			( button ) => button.textContent === 'Review'
+		);
+
+		expect( selectedButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Reviewing Replace navigation block'
+		);
+		expect( searchButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Review Add header search'
+		);
+	} );
+
 	test( 'keeps stale template-part results visible but disables confirm apply when the stored context signature mismatches', async () => {
 		currentState = createState( {
 			store: {

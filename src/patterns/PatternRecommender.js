@@ -210,6 +210,7 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 			<PatternFilteredCandidateNotice diagnostics={ diagnostics } />
 			<div className="flavor-agent-pattern-shelf__items">
 				{ items.map( ( { pattern, recommendation } ) => {
+					const patternTitle = getPatternTitle( pattern );
 					const insights = getPatternRecommendationInsights(
 						pattern,
 						recommendation
@@ -222,7 +223,7 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 						>
 							<div className="flavor-agent-pattern-shelf__body">
 								<div className="flavor-agent-pattern-shelf__title">
-									{ getPatternTitle( pattern ) }
+									{ patternTitle }
 								</div>
 								{ recommendation?.reason && (
 									<p className="flavor-agent-pattern-shelf__reason">
@@ -247,6 +248,7 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 								size="small"
 								onClick={ () => onInsert( pattern ) }
 								className="flavor-agent-card__apply"
+								aria-label={ `Insert ${ patternTitle }` }
 							>
 								Insert
 							</Button>
@@ -324,6 +326,11 @@ export default function PatternRecommender() {
 		( select ) => select( editorStore ).getCurrentPostType(),
 		[]
 	);
+	const siteEditorPostType = useSelect( ( select ) => {
+		const editSite = select( 'core/edit-site' );
+
+		return getNonEmptyString( editSite?.getEditedPostType?.() );
+	}, [] );
 	const isInserterOpen = useSelect(
 		( select ) => select( editorStore ).isInserterOpened(),
 		[]
@@ -406,6 +413,9 @@ export default function PatternRecommender() {
 	const { insertBlocks } = useDispatch( blockEditorStore );
 	const { createSuccessNotice, createErrorNotice } =
 		useDispatch( noticesStore );
+	const effectivePostType =
+		getNonEmptyString( postType ) ||
+		( siteEditorPostType === 'wp_template' ? siteEditorPostType : '' );
 	const observerRef = useRef( null );
 	const listenerRef = useRef( null );
 	const debounceRef = useRef( null );
@@ -444,7 +454,7 @@ export default function PatternRecommender() {
 
 	const buildBaseInput = useCallback( () => {
 		const input = {
-			postType,
+			postType: effectivePostType,
 			visiblePatternNames,
 		};
 
@@ -457,7 +467,12 @@ export default function PatternRecommender() {
 		}
 
 		return input;
-	}, [ postType, templateType, visiblePatternNames, insertionContext ] );
+	}, [
+		effectivePostType,
+		templateType,
+		visiblePatternNames,
+		insertionContext,
+	] );
 
 	const clearSearchDebounce = useCallback( () => {
 		if ( debounceRef.current ) {
@@ -478,14 +493,14 @@ export default function PatternRecommender() {
 	);
 
 	const handleRetry = useCallback( () => {
-		if ( ! canRecommend || ! postType ) {
+		if ( ! canRecommend || ! effectivePostType ) {
 			return;
 		}
 
 		fetchPatternRecommendations( buildBaseInput() );
 	}, [
 		canRecommend,
-		postType,
+		effectivePostType,
 		buildBaseInput,
 		fetchPatternRecommendations,
 	] );
@@ -565,14 +580,14 @@ export default function PatternRecommender() {
 	);
 
 	useEffect( () => {
-		if ( ! canRecommend || ! postType ) {
+		if ( ! canRecommend || ! effectivePostType ) {
 			return;
 		}
 
 		fetchPatternRecommendations( buildBaseInput() );
 	}, [
 		canRecommend,
-		postType,
+		effectivePostType,
 		buildBaseInput,
 		fetchPatternRecommendations,
 	] );
@@ -655,7 +670,7 @@ export default function PatternRecommender() {
 	const handleSearchInput = useCallback(
 		( value ) => {
 			scheduleSearchFetch( () => {
-				if ( ! postType ) {
+				if ( ! effectivePostType ) {
 					return;
 				}
 
@@ -675,7 +690,7 @@ export default function PatternRecommender() {
 			} );
 		},
 		[
-			postType,
+			effectivePostType,
 			buildBaseInput,
 			selectedBlockName,
 			fetchPatternRecommendations,
@@ -800,6 +815,8 @@ export default function PatternRecommender() {
 					) }
 				/>
 			);
+		} else if ( patternStatus === 'idle' ) {
+			notice = <PatternInserterNotice status="idle" />;
 		} else {
 			notice = <PatternInserterNotice status="loading" />;
 		}

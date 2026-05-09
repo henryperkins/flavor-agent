@@ -528,6 +528,50 @@ describe( 'TemplateRecommender', () => {
 		);
 	} );
 
+	test( 'labels template review controls with the suggestion name', async () => {
+		currentState = createState( {
+			store: {
+				templateRecommendations: [
+					SUGGESTION,
+					{
+						label: 'Add footer links',
+						description: 'Insert links near the footer.',
+						operations: [
+							{
+								type: TEMPLATE_OPERATION_INSERT_PATTERN,
+								patternName: 'theme/footer',
+								placement: 'end',
+							},
+						],
+					},
+				],
+				templateSelectedSuggestionKey: SUGGESTION_KEY,
+				templateStatus: 'ready',
+			},
+		} );
+
+		await renderPanel();
+
+		const reviewButtons = Array.from(
+			getContainer().querySelectorAll(
+				'.flavor-agent-card--template .flavor-agent-card__apply'
+			)
+		);
+		const selectedButton = reviewButtons.find(
+			( button ) => button.textContent === 'Reviewing'
+		);
+		const footerButton = reviewButtons.find(
+			( button ) => button.textContent === 'Review'
+		);
+
+		expect( selectedButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Reviewing Add hero intro'
+		);
+		expect( footerButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Review Add footer links'
+		);
+	} );
+
 	test( 'preserves stale recommendations when template-global visible patterns change without resetting the prompt', async () => {
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
 		expect( hasText( 'Confirm Apply' ) ).toBe( true );

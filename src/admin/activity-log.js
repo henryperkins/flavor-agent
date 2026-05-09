@@ -1442,8 +1442,24 @@ export function ActivityLogApp( { bootData } ) {
 								) }
 							</div>
 							<div className="flavor-agent-activity-log__controls-actions">
-								<DataViews.FiltersToggle />
-								<DataViews.ViewConfig />
+								<span className="flavor-agent-activity-log__toolbar-control">
+									<DataViews.FiltersToggle />
+									<span
+										className="flavor-agent-activity-log__toolbar-control-label"
+										aria-hidden="true"
+									>
+										{ __( 'Filter', 'flavor-agent' ) }
+									</span>
+								</span>
+								<span className="flavor-agent-activity-log__toolbar-control">
+									<DataViews.ViewConfig />
+									<span
+										className="flavor-agent-activity-log__toolbar-control-label"
+										aria-hidden="true"
+									>
+										{ __( 'View options', 'flavor-agent' ) }
+									</span>
+								</span>
 								{ isViewModified && (
 									<Button
 										variant="secondary"

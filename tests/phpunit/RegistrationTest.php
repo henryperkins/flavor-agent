@@ -1323,4 +1323,46 @@ final class RegistrationTest extends TestCase {
 			$tokens_ability['output_schema']['properties']['diagnostics']['type'] ?? null
 		);
 	}
+
+	public function test_register_recommendation_abilities_use_flavor_agent_category(): void {
+		Registration::register_category();
+		Registration::register_recommendation_abilities();
+
+		foreach ( Registration::recommendation_ability_classes() as $ability_id => $definition ) {
+			$ability = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+
+			$this->assertIsArray( $ability, "Expected registered ability {$ability_id}." );
+			$this->assertSame(
+				'flavor-agent',
+				$ability['category'] ?? null,
+				"{$ability_id} must report category 'flavor-agent' so the Ability Explorer groups it under the plugin."
+			);
+		}
+	}
+
+	public function test_recommend_content_mode_advertises_enum_and_default(): void {
+		Registration::register_category();
+		Registration::register_recommendation_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-content'] ?? null;
+		$mode    = $ability['input_schema']['properties']['mode'] ?? null;
+
+		$this->assertIsArray( $mode );
+		$this->assertSame( 'string', $mode['type'] ?? null );
+		$this->assertSame( [ 'draft', 'edit', 'critique' ], $mode['enum'] ?? null );
+		$this->assertSame( 'draft', $mode['default'] ?? null );
+	}
+
+	public function test_list_synced_patterns_advertises_sync_status_enum_and_default(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/list-synced-patterns'] ?? null;
+		$sync    = $ability['input_schema']['properties']['syncStatus'] ?? null;
+
+		$this->assertIsArray( $sync );
+		$this->assertSame( 'string', $sync['type'] ?? null );
+		$this->assertSame( [ 'synced', 'partial', 'unsynced', 'all' ], $sync['enum'] ?? null );
+		$this->assertSame( 'synced', $sync['default'] ?? null );
+	}
 }

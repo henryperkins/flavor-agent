@@ -466,6 +466,18 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'renders app-owned labels for DataViews toolbar controls', async () => {
+		await renderApp( [ createEntry( { id: 'activity-1' } ) ] );
+		expect( getContainer().textContent ).toContain( 'Filter' );
+		expect( getContainer().textContent ).toContain( 'View options' );
+		expect( ACTIVITY_LOG_CSS ).toContain(
+			'.flavor-agent-activity-log__toolbar-control-label'
+		);
+		expect( ACTIVITY_LOG_CSS ).not.toMatch(
+			/content:\s*attr\(aria-label\)/
+		);
+	} );
+
 	test( 'declares distinct review and blocked activity status styles', () => {
 		expect( ACTIVITY_LOG_CSS ).toContain(
 			'.flavor-agent-activity-log__status.is-review'
@@ -475,6 +487,18 @@ describe( 'ActivityLogApp', () => {
 		);
 		expect( ACTIVITY_LOG_CSS ).toMatch(
 			/\.flavor-agent-activity-log__icon\.is-blocked\s*\{[^}]*warning/s
+		);
+	} );
+
+	test( 'provides forced-colors focus outlines for activity log controls', () => {
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*\.flavor-agent-activity-log\s+\.dataviews-filters__summary-chip-container\s+button:focus-visible[\s\S]*box-shadow:\s*none;[\s\S]*outline:\s*2px\s+solid\s+Highlight;[\s\S]*outline-offset:\s*2px;/s
+		);
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*\.flavor-agent-activity-log__detail-summary:focus-visible[\s\S]*box-shadow:\s*none;[\s\S]*outline:\s*2px\s+solid\s+Highlight;[\s\S]*outline-offset:\s*2px;/s
+		);
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*\.flavor-agent-activity-log\s+\.components-button:focus-visible:not\(:disabled\)[\s\S]*box-shadow:\s*none;[\s\S]*outline:\s*2px\s+solid\s+Highlight;[\s\S]*outline-offset:\s*2px;/s
 		);
 	} );
 

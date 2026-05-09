@@ -1152,6 +1152,9 @@ function TemplatePartSuggestionCard( {
 		);
 	}
 
+	const reviewActionLabel = isSelected ? 'Reviewing' : 'Review';
+	const suggestionLabel = suggestion.label || 'suggestion';
+
 	return (
 		<div
 			className={ `flavor-agent-card flavor-agent-card--template${
@@ -1196,8 +1199,9 @@ function TemplatePartSuggestionCard( {
 						}
 						className="flavor-agent-card__apply"
 						disabled={ isApplying || isStale }
+						aria-label={ `${ reviewActionLabel } ${ suggestionLabel }` }
 					>
-						{ isSelected ? 'Reviewing' : 'Review' }
+						{ reviewActionLabel }
 					</Button>
 				) }
 			</div>

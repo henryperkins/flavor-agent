@@ -319,6 +319,21 @@ body.settings_page_flavor-agent-activity {
   box-shadow: var(--flavor-agent-focus-ring);
 }
 
+.flavor-agent-activity-log__toolbar-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.flavor-agent-activity-log__toolbar-control-label {
+  color: var(--flavor-agent-activity-log-text);
+  font-size: var(--wpds-font-size-sm, 12px);
+  font-weight: 500;
+  line-height: 1;
+}
+
 .flavor-agent-activity-log .dataviews-filters__visibility-toggle,
 .flavor-agent-activity-log
   .dataviews-view-config__toggle-wrapper
@@ -327,17 +342,6 @@ body.settings_page_flavor-agent-activity {
   min-height: 30px;
   padding-inline: 10px 12px;
   border-radius: var(--wpds-border-radius-md, 4px);
-}
-
-.flavor-agent-activity-log .dataviews-filters__visibility-toggle::after,
-.flavor-agent-activity-log
-  .dataviews-view-config__toggle-wrapper
-  > .components-button::after {
-  content: attr(aria-label);
-  margin-left: 6px;
-  font-size: var(--wpds-font-size-sm, 12px);
-  font-weight: 500;
-  line-height: 1;
 }
 
 .flavor-agent-activity-log .dataviews-view-config__toggle-wrapper {
@@ -954,4 +958,17 @@ body.settings_page_flavor-agent-activity {
   .components-button:focus-visible:not(:disabled) {
   outline: none;
   box-shadow: var(--flavor-agent-focus-ring);
+}
+
+@media (forced-colors: active) {
+  .flavor-agent-activity-log
+    .dataviews-filters__summary-chip-container
+    button:focus-visible,
+  .flavor-agent-activity-log__detail-summary:focus-visible,
+  .flavor-agent-activity-log
+    .components-button:focus-visible:not(:disabled) {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }

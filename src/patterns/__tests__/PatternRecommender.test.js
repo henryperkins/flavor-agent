@@ -274,6 +274,18 @@ describe( 'PatternRecommender', () => {
 		expect( EDITOR_CSS ).not.toContain( '--flavor-agent-editor-ink' );
 	} );
 
+	test( 'provides forced-colors focus outlines for chip and panel buttons', () => {
+		expect( EDITOR_CSS ).toMatch(
+			/@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*\.flavor-agent-chip\.components-button:focus-visible[\s\S]*box-shadow:\s*none;[\s\S]*outline:\s*2px\s+solid\s+Highlight;[\s\S]*outline-offset:\s*2px;/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*\.flavor-agent-panel\s+\.components-button\.is-primary:focus-visible:not\(:disabled\)[\s\S]*box-shadow:\s*none;[\s\S]*outline:\s*2px\s+solid\s+Highlight;[\s\S]*outline-offset:\s*2px;/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*\.flavor-agent-panel\s+\.components-button\.is-secondary:focus-visible:not\(:disabled\)[\s\S]*box-shadow:\s*none;[\s\S]*outline:\s*2px\s+solid\s+Highlight;[\s\S]*outline-offset:\s*2px;/s
+		);
+	} );
+
 	test( 'disconnects the observers cleanly when the inserter search input never appears', () => {
 		const observerInstances = [];
 
@@ -468,6 +480,30 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
+	test( 'renders an idle notice instead of loading when no recommendation context is available', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.postType = '';
+		state.editSite = {
+			postType: '',
+			postId: null,
+		};
+		state.store.patternStatus = 'idle';
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+		expect( document.body.textContent ).toContain(
+			'Preparing pattern recommendations for this insertion point.'
+		);
+		expect( document.body.textContent ).not.toContain(
+			'Ranking patterns for this insertion point.'
+		);
+	} );
+
 	test( 'renders an empty-state notice inside the inserter when no pattern matches are returned', () => {
 		const inserterContainer = document.createElement( 'div' );
 
@@ -630,11 +666,16 @@ describe( 'PatternRecommender', () => {
 				.querySelector( '[role="status"]' )
 				?.querySelector( 'button' )
 		).toBeNull();
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		expect( insertButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Insert Hero'
+		);
 
 		act( () => {
-			Array.from( inserterContainer.querySelectorAll( 'button' ) )
-				.find( ( button ) => button.textContent === 'Insert' )
-				.click();
+			insertButton.click();
 		} );
 
 		expect( mockCloneBlock ).toHaveBeenCalledWith(
@@ -1243,6 +1284,113 @@ describe( 'PatternRecommender', () => {
 				rootBlock: 'core/group',
 				ancestors: [ 'core/group' ],
 				nearbySiblings: [],
+			},
+		} );
+	} );
+
+	test( 'uses the Site Editor template post type when the editor post type is empty', () => {
+		state.postType = '';
+		state.editSite = {
+			postType: 'wp_template',
+			postId: 'custom//front-page',
+		};
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			postType: 'wp_template',
+			templateType: 'front-page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [],
+			},
+		} );
+	} );
+
+	test( 'uses the Site Editor template post type for retry requests', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.postType = '';
+		state.editSite = {
+			postType: 'wp_template',
+			postId: 'custom//front-page',
+		};
+		state.store.patternStatus = 'error';
+		state.store.patternError = 'Pattern recommendation request failed.';
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+		mockFetchPatternRecommendations.mockClear();
+
+		act( () => {
+			Array.from( inserterContainer.querySelectorAll( 'button' ) )
+				.find( ( button ) => button.textContent === 'Retry' )
+				.click();
+		} );
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			postType: 'wp_template',
+			templateType: 'front-page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [],
+			},
+		} );
+	} );
+
+	test( 'uses the Site Editor template post type for inserter search requests', () => {
+		const searchInput = {
+			addEventListener: jest.fn(),
+			removeEventListener: jest.fn(),
+		};
+		let inputListener = null;
+
+		state.postType = '';
+		state.editSite = {
+			postType: 'wp_template',
+			postId: 'custom//front-page',
+		};
+		state.blockEditor.selectedBlockClientId = 'block-1';
+		state.blockEditor.selectedBlockName = 'core/heading';
+		mockFindInserterSearchInput.mockReturnValue( searchInput );
+		searchInput.addEventListener.mockImplementation(
+			( event, listener ) => {
+				if ( event === 'input' ) {
+					inputListener = listener;
+				}
+			}
+		);
+
+		renderComponent();
+		mockFetchPatternRecommendations.mockClear();
+
+		act( () => {
+			inputListener( {
+				target: {
+					value: 'hero',
+				},
+			} );
+			jest.advanceTimersByTime( 400 );
+		} );
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			postType: 'wp_template',
+			templateType: 'front-page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [],
+			},
+			prompt: 'hero',
+			blockContext: {
+				blockName: 'core/heading',
 			},
 		} );
 	} );

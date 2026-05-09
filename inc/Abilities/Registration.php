@@ -283,7 +283,9 @@ final class Registration {
 					'properties' => [
 						'syncStatus'     => [
 							'type'        => 'string',
-							'description' => 'Optional sync status filter: synced, partial, unsynced, or all.',
+							'enum'        => [ 'synced', 'partial', 'unsynced', 'all' ],
+							'default'     => 'synced',
+							'description' => 'Optional sync status filter: synced, partial, unsynced, or all. Defaults to synced when omitted.',
 						],
 						'search'         => [
 							'type'        => 'string',
@@ -640,7 +642,7 @@ final class Registration {
 					'clientRequest'        => $client_request,
 					'resolveSignatureOnly' => [
 						'type'        => 'boolean',
-						'description' => 'When true, only resolve the server-issued apply-context signature without calling the model.',
+						'description' => 'When true, only resolve the server-issued apply-context signature without calling the model. Useful for dry-running this ability from the Ability Explorer or other tooling without invoking the AI Connector.',
 					],
 				],
 			],
@@ -649,7 +651,9 @@ final class Registration {
 				'properties' => [
 					'mode'          => [
 						'type'        => 'string',
-						'description' => 'Writing mode: draft, edit, or critique.',
+						'enum'        => [ 'draft', 'edit', 'critique' ],
+						'default'     => 'draft',
+						'description' => 'Writing mode: draft, edit, or critique. Defaults to draft when omitted.',
 					],
 					'prompt'        => [
 						'type'        => 'string',
@@ -721,7 +725,7 @@ final class Registration {
 					'clientRequest'        => $client_request,
 					'resolveSignatureOnly' => [
 						'type'        => 'boolean',
-						'description' => 'When true, only resolve the server-backed review freshness signature without calling the model.',
+						'description' => 'When true, only resolve the server-backed review freshness signature without calling the model. Useful for dry-running this ability from the Ability Explorer or other tooling without invoking the AI Connector.',
 					],
 				],
 			],
@@ -772,7 +776,7 @@ final class Registration {
 					'clientRequest'        => $client_request,
 					'resolveSignatureOnly' => [
 						'type'        => 'boolean',
-						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
+						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model. Useful for dry-running this ability from the Ability Explorer or other tooling without invoking the AI Connector.',
 					],
 				],
 				'required'   => [ 'scope', 'styleContext' ],
@@ -884,7 +888,7 @@ final class Registration {
 					'clientRequest'        => $client_request,
 					'resolveSignatureOnly' => [
 						'type'        => 'boolean',
-						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
+						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model. Useful for dry-running this ability from the Ability Explorer or other tooling without invoking the AI Connector.',
 					],
 				],
 				'required'   => [ 'templateRef' ],
@@ -906,7 +910,7 @@ final class Registration {
 					'clientRequest'        => $client_request,
 					'resolveSignatureOnly' => [
 						'type'        => 'boolean',
-						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
+						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model. Useful for dry-running this ability from the Ability Explorer or other tooling without invoking the AI Connector.',
 					],
 				],
 				'required'   => [ 'templatePartRef' ],

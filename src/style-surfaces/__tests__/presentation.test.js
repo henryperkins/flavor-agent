@@ -1,9 +1,20 @@
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
+
 import {
 	formatStyleBadgeLabel,
 	formatStyleOperation,
 	getStyleSuggestionToneLabel,
 	isInlineStyleNotice,
+	StyleSuggestionCard,
 } from '../presentation';
+
+// eslint-disable-next-line import/no-extraneous-dependencies
+const { act } = require( 'react' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
+
+const { getContainer, getRoot } = setupReactTest();
 
 describe( 'style-surface presentation helpers', () => {
 	test( 'formats theme-backed preset operations consistently across style surfaces', () => {
@@ -56,5 +67,48 @@ describe( 'style-surface presentation helpers', () => {
 				tone: 'manual',
 			} )
 		).toBe( 'Manual ideas' );
+	} );
+
+	test( 'labels style review controls with the suggestion name', async () => {
+		await act( async () => {
+			getRoot().render(
+				<div>
+					<StyleSuggestionCard
+						suggestion={ {
+							label: 'Tune the button contrast',
+							suggestionKey: 'tune-button-contrast',
+							tone: 'executable',
+						} }
+						onReview={ jest.fn() }
+					/>
+					<StyleSuggestionCard
+						suggestion={ {
+							label: 'Switch to Midnight',
+							suggestionKey: 'switch-midnight',
+							tone: 'executable',
+						} }
+						isSelected
+						onReview={ jest.fn() }
+					/>
+				</div>
+			);
+		} );
+
+		const reviewButtons = Array.from(
+			getContainer().querySelectorAll( '.flavor-agent-card__apply' )
+		);
+		const reviewButton = reviewButtons.find(
+			( button ) => button.textContent === 'Review'
+		);
+		const selectedButton = reviewButtons.find(
+			( button ) => button.textContent === 'Reviewing'
+		);
+
+		expect( reviewButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Review Tune the button contrast'
+		);
+		expect( selectedButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Reviewing Switch to Midnight'
+		);
 	} );
 } );

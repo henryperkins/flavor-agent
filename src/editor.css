@@ -2288,6 +2288,21 @@
   box-shadow: var(--flavor-agent-editor-focus-ring);
 }
 
+@media (forced-colors: active) {
+  .flavor-agent-chip.components-button:focus-visible,
+  .flavor-agent-panel .components-button.is-primary:focus-visible:not(:disabled),
+  .flavor-agent-panel
+    .flavor-agent-fetch-button.components-button.is-primary:focus-visible:not(
+      :disabled
+    ),
+  .flavor-agent-panel
+    .components-button.is-secondary:focus-visible:not(:disabled) {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
 /* The chip stack already paints its own brand surface (AI-edge + cream
    wash). Don't double-coat its primary state with the panel-wide overrides
    below — the chip's own rules win at higher specificity. */

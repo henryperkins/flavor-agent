@@ -98,6 +98,8 @@ export function StyleSuggestionCard( {
 } ) {
 	const secondaryGuidance =
 		suggestion?.tone === 'executable' ? executableGuidance : manualGuidance;
+	const reviewActionLabel = isSelected ? 'Reviewing' : 'Review';
+	const suggestionLabel = suggestion?.label || 'suggestion';
 
 	return (
 		<div
@@ -157,8 +159,9 @@ export function StyleSuggestionCard( {
 							}
 							className="flavor-agent-card__apply"
 							disabled={ isStale }
+							aria-label={ `${ reviewActionLabel } ${ suggestionLabel }` }
 						>
-							{ isSelected ? 'Reviewing' : 'Review' }
+							{ reviewActionLabel }
 						</Button>
 					</div>
 				) }
