@@ -177,7 +177,7 @@ final class GuidelinesTest extends TestCase {
 		);
 	}
 
-	public function test_block_prompt_includes_site_and_matching_block_guidelines(): void {
+	public function test_block_prompt_does_not_inject_site_or_block_guidelines(): void {
 		WordPressTestState::$options = [
 			Guidelines::OPTION_SITE       => 'Marketing site for enterprise buyers.',
 			Guidelines::OPTION_COPY       => 'Use direct, plain language.',
@@ -202,16 +202,15 @@ final class GuidelinesTest extends TestCase {
 			]
 		);
 
-		$this->assertStringContainsString( '## Site Guidelines', $prompt );
-		$this->assertStringContainsString( 'Site: Marketing site for enterprise buyers.', $prompt );
-		$this->assertStringContainsString( 'Copy: Use direct, plain language.', $prompt );
-		$this->assertStringContainsString( 'Images: Prefer documentary photography.', $prompt );
-		$this->assertStringContainsString( 'Additional: Avoid discount language.', $prompt );
-		$this->assertStringContainsString( 'Block core/paragraph: Keep paragraphs under three sentences.', $prompt );
-		$this->assertStringNotContainsString( 'Always include descriptive alt text.', $prompt );
+		$this->assertStringNotContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringNotContainsString( 'Marketing site for enterprise buyers.', $prompt );
+		$this->assertStringNotContainsString( 'Use direct, plain language.', $prompt );
+		$this->assertStringNotContainsString( 'Prefer documentary photography.', $prompt );
+		$this->assertStringNotContainsString( 'Avoid discount language.', $prompt );
+		$this->assertStringNotContainsString( 'Keep paragraphs under three sentences.', $prompt );
 	}
 
-	public function test_writing_prompt_includes_site_guidelines(): void {
+	public function test_writing_prompt_does_not_inject_site_guidelines(): void {
 		WordPressTestState::$options = [
 			Guidelines::OPTION_SITE => 'Audience is technical operators.',
 			Guidelines::OPTION_COPY => 'Use active voice.',
@@ -227,9 +226,10 @@ final class GuidelinesTest extends TestCase {
 			'Draft a launch note.'
 		);
 
-		$this->assertStringContainsString( '## Site Guidelines', $prompt );
-		$this->assertStringContainsString( 'Site: Audience is technical operators.', $prompt );
-		$this->assertStringContainsString( 'Copy: Use active voice.', $prompt );
+		$this->assertStringNotContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringNotContainsString( 'Audience is technical operators.', $prompt );
+		$this->assertStringNotContainsString( 'Use active voice.', $prompt );
+		$this->assertStringContainsString( 'Draft a launch note.', $prompt );
 	}
 
 	public function test_prompt_context_prefers_upstream_wordpress_ai_guidelines_when_available(): void {

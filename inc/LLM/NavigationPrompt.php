@@ -41,13 +41,15 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
           "target": "overlayMenu",
           "detail": "Specific recommendation"
         }
-      ]
+      ],
+      "confidence": 0.85
     }
   ],
   "explanation": "Overall reasoning for these recommendations"
 }
 
 Rules:
+- confidence MUST be a number from 0 to 1 indicating your certainty in this suggestion, or null to defer to the system's deterministic ranking.
 - category MUST be one of: structure, overlay, accessibility.
 - changes[].type MUST be one of: reorder, group, ungroup, add-submenu, flatten, set-attribute.
 - Structural changes (reorder, group, ungroup, add-submenu, flatten) MUST include targetPath.
@@ -94,11 +96,6 @@ SYSTEM;
 		}
 
 		$budget->add_section( 'identity', implode( "\n", $identity_lines ), 100 );
-
-		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
-		if ( '' !== $guidelines_context ) {
-			$budget->add_section( 'site_guidelines', $guidelines_context, 88 );
-		}
 
 		// ── Priority 60: Location context ──
 		$location_details = is_array( $context['locationDetails'] ?? null ) ? $context['locationDetails'] : [];
@@ -425,22 +422,20 @@ SYSTEM;
 				$source_signals[] = 'has_changes';
 			}
 
-			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) || isset( $suggestion['advisoryType'] ) ) {
-				$entry['ranking'] = RankingContract::normalize(
-					$ranking_input,
-					[
-						'score'         => $computed_score,
-						'reason'        => $description,
-						'sourceSignals' => $source_signals,
-						'safetyMode'    => 'validated',
-						'freshnessMeta' => [
-							'source'  => 'llm',
-							'surface' => 'navigation',
-						],
-						'advisoryType'  => (string) ( $suggestion['advisoryType'] ?? $category ),
-					]
-				);
-			}
+			$entry['ranking'] = RankingContract::normalize(
+				$ranking_input,
+				[
+					'score'         => $computed_score,
+					'reason'        => $description,
+					'sourceSignals' => $source_signals,
+					'safetyMode'    => 'validated',
+					'freshnessMeta' => [
+						'source'  => 'llm',
+						'surface' => 'navigation',
+					],
+					'advisoryType'  => (string) ( $suggestion['advisoryType'] ?? $category ),
+				]
+			);
 
 			$entry['_rankScore'] = $computed_score;
 			$entry['_rankOrder'] = $order++;

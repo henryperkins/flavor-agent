@@ -190,7 +190,7 @@ final class StylePromptTest extends TestCase {
 		];
 	}
 
-	public function test_build_user_includes_site_guidelines(): void {
+	public function test_build_user_does_not_inject_site_guidelines(): void {
 		WordPressTestState::$options = [
 			Guidelines::OPTION_SITE   => 'Use a restrained operational tone.',
 			Guidelines::OPTION_BLOCKS => [
@@ -204,9 +204,9 @@ final class StylePromptTest extends TestCase {
 
 		$prompt = StylePrompt::build_user( $context );
 
-		$this->assertStringContainsString( '## Site Guidelines', $prompt );
-		$this->assertStringContainsString( 'Site: Use a restrained operational tone.', $prompt );
-		$this->assertStringContainsString( 'Block core/paragraph: Keep body text compact.', $prompt );
+		$this->assertStringNotContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringNotContainsString( 'Use a restrained operational tone.', $prompt );
+		$this->assertStringNotContainsString( 'Keep body text compact.', $prompt );
 	}
 
 	public function test_build_user_includes_scope_diagnostics_and_variations(): void {

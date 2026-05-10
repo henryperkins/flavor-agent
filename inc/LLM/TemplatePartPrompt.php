@@ -45,13 +45,15 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
           "placement": "before_block_path",
           "targetPath": [0, 1]
         }
-      ]
+      ],
+      "confidence": 0.85
     }
   ],
   "explanation": "Overall reasoning for these recommendations"
 }
 
 Rules:
+- confidence MUST be a number from 0 to 1 indicating your certainty in this suggestion, or null to defer to the system's deterministic ranking.
 - blockHints[].path MUST be a real path from the Current Block Tree.
 - blockHints[].label should be short and human-readable.
 - patternSuggestions[] MUST be pattern name values from the Available Patterns list.
@@ -108,11 +110,6 @@ SYSTEM;
 		$area  = (string) ( $context['area'] ?? 'uncategorized' );
 
 		$budget->add_section( 'identity', "## Template Part\nRef: {$ref}\nSlug: {$slug}\nTitle: {$title}\nArea: {$area}", 100 );
-
-		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
-		if ( '' !== $guidelines_context ) {
-			$budget->add_section( 'site_guidelines', $guidelines_context, 88 );
-		}
 
 		$top_level_blocks = is_array( $context['topLevelBlocks'] ?? null ) ? $context['topLevelBlocks'] : [];
 		if ( count( $top_level_blocks ) > 0 ) {
@@ -750,22 +747,20 @@ EXAMPLE
 				$source_signals[] = 'has_pattern_suggestions';
 			}
 
-			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) ) {
-				$entry['ranking'] = RankingContract::normalize(
-					$ranking_input,
-					[
-						'score'         => $computed_score,
-						'reason'        => $description,
-						'sourceSignals' => $source_signals,
-						'safetyMode'    => 'validated',
-						'freshnessMeta' => [
-							'source'  => 'llm',
-							'surface' => 'template_part',
-						],
-						'operations'    => $operations,
-					]
-				);
-			}
+			$entry['ranking'] = RankingContract::normalize(
+				$ranking_input,
+				[
+					'score'         => $computed_score,
+					'reason'        => $description,
+					'sourceSignals' => $source_signals,
+					'safetyMode'    => 'validated',
+					'freshnessMeta' => [
+						'source'  => 'llm',
+						'surface' => 'template_part',
+					],
+					'operations'    => $operations,
+				]
+			);
 
 			$entry['_rankScore'] = $computed_score;
 			$entry['_rankOrder'] = $order++;

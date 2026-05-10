@@ -11,5 +11,5 @@ final class RecommendStyleAbility extends RecommendationAbility {
 	protected const SURFACE              = 'style';
 	protected const CAPABILITY           = 'edit_theme_options';
 	protected const CALLBACK             = [ StyleAbilities::class, 'recommend_style' ];
-	protected const GUIDELINE_CATEGORIES = [ 'site', 'additional' ];
+	protected const GUIDELINE_CATEGORIES = [ 'site', 'images', 'additional' ];
 }

@@ -997,6 +997,7 @@ final class Registration {
 							'categories'           => [ 'type' => 'array' ],
 							'patternOverrides'     => [ 'type' => 'object' ],
 							'overrideCapabilities' => self::pattern_override_capabilities_schema(),
+							'ranking'              => self::ranking_contract_schema(),
 							'content'              => [ 'type' => 'string' ],
 						]
 					),
@@ -1040,6 +1041,7 @@ final class Registration {
 									]
 								),
 							],
+							'ranking'     => self::ranking_contract_schema(),
 						]
 					),
 				],
@@ -1074,9 +1076,9 @@ final class Registration {
 					'type'  => 'array',
 					'items' => self::open_object_schema(
 						[
-							'label'       => [ 'type' => 'string' ],
-							'description' => [ 'type' => 'string' ],
-							'operations'  => [
+							'label'              => [ 'type' => 'string' ],
+							'description'        => [ 'type' => 'string' ],
+							'operations'         => [
 								'type'  => 'array',
 								'items' => self::open_object_schema(
 									[
@@ -1094,6 +1096,21 @@ final class Registration {
 									]
 								),
 							],
+							'templateParts'      => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(
+									[
+										'slug'   => [ 'type' => 'string' ],
+										'area'   => [ 'type' => 'string' ],
+										'reason' => [ 'type' => 'string' ],
+									]
+								),
+							],
+							'patternSuggestions' => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'string' ],
+							],
+							'ranking'            => self::ranking_contract_schema(),
 						]
 					),
 				],
@@ -1149,6 +1166,7 @@ final class Registration {
 									]
 								),
 							],
+							'ranking'            => self::ranking_contract_schema(),
 						]
 					),
 				],
@@ -1651,6 +1669,32 @@ final class Registration {
 		);
 	}
 
+	private static function ranking_contract_schema(): array {
+		return self::open_object_schema(
+			[
+				'score'         => [
+					'type'    => 'number',
+					'minimum' => 0,
+					'maximum' => 1,
+				],
+				'reason'        => [ 'type' => 'string' ],
+				'sourceSignals' => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'safetyMode'    => [ 'type' => 'string' ],
+				'freshnessMeta' => self::open_object_schema(),
+				'operations'    => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(),
+				],
+				'rankingHint'   => self::open_object_schema(),
+				'advisoryType'  => [ 'type' => 'string' ],
+			],
+			'Normalized ranking contract for recommendation items: score (0–1), reason, sourceSignals, safetyMode, and freshnessMeta are always emitted; operations, rankingHint, and advisoryType are surface-specific and omitted when empty.'
+		);
+	}
+
 	private static function pattern_override_capabilities_schema(): array {
 		return self::open_object_schema(
 			[
@@ -1723,6 +1767,7 @@ final class Registration {
 				'preview'          => [ 'type' => [ 'string', 'null' ] ],
 				'presetSlug'       => [ 'type' => [ 'string', 'null' ] ],
 				'cssVar'           => [ 'type' => [ 'string', 'null' ] ],
+				'ranking'          => self::ranking_contract_schema(),
 			],
 		];
 		$block_suggestion_schema = $suggestion_schema;
@@ -1862,6 +1907,7 @@ final class Registration {
 									],
 								],
 							],
+							'ranking'     => self::ranking_contract_schema(),
 						],
 					],
 				],

@@ -232,11 +232,6 @@ SYSTEM;
 			$budget->add_section( 'voice_samples', $voice_samples_section, 10, false );
 		}
 
-		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
-		if ( '' !== $guidelines_context ) {
-			$budget->add_section( 'guidelines', $guidelines_context, 60, true );
-		}
-
 		$instruction = '' !== trim( $prompt )
 			? trim( $prompt )
 			: self::default_instruction_for_mode( $mode );

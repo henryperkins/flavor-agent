@@ -11,5 +11,5 @@ final class RecommendContentAbility extends RecommendationAbility {
 	protected const SURFACE              = 'content';
 	protected const CAPABILITY           = 'edit_posts';
 	protected const CALLBACK             = [ ContentAbilities::class, 'recommend_content' ];
-	protected const GUIDELINE_CATEGORIES = [ 'site', 'copy', 'additional' ];
+	protected const GUIDELINE_CATEGORIES = [ 'site', 'copy', 'images', 'additional' ];
 }

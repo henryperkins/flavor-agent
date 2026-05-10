@@ -526,7 +526,7 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringNotContainsString( '## User Instruction', $prompt );
 	}
 
-	public function test_prompt_build_user_includes_site_guidelines(): void {
+	public function test_prompt_build_user_does_not_inject_site_guidelines(): void {
 		WordPressTestState::$options = [
 			Guidelines::OPTION_SITE   => 'Keep navigation labels short and task oriented.',
 			Guidelines::OPTION_BLOCKS => [
@@ -544,9 +544,9 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$prompt = NavigationPrompt::build_user( $context );
 
-		$this->assertStringContainsString( '## Site Guidelines', $prompt );
-		$this->assertStringContainsString( 'Site: Keep navigation labels short and task oriented.', $prompt );
-		$this->assertStringContainsString( 'Block core/navigation: Prefer shallow menus for primary navigation.', $prompt );
+		$this->assertStringNotContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringNotContainsString( 'Keep navigation labels short and task oriented.', $prompt );
+		$this->assertStringNotContainsString( 'Prefer shallow menus for primary navigation.', $prompt );
 	}
 
 	public function test_prompt_build_user_includes_docs_guidance(): void {

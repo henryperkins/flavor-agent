@@ -9,6 +9,20 @@ use PHPUnit\Framework\TestCase;
 
 final class PromptRulesTest extends TestCase {
 
+	/**
+	 * @param array<int, array<string, mixed>> $entries
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function strip_ranking_from_entries( array $entries ): array {
+		return array_map(
+			static function ( array $entry ): array {
+				unset( $entry['ranking'] );
+				return $entry;
+			},
+			$entries
+		);
+	}
+
 	public function test_build_system_describes_catalog_operations_as_validator_owned_proposals(): void {
 		$system = Prompt::build_system();
 
@@ -520,7 +534,9 @@ TEXT
 		$this->assertNull( $result['settings'][0]['preview'] );
 		$this->assertNull( $result['settings'][0]['presetSlug'] );
 		$this->assertNull( $result['settings'][0]['cssVar'] );
-		$this->assertArrayNotHasKey( 'ranking', $result['settings'][0] );
+		$this->assertArrayHasKey( 'ranking', $result['settings'][0] );
+		$this->assertSame( 'validated', $result['settings'][0]['ranking']['safetyMode'] );
+		$this->assertIsFloat( $result['settings'][0]['ranking']['score'] );
 	}
 
 	public function test_parse_response_keeps_advisory_block_suggestions_without_panel_and_strips_attribute_updates(): void {
@@ -563,7 +579,7 @@ TEXT
 					'rejectedOperations' => [],
 				],
 			],
-			$result['block']
+			$this->strip_ranking_from_entries( $result['block'] )
 		);
 	}
 
@@ -857,7 +873,7 @@ TEXT
 					'cssVar'           => null,
 				],
 			],
-			$result['styles']
+			$this->strip_ranking_from_entries( $result['styles'] )
 		);
 	}
 

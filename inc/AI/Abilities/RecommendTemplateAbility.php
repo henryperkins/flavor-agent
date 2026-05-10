@@ -11,5 +11,5 @@ final class RecommendTemplateAbility extends RecommendationAbility {
 	protected const SURFACE              = 'template';
 	protected const CAPABILITY           = 'edit_theme_options';
 	protected const CALLBACK             = [ TemplateAbilities::class, 'recommend_template' ];
-	protected const GUIDELINE_CATEGORIES = [ 'site', 'copy', 'additional' ];
+	protected const GUIDELINE_CATEGORIES = [ 'site', 'copy', 'images', 'additional' ];
 }

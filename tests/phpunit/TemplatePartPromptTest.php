@@ -17,7 +17,21 @@ final class TemplatePartPromptTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
-	public function test_build_user_includes_site_guidelines(): void {
+	/**
+	 * @param array<int, array<string, mixed>> $entries
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function strip_ranking_from_entries( array $entries ): array {
+		return array_map(
+			static function ( array $entry ): array {
+				unset( $entry['ranking'] );
+				return $entry;
+			},
+			$entries
+		);
+	}
+
+	public function test_build_user_does_not_inject_site_guidelines(): void {
 		WordPressTestState::$options = [
 			Guidelines::OPTION_SITE   => 'Header should support product discovery.',
 			Guidelines::OPTION_IMAGES => 'Prefer real interface screenshots.',
@@ -35,9 +49,9 @@ final class TemplatePartPromptTest extends TestCase {
 			]
 		);
 
-		$this->assertStringContainsString( '## Site Guidelines', $prompt );
-		$this->assertStringContainsString( 'Site: Header should support product discovery.', $prompt );
-		$this->assertStringContainsString( 'Images: Prefer real interface screenshots.', $prompt );
+		$this->assertStringNotContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringNotContainsString( 'Header should support product discovery.', $prompt );
+		$this->assertStringNotContainsString( 'Prefer real interface screenshots.', $prompt );
 	}
 
 	public function test_build_user_includes_structural_presence_flags(): void {
@@ -341,7 +355,7 @@ final class TemplatePartPromptTest extends TestCase {
 					'operations'         => [],
 				],
 			],
-			$result['suggestions']
+			$this->strip_ranking_from_entries( $result['suggestions'] )
 		);
 	}
 
@@ -467,7 +481,7 @@ final class TemplatePartPromptTest extends TestCase {
 					],
 				],
 			],
-			$result['suggestions']
+			$this->strip_ranking_from_entries( $result['suggestions'] )
 		);
 	}
 
@@ -649,7 +663,7 @@ final class TemplatePartPromptTest extends TestCase {
 					],
 				],
 			],
-			$result['suggestions']
+			$this->strip_ranking_from_entries( $result['suggestions'] )
 		);
 	}
 
@@ -735,7 +749,7 @@ final class TemplatePartPromptTest extends TestCase {
 					'operations'         => [],
 				],
 			],
-			$result['suggestions']
+			$this->strip_ranking_from_entries( $result['suggestions'] )
 		);
 	}
 

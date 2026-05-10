@@ -95,6 +95,7 @@ final class ResponseSchema {
 								'type'  => 'array',
 								'items' => [ 'type' => 'string' ],
 							],
+							'confidence'         => self::nullable_confidence(),
 						]
 					),
 				],
@@ -146,6 +147,7 @@ final class ResponseSchema {
 									]
 								),
 							],
+							'confidence'         => self::nullable_confidence(),
 						]
 					),
 				],
@@ -194,6 +196,7 @@ final class ResponseSchema {
 									]
 								),
 							],
+							'confidence'  => self::nullable_confidence(),
 						]
 					),
 				],
@@ -229,6 +232,7 @@ final class ResponseSchema {
 									]
 								),
 							],
+							'confidence'  => self::nullable_confidence(),
 						]
 					),
 				],
@@ -385,6 +389,15 @@ final class ResponseSchema {
 
 	private static function nullable_integer(): array {
 		return [ 'type' => [ 'integer', 'null' ] ];
+	}
+
+	private static function nullable_confidence(): array {
+		return [
+			'type'        => [ 'number', 'null' ],
+			'minimum'     => 0,
+			'maximum'     => 1,
+			'description' => 'Optional 0..1 ranking confidence; return null to defer to deterministic ranking.',
+		];
 	}
 
 	private static function nullable_integer_array(): array {

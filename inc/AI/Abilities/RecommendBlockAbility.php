@@ -11,5 +11,5 @@ final class RecommendBlockAbility extends RecommendationAbility {
 	protected const SURFACE              = 'block';
 	protected const CAPABILITY           = 'edit_posts';
 	protected const CALLBACK             = [ BlockAbilities::class, 'recommend_block' ];
-	protected const GUIDELINE_CATEGORIES = [ 'site', 'copy', 'additional' ];
+	protected const GUIDELINE_CATEGORIES = [ 'site', 'copy', 'images', 'additional' ];
 }

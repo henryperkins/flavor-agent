@@ -62,13 +62,15 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
           "reason": "Why this part fits this area"
         }
       ],
-      "patternSuggestions": ["pattern/name-from-patterns-list"]
+      "patternSuggestions": ["pattern/name-from-patterns-list"],
+      "confidence": 0.85
     }
   ],
   "explanation": "Overall reasoning for these recommendations"
 }
 
 Rules:
+- confidence MUST be a number from 0 to 1 indicating your certainty in this suggestion, or null to defer to the system's deterministic ranking.
 - operations[] MUST be the executable source of truth when the suggestion is fully deterministic.
 - Supported operation types are ONLY: assign_template_part, replace_template_part, insert_pattern.
 - Each suggestion may contain at most one insert_pattern operation.
@@ -138,11 +140,6 @@ SYSTEM;
 				: "## Explicitly Empty Areas\nNone detected.",
 			88
 		);
-
-		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
-		if ( '' !== $guidelines_context ) {
-			$budget->add_section( 'site_guidelines', $guidelines_context, 86 );
-		}
 
 		$assigned_slugs = array_column( $assigned, 'slug' );
 		$available      = array_values(
@@ -681,22 +678,20 @@ EXAMPLE
 				$source_signals[] = 'has_pattern_suggestions';
 			}
 
-			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) ) {
-				$entry['ranking'] = RankingContract::normalize(
-					$ranking_input,
-					[
-						'score'         => $computed_score,
-						'reason'        => (string) ( $suggestion['description'] ?? '' ),
-						'sourceSignals' => $source_signals,
-						'safetyMode'    => 'validated',
-						'freshnessMeta' => [
-							'source'  => 'llm',
-							'surface' => 'template',
-						],
-						'operations'    => $entry['operations'],
-					]
-				);
-			}
+			$entry['ranking'] = RankingContract::normalize(
+				$ranking_input,
+				[
+					'score'         => $computed_score,
+					'reason'        => (string) ( $suggestion['description'] ?? '' ),
+					'sourceSignals' => $source_signals,
+					'safetyMode'    => 'validated',
+					'freshnessMeta' => [
+						'source'  => 'llm',
+						'surface' => 'template',
+					],
+					'operations'    => $entry['operations'],
+				]
+			);
 
 			$entry['_rankScore'] = $computed_score;
 			$entry['_rankOrder'] = $order++;

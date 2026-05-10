@@ -75,11 +75,13 @@ Backend-specific sync behavior:
 
 ## Guidelines Bridge Flow
 
-1. Recommendation prompt builders call `Guidelines::format_prompt_context()`.
-2. `Guidelines` resolves the active repository through the `flavor_agent_guidelines_repository` filter, then core/Gutenberg Guidelines storage, then legacy Flavor Agent options.
-3. Core/Gutenberg storage is detected through the emerging `wp_guideline` post type and `wp_guideline_type` taxonomy model, with a read-only fallback for the older `wp_content_guideline` experiment shape.
-4. Legacy options are preserved even when core storage is available. The current migration status is tracked separately so a future write migration can avoid repeated imports.
-5. The settings screen keeps the legacy fields, block guideline editor, and JSON import/export available as migration/admin tooling when core Guidelines storage is detected.
+1. Recommendation abilities declare the guideline categories they need through their `GUIDELINE_CATEGORIES` constants.
+2. `FlavorAgent\AI\Abilities\RecommendationAbility::execute_callback()` passes those categories, plus any scoped block name, into `RecommendationAbilityExecution`.
+3. `RecommendationAbilityExecution` calls `Guidelines::format_prompt_context()` and temporarily prepends the formatted guidance to the recommendation system instruction through the `flavor_agent_recommendation_system_instruction` filter.
+4. `Guidelines` resolves the active repository through the `flavor_agent_guidelines_repository` filter, then core/Gutenberg Guidelines storage, then legacy Flavor Agent options.
+5. Core/Gutenberg storage is detected through the emerging `wp_guideline` post type and `wp_guideline_type` taxonomy model, with a read-only fallback for the older `wp_content_guideline` experiment shape.
+6. Legacy options are preserved even when core storage is available. The current migration status is tracked separately so a future write migration can avoid repeated imports.
+7. The settings screen keeps the legacy fields, block guideline editor, and JSON import/export available as migration/admin tooling when core Guidelines storage is detected.
 
 ## Primary Functions And Handlers
 
@@ -91,7 +93,7 @@ Backend-specific sync behavior:
 | Backend status        | `InfraAbilities::check_status()`                                         | Returns backend inventory and currently available abilities                                                |
 | Theme tokens          | `InfraAbilities::get_theme_tokens()`                                     | Exposes the current theme token snapshot through an ability                                                |
 | Docs grounding        | `WordPressDocsAbilities::search_wordpress_docs()`                        | Exposes trusted developer-doc grounding through an ability                                                 |
-| Guidelines bridge     | `Guidelines::get_all()` / `Guidelines::format_prompt_context()`          | Reads core Guidelines first when available, falls back to legacy options, and formats guidance for prompts |
+| Guidelines bridge     | `RecommendationAbilityExecution` + `Guidelines::format_prompt_context()` | Reads core Guidelines first when available, falls back to legacy options, and prepends formatted guidance to recommendation system instructions |
 | Manual sync UI        | `src/admin/settings-page.js` + `src/admin/settings-page-controller.js`   | Owns settings-page sync enqueueing, polling, live status updates, and section-open persistence             |
 | Pattern sync backend  | `PatternIndex::sync()`                                                   | Rebuilds the selected pattern backend catalog                                                              |
 

@@ -549,6 +549,155 @@ final class RegistrationTest extends TestCase {
 		);
 	}
 
+	public function test_register_abilities_exposes_ranking_contract_in_all_recommendation_surfaces(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		$cases = [
+			'flavor-agent/recommend-template'      => 'suggestions',
+			'flavor-agent/recommend-template-part' => 'suggestions',
+			'flavor-agent/recommend-navigation'    => 'suggestions',
+			'flavor-agent/recommend-style'         => 'suggestions',
+		];
+
+		foreach ( $cases as $ability_id => $list_key ) {
+			$ability = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+			$this->assertIsArray( $ability, "Expected registered ability {$ability_id}." );
+
+			$ranking = $ability['output_schema']['properties'][ $list_key ]['items']['properties']['ranking'] ?? null;
+
+			$this->assertIsArray( $ranking, "{$ability_id} should declare ranking schema on its suggestion items." );
+			$this->assertSame( 'object', $ranking['type'] ?? null, "{$ability_id} ranking should be an object." );
+			$this->assertSame( 'number', $ranking['properties']['score']['type'] ?? null );
+			$this->assertSame( 'string', $ranking['properties']['safetyMode']['type'] ?? null );
+			$this->assertSame( 'array', $ranking['properties']['sourceSignals']['type'] ?? null );
+			$this->assertSame( 'object', $ranking['properties']['freshnessMeta']['type'] ?? null );
+		}
+
+		$block_ability  = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'] ?? null;
+		$block_ranking  = $block_ability['output_schema']['properties']['settings']['items']['properties']['ranking'] ?? null;
+		$styles_ranking = $block_ability['output_schema']['properties']['styles']['items']['properties']['ranking'] ?? null;
+		$blocks_ranking = $block_ability['output_schema']['properties']['block']['items']['properties']['ranking'] ?? null;
+
+		$this->assertIsArray( $block_ranking, 'recommend-block settings items should declare ranking.' );
+		$this->assertIsArray( $styles_ranking, 'recommend-block styles items should declare ranking.' );
+		$this->assertIsArray( $blocks_ranking, 'recommend-block block items should declare ranking.' );
+		$this->assertSame( 'number', $block_ranking['properties']['score']['type'] ?? null );
+	}
+
+	public function test_register_abilities_declares_template_advisory_fields_in_output_schema(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-template'] ?? null;
+		$item    = $ability['output_schema']['properties']['suggestions']['items'] ?? null;
+
+		$this->assertIsArray( $item );
+		$this->assertSame( 'array', $item['properties']['templateParts']['type'] ?? null, 'Template suggestions emit templateParts; the schema should advertise it.' );
+		$this->assertSame( 'string', $item['properties']['templateParts']['items']['properties']['slug']['type'] ?? null );
+		$this->assertSame( 'string', $item['properties']['templateParts']['items']['properties']['area']['type'] ?? null );
+		$this->assertSame( 'array', $item['properties']['patternSuggestions']['type'] ?? null );
+		$this->assertSame( 'string', $item['properties']['patternSuggestions']['items']['type'] ?? null );
+	}
+
+	public function test_register_abilities_exposes_ranking_contract_in_pattern_recommendations(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-patterns'] ?? null;
+
+		$this->assertIsArray( $ability );
+
+		$ranking = $ability['output_schema']['properties']['recommendations']['items']['properties']['ranking'] ?? null;
+
+		$this->assertIsArray( $ranking, 'Pattern recommendation items should declare a ranking schema for MCP/Ability consumers.' );
+		$this->assertSame( 'object', $ranking['type'] ?? null );
+		$this->assertTrue(
+			(bool) ( $ranking['additionalProperties'] ?? false ),
+			'ranking stays open-ended so surface-specific freshness metadata round-trips.'
+		);
+		$this->assertSame( 'number', $ranking['properties']['score']['type'] ?? null );
+		$this->assertSame( 0, $ranking['properties']['score']['minimum'] ?? null );
+		$this->assertSame( 1, $ranking['properties']['score']['maximum'] ?? null );
+		$this->assertSame( 'string', $ranking['properties']['reason']['type'] ?? null );
+		$this->assertSame( 'array', $ranking['properties']['sourceSignals']['type'] ?? null );
+		$this->assertSame( 'string', $ranking['properties']['sourceSignals']['items']['type'] ?? null );
+		$this->assertSame( 'string', $ranking['properties']['safetyMode']['type'] ?? null );
+		$this->assertSame( 'object', $ranking['properties']['freshnessMeta']['type'] ?? null );
+		$this->assertSame( 'object', $ranking['properties']['rankingHint']['type'] ?? null );
+		$this->assertSame( 'string', $ranking['properties']['advisoryType']['type'] ?? null );
+		$this->assertSame( 'array', $ranking['properties']['operations']['type'] ?? null );
+		$this->assertSame( 'object', $ranking['properties']['operations']['items']['type'] ?? null );
+	}
+
+	public function test_recommendation_abilities_include_image_guidelines_in_declared_categories(): void {
+		Registration::register_category();
+		Registration::register_recommendation_abilities();
+
+		$cases = [
+			'flavor-agent/recommend-block'         => [
+				'blockName'  => 'core/image',
+				'categories' => [ 'site', 'copy', 'images', 'additional' ],
+			],
+			'flavor-agent/recommend-content'       => [
+				'blockName'  => null,
+				'categories' => [ 'site', 'copy', 'images', 'additional' ],
+			],
+			'flavor-agent/recommend-patterns'      => [
+				'blockName'  => null,
+				'categories' => [ 'site', 'images', 'additional' ],
+			],
+			'flavor-agent/recommend-navigation'    => [
+				'blockName'  => null,
+				'categories' => [ 'site', 'copy', 'images', 'additional' ],
+			],
+			'flavor-agent/recommend-style'         => [
+				'blockName'  => null,
+				'categories' => [ 'site', 'images', 'additional' ],
+			],
+			'flavor-agent/recommend-template'      => [
+				'blockName'  => null,
+				'categories' => [ 'site', 'copy', 'images', 'additional' ],
+			],
+			'flavor-agent/recommend-template-part' => [
+				'blockName'  => null,
+				'categories' => [ 'site', 'copy', 'images', 'additional' ],
+			],
+		];
+
+		foreach ( $cases as $ability_id => $case ) {
+			WordPressTestState::$wpai_formatted_guidelines = '<guidelines>Respect imagery.</guidelines>';
+			WordPressTestState::$wpai_guideline_calls      = [];
+
+			$ability = WordPressTestState::$registered_abilities[ $ability_id ]['execute_callback'][0] ?? null;
+
+			$this->assertInstanceOf( \FlavorAgent\AI\Abilities\RecommendationAbility::class, $ability, "Expected ability object for {$ability_id}." );
+
+			$instruction = $ability->get_system_instruction(
+				null,
+				[
+					'ability'    => $ability_id,
+					'block_name' => $case['blockName'],
+				]
+			);
+
+			$this->assertSame( '<guidelines>Respect imagery.</guidelines>', $instruction, "Expected {$ability_id} to return formatted guidelines." );
+			$this->assertSame(
+				[
+					[
+						'categories' => $case['categories'],
+						'blockName'  => $case['blockName'],
+					],
+				],
+				WordPressTestState::$wpai_guideline_calls,
+				"Expected {$ability_id} to request the complete guideline category set."
+			);
+		}
+	}
+
 	public function test_register_abilities_exposes_design_helper_schemas(): void {
 		Registration::register_category();
 		Registration::register_abilities();
@@ -916,7 +1065,7 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'categories' => [ 'site', 'copy', 'additional' ],
+					'categories' => [ 'site', 'copy', 'images', 'additional' ],
 					'blockName'  => 'core/paragraph',
 				],
 			],
@@ -948,7 +1097,7 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'categories' => [ 'site', 'copy', 'additional' ],
+					'categories' => [ 'site', 'copy', 'images', 'additional' ],
 					'blockName'  => 'core/paragraph',
 				],
 			],

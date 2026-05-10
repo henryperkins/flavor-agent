@@ -17,7 +17,21 @@ final class TemplatePromptTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
-	public function test_build_user_includes_site_guidelines(): void {
+	/**
+	 * @param array<int, array<string, mixed>> $entries
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function strip_ranking_from_entries( array $entries ): array {
+		return array_map(
+			static function ( array $entry ): array {
+				unset( $entry['ranking'] );
+				return $entry;
+			},
+			$entries
+		);
+	}
+
+	public function test_build_user_does_not_inject_site_guidelines(): void {
 		WordPressTestState::$options = [
 			Guidelines::OPTION_SITE       => 'Homepage for enterprise buyers.',
 			Guidelines::OPTION_ADDITIONAL => 'Keep accessibility requirements visible.',
@@ -35,9 +49,9 @@ final class TemplatePromptTest extends TestCase {
 			]
 		);
 
-		$this->assertStringContainsString( '## Site Guidelines', $prompt );
-		$this->assertStringContainsString( 'Site: Homepage for enterprise buyers.', $prompt );
-		$this->assertStringContainsString( 'Additional: Keep accessibility requirements visible.', $prompt );
+		$this->assertStringNotContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringNotContainsString( 'Homepage for enterprise buyers.', $prompt );
+		$this->assertStringNotContainsString( 'Keep accessibility requirements visible.', $prompt );
 	}
 
 	public function test_build_user_includes_structure_summary(): void {
@@ -283,7 +297,7 @@ final class TemplatePromptTest extends TestCase {
 					'patternSuggestions' => [ 'theme/hero' ],
 				],
 			],
-			$result['suggestions']
+			$this->strip_ranking_from_entries( $result['suggestions'] )
 		);
 	}
 
@@ -569,7 +583,7 @@ final class TemplatePromptTest extends TestCase {
 					'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
 				],
 			],
-			$result['suggestions']
+			$this->strip_ranking_from_entries( $result['suggestions'] )
 		);
 	}
 
@@ -823,7 +837,7 @@ final class TemplatePromptTest extends TestCase {
 					'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
 				],
 			],
-			$result['suggestions']
+			$this->strip_ranking_from_entries( $result['suggestions'] )
 		);
 	}
 
@@ -1140,7 +1154,7 @@ final class TemplatePromptTest extends TestCase {
 					'patternSuggestions' => [ 'theme/hero' ],
 				],
 			],
-			$result['suggestions']
+			$this->strip_ranking_from_entries( $result['suggestions'] )
 		);
 	}
 

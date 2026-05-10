@@ -11,5 +11,5 @@ final class RecommendNavigationAbility extends RecommendationAbility {
 	protected const SURFACE              = 'navigation';
 	protected const CAPABILITY           = 'edit_theme_options';
 	protected const CALLBACK             = [ NavigationAbilities::class, 'recommend_navigation' ];
-	protected const GUIDELINE_CATEGORIES = [ 'site', 'copy', 'additional' ];
+	protected const GUIDELINE_CATEGORIES = [ 'site', 'copy', 'images', 'additional' ];
 }

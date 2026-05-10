@@ -318,11 +318,6 @@ SYSTEM;
 		$budget->add_section( 'block_constraints', implode( "\n", $parts ), 92, $restrictions['contentOnly'] );
 		$parts = [];
 
-		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context( (string) ( $block['name'] ?? '' ) );
-		if ( '' !== $guidelines_context ) {
-			$budget->add_section( 'site_guidelines', $guidelines_context, 82 );
-		}
-
 		$parts[] = '## Theme Tokens';
 
 		if ( ! empty( $tokens['colors'] ) ) {
@@ -2424,22 +2419,20 @@ SYSTEM;
 				$source_signals[] = 'has_description';
 			}
 
-			if ( array_key_exists( 'ranking', $s ) || null !== $confidence || isset( $s['score'] ) ) {
-				$normalized['ranking'] = RankingContract::normalize(
-					$ranking_input,
-					[
-						'score'         => $computed_score,
-						'reason'        => (string) ( $s['description'] ?? '' ),
-						'sourceSignals' => $source_signals,
-						'safetyMode'    => 'validated',
-						'freshnessMeta' => [
-							'source' => 'llm',
-							'group'  => $group,
-						],
-						'advisoryType'  => 'block' === $group ? (string) ( $s['type'] ?? '' ) : '',
-					]
-				);
-			}
+			$normalized['ranking'] = RankingContract::normalize(
+				$ranking_input,
+				[
+					'score'         => $computed_score,
+					'reason'        => (string) ( $s['description'] ?? '' ),
+					'sourceSignals' => $source_signals,
+					'safetyMode'    => 'validated',
+					'freshnessMeta' => [
+						'source' => 'llm',
+						'group'  => $group,
+					],
+					'advisoryType'  => 'block' === $group ? (string) ( $s['type'] ?? '' ) : '',
+				]
+			);
 
 			$normalized['_rankScore'] = $computed_score;
 			$normalized['_rankOrder'] = $order++;

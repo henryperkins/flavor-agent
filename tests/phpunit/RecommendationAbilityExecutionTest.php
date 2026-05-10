@@ -230,6 +230,42 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		);
 	}
 
+	public function test_execute_preserves_image_guidelines_when_category_declares_images(): void {
+		WordPressTestState::$options = [
+			\FlavorAgent\Guidelines::OPTION_SITE       => 'Use a calm site voice.',
+			\FlavorAgent\Guidelines::OPTION_IMAGES     => 'Prefer documentary screenshots.',
+			\FlavorAgent\Guidelines::OPTION_ADDITIONAL => 'Avoid hype.',
+		];
+
+		$seen_instruction = null;
+
+		$result = RecommendationAbilityExecution::execute(
+			'template-part',
+			'flavor-agent/recommend-template-part',
+			[ 'resolveSignatureOnly' => true ],
+			static function () use ( &$seen_instruction ): array {
+				$seen_instruction = apply_filters(
+					'flavor_agent_recommendation_system_instruction',
+					'Existing prompt instruction.'
+				);
+
+				return [
+					'resolvedContextSignature' => 'signature',
+				];
+			},
+			[
+				'categories' => [ 'site', 'copy', 'images', 'additional' ],
+				'blockName'  => '',
+			]
+		);
+
+		$this->assertSame( 'signature', $result['resolvedContextSignature'] ?? null );
+		$this->assertStringContainsString( 'Site: Use a calm site voice.', (string) $seen_instruction );
+		$this->assertStringContainsString( 'Images: Prefer documentary screenshots.', (string) $seen_instruction );
+		$this->assertStringContainsString( 'Additional: Avoid hype.', (string) $seen_instruction );
+		$this->assertStringContainsString( 'Existing prompt instruction.', (string) $seen_instruction );
+	}
+
 	public function test_execute_strips_client_request_from_callback_input(): void {
 		$seen_input = null;
 

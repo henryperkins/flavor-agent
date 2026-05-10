@@ -57,13 +57,15 @@ Return ONLY a JSON object with this exact shape:
 	          "presetSlug": "body",
 	          "cssVar": "var(--wp--preset--font-size--body)"
 	        }
-	      ]
+	      ],
+	      "confidence": 0.85
 	    }
 	  ],
   "explanation": "Overall reasoning"
 }
 
 	Rules:
+	- confidence MUST be a number from 0 to 1 indicating your certainty in this suggestion, or null to defer to the system's deterministic ranking.
 	- Supported operation types are ONLY set_styles, set_block_styles, and set_theme_variation.
 	- Use set_styles only for the global-styles surface.
 	- Use set_block_styles only for the style-book surface.
@@ -142,13 +144,6 @@ SYSTEM;
 
 		// Scope is the surface identity. Without it the model cannot disambiguate global-styles vs style-book.
 		$budget->add_section( 'scope', implode( "\n", $scope_lines ), 100, true );
-
-		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context(
-			'style-book' === $surface ? (string) ( $scope['blockName'] ?? '' ) : ''
-		);
-		if ( '' !== $guidelines_context ) {
-			$budget->add_section( 'site_guidelines', $guidelines_context, 88 );
-		}
 
 		// Current and merged config carry the live style state; keep them focused so large site metadata does not dominate the prompt.
 		$budget->add_section( 'current_config', "## Current Global Styles user config\n" . wp_json_encode( self::trim_style_config_for_prompt( $style_context['currentConfig'] ?? [] ) ), 90, true );
@@ -830,22 +825,20 @@ EXAMPLE
 				$source_signals[] = 'has_operations';
 			}
 
-			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) ) {
-				$entry['ranking'] = RankingContract::normalize(
-					$ranking_input,
-					[
-						'score'         => $computed_score,
-						'reason'        => (string) ( $suggestion['description'] ?? '' ),
-						'sourceSignals' => $source_signals,
-						'safetyMode'    => 'validated',
-						'freshnessMeta' => [
-							'source'  => 'llm',
-							'surface' => 'style',
-						],
-						'operations'    => 'executable' === $tone ? $effective_operations : [],
-					]
-				);
-			}
+			$entry['ranking'] = RankingContract::normalize(
+				$ranking_input,
+				[
+					'score'         => $computed_score,
+					'reason'        => (string) ( $suggestion['description'] ?? '' ),
+					'sourceSignals' => $source_signals,
+					'safetyMode'    => 'validated',
+					'freshnessMeta' => [
+						'source'  => 'llm',
+						'surface' => 'style',
+					],
+					'operations'    => 'executable' === $tone ? $effective_operations : [],
+				]
+			);
 
 			$entry['_rankScore'] = $computed_score;
 			$entry['_rankOrder'] = $order++;
