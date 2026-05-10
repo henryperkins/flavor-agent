@@ -9,8 +9,10 @@ jest.mock( '@wordpress/icons', () => ( {
 } ) );
 
 jest.mock( '@wordpress/i18n', () => ( {
-	__: ( text ) => text,
+	__: jest.fn( ( text ) => text ),
 } ) );
+
+import * as i18n from '@wordpress/i18n';
 
 const fs = require( 'fs' );
 const path = require( 'path' );
@@ -82,6 +84,13 @@ describe( 'ToastRegion — portal mount', () => {
 
 		expect( root ).toBeTruthy();
 		expect( root.parentElement ).toBe( document.body );
+		expect( root.getAttribute( 'aria-label' ) ).toBe(
+			'Flavor Agent recent changes'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Flavor Agent recent changes',
+			'flavor-agent'
+		);
 		expect( root.textContent ).toContain( 'Block updated' );
 	} );
 

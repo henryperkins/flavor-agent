@@ -1,3 +1,5 @@
+import { __ } from '@wordpress/i18n';
+
 const LEGACY_FLAG_KEYS = Object.freeze( {
 	block: 'canRecommendBlocks',
 	pattern: 'canRecommendPatterns',
@@ -77,13 +79,16 @@ function getDefaultActions( surface, data, reason ) {
 		return [
 			data?.settingsUrl
 				? {
-						label: 'Open Flavor Agent settings',
+						label: __(
+							'Open Flavor Agent settings',
+							'flavor-agent'
+						),
 						href: data.settingsUrl,
 				  }
 				: null,
 			data?.connectorsUrl
 				? {
-						label: 'Open Connectors',
+						label: __( 'Open Connectors', 'flavor-agent' ),
 						href: data.connectorsUrl,
 				  }
 				: null,
@@ -104,13 +109,16 @@ function getDefaultActions( surface, data, reason ) {
 		return [
 			data?.connectorsUrl
 				? {
-						label: 'Open Connectors',
+						label: __( 'Open Connectors', 'flavor-agent' ),
 						href: data.connectorsUrl,
 				  }
 				: null,
 			data?.settingsUrl && ! data?.connectorsUrl
 				? {
-						label: 'Open Flavor Agent settings',
+						label: __(
+							'Open Flavor Agent settings',
+							'flavor-agent'
+						),
 						href: data.settingsUrl,
 				  }
 				: null,
@@ -120,57 +128,89 @@ function getDefaultActions( surface, data, reason ) {
 	return [
 		data?.settingsUrl
 			? {
-					label: 'Open Flavor Agent settings',
+					label: __( 'Open Flavor Agent settings', 'flavor-agent' ),
 					href: data.settingsUrl,
 			  }
 			: null,
 	].filter( Boolean );
 }
 
-// ── Shared message fragments ────────────────────────────────
-const CHAT_PROVIDER_MESSAGE =
-	'need a text-generation provider configured in Settings > Connectors.';
-const THEME_CAPABILITY_MESSAGE = 'require the edit_theme_options capability.';
-
 // ── Surface-specific message configuration ──────────────────
 const SURFACE_MESSAGES = Object.freeze( {
 	block: {
-		default:
+		default: __(
 			'Configure a text-generation provider in Settings > Connectors to enable block recommendations.',
+			'flavor-agent'
+		),
 	},
 	content: {
-		default: `Content recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+		default: __(
+			'Content recommendations need a text-generation provider configured in Settings > Connectors.',
+			'flavor-agent'
+		),
 	},
 	template: {
-		default: `Template recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+		default: __(
+			'Template recommendations need a text-generation provider configured in Settings > Connectors.',
+			'flavor-agent'
+		),
 	},
 	'template-part': {
-		default: `Template-part recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+		default: __(
+			'Template-part recommendations need a text-generation provider configured in Settings > Connectors.',
+			'flavor-agent'
+		),
 	},
 	navigation: {
-		missing_theme_capability: `Navigation recommendations ${ THEME_CAPABILITY_MESSAGE }`,
-		default: `Navigation recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+		missing_theme_capability: __(
+			'Navigation recommendations require the edit_theme_options capability.',
+			'flavor-agent'
+		),
+		default: __(
+			'Navigation recommendations need a text-generation provider configured in Settings > Connectors.',
+			'flavor-agent'
+		),
 	},
 	'global-styles': {
-		missing_theme_capability: `Global Styles recommendations ${ THEME_CAPABILITY_MESSAGE }`,
-		default: `Global Styles recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+		missing_theme_capability: __(
+			'Global Styles recommendations require the edit_theme_options capability.',
+			'flavor-agent'
+		),
+		default: __(
+			'Global Styles recommendations need a text-generation provider configured in Settings > Connectors.',
+			'flavor-agent'
+		),
 	},
 	'style-book': {
-		surface_not_implemented:
+		surface_not_implemented: __(
 			'Style Book recommendations are not available in this plugin build yet.',
-		missing_theme_capability: `Style Book recommendations ${ THEME_CAPABILITY_MESSAGE }`,
-		default: `Style Book recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+			'flavor-agent'
+		),
+		missing_theme_capability: __(
+			'Style Book recommendations require the edit_theme_options capability.',
+			'flavor-agent'
+		),
+		default: __(
+			'Style Book recommendations need a text-generation provider configured in Settings > Connectors.',
+			'flavor-agent'
+		),
 	},
 	pattern: {
-		default:
+		default: __(
 			'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
-		cloudflare_ai_search_unconfigured:
+			'flavor-agent'
+		),
+		cloudflare_ai_search_unconfigured: __(
 			'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+			'flavor-agent'
+		),
 	},
 } );
 
-const FALLBACK_MESSAGE =
-	'This Flavor Agent surface is not available right now.';
+const FALLBACK_MESSAGE = __(
+	'This Flavor Agent surface is not available right now.',
+	'flavor-agent'
+);
 
 function getDefaultMessage( surface, reason ) {
 	const surfaceConfig = SURFACE_MESSAGES[ surface ];

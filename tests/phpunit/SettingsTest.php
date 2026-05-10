@@ -690,12 +690,16 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertStringContainsString( 'Managed pattern index using the saved Cloudflare credentials from the Embedding Model section.', $output );
 		$this->assertStringContainsString(
-			'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID . '"',
+			'Cloudflare AI Search Pattern Storage',
 			$output
 		);
 		$this->assertStringNotContainsString( 'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID . '"', $output );
 		$this->assertStringNotContainsString( 'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE . '"', $output );
 		$this->assertStringNotContainsString( 'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN . '"', $output );
+		$this->assertStringNotContainsString(
+			'name="' . Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID . '"',
+			$output
+		);
 		$this->assertStringContainsString(
 			'name="' . Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH . '"',
 			$output

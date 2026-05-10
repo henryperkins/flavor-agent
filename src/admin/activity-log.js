@@ -352,7 +352,10 @@ function getActivityRequestUrl( bootData, view, linkedActivityId ) {
 		params.set( 'sortDirection', view.sort.direction || 'desc' );
 	}
 
-	if ( typeof linkedActivityId === 'string' && '' !== linkedActivityId.trim() ) {
+	if (
+		typeof linkedActivityId === 'string' &&
+		'' !== linkedActivityId.trim()
+	) {
 		params.set( 'activity', linkedActivityId.trim() );
 	}
 
@@ -833,7 +836,8 @@ export function ActivityLogApp( { bootData } ) {
 		[ requestedView, responseData.paginationInfo, viewOptions ]
 	);
 	const requestUrl = useMemo(
-		() => getActivityRequestUrl( bootData, requestedView, requestActivityId ),
+		() =>
+			getActivityRequestUrl( bootData, requestedView, requestActivityId ),
 		[ bootData, requestedView, requestActivityId ]
 	);
 	const invalidDayFilter = hasInvalidDayFilter( requestedView );
@@ -981,14 +985,9 @@ export function ActivityLogApp( { bootData } ) {
 		return () => {
 			isCurrent = false;
 		};
-	}, [
-		bootData,
-		invalidDayFilter,
-		requestUrl,
-		reloadToken,
-		requestedView.page,
-		requestedView.perPage,
-	] );
+		// requestUrl already encodes requestedView (page, perPage, filters), so it changes when those do.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ bootData, invalidDayFilter, requestUrl, reloadToken ] );
 
 	const fields = useMemo( () => {
 		const surfaceElements =
@@ -1331,7 +1330,12 @@ export function ActivityLogApp( { bootData } ) {
 		) {
 			setRequestActivityId( '' );
 		}
-	}, [ isLoading, requestActivityId, responseData.entries, selectedEntryId ] );
+	}, [
+		isLoading,
+		requestActivityId,
+		responseData.entries,
+		selectedEntryId,
+	] );
 
 	const summaryCards = getSummaryCards( responseData.summary );
 	const isViewModified = ! areActivityViewsEqual(

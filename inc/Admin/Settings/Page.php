@@ -372,16 +372,16 @@ final class Page {
 		<section class="flavor-agent-settings-section" id="<?php echo esc_attr( $dom_id ); ?>">
 			<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="<?php echo esc_attr( $group ); ?>"<?php echo $is_open ? ' open' : ''; ?>>
 				<summary class="flavor-agent-settings-section__summary">
-					<span class="flavor-agent-settings-section__summary-main">
-						<span class="flavor-agent-settings-section__title" role="heading" aria-level="2">
+					<div class="flavor-agent-settings-section__summary-main">
+						<h2 class="flavor-agent-settings-section__title">
 							<?php echo esc_html( $title ); ?>
-						</span>
+						</h2>
 						<?php if ( '' !== (string) $meta['summary'] ) : ?>
 							<span class="flavor-agent-settings-section__summary-text">
 								<?php echo esc_html( $meta['summary'] ); ?>
 							</span>
 						<?php endif; ?>
-					</span>
+					</div>
 					<span class="flavor-agent-settings-section__summary-side">
 						<?php self::render_section_badges( $meta['badges'] ); ?>
 						<?php self::render_badge( $meta['status'], [ 'data-flavor-agent-status-badge' => $group ] ); ?>
@@ -595,7 +595,6 @@ final class Page {
 			);
 			self::render_cloudflare_pattern_ai_search_status_panel( $state, $feedback );
 			self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
-			self::render_cloudflare_pattern_ai_search_hidden_field();
 			?>
 		</div>
 		<details class="flavor-agent-settings-subpanel">
@@ -795,14 +794,6 @@ final class Page {
 			</div>
 			<?php
 		}
-	}
-
-	private static function render_cloudflare_pattern_ai_search_hidden_field(): void {
-		printf(
-			'<input type="hidden" name="%1$s" value="%2$s" />',
-			esc_attr( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ),
-			esc_attr( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) )
-		);
 	}
 
 	private static function render_pattern_backend_segmented_control( string $saved_backend ): void {

@@ -1,3 +1,9 @@
+jest.mock( '@wordpress/i18n', () => ( {
+	__: jest.fn( ( text ) => text ),
+} ) );
+
+import * as i18n from '@wordpress/i18n';
+
 import {
 	buildToastForActivity,
 	reduceToastsState,
@@ -161,6 +167,42 @@ describe( 'toasts slice — selector', () => {
 } );
 
 describe( 'buildToastForActivity', () => {
+	it( 'registers static toast copy for translation', () => {
+		const result = buildToastForActivity( {
+			surface: 'block',
+			persistedEntry: { id: 'activity-1' },
+			suggestion: {},
+		} );
+
+		expect( result.title ).toBe( 'Block updated' );
+		expect( result.undoLabel ).toBe( 'Undo' );
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Block updated',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Template applied',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Template part applied',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Global styles updated',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Style Book updated',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Update applied',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith( 'Undo', 'flavor-agent' );
+	} );
+
 	it( 'block surface produces a success toast with the persisted entry id', () => {
 		const result = buildToastForActivity( {
 			surface: 'block',

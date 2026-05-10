@@ -528,9 +528,7 @@ export default function NavigationRecommendations( {
 		requestInput,
 	] );
 	const handleRefresh = useCallback( () => {
-		const refreshPrompt = isPromptInitializedRef.current
-			? prompt
-			: requestPrompt || '';
+		const refreshPrompt = prompt.trim() || requestPrompt || '';
 		const refreshInput = buildNavigationFetchInput( {
 			block: navigationBlock,
 			blockClientId: clientId,

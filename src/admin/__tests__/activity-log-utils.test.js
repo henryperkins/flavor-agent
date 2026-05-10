@@ -779,17 +779,6 @@ describe( 'activity log utils', () => {
 			clampActivityViewPage(
 				{
 					...DEFAULT_ACTIVITY_VIEW,
-					page: 3,
-				},
-				{
-					totalPages: 0,
-				}
-			).page
-		).toBe( 1 );
-		expect(
-			clampActivityViewPage(
-				{
-					...DEFAULT_ACTIVITY_VIEW,
 					page: 2,
 				},
 				{
@@ -797,11 +786,28 @@ describe( 'activity log utils', () => {
 				}
 			).page
 		).toBe( 2 );
+	} );
+
+	test( 'clampActivityViewPage leaves page untouched when totalPages is unknown', () => {
+		// Pre-fetch state: paginationInfo.totalPages is 0 because no REST response
+		// has populated it yet. A persisted page > 1 must survive until real
+		// pagination metadata arrives.
+		expect(
+			clampActivityViewPage(
+				{
+					...DEFAULT_ACTIVITY_VIEW,
+					page: 3,
+				},
+				{
+					totalPages: 0,
+				}
+			).page
+		).toBe( 3 );
 		expect(
 			clampActivityViewPage( {
 				...DEFAULT_ACTIVITY_VIEW,
 				page: 4,
 			} ).page
-		).toBe( 1 );
+		).toBe( 4 );
 	} );
 } );

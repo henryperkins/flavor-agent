@@ -83,6 +83,10 @@
   --flavor-agent-editor-space-8: var(--wpds-dimension-gap-sm, 8px);
   --flavor-agent-editor-space-12: var(--wpds-dimension-gap-md, 12px);
   --flavor-agent-editor-space-16: var(--wpds-dimension-gap-lg, 16px);
+  /* Gutenberg base-styles map .components-snackbar-list to 100000.
+     Badge adornments stay local inside isolated component stacking contexts. */
+  --flavor-agent-editor-z-inserter-badge: 1;
+  --flavor-agent-editor-z-toast-region: 100000;
 
   /* Brand surfaces echoed for the Inspector AI panel. The hero reads against
      a layered cream → mint-cream wash; per-card surfaces stay neutral so they
@@ -1815,6 +1819,14 @@
     var(--flavor-agent-editor-accent);
 }
 
+@media (forced-colors: active) {
+  .flavor-agent-action-link.components-button.is-link:focus-visible {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
 .flavor-agent-action-link.components-button.is-link[disabled] {
   opacity: 0.5;
   pointer-events: none;
@@ -1926,6 +1938,14 @@
 .flavor-agent-inline-link.components-button.is-link:focus-visible {
   box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
     var(--flavor-agent-editor-accent);
+}
+
+@media (forced-colors: active) {
+  .flavor-agent-inline-link.components-button.is-link:focus-visible {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 
 /* Inline type: part — blue accent, highlights the slug in running text */
@@ -2068,6 +2088,7 @@
 
 .flavor-agent-inserter-badge-anchor {
   position: relative;
+  isolation: isolate;
 }
 
 .flavor-agent-pattern-inserter-slot {
@@ -2184,7 +2205,7 @@
   font-weight: 700;
   line-height: 1;
   text-align: center;
-  z-index: 100;
+  z-index: var(--flavor-agent-editor-z-inserter-badge);
   pointer-events: none;
 }
 
@@ -2361,7 +2382,7 @@
   flex-direction: column;
   align-items: center;
   pointer-events: none;
-  z-index: 1000;
+  z-index: var(--flavor-agent-editor-z-toast-region);
 }
 
 .flavor-agent-toast-region__inner {
@@ -2519,6 +2540,15 @@
   box-shadow:
     0 0 0 2px var(--flavor-agent-color-ink),
     0 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+@media (forced-colors: active) {
+  .flavor-agent-toast .flavor-agent-toast__action.components-button:focus-visible,
+  .flavor-agent-toast .flavor-agent-toast__close.components-button:focus-visible {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 
 .flavor-agent-toast .flavor-agent-toast__close.components-button svg {

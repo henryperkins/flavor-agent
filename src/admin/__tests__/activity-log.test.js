@@ -478,6 +478,15 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'keeps sidebar detail styles scoped to app-owned markup', () => {
+		expect( ACTIVITY_LOG_CSS ).toContain(
+			'.flavor-agent-activity-log__detail-section'
+		);
+		expect( ACTIVITY_LOG_CSS ).not.toContain(
+			'dataviews-settings-section'
+		);
+	} );
+
 	test( 'declares distinct review and blocked activity status styles', () => {
 		expect( ACTIVITY_LOG_CSS ).toContain(
 			'.flavor-agent-activity-log__status.is-review'

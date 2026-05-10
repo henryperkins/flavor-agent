@@ -1,5 +1,7 @@
 body.settings_page_flavor-agent-activity {
-  background: var(--wp-admin-theme-color-bg, #f0f0f1);
+  /* WordPress admin default background fallback is #f0f0f1; there is no
+     --wp-admin-theme-color-bg token in core. */
+  background: #f0f0f1;
 }
 
 .flavor-agent-activity-log {
@@ -372,6 +374,11 @@ body.settings_page_flavor-agent-activity {
   background: transparent;
 }
 
+.flavor-agent-activity-log > .dataviews-wrapper {
+  background: transparent;
+  gap: 12px;
+}
+
 .flavor-agent-activity-log__feed-card .dataviews-wrapper {
   background: transparent;
 }
@@ -586,27 +593,6 @@ body.settings_page_flavor-agent-activity {
 
 .flavor-agent-activity-log__sidebar-actions {
   flex: 0 0 auto;
-}
-
-.flavor-agent-activity-log__sidebar .dataviews-settings-section {
-  padding-block: 12px;
-  border-top: 1px solid var(--flavor-agent-activity-log-border);
-}
-
-.flavor-agent-activity-log__sidebar .dataviews-settings-section:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.flavor-agent-activity-log__sidebar
-  .dataviews-settings-section__title.dataviews-settings-section__title {
-  font-size: var(--wpds-font-size-md, 13px);
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.flavor-agent-activity-log__sidebar .dataviews-settings-section__sidebar {
-  color: var(--flavor-agent-activity-log-muted);
 }
 
 .flavor-agent-activity-log__status,

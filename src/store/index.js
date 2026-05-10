@@ -2974,6 +2974,8 @@ const selectors = {
 	getPatternStatus: ( state ) => state.patternStatus,
 	getPatternError: ( state ) => state.patternError,
 	getPatternRequestToken: ( state ) => state.patternRequestToken,
+	getPatternRequestSignature: ( state ) =>
+		state.patternRequestSignature || '',
 	getContentRecommendation: ( state ) => state.contentRecommendation,
 	getContentRecommendationRequestSignature: ( state ) =>
 		state.contentRecommendationRequestSignature || '',

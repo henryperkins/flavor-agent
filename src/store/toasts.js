@@ -19,6 +19,8 @@
  * in `src/store/executable-surface-runtime.js` never drift.
  */
 
+import { __ } from '@wordpress/i18n';
+
 const ACTION_TYPES = Object.freeze( {
 	ENQUEUE: 'FLAVOR_AGENT_TOAST_ENQUEUE',
 	UPDATE: 'FLAVOR_AGENT_TOAST_UPDATE',
@@ -32,15 +34,17 @@ const DEFAULT_SUCCESS_MS = 6000;
 const DEFAULT_ERROR_MS = 8000;
 
 const SURFACE_TITLES = Object.freeze( {
-	block: 'Block updated',
-	template: 'Template applied',
-	templatePart: 'Template part applied',
-	'template-part': 'Template part applied',
-	globalStyles: 'Global styles updated',
-	'global-styles': 'Global styles updated',
-	styleBook: 'Style Book updated',
-	'style-book': 'Style Book updated',
+	block: __( 'Block updated', 'flavor-agent' ),
+	template: __( 'Template applied', 'flavor-agent' ),
+	templatePart: __( 'Template part applied', 'flavor-agent' ),
+	'template-part': __( 'Template part applied', 'flavor-agent' ),
+	globalStyles: __( 'Global styles updated', 'flavor-agent' ),
+	'global-styles': __( 'Global styles updated', 'flavor-agent' ),
+	styleBook: __( 'Style Book updated', 'flavor-agent' ),
+	'style-book': __( 'Style Book updated', 'flavor-agent' ),
 } );
+const FALLBACK_SURFACE_TITLE = __( 'Update applied', 'flavor-agent' );
+const UNDO_LABEL = __( 'Undo', 'flavor-agent' );
 
 let nextLocalToastId = 0;
 
@@ -54,7 +58,7 @@ function getSurfaceTitle( surface ) {
 		return SURFACE_TITLES[ surface ];
 	}
 
-	return 'Update applied';
+	return FALLBACK_SURFACE_TITLE;
 }
 
 function formatBlockDetail( suggestion, extras ) {
@@ -226,7 +230,7 @@ export function buildToastForActivity( {
 		activityId,
 		activityScopeKey: activityDocument?.scopeKey || null,
 		activityDocument,
-		undoLabel: 'Undo',
+		undoLabel: UNDO_LABEL,
 		autoDismissMs: DEFAULT_SUCCESS_MS,
 		interacted: false,
 	};

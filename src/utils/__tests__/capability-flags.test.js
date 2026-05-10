@@ -1,3 +1,8 @@
+jest.mock( '@wordpress/i18n', () => ( {
+	__: jest.fn( ( text ) => text ),
+} ) );
+
+import * as i18n from '@wordpress/i18n';
 import { getCapabilityNotice, getSurfaceCapability } from '../capability-flags';
 
 describe( 'capability-flags', () => {
@@ -145,6 +150,45 @@ describe( 'capability-flags', () => {
 		} );
 		expect( getCapabilityNotice( 'pattern' )?.message ).toContain(
 			'Settings > Flavor Agent'
+		);
+	} );
+
+	test( 'registers legacy fallback notice copy for translation', () => {
+		window.flavorAgentData = {
+			canRecommendBlocks: false,
+			canRecommendPatterns: false,
+			settingsUrl:
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			connectorsUrl:
+				'https://example.test/wp-admin/options-connectors.php',
+		};
+
+		expect( getCapabilityNotice( 'block' ) ).toMatchObject( {
+			actionLabel: 'Open Connectors',
+		} );
+		expect( getCapabilityNotice( 'pattern' ) ).toMatchObject( {
+			actionLabel: 'Open Flavor Agent settings',
+		} );
+
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Open Connectors',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Open Flavor Agent settings',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Configure a text-generation provider in Settings > Connectors to enable block recommendations.',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+			'flavor-agent'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'This Flavor Agent surface is not available right now.',
+			'flavor-agent'
 		);
 	} );
 

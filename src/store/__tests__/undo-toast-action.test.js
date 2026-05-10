@@ -1,3 +1,8 @@
+jest.mock( '@wordpress/i18n', () => ( {
+	__: jest.fn( ( text ) => text ),
+} ) );
+
+import * as i18n from '@wordpress/i18n';
 import { createUndoToastAction } from '../undo-toast-action';
 import { TOAST_DEFAULTS } from '../toasts';
 
@@ -101,6 +106,11 @@ describe( 'undoToastAction — result handling', () => {
 				variant: 'error',
 				errorHint: 'The change could not be reverted.',
 			} )
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith( 'Undo failed', 'flavor-agent' );
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'The change could not be reverted.',
+			'flavor-agent'
 		);
 	} );
 

@@ -32,6 +32,7 @@ import { store as noticesStore } from '@wordpress/notices';
 
 import CapabilityNotice from '../components/CapabilityNotice';
 import { STORE_NAME } from '../store';
+import { buildPatternRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import { formatCount } from '../utils/format-count';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import {
@@ -398,17 +399,23 @@ export default function PatternRecommender() {
 		},
 		[ inserterRootClientId ]
 	);
-	const { patternError, patternStatus, recommendations, patternDiagnostics } =
-		useSelect( ( select ) => {
-			const store = select( STORE_NAME );
+	const {
+		patternError,
+		patternStatus,
+		recommendations,
+		patternDiagnostics,
+		patternRequestSignature,
+	} = useSelect( ( select ) => {
+		const store = select( STORE_NAME );
 
-			return {
-				patternError: store.getPatternError?.() || '',
-				patternStatus: store.getPatternStatus(),
-				recommendations: store.getPatternRecommendations(),
-				patternDiagnostics: store.getPatternDiagnostics?.() || null,
-			};
-		}, [] );
+		return {
+			patternError: store.getPatternError?.() || '',
+			patternStatus: store.getPatternStatus(),
+			recommendations: store.getPatternRecommendations(),
+			patternDiagnostics: store.getPatternDiagnostics?.() || null,
+			patternRequestSignature: store.getPatternRequestSignature?.() || '',
+		};
+	}, [] );
 	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
 	const { insertBlocks } = useDispatch( blockEditorStore );
 	const { createSuccessNotice, createErrorNotice } =
@@ -514,7 +521,8 @@ export default function PatternRecommender() {
 					sprintf(
 						/* translators: %s: block pattern title. */
 						__(
-							'Cannot insert pattern "%s" because Gutenberg did not provide insertable block content for it.'
+							'Cannot insert pattern "%s" because Gutenberg did not provide insertable block content for it.',
+							'flavor-agent'
 						),
 						getPatternTitle( pattern )
 					),
@@ -524,6 +532,35 @@ export default function PatternRecommender() {
 					}
 				);
 				return;
+			}
+
+			// Freshness guard: the inserter root/index can move after the
+			// recommendation was ranked. Compare the live request signature
+			// with the one captured at fetch time and refuse stale inserts so
+			// blocks never land in a context the LLM did not see.
+			if ( patternRequestSignature && effectivePostType ) {
+				const liveInput = buildBaseInput();
+				const liveSignature =
+					buildPatternRecommendationRequestSignature( liveInput );
+
+				if ( liveSignature !== patternRequestSignature ) {
+					createErrorNotice(
+						sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot insert pattern "%s" because the insertion point has changed since these recommendations were ranked. Refreshing now — try again in a moment.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
+						),
+						{
+							type: 'snackbar',
+							id: 'inserter-notice',
+						}
+					);
+					fetchPatternRecommendations( liveInput );
+					return;
+				}
 			}
 
 			const blockEditor = registry?.select?.( blockEditorStore );
@@ -538,7 +575,8 @@ export default function PatternRecommender() {
 					sprintf(
 						/* translators: 1: pattern title 2: comma-separated block names. */
 						__(
-							'Cannot insert pattern "%1$s" here. The following blocks are not allowed at this insertion point: %2$s.'
+							'Cannot insert pattern "%1$s" here. The following blocks are not allowed at this insertion point: %2$s.',
+							'flavor-agent'
 						),
 						getPatternTitle( pattern ),
 						rejected.join( ', ' )
@@ -560,7 +598,7 @@ export default function PatternRecommender() {
 			createSuccessNotice(
 				sprintf(
 					/* translators: %s: block pattern title. */
-					__( 'Block pattern "%s" inserted.' ),
+					__( 'Block pattern "%s" inserted.', 'flavor-agent' ),
 					getPatternTitle( pattern )
 				),
 				{
@@ -570,11 +608,15 @@ export default function PatternRecommender() {
 			);
 		},
 		[
+			buildBaseInput,
 			createErrorNotice,
 			createSuccessNotice,
+			effectivePostType,
+			fetchPatternRecommendations,
 			insertBlocks,
 			insertionIndex,
 			inserterRootClientId,
+			patternRequestSignature,
 			registry,
 		]
 	);

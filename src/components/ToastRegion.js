@@ -21,6 +21,7 @@ import {
 	useState,
 } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
+import { __ } from '@wordpress/i18n';
 
 import UndoToast from './UndoToast';
 import { TOAST_DEFAULTS } from '../store/toasts';
@@ -35,7 +36,10 @@ function getRegionRoot() {
 	if ( ! root ) {
 		root = document.createElement( 'div' );
 		root.className = 'flavor-agent-toast-region';
-		root.setAttribute( 'aria-label', 'Flavor Agent recent changes' );
+		root.setAttribute(
+			'aria-label',
+			__( 'Flavor Agent recent changes', 'flavor-agent' )
+		);
 		document.body.appendChild( root );
 	}
 

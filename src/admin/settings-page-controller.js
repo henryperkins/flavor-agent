@@ -1185,6 +1185,9 @@ function initializePatternSync( root, fetchImpl ) {
 			'1'
 		) === '1';
 
+	const havePatternPrerequisites = () =>
+		normalizeText( syncBody.dataset.patternPrerequisitesReady ) === '1';
+
 	const canSyncNow = () => {
 		return (
 			havePatternPrerequisites() &&
@@ -1192,9 +1195,6 @@ function initializePatternSync( root, fetchImpl ) {
 			getCurrentSyncStatus() !== 'indexing'
 		);
 	};
-
-	const havePatternPrerequisites = () =>
-		normalizeText( syncBody.dataset.patternPrerequisitesReady ) === '1';
 
 	const updateButtonAccessibility = ( isBusy = false ) => {
 		const canSync = canSyncNow();

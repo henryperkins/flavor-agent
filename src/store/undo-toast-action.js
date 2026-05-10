@@ -1,11 +1,17 @@
+import { __ } from '@wordpress/i18n';
+
 import { TOAST_DEFAULTS } from './toasts';
 
-const FALLBACK_ERROR_HINT = 'The change could not be reverted.';
+const FALLBACK_ERROR_HINT = __(
+	'The change could not be reverted.',
+	'flavor-agent'
+);
+const UNDO_FAILED_TITLE = __( 'Undo failed', 'flavor-agent' );
 
 function buildErrorPatch( errorHint ) {
 	return {
 		variant: 'error',
-		title: 'Undo failed',
+		title: UNDO_FAILED_TITLE,
 		errorHint: errorHint || FALLBACK_ERROR_HINT,
 		autoDismissMs: TOAST_DEFAULTS.errorMs,
 		interacted: false,

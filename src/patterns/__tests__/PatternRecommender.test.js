@@ -141,6 +141,9 @@ function createSelectMap() {
 			getPatternDiagnostics: jest.fn(
 				() => state.store.patternDiagnostics
 			),
+			getPatternRequestSignature: jest.fn(
+				() => state.store.patternRequestSignature
+			),
 		},
 	};
 }
@@ -180,6 +183,7 @@ describe( 'PatternRecommender', () => {
 				patternStatus: 'idle',
 				patternRecommendations: [],
 				patternDiagnostics: null,
+				patternRequestSignature: '',
 			},
 		};
 		mockUseDispatch.mockReset();
@@ -272,6 +276,30 @@ describe( 'PatternRecommender', () => {
 			/\.flavor-agent-pattern-shelf__title\s*\{[^}]*color:\s*var\(--flavor-agent-editor-text\)/s
 		);
 		expect( EDITOR_CSS ).not.toContain( '--flavor-agent-editor-ink' );
+	} );
+
+	test( 'uses semantic z-index tokens for editor overlays', () => {
+		expect( EDITOR_CSS ).toContain(
+			'--flavor-agent-editor-z-inserter-badge: 1;'
+		);
+		expect( EDITOR_CSS ).toContain(
+			'--flavor-agent-editor-z-toast-region: 100000;'
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-inserter-badge-anchor\s*\{[^}]*isolation:\s*isolate;/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-inserter-badge\s*\{[^}]*z-index:\s*var\(--flavor-agent-editor-z-inserter-badge\)/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-toast-region\s*\{[^}]*z-index:\s*var\(--flavor-agent-editor-z-toast-region\)/s
+		);
+		expect( EDITOR_CSS ).not.toMatch(
+			/\.flavor-agent-inserter-badge\s*\{[^}]*z-index:\s*100\b/s
+		);
+		expect( EDITOR_CSS ).not.toMatch(
+			/\.flavor-agent-toast-region\s*\{[^}]*z-index:\s*1000\b/s
+		);
 	} );
 
 	test( 'provides forced-colors focus outlines for chip and panel buttons', () => {
@@ -699,6 +727,134 @@ describe( 'PatternRecommender', () => {
 				id: 'inserter-notice',
 			}
 		);
+	} );
+
+	test( 'blocks insert and refetches when the live insertion context drifts from the ranked context', () => {
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		// Stale signature captured for a previous insertion target. Live signature
+		// computed by the component will differ because the component derives it
+		// from the current insertionContext / postType / visiblePatternNames.
+		state.store.patternRequestSignature =
+			'stale-signature-from-prior-target';
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		// Drop the initial fetch from useEffect so we can observe the
+		// drift-triggered refetch in isolation.
+		mockFetchPatternRecommendations.mockClear();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		act( () => {
+			insertButton.click();
+		} );
+
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+		expect( mockCreateErrorNotice ).toHaveBeenCalledTimes( 1 );
+		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+			expect.stringMatching(
+				/insertion point has changed|inserter has moved/i
+			),
+			expect.objectContaining( {
+				type: 'snackbar',
+				id: 'inserter-notice',
+			} )
+		);
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				postType: 'page',
+				visiblePatternNames: [ 'theme/hero' ],
+				insertionContext: expect.objectContaining( {
+					rootBlock: 'core/group',
+				} ),
+			} )
+		);
+	} );
+
+	test( 'inserts when the live insertion context matches the ranked context', () => {
+		const {
+			buildPatternRecommendationRequestSignature,
+		} = require( '../../utils/recommendation-request-signature' );
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.store.patternRequestSignature =
+			buildPatternRecommendationRequestSignature( {
+				postType: 'page',
+				visiblePatternNames: [ 'theme/hero' ],
+				insertionContext: {
+					rootBlock: 'core/group',
+					ancestors: [ 'core/group' ],
+					nearbySiblings: [],
+				},
+			} );
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+		mockFetchPatternRecommendations.mockClear();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		act( () => {
+			insertButton.click();
+		} );
+
+		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
+		expect( mockCreateErrorNotice ).not.toHaveBeenCalled();
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
 	} );
 
 	test( 'shows a safe unreadable synced-pattern notice when renderable recommendations remain', () => {

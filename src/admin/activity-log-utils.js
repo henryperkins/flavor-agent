@@ -1445,8 +1445,15 @@ export function clampActivityViewPage(
 	const totalPages = Number.isInteger( paginationInfo?.totalPages )
 		? paginationInfo.totalPages
 		: 0;
-	const lastPage = totalPages > 0 ? totalPages : 1;
-	const nextPage = Math.min( normalizedView.page, lastPage );
+
+	// Pagination metadata not loaded yet (or response held no entries). Leave the
+	// page untouched so a persisted page > 1 isn't reset to 1 before the first
+	// REST response arrives — the clamp re-runs once real totalPages is known.
+	if ( totalPages <= 0 ) {
+		return normalizedView;
+	}
+
+	const nextPage = Math.min( normalizedView.page, totalPages );
 
 	if ( nextPage === normalizedView.page ) {
 		return normalizedView;
