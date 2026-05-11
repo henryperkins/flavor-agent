@@ -1,10 +1,14 @@
 const path = require( 'path' );
+const fs = require( 'fs' );
 const { defineConfig } = require( '@playwright/test' );
 
 const rootDir = __dirname;
 const port = Number( process.env.PLAYWRIGHT_PORT || 9402 );
 const pluginDir = rootDir;
 const muPluginDir = path.join( rootDir, 'tests/e2e/playground-mu-plugin' );
+const playgroundTmpDir = path.join( rootDir, 'output/playground-tmp' );
+
+fs.mkdirSync( playgroundTmpDir, { recursive: true } );
 
 // Ensure the SHELL environment variable is set to the detected bash path
 // to avoid ENOENT errors on Windows when Playwright tries to spawn a shell
@@ -45,6 +49,12 @@ module.exports = defineConfig( {
 			`--mount-dir ${ muPluginDir } /wordpress/wp-content/mu-plugins`,
 			'--verbosity=quiet',
 		].join( ' ' ),
+		env: {
+			...process.env,
+			TMPDIR: playgroundTmpDir,
+			TMP: playgroundTmpDir,
+			TEMP: playgroundTmpDir,
+		},
 		port,
 		reuseExistingServer: true,
 		timeout: 120_000,

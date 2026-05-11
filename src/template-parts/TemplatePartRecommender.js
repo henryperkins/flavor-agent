@@ -23,10 +23,8 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
-	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
-	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import { STORE_NAME } from '../store';
@@ -706,15 +704,15 @@ export default function TemplatePartRecommender() {
 			) || null,
 		[ executableSuggestionCards, selectedSuggestionKey ]
 	);
+	const hasUndoSuccess =
+		undoStatus === 'success' &&
+		lastUndoneTemplatePartActivity?.undo?.status === 'undone';
 	const hasApplySuccess =
 		applyStatus === 'success' &&
 		lastAppliedSuggestionKey &&
 		lastAppliedOperations.length > 0 &&
 		latestTemplatePartActivity &&
 		latestTemplatePartActivity.id === latestUndoableActivityId;
-	const hasUndoSuccess =
-		undoStatus === 'success' &&
-		lastUndoneTemplatePartActivity?.undo?.status === 'undone';
 	const statusNotice = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -949,18 +947,6 @@ export default function TemplatePartRecommender() {
 					onDismiss={ dismissStatusNotice }
 				/>
 
-				{ canRecommend && isStaleResult && (
-					<RecommendationHero
-						title="Refresh recommendations for this template part"
-						description="Flavor Agent kept the previous result visible so you can compare it against the current template part."
-						tone={ STALE_STATUS_LABEL }
-						why="Review and apply actions stay disabled until you refresh against the live template-part context and current prompt."
-						primaryActionLabel={ REFRESH_ACTION_LABEL }
-						onPrimaryAction={ handleFetch }
-						primaryActionDisabled={ isLoading }
-					/>
-				) }
-
 				{ canRecommend && featuredSuggestionCard && (
 					<RecommendationHero
 						title={
@@ -1081,7 +1067,7 @@ export default function TemplatePartRecommender() {
 						}
 						hint={
 							isStaleResult
-								? 'This preview is stale. Refresh recommendations before applying these operations.'
+								? ''
 								: 'Flavor Agent will only apply the exact deterministic operations shown here inside the current template part.'
 						}
 						confirmLabel={

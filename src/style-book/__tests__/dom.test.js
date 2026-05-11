@@ -321,7 +321,7 @@ describe( 'subscribeToStyleBookUi', () => {
 		unsubscribe();
 	} );
 
-	test( 'observes the Styles sidebar root instead of the whole document body when available', () => {
+	test( 'observes the document body so Style Book mounts outside the sidebar are detected', () => {
 		const originalObserver = window.MutationObserver;
 		const observeTargets = [];
 
@@ -335,8 +335,7 @@ describe( 'subscribeToStyleBookUi', () => {
 		const unsubscribe = subscribeToStyleBookUi( document, jest.fn() );
 
 		try {
-			expect( observeTargets[ 0 ]?.id ).toBe( 'sidebar' );
-			expect( observeTargets ).not.toContain( document.body );
+			expect( observeTargets[ 0 ] ).toBe( document.body );
 		} finally {
 			unsubscribe();
 			window.MutationObserver = originalObserver;

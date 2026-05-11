@@ -901,6 +901,7 @@ describe( 'store action thunks', () => {
 			...input,
 			document,
 		};
+		const insertionTargetSignature = 'pattern-target-root-a-0';
 		const requestSignature =
 			buildPatternRecommendationRequestSignature( requestData );
 		const dispatch = jest.fn();
@@ -908,7 +909,9 @@ describe( 'store action thunks', () => {
 			getPatternRequestToken: jest.fn().mockReturnValue( 4 ),
 		};
 
-		await actions.fetchPatternRecommendations( input )( {
+		await actions.fetchPatternRecommendations( input, {
+			insertionTargetSignature,
+		} )( {
 			dispatch,
 			registry: {
 				select: jest.fn( ( storeName ) =>
@@ -929,7 +932,13 @@ describe( 'store action thunks', () => {
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setPatternStatus( 'loading', null, 5, requestSignature )
+			actions.setPatternStatus(
+				'loading',
+				null,
+				5,
+				requestSignature,
+				insertionTargetSignature
+			)
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
@@ -947,23 +956,91 @@ describe( 'store action thunks', () => {
 					filteredCandidates: {
 						unreadableSyncedPatterns: 2,
 					},
-				}
+				},
+				insertionTargetSignature
 			)
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
 			3,
-			actions.setPatternStatus( 'ready', null, 5, requestSignature )
+			actions.setPatternStatus(
+				'ready',
+				null,
+				5,
+				requestSignature,
+				insertionTargetSignature
+			)
+		);
+	} );
+
+	test( 'fetchPatternRecommendations clears insertion target signature when omitted', async () => {
+		apiFetch.mockResolvedValue( {
+			recommendations: [],
+		} );
+
+		const input = {
+			postType: 'page',
+		};
+		const document = {
+			scopeKey: 'page:42',
+			postType: 'page',
+			entityId: '42',
+			entityKind: '',
+			entityName: '',
+			stylesheet: '',
+		};
+		const requestSignature = buildPatternRecommendationRequestSignature( {
+			...input,
+			document,
+		} );
+		const dispatch = jest.fn();
+
+		await actions.fetchPatternRecommendations( input )( {
+			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'page',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
+			select: {
+				getPatternRequestToken: jest.fn().mockReturnValue( 0 ),
+			},
+		} );
+
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setPatternStatus( 'loading', null, 1, requestSignature, '' )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setPatternRecommendations(
+				[],
+				1,
+				requestSignature,
+				null,
+				''
+			)
 		);
 	} );
 
 	test( 'stores pattern diagnostics for selectors', () => {
 		const state = reducer(
 			undefined,
-			actions.setPatternRecommendations( [], 1, 'abc', {
-				filteredCandidates: {
-					unreadableSyncedPatterns: 3,
+			actions.setPatternRecommendations(
+				[],
+				1,
+				'abc',
+				{
+					filteredCandidates: {
+						unreadableSyncedPatterns: 3,
+					},
 				},
-			} )
+				'target-a'
+			)
 		);
 
 		expect( selectors.getPatternDiagnostics( state ) ).toEqual( {
@@ -971,6 +1048,9 @@ describe( 'store action thunks', () => {
 				unreadableSyncedPatterns: 3,
 			},
 		} );
+		expect( selectors.getPatternInsertionTargetSignature( state ) ).toBe(
+			'target-a'
+		);
 	} );
 
 	test( 'fetchContentRecommendations sends document scope and refreshes scoped activity', async () => {

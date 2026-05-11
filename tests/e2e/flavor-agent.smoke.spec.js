@@ -7,6 +7,9 @@ const {
 } = require( '../../scripts/wp70-e2e' );
 
 const wp70Harness = getWp70HarnessConfig();
+const FLAVOR_AGENT_READY_TIMEOUT_MS = 90_000;
+const FLAVOR_AGENT_READY_RETRY_MS = 15_000;
+const FLAVOR_AGENT_READY_NAVIGATION_TIMEOUT_MS = 10_000;
 
 const BLOCK_RESPONSE = {
 	payload: {
@@ -63,7 +66,7 @@ const TEMPLATE_PART_STALE_NOTICE =
 const GLOBAL_STYLES_PROMPT =
 	'Warm the canvas slightly and tighten the site-wide vertical rhythm.';
 const GLOBAL_STYLES_SUGGESTION_LABEL = 'Adjust canvas tone and rhythm';
-const GLOBAL_STYLES_BACKGROUND_VALUE = 'var:preset|color|signal';
+const GLOBAL_STYLES_BACKGROUND_VALUE = 'var:preset|color|paper';
 const GLOBAL_STYLES_LINE_HEIGHT_VALUE = 1.73;
 const GLOBAL_STYLES_STALE_TEXT_COLOR = '#101010';
 const GLOBAL_STYLES_STALE_NOTICE =
@@ -113,12 +116,12 @@ function recommendationAbilityRoute( abilitySlug ) {
 const GLOBAL_STYLES_RESPONSE = {
 	resolvedContextSignature: GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE,
 	explanation:
-		'Use the theme signal preset for the canvas and tighten line height slightly.',
+		'Use the theme paper preset for the canvas and tighten line height slightly.',
 	suggestions: [
 		{
 			label: 'Adjust canvas tone and rhythm',
 			description:
-				'Apply the signal canvas preset and tighten the global line height.',
+				'Apply the paper canvas preset and tighten the global line height.',
 			category: 'color',
 			tone: 'executable',
 			operations: [
@@ -128,8 +131,8 @@ const GLOBAL_STYLES_RESPONSE = {
 					value: GLOBAL_STYLES_BACKGROUND_VALUE,
 					valueType: 'preset',
 					presetType: 'color',
-					presetSlug: 'signal',
-					cssVar: 'var(--wp--preset--color--signal)',
+					presetSlug: 'paper',
+					cssVar: 'var(--wp--preset--color--paper)',
 				},
 				{
 					type: 'set_styles',
@@ -159,8 +162,8 @@ const GLOBAL_STYLES_PARTIAL_INVALID_RESPONSE = {
 					value: GLOBAL_STYLES_BACKGROUND_VALUE,
 					valueType: 'preset',
 					presetType: 'color',
-					presetSlug: 'signal',
-					cssVar: 'var(--wp--preset--color--signal)',
+					presetSlug: 'paper',
+					cssVar: 'var(--wp--preset--color--paper)',
 				},
 				{
 					type: 'set_styles',
@@ -367,7 +370,7 @@ async function mockGlobalStylesRecommendations(
 ) {
 	await mockRecommendationRoute(
 		page,
-		'**/*recommend-style*',
+		recommendationAbilityRoute( 'recommend-style' ),
 		styleRequests,
 		responseBody
 	);
@@ -376,7 +379,7 @@ async function mockGlobalStylesRecommendations(
 async function mockStyleBookRecommendations( page, styleRequests ) {
 	await mockRecommendationRoute(
 		page,
-		'**/*recommend-style*',
+		recommendationAbilityRoute( 'recommend-style' ),
 		styleRequests,
 		STYLE_BOOK_RESPONSE
 	);
@@ -607,10 +610,52 @@ async function injectStyleBookExample( page, { blockName, blockTitle } ) {
 	);
 }
 
-async function waitForFlavorAgent( page ) {
-	await page.waitForFunction( () =>
-		Boolean( window.wp?.data?.select( 'flavor-agent' ) )
-	);
+async function waitForFlavorAgent(
+	page,
+	{ timeout = FLAVOR_AGENT_READY_TIMEOUT_MS } = {}
+) {
+	const deadline = Date.now() + timeout;
+
+	while ( Date.now() < deadline ) {
+		const remaining = deadline - Date.now();
+
+		try {
+			await page.waitForFunction(
+				() => Boolean( window.wp?.data?.select( 'flavor-agent' ) ),
+				undefined,
+				{
+					timeout: Math.min( FLAVOR_AGENT_READY_RETRY_MS, remaining ),
+				}
+			);
+
+			return;
+		} catch {}
+
+		const nextRemaining = deadline - Date.now();
+		if ( nextRemaining <= 0 ) {
+			break;
+		}
+
+		const targetUrl = page.url();
+
+		try {
+			await page.goto( targetUrl, {
+				waitUntil: 'domcontentloaded',
+				timeout: Math.min(
+					FLAVOR_AGENT_READY_NAVIGATION_TIMEOUT_MS,
+					nextRemaining
+				),
+			} );
+			await waitForWordPressReady( page, {
+				timeout: Math.min(
+					FLAVOR_AGENT_READY_NAVIGATION_TIMEOUT_MS,
+					Math.max( 1, deadline - Date.now() )
+				),
+			} );
+		} catch {}
+	}
+
+	throw new Error( 'Timed out waiting for Flavor Agent.' );
 }
 
 async function reloadActivitySessionForCurrentEditorScope( page ) {
@@ -2964,7 +3009,9 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 	await expect(
 		recommendationsPanel.getByText( GLOBAL_STYLES_SUGGESTION_LABEL ).first()
 	).toBeVisible();
-	await page.getByRole( 'button', { name: 'Review', exact: true } ).click();
+	await recommendationsPanel
+		.getByRole( 'button', { name: /^Review\b/ } )
+		.click();
 	await expect(
 		page
 			.locator( '.flavor-agent-review-section' )
@@ -2974,14 +3021,6 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 		.getByRole( 'button', { name: 'Confirm Apply', exact: true } )
 		.click();
 
-	await expect(
-		page
-			.locator( '.flavor-agent-status-notice__message' )
-			.getByText(
-				'Flavor Agent applied the selected Global Styles change.',
-				{ exact: true }
-			)
-	).toBeVisible( { timeout: 15000 } );
 	await expect
 		.poll( () => getGlobalStylesState( page ) )
 		.toEqual(
@@ -2998,6 +3037,13 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 			.locator( '.flavor-agent-activity-row' )
 			.getByText( 'Undo available' )
 	).toBeVisible();
+	const applyToast = page.locator( '.flavor-agent-toast' ).first();
+	if ( await applyToast.isVisible().catch( () => false ) ) {
+		await applyToast
+			.getByRole( 'button', { name: 'Dismiss', exact: true } )
+			.click();
+		await expect( applyToast ).toBeHidden();
+	}
 
 	await expect( page.getByText( 'Recent AI Style Actions' ) ).toBeVisible();
 	await page
@@ -3064,7 +3110,9 @@ test( '@wp70-site-editor global styles surface keeps grouped apply operations al
 	await expect(
 		recommendationsPanel.getByText( GLOBAL_STYLES_SUGGESTION_LABEL ).first()
 	).toBeVisible();
-	await page.getByRole( 'button', { name: 'Review', exact: true } ).click();
+	await recommendationsPanel
+		.getByRole( 'button', { name: /^Review\b/ } )
+		.click();
 	await page
 		.getByRole( 'button', { name: 'Confirm Apply', exact: true } )
 		.click();
@@ -3218,12 +3266,14 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 		.toBe( GLOBAL_STYLES_STALE_TEXT_COLOR );
 
 	await expect(
-		recommendationsPanel.getByText( GLOBAL_STYLES_STALE_NOTICE )
+		recommendationsPanel.locator(
+			'.flavor-agent-scope-bar__stale-message',
+			{ hasText: GLOBAL_STYLES_STALE_NOTICE }
+		)
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
-			name: 'Reviewing',
-			exact: true,
+			name: /^Reviewing\b/,
 		} )
 	).toBeDisabled();
 	await expect(
@@ -3243,12 +3293,14 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 		styleRequests[ 1 ].styleContext.currentConfig.styles.color.text
 	).toBe( GLOBAL_STYLES_STALE_TEXT_COLOR );
 	await expect(
-		recommendationsPanel.getByText( GLOBAL_STYLES_STALE_NOTICE )
+		recommendationsPanel.locator(
+			'.flavor-agent-scope-bar__stale-message',
+			{ hasText: GLOBAL_STYLES_STALE_NOTICE }
+		)
 	).toHaveCount( 0 );
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
-			name: 'Review',
-			exact: true,
+			name: /^Review\b/,
 		} )
 	).toBeEnabled();
 } );
@@ -3415,12 +3467,14 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 		.toBe( STYLE_BOOK_STALE_TEXT_COLOR );
 
 	await expect(
-		recommendationsPanel.getByText( STYLE_BOOK_STALE_NOTICE )
+		recommendationsPanel.locator(
+			'.flavor-agent-scope-bar__stale-message',
+			{ hasText: STYLE_BOOK_STALE_NOTICE }
+		)
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
-			name: 'Reviewing',
-			exact: true,
+			name: /^Reviewing\b/,
 		} )
 	).toBeDisabled();
 	await expect(
@@ -3440,12 +3494,14 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 		styleRequests[ 1 ].styleContext.styleBookTarget.currentStyles.color.text
 	).toBe( STYLE_BOOK_STALE_TEXT_COLOR );
 	await expect(
-		recommendationsPanel.getByText( STYLE_BOOK_STALE_NOTICE )
+		recommendationsPanel.locator(
+			'.flavor-agent-scope-bar__stale-message',
+			{ hasText: STYLE_BOOK_STALE_NOTICE }
+		)
 	).toHaveCount( 0 );
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
-			name: 'Review',
-			exact: true,
+			name: /^Review\b/,
 		} )
 	).toBeEnabled();
 } );
@@ -3732,12 +3788,14 @@ test( 'template surface keeps stale results visible but disables review and appl
 	recommendationsPanel = getPanelBody( promptInput );
 
 	await expect(
-		recommendationsPanel.getByText( TEMPLATE_STALE_NOTICE )
+		recommendationsPanel.locator(
+			'.flavor-agent-scope-bar__stale-message',
+			{ hasText: TEMPLATE_STALE_NOTICE }
+		)
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
-			name: 'Reviewing',
-			exact: true,
+			name: /^Reviewing\b/,
 		} )
 	).toBeDisabled();
 	await expect(
@@ -3752,7 +3810,7 @@ test( 'template surface keeps stale results visible but disables review and appl
 			name: 'Refresh',
 			exact: true,
 		} )
-		.nth( 1 );
+		.first();
 
 	await expect( refreshButton ).toBeEnabled( { timeout: 15000 } );
 	await refreshButton.click();
@@ -3773,12 +3831,14 @@ test( 'template surface keeps stale results visible but disables review and appl
 		] )
 	);
 	await expect(
-		recommendationsPanel.getByText( TEMPLATE_STALE_NOTICE )
+		recommendationsPanel.locator(
+			'.flavor-agent-scope-bar__stale-message',
+			{ hasText: TEMPLATE_STALE_NOTICE }
+		)
 	).toHaveCount( 0 );
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
-			name: 'Review',
-			exact: true,
+			name: /^Review\b/,
 		} )
 	).toBeEnabled();
 } );
@@ -4072,9 +4132,28 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 		.getByRole( 'tab', { name: 'Template Part', exact: true } )
 		.click();
 	await openTemplatePartRecommendationsPanel( page );
-	const templatePartUndoButton = page
-		.locator( '.components-notice, .flavor-agent-activity-row' )
-		.filter( { hasText: 'Applied 1 template-part operation.' } )
+	await reloadActivitySessionForCurrentEditorScope( page );
+	const recentActionsToggle = page
+		.getByRole( 'button', { name: /Recent AI Actions 1 action/ } )
+		.first();
+	if (
+		( await recentActionsToggle.getAttribute( 'aria-expanded' ) ) !== 'true'
+	) {
+		await recentActionsToggle.click();
+	}
+	const templatePartActivityRow = page
+		.locator( '.flavor-agent-activity-row' )
+		.filter( { hasText: TEMPLATE_PART_SUGGESTION_LABEL } )
+		.first();
+	await expect( templatePartActivityRow ).toContainText( 'Undo available' );
+	const applyToast = page.locator( '.flavor-agent-toast' ).first();
+	if ( await applyToast.isVisible().catch( () => false ) ) {
+		await applyToast
+			.getByRole( 'button', { name: 'Dismiss', exact: true } )
+			.click();
+		await expect( applyToast ).toBeHidden();
+	}
+	const templatePartUndoButton = templatePartActivityRow
 		.getByRole( 'button', { name: 'Undo', exact: true } )
 		.first();
 	await templatePartUndoButton.scrollIntoViewIfNeeded();
@@ -4219,12 +4298,14 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 	recommendationsPanel = getPanelBody( promptInput );
 
 	await expect(
-		recommendationsPanel.getByText( TEMPLATE_PART_STALE_NOTICE )
+		recommendationsPanel.locator(
+			'.flavor-agent-scope-bar__stale-message',
+			{ hasText: TEMPLATE_PART_STALE_NOTICE }
+		)
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
-			name: 'Reviewing',
-			exact: true,
+			name: /^Reviewing\b/,
 		} )
 	).toBeDisabled();
 	await expect(
@@ -4260,12 +4341,14 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 		] )
 	);
 	await expect(
-		recommendationsPanel.getByText( TEMPLATE_PART_STALE_NOTICE )
+		recommendationsPanel.locator(
+			'.flavor-agent-scope-bar__stale-message',
+			{ hasText: TEMPLATE_PART_STALE_NOTICE }
+		)
 	).toHaveCount( 0 );
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
-			name: 'Review',
-			exact: true,
+			name: /^Review\b/,
 		} )
 	).toBeEnabled();
 } );

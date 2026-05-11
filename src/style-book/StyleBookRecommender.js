@@ -21,10 +21,8 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
-	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
-	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import {
 	buildBlockStyleExecutionContractFromSettings,
@@ -120,8 +118,6 @@ function StyleBookPanel( {
 	}
 
 	if ( isStale ) {
-		reviewHint =
-			'This review is stale. Refresh recommendations before applying these operations.';
 		staleReason = getExecutableSurfaceStaleMessage( {
 			surfaceLabel: 'Style Book',
 			staleReasonType,
@@ -202,18 +198,6 @@ function StyleBookPanel( {
 					onAction={ onNoticeAction }
 					onDismiss={ onNoticeDismiss }
 					className="flavor-agent-style-feedback-notice"
-				/>
-			) }
-
-			{ isStale && capabilityAvailable && (
-				<RecommendationHero
-					title="Refresh recommendations for this Style Book example"
-					description="Flavor Agent kept the previous result visible so you can compare it against the active Style Book example."
-					tone={ STALE_STATUS_LABEL }
-					why="Review and apply actions stay disabled until you refresh against the live Style Book context and current prompt."
-					primaryActionLabel={ REFRESH_ACTION_LABEL }
-					onPrimaryAction={ onRequest }
-					primaryActionDisabled={ isLoading }
 				/>
 			) }
 

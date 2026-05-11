@@ -32,7 +32,7 @@ import { store as noticesStore } from '@wordpress/notices';
 
 import CapabilityNotice from '../components/CapabilityNotice';
 import { STORE_NAME } from '../store';
-import { buildPatternRecommendationRequestSignature } from '../utils/recommendation-request-signature';
+import { buildPatternInsertionTargetSignature } from '../utils/recommendation-request-signature';
 import { formatCount } from '../utils/format-count';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import {
@@ -404,7 +404,7 @@ export default function PatternRecommender() {
 		patternStatus,
 		recommendations,
 		patternDiagnostics,
-		patternRequestSignature,
+		patternInsertionTargetSignature,
 	} = useSelect( ( select ) => {
 		const store = select( STORE_NAME );
 
@@ -413,7 +413,8 @@ export default function PatternRecommender() {
 			patternStatus: store.getPatternStatus(),
 			recommendations: store.getPatternRecommendations(),
 			patternDiagnostics: store.getPatternDiagnostics?.() || null,
-			patternRequestSignature: store.getPatternRequestSignature?.() || '',
+			patternInsertionTargetSignature:
+				store.getPatternInsertionTargetSignature?.() || '',
 		};
 	}, [] );
 	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
@@ -481,6 +482,36 @@ export default function PatternRecommender() {
 		insertionContext,
 	] );
 
+	const currentInsertionTargetSignature = useMemo(
+		() =>
+			buildPatternInsertionTargetSignature( {
+				postType: effectivePostType,
+				templateType,
+				inserterRootClientId,
+				insertionIndex,
+				insertionContext,
+			} ),
+		[
+			effectivePostType,
+			templateType,
+			inserterRootClientId,
+			insertionIndex,
+			insertionContext,
+		]
+	);
+
+	const fetchPatternRecommendationsForCurrentTarget = useCallback(
+		( input = buildBaseInput() ) =>
+			fetchPatternRecommendations( input, {
+				insertionTargetSignature: currentInsertionTargetSignature,
+			} ),
+		[
+			buildBaseInput,
+			currentInsertionTargetSignature,
+			fetchPatternRecommendations,
+		]
+	);
+
 	const clearSearchDebounce = useCallback( () => {
 		if ( debounceRef.current ) {
 			clearTimeout( debounceRef.current );
@@ -504,12 +535,11 @@ export default function PatternRecommender() {
 			return;
 		}
 
-		fetchPatternRecommendations( buildBaseInput() );
+		fetchPatternRecommendationsForCurrentTarget();
 	}, [
 		canRecommend,
 		effectivePostType,
-		buildBaseInput,
-		fetchPatternRecommendations,
+		fetchPatternRecommendationsForCurrentTarget,
 	] );
 
 	const handleInsertPattern = useCallback(
@@ -535,15 +565,20 @@ export default function PatternRecommender() {
 			}
 
 			// Freshness guard: the inserter root/index can move after the
-			// recommendation was ranked. Compare the live request signature
-			// with the one captured at fetch time and refuse stale inserts so
-			// blocks never land in a context the LLM did not see.
-			if ( patternRequestSignature && effectivePostType ) {
+			// recommendation was ranked. Compare only the insertion-target
+			// signature captured at fetch time so ranking inputs such as the
+			// visible pattern set do not cause false stale-target rejections.
+			if (
+				patternInsertionTargetSignature &&
+				currentInsertionTargetSignature &&
+				effectivePostType
+			) {
 				const liveInput = buildBaseInput();
-				const liveSignature =
-					buildPatternRecommendationRequestSignature( liveInput );
 
-				if ( liveSignature !== patternRequestSignature ) {
+				if (
+					currentInsertionTargetSignature !==
+					patternInsertionTargetSignature
+				) {
 					createErrorNotice(
 						sprintf(
 							/* translators: %s: block pattern title. */
@@ -558,7 +593,7 @@ export default function PatternRecommender() {
 							id: 'inserter-notice',
 						}
 					);
-					fetchPatternRecommendations( liveInput );
+					fetchPatternRecommendationsForCurrentTarget( liveInput );
 					return;
 				}
 			}
@@ -612,11 +647,12 @@ export default function PatternRecommender() {
 			createErrorNotice,
 			createSuccessNotice,
 			effectivePostType,
-			fetchPatternRecommendations,
+			fetchPatternRecommendationsForCurrentTarget,
 			insertBlocks,
 			insertionIndex,
 			inserterRootClientId,
-			patternRequestSignature,
+			currentInsertionTargetSignature,
+			patternInsertionTargetSignature,
 			registry,
 		]
 	);
@@ -626,12 +662,11 @@ export default function PatternRecommender() {
 			return;
 		}
 
-		fetchPatternRecommendations( buildBaseInput() );
+		fetchPatternRecommendationsForCurrentTarget();
 	}, [
 		canRecommend,
 		effectivePostType,
-		buildBaseInput,
-		fetchPatternRecommendations,
+		fetchPatternRecommendationsForCurrentTarget,
 	] );
 
 	useEffect( () => {
@@ -728,14 +763,14 @@ export default function PatternRecommender() {
 					input.blockContext = { blockName: selectedBlockName };
 				}
 
-				fetchPatternRecommendations( input );
+				fetchPatternRecommendationsForCurrentTarget( input );
 			} );
 		},
 		[
 			effectivePostType,
 			buildBaseInput,
 			selectedBlockName,
-			fetchPatternRecommendations,
+			fetchPatternRecommendationsForCurrentTarget,
 			scheduleSearchFetch,
 		]
 	);

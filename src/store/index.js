@@ -130,6 +130,7 @@ const DEFAULT_STATE = {
 	patternRequestToken: 0,
 	patternResultToken: 0,
 	patternRequestSignature: '',
+	patternInsertionTargetSignature: '',
 	...createExecutableSurfaceDefaultState(),
 	...toastsDefaultState,
 };
@@ -1872,7 +1873,8 @@ const actions = {
 		status,
 		error = null,
 		requestToken = null,
-		requestSignature = ''
+		requestSignature = '',
+		insertionTargetSignature = ''
 	) {
 		return {
 			type: 'SET_PATTERN_STATUS',
@@ -1880,6 +1882,7 @@ const actions = {
 			error,
 			requestToken,
 			requestSignature,
+			insertionTargetSignature,
 		};
 	},
 
@@ -1887,7 +1890,8 @@ const actions = {
 		recommendations,
 		requestToken = null,
 		requestSignature = '',
-		diagnostics = null
+		diagnostics = null,
+		insertionTargetSignature = ''
 	) {
 		return {
 			type: 'SET_PATTERN_RECS',
@@ -1895,6 +1899,7 @@ const actions = {
 			requestToken,
 			requestSignature,
 			diagnostics,
+			insertionTargetSignature,
 		};
 	},
 
@@ -1960,7 +1965,7 @@ const actions = {
 		};
 	},
 
-	fetchPatternRecommendations( input ) {
+	fetchPatternRecommendations( input, requestContext = {} ) {
 		return ( { dispatch, registry, select } ) =>
 			runAbortableRecommendationRequest( {
 				abortKey: '_patternAbort',
@@ -1980,11 +1985,17 @@ const actions = {
 						buildPatternRecommendationRequestSignature(
 							requestData
 						);
+					const insertionTargetSignature =
+						typeof requestContext?.insertionTargetSignature ===
+						'string'
+							? requestContext.insertionTargetSignature
+							: '';
 
 					return {
 						requestData,
 						requestToken,
 						requestSignature,
+						insertionTargetSignature,
 					};
 				},
 				dispatch,
@@ -1994,6 +2005,7 @@ const actions = {
 				onError: ( {
 					dispatch: localDispatch,
 					err,
+					insertionTargetSignature,
 					requestSignature,
 					requestToken,
 				} ) => {
@@ -2001,7 +2013,9 @@ const actions = {
 						actions.setPatternRecommendations(
 							[],
 							requestToken,
-							requestSignature
+							requestSignature,
+							null,
+							insertionTargetSignature
 						)
 					);
 					localDispatch(
@@ -2010,7 +2024,8 @@ const actions = {
 							err?.message ||
 								'Pattern recommendation request failed.',
 							requestToken,
-							requestSignature
+							requestSignature,
+							insertionTargetSignature
 						)
 					);
 					return reloadStoreActivitySession(
@@ -2021,6 +2036,7 @@ const actions = {
 				},
 				onLoading: ( {
 					dispatch: localDispatch,
+					insertionTargetSignature,
 					requestSignature,
 					requestToken,
 				} ) => {
@@ -2029,12 +2045,14 @@ const actions = {
 							'loading',
 							null,
 							requestToken,
-							requestSignature
+							requestSignature,
+							insertionTargetSignature
 						)
 					);
 				},
 				onSuccess: ( {
 					dispatch: localDispatch,
+					insertionTargetSignature,
 					requestSignature,
 					requestToken,
 					result,
@@ -2044,7 +2062,8 @@ const actions = {
 							result.recommendations || [],
 							requestToken,
 							requestSignature,
-							result.diagnostics || null
+							result.diagnostics || null,
+							insertionTargetSignature
 						)
 					);
 					localDispatch(
@@ -2052,7 +2071,8 @@ const actions = {
 							'ready',
 							null,
 							requestToken,
-							requestSignature
+							requestSignature,
+							insertionTargetSignature
 						)
 					);
 					return reloadStoreActivitySession(
@@ -2744,6 +2764,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 					action.requestToken ?? state.patternRequestToken,
 				patternRequestSignature:
 					action.requestSignature || state.patternRequestSignature,
+				patternInsertionTargetSignature:
+					typeof action.insertionTargetSignature === 'string'
+						? action.insertionTargetSignature
+						: state.patternInsertionTargetSignature,
 			};
 		case 'SET_CONTENT_STATUS':
 			if ( action.requestToken < ( state.contentRequestToken || 0 ) ) {
@@ -2822,6 +2846,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 				patternResultToken: state.patternResultToken + 1,
 				patternRequestSignature:
 					action.requestSignature || state.patternRequestSignature,
+				patternInsertionTargetSignature:
+					typeof action.insertionTargetSignature === 'string'
+						? action.insertionTargetSignature
+						: state.patternInsertionTargetSignature,
 			};
 		case 'SET_NAVIGATION_STATUS':
 			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
@@ -2976,6 +3004,8 @@ const selectors = {
 	getPatternRequestToken: ( state ) => state.patternRequestToken,
 	getPatternRequestSignature: ( state ) =>
 		state.patternRequestSignature || '',
+	getPatternInsertionTargetSignature: ( state ) =>
+		state.patternInsertionTargetSignature || '',
 	getContentRecommendation: ( state ) => state.contentRecommendation,
 	getContentRecommendationRequestSignature: ( state ) =>
 		state.contentRecommendationRequestSignature || '',

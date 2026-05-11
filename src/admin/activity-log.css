@@ -931,7 +931,7 @@ body.settings_page_flavor-agent-activity {
 
 .flavor-agent-activity-log
   .components-button.is-secondary:hover:not(:disabled) {
-  background: #fff;
+  background: var(--wpds-color-bg-surface, #fff);
   border-color: var(--flavor-agent-activity-log-accent-strong);
   color: var(--flavor-agent-activity-log-accent-strong);
 }

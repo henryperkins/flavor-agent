@@ -16,7 +16,6 @@ const mockGetBlockActivityUndoState = jest.fn();
 const mockRenderAIActivitySection = jest.fn();
 const mockRenderNavigationRecommendations = jest.fn();
 let mockShouldRenderNavigationRecommendations = false;
-const DOCUMENT_POSITION_FOLLOWING = 4;
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -698,6 +697,21 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 	test( 'shows an undo action on apply success notices and dispatches undo for the latest block activity', () => {
 		currentState = createState( {
 			store: {
+				blockApplyStatuses: {
+					'block-1': 'success',
+				},
+			},
+		} );
+
+		renderPanel();
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				blockApplyStatuses: {
+					'block-1': 'success',
+				},
 				activityLog: [
 					{
 						id: 'activity-1',
@@ -716,29 +730,6 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			},
 		} );
 
-		renderPanel();
-		currentState = createState( {
-			blockEditor: {
-				selectedBlockClientId: null,
-			},
-			store: {
-				activityLog: [
-					{
-						id: 'activity-1',
-						surface: 'block',
-						suggestion: 'Refresh hero copy',
-						target: {
-							clientId: 'block-1',
-						},
-						undo: {
-							canUndo: true,
-							status: 'available',
-							error: null,
-						},
-					},
-				],
-			},
-		} );
 		renderPanel();
 
 		expect( getContainer().textContent ).toContain(
@@ -1541,7 +1532,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( getContainer().textContent ).toContain( 'Review first' );
 		expect( getContainer().textContent ).toContain( 'Stale' );
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'These structural suggestions are shown for reference from the last request. Refresh before reviewing them.'
 		);
 		expect( getContainer().textContent ).not.toContain(
@@ -1650,7 +1641,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( getContainer().textContent ).toContain( 'Review first' );
 		expect( getContainer().textContent ).toContain( 'Stale' );
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'These structural suggestions are shown for reference from the last request. Refresh before reviewing them.'
 		);
 		expect( getContainer().textContent ).toContain(
@@ -2248,9 +2239,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( getContainer().textContent ).toContain( 'Stale' );
 		expect( getContainer().textContent ).toContain(
-			'This result no longer matches the current block or prompt.'
+			'Block or prompt changed. Refresh before applying the previous result.'
 		);
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Refresh recommendations for the current block'
 		);
 		expect( mockSuggestionChips ).toHaveBeenCalledWith(
@@ -2274,12 +2265,11 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				?.getAttribute( 'role' )
 		).toBe( 'status' );
 		expect(
-			getContainer()
-				.querySelector( '.flavor-agent-recommendation-hero' )
-				?.compareDocumentPosition(
-					getContainer().querySelector( '.flavor-agent-explanation' )
-				)
-		).toBe( DOCUMENT_POSITION_FOLLOWING );
+			getContainer().querySelector( '.flavor-agent-recommendation-hero' )
+		).toBeNull();
+		expect( getContainer().textContent ).toContain(
+			'Use viewport visibility for mobile.'
+		);
 	} );
 
 	test( 'marks same-clientId block edits stale and refreshes against the updated live context', () => {
@@ -2341,7 +2331,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( getContainer().textContent ).toContain( 'Stale' );
 		expect( getContainer().textContent ).toContain(
-			'This result no longer matches the current block or prompt.'
+			'Block or prompt changed. Refresh before applying the previous result.'
 		);
 
 		mockFetchBlockRecommendations.mockClear();

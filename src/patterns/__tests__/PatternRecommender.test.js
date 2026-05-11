@@ -144,6 +144,9 @@ function createSelectMap() {
 			getPatternRequestSignature: jest.fn(
 				() => state.store.patternRequestSignature
 			),
+			getPatternInsertionTargetSignature: jest.fn(
+				() => state.store.patternInsertionTargetSignature
+			),
 		},
 	};
 }
@@ -184,6 +187,7 @@ describe( 'PatternRecommender', () => {
 				patternRecommendations: [],
 				patternDiagnostics: null,
 				patternRequestSignature: '',
+				patternInsertionTargetSignature: '',
 			},
 		};
 		mockUseDispatch.mockReset();
@@ -206,8 +210,8 @@ describe( 'PatternRecommender', () => {
 		mockUseDispatch.mockImplementation( ( storeName ) => {
 			if ( storeName === 'flavor-agent' ) {
 				return {
-					fetchPatternRecommendations:
-						mockFetchPatternRecommendations,
+					fetchPatternRecommendations: ( input ) =>
+						mockFetchPatternRecommendations( input ),
 				};
 			}
 
@@ -730,6 +734,9 @@ describe( 'PatternRecommender', () => {
 	} );
 
 	test( 'blocks insert and refetches when the live insertion context drifts from the ranked context', () => {
+		const {
+			buildPatternInsertionTargetSignature,
+		} = require( '../../utils/recommendation-request-signature' );
 		const inserterContainer = document.createElement( 'div' );
 		const allowedPattern = {
 			name: 'theme/hero',
@@ -755,10 +762,19 @@ describe( 'PatternRecommender', () => {
 			},
 		];
 		// Stale signature captured for a previous insertion target. Live signature
-		// computed by the component will differ because the component derives it
-		// from the current insertionContext / postType / visiblePatternNames.
-		state.store.patternRequestSignature =
-			'stale-signature-from-prior-target';
+		// computed by the component will differ because the component includes
+		// the live inserter root/index in the insertion-target signature.
+		state.store.patternInsertionTargetSignature =
+			buildPatternInsertionTargetSignature( {
+				postType: 'page',
+				inserterRootClientId: 'previous-root',
+				insertionIndex: 0,
+				insertionContext: {
+					rootBlock: 'core/group',
+					ancestors: [ 'core/group' ],
+					nearbySiblings: [],
+				},
+			} );
 		state.allowedPatterns = [ allowedPattern ];
 		mockFindInserterContainer.mockReturnValue( inserterContainer );
 
@@ -800,8 +816,81 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
+	test( 'blocks insert when root and index match but insertion context changes', () => {
+		const {
+			buildPatternInsertionTargetSignature,
+		} = require( '../../utils/recommendation-request-signature' );
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.blockEditor.blockOrder = {
+			'root-a': [ 'sibling-a' ],
+		};
+		state.blockEditor.blockNames = {
+			'root-a': 'core/group',
+			'sibling-a': 'core/heading',
+		};
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.store.patternInsertionTargetSignature =
+			buildPatternInsertionTargetSignature( {
+				postType: 'page',
+				inserterRootClientId: 'root-a',
+				insertionIndex: 0,
+				insertionContext: {
+					rootBlock: 'core/group',
+					ancestors: [ 'core/group' ],
+					nearbySiblings: [ 'core/paragraph' ],
+				},
+			} );
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+		mockFetchPatternRecommendations.mockClear();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		act( () => {
+			insertButton.click();
+		} );
+
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockCreateErrorNotice ).toHaveBeenCalledTimes( 1 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				insertionContext: expect.objectContaining( {
+					nearbySiblings: [ 'core/heading' ],
+				} ),
+			} )
+		);
+	} );
+
 	test( 'inserts when the live insertion context matches the ranked context', () => {
 		const {
+			buildPatternInsertionTargetSignature,
 			buildPatternRecommendationRequestSignature,
 		} = require( '../../utils/recommendation-request-signature' );
 		const inserterContainer = document.createElement( 'div' );
@@ -832,6 +921,87 @@ describe( 'PatternRecommender', () => {
 			buildPatternRecommendationRequestSignature( {
 				postType: 'page',
 				visiblePatternNames: [ 'theme/hero' ],
+				insertionContext: {
+					rootBlock: 'core/group',
+					ancestors: [ 'core/group' ],
+					nearbySiblings: [],
+				},
+			} );
+		state.store.patternInsertionTargetSignature =
+			buildPatternInsertionTargetSignature( {
+				postType: 'page',
+				inserterRootClientId: 'root-a',
+				insertionIndex: 0,
+				insertionContext: {
+					rootBlock: 'core/group',
+					ancestors: [ 'core/group' ],
+					nearbySiblings: [],
+				},
+			} );
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+		mockFetchPatternRecommendations.mockClear();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		act( () => {
+			insertButton.click();
+		} );
+
+		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
+		expect( mockCreateErrorNotice ).not.toHaveBeenCalled();
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+	} );
+
+	test( 'inserts when live visible patterns drift but the insertion target still matches', () => {
+		const {
+			buildPatternInsertionTargetSignature,
+			buildPatternRecommendationRequestSignature,
+		} = require( '../../utils/recommendation-request-signature' );
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.visiblePatternNames = [ 'theme/hero', 'theme/cards' ];
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.store.patternRequestSignature =
+			buildPatternRecommendationRequestSignature( {
+				postType: 'page',
+				visiblePatternNames: [ 'theme/hero' ],
+				insertionContext: {
+					rootBlock: 'core/group',
+					ancestors: [ 'core/group' ],
+					nearbySiblings: [],
+				},
+			} );
+		state.store.patternInsertionTargetSignature =
+			buildPatternInsertionTargetSignature( {
+				postType: 'page',
+				inserterRootClientId: 'root-a',
+				insertionIndex: 0,
 				insertionContext: {
 					rootBlock: 'core/group',
 					ancestors: [ 'core/group' ],

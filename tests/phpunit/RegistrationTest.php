@@ -167,6 +167,27 @@ final class RegistrationTest extends TestCase {
 		);
 	}
 
+	public function test_registered_ability_schemas_do_not_emit_empty_properties_arrays(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		foreach ( WordPressTestState::$registered_abilities as $ability_id => $ability ) {
+			foreach ( [ 'input_schema', 'output_schema' ] as $schema_key ) {
+				$schema = $ability[ $schema_key ] ?? null;
+
+				if ( ! is_array( $schema ) ) {
+					continue;
+				}
+
+				$this->assertSchemaHasNoEmptyPropertiesArrays(
+					$schema,
+					"{$ability_id}.{$schema_key}"
+				);
+			}
+		}
+	}
+
 	public function test_recommendation_ability_registration_delegates_contracts_to_ability_classes(): void {
 		Registration::register_category();
 		Registration::register_recommendation_abilities();
@@ -1513,5 +1534,27 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame( 'string', $sync['type'] ?? null );
 		$this->assertSame( [ 'synced', 'partial', 'unsynced', 'all' ], $sync['enum'] ?? null );
 		$this->assertSame( 'synced', $sync['default'] ?? null );
+	}
+
+	/**
+	 * @param array<string, mixed> $schema
+	 */
+	private function assertSchemaHasNoEmptyPropertiesArrays( array $schema, string $path ): void {
+		if ( array_key_exists( 'properties', $schema ) ) {
+			$this->assertNotSame(
+				[],
+				$schema['properties'],
+				"{$path}.properties must be omitted for open object schemas without declared child properties."
+			);
+		}
+
+		foreach ( $schema as $key => $value ) {
+			if ( is_array( $value ) ) {
+				$this->assertSchemaHasNoEmptyPropertiesArrays(
+					$value,
+					"{$path}.{$key}"
+				);
+			}
+		}
 	}
 }

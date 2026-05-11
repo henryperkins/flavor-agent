@@ -1394,7 +1394,7 @@ describe( 'GlobalStylesRecommender', () => {
 		);
 	} );
 
-	test( 'dispatches undo from the Global Styles apply success notice for the latest activity', () => {
+	test( 'shows an inline undo action on Global Styles apply success', () => {
 		currentStoreState = {
 			...currentStoreState,
 			activityLog: [
@@ -1419,8 +1419,12 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
+		expect( sidebar.textContent ).toContain(
+			'Flavor Agent applied the selected Global Styles change.'
+		);
+
 		const undoButton = Array.from(
-			sidebar.querySelectorAll( 'button' )
+			sidebar.querySelectorAll( '[data-status-notice="true"] button' )
 		).find( ( element ) => element.textContent === 'Undo' );
 
 		expect( undoButton ).toBeDefined();
@@ -1432,7 +1436,7 @@ describe( 'GlobalStylesRecommender', () => {
 		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
 	} );
 
-	test( 'keeps the apply success undo notice visible after review closes while suggestions remain', () => {
+	test( 'keeps an inline Global Styles apply success notice after review closes', () => {
 		currentStoreState = {
 			...currentStoreState,
 			activityLog: [
@@ -1492,7 +1496,9 @@ describe( 'GlobalStylesRecommender', () => {
 		);
 
 		expect( applySuccessNotice ).toBeDefined();
-		expect( applySuccessNotice.textContent ).toContain( 'Undo' );
+		expect(
+			applySuccessNotice.querySelector( 'button' )?.textContent
+		).toBe( 'Undo' );
 	} );
 
 	test( 'does not mark activity history as undoing while apply is in flight', () => {

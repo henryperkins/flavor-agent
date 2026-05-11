@@ -21,10 +21,8 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
-	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
-	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import {
 	buildGlobalStylesExecutionContractFromSettings,
@@ -105,8 +103,6 @@ function GlobalStylesPanel( {
 	let staleReason = '';
 
 	if ( isStale ) {
-		reviewHint =
-			'This review is stale. Refresh recommendations before applying these operations.';
 		staleReason = getExecutableSurfaceStaleMessage( {
 			surfaceLabel: 'Global Styles',
 			staleReasonType,
@@ -193,18 +189,6 @@ function GlobalStylesPanel( {
 					onAction={ onNoticeAction }
 					onDismiss={ onNoticeDismiss }
 					className="flavor-agent-style-feedback-notice"
-				/>
-			) }
-
-			{ isStale && capabilityAvailable && (
-				<RecommendationHero
-					title="Refresh recommendations for Global Styles"
-					description="Flavor Agent kept the previous result visible so you can compare it against the current Global Styles config."
-					tone={ STALE_STATUS_LABEL }
-					why="Review and apply actions stay disabled until you refresh against the live Global Styles context and current prompt."
-					primaryActionLabel={ REFRESH_ACTION_LABEL }
-					onPrimaryAction={ onRequest }
-					primaryActionDisabled={ isLoading }
 				/>
 			) }
 

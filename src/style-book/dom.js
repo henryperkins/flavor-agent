@@ -501,8 +501,7 @@ function reconcileSharedIframeObserver() {
 
 function attachSharedObservers( root ) {
 	sharedRoot = root;
-	const observerTarget =
-		findStylesSidebarMountNode( root ) || root.body || root.documentElement;
+	const observerTarget = root.body || root.documentElement;
 
 	if ( ! observerTarget ) {
 		reconcileSharedIframeObserver();

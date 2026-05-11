@@ -18,6 +18,16 @@ function normalizeStringArray( value ) {
 	].sort();
 }
 
+function normalizeNullableInteger( value ) {
+	if ( value === null || value === undefined || value === '' ) {
+		return null;
+	}
+
+	const number = Number( value );
+
+	return Number.isInteger( number ) ? number : null;
+}
+
 export function buildRecommendationRequestSignature( {
 	surface = '',
 	prompt = '',
@@ -112,12 +122,38 @@ export function buildContentRecommendationRequestSignature( {
 	} );
 }
 
+export function buildPatternInsertionTargetSignature( input = {} ) {
+	const normalizedInput =
+		input && typeof input === 'object' && ! Array.isArray( input )
+			? input
+			: {};
+
+	return buildContextSignature( {
+		surface: 'pattern-insertion-target',
+		postType: normalizeStringValue( normalizedInput.postType ),
+		templateType: normalizeStringValue( normalizedInput.templateType ),
+		inserterRootClientId: normalizeStringValue(
+			normalizedInput.inserterRootClientId
+		),
+		insertionIndex: normalizeNullableInteger(
+			normalizedInput.insertionIndex
+		),
+		insertionContext: normalizedInput.insertionContext || null,
+	} );
+}
+
 export function buildPatternRecommendationRequestSignature( input = {} ) {
 	const normalizedInput =
 		input && typeof input === 'object' && ! Array.isArray( input )
 			? input
 			: {};
 
+	// `document` is intentionally excluded: it carries activity-scope metadata
+	// that the PHP execution layer strips before reaching the LLM
+	// (RecommendationAbilityExecution::build_execution_input). Including it
+	// here previously caused a false-positive freshness mismatch on every
+	// Insert click, because the live signature in PatternRecommender does not
+	// have access to the activity scope.
 	return buildContextSignature( {
 		surface: 'pattern',
 		postType: normalizeStringValue( normalizedInput.postType ),
@@ -128,7 +164,6 @@ export function buildPatternRecommendationRequestSignature( input = {} ) {
 		),
 		insertionContext: normalizedInput.insertionContext || null,
 		blockContext: normalizedInput.blockContext || null,
-		document: normalizedInput.document || null,
 	} );
 }
 

@@ -32,16 +32,13 @@ import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import LinkedEntityText from '../components/LinkedEntityText';
-import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
-	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
-	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import { STORE_NAME } from '../store';
 import {
@@ -605,15 +602,15 @@ export default function TemplateRecommender() {
 			) || null,
 		[ executableSuggestionCards, selectedSuggestionKey ]
 	);
+	const hasUndoSuccess =
+		undoStatus === 'success' &&
+		lastUndoneTemplateActivity?.undo?.status === 'undone';
 	const hasApplySuccess =
 		applyStatus === 'success' &&
 		lastAppliedSuggestionKey &&
 		lastAppliedOperations.length > 0 &&
 		latestTemplateActivity &&
 		latestTemplateActivity.id === latestUndoableActivityId;
-	const hasUndoSuccess =
-		undoStatus === 'success' &&
-		lastUndoneTemplateActivity?.undo?.status === 'undone';
 	const statusNotice = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -832,18 +829,6 @@ export default function TemplateRecommender() {
 					onDismiss={ dismissStatusNotice }
 				/>
 
-				{ canRecommend && isStaleResult && (
-					<RecommendationHero
-						title="Refresh recommendations for this template"
-						description="Flavor Agent kept the previous result visible so you can compare it against the current template."
-						tone={ STALE_STATUS_LABEL }
-						why="Review and apply actions stay disabled until you refresh against the live template context and current prompt."
-						primaryActionLabel={ REFRESH_ACTION_LABEL }
-						onPrimaryAction={ handleFetch }
-						primaryActionDisabled={ isLoading }
-					/>
-				) }
-
 				{ canRecommend && hasResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
 						<LinkedEntityText
@@ -943,7 +928,7 @@ export default function TemplateRecommender() {
 						}
 						hint={
 							isStaleResult
-								? 'This preview is stale. Refresh recommendations before applying these operations.'
+								? ''
 								: 'Pattern insertions use the validated template structure shown below, and Flavor Agent will refuse to apply them if that target has drifted.'
 						}
 						confirmLabel={

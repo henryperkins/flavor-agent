@@ -666,13 +666,7 @@ describe( 'TemplatePartRecommender', () => {
 		expect( hasText( 'Advisory only' ) ).toBe( true );
 		expect( hasText( 'Introduce utility links' ) ).toBe( true );
 		expect( hasText( 'Browse pattern' ) ).toBe( true );
-		expect(
-			getContainer()
-				.querySelector( '.flavor-agent-recommendation-hero' )
-				?.compareDocumentPosition(
-					getContainer().querySelector( '.flavor-agent-explanation' )
-				)
-		).toBe( DOCUMENT_POSITION_FOLLOWING );
+		expect( hasText( 'One advisory idea is available.' ) ).toBe( true );
 	} );
 
 	test( 'submits live pattern override metadata with template-part requests', async () => {

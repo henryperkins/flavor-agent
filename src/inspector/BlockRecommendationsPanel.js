@@ -24,7 +24,6 @@ import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
-import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
@@ -33,7 +32,6 @@ import {
 	MANUAL_IDEAS_LABEL,
 	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
-	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
@@ -389,12 +387,12 @@ export function BlockRecommendationsContent( {
 
 		setUncontrolledPrompt( recommendationsPromptRef.current );
 	}, [ clientId, isPromptControlled ] );
-	const hasApplySuccess =
-		Boolean( latestBlockActivity ) &&
-		latestBlockActivity?.id === latestUndoableActivityId;
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
+	const hasApplySuccess =
+		Boolean( latestBlockActivity ) &&
+		latestBlockActivity?.id === latestUndoableActivityId;
 	const {
 		clientStaleReason,
 		effectiveStaleReason,
@@ -789,8 +787,8 @@ export function BlockRecommendationsContent( {
 	if ( isStaleResult ) {
 		staleScopeReason =
 			effectiveStaleReason === 'server-apply'
-				? 'This result no longer matches the current server-resolved apply context. Refresh before applying anything from the previous result.'
-				: 'This result no longer matches the current block or prompt. Refresh before applying anything from the previous result.';
+				? 'Server apply context changed. Refresh before applying the previous result.'
+				: 'Block or prompt changed. Refresh before applying the previous result.';
 	}
 
 	const shouldShowScopeNote = eyebrow !== 'Selected Block' && introCopy;
@@ -853,18 +851,6 @@ export function BlockRecommendationsContent( {
 				onDismiss={ dismissStatusNotice }
 			/>
 
-			{ isStaleResult && (
-				<RecommendationHero
-					title="Refresh recommendations for the current block"
-					description="Flavor Agent kept the previous result visible so you can compare it against the current block."
-					tone={ STALE_STATUS_LABEL }
-					why="Apply actions stay disabled until you refresh against the live block context and current prompt."
-					primaryActionLabel={ REFRESH_ACTION_LABEL }
-					onPrimaryAction={ handleRefresh }
-					primaryActionDisabled={ isLoading }
-				/>
-			) }
-
 			{ hasResult && recommendations?.explanation && (
 				<p className="flavor-agent-explanation flavor-agent-panel__note">
 					{ recommendations.explanation }
@@ -874,14 +860,12 @@ export function BlockRecommendationsContent( {
 			{ executableBlockSuggestions.length > 0 && (
 				<RecommendationLane
 					title={ APPLY_NOW_LABEL }
-					tone={
-						isStaleResult ? STALE_STATUS_LABEL : APPLY_NOW_LABEL
-					}
+					tone={ isStaleResult ? '' : APPLY_NOW_LABEL }
 					count={ executableBlockSuggestions.length }
 					countNoun="suggestion"
 					description={
 						isStaleResult
-							? 'These suggestions are shown for reference from the last request. Refresh before applying them.'
+							? ''
 							: 'Inline-safe changes can apply directly.'
 					}
 					meta={
@@ -906,14 +890,12 @@ export function BlockRecommendationsContent( {
 			{ reviewBlockSuggestions.length > 0 && (
 				<RecommendationLane
 					title={ REVIEW_LANE_LABEL }
-					tone={
-						isStaleResult ? STALE_STATUS_LABEL : REVIEW_LANE_LABEL
-					}
+					tone={ isStaleResult ? '' : REVIEW_LANE_LABEL }
 					count={ reviewBlockSuggestions.length }
 					countNoun="suggestion"
 					description={
 						isStaleResult
-							? 'These structural suggestions are shown for reference from the last request. Refresh before reviewing them.'
+							? ''
 							: 'Review required before structural apply.'
 					}
 					meta={
@@ -945,15 +927,11 @@ export function BlockRecommendationsContent( {
 			{ settingsSuggestions.length > 0 && (
 				<RecommendationLane
 					title="Settings suggestions"
-					tone={
-						isStaleResult ? STALE_STATUS_LABEL : APPLY_NOW_LABEL
-					}
+					tone={ isStaleResult ? '' : APPLY_NOW_LABEL }
 					count={ settingsSuggestions.length }
 					countNoun="suggestion"
 					description={
-						isStaleResult
-							? 'These settings suggestions are shown for reference from the last request. Refresh before applying them.'
-							: 'Settings changes apply here only.'
+						isStaleResult ? '' : 'Settings changes apply here only.'
 					}
 				>
 					<SuggestionChips
@@ -972,15 +950,11 @@ export function BlockRecommendationsContent( {
 			{ styleSuggestions.length > 0 && (
 				<RecommendationLane
 					title="Style suggestions"
-					tone={
-						isStaleResult ? STALE_STATUS_LABEL : APPLY_NOW_LABEL
-					}
+					tone={ isStaleResult ? '' : APPLY_NOW_LABEL }
 					count={ styleSuggestions.length }
 					countNoun="suggestion"
 					description={
-						isStaleResult
-							? 'These style suggestions are shown for reference from the last request. Refresh before applying them.'
-							: 'Style changes apply here only.'
+						isStaleResult ? '' : 'Style changes apply here only.'
 					}
 				>
 					<SuggestionChips

@@ -732,7 +732,7 @@ describe( 'StyleBookRecommender', () => {
 		);
 	} );
 
-	test( 'keeps the apply success undo notice visible after review closes while suggestions remain', () => {
+	test( 'keeps an inline Style Book apply success notice after review closes', () => {
 		currentStoreState = {
 			...currentStoreState,
 			activityLog: [
@@ -792,7 +792,16 @@ describe( 'StyleBookRecommender', () => {
 		);
 
 		expect( applySuccessNotice ).toBeDefined();
-		expect( applySuccessNotice.textContent ).toContain( 'Undo' );
+
+		const undoButton = applySuccessNotice.querySelector( 'button' );
+
+		expect( undoButton?.textContent ).toBe( 'Undo' );
+
+		act( () => {
+			undoButton.click();
+		} );
+
+		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
 	} );
 
 	test( 'renders shared style card badges and review state for executable style book suggestions', () => {

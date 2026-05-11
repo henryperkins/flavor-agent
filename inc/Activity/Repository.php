@@ -350,11 +350,11 @@ final class Repository {
 	 * }
 	 */
 	public static function query_admin( array $filters ): array {
-		$page           = self::normalize_page( $filters['page'] ?? 1 );
-		$per_page       = self::normalize_per_page( $filters['perPage'] ?? self::DEFAULT_PER_PAGE );
-		$sort_field     = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
-		$sort_direction = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
-		$timezone       = self::resolve_activity_timezone();
+		$page               = self::normalize_page( $filters['page'] ?? 1 );
+		$per_page           = self::normalize_per_page( $filters['perPage'] ?? self::DEFAULT_PER_PAGE );
+		$sort_field         = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
+		$sort_direction     = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
+		$timezone           = self::resolve_activity_timezone();
 		$linked_activity_id = trim( (string) ( $filters['activity'] ?? '' ) );
 
 		if ( '' !== $linked_activity_id ) {
@@ -458,8 +458,8 @@ final class Repository {
 			return 0;
 		}
 
-		$candidate_rows = self::query_candidate_rows( $filters );
-		$history_rows   = self::requires_full_history_resolution( $filters )
+		$candidate_rows    = self::query_candidate_rows( $filters );
+		$history_rows      = self::requires_full_history_resolution( $filters )
 			? self::query_admin_history_rows( $candidate_rows )
 			: $candidate_rows;
 		$status_map        = self::resolve_admin_row_statuses( $history_rows );

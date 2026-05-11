@@ -215,4 +215,62 @@ describe( 'pattern status store contract', () => {
 			'signature-current'
 		);
 	} );
+
+	test( 'pattern insertion target signature can be cleared by a current request', () => {
+		let state = reducer(
+			undefined,
+			actions.setPatternStatus(
+				'loading',
+				null,
+				1,
+				'signature-a',
+				'target-a'
+			)
+		);
+
+		expect( state.patternInsertionTargetSignature ).toBe( 'target-a' );
+
+		state = reducer(
+			state,
+			actions.setPatternRecommendations( [], 2, 'signature-b', null, '' )
+		);
+
+		expect( state.patternInsertionTargetSignature ).toBe( '' );
+	} );
+
+	test( 'stale pattern completions cannot overwrite insertion target signature', () => {
+		let state = reducer(
+			undefined,
+			actions.setPatternStatus(
+				'loading',
+				null,
+				1,
+				'signature-a',
+				'target-a'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setPatternStatus(
+				'loading',
+				null,
+				2,
+				'signature-b',
+				'target-b'
+			)
+		);
+
+		const staleState = reducer(
+			state,
+			actions.setPatternRecommendations(
+				[],
+				1,
+				'signature-a',
+				null,
+				'target-stale'
+			)
+		);
+
+		expect( staleState.patternInsertionTargetSignature ).toBe( 'target-b' );
+	} );
 } );

@@ -459,9 +459,8 @@ final class Registration {
 				'execute_callback'    => [ InfraAbilities::class, 'get_active_theme' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
 				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [],
-					'default'    => [],
+					'type'    => 'object',
+					'default' => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -480,9 +479,8 @@ final class Registration {
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_presets' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
 				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [],
-					'default'    => [],
+					'type'    => 'object',
+					'default' => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -501,9 +499,8 @@ final class Registration {
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_styles' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
 				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [],
-					'default'    => [],
+					'type'    => 'object',
+					'default' => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -522,9 +519,8 @@ final class Registration {
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_tokens' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
 				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [],
-					'default'    => [],
+					'type'    => 'object',
+					'default' => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -554,9 +550,8 @@ final class Registration {
 				'execute_callback'    => [ InfraAbilities::class, 'check_status' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
 				'input_schema'        => [
-					'type'       => 'object',
-					'properties' => [],
-					'default'    => [],
+					'type'    => 'object',
+					'default' => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -1739,9 +1734,12 @@ final class Registration {
 	private static function open_object_schema( array $properties = [], string $description = '' ): array {
 		$schema = [
 			'type'                 => 'object',
-			'properties'           => $properties,
 			'additionalProperties' => true,
 		];
+
+		if ( ! empty( $properties ) ) {
+			$schema['properties'] = $properties;
+		}
 
 		if ( $description !== '' ) {
 			$schema['description'] = $description;
