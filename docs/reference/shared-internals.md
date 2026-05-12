@@ -105,11 +105,11 @@ Local request-signature builder shared by the executable recommendation surfaces
 
 **Consumers:** `src/store/index.js`, `src/inspector/BlockRecommendationsPanel.js`, `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`, `src/inspector/SuggestionChips.js`
 
-`src/store/index.js` now pairs these local request signatures with server freshness signatures. Block stores `resolvedContextSignature` for apply safety and background server freshness demotion, template/template-part/Global Styles/Style Book also store a docs-free `reviewContextSignature` for background review revalidation, and navigation stores a docs-free `reviewContextSignature` without an apply hash. Apply actions keep the existing local stale check first, then re-execute the same ability with `resolveSignatureOnly: true` and compare the returned server apply-context signature before any deterministic mutation runs.
+`src/store/index.js` now pairs these local request signatures with server freshness signatures. Block stores `resolvedContextSignature` for apply safety and background server freshness demotion, template/template-part/Global Styles/Style Book also store `reviewContextSignature` for background review revalidation, and navigation stores `reviewContextSignature` without an apply hash. Those server signatures include a compact docs-grounding fingerprint. Apply actions keep the existing local stale check first, then re-execute the same ability with `resolveSignatureOnly: true` and compare the returned server apply-context signature before any deterministic mutation runs.
 
 ### `inc/Support/RecommendationResolvedSignature.php`
 
-Server-side apply-freshness helper shared by the executable recommendation abilities. `RecommendationResolvedSignature::from_payload()` hashes a stable normalized payload containing `{ surface, payload }`, where `payload` is the server-normalized apply context plus the sanitized prompt. Associative keys are sorted deterministically, list order is preserved, and docs guidance text is intentionally excluded so cache churn does not invalidate otherwise unchanged results.
+Server-side apply-freshness helper shared by the executable recommendation abilities. `RecommendationResolvedSignature::from_payload()` hashes a stable normalized payload containing `{ surface, payload }`, where `payload` is the server-normalized apply context plus the sanitized prompt and docs-grounding fingerprint. Associative keys are sorted deterministically, list order is preserved, and docs guidance text is intentionally excluded while the compact fingerprint captures currentness changes.
 
 **Consumers:** `inc/Abilities/BlockAbilities.php`, `inc/Abilities/TemplateAbilities.php`, `inc/Abilities/StyleAbilities.php`
 
@@ -117,7 +117,7 @@ Server-side apply-freshness helper shared by the executable recommendation abili
 
 Server-side review-freshness helper shared by template, template-part, style, and navigation recommendation abilities. `RecommendationReviewSignature::from_payload()` hashes a stable normalized `{ surface, payload }` structure with deterministic key ordering for associative arrays and preserved order for lists.
 
-Review payloads are intentionally limited to docs-free server review context so freshness tracks real server-owned drift instead of docs guidance or grounded prompt text churn, while apply-time mutation safety continues to rely on `resolvedContextSignature`.
+Review payloads are intentionally limited to server review context plus the docs-grounding fingerprint so freshness tracks real server-owned drift and currentness changes without embedding docs guidance text, while apply-time mutation safety continues to rely on `resolvedContextSignature`.
 
 **Consumers:** `inc/Abilities/TemplateAbilities.php`, `inc/Abilities/StyleAbilities.php`, `inc/Abilities/NavigationAbilities.php`
 

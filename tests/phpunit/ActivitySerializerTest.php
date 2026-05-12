@@ -139,6 +139,23 @@ final class ActivitySerializerTest extends TestCase {
 		);
 		$this->assertSame(
 			[
+				'type' => 'docs_grounding',
+				'ref'  => 'docs-grounding:developer-docs',
+			],
+			Serializer::derive_entity(
+				[
+					'surface'  => 'docs_grounding',
+					'target'   => [
+						'requestRef' => 'developer-docs',
+					],
+					'document' => [
+						'scopeKey' => 'docs-grounding:developer-docs',
+					],
+				]
+			)
+		);
+		$this->assertSame(
+			[
 				'type' => 'block',
 				'ref'  => 'post:42:path:0.2:block:core/group',
 			],

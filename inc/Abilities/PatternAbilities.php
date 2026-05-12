@@ -14,6 +14,7 @@ use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RankingContract;
@@ -279,7 +280,7 @@ final class PatternAbilities {
 		$visible_lookup          = array_fill_keys( $visible_pattern_names, true );
 		$semantic_limit          = $visible_lookup ? self::FILTERED_SEMANTIC_LIMIT : self::DEFAULT_SEMANTIC_LIMIT;
 		$structural_limit        = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
-		$docs_guidance           = self::collect_wordpress_docs_guidance(
+		$docs_result             = self::collect_wordpress_docs_guidance_result(
 			[
 				'postType'            => $post_type,
 				'templateType'        => $template_type,
@@ -289,6 +290,7 @@ final class PatternAbilities {
 			],
 			$prompt
 		);
+		$docs_guidance           = DocsGuidanceResult::guidance( $docs_result );
 
 		$query = self::build_embedding_query(
 			$post_type,
@@ -416,8 +418,12 @@ final class PatternAbilities {
 			self::MAX_LLM_CANDIDATES
 		);
 
+		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
+			return DocsGuidanceResult::unavailable_error( $docs_result );
+		}
+
 		if ( empty( $candidates ) ) {
-			return self::pattern_recommendation_response( [], $diagnostics );
+			return self::pattern_recommendation_response( [], $diagnostics, $docs_result );
 		}
 
 		// Step 5: Rank via Responses API.
@@ -539,7 +545,7 @@ final class PatternAbilities {
 			static fn( array $left, array $right ): int => $right['score'] <=> $left['score']
 		);
 
-		return self::pattern_recommendation_response( $recommendations, $diagnostics );
+		return self::pattern_recommendation_response( $recommendations, $diagnostics, $docs_result );
 	}
 
 	private static function validate_recommendation_backends(): true|\WP_Error {
@@ -599,10 +605,12 @@ final class PatternAbilities {
 	 * @param array<string, mixed>             $diagnostics
 	 * @return array<string, mixed>
 	 */
-	private static function pattern_recommendation_response( array $recommendations, array $diagnostics ): array {
+	private static function pattern_recommendation_response( array $recommendations, array $diagnostics, array $docs_result = [] ): array {
 		return [
-			'recommendations' => $recommendations,
-			'diagnostics'     => [
+			'recommendations'          => $recommendations,
+			'docsGrounding'            => [] !== $docs_result ? DocsGuidanceResult::public_summary( $docs_result ) : null,
+			'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+			'diagnostics'              => [
 				'filteredCandidates' => [
 					'unreadableSyncedPatterns' => max(
 						0,
@@ -781,8 +789,15 @@ Rules:
 - In custom block contexts, also prefer patterns whose Pattern Overrides
   metadata shows relevant support for the nearby custom block or other
   custom blocks when that flexibility materially improves fit.
-- When WordPress Developer Guidance is provided, prefer recommendations that
-  align with documented pattern, block, template, and theme.json guidance.
+- Use the WordPress Developer Guidance section as authoritative current
+  WordPress context. Do not recommend capabilities, block supports, APIs, or
+  editor workflows that contradict the provided guidance. If the user asks for
+  a current WordPress feature that is absent from the guidance, keep the
+  suggestion conservative and avoid claiming support.
+- If the guidance explicitly marks the user's requested API, workflow, or
+  feature as deprecated, unsupported, experimental, or replaced, warn about
+  that conflict and suggest the documented replacement instead of complying
+  with the stale request.
 - When Pattern Overrides metadata materially strengthens the recommendation,
   mention that briefly in the reason.
 - Return only name, score, and reason per pattern. Title, categories,
@@ -1841,7 +1856,24 @@ SYSTEM;
 			$context,
 			$prompt,
 			[
-				'allowForegroundWarm' => false,
+				'allowForegroundWarm' => true,
+			]
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt ): array {
+		return CollectsDocsGuidance::collect_result(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
+			static fn( array $request_context, string $request_prompt, string $entity_key ): array => self::build_wordpress_docs_family_context( $request_context, $entity_key ),
+			$context,
+			$prompt,
+			[
+				'allowForegroundWarm' => true,
+				'mode'                => 'recommendation',
 			]
 		);
 	}

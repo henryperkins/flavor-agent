@@ -14,6 +14,7 @@ import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
@@ -74,6 +75,7 @@ function GlobalStylesPanel( {
 	selectedSuggestion,
 	suggestions,
 	explanation,
+	docsGroundingWarning,
 	notice,
 	activityEntries,
 	activityResetKey,
@@ -157,6 +159,10 @@ function GlobalStylesPanel( {
 				onAction={ onNoticeAction }
 				onDismiss={ onNoticeDismiss }
 			/>
+
+			{ ! isStale && (
+				<DocsGroundingNotice warning={ docsGroundingWarning } />
+			) }
 
 			<SurfaceComposer
 				title="Ask Flavor Agent"
@@ -365,6 +371,7 @@ export default function GlobalStylesRecommender() {
 		currentResultRef,
 		reviewStaleReason,
 		storedStaleReason,
+		docsGroundingWarning,
 		status,
 		selectedSuggestionKey,
 		applyStatus,
@@ -471,6 +478,8 @@ export default function GlobalStylesRecommender() {
 			reviewStaleReason:
 				store?.getGlobalStylesReviewStaleReason?.() || null,
 			storedStaleReason: store?.getGlobalStylesStaleReason?.() || null,
+			docsGroundingWarning:
+				store?.getGlobalStylesDocsGroundingWarning?.() || null,
 			status: store?.getGlobalStylesStatus?.() || 'idle',
 			selectedSuggestionKey:
 				store?.getGlobalStylesSelectedSuggestionKey?.() || null,
@@ -845,6 +854,9 @@ export default function GlobalStylesRecommender() {
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
 			explanation={ explanation }
+			docsGroundingWarning={
+				hasMatchingResult ? docsGroundingWarning : null
+			}
 			notice={ notice }
 			activityEntries={ activityEntries }
 			activityResetKey={ scope?.globalStylesId || 'global-styles' }

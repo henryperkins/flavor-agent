@@ -80,7 +80,8 @@ Rules:
 - Keep patternSuggestions aligned with any executable operations you return.
 - Keep recommendations advisory-first. Do not output raw block markup or free-form rewritten block trees.
 - Use blockHints to point at the most relevant places in the current structure when specific focus areas exist.
-- When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
+- Use the WordPress Developer Guidance section as authoritative current WordPress context. Do not recommend capabilities, block supports, APIs, or editor workflows that contradict the provided guidance. If the user asks for a current WordPress feature that is absent from the guidance, keep the suggestion conservative and avoid claiming support.
+- If the guidance explicitly marks the user's requested API, workflow, or feature as deprecated, unsupported, experimental, or replaced, warn about that conflict and suggest the documented replacement instead of complying with the stale request.
 - Respect the theme's design tokens when suggesting patterns or structural changes.
 - Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.
 - When a recommendation depends on color, spacing, typography, border, background, or layout controls, do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.

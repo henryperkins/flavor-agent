@@ -14,18 +14,11 @@ use FlavorAgent\Tests\Support\WordPressTestState;
 
 final class NavigationAbilitiesTest extends TestCase {
 
-	/** @var callable */
-	private $disable_public_docs_filter;
-
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_filter    = static fn(): string => '';
-		\add_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			$this->disable_public_docs_filter
-		);
+		$this->prime_current_docs_source_coverage();
 		WordPressTestState::$block_templates = [
 			'wp_template_part' => [
 				(object) [
@@ -48,15 +41,6 @@ final class NavigationAbilitiesTest extends TestCase {
 				],
 			],
 		];
-	}
-
-	protected function tearDown(): void {
-		\remove_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			$this->disable_public_docs_filter
-		);
-
-		parent::tearDown();
 	}
 
 	public function test_recommend_navigation_rejects_missing_input(): void {
@@ -91,17 +75,123 @@ final class NavigationAbilitiesTest extends TestCase {
 		);
 
 		$this->assertIsArray( $result );
-		$this->assertSame(
-			[
-				'reviewContextSignature' => $result['reviewContextSignature'] ?? null,
-			],
-			$result
-		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['reviewContextSignature'] ?? '' )
 		);
+		$this->assertSame( 'unavailable', $result['docsGrounding']['status'] ?? null );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $result['docsGroundingFingerprint'] ?? '' )
+		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_recommend_navigation_fails_closed_when_docs_grounding_is_unavailable(): void {
+		$this->configure_text_generation_connector();
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Group related links',
+						'description' => 'Would have called the model without the grounding gate.',
+						'category'    => 'structure',
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'target'     => 'Home',
+								'detail'     => 'Keep Home first.',
+								'targetPath' => [ 0 ],
+							],
+						],
+					],
+				],
+				'explanation' => 'Grounding gate regression fixture.',
+			]
+		);
+
+		$result = NavigationAbilities::recommend_navigation(
+			[
+				'navigationMarkup' => '<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- /wp:navigation -->',
+				'prompt'           => 'Simplify the header navigation.',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+	}
+
+	public function test_recommend_navigation_review_signature_is_stable_between_recommendation_and_signature_modes(): void {
+		$this->configure_text_generation_connector();
+		AISearchClient::cache_entity_guidance(
+			'core/navigation',
+			[
+				[
+					'id'          => 'navigation-current-doc',
+					'title'       => 'Navigation block reference',
+					'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+					'sourceType'  => 'developer-docs',
+					'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+					'excerpt'     => 'Use supported navigation block controls for responsive menu recommendations.',
+					'score'       => 0.91,
+					'retrievedAt' => '2026-05-08T14:00:00Z',
+					'publishedAt' => '',
+					'contentHash' => 'navigation-current-doc',
+					'freshness'   => 'current',
+				],
+			]
+		);
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Group related links',
+						'description' => 'Keep the primary navigation predictable.',
+						'category'    => 'structure',
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'target'     => 'Home',
+								'detail'     => 'Keep Home first.',
+								'targetPath' => [ 0 ],
+							],
+						],
+					],
+				],
+				'explanation' => 'Grounded navigation response.',
+			]
+		);
+
+		$input = [
+			'navigationMarkup' => '<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- /wp:navigation -->',
+			'prompt'           => 'Simplify the header navigation.',
+		];
+
+		$recommendation = NavigationAbilities::recommend_navigation( $input );
+		$signature      = NavigationAbilities::recommend_navigation(
+			array_merge(
+				$input,
+				[
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $recommendation );
+		$this->assertIsArray( $signature );
+		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
+		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertSame(
+			$recommendation['reviewContextSignature'] ?? null,
+			$signature['reviewContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$recommendation['docsGroundingFingerprint'] ?? null,
+			$signature['docsGroundingFingerprint'] ?? null
+		);
 	}
 
 	public function test_navigation_review_signature_changes_when_theme_constraints_change(): void {
@@ -1007,5 +1097,42 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Fallback confidence navigation idea', $result['suggestions'][0]['label'] );
 		$this->assertSame( 0.86, $result['suggestions'][0]['ranking']['score'] );
+	}
+
+	private function configure_text_generation_connector(): void {
+		WordPressTestState::$options                    = array_merge(
+			WordPressTestState::$options,
+			[
+				'flavor_agent_openai_provider' => 'openai',
+			]
+		);
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_supported        = true;
+	}
+
+	private function prime_current_docs_source_coverage(): void {
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'current',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => true,
+			'sourceTypes'            => [ 'developer-docs', 'make-core' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => '',
+			'errorMessage'           => '',
+		];
 	}
 }

@@ -22,7 +22,6 @@ final class AgentControllerTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_grounding();
 		$this->register_paragraph_block();
 		$this->register_pattern(
 			'theme/hero',
@@ -566,17 +565,6 @@ final class AgentControllerTest extends TestCase {
 			$properties
 		);
 	}
-
-	private function disable_public_docs_grounding(): void {
-		\add_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			static fn(): string => ''
-		);
-	}
-
-
-
-
 
 	private function configure_pattern_recommendation_backends(): void {
 		WordPressTestState::$options             = [

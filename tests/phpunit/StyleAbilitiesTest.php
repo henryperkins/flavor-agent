@@ -13,19 +13,12 @@ use ReflectionMethod;
 
 final class StyleAbilitiesTest extends TestCase {
 
-	/** @var callable */
-	private $disable_public_docs_filter;
-
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_filter = static fn(): string => '';
-		\add_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			$this->disable_public_docs_filter
-		);
 		$this->configure_text_generation_connector();
+		$this->prime_default_docs_grounding();
 		WordPressTestState::$global_settings = [
 			'color' => [
 				'palette' => [
@@ -36,15 +29,6 @@ final class StyleAbilitiesTest extends TestCase {
 				],
 			],
 		];
-	}
-
-	protected function tearDown(): void {
-		\remove_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			$this->disable_public_docs_filter
-		);
-
-		parent::tearDown();
 	}
 
 	public function test_recommend_style_requires_global_styles_scope(): void {
@@ -163,6 +147,60 @@ final class StyleAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_recommend_style_fails_closed_when_docs_grounding_is_unavailable(): void {
+		WordPressTestState::$transients                     = [];
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Use accent canvas',
+						'description' => 'Would have called the model without the grounding gate.',
+						'category'    => 'color',
+						'tone'        => 'executable',
+						'operations'  => [
+							[
+								'type'       => 'set_styles',
+								'path'       => [ 'color', 'background' ],
+								'value'      => 'var:preset|color|accent',
+								'valueType'  => 'preset',
+								'presetType' => 'color',
+								'presetSlug' => 'accent',
+								'cssVar'     => 'var(--wp--preset--color--accent)',
+							],
+						],
+					],
+				],
+				'explanation' => 'Grounding gate regression fixture.',
+			]
+		);
+
+		$result = StyleAbilities::recommend_style(
+			[
+				'scope'        => [
+					'surface'        => 'global-styles',
+					'scopeKey'       => 'global_styles:17',
+					'globalStylesId' => '17',
+				],
+				'styleContext' => [
+					'currentConfig'         => [ 'styles' => [] ],
+					'mergedConfig'          => [ 'styles' => [] ],
+					'availableVariations'   => [],
+					'themeTokenDiagnostics' => [
+						'source'      => 'stable',
+						'settingsKey' => 'features',
+						'reason'      => 'stable-parity',
+					],
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+	}
+
 	public function test_recommend_style_canonicalizes_scope_key_server_side(): void {
 		$canonical_input = [
 			'scope'                => [
@@ -270,7 +308,8 @@ final class StyleAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_style_resolve_signature_only_returns_minimal_payload_and_changes_when_prompt_changes(): void {
-		$input = [
+		WordPressTestState::$transients = [];
+		$input                          = [
 			'scope'        => [
 				'surface'        => 'global-styles',
 				'scopeKey'       => 'global_styles:17',
@@ -308,13 +347,6 @@ final class StyleAbilitiesTest extends TestCase {
 		);
 
 		$this->assertIsArray( $baseline );
-		$this->assertSame(
-			[
-				'reviewContextSignature'   => $baseline['reviewContextSignature'] ?? null,
-				'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null,
-			],
-			$baseline
-		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['reviewContextSignature'] ?? '' )
@@ -323,14 +355,8 @@ final class StyleAbilitiesTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['resolvedContextSignature'] ?? '' )
 		);
+		$this->assertSame( 'unavailable', $baseline['docsGrounding']['status'] ?? null );
 		$this->assertIsArray( $changed );
-		$this->assertSame(
-			[
-				'reviewContextSignature'   => $changed['reviewContextSignature'] ?? null,
-				'resolvedContextSignature' => $changed['resolvedContextSignature'] ?? null,
-			],
-			$changed
-		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $changed['reviewContextSignature'] ?? '' )
@@ -350,7 +376,7 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_style_resolve_signature_only_ignores_docs_guidance_changes(): void {
+	public function test_recommend_style_resolve_signature_only_includes_docs_guidance_changes(): void {
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id']  = 'account-123';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']   = 'token-xyz';
@@ -406,13 +432,6 @@ final class StyleAbilitiesTest extends TestCase {
 		$baseline = StyleAbilities::recommend_style( $input );
 
 		$this->assertIsArray( $baseline );
-		$this->assertSame(
-			[
-				'reviewContextSignature'   => $baseline['reviewContextSignature'] ?? null,
-				'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null,
-			],
-			$baseline
-		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['reviewContextSignature'] ?? '' )
@@ -438,22 +457,91 @@ final class StyleAbilitiesTest extends TestCase {
 		$with_docs = StyleAbilities::recommend_style( $input );
 
 		$this->assertIsArray( $with_docs );
-		$this->assertSame(
-			[
-				'reviewContextSignature'   => $with_docs['reviewContextSignature'] ?? null,
-				'resolvedContextSignature' => $with_docs['resolvedContextSignature'] ?? null,
-			],
-			$with_docs
-		);
-		$this->assertSame(
+		$this->assertNotSame(
 			$baseline['resolvedContextSignature'] ?? null,
 			$with_docs['resolvedContextSignature'] ?? null
 		);
-		$this->assertSame(
+		$this->assertNotSame(
 			$baseline['reviewContextSignature'] ?? null,
 			$with_docs['reviewContextSignature'] ?? null
 		);
+		$this->assertNotSame(
+			$baseline['docsGroundingFingerprint'] ?? null,
+			$with_docs['docsGroundingFingerprint'] ?? null
+		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_recommend_style_signatures_are_stable_between_recommendation_and_signature_modes(): void {
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Use accent canvas',
+						'description' => 'Apply the accent preset to the site background.',
+						'category'    => 'color',
+						'tone'        => 'executable',
+						'operations'  => [
+							[
+								'type'       => 'set_styles',
+								'path'       => [ 'color', 'background' ],
+								'value'      => 'var:preset|color|accent',
+								'valueType'  => 'preset',
+								'presetType' => 'color',
+								'presetSlug' => 'accent',
+								'cssVar'     => 'var(--wp--preset--color--accent)',
+							],
+						],
+					],
+				],
+				'explanation' => 'Grounded style response.',
+			]
+		);
+
+		$input = [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+			],
+			'styleContext' => [
+				'currentConfig'         => [ 'styles' => [] ],
+				'mergedConfig'          => [ 'styles' => [] ],
+				'availableVariations'   => [],
+				'themeTokenDiagnostics' => [
+					'source'      => 'stable',
+					'settingsKey' => 'features',
+					'reason'      => 'stable-parity',
+				],
+			],
+		];
+
+		$recommendation = StyleAbilities::recommend_style( $input );
+		$signature      = StyleAbilities::recommend_style(
+			array_merge(
+				$input,
+				[
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $recommendation );
+		$this->assertIsArray( $signature );
+		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
+		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertSame(
+			$recommendation['reviewContextSignature'] ?? null,
+			$signature['reviewContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$recommendation['resolvedContextSignature'] ?? null,
+			$signature['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$recommendation['docsGroundingFingerprint'] ?? null,
+			$signature['docsGroundingFingerprint'] ?? null
+		);
 	}
 
 	public function test_recommend_style_downgrades_invalid_freeform_operations_to_advisory(): void {
@@ -980,12 +1068,17 @@ final class StyleAbilitiesTest extends TestCase {
 
 		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ] = [
 			[
-				'id'        => 'chunk-1',
-				'title'     => 'Global styles reference',
-				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/settings',
-				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/settings/',
-				'excerpt'   => 'Use theme.json preset families for color and typography changes.',
-				'score'     => 0.91,
+				'id'          => 'chunk-1',
+				'title'       => 'Global styles reference',
+				'sourceKey'   => 'developer.wordpress.org/themes/global-settings-and-styles/settings',
+				'sourceType'  => 'developer-docs',
+				'url'         => 'https://developer.wordpress.org/themes/global-settings-and-styles/settings/',
+				'excerpt'     => 'Use theme.json preset families for color and typography changes.',
+				'score'       => 0.91,
+				'retrievedAt' => '2026-05-08T14:00:00Z',
+				'publishedAt' => '',
+				'contentHash' => 'global-styles-reference-current',
+				'freshness'   => 'current',
 			],
 		];
 
@@ -1256,6 +1349,43 @@ final class StyleAbilitiesTest extends TestCase {
 		WordPressTestState::$ai_client_supported        = true;
 		WordPressTestState::$ai_client_provider_support = [
 			'openai' => true,
+		];
+	}
+
+	private function prime_default_docs_grounding(): void {
+		$this->prime_current_docs_source_coverage();
+		foreach ( [ 'guidance:global-styles', 'guidance:style-book' ] as $entity_key ) {
+			AISearchClient::cache_entity_guidance(
+				$entity_key,
+				[
+					[
+						'id'          => $entity_key . '-default-doc',
+						'title'       => 'Global Styles developer guidance',
+						'sourceKey'   => 'developer.wordpress.org/themes/global-settings-and-styles/',
+						'sourceType'  => 'developer-docs',
+						'url'         => 'https://developer.wordpress.org/themes/global-settings-and-styles/',
+						'excerpt'     => 'Use supported theme.json and Global Styles controls for style recommendations.',
+						'score'       => 0.91,
+						'retrievedAt' => '2026-05-08T14:00:00Z',
+						'publishedAt' => '',
+						'contentHash' => $entity_key . '-default-doc',
+						'freshness'   => 'current',
+					],
+				]
+			);
+		}
+	}
+
+	private function prime_current_docs_source_coverage(): void {
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'current',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => true,
+			'sourceTypes'            => [ 'developer-docs', 'make-core' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => '',
+			'errorMessage'           => '',
 		];
 	}
 

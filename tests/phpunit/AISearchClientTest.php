@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -70,12 +72,17 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 6, $request_body['ai_search_options']['retrieval']['max_num_results'] );
 		$this->assertSame(
 			[
-				'id'        => 'chunk-1',
-				'title'     => '',
-				'sourceKey' => 'developer.wordpress.org/rest-api/reference/wp_template_parts',
-				'url'       => 'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
-				'excerpt'   => 'Where the template part is intended for use (header, footer, etc).',
-				'score'     => 0.91,
+				'id'          => 'chunk-1',
+				'title'       => '',
+				'sourceKey'   => 'developer.wordpress.org/rest-api/reference/wp_template_parts',
+				'sourceType'  => 'developer-docs',
+				'url'         => 'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
+				'excerpt'     => 'Where the template part is intended for use (header, footer, etc).',
+				'score'       => 0.91,
+				'retrievedAt' => '',
+				'publishedAt' => '',
+				'contentHash' => '',
+				'freshness'   => 'unknown',
 			],
 			$result['guidance'][0]
 		);
@@ -277,6 +284,46 @@ final class AISearchClientTest extends TestCase {
 		$this->assertStringNotContainsString( 'source_url', $result['guidance'][0]['excerpt'] );
 	}
 
+	public function test_search_preserves_frontmatter_provenance_and_freshness_metadata(): void {
+		$chunk_text = "---\nsource_url: \"https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/\"\noriginal_url: \"https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\npublished_at: \"2026-03-24T21:40:44Z\"\ncontent_hash: abc123\n---\nWordPress 7.0 provides client-side abilities through @wordpress/abilities.";
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'search_query' => 'WordPress 7.0 abilities',
+						'chunks'       => [
+							[
+								'id'    => 'make-core-chunk',
+								'score' => 0.94,
+								'item'  => [
+									'key'      => 'ai-search/wp-dev-docs/make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/136f765ace420bbea73a493de6698debade0c95a80f90ce5fc7dc1dbe2ebd6ff/part-0001.md',
+									'metadata' => [
+										'title' => 'Client-side abilities API in WordPress 7.0',
+									],
+								],
+								'text'  => $chunk_text,
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'WordPress 7.0 abilities' );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, $result['guidance'] );
+		$this->assertSame( 'make-core', $result['guidance'][0]['sourceType'] );
+		$this->assertSame( '2026-05-08T14:00:00Z', $result['guidance'][0]['retrievedAt'] );
+		$this->assertSame( '2026-03-24T21:40:44Z', $result['guidance'][0]['publishedAt'] );
+		$this->assertSame( 'abc123', $result['guidance'][0]['contentHash'] );
+		$this->assertSame( 'stale', $result['guidance'][0]['freshness'] );
+	}
+
 	public function test_search_accepts_trusted_ai_search_source_key_when_url_metadata_is_missing(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -364,32 +411,63 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( [], $result['guidance'] );
 	}
 
-	public function test_validate_configuration_uses_probe_search_only(): void {
-		WordPressTestState::$options              = [
+	public function test_validate_configuration_uses_probe_and_current_source_coverage_searches(): void {
+		WordPressTestState::$options               = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
-		WordPressTestState::$remote_post_response = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						'chunks' => [
-							[
-								'id'   => 'probe-chunk',
-								'item' => [
-									'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
-									'metadata' => [],
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'result' => [
+							'chunks' => [
+								[
+									'id'   => 'probe-chunk',
+									'item' => [
+										'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+										'metadata' => [],
+									],
+									'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\n---\nUse block supports to expose design tools.",
 								],
-								'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\n---\nUse block supports to expose design tools.",
 							],
 						],
-					],
-				]
-			),
+					]
+				),
+			],
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'result' => [
+							'chunks' => [
+								[
+									'id'   => 'stable-docs',
+									'item' => [
+										'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+										'metadata' => [],
+									],
+									'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\n---\nUse block supports to expose design tools.",
+								],
+								[
+									'id'   => 'make-core',
+									'item' => [
+										'key'      => 'ai-search/wp-dev-docs/make.wordpress.org/core/2026/05/08/current-editor-guidance/136f765ace420bbea73a493de6698debade0c95a80f90ce5fc7dc1dbe2ebd6ff/part-0001.md',
+										'metadata' => [],
+									],
+									'text' => "---\nsource_url: \"https://make.wordpress.org/core/2026/05/08/current-editor-guidance/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\npublished_at: \"2026-05-08T13:00:00Z\"\n---\nWordPress 7.0 provides current editor guidance.",
+								],
+							],
+						],
+					]
+				),
+			],
 		];
 
 		$result = AISearchClient::validate_configuration();
@@ -397,7 +475,7 @@ final class AISearchClientTest extends TestCase {
 			$this->assertSame(
 				[
 					'id'      => 'c5d54c4a-27df-4034-80da-ca6054684fcd',
-					'source'  => '',
+					'source'  => 'public',
 					'enabled' => true,
 					'paused'  => false,
 				],
@@ -408,15 +486,246 @@ final class AISearchClientTest extends TestCase {
 				WordPressTestState::$last_remote_post['url']
 			);
 		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
-		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 
 		$request_body = json_decode(
-			WordPressTestState::$last_remote_post['args']['body'],
+			WordPressTestState::$remote_post_calls[0]['args']['body'],
 			true
 		);
 
 		$this->assertSame( 'block editor', $request_body['messages'][0]['content'] );
 		$this->assertSame( 3, $request_body['ai_search_options']['retrieval']['max_num_results'] );
+
+		$coverage_body = json_decode(
+			WordPressTestState::$remote_post_calls[1]['args']['body'],
+			true
+		);
+
+		$this->assertStringContainsString( 'WordPress current block editor developer guidance', $coverage_body['messages'][0]['content'] );
+		$this->assertSame( 4, $coverage_body['ai_search_options']['retrieval']['max_num_results'] );
+	}
+
+	public function test_validate_configuration_degrades_when_release_cycle_sources_are_missing(): void {
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'result' => [
+							'chunks' => [
+								[
+									'id'   => 'probe-chunk',
+									'item' => [
+										'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+										'metadata' => [],
+									],
+									'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\n---\nUse block supports to expose design tools.",
+								],
+							],
+						],
+					]
+				),
+			],
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'result' => [
+							'chunks' => [
+								[
+									'id'   => 'stable-docs',
+									'item' => [
+										'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+										'metadata' => [],
+									],
+									'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\n---\nUse block supports to expose design tools.",
+								],
+							],
+						],
+					]
+				),
+			],
+		];
+
+		$result = AISearchClient::validate_configuration();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_missing_current_sources', $result->get_error_code() );
+		$this->assertSame( [ 'developer-docs' ], $result->get_error_data()['sourceTypes'] ?? null );
+	}
+
+	public function test_validate_configuration_requires_current_release_cycle_freshness(): void {
+		WordPressTestState::$remote_post_responses = [
+			$this->trusted_docs_response(
+				[
+					$this->trusted_docs_chunk(
+						'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+						'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+						'Use block supports to expose design tools.',
+						'2026-05-08T14:00:00Z'
+					),
+				]
+			),
+			$this->trusted_docs_response(
+				[
+					$this->trusted_docs_chunk(
+						'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+						'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+						'Use block supports to expose design tools.',
+						'2026-05-08T14:00:00Z'
+					),
+					$this->trusted_docs_chunk(
+						'ai-search/wp-dev-docs/make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/136f765ace420bbea73a493de6698debade0c95a80f90ce5fc7dc1dbe2ebd6ff/part-0001.md',
+						'https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/',
+						'WordPress 7.0 provides client-side abilities.',
+						'2026-03-16T22:13:36Z',
+						'2026-03-15T22:35:08Z'
+					),
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_missing_current_sources', $result->get_error_code() );
+		$this->assertSame( 'missing-current-release-cycle', $result->get_error_data()['coverage']['status'] ?? null );
+	}
+
+	public function test_source_coverage_probe_caches_current_summary_for_recommendations(): void {
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+					'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+					'Use block supports to expose design tools.',
+					'2026-05-08T14:00:00Z'
+				),
+				$this->trusted_docs_chunk(
+					'ai-search/wp-dev-docs/make.wordpress.org/core/2026/05/08/current-editor-guidance/136f765ace420bbea73a493de6698debade0c95a80f90ce5fc7dc1dbe2ebd6ff/part-0001.md',
+					'https://make.wordpress.org/core/2026/05/08/current-editor-guidance/',
+					'Current editor guidance.',
+					'2026-05-08T14:00:00Z',
+					'2026-05-08T13:00:00Z'
+				),
+			]
+		);
+
+		$coverage = AISearchClient::get_current_source_coverage( true );
+
+		$this->assertSame( 'current', $coverage['status'] );
+		$this->assertTrue( $coverage['hasCurrentReleaseCycle'] );
+		$this->assertSame( 1, count( WordPressTestState::$remote_post_calls ) );
+
+		$cached = AISearchClient::get_current_source_coverage( false );
+
+		$this->assertSame( 'current', $cached['status'] );
+		$this->assertSame( 1, count( WordPressTestState::$remote_post_calls ) );
+	}
+
+	public function test_source_coverage_probe_uses_full_ttl_for_current_results(): void {
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+					'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+					'Use block supports to expose design tools.',
+					'2026-05-08T14:00:00Z'
+				),
+				$this->trusted_docs_chunk(
+					'ai-search/wp-dev-docs/make.wordpress.org/core/2026/05/08/current-editor-guidance/part-0001.md',
+					'https://make.wordpress.org/core/2026/05/08/current-editor-guidance/',
+					'Current editor guidance.',
+					'2026-05-08T14:00:00Z',
+					'2026-05-08T13:00:00Z'
+				),
+			]
+		);
+
+		$coverage = AISearchClient::get_current_source_coverage( true );
+
+		$this->assertSame( 'current', $coverage['status'] );
+		$this->assertSame( 21600, WordPressTestState::$transient_expirations['flavor_agent_docs_source_coverage_v2'] ?? null );
+	}
+
+	public function test_source_coverage_probe_uses_short_ttl_for_missing_release_cycle_results(): void {
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+					'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+					'Use block supports to expose design tools.',
+					'2026-05-08T14:00:00Z'
+				),
+			]
+		);
+
+		$coverage = AISearchClient::get_current_source_coverage( true );
+
+		$this->assertSame( 'missing-current-release-cycle', $coverage['status'] );
+		$this->assertSame( 900, WordPressTestState::$transient_expirations['flavor_agent_docs_source_coverage_v2'] ?? null );
+	}
+
+	public function test_source_coverage_probe_uses_error_ttl_for_unavailable_results(): void {
+		WordPressTestState::$remote_post_response = new \WP_Error( 'http_request_failed', 'Timeout.' );
+
+		$coverage = AISearchClient::get_current_source_coverage( true );
+
+		$this->assertSame( 'unavailable', $coverage['status'] );
+		$this->assertSame( 300, WordPressTestState::$transient_expirations['flavor_agent_docs_source_coverage_v2'] ?? null );
+	}
+
+	public function test_validate_configuration_uses_short_ttl_for_missing_release_cycle_results(): void {
+		WordPressTestState::$remote_post_responses = [
+			$this->trusted_docs_response(
+				[
+					$this->trusted_docs_chunk(
+						'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+						'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+						'Use block supports to expose design tools.',
+						'2026-05-08T14:00:00Z'
+					),
+				]
+			),
+			$this->trusted_docs_response(
+				[
+					$this->trusted_docs_chunk(
+						'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+						'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+						'Use block supports to expose design tools.',
+						'2026-05-08T14:00:00Z'
+					),
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_missing_current_sources', $result->get_error_code() );
+		$this->assertSame( 900, WordPressTestState::$transient_expirations['flavor_agent_docs_source_coverage_v2'] ?? null );
+	}
+
+	public function test_cache_fallbacks_can_run_without_runtime_side_effects(): void {
+		AISearchClient::maybe_search_with_cache_fallbacks(
+			'current block editor guidance',
+			'core/paragraph',
+			[ 'surface' => 'block' ],
+			null,
+			false,
+			false
+		);
+
+		$this->assertArrayNotHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+
+		$runtime_state = AISearchClient::get_runtime_state();
+
+		$this->assertSame( '', $runtime_state['lastServedAt'] );
+		$this->assertSame( '', $runtime_state['lastFallbackType'] );
 	}
 
 	public function test_validate_configuration_rejects_probe_results_without_trusted_source_keys_or_urls(): void {
@@ -707,6 +1016,47 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( $query_key_a, $this->build_cache_key( 'navigation footer guidance', 4 ) );
 		$this->assertSame( $family_key_a, $this->build_family_cache_key( $family_context, 4 ) );
 		$this->assertSame( $entity_key_a, $this->build_entity_cache_key( 'core/navigation' ) );
+	}
+
+	public function test_cache_namespace_changes_with_docs_grounding_schema_version(): void {
+		$reflection = new \ReflectionClass( AISearchClient::class );
+		$cache_key  = $this->build_cache_key( 'block editor guidance', 4 );
+
+		$this->assertSame( 3, $reflection->getConstant( 'CACHE_SCHEMA_VERSION' ) );
+		$this->assertMatchesRegularExpression( '/^flavor_agent_ai_search_[a-f0-9]{32}$/', $cache_key );
+	}
+
+	public function test_source_coverage_cache_key_ignores_stale_schema_summary(): void {
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage'] = [
+			'status'                 => 'current',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => true,
+			'sourceTypes'            => [ 'developer-docs', 'make-core' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => '',
+			'errorMessage'           => '',
+		];
+
+		$coverage = AISearchClient::get_current_source_coverage( false );
+
+		$this->assertSame( 'unknown', $coverage['status'] );
+		$this->assertSame( 'coverage_not_checked', $coverage['errorCode'] );
+
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'current',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => true,
+			'sourceTypes'            => [ 'developer-docs', 'make-core' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => '',
+			'errorMessage'           => '',
+		];
+
+		$coverage = AISearchClient::get_current_source_coverage( false );
+
+		$this->assertSame( 'current', $coverage['status'] );
 	}
 
 	public function test_maybe_search_entity_returns_cached_guidance_without_querying_cloudflare(): void {
@@ -1006,7 +1356,7 @@ final class AISearchClientTest extends TestCase {
 									'key'      => 'developer.wordpress.org/themes/templates/template-parts',
 									'metadata' => [],
 								],
-								'text'  => "---\nsource_url: \"https://developer.wordpress.org/themes/templates/template-parts/\"\n---\nHeader template parts should stay focused and reusable.",
+								'text'  => "---\nsource_url: \"https://developer.wordpress.org/themes/templates/template-parts/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: fresh-template-part\n---\nHeader template parts should stay focused and reusable.",
 							],
 						],
 					],
@@ -1231,6 +1581,97 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 'async', $runtime_state['lastErrorMode'] );
 	}
 
+	public function test_live_search_failure_uses_recent_last_known_current_guidance_as_degraded_grace(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'    => 'current-docs',
+								'score' => 0.91,
+								'item'  => [
+									'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+									'metadata' => [],
+								],
+								'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: current-docs\n---\nUse block supports to expose design tools.",
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$primed = AISearchClient::search( 'block supports guidance' );
+
+		$this->assertIsArray( $primed );
+
+		WordPressTestState::$remote_post_response = new \WP_Error(
+			'http_request_failed',
+			'Cloudflare timed out.'
+		);
+
+		$result = AISearchClient::search( 'block supports guidance after failure' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'current-docs', $result['guidance'][0]['id'] ?? null );
+
+		$docs_grounding = DocsGuidanceResult::from_guidance( $result['guidance'], 'direct', 'live' );
+
+		$this->assertSame( 'degraded', $docs_grounding['status'] );
+
+		$runtime_state = AISearchClient::get_runtime_state();
+
+		$this->assertSame( 'Cloudflare timed out.', $runtime_state['lastErrorMessage'] );
+		$this->assertSame( 'grace', $runtime_state['lastServedMode'] );
+		$this->assertSame( 'last-known-current', $runtime_state['lastFallbackType'] );
+	}
+
+	public function test_live_search_failure_does_not_use_expired_last_known_current_guidance(): void {
+		WordPressTestState::$options['flavor_agent_docs_runtime_state'] = [
+			'lastKnownCurrentAt'       => gmdate( 'Y-m-d H:i:s', time() - 21601 ),
+			'lastKnownCurrentGuidance' => [
+				[
+					'id'          => 'expired-docs',
+					'title'       => '',
+					'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+					'sourceType'  => 'developer-docs',
+					'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+					'excerpt'     => 'Expired guidance.',
+					'score'       => 0.91,
+					'retrievedAt' => '2026-05-08T14:00:00Z',
+					'publishedAt' => '',
+					'contentHash' => 'expired-docs',
+					'freshness'   => 'current',
+				],
+			],
+		];
+		WordPressTestState::$remote_post_response                       = new \WP_Error(
+			'http_request_failed',
+			'Cloudflare timed out.'
+		);
+
+		$result = AISearchClient::search( 'block supports guidance after failure' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'http_request_failed', $result->get_error_code() );
+	}
+
+	public function test_live_search_failure_without_last_known_current_guidance_fails(): void {
+		WordPressTestState::$remote_post_response = new \WP_Error(
+			'http_request_failed',
+			'Cloudflare timed out.'
+		);
+
+		$result = AISearchClient::search( 'block supports guidance after failure' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'http_request_failed', $result->get_error_code() );
+	}
+
 	public function test_process_context_warm_queue_seeds_exact_family_and_entity_caches(): void {
 		WordPressTestState::$options               = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -1453,6 +1894,40 @@ final class AISearchClientTest extends TestCase {
 			);
 	}
 
+	public function test_empty_live_search_persists_docs_grounding_activity_diagnostic(): void {
+		ActivityRepository::install();
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'current block editor guidance' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $result['guidance'] );
+
+		$entries = ActivityRepository::query(
+			[
+				'surface' => 'docs_grounding',
+				'limit'   => 1,
+			]
+		);
+		$entry   = $entries[0] ?? null;
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( 'request_diagnostic', $entry['type'] ?? null );
+		$this->assertSame( 'docs_grounding', $entry['surface'] ?? null );
+		$this->assertSame( 'failed', $entry['executionResult'] ?? null );
+	}
+
 	public function test_sanitize_excerpt_truncates_utf8_text_without_breaking_characters(): void {
 		$method = new \ReflectionMethod( AISearchClient::class, 'sanitize_excerpt' );
 		$method->setAccessible( true );
@@ -1543,6 +2018,44 @@ final class AISearchClientTest extends TestCase {
 			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
 			$result
 		);
+	}
+
+	private function trusted_docs_response( array $chunks ): array {
+		return [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => $chunks,
+					],
+				]
+			),
+		];
+	}
+
+	private function trusted_docs_chunk(
+		string $source_key,
+		string $url,
+		string $excerpt,
+		string $retrieved_at,
+		string $published_at = ''
+	): array {
+		$frontmatter = "---\nsource_url: \"{$url}\"\nretrieved_at: \"{$retrieved_at}\"\ncontent_hash: docs-coverage-test";
+
+		if ( '' !== $published_at ) {
+			$frontmatter .= "\npublished_at: \"{$published_at}\"";
+		}
+
+		return [
+			'id'   => md5( $source_key . $url ),
+			'item' => [
+				'key'      => $source_key,
+				'metadata' => [],
+			],
+			'text' => $frontmatter . "\n---\n{$excerpt}",
+		];
 	}
 
 	private function build_cache_key( string $query, int $max_results ): string {

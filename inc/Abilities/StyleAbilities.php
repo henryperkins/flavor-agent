@@ -10,6 +10,7 @@ use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\StylePrompt;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\RecommendationReviewSignature;
 
@@ -101,27 +102,43 @@ final class StyleAbilities {
 			return $context;
 		}
 
+		$docs_result = self::collect_wordpress_docs_guidance_result(
+			$context,
+			$prompt,
+			[
+				'signatureOnly' => $resolve_signature_only,
+			]
+		);
+
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			$scope_surface,
 			[
-				'context' => $context,
-				'prompt'  => $prompt,
+				'context'                  => $context,
+				'prompt'                   => $prompt,
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			]
 		);
 
 		$review_context_signature = self::build_review_context_signature(
 			$scope_surface,
-			$context
+			$context,
+			(string) ( $docs_result['fingerprint'] ?? '' )
 		);
 
 		if ( $resolve_signature_only ) {
 			return [
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
+				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
 
-		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
+		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
+			return DocsGuidanceResult::unavailable_error( $docs_result );
+		}
+
+		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system_prompt = StylePrompt::build_system();
 		$user_prompt   = StylePrompt::build_user(
 			$context,
@@ -149,6 +166,8 @@ final class StyleAbilities {
 
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
+		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
 	}
@@ -325,13 +344,13 @@ final class StyleAbilities {
 		return $context;
 	}
 
-	private static function build_review_context_signature( string $surface, array $context ): string {
+	private static function build_review_context_signature( string $surface, array $context, string $docs_grounding_fingerprint = '' ): string {
 		$style_context = self::normalize_map( $context['styleContext'] ?? [] );
-		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
-		$payload = [
-			'themeTokens' => self::normalize_review_theme_tokens(
+		$payload       = [
+			'themeTokens'              => self::normalize_review_theme_tokens(
 				self::normalize_map( $style_context['themeTokens'] ?? [] )
 			),
+			'docsGroundingFingerprint' => sanitize_text_field( $docs_grounding_fingerprint ),
 		];
 
 		if ( self::SURFACE_STYLE_BOOK === $surface ) {
@@ -413,6 +432,32 @@ final class StyleAbilities {
 			$context,
 			$prompt
 		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
+		return CollectsDocsGuidance::collect_result(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
+			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt,
+			[
+				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
+				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
+				'sideEffects'         => empty( $options['signatureOnly'] ),
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @return array<string, mixed>
+	 */
+	private static function format_docs_grounding_output( array $result ): array {
+		return DocsGuidanceResult::public_summary( $result );
 	}
 
 	private static function build_wordpress_docs_query( array $context, string $prompt ): string {

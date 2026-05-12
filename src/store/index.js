@@ -71,6 +71,7 @@ import {
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
 import { isPlainObject } from '../utils/type-guards';
+import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
 import {
 	getAllowedPatterns,
 	getBlockPatterns,
@@ -92,6 +93,7 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 	applyError: null,
 	lastAppliedSuggestionKey: null,
 	staleReason: null,
+	docsGroundingWarning: null,
 };
 
 const DEFAULT_STATE = {
@@ -118,6 +120,7 @@ const DEFAULT_STATE = {
 	navigationReviewRequestToken: 0,
 	navigationReviewFreshnessStatus: 'idle',
 	navigationReviewStaleReason: null,
+	navigationDocsGroundingWarning: null,
 	activityScopeKey: null,
 	activityLog: [],
 	undoStatus: 'idle',
@@ -131,6 +134,7 @@ const DEFAULT_STATE = {
 	patternResultToken: 0,
 	patternRequestSignature: '',
 	patternInsertionTargetSignature: '',
+	patternDocsGroundingWarning: null,
 	...createExecutableSurfaceDefaultState(),
 	...toastsDefaultState,
 };
@@ -1158,6 +1162,14 @@ const actions = {
 		};
 	},
 
+	setBlockDocsGroundingWarning( clientId, docsGroundingWarning = null ) {
+		return {
+			type: 'SET_BLOCK_DOCS_GROUNDING_WARNING',
+			clientId,
+			docsGroundingWarning,
+		};
+	},
+
 	clearBlockRecommendations( clientId ) {
 		return ( { dispatch } ) => {
 			if ( isPlainObject( actions._blockRecommendationAbort ) ) {
@@ -1891,7 +1903,8 @@ const actions = {
 		requestToken = null,
 		requestSignature = '',
 		diagnostics = null,
-		insertionTargetSignature = ''
+		insertionTargetSignature = '',
+		docsGroundingWarning = null
 	) {
 		return {
 			type: 'SET_PATTERN_RECS',
@@ -1900,6 +1913,7 @@ const actions = {
 			requestSignature,
 			diagnostics,
 			insertionTargetSignature,
+			docsGroundingWarning,
 		};
 	},
 
@@ -1940,13 +1954,15 @@ const actions = {
 	setNavigationReviewFreshnessState(
 		status,
 		requestToken = null,
-		staleReason = null
+		staleReason = null,
+		docsGroundingWarning = null
 	) {
 		return {
 			type: 'SET_NAVIGATION_REVIEW_FRESHNESS_STATE',
 			status,
 			requestToken,
 			staleReason,
+			docsGroundingWarning,
 		};
 	},
 
@@ -2063,7 +2079,10 @@ const actions = {
 							requestToken,
 							requestSignature,
 							result.diagnostics || null,
-							insertionTargetSignature
+							insertionTargetSignature,
+							normalizeDocsGroundingWarning(
+								result.docsGrounding
+							)
 						)
 					);
 					localDispatch(
@@ -2333,6 +2352,15 @@ const actions = {
 
 				const serverSig =
 					getResolvedContextSignatureFromResponse( response ) || '';
+				const docsGroundingStatus =
+					typeof response?.docsGrounding?.status === 'string'
+						? response.docsGrounding.status
+						: '';
+				const docsGroundingWarning = normalizeDocsGroundingWarning(
+					response?.docsGrounding
+				);
+				const currentDocsGroundingWarning =
+					select.getBlockDocsGroundingWarning?.( clientId ) || null;
 				const currentResolvedSig = normalizeStringMessage(
 					select.getBlockResolvedContextSignature?.( clientId ) || ''
 				);
@@ -2351,7 +2379,20 @@ const actions = {
 					return;
 				}
 
-				if (
+				if ( docsGroundingStatus === 'unavailable' ) {
+					dispatch(
+						actions.setBlockApplyState(
+							clientId,
+							'idle',
+							null,
+							null,
+							'docs-grounding-unavailable'
+						)
+					);
+					dispatch(
+						actions.setBlockDocsGroundingWarning( clientId, null )
+					);
+				} else if (
 					serverSig &&
 					currentResolvedSig &&
 					serverSig !== currentResolvedSig
@@ -2370,6 +2411,23 @@ const actions = {
 					select.getBlockStaleReason?.( clientId ) === 'server'
 				) {
 					dispatch( actions.setBlockApplyState( clientId, 'idle' ) );
+					if ( docsGroundingWarning || currentDocsGroundingWarning ) {
+						dispatch(
+							actions.setBlockDocsGroundingWarning(
+								clientId,
+								docsGroundingWarning
+							)
+						);
+					}
+				} else if ( serverSig === currentResolvedSig ) {
+					if ( docsGroundingWarning || currentDocsGroundingWarning ) {
+						dispatch(
+							actions.setBlockDocsGroundingWarning(
+								clientId,
+								docsGroundingWarning
+							)
+						);
+					}
 				}
 			} catch {
 				// Background revalidation failures are silent.
@@ -2473,6 +2531,11 @@ function reducer( state = DEFAULT_STATE, action ) {
 							action.status === 'loading'
 								? null
 								: currentEntry.staleReason,
+						docsGroundingWarning:
+							action.status === 'loading' ||
+							action.status === 'error'
+								? null
+								: currentEntry.docsGroundingWarning,
 						requestToken:
 							action.requestToken ?? currentEntry.requestToken,
 					},
@@ -2510,9 +2573,30 @@ function reducer( state = DEFAULT_STATE, action ) {
 						applyError: null,
 						lastAppliedSuggestionKey: null,
 						staleReason: null,
+						docsGroundingWarning: normalizeDocsGroundingWarning(
+							action.recommendations?.docsGrounding
+						),
 					},
 				},
 			};
+		case 'SET_BLOCK_DOCS_GROUNDING_WARNING': {
+			const currentEntry = getStoredBlockRequestState(
+				state,
+				action.clientId
+			);
+
+			return {
+				...state,
+				blockRequestState: {
+					...state.blockRequestState,
+					[ action.clientId ]: {
+						...currentEntry,
+						docsGroundingWarning:
+							action.docsGroundingWarning ?? null,
+					},
+				},
+			};
+		}
 		case 'SET_BLOCK_APPLY_STATE': {
 			const currentEntry = getStoredBlockRequestState(
 				state,
@@ -2537,6 +2621,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 								action.staleReason !== null )
 								? action.staleReason ?? null
 								: null,
+						docsGroundingWarning: action.staleReason
+							? null
+							: currentEntry.docsGroundingWarning,
 					},
 				},
 			};
@@ -2768,6 +2855,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 					typeof action.insertionTargetSignature === 'string'
 						? action.insertionTargetSignature
 						: state.patternInsertionTargetSignature,
+				patternDocsGroundingWarning:
+					action.status === 'loading' || action.status === 'error'
+						? null
+						: state.patternDocsGroundingWarning,
 			};
 		case 'SET_CONTENT_STATUS':
 			if ( action.requestToken < ( state.contentRequestToken || 0 ) ) {
@@ -2850,6 +2941,8 @@ function reducer( state = DEFAULT_STATE, action ) {
 					typeof action.insertionTargetSignature === 'string'
 						? action.insertionTargetSignature
 						: state.patternInsertionTargetSignature,
+				patternDocsGroundingWarning:
+					action.docsGroundingWarning ?? null,
 			};
 		case 'SET_NAVIGATION_STATUS':
 			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
@@ -2876,6 +2969,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 					action.status === 'loading'
 						? null
 						: state.navigationReviewStaleReason,
+				navigationDocsGroundingWarning:
+					action.status === 'loading' || action.status === 'error'
+						? null
+						: state.navigationDocsGroundingWarning,
 			};
 		case 'SET_NAVIGATION_RECS':
 			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
@@ -2902,6 +2999,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationStatus: 'ready',
 				navigationError: null,
 				navigationReviewStaleReason: null,
+				navigationDocsGroundingWarning: normalizeDocsGroundingWarning(
+					action.payload?.docsGrounding
+				),
 			};
 		case 'SET_NAVIGATION_REVIEW_FRESHNESS_STATE':
 			if (
@@ -2919,6 +3019,16 @@ function reducer( state = DEFAULT_STATE, action ) {
 				nextNavigationReviewStaleReason = null;
 			}
 
+			let nextNavigationDocsGroundingWarning =
+				state.navigationDocsGroundingWarning;
+
+			if ( action.status === 'fresh' ) {
+				nextNavigationDocsGroundingWarning =
+					action.docsGroundingWarning ?? null;
+			} else if ( action.status === 'stale' ) {
+				nextNavigationDocsGroundingWarning = null;
+			}
+
 			return {
 				...state,
 				navigationReviewRequestToken:
@@ -2926,6 +3036,8 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationReviewFreshnessStatus:
 					action.status ?? state.navigationReviewFreshnessStatus,
 				navigationReviewStaleReason: nextNavigationReviewStaleReason,
+				navigationDocsGroundingWarning:
+					nextNavigationDocsGroundingWarning,
 			};
 		case 'CLEAR_NAVIGATION_ERROR':
 			return {
@@ -2953,6 +3065,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 					state.navigationReviewRequestToken + 1,
 				navigationReviewFreshnessStatus: 'idle',
 				navigationReviewStaleReason: null,
+				navigationDocsGroundingWarning: null,
 			};
 		default:
 			return state;
@@ -2977,6 +3090,9 @@ const selectors = {
 		getStoredBlockRequestState( state, clientId ).resolvedContextSignature,
 	getBlockRequestDiagnostics: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).diagnostics,
+	getBlockDocsGroundingWarning: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).docsGroundingWarning ||
+		null,
 	getBlockApplyStatus: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).applyStatus,
 	getBlockApplyError: ( state, clientId ) =>
@@ -3006,6 +3122,8 @@ const selectors = {
 		state.patternRequestSignature || '',
 	getPatternInsertionTargetSignature: ( state ) =>
 		state.patternInsertionTargetSignature || '',
+	getPatternDocsGroundingWarning: ( state ) =>
+		state.patternDocsGroundingWarning || null,
 	getContentRecommendation: ( state ) => state.contentRecommendation,
 	getContentRecommendationRequestSignature: ( state ) =>
 		state.contentRecommendationRequestSignature || '',
@@ -3058,6 +3176,10 @@ const selectors = {
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? null
 			: state.navigationReviewStaleReason,
+	getNavigationDocsGroundingWarning: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? null
+			: state.navigationDocsGroundingWarning || null,
 	isNavigationLoading: ( state, blockClientId = null ) =>
 		( ! blockClientId ||
 			state.navigationBlockClientId === blockClientId ) &&

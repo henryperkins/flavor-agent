@@ -11,6 +11,10 @@ export function getExecutableSurfaceEffectiveStaleReason( {
 		return 'server-review';
 	}
 
+	if ( reviewStaleReason === 'docs-grounding-unavailable' ) {
+		return 'docs-grounding-unavailable';
+	}
+
 	if (
 		storedStaleReason === 'server' ||
 		storedStaleReason === 'server-apply'
@@ -36,6 +40,10 @@ export function getExecutableSurfaceStaleMessage( {
 
 	if ( staleReasonType === 'server-apply' ) {
 		return `This ${ surfaceLabel } result no longer matches the current server-resolved apply context. Refresh before reviewing or applying anything from the previous result.`;
+	}
+
+	if ( staleReasonType === 'docs-grounding-unavailable' ) {
+		return `This ${ surfaceLabel } result no longer has trusted WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.`;
 	}
 
 	return `This ${ surfaceLabel } result no longer matches ${ liveContextLabel }. Refresh before reviewing or applying anything from the previous result.`;

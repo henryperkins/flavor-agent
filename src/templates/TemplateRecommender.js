@@ -31,6 +31,7 @@ import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import LinkedEntityText from '../components/LinkedEntityText';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
@@ -263,6 +264,7 @@ export default function TemplateRecommender() {
 		lastAppliedOperations,
 		reviewStaleReason,
 		storedStaleReason,
+		docsGroundingWarning,
 		activityLog,
 		undoError,
 		undoStatus,
@@ -290,6 +292,8 @@ export default function TemplateRecommender() {
 			lastAppliedOperations: store.getTemplateLastAppliedOperations(),
 			reviewStaleReason: store.getTemplateReviewStaleReason?.() || null,
 			storedStaleReason: store.getTemplateStaleReason?.() || null,
+			docsGroundingWarning:
+				store.getTemplateDocsGroundingWarning?.() || null,
 			activityLog: store.getActivityLog() || [],
 			undoError: store.getUndoError(),
 			undoStatus: store.getUndoStatus(),
@@ -828,6 +832,10 @@ export default function TemplateRecommender() {
 					}
 					onDismiss={ dismissStatusNotice }
 				/>
+
+				{ canRecommend && ! isStaleResult && (
+					<DocsGroundingNotice warning={ docsGroundingWarning } />
+				) }
 
 				{ canRecommend && hasResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">

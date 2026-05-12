@@ -1301,6 +1301,7 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'Settings &gt; Connectors', $screen->help_tabs[1]['content'] );
 		$this->assertSame( 'flavor-agent-troubleshooting', $screen->help_tabs[2]['id'] );
 		$this->assertStringContainsString( 'Developer Docs use the built-in developer.wordpress.org grounding path.', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'The Developer Docs group shows compact runtime status.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'When core Guidelines are available, Flavor Agent reads them first.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'Structural block actions are beta controls.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'Quick Links', $screen->help_sidebar );
@@ -2216,36 +2217,25 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_render_page_keeps_runtime_grounding_diagnostics_out_of_inline_copy(): void {
+	public function test_render_page_shows_runtime_grounding_diagnostics_in_developer_docs_group(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_docs_runtime_state' => [
-				'lastSearchAt'           => '2026-04-08 10:00:00',
-				'lastSearchMode'         => 'async',
-				'lastResultCount'        => 0,
-				'lastTrustedSuccessAt'   => '2026-04-08 09:45:00',
-				'lastTrustedSuccessMode' => 'foreground',
-				'lastServedAt'           => '2026-04-08 09:50:00',
-				'lastServedMode'         => 'cache',
-				'lastFallbackType'       => 'generic',
-				'lastErrorAt'            => '2026-04-08 10:00:00',
-				'lastErrorMode'          => 'async',
-				'lastErrorCode'          => 'http_request_failed',
-				'lastErrorMessage'       => 'Cloudflare timed out.',
-			],
-			'flavor_agent_docs_warm_queue'    => [
-				[
-					'query'            => 'navigation footer guidance',
-					'entityKey'        => 'core/navigation',
-					'familyContext'    => [
-						'surface' => 'block',
-					],
-					'maxResults'       => 4,
-					'attempts'         => 1,
-					'nextAttemptAt'    => time() + 60,
-					'lastErrorAt'      => '2026-04-08 10:00:00',
-					'lastErrorCode'    => 'http_request_failed',
-					'lastErrorMessage' => 'Cloudflare timed out.',
-				],
+				'status'                   => 'degraded',
+				'lastSearchAt'             => '2026-05-11 00:00:00',
+				'lastSearchMode'           => 'async',
+				'lastResultCount'          => 0,
+				'lastTrustedSuccessAt'     => '2026-04-08 09:45:00',
+				'lastTrustedSuccessMode'   => 'foreground',
+				'lastServedAt'             => '2026-04-08 09:50:00',
+				'lastServedMode'           => 'cache',
+				'lastFallbackType'         => 'generic',
+				'lastSourceTypes'          => [ 'developer-docs' ],
+				'lastFreshness'            => [ 'stale' ],
+				'lastGroundingFingerprint' => 'abc123',
+				'lastErrorAt'              => '2026-05-11 00:00:00',
+				'lastErrorMode'            => 'async',
+				'lastErrorCode'            => 'http_request_failed',
+				'lastErrorMessage'         => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
 			],
 		];
 
@@ -2254,10 +2244,12 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
-		$this->assertStringNotContainsString( 'Runtime Grounding', $output );
-		$this->assertStringNotContainsString( 'Warm queue: 1 pending.', $output );
-		$this->assertStringNotContainsString( 'Last trusted success: 2026-04-08 09:45:00 UTC via foreground warm', $output );
-		$this->assertStringNotContainsString( 'Last error (async warm): Cloudflare timed out.', $output );
+		$this->assertStringContainsString( 'Developer Docs grounding is degraded.', $output );
+		$this->assertStringContainsString( 'developer-docs', $output );
+		$this->assertStringContainsString( 'stale', $output );
+		$this->assertStringContainsString( 'Developer Docs grounding is missing current WordPress release-cycle sources.', $output );
+		$this->assertStringNotContainsString( 'Fingerprint:', $output );
+		$this->assertStringNotContainsString( 'abc123', $output );
 	}
 
 	/**

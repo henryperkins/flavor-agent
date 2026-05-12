@@ -426,27 +426,99 @@ final class Registration {
 				'output_schema'       => [
 					'type'       => 'object',
 					'properties' => [
-						'query'    => [ 'type' => 'string' ],
-						'guidance' => [
+						'query'                    => [ 'type' => 'string' ],
+						'guidance'                 => [
 							'type'  => 'array',
 							'items' => [
 								'type'       => 'object',
 								'properties' => [
-									'id'         => [ 'type' => 'string' ],
-									'title'      => [ 'type' => 'string' ],
-									'sourceKey'  => [ 'type' => 'string' ],
-									'sourceType' => [ 'type' => 'string' ],
-									'url'        => [ 'type' => 'string' ],
-									'excerpt'    => [ 'type' => 'string' ],
-									'score'      => [ 'type' => 'number' ],
+									'id'          => [ 'type' => 'string' ],
+									'title'       => [ 'type' => 'string' ],
+									'sourceKey'   => [ 'type' => 'string' ],
+									'sourceType'  => [ 'type' => 'string' ],
+									'url'         => [ 'type' => 'string' ],
+									'excerpt'     => [ 'type' => 'string' ],
+									'score'       => [ 'type' => 'number' ],
+									'retrievedAt' => [ 'type' => 'string' ],
+									'publishedAt' => [ 'type' => 'string' ],
+									'contentHash' => [ 'type' => 'string' ],
+									'freshness'   => [ 'type' => 'string' ],
 								],
 							],
 						],
+						'docsGrounding'            => self::docs_grounding_output_schema(),
+						'docsGroundingFingerprint' => [ 'type' => 'string' ],
 					],
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::docs_search_meta(),
 			]
 		);
+	}
+
+	private static function docs_search_meta(): array {
+		return [
+			'show_in_rest' => true,
+			'mcp'          => [
+				'public' => true,
+				'type'   => 'tool',
+			],
+			'annotations'  => [
+				'destructive' => false,
+				'idempotent'  => false,
+			],
+		];
+	}
+
+	private static function docs_grounding_output_schema(): array {
+		return [
+			'type'                 => 'object',
+			'additionalProperties' => false,
+			'properties'           => [
+				'status'      => [ 'type' => 'string' ],
+				'mode'        => [ 'type' => 'string' ],
+				'transport'   => [ 'type' => 'string' ],
+				'sourceTypes' => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'freshness'   => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'coverage'    => [
+					'type'                 => 'object',
+					'additionalProperties' => false,
+					'properties'           => [
+						'status'                 => [ 'type' => 'string' ],
+						'hasDeveloperDocs'       => [ 'type' => 'boolean' ],
+						'hasCurrentReleaseCycle' => [ 'type' => 'boolean' ],
+						'sourceTypes'            => [
+							'type'  => 'array',
+							'items' => [ 'type' => 'string' ],
+						],
+						'freshness'              => [
+							'type'  => 'array',
+							'items' => [ 'type' => 'string' ],
+						],
+						'checkedAt'              => [ 'type' => 'string' ],
+						'errorCode'              => [ 'type' => 'string' ],
+						'errorMessage'           => [ 'type' => 'string' ],
+					],
+				],
+				'fingerprint' => [ 'type' => 'string' ],
+			],
+		];
+	}
+
+	private static function with_docs_grounding_output_schema( array $schema ): array {
+		if ( ! isset( $schema['properties'] ) || ! is_array( $schema['properties'] ) ) {
+			$schema['properties'] = [];
+		}
+
+		$schema['properties']['docsGrounding']            = self::docs_grounding_output_schema();
+		$schema['properties']['docsGroundingFingerprint'] = [ 'type' => 'string' ];
+
+		return $schema;
 	}
 
 	private static function register_infra_abilities(): void {
@@ -973,78 +1045,82 @@ final class Registration {
 	}
 
 	private static function patterns_recommendation_output_schema(): array {
-		return [
-			'type'       => 'object',
-			'properties' => [
-				'recommendations' => [
-					'type'  => 'array',
-					'items' => self::open_object_schema(
-						[
-							'name'                 => [ 'type' => 'string' ],
-							'title'                => [ 'type' => 'string' ],
-							'type'                 => [ 'type' => 'string' ],
-							'source'               => [ 'type' => 'string' ],
-							'syncedPatternId'      => [ 'type' => 'integer' ],
-							'syncStatus'           => [ 'type' => 'string' ],
-							'wpPatternSyncStatus'  => [ 'type' => 'string' ],
-							'score'                => [ 'type' => 'number' ],
-							'reason'               => [ 'type' => 'string' ],
-							'categories'           => [ 'type' => 'array' ],
-							'patternOverrides'     => [ 'type' => 'object' ],
-							'overrideCapabilities' => self::pattern_override_capabilities_schema(),
-							'ranking'              => self::ranking_contract_schema(),
-							'content'              => [ 'type' => 'string' ],
-						]
-					),
-				],
-				'diagnostics'     => self::open_object_schema(
-					[
-						'filteredCandidates' => self::open_object_schema(
+		return self::with_docs_grounding_output_schema(
+			[
+				'type'       => 'object',
+				'properties' => [
+					'recommendations' => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(
 							[
-								'unreadableSyncedPatterns' => [ 'type' => 'integer' ],
+								'name'                 => [ 'type' => 'string' ],
+								'title'                => [ 'type' => 'string' ],
+								'type'                 => [ 'type' => 'string' ],
+								'source'               => [ 'type' => 'string' ],
+								'syncedPatternId'      => [ 'type' => 'integer' ],
+								'syncStatus'           => [ 'type' => 'string' ],
+								'wpPatternSyncStatus'  => [ 'type' => 'string' ],
+								'score'                => [ 'type' => 'number' ],
+								'reason'               => [ 'type' => 'string' ],
+								'categories'           => [ 'type' => 'array' ],
+								'patternOverrides'     => [ 'type' => 'object' ],
+								'overrideCapabilities' => self::pattern_override_capabilities_schema(),
+								'ranking'              => self::ranking_contract_schema(),
+								'content'              => [ 'type' => 'string' ],
 							]
 						),
-					]
-				),
-				'requestMeta'     => self::open_object_schema(),
-			],
-		];
+					],
+					'diagnostics'     => self::open_object_schema(
+						[
+							'filteredCandidates' => self::open_object_schema(
+								[
+									'unreadableSyncedPatterns' => [ 'type' => 'integer' ],
+								]
+							),
+						]
+					),
+					'requestMeta'     => self::open_object_schema(),
+				],
+			]
+		);
 	}
 
 	private static function navigation_recommendation_output_schema(): array {
-		return [
-			'type'       => 'object',
-			'properties' => [
-				'suggestions'            => [
-					'type'  => 'array',
-					'items' => self::open_object_schema(
-						[
-							'label'       => [ 'type' => 'string' ],
-							'description' => [ 'type' => 'string' ],
-							'category'    => [ 'type' => 'string' ],
-							'changes'     => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'type'       => [ 'type' => 'string' ],
-										'target'     => [ 'type' => 'string' ],
-										'detail'     => [ 'type' => 'string' ],
-										'targetPath' => [
-											'type'  => 'array',
-											'items' => [ 'type' => 'integer' ],
-										],
-									]
-								),
-							],
-							'ranking'     => self::ranking_contract_schema(),
-						]
-					),
+		return self::with_docs_grounding_output_schema(
+			[
+				'type'       => 'object',
+				'properties' => [
+					'suggestions'            => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(
+							[
+								'label'       => [ 'type' => 'string' ],
+								'description' => [ 'type' => 'string' ],
+								'category'    => [ 'type' => 'string' ],
+								'changes'     => [
+									'type'  => 'array',
+									'items' => self::open_object_schema(
+										[
+											'type'       => [ 'type' => 'string' ],
+											'target'     => [ 'type' => 'string' ],
+											'detail'     => [ 'type' => 'string' ],
+											'targetPath' => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+										]
+									),
+								],
+								'ranking'     => self::ranking_contract_schema(),
+							]
+						),
+					],
+					'explanation'            => [ 'type' => 'string' ],
+					'reviewContextSignature' => [ 'type' => 'string' ],
+					'requestMeta'            => self::open_object_schema(),
 				],
-				'explanation'            => [ 'type' => 'string' ],
-				'reviewContextSignature' => [ 'type' => 'string' ],
-				'requestMeta'            => self::open_object_schema(),
-			],
-		];
+			]
+		);
 	}
 
 	private static function template_recommendation_output_schema(): array {
@@ -1064,113 +1140,117 @@ final class Registration {
 			]
 		);
 
-		return [
-			'type'       => 'object',
-			'properties' => [
-				'suggestions'              => [
-					'type'  => 'array',
-					'items' => self::open_object_schema(
-						[
-							'label'              => [ 'type' => 'string' ],
-							'description'        => [ 'type' => 'string' ],
-							'operations'         => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'type'           => [ 'type' => 'string' ],
-										'slug'           => [ 'type' => 'string' ],
-										'area'           => [ 'type' => 'string' ],
-										'currentSlug'    => [ 'type' => 'string' ],
-										'patternName'    => [ 'type' => 'string' ],
-										'placement'      => [ 'type' => 'string' ],
-										'targetPath'     => [
-											'type'  => 'array',
-											'items' => [ 'type' => 'integer' ],
-										],
-										'expectedTarget' => $expected_target,
-									]
-								),
-							],
-							'templateParts'      => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'slug'   => [ 'type' => 'string' ],
-										'area'   => [ 'type' => 'string' ],
-										'reason' => [ 'type' => 'string' ],
-									]
-								),
-							],
-							'patternSuggestions' => [
-								'type'  => 'array',
-								'items' => [ 'type' => 'string' ],
-							],
-							'ranking'            => self::ranking_contract_schema(),
-						]
-					),
+		return self::with_docs_grounding_output_schema(
+			[
+				'type'       => 'object',
+				'properties' => [
+					'suggestions'              => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(
+							[
+								'label'              => [ 'type' => 'string' ],
+								'description'        => [ 'type' => 'string' ],
+								'operations'         => [
+									'type'  => 'array',
+									'items' => self::open_object_schema(
+										[
+											'type'        => [ 'type' => 'string' ],
+											'slug'        => [ 'type' => 'string' ],
+											'area'        => [ 'type' => 'string' ],
+											'currentSlug' => [ 'type' => 'string' ],
+											'patternName' => [ 'type' => 'string' ],
+											'placement'   => [ 'type' => 'string' ],
+											'targetPath'  => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+											'expectedTarget' => $expected_target,
+										]
+									),
+								],
+								'templateParts'      => [
+									'type'  => 'array',
+									'items' => self::open_object_schema(
+										[
+											'slug'   => [ 'type' => 'string' ],
+											'area'   => [ 'type' => 'string' ],
+											'reason' => [ 'type' => 'string' ],
+										]
+									),
+								],
+								'patternSuggestions' => [
+									'type'  => 'array',
+									'items' => [ 'type' => 'string' ],
+								],
+								'ranking'            => self::ranking_contract_schema(),
+							]
+						),
+					],
+					'explanation'              => [ 'type' => 'string' ],
+					'reviewContextSignature'   => [ 'type' => 'string' ],
+					'resolvedContextSignature' => [ 'type' => 'string' ],
+					'requestMeta'              => self::open_object_schema(),
 				],
-				'explanation'              => [ 'type' => 'string' ],
-				'reviewContextSignature'   => [ 'type' => 'string' ],
-				'resolvedContextSignature' => [ 'type' => 'string' ],
-				'requestMeta'              => self::open_object_schema(),
-			],
-		];
+			]
+		);
 	}
 
 	private static function template_part_recommendation_output_schema(): array {
-		return [
-			'type'       => 'object',
-			'properties' => [
-				'suggestions'              => [
-					'type'  => 'array',
-					'items' => self::open_object_schema(
-						[
-							'label'              => [ 'type' => 'string' ],
-							'description'        => [ 'type' => 'string' ],
-							'blockHints'         => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'path'      => [
-											'type'  => 'array',
-											'items' => [ 'type' => 'integer' ],
-										],
-										'label'     => [ 'type' => 'string' ],
-										'blockName' => [ 'type' => 'string' ],
-										'reason'    => [ 'type' => 'string' ],
-									]
-								),
-							],
-							'patternSuggestions' => [
-								'type'  => 'array',
-								'items' => [ 'type' => 'string' ],
-							],
-							'operations'         => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'type'           => [ 'type' => 'string' ],
-										'patternName'    => [ 'type' => 'string' ],
-										'placement'      => [ 'type' => 'string' ],
-										'targetPath'     => [
-											'type'  => 'array',
-											'items' => [ 'type' => 'integer' ],
-										],
-										'expectedBlockName' => [ 'type' => 'string' ],
-										'expectedTarget' => [ 'type' => 'object' ],
-									]
-								),
-							],
-							'ranking'            => self::ranking_contract_schema(),
-						]
-					),
+		return self::with_docs_grounding_output_schema(
+			[
+				'type'       => 'object',
+				'properties' => [
+					'suggestions'              => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(
+							[
+								'label'              => [ 'type' => 'string' ],
+								'description'        => [ 'type' => 'string' ],
+								'blockHints'         => [
+									'type'  => 'array',
+									'items' => self::open_object_schema(
+										[
+											'path'      => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+											'label'     => [ 'type' => 'string' ],
+											'blockName' => [ 'type' => 'string' ],
+											'reason'    => [ 'type' => 'string' ],
+										]
+									),
+								],
+								'patternSuggestions' => [
+									'type'  => 'array',
+									'items' => [ 'type' => 'string' ],
+								],
+								'operations'         => [
+									'type'  => 'array',
+									'items' => self::open_object_schema(
+										[
+											'type'        => [ 'type' => 'string' ],
+											'patternName' => [ 'type' => 'string' ],
+											'placement'   => [ 'type' => 'string' ],
+											'targetPath'  => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+											'expectedBlockName' => [ 'type' => 'string' ],
+											'expectedTarget' => [ 'type' => 'object' ],
+										]
+									),
+								],
+								'ranking'            => self::ranking_contract_schema(),
+							]
+						),
+					],
+					'explanation'              => [ 'type' => 'string' ],
+					'reviewContextSignature'   => [ 'type' => 'string' ],
+					'resolvedContextSignature' => [ 'type' => 'string' ],
+					'requestMeta'              => self::open_object_schema(),
 				],
-				'explanation'              => [ 'type' => 'string' ],
-				'reviewContextSignature'   => [ 'type' => 'string' ],
-				'resolvedContextSignature' => [ 'type' => 'string' ],
-				'requestMeta'              => self::open_object_schema(),
-			],
-		];
+			]
+		);
 	}
 
 	private static function template_part_editor_structure_schema(): array {
@@ -1841,78 +1921,82 @@ final class Registration {
 			],
 		];
 
-		return [
-			'type'       => 'object',
-			'properties' => [
-				'settings'                 => [
-					'type'  => 'array',
-					'items' => $suggestion_schema,
-				],
-				'styles'                   => [
-					'type'  => 'array',
-					'items' => $suggestion_schema,
-				],
-				'block'                    => [
-					'type'  => 'array',
-					'items' => $block_suggestion_schema,
-				],
-				'explanation'              => [ 'type' => 'string' ],
-				'preFilteringCounts'       => [
-					'type'       => 'object',
-					'properties' => [
-						'settings' => [ 'type' => 'integer' ],
-						'styles'   => [ 'type' => 'integer' ],
-						'block'    => [ 'type' => 'integer' ],
+		return self::with_docs_grounding_output_schema(
+			[
+				'type'       => 'object',
+				'properties' => [
+					'settings'                 => [
+						'type'  => 'array',
+						'items' => $suggestion_schema,
 					],
+					'styles'                   => [
+						'type'  => 'array',
+						'items' => $suggestion_schema,
+					],
+					'block'                    => [
+						'type'  => 'array',
+						'items' => $block_suggestion_schema,
+					],
+					'explanation'              => [ 'type' => 'string' ],
+					'preFilteringCounts'       => [
+						'type'       => 'object',
+						'properties' => [
+							'settings' => [ 'type' => 'integer' ],
+							'styles'   => [ 'type' => 'integer' ],
+							'block'    => [ 'type' => 'integer' ],
+						],
+					],
+					'executionContract'        => [ 'type' => 'object' ],
+					'resolvedContextSignature' => [ 'type' => 'string' ],
 				],
-				'executionContract'        => [ 'type' => 'object' ],
-				'resolvedContextSignature' => [ 'type' => 'string' ],
-			],
-		];
+			]
+		);
 	}
 
 	private static function style_recommendation_output_schema(): array {
-		return [
-			'type'       => 'object',
-			'properties' => [
-				'suggestions'              => [
-					'type'  => 'array',
-					'items' => [
-						'type'       => 'object',
-						'properties' => [
-							'label'       => [ 'type' => 'string' ],
-							'description' => [ 'type' => 'string' ],
-							'category'    => [ 'type' => 'string' ],
-							'tone'        => [ 'type' => 'string' ],
-							'operations'  => [
-								'type'  => 'array',
-								'items' => [
-									'type'       => 'object',
-									'properties' => [
-										'type'           => [ 'type' => 'string' ],
-										'blockName'      => [ 'type' => 'string' ],
-										'path'           => [
-											'type'  => 'array',
-											'items' => [ 'type' => 'string' ],
+		return self::with_docs_grounding_output_schema(
+			[
+				'type'       => 'object',
+				'properties' => [
+					'suggestions'              => [
+						'type'  => 'array',
+						'items' => [
+							'type'       => 'object',
+							'properties' => [
+								'label'       => [ 'type' => 'string' ],
+								'description' => [ 'type' => 'string' ],
+								'category'    => [ 'type' => 'string' ],
+								'tone'        => [ 'type' => 'string' ],
+								'operations'  => [
+									'type'  => 'array',
+									'items' => [
+										'type'       => 'object',
+										'properties' => [
+											'type'       => [ 'type' => 'string' ],
+											'blockName'  => [ 'type' => 'string' ],
+											'path'       => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'string' ],
+											],
+											'value'      => [ 'type' => [ 'string', 'number', 'boolean', 'object', 'array', 'null' ] ],
+											'valueType'  => [ 'type' => 'string' ],
+											'presetType' => [ 'type' => 'string' ],
+											'presetSlug' => [ 'type' => 'string' ],
+											'cssVar'     => [ 'type' => 'string' ],
+											'variationIndex' => [ 'type' => 'integer' ],
+											'variationTitle' => [ 'type' => 'string' ],
 										],
-										'value'          => [ 'type' => [ 'string', 'number', 'boolean', 'object', 'array', 'null' ] ],
-										'valueType'      => [ 'type' => 'string' ],
-										'presetType'     => [ 'type' => 'string' ],
-										'presetSlug'     => [ 'type' => 'string' ],
-										'cssVar'         => [ 'type' => 'string' ],
-										'variationIndex' => [ 'type' => 'integer' ],
-										'variationTitle' => [ 'type' => 'string' ],
 									],
 								],
+								'ranking'     => self::ranking_contract_schema(),
 							],
-							'ranking'     => self::ranking_contract_schema(),
 						],
 					],
+					'explanation'              => [ 'type' => 'string' ],
+					'reviewContextSignature'   => [ 'type' => 'string' ],
+					'resolvedContextSignature' => [ 'type' => 'string' ],
 				],
-				'explanation'              => [ 'type' => 'string' ],
-				'reviewContextSignature'   => [ 'type' => 'string' ],
-				'resolvedContextSignature' => [ 'type' => 'string' ],
-			],
-		];
+			]
+		);
 	}
 }

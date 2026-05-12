@@ -90,6 +90,33 @@ final class ContentAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_recommend_content_remains_available_when_docs_grounding_is_unavailable(): void {
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'draft',
+				'title'   => 'Draft title',
+				'summary' => 'Draft summary.',
+				'content' => "Draft body.\n",
+				'notes'   => [],
+				'issues'  => [],
+			]
+		);
+
+		$result = ContentAbilities::recommend_content(
+			[
+				'mode'        => 'draft',
+				'prompt'      => 'Draft a short update.',
+				'postContext' => [
+					'title' => 'Working title',
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Draft body.', trim( $result['content'] ?? '' ) );
+		$this->assertNotEmpty( WordPressTestState::$last_ai_client_prompt );
+	}
+
 	public function test_recommend_content_sanitizes_context_and_voice_profile_before_prompting(): void {
 		$this->stub_successful_content_response(
 			[

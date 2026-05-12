@@ -12,6 +12,7 @@ use FlavorAgent\LLM\TemplatePrompt;
 use FlavorAgent\LLM\TemplatePartPrompt;
 use FlavorAgent\LLM\ThemeTokenFormatter;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\RecommendationReviewSignature;
@@ -95,25 +96,42 @@ final class TemplateAbilities {
 		$editor_structure = self::normalize_template_editor_structure( $input['editorStructure'] ?? null );
 		$context          = self::apply_template_live_slot_context( $context, $editor_slots );
 		$context          = self::apply_template_live_structure_context( $context, $editor_structure );
+		$docs_result      = self::collect_wordpress_docs_guidance_result(
+			$context,
+			$prompt,
+			[
+				'signatureOnly' => $resolve_signature_only,
+			]
+		);
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			'template',
 			[
-				'context' => $context,
-				'prompt'  => $prompt,
+				'context'                  => $context,
+				'prompt'                   => $prompt,
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			]
 		);
 
-		$review_context_signature = self::build_template_review_context_signature( $review_context );
+		$review_context_signature = self::build_template_review_context_signature(
+			$review_context,
+			(string) ( $docs_result['fingerprint'] ?? '' )
+		);
 
 		if ( $resolve_signature_only ) {
 			return [
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
+				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
 
-		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
+		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
+			return DocsGuidanceResult::unavailable_error( $docs_result );
+		}
+
+		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system        = TemplatePrompt::build_system();
 		$user          = TemplatePrompt::build_user(
 			$context,
@@ -141,6 +159,8 @@ final class TemplateAbilities {
 
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
+		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
 	}
@@ -190,25 +210,42 @@ final class TemplateAbilities {
 
 		$editor_structure = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
 		$context          = self::apply_template_part_live_structure_context( $context, $editor_structure );
+		$docs_result      = self::collect_template_part_wordpress_docs_guidance_result(
+			$context,
+			$prompt,
+			[
+				'signatureOnly' => $resolve_signature_only,
+			]
+		);
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			'template-part',
 			[
-				'context' => $context,
-				'prompt'  => $prompt,
+				'context'                  => $context,
+				'prompt'                   => $prompt,
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			]
 		);
 
-		$review_context_signature = self::build_template_part_review_context_signature( $review_context );
+		$review_context_signature = self::build_template_part_review_context_signature(
+			$review_context,
+			(string) ( $docs_result['fingerprint'] ?? '' )
+		);
 
 		if ( $resolve_signature_only ) {
 			return [
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
+				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
 
-		$docs_guidance = self::collect_template_part_wordpress_docs_guidance( $context, $prompt );
+		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
+			return DocsGuidanceResult::unavailable_error( $docs_result );
+		}
+
+		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system        = TemplatePartPrompt::build_system();
 		$user          = TemplatePartPrompt::build_user(
 			$context,
@@ -236,6 +273,8 @@ final class TemplateAbilities {
 
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
+		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
 	}
@@ -1426,18 +1465,18 @@ final class TemplateAbilities {
 		return array_values( $anchors );
 	}
 
-	private static function build_template_review_context_signature( array $context ): string {
-		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
+	private static function build_template_review_context_signature( array $context, string $docs_grounding_fingerprint = '' ): string {
 		$payload      = [
-			'template'       => self::normalize_template_review_identity( $context ),
-			'allowedAreas'   => self::normalize_template_review_allowed_areas(
+			'template'                 => self::normalize_template_review_identity( $context ),
+			'allowedAreas'             => self::normalize_template_review_allowed_areas(
 				is_array( $context['allowedAreas'] ?? null ) ? $context['allowedAreas'] : []
 			),
-			'availableParts' => self::normalize_template_review_available_parts( $context ),
-			'patterns'       => self::normalize_template_review_patterns(
+			'availableParts'           => self::normalize_template_review_available_parts( $context ),
+			'patterns'                 => self::normalize_template_review_patterns(
 				is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
 				self::REVIEW_TEMPLATE_PATTERN_LIMIT
 			),
+			'docsGroundingFingerprint' => sanitize_text_field( $docs_grounding_fingerprint ),
 		];
 		$theme_tokens = self::format_template_review_theme_tokens(
 			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
@@ -1453,14 +1492,14 @@ final class TemplateAbilities {
 		);
 	}
 
-	private static function build_template_part_review_context_signature( array $context ): string {
-		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
+	private static function build_template_part_review_context_signature( array $context, string $docs_grounding_fingerprint = '' ): string {
 		$payload      = [
-			'templatePart' => self::normalize_template_part_review_identity( $context ),
-			'patterns'     => self::normalize_template_review_patterns(
+			'templatePart'             => self::normalize_template_part_review_identity( $context ),
+			'patterns'                 => self::normalize_template_review_patterns(
 				is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
 				self::REVIEW_TEMPLATE_PART_PATTERN_LIMIT
 			),
+			'docsGroundingFingerprint' => sanitize_text_field( $docs_grounding_fingerprint ),
 		];
 		$theme_tokens = self::format_template_review_theme_tokens(
 			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
@@ -1620,6 +1659,24 @@ final class TemplateAbilities {
 	}
 
 	/**
+	 * @return array<string, mixed>
+	 */
+	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
+		return CollectsDocsGuidance::collect_result(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
+			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt,
+			[
+				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
+				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
+				'sideEffects'         => empty( $options['signatureOnly'] ),
+			]
+		);
+	}
+
+	/**
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_template_part_wordpress_docs_guidance( array $context, string $prompt ): array {
@@ -1630,6 +1687,32 @@ final class TemplateAbilities {
 			$context,
 			$prompt
 		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function collect_template_part_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
+		return CollectsDocsGuidance::collect_result(
+			static fn( array $request_context, string $request_prompt ): string => self::build_template_part_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context, string $query ): string => AISearchClient::resolve_entity_key( 'core/template-part', $query ),
+			static fn( array $request_context ): array => self::build_template_part_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt,
+			[
+				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
+				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
+				'sideEffects'         => empty( $options['signatureOnly'] ),
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @return array<string, mixed>
+	 */
+	private static function format_docs_grounding_output( array $result ): array {
+		return DocsGuidanceResult::public_summary( $result );
 	}
 
 	private static function build_wordpress_docs_entity_key( array $context ): string {

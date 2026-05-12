@@ -87,7 +87,8 @@ Rules:
 - patternSuggestions[] MUST be pattern name values from the Available Patterns list.
 - If a suggestion cannot be safely expressed with the supported operations, leave operations as an empty array and keep it advisory through templateParts and/or patternSuggestions.
 - Keep templateParts and patternSuggestions aligned with the operations you return. When operations is empty, use them as advisory summaries instead.
-- When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
+- Use the WordPress Developer Guidance section as authoritative current WordPress context. Do not recommend capabilities, block supports, APIs, or editor workflows that contradict the provided guidance. If the user asks for a current WordPress feature that is absent from the guidance, keep the suggestion conservative and avoid claiming support.
+- If the guidance explicitly marks the user's requested API, workflow, or feature as deprecated, unsupported, experimental, or replaced, warn about that conflict and suggest the documented replacement instead of complying with the stale request.
 - Prioritize explicitly empty template-part placeholders before replacing existing assignments.
 - Respect the theme's design tokens when suggesting patterns.
 - Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.

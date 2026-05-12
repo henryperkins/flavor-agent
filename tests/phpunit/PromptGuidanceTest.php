@@ -67,7 +67,7 @@ final class PromptGuidanceTest extends TestCase {
 			[
 				[
 					'title'      => 'WordPress AI roadmap status',
-					'sourceType' => 'core-roadmap',
+					'sourceType' => 'roadmap',
 					'excerpt'    => 'Open roadmap milestones: 0.9.0, 1.0.0.',
 				],
 			]

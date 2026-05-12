@@ -11,6 +11,7 @@ use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\Prompt;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\StringArray;
 
@@ -55,18 +56,28 @@ final class BlockAbilities {
 		$context            = $prepared['context'];
 		$prompt             = $prepared['prompt'];
 		$execution_contract = BlockRecommendationExecutionContract::from_context( $context );
+		$docs_result        = self::collect_wordpress_docs_guidance_result(
+			$context,
+			$prompt,
+			[
+				'signatureOnly' => $resolve_signature_only,
+			]
+		);
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			'block',
 			[
-				'context' => $context,
-				'prompt'  => $prompt,
+				'context'                  => $context,
+				'prompt'                   => $prompt,
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			]
 		);
 
 		if ( $resolve_signature_only ) {
 			return [
 				'resolvedContextSignature' => $resolved_context_signature,
+				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
 
@@ -79,11 +90,17 @@ final class BlockAbilities {
 			];
 			$payload['executionContract']        = $execution_contract;
 			$payload['resolvedContextSignature'] = $resolved_context_signature;
+			$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+			$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 			return $payload;
 		}
 
-		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
+		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
+			return DocsGuidanceResult::unavailable_error( $docs_result );
+		}
+
+		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system_prompt = Prompt::build_system();
 		$user_prompt   = Prompt::build_user(
 			$context,
@@ -129,6 +146,8 @@ final class BlockAbilities {
 		$payload['preFilteringCounts']       = $pre_filtering_counts;
 		$payload['executionContract']        = $execution_contract;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
+		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
 	}
@@ -793,6 +812,32 @@ final class BlockAbilities {
 			$context,
 			$prompt
 		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
+		return CollectsDocsGuidance::collect_result(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
+			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt,
+			[
+				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
+				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
+				'sideEffects'         => empty( $options['signatureOnly'] ),
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @return array<string, mixed>
+	 */
+	private static function format_docs_grounding_output( array $result ): array {
+		return DocsGuidanceResult::public_summary( $result );
 	}
 
 	private static function normalize_docs_scope_token( mixed $value ): string {

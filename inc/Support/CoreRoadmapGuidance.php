@@ -38,7 +38,7 @@ final class CoreRoadmapGuidance {
 		''                               => 9,
 	];
 
-	public static function collect( array $context = [] ): array {
+	public static function collect( array $context = [], array $options = [] ): array {
 		if ( ! self::is_enabled( $context ) ) {
 			return [];
 		}
@@ -46,6 +46,14 @@ final class CoreRoadmapGuidance {
 		$cached = get_transient( self::CACHE_KEY );
 		if ( is_array( $cached ) ) {
 			return self::sanitize_guidance_chunks( $cached );
+		}
+
+		$side_effects = array_key_exists( 'sideEffects', $options )
+			? (bool) $options['sideEffects']
+			: true;
+
+		if ( ! $side_effects ) {
+			return [];
 		}
 
 		self::schedule_warm( $context );
@@ -537,7 +545,7 @@ final class CoreRoadmapGuidance {
 				'id'         => 'flavor-agent-roadmap-summary',
 				'title'      => 'WordPress AI roadmap status',
 				'sourceKey'  => self::ROADMAP_SOURCE_KEY,
-				'sourceType' => 'core-roadmap',
+				'sourceType' => 'roadmap',
 				'url'        => self::ROADMAP_VIEW_URL,
 				'excerpt'    => 'Open roadmap milestones: ' . implode( ', ', array_slice( $open_milestones, 0, 3 ) ),
 				'score'      => 0.95,
@@ -560,7 +568,7 @@ final class CoreRoadmapGuidance {
 				'id'         => 'core-roadmap-' . sanitize_title( (string) ( $item['title'] ?? '' ) ),
 				'title'      => sanitize_text_field( (string) ( $item['title'] ?? '' ) ),
 				'sourceKey'  => self::ROADMAP_SOURCE_KEY,
-				'sourceType' => 'core-roadmap',
+				'sourceType' => 'roadmap',
 				'url'        => sanitize_url( (string) ( $item['url'] ?? '' ) ),
 				'excerpt'    => $excerpt,
 				'score'      => (float) ( 0.8 + ( (float) ( $item['virtualScore'] ?? 0.0 ) / 10 ) ),

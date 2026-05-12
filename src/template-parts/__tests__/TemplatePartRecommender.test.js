@@ -84,6 +84,13 @@ import {
 const { getContainer, getRoot } = setupReactTest();
 
 let currentState = null;
+const DOCS_WARNING_TEXT =
+	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	coverageStatus: 'missing-current-release-cycle',
+};
+
 function getState() {
 	return currentState;
 }
@@ -123,6 +130,7 @@ function createState( overrides = {} ) {
 			templatePartContextSignature: null,
 			templatePartReviewContextSignature: null,
 			templatePartReviewStaleReason: null,
+			templatePartDocsGroundingWarning: null,
 			templatePartResultRef: null,
 			templatePartResultToken: 1,
 			templatePartSelectedSuggestionKey: null,
@@ -259,6 +267,9 @@ function selectStore( storeName ) {
 			getTemplatePartReviewStaleReason: jest.fn(
 				() => getState().store.templatePartReviewStaleReason
 			),
+			getTemplatePartDocsGroundingWarning: jest.fn(
+				() => getState().store.templatePartDocsGroundingWarning || null
+			),
 			getUndoError: jest.fn( () => getState().store.undoError ),
 			getUndoStatus: jest.fn( () => getState().store.undoStatus ),
 			isTemplatePartLoading: jest.fn(
@@ -327,6 +338,28 @@ afterEach( async () => {
 } );
 
 describe( 'TemplatePartRecommender', () => {
+	test( 'renders docs grounding warnings before template-part suggestions', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Tighten the header utility area',
+						description: 'Keep the utility actions near the nav.',
+					},
+				],
+				templatePartDocsGroundingWarning: DOCS_GROUNDING_WARNING,
+				templatePartResultRef: 'theme//header',
+				templatePartStatus: 'ready',
+			},
+		} );
+		currentState.store.templatePartContextSignature =
+			buildTemplatePartContextSignature( currentState );
+
+		await renderPanel();
+
+		expect( getContainer().textContent ).toContain( DOCS_WARNING_TEXT );
+	} );
+
 	test( 'renders inline entity links in explanation and card descriptions', async () => {
 		currentState = createState( {
 			store: {

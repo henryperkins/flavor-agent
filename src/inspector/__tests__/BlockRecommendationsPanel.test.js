@@ -120,6 +120,13 @@ import {
 const { getContainer, getRoot } = setupReactTest();
 
 let currentState = null;
+const DOCS_WARNING_TEXT =
+	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	coverageStatus: 'missing-current-release-cycle',
+};
+
 function getState() {
 	return currentState;
 }
@@ -154,6 +161,7 @@ function createState( overrides = {} ) {
 			blockErrors: {},
 			blockRecommendations: {},
 			blockContextSignatures: {},
+			blockDocsGroundingWarnings: {},
 			blockResolvedContextSignatures: {},
 			blockStatuses: {},
 			lastUndoneActivityId: null,
@@ -224,6 +232,11 @@ function selectStore( storeName ) {
 			getBlockRequestDiagnostics: jest.fn(
 				( clientId ) =>
 					getState().store.blockRequestDiagnostics?.[ clientId ] ||
+					null
+			),
+			getBlockDocsGroundingWarning: jest.fn(
+				( clientId ) =>
+					getState().store.blockDocsGroundingWarnings?.[ clientId ] ||
 					null
 			),
 			getBlockRequestToken: jest.fn(
@@ -378,6 +391,45 @@ afterEach( () => {
 } );
 
 describe( 'BlockRecommendationsDocumentPanel', () => {
+	test( 'renders docs grounding warnings before block recommendations', () => {
+		const context = {
+			block: {
+				name: 'core/paragraph',
+			},
+		};
+
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						prompt: '',
+						blockName: 'core/paragraph',
+						blockContext: context.block,
+						block: [ { label: 'Tighten copy' } ],
+						settings: [],
+						styles: [],
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( context ),
+				},
+				blockDocsGroundingWarnings: {
+					'block-1': DOCS_GROUNDING_WARNING,
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain( DOCS_WARNING_TEXT );
+		expect(
+			getContainer().textContent.indexOf( DOCS_WARNING_TEXT )
+		).toBeLessThan( getContainer().textContent.indexOf( 'Tighten copy' ) );
+	} );
+
 	test( 'uses provided request data without recomputing live block context', () => {
 		const context = {
 			block: {
@@ -1654,6 +1706,124 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( reviewButton ).toBeDefined();
 		expect( reviewButton.disabled ).toBe( true );
+	} );
+
+	test( 'disables block review and apply controls when docs grounding becomes unavailable', () => {
+		const liveContext = {
+			block: {
+				name: 'core/group',
+			},
+		};
+		const contextSignature = JSON.stringify( liveContext );
+		const operation = {
+			catalogVersion: 1,
+			type: 'insert_pattern',
+			patternName: 'theme/hero',
+			targetClientId: 'block-1',
+			targetSignature: 'target-sig',
+			targetType: 'block',
+			expectedTarget: {
+				clientId: 'block-1',
+				name: 'core/group',
+			},
+			position: 'insert_after',
+		};
+
+		mockCollectBlockContext.mockReturnValue( liveContext );
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				},
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				],
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						prompt: '',
+						blockName: 'core/group',
+						blockContext: {
+							name: 'core/group',
+							blockOperationContext: {
+								enableBlockStructuralActions: true,
+								targetClientId: 'block-1',
+								targetBlockName: 'core/group',
+								targetSignature: 'target-sig',
+								isTargetLocked: false,
+								isContentOnly: false,
+								allowedPatterns: [
+									{
+										name: 'theme/hero',
+										title: 'Hero',
+										allowedActions: [ 'insert_after' ],
+									},
+								],
+							},
+						},
+						block: [
+							{
+								label: 'Add a hero pattern after this group',
+								description:
+									'Insert the approved hero pattern.',
+								type: 'pattern_replacement',
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						settings: [],
+						styles: [],
+					},
+				},
+				blockContextSignatures: {
+					'block-1': contextSignature,
+				},
+				blockResolvedContextSignatures: {
+					'block-1': 'resolved-context',
+				},
+				blockStaleReasons: {
+					'block-1': 'docs-grounding-unavailable',
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain(
+			'Developer Docs grounding is unavailable'
+		);
+		const reviewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Refresh to review' );
+
+		expect( reviewButton ).toBeDefined();
+		expect( reviewButton.disabled ).toBe( true );
+
+		const applyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find(
+			( element ) => element.textContent === 'Apply reviewed structure'
+		);
+
+		expect( applyButton ).toBeUndefined();
+
+		expect( mockApplyBlockStructuralSuggestion ).not.toHaveBeenCalled();
 	} );
 
 	test( 'keeps rejected structural proposals visible as advisory remainder when local attributes can apply', () => {

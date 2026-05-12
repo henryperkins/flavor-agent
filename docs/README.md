@@ -61,6 +61,7 @@ Read these documents in this order:
    - `pattern-recommendation-debugging.md` — operator runbook for sync, Qdrant collection health, raw retrieval, and reranking triage.
    - `provider-precedence.md` — AI backend selection, credential fallback chain, and surface-to-backend map.
    - `external-service-disclosure.md` — service disclosure source for external endpoints, triggers, and data types.
+   - `developer-docs-public-corpus-runbook.md` — ownership, refresh cadence, validation query, and release gate for the built-in public Developer Docs grounding corpus.
    - `template-operations.md` — operation types, placements, and validation rules per surface.
    - `activity-state-machine.md` — undo states, transitions, ordered undo, and pruning.
    - `wordpress-ai-roadmap-tracking.md` — snapshot of WordPress org project 240 and the active overlap between upstream AI work and Flavor Agent surfaces, plus a refresh procedure.
@@ -105,6 +106,7 @@ Each top-level doc has one job:
    - `pattern-recommendation-debugging.md` — How do you debug sync, Qdrant collection health, raw retrieval, and reranking failures?
    - `provider-precedence.md` — Which AI backend serves a request? What credential sources are checked and in what order?
    - `external-service-disclosure.md` — Which external services can be contacted? What data is sent and what user action triggers it?
+   - `developer-docs-public-corpus-runbook.md` — Who owns the built-in public Developer Docs grounding corpus? Which source scopes, refresh cadence, and validation evidence gate fail-closed enforcement?
    - `template-operations.md` — Which operation types are valid per surface? What fields and placements are required?
    - `activity-state-machine.md` — What undo states exist? Which transitions are valid? When is undo blocked?
    - `wordpress-ai-roadmap-tracking.md` — Which upstream AI initiative collides with which Flavor Agent surface, and which board items are imminent?
@@ -140,7 +142,7 @@ Right now the intended doc stack is:
 2. Current state: `STATUS.md`
 3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
 4. Per-surface deep dives: `docs/features/README.md`
-5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
+5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, developer-docs-public-corpus-runbook, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
 6. Architecture companion: `docs/flavor-agent-readme.md`
 7. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
 

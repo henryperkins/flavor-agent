@@ -48,6 +48,13 @@ import NavigationRecommendations, {
 const { getContainer, getRoot } = setupReactTest();
 
 let currentState = null;
+const DOCS_WARNING_TEXT =
+	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	coverageStatus: 'missing-current-release-cycle',
+};
+
 function getState() {
 	return currentState;
 }
@@ -185,6 +192,11 @@ function createSelectors() {
 					? getState().store.navigationReviewStaleReason || null
 					: null
 			),
+			getNavigationDocsGroundingWarning: jest.fn( ( clientId ) =>
+				getState().store.navigationBlockClientId === clientId
+					? getState().store.navigationDocsGroundingWarning || null
+					: null
+			),
 			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
 				void surface;
 
@@ -253,6 +265,7 @@ beforeEach( () => {
 			navigationReviewContextSignature: null,
 			navigationReviewFreshnessStatus: 'idle',
 			navigationReviewStaleReason: null,
+			navigationDocsGroundingWarning: null,
 		},
 	};
 	window.flavorAgentData = {
@@ -308,6 +321,36 @@ afterEach( () => {
 } );
 
 describe( 'NavigationRecommendations', () => {
+	test( 'renders docs grounding warnings for current navigation results', () => {
+		const navigationMarkup =
+			'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->';
+
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		mockSerialize.mockReturnValue( navigationMarkup );
+		currentState.store = {
+			...currentState.store,
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationStatus: 'ready',
+			navigationContextSignature:
+				buildStoredNavigationSignature( navigationMarkup ),
+			navigationDocsGroundingWarning: DOCS_GROUNDING_WARNING,
+		};
+
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain( DOCS_WARNING_TEXT );
+	} );
+
 	test( 'does not render for non-navigation blocks', () => {
 		currentState.blockEditor.blocks = {
 			'block-1': {

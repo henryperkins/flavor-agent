@@ -42,10 +42,10 @@ final class CoreRoadmapGuidanceTest extends TestCase {
 
 		$this->assertSame( 2, count( $result ) );
 		$this->assertSame( 'WordPress AI roadmap status', $result[0]['title'] );
-		$this->assertSame( 'core-roadmap', $result[0]['sourceType'] );
+		$this->assertSame( 'roadmap', $result[0]['sourceType'] );
 		$this->assertStringContainsString( 'Open roadmap milestones: Core Improvements', $result[0]['excerpt'] );
 		$this->assertSame( 'Enable richer editor controls', $result[1]['title'] );
-		$this->assertSame( 'core-roadmap', $result[1]['sourceType'] );
+		$this->assertSame( 'roadmap', $result[1]['sourceType'] );
 		$this->assertStringContainsString( 'In progress', $result[1]['excerpt'] );
 		$this->assertStringContainsString( 'Priority: High', $result[1]['excerpt'] );
 		$this->assertSame( 'https://github.com/orgs/WordPress/projects/240/views/7?layout=table&hierarchy=true', WordPressTestState::$last_remote_get['url'] );
@@ -65,6 +65,36 @@ final class CoreRoadmapGuidanceTest extends TestCase {
 			CoreRoadmapGuidance::WARM_CRON_HOOK,
 			WordPressTestState::$scheduled_events
 		);
+	}
+
+	public function test_collect_with_side_effects_disabled_does_not_schedule_warm_on_cache_miss(): void {
+		$result = CoreRoadmapGuidance::collect( [], [ 'sideEffects' => false ] );
+
+		$this->assertSame( [], $result );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$scheduled_events );
+		$this->assertArrayNotHasKey( 'flavor_agent_core_roadmap_guidance_schedule_lock', WordPressTestState::$transients );
+	}
+
+	public function test_collect_with_side_effects_disabled_still_reads_cached_guidance(): void {
+		$cached = [
+			[
+				'id'         => 'roadmap-1',
+				'title'      => 'WordPress AI roadmap status',
+				'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
+				'sourceType' => 'roadmap',
+				'url'        => 'https://github.com/orgs/WordPress/projects/240/views/7?layout=table&hierarchy=true',
+				'excerpt'    => 'Open roadmap milestones: 0.9.0.',
+				'score'      => 0.95,
+			],
+		];
+
+		WordPressTestState::$transients['flavor_agent_core_roadmap_guidance_v1'] = $cached;
+
+		$result = CoreRoadmapGuidance::collect( [], [ 'sideEffects' => false ] );
+
+		$this->assertSame( $cached, $result );
+		$this->assertSame( [], WordPressTestState::$scheduled_events );
 	}
 
 	public function test_warm_applies_timeout_and_cache_ttl_filters(): void {

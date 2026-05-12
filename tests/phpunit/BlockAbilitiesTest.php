@@ -16,6 +16,7 @@ final class BlockAbilitiesTest extends TestCase {
 
 		WordPressTestState::reset();
 		$this->register_paragraph_block();
+		$this->prime_default_docs_grounding();
 	}
 
 	public function test_prepare_recommend_block_input_normalizes_editor_context_payload(): void {
@@ -608,8 +609,39 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 	}
 
-	public function test_recommend_block_resolve_signature_only_returns_minimal_payload_and_ignores_docs_guidance_cache_changes(): void {
-		WordPressTestState::$options = [
+	public function test_recommend_block_fails_closed_when_docs_grounding_is_unavailable(): void {
+		$this->configure_text_generation_connector();
+		WordPressTestState::$transients                     = [];
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Would have called the model without the grounding gate.',
+			]
+		);
+
+		$result = BlockAbilities::recommend_block(
+			[
+				'selectedBlock' => [
+					'blockName'  => 'core/paragraph',
+					'attributes' => [
+						'content' => 'Hello world',
+					],
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+	}
+
+	public function test_recommend_block_resolve_signature_only_includes_docs_grounding_fingerprint(): void {
+		WordPressTestState::$transients = [];
+		WordPressTestState::$options    = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
@@ -634,13 +666,14 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 
 		$this->assertIsArray( $baseline );
-		$this->assertSame(
-			[ 'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null ],
-			$baseline
-		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertSame( 'unavailable', $baseline['docsGrounding']['status'] ?? null );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $baseline['docsGroundingFingerprint'] ?? '' )
 		);
 		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
@@ -657,15 +690,21 @@ final class BlockAbilitiesTest extends TestCase {
 
 		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ] = [
 			[
-				'id'        => 'chunk-1',
-				'title'     => 'Paragraph block guidance',
-				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
-				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
-				'excerpt'   => 'Paragraph guidance should keep typography and spacing inside supported editor controls.',
-				'score'     => 0.91,
+				'id'          => 'chunk-1',
+				'title'       => 'Paragraph block guidance',
+				'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+				'sourceType'  => 'developer-docs',
+				'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+				'excerpt'     => 'Paragraph guidance should keep typography and spacing inside supported editor controls.',
+				'score'       => 0.91,
+				'retrievedAt' => '2026-05-08T14:00:00Z',
+				'publishedAt' => '',
+				'contentHash' => 'paragraph-guidance',
+				'freshness'   => 'current',
 			],
 		];
-		WordPressTestState::$last_remote_post                                  = [];
+		$this->prime_current_docs_source_coverage();
+		WordPressTestState::$last_remote_post = [];
 
 		$with_docs = BlockAbilities::recommend_block(
 			array_merge(
@@ -677,16 +716,149 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 
 		$this->assertIsArray( $with_docs );
-		$this->assertSame(
-			[ 'resolvedContextSignature' => $with_docs['resolvedContextSignature'] ?? null ],
-			$with_docs
-		);
-		$this->assertSame(
+		$this->assertSame( 'grounded', $with_docs['docsGrounding']['status'] ?? null );
+		$this->assertNotSame(
 			$baseline['resolvedContextSignature'] ?? null,
 			$with_docs['resolvedContextSignature'] ?? null
 		);
+		$this->assertNotSame(
+			$baseline['docsGroundingFingerprint'] ?? null,
+			$with_docs['docsGroundingFingerprint'] ?? null
+		);
 		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_recommend_block_resolved_signature_is_stable_between_recommendation_and_signature_modes(): void {
+		$this->configure_text_generation_connector();
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Keep the paragraph concise.',
+			]
+		);
+
+		$input = [
+			'prompt'        => 'Keep the paragraph tighter and clearer.',
+			'selectedBlock' => [
+				'blockName'  => 'core/paragraph',
+				'attributes' => [
+					'content' => 'Hello world',
+				],
+			],
+		];
+
+		$recommendation = BlockAbilities::recommend_block( $input );
+		$signature      = BlockAbilities::recommend_block(
+			array_merge(
+				$input,
+				[
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $recommendation );
+		$this->assertIsArray( $signature );
+		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
+		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertSame(
+			$recommendation['resolvedContextSignature'] ?? null,
+			$signature['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$recommendation['docsGroundingFingerprint'] ?? null,
+			$signature['docsGroundingFingerprint'] ?? null
+		);
+	}
+
+	public function test_recommend_block_warns_on_missing_release_cycle_coverage_by_default(): void {
+		$this->configure_text_generation_connector();
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'missing-current-release-cycle',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => false,
+			'sourceTypes'            => [ 'developer-docs' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => 'missing_current_release_cycle',
+			'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
+		];
+		WordPressTestState::$ai_client_generate_text_result                     = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Model still runs when coverage is only diagnostic.',
+			]
+		);
+
+		$result = BlockAbilities::recommend_block(
+			[
+				'selectedBlock' => [
+					'blockName'  => 'core/paragraph',
+					'attributes' => [
+						'content' => 'Hello world',
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			'missing-current-release-cycle',
+			$result['docsGrounding']['coverage']['status'] ?? null
+		);
+		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt );
+	}
+
+	public function test_recommend_block_enforces_missing_release_cycle_coverage_only_when_release_gate_is_enabled(): void {
+		$this->configure_text_generation_connector();
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'missing-current-release-cycle',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => false,
+			'sourceTypes'            => [ 'developer-docs' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => 'missing_current_release_cycle',
+			'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
+		];
+		WordPressTestState::$ai_client_generate_text_result                     = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'The model must not run while the gate is enforced.',
+			]
+		);
+
+		add_filter( 'flavor_agent_docs_grounding_require_current_coverage', '__return_true' );
+
+		try {
+			$result = BlockAbilities::recommend_block(
+				[
+					'selectedBlock' => [
+						'blockName'  => 'core/paragraph',
+						'attributes' => [
+							'content' => 'Hello world',
+						],
+					],
+				]
+			);
+		} finally {
+			remove_filter( 'flavor_agent_docs_grounding_require_current_coverage', '__return_true' );
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
+		$this->assertSame(
+			'missing-current-release-cycle',
+			$result->get_error_data()['docsGrounding']['coverage']['status'] ?? null
+		);
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
 	}
 
 	public function test_list_allowed_blocks_returns_registered_block_manifests(): void {
@@ -917,5 +1089,64 @@ final class BlockAbilitiesTest extends TestCase {
 				'apiVersion' => 3,
 			]
 		);
+	}
+
+	private function configure_text_generation_connector(): void {
+		WordPressTestState::$options                    = array_merge(
+			WordPressTestState::$options,
+			[
+				'flavor_agent_openai_provider' => 'openai',
+			]
+		);
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_supported        = true;
+	}
+
+	private function prime_default_docs_grounding(): void {
+		$this->prime_current_docs_source_coverage();
+		\FlavorAgent\Cloudflare\AISearchClient::cache_entity_guidance(
+			'core/paragraph',
+			[
+				[
+					'id'          => 'paragraph-default-doc',
+					'title'       => 'Paragraph block reference',
+					'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+					'sourceType'  => 'developer-docs',
+					'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+					'excerpt'     => 'Use supported paragraph block controls for typography and spacing recommendations.',
+					'score'       => 0.91,
+					'retrievedAt' => '2026-05-08T14:00:00Z',
+					'publishedAt' => '',
+					'contentHash' => 'paragraph-default-doc',
+					'freshness'   => 'current',
+				],
+			]
+		);
+	}
+
+	private function prime_current_docs_source_coverage(): void {
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'current',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => true,
+			'sourceTypes'            => [ 'developer-docs', 'make-core' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => '',
+			'errorMessage'           => '',
+		];
 	}
 }

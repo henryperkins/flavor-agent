@@ -140,7 +140,8 @@ Rules:
 - Only suggest preset values that exist in the provided themeTokens.
 - CSS custom property references like var(--wp--custom--brand-accent) are allowed when they match the theme's live variables.
 - When the relevant preset family is empty in themeTokens, you may fall back to safe raw values for that property (for example hex colors, font sizes, font families, or shadow strings).
-- When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented Gutenberg capabilities or theme.json standards.
+- Use the WordPress Developer Guidance section as authoritative current WordPress context. Do not recommend capabilities, block supports, APIs, or editor workflows that contradict the provided guidance. If the user asks for a current WordPress feature that is absent from the guidance, keep the suggestion conservative and avoid claiming support.
+- If the guidance explicitly marks the user's requested API, workflow, or feature as deprecated, unsupported, experimental, or replaced, warn about that conflict and suggest the documented replacement instead of complying with the stale request.
 - When structural identity is provided, treat it as the block's job on this page. Distinguish role and location from raw block name alone (for example, header navigation vs footer navigation, main query vs sidebar query).
 - When parent container context shows a dark or high-overlay container (for example, high dimRatio or a dark/contrast background preset), prefer light/contrast text colors and ensure sufficient contrast.
 - When the parent container uses a constrained layout, respect its width constraints in dimension suggestions.

@@ -176,6 +176,12 @@ let currentStyleBookUiState = null;
 let styleBookUiSubscriber = null;
 let currentEditedTemplateId = null;
 let currentEditedBlocks = null;
+const DOCS_WARNING_TEXT =
+	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	coverageStatus: 'missing-current-release-cycle',
+};
 
 function getMockStyleBookUiState() {
 	return {
@@ -335,6 +341,7 @@ beforeEach( () => {
 		contextSignature: null,
 		reviewContextSignature: null,
 		reviewStaleReason: null,
+		docsGroundingWarning: null,
 		selectedSuggestionKey: null,
 		applyStatus: 'idle',
 		undoStatus: 'idle',
@@ -407,6 +414,8 @@ beforeEach( () => {
 						currentStoreState.selectedSuggestionKey,
 					getGlobalStylesReviewStaleReason: () =>
 						currentStoreState.reviewStaleReason,
+					getGlobalStylesDocsGroundingWarning: () =>
+						currentStoreState.docsGroundingWarning || null,
 					getGlobalStylesApplyStatus: () =>
 						currentStoreState.applyStatus,
 					getUndoStatus: () => currentStoreState.undoStatus,
@@ -499,6 +508,39 @@ afterEach( () => {
 } );
 
 describe( 'GlobalStylesRecommender', () => {
+	test( 'renders docs grounding warnings in the Global Styles panel', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Use accent canvas',
+					description:
+						'Apply the accent preset to the site background.',
+					category: 'color',
+					tone: 'executable',
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'background' ],
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
+						},
+					],
+				},
+			],
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: buildContextSignature( currentGlobalStylesData ),
+			docsGroundingWarning: DOCS_GROUNDING_WARNING,
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( DOCS_WARNING_TEXT );
+	} );
+
 	test( 'stays hidden while the Style Book surface is active', () => {
 		currentStyleBookUiState = {
 			isActive: true,

@@ -15,6 +15,7 @@ import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import LinkedEntityText from '../components/LinkedEntityText';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
@@ -371,6 +372,7 @@ export default function TemplatePartRecommender() {
 		lastAppliedOperations,
 		reviewStaleReason,
 		storedStaleReason,
+		docsGroundingWarning,
 		activityLog,
 		undoError,
 		undoStatus,
@@ -399,6 +401,8 @@ export default function TemplatePartRecommender() {
 			reviewStaleReason:
 				store.getTemplatePartReviewStaleReason?.() || null,
 			storedStaleReason: store.getTemplatePartStaleReason?.() || null,
+			docsGroundingWarning:
+				store.getTemplatePartDocsGroundingWarning?.() || null,
 			activityLog: store.getActivityLog() || [],
 			undoError: store.getUndoError(),
 			undoStatus: store.getUndoStatus(),
@@ -946,6 +950,10 @@ export default function TemplatePartRecommender() {
 					}
 					onDismiss={ dismissStatusNotice }
 				/>
+
+				{ canRecommend && ! isStaleResult && (
+					<DocsGroundingNotice warning={ docsGroundingWarning } />
+				) }
 
 				{ canRecommend && featuredSuggestionCard && (
 					<RecommendationHero

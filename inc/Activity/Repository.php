@@ -3774,15 +3774,16 @@ final class Repository {
 
 	private static function format_surface_label( string $surface ): string {
 		return match ( $surface ) {
-			'content'       => 'Content',
-			'navigation'    => 'Navigation',
-			'pattern'       => 'Pattern',
-			'template'      => 'Template',
-			'template-part' => 'Template part',
-			'global-styles' => 'Global Styles',
-			'style-book'    => 'Style Book',
-			'block'         => 'Block',
-			default         => 'Activity',
+			'content'        => 'Content',
+			'navigation'     => 'Navigation',
+			'pattern'        => 'Pattern',
+			'template'       => 'Template',
+			'template-part'  => 'Template part',
+			'docs_grounding' => 'Developer Docs',
+			'global-styles'  => 'Global Styles',
+			'style-book'     => 'Style Book',
+			'block'          => 'Block',
+			default          => 'Activity',
 		};
 	}
 

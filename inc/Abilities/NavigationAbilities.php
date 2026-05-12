@@ -10,6 +10,7 @@ use FlavorAgent\LLM\NavigationPrompt;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\ThemeTokenFormatter;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationReviewSignature;
 use FlavorAgent\Support\StringArray;
@@ -57,15 +58,32 @@ final class NavigationAbilities {
 			return $context;
 		}
 
-		$review_context_signature = self::build_review_context_signature( $context );
+		$docs_result = self::collect_wordpress_docs_guidance_result(
+			$context,
+			$prompt,
+			[
+				'signatureOnly' => $resolve_signature_only,
+			]
+		);
+
+		$review_context_signature = self::build_review_context_signature(
+			$context,
+			(string) ( $docs_result['fingerprint'] ?? '' )
+		);
 
 		if ( $resolve_signature_only ) {
 			return [
-				'reviewContextSignature' => $review_context_signature,
+				'reviewContextSignature'   => $review_context_signature,
+				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
 
-		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
+		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
+			return DocsGuidanceResult::unavailable_error( $docs_result );
+		}
+
+		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system        = NavigationPrompt::build_system();
 		$user          = NavigationPrompt::build_user(
 			$context,
@@ -89,36 +107,38 @@ final class NavigationAbilities {
 			return $payload;
 		}
 
-		$payload['reviewContextSignature'] = $review_context_signature;
+		$payload['reviewContextSignature']   = $review_context_signature;
+		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
 	}
 
-	private static function build_review_context_signature( array $context ): string {
-		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
+	private static function build_review_context_signature( array $context, string $docs_grounding_fingerprint = '' ): string {
 		$payload      = [
-			'location'         => sanitize_key( (string) ( $context['location'] ?? '' ) ),
-			'locationDetails'  => self::normalize_map( $context['locationDetails'] ?? [] ),
-			'attributes'       => self::normalize_review_attributes(
+			'location'                 => sanitize_key( (string) ( $context['location'] ?? '' ) ),
+			'locationDetails'          => self::normalize_map( $context['locationDetails'] ?? [] ),
+			'attributes'               => self::normalize_review_attributes(
 				is_array( $context['attributes'] ?? null ) ? $context['attributes'] : []
 			),
-			'menuItemCount'    => isset( $context['menuItemCount'] ) ? max( 0, (int) $context['menuItemCount'] ) : 0,
-			'maxDepth'         => isset( $context['maxDepth'] ) ? max( 0, (int) $context['maxDepth'] ) : 0,
-			'menuItems'        => self::normalize_review_menu_items(
+			'menuItemCount'            => isset( $context['menuItemCount'] ) ? max( 0, (int) $context['menuItemCount'] ) : 0,
+			'maxDepth'                 => isset( $context['maxDepth'] ) ? max( 0, (int) $context['maxDepth'] ) : 0,
+			'menuItems'                => self::normalize_review_menu_items(
 				is_array( $context['menuItems'] ?? null ) ? $context['menuItems'] : []
 			),
-			'targetInventory'  => self::normalize_review_target_inventory(
+			'targetInventory'          => self::normalize_review_target_inventory(
 				is_array( $context['targetInventory'] ?? null ) ? $context['targetInventory'] : []
 			),
-			'structureSummary' => self::normalize_review_structure_summary(
+			'structureSummary'         => self::normalize_review_structure_summary(
 				is_array( $context['structureSummary'] ?? null ) ? $context['structureSummary'] : []
 			),
-			'overlayContext'   => self::normalize_review_overlay_context(
+			'overlayContext'           => self::normalize_review_overlay_context(
 				is_array( $context['overlayContext'] ?? null ) ? $context['overlayContext'] : []
 			),
-			'overlayParts'     => self::normalize_overlay_template_parts(
+			'overlayParts'             => self::normalize_overlay_template_parts(
 				is_array( $context['overlayTemplateParts'] ?? null ) ? $context['overlayTemplateParts'] : []
 			),
+			'docsGroundingFingerprint' => sanitize_text_field( $docs_grounding_fingerprint ),
 		];
 		$theme_tokens = ThemeTokenFormatter::format(
 			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
@@ -364,6 +384,32 @@ final class NavigationAbilities {
 			$context,
 			$prompt
 		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
+		return CollectsDocsGuidance::collect_result(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn(): string => 'core/navigation',
+			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt,
+			[
+				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
+				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
+				'sideEffects'         => empty( $options['signatureOnly'] ),
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @return array<string, mixed>
+	 */
+	private static function format_docs_grounding_output( array $result ): array {
+		return DocsGuidanceResult::public_summary( $result );
 	}
 
 	/**

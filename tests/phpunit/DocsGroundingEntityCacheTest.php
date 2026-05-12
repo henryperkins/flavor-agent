@@ -123,7 +123,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 				'id'         => 'roadmap-1',
 				'title'      => 'WordPress AI roadmap status',
 				'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
-				'sourceType' => 'core-roadmap',
+				'sourceType' => 'roadmap',
 				'url'        => 'https://github.com/orgs/WordPress/projects/240/views/7?layout=table&hierarchy=true',
 				'excerpt'    => 'Open roadmap milestones: 0.9.0.',
 				'score'      => 0.95,
@@ -132,7 +132,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 				'id'         => 'roadmap-2',
 				'title'      => 'Improve block bindings guidance',
 				'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
-				'sourceType' => 'core-roadmap',
+				'sourceType' => 'roadmap',
 				'url'        => 'https://github.com/WordPress/ai/issues/123',
 				'excerpt'    => 'In-progress roadmap item.',
 				'score'      => 0.9,
@@ -141,7 +141,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 				'id'         => 'roadmap-3',
 				'title'      => 'Improve navigation guidance',
 				'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
-				'sourceType' => 'core-roadmap',
+				'sourceType' => 'roadmap',
 				'url'        => 'https://github.com/WordPress/ai/issues/124',
 				'excerpt'    => 'Another in-progress roadmap item.',
 				'score'      => 0.88,
@@ -160,11 +160,37 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 		);
 
 		$this->assertGreaterThanOrEqual( 2, count( $result ) );
-		$this->assertSame( 'core-roadmap', $result[0]['sourceType'] ?? '' );
+		$this->assertSame( 'roadmap', $result[0]['sourceType'] ?? '' );
 		$this->assertSame(
 			[ 'roadmap-1', 'docs-chunk-1', 'docs-chunk-2' ],
 			array_slice( array_column( $result, 'id' ), 0, 3 )
 		);
+
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_true' ] );
+		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_false' ] );
+	}
+
+	public function test_collect_result_signature_mode_does_not_schedule_roadmap_warm(): void {
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_false' ] );
+		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_true' ] );
+
+		$result = CollectsDocsGuidance::collect_result(
+			static fn(): string => 'navigation docs',
+			static fn(): string => 'core/navigation',
+			static fn(): array => [ 'surface' => 'block' ],
+			[ 'surface' => 'block' ],
+			'Simplify navigation.',
+			[
+				'allowForegroundWarm' => false,
+				'sideEffects'         => false,
+				'mode'                => 'signature',
+			]
+		);
+
+		$this->assertSame( 'unavailable', $result['status'] ?? null );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$scheduled_events );
 
 		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_true' ] );
 		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_false' ] );
@@ -861,6 +887,11 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 		);
 
 		$this->assertIsArray( $result );
+		$this->assertSame( 'grounded', $result['docsGrounding']['status'] ?? null );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $result['docsGroundingFingerprint'] ?? '' )
+		);
 		$this->assertSame(
 			$result['guidance'],
 			AISearchClient::maybe_search( $query )
@@ -971,7 +1002,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 									'key'      => $source_key,
 									'metadata' => [],
 								],
-								'text'  => "---\nsource_url: \"{$url}\"\n---\n{$excerpt}",
+								'text'  => "---\nsource_url: \"{$url}\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: docs-cache-test\n---\n{$excerpt}",
 							],
 						],
 					],

@@ -115,6 +115,23 @@ import {
 	createExecutableSurfaceReviewFreshnessConfig,
 } from '../executable-surface-runtime';
 
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	message: '',
+	coverageStatus: 'missing-current-release-cycle',
+	coverageMessage: 'Current release-cycle docs were not confirmed.',
+	source: '',
+	checkedAt: '',
+};
+
+const DOCS_GROUNDING_PAYLOAD = {
+	status: 'grounded',
+	coverage: {
+		status: 'missing-current-release-cycle',
+		message: 'Current release-cycle docs were not confirmed.',
+	},
+};
+
 function buildSurfaceFixture( def ) {
 	switch ( def.key ) {
 		case 'template':
@@ -395,7 +412,8 @@ describe( 'executable-surface runtime config factories', () => {
 		expect( setReviewStateAction ).toHaveBeenCalledWith(
 			'stale',
 			9,
-			'server-review'
+			'server-review',
+			null
 		);
 		expect( config.setReviewState( 'fresh' ) ).toEqual( {
 			status: 'fresh',
@@ -404,6 +422,7 @@ describe( 'executable-surface runtime config factories', () => {
 		} );
 		expect( setReviewStateAction ).toHaveBeenCalledWith(
 			'fresh',
+			null,
 			null,
 			null
 		);
@@ -561,6 +580,7 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 		it( 'exposes the expected default slice state', () => {
 			const defaults = createExecutableSurfaceDefaultState();
 
+			expect( def.docsGroundingWarningKey ).toBeTruthy();
 			expect( defaults ).toMatchObject( {
 				[ def.collectionKey ]: [],
 				[ def.explanationKey ]: '',
@@ -582,6 +602,7 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				[ def.lastAppliedOperationsKey ]: [],
 				[ def.reviewStaleReasonKey ]: null,
 				[ def.staleReasonKey ]: null,
+				[ def.docsGroundingWarningKey ]: null,
 				...def.extraStateDefaults,
 			} );
 		} );
@@ -625,13 +646,24 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				actions[ def.methodNames.setReviewFreshnessState ](
 					'stale',
 					12,
-					'server-review'
+					'server-review',
+					DOCS_GROUNDING_WARNING
 				)
 			).toEqual( {
 				type: def.types.setReviewFreshnessState,
 				status: 'stale',
 				requestToken: 12,
 				staleReason: 'server-review',
+				docsGroundingWarning: DOCS_GROUNDING_WARNING,
+			} );
+
+			expect(
+				actions[ def.methodNames.setDocsGroundingWarning ](
+					DOCS_GROUNDING_WARNING
+				)
+			).toEqual( {
+				type: def.types.setDocsGroundingWarning,
+				docsGroundingWarning: DOCS_GROUNDING_WARNING,
 			} );
 
 			expect(
@@ -761,6 +793,12 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			expect( selectors[ def.methodNames.getStaleReason ]( state ) ).toBe(
 				'apply-stale'
 			);
+			expect(
+				selectors[ def.methodNames.getDocsGroundingWarning ]( {
+					...state,
+					[ def.docsGroundingWarningKey ]: DOCS_GROUNDING_WARNING,
+				} )
+			).toEqual( DOCS_GROUNDING_WARNING );
 
 			for ( const { name, key } of def.extraSelectors ) {
 				expect( selectors[ name ]( state ) ).toBe( state[ key ] );
@@ -1018,6 +1056,7 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				[ def.reviewFreshnessStatusKey ]: 'stale',
 				[ def.reviewStaleReasonKey ]: 'server-review',
 				[ def.staleReasonKey ]: 'apply-stale',
+				[ def.docsGroundingWarningKey ]: DOCS_GROUNDING_WARNING,
 				[ def.requestTokenKey ]: 6,
 				[ def.reviewRequestTokenKey ]: 2,
 			};
@@ -1046,6 +1085,7 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			);
 			expect( afterLoading[ def.reviewStaleReasonKey ] ).toBeNull();
 			expect( afterLoading[ def.staleReasonKey ] ).toBeNull();
+			expect( afterLoading[ def.docsGroundingWarningKey ] ).toBeNull();
 
 			const staleStatusState = {
 				...createExecutableSurfaceDefaultState(),
@@ -1146,6 +1186,28 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				afterRecommendations[ def.reviewStaleReasonKey ]
 			).toBeNull();
 			expect( afterRecommendations[ def.staleReasonKey ] ).toBeNull();
+			expect(
+				afterRecommendations[ def.docsGroundingWarningKey ]
+			).toBeNull();
+
+			const afterWarningRecommendations = reduceExecutableSurfaceState(
+				recommendationState,
+				actions[ def.methodNames.setRecommendations ](
+					fixture.recommendationValue,
+					{
+						...fixture.payload,
+						docsGrounding: DOCS_GROUNDING_PAYLOAD,
+					},
+					fixture.input.prompt,
+					8,
+					fixture.input.contextSignature,
+					fixture.reviewContextSignature,
+					fixture.resolvedContextSignature
+				)
+			);
+			expect(
+				afterWarningRecommendations[ def.docsGroundingWarningKey ]
+			).toEqual( DOCS_GROUNDING_WARNING );
 
 			const staleReviewState = {
 				...createExecutableSurfaceDefaultState(),
@@ -1163,7 +1225,7 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			).toBe( staleReviewState );
 
 			const afterStaleReview = reduceExecutableSurfaceState(
-				afterRecommendations,
+				afterWarningRecommendations,
 				actions[ def.methodNames.setReviewFreshnessState ](
 					'stale',
 					5,
@@ -1177,16 +1239,27 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				'server-review'
 			);
 			expect( afterStaleReview[ def.reviewRequestTokenKey ] ).toBe( 5 );
+			expect(
+				afterStaleReview[ def.docsGroundingWarningKey ]
+			).toBeNull();
 
 			const afterFreshReview = reduceExecutableSurfaceState(
 				afterStaleReview,
-				actions[ def.methodNames.setReviewFreshnessState ]( 'fresh', 6 )
+				actions[ def.methodNames.setReviewFreshnessState ](
+					'fresh',
+					6,
+					null,
+					DOCS_GROUNDING_WARNING
+				)
 			);
 			expect( afterFreshReview[ def.reviewFreshnessStatusKey ] ).toBe(
 				'fresh'
 			);
 			expect( afterFreshReview[ def.reviewStaleReasonKey ] ).toBeNull();
 			expect( afterFreshReview[ def.reviewRequestTokenKey ] ).toBe( 6 );
+			expect( afterFreshReview[ def.docsGroundingWarningKey ] ).toEqual(
+				DOCS_GROUNDING_WARNING
+			);
 
 			const selectedSuggestionState = {
 				...createExecutableSurfaceDefaultState(),

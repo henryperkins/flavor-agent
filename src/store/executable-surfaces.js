@@ -24,12 +24,14 @@ import {
 	createExecutableSurfaceFetchConfig,
 	createExecutableSurfaceReviewFreshnessConfig,
 } from './executable-surface-runtime';
+import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
 
 function buildMethodNames( baseName ) {
 	return {
 		setStatus: `set${ baseName }Status`,
 		setRecommendations: `set${ baseName }Recommendations`,
 		setReviewFreshnessState: `set${ baseName }ReviewFreshnessState`,
+		setDocsGroundingWarning: `set${ baseName }DocsGroundingWarning`,
 		setSelectedSuggestion: `set${ baseName }SelectedSuggestion`,
 		setApplyState: `set${ baseName }ApplyState`,
 		clearRecommendations: `clear${ baseName }Recommendations`,
@@ -58,6 +60,7 @@ function buildMethodNames( baseName ) {
 		getLastAppliedOperations: `get${ baseName }LastAppliedOperations`,
 		getReviewStaleReason: `get${ baseName }ReviewStaleReason`,
 		getStaleReason: `get${ baseName }StaleReason`,
+		getDocsGroundingWarning: `get${ baseName }DocsGroundingWarning`,
 		getInteractionState: `get${ baseName }InteractionState`,
 	};
 }
@@ -67,6 +70,7 @@ function buildActionTypes( prefix ) {
 		setStatus: `SET_${ prefix }_STATUS`,
 		setRecommendations: `SET_${ prefix }_RECS`,
 		setReviewFreshnessState: `SET_${ prefix }_REVIEW_FRESHNESS_STATE`,
+		setDocsGroundingWarning: `SET_${ prefix }_DOCS_GROUNDING_WARNING`,
 		setSelectedSuggestion: `SET_${ prefix }_SELECTED_SUGGESTION`,
 		setApplyState: `SET_${ prefix }_APPLY_STATE`,
 		clearRecommendations: `CLEAR_${ prefix }_RECS`,
@@ -106,6 +110,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		resultTokenKey: 'templateResultToken',
 		reviewRequestTokenKey: 'templateReviewRequestToken',
 		reviewFreshnessStatusKey: 'templateReviewFreshnessStatus',
+		docsGroundingWarningKey: 'templateDocsGroundingWarning',
 		selectedSuggestionKey: 'templateSelectedSuggestionKey',
 		applyStatusKey: 'templateApplyStatus',
 		applyErrorKey: 'templateApplyError',
@@ -160,6 +165,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		resultTokenKey: 'templatePartResultToken',
 		reviewRequestTokenKey: 'templatePartReviewRequestToken',
 		reviewFreshnessStatusKey: 'templatePartReviewFreshnessStatus',
+		docsGroundingWarningKey: 'templatePartDocsGroundingWarning',
 		selectedSuggestionKey: 'templatePartSelectedSuggestionKey',
 		applyStatusKey: 'templatePartApplyStatus',
 		applyErrorKey: 'templatePartApplyError',
@@ -214,6 +220,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		resultTokenKey: 'globalStylesResultToken',
 		reviewRequestTokenKey: 'globalStylesReviewRequestToken',
 		reviewFreshnessStatusKey: 'globalStylesReviewFreshnessStatus',
+		docsGroundingWarningKey: 'globalStylesDocsGroundingWarning',
 		selectedSuggestionKey: 'globalStylesSelectedSuggestionKey',
 		applyStatusKey: 'globalStylesApplyStatus',
 		applyErrorKey: 'globalStylesApplyError',
@@ -283,6 +290,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		resultTokenKey: 'styleBookResultToken',
 		reviewRequestTokenKey: 'styleBookReviewRequestToken',
 		reviewFreshnessStatusKey: 'styleBookReviewFreshnessStatus',
+		docsGroundingWarningKey: 'styleBookDocsGroundingWarning',
 		selectedSuggestionKey: 'styleBookSelectedSuggestionKey',
 		applyStatusKey: 'styleBookApplyStatus',
 		applyErrorKey: 'styleBookApplyError',
@@ -362,6 +370,7 @@ function buildSurfaceDefaultState( def ) {
 		[ def.resultTokenKey ]: 0,
 		[ def.reviewRequestTokenKey ]: 0,
 		[ def.reviewFreshnessStatusKey ]: 'idle',
+		[ def.docsGroundingWarningKey ]: null,
 		[ def.selectedSuggestionKey ]: null,
 		[ def.applyStatusKey ]: 'idle',
 		[ def.applyErrorKey ]: null,
@@ -424,13 +433,23 @@ export function createExecutableSurfaceStateActionCreators( runtime ) {
 			function setReviewFreshnessState(
 				status,
 				requestToken = null,
-				staleReason = null
+				staleReason = null,
+				docsGroundingWarning = null
 			) {
 				return {
 					type: def.types.setReviewFreshnessState,
 					status,
 					requestToken,
 					staleReason,
+					docsGroundingWarning,
+				};
+			};
+
+		actionCreators[ def.methodNames.setDocsGroundingWarning ] =
+			function setDocsGroundingWarning( docsGroundingWarning = null ) {
+				return {
+					type: def.types.setDocsGroundingWarning,
+					docsGroundingWarning,
 				};
 			};
 
@@ -704,6 +723,10 @@ function reduceExecutableSurface( state, action, def ) {
 				action.status === 'loading'
 					? null
 					: state[ def.staleReasonKey ],
+			[ def.docsGroundingWarningKey ]:
+				action.status === 'loading'
+					? null
+					: state[ def.docsGroundingWarningKey ],
 		};
 	}
 
@@ -739,6 +762,9 @@ function reduceExecutableSurface( state, action, def ) {
 			[ def.lastAppliedOperationsKey ]: [],
 			[ def.reviewStaleReasonKey ]: null,
 			[ def.staleReasonKey ]: null,
+			[ def.docsGroundingWarningKey ]: normalizeDocsGroundingWarning(
+				action.payload?.docsGrounding
+			),
 			...def.mapResultState( action[ def.inputKey ] ),
 		};
 	}
@@ -756,6 +782,14 @@ function reduceExecutableSurface( state, action, def ) {
 			nextReviewStaleReason = null;
 		}
 
+		let nextDocsGroundingWarning = state[ def.docsGroundingWarningKey ];
+
+		if ( action.status === 'fresh' ) {
+			nextDocsGroundingWarning = action.docsGroundingWarning ?? null;
+		} else if ( action.status === 'stale' ) {
+			nextDocsGroundingWarning = null;
+		}
+
 		return {
 			...state,
 			[ def.reviewRequestTokenKey ]:
@@ -763,6 +797,15 @@ function reduceExecutableSurface( state, action, def ) {
 			[ def.reviewFreshnessStatusKey ]:
 				action.status ?? state[ def.reviewFreshnessStatusKey ],
 			[ def.reviewStaleReasonKey ]: nextReviewStaleReason,
+			[ def.docsGroundingWarningKey ]: nextDocsGroundingWarning,
+		};
+	}
+
+	if ( action.type === def.types.setDocsGroundingWarning ) {
+		return {
+			...state,
+			[ def.docsGroundingWarningKey ]:
+				action.docsGroundingWarning ?? null,
 		};
 	}
 
@@ -874,6 +917,8 @@ export function createExecutableSurfaceSelectors( {
 			state[ def.reviewStaleReasonKey ];
 		selectors[ def.methodNames.getStaleReason ] = ( state ) =>
 			state[ def.staleReasonKey ];
+		selectors[ def.methodNames.getDocsGroundingWarning ] = ( state ) =>
+			state[ def.docsGroundingWarningKey ] ?? null;
 		selectors[ def.methodNames.getInteractionState ] = (
 			state,
 			options = {}

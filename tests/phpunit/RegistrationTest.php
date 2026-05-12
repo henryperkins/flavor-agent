@@ -256,7 +256,6 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/get-theme-styles',
 			'flavor-agent/get-theme-tokens',
 			'flavor-agent/check-status',
-			'flavor-agent/search-wordpress-docs',
 		] as $ability_id ) {
 			$ability     = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
 			$annotations = $ability['meta']['annotations'] ?? null;
@@ -264,6 +263,26 @@ final class RegistrationTest extends TestCase {
 			$this->assertIsArray( $annotations, "{$ability_id} should declare meta.annotations." );
 			$this->assertSame( $expected, $annotations, "{$ability_id} should declare read-only annotations." );
 		}
+	}
+
+	public function test_search_wordpress_docs_does_not_claim_readonly_annotations(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		$ability     = WordPressTestState::$registered_abilities['flavor-agent/search-wordpress-docs'] ?? null;
+		$annotations = $ability['meta']['annotations'] ?? null;
+
+		$this->assertIsArray( $annotations );
+		$this->assertArrayNotHasKey( 'readonly', $annotations );
+		$this->assertArrayNotHasKey( 'readOnlyHint', $annotations );
+		$this->assertSame(
+			[
+				'destructive' => false,
+				'idempotent'  => false,
+			],
+			$annotations
+		);
 	}
 
 	public function test_read_only_optional_object_inputs_default_to_empty_object(): void {
@@ -1162,6 +1181,62 @@ final class RegistrationTest extends TestCase {
 			'template:404',
 			(string) ( $ability['input_schema']['properties']['entityKey']['description'] ?? '' )
 		);
+		$this->assertSame(
+			'object',
+			$ability['output_schema']['properties']['docsGrounding']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['docsGroundingFingerprint']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['guidance']['items']['properties']['retrievedAt']['type'] ?? null
+		);
+	}
+
+	public function test_recommendation_output_schemas_expose_docs_grounding_contract(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		foreach (
+			[
+				'flavor-agent/recommend-block',
+				'flavor-agent/recommend-patterns',
+				'flavor-agent/recommend-navigation',
+				'flavor-agent/recommend-style',
+				'flavor-agent/recommend-template',
+				'flavor-agent/recommend-template-part',
+			] as $ability_id
+		) {
+			$ability    = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+			$properties = is_array( $ability['output_schema']['properties'] ?? null )
+				? $ability['output_schema']['properties']
+				: [];
+
+			$this->assertSame( 'object', $properties['docsGrounding']['type'] ?? null, $ability_id );
+			$this->assertSame(
+				'array',
+				$properties['docsGrounding']['properties']['sourceTypes']['type'] ?? null,
+				$ability_id
+			);
+			$this->assertSame(
+				'object',
+				$properties['docsGrounding']['properties']['coverage']['type'] ?? null,
+				$ability_id
+			);
+			$this->assertSame(
+				'boolean',
+				$properties['docsGrounding']['properties']['coverage']['properties']['hasCurrentReleaseCycle']['type'] ?? null,
+				$ability_id
+			);
+			$this->assertSame(
+				'string',
+				$properties['docsGroundingFingerprint']['type'] ?? null,
+				$ability_id
+			);
+		}
 	}
 
 	public function test_register_abilities_exposes_structured_template_operation_schema(): void {

@@ -13,18 +13,11 @@ use ReflectionMethod;
 
 final class TemplateAbilitiesTest extends TestCase {
 
-	/** @var callable */
-	private $disable_public_docs_filter;
-
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_filter    = static fn(): string => '';
-		\add_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			$this->disable_public_docs_filter
-		);
+		$this->prime_current_docs_source_coverage();
 		WordPressTestState::$block_templates = [
 			'wp_template'      => [
 				(object) [
@@ -90,15 +83,6 @@ final class TemplateAbilitiesTest extends TestCase {
 		);
 	}
 
-	protected function tearDown(): void {
-		\remove_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			$this->disable_public_docs_filter
-		);
-
-		parent::tearDown();
-	}
-
 	public function test_list_template_parts_can_omit_or_include_content_for_theme_editors(): void {
 		WordPressTestState::$capabilities = [
 			'edit_theme_options' => true,
@@ -148,13 +132,6 @@ final class TemplateAbilitiesTest extends TestCase {
 		);
 
 		$this->assertIsArray( $result );
-		$this->assertSame(
-			[
-				'reviewContextSignature'   => $result['reviewContextSignature'] ?? null,
-				'resolvedContextSignature' => $result['resolvedContextSignature'] ?? null,
-			],
-			$result
-		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['reviewContextSignature'] ?? '' )
@@ -163,10 +140,15 @@ final class TemplateAbilitiesTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['resolvedContextSignature'] ?? '' )
 		);
+		$this->assertSame( 'unavailable', $result['docsGrounding']['status'] ?? null );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $result['docsGroundingFingerprint'] ?? '' )
+		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_template_review_and_resolved_signatures_ignore_docs_guidance_changes(): void {
+	public function test_recommend_template_review_and_resolved_signatures_include_docs_guidance_changes(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -221,18 +203,99 @@ final class TemplateAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $baseline );
 		$this->assertIsArray( $changed );
-		$this->assertSame(
+		$this->assertNotSame(
 			$baseline['resolvedContextSignature'] ?? null,
 			$changed['resolvedContextSignature'] ?? null
 		);
-		$this->assertSame(
+		$this->assertNotSame(
 			$baseline['reviewContextSignature'] ?? null,
 			$changed['reviewContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['docsGroundingFingerprint'] ?? null,
+			$changed['docsGroundingFingerprint'] ?? null
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_template_part_review_and_resolved_signatures_ignore_docs_guidance_changes(): void {
+	public function test_recommend_template_signatures_are_stable_between_recommendation_and_signature_modes(): void {
+		$this->configure_text_generation_connector();
+		AISearchClient::cache_entity_guidance(
+			'template:home',
+			[
+				[
+					'id'          => 'template-home-current-doc',
+					'title'       => 'Home template guidance',
+					'sourceKey'   => 'developer.wordpress.org/themes/templates/introduction-to-templates/',
+					'sourceType'  => 'developer-docs',
+					'url'         => 'https://developer.wordpress.org/themes/templates/introduction-to-templates/',
+					'excerpt'     => 'Use template structure to reinforce the hierarchy of the page.',
+					'score'       => 0.91,
+					'retrievedAt' => '2026-05-08T14:00:00Z',
+					'publishedAt' => '',
+					'contentHash' => 'template-home-current-doc',
+					'freshness'   => 'current',
+				],
+			]
+		);
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Use the hero pattern',
+						'description'        => 'Keep the home template focused on one clear lead section.',
+						'operations'         => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'end',
+							],
+						],
+						'templateParts'      => [],
+						'patternSuggestions' => [ 'theme/hero' ],
+						'confidence'         => 0.8,
+					],
+				],
+				'explanation' => 'Grounded template response.',
+			]
+		);
+
+		$input = [
+			'templateRef'         => 'theme//home',
+			'templateType'        => 'home',
+			'prompt'              => 'Make the home template feel more editorial.',
+			'visiblePatternNames' => [ 'theme/hero' ],
+		];
+
+		$recommendation = TemplateAbilities::recommend_template( $input );
+		$signature      = TemplateAbilities::recommend_template(
+			array_merge(
+				$input,
+				[
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $recommendation );
+		$this->assertIsArray( $signature );
+		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
+		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertSame(
+			$recommendation['reviewContextSignature'] ?? null,
+			$signature['reviewContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$recommendation['resolvedContextSignature'] ?? null,
+			$signature['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$recommendation['docsGroundingFingerprint'] ?? null,
+			$signature['docsGroundingFingerprint'] ?? null
+		);
+	}
+
+	public function test_recommend_template_part_review_and_resolved_signatures_include_docs_guidance_changes(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -286,15 +349,59 @@ final class TemplateAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $baseline );
 		$this->assertIsArray( $changed );
-		$this->assertSame(
+		$this->assertNotSame(
 			$baseline['resolvedContextSignature'] ?? null,
 			$changed['resolvedContextSignature'] ?? null
 		);
-		$this->assertSame(
+		$this->assertNotSame(
 			$baseline['reviewContextSignature'] ?? null,
 			$changed['reviewContextSignature'] ?? null
 		);
+		$this->assertNotSame(
+			$baseline['docsGroundingFingerprint'] ?? null,
+			$changed['docsGroundingFingerprint'] ?? null
+		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_recommend_template_fails_closed_when_docs_grounding_is_unavailable(): void {
+		$this->configure_text_generation_connector();
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Use the hero pattern',
+						'description'        => 'Would have called the model without the grounding gate.',
+						'operations'         => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'end',
+							],
+						],
+						'templateParts'      => [],
+						'patternSuggestions' => [ 'theme/hero' ],
+						'confidence'         => 0.8,
+					],
+				],
+				'explanation' => 'Grounding gate regression fixture.',
+			]
+		);
+
+		$result = TemplateAbilities::recommend_template(
+			[
+				'templateRef'         => 'theme//home',
+				'templateType'        => 'home',
+				'prompt'              => 'Make the home template feel more editorial.',
+				'visiblePatternNames' => [ 'theme/hero' ],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
 	}
 
 	public function test_recommend_template_review_signature_ignores_visible_pattern_scope_changes(): void {
@@ -1090,5 +1197,42 @@ final class TemplateAbilitiesTest extends TestCase {
 		$this->assertIsString( $result );
 
 		return $result;
+	}
+
+	private function configure_text_generation_connector(): void {
+		WordPressTestState::$options                    = array_merge(
+			WordPressTestState::$options,
+			[
+				'flavor_agent_openai_provider' => 'openai',
+			]
+		);
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_supported        = true;
+	}
+
+	private function prime_current_docs_source_coverage(): void {
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'current',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => true,
+			'sourceTypes'            => [ 'developer-docs', 'make-core' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => '',
+			'errorMessage'           => '',
+		];
 	}
 }

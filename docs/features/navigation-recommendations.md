@@ -31,7 +31,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. `buildNavigationFetchInput()` extracts the prompt, menu ID, and/or serialized navigation markup
 3. `fetchNavigationRecommendations()` in the `flavor-agent` store executes the `flavor-agent/recommend-navigation` ability
 4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the request to `FlavorAgent\Abilities\NavigationAbilities::recommend_navigation()`
-5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, a path-based current target inventory, overlay context, and overlay template-part metadata, computes a docs-free `reviewContextSignature`, returns early for signature-only revalidation, and only then collects WordPress docs grounding, builds prompt text, and calls `ResponsesClient::rank()`
+5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, a path-based current target inventory, overlay context, and overlay template-part metadata, collects WordPress docs grounding, computes a `reviewContextSignature` that includes the docs-grounding fingerprint, returns early for signature-only revalidation, then builds prompt text and calls `ResponsesClient::rank()`
 6. The parsed response returns advisory suggestion groups, an explanation string, and a `reviewContextSignature`
 7. The store caches the result against the current block client ID and the UI renders suggestion cards and per-change rows
 
@@ -42,7 +42,7 @@ Navigation participates in the server review-freshness contract even though it i
 1. When a stored `ready` result is displayed, the UI triggers a background `resolveSignatureOnly` request via `revalidateNavigationReviewFreshness()`
 2. The backend resolves the server context that participates in review freshness (menu structure, target inventory, overlay parts, overlay context, and theme tokens) and returns only the `reviewContextSignature` hash — no docs lookup or model call is made
 3. If the returned signature differs from the stored result's `reviewContextSignature`, the UI marks the result as stale and exposes a refresh affordance
-4. Full recommendation requests still collect docs grounding after the signature-only fast path, but docs churn alone does not make a stored navigation result stale
+4. Signature-only revalidation returns docs-grounding status. Unavailable trusted grounding marks the stored navigation result stale; stale or degraded trusted grounding remains reviewable with warning metadata.
 5. Navigation docs grounding uses the shared cache/fallback collector. Exact, family, and entity cache hits are reused immediately; on generic or missing fallback guidance, a full request may perform a foreground docs warm before queuing async warming.
 
 ## What This Surface Can Do

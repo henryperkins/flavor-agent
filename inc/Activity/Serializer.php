@@ -120,6 +120,15 @@ final class Serializer {
 			];
 		}
 
+		if ( 'docs_grounding' === $surface ) {
+			return [
+				'type' => 'docs_grounding',
+				'ref'  => '' !== $document_key
+					? $document_key
+					: self::normalize_string( $target['requestRef'] ?? 'developer-docs' ),
+			];
+		}
+
 		$block_name = self::normalize_string( $target['blockName'] ?? '' );
 		$block_path = '';
 

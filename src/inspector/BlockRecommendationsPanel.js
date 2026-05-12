@@ -24,6 +24,7 @@ import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
@@ -77,6 +78,8 @@ const HIDDEN_ADVISORY_BLOCKER_REASONS = new Set( [
 	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
 ] );
 const BLOCK_REVIEW_REVALIDATION_DEBOUNCE_MS = 300;
+const DOCS_GROUNDING_UNAVAILABLE_STALE_REASON =
+	'Developer Docs grounding is unavailable. Refresh before applying the previous result.';
 
 export function getBlockPathFromEditor( blockEditor, clientId ) {
 	if ( ! clientId || ! blockEditor?.getBlock?.( clientId ) ) {
@@ -131,6 +134,7 @@ function useBlockRecommendationState( clientId ) {
 		storedContextSignature,
 		requestToken,
 		storedStaleReason,
+		docsGroundingWarning,
 		requestDiagnostics,
 		blockActivityLog,
 		blockApplyError,
@@ -173,6 +177,8 @@ function useBlockRecommendationState( clientId ) {
 				requestToken: store.getBlockRequestToken?.( clientId ) || 0,
 				storedStaleReason:
 					store.getBlockStaleReason?.( clientId ) || null,
+				docsGroundingWarning:
+					store.getBlockDocsGroundingWarning?.( clientId ) || null,
 				requestDiagnostics:
 					store.getBlockRequestDiagnostics?.( clientId ) || null,
 				blockActivityLog: blockEntries,
@@ -231,6 +237,7 @@ function useBlockRecommendationState( clientId ) {
 		storedContextSignature,
 		requestToken,
 		storedStaleReason,
+		docsGroundingWarning,
 		requestDiagnostics,
 		blockActivityEntries,
 		latestBlockActivity,
@@ -332,6 +339,7 @@ export function BlockRecommendationsContent( {
 		storedContextSignature,
 		requestToken,
 		storedStaleReason,
+		docsGroundingWarning,
 		requestDiagnostics,
 		blockActivityEntries,
 		latestBlockActivity,
@@ -785,10 +793,15 @@ export function BlockRecommendationsContent( {
 	let staleScopeReason = '';
 
 	if ( isStaleResult ) {
-		staleScopeReason =
-			effectiveStaleReason === 'server-apply'
-				? 'Server apply context changed. Refresh before applying the previous result.'
-				: 'Block or prompt changed. Refresh before applying the previous result.';
+		if ( effectiveStaleReason === 'docs-grounding-unavailable' ) {
+			staleScopeReason = DOCS_GROUNDING_UNAVAILABLE_STALE_REASON;
+		} else if ( effectiveStaleReason === 'server-apply' ) {
+			staleScopeReason =
+				'Server apply context changed. Refresh before applying the previous result.';
+		} else {
+			staleScopeReason =
+				'Block or prompt changed. Refresh before applying the previous result.';
+		}
 	}
 
 	const shouldShowScopeNote = eyebrow !== 'Selected Block' && introCopy;
@@ -850,6 +863,10 @@ export function BlockRecommendationsContent( {
 				}
 				onDismiss={ dismissStatusNotice }
 			/>
+
+			{ ! isStaleResult && (
+				<DocsGroundingNotice warning={ docsGroundingWarning } />
+			) }
 
 			{ hasResult && recommendations?.explanation && (
 				<p className="flavor-agent-explanation flavor-agent-panel__note">

@@ -1,4 +1,5 @@
 import { executeFlavorAgentAbility } from './abilities-client';
+import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
 
 const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
 	.toString( 36 )
@@ -73,8 +74,18 @@ export function createExecutableSurfaceReviewFreshnessConfig( {
 		getStoredReviewContextSignature,
 		setReviewState: (
 			status,
-			{ requestToken = null, staleReason = null } = {}
-		) => setReviewStateAction( status, requestToken, staleReason ),
+			{
+				requestToken = null,
+				staleReason = null,
+				docsGroundingWarning = null,
+			} = {}
+		) =>
+			setReviewStateAction(
+				status,
+				requestToken,
+				staleReason,
+				docsGroundingWarning
+			),
 		surface,
 	};
 }
@@ -281,7 +292,8 @@ function createExecutableSurfaceReviewFreshnessAction( {
 			);
 
 			try {
-				// Server review freshness is based on docs-free server context, not grounded prompt churn.
+				// Server review freshness includes a compact docs-grounding fingerprint,
+				// not the full grounded prompt text.
 				const result = await executeFlavorAgentAbility( abilityName, {
 					...requestData,
 					resolveSignatureOnly: true,
@@ -293,6 +305,26 @@ function createExecutableSurfaceReviewFreshnessAction( {
 				const reviewContextSignature = normalizeStringMessage(
 					getReviewContextSignatureFromResponse( result )
 				);
+				const docsGroundingStatus =
+					typeof result?.docsGrounding?.status === 'string'
+						? result.docsGrounding.status
+						: '';
+
+				if ( docsGroundingStatus === 'unavailable' ) {
+					localDispatch(
+						setReviewState( 'stale', {
+							requestToken,
+							staleReason: 'docs-grounding-unavailable',
+						} )
+					);
+
+					return {
+						ok: false,
+						staleReason: 'docs-grounding-unavailable',
+						surface,
+						docsGrounding: result.docsGrounding,
+					};
+				}
 
 				if (
 					! reviewContextSignature ||
@@ -312,9 +344,14 @@ function createExecutableSurfaceReviewFreshnessAction( {
 					};
 				}
 
+				const docsGroundingWarning = normalizeDocsGroundingWarning(
+					result?.docsGrounding
+				);
+
 				localDispatch(
 					setReviewState( 'fresh', {
 						requestToken,
+						docsGroundingWarning,
 					} )
 				);
 
@@ -322,6 +359,7 @@ function createExecutableSurfaceReviewFreshnessAction( {
 					ok: true,
 					reviewContextSignature,
 					surface,
+					...( docsGroundingWarning ? { docsGroundingWarning } : {} ),
 				};
 			} catch {
 				localDispatch(

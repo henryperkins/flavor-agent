@@ -12,6 +12,7 @@ import {
 import { formatCount, humanizeString } from '../utils/format-count';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
 import StaleResultBanner from '../components/StaleResultBanner';
@@ -307,6 +308,7 @@ export default function NavigationRecommendations( {
 		currentReviewContextSignature,
 		currentReviewFreshnessStatus,
 		currentReviewStaleReason,
+		docsGroundingWarning,
 	} = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -329,6 +331,9 @@ export default function NavigationRecommendations( {
 					store.getNavigationReviewFreshnessStatus( clientId ),
 				currentReviewStaleReason:
 					store.getNavigationReviewStaleReason( clientId ),
+				docsGroundingWarning:
+					store.getNavigationDocsGroundingWarning?.( clientId ) ||
+					null,
 			};
 		},
 		[ clientId ]
@@ -692,6 +697,12 @@ export default function NavigationRecommendations( {
 							}
 						/>
 
+						{ ! isStaleResult && (
+							<DocsGroundingNotice
+								warning={ docsGroundingWarning }
+							/>
+						) }
+
 						{ featuredSuggestion && (
 							<NavigationEmbeddedSection
 								title="Recommended next change"
@@ -788,6 +799,12 @@ export default function NavigationRecommendations( {
 										: undefined
 								}
 							/>
+
+							{ ! isStaleResult && (
+								<DocsGroundingNotice
+									warning={ docsGroundingWarning }
+								/>
+							) }
 
 							{ featuredSuggestion && (
 								<RecommendationHero

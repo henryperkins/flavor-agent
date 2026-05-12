@@ -168,6 +168,12 @@ let currentStyleBookUiState = null;
 let styleBookUiSubscriber = null;
 let currentEditedTemplateId = null;
 let currentEditedBlocks = null;
+const DOCS_WARNING_TEXT =
+	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	coverageStatus: 'missing-current-release-cycle',
+};
 
 function getMockStyleBookUiState() {
 	return {
@@ -357,6 +363,7 @@ beforeEach( () => {
 		contextSignature: null,
 		reviewContextSignature: null,
 		reviewStaleReason: null,
+		docsGroundingWarning: null,
 		selectedSuggestionKey: null,
 		applyStatus: 'idle',
 		undoStatus: 'idle',
@@ -438,6 +445,8 @@ beforeEach( () => {
 						currentStoreState.selectedSuggestionKey,
 					getStyleBookReviewStaleReason: () =>
 						currentStoreState.reviewStaleReason,
+					getStyleBookDocsGroundingWarning: () =>
+						currentStoreState.docsGroundingWarning || null,
 					getStyleBookApplyStatus: () =>
 						currentStoreState.applyStatus,
 					getUndoStatus: () => currentStoreState.undoStatus,
@@ -535,6 +544,37 @@ afterEach( () => {
 } );
 
 describe( 'StyleBookRecommender', () => {
+	test( 'renders docs grounding warnings in the Style Book panel', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Tighten paragraph rhythm',
+					description: 'Use a steadier paragraph rhythm.',
+					category: 'spacing',
+					tone: 'executable',
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'spacing', 'blockGap' ],
+							value: '1rem',
+						},
+					],
+				},
+			],
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+			docsGroundingWarning: DOCS_GROUNDING_WARNING,
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( DOCS_WARNING_TEXT );
+	} );
+
 	test( 'submits a block-scoped style recommendation request from the Style Book sidebar', () => {
 		act( () => {
 			getRoot().render( <StyleBookRecommender /> );

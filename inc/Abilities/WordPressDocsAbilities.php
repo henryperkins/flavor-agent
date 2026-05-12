@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\NormalizesInput;
 
 final class WordPressDocsAbilities {
@@ -36,10 +37,25 @@ final class WordPressDocsAbilities {
 		$entity_key = isset( $input['entityKey'] ) ? (string) $input['entityKey'] : '';
 		$entity_key = AISearchClient::resolve_entity_key( $entity_key, $query );
 
-		if ( $entity_key !== '' ) {
-			return AISearchClient::warm_entity( $entity_key, $query, $max_results );
+		$result = $entity_key !== ''
+			? AISearchClient::warm_entity( $entity_key, $query, $max_results )
+			: AISearchClient::search( $query, $max_results );
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 
-		return AISearchClient::search( $query, $max_results );
+		$docs_grounding = DocsGuidanceResult::from_guidance(
+			is_array( $result['guidance'] ?? null ) ? $result['guidance'] : [],
+			'direct',
+			'live'
+		);
+
+		return [
+			'query'                    => (string) ( $result['query'] ?? $query ),
+			'guidance'                 => DocsGuidanceResult::guidance( $docs_grounding ),
+			'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_grounding ),
+			'docsGroundingFingerprint' => (string) ( $docs_grounding['fingerprint'] ?? '' ),
+		];
 	}
 }

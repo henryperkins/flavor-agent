@@ -1018,6 +1018,40 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	public function test_query_admin_labels_docs_grounding_activity_surface(): void {
+		Repository::install();
+
+		Repository::create(
+			[
+				'id'              => 'activity-docs-grounding',
+				'type'            => 'request_diagnostic',
+				'surface'         => 'docs_grounding',
+				'target'          => [
+					'requestRef' => 'developer-docs',
+				],
+				'suggestion'      => 'Developer Docs grounding',
+				'request'         => [
+					'ability'   => 'flavor-agent/search-wordpress-docs',
+					'reference' => 'docs-grounding-fingerprint',
+				],
+				'document'        => [
+					'scopeKey' => 'docs-grounding:developer-docs',
+				],
+				'executionResult' => 'review',
+				'undo'            => [
+					'status' => 'review',
+				],
+				'timestamp'       => '2026-05-12T10:00:00Z',
+			]
+		);
+
+		$result = Repository::query_admin( [ 'perPage' => 10 ] );
+		$admin  = $result['entries'][0]['admin'] ?? [];
+
+		$this->assertSame( 'docs_grounding', $admin['surface'] ?? null );
+		$this->assertSame( 'Developer Docs', $admin['surfaceLabel'] ?? null );
+	}
+
 	public function test_query_admin_supports_operator_filters_and_user_sorting(): void {
 		Repository::install();
 

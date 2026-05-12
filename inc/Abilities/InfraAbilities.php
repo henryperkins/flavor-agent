@@ -48,6 +48,7 @@ final class InfraAbilities {
 		$qdrant_url                     = get_option( 'flavor_agent_qdrant_url', '' );
 		$qdrant_key                     = get_option( 'flavor_agent_qdrant_key', '' );
 		$cloudflare_ai_search_id        = AISearchClient::configured_instance_id();
+		$cloudflare_runtime_state       = AISearchClient::get_runtime_state();
 		$pattern_readiness              = PatternIndex::recommendation_index_readiness();
 
 		$qdrant_configured       = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
@@ -96,8 +97,12 @@ final class InfraAbilities {
 					'configured' => $qdrant_configured,
 				],
 				'cloudflare_ai_search'  => [
-					'configured' => $cloudflare_configured,
-					'instanceId' => $cloudflare_configured ? $cloudflare_ai_search_id : null,
+					'configured'               => $cloudflare_configured,
+					'instanceId'               => $cloudflare_configured ? $cloudflare_ai_search_id : null,
+					'runtime'                  => $cloudflare_runtime_state,
+					'lastSourceTypes'          => (array) ( $cloudflare_runtime_state['lastSourceTypes'] ?? [] ),
+					'lastFreshness'            => (array) ( $cloudflare_runtime_state['lastFreshness'] ?? [] ),
+					'lastGroundingFingerprint' => (string) ( $cloudflare_runtime_state['lastGroundingFingerprint'] ?? '' ),
 				],
 			],
 		];

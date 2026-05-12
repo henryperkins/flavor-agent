@@ -94,6 +94,12 @@ const { getRoot } = setupReactTest();
 
 let state = null;
 let originalMutationObserver = null;
+const DOCS_WARNING_TEXT =
+	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	coverageStatus: 'missing-current-release-cycle',
+};
 
 function createSelectMap() {
 	return {
@@ -147,6 +153,9 @@ function createSelectMap() {
 			getPatternInsertionTargetSignature: jest.fn(
 				() => state.store.patternInsertionTargetSignature
 			),
+			getPatternDocsGroundingWarning: jest.fn(
+				() => state.store.patternDocsGroundingWarning
+			),
 		},
 	};
 }
@@ -188,6 +197,7 @@ describe( 'PatternRecommender', () => {
 				patternDiagnostics: null,
 				patternRequestSignature: '',
 				patternInsertionTargetSignature: '',
+				patternDocsGroundingWarning: null,
 			},
 		};
 		mockUseDispatch.mockReset();
@@ -316,6 +326,33 @@ describe( 'PatternRecommender', () => {
 		expect( EDITOR_CSS ).toMatch(
 			/@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*\.flavor-agent-panel\s+\.components-button\.is-secondary:focus-visible:not\(:disabled\)[\s\S]*box-shadow:\s*none;[\s\S]*outline:\s*2px\s+solid\s+Highlight;[\s\S]*outline-offset:\s*2px;/s
 		);
+	} );
+
+	test( 'renders docs grounding warnings inside the inserter shelf', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				reason: 'Matches this insertion point.',
+			},
+		];
+		state.store.patternDocsGroundingWarning = DOCS_GROUNDING_WARNING;
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/group' } ],
+			},
+		];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain( DOCS_WARNING_TEXT );
 	} );
 
 	test( 'disconnects the observers cleanly when the inserter search input never appears', () => {

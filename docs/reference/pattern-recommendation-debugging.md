@@ -586,10 +586,10 @@ Low-priority suspect:
 
 Reason:
 
-- in this pipeline, docs guidance is cache-only and non-blocking
-- cache misses schedule async warming and do not perform foreground AI Search
-- cache misses do not block retrieval or ranking
-- live Cloudflare AI Search requests should not appear in foreground `/recommend-patterns` request traces
+- docs grounding is required before reranking
+- cache misses can perform one bounded foreground warm before async warming is queued
+- if trusted grounding remains unavailable after candidate retrieval, the request fails closed before reranking
+- live public docs AI Search requests may appear in foreground `/recommend-patterns` request traces when the docs cache is cold
 
 ## Fast Decision Rules
 

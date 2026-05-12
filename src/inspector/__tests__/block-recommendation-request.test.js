@@ -69,4 +69,27 @@ describe( 'block recommendation request freshness', () => {
 		expect( freshness.hasFreshResult ).toBe( false );
 		expect( freshness.isStaleResult ).toBe( true );
 	} );
+
+	test( 'treats docs grounding outages as hard server staleness', () => {
+		const storedContextSignature = 'stored-context';
+		const freshness = getBlockRecommendationFreshness( {
+			clientId: 'block-1',
+			recommendations: {
+				prompt: 'Tighten the copy.',
+				block: [ { label: 'Shorten paragraph' } ],
+			},
+			status: 'ready',
+			storedContextSignature,
+			storedStaleReason: 'docs-grounding-unavailable',
+			liveContextSignature: storedContextSignature,
+			prompt: 'Tighten the copy.',
+		} );
+
+		expect( freshness.clientStaleReason ).toBeNull();
+		expect( freshness.effectiveStaleReason ).toBe(
+			'docs-grounding-unavailable'
+		);
+		expect( freshness.hasFreshResult ).toBe( false );
+		expect( freshness.isStaleResult ).toBe( true );
+	} );
 } );

@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-05-06
+> Last updated: 2026-05-11
 
 ## Working
 
@@ -44,12 +44,13 @@ All three REST route paths under `/flavor-agent/v1/` are working. Recommendation
 - WP 7.0 ability `meta.annotations` are populated for all 20 defined abilities. The 7 LLM-invoking `recommend-*` abilities keep WP-format `readonly` unset to preserve POST execution through the Abilities API and declare `destructive:false` / `idempotent:false`; they intentionally do not claim MCP `readOnlyHint:true` because execution can persist request diagnostics and freshness tokens. The 13 read abilities declare WP-format `readonly:true`, `destructive:false`, and `idempotent:true`.
 - Guidelines now read through a core-first repository bridge. When the emerging core/Gutenberg `wp_guideline` storage model is present, recommendation prompts read those values first; legacy Flavor Agent guideline options remain available for fallback, migration/import-export tooling, and rollback while the public Guidelines API settles.
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Cloudflare Workers AI, Qdrant, and Cloudflare AI Search validation errors
-- WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
+- WordPress docs grounding only accepts trusted official WordPress sources: stable handbook/reference pages from `developer.wordpress.org`, current Developer Blog posts, and Make/Core release-cycle posts with freshness metadata
 - Legacy Azure OpenAI and OpenAI Native embedding options are no longer rendered or save-validated in the settings UI; text generation for those services is owned by `Settings > Connectors`.
 - Cloudflare Workers AI embedding credentials are revalidated only when account ID, API token, or embedding model changes and all three fields are present; Workers AI is the only embedding provider used for Qdrant.
 - Qdrant credentials are revalidated only when the URL or key changes and both fields are present; the configured `/collections` endpoint must return the expected payload before new values are saved
 - Developer Docs grounding uses Flavor Agent's built-in public Cloudflare AI Search endpoint; site owners no longer configure or validate Cloudflare credentials for developer docs from the settings screen
-- Recommendation-time WordPress docs grounding is cache-first: exact-query cache is authoritative, family/entity cache is fallback, pattern recommendations disable foreground warming, and block/template/template-part/navigation/Global Styles/Style Book requests may do one bounded foreground warm when only generic or no fallback guidance exists before async warming is queued
+- Recommendation-time WordPress docs grounding is cache-first: exact-query cache is authoritative, family/entity cache is fallback, and block/pattern/template/template-part/navigation/Global Styles/Style Book requests may do one bounded foreground warm when only generic or no fallback guidance exists before async warming is queued
+- Block, pattern, template, template-part, navigation, Global Styles, and Style Book recommendations include `docsGrounding` plus `docsGroundingFingerprint` and fail closed with `flavor_agent_docs_grounding_unavailable` before chat/reranking when trusted grounding is unavailable; content recommendations remain editorial-only and exempt
 - Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
 - Docs grounding prewarm: scheduling checks fire on plugin activation and normal bootstrap, but the WP-Cron job only seeds the entity cache when the `flavor_agent_cloudflare_ai_search_allow_public_prewarm` opt-in filter returns true; otherwise the built-in public endpoint stays available for user-triggered docs grounding without background prewarm. When prewarm runs, it covers 22 warm-set entries: 8 core blocks, `core/template-part`, `core/navigation`, 7 template types, and 5 generic guidance families. Exact entity misses can fall back to prewarmed generic guidance families before returning empty; throttled by source fingerprint + 1-hour cooldown; admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts
 

@@ -26,6 +26,14 @@ describe( 'getExecutableSurfaceEffectiveStaleReason', () => {
 		).toBe( 'server-review' );
 	} );
 
+	test( 'falls back to docs grounding unavailable when only the review signal is set', () => {
+		expect(
+			getExecutableSurfaceEffectiveStaleReason( {
+				reviewStaleReason: 'docs-grounding-unavailable',
+			} )
+		).toBe( 'docs-grounding-unavailable' );
+	} );
+
 	test( 'ignores review stale reasons that are not "server-review"', () => {
 		expect(
 			getExecutableSurfaceEffectiveStaleReason( {
@@ -87,6 +95,18 @@ describe( 'getExecutableSurfaceStaleMessage', () => {
 			} )
 		).toBe(
 			'This Style Book result no longer matches the current server-resolved apply context. Refresh before reviewing or applying anything from the previous result.'
+		);
+	} );
+
+	test( 'produces docs grounding unavailable messaging tied to the surface label', () => {
+		expect(
+			getExecutableSurfaceStaleMessage( {
+				surfaceLabel: 'Template',
+				staleReasonType: 'docs-grounding-unavailable',
+				liveContextLabel: 'the current template',
+			} )
+		).toBe(
+			'This Template result no longer has trusted WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.'
 		);
 	} );
 

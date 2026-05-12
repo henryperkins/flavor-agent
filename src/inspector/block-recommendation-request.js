@@ -1,5 +1,11 @@
 import { buildBlockRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 
+const STORED_SERVER_STALE_REASONS = new Set( [
+	'server',
+	'server-apply',
+	'docs-grounding-unavailable',
+] );
+
 export function buildBlockRecommendationRequestData( {
 	clientId,
 	liveContext = null,
@@ -61,10 +67,11 @@ export function getBlockRecommendationFreshness( {
 			storedRequestSignature !== currentRequestSignature )
 			? 'client'
 			: null;
-	const serverStaleReason =
-		storedStaleReason === 'server' || storedStaleReason === 'server-apply'
-			? storedStaleReason
-			: null;
+	const serverStaleReason = STORED_SERVER_STALE_REASONS.has(
+		storedStaleReason
+	)
+		? storedStaleReason
+		: null;
 	const effectiveStaleReason = clientStaleReason || serverStaleReason;
 
 	return {

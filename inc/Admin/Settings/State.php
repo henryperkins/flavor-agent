@@ -104,7 +104,7 @@ final class State {
 				in_array( (string) ( $state['prewarm_state']['status'] ?? '' ), [ 'failed', 'partial' ], true ) ||
 				in_array(
 					(string) ( $state['runtime_docs_grounding']['status'] ?? '' ),
-					[ 'degraded', 'error', 'retrying' ],
+					[ 'degraded', 'error', 'retrying', 'stale', 'unavailable' ],
 					true
 				)
 			)
@@ -291,7 +291,7 @@ final class State {
 		}
 
 		if (
-			in_array( $runtime_status, [ 'degraded', 'error' ], true ) ||
+			in_array( $runtime_status, [ 'degraded', 'error', 'stale', 'unavailable' ], true ) ||
 			in_array( $prewarm_status, [ 'failed', 'partial' ], true )
 		) {
 			return self::make_badge( __( 'Needs attention', 'flavor-agent' ), 'warning' );
@@ -420,11 +420,32 @@ final class State {
 					'tone'    => 'warning',
 					'message' => __( 'Developer Docs grounding is warming in the background.', 'flavor-agent' ),
 				];
-			} elseif ( in_array( $runtime_status, [ 'degraded', 'error' ], true ) ) {
+			} elseif ( in_array( $runtime_status, [ 'degraded', 'error', 'stale', 'unavailable' ], true ) ) {
+				$freshness = implode(
+					', ',
+					array_map(
+						'sanitize_key',
+						(array) ( $state['runtime_docs_grounding']['lastFreshness'] ?? [] )
+					)
+				);
+				$freshness = '' !== $freshness ? $freshness : __( 'unknown', 'flavor-agent' );
+
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'Developer Docs live grounding needs attention. Check Activity Log for the latest error.', 'flavor-agent' ),
+					'message' => sprintf(
+						/* translators: 1: docs grounding status, 2: freshness labels. */
+						__( 'Developer Docs grounding is %1$s. Current freshness: %2$s.', 'flavor-agent' ),
+						$runtime_status,
+						$freshness
+					),
 				];
+
+				if ( '' !== (string) ( $state['runtime_docs_grounding']['lastErrorMessage'] ?? '' ) ) {
+					$status_blocks[] = [
+						'tone'    => 'warning',
+						'message' => (string) ( $state['runtime_docs_grounding']['lastErrorMessage'] ?? '' ),
+					];
+				}
 			}
 
 			if ( in_array( (string) ( $state['prewarm_state']['status'] ?? '' ), [ 'failed', 'partial' ], true ) ) {

@@ -73,6 +73,12 @@ const { getContainer, getRoot } = setupReactTest();
 
 const TEMPLATE_REF = 'theme//home';
 const NEXT_TEMPLATE_REF = 'theme//single';
+const DOCS_WARNING_TEXT =
+	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	coverageStatus: 'missing-current-release-cycle',
+};
 const SUGGESTION = {
 	label: 'Add hero intro',
 	description: 'Insert a hero pattern at the start of the template.',
@@ -257,6 +263,9 @@ function createSelectors() {
 			getTemplateReviewStaleReason: jest.fn(
 				() => getState().store.templateReviewStaleReason
 			),
+			getTemplateDocsGroundingWarning: jest.fn(
+				() => getState().store.templateDocsGroundingWarning || null
+			),
 			getUndoError: jest.fn( () => getState().store.undoError ),
 			getUndoStatus: jest.fn( () => getState().store.undoStatus ),
 			isTemplateLoading: jest.fn(
@@ -363,6 +372,7 @@ function createState( overrides = {} ) {
 			templateContextSignature: null,
 			templateReviewContextSignature: null,
 			templateReviewStaleReason: null,
+			templateDocsGroundingWarning: null,
 			templateResultRef: TEMPLATE_REF,
 			templateResultToken: 1,
 			templateSelectedSuggestionKey: SUGGESTION_KEY,
@@ -511,6 +521,23 @@ afterEach( async () => {
 } );
 
 describe( 'TemplateRecommender', () => {
+	test( 'renders docs grounding warnings before template suggestion lanes', async () => {
+		currentState = createState( {
+			store: {
+				templateRecommendations: [ SUGGESTION ],
+				templateDocsGroundingWarning: DOCS_GROUNDING_WARNING,
+				templateResultRef: TEMPLATE_REF,
+				templateStatus: 'ready',
+			},
+		} );
+		currentState.store.templateContextSignature =
+			buildTemplateContextSignature( currentState );
+
+		await renderPanel();
+
+		expect( getContainer().textContent ).toContain( DOCS_WARNING_TEXT );
+	} );
+
 	test( 'renders one shared review panel below the lanes instead of nesting it in the selected card', async () => {
 		const selectedCard = getContainer().querySelector(
 			'.flavor-agent-card--template.is-review-selected'

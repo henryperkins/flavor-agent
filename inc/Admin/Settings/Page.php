@@ -629,6 +629,44 @@ final class Page {
 			<?php echo esc_html__( 'Built-in developer.wordpress.org grounding is active.', 'flavor-agent' ); ?>
 		</p>
 		<?php
+		$runtime_state = is_array( $state['runtime_docs_grounding'] ?? null ) ? $state['runtime_docs_grounding'] : [];
+		$source_types  = array_values( array_filter( array_map( 'sanitize_key', (array) ( $runtime_state['lastSourceTypes'] ?? [] ) ) ) );
+		$freshness     = array_values( array_filter( array_map( 'sanitize_key', (array) ( $runtime_state['lastFreshness'] ?? [] ) ) ) );
+		$diagnostics   = [];
+
+		if ( [] !== $source_types ) {
+			$diagnostics[] = sprintf(
+				/* translators: %s: docs source type list. */
+				__( 'Sources: %s.', 'flavor-agent' ),
+				implode( ', ', $source_types )
+			);
+		}
+
+		if ( [] !== $freshness ) {
+			$diagnostics[] = sprintf(
+				/* translators: %s: docs freshness list. */
+				__( 'Freshness: %s.', 'flavor-agent' ),
+				implode( ', ', $freshness )
+			);
+		}
+
+		if ( '' !== (string) ( $runtime_state['lastSearchAt'] ?? '' ) ) {
+			$diagnostics[] = sprintf(
+				/* translators: %s: last docs search timestamp. */
+				__( 'Last search: %s.', 'flavor-agent' ),
+				(string) ( $runtime_state['lastSearchAt'] ?? '' )
+			);
+		}
+
+		if ( [] !== $diagnostics ) :
+			?>
+			<p class="flavor-agent-settings-inline-meta">
+				<?php echo esc_html( implode( ' ', $diagnostics ) ); ?>
+			</p>
+			<?php
+		endif;
+		?>
+		<?php
 		self::render_registered_section_callback( 'flavor_agent_cloudflare' );
 		self::render_registered_fields_table(
 			'flavor_agent_cloudflare',

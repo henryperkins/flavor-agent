@@ -14,6 +14,7 @@ import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
@@ -81,6 +82,7 @@ function StyleBookPanel( {
 	selectedSuggestion,
 	suggestions,
 	explanation,
+	docsGroundingWarning,
 	notice,
 	activityEntries,
 	activityResetKey,
@@ -170,6 +172,10 @@ function StyleBookPanel( {
 				onAction={ onNoticeAction }
 				onDismiss={ onNoticeDismiss }
 			/>
+
+			{ ! isStale && (
+				<DocsGroundingNotice warning={ docsGroundingWarning } />
+			) }
 
 			<SurfaceComposer
 				title="Ask Flavor Agent"
@@ -376,6 +382,7 @@ export default function StyleBookRecommender() {
 		currentResultRef,
 		reviewStaleReason,
 		storedStaleReason,
+		docsGroundingWarning,
 		status,
 		selectedSuggestionKey,
 		applyStatus,
@@ -503,6 +510,8 @@ export default function StyleBookRecommender() {
 				reviewStaleReason:
 					store?.getStyleBookReviewStaleReason?.() || null,
 				storedStaleReason: store?.getStyleBookStaleReason?.() || null,
+				docsGroundingWarning:
+					store?.getStyleBookDocsGroundingWarning?.() || null,
 				status: store?.getStyleBookStatus?.() || 'idle',
 				selectedSuggestionKey:
 					store?.getStyleBookSelectedSuggestionKey?.() || null,
@@ -904,6 +913,9 @@ export default function StyleBookRecommender() {
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
 			explanation={ explanation }
+			docsGroundingWarning={
+				hasMatchingResult ? docsGroundingWarning : null
+			}
 			notice={ notice }
 			activityEntries={ activityEntries }
 			activityResetKey={ scope?.scopeKey || 'style-book' }

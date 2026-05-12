@@ -114,6 +114,21 @@ const ABILITY_RUN_PATHS_BY_NAME = Object.fromEntries(
 		ABILITY_RUN_PATHS[ abilityKey ],
 	] )
 );
+const DOCS_GROUNDING_PAYLOAD = {
+	status: 'grounded',
+	coverage: {
+		status: 'missing-current-release-cycle',
+		message: 'Current release-cycle docs were not confirmed.',
+	},
+};
+const DOCS_GROUNDING_WARNING = {
+	status: 'grounded',
+	message: '',
+	coverageStatus: 'missing-current-release-cycle',
+	coverageMessage: 'Current release-cycle docs were not confirmed.',
+	source: '',
+	checkedAt: '',
+};
 
 function expectAbilityRunRequest( abilityKey, input ) {
 	return expect.objectContaining( {
@@ -1051,6 +1066,113 @@ describe( 'store action thunks', () => {
 		expect( selectors.getPatternInsertionTargetSignature( state ) ).toBe(
 			'target-a'
 		);
+	} );
+
+	test( 'stores and clears docs grounding warnings for custom recommendation surfaces', () => {
+		const blockState = reducer(
+			undefined,
+			actions.setBlockRecommendations(
+				'block-1',
+				{
+					settings: [],
+					styles: [],
+					block: [],
+					docsGrounding: DOCS_GROUNDING_PAYLOAD,
+				},
+				1,
+				'block-context',
+				null,
+				'block-resolved'
+			)
+		);
+
+		expect(
+			selectors.getBlockDocsGroundingWarning( blockState, 'block-1' )
+		).toEqual( DOCS_GROUNDING_WARNING );
+
+		const blockLoadingState = reducer(
+			blockState,
+			actions.setBlockRequestState( 'block-1', 'loading', null, 2 )
+		);
+
+		expect(
+			selectors.getBlockDocsGroundingWarning(
+				blockLoadingState,
+				'block-1'
+			)
+		).toBeNull();
+
+		const navigationState = reducer(
+			undefined,
+			actions.setNavigationRecommendations(
+				'nav-1',
+				{
+					suggestions: [],
+					explanation: '',
+					docsGrounding: DOCS_GROUNDING_PAYLOAD,
+				},
+				'Improve navigation.',
+				1,
+				'navigation-context',
+				'navigation-review'
+			)
+		);
+
+		expect(
+			selectors.getNavigationDocsGroundingWarning( navigationState )
+		).toEqual( DOCS_GROUNDING_WARNING );
+
+		const navigationFreshState = reducer(
+			navigationState,
+			actions.setNavigationReviewFreshnessState(
+				'fresh',
+				2,
+				null,
+				DOCS_GROUNDING_WARNING
+			)
+		);
+
+		expect(
+			selectors.getNavigationDocsGroundingWarning( navigationFreshState )
+		).toEqual( DOCS_GROUNDING_WARNING );
+
+		const navigationStaleState = reducer(
+			navigationFreshState,
+			actions.setNavigationReviewFreshnessState(
+				'stale',
+				3,
+				'docs-grounding-unavailable'
+			)
+		);
+
+		expect(
+			selectors.getNavigationDocsGroundingWarning( navigationStaleState )
+		).toBeNull();
+
+		const patternState = reducer(
+			undefined,
+			actions.setPatternRecommendations(
+				[ { name: 'theme/hero' } ],
+				1,
+				'pattern-signature',
+				null,
+				'pattern-target',
+				DOCS_GROUNDING_WARNING
+			)
+		);
+
+		expect(
+			selectors.getPatternDocsGroundingWarning( patternState )
+		).toEqual( DOCS_GROUNDING_WARNING );
+
+		const patternLoadingState = reducer(
+			patternState,
+			actions.setPatternStatus( 'loading', null, 2, 'next-signature' )
+		);
+
+		expect(
+			selectors.getPatternDocsGroundingWarning( patternLoadingState )
+		).toBeNull();
 	} );
 
 	test( 'fetchContentRecommendations sends document scope and refreshes scoped activity', async () => {
@@ -4316,6 +4438,41 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( dispatch ).not.toHaveBeenCalled();
+	} );
+
+	test( 'revalidateBlockReviewFreshness stores coverage-only docs grounding warnings', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+				docsGrounding: DOCS_GROUNDING_PAYLOAD,
+			},
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockDocsGroundingWarning: jest.fn().mockReturnValue( null ),
+		};
+
+		await actions.revalidateBlockReviewFreshness( 'block-1', {
+			clientId: 'block-1',
+			editorContext: {
+				block: PARAGRAPH_BLOCK_CONTEXT,
+			},
+			prompt: 'Refresh content.',
+		} )( {
+			dispatch,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockDocsGroundingWarning(
+				'block-1',
+				DOCS_GROUNDING_WARNING
+			)
+		);
 	} );
 
 	test( 'revalidateBlockReviewFreshness ignores stale background responses after a newer block result is stored', async () => {

@@ -43,6 +43,8 @@ final class InfraAbilitiesTest extends TestCase {
 			'c5d54c4a-27df-4034-80da-ca6054684fcd',
 			$status['backends']['cloudflare_ai_search']['instanceId']
 		);
+		$this->assertIsArray( $status['backends']['cloudflare_ai_search']['runtime'] ?? null );
+		$this->assertSame( [], $status['backends']['cloudflare_ai_search']['lastSourceTypes'] ?? null );
 	}
 
 	public function test_check_status_includes_new_design_helpers_for_editors(): void {

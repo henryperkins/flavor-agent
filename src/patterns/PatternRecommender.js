@@ -31,6 +31,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
 
 import CapabilityNotice from '../components/CapabilityNotice';
+import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import { STORE_NAME } from '../store';
 import { buildPatternInsertionTargetSignature } from '../utils/recommendation-request-signature';
 import { formatCount } from '../utils/format-count';
@@ -405,6 +406,7 @@ export default function PatternRecommender() {
 		recommendations,
 		patternDiagnostics,
 		patternInsertionTargetSignature,
+		patternDocsGroundingWarning,
 	} = useSelect( ( select ) => {
 		const store = select( STORE_NAME );
 
@@ -415,6 +417,8 @@ export default function PatternRecommender() {
 			patternDiagnostics: store.getPatternDiagnostics?.() || null,
 			patternInsertionTargetSignature:
 				store.getPatternInsertionTargetSignature?.() || '',
+			patternDocsGroundingWarning:
+				store.getPatternDocsGroundingWarning?.() || null,
 		};
 	}, [] );
 	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
@@ -854,6 +858,10 @@ export default function PatternRecommender() {
 
 	if ( shouldRenderInserterAffordance && noticeSlotRef.current ) {
 		let notice = null;
+		const docsGroundingNotice =
+			patternStatus === 'ready' ? (
+				<DocsGroundingNotice warning={ patternDocsGroundingWarning } />
+			) : null;
 
 		if ( ! canRecommend ) {
 			notice = <CapabilityNotice surface="pattern" />;
@@ -898,7 +906,13 @@ export default function PatternRecommender() {
 			notice = <PatternInserterNotice status="loading" />;
 		}
 
-		return createPortal( notice, noticeSlotRef.current );
+		return createPortal(
+			<>
+				{ docsGroundingNotice }
+				{ notice }
+			</>,
+			noticeSlotRef.current
+		);
 	}
 
 	return null;

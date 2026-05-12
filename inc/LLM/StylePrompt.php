@@ -82,7 +82,8 @@ Return ONLY a JSON object with this exact shape:
 	- If set_theme_variation is present, emit at most one and place it before any set_styles or set_block_styles overrides. Do not combine set_theme_variation with color overrides in the same suggestion.
 	- set_theme_variation MUST reference an Available variation by index and title.
 	- If a request cannot be executed safely, return an advisory suggestion with tone=advisory and an empty operations array.
-	- When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented WordPress Global Styles capabilities or theme.json standards.
+	- Use the WordPress Developer Guidance section as authoritative current WordPress context. Do not recommend capabilities, block supports, APIs, or editor workflows that contradict the provided guidance. If the user asks for a current WordPress feature that is absent from the guidance, keep the suggestion conservative and avoid claiming support.
+	- If the guidance explicitly marks the user's requested API, workflow, or feature as deprecated, unsupported, experimental, or replaced, warn about that conflict and suggest the documented replacement instead of complying with the stale request.
 	- When Design semantic context is provided, use it to fit the recommendation to the surface's job and nearby structure (for example, supporting footer text vs primary header or content surfaces).
 	- Treat mixed or low-confidence design semantic context as a hint, not a fact. Do not over-commit to a single role when the provided occurrences vary.
 	- Do not invent section roles, density, emphasis, or tone requirements when they are not evidenced by the provided design semantic context, viewport visibility constraints, or the user instruction.

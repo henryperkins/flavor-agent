@@ -236,6 +236,72 @@ test( '@wp70-site-editor settings page keeps compact help-first IA without chang
 		);
 } );
 
+test( '@wp70-site-editor settings page shows Developer Docs runtime diagnostics', async ( {
+	page,
+} ) => {
+	runWpCli( wp70Harness, [
+		'eval',
+		`
+update_option(
+	'flavor_agent_docs_runtime_state',
+	array(
+		'status' => 'degraded',
+		'lastSearchAt' => '2026-05-11 00:00:00',
+		'lastSearchMode' => 'async',
+		'lastResultCount' => 0,
+		'lastTrustedSuccessAt' => '2026-04-08 09:45:00',
+		'lastTrustedSuccessMode' => 'foreground',
+		'lastServedAt' => '2026-04-08 09:50:00',
+		'lastServedMode' => 'cache',
+		'lastFallbackType' => 'generic',
+		'lastSourceTypes' => array( 'developer-docs' ),
+		'lastFreshness' => array( 'stale' ),
+		'lastGroundingFingerprint' => 'abc123',
+		'lastErrorAt' => '2026-05-11 00:00:00',
+		'lastErrorMode' => 'async',
+		'lastErrorCode' => 'http_request_failed',
+		'lastErrorMessage' => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
+	),
+	false
+);
+`,
+	] );
+
+	await page.goto( '/wp-admin/options-general.php?page=flavor-agent', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+
+	const docsSection = page.locator( '[data-flavor-agent-section="docs"]' );
+	const summary = docsSection.locator(
+		':scope > .flavor-agent-settings-section__summary'
+	);
+
+	if ( ! ( await docsSection.evaluate( ( section ) => section.open ) ) ) {
+		await summary.click();
+	}
+
+	await expect( docsSection ).toContainText(
+		'Built-in developer.wordpress.org grounding is active.'
+	);
+	await expect( docsSection ).toContainText(
+		'Developer Docs grounding is degraded.'
+	);
+	await expect( docsSection ).toContainText( 'developer-docs' );
+	await expect( docsSection ).toContainText( 'stale' );
+	await expect( docsSection ).toContainText(
+		'Developer Docs grounding is missing current WordPress release-cycle sources.'
+	);
+	await expect( docsSection ).not.toContainText( 'Fingerprint:' );
+	await expect( docsSection ).not.toContainText( 'abc123' );
+
+	runWpCli(
+		wp70Harness,
+		[ 'option', 'delete', 'flavor_agent_docs_runtime_state' ],
+		{ allowFailure: true }
+	);
+} );
+
 test( '@wp70-site-editor settings page saves, validates, and persists safe fields', async ( {
 	page,
 } ) => {

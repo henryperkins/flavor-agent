@@ -65,6 +65,7 @@ final class Help {
 					'',
 					[
 						'<p>' . esc_html__( 'Developer Docs use the built-in developer.wordpress.org grounding path. Runtime warnings identify grounding, warm queue, or prewarm states that need attention.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'The Developer Docs group shows compact runtime status. Detailed grounding diagnostics, fingerprints, and request history belong in AI Activity entries and validation logs rather than the primary settings form.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Pattern Sync stays unavailable until the selected storage path is configured. The sync panel shows stale reasons, last errors, and technical index details.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'When core Guidelines are available, Flavor Agent reads them first.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Guidelines import fills the form. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape.', 'flavor-agent' ) . '</p>',

@@ -16,7 +16,7 @@ trait FormatsDocsGuidance {
 			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
 		}
 
-		if ( 'core-roadmap' === sanitize_key( (string) ( $guidance['sourceType'] ?? '' ) ) ) {
+		if ( in_array( sanitize_key( (string) ( $guidance['sourceType'] ?? '' ) ), [ 'roadmap', 'core-roadmap' ], true ) ) {
 			$prefix = '' !== $prefix ? 'Core roadmap - ' . $prefix : 'Core roadmap';
 		}
 

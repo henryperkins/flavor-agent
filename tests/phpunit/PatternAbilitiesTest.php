@@ -22,7 +22,7 @@ final class PatternAbilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_grounding();
+		$this->prime_current_docs_source_coverage();
 	}
 
 	public function test_list_patterns_normalizes_object_input_and_applies_filters(): void {
@@ -1340,6 +1340,75 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'parse_error', $result->get_error_code() );
 	}
 
+	public function test_recommend_patterns_fails_closed_when_docs_grounding_is_unavailable(): void {
+		$this->configure_backends();
+		WordPressTestState::$transients = [];
+		$this->prime_current_docs_source_coverage();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->cloudflare_ai_search_chunks_response( [] ),
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/hero', 0.71 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.82,
+								'reason' => 'Would have called the reranker without the grounding gate.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'theme/hero' ]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
+		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_recommend_patterns_fails_closed_when_docs_grounding_is_unavailable_even_without_candidates(): void {
+		$this->configure_backends();
+		WordPressTestState::$transients = [];
+		$this->prime_current_docs_source_coverage();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->cloudflare_ai_search_chunks_response( [] ),
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response( [] ),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'theme/hero' ]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
+		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+	}
+
 	public function test_recommend_patterns_includes_cached_wordpress_docs_guidance_in_ranking_input(): void {
 		$this->configure_backends();
 		$this->configure_docs_grounding();
@@ -1349,12 +1418,17 @@ final class PatternAbilitiesTest extends TestCase {
 			'core/cover',
 			[
 				[
-					'id'        => 'cover-doc',
-					'title'     => 'Cover block reference',
-					'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/cover',
-					'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/cover/',
-					'excerpt'   => 'Cover blocks support focal point, overlay styling, and inner content layout controls.',
-					'score'     => 0.91,
+					'id'          => 'cover-doc',
+					'title'       => 'Cover block reference',
+					'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/cover',
+					'sourceType'  => 'developer-docs',
+					'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/cover/',
+					'excerpt'     => 'Cover blocks support focal point, overlay styling, and inner content layout controls.',
+					'score'       => 0.91,
+					'retrievedAt' => '2026-05-08T14:00:00Z',
+					'publishedAt' => '',
+					'contentHash' => 'cover-doc-current',
+					'freshness'   => 'current',
 				],
 			]
 		);
@@ -1413,12 +1487,17 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$generic_guidance = [
 			[
-				'id'        => 'generic-block-editor-doc',
-				'title'     => 'Block Editor Handbook',
-				'sourceKey' => 'developer.wordpress.org/block-editor',
-				'url'       => 'https://developer.wordpress.org/block-editor/',
-				'excerpt'   => 'Use patterns that fit the inserter context.',
-				'score'     => 0.82,
+				'id'          => 'generic-block-editor-doc',
+				'title'       => 'Block Editor Handbook',
+				'sourceKey'   => 'developer.wordpress.org/block-editor',
+				'sourceType'  => 'developer-docs',
+				'url'         => 'https://developer.wordpress.org/block-editor/',
+				'excerpt'     => 'Use patterns that fit the inserter context.',
+				'score'       => 0.82,
+				'retrievedAt' => '2026-05-08T14:00:00Z',
+				'publishedAt' => '',
+				'contentHash' => 'generic-block-editor-doc-current',
+				'freshness'   => 'current',
 			],
 		];
 
@@ -2382,6 +2461,7 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$ai_client_supported = true;
+		$this->prime_default_docs_grounding();
 
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
@@ -2618,6 +2698,7 @@ final class PatternAbilitiesTest extends TestCase {
 				'openai' => true,
 			]
 		);
+		$this->prime_default_docs_grounding();
 	}
 
 	private function configure_cloudflare_ai_search_backends(): void {
@@ -2637,13 +2718,6 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 	}
 
-	private function disable_public_docs_grounding(): void {
-		\add_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			static fn(): string => ''
-		);
-	}
-
 	private function configure_docs_grounding(): void {
 		WordPressTestState::$options = array_merge(
 			WordPressTestState::$options,
@@ -2653,6 +2727,43 @@ final class PatternAbilitiesTest extends TestCase {
 				'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 			]
 		);
+	}
+
+	private function prime_default_docs_grounding(): void {
+		$this->prime_current_docs_source_coverage();
+		foreach ( [ 'guidance:block-editor', 'guidance:template', 'template:home', 'core/template-part', 'core/cover', 'core/image', 'plugin/card' ] as $entity_key ) {
+			AISearchClient::cache_entity_guidance(
+				$entity_key,
+				[
+					[
+						'id'          => $entity_key . '-default-doc',
+						'title'       => 'Block Editor Handbook',
+						'sourceKey'   => 'developer.wordpress.org/block-editor/',
+						'sourceType'  => 'developer-docs',
+						'url'         => 'https://developer.wordpress.org/block-editor/',
+						'excerpt'     => 'Use documented block editor and pattern guidance for recommendation ranking.',
+						'score'       => 0.91,
+						'retrievedAt' => '2026-05-08T14:00:00Z',
+						'publishedAt' => '',
+						'contentHash' => $entity_key . '-default-doc',
+						'freshness'   => 'current',
+					],
+				]
+			);
+		}
+	}
+
+	private function prime_current_docs_source_coverage(): void {
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'current',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => true,
+			'sourceTypes'            => [ 'developer-docs', 'make-core' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => '2026-05-11 00:00:00',
+			'errorCode'              => '',
+			'errorMessage'           => '',
+		];
 	}
 
 	private function recommend_patterns( array $input, array $visible_pattern_names ): array|\WP_Error {
