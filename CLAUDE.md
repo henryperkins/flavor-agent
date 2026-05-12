@@ -4,6 +4,10 @@ WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-adm
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 
+## MCP Tooling
+
+Use available MCP tools when they can speed up implementation, verification, or research. When the `wordpress-docs-ai-search` MCP server is available, consult it for WordPress plugin, Gutenberg, block editor, theme.json, and current release-cycle decisions; treat results as grounding input and still apply the plugin's trusted-source/currentness rules from `inc/Cloudflare/AISearchClient.php` and `inc/Support/DocsGroundingSourcePolicy.php`.
+
 ## Commands
 
 ```bash

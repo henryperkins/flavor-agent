@@ -501,7 +501,8 @@ final class AISearchClientTest extends TestCase {
 			true
 		);
 
-		$this->assertStringContainsString( 'WordPress current block editor developer guidance', $coverage_body['messages'][0]['content'] );
+		$this->assertStringContainsString( 'current WordPress 7.0 release cycle sources', $coverage_body['messages'][0]['content'] );
+		$this->assertStringContainsString( 'stable Developer Docs block editor reference', $coverage_body['messages'][0]['content'] );
 		$this->assertSame( 4, $coverage_body['ai_search_options']['retrieval']['max_num_results'] );
 	}
 

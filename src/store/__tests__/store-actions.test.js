@@ -2956,6 +2956,92 @@ describe( 'store action thunks', () => {
 		expect( result ).toBe( true );
 	} );
 
+	test( 'applySuggestion records only changed attributes for undo snapshots', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+		} );
+
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const currentAttributes = {
+			content: 'Old copy',
+			align: 'wide',
+			metadata: {
+				name: 'Hero',
+			},
+		};
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
+				prompt: 'Tighten the copy.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-1',
+									name: 'core/paragraph',
+									attributes: currentAttributes,
+								},
+							] ),
+							getBlockAttributes: jest
+								.fn()
+								.mockReturnValue( currentAttributes ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Refresh content',
+				attributeUpdates: {
+					content: 'New copy',
+				},
+			},
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/paragraph',
+					},
+				},
+				prompt: 'Tighten the copy.',
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		const logActivityAction = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+		)?.[ 0 ];
+
+		expect( result ).toBe( true );
+		expect( logActivityAction.entry.before.attributes ).toEqual( {
+			content: 'Old copy',
+		} );
+		expect( logActivityAction.entry.after.attributes ).toEqual( {
+			content: 'New copy',
+		} );
+	} );
+
 	test( 'applyBlockStructuralSuggestion applies a review-safe structural operation and logs structural activity', async () => {
 		apiFetch.mockResolvedValue( {
 			payload: {
@@ -3129,6 +3215,157 @@ describe( 'store action thunks', () => {
 								patternName: 'theme/hero',
 							} ),
 						],
+					} ),
+				} ),
+			} )
+		);
+	} );
+
+	test( 'applyBlockStructuralSuggestion logs the structural operation target when it differs from the panel block', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+		} );
+
+		const blocks = [
+			{
+				clientId: 'panel-block',
+				name: 'core/group',
+				attributes: {},
+				innerBlocks: [],
+			},
+			{
+				clientId: 'block-1',
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Target copy',
+				},
+				innerBlocks: [],
+			},
+		];
+		const insertBlocks = jest.fn( ( blocksToInsert, index ) => {
+			blocks.splice(
+				index,
+				0,
+				...JSON.parse( JSON.stringify( blocksToInsert ) )
+			);
+		} );
+		const blockEditorSelect = {
+			getBlock: jest.fn( ( clientId ) =>
+				blocks.find( ( block ) => block.clientId === clientId )
+			),
+			getBlocks: jest.fn( () => blocks ),
+			getBlockRootClientId: jest.fn( () => null ),
+			getBlockIndex: jest.fn( ( clientId ) =>
+				blocks.findIndex( ( block ) => block.clientId === clientId )
+			),
+			getBlockEditingMode: jest.fn( () => 'default' ),
+			getSettings: jest.fn( () => ( {
+				blockPatterns: [
+					{
+						name: 'theme/hero',
+						title: 'Hero',
+						content:
+							'<!-- wp:paragraph {"content":"Pattern content"} /-->',
+					},
+				],
+			} ) ),
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'context-sig' ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: {
+					name: 'core/group',
+				},
+				prompt: 'Add a hero.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor' ? blockEditorSelect : {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				insertBlocks,
+				removeBlocks: jest.fn(),
+				selectBlock: jest.fn(),
+			} ),
+		};
+		const suggestion = {
+			label: 'Add hero pattern',
+			suggestionKey: 'add-hero-pattern',
+			actionability: {
+				tier: 'review-safe',
+				executableOperations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+						targetClientId: 'block-1',
+						position: 'insert_after',
+						targetSignature: 'target-sig',
+						expectedTarget: {
+							clientId: 'block-1',
+							name: 'core/paragraph',
+						},
+					},
+				],
+			},
+		};
+
+		const result = await actions.applyBlockStructuralSuggestion(
+			'panel-block',
+			suggestion,
+			null,
+			{
+				clientId: 'panel-block',
+				editorContext: {
+					block: {
+						name: 'core/group',
+					},
+					blockOperationContext: {
+						enableBlockStructuralActions: true,
+						targetClientId: 'block-1',
+						targetBlockName: 'core/paragraph',
+						targetSignature: 'target-sig',
+						allowedPatterns: [
+							{
+								name: 'theme/hero',
+								title: 'Hero',
+								allowedActions: [
+									'insert_before',
+									'insert_after',
+									'replace',
+								],
+							},
+						],
+					},
+				},
+				prompt: 'Add a hero.',
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toBe( true );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'LOG_ACTIVITY',
+				entry: expect.objectContaining( {
+					type: 'apply_block_structural_suggestion',
+					target: expect.objectContaining( {
+						clientId: 'block-1',
+						blockName: 'core/paragraph',
+						blockPath: [ 1 ],
 					} ),
 				} ),
 			} )

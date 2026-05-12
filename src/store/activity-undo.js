@@ -192,6 +192,8 @@ export function buildBlockStructuralActivityEntry( {
 	result,
 	scope = null,
 	suggestion,
+	targetBlockName = '',
+	targetClientId = '',
 } ) {
 	const operations = Array.isArray( result?.operations )
 		? result.operations
@@ -201,8 +203,8 @@ export function buildBlockStructuralActivityEntry( {
 		type: 'apply_block_structural_suggestion',
 		surface: 'block',
 		target: {
-			clientId,
-			blockName: blockContext?.name || '',
+			clientId: targetClientId || clientId,
+			blockName: targetBlockName || blockContext?.name || '',
 			blockPath: Array.isArray( blockPath ) ? blockPath : [],
 		},
 		suggestion: suggestion?.label || '',

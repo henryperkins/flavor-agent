@@ -237,6 +237,20 @@ function normalizeBlockPath( value ) {
 		: [];
 }
 
+function pickAttributeSnapshot( attributes = {}, keys = [] ) {
+	if ( ! isPlainObject( attributes ) || ! Array.isArray( keys ) ) {
+		return {};
+	}
+
+	return keys.reduce( ( snapshot, key ) => {
+		if ( Object.prototype.hasOwnProperty.call( attributes, key ) ) {
+			snapshot[ key ] = attributes[ key ];
+		}
+
+		return snapshot;
+	}, {} );
+}
+
 function normalizePatternDiagnostics( diagnostics = null ) {
 	const unreadableSyncedPatterns = Number(
 		diagnostics?.filteredCandidates?.unreadableSyncedPatterns ?? 0
@@ -1554,6 +1568,7 @@ const actions = {
 					executionContract
 				);
 				const allowedUpdates = execution.allowedUpdates;
+				let appliedAttributeKeys = [];
 				let nextAttributes = null;
 				let didApply = false;
 				let isNoOp = false;
@@ -1574,13 +1589,14 @@ const actions = {
 						currentAttributes,
 						allowedUpdates
 					);
+					const safeUpdateKeys = Object.keys( safeUpdates );
 					const proposedNextAttributes = {
 						...currentAttributes,
 						...safeUpdates,
 					};
 
 					if (
-						Object.keys( safeUpdates ).length > 0 &&
+						safeUpdateKeys.length > 0 &&
 						attributeSnapshotsMatch(
 							currentAttributes,
 							proposedNextAttributes
@@ -1590,11 +1606,12 @@ const actions = {
 					}
 
 					if (
-						Object.keys( safeUpdates ).length > 0 &&
+						safeUpdateKeys.length > 0 &&
 						! isNoOp &&
 						typeof blockEditorDispatch.updateBlockAttributes ===
 							'function'
 					) {
+						appliedAttributeKeys = safeUpdateKeys;
 						nextAttributes = proposedNextAttributes;
 						blockEditorDispatch.updateBlockAttributes(
 							clientId,
@@ -1626,8 +1643,14 @@ const actions = {
 					localDispatch,
 					select,
 					buildBlockActivityEntry( {
-						afterAttributes: nextAttributes || currentAttributes,
-						beforeAttributes: currentAttributes,
+						afterAttributes: pickAttributeSnapshot(
+							nextAttributes || currentAttributes,
+							appliedAttributeKeys
+						),
+						beforeAttributes: pickAttributeSnapshot(
+							currentAttributes,
+							appliedAttributeKeys
+						),
 						blockContext,
 						blockPath: findBlockPath(
 							blockEditorSelect.getBlocks?.() || [],
@@ -1782,6 +1805,13 @@ const actions = {
 
 				const targetClientId =
 					blockOperationContext.targetClientId || clientId;
+				const targetBlock =
+					blockEditorSelect.getBlock?.( targetClientId ) || null;
+				const targetBlockName =
+					targetBlock?.name ||
+					blockOperationContext.targetBlockName ||
+					blockContext?.name ||
+					'';
 				const targetRootClientId =
 					blockEditorSelect.getBlockRootClientId?.(
 						targetClientId
@@ -1837,6 +1867,8 @@ const actions = {
 						result,
 						scope,
 						suggestion,
+						targetBlockName,
+						targetClientId,
 					} )
 				);
 

@@ -27,6 +27,8 @@ final class AISearchClient {
 	private const ENTITY_CACHE_TTL                   = 43200;
 	private const VALIDATION_PROBE_QUERY             = 'block editor';
 	private const VALIDATION_PROBE_RESULTS           = 3;
+	private const SOURCE_COVERAGE_PROBE_QUERY        = 'current WordPress 7.0 release cycle sources Make Core dev notes Gutenberg release notes plus stable Developer Docs block editor reference';
+	private const SOURCE_COVERAGE_PROBE_RESULTS      = 4;
 	private const DEFAULT_PUBLIC_SEARCH_URL          = 'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search';
 	private const PUBLIC_HOST_SUFFIX                 = '.search.ai.cloudflare.com';
 	private const PREWARM_STATE_OPTION               = 'flavor_agent_docs_prewarm_state';
@@ -2244,8 +2246,8 @@ final class AISearchClient {
 	private static function probe_current_source_coverage( array $config ): array {
 		$data = self::request_search(
 			$config,
-			'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes',
-			4,
+			self::SOURCE_COVERAGE_PROBE_QUERY,
+			self::SOURCE_COVERAGE_PROBE_RESULTS,
 			'cloudflare_ai_search_coverage_failed',
 			'cloudflare_ai_search_coverage_parse_failed',
 			502,
