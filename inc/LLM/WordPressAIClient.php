@@ -19,12 +19,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class WordPressAIClient {
 
-	private const SETUP_MESSAGE            = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
-	private const PROMPT_PREVENTED_CODE    = 'prompt_prevented';
-	private const PROMPT_PREVENTED_MESSAGE = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
-	private const DEFAULT_REQUEST_TIMEOUT  = 90;
-	private const REASONING_EFFORTS        = [ 'low', 'medium', 'high', 'xhigh' ];
-	private const SCHEMA_UNION_LIMIT       = 16;
+	private const SETUP_MESSAGE                    = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const PROMPT_PREVENTED_CODE            = 'prompt_prevented';
+	private const PROMPT_PREVENTED_MESSAGE         = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
+	private const DEFAULT_REQUEST_TIMEOUT          = 90;
+	private const REASONING_EFFORTS                = [ 'low', 'medium', 'high', 'xhigh' ];
+	private const SCHEMA_UNION_LIMIT               = 16;
+	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
 
 	public static function is_supported( ?string $provider = null ): bool {
 		$prompt = self::make_prompt( 'Flavor Agent availability check.' );
@@ -691,7 +692,13 @@ final class WordPressAIClient {
 
 		$schema = self::normalize_output_schema( $schema );
 
-		return self::should_skip_output_schema( $schema ) ? null : $schema;
+		if ( ! self::should_skip_output_schema( $schema ) ) {
+			return $schema;
+		}
+
+		$compact_schema = self::compact_schema_for_union_limit( $schema );
+
+		return self::should_skip_output_schema( $compact_schema ) ? null : $compact_schema;
 	}
 
 	private static function apply_output_schema( object $prompt, ?array $schema ): object {
@@ -862,6 +869,157 @@ final class WordPressAIClient {
 
 	private static function should_skip_output_schema( array $schema ): bool {
 		return self::count_schema_unions( $schema ) > self::SCHEMA_UNION_LIMIT;
+	}
+
+	private static function compact_schema_for_union_limit( array $schema ): array {
+		$ranking_schema = null;
+		$schema         = self::replace_nullable_ranking_contract_schemas_with_ref( $schema, $ranking_schema );
+		$schema         = self::compact_nullable_schema_unions( $schema );
+
+		if ( null !== $ranking_schema ) {
+			$defs = isset( $schema['$defs'] ) && is_array( $schema['$defs'] ) ? $schema['$defs'] : [];
+			$defs[ self::RANKING_CONTRACT_SCHEMA_REF_NAME ] = $ranking_schema;
+			$schema['$defs']                                = $defs;
+		}
+
+		return $schema;
+	}
+
+	private static function replace_nullable_ranking_contract_schemas_with_ref( array $schema, ?array &$ranking_schema ): array {
+		if ( self::is_nullable_ranking_contract_schema( $schema ) ) {
+			$ranking_schema ??= $schema;
+
+			return [
+				'$ref' => '#/$defs/' . self::RANKING_CONTRACT_SCHEMA_REF_NAME,
+			];
+		}
+
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $collection_key ][ $key ] = self::replace_nullable_ranking_contract_schemas_with_ref( $child_schema, $ranking_schema );
+				}
+			}
+		}
+
+		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
+				$schema[ $schema_key ] = self::replace_nullable_ranking_contract_schema_node_or_list_with_ref( $schema[ $schema_key ], $ranking_schema );
+			}
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $schema_list_key ][ $key ] = self::replace_nullable_ranking_contract_schemas_with_ref( $child_schema, $ranking_schema );
+				}
+			}
+		}
+
+		return $schema;
+	}
+
+	private static function replace_nullable_ranking_contract_schema_node_or_list_with_ref( array $schema, ?array &$ranking_schema ): array {
+		if ( ! self::is_list_array( $schema ) ) {
+			return self::replace_nullable_ranking_contract_schemas_with_ref( $schema, $ranking_schema );
+		}
+
+		foreach ( $schema as $key => $child_schema ) {
+			if ( is_array( $child_schema ) ) {
+				$schema[ $key ] = self::replace_nullable_ranking_contract_schemas_with_ref( $child_schema, $ranking_schema );
+			}
+		}
+
+		return $schema;
+	}
+
+	private static function is_nullable_ranking_contract_schema( array $schema ): bool {
+		$type = $schema['type'] ?? null;
+
+		if ( ! is_array( $type ) || ! in_array( 'object', $type, true ) || ! in_array( 'null', $type, true ) ) {
+			return false;
+		}
+
+		$properties = isset( $schema['properties'] ) && is_array( $schema['properties'] ) ? $schema['properties'] : [];
+		$required   = isset( $schema['required'] ) && is_array( $schema['required'] ) ? $schema['required'] : [];
+		$field_keys = [ 'score', 'reason', 'sourceSignals', 'designPrinciple', 'risk' ];
+
+		foreach ( $field_keys as $field_key ) {
+			if ( ! array_key_exists( $field_key, $properties ) || ! in_array( $field_key, $required, true ) ) {
+				return false;
+			}
+		}
+
+		return count( array_diff( array_keys( $properties ), $field_keys ) ) === 0;
+	}
+
+	private static function compact_nullable_schema_unions( array $schema ): array {
+		if ( isset( $schema['type'] ) && is_array( $schema['type'] ) && in_array( 'null', $schema['type'], true ) ) {
+			$types = array_values(
+				array_filter(
+					$schema['type'],
+					static fn( mixed $type ): bool => is_string( $type ) && 'null' !== $type
+				)
+			);
+
+			if ( 1 === count( $types ) ) {
+				$schema['type'] = $types[0];
+			}
+		}
+
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $collection_key ][ $key ] = self::compact_nullable_schema_unions( $child_schema );
+				}
+			}
+		}
+
+		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
+				$schema[ $schema_key ] = self::compact_nullable_schema_node_or_list( $schema[ $schema_key ] );
+			}
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $schema_list_key ][ $key ] = self::compact_nullable_schema_unions( $child_schema );
+				}
+			}
+		}
+
+		return $schema;
+	}
+
+	private static function compact_nullable_schema_node_or_list( array $schema ): array {
+		if ( ! self::is_list_array( $schema ) ) {
+			return self::compact_nullable_schema_unions( $schema );
+		}
+
+		foreach ( $schema as $key => $child_schema ) {
+			if ( is_array( $child_schema ) ) {
+				$schema[ $key ] = self::compact_nullable_schema_unions( $child_schema );
+			}
+		}
+
+		return $schema;
 	}
 
 	private static function count_schema_unions( array $schema ): int {

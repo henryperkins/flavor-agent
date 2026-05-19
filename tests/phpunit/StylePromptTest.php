@@ -1022,34 +1022,46 @@ final class StylePromptTest extends TestCase {
 		$this->assertSame( [], $result['suggestions'][0]['operations'] );
 	}
 
-	public function test_parse_response_prefers_explicit_score_over_confidence_for_sorting(): void {
+	public function test_parse_response_blends_model_score_with_deterministic_quality_for_sorting(): void {
 		$result = StylePrompt::parse_response(
 			wp_json_encode(
 				[
 					'suggestions' => [
 						[
-							'label'       => 'Explicit score suggestion',
-							'description' => 'This should sort first.',
+							'label'       => 'High model advisory',
+							'description' => 'This should sort second after deterministic validation.',
 							'category'    => 'color',
-							'score'       => 0.93,
-							'confidence'  => 0.12,
+							'ranking'     => [
+								'score' => 0.9,
+							],
 						],
 						[
-							'label'       => 'Confidence-only suggestion',
-							'description' => 'This should sort second.',
+							'label'       => 'Lower model executable preset',
+							'description' => 'This has stronger deterministic evidence.',
 							'category'    => 'color',
-							'confidence'  => 0.81,
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|accent',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'accent',
+								],
+							],
+							'score'       => 0.55,
 						],
 					],
-					'explanation' => 'Explicit scores should outrank confidence-only entries.',
+					'explanation' => 'Deterministic quality should blend with model scores.',
 				]
 			),
 			$this->build_context()
 		);
 
 		$this->assertIsArray( $result );
-		$this->assertSame( 'Explicit score suggestion', $result['suggestions'][0]['label'] );
-		$this->assertSame( 0.93, $result['suggestions'][0]['ranking']['score'] );
+		$this->assertSame( 'Lower model executable preset', $result['suggestions'][0]['label'] );
+		$this->assertGreaterThan( $result['suggestions'][1]['ranking']['score'], $result['suggestions'][0]['ranking']['score'] );
 	}
 
 	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
@@ -1081,7 +1093,43 @@ final class StylePromptTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Fallback confidence suggestion', $result['suggestions'][0]['label'] );
-		$this->assertSame( 0.87, $result['suggestions'][0]['ranking']['score'] );
+		$this->assertSame( 0.708, $result['suggestions'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_merges_model_source_signals_with_plugin_ranking_signals(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Concrete style update with model signal',
+							'description' => 'Keep model style context without losing plugin diagnostics.',
+							'category'    => 'border',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'border', 'width' ],
+									'value'     => '2px',
+									'valueType' => 'freeform',
+								],
+							],
+							'ranking'     => [
+								'score'         => 0.61,
+								'sourceSignals' => [ 'model_style_balance' ],
+							],
+						],
+					],
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[ 'llm_response', 'style_surface', 'tone_executable', 'has_operations', 'model_style_balance' ],
+			$result['suggestions'][0]['ranking']['sourceSignals']
+		);
 	}
 
 	public function test_parse_response_downgrades_low_contrast_executable_suggestion_to_advisory(): void {
@@ -1413,5 +1461,13 @@ final class StylePromptTest extends TestCase {
 				],
 			],
 		];
+	}
+
+	public function test_build_system_includes_required_nullable_ranking_shape_for_strict_schema(): void {
+		$system = StylePrompt::build_system();
+
+		$this->assertStringContainsString( '"ranking": null', $system );
+		$this->assertStringContainsString( 'return ranking as null', strtolower( $system ) );
+		$this->assertStringContainsString( 'use null for unknown ranking object values', strtolower( $system ) );
 	}
 }

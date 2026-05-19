@@ -255,7 +255,7 @@ final class ChatClientTest extends TestCase {
 
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
 
-		$this->assertSame( 0, self::count_schema_unions( $schema ) );
+		$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ) );
 		$this->assertSame(
 			'string',
 			$schema['properties']['settings']['items']['properties']['attributeUpdates']['type'] ?? null

@@ -96,6 +96,7 @@ final class ResponseSchema {
 								'items' => [ 'type' => 'string' ],
 							],
 							'confidence'         => self::nullable_confidence(),
+							'ranking'            => self::nullable_ranking_schema(),
 						]
 					),
 				],
@@ -148,6 +149,7 @@ final class ResponseSchema {
 								),
 							],
 							'confidence'         => self::nullable_confidence(),
+							'ranking'            => self::nullable_ranking_schema(),
 						]
 					),
 				],
@@ -197,6 +199,7 @@ final class ResponseSchema {
 								),
 							],
 							'confidence'  => self::nullable_confidence(),
+							'ranking'     => self::nullable_ranking_schema(),
 						]
 					),
 				],
@@ -233,6 +236,7 @@ final class ResponseSchema {
 								),
 							],
 							'confidence'  => self::nullable_confidence(),
+							'ranking'     => self::nullable_ranking_schema(),
 						]
 					),
 				],
@@ -322,6 +326,7 @@ final class ResponseSchema {
 			'isCurrentStyle' => [ 'type' => 'boolean' ],
 			'isRecommended'  => [ 'type' => 'boolean' ],
 			'confidence'     => [ 'type' => 'number' ],
+			'ranking'        => self::nullable_ranking_schema(),
 			'preview'        => [ 'type' => 'string' ],
 			'presetSlug'     => [ 'type' => 'string' ],
 			'cssVar'         => [ 'type' => 'string' ],
@@ -398,6 +403,29 @@ final class ResponseSchema {
 			'maximum'     => 1,
 			'description' => 'Optional 0..1 ranking confidence; return null to defer to deterministic ranking.',
 		];
+	}
+
+	private static function nullable_ranking_schema(): array {
+		$schema = self::strict_object(
+			[
+				'score'           => [
+					'type'    => [ 'number', 'null' ],
+					'minimum' => 0,
+					'maximum' => 1,
+				],
+				'reason'          => self::nullable_string(),
+				'sourceSignals'   => [
+					'type'  => [ 'array', 'null' ],
+					'items' => [ 'type' => 'string' ],
+				],
+				'designPrinciple' => self::nullable_string(),
+				'risk'            => self::nullable_string(),
+			]
+		);
+
+		$schema['type'] = [ 'object', 'null' ];
+
+		return $schema;
 	}
 
 	private static function nullable_integer_array(): array {

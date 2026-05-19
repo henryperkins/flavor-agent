@@ -63,7 +63,8 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
         }
       ],
       "patternSuggestions": ["pattern/name-from-patterns-list"],
-      "confidence": 0.85
+      "confidence": 0.85,
+      "ranking": null
     }
   ],
   "explanation": "Overall reasoning for these recommendations"
@@ -71,6 +72,7 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
 
 Rules:
 - confidence MUST be a number from 0 to 1 indicating your certainty in this suggestion, or null to defer to the system's deterministic ranking.
+- Every suggestion item MUST include ranking. Return ranking as null when you do not have a structured ranking object. When ranking is an object, include score, reason, sourceSignals, designPrinciple, and risk, and use null for unknown ranking object values; the plugin will blend score with deterministic validation signals.
 - operations[] MUST be the executable source of truth when the suggestion is fully deterministic.
 - Supported operation types are ONLY: assign_template_part, replace_template_part, insert_pattern.
 - Each suggestion may contain at most one insert_pattern operation.
@@ -649,25 +651,30 @@ EXAMPLE
 				continue;
 			}
 
-			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
-			$computed_score = RankingContract::resolve_score_candidate(
+			$ranking_input       = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
+			$model_score         = RankingContract::resolve_score_candidate(
 				$ranking_input['score'] ?? null,
 				$suggestion['score'] ?? null,
 				$ranking_input['confidence'] ?? null,
 				$suggestion['confidence'] ?? null
 			);
-			if ( null === $computed_score ) {
-				$computed_score = RankingContract::derive_score(
-					0.45,
-					[
-						'has_operations'    => [] !== $entry['operations'] ? 0.25 : 0.0,
-						'has_templateparts' => [] !== $entry['templateParts'] ? 0.15 : 0.0,
-						'has_patterns'      => [] !== $entry['patternSuggestions'] ? 0.1 : 0.0,
-						'has_description'   => '' !== $entry['description'] ? 0.05 : 0.0,
-					]
-				);
-			}
-			$source_signals = [ 'llm_response', 'template_surface' ];
+			$deterministic_score = RankingContract::derive_score(
+				0.45,
+				[
+					'has_operations'    => [] !== $entry['operations'] ? 0.25 : 0.0,
+					'has_templateparts' => [] !== $entry['templateParts'] ? 0.15 : 0.0,
+					'has_patterns'      => [] !== $entry['patternSuggestions'] ? 0.1 : 0.0,
+					'has_description'   => '' !== $entry['description'] ? 0.05 : 0.0,
+				]
+			);
+			$computed_score      = RankingContract::blend_score(
+				[
+					'model'         => $model_score,
+					'deterministic' => $deterministic_score,
+					'context'       => null,
+				]
+			);
+			$source_signals      = [ 'llm_response', 'template_surface' ];
 
 			if ( [] !== $entry['operations'] ) {
 				$source_signals[] = 'has_operations';
@@ -679,8 +686,11 @@ EXAMPLE
 				$source_signals[] = 'has_pattern_suggestions';
 			}
 
+			$ranking_metadata = $ranking_input;
+			unset( $ranking_metadata['score'], $ranking_metadata['confidence'] );
+
 			$entry['ranking'] = RankingContract::normalize(
-				$ranking_input,
+				$ranking_metadata,
 				[
 					'score'         => $computed_score,
 					'reason'        => (string) ( $suggestion['description'] ?? '' ),

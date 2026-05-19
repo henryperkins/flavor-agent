@@ -613,6 +613,8 @@ final class RegistrationTest extends TestCase {
 			$this->assertSame( 'string', $ranking['properties']['safetyMode']['type'] ?? null );
 			$this->assertSame( 'array', $ranking['properties']['sourceSignals']['type'] ?? null );
 			$this->assertSame( 'object', $ranking['properties']['freshnessMeta']['type'] ?? null );
+			$this->assertSame( 'string', $ranking['properties']['designPrinciple']['type'] ?? null );
+			$this->assertSame( 'string', $ranking['properties']['risk']['type'] ?? null );
 		}
 
 		$block_ability  = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'] ?? null;
@@ -624,6 +626,12 @@ final class RegistrationTest extends TestCase {
 		$this->assertIsArray( $styles_ranking, 'recommend-block styles items should declare ranking.' );
 		$this->assertIsArray( $blocks_ranking, 'recommend-block block items should declare ranking.' );
 		$this->assertSame( 'number', $block_ranking['properties']['score']['type'] ?? null );
+		$this->assertSame( 'string', $block_ranking['properties']['designPrinciple']['type'] ?? null );
+		$this->assertSame( 'string', $block_ranking['properties']['risk']['type'] ?? null );
+		$this->assertSame( 'string', $styles_ranking['properties']['designPrinciple']['type'] ?? null );
+		$this->assertSame( 'string', $styles_ranking['properties']['risk']['type'] ?? null );
+		$this->assertSame( 'string', $blocks_ranking['properties']['designPrinciple']['type'] ?? null );
+		$this->assertSame( 'string', $blocks_ranking['properties']['risk']['type'] ?? null );
 	}
 
 	public function test_register_abilities_declares_template_advisory_fields_in_output_schema(): void {
@@ -669,6 +677,8 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame( 'object', $ranking['properties']['freshnessMeta']['type'] ?? null );
 		$this->assertSame( 'object', $ranking['properties']['rankingHint']['type'] ?? null );
 		$this->assertSame( 'string', $ranking['properties']['advisoryType']['type'] ?? null );
+		$this->assertSame( 'string', $ranking['properties']['designPrinciple']['type'] ?? null );
+		$this->assertSame( 'string', $ranking['properties']['risk']['type'] ?? null );
 		$this->assertSame( 'array', $ranking['properties']['operations']['type'] ?? null );
 		$this->assertSame( 'object', $ranking['properties']['operations']['items']['type'] ?? null );
 	}

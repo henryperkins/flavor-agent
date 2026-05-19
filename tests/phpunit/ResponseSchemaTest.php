@@ -49,4 +49,47 @@ final class ResponseSchemaTest extends TestCase {
 		$this->assertSame( 'number', $styles_confidence['type'] ?? null );
 		$this->assertSame( 'number', $block_confidence['type'] ?? null );
 	}
+
+	public function test_strict_llm_schemas_accept_nullable_ranking_objects(): void {
+		$cases = [
+			'template'      => [ 'suggestions' ],
+			'template_part' => [ 'suggestions' ],
+			'style'         => [ 'suggestions' ],
+			'navigation'    => [ 'suggestions' ],
+		];
+
+		foreach ( $cases as $surface => [ $list_key ] ) {
+			$schema  = ResponseSchema::get( $surface );
+			$ranking = $schema['properties'][ $list_key ]['items']['properties']['ranking'] ?? null;
+
+			$this->assertIsArray( $ranking, "{$surface} suggestion items should declare ranking." );
+			$this->assertSame( [ 'object', 'null' ], $ranking['type'] ?? null );
+			$this->assertFalse( (bool) ( $ranking['additionalProperties'] ?? true ) );
+			$this->assertSame( [ 'number', 'null' ], $ranking['properties']['score']['type'] ?? null );
+			$this->assertSame( [ 'string', 'null' ], $ranking['properties']['reason']['type'] ?? null );
+			$this->assertSame( [ 'array', 'null' ], $ranking['properties']['sourceSignals']['type'] ?? null );
+			$this->assertSame( [ 'string', 'null' ], $ranking['properties']['designPrinciple']['type'] ?? null );
+			$this->assertSame( [ 'string', 'null' ], $ranking['properties']['risk']['type'] ?? null );
+			$this->assertSame(
+				[ 'score', 'reason', 'sourceSignals', 'designPrinciple', 'risk' ],
+				$ranking['required'] ?? null
+			);
+		}
+	}
+
+	public function test_block_schema_accepts_nullable_ranking_objects_on_all_lanes(): void {
+		$schema = ResponseSchema::get( 'block' );
+
+		foreach ( [ 'settings', 'styles', 'block' ] as $list_key ) {
+			$ranking = $schema['properties'][ $list_key ]['items']['properties']['ranking'] ?? null;
+
+			$this->assertIsArray( $ranking, "Block {$list_key} items should declare ranking." );
+			$this->assertSame( [ 'object', 'null' ], $ranking['type'] ?? null );
+			$this->assertSame( [ 'number', 'null' ], $ranking['properties']['score']['type'] ?? null );
+			$this->assertSame(
+				[ 'score', 'reason', 'sourceSignals', 'designPrinciple', 'risk' ],
+				$ranking['required'] ?? null
+			);
+		}
+	}
 }

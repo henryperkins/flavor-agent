@@ -332,7 +332,7 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( '#fff', $result['settings'][0]['preview'] );
 		$this->assertSame( 'accent', $result['settings'][0]['presetSlug'] );
 		$this->assertSame( 'var(--wp--preset--color--accent)', $result['settings'][0]['cssVar'] );
-		$this->assertSame( 0.72, $result['settings'][0]['ranking']['score'] );
+		$this->assertSame( 0.858, $result['settings'][0]['ranking']['score'] );
 	}
 
 	public function test_parse_response_extracts_json_object_from_surrounding_text(): void {
@@ -1847,29 +1847,33 @@ TEXT
 		);
 
 		$this->assertIsArray( $result );
-		$this->assertSame( 0.71, $result['block'][0]['ranking']['score'] );
+		$this->assertSame( 0.674, $result['block'][0]['ranking']['score'] );
 		$this->assertSame( 'validated', $result['block'][0]['ranking']['safetyMode'] );
 		$this->assertSame( 'structural_recommendation', $result['block'][0]['ranking']['advisoryType'] );
 		$this->assertSame( [ 'llm_response', 'block_surface', 'has_description' ], $result['block'][0]['ranking']['sourceSignals'] );
 	}
 
-	public function test_parse_response_prefers_explicit_score_over_confidence_when_ranking_blocks(): void {
+	public function test_parse_response_blends_model_score_with_deterministic_quality_when_ranking_blocks(): void {
 		$result = Prompt::parse_response(
 			wp_json_encode(
 				[
 					'block' => [
 						[
-							'label'       => 'Explicit score wins',
-							'description' => 'The score should drive ordering.',
+							'label'       => 'High model advisory',
+							'description' => 'Broad idea with no executable change.',
 							'type'        => 'structural_recommendation',
-							'score'       => 0.91,
-							'confidence'  => 0.14,
+							'ranking'     => [
+								'score' => 0.9,
+							],
 						],
 						[
-							'label'       => 'Confidence only',
-							'description' => 'Still valid, but lower-ranked.',
-							'type'        => 'structural_recommendation',
-							'confidence'  => 0.82,
+							'label'            => 'Lower model executable update',
+							'description'      => 'Concrete update with stronger deterministic quality.',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => [
+								'level' => 2,
+							],
+							'score'            => 0.55,
 						],
 					],
 				]
@@ -1877,8 +1881,8 @@ TEXT
 		);
 
 		$this->assertIsArray( $result );
-		$this->assertSame( 'Explicit score wins', $result['block'][0]['label'] );
-		$this->assertSame( 0.91, $result['block'][0]['ranking']['score'] );
+		$this->assertSame( 'Lower model executable update', $result['block'][0]['label'] );
+		$this->assertGreaterThan( $result['block'][1]['ranking']['score'], $result['block'][0]['ranking']['score'] );
 	}
 
 	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
@@ -1908,7 +1912,34 @@ TEXT
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Fallback confidence wins', $result['block'][0]['label'] );
-		$this->assertSame( 0.88, $result['block'][0]['ranking']['score'] );
+		$this->assertSame( 0.742, $result['block'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_merges_model_source_signals_with_plugin_ranking_signals(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'            => 'Concrete update with model signal',
+							'description'      => 'Keep provider explanation without losing plugin diagnostics.',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => [ 'level' => 2 ],
+							'ranking'          => [
+								'score'         => 0.61,
+								'sourceSignals' => [ 'model_heading_hierarchy' ],
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[ 'llm_response', 'block_surface', 'has_executable_updates', 'has_description', 'model_heading_hierarchy' ],
+			$result['block'][0]['ranking']['sourceSignals']
+		);
 	}
 
 	public function test_parse_response_ranks_block_suggestions_by_computed_quality_signals(): void {
@@ -1936,5 +1967,13 @@ TEXT
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Executable update', $result['block'][0]['label'] );
+	}
+
+	public function test_build_system_includes_required_nullable_ranking_shape_for_strict_schema(): void {
+		$system = Prompt::build_system();
+
+		$this->assertStringContainsString( '"ranking": null', $system );
+		$this->assertStringContainsString( 'return ranking as null', strtolower( $system ) );
+		$this->assertStringContainsString( 'use null for unknown ranking object values', strtolower( $system ) );
 	}
 }

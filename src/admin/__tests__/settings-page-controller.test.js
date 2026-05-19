@@ -54,7 +54,16 @@ function renderSettingsPage( {
 	prerequisiteMessage = '',
 	prerequisitesReady = '1',
 	syncStatus = 'uninitialized',
+	validationErrorSections = [],
 } = {} ) {
+	const sectionAttributes = ( section ) => {
+		if ( ! validationErrorSections.includes( section ) ) {
+			return '';
+		}
+
+		return ' open data-flavor-agent-validation-error="true"';
+	};
+
 	document.body.innerHTML = `
 		<div
 			class="flavor-agent-settings"
@@ -64,17 +73,23 @@ function renderSettingsPage( {
 			data-open-section-storage-key="flavor-agent-settings-open-section"
 		>
 			<section id="flavor-agent-section-chat">
-				<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="chat">
+				<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="chat"${ sectionAttributes(
+					'chat'
+				) }>
 					<summary>Chat</summary>
 				</details>
 			</section>
 			<section id="flavor-agent-section-patterns">
-				<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="patterns">
+				<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="patterns"${ sectionAttributes(
+					'patterns'
+				) }>
 					<summary>Patterns</summary>
 				</details>
 			</section>
 			<section id="flavor-agent-section-docs">
-				<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="docs">
+				<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="docs"${ sectionAttributes(
+					'docs'
+				) }>
 					<summary>Docs</summary>
 				</details>
 			</section>
@@ -371,6 +386,36 @@ describe( 'settings page controller', () => {
 		).toBe( false );
 		expect( storage.getItem( 'flavor-agent-settings-open-section' ) ).toBe(
 			'patterns'
+		);
+	} );
+
+	test( 'preserves every server-opened validation error section on load', () => {
+		const storage = createStorage( {
+			'flavor-agent-settings-open-section': 'docs',
+		} );
+		const root = renderSettingsPage( {
+			defaultSection: 'chat',
+			forceSection: 'chat',
+			validationErrorSections: [ 'chat', 'patterns' ],
+		} );
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage,
+		} );
+
+		expect(
+			root.querySelector( '[data-flavor-agent-section="chat"]' ).open
+		).toBe( true );
+		expect(
+			root.querySelector( '[data-flavor-agent-section="patterns"]' ).open
+		).toBe( true );
+		expect(
+			root.querySelector( '[data-flavor-agent-section="docs"]' ).open
+		).toBe( false );
+		expect( storage.getItem( 'flavor-agent-settings-open-section' ) ).toBe(
+			'chat'
 		);
 	} );
 

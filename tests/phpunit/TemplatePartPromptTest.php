@@ -1013,7 +1013,7 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
 
-	public function test_parse_response_prefers_explicit_score_over_confidence_for_sorting(): void {
+	public function test_parse_response_blends_model_score_with_deterministic_quality_for_sorting(): void {
 		$context = [
 			'blockTree'        => [],
 			'patterns'         => [
@@ -1021,35 +1021,47 @@ final class TemplatePartPromptTest extends TestCase {
 					'name' => 'theme/header-utility',
 				],
 			],
-			'insertionAnchors' => [],
+			'insertionAnchors' => [
+				[
+					'placement' => 'start',
+				],
+			],
 		];
 
 		$raw = wp_json_encode(
 			[
 				'suggestions' => [
 					[
-						'label'              => 'Explicit score template part idea',
-						'description'        => 'This should sort first.',
+						'label'              => 'High model advisory template part idea',
+						'description'        => 'This should sort second after deterministic validation.',
 						'patternSuggestions' => [ 'theme/header-utility' ],
-						'score'              => 0.94,
-						'confidence'         => 0.21,
+						'ranking'            => [
+							'score' => 0.9,
+						],
 					],
 					[
-						'label'              => 'Confidence template part idea',
-						'description'        => 'This should sort second.',
+						'label'              => 'Lower model executable template part idea',
+						'description'        => 'This has stronger deterministic evidence.',
+						'operations'         => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/header-utility',
+								'placement'   => 'start',
+							],
+						],
 						'patternSuggestions' => [ 'theme/header-utility' ],
-						'confidence'         => 0.83,
+						'score'              => 0.55,
 					],
 				],
-				'explanation' => 'Explicit scores should drive ordering.',
+				'explanation' => 'Deterministic quality should blend with model scores.',
 			]
 		);
 
 		$result = TemplatePartPrompt::parse_response( $raw, $context );
 
 		$this->assertIsArray( $result );
-		$this->assertSame( 'Explicit score template part idea', $result['suggestions'][0]['label'] );
-		$this->assertSame( 0.94, $result['suggestions'][0]['ranking']['score'] );
+		$this->assertSame( 'Lower model executable template part idea', $result['suggestions'][0]['label'] );
+		$this->assertGreaterThan( $result['suggestions'][1]['ranking']['score'], $result['suggestions'][0]['ranking']['score'] );
 	}
 
 	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
@@ -1090,6 +1102,61 @@ final class TemplatePartPromptTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Fallback confidence template part idea', $result['suggestions'][0]['label'] );
-		$this->assertSame( 0.85, $result['suggestions'][0]['ranking']['score'] );
+		$this->assertSame( 0.7, $result['suggestions'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_merges_model_source_signals_with_plugin_ranking_signals(): void {
+		$context = [
+			'blockTree'        => [],
+			'patterns'         => [
+				[
+					'name' => 'theme/header-utility',
+				],
+			],
+			'insertionAnchors' => [
+				[
+					'placement' => 'start',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Concrete template part update with model signal',
+						'description' => 'Keep model template-part context without losing plugin diagnostics.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/header-utility',
+								'placement'   => 'start',
+							],
+						],
+						'ranking'     => [
+							'score'         => 0.61,
+							'sourceSignals' => [ 'model_template_part_balance' ],
+						],
+					],
+				],
+				'explanation' => 'Source signals should merge.',
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[ 'llm_response', 'template_part_surface', 'has_operations', 'has_pattern_suggestions', 'model_template_part_balance' ],
+			$result['suggestions'][0]['ranking']['sourceSignals']
+		);
+	}
+
+	public function test_build_system_includes_required_nullable_ranking_shape_for_strict_schema(): void {
+		$system = TemplatePartPrompt::build_system();
+
+		$this->assertStringContainsString( '"ranking": null', $system );
+		$this->assertStringContainsString( 'return ranking as null', strtolower( $system ) );
+		$this->assertStringContainsString( 'use null for unknown ranking object values', strtolower( $system ) );
 	}
 }

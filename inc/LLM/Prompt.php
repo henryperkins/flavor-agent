@@ -92,7 +92,8 @@ Each item in settings/styles is an object:
   "confidence": 0.0,
   "preview": "Hex color for visual preview swatch or empty string",
   "presetSlug": "Theme preset slug or empty string",
-  "cssVar": "CSS custom property reference or empty string"
+  "cssVar": "CSS custom property reference or empty string",
+  "ranking": null
 }
 
 Each item in block is an object:
@@ -110,7 +111,8 @@ Each item in block is an object:
   "confidence": 0.0,
   "preview": "Hex color for visual preview swatch or empty string",
   "presetSlug": "Theme preset slug or empty string",
-  "cssVar": "CSS custom property reference or empty string"
+  "cssVar": "CSS custom property reference or empty string",
+  "ranking": null
 }
 
 Rules:
@@ -128,6 +130,7 @@ Rules:
 - If you need to suggest both a local selected-block mutation and a broader structural idea, emit two separate suggestions instead of combining them into one item.
 - attributeUpdates must be a JSON object string, not a nested object. Use "{}" when there are no selected-block attribute changes.
 - For display metadata, use empty string, false, or 0 when the metadata is not applicable. Use confidence 0 only when you cannot estimate confidence.
+- Every suggestion item MUST include ranking. Return ranking as null when you do not have a structured ranking object. When ranking is an object, include score, reason, sourceSignals, designPrinciple, and risk, and use null for unknown ranking object values; the plugin will blend score with deterministic validation signals.
 - Every block-lane item must include operations. Use [] for ordinary attribute-only recommendations.
 - Do not invent proposedOperations or rejectedOperations. The plugin derives them after validation.
 - When allowed block pattern actions are provided, you may propose at most one operation from the catalog.
@@ -2393,24 +2396,29 @@ SYSTEM;
 
 			$has_executable_updates = ! empty( $normalized['attributeUpdates'] );
 			$ranking_input          = is_array( $s['ranking'] ?? null ) ? $s['ranking'] : [];
-			$computed_score         = RankingContract::resolve_score_candidate(
+			$model_score            = RankingContract::resolve_score_candidate(
 				$ranking_input['score'] ?? null,
 				$s['score'] ?? null,
 				$ranking_input['confidence'] ?? null,
 				$confidence
 			);
-			if ( null === $computed_score ) {
-				$computed_score = RankingContract::derive_score(
-					0.45,
-					[
-						'has_executable_updates' => $has_executable_updates ? 0.25 : 0.0,
-						'has_description'        => '' !== $normalized['description'] ? 0.15 : 0.0,
-						'has_type'               => null !== $type && '' !== $type ? 0.05 : 0.0,
-						'has_preview'            => null !== $normalized['preview'] ? 0.05 : 0.0,
-					]
-				);
-			}
-			$source_signals = [ 'llm_response', $group . '_surface' ];
+			$deterministic_score    = RankingContract::derive_score(
+				0.45,
+				[
+					'has_executable_updates' => $has_executable_updates ? 0.25 : 0.0,
+					'has_description'        => '' !== $normalized['description'] ? 0.15 : 0.0,
+					'has_type'               => null !== $type && '' !== $type ? 0.05 : 0.0,
+					'has_preview'            => null !== $normalized['preview'] ? 0.05 : 0.0,
+				]
+			);
+			$computed_score         = RankingContract::blend_score(
+				[
+					'model'         => $model_score,
+					'deterministic' => $deterministic_score,
+					'context'       => null,
+				]
+			);
+			$source_signals         = [ 'llm_response', $group . '_surface' ];
 
 			if ( $has_executable_updates ) {
 				$source_signals[] = 'has_executable_updates';
@@ -2420,8 +2428,11 @@ SYSTEM;
 				$source_signals[] = 'has_description';
 			}
 
+			$ranking_metadata = $ranking_input;
+			unset( $ranking_metadata['score'], $ranking_metadata['confidence'] );
+
 			$normalized['ranking'] = RankingContract::normalize(
-				$ranking_input,
+				$ranking_metadata,
 				[
 					'score'         => $computed_score,
 					'reason'        => (string) ( $s['description'] ?? '' ),

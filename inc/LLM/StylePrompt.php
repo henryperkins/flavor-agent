@@ -58,7 +58,8 @@ Return ONLY a JSON object with this exact shape:
 	          "cssVar": "var(--wp--preset--font-size--body)"
 	        }
 	      ],
-	      "confidence": 0.85
+	      "confidence": 0.85,
+	      "ranking": null
 	    }
 	  ],
   "explanation": "Overall reasoning"
@@ -66,6 +67,7 @@ Return ONLY a JSON object with this exact shape:
 
 	Rules:
 	- confidence MUST be a number from 0 to 1 indicating your certainty in this suggestion, or null to defer to the system's deterministic ranking.
+	- Every suggestion item MUST include ranking. Return ranking as null when you do not have a structured ranking object. When ranking is an object, include score, reason, sourceSignals, designPrinciple, and risk, and use null for unknown ranking object values; the plugin will blend score with deterministic validation signals.
 	- Supported operation types are ONLY set_styles, set_block_styles, and set_theme_variation.
 	- Use set_styles only for the global-styles surface.
 	- Use set_block_styles only for the style-book surface.
@@ -802,32 +804,44 @@ EXAMPLE
 				'operations'  => 'executable' === $tone ? $effective_operations : [],
 			];
 
-			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
-			$computed_score = RankingContract::resolve_score_candidate(
+			$ranking_input       = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
+			$model_score         = RankingContract::resolve_score_candidate(
 				$ranking_input['score'] ?? null,
 				$suggestion['score'] ?? null,
 				$ranking_input['confidence'] ?? null,
 				$suggestion['confidence'] ?? null
 			);
-			if ( null === $computed_score ) {
-				$computed_score = RankingContract::derive_score(
-					0.45,
-					[
-						'is_executable'   => 'executable' === $tone ? 0.25 : 0.0,
-						'has_operations'  => [] !== $effective_operations ? 0.15 : 0.0,
-						'has_description' => '' !== $entry['description'] ? 0.1 : 0.0,
-						'has_category'    => '' !== $entry['category'] ? 0.05 : 0.0,
-					]
-				);
-			}
-			$source_signals = [ 'llm_response', 'style_surface', 'tone_' . $tone ];
+			$deterministic_score = RankingContract::derive_score(
+				0.45,
+				[
+					'is_executable'      => 'executable' === $tone ? 0.15 : 0.0,
+					'has_operations'     => [] !== $effective_operations ? 0.05 : 0.0,
+					'has_description'    => '' !== $entry['description'] ? 0.1 : 0.0,
+					'has_category'       => '' !== $entry['category'] ? 0.05 : 0.0,
+					'uses_preset_values' => self::operations_use_preset_values( $effective_operations ) ? 0.25 : 0.0,
+				]
+			);
+			$computed_score      = RankingContract::blend_score(
+				[
+					'model'         => $model_score,
+					'deterministic' => $deterministic_score,
+					'context'       => null,
+				]
+			);
+			$source_signals      = [ 'llm_response', 'style_surface', 'tone_' . $tone ];
 
 			if ( [] !== $effective_operations ) {
 				$source_signals[] = 'has_operations';
 			}
+			if ( self::operations_use_preset_values( $effective_operations ) ) {
+				$source_signals[] = 'uses_preset_values';
+			}
+
+			$ranking_metadata = $ranking_input;
+			unset( $ranking_metadata['score'], $ranking_metadata['confidence'] );
 
 			$entry['ranking'] = RankingContract::normalize(
-				$ranking_input,
+				$ranking_metadata,
 				[
 					'score'         => $computed_score,
 					'reason'        => (string) ( $suggestion['description'] ?? '' ),
@@ -874,6 +888,26 @@ EXAMPLE
 			},
 			$filtered
 		);
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $operations
+	 */
+	private static function operations_use_preset_values( array $operations ): bool {
+		foreach ( $operations as $operation ) {
+			if ( ! is_array( $operation ) ) {
+				continue;
+			}
+
+			$value_type = is_string( $operation['valueType'] ?? null ) ? $operation['valueType'] : '';
+			$value      = is_string( $operation['value'] ?? null ) ? $operation['value'] : '';
+
+			if ( 'preset' === $value_type || str_starts_with( $value, 'var:preset|' ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

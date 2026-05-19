@@ -78,6 +78,7 @@ final class Page {
 						__( '1. AI Model', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_CHAT, $state ),
 						$open_group,
+						$feedback,
 						static function () use ( $state, $feedback, $connectors_url ): void {
 							self::render_ai_model_group( $state, $feedback, $connectors_url );
 						}
@@ -87,6 +88,7 @@ final class Page {
 						__( '2. Embedding Model', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_EMBEDDINGS, $state ),
 						$open_group,
+						$feedback,
 						static function () use ( $state, $feedback ): void {
 							self::render_embedding_model_group( $state, $feedback );
 						}
@@ -96,6 +98,7 @@ final class Page {
 						__( '3. Patterns', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_PATTERNS, $state ),
 						$open_group,
+						$feedback,
 						static function () use ( $state, $feedback ): void {
 							self::render_pattern_recommendations_group( $state, $feedback );
 						}
@@ -105,6 +108,7 @@ final class Page {
 						__( '4. Developer Docs', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_DOCS, $state ),
 						$open_group,
+						$feedback,
 						static function () use ( $state, $feedback ): void {
 							self::render_docs_grounding_group( $state, $feedback );
 						}
@@ -114,6 +118,7 @@ final class Page {
 						__( '5. Guidelines', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_GUIDELINES, $state ),
 						$open_group,
+						$feedback,
 						static function () use ( $state, $feedback ): void {
 							self::render_guidelines_group( $state, $feedback );
 						}
@@ -123,6 +128,7 @@ final class Page {
 						__( '6. Experimental Features', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_EXPERIMENTS, $state ),
 						$open_group,
+						$feedback,
 						static function () use ( $state, $feedback ): void {
 							self::render_experimental_features_group( $state, $feedback );
 						}
@@ -360,19 +366,30 @@ final class Page {
 
 	/**
 	 * @param array{summary: string, badges: array<int, array{label: string, tone: string}>, status: array{label: string, tone: string}, open: bool} $meta
+	 * @param array<string, mixed> $feedback
 	 */
 	private static function render_settings_section_group(
 		string $group,
 		string $title,
 		array $meta,
 		string $open_group,
+		array $feedback,
 		callable $renderer
 	): void {
-		$dom_id  = State::get_section_dom_id( $group );
-		$is_open = $open_group === $group;
+		$dom_id             = State::get_section_dom_id( $group );
+		$has_feedback_error = Feedback::feedback_group_has_tone( $feedback, $group, 'error' );
+		$is_open            = $open_group === $group || $has_feedback_error;
+		$details_attributes = [
+			'class'                     => 'flavor-agent-settings-section__panel',
+			'data-flavor-agent-section' => $group,
+		];
+
+		if ( $has_feedback_error ) {
+			$details_attributes['data-flavor-agent-validation-error'] = 'true';
+		}
 		?>
 		<section class="flavor-agent-settings-section" id="<?php echo esc_attr( $dom_id ); ?>">
-			<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="<?php echo esc_attr( $group ); ?>"<?php echo $is_open ? ' open' : ''; ?>>
+			<details<?php Utils::render_html_attributes( $details_attributes ); ?><?php echo $is_open ? ' open' : ''; ?>>
 				<summary class="flavor-agent-settings-section__summary">
 					<div class="flavor-agent-settings-section__summary-main">
 						<h2 class="flavor-agent-settings-section__title">

@@ -277,7 +277,7 @@ final class WordPressAIClientTest extends TestCase {
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
 
 		$this->assertIsArray( $schema );
-		$this->assertSame( 0, self::count_schema_unions( $schema ) );
+		$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ) );
 
 		$block_properties = $schema['properties']['block']['items']['properties'] ?? [];
 		$this->assertArrayHasKey( 'operations', $block_properties );
@@ -291,6 +291,59 @@ final class WordPressAIClientTest extends TestCase {
 			'number',
 			$schema['properties']['settings']['items']['properties']['confidence']['type'] ?? null
 		);
+	}
+
+	public function test_chat_preserves_nullable_ranking_contract_when_compacting_schema_unions(): void {
+		$cases = [
+			'block'         => [
+				[ 'properties', 'settings', 'items', 'properties', 'ranking' ],
+				[ 'properties', 'styles', 'items', 'properties', 'ranking' ],
+				[ 'properties', 'block', 'items', 'properties', 'ranking' ],
+			],
+			'template'      => [
+				[ 'properties', 'suggestions', 'items', 'properties', 'ranking' ],
+			],
+			'template_part' => [
+				[ 'properties', 'suggestions', 'items', 'properties', 'ranking' ],
+			],
+			'style'         => [
+				[ 'properties', 'suggestions', 'items', 'properties', 'ranking' ],
+			],
+			'navigation'    => [
+				[ 'properties', 'suggestions', 'items', 'properties', 'ranking' ],
+			],
+		];
+
+		foreach ( $cases as $surface => $ranking_paths ) {
+			WordPressTestState::reset();
+			WordPressTestState::$ai_client_supported            = true;
+			WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+			WordPressAIClient::chat(
+				'WordPress Gutenberg recommendation assistant.',
+				'Recommend an improvement.',
+				null,
+				'medium',
+				ResponseSchema::get( $surface )
+			);
+
+			$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+			$this->assertIsArray( $schema, "{$surface} should send a response schema." );
+			$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ), "{$surface} schema should remain within the provider union limit." );
+
+			foreach ( $ranking_paths as $path ) {
+				$ranking_schema = self::schema_at_path( $schema, $path );
+				$ranking_schema = is_array( $ranking_schema ) ? self::resolve_schema_ref( $schema, $ranking_schema ) : $ranking_schema;
+
+				$this->assertIsArray( $ranking_schema, "{$surface} ranking schema should exist at " . implode( '.', $path ) );
+				$this->assertSame(
+					[ 'object', 'null' ],
+					$ranking_schema['type'] ?? null,
+					"{$surface} ranking schema should allow the prompt-required null fallback."
+				);
+			}
+		}
 	}
 
 	public function test_chat_locks_the_prompt_to_the_requested_provider(): void {
@@ -879,5 +932,41 @@ final class WordPressAIClientTest extends TestCase {
 		}
 
 		return $count;
+	}
+
+	/**
+	 * @param array<string, mixed> $schema
+	 * @param array<int, string>  $path
+	 */
+	private static function schema_at_path( array $schema, array $path ): mixed {
+		$current = $schema;
+
+		foreach ( $path as $segment ) {
+			if ( ! is_array( $current ) || ! array_key_exists( $segment, $current ) ) {
+				return null;
+			}
+
+			$current = $current[ $segment ];
+		}
+
+		return $current;
+	}
+
+	/**
+	 * @param array<string, mixed> $root
+	 * @param array<string, mixed> $schema
+	 * @return array<string, mixed>
+	 */
+	private static function resolve_schema_ref( array $root, array $schema ): array {
+		$ref = is_string( $schema['$ref'] ?? null ) ? $schema['$ref'] : '';
+
+		if ( ! str_starts_with( $ref, '#/$defs/' ) ) {
+			return $schema;
+		}
+
+		$definition_name = substr( $ref, strlen( '#/$defs/' ) );
+		$definition      = $root['$defs'][ $definition_name ] ?? null;
+
+		return is_array( $definition ) ? $definition : $schema;
 	}
 }

@@ -418,6 +418,8 @@ function initializeSectionState( root, storage ) {
 			( section ) =>
 				normalizeText( section.dataset.flavorAgentSection ) === key
 		) || null;
+	const sectionHasValidationError = ( section ) =>
+		normalizeText( section.dataset.flavorAgentValidationError ) === 'true';
 
 	const setActiveSection = ( key ) => {
 		const nextActiveSection =
@@ -431,7 +433,9 @@ function initializeSectionState( root, storage ) {
 
 		isAdjustingSections = true;
 		sections.forEach( ( section ) => {
-			section.open = section === nextActiveSection;
+			section.open =
+				section === nextActiveSection ||
+				( section.open && sectionHasValidationError( section ) );
 		} );
 		isAdjustingSections = false;
 

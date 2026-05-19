@@ -1324,15 +1324,30 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
 
-	public function test_parse_response_prefers_explicit_score_over_confidence_for_sorting(): void {
+	public function test_parse_response_blends_model_score_with_deterministic_quality_for_sorting(): void {
 		$context = [
-			'assignedParts'  => [],
-			'availableParts' => [],
-			'allowedAreas'   => [ 'header', 'footer' ],
-			'emptyAreas'     => [ 'header', 'footer' ],
-			'patterns'       => [
+			'assignedParts'            => [],
+			'availableParts'           => [],
+			'allowedAreas'             => [ 'header', 'footer' ],
+			'emptyAreas'               => [ 'header', 'footer' ],
+			'patterns'                 => [
 				[
 					'name' => 'theme/hero',
+				],
+			],
+			'topLevelBlockTree'        => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'label'      => 'Main group',
+					'attributes' => [],
+					'childCount' => 0,
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template',
 				],
 			],
 		];
@@ -1341,28 +1356,36 @@ final class TemplatePromptTest extends TestCase {
 			[
 				'suggestions' => [
 					[
-						'label'              => 'Explicit score template idea',
-						'description'        => 'This should sort first.',
+						'label'              => 'High model advisory template idea',
+						'description'        => 'This should sort second after deterministic validation.',
 						'patternSuggestions' => [ 'theme/hero' ],
-						'score'              => 0.92,
-						'confidence'         => 0.18,
+						'ranking'            => [
+							'score' => 0.9,
+						],
 					],
 					[
-						'label'              => 'Confidence template idea',
-						'description'        => 'This should sort second.',
+						'label'              => 'Lower model executable template idea',
+						'description'        => 'This has stronger deterministic evidence.',
+						'operations'         => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'start',
+							],
+						],
 						'patternSuggestions' => [ 'theme/hero' ],
-						'confidence'         => 0.84,
+						'score'              => 0.55,
 					],
 				],
-				'explanation' => 'Explicit scores should drive ordering.',
+				'explanation' => 'Deterministic quality should blend with model scores.',
 			]
 		);
 
 		$result = TemplatePrompt::parse_response( $raw, $context );
 
 		$this->assertIsArray( $result );
-		$this->assertSame( 'Explicit score template idea', $result['suggestions'][0]['label'] );
-		$this->assertSame( 0.92, $result['suggestions'][0]['ranking']['score'] );
+		$this->assertSame( 'Lower model executable template idea', $result['suggestions'][0]['label'] );
+		$this->assertGreaterThan( $result['suggestions'][1]['ranking']['score'], $result['suggestions'][0]['ranking']['score'] );
 	}
 
 	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
@@ -1405,6 +1428,65 @@ final class TemplatePromptTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Fallback confidence template idea', $result['suggestions'][0]['label'] );
-		$this->assertSame( 0.86, $result['suggestions'][0]['ranking']['score'] );
+		$this->assertSame( 0.704, $result['suggestions'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_merges_model_source_signals_with_plugin_ranking_signals(): void {
+		$context = [
+			'assignedParts'            => [],
+			'availableParts'           => [],
+			'allowedAreas'             => [ 'header', 'footer' ],
+			'emptyAreas'               => [ 'header', 'footer' ],
+			'patterns'                 => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Concrete template update with model signal',
+						'description' => 'Keep model template context without losing plugin diagnostics.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'start',
+							],
+						],
+						'ranking'     => [
+							'score'         => 0.61,
+							'sourceSignals' => [ 'model_template_balance' ],
+						],
+					],
+				],
+				'explanation' => 'Source signals should merge.',
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[ 'llm_response', 'template_surface', 'has_operations', 'has_pattern_suggestions', 'model_template_balance' ],
+			$result['suggestions'][0]['ranking']['sourceSignals']
+		);
+	}
+
+	public function test_build_system_includes_required_nullable_ranking_shape_for_strict_schema(): void {
+		$system = TemplatePrompt::build_system();
+
+		$this->assertStringContainsString( '"ranking": null', $system );
+		$this->assertStringContainsString( 'return ranking as null', strtolower( $system ) );
+		$this->assertStringContainsString( 'use null for unknown ranking object values', strtolower( $system ) );
 	}
 }

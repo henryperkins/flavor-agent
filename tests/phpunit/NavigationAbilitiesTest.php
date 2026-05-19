@@ -975,30 +975,30 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'openSubmenusOnClick', $system );
 	}
 
-	public function test_parse_response_prefers_explicit_score_over_confidence_for_sorting(): void {
+	public function test_parse_response_blends_model_score_with_deterministic_quality_for_sorting(): void {
 		$raw = wp_json_encode(
 			[
 				'suggestions' => [
 					[
-						'label'       => 'Explicit score navigation idea',
-						'description' => 'This should sort first.',
-						'category'    => 'structure',
-						'score'       => 0.9,
-						'confidence'  => 0.11,
+						'label'       => 'High model accessibility idea',
+						'description' => 'This should sort second after deterministic validation.',
+						'category'    => 'accessibility',
+						'ranking'     => [
+							'score' => 0.9,
+						],
 						'changes'     => [
 							[
-								'type'       => 'reorder',
-								'targetPath' => [ 1 ],
-								'target'     => 'About link',
-								'detail'     => 'Move About later.',
+								'type'   => 'set-attribute',
+								'target' => 'overlayMenu',
+								'detail' => 'Use a controlled overlay setting.',
 							],
 						],
 					],
 					[
-						'label'       => 'Confidence navigation idea',
-						'description' => 'This should sort second.',
+						'label'       => 'Lower model structural navigation idea',
+						'description' => 'This has stronger deterministic evidence.',
 						'category'    => 'structure',
-						'confidence'  => 0.82,
+						'score'       => 0.55,
 						'changes'     => [
 							[
 								'type'       => 'reorder',
@@ -1006,10 +1006,28 @@ final class NavigationAbilitiesTest extends TestCase {
 								'target'     => 'Home link',
 								'detail'     => 'Move Home later.',
 							],
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 1 ],
+								'target'     => 'About link',
+								'detail'     => 'Move About later.',
+							],
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 2 ],
+								'target'     => 'Services link',
+								'detail'     => 'Move Services later.',
+							],
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 3 ],
+								'target'     => 'Contact link',
+								'detail'     => 'Move Contact later.',
+							],
 						],
 					],
 				],
-				'explanation' => 'Explicit scores should drive ordering.',
+				'explanation' => 'Deterministic quality should blend with model scores.',
 			]
 		);
 
@@ -1029,13 +1047,25 @@ final class NavigationAbilitiesTest extends TestCase {
 						'type'  => 'navigation-link',
 						'depth' => 0,
 					],
+					[
+						'path'  => [ 2 ],
+						'label' => 'Services',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+					[
+						'path'  => [ 3 ],
+						'label' => 'Contact',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
 				],
 			]
 		);
 
 		$this->assertIsArray( $result );
-		$this->assertSame( 'Explicit score navigation idea', $result['suggestions'][0]['label'] );
-		$this->assertSame( 0.9, $result['suggestions'][0]['ranking']['score'] );
+		$this->assertSame( 'Lower model structural navigation idea', $result['suggestions'][0]['label'] );
+		$this->assertGreaterThan( $result['suggestions'][1]['ranking']['score'], $result['suggestions'][0]['ranking']['score'] );
 	}
 
 	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
@@ -1100,7 +1130,54 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Fallback confidence navigation idea', $result['suggestions'][0]['label'] );
-		$this->assertSame( 0.86, $result['suggestions'][0]['ranking']['score'] );
+		$this->assertSame( 0.764, $result['suggestions'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_merges_model_source_signals_with_plugin_ranking_signals(): void {
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Concrete navigation update with model signal',
+						'description' => 'Keep model navigation context without losing plugin diagnostics.',
+						'category'    => 'structure',
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 0 ],
+								'target'     => 'Home link',
+								'detail'     => 'Move Home later.',
+							],
+						],
+						'ranking'     => [
+							'score'         => 0.61,
+							'sourceSignals' => [ 'model_navigation_balance' ],
+						],
+					],
+				],
+				'explanation' => 'Source signals should merge.',
+			]
+		);
+
+		$result = NavigationPrompt::parse_response(
+			$raw,
+			[
+				'targetInventory' => [
+					[
+						'path'  => [ 0 ],
+						'label' => 'Home',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[ 'llm_response', 'navigation_surface', 'category_structure', 'has_changes', 'model_navigation_balance' ],
+			$result['suggestions'][0]['ranking']['sourceSignals']
+		);
 	}
 
 	private function configure_text_generation_connector(): void {
@@ -1138,5 +1215,13 @@ final class NavigationAbilitiesTest extends TestCase {
 			'errorCode'              => '',
 			'errorMessage'           => '',
 		];
+	}
+
+	public function test_build_system_includes_required_nullable_ranking_shape_for_strict_schema(): void {
+		$system = NavigationPrompt::build_system();
+
+		$this->assertStringContainsString( '"ranking": null', $system );
+		$this->assertStringContainsString( 'return ranking as null', strtolower( $system ) );
+		$this->assertStringContainsString( 'use null for unknown ranking object values', strtolower( $system ) );
 	}
 }

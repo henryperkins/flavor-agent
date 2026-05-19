@@ -23,8 +23,9 @@ final class RankingContract {
 			(string) ( $input['reason'] ?? $defaults['reason'] ?? '' )
 		);
 
-		$source_signals = self::normalize_source_signals(
-			$input['sourceSignals'] ?? $defaults['sourceSignals'] ?? []
+		$source_signals = self::merge_source_signals(
+			$defaults['sourceSignals'] ?? [],
+			$input['sourceSignals'] ?? []
 		);
 
 		$safety_mode = sanitize_key(
@@ -46,6 +47,16 @@ final class RankingContract {
 			'safetyMode'    => $safety_mode,
 			'freshnessMeta' => $freshness_meta,
 		];
+
+		foreach ( [ 'designPrinciple', 'risk' ] as $context_key ) {
+			$context_value = sanitize_text_field(
+				(string) ( $input[ $context_key ] ?? $defaults[ $context_key ] ?? '' )
+			);
+
+			if ( '' !== $context_value ) {
+				$contract[ $context_key ] = $context_value;
+			}
+		}
 
 		$operations = self::normalize_operations( $input['operations'] ?? $defaults['operations'] ?? null );
 		if ( null !== $operations ) {
@@ -94,6 +105,42 @@ final class RankingContract {
 		return self::coerce_score( $score );
 	}
 
+	/**
+	 * @param array{model?: mixed, deterministic?: mixed, context?: mixed} $components
+	 * @param array{model?: float, deterministic?: float, context?: float} $weights
+	 */
+	public static function blend_score( array $components, array $weights = [] ): float {
+		$weights = array_merge(
+			[
+				'model'         => 0.30,
+				'deterministic' => 0.45,
+				'context'       => 0.25,
+			],
+			$weights
+		);
+
+		$weighted_score = 0.0;
+		$total_weight   = 0.0;
+
+		foreach ( [ 'model', 'deterministic', 'context' ] as $component ) {
+			$value  = $components[ $component ] ?? null;
+			$weight = (float) ( $weights[ $component ] ?? 0.0 );
+
+			if ( $weight <= 0.0 || ! is_scalar( $value ) || ! is_numeric( $value ) ) {
+				continue;
+			}
+
+			$weighted_score += self::coerce_score( $value ) * $weight;
+			$total_weight   += $weight;
+		}
+
+		if ( $total_weight <= 0.0 ) {
+			return 0.0;
+		}
+
+		return self::coerce_score( round( $weighted_score / $total_weight, 4 ) );
+	}
+
 	private static function coerce_score( mixed $value ): float {
 		if ( is_bool( $value ) ) {
 			$numeric_value = (float) $value;
@@ -123,6 +170,21 @@ final class RankingContract {
 		}
 
 		return array_values( $signals );
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function merge_source_signals( mixed ...$values ): array {
+		$merged = [];
+
+		foreach ( $values as $value ) {
+			foreach ( self::normalize_source_signals( $value ) as $signal ) {
+				$merged[ $signal ] = $signal;
+			}
+		}
+
+		return array_values( $merged );
 	}
 
 	/**

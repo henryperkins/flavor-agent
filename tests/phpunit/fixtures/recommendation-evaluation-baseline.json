@@ -1,0 +1,8 @@
+{
+  "fixtures": 5,
+  "suggestions": 6,
+  "invalidOperationRate": 0.3333,
+  "presetAdherenceRate": 0.5,
+  "noOpRate": 0.1667,
+  "noiseRate": 1
+}

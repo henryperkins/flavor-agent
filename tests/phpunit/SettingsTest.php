@@ -1396,6 +1396,46 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_render_page_opens_every_section_with_request_scoped_validation_errors(): void {
+		WordPressTestState::$current_user_id = 1;
+		$storage_key                         = Feedback::get_storage_key( 'multi-section-errors' );
+
+		WordPressTestState::$transients[ $storage_key ] = [
+			'messages'      => [
+				Config::GROUP_EMBEDDINGS => [
+					[
+						'tone'    => 'error',
+						'message' => 'Embedding validation failed.',
+					],
+				],
+				Config::GROUP_PATTERNS   => [
+					[
+						'tone'    => 'error',
+						'message' => 'Pattern storage validation failed.',
+					],
+				],
+			],
+			'focus_section' => Config::GROUP_EMBEDDINGS,
+		];
+		$_GET = [
+			'settings-updated'                   => 'true',
+			'flavor_agent_settings_feedback_key' => 'multi-section-errors',
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertMatchesRegularExpression(
+			'/<details(?=[^>]*data-flavor-agent-section="embeddings")(?=[^>]*data-flavor-agent-validation-error="true")(?=[^>]*\bopen\b)[^>]*>/',
+			$output
+		);
+		$this->assertMatchesRegularExpression(
+			'/<details(?=[^>]*data-flavor-agent-section="patterns")(?=[^>]*data-flavor-agent-validation-error="true")(?=[^>]*\bopen\b)[^>]*>/',
+			$output
+		);
+	}
+
 	public function test_sync_panel_renders_button_disabled_while_indexing(): void {
 		$state                   = $this->build_default_open_group_state();
 		$state['patterns_ready'] = true;
