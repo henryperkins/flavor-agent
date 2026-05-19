@@ -250,9 +250,13 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 								size="small"
 								onClick={ () => onInsert( pattern ) }
 								className="flavor-agent-card__apply"
-								aria-label={ `Insert ${ patternTitle }` }
+								aria-label={ sprintf(
+									/* translators: %s: block pattern title. */
+									__( 'Insert %s', 'flavor-agent' ),
+									patternTitle
+								) }
 							>
-								Insert
+								{ __( 'Insert', 'flavor-agent' ) }
 							</Button>
 						</div>
 					);
@@ -270,17 +274,28 @@ function PatternInserterNotice( {
 } ) {
 	let resolvedMessage =
 		message ||
-		'Preparing pattern recommendations for this insertion point.';
+		__(
+			'Preparing pattern recommendations for this insertion point.',
+			'flavor-agent'
+		);
 
 	if ( status === 'loading' ) {
-		resolvedMessage = 'Ranking patterns for this insertion point.';
+		resolvedMessage = __(
+			'Ranking patterns for this insertion point.',
+			'flavor-agent'
+		);
 	} else if ( status === 'error' ) {
 		resolvedMessage =
 			error ||
-			'Pattern recommendation request failed for this insertion point.';
+			__(
+				'Pattern recommendation request failed for this insertion point.',
+				'flavor-agent'
+			);
 	} else if ( status === 'empty' && ! message ) {
-		resolvedMessage =
-			'Flavor Agent did not find a strong pattern match for this insertion point yet.';
+		resolvedMessage = __(
+			'Flavor Agent did not find a strong pattern match for this insertion point yet.',
+			'flavor-agent'
+		);
 	}
 
 	return (
@@ -290,15 +305,19 @@ function PatternInserterNotice( {
 					Flavor Agent
 				</span>
 				{ status === 'empty' && (
-					<span className="flavor-agent-pill">No matches yet</span>
+					<span className="flavor-agent-pill">
+						{ __( 'No matches yet', 'flavor-agent' ) }
+					</span>
 				) }
 				{ status === 'error' && (
 					<span className="flavor-agent-pill flavor-agent-pill--stale">
-						Ranking failed
+						{ __( 'Ranking failed', 'flavor-agent' ) }
 					</span>
 				) }
 				{ status === 'loading' && (
-					<span className="flavor-agent-pill">Ranking…</span>
+					<span className="flavor-agent-pill">
+						{ __( 'Ranking…', 'flavor-agent' ) }
+					</span>
 				) }
 			</div>
 			<p
@@ -314,7 +333,7 @@ function PatternInserterNotice( {
 					onClick={ onRetry }
 					className="flavor-agent-pattern-summary__retry"
 				>
-					Retry
+					{ __( 'Retry', 'flavor-agent' ) }
 				</Button>
 			) }
 		</div>

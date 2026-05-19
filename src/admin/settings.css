@@ -51,7 +51,7 @@
 }
 
 .flavor-agent-settings-status--accent {
-	border-color: rgba(11, 123, 128, 0.2);
+	border-color: var(--flavor-agent-settings-status-border-accent);
 	border-left-color: var(--flavor-agent-brand-accent);
 	background: color-mix(
 		in srgb,
@@ -61,19 +61,19 @@
 }
 
 .flavor-agent-settings-status--success {
-	border-color: rgba(51, 125, 78, 0.24);
+	border-color: var(--flavor-agent-settings-status-border-success);
 	border-left-color: var(--wpds-color-fg-content-success-weak, #007f30);
 	background: var(--wpds-color-bg-surface-success-weak, #eaffed);
 }
 
 .flavor-agent-settings-status--warning {
-	border-color: rgba(186, 121, 37, 0.28);
+	border-color: var(--flavor-agent-settings-status-border-warning);
 	border-left-color: var(--wpds-color-fg-content-warning-weak, #926300);
 	background: var(--wpds-color-bg-surface-warning-weak, #fff7e0);
 }
 
 .flavor-agent-settings-status--error {
-	border-color: rgba(204, 24, 24, 0.22);
+	border-color: var(--flavor-agent-settings-status-border-error);
 	border-left-color: var(--wpds-color-fg-content-error-weak, #cc1818);
 	background: var(--wpds-color-bg-surface-error-weak, #fff6f4);
 }
@@ -98,15 +98,15 @@
 }
 
 .flavor-agent-settings__glance-item--accent {
-	border-color: rgba(11, 123, 128, 0.18);
+	border-color: var(--flavor-agent-settings-glance-border-accent);
 }
 
 .flavor-agent-settings__glance-item--success {
-	border-color: rgba(51, 125, 78, 0.2);
+	border-color: var(--flavor-agent-settings-glance-border-success);
 }
 
 .flavor-agent-settings__glance-item--warning {
-	border-color: rgba(186, 121, 37, 0.24);
+	border-color: var(--flavor-agent-settings-glance-border-warning);
 }
 
 .flavor-agent-settings__glance-label {

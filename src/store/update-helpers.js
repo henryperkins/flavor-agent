@@ -15,6 +15,7 @@ import {
 	classifyBlockSuggestionActionability,
 	summarizeActionability,
 } from '../utils/recommendation-actionability';
+import { normalizeStyleSupportPath } from '../utils/style-support-paths';
 
 const NESTED_MERGE_KEYS = new Set( [ 'metadata', 'style' ] );
 const BANNED_TOP_LEVEL_ATTRIBUTE_KEYS = new Set( [ 'customCSS' ] );
@@ -649,6 +650,10 @@ function executionContractSupportsPath(
 
 	const supportedPaths = Array.isArray( executionContract?.styleSupportPaths )
 		? executionContract.styleSupportPaths
+				.map( ( supportedPath ) =>
+					normalizeStyleSupportPath( supportedPath )
+				)
+				.filter( Boolean )
 		: [];
 
 	if (
@@ -658,7 +663,9 @@ function executionContractSupportsPath(
 		return true;
 	}
 
-	return new Set( supportedPaths ).has( supportPath );
+	return new Set( supportedPaths ).has(
+		normalizeStyleSupportPath( supportPath )
+	);
 }
 
 function executionContractFeatureEnabled(
@@ -945,10 +952,7 @@ function validateStyleLeafValue( dotPath, value, executionContract ) {
 			fallbackValidator: FREEFORM_STYLE_VALIDATORS.LENGTH_OR_PERCENTAGE,
 		},
 		'typography.fontFamily': {
-			supportPath: [
-				'typography.fontFamily',
-				'typography.__experimentalFontFamily',
-			],
+			supportPath: 'typography.fontFamily',
 			presetType: 'fontfamily',
 			allowCustomProperty: true,
 			fallbackValidator: FREEFORM_STYLE_VALIDATORS.FONT_FAMILY,

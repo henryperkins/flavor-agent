@@ -26,6 +26,7 @@ final class Page {
 		$activity_url         = admin_url( 'options-general.php?page=flavor-agent-activity' );
 		$connectors_url       = admin_url( 'options-connectors.php' );
 		$default_group        = State::determine_default_open_group( $state );
+		$attention_group      = State::determine_runtime_attention_group( $state );
 		$forced_group         = is_string( $feedback['focus_section'] ?? null ) ? $feedback['focus_section'] : '';
 		$chat_ready           = ! empty( $state['runtime_chat']['configured'] );
 		$primary_url          = $chat_ready ? $activity_url : $connectors_url;
@@ -37,6 +38,7 @@ final class Page {
 		<div class="wrap flavor-agent-settings-page">
 			<div
 				class="flavor-agent-settings"
+				data-attention-section="<?php echo esc_attr( $attention_group ); ?>"
 				data-default-section="<?php echo esc_attr( $default_group ); ?>"
 				data-force-section="<?php echo esc_attr( $forced_group ); ?>"
 				data-open-section-storage-key="<?php echo esc_attr( Config::OPEN_SECTION_STORAGE_KEY ); ?>"

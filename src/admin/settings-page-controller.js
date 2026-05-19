@@ -408,6 +408,7 @@ function initializeSectionState( root, storage ) {
 
 	const storageKey = normalizeText( root.dataset.openSectionStorageKey );
 	const forcedSection = normalizeText( root.dataset.forceSection );
+	const attentionSection = normalizeText( root.dataset.attentionSection );
 	const storedSection = readStoredSection( storage, storageKey );
 	const defaultSection = normalizeText( root.dataset.defaultSection );
 	let isAdjustingSections = false;
@@ -441,7 +442,9 @@ function initializeSectionState( root, storage ) {
 		);
 	};
 
-	setActiveSection( forcedSection || storedSection || defaultSection );
+	setActiveSection(
+		forcedSection || attentionSection || storedSection || defaultSection
+	);
 
 	sections.forEach( ( section ) => {
 		section.addEventListener( 'toggle', () => {

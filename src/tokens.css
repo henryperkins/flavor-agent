@@ -48,6 +48,42 @@
 	--flavor-agent-color-warning-weak: #fff7e0;
 	--flavor-agent-color-error: #cc1818;
 	--flavor-agent-color-error-weak: #fff6f4;
+	--flavor-agent-settings-status-border-accent: color-mix(
+		in srgb,
+		var(--flavor-agent-color-accent) 20%,
+		transparent
+	);
+	--flavor-agent-settings-status-border-success: color-mix(
+		in srgb,
+		var(--wpds-color-fg-content-success-weak, var(--flavor-agent-color-success))
+			24%,
+		transparent
+	);
+	--flavor-agent-settings-status-border-warning: color-mix(
+		in srgb,
+		var(--wpds-color-fg-content-warning-weak, var(--flavor-agent-color-warning))
+			28%,
+		transparent
+	);
+	--flavor-agent-settings-status-border-error: color-mix(
+		in srgb,
+		var(--wpds-color-fg-content-error-weak, var(--flavor-agent-color-error))
+			22%,
+		transparent
+	);
+	--flavor-agent-settings-glance-border-accent: var(--flavor-agent-color-accent-line);
+	--flavor-agent-settings-glance-border-success: color-mix(
+		in srgb,
+		var(--wpds-color-fg-content-success-weak, var(--flavor-agent-color-success))
+			20%,
+		transparent
+	);
+	--flavor-agent-settings-glance-border-warning: color-mix(
+		in srgb,
+		var(--wpds-color-fg-content-warning-weak, var(--flavor-agent-color-warning))
+			24%,
+		transparent
+	);
 
 	/* ── Brand surfaces ─────────────────────────────────────────────────────── */
 	/* Hero card, settings section, and admin marketing backgrounds.            */

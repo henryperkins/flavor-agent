@@ -617,6 +617,29 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_render_page_exposes_runtime_attention_section_for_settings_controller(): void {
+		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$options             = [
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'workers-account',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
+			'flavor_agent_qdrant_url'                      => 'https://qdrant.example',
+			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			PatternIndex::STATE_OPTION                     => [
+				'status'         => 'stale',
+				'last_error'     => null,
+				'last_synced_at' => '2026-05-18T10:00:00Z',
+				'stale_reason'   => 'pattern_registry_changed',
+			],
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'data-default-section="patterns"', $output );
+		$this->assertStringContainsString( 'data-attention-section="patterns"', $output );
+	}
+
 	public function test_register_settings_exposes_pattern_retrieval_backend_and_private_ai_search_options(): void {
 		Settings::register_settings();
 

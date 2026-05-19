@@ -487,6 +487,12 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'constrains code detail blobs inside the sidebar panel', () => {
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/\.flavor-agent-activity-log__detail-value--code\s+\.flavor-agent-activity-log__code\s*\{[^}]*max-width:\s*100%;[^}]*overflow:\s*auto;[^}]*white-space:\s*pre-wrap;[^}]*overflow-wrap:\s*anywhere;/s
+		);
+	} );
+
 	test( 'declares distinct review and blocked activity status styles', () => {
 		expect( ACTIVITY_LOG_CSS ).toContain(
 			'.flavor-agent-activity-log__status.is-review'

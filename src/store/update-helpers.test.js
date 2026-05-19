@@ -20,7 +20,21 @@ import {
 } from '../utils/recommendation-actionability';
 import { BLOCK_OPERATION_ERROR_CLIENT_SERVER_OPERATION_MISMATCH } from '../utils/block-operation-catalog';
 
+const fs = require( 'fs' );
+const path = require( 'path' );
+
+const UPDATE_HELPERS_SOURCE = fs.readFileSync(
+	path.join( __dirname, 'update-helpers.js' ),
+	'utf8'
+);
+
 describe( 'update helpers', () => {
+	test( 'keeps experimental support aliases out of store mutation helpers', () => {
+		expect( UPDATE_HELPERS_SOURCE ).not.toContain(
+			'__experimentalFontFamily'
+		);
+	} );
+
 	test( 'buildSafeAttributeUpdates preserves unrelated metadata and style values', () => {
 		const currentAttributes = {
 			metadata: {

@@ -47,6 +47,7 @@ function flushPromises() {
 }
 
 function renderSettingsPage( {
+	attentionSection = '',
 	defaultSection = 'chat',
 	forceSection = '',
 	includePatternBackendPreview = false,
@@ -57,6 +58,7 @@ function renderSettingsPage( {
 	document.body.innerHTML = `
 		<div
 			class="flavor-agent-settings"
+			data-attention-section="${ attentionSection }"
 			data-default-section="${ defaultSection }"
 			data-force-section="${ forceSection }"
 			data-open-section-storage-key="flavor-agent-settings-open-section"
@@ -277,6 +279,28 @@ describe( 'settings page controller', () => {
 		);
 	} );
 
+	test( 'settings status borders use shared admin status tokens', () => {
+		expect( SETTINGS_CSS ).toContain(
+			'--flavor-agent-settings-status-border-accent'
+		);
+		expect( SETTINGS_CSS ).toContain(
+			'--flavor-agent-settings-status-border-success'
+		);
+		expect( SETTINGS_CSS ).toContain(
+			'--flavor-agent-settings-status-border-warning'
+		);
+		expect( SETTINGS_CSS ).toContain(
+			'--flavor-agent-settings-status-border-error'
+		);
+		const toneBorderRules =
+			SETTINGS_CSS.match(
+				/\.flavor-agent-settings(?:-status|__glance-item)--(?:accent|success|warning|error)\s*\{[^}]*\}/g
+			) || [];
+		expect( toneBorderRules.join( '\n' ) ).not.toContain(
+			'border-color: rgba('
+		);
+	} );
+
 	test( 'shared reduced-motion reset covers wp-admin roots', () => {
 		expect( TOKENS_CSS ).toMatch(
 			/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.flavor-agent-settings \*/s
@@ -289,6 +313,35 @@ describe( 'settings page controller', () => {
 		);
 		expect( TOKENS_CSS ).toMatch(
 			/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.flavor-agent-activity-log \*::after/s
+		);
+	} );
+
+	test( 'runtime attention section overrides stored state and becomes the active accordion section', () => {
+		const storage = createStorage( {
+			'flavor-agent-settings-open-section': 'docs',
+		} );
+		const root = renderSettingsPage( {
+			attentionSection: 'patterns',
+			defaultSection: 'patterns',
+		} );
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage,
+		} );
+
+		expect(
+			root.querySelector( '[data-flavor-agent-section="patterns"]' ).open
+		).toBe( true );
+		expect(
+			root.querySelector( '[data-flavor-agent-section="chat"]' ).open
+		).toBe( false );
+		expect(
+			root.querySelector( '[data-flavor-agent-section="docs"]' ).open
+		).toBe( false );
+		expect( storage.getItem( 'flavor-agent-settings-open-section' ) ).toBe(
+			'patterns'
 		);
 	} );
 

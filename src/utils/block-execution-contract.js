@@ -1,3 +1,5 @@
+import { normalizeStyleSupportPaths } from './style-support-paths';
+
 const STYLE_PANELS = new Set( [
 	'color',
 	'filter',
@@ -101,7 +103,9 @@ export function buildBlockRecommendationExecutionContract(
 		hasExplicitlyEmptyPanels:
 			hasExplicitInspectorPanels &&
 			Object.keys( inspectorPanels ).length === 0,
-		styleSupportPaths: sanitizeStringList( styleSupportPaths ),
+		styleSupportPaths: normalizeStyleSupportPaths(
+			sanitizeStringList( styleSupportPaths )
+		),
 		bindableAttributes,
 		contentAttributeKeys,
 		configAttributeKeys: Object.keys(

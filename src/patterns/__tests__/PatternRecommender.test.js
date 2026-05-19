@@ -47,9 +47,9 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: 'core/editor',
 } ) );
 
-jest.mock( '@wordpress/i18n', () => ( {
-	__: ( value ) => value,
-	sprintf: ( template, ...values ) => {
+jest.mock( '@wordpress/i18n', () => {
+	const translate = jest.fn( ( value ) => value );
+	const sprintf = jest.fn( ( template, ...values ) => {
 		let i = 0;
 		return template
 			.replace(
@@ -57,8 +57,13 @@ jest.mock( '@wordpress/i18n', () => ( {
 				( _, n ) => values[ Number( n ) - 1 ] ?? ''
 			)
 			.replace( /%s/g, () => values[ i++ ] ?? '' );
-	},
-} ) );
+	} );
+
+	return {
+		__: translate,
+		sprintf,
+	};
+} );
 
 jest.mock( '@wordpress/notices', () => ( {
 	store: 'core/notices',
@@ -86,6 +91,10 @@ jest.mock( '../../utils/visible-patterns', () => ( {
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
 const { createRoot } = require( '@wordpress/element' );
+const {
+	__: mockTranslate,
+	sprintf: mockSprintf,
+} = require( '@wordpress/i18n' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import PatternRecommender from '../PatternRecommender';
@@ -217,6 +226,18 @@ describe( 'PatternRecommender', () => {
 		mockFindInserterContainer.mockReset();
 		mockFindInserterSearchInput.mockReset();
 		mockGetVisiblePatternNames.mockReset();
+		mockTranslate.mockClear();
+		mockTranslate.mockImplementation( ( value ) => value );
+		mockSprintf.mockClear();
+		mockSprintf.mockImplementation( ( template, ...values ) => {
+			let i = 0;
+			return template
+				.replace(
+					/%(\d+)\$s/g,
+					( _, n ) => values[ Number( n ) - 1 ] ?? ''
+				)
+				.replace( /%s/g, () => values[ i++ ] ?? '' );
+		} );
 		mockUseDispatch.mockImplementation( ( storeName ) => {
 			if ( storeName === 'flavor-agent' ) {
 				return {
@@ -547,6 +568,14 @@ describe( 'PatternRecommender', () => {
 		expect( document.body.textContent ).toContain(
 			'Ranking patterns for this insertion point.'
 		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Ranking patterns for this insertion point.',
+			'flavor-agent'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Ranking…',
+			'flavor-agent'
+		);
 	} );
 
 	test( 'renders an idle notice instead of loading when no recommendation context is available', () => {
@@ -570,6 +599,10 @@ describe( 'PatternRecommender', () => {
 		);
 		expect( document.body.textContent ).not.toContain(
 			'Ranking patterns for this insertion point.'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Preparing pattern recommendations for this insertion point.',
+			'flavor-agent'
 		);
 	} );
 
@@ -669,6 +702,11 @@ describe( 'PatternRecommender', () => {
 			'Pattern recommendation request failed.'
 		);
 		expect( document.body.textContent ).toContain( 'Retry' );
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Ranking failed',
+			'flavor-agent'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith( 'Retry', 'flavor-agent' );
 		expect(
 			inserterContainer
 				.querySelector( '[role="status"]' )
@@ -742,6 +780,15 @@ describe( 'PatternRecommender', () => {
 		expect( insertButton?.getAttribute( 'aria-label' ) ).toBe(
 			'Insert Hero'
 		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Insert',
+			'flavor-agent'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Insert %s',
+			'flavor-agent'
+		);
+		expect( mockSprintf ).toHaveBeenCalledWith( 'Insert %s', 'Hero' );
 
 		act( () => {
 			insertButton.click();
@@ -767,6 +814,47 @@ describe( 'PatternRecommender', () => {
 				type: 'snackbar',
 				id: 'inserter-notice',
 			}
+		);
+	} );
+
+	test( 'renders translated insert button text and accessible label', () => {
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [ { name: 'core/paragraph', attributes: {} } ],
+		};
+
+		mockTranslate.mockImplementation( ( value ) => {
+			if ( value === 'Insert' ) {
+				return 'Translated Insert';
+			}
+			if ( value === 'Insert %s' ) {
+				return 'Translated Insert %s';
+			}
+			return value;
+		} );
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+			},
+		];
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Translated Insert' );
+
+		expect( insertButton ).toBeTruthy();
+		expect( insertButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Translated Insert Hero'
 		);
 	} );
 

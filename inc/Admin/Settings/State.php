@@ -77,6 +77,12 @@ final class State {
 	}
 
 	public static function determine_default_open_group( array $state ): string {
+		$attention_group = self::determine_runtime_attention_group( $state );
+
+		return '' !== $attention_group ? $attention_group : Config::GROUP_CHAT;
+	}
+
+	public static function determine_runtime_attention_group( array $state ): string {
 		if ( empty( $state['runtime_chat']['configured'] ) ) {
 			return Config::GROUP_CHAT;
 		}
@@ -112,7 +118,7 @@ final class State {
 			return Config::GROUP_DOCS;
 		}
 
-		return Config::GROUP_CHAT;
+		return '';
 	}
 
 	public static function get_section_dom_id( string $group ): string {
