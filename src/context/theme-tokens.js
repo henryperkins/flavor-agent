@@ -399,7 +399,7 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 	return supportedPaths;
 }
 
-export function buildGlobalStylesExecutionContract( tokens = {} ) {
+function buildGlobalStylesExecutionContract( tokens = {} ) {
 	return {
 		supportedStylePaths:
 			getGlobalStylesSupportedStylePathsFromTokens( tokens ),
@@ -419,10 +419,7 @@ export function buildGlobalStylesExecutionContract( tokens = {} ) {
 	};
 }
 
-export function buildBlockStyleExecutionContract(
-	tokens = {},
-	blockType = {}
-) {
+function buildBlockStyleExecutionContract( tokens = {}, blockType = {} ) {
 	return {
 		supportedStylePaths: getBlockStyleSupportedStylePathsFromTokens(
 			tokens,

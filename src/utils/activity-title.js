@@ -1,4 +1,4 @@
-export const ACTIVITY_TITLE_MAX_LENGTH = 96;
+const ACTIVITY_TITLE_MAX_LENGTH = 96;
 
 export function truncateActivityTitle(
 	value = '',

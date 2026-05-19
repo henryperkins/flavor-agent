@@ -32,6 +32,7 @@ final class DocsPrewarmTest extends TestCase {
 
 		$this->assertArrayHasKey( 'core/paragraph', $warm_set );
 		$this->assertArrayHasKey( 'core/heading', $warm_set );
+		$this->assertArrayHasKey( 'core/breadcrumbs', $warm_set );
 		$this->assertArrayHasKey( 'core/image', $warm_set );
 		$this->assertArrayHasKey( 'core/group', $warm_set );
 		$this->assertArrayHasKey( 'core/columns', $warm_set );
@@ -40,6 +41,7 @@ final class DocsPrewarmTest extends TestCase {
 		$this->assertArrayHasKey( 'core/cover', $warm_set );
 		$this->assertArrayHasKey( 'core/template-part', $warm_set );
 		$this->assertArrayHasKey( 'core/navigation', $warm_set );
+		$this->assertArrayHasKey( 'core/navigation-overlay-close', $warm_set );
 		$this->assertArrayHasKey( 'template:single', $warm_set );
 		$this->assertArrayHasKey( 'template:page', $warm_set );
 		$this->assertArrayHasKey( 'template:archive', $warm_set );
@@ -52,7 +54,7 @@ final class DocsPrewarmTest extends TestCase {
 		$this->assertArrayHasKey( 'guidance:style-book', $warm_set );
 		$this->assertArrayHasKey( 'guidance:template', $warm_set );
 		$this->assertArrayHasKey( 'guidance:template-part', $warm_set );
-		$this->assertCount( 22, $warm_set );
+		$this->assertCount( 24, $warm_set );
 
 		foreach ( $warm_set as $entity_key => $query ) {
 			$this->assertNotEmpty( $query, "Query for {$entity_key} must not be empty." );

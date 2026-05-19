@@ -472,19 +472,19 @@ final class AISearchClientTest extends TestCase {
 
 		$result = AISearchClient::validate_configuration();
 
-			$this->assertSame(
-				[
-					'id'      => 'c5d54c4a-27df-4034-80da-ca6054684fcd',
-					'source'  => 'public',
-					'enabled' => true,
-					'paused'  => false,
-				],
-				$result
-			);
-			$this->assertSame(
-				'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
-				WordPressTestState::$last_remote_post['url']
-			);
+		$this->assertSame(
+			[
+				'id'      => 'c5d54c4a-27df-4034-80da-ca6054684fcd',
+				'source'  => 'public',
+				'enabled' => true,
+				'paused'  => false,
+			],
+			$result
+		);
+		$this->assertSame(
+			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			WordPressTestState::$last_remote_post['url']
+		);
 		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 
@@ -501,9 +501,11 @@ final class AISearchClientTest extends TestCase {
 			true
 		);
 
-		$this->assertStringContainsString( 'current WordPress 7.0 release cycle sources', $coverage_body['messages'][0]['content'] );
-		$this->assertStringContainsString( 'stable Developer Docs block editor reference', $coverage_body['messages'][0]['content'] );
-		$this->assertSame( 4, $coverage_body['ai_search_options']['retrieval']['max_num_results'] );
+		$this->assertSame(
+			'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes',
+			$coverage_body['messages'][0]['content']
+		);
+		$this->assertSame( 8, $coverage_body['ai_search_options']['retrieval']['max_num_results'] );
 	}
 
 	public function test_validate_configuration_degrades_when_release_cycle_sources_are_missing(): void {
@@ -1413,6 +1415,52 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 'foreground', $runtime_state['lastTrustedSuccessMode'] );
 		$this->assertSame( 'foreground', $runtime_state['lastServedMode'] );
 		$this->assertSame( 'fresh', $runtime_state['lastFallbackType'] );
+	}
+
+	public function test_maybe_search_with_cache_fallbacks_uses_full_foreground_timeout_when_current_coverage_is_required(): void {
+		\add_filter( 'flavor_agent_docs_grounding_require_current_coverage', '__return_true' );
+
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'    => 'fresh-fail-closed-chunk',
+								'score' => 0.93,
+								'item'  => [
+									'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+									'metadata' => [],
+								],
+								'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: fresh-fail-closed\n---\nUse block supports to expose design tools.",
+							],
+						],
+					],
+				]
+			),
+		];
+		$family_context                           = [
+			'surface'   => 'block',
+			'entityKey' => 'core/paragraph',
+		];
+
+		$result = AISearchClient::maybe_search_with_cache_fallbacks(
+			'paragraph block design guidance',
+			'core/paragraph',
+			$family_context,
+			4
+		);
+
+		$this->assertSame( 'fresh-fail-closed-chunk', $result[0]['id'] ?? null );
+		$this->assertSame( 20, WordPressTestState::$last_remote_post['args']['timeout'] );
 	}
 
 	public function test_maybe_search_with_cache_fallbacks_prefers_foreground_warm_for_style_book_when_live_search_succeeds(): void {

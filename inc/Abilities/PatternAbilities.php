@@ -17,6 +17,7 @@ use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
+use FlavorAgent\Support\NonNegativeInteger;
 use FlavorAgent\Support\RankingContract;
 use FlavorAgent\Support\StringArray;
 
@@ -54,8 +55,8 @@ final class PatternAbilities {
 			$input['includeContent'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
 		);
-		$limit           = self::normalize_non_negative_int( $input['limit'] ?? null );
-		$offset          = self::normalize_non_negative_int( $input['offset'] ?? null ) ?? 0;
+		$limit           = NonNegativeInteger::normalize( $input['limit'] ?? null );
+		$offset          = NonNegativeInteger::normalize( $input['offset'] ?? null ) ?? 0;
 		$search          = isset( $input['search'] ) && is_string( $input['search'] )
 			? sanitize_text_field( $input['search'] )
 			: null;
@@ -107,8 +108,8 @@ final class PatternAbilities {
 			$input['includeContent'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
 		);
-		$limit           = self::normalize_non_negative_int( $input['limit'] ?? null );
-		$offset          = self::normalize_non_negative_int( $input['offset'] ?? null ) ?? 0;
+		$limit           = NonNegativeInteger::normalize( $input['limit'] ?? null );
+		$offset          = NonNegativeInteger::normalize( $input['offset'] ?? null ) ?? 0;
 		$search          = isset( $input['search'] ) && is_string( $input['search'] )
 			? sanitize_text_field( $input['search'] )
 			: null;
@@ -140,10 +141,6 @@ final class PatternAbilities {
 		}
 
 		return $pattern;
-	}
-
-	private static function normalize_non_negative_int( mixed $value ): ?int {
-		return \FlavorAgent\Support\NonNegativeInteger::normalize( $value );
 	}
 
 	/**
@@ -1843,22 +1840,6 @@ SYSTEM;
 		);
 
 		return max( 1, min( self::MAX_LLM_CANDIDATES, $value ) );
-	}
-
-	/**
-	 * @return array<int, array<string, mixed>>
-	 */
-	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		return CollectsDocsGuidance::collect(
-			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
-			static fn( array $request_context, string $request_prompt, string $entity_key ): array => self::build_wordpress_docs_family_context( $request_context, $entity_key ),
-			$context,
-			$prompt,
-			[
-				'allowForegroundWarm' => true,
-			]
-		);
 	}
 
 	/**

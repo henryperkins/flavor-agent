@@ -1,10 +1,11 @@
 # WP 7.0 Migration Opportunities
 
 Generated: 2026-03-25
-Verified: 2026-04-20
+Verified: 2026-05-19
 
 > Status: point-in-time migration assessment, not the live backlog. This doc has two parts: [Applied Changes](#applied-changes) records WP 7.0 migration work already shipped, and [Remaining Opportunities](#remaining-opportunities) lists still-open watch items and future-facing evaluations. Neither section is re-verified on every release — treat both as frozen snapshots and confirm against the current source tree before acting.
-> Verification basis: current source tree, targeted doc and source review, and official WordPress 7.0 release-cycle docs/dev notes re-checked on 2026-04-20.
+> Verification basis: current source tree, targeted doc and source review, and official WordPress 7.0 release-cycle docs/dev notes re-checked against the 2026-05-14 Field Guide (last edited 2026-05-18) on 2026-05-19.
+> Field Guide refresh: 2026-05-19. The 2026-05-14 WordPress 7.0 Field Guide confirms the AI Client (including the new `WP_AI_Client_Prompt_Builder` class and `using_model_preference()` function), Client-Side Abilities API, Connectors screen/API, pattern/contentOnly changes (including the `block_editor_settings_all` opt-out path), block support additions, PHP-only block registration, DataViews/DataForms with new Activity and Details layouts, the new `@wordpress/boot` package for custom Site Editor pages, and PHP 7.4 minimum as the live 7.0 developer-facing surface. The 2026-05-17 Field Guide edit added the DataViews dev note, `textIndent` support, and margin-free component styles; the 2026-05-18 edit dropped the standalone Notes section and refreshed the Gallery slideshow image. Real-time collaboration was removed from WordPress 7.0 before final release, so RTC remains a future/Gutenberg-plugin watch item rather than a WP 7.0 migration requirement.
 > Use `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `STATUS.md` for current priorities and shipped behavior.
 
 ## Applied Changes
@@ -103,15 +104,16 @@ WordPress Playground now has an official MCP server via the `@wp-playground/mcp`
 
 For this repo, that is an optional contributor-workflow opportunity, not a runtime migration target. It may eventually belong in local-dev or agent-runbook docs, but it should not displace the current Docker and Playwright workflows unless the team chooses to standardize on it.
 
-### `@wordpress/build` Evaluation (tooling watch)
+### `@wordpress/build` And `@wordpress/boot` Evaluation (tooling watch)
 
-The April 2, 2026 `@wordpress/build` article describes the new build tool as the longer-term engine under `@wordpress/scripts`, not as an immediate replacement requirement for every plugin repo.
+The April 2, 2026 `@wordpress/build` article describes the new build tool as the longer-term engine under `@wordpress/scripts`, not as an immediate replacement requirement for every plugin repo. The 2026-05-14 Field Guide also introduces the new `@wordpress/boot` package as the path for building custom Site Editor pages, alongside the refactored `@wordpress/scripts` build-from-directories model.
 
 For Flavor Agent:
 
 - stay on `@wordpress/scripts` for now
 - watch future upstream releases for changes that alter generated asset registration or build conventions
 - only plan an explicit migration if the repo's current `wp-scripts` workflow stops matching upstream expectations or if a switch would clearly simplify this codebase
+- `@wordpress/boot` is not relevant today because Flavor Agent does not ship its own Site Editor screens; revisit only if a future surface needs a custom routed Site Editor page
 
 ### Pattern Overrides for Custom Blocks (feature)
 
@@ -129,15 +131,20 @@ WP 7.0 extends Pattern Overrides to any block via the `block_bindings_supported_
 
 ### contentOnly Editing Expansion
 
-WP 7.0 defaults unsynced patterns and template parts to `contentOnly` mode. The plugin already respects `contentOnly` editing mode. New features to consider:
+WP 7.0 applies `contentOnly` more broadly to patterns and exposes an opt-out path for unsynced patterns. The plugin already respects `contentOnly` editing mode. New features to consider:
 - `disableContentOnlyForUnsyncedPatterns` editor setting
+- `block_editor_settings_all` PHP filter as the documented opt-out hook for the new pattern-level `contentOnly` default
+- Attributes declared with `"role": "content"` (already used by Flavor Agent for stable role detection) retain editability inside pattern `contentOnly` mode; static blocks rely on `render_callback()` for complex attributes
 - `"contentOnly": true` block support (alias for `contentRole`)
 - Parent/child `contentOnly` blocks allowing child insertion
 
 ## Not Applicable
 
-- **Interactivity API** - plugin uses React, not directives
-- **DataViews and DataForm** - no migration opportunity for the Settings page itself; the separate `Settings > AI Activity` admin surface already uses DataViews for the feed and custom read-only details instead of DataForm
-- **PHP-only block registration** - plugin doesn't register blocks
-- **Real-time collaboration** - not relevant to AI recommendations
+- **Interactivity API** - plugin uses React, not directives; the new `watch()` function and `data-wp-watch` directive plus server-populated `state.url` (Field Guide) are watch items only
+- **DataViews and DataForm** - no migration opportunity for the Settings page itself; the separate `Settings > AI Activity` admin surface already uses DataViews for the feed and custom read-only details instead of DataForm. The Field Guide's new DataViews Activity layout and Details layout are future enhancement candidates for `src/admin/activity-log.js`, but the existing implementation already covers the feed and details requirements
+- **PHP-only block registration** - Flavor Agent doesn't register blocks, so the new `'supports' => array( 'autoRegister' => true )` + render-callback pattern is irrelevant for plugin code. The dev note states autoRegister'd blocks "automatically appear in the editor without requiring any JavaScript registration", so third-party PHP-only blocks remain discoverable to Flavor Agent's introspection through the server-side `WP_Block_Type_Registry` read in `inc/Context/BlockTypeIntrospector.php` and through the editor-hydrated JS block registry that `src/context/block-inspector.js` and `src/utils/template-actions.js` rely on — no separate JS-global ingestion path is needed
+- **Real-time collaboration** - removed from WordPress 7.0 before final release; still not relevant to current AI recommendations
+- **New built-in blocks (Headings, Breadcrumbs, navigation overlay close)** - Flavor Agent recommends across blocks generically and does not maintain block-specific advisors; the `Breadcrumb block filters` developer hooks are unrelated to recommendation contracts
+- **`plugins_list_status_text` filter and `default_role_dropdown_excluded_roles` filter** - admin-page primitives outside Flavor Agent's surfaces
+- **CodeMirror v5 / Espree / backbone / Requests / PHPMailer bumps** - bundled-library upgrades inside core; no plugin-side migration
 - **Most April 2026 roundup UI bullets** - items like waveform visuals, hidden form inputs, or command-palette grouping do not currently change Flavor Agent contracts or compatibility posture

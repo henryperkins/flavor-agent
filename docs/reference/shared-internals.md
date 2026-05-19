@@ -242,14 +242,14 @@ Design token extraction from `theme.json` and global styles. Produces a full tok
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `collectThemeTokens()`                                         | Entry point: reads current editor settings and returns the full design-token manifest                   |
 | `summarizeTokens(tokens)`                                      | Compresses the manifest into a compact, prompt-friendly summary                                         |
-| `buildGlobalStylesExecutionContract(tokens)`                   | Combines supported style paths with sorted preset slug maps for the LLM to validate style writes        |
-| `buildBlockStyleExecutionContract(tokens, blockType)`          | Same as above but scoped to a specific block type's supports                                            |
 | `collectThemeTokenDiagnosticsFromSettings(settings)`           | Collects diagnostic data (coverage gaps, missing presets) from provided editor settings                 |
 | `collectThemeTokensFromSettings(settings)`                     | Token extraction from an explicit settings object (used when editor store is not available)             |
 | `getGlobalStylesSupportedStylePathsFromTokens(tokens)`         | Returns the set of style paths (e.g. `color.text`, `typography.fontSize`) supported at the global scope |
 | `getBlockStyleSupportedStylePathsFromTokens(tokens, type)`     | Same as above but scoped to a specific block type's style supports                                      |
 | `buildGlobalStylesExecutionContractFromSettings(settings)`     | Builds the execution contract directly from settings without calling `collectThemeTokens()`             |
 | `buildBlockStyleExecutionContractFromSettings(settings, type)` | Same as above but scoped to a specific block type                                                       |
+
+`buildGlobalStylesExecutionContract(tokens)` and `buildBlockStyleExecutionContract(tokens, blockType)` are module-local helpers behind the `*FromSettings` exports.
 
 **Consumers:** `src/context/collector.js`, `src/utils/style-operations.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
 

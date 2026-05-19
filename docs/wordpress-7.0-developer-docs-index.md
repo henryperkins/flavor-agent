@@ -1,7 +1,7 @@
 # WordPress 7.0 Developer Docs Index
 
 Generated: 2026-03-27 UTC
-Updated: 2026-04-23 UTC
+Updated: 2026-05-19 UTC
 
 > Status: discovery snapshot for release-cycle research, not a live backlog or product-behavior document.
 > Use `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, and `docs/features/` for current Flavor Agent truth.
@@ -11,10 +11,11 @@ Updated: 2026-04-23 UTC
 This index covers official, release-specific WordPress 7.0 developer documentation discovered from:
 
 - Make/Core release pages and tags
+- the 2026-05-14 WordPress 7.0 Field Guide and its post-publication edits
 - Make/Test release and feature-testing posts
 - WordPress Developer Blog roundup posts and related tooling articles returned by a `WordPress 7.0` or `@wordpress/build` search
 - the official `Keeping up with Gutenberg: Index 2026` page plus linked Gutenberg 22.5-22.7 weekly update posts listed under the WordPress 7.0 heading
-- the Gutenberg GitHub releases page, including the 2026-04-22 `23.0.0` release, plus the published Gutenberg 22.9 release post
+- the Gutenberg GitHub releases page, including the 2026-04-22 `23.0.0` release, plus the published Gutenberg 22.9 and 23.1 release posts
 - the Make/Playground blog for the official Playground MCP announcement
 - the Make/AI blog for the community connector testing call that confirms the emerging third-party provider ecosystem
 
@@ -25,7 +26,7 @@ Excluded on purpose:
 - recurring agendas, chat summaries, volunteer calls, and similar coordination posts
 - generic handbook or reference pages that only mention 7.0 in passing
 
-Note: as of 2026-04-23, a `WordPress 7.0 Field Guide` post was still not discoverable on Make/Core's `field guide` tag or in Make/Core `WordPress 7.0` search results. Core did publish the revised release schedule on 2026-04-22, and the current target general release date is 2026-05-20.
+Note: the `WordPress 7.0 Field Guide` was published on 2026-05-14 during the release-candidate phase. Core also removed real-time collaboration from the 7.0 release on 2026-05-08 while keeping the 2026-05-20 target general release date.
 
 ## Discovery Sources
 
@@ -42,11 +43,16 @@ Note: as of 2026-04-23, a `WordPress 7.0 Field Guide` post was still not discove
 
 ## New Notes This Refresh
 
+- On 2026-05-14, Core published the WordPress 7.0 Field Guide. For Flavor Agent, the live release-cycle anchors are the AI Client, Client-Side Abilities API, `Settings > Connectors` screen, Connectors API, pattern/contentOnly changes, design-tool/block-support additions, PHP-only block registration, DataViews/DataForms, and the PHP 7.4 core minimum.
+- The Field Guide edits matter for stale docs: the 2026-05-17 edit added the DataViews dev note, `textIndent` block support, and margin-free component styles; the 2026-05-18 edit removed the standalone Notes section and refreshed the Gallery slideshow image.
+- The 2026-04-22 `Roster of design tools per block (WordPress 7.0 edition)` dev note is now indexed under blocks/styles/themes. It is the canonical reference for which block supports each first-party block declares in WordPress 7.0 and is linked from the Field Guide's Design Agility section; the entry was previously missing from this index.
+- On 2026-05-08, Core announced real-time collaboration will not ship in WordPress 7.0. Keep RTC references in this repo framed as Gutenberg-plugin or future-release compatibility watch items, not as WordPress 7.0 core requirements.
+- The 2026-05-07 Gutenberg 23.1 release post is now part of the supplemental compatibility set. It added `@wordpress/ui` `Drawer` and `Autocomplete` primitives, a developer-preview `@wordpress/grid` package, experiments for custom taxonomies and the media editor, and RTC reliability fixes in the Gutenberg plugin.
 - On 2026-04-22, Core published `WordPress 7.0 Release Party Updated Schedule`, which moves the target general release to 2026-05-20 and explicitly says `RC3` on 2026-05-08 should be tested like a new Beta 1, with `RC4` on 2026-05-14 acting like a new `RC1`.
 - The March 10, 2026 Developer Blog roundup says the "always-iframed post editor" work was punted to WordPress 7.1, so the WordPress 7.0 iframe note should be read as the inserted-block-version gate rather than a blanket always-iframed rollout.
 - The February 20, 2026 `Help Test WordPress 7.0` post expands the concrete release-test surface beyond the standalone dev notes: admin refresh, client-side media processing, Icon and Breadcrumbs blocks, Gallery lightbox, Cover external video, and Grid controls are all called out explicitly.
 - The March 11, 2026 Gutenberg 22.7 update and the April roundup together show Connectors work continuing after the standalone Connectors dev note: the Connectors screen and API landed, connector setting names gained the `_ai_` prefix, providers are dynamically registered from the WP AI Client registry, and community providers such as OpenRouter, Ollama, and Mistral now demonstrate that ecosystem in practice.
-- The official Gutenberg 2026 index page was still last updated on 2026-03-19, so it stops at Gutenberg 22.7; Gutenberg `22.8.0` (2026-03-25), `22.8.1` (2026-03-26), `22.9.0` (2026-04-09), and `23.0.0` (2026-04-22) were cross-checked directly from the Gutenberg project.
+- The official Gutenberg 2026 index page was still last updated on 2026-03-19, so it stops at Gutenberg 22.7; Gutenberg `22.8.0` (2026-03-25), `22.8.1` (2026-03-26), `22.9.0` (2026-04-09), `23.0.0` (2026-04-22), and the published `23.1` release post (2026-05-07) were cross-checked directly from the Gutenberg project.
 - The Block Editor handbook's `Gutenberg versions in WordPress` page still lists WordPress `7.0.x` as based on Gutenberg `22.6`, which is the key reminder that later Gutenberg releases are compatibility context rather than a one-to-one core snapshot.
 - The March 17, 2026 Playground MCP post is now part of the relevant upstream tooling surface for Flavor Agent because it documents an official agent-facing way to drive local Playground instances.
 - The April 2, 2026 `@wordpress/build` article is relevant as a tooling-direction snapshot, but it explicitly says the long-term plan is for it to sit underneath `@wordpress/scripts`, not to force an immediate migration.
@@ -59,6 +65,8 @@ Note: as of 2026-04-23, a `WordPress 7.0 Field Guide` post was still not discove
 - 2026-03-31: [Extending the 7.0 Cycle](https://make.wordpress.org/core/2026/03/31/extending-the-7-0-cycle/)
 - 2026-04-02: [The Path Forward for WordPress 7.0](https://make.wordpress.org/core/2026/04/02/the-path-forward-for-wordpress-7-0/)
 - 2026-04-22: [WordPress 7.0 Release Party Updated Schedule](https://make.wordpress.org/core/2026/04/22/wordpress-7-0-release-party-updated-schedule/)
+- 2026-05-08: [Real-time collaboration will not ship in WordPress 7.0](https://make.wordpress.org/core/2026/05/08/rtc-removed-from-7-0/)
+- 2026-05-14: [WordPress 7.0 Field Guide](https://make.wordpress.org/core/2026/05/14/wordpress-7-0-field-guide/)
 
 ## Core Dev Notes
 
@@ -78,11 +86,12 @@ Note: as of 2026-04-23, a `WordPress 7.0 Field Guide` post was still not discove
 - 2026-03-16: [Pattern Overrides in WP 7.0: Support for Custom Blocks](https://make.wordpress.org/core/2026/03/16/pattern-overrides-in-wp-7-0-support-for-custom-blocks/)
 - 2026-03-15: [Pattern Editing in WordPress 7.0](https://make.wordpress.org/core/2026/03/15/pattern-editing-in-wordpress-7-0/)
 - 2026-03-15: [Block Visibility in WordPress 7.0](https://make.wordpress.org/core/2026/03/15/block-visibility-in-wordpress-7-0/)
-- 2026-03-10: [Real-Time Collaboration in the Block Editor](https://make.wordpress.org/core/2026/03/10/real-time-collaboration-in-the-block-editor/)
+- 2026-03-10: [Real-Time Collaboration in the Block Editor](https://make.wordpress.org/core/2026/03/10/real-time-collaboration-in-the-block-editor/) — superseded for WordPress 7.0 core by the 2026-05-08 removal post above.
 - 2026-02-24: [Iframed Editor Changes in WordPress 7.0](https://make.wordpress.org/core/2026/02/24/iframed-editor-changes-in-wordpress-7-0/)
 
 ### Blocks, styles, and themes
 
+- 2026-04-22: [Roster of design tools per block (WordPress 7.0 edition)](https://make.wordpress.org/core/2026/04/22/roster-of-design-tools-per-block-wordpress-7-0/)
 - 2026-03-15: [Dimensions Support Enhancements in WordPress 7.0](https://make.wordpress.org/core/2026/03/15/dimensions-support-enhancements-in-wordpress-7-0/)
 - 2026-03-15: [Custom CSS for Individual Block Instances in WordPress 7.0](https://make.wordpress.org/core/2026/03/15/custom-css-for-individual-block-instances-in-wordpress-7-0/)
 - 2026-03-15: [New Block Support: Text Indent (textIndent)](https://make.wordpress.org/core/2026/03/15/new-block-support-text-indent-textindent/)
@@ -99,8 +108,9 @@ Note: as of 2026-04-23, a `WordPress 7.0 Field Guide` post was still not discove
 
 ## Supplemental Gutenberg Cycle Coverage
 
-These are not dedicated WordPress 7.0 dev notes. The official Gutenberg index carries 22.5-22.7 under the WordPress 7.0 heading, and the later 22.8.x through 23.0 line was cross-checked directly from Gutenberg because the index had not yet been refreshed.
+These are not dedicated WordPress 7.0 dev notes. The official Gutenberg index carries 22.5-22.7 under the WordPress 7.0 heading, and the later 22.8.x through 23.1 line was cross-checked directly from Gutenberg because the index had not yet been refreshed.
 
+- 2026-05-07: [What’s new in Gutenberg 23.1? (07 May)](https://make.wordpress.org/core/2026/05/07/whats-new-in-gutenberg-23-1-07-may/)
 - 2026-04-22: [Gutenberg 23.0.0 release](https://github.com/WordPress/gutenberg/releases/tag/v23.0.0)
 - 2026-04-09: [What’s new in Gutenberg 22.9? (8 April)](https://make.wordpress.org/core/2026/04/09/whats-new-in-gutenberg-22-9-8-april/)
 - 2026-03-26: [Gutenberg 22.8.1 release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.1)
@@ -129,9 +139,9 @@ These are not core release-plan docs, but they affect how WordPress 7.0-era AI a
 
 ## Counts
 
-- 5 release hub and schedule docs
-- 18 Make/Core dev notes
+- 7 release hub, schedule, and field-guide docs
+- 19 Make/Core dev notes
 - 5 testing docs
 - 6 supplemental Developer Blog roundup posts and tooling articles
-- 7 supplemental Gutenberg release/update posts
+- 8 supplemental Gutenberg release/update posts
 - 2 supplemental Playground and AI ecosystem posts

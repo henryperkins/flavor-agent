@@ -15,6 +15,7 @@ Use it when you need to answer:
 - Snapshot date: 2026-05-09
 - Snapshot shape: 304 items total, 230 Done, 73 active across Triage, Backlog, In discussion / Needs decision, To do, In progress, and Needs review.
 - AI plugin milestone overlay refreshed: 2026-05-09. `WordPress/ai` milestone #17 is `0.9.0` (verified in the local test container), and milestone #7 is `1.0.0` (due 2026-05-21; 23 open, 0 closed; upstream description: "WordPress 7.0 Stable Release Candidate"). `0.9.0` is the version immediately before `1.0.0`; treat both milestone item sets as core AI plugin release targets rather than speculative board items.
+- Release-cycle grounding refreshed: 2026-05-19. The WordPress 7.0 Field Guide confirms the AI Client, Client-Side Abilities API, Connectors screen, and Connectors API as WordPress 7.0 developer-facing features. Treat those as release-cycle facts while keeping this document's project-board counts as the older 2026-05-09 snapshot until the board is explicitly refreshed.
 - Active items live almost entirely in `WordPress/ai` (the core AI plugin / AI Experiments showcase repository); `WordPress/wp-ai-client`, `WordPress/abilities-api`, and `WordPress/php-ai-client` have no active items on this board as of the snapshot date.
 - Teams visible on the board: `LLM Integrations`, `Abilities API`, `Integration Bridges`, `Showcase Plugin`. Showcase Plugin owns 294 of 304 items.
 
@@ -71,7 +72,7 @@ When this doc is updated, run `npm run check:docs` if any other live contributor
 | Integration Bridges                                                    | 0            |
 | (untagged)                                                             | 1            |
 
-The headline strategic read: WordPress core's AI direction is being prototyped almost entirely inside the core AI plugin. Treat the `WordPress/ai` release milestones as the source of truth for what the plugin is targeting next, and the project board as the broader pressure map for editor, admin, provider, and ability surfaces.
+The headline strategic read: WordPress core's AI direction is being prototyped almost entirely inside the core AI plugin, while the WordPress 7.0 Field Guide now confirms the core AI Client, Client-Side Abilities API, Connectors screen, and Connectors API as 7.0 release-cycle facts. Treat the `WordPress/ai` release milestones as the source of truth for what the plugin is targeting next, and the project board as the broader pressure map for editor, admin, provider, and ability surfaces.
 
 ## AI Plugin Release Milestone Overlay
 

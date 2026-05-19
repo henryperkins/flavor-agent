@@ -200,6 +200,7 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$baseline_signature = $method->invoke(
 			null,
+			'navigation',
 			[
 				'location'    => 'header',
 				'themeTokens' => [],
@@ -207,6 +208,7 @@ final class NavigationAbilitiesTest extends TestCase {
 		);
 		$changed_signature  = $method->invoke(
 			null,
+			'navigation',
 			[
 				'location'    => 'header',
 				'themeTokens' => [
@@ -235,6 +237,7 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$baseline_signature = $method->invoke(
 			null,
+			'navigation',
 			[
 				'location'             => 'header',
 				'overlayContext'       => [
@@ -263,6 +266,7 @@ final class NavigationAbilitiesTest extends TestCase {
 		);
 		$changed_signature  = $method->invoke(
 			null,
+			'navigation',
 			[
 				'location'             => 'header',
 				'overlayContext'       => [

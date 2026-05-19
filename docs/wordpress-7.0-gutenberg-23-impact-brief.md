@@ -1,20 +1,20 @@
 # Flavor Agent Impact Brief: WordPress 7.0 and Gutenberg 23
 
 > Compiled: 2026-04-23
-> Reviewed: 2026-04-30
+> Reviewed: 2026-05-19
 > Scope: dated upstream release posture plus the concrete impact on this repo's shipped code and docs
-> Status: retained as a point-in-time compatibility snapshot for the WordPress 7.0 / Gutenberg 23.0 release cycle. Use `docs/reference/gutenberg-feature-tracking.md` for ongoing Gutenberg/API tracking and `docs/reference/wordpress-ai-roadmap-tracking.md` for ongoing WordPress AI roadmap pressure.
+> Status: retained as a point-in-time compatibility snapshot for the WordPress 7.0 / Gutenberg 23.x release cycle. Use `docs/reference/gutenberg-feature-tracking.md` for ongoing Gutenberg/API tracking and `docs/reference/wordpress-ai-roadmap-tracking.md` for ongoing WordPress AI roadmap pressure.
 > Use `docs/wordpress-7.0-developer-docs-index.md` for the broader upstream source map and `docs/wp7-migration-opportunities.md` for the older migration snapshot.
 
 ## Current Upstream Snapshot
 
 | Topic | Current state | Why it matters here |
 | --- | --- | --- |
-| WordPress 7.0 schedule | Core published an updated 7.0 schedule on 2026-04-22. The new target general release is 2026-05-20. `RC3` lands 2026-05-08 but should be tested like a "new Beta 1", and `RC4` lands 2026-05-14 acting like a new `RC1`. | Repo docs should no longer say the updated schedule is still pending. |
-| WordPress 7.0 release mode | 7.0 remains pre-release as of the 2026-04-30 review. The cycle is still in stabilization mode after the RTC architecture delay. | Keep the dedicated WP 7.0 browser harness framed as a pre-release compatibility path until the repo intentionally moves to the stable image. |
-| Gutenberg plugin latest | The latest Gutenberg plugin release is `23.0.0`, published 2026-04-22. | Useful for forward-compat testing and upstream watch items, but not a signal that WordPress core 7.0 will ship every 23.0 API unchanged. |
-| Gutenberg in core | The Block Editor handbook still lists WordPress `7.0.x` as based on Gutenberg `22.6`, with later bug fixes cherry-picked as needed during beta/RC. | Flavor Agent should keep runtime assumptions anchored to WordPress 7.0 core behavior first, and treat 22.7-23.0 as supplemental compatibility context. |
-| Main upstream pressure point | The release delay is about RTC persistence and hosting compatibility, especially around cache behavior and plugin metabox compatibility. | Flavor Agent does not ship classic metabox UI or RTC transport/storage code, so this is not a direct product blocker. |
+| WordPress 7.0 schedule | Core's 2026-04-22 updated schedule still targets 2026-05-20 for general release. The 2026-05-14 Field Guide confirms the release is in the release-candidate phase. | Repo docs should treat the schedule as known and the Field Guide as the current release-cycle source map. |
+| WordPress 7.0 release mode | 7.0 remains pre-release as of this 2026-05-19 refresh. Real-time collaboration was removed from 7.0 on 2026-05-08 while the release schedule remained in place. | Keep the dedicated WP 7.0 browser harness framed as a pre-release compatibility path until the repo intentionally moves to the stable image. Do not treat RTC as a WordPress 7.0 core requirement. |
+| Gutenberg plugin latest | The latest tracked Gutenberg release post is `23.1`, published 2026-05-07. | Useful for forward-compat testing and upstream watch items, but not a signal that WordPress core 7.0 will ship every 23.1 API unchanged. |
+| Gutenberg in core | The Block Editor handbook still lists WordPress `7.0.x` as based on Gutenberg `22.6`, with later bug fixes cherry-picked as needed during beta/RC. | Flavor Agent should keep runtime assumptions anchored to WordPress 7.0 core behavior first, and treat 22.7-23.1 as supplemental compatibility context. |
+| Main upstream pressure point | The remaining Field Guide impact for Flavor Agent is not RTC; it is alignment with the 7.0 AI Client, Client-Side Abilities, Connectors, DataViews/DataForms, design tools, pattern/contentOnly behavior, and PHP 7.4 core minimum. | Flavor Agent is already on the core AI/Abilities path, so this is mostly a documentation and regression-watch update rather than new product work. |
 
 ## Repo Areas Already Aligned
 
@@ -30,6 +30,7 @@ Impact:
 
 - No architecture change is needed for WordPress 7.0 here.
 - Docs should keep acknowledging the broader connector ecosystem, not just the three initial official providers.
+- The Field Guide also introduces `WP_AI_Client_Prompt_Builder` and the `using_model_preference()` helper alongside `wp_ai_client_prompt()`; today the wrapper uses the function-style entry point and does not need the builder class, but treat both as the canonical 7.0 AI Client surface for any future prompt-construction work.
 
 ### Client-Side Abilities API
 
@@ -54,7 +55,7 @@ The repo is already preserving the right compatibility posture for pattern APIs.
 Impact:
 
 - Keep this adapter-backed approach.
-- Do not simplify it on the assumption that Gutenberg 23.0 implies stable pattern settings in WordPress 7.0 core.
+- Do not simplify it on the assumption that Gutenberg 23.x implies stable pattern settings in WordPress 7.0 core.
 
 ### Stable `role`, `supports.contentRole`, and viewport block visibility
 
@@ -88,30 +89,32 @@ The plugin's `Settings > AI Activity` admin screen is already built on the same 
 
 Impact:
 
-- This area should stay under regression watch as Gutenberg iterates, but nothing in the current 7.0 / 23.0 snapshot forces a redesign.
+- This area should stay under regression watch as Gutenberg iterates, but nothing in the current 7.0 / 23.1 refresh forces a redesign.
+- The 2026-05-17 Field Guide edit added a dedicated DataViews dev note describing the new native Activity layout and Details layout for DataViews/DataForm. Treat both as future enhancement candidates for `src/admin/activity-log.js` (the new Activity layout may replace the bespoke feed presentation; the Details layout may absorb the custom side panel) rather than required 7.0 migration work.
 
 ### RTC and metabox compatibility
 
-The current WordPress 7.0 RTC delay is mostly not about this plugin.
+Real-time collaboration is no longer a WordPress 7.0 ship item.
 
 - A repo-wide search does not show Flavor Agent shipping classic `add_meta_box()` editor UI.
 - The plugin does not implement RTC persistence, transport, or co-editing behavior.
+- The Gutenberg plugin can still carry RTC reliability fixes and future testing paths, but those are not WordPress 7.0 core requirements.
 
 Impact:
 
-- The RTC architectural delay changes release timing, not the plugin's current implementation strategy.
+- The RTC removal changes documentation posture, not the plugin's current implementation strategy.
 - If Flavor Agent later grows live collaborative post-editor features, this should be re-evaluated from scratch.
 
 ## Concrete Follow-Ups
 
-### 1. Keep the runtime baseline anchored to WordPress 7.0 core, not Gutenberg 23.0
+### 1. Keep the runtime baseline anchored to WordPress 7.0 core, not a specific Gutenberg 23.x plugin release
 
-Gutenberg `23.0.0` is the newest plugin release, but WordPress `7.0.x` is still documented as based on Gutenberg `22.6` plus cherry-picked fixes.
+The latest tracked Gutenberg release post is `23.1`, but WordPress `7.0.x` is still documented as based on Gutenberg `22.6` plus cherry-picked fixes.
 
 Action:
 
-- Treat Gutenberg 23.0 as a forward-compat reference and testing snapshot.
-- Avoid assuming that new `23.0.0` APIs or UI details are available in every WordPress 7.0 environment.
+- Treat Gutenberg 23.x releases as forward-compat references and testing snapshots.
+- Avoid assuming that new Gutenberg 23.x plugin APIs or UI details are available in every WordPress 7.0 environment.
 
 ### 2. Update the WP 7.0 harness image when the stable Docker image exists
 
@@ -149,7 +152,7 @@ Action:
 
 ## No New Product Work Required From This Refresh
 
-- No RTC implementation work
+- No RTC implementation work for WordPress 7.0 core
 - No metabox migration work
 - No Abilities API rewrite
 - No Connectors API redesign
@@ -158,6 +161,10 @@ Action:
 
 ## Source Set
 
+- [WordPress 7.0 Field Guide](https://make.wordpress.org/core/2026/05/14/wordpress-7-0-field-guide/)
+- [Real-time collaboration will not ship in WordPress 7.0](https://make.wordpress.org/core/2026/05/08/rtc-removed-from-7-0/)
+- [What’s new in Gutenberg 23.1? (07 May)](https://make.wordpress.org/core/2026/05/07/whats-new-in-gutenberg-23-1-07-may/)
+- [Roster of design tools per block (WordPress 7.0 edition)](https://make.wordpress.org/core/2026/04/22/roster-of-design-tools-per-block-wordpress-7-0/)
 - [WordPress 7.0 Release Party Updated Schedule](https://make.wordpress.org/core/2026/04/22/wordpress-7-0-release-party-updated-schedule/)
 - [The Path Forward for WordPress 7.0](https://make.wordpress.org/core/2026/04/02/the-path-forward-for-wordpress-7-0/)
 - [Extending the 7.0 Cycle](https://make.wordpress.org/core/2026/03/31/extending-the-7-0-cycle/)

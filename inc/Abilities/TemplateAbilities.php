@@ -122,7 +122,7 @@ final class TemplateAbilities {
 			return [
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
-				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
 				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
@@ -159,7 +159,7 @@ final class TemplateAbilities {
 
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
-		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
 		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
@@ -236,7 +236,7 @@ final class TemplateAbilities {
 			return [
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
-				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
 				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
@@ -273,7 +273,7 @@ final class TemplateAbilities {
 
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
-		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
 		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
@@ -1646,19 +1646,6 @@ final class TemplateAbilities {
 	}
 
 	/**
-	 * @return array<int, array<string, mixed>>
-	 */
-	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		return CollectsDocsGuidance::collect(
-			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
-			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
-			$context,
-			$prompt
-		);
-	}
-
-	/**
 	 * @return array<string, mixed>
 	 */
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
@@ -1673,19 +1660,6 @@ final class TemplateAbilities {
 				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
 				'sideEffects'         => empty( $options['signatureOnly'] ),
 			]
-		);
-	}
-
-	/**
-	 * @return array<int, array<string, mixed>>
-	 */
-	private static function collect_template_part_wordpress_docs_guidance( array $context, string $prompt ): array {
-		return CollectsDocsGuidance::collect(
-			static fn( array $request_context, string $request_prompt ): string => self::build_template_part_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context, string $query ): string => AISearchClient::resolve_entity_key( 'core/template-part', $query ),
-			static fn( array $request_context ): array => self::build_template_part_wordpress_docs_family_context( $request_context ),
-			$context,
-			$prompt
 		);
 	}
 
@@ -1705,14 +1679,6 @@ final class TemplateAbilities {
 				'sideEffects'         => empty( $options['signatureOnly'] ),
 			]
 		);
-	}
-
-	/**
-	 * @param array<string, mixed> $result
-	 * @return array<string, mixed>
-	 */
-	private static function format_docs_grounding_output( array $result ): array {
-		return DocsGuidanceResult::public_summary( $result );
 	}
 
 	private static function build_wordpress_docs_entity_key( array $context ): string {

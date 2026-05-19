@@ -67,6 +67,7 @@ final class NavigationAbilities {
 		);
 
 		$review_context_signature = self::build_review_context_signature(
+			'navigation',
 			$context,
 			(string) ( $docs_result['fingerprint'] ?? '' )
 		);
@@ -74,7 +75,7 @@ final class NavigationAbilities {
 		if ( $resolve_signature_only ) {
 			return [
 				'reviewContextSignature'   => $review_context_signature,
-				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
 				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
@@ -108,13 +109,13 @@ final class NavigationAbilities {
 		}
 
 		$payload['reviewContextSignature']   = $review_context_signature;
-		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
 		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
 	}
 
-	private static function build_review_context_signature( array $context, string $docs_grounding_fingerprint = '' ): string {
+	private static function build_review_context_signature( string $surface, array $context, string $docs_grounding_fingerprint = '' ): string {
 		$payload      = [
 			'location'                 => sanitize_key( (string) ( $context['location'] ?? '' ) ),
 			'locationDetails'          => self::normalize_map( $context['locationDetails'] ?? [] ),
@@ -149,7 +150,7 @@ final class NavigationAbilities {
 		}
 
 		return RecommendationReviewSignature::from_payload(
-			'navigation',
+			$surface,
 			$payload
 		);
 	}
@@ -374,19 +375,6 @@ final class NavigationAbilities {
 	}
 
 	/**
-	 * @return array<int, array<string, mixed>>
-	 */
-	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		return CollectsDocsGuidance::collect(
-			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn(): string => 'core/navigation',
-			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
-			$context,
-			$prompt
-		);
-	}
-
-	/**
 	 * @return array<string, mixed>
 	 */
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
@@ -402,14 +390,6 @@ final class NavigationAbilities {
 				'sideEffects'         => empty( $options['signatureOnly'] ),
 			]
 		);
-	}
-
-	/**
-	 * @param array<string, mixed> $result
-	 * @return array<string, mixed>
-	 */
-	private static function format_docs_grounding_output( array $result ): array {
-		return DocsGuidanceResult::public_summary( $result );
 	}
 
 	/**
@@ -566,45 +546,5 @@ final class NavigationAbilities {
 		}
 
 		return $normalized;
-	}
-
-	private static function normalize_map( mixed $value ): array {
-		$normalized = self::normalize_value( $value );
-
-		return is_array( $normalized ) ? $normalized : [];
-	}
-
-	private static function normalize_list( mixed $value ): array {
-		$normalized = self::normalize_map( $value );
-
-		return array_values( $normalized );
-	}
-
-	private static function normalize_value( mixed $value ): mixed {
-		if ( is_object( $value ) ) {
-			$value = get_object_vars( $value );
-		}
-
-		if ( is_array( $value ) ) {
-			$normalized = [];
-
-			foreach ( $value as $key => $entry ) {
-				$normalized[ $key ] = self::normalize_value( $entry );
-			}
-
-			return $normalized;
-		}
-
-		if (
-			is_string( $value )
-			|| is_int( $value )
-			|| is_float( $value )
-			|| is_bool( $value )
-			|| null === $value
-		) {
-			return $value;
-		}
-
-		return null;
 	}
 }

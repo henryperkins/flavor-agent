@@ -25,9 +25,9 @@ Primary sources:
 
 Secondary signals (paraphrase primary sources, not authoritative): WP Tavern, agency blogs. Treat any version-specific feature claim that is not on `make.wordpress.org` or in a tracking issue as unconfirmed.
 
-Snapshot date: 2026-05-09.
-Latest Gutenberg release at snapshot: `23.1.1` (verified in the local test container).
-WordPress core: `7.0` targeted 2026-05-20, still pre-release at snapshot.
+Snapshot date: 2026-05-19.
+Latest Gutenberg release post at snapshot: `23.1` (published 2026-05-07; local compatibility work had previously verified the `23.1.1` plugin patch line).
+WordPress core: `7.0` targeted 2026-05-20, in release-candidate phase at snapshot. The 2026-05-14 Field Guide is the current 7.0 developer source map; real-time collaboration was removed from the 7.0 release on 2026-05-08.
 
 To refresh:
 
@@ -45,7 +45,7 @@ When this doc is updated, run `npm run check:docs` if any other live contributor
 | --- | --- | --- |
 | 1 — Easier Editing | Shipped, ongoing | Active follow-up on inserter UX (gutenberg#71995, #77698), block-transforms unification (#73821), and `contentOnly` audit (#65778). |
 | 2 — Customization / Site Editor | Shipped through WP 6.3, ongoing | Project board `WordPress/projects/56` still open; template activation (#71735), Navigation Sidebar (#76037, #77069), Content Types experiment (#77600). |
-| 3 — Collaboration / Workflows | Active | RTC landed in 7.0; Notes iteration (#76316), 7.1 collaborative editing iteration (#76377, In discussion), accessibility (#73942), CRDT cleanup cron (#75466). |
+| 3 — Collaboration / Workflows | Active | Real-time collaboration did not ship in WordPress 7.0. Keep Notes (#76316), 7.1 collaborative editing (#76377), accessibility (#73942), CRDT cleanup, and Gutenberg-plugin RTC reliability fixes on watch, but do not treat RTC as a 7.0 core contract. |
 | 4 — Multilingual | Future | No active code work. Reference: `gutenberg#59250`. No primary-source timeline. |
 
 ## Versions Tracked
@@ -55,12 +55,12 @@ When this doc is updated, run `npm run check:docs` if any other live contributor
 | 22.4 | 2026-01-20 | Pattern Overrides extended to all custom blocks via Block Bindings; Block Visibility by Screen Size (experimental); Font Library + Global Styles for classic/hybrid themes |
 | 22.5 | 2026-02-04 | Per-block custom CSS (`has-custom-css`); Pattern Editing stabilized; Block Visibility by viewport stabilized |
 | 22.6 | 2026-02-25 | Visual Revisions UI (text + block diff); SVG Icon Registration + REST `/wp/v2/icons`; client-side media processing stabilized |
-| 22.7 | 2026-03-11 | `Settings > Connectors`; custom CSS selectors in `block.json`; Style variation transforms preview; patterns in contentOnly; RTC on by default; Content Guidelines experimental REST + CPT |
+| 22.7 | 2026-03-11 | `Settings > Connectors`; custom CSS selectors in `block.json`; Style variation transforms preview; patterns in contentOnly; RTC on by default in the Gutenberg plugin line, later removed from WP 7.0 core; Content Guidelines experimental REST + CPT |
 | 22.8 | 2026-03-25 | `registerConnector()` / `unregisterConnector()`; Button pseudo-state styling in Global Styles; Site Identity moves into Design panel; AVIF in client uploads; command palette in admin bar |
 | 23.0 | 2026-04-22 | Revisions row for templates, template parts, patterns; `__rtc_compatible_meta_box`; DataForm date-range; `wordpress/ui` CSS-defense module; Site Identity panel consolidation |
-| (WordPress 7.0) | targeted 2026-05-20 | AI Client `wp_ai_client_prompt()` + `wp_ai_client_prevent_prompt` filter; client-side Abilities API (`@wordpress/abilities`, `@wordpress/core-abilities`); ability `meta.annotations.{readonly,destructive,idempotent}`; DataForm/DataViews v2; RTC opt-in for beta; Interactivity API `withSyncEvent()` and `state.navigation` deprecation |
-| 23.1 | 2026-05 | Core Abilities exposes a readiness promise; Guidelines classes/routes moved from content-guidelines naming to guidelines naming while retaining `wp_guideline` and `wp_guideline_type`; Guidelines became type-aware; network-active connector plugins count as active. |
-| 23.2 | projected ~2026-05-20 | Same |
+| (WordPress 7.0) | targeted 2026-05-20 | AI Client `wp_ai_client_prompt()` + `WP_AI_Client_Prompt_Builder` class + `using_model_preference()` + `wp_ai_client_prevent_prompt` filter; client-side Abilities API (`@wordpress/abilities`, `@wordpress/core-abilities`); ability `meta.annotations.{readonly,destructive,idempotent}`; `Settings > Connectors` and Connectors API with `wp_connectors_init`; DataForm/DataViews v2 with new Activity and Details layouts; PHP-only block registration (`'supports' => array( 'autoRegister' => true )`); pattern/contentOnly changes with the `block_editor_settings_all` opt-out hook and the `disableContentOnlyForUnsyncedPatterns` editor setting; block design-tool/support additions; `@wordpress/boot` package for custom Site Editor pages; Interactivity API `watch()` / `data-wp-watch` and server-populated `state.url`. RTC was removed before final. 2026-05-14 Field Guide is the canonical map; 2026-05-17 edit added the DataViews dev note plus `textIndent`/margin-free styles; 2026-05-18 edit dropped the standalone Notes section. |
+| 23.1 | 2026-05-07 | `@wordpress/ui` `Drawer` and `Autocomplete` primitives; developer-preview `@wordpress/grid`; custom taxonomies and media editor experiments; Classic block inserter filter; RTC reliability fixes in the Gutenberg plugin; Core Abilities readiness promise and Guidelines renaming/type-awareness remain compatibility context for Flavor Agent. |
+| 23.2 | projected ~2026-05-20 | Not yet released at 2026-05-19 snapshot; cross-check the Make/Core Gutenberg post and Field Guide post-publication edits during the next refresh before updating this row. |
 
 WordPress core release cadence at snapshot: WP 7.0 May 20, 2026; WP 7.1 August 19, 2026; WP 7.2 December 10, 2026 (per the WordPress.org roadmap).
 
@@ -92,7 +92,9 @@ These rows record stabilized or shipped APIs that Flavor Agent does not currentl
 | Button pseudo-state styling in Global Styles | 22.8 | New operation type the Global Styles recommender should learn to emit. | `inc/LLM/StylePrompt.php` |
 | Revisions row for templates, template parts, patterns | 23.0 | Some apply paths can hand undo to core revisions instead of growing the activity store. Design effort, not just plumbing — the activity-state-machine has ordered undo that core revisions does not match. | `inc/Activity/Repository.php`, `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js` |
 | DataForm/DataViews v2 (combobox, adaptiveSelect, validation) | WP 7.0 | Settings page can drop bespoke validation and combobox handling. | `src/admin/settings-page-controller.js` |
-| Real-Time Collaboration on by default | 22.7 (opt-in for 7.0 beta) | Apply paths must re-check `RecommendationResolvedSignature` immediately before mutation under RTC; consider an "another editor is active" guard. | `src/store/index.js` apply actions, `inc/Support/RecommendationResolvedSignature.php` |
+| DataViews Activity layout and Details layout | WP 7.0 (added in the 2026-05-17 Field Guide edit) | `Settings > AI Activity` already uses DataViews for the feed plus custom read-only detail blocks. The new native Activity layout may eventually replace the bespoke feed layout, and the Details layout may absorb the custom side panel — both are future enhancement candidates, not migrations required for 7.0. | `src/admin/activity-log.js`, `src/admin/activity-log-utils.js` |
+| `block_editor_settings_all` filter for pattern `contentOnly` opt-out | WP 7.0 | If Flavor Agent ever needs a per-context override for the new pattern-level `contentOnly` default, this is the documented hook. Today the plugin already respects whatever `contentOnly` the editor enforces and does not need to opt out. | None today; track for future contentOnly recommender work |
+| Real-Time Collaboration compatibility guards | Gutenberg plugin watch item; removed from WP 7.0 core | Apply paths may eventually need a final freshness re-check immediately before mutation under RTC, but this is no longer a 7.0 release requirement. | `src/store/index.js` apply actions, `inc/Support/RecommendationResolvedSignature.php` |
 
 ## Still Experimental — Shims Required
 
@@ -166,7 +168,7 @@ Concrete tasks driven by this matrix, in priority order. Strike through complete
 4. **Watch `gutenberg#77069` (Navigation in Sidebar)**. When the new navigation sidebar surface lands in 7.1, decide whether `src/inspector/NavigationRecommendations.js` continues to embed in the block Inspector or projects into the new sidebar. **Not yet covered by an existing workstream.**
 5. **Watch `gutenberg#77199` (Block Bindings + Block Fields)**. Pattern Overrides is being absorbed; scope new template-part apply work against Block Fields, not Pattern Overrides. **Not yet covered by an existing workstream.**
 6. **Watch `gutenberg#75171` (Content Guidelines)** alongside Workstream D. The upstream design is still in discussion; do not pre-commit Flavor Agent's bridge to either the 22.7 experiment or a future `wp_register_guideline()` API until core's final write/defaults model is announced. **Tracked under Workstream D in the remediation plan.**
-7. Watch RTC stable rollout. Once core RTC ships post-7.0-beta, add a freshness re-check in `src/store/index.js` apply actions immediately before mutation. Coordinate with `gutenberg#76377`. **Not yet covered by an existing workstream.**
+7. Watch RTC stable rollout after its removal from WordPress 7.0. If core later ships collaborative editing, add a freshness re-check in `src/store/index.js` apply actions immediately before mutation. Coordinate with `gutenberg#76377`. **Not yet covered by an existing workstream.**
 8. Evaluate handing template/template-part undo to core revisions (23.0) for surfaces where the activity-state-machine duplicates revision behavior. Design effort, not just plumbing. **Not yet covered by an existing workstream.**
 
 When any of these moves from "watch" to "act", record the workstream in `docs/SOURCE_OF_TRUTH.md` or the relevant feature doc rather than tracking implementation details here.

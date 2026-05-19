@@ -12,10 +12,13 @@ use FlavorAgent\LLM\Prompt;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\DocsGuidanceResult;
+use FlavorAgent\Support\NonNegativeInteger;
+use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\StringArray;
 
 final class BlockAbilities {
+	use NormalizesInput;
 
 	private const STRUCTURAL_SUMMARY_MAX_ITEMS = 6;
 
@@ -76,7 +79,7 @@ final class BlockAbilities {
 		if ( $resolve_signature_only ) {
 			return [
 				'resolvedContextSignature' => $resolved_context_signature,
-				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
 				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
@@ -90,7 +93,7 @@ final class BlockAbilities {
 			];
 			$payload['executionContract']        = $execution_contract;
 			$payload['resolvedContextSignature'] = $resolved_context_signature;
-			$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+			$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
 			$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 			return $payload;
@@ -146,7 +149,7 @@ final class BlockAbilities {
 		$payload['preFilteringCounts']       = $pre_filtering_counts;
 		$payload['executionContract']        = $execution_contract;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
-		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
 		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
@@ -177,13 +180,13 @@ final class BlockAbilities {
 		$category           = isset( $input['category'] ) && is_string( $input['category'] )
 			? sanitize_key( $input['category'] )
 			: null;
-		$limit              = self::normalize_non_negative_int( $input['limit'] ?? null );
-		$offset             = self::normalize_non_negative_int( $input['offset'] ?? null ) ?? 0;
+		$limit              = NonNegativeInteger::normalize( $input['limit'] ?? null );
+		$offset             = NonNegativeInteger::normalize( $input['offset'] ?? null ) ?? 0;
 		$include_variations = filter_var(
 			$input['includeVariations'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
 		);
-		$max_variations     = self::normalize_non_negative_int( $input['maxVariations'] ?? null );
+		$max_variations     = NonNegativeInteger::normalize( $input['maxVariations'] ?? null );
 
 		return [
 			'blocks' => ServerCollector::for_registered_blocks(
@@ -221,10 +224,6 @@ final class BlockAbilities {
 			'context' => $context,
 			'prompt'  => $prompt,
 		];
-	}
-
-	private static function normalize_non_negative_int( mixed $value ): ?int {
-		return \FlavorAgent\Support\NonNegativeInteger::normalize( $value );
 	}
 
 	/**
@@ -802,19 +801,6 @@ final class BlockAbilities {
 	}
 
 	/**
-	 * @return array<int, array<string, mixed>>
-	 */
-	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		return CollectsDocsGuidance::collect(
-			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
-			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
-			$context,
-			$prompt
-		);
-	}
-
-	/**
 	 * @return array<string, mixed>
 	 */
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
@@ -830,14 +816,6 @@ final class BlockAbilities {
 				'sideEffects'         => empty( $options['signatureOnly'] ),
 			]
 		);
-	}
-
-	/**
-	 * @param array<string, mixed> $result
-	 * @return array<string, mixed>
-	 */
-	private static function format_docs_grounding_output( array $result ): array {
-		return DocsGuidanceResult::public_summary( $result );
 	}
 
 	private static function normalize_docs_scope_token( mixed $value ): string {
@@ -1236,46 +1214,6 @@ final class BlockAbilities {
 		}
 
 		return $family_context;
-	}
-
-	private static function normalize_map( mixed $value ): array {
-		$normalized = self::normalize_value( $value );
-
-		return is_array( $normalized ) ? $normalized : [];
-	}
-
-	private static function normalize_list( mixed $value ): array {
-		$normalized = self::normalize_map( $value );
-
-		return array_values( $normalized );
-	}
-
-	private static function normalize_value( mixed $value ): mixed {
-		if ( is_object( $value ) ) {
-			$value = get_object_vars( $value );
-		}
-
-		if ( is_array( $value ) ) {
-			$normalized = [];
-
-			foreach ( $value as $key => $entry ) {
-				$normalized[ $key ] = self::normalize_value( $entry );
-			}
-
-			return $normalized;
-		}
-
-		if (
-			is_string( $value )
-			|| is_int( $value )
-			|| is_float( $value )
-			|| is_bool( $value )
-			|| null === $value
-		) {
-			return $value;
-		}
-
-		return null;
 	}
 
 	private static function get_value_from_path( array $source, array $path ): mixed {

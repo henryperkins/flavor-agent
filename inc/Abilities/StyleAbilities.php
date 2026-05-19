@@ -11,10 +11,12 @@ use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\StylePrompt;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\DocsGuidanceResult;
+use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\RecommendationReviewSignature;
 
 final class StyleAbilities {
+	use NormalizesInput;
 
 	private const SURFACE_GLOBAL_STYLES     = 'global-styles';
 	private const SURFACE_STYLE_BOOK        = 'style-book';
@@ -129,7 +131,7 @@ final class StyleAbilities {
 			return [
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
-				'docsGrounding'            => self::format_docs_grounding_output( $docs_result ),
+				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
 				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
 		}
@@ -166,7 +168,7 @@ final class StyleAbilities {
 
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
-		$payload['docsGrounding']            = self::format_docs_grounding_output( $docs_result );
+		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
 		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
 
 		return $payload;
@@ -422,19 +424,6 @@ final class StyleAbilities {
 	}
 
 	/**
-	 * @return array<int, array<string, mixed>>
-	 */
-	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		return CollectsDocsGuidance::collect(
-			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
-			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
-			$context,
-			$prompt
-		);
-	}
-
-	/**
 	 * @return array<string, mixed>
 	 */
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
@@ -450,14 +439,6 @@ final class StyleAbilities {
 				'sideEffects'         => empty( $options['signatureOnly'] ),
 			]
 		);
-	}
-
-	/**
-	 * @param array<string, mixed> $result
-	 * @return array<string, mixed>
-	 */
-	private static function format_docs_grounding_output( array $result ): array {
-		return DocsGuidanceResult::public_summary( $result );
 	}
 
 	private static function build_wordpress_docs_query( array $context, string $prompt ): string {
@@ -1221,27 +1202,5 @@ final class StyleAbilities {
 	 */
 	private static function is_list_array( array $value ): bool {
 		return array_keys( $value ) === range( 0, count( $value ) - 1 );
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private static function normalize_map( mixed $value ): array {
-		if ( is_object( $value ) ) {
-			$value = get_object_vars( $value );
-		}
-
-		return is_array( $value ) ? $value : [];
-	}
-
-	/**
-	 * @return array<int, mixed>
-	 */
-	private static function normalize_list( mixed $value ): array {
-		if ( is_object( $value ) ) {
-			$value = get_object_vars( $value );
-		}
-
-		return is_array( $value ) ? array_values( $value ) : [];
 	}
 }

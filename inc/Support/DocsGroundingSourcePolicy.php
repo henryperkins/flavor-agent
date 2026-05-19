@@ -9,7 +9,6 @@ final class DocsGroundingSourcePolicy {
 	public const SOURCE_DEVELOPER_DOCS = 'developer-docs';
 	public const SOURCE_DEVELOPER_BLOG = 'developer-blog';
 	public const SOURCE_MAKE_CORE      = 'make-core';
-	public const SOURCE_ROADMAP        = 'roadmap';
 
 	private const SECONDS_PER_DAY = 86400;
 

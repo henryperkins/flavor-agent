@@ -81,7 +81,7 @@ const BLOCK_REVIEW_REVALIDATION_DEBOUNCE_MS = 300;
 const DOCS_GROUNDING_UNAVAILABLE_STALE_REASON =
 	'Developer Docs grounding is unavailable. Refresh before applying the previous result.';
 
-export function getBlockPathFromEditor( blockEditor, clientId ) {
+function getBlockPathFromEditor( blockEditor, clientId ) {
 	if ( ! clientId || ! blockEditor?.getBlock?.( clientId ) ) {
 		return null;
 	}
@@ -102,7 +102,7 @@ export function getBlockPathFromEditor( blockEditor, clientId ) {
 	return path;
 }
 
-export function blockPathMatches( left, right ) {
+function blockPathMatches( left, right ) {
 	return shallowStructuralEqual( left || [], right || [] );
 }
 

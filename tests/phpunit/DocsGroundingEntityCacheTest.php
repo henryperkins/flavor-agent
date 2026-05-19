@@ -86,11 +86,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$query_guidance,
-			$this->invoke_private_array_method(
-				BlockAbilities::class,
-				'collect_wordpress_docs_guidance',
-				[ $context, $prompt ]
-			)
+			$this->collect_block_docs_guidance( $context, $prompt )
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
@@ -233,11 +229,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$query_guidance,
-			$this->invoke_private_array_method(
-				TemplateAbilities::class,
-				'collect_wordpress_docs_guidance',
-				[ $context, $prompt ]
-			)
+			$this->collect_template_docs_guidance( $context, $prompt )
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
@@ -282,11 +274,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$query_guidance,
-			$this->invoke_private_array_method(
-				PatternAbilities::class,
-				'collect_wordpress_docs_guidance',
-				[ $context, $prompt ]
-			)
+			$this->collect_pattern_docs_guidance( $context, $prompt )
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
@@ -486,11 +474,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$query_guidance,
-			$this->invoke_private_array_method(
-				StyleAbilities::class,
-				'collect_wordpress_docs_guidance',
-				[ $context, $prompt ]
-			)
+			$this->collect_style_docs_guidance( $context, $prompt )
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
@@ -527,11 +511,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$entity_guidance,
-			$this->invoke_private_array_method(
-				StyleAbilities::class,
-				'collect_wordpress_docs_guidance',
-				[ $context, 'Keep the palette restrained.' ]
-			)
+			$this->collect_style_docs_guidance( $context, 'Keep the palette restrained.' )
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
@@ -579,11 +559,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$generic_guidance,
-			$this->invoke_private_array_method(
-				StyleAbilities::class,
-				'collect_wordpress_docs_guidance',
-				[ $context, 'Tune the intro typography.' ]
-			)
+			$this->collect_style_docs_guidance( $context, 'Tune the intro typography.' )
 		);
 		$this->assertSame( 5, WordPressTestState::$last_remote_post['args']['timeout'] );
 		$this->assertArrayHasKey(
@@ -634,11 +610,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$query_guidance,
-			$this->invoke_private_array_method(
-				TemplateAbilities::class,
-				'collect_template_part_wordpress_docs_guidance',
-				[ $context, $prompt ]
-			)
+			$this->collect_template_part_docs_guidance( $context, $prompt )
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
@@ -665,11 +637,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$entity_guidance,
-			$this->invoke_private_array_method(
-				BlockAbilities::class,
-				'collect_wordpress_docs_guidance',
-				[ $context, 'Simplify footer links.' ]
-			)
+			$this->collect_block_docs_guidance( $context, 'Simplify footer links.' )
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
@@ -720,11 +688,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 
 		$this->assertSame(
 			$family_guidance,
-			$this->invoke_private_array_method(
-				BlockAbilities::class,
-				'collect_wordpress_docs_guidance',
-				[ $context, $prompt ]
-			)
+			$this->collect_block_docs_guidance( $context, $prompt )
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
@@ -970,6 +934,138 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 		$this->assertIsString( $result );
 
 		return $result;
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function collect_block_docs_guidance( array $context, string $prompt ): array {
+		return CollectsDocsGuidance::collect(
+			fn( array $request_context, string $request_prompt ): string => $this->invoke_private_string_method(
+				BlockAbilities::class,
+				'build_wordpress_docs_query',
+				[ $request_context, $request_prompt ]
+			),
+			fn( array $request_context ): string => $this->invoke_private_string_method(
+				BlockAbilities::class,
+				'build_wordpress_docs_entity_key',
+				[ $request_context ]
+			),
+			fn( array $request_context ): array => $this->invoke_private_array_method(
+				BlockAbilities::class,
+				'build_wordpress_docs_family_context',
+				[ $request_context ]
+			),
+			$context,
+			$prompt
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function collect_template_docs_guidance( array $context, string $prompt ): array {
+		return CollectsDocsGuidance::collect(
+			fn( array $request_context, string $request_prompt ): string => $this->invoke_private_string_method(
+				TemplateAbilities::class,
+				'build_wordpress_docs_query',
+				[ $request_context, $request_prompt ]
+			),
+			fn( array $request_context ): string => $this->invoke_private_string_method(
+				TemplateAbilities::class,
+				'build_wordpress_docs_entity_key',
+				[ $request_context ]
+			),
+			fn( array $request_context ): array => $this->invoke_private_array_method(
+				TemplateAbilities::class,
+				'build_wordpress_docs_family_context',
+				[ $request_context ]
+			),
+			$context,
+			$prompt
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function collect_pattern_docs_guidance( array $context, string $prompt ): array {
+		return CollectsDocsGuidance::collect(
+			fn( array $request_context, string $request_prompt ): string => $this->invoke_private_string_method(
+				PatternAbilities::class,
+				'build_wordpress_docs_query',
+				[ $request_context, $request_prompt ]
+			),
+			fn( array $request_context ): string => $this->invoke_private_string_method(
+				PatternAbilities::class,
+				'build_wordpress_docs_entity_key',
+				[ $request_context ]
+			),
+			fn( array $request_context, string $_request_prompt, string $entity_key ): array => $this->invoke_private_array_method(
+				PatternAbilities::class,
+				'build_wordpress_docs_family_context',
+				[ $request_context, $entity_key ]
+			),
+			$context,
+			$prompt,
+			[
+				'allowForegroundWarm' => true,
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function collect_style_docs_guidance( array $context, string $prompt ): array {
+		return CollectsDocsGuidance::collect(
+			fn( array $request_context, string $request_prompt ): string => $this->invoke_private_string_method(
+				StyleAbilities::class,
+				'build_wordpress_docs_query',
+				[ $request_context, $request_prompt ]
+			),
+			fn( array $request_context ): string => $this->invoke_private_string_method(
+				StyleAbilities::class,
+				'build_wordpress_docs_entity_key',
+				[ $request_context ]
+			),
+			fn( array $request_context ): array => $this->invoke_private_array_method(
+				StyleAbilities::class,
+				'build_wordpress_docs_family_context',
+				[ $request_context ]
+			),
+			$context,
+			$prompt
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function collect_template_part_docs_guidance( array $context, string $prompt ): array {
+		return CollectsDocsGuidance::collect(
+			fn( array $request_context, string $request_prompt ): string => $this->invoke_private_string_method(
+				TemplateAbilities::class,
+				'build_template_part_wordpress_docs_query',
+				[ $request_context, $request_prompt ]
+			),
+			static fn( array $_request_context, string $query ): string => AISearchClient::resolve_entity_key(
+				'core/template-part',
+				$query
+			),
+			fn( array $request_context ): array => $this->invoke_private_array_method(
+				TemplateAbilities::class,
+				'build_template_part_wordpress_docs_family_context',
+				[ $request_context ]
+			),
+			$context,
+			$prompt
+		);
 	}
 
 	/**

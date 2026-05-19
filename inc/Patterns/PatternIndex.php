@@ -508,23 +508,6 @@ final class PatternIndex {
 	}
 
 	/**
-	 * Run an admin-requested sync immediately instead of waiting for WP-Cron.
-	 *
-	 * @return array|\WP_Error Sync result with indexed/removed counts.
-	 */
-	public static function sync_now(): array|\WP_Error {
-		if ( ! self::recommendation_backends_configured() ) {
-			return new \WP_Error(
-				'pattern_sync_unconfigured',
-				'Pattern recommendations are not configured for syncing.',
-				[ 'status' => 400 ]
-			);
-		}
-
-		return self::sync( true );
-	}
-
-	/**
 	 * Execute a due background sync from a foreground status check.
 	 *
 	 * This keeps the settings screen from getting stuck when WP-Cron is disabled

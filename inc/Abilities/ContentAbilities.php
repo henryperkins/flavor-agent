@@ -8,10 +8,12 @@ use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\WritingPrompt;
+use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\StringArray;
 use FlavorAgent\Support\WordPressAIPolicy;
 
 final class ContentAbilities {
+	use NormalizesInput;
 
 	public static function recommend_content( mixed $input ): array|\WP_Error {
 		$input              = self::normalize_map( $input );
@@ -126,17 +128,5 @@ final class ContentAbilities {
 		}
 
 		return WordPressAIPolicy::sanitize_textarea_content( $value );
-	}
-
-	private static function normalize_map( mixed $value ): array {
-		if ( is_array( $value ) ) {
-			return $value;
-		}
-
-		if ( is_object( $value ) ) {
-			return get_object_vars( $value );
-		}
-
-		return [];
 	}
 }

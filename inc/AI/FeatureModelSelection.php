@@ -35,12 +35,6 @@ final class FeatureModelSelection {
 		];
 	}
 
-	public static function has_selection(): bool {
-		$selection = self::get();
-
-		return '' !== $selection['provider'];
-	}
-
 	/**
 	 * @return array{provider: string, model: string}
 	 */
