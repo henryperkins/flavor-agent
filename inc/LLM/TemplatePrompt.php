@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\RankingContract;
 
@@ -267,6 +268,23 @@ SYSTEM;
 			"## Current Viewport Visibility Constraints\n" . self::format_current_viewport_visibility( $current_viewport_visibility ),
 			45
 		);
+
+		$design_semantics      = DesignSemantics::normalize(
+			$context['designSemantics'] ?? [],
+			'template'
+		);
+		$design_semantic_lines = DesignSemantics::format_prompt_lines(
+			$design_semantics,
+			80
+		);
+
+		if ( ! empty( $design_semantic_lines ) ) {
+			$budget->add_section(
+				'design_semantics',
+				"## Design semantic context\n" . implode( "\n", $design_semantic_lines ),
+				58
+			);
+		}
 
 		$formatted_tokens = ThemeTokenFormatter::format(
 			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []

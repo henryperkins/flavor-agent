@@ -92,6 +92,37 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertStringContainsString( 'containsSpacer: yes', $prompt );
 	}
 
+	public function test_build_user_includes_design_semantic_context(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef' => 'twentytwentyfive//footer',
+				'slug'            => 'footer',
+				'title'           => 'Footer',
+				'area'            => 'footer',
+				'blockTree'       => [],
+				'patterns'        => [],
+				'themeTokens'     => [],
+				'designSemantics' => [
+					'surface'         => 'template-part',
+					'sectionRole'     => 'footer',
+					'visualDensity'   => 'balanced',
+					'contrastContext' => 'dark-parent',
+					'layoutRhythm'    => 'constrained',
+					'typographyRole'  => 'body',
+					'mainDesignIssue' => 'contrast',
+					'templatePart'    => [
+						'area' => 'footer',
+					],
+				],
+			],
+			''
+		);
+
+		$this->assertStringContainsString( '## Design semantic context', $prompt );
+		$this->assertStringContainsString( 'Role: footer', $prompt );
+		$this->assertStringContainsString( 'Template part: area=footer', $prompt );
+	}
+
 	public function test_build_user_includes_pattern_override_context(): void {
 		$prompt = TemplatePartPrompt::build_user(
 			[

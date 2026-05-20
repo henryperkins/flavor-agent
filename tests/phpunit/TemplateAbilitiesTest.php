@@ -218,6 +218,71 @@ final class TemplateAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_recommend_template_review_and_resolved_signatures_include_design_semantics(): void {
+		$baseline  = TemplateAbilities::recommend_template(
+			[
+				'templateRef'          => 'theme//home',
+				'templateType'         => 'home',
+				'prompt'               => 'Make the home template feel more editorial.',
+				'visiblePatternNames'  => [ 'theme/hero' ],
+				'designSemantics'      => [
+					'surface'      => 'template',
+					'sectionRole'  => 'archive-list',
+					'layoutRhythm' => 'grid',
+				],
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$reordered = TemplateAbilities::recommend_template(
+			[
+				'templateRef'          => 'theme//home',
+				'templateType'         => 'home',
+				'prompt'               => 'Make the home template feel more editorial.',
+				'visiblePatternNames'  => [ 'theme/hero' ],
+				'designSemantics'      => [
+					'layoutRhythm' => 'grid',
+					'sectionRole'  => 'archive-list',
+					'surface'      => 'template',
+				],
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$changed   = TemplateAbilities::recommend_template(
+			[
+				'templateRef'          => 'theme//home',
+				'templateType'         => 'home',
+				'prompt'               => 'Make the home template feel more editorial.',
+				'visiblePatternNames'  => [ 'theme/hero' ],
+				'designSemantics'      => [
+					'surface'      => 'template',
+					'sectionRole'  => 'archive-list',
+					'layoutRhythm' => 'stacked',
+				],
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $reordered );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$reordered['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$reordered['reviewContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
+	}
+
 	public function test_recommend_template_signatures_are_stable_between_recommendation_and_signature_modes(): void {
 		$this->configure_text_generation_connector();
 		AISearchClient::cache_entity_guidance(
@@ -362,6 +427,80 @@ final class TemplateAbilitiesTest extends TestCase {
 			$changed['docsGroundingFingerprint'] ?? null
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_recommend_template_part_review_and_resolved_signatures_include_design_semantics(): void {
+		$baseline  = TemplateAbilities::recommend_template_part(
+			[
+				'templatePartRef'      => 'theme//header',
+				'prompt'               => 'Tighten the header utility area.',
+				'visiblePatternNames'  => [ 'theme/header-utility' ],
+				'designSemantics'      => [
+					'surface'         => 'template-part',
+					'sectionRole'     => 'footer',
+					'contrastContext' => 'dark-parent',
+					'templatePart'    => [
+						'ref'  => 'theme//header',
+						'slug' => 'header',
+					],
+				],
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$reordered = TemplateAbilities::recommend_template_part(
+			[
+				'templatePartRef'      => 'theme//header',
+				'prompt'               => 'Tighten the header utility area.',
+				'visiblePatternNames'  => [ 'theme/header-utility' ],
+				'designSemantics'      => [
+					'templatePart'    => [
+						'slug' => 'header',
+						'ref'  => 'theme//header',
+					],
+					'contrastContext' => 'dark-parent',
+					'sectionRole'     => 'footer',
+					'surface'         => 'template-part',
+				],
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$changed   = TemplateAbilities::recommend_template_part(
+			[
+				'templatePartRef'      => 'theme//header',
+				'prompt'               => 'Tighten the header utility area.',
+				'visiblePatternNames'  => [ 'theme/header-utility' ],
+				'designSemantics'      => [
+					'surface'         => 'template-part',
+					'sectionRole'     => 'footer',
+					'contrastContext' => 'light-parent',
+					'templatePart'    => [
+						'ref'  => 'theme//header',
+						'slug' => 'header',
+					],
+				],
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $reordered );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$reordered['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$reordered['reviewContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
 	}
 
 	public function test_recommend_template_fails_closed_when_docs_grounding_is_unavailable(): void {

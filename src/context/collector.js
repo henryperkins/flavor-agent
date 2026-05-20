@@ -36,6 +36,7 @@ import {
 } from '../utils/block-allowed-pattern-context';
 import { buildContextSignature } from '../utils/context-signature';
 import { isBlockStructuralActionsEnabled } from '../utils/block-operation-catalog';
+import { buildBlockDesignSemantics } from '../utils/recommendation-design-semantics';
 export { buildBlockRecommendationContextSignature };
 
 const BASE_VISUAL_HINT_PATHS = [
@@ -687,6 +688,8 @@ export function collectBlockContext( clientId ) {
 			}
 		);
 	}
+
+	context.designSemantics = buildBlockDesignSemantics( context );
 
 	return context;
 }

@@ -354,6 +354,92 @@ describe( 'collectBlockContext', () => {
 		} );
 	} );
 
+	test( 'collects bounded design semantics from parent visual and operation context', () => {
+		window.flavorAgentData = {
+			enableBlockStructuralActions: true,
+		};
+		const selectedNode = {
+			clientId: 'client-1',
+			name: 'core/paragraph',
+			innerBlocks: [],
+			structuralIdentity: {
+				role: 'footer-paragraph',
+				location: 'footer',
+			},
+		};
+		const parentNode = {
+			clientId: 'parent-1',
+			name: 'core/group',
+			innerBlocks: [ selectedNode ],
+			structuralIdentity: { role: 'footer' },
+		};
+		const blockEditor = {
+			getBlockRootClientId: jest.fn().mockReturnValue( 'parent-1' ),
+			getBlockOrder: jest.fn().mockReturnValue( [ 'client-1' ] ),
+			getBlockName: jest.fn().mockImplementation( ( id ) => {
+				if ( id === 'parent-1' ) {
+					return 'core/group';
+				}
+				if ( id === 'client-1' ) {
+					return 'core/paragraph';
+				}
+				return undefined;
+			} ),
+			getBlockAttributes: jest.fn().mockImplementation( ( id ) => {
+				if ( id === 'parent-1' ) {
+					return {
+						backgroundColor: 'contrast',
+						layout: { type: 'constrained' },
+					};
+				}
+				return {};
+			} ),
+			getBlockCount: jest.fn().mockReturnValue( 1 ),
+		};
+
+		mockIntrospectBlockInstance.mockReturnValue( {
+			name: 'core/paragraph',
+			title: 'Paragraph',
+			currentAttributes: { textColor: 'contrast' },
+			inspectorPanels: { styles: [ 'color' ] },
+			bindableAttributes: [],
+			styles: [],
+			activeStyle: null,
+			variations: [],
+			supportsContentRole: false,
+			contentAttributes: {},
+			configAttributes: {},
+			editingMode: 'default',
+			isInsideContentOnly: false,
+			blockVisibility: null,
+			childCount: 0,
+		} );
+		mockIntrospectBlockTree.mockReturnValue( [ parentNode ] );
+		mockAnnotateStructuralIdentity.mockReturnValue( [ parentNode ] );
+		mockFindNodePath.mockReturnValue( [ parentNode, selectedNode ] );
+		mockFindBranchRoot.mockReturnValue( parentNode );
+		mockSummarizeTree.mockReturnValue( [ { block: 'core/group' } ] );
+		mockCollectThemeTokens.mockReturnValue( {} );
+		mockSummarizeTokens.mockReturnValue( {
+			colorPresets: [ { slug: 'contrast' } ],
+			fontSizePresets: [],
+			spacingPresets: [],
+		} );
+		mockSelect.mockReturnValue( blockEditor );
+		mockGetAllowedPatterns.mockReturnValue( [] );
+
+		const context = collectBlockContext( 'client-1' );
+
+		expect( context.designSemantics ).toMatchObject( {
+			surface: 'block',
+			contrastContext: 'dark-parent',
+			layoutRhythm: 'constrained',
+		} );
+		expect( context.designSemantics.negativeSignals ).toEqual(
+			expect.arrayContaining( [ 'no-structural-pattern-actions' ] )
+		);
+	} );
+
 	test( 'omits allowed pattern actions for locked structural targets', () => {
 		window.flavorAgentData = {
 			enableBlockStructuralActions: true,

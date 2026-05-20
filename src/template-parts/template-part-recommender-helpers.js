@@ -9,6 +9,7 @@ import {
 	summarizeBlockAttributes,
 } from '../utils/live-structure-snapshots';
 import { buildContextSignature } from '../utils/context-signature';
+import { normalizeDesignSemantics } from '../utils/recommendation-design-semantics';
 
 const TEMPLATE_PART_ATTRIBUTE_FIELDS = [
 	'tagName',
@@ -415,11 +416,11 @@ export function buildEditorTemplatePartStructureSnapshot(
 export function buildTemplatePartRecommendationContextSignature( {
 	visiblePatternNames,
 	editorStructure,
+	designSemantics,
 } = {} ) {
 	const normalizedVisiblePatternNames =
 		normalizeVisiblePatternNames( visiblePatternNames );
-
-	return buildContextSignature( {
+	const signatureInputs = {
 		blockTree: Array.isArray( editorStructure?.blockTree )
 			? editorStructure.blockTree
 			: null,
@@ -443,7 +444,16 @@ export function buildTemplatePartRecommendationContextSignature( {
 		visiblePatternNames: Array.isArray( normalizedVisiblePatternNames )
 			? [ ...normalizedVisiblePatternNames ].sort()
 			: null,
-	} );
+	};
+
+	if ( designSemantics ) {
+		signatureInputs.designSemantics = normalizeDesignSemantics(
+			designSemantics,
+			'template-part'
+		);
+	}
+
+	return buildContextSignature( signatureInputs );
 }
 
 export function buildTemplatePartFetchInput( {
@@ -451,6 +461,7 @@ export function buildTemplatePartFetchInput( {
 	prompt,
 	visiblePatternNames,
 	editorStructure,
+	designSemantics,
 	contextSignature = '',
 } ) {
 	const input = { templatePartRef };
@@ -468,6 +479,13 @@ export function buildTemplatePartFetchInput( {
 
 	if ( editorStructure ) {
 		input.editorStructure = editorStructure;
+	}
+
+	if ( designSemantics ) {
+		input.designSemantics = normalizeDesignSemantics(
+			designSemantics,
+			'template-part'
+		);
 	}
 
 	if ( contextSignature ) {

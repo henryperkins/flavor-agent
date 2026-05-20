@@ -1258,6 +1258,10 @@ final class RegistrationTest extends TestCase {
 
 		$this->assertIsArray( $ability );
 		$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
+		$this->assertSame(
+			'object',
+			$ability['input_schema']['properties']['designSemantics']['type'] ?? null
+		);
 
 		$suggestion = $ability['output_schema']['properties']['suggestions']['items'] ?? null;
 
@@ -1369,6 +1373,10 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'object',
 			$ability['input_schema']['properties']['editorStructure']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$ability['input_schema']['properties']['designSemantics']['type'] ?? null
 		);
 		$this->assertSame(
 			'integer',

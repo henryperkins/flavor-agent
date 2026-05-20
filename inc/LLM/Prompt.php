@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\LLM;
 
 use FlavorAgent\Context\BlockOperationValidator;
+use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\RankingContract;
 
@@ -471,6 +472,23 @@ SYSTEM;
 			$parts[] = $block_operation_context;
 			$budget->add_section( 'block_operations', implode( "\n", $parts ), 84 );
 			$parts = [];
+		}
+
+		$design_semantics      = DesignSemantics::normalize(
+			$context['designSemantics'] ?? [],
+			'block'
+		);
+		$design_semantic_lines = DesignSemantics::format_prompt_lines(
+			$design_semantics,
+			80
+		);
+
+		if ( ! empty( $design_semantic_lines ) ) {
+			$budget->add_section(
+				'design_semantics',
+				"## Design semantic context\n" . implode( "\n", $design_semantic_lines ),
+				58
+			);
 		}
 
 		if ( ! empty( $docs_guidance ) ) {

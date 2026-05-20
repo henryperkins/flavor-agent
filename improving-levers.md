@@ -94,7 +94,7 @@ Extend the existing `designSemantics` concept across recommendation surfaces. Sh
 
 ```json
 {
-  "sectionRole": "hero|footer|card|sidebar|post-body|cta|archive-list|unknown",
+  "sectionRole": "hero|header|footer|card|sidebar|post-body|cta|archive-list|unknown",
   "visualDensity": "sparse|balanced|dense|unknown",
   "contrastContext": "dark-parent|light-parent|image-overlay|unknown",
   "layoutRhythm": "constrained|full-width|grid|stacked|media-text|sidebar|unknown",
@@ -133,7 +133,7 @@ Surface-specific keys should be nested. For example, block-only execution constr
 ### Implementation Seams
 
 - Client collection: `src/context/collector.js`
-- Server context normalization: `inc/Context/ServerCollector.php`
+- Server-side semantic normalization: `inc/Support/DesignSemantics.php`, applied from `inc/Abilities/BlockAbilities.php` and `inc/Abilities/TemplateAbilities.php` before prompt assembly and resolved/review signature generation.
 - Block prompt assembly: `inc/LLM/Prompt.php`
 - Style prompt assembly: `inc/LLM/StylePrompt.php`
 - Template prompt assembly: `inc/LLM/TemplatePrompt.php`
@@ -147,6 +147,7 @@ Surface-specific keys should be nested. For example, block-only execution constr
 - Raw values that could be replaced by known theme presets.
 - Neighbor style summaries, not only sibling block names.
 - Parent background/text tone and layout width behavior.
+- Template-part identity and resolved area, including header/footer/sidebar roles that should not fall through to `unknown`.
 - Token role classification from theme token names, such as `base`, `contrast`, `accent`, `muted`, or semantic names.
 - Negative context, such as unsupported panels, locked editing modes, parent-supplied contrast, or absent block support.
 
@@ -157,7 +158,7 @@ Surface-specific keys should be nested. For example, block-only execution constr
 - Prompt tests prove unsupported controls become negative signals, not model invitations.
 - Existing content-only and Inspector-panel guards continue to reject unsupported mutations.
 - Resolved/review freshness signatures include the normalized semantic projection, so surrounding rhythm, contrast, or role changes stale old recommendations.
-- Added prompt sections stay budget-capped through `PromptBudget`; each phase should keep the new semantic section under roughly 80 estimated tokens per surface unless tests show a larger section improves fixture metrics.
+- Added prompt sections stay budget-aware through `PromptBudget`, but the semantic section's own roughly 80-token cap must be enforced before assembly in the formatter that builds the semantic prompt lines. The `PromptBudget::add_section()` priority argument is not a per-section token limit.
 - Metrics gate: `noiseRate` does not increase on already-good fixtures, and `invalidOperationRate` does not increase on locked/content-only fixtures.
 
 ## Priority 2: Move Ranking To Composite Scores
@@ -534,7 +535,7 @@ git diff --check
 ```bash
 npm run test:unit -- --runInBand src/context/__tests__/collector.test.js
 composer run test:php -- --filter 'RecommendationEvaluationTest|BlockAbilitiesTest|PromptGuidanceTest|StylePromptTest|TemplatePromptTest|TemplatePartPromptTest'
-npm run test:unit -- --runInBand src/utils/__tests__/block-recommendation-context.test.js src/templates/__tests__/template-recommender-helpers.test.js src/template-parts/__tests__/template-part-recommender-helpers.test.js src/utils/__tests__/style-operations.test.js
+npm run test:unit -- --runInBand src/utils/__tests__/recommendation-design-semantics.test.js src/utils/__tests__/block-recommendation-context.test.js src/templates/__tests__/template-recommender-helpers.test.js src/templates/__tests__/TemplateRecommender.test.js src/template-parts/__tests__/template-part-recommender-helpers.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/utils/__tests__/style-operations.test.js
 npm run check:docs
 git diff --check
 ```
@@ -647,7 +648,7 @@ The first useful milestone is complete when:
 - the fixture-backed Phase 0 metrics stub exists and has baseline output;
 - strict LLM schemas can accept structured ranking;
 - composite ranking prevents confidence-only suggestions from dominating;
-- block/style prompts include explicit `designSemantics` summaries;
+- block/style/template/template-part prompts include explicit `designSemantics` summaries;
 - guideline changes participate in freshness signatures;
 - validation reasons are available for ranking and diagnostics;
 - docs retrieval refreshes do not stale unchanged guidance content;

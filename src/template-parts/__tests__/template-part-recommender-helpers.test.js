@@ -169,6 +169,49 @@ describe( 'template-part recommender helpers', () => {
 		expect( secondSignature ).not.toBe( thirdSignature );
 	} );
 
+	test( 'template-part recommendation signatures and fetch input include design semantics', () => {
+		const designSemantics = {
+			surface: 'template-part',
+			sectionRole: 'footer',
+			contrastContext: 'dark-parent',
+			templatePart: {
+				ref: 'twentytwentyfive//footer',
+				slug: 'footer',
+				area: 'footer',
+			},
+		};
+
+		const firstSignature = buildTemplatePartRecommendationContextSignature(
+			{
+				editorStructure: { structureStats: { blockCount: 4 } },
+				visiblePatternNames: [ 'theme/footer' ],
+				designSemantics,
+			}
+		);
+		const secondSignature = buildTemplatePartRecommendationContextSignature(
+			{
+				editorStructure: { structureStats: { blockCount: 4 } },
+				visiblePatternNames: [ 'theme/footer' ],
+				designSemantics: {
+					...designSemantics,
+					contrastContext: 'light-parent',
+				},
+			}
+		);
+
+		expect( firstSignature ).not.toBe( secondSignature );
+		expect(
+			buildTemplatePartFetchInput( {
+				templatePartRef: 'twentytwentyfive//footer',
+				prompt: '',
+				editorStructure: { structureStats: { blockCount: 4 } },
+				visiblePatternNames: [],
+				designSemantics,
+				contextSignature: firstSignature,
+			} ).designSemantics
+		).toEqual( expect.objectContaining( designSemantics ) );
+	} );
+
 	test( 'buildEditorTemplatePartStructureSnapshot includes expected target metadata for executable paths', () => {
 		const snapshot = buildEditorTemplatePartStructureSnapshot( [
 			{

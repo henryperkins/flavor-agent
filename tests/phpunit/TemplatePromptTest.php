@@ -88,6 +88,38 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertStringContainsString( 'Last top-level block: core/query', $prompt );
 	}
 
+	public function test_build_user_includes_design_semantic_context(): void {
+		$prompt = TemplatePrompt::build_user(
+			[
+				'templateRef'     => 'twentytwentyfive//archive',
+				'templateType'    => 'archive',
+				'title'           => 'Archive',
+				'assignedParts'   => [],
+				'emptyAreas'      => [],
+				'availableParts'  => [],
+				'patterns'        => [],
+				'themeTokens'     => [],
+				'designSemantics' => [
+					'surface'         => 'template',
+					'sectionRole'     => 'archive-list',
+					'visualDensity'   => 'dense',
+					'contrastContext' => 'unknown',
+					'layoutRhythm'    => 'grid',
+					'typographyRole'  => 'body',
+					'mainDesignIssue' => 'rhythm',
+					'template'        => [
+						'emptyAreaCount' => 1,
+					],
+				],
+			],
+			''
+		);
+
+		$this->assertStringContainsString( '## Design semantic context', $prompt );
+		$this->assertStringContainsString( 'Role: archive-list', $prompt );
+		$this->assertStringContainsString( 'Template: emptyAreaCount=1', $prompt );
+	}
+
 	public function test_build_user_includes_pattern_override_and_visibility_context(): void {
 		$prompt = TemplatePrompt::build_user(
 			[

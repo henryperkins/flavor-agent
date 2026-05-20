@@ -1,4 +1,5 @@
 import { buildContextSignature } from './context-signature';
+import { normalizeDesignSemantics } from './recommendation-design-semantics';
 
 // Keep these aligned with the PHP structural-summary normalization/schema caps.
 export const BLOCK_SIBLING_SUMMARY_MAX_ITEMS = 3;
@@ -38,5 +39,9 @@ export function buildBlockRecommendationContextSignature( context = null ) {
 		siblingSummariesBefore: context?.siblingSummariesBefore || [],
 		siblingSummariesAfter: context?.siblingSummariesAfter || [],
 		blockOperationContext: context?.blockOperationContext || null,
+		designSemantics: normalizeDesignSemantics(
+			context?.designSemantics || {},
+			'block'
+		),
 	} );
 }

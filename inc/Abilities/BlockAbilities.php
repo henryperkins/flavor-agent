@@ -11,6 +11,7 @@ use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\Prompt;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\NonNegativeInteger;
 use FlavorAgent\Support\NormalizesInput;
@@ -382,6 +383,14 @@ final class BlockAbilities {
 		$block_operation_context = self::normalize_block_operation_context( $context['blockOperationContext'] ?? [] );
 		if ( ! empty( $block_operation_context ) ) {
 			$normalized['blockOperationContext'] = $block_operation_context;
+		}
+
+		$design_semantics = DesignSemantics::normalize(
+			$context['designSemantics'] ?? [],
+			'block'
+		);
+		if ( ! empty( $design_semantics ) ) {
+			$normalized['designSemantics'] = $design_semantics;
 		}
 
 		return $normalized;

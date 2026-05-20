@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\RankingContract;
 
@@ -211,6 +212,23 @@ SYSTEM;
 		$formatted_constraints  = self::format_structural_constraints( $structural_constraints );
 		if ( $formatted_constraints !== '' ) {
 			$budget->add_section( 'structural_constraints', "## Structural Constraints\n{$formatted_constraints}", 60 );
+		}
+
+		$design_semantics      = DesignSemantics::normalize(
+			$context['designSemantics'] ?? [],
+			'template-part'
+		);
+		$design_semantic_lines = DesignSemantics::format_prompt_lines(
+			$design_semantics,
+			80
+		);
+
+		if ( ! empty( $design_semantic_lines ) ) {
+			$budget->add_section(
+				'design_semantics',
+				"## Design semantic context\n" . implode( "\n", $design_semantic_lines ),
+				58
+			);
 		}
 
 		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null )

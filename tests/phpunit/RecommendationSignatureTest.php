@@ -111,6 +111,57 @@ final class RecommendationSignatureTest extends TestCase {
 		$this->assertSame( $ordered, $reversed );
 	}
 
+	public function test_nested_design_semantics_are_canonically_encoded(): void {
+		$ordered  = RecommendationResolvedSignature::from_payload(
+			'template',
+			[
+				'context' => [
+					'designSemantics' => [
+						'surface'      => 'template',
+						'sectionRole'  => 'archive-list',
+						'layoutRhythm' => 'grid',
+						'template'     => [
+							'emptyAreaCount' => 1,
+						],
+					],
+				],
+			]
+		);
+		$reversed = RecommendationResolvedSignature::from_payload(
+			'template',
+			[
+				'context' => [
+					'designSemantics' => [
+						'template'     => [
+							'emptyAreaCount' => 1,
+						],
+						'layoutRhythm' => 'grid',
+						'sectionRole'  => 'archive-list',
+						'surface'      => 'template',
+					],
+				],
+			]
+		);
+		$changed  = RecommendationResolvedSignature::from_payload(
+			'template',
+			[
+				'context' => [
+					'designSemantics' => [
+						'surface'      => 'template',
+						'sectionRole'  => 'archive-list',
+						'layoutRhythm' => 'stacked',
+						'template'     => [
+							'emptyAreaCount' => 1,
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( $ordered, $reversed );
+		$this->assertNotSame( $ordered, $changed );
+	}
+
 	public function test_list_array_order_is_preserved(): void {
 		$forward  = RecommendationSignature::from_payload(
 			'block',

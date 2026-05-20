@@ -80,6 +80,7 @@ import {
 	buildEditorTemplatePartStructureSnapshot,
 	buildTemplatePartRecommendationContextSignature,
 } from '../template-part-recommender-helpers';
+import { buildTemplatePartDesignSemantics } from '../../utils/recommendation-design-semantics';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -96,12 +97,29 @@ function getState() {
 }
 
 function buildTemplatePartContextSignature( state = getState() ) {
+	const templatePartRef = state.editSite.postId;
+	const slug =
+		typeof templatePartRef === 'string' && templatePartRef.includes( '//' )
+			? templatePartRef.slice( templatePartRef.indexOf( '//' ) + 2 )
+			: templatePartRef;
+	const areaLookup = mockGetTemplatePartAreaLookup();
+	const area =
+		typeof areaLookup?.[ slug ] === 'string' ? areaLookup[ slug ] : '';
+	const editorStructure = buildEditorTemplatePartStructureSnapshot(
+		state.blockEditor.blocks,
+		areaLookup
+	);
+
 	return buildTemplatePartRecommendationContextSignature( {
 		visiblePatternNames: [],
-		editorStructure: buildEditorTemplatePartStructureSnapshot(
-			state.blockEditor.blocks,
-			mockGetTemplatePartAreaLookup()
-		),
+		editorStructure,
+		designSemantics: buildTemplatePartDesignSemantics( {
+			templatePartRef,
+			slug,
+			area,
+			editorStructure,
+			visiblePatternNames: [],
+		} ),
 	} );
 }
 
@@ -742,6 +760,14 @@ describe( 'TemplatePartRecommender', () => {
 		expect( mockFetchTemplatePartRecommendations ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				templatePartRef: 'theme//header',
+				designSemantics: expect.objectContaining( {
+					surface: 'template-part',
+					sectionRole: 'header',
+					templatePart: expect.objectContaining( {
+						slug: 'header',
+						area: 'header',
+					} ),
+				} ),
 				editorStructure: expect.objectContaining( {
 					blockTree: [
 						{

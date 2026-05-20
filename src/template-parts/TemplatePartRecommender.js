@@ -60,6 +60,7 @@ import {
 	getExecutableSurfaceStaleMessage,
 } from '../utils/recommendation-stale-reasons';
 import { buildTemplatePartRecommendationRequestSignature } from '../utils/recommendation-request-signature';
+import { buildTemplatePartDesignSemantics } from '../utils/recommendation-design-semantics';
 import {
 	buildEditorTemplatePartStructureSnapshot,
 	buildTemplatePartFetchInput,
@@ -500,18 +501,6 @@ export default function TemplatePartRecommender() {
 	);
 	const currentPatternOverrides =
 		editorStructure?.currentPatternOverrides || null;
-	const recommendationContextSignature = useMemo(
-		() =>
-			buildTemplatePartRecommendationContextSignature( {
-				visiblePatternNames,
-				editorStructure,
-			} ),
-		[ editorStructure, visiblePatternNames ]
-	);
-	const previousRecommendationContextSignature = useRef(
-		recommendationContextSignature
-	);
-
 	const slug = useMemo(
 		() => normalizeTemplatePartSlug( templatePartRef ),
 		[ templatePartRef ]
@@ -535,6 +524,29 @@ export default function TemplatePartRecommender() {
 			humanizeLabel( area ),
 		[ templatePartContract.templatePartAreaLabels, area ]
 	);
+	const designSemantics = useMemo(
+		() =>
+			buildTemplatePartDesignSemantics( {
+				templatePartRef,
+				slug,
+				area,
+				editorStructure,
+				visiblePatternNames,
+			} ),
+		[ area, editorStructure, slug, templatePartRef, visiblePatternNames ]
+	);
+	const recommendationContextSignature = useMemo(
+		() =>
+			buildTemplatePartRecommendationContextSignature( {
+				visiblePatternNames,
+				editorStructure,
+				designSemantics,
+			} ),
+		[ designSemantics, editorStructure, visiblePatternNames ]
+	);
+	const previousRecommendationContextSignature = useRef(
+		recommendationContextSignature
+	);
 	const hasStoredResultForTemplatePart = resultRef === templatePartRef;
 	const recommendationRequestSignature = useMemo(
 		() =>
@@ -552,9 +564,11 @@ export default function TemplatePartRecommender() {
 				prompt,
 				visiblePatternNames,
 				editorStructure,
+				designSemantics,
 				contextSignature: recommendationContextSignature,
 			} ),
 		[
+			designSemantics,
 			editorStructure,
 			prompt,
 			recommendationContextSignature,

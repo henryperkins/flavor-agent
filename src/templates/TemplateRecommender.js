@@ -84,6 +84,7 @@ import {
 	getExecutableSurfaceEffectiveStaleReason,
 	getExecutableSurfaceStaleMessage,
 } from '../utils/recommendation-stale-reasons';
+import { buildTemplateDesignSemantics } from '../utils/recommendation-design-semantics';
 
 function formatBlockLabel( block ) {
 	if ( ! block ) {
@@ -414,14 +415,25 @@ export default function TemplateRecommender() {
 				: null,
 		[ templateBlocks ]
 	);
+	const designSemantics = useMemo(
+		() =>
+			buildTemplateDesignSemantics( {
+				templateType,
+				editorSlots,
+				editorStructure,
+				visiblePatternNames,
+			} ),
+		[ editorSlots, editorStructure, templateType, visiblePatternNames ]
+	);
 	const recommendationContextSignature = useMemo(
 		() =>
 			buildTemplateRecommendationContextSignature( {
 				editorSlots,
 				editorStructure,
 				visiblePatternNames,
+				designSemantics,
 			} ),
-		[ editorSlots, editorStructure, visiblePatternNames ]
+		[ designSemantics, editorSlots, editorStructure, visiblePatternNames ]
 	);
 	const currentPatternOverrideCount =
 		editorStructure?.currentPatternOverrides?.blockCount || 0;
@@ -449,9 +461,11 @@ export default function TemplateRecommender() {
 				editorSlots,
 				editorStructure,
 				visiblePatternNames,
+				designSemantics,
 				contextSignature: recommendationContextSignature,
 			} ),
 		[
+			designSemantics,
 			editorSlots,
 			editorStructure,
 			prompt,

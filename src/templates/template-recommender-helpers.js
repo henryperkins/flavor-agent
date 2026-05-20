@@ -11,6 +11,7 @@ import {
 	normalizeVisiblePatternNames,
 	summarizeBlockAttributes,
 } from '../utils/live-structure-snapshots';
+import { normalizeDesignSemantics } from '../utils/recommendation-design-semantics';
 export { formatCount } from '../utils/format-count';
 
 const ENTITY_PART = 'part';
@@ -195,14 +196,14 @@ export function buildTemplateRecommendationContextSignature( {
 	editorSlots,
 	visiblePatternNames,
 	editorStructure,
+	designSemantics,
 } = {} ) {
 	const normalizedVisiblePatternNames =
 		normalizeVisiblePatternNames( visiblePatternNames );
 	const normalizedAllowedAreas = Array.isArray( editorSlots?.allowedAreas )
 		? [ ...new Set( editorSlots.allowedAreas.filter( Boolean ) ) ].sort()
 		: null;
-
-	return buildContextSignature( {
+	const signatureInputs = {
 		assignedParts: Array.isArray( editorSlots?.assignedParts )
 			? editorSlots.assignedParts
 			: null,
@@ -221,7 +222,16 @@ export function buildTemplateRecommendationContextSignature( {
 		visiblePatternNames: Array.isArray( normalizedVisiblePatternNames )
 			? [ ...normalizedVisiblePatternNames ].sort()
 			: null,
-	} );
+	};
+
+	if ( designSemantics ) {
+		signatureInputs.designSemantics = normalizeDesignSemantics(
+			designSemantics,
+			'template'
+		);
+	}
+
+	return buildContextSignature( signatureInputs );
 }
 
 export function buildTemplateFetchInput( {
@@ -231,6 +241,7 @@ export function buildTemplateFetchInput( {
 	editorSlots,
 	visiblePatternNames,
 	editorStructure,
+	designSemantics,
 	contextSignature = '',
 } ) {
 	const input = { templateRef };
@@ -256,6 +267,13 @@ export function buildTemplateFetchInput( {
 
 	if ( Array.isArray( normalizedVisiblePatternNames ) ) {
 		input.visiblePatternNames = normalizedVisiblePatternNames;
+	}
+
+	if ( designSemantics ) {
+		input.designSemantics = normalizeDesignSemantics(
+			designSemantics,
+			'template'
+		);
 	}
 
 	if ( contextSignature ) {

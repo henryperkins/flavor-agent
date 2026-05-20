@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use FlavorAgent\LLM\PromptBudget;
+use FlavorAgent\Support\DesignSemantics;
 use PHPUnit\Framework\TestCase;
 
 final class PromptBudgetTest extends TestCase {
@@ -75,6 +76,85 @@ final class PromptBudgetTest extends TestCase {
 
 	public function test_estimate_tokens_returns_zero_for_empty(): void {
 		$this->assertSame( 0, PromptBudget::estimate_tokens( '' ) );
+	}
+
+	public function test_design_semantic_formatter_caps_prompt_body_tokens(): void {
+		$lines = DesignSemantics::format_prompt_lines(
+			[
+				'surface'         => 'template-part',
+				'sectionRole'     => 'footer',
+				'visualDensity'   => 'dense',
+				'contrastContext' => 'dark-parent',
+				'layoutRhythm'    => 'grid',
+				'typographyRole'  => 'navigation',
+				'mainDesignIssue' => 'accessibility',
+				'negativeSignals' => [
+					'parent-already-supplies-contrast',
+					'no-typography-support',
+					'content-only-context',
+					'locked-editing-mode',
+				],
+				'templatePart'    => [
+					'ref'                => 'twentytwentyfive//footer',
+					'slug'               => 'footer',
+					'area'               => 'footer',
+					'visiblePatternName' => 'twentytwentyfive/footer-with-navigation-and-social-links',
+				],
+			],
+			80
+		);
+
+		$this->assertLessThanOrEqual(
+			80,
+			PromptBudget::estimate_tokens( implode( "\n", $lines ) )
+		);
+	}
+
+	public function test_design_semantic_section_does_not_displace_higher_priority_context(): void {
+		$lines  = DesignSemantics::format_prompt_lines(
+			[
+				'surface'         => 'template',
+				'sectionRole'     => 'archive-list',
+				'visualDensity'   => 'dense',
+				'contrastContext' => 'dark-parent',
+				'layoutRhythm'    => 'grid',
+				'typographyRole'  => 'body',
+				'mainDesignIssue' => 'rhythm',
+				'negativeSignals' => [
+					'parent-already-supplies-contrast',
+					'no-typography-support',
+					'content-only-context',
+					'locked-editing-mode',
+				],
+				'template'        => [
+					'templateType'        => 'archive',
+					'emptyAreaCount'      => 1,
+					'visiblePatternCount' => 6,
+				],
+			],
+			80
+		);
+		$budget = new PromptBudget( 2000 );
+
+		$budget->add_section( 'identity', "## Template\nType: archive", 100 );
+		$budget->add_section( 'primary_context', '## Structure Summary', 70 );
+		$budget->add_section(
+			'design_semantics',
+			"## Design semantic context\n" . implode( "\n", $lines ),
+			58
+		);
+		$budget->add_section( 'theme_tokens', str_repeat( 'token ', 12000 ), 30 );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( '## Template', $result );
+		$this->assertStringContainsString( '## Structure Summary', $result );
+		$this->assertStringNotContainsString( str_repeat( 'token ', 100 ), $result );
+
+		if ( str_contains( $result, '## Design semantic context' ) ) {
+			$semantic_body = trim( substr( $result, strpos( $result, '## Design semantic context' ) ) );
+			$this->assertLessThanOrEqual( 120, PromptBudget::estimate_tokens( $semantic_body ) );
+		}
 	}
 
 	public function test_is_within_budget_when_small_content(): void {

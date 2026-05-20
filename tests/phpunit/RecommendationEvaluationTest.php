@@ -56,6 +56,93 @@ final class RecommendationEvaluationTest extends TestCase {
 		}
 	}
 
+	public function test_phase_two_parser_backed_metrics_include_design_semantic_prompt_wiring(): void {
+		$fixtures              = require __DIR__ . '/fixtures/recommendation-evaluation-phase-2-parser-fixtures.php';
+		$materialized_fixtures = [];
+
+		foreach ( $fixtures as $name => $fixture ) {
+			$this->assertIsArray( $fixture );
+			self::assert_phase_two_prompt_includes_design_semantics(
+				is_string( $name ) ? $name : 'phase_2_fixture',
+				$fixture
+			);
+
+			$expected = $fixture['expectedMetrics'] ?? null;
+			$this->assertIsArray( $expected );
+
+			$materialized = self::materialize_parser_fixture( $fixture );
+
+			$this->assertSame(
+				self::normalize_expected_metrics( $expected ),
+				self::round_metric_values( self::evaluate( [ $materialized ] ) )
+			);
+
+			$expected_top_ranked = $fixture['expectedTopRankedMetrics'] ?? null;
+			if ( ! empty( $fixture['rankedMetricProbe'] ) ) {
+				$this->assertIsArray( $expected_top_ranked, 'Ranked parser probes must record top-ranked Phase 2 metrics.' );
+			}
+
+			if ( is_array( $expected_top_ranked ) ) {
+				$this->assertSame(
+					self::normalize_expected_metrics( $expected_top_ranked ),
+					self::round_metric_values( self::evaluate( [ self::top_ranked_fixture( $materialized ) ] ) )
+				);
+			}
+
+			$materialized_fixtures[] = $materialized;
+		}
+
+		$metrics = self::round_metric_values( self::evaluate( $materialized_fixtures ) );
+
+		$this->assertSame( 0.0, $metrics['invalidOperationRate'] );
+		$this->assertSame( 0.0, $metrics['noiseRate'] );
+
+		$baseline = json_decode(
+			(string) file_get_contents( __DIR__ . '/fixtures/recommendation-evaluation-baseline.json' ),
+			true
+		);
+		$this->assertIsArray( $baseline );
+
+		$baseline = self::normalize_expected_metrics( $baseline );
+
+		$this->assertSame( 0.3333, $baseline['invalidOperationRate'] );
+		$this->assertSame( 1.0, $baseline['noiseRate'] );
+	}
+
+	/**
+	 * @param array<string, mixed> $fixture
+	 */
+	private static function assert_phase_two_prompt_includes_design_semantics( string $name, array $fixture ): void {
+		$parser  = is_string( $fixture['parser'] ?? null ) ? $fixture['parser'] : '';
+		$context = is_array( $fixture['context'] ?? null ) ? $fixture['context'] : [];
+
+		self::assertIsArray(
+			$context['designSemantics'] ?? null,
+			"{$name} must include designSemantics context."
+		);
+
+		$prompt = match ( $parser ) {
+			'block'         => Prompt::build_user( $context, '' ),
+			'template'      => TemplatePrompt::build_user( $context, '' ),
+			'template_part' => TemplatePartPrompt::build_user( $context, '' ),
+			default         => self::fail( "Unsupported Phase 2 prompt fixture: {$parser}" ),
+		};
+
+		self::assertStringContainsString( '## Design semantic context', $prompt, $name );
+
+		if ( is_string( $context['designSemantics']['sectionRole'] ?? null ) ) {
+			self::assertStringContainsString(
+				'Role: ' . $context['designSemantics']['sectionRole'],
+				$prompt,
+				$name
+			);
+		}
+
+		if ( ! empty( $context['designSemantics']['negativeSignals'] ) ) {
+			self::assertStringContainsString( 'Negative signals:', $prompt, $name );
+		}
+	}
+
 	/**
 	 * @param array<string, mixed> $fixture
 	 * @return array<string, mixed>

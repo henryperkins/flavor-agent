@@ -146,6 +146,19 @@ final class BlockAbilitiesTest extends TestCase {
 							],
 						],
 					],
+					'designSemantics'     => (object) [
+						'surface'         => 'block',
+						'sectionRole'     => 'footer',
+						'contrastContext' => 'dark-parent',
+						'layoutRhythm'    => 'constrained',
+						'tokenAffinity'   => (object) [
+							'color' => [ 'contrast', 'base', 'contrast' ],
+						],
+						'block'           => (object) [
+							'name'        => 'core/paragraph',
+							'unsupported' => [ 'drop' ],
+						],
+					],
 				],
 			]
 		);
@@ -184,6 +197,11 @@ final class BlockAbilitiesTest extends TestCase {
 			$this->assertSame( 'footer-paragraph', $prepared['context']['block']['structuralIdentity']['role'] );
 			$this->assertSame( 'footer-slot', $prepared['context']['structuralAncestors'][0]['role'] );
 			$this->assertSame( 'footer-slot', $prepared['context']['structuralBranch'][0]['role'] );
+			$this->assertSame( 'block', $prepared['context']['designSemantics']['surface'] ?? null );
+			$this->assertSame( 'footer', $prepared['context']['designSemantics']['sectionRole'] ?? null );
+			$this->assertSame( 'dark-parent', $prepared['context']['designSemantics']['contrastContext'] ?? null );
+			$this->assertSame( [ 'base', 'contrast' ], $prepared['context']['designSemantics']['tokenAffinity']['color'] ?? null );
+			$this->assertArrayNotHasKey( 'unsupported', $prepared['context']['designSemantics']['block'] ?? [] );
 	}
 
 	public function test_prepare_recommend_block_input_normalizes_selected_block_payload(): void {
@@ -727,6 +745,70 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_recommend_block_resolved_signature_includes_design_semantics(): void {
+		$input = [
+			'prompt'               => 'Keep the paragraph tighter and clearer.',
+			'editorContext'        => [
+				'block'           => [
+					'name' => 'core/paragraph',
+				],
+				'designSemantics' => [
+					'surface'         => 'block',
+					'sectionRole'     => 'hero',
+					'contrastContext' => 'dark-parent',
+					'layoutRhythm'    => 'constrained',
+				],
+			],
+			'resolveSignatureOnly' => true,
+		];
+
+		$first     = BlockAbilities::recommend_block( $input );
+		$reordered = BlockAbilities::recommend_block(
+			[
+				...$input,
+				'editorContext' => [
+					'block'           => [
+						'name' => 'core/paragraph',
+					],
+					'designSemantics' => [
+						'layoutRhythm'    => 'constrained',
+						'contrastContext' => 'dark-parent',
+						'sectionRole'     => 'hero',
+						'surface'         => 'block',
+					],
+				],
+			]
+		);
+		$changed   = BlockAbilities::recommend_block(
+			[
+				...$input,
+				'editorContext' => [
+					'block'           => [
+						'name' => 'core/paragraph',
+					],
+					'designSemantics' => [
+						'surface'         => 'block',
+						'sectionRole'     => 'footer',
+						'contrastContext' => 'dark-parent',
+						'layoutRhythm'    => 'constrained',
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $first );
+		$this->assertIsArray( $reordered );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$first['resolvedContextSignature'] ?? null,
+			$reordered['resolvedContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$first['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
 	}
 
 	public function test_recommend_block_resolved_signature_is_stable_between_recommendation_and_signature_modes(): void {

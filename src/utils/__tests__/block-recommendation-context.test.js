@@ -77,6 +77,42 @@ describe( 'buildBlockRecommendationContextSignature', () => {
 		expect( signatureA ).not.toBe( signatureB );
 	} );
 
+	test( 'includes normalized design semantic context in the block signature', () => {
+		const baseContext = {
+			block: { name: 'core/paragraph' },
+			designSemantics: {
+				surface: 'block',
+				sectionRole: 'hero',
+				contrastContext: 'dark-parent',
+				negativeSignals: [ 'parent-already-supplies-contrast' ],
+			},
+		};
+
+		expect( buildBlockRecommendationContextSignature( baseContext ) ).toBe(
+			buildBlockRecommendationContextSignature( {
+				block: { name: 'core/paragraph' },
+				designSemantics: {
+					negativeSignals: [ 'parent-already-supplies-contrast' ],
+					contrastContext: 'dark-parent',
+					sectionRole: 'hero',
+					surface: 'block',
+				},
+			} )
+		);
+
+		expect(
+			buildBlockRecommendationContextSignature( baseContext )
+		).not.toBe(
+			buildBlockRecommendationContextSignature( {
+				...baseContext,
+				designSemantics: {
+					...baseContext.designSemantics,
+					sectionRole: 'footer',
+				},
+			} )
+		);
+	} );
+
 	test( 'ignores structural ancestor changes beyond the server-visible cap', () => {
 		const visibleAncestors = Array.from(
 			{ length: BLOCK_STRUCTURAL_SUMMARY_MAX_ITEMS },

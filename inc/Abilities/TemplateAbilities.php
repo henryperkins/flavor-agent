@@ -12,6 +12,7 @@ use FlavorAgent\LLM\TemplatePrompt;
 use FlavorAgent\LLM\TemplatePartPrompt;
 use FlavorAgent\LLM\ThemeTokenFormatter;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
@@ -96,7 +97,15 @@ final class TemplateAbilities {
 		$editor_structure = self::normalize_template_editor_structure( $input['editorStructure'] ?? null );
 		$context          = self::apply_template_live_slot_context( $context, $editor_slots );
 		$context          = self::apply_template_live_structure_context( $context, $editor_structure );
-		$docs_result      = self::collect_wordpress_docs_guidance_result(
+		$design_semantics = DesignSemantics::normalize(
+			$input['designSemantics'] ?? [],
+			'template'
+		);
+		if ( ! empty( $design_semantics ) ) {
+			$context['designSemantics']        = $design_semantics;
+			$review_context['designSemantics'] = $design_semantics;
+		}
+		$docs_result = self::collect_wordpress_docs_guidance_result(
 			$context,
 			$prompt,
 			[
@@ -210,7 +219,15 @@ final class TemplateAbilities {
 
 		$editor_structure = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
 		$context          = self::apply_template_part_live_structure_context( $context, $editor_structure );
-		$docs_result      = self::collect_template_part_wordpress_docs_guidance_result(
+		$design_semantics = DesignSemantics::normalize(
+			$input['designSemantics'] ?? [],
+			'template-part'
+		);
+		if ( ! empty( $design_semantics ) ) {
+			$context['designSemantics']        = $design_semantics;
+			$review_context['designSemantics'] = $design_semantics;
+		}
+		$docs_result = self::collect_template_part_wordpress_docs_guidance_result(
 			$context,
 			$prompt,
 			[
@@ -1486,6 +1503,15 @@ final class TemplateAbilities {
 			$payload['themeTokens'] = $theme_tokens;
 		}
 
+		$design_semantics = DesignSemantics::normalize(
+			$context['designSemantics'] ?? [],
+			'template'
+		);
+
+		if ( ! empty( $design_semantics ) ) {
+			$payload['designSemantics'] = $design_semantics;
+		}
+
 		return RecommendationReviewSignature::from_payload(
 			'template',
 			$payload
@@ -1507,6 +1533,15 @@ final class TemplateAbilities {
 
 		if ( '' !== $theme_tokens ) {
 			$payload['themeTokens'] = $theme_tokens;
+		}
+
+		$design_semantics = DesignSemantics::normalize(
+			$context['designSemantics'] ?? [],
+			'template-part'
+		);
+
+		if ( ! empty( $design_semantics ) ) {
+			$payload['designSemantics'] = $design_semantics;
 		}
 
 		return RecommendationReviewSignature::from_payload(

@@ -68,6 +68,8 @@ import {
 	getSuggestionCardKey,
 	TEMPLATE_OPERATION_INSERT_PATTERN,
 } from '../template-recommender-helpers';
+import { buildTemplateDesignSemantics } from '../../utils/recommendation-design-semantics';
+import { normalizeTemplateType } from '../../utils/template-types';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -93,18 +95,30 @@ const SUGGESTION = {
 const SUGGESTION_KEY = getSuggestionCardKey( SUGGESTION, 0 );
 
 function buildTemplateContextSignature( state = getState() ) {
+	const editorSlots = buildEditorTemplateSlotSnapshot(
+		state.blockEditor.blocks
+	);
+	const editorStructure = buildEditorTemplateTopLevelStructureSnapshot(
+		state.blockEditor.blocks
+	);
+	const visiblePatternNames = (
+		state.blockEditor.allowedPatternsByRoot.null || []
+	)
+		.map( ( pattern ) => pattern?.name )
+		.filter( Boolean );
+
 	return buildTemplateRecommendationContextSignature( {
-		editorSlots: buildEditorTemplateSlotSnapshot(
-			state.blockEditor.blocks
-		),
-		editorStructure: buildEditorTemplateTopLevelStructureSnapshot(
-			state.blockEditor.blocks
-		),
-		visiblePatternNames: (
-			state.blockEditor.allowedPatternsByRoot.null || []
-		)
-			.map( ( pattern ) => pattern?.name )
-			.filter( Boolean ),
+		editorSlots,
+		editorStructure,
+		visiblePatternNames,
+		designSemantics: buildTemplateDesignSemantics( {
+			templateType: normalizeTemplateType(
+				state.editSite.postId || state.editor.postId
+			),
+			editorSlots,
+			editorStructure,
+			visiblePatternNames,
+		} ),
 	} );
 }
 
@@ -859,6 +873,12 @@ describe( 'TemplateRecommender', () => {
 		expect( mockFetchTemplateRecommendations ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				templateRef: TEMPLATE_REF,
+				designSemantics: expect.objectContaining( {
+					surface: 'template',
+					template: expect.objectContaining( {
+						visiblePatternCount: 2,
+					} ),
+				} ),
 				editorStructure: expect.objectContaining( {
 					structureStats: {
 						blockCount: 2,
@@ -897,6 +917,67 @@ describe( 'TemplateRecommender', () => {
 							},
 						],
 					},
+				} ),
+			} )
+		);
+	} );
+
+	test( 'submits runtime template slot semantics with explicit template type', async () => {
+		currentState = createState( {
+			blockEditor: {
+				...getState().blockEditor,
+				blocks: [
+					{
+						clientId: 'part-header',
+						name: 'core/template-part',
+						attributes: {
+							slug: 'site-header',
+							area: 'header',
+						},
+						innerBlocks: [],
+					},
+					{
+						clientId: 'part-footer',
+						name: 'core/template-part',
+						attributes: {
+							slug: 'site-footer',
+							area: 'footer',
+						},
+						innerBlocks: [],
+					},
+				],
+			},
+		} );
+		currentState = {
+			...currentState,
+			store: {
+				...currentState.store,
+				templateContextSignature:
+					buildTemplateContextSignature( currentState ),
+			},
+		};
+
+		await renderPanel();
+
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( element ) => element.textContent === 'Get Suggestions'
+				)
+				.click();
+		} );
+
+		expect( mockFetchTemplateRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				templateRef: TEMPLATE_REF,
+				designSemantics: expect.objectContaining( {
+					surface: 'template',
+					template: expect.objectContaining( {
+						templateType: 'home',
+						hasHeader: true,
+						hasFooter: true,
+						visiblePatternCount: 2,
+					} ),
 				} ),
 			} )
 		);

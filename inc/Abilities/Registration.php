@@ -861,6 +861,7 @@ final class Registration {
 						'type'  => 'array',
 						'items' => [ 'type' => 'string' ],
 					],
+					'designSemantics'      => self::open_object_schema(),
 					'editorSlots'          => self::open_object_schema(
 						[
 							'assignedParts' => [
@@ -972,6 +973,7 @@ final class Registration {
 						'type'  => 'array',
 						'items' => [ 'type' => 'string' ],
 					],
+					'designSemantics'      => self::open_object_schema(),
 					'editorStructure'      => self::template_part_editor_structure_schema(),
 					'document'             => $document,
 					'clientRequest'        => $client_request,

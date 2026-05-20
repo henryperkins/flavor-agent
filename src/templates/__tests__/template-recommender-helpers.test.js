@@ -156,6 +156,47 @@ describe( 'template recommender helpers', () => {
 		expect( firstSignature ).toBe( secondSignature );
 	} );
 
+	test( 'template recommendation signatures and fetch input include design semantics', () => {
+		const designSemantics = {
+			surface: 'template',
+			sectionRole: 'archive-list',
+			layoutRhythm: 'grid',
+			template: {
+				emptyAreaCount: 1,
+			},
+		};
+
+		const firstSignature = buildTemplateRecommendationContextSignature( {
+			editorSlots: { emptyAreas: [ 'footer' ] },
+			editorStructure: { structureStats: { blockCount: 6 } },
+			visiblePatternNames: [ 'theme/query-card' ],
+			designSemantics,
+		} );
+		const secondSignature = buildTemplateRecommendationContextSignature( {
+			editorSlots: { emptyAreas: [ 'footer' ] },
+			editorStructure: { structureStats: { blockCount: 6 } },
+			visiblePatternNames: [ 'theme/query-card' ],
+			designSemantics: {
+				...designSemantics,
+				layoutRhythm: 'stacked',
+			},
+		} );
+
+		expect( firstSignature ).not.toBe( secondSignature );
+		expect(
+			buildTemplateFetchInput( {
+				templateRef: 'twentytwentyfive//archive',
+				templateType: 'archive',
+				prompt: '',
+				editorSlots: { emptyAreas: [ 'footer' ] },
+				editorStructure: { structureStats: { blockCount: 6 } },
+				visiblePatternNames: [],
+				designSemantics,
+				contextSignature: firstSignature,
+			} ).designSemantics
+		).toEqual( expect.objectContaining( designSemantics ) );
+	} );
+
 	test( 'buildTemplateRecommendationContextSignature includes top-level template structure', () => {
 		expect(
 			buildTemplateRecommendationContextSignature( {

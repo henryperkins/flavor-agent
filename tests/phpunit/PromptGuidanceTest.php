@@ -111,6 +111,39 @@ final class PromptGuidanceTest extends TestCase {
 		$this->assertStringContainsString( '## Structural branch', $prompt );
 	}
 
+	public function test_block_prompt_includes_design_semantic_context(): void {
+		$prompt = Prompt::build_user(
+			[
+				'block'           => [
+					'name'            => 'core/paragraph',
+					'title'           => 'Paragraph',
+					'inspectorPanels' => [
+						'styles' => [ 'color' ],
+					],
+				],
+				'designSemantics' => [
+					'surface'         => 'block',
+					'sectionRole'     => 'footer',
+					'visualDensity'   => 'balanced',
+					'contrastContext' => 'dark-parent',
+					'layoutRhythm'    => 'constrained',
+					'typographyRole'  => 'body',
+					'mainDesignIssue' => 'contrast',
+					'negativeSignals' => [ 'parent-already-supplies-contrast' ],
+					'block'           => [
+						'name' => 'core/paragraph',
+					],
+				],
+				'themeTokens'     => [],
+			],
+			''
+		);
+
+		$this->assertStringContainsString( '## Design semantic context', $prompt );
+		$this->assertStringContainsString( 'Role: footer', $prompt );
+		$this->assertStringContainsString( 'Negative signals: parent-already-supplies-contrast', $prompt );
+	}
+
 	public function test_block_prompt_describes_block_level_content_only_restrictions(): void {
 		$prompt = Prompt::build_user(
 			[
