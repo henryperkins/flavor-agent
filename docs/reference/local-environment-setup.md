@@ -12,6 +12,8 @@ source ~/.nvm/nvm.sh && nvm use
 npm ci
 ```
 
+Node runtimes for this repo must be **major 20 or 24** (matching `package.json` `engines.node: ^20 || ^24`), with **24** as the default selector via `.node-version`.
+
 The local WordPress stack also expects Docker, Docker Compose, PHP, Composer, WP-CLI, and Playwright browsers to be available on the host when running the full verification pipeline.
 
 ## WordPress Image Pinning
