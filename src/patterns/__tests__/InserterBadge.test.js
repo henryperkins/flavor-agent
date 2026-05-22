@@ -5,6 +5,14 @@ const mockCanInsertBlockType = jest.fn();
 const mockCreateBlock = jest.fn();
 const mockRawHandler = jest.fn();
 
+const fs = require( 'fs' );
+const path = require( 'path' );
+
+const EDITOR_CSS = fs.readFileSync(
+	path.join( __dirname, '../../editor.css' ),
+	'utf8'
+);
+
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
 } ) );
@@ -113,6 +121,15 @@ describe( 'InserterBadge', () => {
 
 	afterEach( () => {
 		document.body.innerHTML = '';
+	} );
+
+	test( 'keeps the badge click-through so the inserter toggle remains clickable', () => {
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-inserter-badge\s*\{[^}]*pointer-events:\s*none;/s
+		);
+		expect( EDITOR_CSS ).not.toMatch(
+			/\.flavor-agent-inserter-badge\s*\{[^}]*cursor:\s*help;/s
+		);
 	} );
 
 	test( 'stays hidden cleanly when no toggle anchor is available', () => {
@@ -225,6 +242,10 @@ describe( 'InserterBadge', () => {
 				.querySelector( '.flavor-agent-inserter-badge--ready' )
 				?.getAttribute( 'title' )
 		).toBe( 'Hero match.' );
+		expect(
+			anchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+				?.tagName
+		).toBe( 'OUTPUT' );
 
 		act( () => {
 			getRoot().unmount();
@@ -399,6 +420,15 @@ describe( 'InserterBadge', () => {
 		expect(
 			anchor.querySelector( '.flavor-agent-inserter-badge--loading' )
 		).not.toBeNull();
+		expect(
+			anchor.querySelector( '.flavor-agent-inserter-badge--loading' )
+				?.tagName
+		).toBe( 'OUTPUT' );
+		expect(
+			anchor
+				.querySelector( '.flavor-agent-inserter-badge--loading' )
+				?.getAttribute( 'aria-label' )
+		).toBe( 'Finding pattern recommendations' );
 	} );
 
 	test( 'error state still renders when allowed matches are zero', () => {

@@ -104,8 +104,10 @@ export default function AIAdvisorySection( {
 				onClick={ () => setIsOpen( ( prev ) => ! prev ) }
 				aria-expanded={ isOpen }
 			>
-				<div className="flavor-agent-panel__group-title">{ title }</div>
-				<div className="flavor-agent-card__meta">
+				<span className="flavor-agent-panel__group-title">
+					{ title }
+				</span>
+				<span className="flavor-agent-card__meta">
 					{ meta }
 					{ advisoryLabel && (
 						<span className="flavor-agent-pill">
@@ -117,7 +119,7 @@ export default function AIAdvisorySection( {
 							{ resolvedCountLabel }
 						</span>
 					) }
-				</div>
+				</span>
 				<span
 					className="flavor-agent-advisory-section__chevron"
 					aria-hidden="true"

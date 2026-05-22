@@ -77,6 +77,25 @@ describe( 'AIAdvisorySection', () => {
 		expect( getContainer().textContent ).toContain( 'Content' );
 	} );
 
+	test( 'uses phrasing content inside the disclosure button', () => {
+		act( () => {
+			getRoot().render(
+				<AIAdvisorySection title="Ideas" count={ 1 } countNoun="idea">
+					<div>Content</div>
+				</AIAdvisorySection>
+			);
+		} );
+
+		const toggle = getContainer().querySelector(
+			'.flavor-agent-advisory-section__toggle'
+		);
+
+		expect( toggle.querySelector( ':scope > div' ) ).toBeNull();
+		expect( toggle.textContent ).toContain( 'Ideas' );
+		expect( toggle.textContent ).toContain( 'Advisory only' );
+		expect( toggle.textContent ).toContain( '1 idea' );
+	} );
+
 	test( 'limits visible children and shows "Show more" button', () => {
 		const items = Array.from( { length: 8 }, ( _, i ) => (
 			<div key={ i }>Item { i + 1 }</div>

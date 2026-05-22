@@ -3,6 +3,7 @@ const mockUseSelect = jest.fn();
 const mockFetchContentRecommendations = jest.fn();
 const mockSetContentMode = jest.fn();
 const mockClearContentError = jest.fn();
+const mockGetContentRecommendationFreshness = jest.fn();
 
 jest.mock( '@wordpress/components', () =>
 	require( '../../test-utils/wp-components' ).mockWpComponents()
@@ -25,6 +26,16 @@ jest.mock( '@wordpress/editor', () => {
 jest.mock( '../../store', () => ( {
 	STORE_NAME: 'flavor-agent',
 } ) );
+
+jest.mock( '../content-recommendation-request', () => {
+	const actual = jest.requireActual( '../content-recommendation-request' );
+
+	return {
+		...actual,
+		getContentRecommendationFreshness: ( ...args ) =>
+			mockGetContentRecommendationFreshness( ...args ),
+	};
+} );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
@@ -58,6 +69,7 @@ function createState( overrides = {} ) {
 		store: {
 			activityLog: [],
 			contentError: null,
+			contentErrorDetails: null,
 			contentMode: 'draft',
 			contentRecommendation: null,
 			contentRecommendationRequestSignature: '',
@@ -72,6 +84,10 @@ function createState( overrides = {} ) {
 function getMockSurfaceStatusNotice( options = {} ) {
 	if ( getState().store.surfaceStatusNotice ) {
 		return getState().store.surfaceStatusNotice;
+	}
+
+	if ( options.requestErrorDetails?.connectorApproval ) {
+		return null;
 	}
 
 	if ( options.requestError ) {
@@ -112,6 +128,9 @@ function selectStore( storeName ) {
 		return {
 			getActivityLog: jest.fn( () => getState().store.activityLog ),
 			getContentError: jest.fn( () => getState().store.contentError ),
+			getContentErrorDetails: jest.fn(
+				() => getState().store.contentErrorDetails
+			),
 			getContentMode: jest.fn( () => getState().store.contentMode ),
 			getContentRecommendation: jest.fn(
 				() => getState().store.contentRecommendation
@@ -135,6 +154,10 @@ function selectStore( storeName ) {
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	mockGetContentRecommendationFreshness.mockImplementation(
+		jest.requireActual( '../content-recommendation-request' )
+			.getContentRecommendationFreshness
+	);
 	currentState = createState();
 	window.flavorAgentData = {
 		canRecommendContent: true,
@@ -244,6 +267,24 @@ describe( 'ContentRecommender', () => {
 		expect( mockSetContentMode ).toHaveBeenCalledWith( 'edit' );
 		expect( getContainer().textContent ).not.toContain(
 			'Current document'
+		);
+	} );
+
+	test( 'memoizes freshness while request inputs stay unchanged', () => {
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		expect( mockGetContentRecommendationFreshness ).toHaveBeenCalledTimes(
+			1
+		);
+
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		expect( mockGetContentRecommendationFreshness ).toHaveBeenCalledTimes(
+			1
 		);
 	} );
 
@@ -409,6 +450,50 @@ describe( 'ContentRecommender', () => {
 		} );
 
 		expect( mockClearContentError ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'renders connector approval notice instead of the generic request error', () => {
+		window.flavorAgentData = {
+			canRecommendContent: true,
+			canManageFlavorAgentSettings: true,
+			connectorApprovalUrl:
+				'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+			capabilities: {
+				surfaces: {
+					content: {
+						available: true,
+						reason: 'ready',
+					},
+				},
+			},
+		};
+		currentState = createState( {
+			store: {
+				contentError: 'Generic content request failed.',
+				contentErrorDetails: {
+					connectorApproval: {
+						connectorId: 'openai',
+						callerBasename: 'flavor-agent/flavor-agent.php',
+						callerName: 'Flavor Agent',
+						adminUrl:
+							'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+					},
+				},
+				contentStatus: 'error',
+			},
+		} );
+
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		const text = getContainer().textContent;
+
+		expect( text ).toContain(
+			'Flavor Agent needs administrator approval to use the openai connector.'
+		);
+		expect( text ).toContain( 'Open approvals page' );
+		expect( text ).not.toContain( 'Generic content request failed.' );
 	} );
 
 	test( 'renders provider capability guidance instead of request controls when unavailable', () => {

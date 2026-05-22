@@ -49,7 +49,10 @@ import {
 	validateTemplatePartOperationSequence,
 } from '../utils/template-operation-sequence';
 import { getTemplatePartAreaLookup } from '../utils/template-part-areas';
-import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../utils/capability-flags';
 import { formatCount } from '../utils/format-count';
 import {
 	getEditedPostTypeEntity,
@@ -359,6 +362,7 @@ export default function TemplatePartRecommender() {
 		recommendations,
 		explanation,
 		error,
+		errorDetails,
 		resultPrompt,
 		resultRef,
 		resultContextSignature,
@@ -385,6 +389,7 @@ export default function TemplatePartRecommender() {
 			recommendations: store.getTemplatePartRecommendations(),
 			explanation: store.getTemplatePartExplanation(),
 			error: store.getTemplatePartError(),
+			errorDetails: store.getTemplatePartErrorDetails?.() || null,
 			resultPrompt: store.getTemplatePartRequestPrompt?.() || '',
 			resultRef: store.getTemplatePartResultRef(),
 			resultContextSignature: store.getTemplatePartContextSignature(),
@@ -738,6 +743,7 @@ export default function TemplatePartRecommender() {
 			return store.getSurfaceStatusNotice( 'template-part', {
 				requestStatus: status,
 				requestError: error,
+				requestErrorDetails: errorDetails,
 				isStale: isStaleResult,
 				applyError,
 				undoError,
@@ -772,6 +778,7 @@ export default function TemplatePartRecommender() {
 			applyError,
 			applyStatus,
 			error,
+			errorDetails,
 			hasApplySuccess,
 			hasResult,
 			hasSuggestions,
@@ -784,6 +791,10 @@ export default function TemplatePartRecommender() {
 			undoStatus,
 			hasUndoSuccess,
 		]
+	);
+	const connectorApprovalNotice = useMemo(
+		() => getConnectorApprovalNotice( 'template-part', errorDetails ),
+		[ errorDetails ]
 	);
 	const showSecondaryGuidance =
 		! hasResult &&
@@ -954,8 +965,15 @@ export default function TemplatePartRecommender() {
 					/>
 				) }
 
+				{ connectorApprovalNotice && (
+					<CapabilityNotice
+						surface="template-part"
+						notice={ connectorApprovalNotice }
+					/>
+				) }
+
 				<AIStatusNotice
-					notice={ statusNotice }
+					notice={ connectorApprovalNotice ? null : statusNotice }
 					onAction={
 						statusNotice?.actionType === 'undo' &&
 						latestTemplatePartActivity

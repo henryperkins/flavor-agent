@@ -18,7 +18,15 @@ export default function RecommendationHero( {
 	children = null,
 	className = '',
 } ) {
-	if ( ! title && ! description && ! tone && ! why && ! meta && ! children ) {
+	if (
+		! eyebrow &&
+		! title &&
+		! description &&
+		! tone &&
+		! why &&
+		! meta &&
+		! children
+	) {
 		return null;
 	}
 

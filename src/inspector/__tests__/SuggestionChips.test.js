@@ -237,6 +237,38 @@ describe( 'SuggestionChips', () => {
 		).toBeUndefined();
 	} );
 
+	test( 'demotes stale passive mirror chips and suppresses their live preview swatch color', () => {
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					interactive={ false }
+					isStale
+					suggestions={ [
+						{
+							label: 'Use accent color',
+							panel: 'color',
+							preview: '#0b7b80',
+						},
+					] }
+				/>
+			);
+		} );
+
+		const chip = getContainer().querySelector(
+			'.flavor-agent-chip--passive'
+		);
+
+		expect( chip.className ).toContain( 'is-stale' );
+		expect(
+			chip.style.getPropertyValue( '--flavor-agent-chip-preview' )
+		).toBe( '' );
+		expect(
+			chip.querySelector( '.flavor-agent-chip__preview' )
+		).not.toBeNull();
+	} );
+
 	test( 'renders passive mirror chips without apply actions', () => {
 		act( () => {
 			getRoot().render(

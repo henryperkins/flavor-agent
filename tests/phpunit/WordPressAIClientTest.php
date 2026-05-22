@@ -90,6 +90,107 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
+	public function test_chat_preserves_connector_approval_error_data(): void {
+		WordPressTestState::$capabilities['manage_options'] = true;
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'wpai_connector_not_approved',
+			'The "openai" AI connector has not been approved for use by "flavor-agent/flavor-agent.php".',
+			[
+				'status'       => 403,
+				'connector_id' => 'openai',
+				'caller'       => [
+					'type'     => 'plugin',
+					'basename' => 'flavor-agent/flavor-agent.php',
+					'name'     => 'Flavor Agent',
+				],
+			]
+		);
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'wpai_connector_not_approved', $result->get_error_code() );
+
+		$data = $result->get_error_data();
+		$this->assertSame( 'openai', $data['connector_id'] ?? null );
+		$this->assertSame( 'flavor-agent/flavor-agent.php', $data['caller']['basename'] ?? null );
+		$this->assertSame( 'openai', $data['connectorApproval']['connectorId'] ?? null );
+		$this->assertSame( 'flavor-agent/flavor-agent.php', $data['connectorApproval']['callerBasename'] ?? null );
+		$this->assertStringContainsString(
+			'tools.php?page=ai-connector-approval',
+			$data['connectorApproval']['adminUrl'] ?? ''
+		);
+	}
+
+	public function test_chat_omits_connector_approval_admin_url_for_non_admins(): void {
+		WordPressTestState::$capabilities['manage_options'] = false;
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'wpai_connector_not_approved',
+			'The "openai" AI connector has not been approved for use by "flavor-agent/flavor-agent.php".',
+			[
+				'status'       => 403,
+				'connector_id' => 'openai',
+				'caller'       => [
+					'type'     => 'plugin',
+					'basename' => 'flavor-agent/flavor-agent.php',
+					'name'     => 'Flavor Agent',
+				],
+			]
+		);
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'wpai_connector_not_approved', $result->get_error_code() );
+		$this->assertSame( '', $result->get_error_data()['connectorApproval']['adminUrl'] ?? null );
+	}
+
+	public function test_chat_recovers_connector_approval_details_from_wrapped_throwable(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_throws = new \RuntimeException(
+			'The "openai" AI connector has not been approved for use by "flavor-agent/flavor-agent.php".'
+		);
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'wpai_connector_not_approved', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( 'openai', $result->get_error_data()['connectorApproval']['connectorId'] ?? null );
+		$this->assertSame(
+			'flavor-agent/flavor-agent.php',
+			$result->get_error_data()['connectorApproval']['callerBasename'] ?? null
+		);
+	}
+
+	public function test_connector_approval_admin_url_uses_default_and_filter_override(): void {
+		$this->assertStringContainsString(
+			'tools.php?page=ai-connector-approval',
+			WordPressAIClient::connector_approval_admin_url()
+		);
+
+		add_filter(
+			'flavor_agent_connector_approval_admin_url',
+			static fn (): string => 'https://example.test/wp-admin/tools.php?page=custom-approvals'
+		);
+
+		$this->assertSame(
+			'https://example.test/wp-admin/tools.php?page=custom-approvals',
+			WordPressAIClient::connector_approval_admin_url()
+		);
+	}
+
 	public function test_chat_returns_prompt_prevented_error_when_filter_blocks_generation(): void {
 		WordPressTestState::$ai_client_supported = true;
 		add_filter( 'wp_ai_client_prevent_prompt', '__return_true' );

@@ -2,28 +2,36 @@ import { Button, Notice } from '@wordpress/components';
 
 import { getCapabilityNotice } from '../utils/capability-flags';
 
-export default function CapabilityNotice( { surface, data = null } ) {
-	const notice = getCapabilityNotice( surface, data );
+export default function CapabilityNotice( {
+	surface,
+	data = null,
+	notice = null,
+} ) {
+	const resolvedNotice = notice || getCapabilityNotice( surface, data );
 
-	if ( ! notice ) {
+	if ( ! resolvedNotice ) {
 		return null;
 	}
 
-	let actions = Array.isArray( notice.actions ) ? notice.actions : [];
+	let actions = Array.isArray( resolvedNotice.actions )
+		? resolvedNotice.actions
+		: [];
 
-	if ( actions.length === 0 && notice.actionHref ) {
+	if ( actions.length === 0 && resolvedNotice.actionHref ) {
 		actions = [
 			{
-				label: notice.actionLabel,
-				href: notice.actionHref,
+				label: resolvedNotice.actionLabel,
+				href: resolvedNotice.actionHref,
 			},
 		];
 	}
 
 	return (
-		<Notice status={ notice.status } isDismissible={ false }>
+		<Notice status={ resolvedNotice.status } isDismissible={ false }>
 			<div className="flavor-agent-capability-notice">
-				<p className="flavor-agent-panel__note">{ notice.message }</p>
+				<p className="flavor-agent-panel__note">
+					{ resolvedNotice.message }
+				</p>
 				{ actions.map( ( action ) => (
 					<Button
 						key={ `${ surface }-${ action.href }` }

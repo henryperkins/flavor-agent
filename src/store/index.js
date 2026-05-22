@@ -77,6 +77,7 @@ import {
 	getBlockPatterns,
 } from '../patterns/pattern-settings';
 import { executeFlavorAgentAbility } from './abilities-client';
+import { normalizeRequestErrorDetails } from './request-error-details';
 
 const STORE_NAME = 'flavor-agent';
 const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
@@ -89,6 +90,7 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 	contextSignature: null,
 	resolvedContextSignature: null,
 	diagnostics: null,
+	errorDetails: null,
 	applyStatus: 'idle',
 	applyError: null,
 	lastAppliedSuggestionKey: null,
@@ -103,6 +105,7 @@ const DEFAULT_STATE = {
 	contentRecommendationRequestSignature: '',
 	contentStatus: 'idle',
 	contentError: null,
+	contentErrorDetails: null,
 	contentMode: 'draft',
 	contentRequestPrompt: '',
 	contentRequestToken: 0,
@@ -111,6 +114,7 @@ const DEFAULT_STATE = {
 	navigationExplanation: '',
 	navigationStatus: 'idle',
 	navigationError: null,
+	navigationErrorDetails: null,
 	navigationRequestPrompt: '',
 	navigationBlockClientId: null,
 	navigationContextSignature: null,
@@ -130,10 +134,12 @@ const DEFAULT_STATE = {
 	patternDiagnostics: null,
 	patternStatus: 'idle',
 	patternError: null,
+	patternErrorDetails: null,
 	patternRequestToken: 0,
 	patternResultToken: 0,
 	patternRequestSignature: '',
 	patternInsertionTargetSignature: '',
+	patternResolvedContextSignature: '',
 	patternDocsGroundingWarning: null,
 	...createExecutableSurfaceDefaultState(),
 	...toastsDefaultState,
@@ -644,6 +650,13 @@ async function guardSurfaceApplyResolvedFreshness( {
 }
 
 function getSurfaceStatusNotice( surface, options = {} ) {
+	const connectorApproval =
+		options.requestErrorDetails?.connectorApproval || null;
+
+	if ( connectorApproval ) {
+		return null;
+	}
+
 	const requestError = normalizeStringMessage( options.requestError );
 
 	if ( requestError ) {
@@ -1129,7 +1142,8 @@ const actions = {
 		clientId,
 		status,
 		error = null,
-		requestToken = null
+		requestToken = null,
+		errorDetails = null
 	) {
 		return {
 			type: 'SET_BLOCK_REQUEST_STATE',
@@ -1137,6 +1151,7 @@ const actions = {
 			status,
 			error,
 			requestToken,
+			errorDetails,
 		};
 	},
 
@@ -1240,12 +1255,18 @@ const actions = {
 		return { type: 'CLEAR_UNDO_ERROR' };
 	},
 
-	setContentStatus( status, error = null, requestToken = null ) {
+	setContentStatus(
+		status,
+		error = null,
+		requestToken = null,
+		errorDetails = null
+	) {
 		return {
 			type: 'SET_CONTENT_STATUS',
 			status,
 			error,
 			requestToken,
+			errorDetails,
 		};
 	},
 
@@ -1335,6 +1356,10 @@ const actions = {
 					requestData,
 					requestToken,
 				} ) => {
+					const errorDetails = normalizeRequestErrorDetails( err );
+					const requestErrorDetails = errorDetails.connectorApproval
+						? errorDetails
+						: null;
 					const diagnostics =
 						buildBlockRecommendationFailureDiagnostics(
 							err,
@@ -1346,8 +1371,11 @@ const actions = {
 						actions.setBlockRequestState(
 							requestClientId,
 							'error',
-							diagnostics.errorMessage || 'Request failed.',
-							requestToken
+							requestErrorDetails?.message ||
+								diagnostics.errorMessage ||
+								'Request failed.',
+							requestToken,
+							requestErrorDetails
 						)
 					);
 					localDispatch(
@@ -1918,7 +1946,8 @@ const actions = {
 		error = null,
 		requestToken = null,
 		requestSignature = '',
-		insertionTargetSignature = ''
+		insertionTargetSignature = '',
+		errorDetails = null
 	) {
 		return {
 			type: 'SET_PATTERN_STATUS',
@@ -1927,6 +1956,7 @@ const actions = {
 			requestToken,
 			requestSignature,
 			insertionTargetSignature,
+			errorDetails,
 		};
 	},
 
@@ -1936,7 +1966,8 @@ const actions = {
 		requestSignature = '',
 		diagnostics = null,
 		insertionTargetSignature = '',
-		docsGroundingWarning = null
+		docsGroundingWarning = null,
+		resolvedContextSignature = ''
 	) {
 		return {
 			type: 'SET_PATTERN_RECS',
@@ -1946,6 +1977,7 @@ const actions = {
 			diagnostics,
 			insertionTargetSignature,
 			docsGroundingWarning,
+			resolvedContextSignature,
 		};
 	},
 
@@ -1953,7 +1985,8 @@ const actions = {
 		status,
 		error = null,
 		requestToken = null,
-		blockClientId = null
+		blockClientId = null,
+		errorDetails = null
 	) {
 		return {
 			type: 'SET_NAVIGATION_STATUS',
@@ -1961,6 +1994,7 @@ const actions = {
 			error,
 			requestToken,
 			blockClientId,
+			errorDetails,
 		};
 	},
 
@@ -2013,6 +2047,23 @@ const actions = {
 		};
 	},
 
+	resolvePatternRecommendationSignature( input ) {
+		return ( { registry } ) => {
+			const requestData = {
+				...( input || {} ),
+				document: getRequestDocumentFromScope(
+					getCurrentActivityScope( registry )
+				),
+				resolveSignatureOnly: true,
+			};
+
+			return executeFlavorAgentAbility(
+				'flavor-agent/recommend-patterns',
+				requestData
+			);
+		};
+	},
+
 	fetchPatternRecommendations( input, requestContext = {} ) {
 		return ( { dispatch, registry, select } ) =>
 			runAbortableRecommendationRequest( {
@@ -2057,6 +2108,11 @@ const actions = {
 					requestSignature,
 					requestToken,
 				} ) => {
+					const errorDetails = normalizeRequestErrorDetails( err );
+					const requestErrorDetails = errorDetails.connectorApproval
+						? errorDetails
+						: null;
+
 					localDispatch(
 						actions.setPatternRecommendations(
 							[],
@@ -2069,11 +2125,12 @@ const actions = {
 					localDispatch(
 						actions.setPatternStatus(
 							'error',
-							err?.message ||
+							errorDetails.message ||
 								'Pattern recommendation request failed.',
 							requestToken,
 							requestSignature,
-							insertionTargetSignature
+							insertionTargetSignature,
+							requestErrorDetails
 						)
 					);
 					return reloadStoreActivitySession(
@@ -2114,7 +2171,9 @@ const actions = {
 							insertionTargetSignature,
 							normalizeDocsGroundingWarning(
 								result.docsGrounding
-							)
+							),
+							getResolvedContextSignatureFromResponse( result ) ||
+								''
 						)
 					);
 					localDispatch(
@@ -2164,12 +2223,18 @@ const actions = {
 				input,
 				registry,
 				onError: ( { dispatch: localDispatch, err, requestToken } ) => {
+					const errorDetails = normalizeRequestErrorDetails( err );
+					const requestErrorDetails = errorDetails.connectorApproval
+						? errorDetails
+						: null;
+
 					localDispatch(
 						actions.setContentStatus(
 							'error',
-							err?.message ||
+							errorDetails.message ||
 								'Content recommendation request failed.',
-							requestToken
+							requestToken,
+							requestErrorDetails
 						)
 					);
 					return reloadStoreActivitySession(
@@ -2254,6 +2319,11 @@ const actions = {
 					requestData,
 					requestToken,
 				} ) => {
+					const errorDetails = normalizeRequestErrorDetails( err );
+					const requestErrorDetails = errorDetails.connectorApproval
+						? errorDetails
+						: null;
+
 					localDispatch(
 						actions.setNavigationRecommendations(
 							blockClientId,
@@ -2267,10 +2337,11 @@ const actions = {
 					localDispatch(
 						actions.setNavigationStatus(
 							'error',
-							err?.message ||
+							errorDetails.message ||
 								'Navigation recommendation request failed.',
 							requestToken,
-							blockClientId
+							blockClientId,
+							requestErrorDetails
 						)
 					);
 					return reloadStoreActivitySession(
@@ -2535,6 +2606,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 						...currentEntry,
 						status: action.status,
 						error: action.error ?? null,
+						errorDetails:
+							action.status === 'error'
+								? action.errorDetails ?? null
+								: null,
 						diagnostics:
 							action.status === 'loading' ||
 							action.status === 'error'
@@ -2601,6 +2676,13 @@ function reducer( state = DEFAULT_STATE, action ) {
 						diagnostics: normalizeBlockRequestDiagnostics(
 							action.diagnostics
 						),
+						errorDetails:
+							action.diagnostics?.type === 'failure'
+								? getStoredBlockRequestState(
+										state,
+										action.clientId
+								  ).errorDetails
+								: null,
 						applyStatus: 'idle',
 						applyError: null,
 						lastAppliedSuggestionKey: null,
@@ -2712,6 +2794,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 								? 'idle'
 								: currentEntry.status,
 						error: null,
+						errorDetails: null,
 						applyStatus:
 							currentEntry.applyStatus === 'error'
 								? 'idle'
@@ -2879,6 +2962,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 				...state,
 				patternStatus: action.status,
 				patternError: action.error ?? null,
+				patternErrorDetails:
+					action.status === 'error'
+						? action.errorDetails ?? null
+						: null,
 				patternRequestToken:
 					action.requestToken ?? state.patternRequestToken,
 				patternRequestSignature:
@@ -2887,6 +2974,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 					typeof action.insertionTargetSignature === 'string'
 						? action.insertionTargetSignature
 						: state.patternInsertionTargetSignature,
+				patternResolvedContextSignature:
+					action.status === 'loading' || action.status === 'error'
+						? ''
+						: state.patternResolvedContextSignature,
 				patternDocsGroundingWarning:
 					action.status === 'loading' || action.status === 'error'
 						? null
@@ -2901,6 +2992,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 				...state,
 				contentStatus: action.status,
 				contentError: action.error ?? null,
+				contentErrorDetails:
+					action.status === 'error'
+						? action.errorDetails ?? null
+						: null,
 				contentRequestToken:
 					action.requestToken ?? state.contentRequestToken,
 				contentRecommendation:
@@ -2927,6 +3022,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				contentResultToken: state.contentResultToken + 1,
 				contentStatus: 'ready',
 				contentError: null,
+				contentErrorDetails: null,
 			};
 		case 'SET_CONTENT_MODE':
 			return {
@@ -2945,6 +3041,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						? 'idle'
 						: state.contentStatus,
 				contentError: null,
+				contentErrorDetails: null,
 			};
 		case 'SET_PATTERN_RECS':
 			if (
@@ -2964,6 +3061,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 					action.diagnostics
 				),
 				patternError: null,
+				patternErrorDetails: null,
 				patternRequestToken:
 					action.requestToken ?? state.patternRequestToken,
 				patternResultToken: state.patternResultToken + 1,
@@ -2973,6 +3071,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 					typeof action.insertionTargetSignature === 'string'
 						? action.insertionTargetSignature
 						: state.patternInsertionTargetSignature,
+				patternResolvedContextSignature:
+					typeof action.resolvedContextSignature === 'string'
+						? action.resolvedContextSignature
+						: '',
 				patternDocsGroundingWarning:
 					action.docsGroundingWarning ?? null,
 			};
@@ -2985,6 +3087,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 				...state,
 				navigationStatus: action.status,
 				navigationError: action.error ?? null,
+				navigationErrorDetails:
+					action.status === 'error'
+						? action.errorDetails ?? null
+						: null,
 				navigationRequestToken:
 					action.requestToken ?? state.navigationRequestToken,
 				navigationBlockClientId:
@@ -3030,6 +3136,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 					: 'idle',
 				navigationStatus: 'ready',
 				navigationError: null,
+				navigationErrorDetails: null,
 				navigationReviewStaleReason: null,
 				navigationDocsGroundingWarning: normalizeDocsGroundingWarning(
 					action.payload?.docsGrounding
@@ -3079,6 +3186,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						? 'idle'
 						: state.navigationStatus,
 				navigationError: null,
+				navigationErrorDetails: null,
 			};
 		case 'CLEAR_NAVIGATION_RECS':
 			return {
@@ -3087,6 +3195,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationExplanation: '',
 				navigationStatus: 'idle',
 				navigationError: null,
+				navigationErrorDetails: null,
 				navigationRequestPrompt: '',
 				navigationBlockClientId: null,
 				navigationContextSignature: null,
@@ -3114,6 +3223,8 @@ const selectors = {
 		getStoredBlockRequestState( state, clientId ).status,
 	getBlockError: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).error,
+	getBlockErrorDetails: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).errorDetails,
 	getBlockRequestToken: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).requestToken,
 	getBlockRecommendationContextSignature: ( state, clientId ) =>
@@ -3129,6 +3240,8 @@ const selectors = {
 		getStoredBlockRequestState( state, clientId ).applyStatus,
 	getBlockApplyError: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).applyError,
+	getBlockLastAppliedSuggestionKey: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).lastAppliedSuggestionKey,
 	getBlockStaleReason: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).staleReason,
 	isBlockLoading: ( state, clientId ) =>
@@ -3149,11 +3262,14 @@ const selectors = {
 	getPatternDiagnostics: ( state ) => state.patternDiagnostics,
 	getPatternStatus: ( state ) => state.patternStatus,
 	getPatternError: ( state ) => state.patternError,
+	getPatternErrorDetails: ( state ) => state.patternErrorDetails,
 	getPatternRequestToken: ( state ) => state.patternRequestToken,
 	getPatternRequestSignature: ( state ) =>
 		state.patternRequestSignature || '',
 	getPatternInsertionTargetSignature: ( state ) =>
 		state.patternInsertionTargetSignature || '',
+	getPatternResolvedContextSignature: ( state ) =>
+		state.patternResolvedContextSignature || '',
 	getPatternDocsGroundingWarning: ( state ) =>
 		state.patternDocsGroundingWarning || null,
 	getContentRecommendation: ( state ) => state.contentRecommendation,
@@ -3162,6 +3278,7 @@ const selectors = {
 	getContentRequestPrompt: ( state ) => state.contentRequestPrompt || '',
 	getContentStatus: ( state ) => state.contentStatus,
 	getContentError: ( state ) => state.contentError,
+	getContentErrorDetails: ( state ) => state.contentErrorDetails,
 	getContentMode: ( state ) => state.contentMode,
 	getContentRequestToken: ( state ) => state.contentRequestToken,
 	getNavigationRecommendations: ( state, blockClientId = null ) =>
@@ -3176,6 +3293,10 @@ const selectors = {
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? null
 			: state.navigationError,
+	getNavigationErrorDetails: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? null
+			: state.navigationErrorDetails,
 	getNavigationStatus: ( state, blockClientId = null ) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? 'idle'
@@ -3270,4 +3391,10 @@ const store = createReduxStore( STORE_NAME, { reducer, actions, selectors } );
 
 register( store );
 
-export { actions, reducer, selectors, STORE_NAME };
+export {
+	actions,
+	getResolvedContextSignatureFromResponse,
+	reducer,
+	selectors,
+	STORE_NAME,
+};

@@ -395,6 +395,48 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		} );
 	} );
 
+	test( 'toast undo focus shortcut uses userAgentData platform before navigator.platform', () => {
+		const originalPlatform = navigator.platform;
+		const originalUserAgentData = navigator.userAgentData;
+
+		Object.defineProperty( navigator, 'platform', {
+			value: '',
+			configurable: true,
+		} );
+		Object.defineProperty( navigator, 'userAgentData', {
+			value: { platform: 'macOS' },
+			configurable: true,
+		} );
+
+		expect(
+			isToastUndoFocusShortcut( {
+				key: 'u',
+				shiftKey: true,
+				altKey: true,
+				ctrlKey: false,
+				metaKey: true,
+			} )
+		).toBe( true );
+		expect(
+			isToastUndoFocusShortcut( {
+				key: 'u',
+				shiftKey: true,
+				altKey: true,
+				ctrlKey: true,
+				metaKey: false,
+			} )
+		).toBe( false );
+
+		Object.defineProperty( navigator, 'platform', {
+			value: originalPlatform,
+			configurable: true,
+		} );
+		Object.defineProperty( navigator, 'userAgentData', {
+			value: originalUserAgentData,
+			configurable: true,
+		} );
+	} );
+
 	test( 'mod+shift+z keydown does not move focus away from editor redo', () => {
 		setToasts( [
 			{
@@ -581,6 +623,61 @@ describe( 'ToastRegion — keyboard shortcut', () => {
 		act( () => {
 			iframe.contentDocument.dispatchEvent(
 				new iframe.contentWindow.KeyboardEvent( 'keydown', {
+					key: 'u',
+					altKey: true,
+					ctrlKey: true,
+					shiftKey: true,
+					bubbles: true,
+				} )
+			);
+		} );
+
+		expect( document.activeElement ).toBe(
+			getRegionRoot().querySelector( '.flavor-agent-toast__action' )
+		);
+
+		Object.defineProperty( navigator, 'platform', {
+			value: original,
+			configurable: true,
+		} );
+	} );
+
+	test( 'observes nested same-origin iframes added after mount for the undo focus shortcut', async () => {
+		setToasts( [
+			{
+				id: 'newest',
+				variant: 'success',
+				title: 'Second',
+				activityId: 'a2',
+				autoDismissMs: 6000,
+				interacted: false,
+			},
+		] );
+
+		const iframe = document.createElement( 'iframe' );
+		document.body.appendChild( iframe );
+
+		act( () => {
+			getRoot().render( <ToastRegion /> );
+		} );
+
+		const nestedIframe = iframe.contentDocument.createElement( 'iframe' );
+		iframe.contentDocument.body.appendChild( nestedIframe );
+
+		await act( async () => {
+			await Promise.resolve();
+		} );
+
+		const original = navigator.platform;
+
+		Object.defineProperty( navigator, 'platform', {
+			value: 'Linux x86_64',
+			configurable: true,
+		} );
+
+		act( () => {
+			nestedIframe.contentDocument.dispatchEvent(
+				new nestedIframe.contentWindow.KeyboardEvent( 'keydown', {
 					key: 'u',
 					altKey: true,
 					ctrlKey: true,

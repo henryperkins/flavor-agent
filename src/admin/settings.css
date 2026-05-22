@@ -357,7 +357,7 @@
 .flavor-agent-settings-field {
 	width: min(100%, 460px);
 	min-height: 40px;
-	border-color: rgba(11, 123, 128, 0.16);
+	border-color: var(--flavor-agent-color-accent-line);
 	border-radius: var(--wpds-border-radius-md, 4px);
 	background: var(--wpds-color-bg-surface, #fff);
 	box-shadow: none;
@@ -451,7 +451,7 @@
 .flavor-agent-settings-subpanel {
 	overflow: hidden;
 	margin-top: 14px;
-	border: 1px solid rgba(11, 123, 128, 0.12);
+	border: 1px solid var(--flavor-agent-color-accent-wash);
 	border-radius: var(--wpds-border-radius-lg, 8px);
 	background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
 }
@@ -508,7 +508,7 @@
 
 .flavor-agent-guidelines__item {
 	padding: 14px;
-	border: 1px solid rgba(11, 123, 128, 0.12);
+	border: 1px solid var(--flavor-agent-color-accent-wash);
 	border-radius: var(--wpds-border-radius-lg, 8px);
 	background: var(--wpds-color-bg-surface, #fff);
 }
@@ -569,7 +569,7 @@
 .flavor-agent-guidelines__block-editor {
 	margin-top: 14px;
 	padding: 14px;
-	border: 1px solid rgba(11, 123, 128, 0.12);
+	border: 1px solid var(--flavor-agent-color-accent-wash);
 	border-radius: var(--wpds-border-radius-lg, 8px);
 	background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
 }
@@ -605,7 +605,7 @@
 
 .flavor-agent-guidelines__actions-panel {
 	padding: 14px;
-	border: 1px solid rgba(11, 123, 128, 0.12);
+	border: 1px solid var(--flavor-agent-color-accent-wash);
 	border-radius: var(--wpds-border-radius-lg, 8px);
 	background: var(--wpds-color-bg-surface, #fff);
 }
@@ -643,7 +643,7 @@
 
 .flavor-agent-sync-panel__prerequisites {
 	padding: 12px 14px;
-	border-left: 3px solid rgba(11, 123, 128, 0.24);
+	border-left: 3px solid var(--flavor-agent-color-accent-line-strong);
 	border-radius: var(--wpds-border-radius-lg, 8px);
 	background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
 }
@@ -700,7 +700,7 @@
 
 .flavor-agent-sync-panel__technical[open]
 	.flavor-agent-sync-panel__technical-summary {
-	border-bottom: 1px solid rgba(11, 123, 128, 0.1);
+	border-bottom: 1px solid var(--flavor-agent-color-accent-wash);
 }
 
 .flavor-agent-sync-panel__technical-body {
@@ -737,7 +737,7 @@
 .flavor-agent-settings-diagnostic {
 	margin-top: 16px;
 	padding: 14px;
-	border: 1px solid rgba(11, 123, 128, 0.12);
+	border: 1px solid var(--flavor-agent-color-accent-wash);
 	border-radius: var(--wpds-border-radius-lg, 8px);
 	background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
 }

@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-05-06
+> Last updated: 2026-05-21
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -99,6 +99,8 @@ The plugin works in degraded mode without any services configured. Each surface 
 
 Runtime embeddings use Cloudflare Workers AI. Older OpenAI Native, Azure OpenAI, or connector-backed provider option values are not rendered as embedding choices, and the settings form overwrites the provider option with `cloudflare_workers_ai` on save.
 
+When the WordPress AI plugin Connector Approval experiment is enabled, chat-backed recommendation surfaces require administrator approval for the selected connector. The first denied request is expected to create a pending approval entry in the AI plugin. Flavor Agent surfaces that denial as a request-time editor notice; administrators get a link to `Tools > Connector Approvals`, while non-admin editors are told to ask an administrator to review the pending request.
+
 ## Feature Inventory
 
 ### Implemented and Working
@@ -116,9 +118,9 @@ Runtime embeddings use Cloudflare Workers AI. Older OpenAI Native, Azure OpenAI,
 #### Pattern Recommendations
 
 - **Trigger:** Passive fetch on editor load; active fetch on inserter search input change (400ms debounce).
-- **Pipeline:** Build query text -> cache-backed/current WordPress docs grounding via Cloudflare AI Search -> selected pattern retrieval backend -> LLM rerank through `ResponsesClient::rank()`, which delegates to the WordPress AI Client / `Settings > Connectors` runtime -> filter scores below the backend-specific ranking threshold -> return up to the saved max result count (default `8`, capped at `12`). Missing or empty `visiblePatternNames` returns an empty list before retrieval, docs, or ranker calls. If trusted docs grounding is unavailable after candidate retrieval, the surface returns `flavor_agent_docs_grounding_unavailable` instead of calling the reranker. The Qdrant backend uses Cloudflare Workers AI embeddings plus two-pass Qdrant search (semantic + structural). The Cloudflare AI Search backend sends query text and the `visiblePatternNames` filter to the private pattern AI Search instance and does not call `EmbeddingClient` or `QdrantClient`.
+- **Pipeline:** Build query text -> cache-backed/current WordPress docs grounding via Cloudflare AI Search -> selected pattern retrieval backend -> LLM rerank through `ResponsesClient::rank()`, which delegates to the WordPress AI Client / `Settings > Connectors` runtime -> filter scores below the backend-specific ranking threshold -> return up to the saved max result count (default `8`, capped at `12`). Missing or empty `visiblePatternNames` returns an empty list before retrieval, docs, or ranker calls. If trusted docs grounding is unavailable after candidate retrieval, the surface returns `flavor_agent_docs_grounding_unavailable` instead of calling the reranker. The Qdrant backend uses Cloudflare Workers AI embeddings plus two-pass Qdrant search (semantic + structural). The Cloudflare AI Search backend sends query text and the `visiblePatternNames` filter to the private pattern AI Search instance and does not call `EmbeddingClient` or `QdrantClient`. Responses include review/apply context signatures derived from the normalized request context, docs-grounding fingerprint, and stable pattern-catalog identity.
 - **Synced/user patterns:** The index includes published `wp_block` patterns across `synced`, `partial`, and `unsynced` states as `core/block/{id}` candidates. Request-time ranking treats synced/user payloads from either backend as untrusted and rehydrates each candidate through current published status and `read_post` access before ranker input or response output.
-- **Inserter integration:** The shelf stays local to Flavor Agent. It uses the current allowed-pattern selector to show only patterns Gutenberg already exposes for the active insertion root, then dispatches core block insertion from the shelf rather than patching the native registry.
+- **Inserter integration:** The shelf stays local to Flavor Agent. It uses the current allowed-pattern selector to show only patterns Gutenberg already exposes for the active insertion root, revalidates the server `resolvedContextSignature` with `resolveSignatureOnly` on Insert, then dispatches core block insertion from the shelf rather than patching the native registry.
 - **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Ready count and tooltip are derived from recommendations that match the current inserter root's allowed patterns, not from a raw store badge cache. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` is derived from the active inserter root through `getVisiblePatternNames()`. `getAllowedPatterns()` is used afterward to match and render only patterns Gutenberg already exposes for that root.
 - **Model:** This is intentionally a ranking/browse-only surface. Flavor Agent owns a local shelf and badge inside the native inserter, but does not add its own review, undo, or activity contract.
@@ -334,10 +336,11 @@ Editor loads (or inserter search changes)
            -> Dedupe/normalize, take top candidates
             -> ResponsesClient::rank(instructions, candidates)
             -> Parse ranking, apply backend-specific threshold, rehydrate synced/user payloads through published status/read_post access
-        <- JSON response: { recommendations: [{ name, score, reason, ... }], diagnostics, requestMeta }
-  -> store: SET_PATTERN_RECS + setPatternStatus('ready')
+        <- JSON response: { recommendations: [{ name, score, reason, ... }], diagnostics, reviewContextSignature, resolvedContextSignature, requestMeta }
+  -> store: SET_PATTERN_RECS + setPatternStatus('ready'), preserving resolvedContextSignature
   -> PatternRecommender.js matches allowed patterns for the current inserter root
   -> UI: local shelf + inserter badge
+  -> Insert click: compare client insertion target, call resolveSignatureOnly, require matching resolvedContextSignature
   -> InserterBadge renders count/loading/error via portal
 ```
 

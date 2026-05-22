@@ -54,7 +54,13 @@ import {
 	writePersistedActivityLog,
 	readPersistedActivityLog,
 } from '../activity-history';
-import { actions, reducer, selectors } from '../index';
+import {
+	actions,
+	getResolvedContextSignatureFromResponse,
+	reducer,
+	selectors,
+} from '../index';
+import { CONNECTOR_NOT_APPROVED_CODE } from '../request-error-details';
 
 const TEMPLATE_PROMPT =
 	'Make this template read more like an editorial front page.';
@@ -483,6 +489,85 @@ describe( 'store action thunks', () => {
 					requestToken: 5,
 				} ),
 			} )
+		);
+	} );
+
+	test( 'fetchBlockRecommendations keeps connector approval details on request state only', async () => {
+		const connectorApprovalError = {
+			code: CONNECTOR_NOT_APPROVED_CODE,
+			message:
+				'The "openai" AI connector has not been approved for use by "flavor-agent/flavor-agent.php".',
+			data: {
+				status: 403,
+				connectorApproval: {
+					connectorId: 'openai',
+					callerBasename: 'flavor-agent/flavor-agent.php',
+					adminUrl:
+						'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+				},
+			},
+		};
+
+		apiFetch.mockRejectedValue( connectorApprovalError );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const context = {
+			block: {
+				name: 'core/paragraph',
+				blockPath: [ 0, 1 ],
+			},
+		};
+
+		await actions.fetchBlockRecommendations(
+			'block-1',
+			context,
+			'Tighten this copy.'
+		)( {
+			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'post',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setBlockRequestState(
+				'block-1',
+				'error',
+				connectorApprovalError.message,
+				5,
+				expect.objectContaining( {
+					connectorApproval: expect.objectContaining( {
+						connectorId: 'openai',
+					} ),
+				} )
+			)
+		);
+
+		const setBlockRecommendationsAction = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'SET_BLOCK_RECS'
+		)?.[ 0 ];
+
+		expect( setBlockRecommendationsAction?.diagnostics ).toEqual(
+			expect.objectContaining( {
+				type: 'failure',
+				errorMessage: connectorApprovalError.message,
+				requestToken: 5,
+			} )
+		);
+		expect( setBlockRecommendationsAction?.diagnostics ).not.toHaveProperty(
+			'connectorApproval'
 		);
 	} );
 
@@ -1042,6 +1127,58 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'resolvePatternRecommendationSignature revalidates the current document-scoped pattern input without mutating state', async () => {
+		apiFetch.mockResolvedValue( {
+			resolvedContextSignature: 'resolved-pattern-context',
+			reviewContextSignature: 'review-pattern-context',
+		} );
+
+		const input = {
+			postType: 'page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+			},
+		};
+		const document = {
+			scopeKey: 'page:42',
+			postType: 'page',
+			entityId: '42',
+			entityKind: '',
+			entityName: '',
+			stylesheet: '',
+		};
+
+		const result = await actions.resolvePatternRecommendationSignature(
+			input
+		)( {
+			dispatch: jest.fn(),
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'page',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expectAbilityRunRequest( 'patterns', {
+				...input,
+				document,
+				resolveSignatureOnly: true,
+			} )
+		);
+		expect( result ).toEqual( {
+			resolvedContextSignature: 'resolved-pattern-context',
+			reviewContextSignature: 'review-pattern-context',
+		} );
+	} );
+
 	test( 'stores pattern diagnostics for selectors', () => {
 		const state = reducer(
 			undefined,
@@ -1054,7 +1191,9 @@ describe( 'store action thunks', () => {
 						unreadableSyncedPatterns: 3,
 					},
 				},
-				'target-a'
+				'target-a',
+				null,
+				'resolved-pattern-context'
 			)
 		);
 
@@ -1066,6 +1205,28 @@ describe( 'store action thunks', () => {
 		expect( selectors.getPatternInsertionTargetSignature( state ) ).toBe(
 			'target-a'
 		);
+		expect( selectors.getPatternResolvedContextSignature( state ) ).toBe(
+			'resolved-pattern-context'
+		);
+	} );
+
+	test( 'exports the resolved context signature response normalizer', () => {
+		expect(
+			getResolvedContextSignatureFromResponse( {
+				payload: { resolvedContextSignature: ' resolved-context ' },
+				resolvedContextSignature: 'fallback-context',
+			} )
+		).toBe( 'resolved-context' );
+		expect(
+			getResolvedContextSignatureFromResponse( {
+				resolvedContextSignature: ' fallback-context ',
+			} )
+		).toBe( 'fallback-context' );
+		expect(
+			getResolvedContextSignatureFromResponse( {
+				payload: { resolvedContextSignature: '   ' },
+			} )
+		).toBeNull();
 	} );
 
 	test( 'stores and clears docs grounding warnings for custom recommendation surfaces', () => {
@@ -1287,6 +1448,109 @@ describe( 'store action thunks', () => {
 			3,
 			actions.setActivitySession( 'post:42', [] )
 		);
+	} );
+
+	test( 'fetchContentRecommendations stores connector approval error details beside the string error', async () => {
+		const connectorApprovalError = {
+			code: CONNECTOR_NOT_APPROVED_CODE,
+			message:
+				'The "openai" AI connector has not been approved for use by "flavor-agent/flavor-agent.php".',
+			data: {
+				status: 403,
+				connector_id: 'openai',
+				caller: {
+					basename: 'flavor-agent/flavor-agent.php',
+					name: 'Flavor Agent',
+				},
+				connectorApproval: {
+					connectorId: 'openai',
+					callerBasename: 'flavor-agent/flavor-agent.php',
+					callerName: 'Flavor Agent',
+					adminUrl:
+						'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+				},
+			},
+		};
+
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if ( path === ABILITY_RUN_PATHS.content && method === 'POST' ) {
+				return Promise.reject( connectorApprovalError );
+			}
+
+			if (
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( { entries: [] } );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getContentRequestToken: jest.fn().mockReturnValue( 8 ),
+		};
+
+		await actions.fetchContentRecommendations( {
+			mode: 'edit',
+			prompt: 'Tighten the opener.',
+			postContext: {
+				postType: 'post',
+				title: 'Working draft',
+				content: 'Retail floors. WordPress themes.',
+			},
+		} )( {
+			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'post',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
+			select,
+		} );
+
+		const errorAction = dispatch.mock.calls.find(
+			( [ action ] ) =>
+				action?.type === 'SET_CONTENT_STATUS' &&
+				action?.status === 'error'
+		)?.[ 0 ];
+
+		expect( errorAction ).toMatchObject( {
+			type: 'SET_CONTENT_STATUS',
+			status: 'error',
+			error: 'The "openai" AI connector has not been approved for use by "flavor-agent/flavor-agent.php".',
+			requestToken: 9,
+			errorDetails: {
+				code: CONNECTOR_NOT_APPROVED_CODE,
+				connectorApproval: {
+					connectorId: 'openai',
+					callerBasename: 'flavor-agent/flavor-agent.php',
+				},
+			},
+		} );
+
+		const state = reducer( undefined, errorAction );
+
+		expect( selectors.getContentError( state ) ).toBe(
+			'The "openai" AI connector has not been approved for use by "flavor-agent/flavor-agent.php".'
+		);
+		expect(
+			selectors.getContentErrorDetails( state )?.connectorApproval
+		).toMatchObject( {
+			connectorId: 'openai',
+			callerBasename: 'flavor-agent/flavor-agent.php',
+		} );
 	} );
 
 	test( 'fetchStyleBookRecommendations stores block-scoped request metadata without posting the context signature', async () => {

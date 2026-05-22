@@ -1,5 +1,6 @@
 import { executeFlavorAgentAbility } from './abilities-client';
 import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
+import { normalizeRequestErrorDetails } from './request-error-details';
 
 const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
 	.toString( 36 )
@@ -52,10 +53,10 @@ export function createExecutableSurfaceFetchConfig( {
 		dispatchRecommendations,
 		getRequestToken,
 		requestErrorMessage,
-		setErrorState: ( message, requestToken ) =>
-			setStatusAction( 'error', message, requestToken ),
+		setErrorState: ( message, requestToken, errorDetails = null ) =>
+			setStatusAction( 'error', message, requestToken, errorDetails ),
 		setLoadingState: ( requestToken ) =>
-			setStatusAction( 'loading', null, requestToken ),
+			setStatusAction( 'loading', null, requestToken, null ),
 	};
 }
 
@@ -195,10 +196,13 @@ function createExecutableSurfaceFetchAction( {
 				input,
 				registry,
 				onError: ( { dispatch: localDispatch, err, requestToken } ) => {
+					const errorDetails = normalizeRequestErrorDetails( err );
+
 					localDispatch(
 						setErrorState(
-							err?.message || requestErrorMessage,
-							requestToken
+							errorDetails.message || requestErrorMessage,
+							requestToken,
+							errorDetails
 						)
 					);
 				},

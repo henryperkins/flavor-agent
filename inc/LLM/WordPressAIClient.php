@@ -20,6 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class WordPressAIClient {
 
 	private const SETUP_MESSAGE                    = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const CONNECTOR_NOT_APPROVED_CODE      = 'wpai_connector_not_approved';
 	private const PROMPT_PREVENTED_CODE            = 'prompt_prevented';
 	private const PROMPT_PREVENTED_MESSAGE         = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
 	private const DEFAULT_REQUEST_TIMEOUT          = 90;
@@ -278,6 +279,31 @@ final class WordPressAIClient {
 
 	public static function get_setup_message(): string {
 		return self::SETUP_MESSAGE;
+	}
+
+	public static function is_connector_approval_error( \WP_Error $error ): bool {
+		if ( self::CONNECTOR_NOT_APPROVED_CODE === $error->get_error_code() ) {
+			return true;
+		}
+
+		$data = $error->get_error_data();
+
+		return is_array( $data )
+			&& 403 === (int) ( $data['status'] ?? 0 )
+			&& is_string( $data['connector_id'] ?? null )
+			&& '' !== $data['connector_id']
+			&& is_array( $data['caller'] ?? null )
+			&& is_string( $data['caller']['basename'] ?? null )
+			&& '' !== $data['caller']['basename'];
+	}
+
+	public static function connector_approval_admin_url(): string {
+		$url = admin_url( 'tools.php?page=ai-connector-approval' );
+
+		return (string) apply_filters(
+			'flavor_agent_connector_approval_admin_url',
+			$url
+		);
 	}
 
 	/**
@@ -1149,6 +1175,11 @@ final class WordPressAIClient {
 		} catch ( Prompt_Prevented_Exception $exception ) {
 			return self::build_prompt_prevented_error();
 		} catch ( \Throwable $throwable ) {
+			$approval_error = self::connector_approval_error_from_throwable( $throwable );
+			if ( $approval_error ) {
+				return self::normalize_ai_client_error( $approval_error );
+			}
+
 			return new \WP_Error(
 				'wp_ai_client_request_failed',
 				self::normalize_ai_client_error_message( $throwable->getMessage() ),
@@ -1162,6 +1193,14 @@ final class WordPressAIClient {
 		$message            = $error->get_error_message( $code );
 		$normalized_message = self::normalize_ai_client_error_message( $message );
 
+		if ( self::is_connector_approval_error( $error ) ) {
+			return new \WP_Error(
+				self::CONNECTOR_NOT_APPROVED_CODE,
+				$normalized_message,
+				self::connector_approval_error_data( $error )
+			);
+		}
+
 		if ( $normalized_message === $message ) {
 			return $error;
 		}
@@ -1170,6 +1209,57 @@ final class WordPressAIClient {
 			$code,
 			$normalized_message,
 			$error->get_error_data( $code )
+		);
+	}
+
+	private static function connector_approval_error_data( \WP_Error $error ): array {
+		$data   = $error->get_error_data();
+		$data   = is_array( $data ) ? $data : [];
+		$caller = is_array( $data['caller'] ?? null ) ? $data['caller'] : [];
+
+		$data['status']            = 403;
+		$data['connectorApproval'] = [
+			'code'           => self::CONNECTOR_NOT_APPROVED_CODE,
+			'connectorId'    => (string) ( $data['connector_id'] ?? '' ),
+			'callerBasename' => (string) ( $caller['basename'] ?? '' ),
+			'callerName'     => (string) ( $caller['name'] ?? 'Flavor Agent' ),
+			'adminUrl'       => current_user_can( 'manage_options' )
+				? self::connector_approval_admin_url()
+				: '',
+		];
+
+		return $data;
+	}
+
+	private static function connector_approval_error_from_throwable( \Throwable $throwable ): ?\WP_Error {
+		$message = self::normalize_ai_client_error_message( $throwable->getMessage() );
+
+		// Fallback for WordPress/ai connector approval exceptions. Prefer the
+		// structured WP_Error path when upstream exposes connector approval data.
+		if (
+			1 !== preg_match(
+				'/^The "([^"]+)" AI connector has not been approved for use by "([^"]+)".$/',
+				$message,
+				$matches
+			)
+		) {
+			return null;
+		}
+
+		$caller_basename = (string) $matches[2];
+
+		return new \WP_Error(
+			self::CONNECTOR_NOT_APPROVED_CODE,
+			$message,
+			[
+				'status'       => 403,
+				'connector_id' => (string) $matches[1],
+				'caller'       => [
+					'type'     => str_contains( $caller_basename, '/' ) ? 'plugin' : '',
+					'basename' => $caller_basename,
+					'name'     => 'flavor-agent/flavor-agent.php' === $caller_basename ? 'Flavor Agent' : $caller_basename,
+				],
+			]
 		);
 	}
 

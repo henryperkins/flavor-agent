@@ -188,10 +188,12 @@ export default function SuggestionChips( {
 						return (
 							<span
 								key={ key }
-								className="flavor-agent-chip flavor-agent-chip--passive"
+								className={ `flavor-agent-chip flavor-agent-chip--passive${
+									isStale ? ' is-stale' : ''
+								}` }
 								title={ s.description || s.label }
 								style={
-									s.preview
+									s.preview && ! isStale
 										? {
 												'--flavor-agent-chip-preview':
 													s.preview,

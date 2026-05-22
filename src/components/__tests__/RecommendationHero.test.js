@@ -11,6 +11,18 @@ import RecommendationHero from '../RecommendationHero';
 const { getContainer, getRoot } = setupReactTest();
 
 describe( 'RecommendationHero', () => {
+	test( 'renders when eyebrow is the only provided content', () => {
+		act( () => {
+			getRoot().render(
+				<RecommendationHero eyebrow="Recommended Next Step" />
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'Recommended Next Step'
+		);
+	} );
+
 	test( 'renders tone, rationale, and actions', () => {
 		const onPrimaryAction = jest.fn();
 		const onSecondaryAction = jest.fn();

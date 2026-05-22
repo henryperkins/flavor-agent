@@ -41,6 +41,7 @@ function buildMethodNames( baseName ) {
 		getRecommendations: `get${ baseName }Recommendations`,
 		getExplanation: `get${ baseName }Explanation`,
 		getError: `get${ baseName }Error`,
+		getErrorDetails: `get${ baseName }ErrorDetails`,
 		getRequestPrompt: `get${ baseName }RequestPrompt`,
 		getResultRef: `get${ baseName }ResultRef`,
 		getContextSignature: `get${ baseName }ContextSignature`,
@@ -80,6 +81,8 @@ function buildActionTypes( prefix ) {
 function createSurfaceDefinition( config ) {
 	return {
 		...config,
+		errorDetailsKey:
+			config.errorDetailsKey || `${ config.errorKey }Details`,
 		methodNames: buildMethodNames( config.baseName ),
 		types: buildActionTypes( config.actionPrefix ),
 	};
@@ -361,6 +364,7 @@ function buildSurfaceDefaultState( def ) {
 		[ def.explanationKey ]: '',
 		[ def.statusKey ]: 'idle',
 		[ def.errorKey ]: null,
+		[ def.errorDetailsKey ]: null,
 		[ def.requestPromptKey ]: '',
 		[ def.resultRefKey ]: null,
 		[ def.contextSignatureKey ]: null,
@@ -397,13 +401,15 @@ export function createExecutableSurfaceStateActionCreators( runtime ) {
 		actionCreators[ def.methodNames.setStatus ] = function setStatus(
 			status,
 			error = null,
-			requestToken = null
+			requestToken = null,
+			errorDetails = null
 		) {
 			return {
 				type: def.types.setStatus,
 				status,
 				error,
 				requestToken,
+				errorDetails,
 			};
 		};
 
@@ -691,6 +697,8 @@ function reduceExecutableSurface( state, action, def ) {
 			...state,
 			[ def.statusKey ]: action.status,
 			[ def.errorKey ]: action.error ?? null,
+			[ def.errorDetailsKey ]:
+				action.status === 'error' ? action.errorDetails ?? null : null,
 			[ def.requestTokenKey ]:
 				action.requestToken ?? state[ def.requestTokenKey ],
 			[ def.applyStatusKey ]:
@@ -755,6 +763,7 @@ function reduceExecutableSurface( state, action, def ) {
 				: 'idle',
 			[ def.statusKey ]: 'ready',
 			[ def.errorKey ]: null,
+			[ def.errorDetailsKey ]: null,
 			[ def.selectedSuggestionKey ]: null,
 			[ def.applyStatusKey ]: 'idle',
 			[ def.applyErrorKey ]: null,
@@ -879,6 +888,8 @@ export function createExecutableSurfaceSelectors( {
 			state[ def.explanationKey ];
 		selectors[ def.methodNames.getError ] = ( state ) =>
 			state[ def.errorKey ];
+		selectors[ def.methodNames.getErrorDetails ] = ( state ) =>
+			state[ def.errorDetailsKey ];
 		selectors[ def.methodNames.getRequestPrompt ] = ( state ) =>
 			state[ def.requestPromptKey ];
 		selectors[ def.methodNames.getResultRef ] = ( state ) =>

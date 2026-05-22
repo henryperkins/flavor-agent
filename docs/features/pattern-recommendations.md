@@ -8,8 +8,8 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - Primary surface: a Flavor Agent-owned recommendation shelf prepended inside the native block inserter
 - Secondary surface: the inserter-toggle badge rendered by `src/patterns/InserterBadge.js`
 - Unavailable state: when Pattern Storage or the Embedding Model is missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
-- There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains ranking/browse-only instead of participating in the lane/review/apply model
-- Pattern recommendations do not use `resolvedContextSignature` and have no declared `resolveSignatureOnly` contract; freshness for this surface stays request-time and backend-runtime scoped rather than review/apply scoped
+- There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains ranking/browse-only instead of participating in the lane/review/apply/undo model
+- Pattern recommendations return `reviewContextSignature` and `resolvedContextSignature`; the direct Insert button revalidates the server-resolved apply context through `resolveSignatureOnly` before dispatching core insertion, while the surface still avoids a separate Flavor Agent review/apply panel
 
 ## Surfacing Conditions
 
@@ -29,15 +29,15 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 2. The component triggers `fetchPatternRecommendations()` on editor load and on debounced inserter-search changes
 3. The store executes the `flavor-agent/recommend-patterns` ability with the request input
 4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the ability input to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
-5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state
+5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state, then computes review/apply signatures from the normalized request context, docs-grounding fingerprint, and stable pattern-catalog identity
 6. `PatternIndex::sync()` maintains the selected retrieval backend corpus made from registered block patterns plus public-safe published user `wp_block` patterns across sync states normalized to Gutenberg's user-pattern name format, `core/block/{id}`
 7. The backend builds a query string, pulls WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` using the same bounded foreground grounding path as other recommendation surfaces, retrieves candidates through the selected pattern backend, rehydrates synced candidates from current published readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()`, and filters out low-confidence results
 8. The Qdrant backend embeds the pattern query through Cloudflare Workers AI and retrieves semantic and structural candidates from Qdrant
 9. The Cloudflare AI Search backend sends the query and `visiblePatternNames` filter to the private pattern AI Search instance, using Cloudflare-managed indexing/search instead of `EmbeddingClient` or `QdrantClient`
-10. The store saves the recommendations and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
+10. The store saves the recommendations plus the server `resolvedContextSignature`, and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
 11. If Pattern Storage or the Embedding Model is unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
 12. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
-13. The user inserts a recommended pattern directly from the Flavor Agent shelf, which dispatches the same core block insertion flow Gutenberg uses for pattern insertion
+13. The user inserts a recommended pattern directly from the Flavor Agent shelf. Before dispatching core block insertion, the click handler checks the client insertion-target signature, reruns `flavor-agent/recommend-patterns` with `resolveSignatureOnly: true`, and blocks insertion if the server `resolvedContextSignature` no longer matches.
 
 ## Pattern Retrieval Backends
 
@@ -51,6 +51,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - Surface ranked patterns in a local inserter shelf without rewriting Gutenberg's pattern registry
 - Rank both registered patterns and synced/user patterns that Gutenberg exposes to the current insertion root
 - Insert matched allowed patterns directly from that shelf while still respecting the current allowed insertion root
+- Revalidate the current server apply context before direct insertion, so docs-grounding or pattern-catalog drift cannot apply an old ranked result
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
 - Show inserter-level status as shelf, loading, empty, unavailable, or error feedback
@@ -66,6 +67,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - If Pattern Storage or the Embedding Model is unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
 - If the backend returns ranked names that Gutenberg is not currently exposing through the allowed-pattern selector, the inserter keeps the result local and explanatory instead of patching registry metadata
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
+- If a stored recommendation lacks a server `resolvedContextSignature`, or the current `resolveSignatureOnly` response does not match the stored signature, the Insert action is blocked and the shelf refreshes recommendations for the current target
 - Cloudflare AI Search sync uploads only public-safe current pattern content. It preserves owner-marker items and unknown remote items, and deletes only stale item IDs that were recorded in the previous Flavor Agent pattern fingerprint state. If a synced pattern later becomes private, draft, trashed, or unreadable before the next sync, request-time rehydration drops it before ranking or response output.
 - WordPress docs grounding uses the shared cache/fallback collector and may perform one bounded foreground warm before reranking. If trusted grounding remains unavailable after candidate retrieval, pattern recommendations return `flavor_agent_docs_grounding_unavailable` instead of calling the reranker; stale or degraded trusted grounding proceeds with warning metadata.
 - The badge fails closed when the inserter DOM anchor cannot be found and only counts recommendations that the current allowed-pattern selector can render
@@ -80,7 +82,8 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 | Unavailable notice | `PatternRecommender()` + `CapabilityNotice` | Mount shared why-unavailable messaging into the native inserter when backends are missing |
 | Inserter shelf | `PatternRecommender()` in `src/patterns/PatternRecommender.js` | Renders the local recommendation shelf and dispatches core block insertion for matched allowed patterns |
 | Badge UI | `InserterBadge()` and `getInserterBadgeState()` | Render count/loading/error state next to the inserter toggle, counting only renderable allowed-pattern matches |
-| Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state |
+| Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state, including the stored server apply signature |
+| Store revalidation | `resolvePatternRecommendationSignature()` in `src/store/index.js` | Reposts the current pattern input with `resolveSignatureOnly` before direct shelf insertion |
 | Ability wrapper | `RecommendationAbilityExecution::execute()` | Adapts the ability request to the backend handler and records request diagnostics |
 | Backend ability | `PatternAbilities::recommend_patterns()` | Runs validation, selected-backend retrieval, reranking, and filtering |
 | Pattern corpus | `PatternIndex::sync()` + `SyncedPatternRepository` | Indexes registered patterns plus public-safe published user `wp_block` patterns as `core/block/{id}` candidates in the selected backend |

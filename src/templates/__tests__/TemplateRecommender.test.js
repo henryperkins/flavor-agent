@@ -179,6 +179,10 @@ function createSelectors() {
 			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
 				void surface;
 
+				if ( options.requestErrorDetails?.connectorApproval ) {
+					return null;
+				}
+
 				if ( options.requestError ) {
 					return {
 						source: 'request',
@@ -243,6 +247,9 @@ function createSelectors() {
 				() => getState().store.templateApplyStatus
 			),
 			getTemplateError: jest.fn( () => getState().store.templateError ),
+			getTemplateErrorDetails: jest.fn(
+				() => getState().store.templateErrorDetails
+			),
 			getTemplateExplanation: jest.fn(
 				() => getState().store.templateExplanation
 			),
@@ -377,6 +384,7 @@ function createState( overrides = {} ) {
 			templateApplyError: 'The previous apply state should be cleared.',
 			templateApplyStatus: 'error',
 			templateError: null,
+			templateErrorDetails: null,
 			templateExplanation:
 				'A focused hero pattern would strengthen the intro.',
 			templateRequestPrompt: '',
@@ -762,6 +770,42 @@ describe( 'TemplateRecommender', () => {
 
 		expect( hasText( 'Template request failed.' ) ).toBe( true );
 		expect( hasText( 'Current' ) ).toBe( false );
+	} );
+
+	test( 'renders connector approval notice instead of generic template request error', async () => {
+		window.flavorAgentData = {
+			...( window.flavorAgentData || {} ),
+			canRecommendTemplates: true,
+			canManageFlavorAgentSettings: true,
+			connectorApprovalUrl:
+				'https://example.test/wp-admin/options-general.php?page=connector-approvals',
+		};
+		currentState = createState( {
+			store: {
+				templateRecommendations: [],
+				templateExplanation: '',
+				templateError: 'Template request failed.',
+				templateErrorDetails: {
+					code: 'wpai_connector_not_approved',
+					connectorApproval: {
+						connectorId: 'openai',
+						callerBasename: 'flavor-agent/flavor-agent.php',
+					},
+				},
+				templateStatus: 'error',
+				templateContextSignature: null,
+			},
+		} );
+
+		await renderPanel();
+
+		expect(
+			hasText(
+				'Flavor Agent needs administrator approval to use the openai connector.'
+			)
+		).toBe( true );
+		expect( hasText( 'Open approvals page' ) ).toBe( true );
+		expect( hasText( 'Template request failed.' ) ).toBe( false );
 	} );
 
 	test( 'treats an empty successful template response as a current result', async () => {

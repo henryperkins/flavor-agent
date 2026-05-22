@@ -985,6 +985,40 @@ final class StylePromptTest extends TestCase {
 		$this->assertSame( '2px', $result['suggestions'][0]['operations'][3]['value'] ?? null );
 	}
 
+	public function test_parse_response_accepts_css_custom_properties_for_freeform_style_values(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Use the theme spacing token',
+							'description' => 'Theme variables should remain executable on freeform style paths.',
+							'category'    => 'border',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'border', 'radius' ],
+									'value'     => '  var(--wp--preset--spacing--20)  ',
+									'valueType' => 'freeform',
+								],
+							],
+						],
+					],
+					'explanation' => 'Client and server validation must both accept theme custom properties.',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'executable', $result['suggestions'][0]['tone'] );
+		$this->assertSame(
+			'var(--wp--preset--spacing--20)',
+			$result['suggestions'][0]['operations'][0]['value'] ?? null
+		);
+	}
+
 	public function test_parse_response_rejects_numeric_border_lengths_that_the_client_cannot_apply(): void {
 		$result = StylePrompt::parse_response(
 			wp_json_encode(

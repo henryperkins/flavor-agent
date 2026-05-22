@@ -281,6 +281,14 @@ export default function UndoToast( {
 						{ errorHint }
 					</span>
 				) }
+				{ reducedMotion && (
+					<span className="flavor-agent-toast__persistent">
+						{ __(
+							'Persistent until Undo or Dismiss',
+							'flavor-agent'
+						) }
+					</span>
+				) }
 			</span>
 
 			<Button

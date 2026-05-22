@@ -123,6 +123,17 @@ describe( 'UndoToast — rendering', () => {
 		);
 	} );
 
+	test( 'renders a static persistence cue when reduced motion disables auto-dismiss', () => {
+		setReducedMotion( true );
+
+		renderToast();
+
+		expect(
+			getContainer().querySelector( '.flavor-agent-toast__persistent' )
+				?.textContent
+		).toBe( 'Persistent until Undo or Dismiss' );
+	} );
+
 	test( 'Undo control is tabbable and aria-disabled when undoDisabled', () => {
 		renderToast( { undoDisabled: true } );
 

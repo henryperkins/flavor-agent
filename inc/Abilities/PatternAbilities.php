@@ -19,6 +19,8 @@ use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\NonNegativeInteger;
 use FlavorAgent\Support\RankingContract;
+use FlavorAgent\Support\RecommendationResolvedSignature;
+use FlavorAgent\Support\RecommendationReviewSignature;
 use FlavorAgent\Support\StringArray;
 
 final class PatternAbilities {
@@ -148,25 +150,123 @@ final class PatternAbilities {
 	 * search, LLM ranking, rehydrate from Qdrant payloads.
 	 */
 	public static function recommend_patterns( mixed $input ): array|\WP_Error {
-		$input = self::normalize_input( $input );
+		$input                  = self::normalize_input( $input );
+		$resolve_signature_only = filter_var(
+			$input['resolveSignatureOnly'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
 
 		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
 			? StringArray::sanitize( $input['visiblePatternNames'] )
 			: null;
 
-		if ( null === $visible_pattern_names || [] === $visible_pattern_names ) {
+		if ( ! $resolve_signature_only && ( null === $visible_pattern_names || [] === $visible_pattern_names ) ) {
 			return [ 'recommendations' => [] ];
 		}
 
 		$diagnostics = self::empty_pattern_recommendation_diagnostics();
+
+		// Step 1: Build normalized recommendation/apply context.
+		$post_type               = isset( $input['postType'] ) && is_string( $input['postType'] ) && sanitize_key( $input['postType'] ) !== ''
+			? sanitize_key( $input['postType'] )
+			: 'post';
+		$block_context           = self::normalize_input( $input['blockContext'] ?? [] );
+		$block_name              = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
+			? sanitize_text_field( $block_context['blockName'] )
+			: '';
+		$template_type           = isset( $input['templateType'] ) && is_string( $input['templateType'] )
+			? sanitize_text_field( $input['templateType'] )
+			: '';
+		$prompt                  = isset( $input['prompt'] ) && is_string( $input['prompt'] )
+			? sanitize_textarea_field( $input['prompt'] )
+			: '';
+		$insertion_context       = self::normalize_input( $input['insertionContext'] ?? [] );
+		$root_block              = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
+			? sanitize_text_field( $insertion_context['rootBlock'] )
+			: '';
+		$ancestors               = StringArray::sanitize( $insertion_context['ancestors'] ?? [] );
+		$nearby_siblings         = StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] );
+		$template_part_area      = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
+			? sanitize_key( $insertion_context['templatePartArea'] )
+			: '';
+		$template_part_slug      = isset( $insertion_context['templatePartSlug'] ) && is_string( $insertion_context['templatePartSlug'] )
+			? sanitize_text_field( $insertion_context['templatePartSlug'] )
+			: '';
+		$container_layout        = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
+			? sanitize_key( $insertion_context['containerLayout'] )
+			: '';
+		$has_insertion_context   = array_key_exists( 'insertionContext', $input )
+			|| $root_block !== ''
+			|| ! empty( $ancestors )
+			|| ! empty( $nearby_siblings )
+			|| $template_part_area !== ''
+			|| $template_part_slug !== ''
+			|| $container_layout !== '';
+		$is_custom_block_context = self::is_custom_block_name( $block_name );
+		$state                   = PatternIndex::get_runtime_state();
+		$signature_context       = self::build_pattern_apply_signature_context(
+			$post_type,
+			$block_context,
+			$template_type,
+			$prompt,
+			$root_block,
+			$ancestors,
+			$nearby_siblings,
+			$template_part_area,
+			$template_part_slug,
+			$container_layout,
+			$has_insertion_context,
+			$state
+		);
+
+		if ( $resolve_signature_only ) {
+			$docs_result = self::collect_wordpress_docs_guidance_result(
+				[
+					'postType'            => $post_type,
+					'templateType'        => $template_type,
+					'blockContext'        => $block_context,
+					'insertionContext'    => $insertion_context,
+					'visiblePatternNames' => $visible_pattern_names ?? [],
+				],
+				$prompt,
+				[
+					'signatureOnly' => true,
+				]
+			);
+
+			$resolved_context_signature = RecommendationResolvedSignature::from_payload(
+				'patterns',
+				[
+					'context'                  => $signature_context,
+					'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				]
+			);
+			$review_context_signature   = RecommendationReviewSignature::from_payload(
+				'patterns',
+				[
+					'context'                  => self::build_pattern_review_signature_context(
+						$signature_context,
+						$visible_pattern_names ?? []
+					),
+					'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				]
+			);
+
+			return self::pattern_recommendation_response(
+				[],
+				$diagnostics,
+				$docs_result,
+				$review_context_signature,
+				$resolved_context_signature
+			);
+		}
 
 		$configuration_error = self::validate_recommendation_backends();
 		if ( is_wp_error( $configuration_error ) ) {
 			return $configuration_error;
 		}
 
-		// Step 1: Staleness check.
-		$state            = PatternIndex::get_runtime_state();
+		// Step 2: Staleness check.
 		$has_usable_index = PatternIndex::has_usable_index( $state );
 
 		switch ( $state['status'] ) {
@@ -237,47 +337,11 @@ final class PatternAbilities {
 				break;
 		}
 
-		// Step 2: Build query string.
-		$post_type               = isset( $input['postType'] ) && is_string( $input['postType'] ) && sanitize_key( $input['postType'] ) !== ''
-			? sanitize_key( $input['postType'] )
-			: 'post';
-		$block_context           = self::normalize_input( $input['blockContext'] ?? [] );
-		$block_name              = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
-			? sanitize_text_field( $block_context['blockName'] )
-			: '';
-		$template_type           = isset( $input['templateType'] ) && is_string( $input['templateType'] )
-			? sanitize_text_field( $input['templateType'] )
-			: '';
-		$prompt                  = isset( $input['prompt'] ) && is_string( $input['prompt'] )
-			? sanitize_textarea_field( $input['prompt'] )
-			: '';
-		$insertion_context       = self::normalize_input( $input['insertionContext'] ?? [] );
-		$root_block              = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
-			? sanitize_text_field( $insertion_context['rootBlock'] )
-			: '';
-		$ancestors               = StringArray::sanitize( $insertion_context['ancestors'] ?? [] );
-		$nearby_siblings         = StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] );
-		$template_part_area      = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
-			? sanitize_key( $insertion_context['templatePartArea'] )
-			: '';
-		$template_part_slug      = isset( $insertion_context['templatePartSlug'] ) && is_string( $insertion_context['templatePartSlug'] )
-			? sanitize_text_field( $insertion_context['templatePartSlug'] )
-			: '';
-		$container_layout        = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
-			? sanitize_key( $insertion_context['containerLayout'] )
-			: '';
-		$has_insertion_context   = array_key_exists( 'insertionContext', $input )
-			|| $root_block !== ''
-			|| ! empty( $ancestors )
-			|| ! empty( $nearby_siblings )
-			|| $template_part_area !== ''
-			|| $template_part_slug !== ''
-			|| $container_layout !== '';
-		$is_custom_block_context = self::is_custom_block_name( $block_name );
-		$visible_lookup          = array_fill_keys( $visible_pattern_names, true );
-		$semantic_limit          = $visible_lookup ? self::FILTERED_SEMANTIC_LIMIT : self::DEFAULT_SEMANTIC_LIMIT;
-		$structural_limit        = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
-		$docs_result             = self::collect_wordpress_docs_guidance_result(
+		// Step 3: Build query string.
+		$visible_lookup             = array_fill_keys( $visible_pattern_names, true );
+		$semantic_limit             = $visible_lookup ? self::FILTERED_SEMANTIC_LIMIT : self::DEFAULT_SEMANTIC_LIMIT;
+		$structural_limit           = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
+		$docs_result                = self::collect_wordpress_docs_guidance_result(
 			[
 				'postType'            => $post_type,
 				'templateType'        => $template_type,
@@ -287,7 +351,24 @@ final class PatternAbilities {
 			],
 			$prompt
 		);
-		$docs_guidance           = DocsGuidanceResult::guidance( $docs_result );
+		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
+			'patterns',
+			[
+				'context'                  => $signature_context,
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+			]
+		);
+		$review_context_signature   = RecommendationReviewSignature::from_payload(
+			'patterns',
+			[
+				'context'                  => self::build_pattern_review_signature_context(
+					$signature_context,
+					$visible_pattern_names
+				),
+				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+			]
+		);
+		$docs_guidance              = DocsGuidanceResult::guidance( $docs_result );
 
 		$query = self::build_embedding_query(
 			$post_type,
@@ -420,7 +501,13 @@ final class PatternAbilities {
 		}
 
 		if ( empty( $candidates ) ) {
-			return self::pattern_recommendation_response( [], $diagnostics, $docs_result );
+			return self::pattern_recommendation_response(
+				[],
+				$diagnostics,
+				$docs_result,
+				$review_context_signature,
+				$resolved_context_signature
+			);
 		}
 
 		// Step 5: Rank via Responses API.
@@ -542,7 +629,13 @@ final class PatternAbilities {
 			static fn( array $left, array $right ): int => $right['score'] <=> $left['score']
 		);
 
-		return self::pattern_recommendation_response( $recommendations, $diagnostics, $docs_result );
+		return self::pattern_recommendation_response(
+			$recommendations,
+			$diagnostics,
+			$docs_result,
+			$review_context_signature,
+			$resolved_context_signature
+		);
 	}
 
 	private static function validate_recommendation_backends(): true|\WP_Error {
@@ -598,15 +691,88 @@ final class PatternAbilities {
 	}
 
 	/**
-	 * @param array<int, array<string, mixed>> $recommendations
-	 * @param array<string, mixed>             $diagnostics
+	 * @param array<string, mixed> $block_context
+	 * @param array<int, string>   $ancestors
+	 * @param array<int, string>   $nearby_siblings
+	 * @param array<string, mixed> $state
 	 * @return array<string, mixed>
 	 */
-	private static function pattern_recommendation_response( array $recommendations, array $diagnostics, array $docs_result = [] ): array {
+	private static function build_pattern_apply_signature_context(
+		string $post_type,
+		array $block_context,
+		string $template_type,
+		string $prompt,
+		string $root_block,
+		array $ancestors,
+		array $nearby_siblings,
+		string $template_part_area,
+		string $template_part_slug,
+		string $container_layout,
+		bool $has_insertion_context,
+		array $state
+	): array {
+		return [
+			'postType'            => $post_type,
+			'blockContext'        => self::normalize_map( $block_context ),
+			'templateType'        => $template_type,
+			'prompt'              => $prompt,
+			'insertionContext'    => [
+				'hasInsertionContext' => $has_insertion_context,
+				'rootBlock'           => $root_block,
+				'ancestors'           => array_values( $ancestors ),
+				'nearbySiblings'      => array_values( $nearby_siblings ),
+				'templatePartArea'    => $template_part_area,
+				'templatePartSlug'    => $template_part_slug,
+				'containerLayout'     => $container_layout,
+			],
+			'patternCatalogState' => self::build_pattern_catalog_signature_context( $state ),
+		];
+	}
+
+	private static function build_pattern_review_signature_context( array $apply_context, array $visible_pattern_names ): array {
+		$context                        = $apply_context;
+		$context['visiblePatternNames'] = array_values( $visible_pattern_names );
+
+		return $context;
+	}
+
+	private static function build_pattern_catalog_signature_context( array $state ): array {
+		$stale_reasons = StringArray::sanitize( $state['stale_reasons'] ?? [] );
+
+		sort( $stale_reasons );
+
+		return [
+			'status'                         => sanitize_key( (string) ( $state['status'] ?? '' ) ),
+			'patternBackend'                 => sanitize_key( (string) ( $state['pattern_backend'] ?? PatternRetrievalBackendFactory::selected_backend() ) ),
+			'fingerprint'                    => sanitize_text_field( (string) ( $state['fingerprint'] ?? '' ) ),
+			'indexedCount'                   => max( 0, (int) ( $state['indexed_count'] ?? 0 ) ),
+			'staleReason'                    => sanitize_key( (string) ( $state['stale_reason'] ?? '' ) ),
+			'staleReasons'                   => $stale_reasons,
+			'qdrantCollection'               => sanitize_text_field( (string) ( $state['qdrant_collection'] ?? '' ) ),
+			'embeddingSignature'             => sanitize_text_field( (string) ( $state['embedding_signature'] ?? '' ) ),
+			'cloudflareAISearchNamespace'    => sanitize_text_field( (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ) ),
+			'cloudflareAISearchInstance'     => sanitize_text_field( (string) ( $state['cloudflare_ai_search_instance'] ?? '' ) ),
+			'cloudflareAISearchSignature'    => sanitize_text_field( (string) ( $state['cloudflare_ai_search_signature'] ?? '' ) ),
+			'patternFingerprintMapSignature' => RecommendationResolvedSignature::from_payload(
+				'pattern-catalog-fingerprints',
+				is_array( $state['pattern_fingerprints'] ?? null ) ? $state['pattern_fingerprints'] : []
+			),
+		];
+	}
+
+	private static function pattern_recommendation_response(
+		array $recommendations,
+		array $diagnostics,
+		array $docs_result = [],
+		string $review_context_signature = '',
+		string $resolved_context_signature = ''
+	): array {
 		return [
 			'recommendations'          => $recommendations,
 			'docsGrounding'            => [] !== $docs_result ? DocsGuidanceResult::public_summary( $docs_result ) : null,
 			'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+			'reviewContextSignature'   => $review_context_signature,
+			'resolvedContextSignature' => $resolved_context_signature,
 			'diagnostics'              => [
 				'filteredCandidates' => [
 					'unreadableSyncedPatterns' => max(
@@ -1845,7 +2011,7 @@ SYSTEM;
 	/**
 	 * @return array<string, mixed>
 	 */
-	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt ): array {
+	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
 		return CollectsDocsGuidance::collect_result(
 			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
 			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
@@ -1853,8 +2019,9 @@ SYSTEM;
 			$context,
 			$prompt,
 			[
-				'allowForegroundWarm' => true,
-				'mode'                => 'recommendation',
+				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
+				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
+				'sideEffects'         => empty( $options['signatureOnly'] ),
 			]
 		);
 	}

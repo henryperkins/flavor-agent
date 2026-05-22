@@ -39,6 +39,16 @@ final class RegistrationTest extends TestCase {
 			$this->assertArrayHasKey( $field, $selected_block['properties'] );
 		}
 
+		$this->assertArrayHasKey( 'name', $selected_block['properties'] );
+		$this->assertSame(
+			[
+				[ 'required' => [ 'blockName' ] ],
+				[ 'required' => [ 'name' ] ],
+			],
+			$selected_block['anyOf'] ?? null
+		);
+		$this->assertArrayNotHasKey( 'required', $selected_block );
+
 		$this->assertSame(
 			'boolean',
 			$ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
@@ -476,6 +486,14 @@ final class RegistrationTest extends TestCase {
 			$recommend_ability['input_schema']['properties']['insertionContext']['type'] ?? null
 		);
 		$this->assertSame(
+			'boolean',
+			$recommend_ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
+		);
+		$this->assertStringContainsString(
+			'server-issued apply-context signature',
+			(string) ( $recommend_ability['input_schema']['properties']['resolveSignatureOnly']['description'] ?? '' )
+		);
+		$this->assertSame(
 			'string',
 			$recommend_ability['input_schema']['properties']['insertionContext']['properties']['ancestors']['items']['type'] ?? null
 		);
@@ -502,6 +520,14 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'integer',
 			$recommend_ability['output_schema']['properties']['diagnostics']['properties']['filteredCandidates']['properties']['unreadableSyncedPatterns']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$recommend_ability['output_schema']['properties']['reviewContextSignature']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$recommend_ability['output_schema']['properties']['resolvedContextSignature']['type'] ?? null
 		);
 		$this->assertSame(
 			'object',
@@ -578,10 +604,6 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'string',
 			$get_synced['output_schema']['properties']['wpPatternSyncStatus']['type'] ?? null
-		);
-		$this->assertArrayNotHasKey(
-			'resolveSignatureOnly',
-			$recommend_ability['input_schema']['properties'] ?? []
 		);
 		$this->assertArrayNotHasKey(
 			'editorStructure',
@@ -1153,6 +1175,29 @@ final class RegistrationTest extends TestCase {
 			],
 			WordPressTestState::$wpai_guideline_calls
 		);
+	}
+
+	public function test_recommend_block_accepts_selected_block_name_alias(): void {
+		Registration::register_category();
+		Registration::register_recommendation_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-block']['execute_callback'][0] ?? null;
+
+		$this->assertInstanceOf( \FlavorAgent\AI\Abilities\RecommendBlockAbility::class, $ability );
+
+		$result = $ability->execute_callback(
+			[
+				'selectedBlock'        => [
+					'name'       => 'core/paragraph',
+					'attributes' => [],
+				],
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'block', $result['surface'] ?? null );
+		$this->assertSame( 'core/paragraph', $result['context']['block']['name'] ?? null );
 	}
 
 	public function test_recommendation_input_schemas_include_client_request_identity(): void {

@@ -44,7 +44,10 @@ import {
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
 } from '../store/activity-history';
-import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../utils/capability-flags';
 import { buildStyleBookRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import {
 	buildGlobalStylesRecommendationContextSignature,
@@ -84,6 +87,7 @@ function StyleBookPanel( {
 	explanation,
 	docsGroundingWarning,
 	notice,
+	connectorApprovalNotice,
 	activityEntries,
 	activityResetKey,
 	blockTitle,
@@ -133,6 +137,12 @@ function StyleBookPanel( {
 	return (
 		<div className="flavor-agent-panel flavor-agent-style-book-panel">
 			<CapabilityNotice surface="style-book" />
+			{ connectorApprovalNotice && (
+				<CapabilityNotice
+					surface="style-book"
+					notice={ connectorApprovalNotice }
+				/>
+			) }
 			<SurfacePanelIntro
 				eyebrow="Style Book"
 				introCopy="Review stays required before Flavor Agent applies theme-backed block style changes to the active Style Book example."
@@ -389,6 +399,7 @@ export default function StyleBookRecommender() {
 		undoStatus,
 		activityEntries,
 		currentError,
+		currentErrorDetails,
 		currentApplyError,
 		currentUndoError,
 		hasUndoSuccess,
@@ -519,6 +530,8 @@ export default function StyleBookRecommender() {
 				undoStatus: store?.getUndoStatus?.() || 'idle',
 				activityEntries: resolvedActivityEntries,
 				currentError: store?.getStyleBookError?.() || null,
+				currentErrorDetails:
+					store?.getStyleBookErrorDetails?.() || null,
 				currentApplyError: store?.getStyleBookApplyError?.() || null,
 				currentUndoError: store?.getUndoError?.() || null,
 				hasUndoSuccess: hasUndoSuccessForScope,
@@ -675,6 +688,7 @@ export default function StyleBookRecommender() {
 	const baseNotice = buildNotice
 		? buildNotice( {
 				requestError: currentError,
+				requestErrorDetails: currentErrorDetails,
 				applyError: currentApplyError,
 				undoError: hasUndoSuccess ? '' : currentUndoError,
 				undoSuccessMessage: hasUndoSuccess
@@ -701,6 +715,10 @@ export default function StyleBookRecommender() {
 					'Review a theme-backed block style change before applying it.',
 		  } )
 		: null;
+	const connectorApprovalNotice = useMemo(
+		() => getConnectorApprovalNotice( 'style-book', currentErrorDetails ),
+		[ currentErrorDetails ]
+	);
 	let fallbackNotice = null;
 
 	if ( ! scope ) {
@@ -917,6 +935,7 @@ export default function StyleBookRecommender() {
 				hasMatchingResult ? docsGroundingWarning : null
 			}
 			notice={ notice }
+			connectorApprovalNotice={ connectorApprovalNotice }
 			activityEntries={ activityEntries }
 			activityResetKey={ scope?.scopeKey || 'style-book' }
 			blockTitle={ scope?.blockTitle || '' }

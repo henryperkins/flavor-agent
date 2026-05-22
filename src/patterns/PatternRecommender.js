@@ -32,10 +32,13 @@ import { store as noticesStore } from '@wordpress/notices';
 
 import CapabilityNotice from '../components/CapabilityNotice';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
-import { STORE_NAME } from '../store';
+import { getResolvedContextSignatureFromResponse, STORE_NAME } from '../store';
 import { buildPatternInsertionTargetSignature } from '../utils/recommendation-request-signature';
 import { formatCount } from '../utils/format-count';
-import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../utils/capability-flags';
 import {
 	getTemplatePartAreaLookup,
 	inferTemplatePartArea,
@@ -421,26 +424,34 @@ export default function PatternRecommender() {
 	);
 	const {
 		patternError,
+		patternErrorDetails,
 		patternStatus,
 		recommendations,
 		patternDiagnostics,
 		patternInsertionTargetSignature,
+		patternResolvedContextSignature,
 		patternDocsGroundingWarning,
 	} = useSelect( ( select ) => {
 		const store = select( STORE_NAME );
 
 		return {
 			patternError: store.getPatternError?.() || '',
+			patternErrorDetails: store.getPatternErrorDetails?.() || null,
 			patternStatus: store.getPatternStatus(),
 			recommendations: store.getPatternRecommendations(),
 			patternDiagnostics: store.getPatternDiagnostics?.() || null,
 			patternInsertionTargetSignature:
 				store.getPatternInsertionTargetSignature?.() || '',
+			patternResolvedContextSignature:
+				store.getPatternResolvedContextSignature?.() || '',
 			patternDocsGroundingWarning:
 				store.getPatternDocsGroundingWarning?.() || null,
 		};
 	}, [] );
-	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
+	const {
+		fetchPatternRecommendations,
+		resolvePatternRecommendationSignature,
+	} = useDispatch( STORE_NAME );
 	const { insertBlocks } = useDispatch( blockEditorStore );
 	const { createSuccessNotice, createErrorNotice } =
 		useDispatch( noticesStore );
@@ -481,6 +492,10 @@ export default function PatternRecommender() {
 			);
 		},
 		[ builtRecommendedPatterns, inserterRootClientId ]
+	);
+	const connectorApprovalNotice = useMemo(
+		() => getConnectorApprovalNotice( 'pattern', patternErrorDetails ),
+		[ patternErrorDetails ]
 	);
 
 	const buildBaseInput = useCallback( () => {
@@ -566,7 +581,7 @@ export default function PatternRecommender() {
 	] );
 
 	const handleInsertPattern = useCallback(
-		( pattern ) => {
+		async ( pattern ) => {
 			const blocks = resolvePatternBlocks( pattern );
 
 			if ( blocks.length === 0 ) {
@@ -587,6 +602,8 @@ export default function PatternRecommender() {
 				return;
 			}
 
+			const liveInput = buildBaseInput();
+
 			// Freshness guard: the inserter root/index can move after the
 			// recommendation was ranked. Compare only the insertion-target
 			// signature captured at fetch time so ranking inputs such as the
@@ -596,8 +613,6 @@ export default function PatternRecommender() {
 				currentInsertionTargetSignature &&
 				effectivePostType
 			) {
-				const liveInput = buildBaseInput();
-
 				if (
 					currentInsertionTargetSignature !==
 					patternInsertionTargetSignature
@@ -647,6 +662,74 @@ export default function PatternRecommender() {
 				return;
 			}
 
+			if (
+				! patternResolvedContextSignature ||
+				typeof resolvePatternRecommendationSignature !== 'function'
+			) {
+				createErrorNotice(
+					sprintf(
+						/* translators: %s: block pattern title. */
+						__(
+							'Cannot insert pattern "%s" because Flavor Agent could not verify the current server apply context. Refreshing now — try again in a moment.',
+							'flavor-agent'
+						),
+						getPatternTitle( pattern )
+					),
+					{
+						type: 'snackbar',
+						id: 'inserter-notice',
+					}
+				);
+				fetchPatternRecommendationsForCurrentTarget( liveInput );
+				return;
+			}
+
+			try {
+				const resolved =
+					await resolvePatternRecommendationSignature( liveInput );
+				const currentResolvedContextSignature =
+					getResolvedContextSignatureFromResponse( resolved );
+
+				if (
+					! currentResolvedContextSignature ||
+					currentResolvedContextSignature !==
+						patternResolvedContextSignature
+				) {
+					createErrorNotice(
+						sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot insert pattern "%s" because the server-resolved apply context has changed since these recommendations were ranked. Refreshing now — try again in a moment.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
+						),
+						{
+							type: 'snackbar',
+							id: 'inserter-notice',
+						}
+					);
+					fetchPatternRecommendationsForCurrentTarget( liveInput );
+					return;
+				}
+			} catch {
+				createErrorNotice(
+					sprintf(
+						/* translators: %s: block pattern title. */
+						__(
+							'Cannot insert pattern "%s" because Flavor Agent could not revalidate the current server apply context. Try again or refresh recommendations.',
+							'flavor-agent'
+						),
+						getPatternTitle( pattern )
+					),
+					{
+						type: 'snackbar',
+						id: 'inserter-notice',
+					}
+				);
+				return;
+			}
+
 			insertBlocks(
 				blocks.map( ( block ) => cloneBlock( block ) ),
 				insertionIndex,
@@ -676,7 +759,9 @@ export default function PatternRecommender() {
 			inserterRootClientId,
 			currentInsertionTargetSignature,
 			patternInsertionTargetSignature,
+			patternResolvedContextSignature,
 			registry,
+			resolvePatternRecommendationSignature,
 		]
 	);
 
@@ -884,6 +969,13 @@ export default function PatternRecommender() {
 
 		if ( ! canRecommend ) {
 			notice = <CapabilityNotice surface="pattern" />;
+		} else if ( connectorApprovalNotice ) {
+			notice = (
+				<CapabilityNotice
+					surface="pattern"
+					notice={ connectorApprovalNotice }
+				/>
+			);
 		} else if (
 			patternStatus === 'ready' &&
 			recommendedPatterns.length > 0

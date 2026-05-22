@@ -1,7 +1,13 @@
 import { Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
@@ -11,7 +17,10 @@ import RecommendationHero from '../components/RecommendationHero';
 import StaleResultBanner from '../components/StaleResultBanner';
 import SurfaceComposer from '../components/SurfaceComposer';
 import { STORE_NAME } from '../store';
-import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../utils/capability-flags';
 import { getContentRecommendationFreshness } from './content-recommendation-request';
 
 const SUPPORTED_POST_TYPES = new Set( [ 'post', 'page' ] );
@@ -156,6 +165,7 @@ export default function ContentRecommender() {
 	const {
 		activityEntries,
 		contentError,
+		contentErrorDetails,
 		contentMode,
 		contentRecommendation,
 		contentRecommendationRequestSignature,
@@ -171,6 +181,7 @@ export default function ContentRecommender() {
 				.filter( ( entry ) => entry?.surface === 'content' )
 				.reverse(),
 			contentError: store.getContentError?.() || null,
+			contentErrorDetails: store.getContentErrorDetails?.() || null,
 			contentMode: store.getContentMode?.() || 'draft',
 			contentRecommendation: store.getContentRecommendation?.() || null,
 			contentRecommendationRequestSignature:
@@ -216,15 +227,49 @@ export default function ContentRecommender() {
 		contentRequestPrompt,
 		contentStatus,
 	] );
+	const {
+		content: postContent,
+		excerpt: postExcerpt,
+		postId,
+		postType,
+		slug: postSlug,
+		status: postStatus,
+		title: postTitle,
+	} = postContext;
 	const hasSupportedPost = SUPPORTED_POST_TYPES.has( postContext.postType );
-	const freshness = getContentRecommendationFreshness( {
-		contentRecommendation,
-		storedRequestSignature: contentRecommendationRequestSignature,
-		currentMode: contentMode,
-		currentPrompt: prompt,
-		currentPostContext: postContext,
-		status: contentStatus,
-	} );
+	const freshness = useMemo(
+		() =>
+			getContentRecommendationFreshness( {
+				contentRecommendation,
+				storedRequestSignature: contentRecommendationRequestSignature,
+				currentMode: contentMode,
+				currentPrompt: prompt,
+				currentPostContext: {
+					postId,
+					postType,
+					title: postTitle,
+					excerpt: postExcerpt,
+					content: postContent,
+					slug: postSlug,
+					status: postStatus,
+				},
+				status: contentStatus,
+			} ),
+		[
+			contentMode,
+			contentRecommendation,
+			contentRecommendationRequestSignature,
+			contentStatus,
+			postContent,
+			postExcerpt,
+			postId,
+			postSlug,
+			postStatus,
+			postTitle,
+			postType,
+			prompt,
+		]
+	);
 	const hasResult = freshness.hasStoredResult;
 	const isStaleResult = freshness.isStaleResult;
 	const hasOutput =
@@ -234,6 +279,7 @@ export default function ContentRecommender() {
 			select( STORE_NAME ).getSurfaceStatusNotice( 'content', {
 				requestStatus: contentStatus,
 				requestError: contentError,
+				requestErrorDetails: contentErrorDetails,
 				isStale: isStaleResult,
 				hasResult,
 				hasSuggestions: hasOutput,
@@ -243,7 +289,18 @@ export default function ContentRecommender() {
 						: '',
 				onDismissAction: Boolean( contentError ),
 			} ),
-		[ contentError, contentStatus, hasOutput, hasResult, isStaleResult ]
+		[
+			contentError,
+			contentErrorDetails,
+			contentStatus,
+			hasOutput,
+			hasResult,
+			isStaleResult,
+		]
+	);
+	const connectorApprovalNotice = useMemo(
+		() => getConnectorApprovalNotice( 'content', contentErrorDetails ),
+		[ contentErrorDetails ]
 	);
 	const handleFetch = useCallback( () => {
 		fetchContentRecommendations( {
@@ -355,8 +412,16 @@ export default function ContentRecommender() {
 							className="flavor-agent-content-recommender__composer"
 							starterPrompts={ activeMode.starterPrompts }
 						/>
+						{ connectorApprovalNotice && (
+							<CapabilityNotice
+								surface="content"
+								notice={ connectorApprovalNotice }
+							/>
+						) }
 						<AIStatusNotice
-							notice={ statusNotice }
+							notice={
+								connectorApprovalNotice ? null : statusNotice
+							}
 							onDismiss={ clearContentError }
 						/>
 

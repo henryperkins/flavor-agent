@@ -55,11 +55,18 @@ function isToastUndoFocusShortcut( event ) {
 		return false;
 	}
 
-	const isMacLike =
-		typeof navigator !== 'undefined' &&
-		/Mac|iPhone|iPad|iPod/.test( navigator.platform || '' );
+	const platform =
+		typeof navigator !== 'undefined'
+			? navigator.userAgentData?.platform || navigator.platform || ''
+			: '';
 
-	return isMacLike ? event.metaKey : event.ctrlKey;
+	if ( ! platform ) {
+		return event.metaKey || event.ctrlKey;
+	}
+
+	return /Mac|iPhone|iPad|iPod/i.test( platform )
+		? event.metaKey
+		: event.ctrlKey;
 }
 
 function getSameOriginIframeDocument( iframe ) {
@@ -125,7 +132,11 @@ export default function ToastRegion() {
 
 		const listeningDocuments = new Set();
 		const observedFrames = new WeakSet();
+		const observedDocuments = new WeakSet();
 		const frameCleanups = [];
+		const documentObservers = [];
+		const MutationObserverConstructor =
+			typeof window !== 'undefined' ? window.MutationObserver : null;
 
 		const handleKeyDown = ( event ) => {
 			if ( ! isToastUndoFocusShortcut( event ) ) {
@@ -138,7 +149,7 @@ export default function ToastRegion() {
 			}
 		};
 
-		const addDocumentListener = ( targetDocument ) => {
+		function addDocumentListener( targetDocument ) {
 			if (
 				! targetDocument?.addEventListener ||
 				listeningDocuments.has( targetDocument )
@@ -148,9 +159,35 @@ export default function ToastRegion() {
 
 			targetDocument.addEventListener( 'keydown', handleKeyDown, true );
 			listeningDocuments.add( targetDocument );
-		};
+		}
 
-		const observeFrame = ( iframe ) => {
+		function observeDocumentBody( targetDocument ) {
+			const observerTarget =
+				targetDocument?.body || targetDocument?.documentElement || null;
+
+			if (
+				! observerTarget ||
+				! MutationObserverConstructor ||
+				observedDocuments.has( targetDocument )
+			) {
+				return;
+			}
+
+			const observer = new MutationObserverConstructor( ( mutations ) => {
+				mutations.forEach( ( mutation ) => {
+					mutation.addedNodes.forEach( scanFrames );
+				} );
+			} );
+
+			observer.observe( observerTarget, {
+				childList: true,
+				subtree: true,
+			} );
+			observedDocuments.add( targetDocument );
+			documentObservers.push( observer );
+		}
+
+		function observeFrame( iframe ) {
 			if ( ! iframe || observedFrames.has( iframe ) ) {
 				return;
 			}
@@ -158,7 +195,11 @@ export default function ToastRegion() {
 			observedFrames.add( iframe );
 
 			const attachFrameDocument = () => {
-				addDocumentListener( getSameOriginIframeDocument( iframe ) );
+				const frameDocument = getSameOriginIframeDocument( iframe );
+
+				addDocumentListener( frameDocument );
+				scanFrames( frameDocument );
+				observeDocumentBody( frameDocument );
 			};
 
 			attachFrameDocument();
@@ -166,9 +207,9 @@ export default function ToastRegion() {
 			frameCleanups.push( () => {
 				iframe.removeEventListener?.( 'load', attachFrameDocument );
 			} );
-		};
+		}
 
-		const scanFrames = ( rootNode = document ) => {
+		function scanFrames( rootNode = document ) {
 			if ( rootNode?.tagName === 'IFRAME' ) {
 				observeFrame( rootNode );
 			}
@@ -178,30 +219,14 @@ export default function ToastRegion() {
 			}
 
 			rootNode.querySelectorAll( 'iframe' ).forEach( observeFrame );
-		};
+		}
 
 		addDocumentListener( document );
 		scanFrames();
-
-		const observerTarget = document.body || document.documentElement;
-		const MutationObserverConstructor =
-			typeof window !== 'undefined' ? window.MutationObserver : null;
-		const observer =
-			observerTarget && MutationObserverConstructor
-				? new MutationObserverConstructor( ( mutations ) => {
-						mutations.forEach( ( mutation ) => {
-							mutation.addedNodes.forEach( scanFrames );
-						} );
-				  } )
-				: null;
-
-		observer?.observe( observerTarget, {
-			childList: true,
-			subtree: true,
-		} );
+		observeDocumentBody( document );
 
 		return () => {
-			observer?.disconnect();
+			documentObservers.forEach( ( observer ) => observer.disconnect() );
 			frameCleanups.forEach( ( cleanup ) => cleanup() );
 			listeningDocuments.forEach( ( targetDocument ) => {
 				targetDocument.removeEventListener(

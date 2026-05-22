@@ -148,6 +148,8 @@ namespace FlavorAgent\Tests\Support {
 
 		public static mixed $ai_client_generate_text_result = '';
 
+		public static ?\Throwable $ai_client_generate_text_throws = null;
+
 		public static mixed $ai_client_model_resolution_error = null;
 
 		public static ?object $current_post = null;
@@ -370,6 +372,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$ai_client_provider_support  = [];
 			self::$ai_client_feature_support   = [];
 			self::$ai_client_generate_text_result = '';
+			self::$ai_client_generate_text_throws = null;
 			self::$ai_client_model_resolution_error = null;
 			self::$current_post                = null;
 
@@ -764,6 +767,10 @@ namespace WordPress\AI_Client {
 				'https://api.openai.com/v1/responses'
 			);
 
+			if (null !== WordPressTestState::$ai_client_generate_text_throws) {
+				throw WordPressTestState::$ai_client_generate_text_throws;
+			}
+
 			$explicit = WordPressTestState::$ai_client_generate_text_result;
 
 			if ('' !== $explicit && null !== $explicit) {
@@ -883,6 +890,10 @@ namespace {
 							['timeout' => 30],
 							'https://api.openai.com/v1/responses'
 						);
+
+						if (null !== WordPressTestState::$ai_client_generate_text_throws) {
+							throw WordPressTestState::$ai_client_generate_text_throws;
+						}
 
 						if ((bool) apply_filters('wp_ai_client_prevent_prompt', false, $this)) {
 							throw new \WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception(

@@ -36,39 +36,50 @@ function getExecutionSummary( entry ) {
 
 function getStatusLabel( entry ) {
 	if ( isDiagnosticEntry( entry ) && entry?.undo?.status !== 'failed' ) {
-		return 'Review';
+		return { label: 'Review', tone: 'review' };
 	}
 
 	if ( isDiagnosticEntry( entry ) && entry?.undo?.status === 'failed' ) {
-		return 'Request failed';
+		return { label: 'Request failed', tone: 'error' };
 	}
 
 	if (
 		entry?.persistence?.status !== 'server' &&
 		entry?.persistence?.syncType === 'undo'
 	) {
-		return entry?.undo?.status === 'undone'
-			? 'Undo pending sync'
-			: 'Audit sync pending';
+		return {
+			label:
+				entry?.undo?.status === 'undone'
+					? 'Undo pending sync'
+					: 'Audit sync pending',
+			tone: 'stale',
+		};
 	}
 
 	if ( entry?.undo?.status === 'undone' ) {
-		return 'Undone';
+		return { label: 'Undone', tone: 'stale' };
 	}
 
 	if ( entry?.undo?.status === 'blocked' ) {
-		return 'Undo blocked';
+		return { label: 'Undo blocked', tone: 'error' };
 	}
 
 	if ( entry?.undo?.status === 'failed' ) {
-		return 'Undo unavailable';
+		return { label: 'Undo unavailable', tone: 'error' };
+	}
+
+	if (
+		entry?.undo?.status === 'available' &&
+		entry?.undo?.canUndo === true
+	) {
+		return { label: 'Undo available', tone: 'success' };
 	}
 
 	if ( entry?.undo?.status === 'available' ) {
-		return 'Undo available';
+		return { label: 'Undo unavailable', tone: 'stale' };
 	}
 
-	return 'Applied';
+	return { label: 'Applied', tone: 'success' };
 }
 
 function describeActivity( entry ) {
@@ -222,13 +233,15 @@ export default function AIActivitySection( {
 				onClick={ () => setIsOpen( ( previous ) => ! previous ) }
 				aria-expanded={ isOpen }
 			>
-				<div className="flavor-agent-panel__group-title">{ title }</div>
-				<div className="flavor-agent-card__meta">
+				<span className="flavor-agent-panel__group-title">
+					{ title }
+				</span>
+				<span className="flavor-agent-card__meta">
 					<span className="flavor-agent-pill">
 						{ entries.length }{ ' ' }
 						{ entries.length === 1 ? 'action' : 'actions' }
 					</span>
-				</div>
+				</span>
 				<span
 					className="flavor-agent-activity-section__chevron"
 					aria-hidden="true"
@@ -246,6 +259,7 @@ export default function AIActivitySection( {
 			{ isOpen && visibleEntries.length > 0 && (
 				<div className="flavor-agent-panel__group-body">
 					{ visibleEntries.map( ( entry ) => {
+						const status = getStatusLabel( entry );
 						const canUndo =
 							entry?.undo?.status === 'available' &&
 							entry?.undo?.canUndo === true &&
@@ -291,8 +305,10 @@ export default function AIActivitySection( {
 										) }
 								</div>
 
-								<span className="flavor-agent-pill">
-									{ getStatusLabel( entry ) }
+								<span
+									className={ `flavor-agent-pill flavor-agent-pill--${ status.tone }` }
+								>
+									{ status.label }
 								</span>
 
 								{ activityEntryUrl && (

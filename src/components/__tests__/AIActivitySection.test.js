@@ -32,6 +32,37 @@ describe( 'AIActivitySection', () => {
 		).toBeNull();
 	} );
 
+	test( 'uses phrasing content inside the disclosure button', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ [
+						{
+							id: 'activity-1',
+							suggestion: 'Refresh content',
+							surface: 'block',
+							target: {
+								blockName: 'core/paragraph',
+							},
+							undo: {
+								canUndo: false,
+								status: 'blocked',
+							},
+						},
+					] }
+				/>
+			);
+		} );
+
+		const toggle = getContainer().querySelector(
+			'.flavor-agent-activity-section__toggle'
+		);
+
+		expect( toggle.querySelector( ':scope > div' ) ).toBeNull();
+		expect( toggle.textContent ).toContain( 'Recent AI Actions' );
+		expect( toggle.textContent ).toContain( '1 action' );
+	} );
+
 	test( 'renders ordered undo labels and only shows undo buttons for available rows', () => {
 		const onUndo = jest.fn();
 
@@ -198,6 +229,86 @@ describe( 'AIActivitySection', () => {
 		undoButton.click();
 
 		expect( onUndo ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'adds tone modifiers to status pills', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					maxVisible={ Number.POSITIVE_INFINITY }
+					entries={ [
+						{
+							id: 'activity-applied',
+							suggestion: 'Refresh content',
+							undo: { status: 'available', canUndo: true },
+						},
+						{
+							id: 'activity-blocked',
+							suggestion: 'Blocked content',
+							undo: { status: 'blocked', canUndo: false },
+						},
+						{
+							id: 'activity-review',
+							type: 'request_diagnostic',
+							suggestion: 'Review result',
+							undo: { status: 'review', canUndo: false },
+						},
+						{
+							id: 'activity-stale',
+							suggestion: 'Undo applied',
+							undo: { status: 'undone', canUndo: false },
+						},
+					] }
+				/>
+			);
+		} );
+
+		const pillByText = ( text ) =>
+			Array.from(
+				getContainer().querySelectorAll( '.flavor-agent-pill' )
+			).find( ( element ) => element.textContent === text );
+
+		expect( pillByText( 'Undo available' ).className ).toContain(
+			'flavor-agent-pill--success'
+		);
+		expect( pillByText( 'Undo blocked' ).className ).toContain(
+			'flavor-agent-pill--error'
+		);
+		expect( pillByText( 'Review' ).className ).toContain(
+			'flavor-agent-pill--review'
+		);
+		expect( pillByText( 'Undone' ).className ).toContain(
+			'flavor-agent-pill--stale'
+		);
+	} );
+
+	test( 'does not label non-actionable available entries as undo available', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					onUndo={ jest.fn() }
+					entries={ [
+						{
+							id: 'activity-1',
+							suggestion: 'Refresh content',
+							surface: 'block',
+							undo: {
+								canUndo: false,
+								status: 'available',
+							},
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Undo unavailable' );
+		expect( getContainer().textContent ).not.toContain( 'Undo available' );
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent === 'Undo'
+			)
+		).toBeUndefined();
 	} );
 
 	test( 'renders compact rows with an activity-log link instead of inline request diagnostics', () => {

@@ -439,8 +439,11 @@ final class BlockAbilities {
 	private static function normalize_selected_block( array $selected ): array {
 		$selected   = self::normalize_map( $selected );
 		$attributes = self::normalize_map( $selected['attributes'] ?? [] );
+		$block_name = is_string( $selected['blockName'] ?? null )
+			? sanitize_text_field( $selected['blockName'] )
+			: ( is_string( $selected['name'] ?? null ) ? sanitize_text_field( $selected['name'] ) : '' );
 
-		$selected['blockName']           = is_string( $selected['blockName'] ?? null ) ? sanitize_text_field( $selected['blockName'] ) : '';
+		$selected['blockName']           = $block_name;
 		$selected['editingMode']         = self::normalize_editing_mode( $selected['editingMode'] ?? 'default' );
 		$selected['isInsideContentOnly'] = ! empty( $selected['isInsideContentOnly'] );
 		$selected['supportsContentRole'] = ! empty( $selected['supportsContentRole'] );

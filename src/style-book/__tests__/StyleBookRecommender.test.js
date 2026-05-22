@@ -108,6 +108,7 @@ jest.mock( '../../components/AIReviewSection', () => {
 } );
 
 jest.mock( '../../utils/capability-flags', () => ( {
+	getConnectorApprovalNotice: () => null,
 	getSurfaceCapability: () =>
 		mockSurfaceCapability || {
 			available: true,
@@ -436,6 +437,8 @@ beforeEach( () => {
 						currentStoreState.requestPrompt,
 					getStyleBookStatus: () => currentStoreState.status,
 					getStyleBookError: () => currentStoreState.error,
+					getStyleBookErrorDetails: () =>
+						currentStoreState.errorDetails || null,
 					getStyleBookResultRef: () => currentStoreState.resultRef,
 					getStyleBookContextSignature: () =>
 						currentStoreState.contextSignature,

@@ -52,7 +52,10 @@ import {
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
 } from '../store/activity-history';
-import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../utils/capability-flags';
 import { buildGlobalStylesRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import {
 	buildGlobalStylesRecommendationContextSignature,
@@ -77,6 +80,7 @@ function GlobalStylesPanel( {
 	explanation,
 	docsGroundingWarning,
 	notice,
+	connectorApprovalNotice,
 	activityEntries,
 	activityResetKey,
 	hasResult,
@@ -118,6 +122,12 @@ function GlobalStylesPanel( {
 	return (
 		<div className="flavor-agent-panel flavor-agent-global-styles-panel">
 			<CapabilityNotice surface="global-styles" />
+			{ connectorApprovalNotice && (
+				<CapabilityNotice
+					surface="global-styles"
+					notice={ connectorApprovalNotice }
+				/>
+			) }
 			<SurfacePanelIntro
 				eyebrow="Site Editor Styles"
 				introCopy="Global Styles suggestions stay theme-backed and keep the review-before-apply contract intact."
@@ -378,6 +388,7 @@ export default function GlobalStylesRecommender() {
 		undoStatus,
 		activityEntries,
 		currentError,
+		currentErrorDetails,
 		currentApplyError,
 		currentUndoError,
 		hasUndoSuccess,
@@ -487,6 +498,7 @@ export default function GlobalStylesRecommender() {
 			undoStatus: store?.getUndoStatus?.() || 'idle',
 			activityEntries: resolvedActivityEntries,
 			currentError: store?.getGlobalStylesError?.() || null,
+			currentErrorDetails: store?.getGlobalStylesErrorDetails?.() || null,
 			currentApplyError: store?.getGlobalStylesApplyError?.() || null,
 			currentUndoError: store?.getUndoError?.() || null,
 			hasUndoSuccess: hasUndoSuccessForScope,
@@ -624,6 +636,7 @@ export default function GlobalStylesRecommender() {
 	const baseNotice = buildNotice
 		? buildNotice( {
 				requestError: currentError,
+				requestErrorDetails: currentErrorDetails,
 				applyError: currentApplyError,
 				undoError: hasUndoSuccess ? '' : currentUndoError,
 				undoSuccessMessage: hasUndoSuccess
@@ -650,6 +663,11 @@ export default function GlobalStylesRecommender() {
 					'Review a theme-backed change before applying it.',
 		  } )
 		: null;
+	const connectorApprovalNotice = useMemo(
+		() =>
+			getConnectorApprovalNotice( 'global-styles', currentErrorDetails ),
+		[ currentErrorDetails ]
+	);
 	let fallbackNotice = null;
 
 	if ( ! scope ) {
@@ -858,6 +876,7 @@ export default function GlobalStylesRecommender() {
 				hasMatchingResult ? docsGroundingWarning : null
 			}
 			notice={ notice }
+			connectorApprovalNotice={ connectorApprovalNotice }
 			activityEntries={ activityEntries }
 			activityResetKey={ scope?.globalStylesId || 'global-styles' }
 			hasResult={ hasResult }

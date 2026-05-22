@@ -74,7 +74,10 @@ import {
 	TEMPLATE_OPERATION_INSERT_PATTERN,
 	TEMPLATE_OPERATION_REPLACE,
 } from './template-recommender-helpers';
-import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../utils/capability-flags';
 import { buildTemplateRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import {
 	getEditedPostTypeEntity,
@@ -251,6 +254,7 @@ export default function TemplateRecommender() {
 		recommendations,
 		explanation,
 		error,
+		errorDetails,
 		resultPrompt,
 		resultRef,
 		resultContextSignature,
@@ -277,6 +281,7 @@ export default function TemplateRecommender() {
 			recommendations: store.getTemplateRecommendations(),
 			explanation: store.getTemplateExplanation(),
 			error: store.getTemplateError(),
+			errorDetails: store.getTemplateErrorDetails?.() || null,
 			resultPrompt: store.getTemplateRequestPrompt?.() || '',
 			resultRef: store.getTemplateResultRef(),
 			resultContextSignature: store.getTemplateContextSignature(),
@@ -636,6 +641,7 @@ export default function TemplateRecommender() {
 			return store.getSurfaceStatusNotice( 'template', {
 				requestStatus: status,
 				requestError: error,
+				requestErrorDetails: errorDetails,
 				isStale: isStaleResult,
 				applyError,
 				undoError,
@@ -670,6 +676,7 @@ export default function TemplateRecommender() {
 			applyError,
 			applyStatus,
 			error,
+			errorDetails,
 			hasApplySuccess,
 			hasResult,
 			hasSuggestions,
@@ -682,6 +689,10 @@ export default function TemplateRecommender() {
 			undoStatus,
 			hasUndoSuccess,
 		]
+	);
+	const connectorApprovalNotice = useMemo(
+		() => getConnectorApprovalNotice( 'template', errorDetails ),
+		[ errorDetails ]
 	);
 	const showSecondaryGuidance =
 		! hasResult &&
@@ -836,8 +847,15 @@ export default function TemplateRecommender() {
 					/>
 				) }
 
+				{ connectorApprovalNotice && (
+					<CapabilityNotice
+						surface="template"
+						notice={ connectorApprovalNotice }
+					/>
+				) }
+
 				<AIStatusNotice
-					notice={ statusNotice }
+					notice={ connectorApprovalNotice ? null : statusNotice }
 					onAction={
 						statusNotice?.actionType === 'undo' &&
 						latestTemplateActivity

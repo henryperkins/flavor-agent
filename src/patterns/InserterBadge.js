@@ -16,7 +16,6 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { Tooltip } from '@wordpress/components';
 
 import { findInserterToggle } from './inserter-dom';
 import { STORE_NAME } from '../store';
@@ -159,14 +158,13 @@ export default function InserterBadge() {
 	}
 
 	return createPortal(
-		<Tooltip text={ badgeState.tooltip }>
-			<span
-				className={ badgeState.className }
-				aria-label={ badgeState.ariaLabel }
-			>
-				{ badgeState.content }
-			</span>
-		</Tooltip>,
+		<output
+			className={ badgeState.className }
+			aria-label={ badgeState.ariaLabel }
+			title={ badgeState.tooltip }
+		>
+			{ badgeState.content }
+		</output>,
 		anchor
 	);
 }

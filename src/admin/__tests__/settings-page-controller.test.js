@@ -316,6 +316,17 @@ describe( 'settings page controller', () => {
 		);
 	} );
 
+	test( 'settings accent borders use shared brand tokens instead of raw rgba literals', () => {
+		expect( SETTINGS_CSS ).not.toMatch( /rgba\(11,\s*123,\s*128/i );
+		expect( TOKENS_CSS ).toContain(
+			'--flavor-agent-color-accent-line-strong'
+		);
+	} );
+
+	test( 'does not expose the dormant low-contrast subtle text token', () => {
+		expect( TOKENS_CSS ).not.toContain( '--flavor-agent-color-subtle' );
+	} );
+
 	test( 'shared reduced-motion reset covers wp-admin roots', () => {
 		expect( TOKENS_CSS ).toMatch(
 			/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.flavor-agent-settings \*/s

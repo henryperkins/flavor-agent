@@ -28,7 +28,10 @@ import {
 	collectBlockContext,
 	getLiveBlockContextSignature,
 } from '../context/collector';
-import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../utils/capability-flags';
 import { buildContextSignature } from '../utils/context-signature';
 import { buildNavigationRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 
@@ -300,6 +303,7 @@ export default function NavigationRecommendations( {
 		recommendations,
 		explanation,
 		error,
+		errorDetails,
 		isLoading,
 		requestPrompt,
 		status,
@@ -319,6 +323,8 @@ export default function NavigationRecommendations( {
 				recommendations: store.getNavigationRecommendations( clientId ),
 				explanation: store.getNavigationExplanation( clientId ),
 				error: store.getNavigationError( clientId ),
+				errorDetails:
+					store.getNavigationErrorDetails?.( clientId ) || null,
 				isLoading: store.isNavigationLoading( clientId ),
 				requestPrompt: store.getNavigationRequestPrompt( clientId ),
 				status: store.getNavigationStatus( clientId ),
@@ -441,6 +447,7 @@ export default function NavigationRecommendations( {
 				statusNotice: store.getSurfaceStatusNotice( 'navigation', {
 					requestStatus: status,
 					requestError: error,
+					requestErrorDetails: errorDetails,
 					isStale: isStaleResult,
 					hasResult: hasMatchingResult,
 					hasSuggestions: hasMatchingResult && hasSuggestions,
@@ -455,11 +462,16 @@ export default function NavigationRecommendations( {
 		[
 			clientId,
 			error,
+			errorDetails,
 			hasMatchingResult,
 			hasSuggestions,
 			isStaleResult,
 			status,
 		]
+	);
+	const connectorApprovalNotice = useMemo(
+		() => getConnectorApprovalNotice( 'navigation', errorDetails ),
+		[ errorDetails ]
 	);
 
 	useEffect( () => {
@@ -678,6 +690,13 @@ export default function NavigationRecommendations( {
 							className="flavor-agent-navigation-embedded__composer"
 						/>
 
+						{ connectorApprovalNotice && (
+							<CapabilityNotice
+								surface="navigation"
+								notice={ connectorApprovalNotice }
+							/>
+						) }
+
 						{ isStaleResult && (
 							<StaleResultBanner
 								message={ staleMessage }
@@ -689,7 +708,9 @@ export default function NavigationRecommendations( {
 						) }
 
 						<AIStatusNotice
-							notice={ statusNotice }
+							notice={
+								connectorApprovalNotice ? null : statusNotice
+							}
 							onDismiss={
 								statusNotice?.source === 'request'
 									? clearNavigationError
@@ -791,8 +812,19 @@ export default function NavigationRecommendations( {
 								disabled={ ! requestInput }
 							/>
 
+							{ connectorApprovalNotice && (
+								<CapabilityNotice
+									surface="navigation"
+									notice={ connectorApprovalNotice }
+								/>
+							) }
+
 							<AIStatusNotice
-								notice={ statusNotice }
+								notice={
+									connectorApprovalNotice
+										? null
+										: statusNotice
+								}
 								onDismiss={
 									statusNotice?.source === 'request'
 										? clearNavigationError

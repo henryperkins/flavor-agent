@@ -37,7 +37,10 @@ import {
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
 import { getSuggestionKey } from './suggestion-keys';
-import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../utils/capability-flags';
 import { describeEditorBlockLabel } from '../utils/editor-context-metadata';
 import {
 	ACTIONABILITY_REASON_MANUAL_COPY_ONLY,
@@ -130,6 +133,7 @@ function useBlockRecommendationState( clientId ) {
 		recommendations,
 		isLoading,
 		error,
+		errorDetails,
 		status,
 		storedContextSignature,
 		requestToken,
@@ -139,6 +143,7 @@ function useBlockRecommendationState( clientId ) {
 		blockActivityLog,
 		blockApplyError,
 		blockApplyStatus,
+		blockLastAppliedSuggestionKey,
 		undoError,
 		undoStatus,
 		lastUndoneActivityId,
@@ -171,6 +176,7 @@ function useBlockRecommendationState( clientId ) {
 				recommendations: store.getBlockRecommendations( clientId ),
 				isLoading: store.isBlockLoading( clientId ),
 				error: store.getBlockError( clientId ),
+				errorDetails: store.getBlockErrorDetails?.( clientId ) || null,
 				status: store.getBlockStatus( clientId ),
 				storedContextSignature:
 					store.getBlockRecommendationContextSignature( clientId ),
@@ -185,6 +191,9 @@ function useBlockRecommendationState( clientId ) {
 				blockApplyError: store.getBlockApplyError?.( clientId ) || null,
 				blockApplyStatus:
 					store.getBlockApplyStatus?.( clientId ) || 'idle',
+				blockLastAppliedSuggestionKey:
+					store.getBlockLastAppliedSuggestionKey?.( clientId ) ||
+					null,
 				undoError: store.getUndoError(),
 				undoStatus: store.getUndoStatus(),
 				lastUndoneActivityId: store.getLastUndoneActivityId(),
@@ -233,6 +242,7 @@ function useBlockRecommendationState( clientId ) {
 		recommendations,
 		isLoading,
 		error,
+		errorDetails,
 		status,
 		storedContextSignature,
 		requestToken,
@@ -245,6 +255,7 @@ function useBlockRecommendationState( clientId ) {
 		lastUndoneBlockActivity,
 		blockApplyError,
 		blockApplyStatus,
+		blockLastAppliedSuggestionKey,
 		undoError,
 		undoStatus,
 		isDisabled: editingMode === 'disabled',
@@ -335,6 +346,7 @@ export function BlockRecommendationsContent( {
 		recommendations,
 		isLoading,
 		error,
+		errorDetails,
 		status,
 		storedContextSignature,
 		requestToken,
@@ -347,6 +359,7 @@ export function BlockRecommendationsContent( {
 		lastUndoneBlockActivity,
 		blockApplyError,
 		blockApplyStatus,
+		blockLastAppliedSuggestionKey,
 		undoError,
 		undoStatus,
 		isDisabled,
@@ -398,9 +411,16 @@ export function BlockRecommendationsContent( {
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
+	const latestBlockActivitySuggestionKey =
+		latestBlockActivity?.suggestionKey ||
+		latestBlockActivity?.suggestion ||
+		null;
 	const hasApplySuccess =
+		blockApplyStatus === 'success' &&
+		Boolean( blockLastAppliedSuggestionKey ) &&
 		Boolean( latestBlockActivity ) &&
-		latestBlockActivity?.id === latestUndoableActivityId;
+		latestBlockActivity?.id === latestUndoableActivityId &&
+		latestBlockActivitySuggestionKey === blockLastAppliedSuggestionKey;
 	const {
 		clientStaleReason,
 		effectiveStaleReason,
@@ -449,6 +469,7 @@ export function BlockRecommendationsContent( {
 		return {
 			statusNotice: store.getSurfaceStatusNotice( 'block', {
 				requestError: error,
+				requestErrorDetails: errorDetails,
 				applyError: blockApplyError,
 				undoError,
 				undoStatus,
@@ -476,6 +497,10 @@ export function BlockRecommendationsContent( {
 			} ),
 		};
 	} );
+	const connectorApprovalNotice = useMemo(
+		() => getConnectorApprovalNotice( 'block', errorDetails ),
+		[ errorDetails ]
+	);
 	const reviewScope = useMemo(
 		() => ( {
 			clientId,
@@ -828,6 +853,13 @@ export function BlockRecommendationsContent( {
 
 			{ ! canRecommendBlocks && <CapabilityNotice surface="block" /> }
 
+			{ connectorApprovalNotice && (
+				<CapabilityNotice
+					surface="block"
+					notice={ connectorApprovalNotice }
+				/>
+			) }
+
 			{ isContentRestricted && (
 				<Notice
 					status="info"
@@ -855,7 +887,7 @@ export function BlockRecommendationsContent( {
 			/>
 
 			<AIStatusNotice
-				notice={ statusNotice }
+				notice={ connectorApprovalNotice ? null : statusNotice }
 				onAction={
 					statusNotice?.actionType === 'undo' && latestBlockActivity
 						? () => handleUndo( latestBlockActivity.id )

@@ -28,13 +28,13 @@
 	--flavor-agent-color-ink: #17232a;            /* Darkest — wordmarks, headings */
 	--flavor-agent-color-text: #203038;           /* Body text (reconciles brand #203038 / old editor #1f2d34) */
 	--flavor-agent-color-muted: #5f6d73;          /* Secondary text (reconciles brand #5f6d73 / old editor #627078) */
-	--flavor-agent-color-subtle: #8a97a1;         /* Tertiary, placeholders */
 	--flavor-agent-color-line: #d8d8d8;           /* Neutral strokes */
 	--flavor-agent-color-line-soft: #e0e0e0;      /* Weaker strokes */
 	--flavor-agent-color-accent: #0b7b80;         /* Primary teal */
 	--flavor-agent-color-accent-strong: #075c62;  /* Teal hover/active */
 	--flavor-agent-color-accent-wash: rgba(11, 123, 128, 0.12);
 	--flavor-agent-color-accent-line: rgba(11, 123, 128, 0.18);
+	--flavor-agent-color-accent-line-strong: rgba(11, 123, 128, 0.24);
 	--flavor-agent-color-warm: #ba7925;           /* Amber — editorial second voice */
 	--flavor-agent-color-warm-weak: #fff7e0;
 

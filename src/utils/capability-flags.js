@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 const LEGACY_FLAG_KEYS = Object.freeze( {
 	block: 'canRecommendBlocks',
@@ -56,6 +56,10 @@ function normalizeAction( action ) {
 		label,
 		href,
 	};
+}
+
+function normalizeString( value ) {
+	return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
 function normalizeActions( actions ) {
@@ -308,5 +312,61 @@ export function getCapabilityNotice( surface, input = null ) {
 			capability.reason === 'missing_theme_capability'
 				? 'info'
 				: 'warning',
+	};
+}
+
+export function getConnectorApprovalNotice(
+	surface,
+	errorDetails = null,
+	input = null
+) {
+	const approval = errorDetails?.connectorApproval || null;
+
+	if ( ! approval?.connectorId || ! approval?.callerBasename ) {
+		return null;
+	}
+
+	const data = getFlavorAgentData( input );
+	const canManageApprovals = data.canManageFlavorAgentSettings !== false;
+	const href = canManageApprovals
+		? normalizeString( approval.adminUrl || data.connectorApprovalUrl )
+		: '';
+	const message = canManageApprovals
+		? sprintf(
+				/* translators: 1: AI connector ID. 2: caller plugin basename. */
+				__(
+					'Flavor Agent needs administrator approval to use the %1$s connector. An approval request for %2$s has been submitted.',
+					'flavor-agent'
+				),
+				approval.connectorId,
+				approval.callerBasename
+		  )
+		: sprintf(
+				/* translators: 1: AI connector ID. 2: caller plugin basename. */
+				__(
+					'Flavor Agent needs administrator approval to use the %1$s connector. An approval request for %2$s has been submitted. Ask an administrator to review it in Connector Approvals.',
+					'flavor-agent'
+				),
+				approval.connectorId,
+				approval.callerBasename
+		  );
+	const actionLabel = href ? __( 'Open approvals page', 'flavor-agent' ) : '';
+
+	return {
+		surface,
+		available: false,
+		reason: 'connector_not_approved',
+		status: 'warning',
+		message,
+		actionLabel,
+		actionHref: href,
+		actions: href
+			? [
+					{
+						label: actionLabel,
+						href,
+					},
+			  ]
+			: [],
 	};
 }

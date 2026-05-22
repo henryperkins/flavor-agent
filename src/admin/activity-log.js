@@ -450,10 +450,7 @@ function EmptyState( { view } ) {
 
 function ErrorState( { error, actionLabel, onAction } ) {
 	return (
-		<Card
-			className="flavor-agent-activity-log__empty flavor-agent-activity-log__error-state"
-			size="small"
-		>
+		<Card className="flavor-agent-activity-log__empty" size="small">
 			<CardBody>
 				<div role="alert">
 					<div className="flavor-agent-activity-log__error-heading">

@@ -52,4 +52,35 @@ describe( 'CapabilityNotice', () => {
 			'/wp-admin/options-general.php?page=flavor-agent'
 		);
 	} );
+
+	test( 'renders an explicit request-time notice without resolving surface capability', () => {
+		getCapabilityNotice.mockReturnValue( null );
+		getCapabilityNotice.mockClear();
+
+		act( () => {
+			getRoot().render(
+				<CapabilityNotice
+					surface="content"
+					notice={ {
+						status: 'warning',
+						message: 'Connector approval is required.',
+						actions: [
+							{
+								label: 'Open approvals page',
+								href: '/wp-admin/tools.php?page=ai-connector-approval',
+							},
+						],
+					} }
+				/>
+			);
+		} );
+
+		expect( getCapabilityNotice ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).toContain(
+			'Connector approval is required.'
+		);
+		expect( getContainer().querySelector( 'a' )?.textContent ).toBe(
+			'Open approvals page'
+		);
+	} );
 } );

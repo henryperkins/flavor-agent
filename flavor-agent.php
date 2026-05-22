@@ -235,6 +235,9 @@ function flavor_agent_get_editor_bootstrap_data(
 	return [
 		'settingsUrl'                  => $settings_url,
 		'connectorsUrl'                => $connectors_url,
+		'connectorApprovalUrl'         => $can_manage_settings
+			? FlavorAgent\LLM\WordPressAIClient::connector_approval_admin_url()
+			: '',
 		'activityLogUrl'               => $can_manage_settings ? admin_url( 'options-general.php?page=flavor-agent-activity' ) : '',
 		'canManageFlavorAgentSettings' => $can_manage_settings,
 		'enableBlockStructuralActions' => flavor_agent_block_structural_actions_enabled(),

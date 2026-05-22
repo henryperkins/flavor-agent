@@ -1,9 +1,20 @@
 jest.mock( '@wordpress/i18n', () => ( {
 	__: jest.fn( ( text ) => text ),
+	sprintf: jest.fn( ( template, ...args ) =>
+		args.reduce(
+			( message, value, index ) =>
+				message.replace( `%${ index + 1 }$s`, value ),
+			template
+		)
+	),
 } ) );
 
 import * as i18n from '@wordpress/i18n';
-import { getCapabilityNotice, getSurfaceCapability } from '../capability-flags';
+import {
+	getCapabilityNotice,
+	getConnectorApprovalNotice,
+	getSurfaceCapability,
+} from '../capability-flags';
 
 describe( 'capability-flags', () => {
 	afterEach( () => {
@@ -34,6 +45,74 @@ describe( 'capability-flags', () => {
 			message:
 				'Navigation recommendations require the edit_theme_options capability.',
 			actions: [],
+		} );
+	} );
+
+	test( 'builds a request-time connector approval notice while the surface is configured', () => {
+		window.flavorAgentData = {
+			canRecommendContent: true,
+			canManageFlavorAgentSettings: true,
+			connectorApprovalUrl:
+				'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+			capabilities: {
+				surfaces: {
+					content: { available: true, reason: 'ready', actions: [] },
+				},
+			},
+		};
+
+		const notice = getConnectorApprovalNotice( 'content', {
+			connectorApproval: {
+				connectorId: 'openai',
+				callerBasename: 'flavor-agent/flavor-agent.php',
+				callerName: 'Flavor Agent',
+				adminUrl:
+					'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+			},
+		} );
+
+		expect( getCapabilityNotice( 'content' ) ).toBeNull();
+		expect( notice ).toMatchObject( {
+			status: 'warning',
+			message:
+				'Flavor Agent needs administrator approval to use the openai connector. An approval request for flavor-agent/flavor-agent.php has been submitted.',
+			actions: [
+				{
+					label: 'Open approvals page',
+					href: 'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+				},
+			],
+		} );
+	} );
+
+	test( 'builds a non-admin connector approval notice without an admin link', () => {
+		window.flavorAgentData = {
+			canRecommendContent: true,
+			canManageFlavorAgentSettings: false,
+			connectorApprovalUrl: '',
+			capabilities: {
+				surfaces: {
+					content: { available: true, reason: 'ready', actions: [] },
+				},
+			},
+		};
+
+		const notice = getConnectorApprovalNotice( 'content', {
+			connectorApproval: {
+				connectorId: 'openai',
+				callerBasename: 'flavor-agent/flavor-agent.php',
+				callerName: 'Flavor Agent',
+				adminUrl:
+					'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+			},
+		} );
+
+		expect( notice ).toMatchObject( {
+			status: 'warning',
+			message:
+				'Flavor Agent needs administrator approval to use the openai connector. An approval request for flavor-agent/flavor-agent.php has been submitted. Ask an administrator to review it in Connector Approvals.',
+			actions: [],
+			actionHref: '',
 		} );
 	} );
 

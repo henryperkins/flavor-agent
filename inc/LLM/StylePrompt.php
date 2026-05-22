@@ -1195,6 +1195,15 @@ EXAMPLE
 	 * @return array{valid: bool, value: mixed}
 	 */
 	private static function validate_freeform_style_value( array $path, mixed $value ): array {
+		$custom_property = self::validate_css_custom_property_reference( $value );
+
+		if ( null !== $custom_property ) {
+			return [
+				'valid' => true,
+				'value' => $custom_property,
+			];
+		}
+
 		return match ( self::path_key( $path ) ) {
 			'typography.lineHeight' => self::validate_line_height_value( $value ),
 			'border.radius' => self::validate_length_value( $value, true ),
@@ -1212,6 +1221,22 @@ EXAMPLE
 	 */
 	private static function path_key( array $path ): string {
 		return implode( '.', $path );
+	}
+
+	private static function validate_css_custom_property_reference( mixed $value ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed ) {
+			return null;
+		}
+
+		return 1 === preg_match( '/^var\(\s*--[a-z0-9_-]+\s*\)$/i', $trimmed )
+			? sanitize_text_field( $trimmed )
+			: null;
 	}
 
 	/**

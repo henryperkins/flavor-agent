@@ -300,6 +300,9 @@ function buildPopulatedSurfaceState( def, fixture ) {
 		[ def.explanationKey ]: fixture.payload.explanation,
 		[ def.statusKey ]: 'loading',
 		[ def.errorKey ]: ' request failed ',
+		[ def.errorDetailsKey ]: {
+			code: 'wpai_connector_not_approved',
+		},
 		[ def.requestPromptKey ]: fixture.input.prompt,
 		[ def.contextSignatureKey ]: ' request-context ',
 		[ def.reviewContextSignatureKey ]: fixture.reviewContextSignature,
@@ -325,11 +328,14 @@ function buildPopulatedSurfaceState( def, fixture ) {
 
 describe( 'executable-surface runtime config factories', () => {
 	it( 'wires fetch config callbacks through the status action', () => {
-		const setStatusAction = jest.fn( ( status, error, requestToken ) => ( {
-			status,
-			error,
-			requestToken,
-		} ) );
+		const setStatusAction = jest.fn(
+			( status, error, requestToken, errorDetails ) => ( {
+				status,
+				error,
+				requestToken,
+				errorDetails,
+			} )
+		);
 		const buildRequestDocument = jest.fn();
 		const dispatchRecommendations = jest.fn();
 		const getRequestToken = jest.fn();
@@ -353,22 +359,38 @@ describe( 'executable-surface runtime config factories', () => {
 			setErrorState: expect.any( Function ),
 			setLoadingState: expect.any( Function ),
 		} );
-		expect( config.setErrorState( 'request failed', 7 ) ).toEqual( {
+		expect(
+			config.setErrorState( 'request failed', 7, {
+				code: 'wpai_connector_not_approved',
+			} )
+		).toEqual( {
 			status: 'error',
 			error: 'request failed',
 			requestToken: 7,
+			errorDetails: {
+				code: 'wpai_connector_not_approved',
+			},
 		} );
 		expect( setStatusAction ).toHaveBeenCalledWith(
 			'error',
 			'request failed',
-			7
+			7,
+			{
+				code: 'wpai_connector_not_approved',
+			}
 		);
 		expect( config.setLoadingState( 8 ) ).toEqual( {
 			status: 'loading',
 			error: null,
 			requestToken: 8,
+			errorDetails: null,
 		} );
-		expect( setStatusAction ).toHaveBeenCalledWith( 'loading', null, 8 );
+		expect( setStatusAction ).toHaveBeenCalledWith(
+			'loading',
+			null,
+			8,
+			null
+		);
 	} );
 
 	it( 'wires review freshness config callbacks through the review action', () => {
@@ -581,11 +603,13 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			const defaults = createExecutableSurfaceDefaultState();
 
 			expect( def.docsGroundingWarningKey ).toBeTruthy();
+			expect( def.errorDetailsKey ).toBeTruthy();
 			expect( defaults ).toMatchObject( {
 				[ def.collectionKey ]: [],
 				[ def.explanationKey ]: '',
 				[ def.statusKey ]: 'idle',
 				[ def.errorKey ]: null,
+				[ def.errorDetailsKey ]: null,
 				[ def.requestPromptKey ]: '',
 				[ def.resultRefKey ]: null,
 				[ def.contextSignatureKey ]: null,
@@ -612,13 +636,15 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				actions[ def.methodNames.setStatus ](
 					'ready',
 					'request failed',
-					9
+					9,
+					{ code: 'wpai_connector_not_approved' }
 				)
 			).toEqual( {
 				type: def.types.setStatus,
 				status: 'ready',
 				error: 'request failed',
 				requestToken: 9,
+				errorDetails: { code: 'wpai_connector_not_approved' },
 			} );
 
 			expect(
@@ -728,6 +754,11 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			expect( selectors[ def.methodNames.getError ]( state ) ).toBe(
 				' request failed '
 			);
+			expect(
+				selectors[ def.methodNames.getErrorDetails ]( state )
+			).toEqual( {
+				code: 'wpai_connector_not_approved',
+			} );
 			expect(
 				selectors[ def.methodNames.getRequestPrompt ]( state )
 			).toBe( fixture.input.prompt );

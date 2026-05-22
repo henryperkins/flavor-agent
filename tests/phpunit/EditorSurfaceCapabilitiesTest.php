@@ -158,6 +158,39 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_admin_bootstrap_data_includes_connector_approval_url(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+			'manage_options'     => true,
+		];
+
+		$data = \flavor_agent_get_editor_bootstrap_data(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php'
+		);
+
+		$this->assertArrayHasKey( 'connectorApprovalUrl', $data );
+		$this->assertStringContainsString(
+			'tools.php?page=ai-connector-approval',
+			$data['connectorApprovalUrl']
+		);
+	}
+
+	public function test_non_admin_bootstrap_data_keeps_empty_connector_approval_url(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+			'manage_options'     => false,
+		];
+
+		$data = \flavor_agent_get_editor_bootstrap_data(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php'
+		);
+
+		$this->assertArrayHasKey( 'connectorApprovalUrl', $data );
+		$this->assertSame( '', $data['connectorApprovalUrl'] );
+	}
+
 	public function test_pattern_capability_uses_cloudflare_ai_search_unavailable_copy(): void {
 		WordPressTestState::$capabilities = [
 			'edit_theme_options' => true,

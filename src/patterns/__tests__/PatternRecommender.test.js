@@ -5,6 +5,7 @@ const mockCloneBlock = jest.fn();
 const mockCreateBlock = jest.fn();
 const mockParse = jest.fn();
 const mockFetchPatternRecommendations = jest.fn();
+const mockResolvePatternRecommendationSignature = jest.fn();
 const mockInsertBlocks = jest.fn();
 const mockCreateSuccessNotice = jest.fn();
 const mockCreateErrorNotice = jest.fn();
@@ -80,6 +81,23 @@ jest.mock( '../inserter-dom', () => ( {
 } ) );
 
 jest.mock( '../../store', () => ( {
+	getResolvedContextSignatureFromResponse: ( result = null ) => {
+		const fromPayload =
+			typeof result?.payload?.resolvedContextSignature === 'string'
+				? result.payload.resolvedContextSignature.trim()
+				: '';
+
+		if ( fromPayload ) {
+			return fromPayload;
+		}
+
+		const direct =
+			typeof result?.resolvedContextSignature === 'string'
+				? result.resolvedContextSignature.trim()
+				: '';
+
+		return direct || null;
+	},
 	STORE_NAME: 'flavor-agent',
 } ) );
 
@@ -149,6 +167,9 @@ function createSelectMap() {
 		},
 		'flavor-agent': {
 			getPatternError: jest.fn( () => state.store.patternError ),
+			getPatternErrorDetails: jest.fn(
+				() => state.store.patternErrorDetails
+			),
 			getPatternStatus: jest.fn( () => state.store.patternStatus ),
 			getPatternRecommendations: jest.fn(
 				() => state.store.patternRecommendations
@@ -161,6 +182,9 @@ function createSelectMap() {
 			),
 			getPatternInsertionTargetSignature: jest.fn(
 				() => state.store.patternInsertionTargetSignature
+			),
+			getPatternResolvedContextSignature: jest.fn(
+				() => state.store.patternResolvedContextSignature
 			),
 			getPatternDocsGroundingWarning: jest.fn(
 				() => state.store.patternDocsGroundingWarning
@@ -201,11 +225,13 @@ describe( 'PatternRecommender', () => {
 			},
 			store: {
 				patternError: '',
+				patternErrorDetails: null,
 				patternStatus: 'idle',
 				patternRecommendations: [],
 				patternDiagnostics: null,
 				patternRequestSignature: '',
 				patternInsertionTargetSignature: '',
+				patternResolvedContextSignature: 'resolved-pattern-context',
 				patternDocsGroundingWarning: null,
 			},
 		};
@@ -216,6 +242,10 @@ describe( 'PatternRecommender', () => {
 		mockCreateBlock.mockReset();
 		mockParse.mockReset();
 		mockFetchPatternRecommendations.mockReset();
+		mockResolvePatternRecommendationSignature.mockReset();
+		mockResolvePatternRecommendationSignature.mockResolvedValue( {
+			resolvedContextSignature: 'resolved-pattern-context',
+		} );
 		mockInsertBlocks.mockReset();
 		mockCreateSuccessNotice.mockReset();
 		mockCreateErrorNotice.mockReset();
@@ -243,6 +273,8 @@ describe( 'PatternRecommender', () => {
 				return {
 					fetchPatternRecommendations: ( input ) =>
 						mockFetchPatternRecommendations( input ),
+					resolvePatternRecommendationSignature: ( input ) =>
+						mockResolvePatternRecommendationSignature( input ),
 				};
 			}
 
@@ -334,6 +366,43 @@ describe( 'PatternRecommender', () => {
 		);
 		expect( EDITOR_CSS ).not.toMatch(
 			/\.flavor-agent-toast-region\s*\{[^}]*z-index:\s*1000\b/s
+		);
+	} );
+
+	test( 'uses semantic editor tokens for recommendation hero spacing and lane pills', () => {
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-recommendation-hero\s*\{[^}]*gap:\s*var\(--flavor-agent-editor-space-8,\s*8px\);[^}]*padding:\s*var\(--flavor-agent-editor-space-12,\s*12px\);/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-recommendation-hero__header\s*\{[^}]*gap:\s*var\(--flavor-agent-editor-space-12,\s*12px\);/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-recommendation-hero__actions\s*\{[^}]*gap:\s*var\(--flavor-agent-editor-space-8,\s*8px\);/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-pill--lane\s*\{[^}]*color:\s*var\(--flavor-agent-editor-accent-strong\);/s
+		);
+	} );
+
+	test( 'uses semantic toast severity tokens instead of raw variant literals', () => {
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-toast__icon--success\s*\{[^}]*var\(--flavor-agent-color-success\)/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-toast--error\s+\.flavor-agent-toast__progress\s*\{[^}]*var\(--flavor-agent-color-error\)/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-toast--warning\s+\.flavor-agent-toast__progress\s*\{[^}]*var\(--flavor-agent-color-warning\)/s
+		);
+		expect( EDITOR_CSS ).not.toMatch( /#(?:6cd394|ff8b8b|f0c267)\b/i );
+	} );
+
+	test( 'dims stale passive chips and removes their live preview color', () => {
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-chip--passive\.is-stale\s*\{[^}]*opacity:\s*0\.6;/s
+		);
+		expect( EDITOR_CSS ).toMatch(
+			/\.flavor-agent-chip--passive\.is-stale\s+\.flavor-agent-chip__preview\s*\{[^}]*background:\s*transparent;/s
 		);
 	} );
 
@@ -730,7 +799,43 @@ describe( 'PatternRecommender', () => {
 		} );
 	} );
 
-	test( 'renders a local inserter shelf and inserts matched allowed patterns', () => {
+	test( 'renders connector approval notice instead of generic ranking error', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		window.flavorAgentData = {
+			...( window.flavorAgentData || {} ),
+			canManageFlavorAgentSettings: true,
+			connectorApprovalUrl:
+				'https://example.test/wp-admin/options-general.php?page=connector-approvals',
+		};
+		state.store.patternStatus = 'error';
+		state.store.patternError = 'Pattern recommendation request failed.';
+		state.store.patternErrorDetails = {
+			code: 'wpai_connector_not_approved',
+			connectorApproval: {
+				connectorId: 'openai',
+				callerBasename: 'flavor-agent/flavor-agent.php',
+			},
+		};
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( inserterContainer.textContent ).toContain(
+			'Flavor Agent needs administrator approval to use the openai connector.'
+		);
+		expect( inserterContainer.textContent ).toContain(
+			'Open approvals page'
+		);
+		expect( inserterContainer.textContent ).not.toContain(
+			'Pattern recommendation request failed.'
+		);
+		expect( inserterContainer.textContent ).not.toContain( 'Retry' );
+	} );
+
+	test( 'renders a local inserter shelf and inserts matched allowed patterns', async () => {
 		const inserterContainer = document.createElement( 'div' );
 		const allowedPattern = {
 			name: 'theme/hero',
@@ -790,7 +895,7 @@ describe( 'PatternRecommender', () => {
 		);
 		expect( mockSprintf ).toHaveBeenCalledWith( 'Insert %s', 'Hero' );
 
-		act( () => {
+		await act( async () => {
 			insertButton.click();
 		} );
 
@@ -1013,7 +1118,7 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
-	test( 'inserts when the live insertion context matches the ranked context', () => {
+	test( 'inserts when the live insertion context matches the ranked context', async () => {
 		const {
 			buildPatternInsertionTargetSignature,
 			buildPatternRecommendationRequestSignature,
@@ -1073,7 +1178,7 @@ describe( 'PatternRecommender', () => {
 			inserterContainer.querySelectorAll( 'button' )
 		).find( ( button ) => button.textContent === 'Insert' );
 
-		act( () => {
+		await act( async () => {
 			insertButton.click();
 		} );
 
@@ -1082,7 +1187,88 @@ describe( 'PatternRecommender', () => {
 		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
 	} );
 
-	test( 'inserts when live visible patterns drift but the insertion target still matches', () => {
+	test( 'blocks insert when the server-resolved apply context drifts', async () => {
+		const {
+			buildPatternInsertionTargetSignature,
+		} = require( '../../utils/recommendation-request-signature' );
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.store.patternInsertionTargetSignature =
+			buildPatternInsertionTargetSignature( {
+				postType: 'page',
+				inserterRootClientId: 'root-a',
+				insertionIndex: 0,
+				insertionContext: {
+					rootBlock: 'core/group',
+					ancestors: [ 'core/group' ],
+					nearbySiblings: [],
+				},
+			} );
+		state.store.patternResolvedContextSignature =
+			'resolved-pattern-context-old';
+		state.allowedPatterns = [ allowedPattern ];
+		mockResolvePatternRecommendationSignature.mockResolvedValue( {
+			resolvedContextSignature: 'resolved-pattern-context-new',
+		} );
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+		mockFetchPatternRecommendations.mockClear();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		await act( async () => {
+			insertButton.click();
+		} );
+
+		expect(
+			mockResolvePatternRecommendationSignature
+		).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				postType: 'page',
+				visiblePatternNames: [ 'theme/hero' ],
+				insertionContext: expect.objectContaining( {
+					rootBlock: 'core/group',
+				} ),
+			} )
+		);
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+			'Cannot insert pattern "Hero" because the server-resolved apply context has changed since these recommendations were ranked. Refreshing now — try again in a moment.',
+			{
+				type: 'snackbar',
+				id: 'inserter-notice',
+			}
+		);
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'inserts when live visible patterns drift but the insertion target still matches', async () => {
 		const {
 			buildPatternInsertionTargetSignature,
 			buildPatternRecommendationRequestSignature,
@@ -1143,7 +1329,7 @@ describe( 'PatternRecommender', () => {
 			inserterContainer.querySelectorAll( 'button' )
 		).find( ( button ) => button.textContent === 'Insert' );
 
-		act( () => {
+		await act( async () => {
 			insertButton.click();
 		} );
 
@@ -1199,7 +1385,7 @@ describe( 'PatternRecommender', () => {
 		expect( document.body.textContent ).toContain( 'Nearby block fit' );
 	} );
 
-	test( 'inserts synced user patterns via a core/block reference', () => {
+	test( 'inserts synced user patterns via a core/block reference', async () => {
 		const inserterContainer = document.createElement( 'div' );
 		const syncedPattern = {
 			name: 'core/block-flavor-agent-sync',
@@ -1224,7 +1410,7 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		act( () => {
+		await act( async () => {
 			Array.from( inserterContainer.querySelectorAll( 'button' ) )
 				.find( ( button ) => button.textContent === 'Insert' )
 				.click();
@@ -1249,7 +1435,7 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
-	test( 'filters out recommendations whose top-level blocks cannot be inserted at the current root', () => {
+	test( 'filters out recommendations whose top-level blocks cannot be inserted at the current root', async () => {
 		const inserterContainer = document.createElement( 'div' );
 		const insertablePattern = {
 			name: 'theme/hero',
@@ -1292,7 +1478,7 @@ describe( 'PatternRecommender', () => {
 		expect( document.body.textContent ).toContain( 'Hero' );
 		expect( document.body.textContent ).not.toContain( 'Photo blog page' );
 
-		act( () => {
+		await act( async () => {
 			Array.from( inserterContainer.querySelectorAll( 'button' ) )
 				.find( ( button ) => button.textContent === 'Insert' )
 				.click();

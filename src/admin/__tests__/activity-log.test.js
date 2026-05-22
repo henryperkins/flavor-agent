@@ -215,6 +215,10 @@ const ACTIVITY_LOG_CSS = fs.readFileSync(
 	path.join( __dirname, '../activity-log.css' ),
 	'utf8'
 );
+const ACTIVITY_LOG_JS = fs.readFileSync(
+	path.join( __dirname, '../activity-log.js' ),
+	'utf8'
+);
 
 function createEntry( overrides = {} ) {
 	return {
@@ -490,6 +494,30 @@ describe( 'ActivityLogApp', () => {
 	test( 'constrains code detail blobs inside the sidebar panel', () => {
 		expect( ACTIVITY_LOG_CSS ).toMatch(
 			/\.flavor-agent-activity-log__detail-value--code\s+\.flavor-agent-activity-log__code\s*\{[^}]*max-width:\s*100%;[^}]*overflow:\s*auto;[^}]*white-space:\s*pre-wrap;[^}]*overflow-wrap:\s*anywhere;/s
+		);
+	} );
+
+	test( 'marks the selected table row with a non-color current state', () => {
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/\.flavor-agent-activity-log\s+\.dataviews-view-table\s+tr:has\(\s*\.flavor-agent-activity-log__entry-title\.is-current\s*\)\s+td\s*\{[^}]*background:\s*var\(--flavor-agent-activity-log-accent-soft\);[^}]*box-shadow:\s*inset\s+0\s+0\s+0\s+1px\s+var\(--flavor-agent-activity-log-border-strong\);/s
+		);
+	} );
+
+	test( 'uses the strong accent for selected activity titles on tinted rows', () => {
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/\.flavor-agent-activity-log__entry-title\.is-current\s*\{[^}]*color:\s*var\(--flavor-agent-activity-log-accent-strong\);/s
+		);
+	} );
+
+	test( 'keeps activity log primary button foreground on the WPDS brand token', () => {
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/\.flavor-agent-activity-log\s+\.components-button\.is-primary\s*\{[^}]*color:\s*var\(--wpds-color-fg-content-on-brand,\s*#fff\);/s
+		);
+	} );
+
+	test( 'does not retain the unused error-state class on the error card', () => {
+		expect( ACTIVITY_LOG_JS ).not.toContain(
+			'flavor-agent-activity-log__error-state'
 		);
 	} );
 

@@ -760,20 +760,24 @@ final class Registration {
 			'flavor-agent/recommend-patterns' => [
 				'type'       => 'object',
 				'properties' => [
-					'postType'            => [
+					'postType'             => [
 						'type'        => 'string',
 						'description' => 'Current post type',
 					],
-					'blockContext'        => self::open_object_schema(),
-					'insertionContext'    => self::pattern_insertion_context_schema(),
-					'templateType'        => [ 'type' => 'string' ],
-					'prompt'              => [ 'type' => 'string' ],
-					'visiblePatternNames' => [
+					'blockContext'         => self::open_object_schema(),
+					'insertionContext'     => self::pattern_insertion_context_schema(),
+					'templateType'         => [ 'type' => 'string' ],
+					'prompt'               => [ 'type' => 'string' ],
+					'visiblePatternNames'  => [
 						'type'  => 'array',
 						'items' => [ 'type' => 'string' ],
 					],
-					'document'            => $document,
-					'clientRequest'       => $client_request,
+					'document'             => $document,
+					'clientRequest'        => $client_request,
+					'resolveSignatureOnly' => [
+						'type'        => 'boolean',
+						'description' => 'When true, only resolve the server-issued apply-context signature and review freshness signature without calling retrieval or the model. Useful for revalidating a pattern recommendation before inserting it.',
+					],
 				],
 				'required'   => [ 'postType' ],
 			],
@@ -1051,7 +1055,7 @@ final class Registration {
 			[
 				'type'       => 'object',
 				'properties' => [
-					'recommendations' => [
+					'recommendations'          => [
 						'type'  => 'array',
 						'items' => self::open_object_schema(
 							[
@@ -1072,7 +1076,7 @@ final class Registration {
 							]
 						),
 					],
-					'diagnostics'     => self::open_object_schema(
+					'diagnostics'              => self::open_object_schema(
 						[
 							'filteredCandidates' => self::open_object_schema(
 								[
@@ -1081,7 +1085,9 @@ final class Registration {
 							),
 						]
 					),
-					'requestMeta'     => self::open_object_schema(),
+					'reviewContextSignature'   => [ 'type' => 'string' ],
+					'resolvedContextSignature' => [ 'type' => 'string' ],
+					'requestMeta'              => self::open_object_schema(),
 				],
 			]
 		);
@@ -1528,6 +1534,10 @@ final class Registration {
 					'type'        => 'string',
 					'description' => 'Block type name (e.g. core/group).',
 				],
+				'name'                   => [
+					'type'        => 'string',
+					'description' => 'Deprecated alias for blockName accepted from Gutenberg-shaped selected block payloads.',
+				],
 				'attributes'             => self::open_object_schema(
 					[],
 					'Current block attributes. Canonical visibility state lives in attributes.metadata.blockVisibility.'
@@ -1586,7 +1596,10 @@ final class Registration {
 					'Deprecated legacy alias for attributes.metadata.blockVisibility. Accepted for backward compatibility.'
 				),
 			],
-			'required'             => [ 'blockName' ],
+			'anyOf'                => [
+				[ 'required' => [ 'blockName' ] ],
+				[ 'required' => [ 'name' ] ],
+			],
 			'additionalProperties' => false,
 		];
 	}

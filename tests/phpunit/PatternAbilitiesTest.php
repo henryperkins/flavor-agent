@@ -405,6 +405,123 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 	}
 
+	public function test_recommend_patterns_resolve_signature_only_returns_context_signatures_without_ranking(): void {
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'        => 'uninitialized',
+					'fingerprint'   => 'catalog-fingerprint-a',
+					'indexed_count' => 3,
+				]
+			)
+		);
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'             => 'page',
+				'templateType'         => 'front-page',
+				'prompt'               => 'Find a concise hero.',
+				'visiblePatternNames'  => [ 'theme/hero' ],
+				'insertionContext'     => [
+					'rootBlock'      => 'core/group',
+					'ancestors'      => [ 'core/group' ],
+					'nearbySiblings' => [ 'core/heading' ],
+				],
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', (string) ( $result['reviewContextSignature'] ?? '' ) );
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', (string) ( $result['resolvedContextSignature'] ?? '' ) );
+		$this->assertSame( [], $result['recommendations'] ?? [] );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_recommend_patterns_resolved_signature_changes_when_catalog_state_changes(): void {
+		$input = [
+			'postType'             => 'page',
+			'visiblePatternNames'  => [ 'theme/hero' ],
+			'insertionContext'     => [
+				'rootBlock' => 'core/group',
+				'ancestors' => [ 'core/group' ],
+			],
+			'resolveSignatureOnly' => true,
+		];
+
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'      => 'uninitialized',
+					'fingerprint' => 'catalog-fingerprint-a',
+				]
+			)
+		);
+		$baseline = PatternAbilities::recommend_patterns( $input );
+
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'      => 'uninitialized',
+					'fingerprint' => 'catalog-fingerprint-b',
+				]
+			)
+		);
+		$changed = PatternAbilities::recommend_patterns( $input );
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $changed );
+		$this->assertNotSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+	}
+
+	public function test_recommend_patterns_signatures_ignore_catalog_sync_timestamp(): void {
+		$input = [
+			'postType'             => 'page',
+			'visiblePatternNames'  => [ 'theme/hero' ],
+			'insertionContext'     => [
+				'rootBlock' => 'core/group',
+				'ancestors' => [ 'core/group' ],
+			],
+			'resolveSignatureOnly' => true,
+		];
+
+		$this->save_index_state(
+			[
+				'fingerprint'     => 'catalog-fingerprint-a',
+				'last_synced_at'  => '2026-03-24T00:00:00+00:00',
+				'last_attempt_at' => '2026-03-24T00:00:00+00:00',
+			]
+		);
+		$baseline = PatternAbilities::recommend_patterns( $input );
+
+		$this->save_index_state(
+			[
+				'fingerprint'     => 'catalog-fingerprint-a',
+				'last_synced_at'  => '2026-03-25T00:00:00+00:00',
+				'last_attempt_at' => '2026-03-25T00:00:00+00:00',
+			]
+		);
+		$changed = PatternAbilities::recommend_patterns( $input );
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
+	}
+
 	public function test_recommend_patterns_qdrant_backend_uses_embeddings_and_qdrant(): void {
 		$this->configure_backends();
 		WordPressTestState::$options[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ] = Config::PATTERN_BACKEND_QDRANT;

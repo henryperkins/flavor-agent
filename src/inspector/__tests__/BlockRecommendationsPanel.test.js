@@ -158,6 +158,7 @@ function createState( overrides = {} ) {
 		store: {
 			activityLog: [],
 			blockApplyErrors: {},
+			blockErrorDetails: {},
 			blockErrors: {},
 			blockRecommendations: {},
 			blockContextSignatures: {},
@@ -212,6 +213,10 @@ function selectStore( storeName ) {
 			getBlockError: jest.fn(
 				( clientId ) => getState().store.blockErrors[ clientId ] || null
 			),
+			getBlockErrorDetails: jest.fn(
+				( clientId ) =>
+					getState().store.blockErrorDetails[ clientId ] || null
+			),
 			getBlockApplyError: jest.fn(
 				( clientId ) =>
 					getState().store.blockApplyErrors[ clientId ] || null
@@ -219,6 +224,12 @@ function selectStore( storeName ) {
 			getBlockApplyStatus: jest.fn(
 				( clientId ) =>
 					getState().store.blockApplyStatuses?.[ clientId ] || 'idle'
+			),
+			getBlockLastAppliedSuggestionKey: jest.fn(
+				( clientId ) =>
+					getState().store.blockLastAppliedSuggestionKeys?.[
+						clientId
+					] || null
 			),
 			getBlockInteractionState: jest.fn( () => 'idle' ),
 			getBlockStatus: jest.fn(
@@ -262,6 +273,10 @@ function selectStore( storeName ) {
 			),
 			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
 				void surface;
+
+				if ( options.requestErrorDetails?.connectorApproval ) {
+					return null;
+				}
 
 				if ( options.requestError ) {
 					return {
@@ -746,11 +761,62 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		);
 	} );
 
+	test( 'shows connector approval notice while block recommendations are otherwise available', () => {
+		window.flavorAgentData = {
+			canRecommendBlocks: true,
+			canManageFlavorAgentSettings: true,
+			connectorApprovalUrl:
+				'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+			capabilities: {
+				surfaces: {
+					block: {
+						available: true,
+						reason: 'ready',
+					},
+				},
+			},
+		};
+		currentState = createState( {
+			store: {
+				blockErrors: {
+					'block-1': 'Generic block request failed.',
+				},
+				blockErrorDetails: {
+					'block-1': {
+						connectorApproval: {
+							connectorId: 'openai',
+							callerBasename: 'flavor-agent/flavor-agent.php',
+							callerName: 'Flavor Agent',
+							adminUrl:
+								'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+						},
+					},
+				},
+				blockStatuses: {
+					'block-1': 'error',
+				},
+			},
+		} );
+
+		renderContent();
+
+		const text = getContainer().textContent;
+
+		expect( text ).toContain(
+			'Flavor Agent needs administrator approval to use the openai connector.'
+		);
+		expect( text ).toContain( 'Open approvals page' );
+		expect( text ).not.toContain( 'Generic block request failed.' );
+	} );
+
 	test( 'shows an undo action on apply success notices and dispatches undo for the latest block activity', () => {
 		currentState = createState( {
 			store: {
 				blockApplyStatuses: {
 					'block-1': 'success',
+				},
+				blockLastAppliedSuggestionKeys: {
+					'block-1': 'refresh-hero-copy',
 				},
 			},
 		} );
@@ -764,11 +830,15 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				blockApplyStatuses: {
 					'block-1': 'success',
 				},
+				blockLastAppliedSuggestionKeys: {
+					'block-1': 'refresh-hero-copy',
+				},
 				activityLog: [
 					{
 						id: 'activity-1',
 						surface: 'block',
 						suggestion: 'Refresh hero copy',
+						suggestionKey: 'refresh-hero-copy',
 						target: {
 							clientId: 'block-1',
 						},
@@ -810,6 +880,98 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		} );
 
 		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'does not show an apply success notice for prior undoable block activity after apply state is idle', () => {
+		renderPanel();
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						surface: 'block',
+						suggestion: 'Refresh hero copy',
+						suggestionKey: 'refresh-hero-copy',
+						target: {
+							clientId: 'block-1',
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+					},
+				],
+				blockLastAppliedSuggestionKeys: {
+					'block-1': 'refresh-hero-copy',
+				},
+			},
+		} );
+
+		renderPanel();
+
+		expect( getContainer().textContent ).not.toContain(
+			'Applied Refresh hero copy.'
+		);
+		expect(
+			getContainer().querySelector( '[data-status-notice="true"]' )
+		).toBeNull();
+	} );
+
+	test( 'does not show an apply success notice when the latest activity does not match the last applied block suggestion', () => {
+		currentState = createState( {
+			store: {
+				blockApplyStatuses: {
+					'block-1': 'success',
+				},
+				blockLastAppliedSuggestionKeys: {
+					'block-1': 'refresh-current-copy',
+				},
+			},
+		} );
+
+		renderPanel();
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				blockApplyStatuses: {
+					'block-1': 'success',
+				},
+				blockLastAppliedSuggestionKeys: {
+					'block-1': 'refresh-current-copy',
+				},
+				activityLog: [
+					{
+						id: 'activity-1',
+						surface: 'block',
+						suggestion: 'Refresh older copy',
+						suggestionKey: 'refresh-older-copy',
+						target: {
+							clientId: 'block-1',
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+					},
+				],
+			},
+		} );
+
+		renderPanel();
+
+		expect( getContainer().textContent ).not.toContain(
+			'Applied Refresh older copy.'
+		);
+		expect(
+			getContainer().querySelector( '[data-status-notice="true"]' )
+		).toBeNull();
 	} );
 
 	test( 'separates executable block suggestions from advisory structural ideas', () => {

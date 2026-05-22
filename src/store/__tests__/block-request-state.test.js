@@ -57,6 +57,25 @@ describe( 'block request state', () => {
 		expect( selectors.getBlockApplyError( state, 'block-b' ) ).toBeNull();
 	} );
 
+	test( 'last applied block suggestion key is isolated per clientId', () => {
+		const state = reducer(
+			undefined,
+			actions.setBlockApplyState(
+				'block-a',
+				'success',
+				null,
+				'refresh-hero-copy'
+			)
+		);
+
+		expect(
+			selectors.getBlockLastAppliedSuggestionKey( state, 'block-a' )
+		).toBe( 'refresh-hero-copy' );
+		expect(
+			selectors.getBlockLastAppliedSuggestionKey( state, 'block-b' )
+		).toBeNull();
+	} );
+
 	test( 'stale completions are ignored for the same block', () => {
 		let state = reducer(
 			undefined,
