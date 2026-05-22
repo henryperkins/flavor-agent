@@ -82,7 +82,15 @@ function satisfiesRange( versionString, rangeString ) {
 
 function main() {
 	const packagePath = path.resolve( __dirname, '..', 'package.json' );
-	const packageJson = JSON.parse( fs.readFileSync( packagePath, 'utf8' ) );
+	let packageJson;
+	try {
+		const content = fs.readFileSync( packagePath, 'utf8' );
+		packageJson = JSON.parse( content );
+	} catch ( error ) {
+		console.error( 'Engine preflight failed.' );
+		console.error( `Unable to read or parse package.json: ${ error.message }` );
+		process.exit( 1 );
+	}
 	const nodeRange = packageJson.engines?.node;
 	const npmRange = packageJson.engines?.npm;
 
