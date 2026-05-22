@@ -1,12 +1,17 @@
 {
 	"name": "Flavor Agent WordPress",
-	"dockerComposeFile": [ "../docker-compose.yml" ],
+	"dockerComposeFile": [
+		"../docker-compose.yml"
+	],
 	"service": "wordpress",
 	"workspaceFolder": "/var/www/html/wp-content/plugins/flavor-agent",
 	"shutdownAction": "stopCompose",
 	"overrideCommand": false,
 	"remoteUser": "root",
-	"forwardPorts": [ 8888, 8889 ],
+	"forwardPorts": [
+		8888,
+		8889
+	],
 	"features": {
 		"ghcr.io/devcontainers/features/node:1": {
 			"version": "20"
@@ -25,5 +30,6 @@
 				"terminal.integrated.defaultProfile.linux": "bash"
 			}
 		}
-	}
+	},
+	"postCreateCommand": "npm run setup:deps && composer install"
 }
