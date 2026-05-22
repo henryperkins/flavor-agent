@@ -483,6 +483,7 @@ export default function TemplatePartRecommender() {
 		clearTemplatePartRecommendations,
 		clearUndoError,
 		fetchTemplatePartRecommendations,
+		recordRecommendationOutcome,
 		revalidateTemplatePartReviewFreshness,
 		setTemplatePartApplyState,
 		setTemplatePartSelectedSuggestion,
@@ -840,9 +841,34 @@ export default function TemplatePartRecommender() {
 	] );
 	const handlePreviewSuggestion = useCallback(
 		( suggestionKey ) => {
+			const suggestion =
+				executableSuggestionCards.find(
+					( item ) => item?.suggestionKey === suggestionKey
+				) ||
+				advisorySuggestionCards.find(
+					( item ) => item?.suggestionKey === suggestionKey
+				);
+
+			if (
+				suggestion &&
+				typeof recordRecommendationOutcome === 'function'
+			) {
+				recordRecommendationOutcome( {
+					event: 'selected_for_review',
+					surface: 'template-part',
+					suggestion,
+					reason: 'review_opened',
+				} );
+			}
+
 			setTemplatePartSelectedSuggestion( suggestionKey );
 		},
-		[ setTemplatePartSelectedSuggestion ]
+		[
+			advisorySuggestionCards,
+			executableSuggestionCards,
+			recordRecommendationOutcome,
+			setTemplatePartSelectedSuggestion,
+		]
 	);
 	const handleCancelPreview = useCallback( () => {
 		setTemplatePartSelectedSuggestion( null );

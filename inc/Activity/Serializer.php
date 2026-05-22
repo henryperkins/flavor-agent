@@ -6,10 +6,11 @@ namespace FlavorAgent\Activity;
 
 final class Serializer {
 
-	private const UNDO_STATUS_AVAILABLE = 'available';
-	private const UNDO_STATUS_FAILED    = 'failed';
-	private const UNDO_STATUS_REVIEW    = 'review';
-	private const UNDO_STATUS_UNDONE    = 'undone';
+	private const UNDO_STATUS_AVAILABLE      = 'available';
+	private const UNDO_STATUS_FAILED         = 'failed';
+	private const UNDO_STATUS_NOT_APPLICABLE = 'not_applicable';
+	private const UNDO_STATUS_REVIEW         = 'review';
+	private const UNDO_STATUS_UNDONE         = 'undone';
 
 	/**
 	 * @param array<string, mixed> $entry
@@ -185,7 +186,7 @@ final class Serializer {
 	public static function normalize_undo_for_storage( array $undo, string $timestamp ): array {
 		$status = self::normalize_string( $undo['status'] ?? self::UNDO_STATUS_AVAILABLE );
 
-		if ( ! in_array( $status, [ self::UNDO_STATUS_AVAILABLE, self::UNDO_STATUS_FAILED, self::UNDO_STATUS_REVIEW, self::UNDO_STATUS_UNDONE ], true ) ) {
+		if ( ! in_array( $status, [ self::UNDO_STATUS_AVAILABLE, self::UNDO_STATUS_FAILED, self::UNDO_STATUS_NOT_APPLICABLE, self::UNDO_STATUS_REVIEW, self::UNDO_STATUS_UNDONE ], true ) ) {
 			$status = self::UNDO_STATUS_AVAILABLE;
 		}
 
@@ -216,7 +217,7 @@ final class Serializer {
 		);
 		$user_id   = self::normalize_non_negative_int( $row['user_id'] ?? 0, 0 );
 
-		return [
+		$hydrated = [
 			'id'              => self::normalize_string( $row['activity_id'] ?? '' ),
 			'schemaVersion'   => self::normalize_non_negative_int( $row['schema_version'] ?? 1, 1 ),
 			'type'            => self::normalize_string( $row['activity_type'] ?? '' ),
@@ -237,6 +238,18 @@ final class Serializer {
 				'status' => 'server',
 			],
 		];
+
+		if (
+			'recommendation_outcome' === $hydrated['type']
+			|| (
+				'diagnostic' === $hydrated['executionResult']
+				&& 'diagnostic' === (string) ( $hydrated['after']['outcome']['visibility'] ?? '' )
+			)
+		) {
+			$hydrated['diagnostic'] = true;
+		}
+
+		return $hydrated;
 	}
 
 	public static function normalize_timestamp( $value ): string {

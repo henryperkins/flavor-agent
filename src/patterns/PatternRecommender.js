@@ -34,6 +34,11 @@ import CapabilityNotice from '../components/CapabilityNotice';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import { getResolvedContextSignatureFromResponse, STORE_NAME } from '../store';
 import { buildPatternInsertionTargetSignature } from '../utils/recommendation-request-signature';
+import {
+	buildRecommendationSetId,
+	getSuggestionOutcomeKey,
+	normalizeSourceRequestSignature,
+} from '../store/recommendation-outcomes';
 import { formatCount } from '../utils/format-count';
 import {
 	getConnectorApprovalNotice,
@@ -251,7 +256,9 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 							<Button
 								variant="secondary"
 								size="small"
-								onClick={ () => onInsert( pattern ) }
+								onClick={ () =>
+									onInsert( pattern, recommendation )
+								}
 								className="flavor-agent-card__apply"
 								aria-label={ sprintf(
 									/* translators: %s: block pattern title. */
@@ -428,6 +435,7 @@ export default function PatternRecommender() {
 		patternStatus,
 		recommendations,
 		patternDiagnostics,
+		patternRequestSignature,
 		patternInsertionTargetSignature,
 		patternResolvedContextSignature,
 		patternDocsGroundingWarning,
@@ -440,6 +448,7 @@ export default function PatternRecommender() {
 			patternStatus: store.getPatternStatus(),
 			recommendations: store.getPatternRecommendations(),
 			patternDiagnostics: store.getPatternDiagnostics?.() || null,
+			patternRequestSignature: store.getPatternRequestSignature?.() || '',
 			patternInsertionTargetSignature:
 				store.getPatternInsertionTargetSignature?.() || '',
 			patternResolvedContextSignature:
@@ -450,6 +459,7 @@ export default function PatternRecommender() {
 	}, [] );
 	const {
 		fetchPatternRecommendations,
+		recordRecommendationOutcome,
 		resolvePatternRecommendationSignature,
 	} = useDispatch( STORE_NAME );
 	const { insertBlocks } = useDispatch( blockEditorStore );
@@ -463,6 +473,7 @@ export default function PatternRecommender() {
 	const debounceRef = useRef( null );
 	const noticeObserverRef = useRef( null );
 	const noticeSlotRef = useRef( null );
+	const shownRecommendationSetRef = useRef( '' );
 
 	if ( ! noticeSlotRef.current && typeof document !== 'undefined' ) {
 		const noticeSlot = document.createElement( 'div' );
@@ -497,6 +508,12 @@ export default function PatternRecommender() {
 		() => getConnectorApprovalNotice( 'pattern', patternErrorDetails ),
 		[ patternErrorDetails ]
 	);
+	const shouldShowPatternShelf =
+		shouldRenderInserterAffordance &&
+		canRecommend &&
+		! connectorApprovalNotice &&
+		patternStatus === 'ready' &&
+		recommendedPatterns.length > 0;
 
 	const buildBaseInput = useCallback( () => {
 		const input = {
@@ -535,6 +552,37 @@ export default function PatternRecommender() {
 			inserterRootClientId,
 			insertionIndex,
 			insertionContext,
+		]
+	);
+	const patternSourceRequestSignature = useMemo(
+		() =>
+			normalizeSourceRequestSignature(
+				patternRequestSignature ||
+					patternInsertionTargetSignature ||
+					currentInsertionTargetSignature
+			),
+		[
+			currentInsertionTargetSignature,
+			patternInsertionTargetSignature,
+			patternRequestSignature,
+		]
+	);
+	const patternRecommendationSetId = useMemo(
+		() =>
+			buildRecommendationSetId( {
+				surface: 'pattern',
+				requestToken:
+					patternRequestSignature ||
+					patternInsertionTargetSignature ||
+					currentInsertionTargetSignature,
+				sourceRequestSignature: patternSourceRequestSignature,
+				resultRef: currentInsertionTargetSignature,
+			} ),
+		[
+			currentInsertionTargetSignature,
+			patternInsertionTargetSignature,
+			patternRequestSignature,
+			patternSourceRequestSignature,
 		]
 	);
 
@@ -580,11 +628,76 @@ export default function PatternRecommender() {
 		fetchPatternRecommendationsForCurrentTarget,
 	] );
 
+	const buildPatternOutcomePayload = useCallback(
+		(
+			event,
+			{ pattern = null, recommendation = null, reason = '' } = {}
+		) => {
+			const suggestionKey = getSuggestionOutcomeKey(
+				recommendation || pattern || {},
+				pattern?.name || ''
+			);
+			const rank =
+				recommendedPatterns.findIndex(
+					( item ) => item?.pattern?.name === pattern?.name
+				) + 1;
+
+			return {
+				event,
+				surface: 'pattern',
+				recommendationSetId: patternRecommendationSetId,
+				suggestionKey,
+				sourceRequestSignature: patternSourceRequestSignature,
+				reason,
+				patternKey: pattern?.name || suggestionKey,
+				rank: rank > 0 ? rank : null,
+				resultCount: recommendedPatterns.length,
+				topSuggestionKeys: recommendedPatterns
+					.slice( 0, 3 )
+					.map( ( item, index ) =>
+						getSuggestionOutcomeKey(
+							item?.recommendation || item?.pattern || {},
+							item?.pattern?.name || `pattern:${ index + 1 }`
+						)
+					),
+				target: {
+					patternKey: pattern?.name || suggestionKey,
+					rank: rank > 0 ? rank : null,
+					blockName: insertionContext?.rootBlock || '',
+				},
+			};
+		},
+		[
+			insertionContext,
+			patternRecommendationSetId,
+			patternSourceRequestSignature,
+			recommendedPatterns,
+		]
+	);
+
+	const recordPatternOutcome = useCallback(
+		( event, options = {} ) => {
+			if ( typeof recordRecommendationOutcome !== 'function' ) {
+				return;
+			}
+
+			recordRecommendationOutcome(
+				buildPatternOutcomePayload( event, options )
+			);
+		},
+		[ buildPatternOutcomePayload, recordRecommendationOutcome ]
+	);
+
 	const handleInsertPattern = useCallback(
-		async ( pattern ) => {
+		async ( pattern, recommendation = null ) => {
 			const blocks = resolvePatternBlocks( pattern );
 
 			if ( blocks.length === 0 ) {
+				recordPatternOutcome( 'validation_blocked', {
+					pattern,
+					recommendation,
+					reason: 'empty_pattern_blocks',
+				} );
 				createErrorNotice(
 					sprintf(
 						/* translators: %s: block pattern title. */
@@ -617,6 +730,11 @@ export default function PatternRecommender() {
 					currentInsertionTargetSignature !==
 					patternInsertionTargetSignature
 				) {
+					recordPatternOutcome( 'stale_blocked', {
+						pattern,
+						recommendation,
+						reason: 'insertion_target_changed',
+					} );
 					createErrorNotice(
 						sprintf(
 							/* translators: %s: block pattern title. */
@@ -644,6 +762,11 @@ export default function PatternRecommender() {
 			);
 
 			if ( rejected.length > 0 ) {
+				recordPatternOutcome( 'validation_blocked', {
+					pattern,
+					recommendation,
+					reason: 'disallowed_block_types',
+				} );
 				createErrorNotice(
 					sprintf(
 						/* translators: 1: pattern title 2: comma-separated block names. */
@@ -666,6 +789,11 @@ export default function PatternRecommender() {
 				! patternResolvedContextSignature ||
 				typeof resolvePatternRecommendationSignature !== 'function'
 			) {
+				recordPatternOutcome( 'stale_blocked', {
+					pattern,
+					recommendation,
+					reason: 'missing_resolved_context',
+				} );
 				createErrorNotice(
 					sprintf(
 						/* translators: %s: block pattern title. */
@@ -695,6 +823,11 @@ export default function PatternRecommender() {
 					currentResolvedContextSignature !==
 						patternResolvedContextSignature
 				) {
+					recordPatternOutcome( 'stale_blocked', {
+						pattern,
+						recommendation,
+						reason: 'resolved_context_changed',
+					} );
 					createErrorNotice(
 						sprintf(
 							/* translators: %s: block pattern title. */
@@ -713,6 +846,11 @@ export default function PatternRecommender() {
 					return;
 				}
 			} catch {
+				recordPatternOutcome( 'stale_blocked', {
+					pattern,
+					recommendation,
+					reason: 'revalidation_failed',
+				} );
 				createErrorNotice(
 					sprintf(
 						/* translators: %s: block pattern title. */
@@ -736,6 +874,11 @@ export default function PatternRecommender() {
 				inserterRootClientId,
 				true
 			);
+			recordPatternOutcome( 'pattern_inserted_from_shelf', {
+				pattern,
+				recommendation,
+				reason: 'insert_blocks_success',
+			} );
 			createSuccessNotice(
 				sprintf(
 					/* translators: %s: block pattern title. */
@@ -760,10 +903,42 @@ export default function PatternRecommender() {
 			currentInsertionTargetSignature,
 			patternInsertionTargetSignature,
 			patternResolvedContextSignature,
+			recordPatternOutcome,
 			registry,
 			resolvePatternRecommendationSignature,
 		]
 	);
+
+	const recordShownPatternOutcome = useCallback( () => {
+		if ( ! shouldShowPatternShelf ) {
+			return;
+		}
+
+		if (
+			shownRecommendationSetRef.current === patternRecommendationSetId
+		) {
+			return;
+		}
+
+		shownRecommendationSetRef.current = patternRecommendationSetId;
+		recordPatternOutcome( 'shown', {
+			reason: 'recommendation_set_visible',
+		} );
+	}, [
+		patternRecommendationSetId,
+		shouldShowPatternShelf,
+		recordPatternOutcome,
+	] );
+
+	useEffect( () => {
+		if ( ! shouldShowPatternShelf ) {
+			return;
+		}
+
+		if ( noticeSlotRef.current?.parentNode ) {
+			recordShownPatternOutcome();
+		}
+	}, [ shouldShowPatternShelf, recordShownPatternOutcome ] );
 
 	useEffect( () => {
 		if ( ! canRecommend || ! effectivePostType ) {
@@ -801,6 +976,7 @@ export default function PatternRecommender() {
 			}
 
 			if ( noticeSlot.parentNode === inserterContainer ) {
+				recordShownPatternOutcome();
 				return;
 			}
 
@@ -812,6 +988,7 @@ export default function PatternRecommender() {
 				noticeSlot,
 				inserterContainer.firstChild
 			);
+			recordShownPatternOutcome();
 		};
 
 		const syncNotice = () => {
@@ -850,7 +1027,7 @@ export default function PatternRecommender() {
 		return () => {
 			cleanupNotice();
 		};
-	}, [ shouldRenderInserterAffordance ] );
+	}, [ shouldRenderInserterAffordance, recordShownPatternOutcome ] );
 
 	const handleSearchInput = useCallback(
 		( value ) => {
@@ -976,10 +1153,7 @@ export default function PatternRecommender() {
 					notice={ connectorApprovalNotice }
 				/>
 			);
-		} else if (
-			patternStatus === 'ready' &&
-			recommendedPatterns.length > 0
-		) {
+		} else if ( shouldShowPatternShelf ) {
 			notice = (
 				<PatternShelf
 					items={ recommendedPatterns }

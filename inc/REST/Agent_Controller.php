@@ -277,6 +277,12 @@ final class Agent_Controller {
 							'default'           => false,
 							'sanitize_callback' => 'rest_sanitize_boolean',
 						],
+						'includeDiagnostics'         => [
+							'required'          => false,
+							'type'              => 'boolean',
+							'default'           => false,
+							'sanitize_callback' => 'rest_sanitize_boolean',
+						],
 						'surfaceLimit'               => [
 							'required'          => false,
 							'type'              => 'integer',
@@ -478,12 +484,13 @@ final class Agent_Controller {
 		}
 
 		$activity_filters = [
-			'scopeKey'   => $request->get_param( 'scopeKey' ),
-			'surface'    => $request->get_param( 'surface' ),
-			'entityType' => $request->get_param( 'entityType' ),
-			'entityRef'  => $request->get_param( 'entityRef' ),
-			'userId'     => $request->get_param( 'userId' ),
-			'limit'      => $request->get_param( 'limit' ),
+			'scopeKey'           => $request->get_param( 'scopeKey' ),
+			'surface'            => $request->get_param( 'surface' ),
+			'entityType'         => $request->get_param( 'entityType' ),
+			'entityRef'          => $request->get_param( 'entityRef' ),
+			'userId'             => $request->get_param( 'userId' ),
+			'limit'              => $request->get_param( 'limit' ),
+			'includeDiagnostics' => true === $request->get_param( 'includeDiagnostics' ),
 		];
 
 		$entries = true === $request->get_param( 'groupBySurface' )

@@ -43,6 +43,7 @@ import {
 	shouldSyncUndoTransition,
 	syncActivitySession,
 } from './activity-session';
+import { getRecommendationIdentityForApply } from './recommendation-outcomes';
 
 function getEntityActivityEntries( activityLog, activity ) {
 	const entityKey = getActivityEntityKey( activity );
@@ -178,6 +179,7 @@ export function buildBlockActivityEntry( {
 		prompt: requestPrompt,
 		requestRef: `block:${ clientId }:${ requestToken }`,
 		requestMeta,
+		recommendation: getRecommendationIdentityForApply( suggestion ),
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -220,6 +222,7 @@ export function buildBlockStructuralActivityEntry( {
 		prompt: requestPrompt,
 		requestRef: `block:${ clientId }:${ requestToken }:structural`,
 		requestMeta,
+		recommendation: getRecommendationIdentityForApply( suggestion ),
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -248,6 +251,7 @@ function buildTemplateActivityEntry( {
 		prompt: requestPrompt,
 		requestRef: `template:${ templateRef || 'unknown' }:${ requestToken }`,
 		requestMeta,
+		recommendation: getRecommendationIdentityForApply( suggestion ),
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -278,6 +282,7 @@ function buildTemplatePartActivityEntry( {
 			templatePartRef || 'unknown'
 		}:${ requestToken }`,
 		requestMeta,
+		recommendation: getRecommendationIdentityForApply( suggestion ),
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -313,6 +318,7 @@ export function buildGlobalStylesActivityEntry( {
 			globalStylesId || 'unknown'
 		}:${ requestToken }`,
 		requestMeta,
+		recommendation: getRecommendationIdentityForApply( suggestion ),
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -382,6 +388,7 @@ export function buildStyleBookActivityEntry( {
 			blockName || 'unknown'
 		}:${ requestToken }`,
 		requestMeta,
+		recommendation: getRecommendationIdentityForApply( suggestion ),
 		document: buildActivityDocument( scope ),
 	} );
 }

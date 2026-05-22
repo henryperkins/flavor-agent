@@ -623,6 +623,7 @@ export default function GlobalStylesRecommender() {
 		clearUndoError,
 		clearGlobalStylesRecommendations,
 		fetchGlobalStylesRecommendations,
+		recordRecommendationOutcome,
 		revalidateGlobalStylesReviewFreshness,
 		setGlobalStylesApplyState,
 		setGlobalStylesSelectedSuggestion,
@@ -832,6 +833,33 @@ export default function GlobalStylesRecommender() {
 		scope,
 	] );
 
+	const handleReviewSuggestion = useCallback(
+		( suggestionKey ) => {
+			const suggestion = suggestions.find(
+				( item ) => item?.suggestionKey === suggestionKey
+			);
+
+			if (
+				suggestion &&
+				typeof recordRecommendationOutcome === 'function'
+			) {
+				recordRecommendationOutcome( {
+					event: 'selected_for_review',
+					surface: 'global-styles',
+					suggestion,
+					reason: 'review_opened',
+				} );
+			}
+
+			setGlobalStylesSelectedSuggestion( suggestionKey );
+		},
+		[
+			recordRecommendationOutcome,
+			setGlobalStylesSelectedSuggestion,
+			suggestions,
+		]
+	);
+
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
 			applyGlobalStylesSuggestion(
@@ -888,7 +916,7 @@ export default function GlobalStylesRecommender() {
 			}
 			onNoticeDismiss={ dismissStatusNotice }
 			onRequest={ handleRequest }
-			onReview={ setGlobalStylesSelectedSuggestion }
+			onReview={ handleReviewSuggestion }
 			onCancelReview={ () => setGlobalStylesSelectedSuggestion( null ) }
 			onApply={ handleApply }
 			onUndo={ handleUndo }

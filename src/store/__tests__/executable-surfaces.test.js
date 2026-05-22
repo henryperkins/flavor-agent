@@ -647,25 +647,49 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 				errorDetails: { code: 'wpai_connector_not_approved' },
 			} );
 
-			expect(
-				actions[ def.methodNames.setRecommendations ](
-					fixture.recommendationValue,
-					fixture.payload,
-					fixture.input.prompt,
-					11,
-					'request-context',
-					fixture.reviewContextSignature,
-					fixture.resolvedContextSignature
-				)
-			).toEqual( {
+			const recommendationAction = actions[
+				def.methodNames.setRecommendations
+			](
+				fixture.recommendationValue,
+				fixture.payload,
+				fixture.input.prompt,
+				11,
+				'request-context',
+				fixture.reviewContextSignature,
+				fixture.resolvedContextSignature
+			);
+
+			expect( recommendationAction ).toMatchObject( {
 				type: def.types.setRecommendations,
 				[ def.inputKey ]: fixture.recommendationValue,
-				payload: fixture.payload,
 				prompt: fixture.input.prompt,
 				requestToken: 11,
 				contextSignature: 'request-context',
 				reviewContextSignature: fixture.reviewContextSignature,
 				resolvedContextSignature: fixture.resolvedContextSignature,
+			} );
+			expect( recommendationAction.payload ).toMatchObject( {
+				explanation: fixture.payload.explanation,
+				recommendationOutcome: expect.objectContaining( {
+					recommendationSetId: expect.any( String ),
+					sourceRequestSignature: expect.stringMatching( /^hash_/ ),
+				} ),
+				suggestions: [
+					expect.objectContaining( {
+						...fixture.payload.suggestions[ 0 ],
+						recommendationOutcome: expect.objectContaining( {
+							rank: 1,
+							recommendationSetId: expect.any( String ),
+							sourceRequestSignature:
+								expect.stringMatching( /^hash_/ ),
+							suggestionKey:
+								fixture.payload.suggestions[ 0 ].suggestionKey,
+							topSuggestionKeys: [
+								fixture.payload.suggestions[ 0 ].suggestionKey,
+							],
+						} ),
+					} ),
+				],
 			} );
 
 			expect(
@@ -1174,9 +1198,16 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			);
 
 			expect( afterRecommendations ).toMatchObject( fixture.resultState );
-			expect( afterRecommendations[ def.collectionKey ] ).toBe(
-				fixture.payload.suggestions
-			);
+			expect( afterRecommendations[ def.collectionKey ] ).toMatchObject( [
+				expect.objectContaining( {
+					...fixture.payload.suggestions[ 0 ],
+					recommendationOutcome: expect.objectContaining( {
+						rank: 1,
+						suggestionKey:
+							fixture.payload.suggestions[ 0 ].suggestionKey,
+					} ),
+				} ),
+			] );
 			expect( afterRecommendations[ def.explanationKey ] ).toBe(
 				fixture.payload.explanation
 			);

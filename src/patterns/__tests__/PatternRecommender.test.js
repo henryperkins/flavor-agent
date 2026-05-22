@@ -6,6 +6,7 @@ const mockCreateBlock = jest.fn();
 const mockParse = jest.fn();
 const mockFetchPatternRecommendations = jest.fn();
 const mockResolvePatternRecommendationSignature = jest.fn();
+const mockRecordRecommendationOutcome = jest.fn();
 const mockInsertBlocks = jest.fn();
 const mockCreateSuccessNotice = jest.fn();
 const mockCreateErrorNotice = jest.fn();
@@ -246,6 +247,7 @@ describe( 'PatternRecommender', () => {
 		mockResolvePatternRecommendationSignature.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-pattern-context',
 		} );
+		mockRecordRecommendationOutcome.mockReset();
 		mockInsertBlocks.mockReset();
 		mockCreateSuccessNotice.mockReset();
 		mockCreateErrorNotice.mockReset();
@@ -275,6 +277,8 @@ describe( 'PatternRecommender', () => {
 						mockFetchPatternRecommendations( input ),
 					resolvePatternRecommendationSignature: ( input ) =>
 						mockResolvePatternRecommendationSignature( input ),
+					recordRecommendationOutcome: ( outcome ) =>
+						mockRecordRecommendationOutcome( outcome ),
 				};
 			}
 
@@ -756,6 +760,97 @@ describe( 'PatternRecommender', () => {
 		expect( shelfText ).not.toContain( 'Gutenberg' );
 	} );
 
+	test( 'does not record pattern shown outcomes when the inserter shelf is not visible', () => {
+		state.isInserterOpen = false;
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				reason: 'Matches this insertion point.',
+			},
+		];
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/group' } ],
+			},
+		];
+		mockFindInserterContainer.mockReturnValue( null );
+
+		renderComponent();
+
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'shown',
+				surface: 'pattern',
+			} )
+		);
+	} );
+
+	test( 'does not record pattern shown outcomes when the inserter slot is detached', () => {
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				reason: 'Matches this insertion point.',
+			},
+		];
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/group' } ],
+			},
+		];
+		mockFindInserterContainer.mockReturnValue( null );
+
+		renderComponent();
+
+		expect( document.body.textContent ).not.toContain( 'Hero' );
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'shown',
+				surface: 'pattern',
+			} )
+		);
+	} );
+
+	test( 'records pattern shown outcomes when the shelf renders in the inserter', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				reason: 'Matches this insertion point.',
+			},
+		];
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/group' } ],
+			},
+		];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain( 'Hero' );
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'shown',
+				surface: 'pattern',
+				reason: 'recommendation_set_visible',
+				resultCount: 1,
+				patternKey: expect.any( String ),
+			} )
+		);
+	} );
+
 	test( 'renders an error notice with retry inside the inserter when ranking fails', () => {
 		const inserterContainer = document.createElement( 'div' );
 
@@ -1185,6 +1280,31 @@ describe( 'PatternRecommender', () => {
 		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
 		expect( mockCreateErrorNotice ).not.toHaveBeenCalled();
 		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+
+		const insertedOutcomeIndex =
+			mockRecordRecommendationOutcome.mock.calls.findIndex(
+				( [ outcome ] ) =>
+					outcome?.event === 'pattern_inserted_from_shelf'
+			);
+
+		expect( insertedOutcomeIndex ).toBeGreaterThanOrEqual( 0 );
+		expect(
+			mockRecordRecommendationOutcome.mock.calls[
+				insertedOutcomeIndex
+			][ 0 ]
+		).toEqual(
+			expect.objectContaining( {
+				event: 'pattern_inserted_from_shelf',
+				surface: 'pattern',
+				reason: 'insert_blocks_success',
+				patternKey: 'theme/hero',
+			} )
+		);
+		expect(
+			mockRecordRecommendationOutcome.mock.invocationCallOrder[
+				insertedOutcomeIndex
+			]
+		).toBeGreaterThan( mockInsertBlocks.mock.invocationCallOrder[ 0 ] );
 	} );
 
 	test( 'blocks insert when the server-resolved apply context drifts', async () => {
@@ -1266,6 +1386,19 @@ describe( 'PatternRecommender', () => {
 			}
 		);
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'stale_blocked',
+				surface: 'pattern',
+				reason: 'resolved_context_changed',
+				patternKey: 'theme/hero',
+			} )
+		);
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'pattern_inserted_from_shelf',
+			} )
+		);
 	} );
 
 	test( 'inserts when live visible patterns drift but the insertion target still matches', async () => {
@@ -1599,6 +1732,19 @@ describe( 'PatternRecommender', () => {
 				type: 'snackbar',
 				id: 'inserter-notice',
 			}
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'validation_blocked',
+				surface: 'pattern',
+				reason: 'disallowed_block_types',
+				patternKey: 'twentytwentyfive/template-page-photo-blog',
+			} )
+		);
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'pattern_inserted_from_shelf',
+			} )
 		);
 		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
 	} );

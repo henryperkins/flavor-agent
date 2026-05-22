@@ -25,11 +25,13 @@ When server hydration requests `groupBySurface=true`, the repository returns the
 | State | Meaning |
 |---|---|
 | `available` | The action has been applied and can be undone |
+| `review` | The row is a read-only request diagnostic rather than an applied action |
 | `blocked` | The action is still applied, but undo is temporarily blocked because newer AI actions on the same entity are still runtime-active |
 | `undone` | The action was successfully rolled back |
 | `failed` | The undo attempt failed (error message stored in `undo.error`) |
+| `not_applicable` | The row is diagnostic only and does not represent an undoable user action |
 
-`review` is not an executable undo state for apply actions. It is only used by scoped read-only `request_diagnostic` audit rows, which the admin page renders as review-only or failed request records instead of as undoable activity.
+`review` is not an executable undo state for apply actions. It is only used by scoped read-only `request_diagnostic` audit rows, which the admin page renders as review-only or failed request records instead of as undoable activity. `not_applicable` is used by `recommendation_outcome` diagnostics, which are hidden from normal inline feeds by default and never participate in undo.
 
 ## Valid Transitions
 
@@ -92,8 +94,9 @@ The client also enforces this rule before sending the request:
 ## Review-Only Audit Rows
 
 - Recommendation fetches for content, pattern, navigation, block, template, template-part, Global Styles, and Style Book can persist scoped `request_diagnostic` rows when a document scope exists. These rows record the request attempt separately from any later apply/undo row; signature-only freshness probes stay quiet.
-- Those rows are stored in the same activity table and travel through the same global `GET /flavor-agent/v1/activity` admin feed, but they do not participate in the executable ordered-undo lifecycle.
-- The admin page resolves them into `review` or `failed` buckets based on the recorded execution result and persisted undo payload, while inline executable surfaces continue to care only about `available`, runtime `blocked`, `undone`, and `failed`.
+- Recommendation outcomes can persist scoped `recommendation_outcome` rows for `shown`, `selected_for_review`, `stale_blocked`, `validation_blocked`, and `pattern_inserted_from_shelf`. Pattern `shown` rows are recorded only after the Flavor Agent shelf is attached to the live inserter DOM and visible, not merely when recommendations become ready. These rows use diagnostic visibility, generic labels, enum reasons, and hashed/signature identifiers; raw prompts, generated recommendation text, block attributes, post content, validation messages, and pattern payloads are not stored.
+- Those rows are stored in the same activity table and can travel through the same global `GET /flavor-agent/v1/activity` admin/debug/evaluation feed when diagnostics are included, but they do not participate in the executable ordered-undo lifecycle.
+- The admin page resolves request diagnostics into `review` or `failed` buckets based on the recorded execution result and persisted undo payload. Outcome diagnostics stay `diagnostic`/`not_applicable`, while inline executable surfaces continue to care only about `available`, runtime `blocked`, `undone`, and `failed`.
 
 ## Retry and Merge Behavior
 

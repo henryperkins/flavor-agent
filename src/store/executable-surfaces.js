@@ -25,6 +25,11 @@ import {
 	createExecutableSurfaceReviewFreshnessConfig,
 } from './executable-surface-runtime';
 import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
+import {
+	buildRecommendationSetId,
+	decorateRecommendationPayload,
+	getRecommendationOutcomeSummaryFromPayload,
+} from './recommendation-outcomes';
 
 function buildMethodNames( baseName ) {
 	return {
@@ -423,10 +428,29 @@ export function createExecutableSurfaceStateActionCreators( runtime ) {
 				reviewContextSignature = null,
 				resolvedContextSignature = null
 			) {
+				const sourceRequestSignature =
+					contextSignature ||
+					reviewContextSignature ||
+					resolvedContextSignature ||
+					'';
+				const decoratedPayload = decorateRecommendationPayload(
+					payload,
+					{
+						surface: def.surface,
+						recommendationSetId: buildRecommendationSetId( {
+							surface: def.surface,
+							requestToken,
+							sourceRequestSignature,
+							resultRef: value,
+						} ),
+						sourceRequestSignature,
+					}
+				);
+
 				return {
 					type: def.types.setRecommendations,
 					[ def.inputKey ]: value,
-					payload,
+					payload: decoratedPayload,
 					prompt,
 					requestToken,
 					contextSignature,
@@ -504,17 +528,33 @@ export function createExecutableSurfaceStateActionCreators( runtime ) {
 }
 
 function dispatchRecommendationsForSurface( def, actions, params ) {
-	params.dispatch(
-		actions[ def.methodNames.setRecommendations ](
-			params.input?.[ def.inputKey ],
-			params.payload,
-			params.input?.prompt || '',
-			params.requestToken,
-			params.contextSignature,
-			params.reviewContextSignature,
-			params.resolvedContextSignature
-		)
+	const recommendationsAction = actions[ def.methodNames.setRecommendations ](
+		params.input?.[ def.inputKey ],
+		params.payload,
+		params.input?.prompt || '',
+		params.requestToken,
+		params.contextSignature,
+		params.reviewContextSignature,
+		params.resolvedContextSignature
 	);
+	const outcomeSummary = getRecommendationOutcomeSummaryFromPayload(
+		recommendationsAction.payload
+	);
+
+	params.dispatch( recommendationsAction );
+
+	if (
+		outcomeSummary &&
+		typeof actions.recordRecommendationOutcome === 'function'
+	) {
+		params.dispatch(
+			actions.recordRecommendationOutcome( {
+				event: 'shown',
+				surface: def.surface,
+				...outcomeSummary,
+			} )
+		);
+	}
 }
 
 function getExecutableSurfaceDocumentFromInput( input = {}, registry = null ) {
@@ -605,6 +645,7 @@ function createApplyConfig( def, actions ) {
 		getStoredRequestSignature: def.buildStoredRequestSignature,
 		getStoredResolvedContextSignature: ( select ) =>
 			select[ def.methodNames.getResolvedContextSignature ]?.() || null,
+		recordOutcomeAction: actions.recordRecommendationOutcome,
 		setApplyStateAction: actions[ def.methodNames.setApplyState ],
 		surface: def.surface,
 		unexpectedErrorMessage: def.unexpectedErrorMessage,

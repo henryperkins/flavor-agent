@@ -33,8 +33,18 @@ function isRequestDiagnosticEntry( entry ) {
 	return entry?.type === 'request_diagnostic';
 }
 
+function isRecommendationOutcomeEntry( entry ) {
+	return entry?.type === 'recommendation_outcome';
+}
+
 function getDiagnosticUndoState( timestamp, undo = {} ) {
-	const status = undo?.status === 'failed' ? 'failed' : 'review';
+	let status = 'review';
+
+	if ( undo?.status === 'not_applicable' ) {
+		status = 'not_applicable';
+	} else if ( undo?.status === 'failed' ) {
+		status = 'failed';
+	}
 
 	return buildUndoState( timestamp, {
 		...undo,
@@ -109,6 +119,7 @@ function normalizeUndoStatus( status ) {
 		case 'available':
 		case 'blocked':
 		case 'failed':
+		case 'not_applicable':
 		case 'review':
 		case 'undone':
 			return status;
@@ -249,6 +260,18 @@ function normalizePersistedActivityEntry(
 		undo: buildUndoState( timestamp, entry.undo ),
 		persistence: buildPersistenceState( timestamp, entry.persistence ),
 	};
+
+	if ( isRecommendationOutcomeEntry( normalizedEntry ) ) {
+		return {
+			...normalizedEntry,
+			diagnostic: true,
+			executionResult: 'diagnostic',
+			undo: getDiagnosticUndoState( timestamp, {
+				...normalizedEntry.undo,
+				status: 'not_applicable',
+			} ),
+		};
+	}
 
 	if ( isRequestDiagnosticEntry( normalizedEntry ) ) {
 		return {
@@ -568,6 +591,7 @@ export function createActivityEntry( {
 	prompt = '',
 	requestRef = '',
 	requestMeta = null,
+	recommendation = null,
 	document = null,
 	timestamp = new Date().toISOString(),
 } ) {
@@ -580,7 +604,31 @@ export function createActivityEntry( {
 		! Array.isArray( requestMeta )
 			? requestMeta
 			: null;
+	const normalizedRecommendation =
+		recommendation &&
+		typeof recommendation === 'object' &&
+		! Array.isArray( recommendation )
+			? recommendation
+			: null;
 	const isRequestDiagnostic = type === 'request_diagnostic';
+	const isRecommendationOutcome = type === 'recommendation_outcome';
+	let executionResult = 'applied';
+
+	if ( isRecommendationOutcome ) {
+		executionResult = 'diagnostic';
+	} else if ( isRequestDiagnostic ) {
+		executionResult = 'review';
+	}
+
+	const diagnosticUndoStatus = isRecommendationOutcome
+		? 'not_applicable'
+		: 'review';
+	const undo =
+		isRequestDiagnostic || isRecommendationOutcome
+			? getDiagnosticUndoState( normalizedTimestamp, {
+					status: diagnosticUndoStatus,
+			  } )
+			: buildUndoState( normalizedTimestamp );
 
 	return {
 		id: `activity-${ Date.now() }-${ activitySequence }`,
@@ -595,6 +643,11 @@ export function createActivityEntry( {
 		request: {
 			prompt,
 			reference: requestRef,
+			...( normalizedRecommendation
+				? {
+						recommendation: normalizedRecommendation,
+				  }
+				: {} ),
 			...( normalizedRequestMeta
 				? {
 						ai: normalizedRequestMeta,
@@ -603,10 +656,9 @@ export function createActivityEntry( {
 		},
 		document,
 		timestamp: normalizedTimestamp,
-		executionResult: isRequestDiagnostic ? 'review' : 'applied',
-		undo: isRequestDiagnostic
-			? getDiagnosticUndoState( normalizedTimestamp )
-			: buildUndoState( normalizedTimestamp ),
+		executionResult,
+		undo,
+		...( isRecommendationOutcome ? { diagnostic: true } : {} ),
 		persistence: buildPersistenceState( normalizedTimestamp, {
 			status: 'local',
 			syncType: 'create',
@@ -633,6 +685,12 @@ export function getActivityEntityKey( entry ) {
 
 	const surface = String( entry?.surface || '' );
 	const activityType = String( entry?.type || '' );
+
+	if ( activityType === 'recommendation_outcome' ) {
+		return `outcome:${ surface }:${ String(
+			entry?.after?.outcome?.recommendationSetId || entry?.id || ''
+		) }`;
+	}
 
 	if ( activityType === 'request_diagnostic' ) {
 		return `request:${ surface }:${ String(

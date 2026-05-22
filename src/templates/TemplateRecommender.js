@@ -397,6 +397,7 @@ export default function TemplateRecommender() {
 		clearUndoError,
 		clearTemplateRecommendations,
 		fetchTemplateRecommendations,
+		recordRecommendationOutcome,
 		revalidateTemplateReviewFreshness,
 		setTemplateApplyState,
 		setTemplateSelectedSuggestion,
@@ -745,9 +746,34 @@ export default function TemplateRecommender() {
 	}, [] );
 	const handlePreviewSuggestion = useCallback(
 		( suggestionKey ) => {
+			const suggestion =
+				executableSuggestionCards.find(
+					( item ) => item?.suggestionKey === suggestionKey
+				) ||
+				advisorySuggestionCards.find(
+					( item ) => item?.suggestionKey === suggestionKey
+				);
+
+			if (
+				suggestion &&
+				typeof recordRecommendationOutcome === 'function'
+			) {
+				recordRecommendationOutcome( {
+					event: 'selected_for_review',
+					surface: 'template',
+					suggestion,
+					reason: 'review_opened',
+				} );
+			}
+
 			setTemplateSelectedSuggestion( suggestionKey );
 		},
-		[ setTemplateSelectedSuggestion ]
+		[
+			advisorySuggestionCards,
+			executableSuggestionCards,
+			recordRecommendationOutcome,
+			setTemplateSelectedSuggestion,
+		]
 	);
 	const handleCancelPreview = useCallback( () => {
 		setTemplateSelectedSuggestion( null );

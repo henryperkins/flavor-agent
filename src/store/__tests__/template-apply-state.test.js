@@ -177,8 +177,10 @@ describe( 'template apply state', () => {
 			actions.setTemplateStatus( 'error', 'Stale request failed.', 1 )
 		);
 
-		expect( selectors.getTemplateRecommendations( finalState ) ).toEqual( [
-			{ label: 'Fresh result' },
+		expect(
+			selectors.getTemplateRecommendations( finalState )
+		).toMatchObject( [
+			expect.objectContaining( { label: 'Fresh result' } ),
 		] );
 		expect( selectors.getTemplateResultRef( finalState ) ).toBe(
 			'theme//home'

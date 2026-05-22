@@ -1346,6 +1346,28 @@ namespace {
 						);
 					}
 
+					if (! preg_match('/\bFROM\s+\S+\s+AS\s+/i', $query)) {
+						if (preg_match("/activity_type\s*=\s*'([^']*)'/i", $query, $matches)) {
+							$activity_type = stripslashes((string) ($matches[1] ?? ''));
+							$rows          = array_values(
+								array_filter(
+									$rows,
+									static fn(array $row): bool => (string) ($row['activity_type'] ?? '') === $activity_type
+								)
+							);
+						}
+
+						if (preg_match("/activity_type\s*<>\s*'([^']*)'/i", $query, $matches)) {
+							$activity_type = stripslashes((string) ($matches[1] ?? ''));
+							$rows          = array_values(
+								array_filter(
+									$rows,
+									static fn(array $row): bool => (string) ($row['activity_type'] ?? '') !== $activity_type
+								)
+							);
+						}
+					}
+
 					foreach (
 						[
 							'admin_post_type',

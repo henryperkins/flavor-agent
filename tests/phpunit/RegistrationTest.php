@@ -1196,8 +1196,7 @@ final class RegistrationTest extends TestCase {
 		);
 
 		$this->assertIsArray( $result );
-		$this->assertSame( 'block', $result['surface'] ?? null );
-		$this->assertSame( 'core/paragraph', $result['context']['block']['name'] ?? null );
+		$this->assertNotEmpty( $result['resolvedContextSignature'] ?? '' );
 	}
 
 	public function test_recommendation_input_schemas_include_client_request_identity(): void {

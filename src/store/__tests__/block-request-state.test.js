@@ -118,8 +118,8 @@ describe( 'block request state', () => {
 
 		expect(
 			selectors.getBlockRecommendations( finalState, 'block-a' )
-		).toEqual( {
-			block: [ { label: 'Fresh result' } ],
+		).toMatchObject( {
+			block: [ expect.objectContaining( { label: 'Fresh result' } ) ],
 		} );
 		expect( selectors.getBlockRequestToken( finalState, 'block-a' ) ).toBe(
 			2
@@ -578,11 +578,15 @@ describe( 'block request state', () => {
 
 		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'ready' );
 		expect( selectors.getBlockError( state, 'block-a' ) ).toBeNull();
-		expect( selectors.getBlockRecommendations( state, 'block-a' ) ).toEqual(
-			{
-				block: [ { label: 'Refresh hierarchy' } ],
-			}
-		);
+		expect(
+			selectors.getBlockRecommendations( state, 'block-a' )
+		).toMatchObject( {
+			block: [
+				expect.objectContaining( {
+					label: 'Refresh hierarchy',
+				} ),
+			],
+		} );
 		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
 			'advisory-ready'
 		);

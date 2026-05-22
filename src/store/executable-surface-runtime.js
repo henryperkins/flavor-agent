@@ -98,6 +98,7 @@ export function createExecutableSurfaceApplyConfig( {
 	executeSuggestion,
 	getStoredRequestSignature,
 	getStoredResolvedContextSignature,
+	recordOutcomeAction = null,
 	setApplyStateAction,
 	surface,
 	unexpectedErrorMessage,
@@ -109,6 +110,7 @@ export function createExecutableSurfaceApplyConfig( {
 		executeSuggestion,
 		getStoredRequestSignature,
 		getStoredResolvedContextSignature,
+		recordOutcomeAction,
 		setApplyState: (
 			status,
 			{
@@ -405,6 +407,7 @@ function createExecutableSurfaceApplyAction( {
 	getStoredResolvedContextSignature,
 	guardSurfaceApplyFreshness,
 	guardSurfaceApplyResolvedFreshness,
+	recordOutcomeAction,
 	recordActivityEntry,
 	setApplyState,
 	surface,
@@ -428,6 +431,20 @@ function createExecutableSurfaceApplyAction( {
 	) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			const scope = getCurrentActivityScope( registry );
+			const recordBlockedOutcome = ( event, reason ) => {
+				if ( typeof recordOutcomeAction !== 'function' ) {
+					return;
+				}
+
+				localDispatch(
+					recordOutcomeAction( {
+						event,
+						surface,
+						suggestion,
+						reason,
+					} )
+				);
+			};
 
 			syncActivitySession( localDispatch, select, scope );
 
@@ -441,6 +458,10 @@ function createExecutableSurfaceApplyAction( {
 			} );
 
 			if ( staleApplyResult ) {
+				recordBlockedOutcome(
+					'stale_blocked',
+					staleApplyResult.staleReason || 'client'
+				);
 				return staleApplyResult;
 			}
 
@@ -459,6 +480,10 @@ function createExecutableSurfaceApplyAction( {
 			);
 
 			if ( ! resolvedFreshness.ok ) {
+				recordBlockedOutcome(
+					'stale_blocked',
+					resolvedFreshness.staleReason || 'revalidation_failed'
+				);
 				return resolvedFreshness;
 			}
 
@@ -491,6 +516,10 @@ function createExecutableSurfaceApplyAction( {
 					setApplyState( 'error', {
 						error: result.error || applyFailureMessage,
 					} )
+				);
+				recordBlockedOutcome(
+					'validation_blocked',
+					'operation_validation_failed'
 				);
 
 				return result;

@@ -61,6 +61,7 @@ import {
 	selectors,
 } from '../index';
 import { CONNECTOR_NOT_APPROVED_CODE } from '../request-error-details';
+import { resetRecommendationOutcomeDedupeForTests } from '../recommendation-outcomes';
 
 const TEMPLATE_PROMPT =
 	'Make this template read more like an editorial front page.';
@@ -163,6 +164,7 @@ function installAbilitiesBridge() {
 describe( 'store action thunks', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		resetRecommendationOutcomeDedupeForTests();
 		jest.useFakeTimers();
 		window.sessionStorage.clear();
 		actions._activitySessionLoadToken = 0;
@@ -2955,6 +2957,160 @@ describe( 'store action thunks', () => {
 		).toHaveLength( 20 );
 	} );
 
+	const createRecommendationOutcomeThunkContext = () => ( {
+		dispatch: jest.fn( ( action ) => action ),
+		select: {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+		},
+		registry: {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		},
+	} );
+
+	const createShownOutcomePayload = () => ( {
+		event: 'shown',
+		surface: 'block',
+		recommendationSetId: 'set-1',
+		suggestionKey: 'suggestion-1',
+		topSuggestionKeys: [ 'suggestion-1' ],
+		resultCount: 1,
+	} );
+
+	const createServerOutcomeEntry = ( id = 'outcome-server-1' ) => ( {
+		id,
+		type: 'recommendation_outcome',
+		surface: 'block',
+		diagnostic: true,
+		executionResult: 'diagnostic',
+		target: {
+			recommendationSetId: 'set-1',
+			suggestionKey: 'suggestion-1',
+		},
+		after: {
+			outcome: {
+				event: 'shown',
+				visibility: 'diagnostic',
+				recommendationSetId: 'set-1',
+			},
+		},
+		request: {
+			recommendation: {
+				recommendationSetId: 'set-1',
+				suggestionKey: 'suggestion-1',
+			},
+		},
+		document: {
+			scopeKey: 'post:42',
+			postType: 'post',
+			entityId: '42',
+		},
+		undo: {
+			canUndo: false,
+			status: 'not_applicable',
+			error: null,
+			updatedAt: '2026-03-24T10:00:00+00:00',
+			undoneAt: null,
+		},
+		persistence: {
+			status: 'server',
+		},
+	} );
+
+	test( 'recordRecommendationOutcome retries after a failed diagnostic persistence attempt', async () => {
+		apiFetch
+			.mockRejectedValueOnce(
+				new Error( 'temporary activity write failure' )
+			)
+			.mockResolvedValueOnce( {
+				entry: createServerOutcomeEntry(),
+			} );
+
+		const context = createRecommendationOutcomeThunkContext();
+		const outcome = createShownOutcomePayload();
+
+		const failedResult =
+			await actions.recordRecommendationOutcome( outcome )( context );
+		const retryResult =
+			await actions.recordRecommendationOutcome( outcome )( context );
+
+		expect( failedResult ).toEqual(
+			expect.objectContaining( {
+				type: 'recommendation_outcome',
+				diagnostic: true,
+			} )
+		);
+		expect( retryResult ).toEqual(
+			expect.objectContaining( {
+				id: 'outcome-server-1',
+				persistence: expect.objectContaining( {
+					status: 'server',
+				} ),
+			} )
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( apiFetch ).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity',
+				method: 'POST',
+			} )
+		);
+		expect( apiFetch ).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity',
+				method: 'POST',
+			} )
+		);
+	} );
+
+	test( 'recordRecommendationOutcome suppresses duplicate in-flight diagnostic persistence attempts', async () => {
+		let resolvePersistedOutcome;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolvePersistedOutcome = resolve;
+				} )
+		);
+
+		const context = createRecommendationOutcomeThunkContext();
+		const outcome = createShownOutcomePayload();
+		const firstAttempt =
+			actions.recordRecommendationOutcome( outcome )( context );
+		const secondAttempt =
+			actions.recordRecommendationOutcome( outcome )( context );
+
+		await expect( secondAttempt ).resolves.toBeNull();
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+		resolvePersistedOutcome( {
+			entry: createServerOutcomeEntry(),
+		} );
+
+		await expect( firstAttempt ).resolves.toEqual(
+			expect.objectContaining( {
+				id: 'outcome-server-1',
+				persistence: expect.objectContaining( {
+					status: 'server',
+				} ),
+			} )
+		);
+
+		const persistedDuplicate =
+			await actions.recordRecommendationOutcome( outcome )( context );
+
+		expect( persistedDuplicate ).toBeNull();
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	test( 'applyTemplateSuggestion makes activity undoable before the server audit write returns', async () => {
 		applyTemplateSuggestionOperations.mockReturnValue( {
 			ok: true,
@@ -5696,7 +5852,6 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
-		expect( dispatch ).toHaveBeenCalledTimes( 1 );
 		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplateApplyState(
 				'error',

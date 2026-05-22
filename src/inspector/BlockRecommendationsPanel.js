@@ -371,6 +371,7 @@ export function BlockRecommendationsContent( {
 		clearBlockError,
 		clearUndoError,
 		applyBlockStructuralSuggestion,
+		recordRecommendationOutcome,
 		revalidateBlockReviewFreshness,
 		undoActivity,
 	} = useDispatch( STORE_NAME );
@@ -748,10 +749,24 @@ export function BlockRecommendationsContent( {
 		fetchBlockRecommendations,
 		liveContext,
 	] );
+	const selectedBlockName = block?.name || '';
 	const handleOpenReview = useCallback(
 		( suggestion ) => {
 			if ( isStaleResult ) {
 				return;
+			}
+
+			if ( typeof recordRecommendationOutcome === 'function' ) {
+				recordRecommendationOutcome( {
+					event: 'selected_for_review',
+					surface: 'block',
+					suggestion,
+					reason: 'review_opened',
+					target: {
+						clientId,
+						blockName: selectedBlockName,
+					},
+				} );
 			}
 
 			setActiveReviewState(
@@ -761,7 +776,13 @@ export function BlockRecommendationsContent( {
 				} )
 			);
 		},
-		[ isStaleResult, reviewScope ]
+		[
+			clientId,
+			isStaleResult,
+			recordRecommendationOutcome,
+			reviewScope,
+			selectedBlockName,
+		]
 	);
 	const handleApplyReviewedStructure = useCallback(
 		( suggestion ) => {

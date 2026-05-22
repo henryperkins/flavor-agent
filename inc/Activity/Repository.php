@@ -138,7 +138,13 @@ final class Repository {
 			);
 		}
 
-		$normalized  = Serializer::normalize_entry( $entry );
+		$normalized = Serializer::normalize_entry( $entry );
+		$normalized = RecommendationOutcome::normalize_entry( $normalized );
+
+		if ( is_wp_error( $normalized ) ) {
+			return $normalized;
+		}
+
 		$activity_id = '' !== $normalized['id']
 			? (string) $normalized['id']
 			: self::generate_activity_id();
@@ -247,6 +253,11 @@ final class Repository {
 		if ( $user_id > 0 ) {
 			$conditions[] = 'user_id = %d';
 			$args[]       = $user_id;
+		}
+
+		if ( empty( $filters['includeDiagnostics'] ) ) {
+			$conditions[] = 'activity_type <> %s';
+			$args[]       = RecommendationOutcome::TYPE;
 		}
 
 		$args[] = $limit;
@@ -1818,7 +1829,7 @@ final class Repository {
 	}
 
 	private static function get_admin_sql_review_condition( string $alias ): string {
-		return '(' . $alias . ".activity_type = 'request_diagnostic' OR " . $alias . ".execution_result = 'review')";
+		return '(' . $alias . ".activity_type = 'request_diagnostic' OR " . $alias . ".activity_type = '" . RecommendationOutcome::TYPE . "' OR " . $alias . ".execution_result IN ('review', 'diagnostic'))";
 	}
 
 	private static function get_admin_sql_undo_status_condition( string $column_sql, string $status ): string {
@@ -2972,7 +2983,7 @@ final class Repository {
 		$undo   = Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' );
 		$status = trim( (string) ( $undo['status'] ?? 'available' ) );
 
-		return in_array( $status, [ 'undone', 'failed', 'review' ], true ) ? $status : 'available';
+		return in_array( $status, [ 'undone', 'failed', 'review', 'not_applicable' ], true ) ? $status : 'available';
 	}
 
 	/**
@@ -2982,7 +2993,9 @@ final class Repository {
 		$activity_type    = trim( (string) ( $row['activity_type'] ?? '' ) );
 		$execution_result = trim( (string) ( $row['execution_result'] ?? '' ) );
 
-		return 'request_diagnostic' === $activity_type || 'review' === $execution_result;
+		return 'request_diagnostic' === $activity_type
+			|| RecommendationOutcome::TYPE === $activity_type
+			|| in_array( $execution_result, [ 'review', 'diagnostic' ], true );
 	}
 
 	/**
@@ -3067,6 +3080,13 @@ final class Repository {
 			return [
 				'value' => 'request-diagnostic',
 				'label' => 'Request diagnostic',
+			];
+		}
+
+		if ( RecommendationOutcome::TYPE === $activity_type ) {
+			return [
+				'value' => 'recommendation-outcome',
+				'label' => 'Recommendation outcome',
 			];
 		}
 

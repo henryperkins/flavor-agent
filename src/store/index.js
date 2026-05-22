@@ -78,6 +78,18 @@ import {
 } from '../patterns/pattern-settings';
 import { executeFlavorAgentAbility } from './abilities-client';
 import { normalizeRequestErrorDetails } from './request-error-details';
+import {
+	buildRecommendationOutcomeDedupeKey,
+	buildRecommendationOutcomeEntry,
+	buildRecommendationSetId,
+	clearRecommendationOutcomePending,
+	decorateRecommendationPayload,
+	getRecommendationOutcomeSummaryFromPayload,
+	hasPendingRecommendationOutcome,
+	hasRecordedRecommendationOutcome,
+	markRecommendationOutcomePending,
+	markRecommendationOutcomeRecorded,
+} from './recommendation-outcomes';
 
 const STORE_NAME = 'flavor-agent';
 const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
@@ -1180,10 +1192,26 @@ const actions = {
 		diagnostics = null,
 		resolvedContextSignature = null
 	) {
+		const sourceRequestSignature =
+			contextSignature || resolvedContextSignature || '';
+		const decoratedRecommendations = decorateRecommendationPayload(
+			recommendations,
+			{
+				surface: 'block',
+				recommendationSetId: buildRecommendationSetId( {
+					surface: 'block',
+					requestToken,
+					sourceRequestSignature,
+					resultRef: clientId,
+				} ),
+				sourceRequestSignature,
+			}
+		);
+
 		return {
 			type: 'SET_BLOCK_RECS',
 			clientId,
-			recommendations,
+			recommendations: decoratedRecommendations,
 			requestToken,
 			contextSignature,
 			diagnostics,
@@ -1223,6 +1251,57 @@ const actions = {
 
 	logActivity( entry ) {
 		return { type: 'LOG_ACTIVITY', entry };
+	},
+
+	recordRecommendationOutcome( outcome = {} ) {
+		return async ( { dispatch: localDispatch, registry, select } ) => {
+			const scope = outcome.scope || getCurrentActivityScope( registry );
+			const document =
+				outcome.document || getRequestDocumentFromScope( scope );
+			const entry = buildRecommendationOutcomeEntry( {
+				...outcome,
+				document,
+			} );
+
+			if ( ! entry ) {
+				return null;
+			}
+
+			const dedupeKey = buildRecommendationOutcomeDedupeKey( {
+				surface: entry.surface,
+				event: entry.after?.outcome?.event,
+				recommendationSetId: entry.after?.outcome?.recommendationSetId,
+				suggestionKey: entry.suggestionKey,
+				reason: entry.after?.outcome?.reason,
+				patternKey: entry.target?.patternKey,
+			} );
+
+			if ( hasRecordedRecommendationOutcome( dedupeKey ) ) {
+				return null;
+			}
+
+			if ( hasPendingRecommendationOutcome( dedupeKey ) ) {
+				return null;
+			}
+
+			markRecommendationOutcomePending( dedupeKey );
+
+			try {
+				const persistedEntry = await logStoreActivityEntry(
+					localDispatch,
+					select,
+					entry
+				);
+
+				if ( persistedEntry?.persistence?.status === 'server' ) {
+					markRecommendationOutcomeRecorded( dedupeKey );
+				}
+
+				return persistedEntry;
+			} finally {
+				clearRecommendationOutcomePending( dedupeKey );
+			}
+		};
 	},
 
 	setUndoState( status, error = null, activityId = null ) {
@@ -1469,7 +1548,7 @@ const actions = {
 						  }
 						: null;
 
-					localDispatch(
+					const recommendationsAction =
 						actions.setBlockRecommendations(
 							requestClientId,
 							{
@@ -1488,8 +1567,13 @@ const actions = {
 							contextSignature,
 							diagnostics,
 							resolvedContextSignature
-						)
-					);
+						);
+					const outcomeSummary =
+						getRecommendationOutcomeSummaryFromPayload(
+							recommendationsAction.recommendations
+						);
+
+					localDispatch( recommendationsAction );
 					localDispatch(
 						actions.setBlockRequestState(
 							requestClientId,
@@ -1498,6 +1582,22 @@ const actions = {
 							requestToken
 						)
 					);
+
+					if ( outcomeSummary ) {
+						localDispatch(
+							actions.recordRecommendationOutcome( {
+								event: 'shown',
+								surface: 'block',
+								...outcomeSummary,
+								target: {
+									clientId: requestClientId,
+									blockName:
+										requestData.editorContext?.block
+											?.name || '',
+								},
+							} )
+						);
+					}
 				},
 				select,
 			} );
@@ -1548,6 +1648,15 @@ const actions = {
 			} );
 
 			if ( staleApplyResult ) {
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion,
+						reason: staleApplyResult.staleReason || 'client',
+						target: { clientId },
+					} )
+				);
 				return false;
 			}
 
@@ -1574,6 +1683,17 @@ const actions = {
 			);
 
 			if ( ! resolvedFreshness.ok ) {
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion,
+						reason:
+							resolvedFreshness.staleReason ||
+							'revalidation_failed',
+						target: { clientId },
+					} )
+				);
 				return false;
 			}
 
@@ -1608,6 +1728,15 @@ const actions = {
 							'error',
 							advisoryApplyMessage
 						)
+					);
+					localDispatch(
+						actions.recordRecommendationOutcome( {
+							event: 'validation_blocked',
+							surface: 'block',
+							suggestion,
+							reason: 'advisory_only',
+							target: { clientId },
+						} )
 					);
 					return false;
 				}
@@ -1663,6 +1792,15 @@ const actions = {
 							'error',
 							applyErrorMessage
 						)
+					);
+					localDispatch(
+						actions.recordRecommendationOutcome( {
+							event: 'validation_blocked',
+							surface: 'block',
+							suggestion,
+							reason: 'operation_validation_failed',
+							target: { clientId },
+						} )
 					);
 					return false;
 				}
@@ -1772,6 +1910,15 @@ const actions = {
 			} );
 
 			if ( staleApplyResult ) {
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion,
+						reason: staleApplyResult.staleReason || 'client',
+						target: { clientId },
+					} )
+				);
 				return false;
 			}
 
@@ -1798,6 +1945,17 @@ const actions = {
 			);
 
 			if ( ! resolvedFreshness.ok ) {
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion,
+						reason:
+							resolvedFreshness.staleReason ||
+							'revalidation_failed',
+						target: { clientId },
+					} )
+				);
 				return false;
 			}
 
@@ -1826,6 +1984,15 @@ const actions = {
 
 					localDispatch(
 						actions.setBlockApplyState( clientId, 'error', error )
+					);
+					localDispatch(
+						actions.recordRecommendationOutcome( {
+							event: 'validation_blocked',
+							surface: 'block',
+							suggestion,
+							reason: 'missing_structural_context',
+							target: { clientId },
+						} )
 					);
 
 					return false;
@@ -1873,6 +2040,16 @@ const actions = {
 									result.code
 								)
 						)
+					);
+					localDispatch(
+						actions.recordRecommendationOutcome( {
+							event: 'validation_blocked',
+							surface: 'block',
+							suggestion,
+							reason:
+								result.code || 'operation_validation_failed',
+							target: { clientId },
+						} )
 					);
 
 					return false;
@@ -2814,6 +2991,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 				lastUndoneActivityId: null,
 			};
 		case 'LOG_ACTIVITY':
+			if ( action.entry?.diagnostic === true ) {
+				return state;
+			}
+
 			return {
 				...state,
 				activityLog: limitActivityLog( [

@@ -228,4 +228,39 @@ final class ActivitySerializerTest extends TestCase {
 			)
 		);
 	}
+
+	public function test_hydrate_row_marks_recommendation_outcome_as_diagnostic(): void {
+		$entry = Serializer::hydrate_row(
+			[
+				'activity_id'      => 'outcome-1',
+				'schema_version'   => '4',
+				'activity_type'    => 'recommendation_outcome',
+				'surface'          => 'pattern',
+				'target_json'      => '{"recommendationSetId":"set-1"}',
+				'suggestion'       => 'Pattern inserted from recommendation shelf',
+				'suggestion_key'   => 'suggestion-1',
+				'before_state'     => '{}',
+				'after_state'      => '{"outcome":{"event":"pattern_inserted_from_shelf","visibility":"diagnostic","recommendationSetId":"set-1"}}',
+				'request_json'     => '{"recommendation":{"recommendationSetId":"set-1","suggestionKey":"suggestion-1"}}',
+				'document_json'    => '{"scopeKey":"post:42"}',
+				'execution_result' => 'diagnostic',
+				'undo_state'       => '{"status":"not_applicable"}',
+				'user_id'          => '0',
+				'created_at'       => '2026-03-24 10:00:00',
+			]
+		);
+
+		$this->assertTrue( $entry['diagnostic'] );
+		$this->assertSame( 'diagnostic', $entry['executionResult'] );
+		$this->assertSame(
+			[
+				'canUndo'   => false,
+				'status'    => 'not_applicable',
+				'error'     => null,
+				'updatedAt' => '2026-03-24T10:00:00+00:00',
+				'undoneAt'  => null,
+			],
+			$entry['undo']
+		);
+	}
 }

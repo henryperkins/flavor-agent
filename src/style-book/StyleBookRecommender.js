@@ -676,6 +676,7 @@ export default function StyleBookRecommender() {
 		clearUndoError,
 		clearStyleBookRecommendations,
 		fetchStyleBookRecommendations,
+		recordRecommendationOutcome,
 		revalidateStyleBookReviewFreshness,
 		setStyleBookApplyState,
 		setStyleBookSelectedSuggestion,
@@ -892,6 +893,37 @@ export default function StyleBookRecommender() {
 		currentRequestInput,
 	] );
 
+	const handleReviewSuggestion = useCallback(
+		( suggestionKey ) => {
+			const suggestion = suggestions.find(
+				( item ) => item?.suggestionKey === suggestionKey
+			);
+
+			if (
+				suggestion &&
+				typeof recordRecommendationOutcome === 'function'
+			) {
+				recordRecommendationOutcome( {
+					event: 'selected_for_review',
+					surface: 'style-book',
+					suggestion,
+					reason: 'review_opened',
+					target: {
+						blockName: styleBookTargetBlockName,
+					},
+				} );
+			}
+
+			setStyleBookSelectedSuggestion( suggestionKey );
+		},
+		[
+			recordRecommendationOutcome,
+			setStyleBookSelectedSuggestion,
+			styleBookTargetBlockName,
+			suggestions,
+		]
+	);
+
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
 			applyStyleBookSuggestion(
@@ -948,7 +980,7 @@ export default function StyleBookRecommender() {
 			}
 			onNoticeDismiss={ dismissStatusNotice }
 			onRequest={ handleRequest }
-			onReview={ setStyleBookSelectedSuggestion }
+			onReview={ handleReviewSuggestion }
 			onCancelReview={ () => setStyleBookSelectedSuggestion( null ) }
 			onApply={ handleApply }
 			onUndo={ handleUndo }

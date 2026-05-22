@@ -159,6 +159,7 @@ function buildActivityQueryPath( {
 	limit = null,
 	groupBySurface = false,
 	surfaceLimit = null,
+	includeDiagnostics = false,
 } ) {
 	const params = new URLSearchParams();
 
@@ -188,6 +189,10 @@ function buildActivityQueryPath( {
 
 	if ( Number.isInteger( surfaceLimit ) && surfaceLimit > 0 ) {
 		params.set( 'surfaceLimit', String( surfaceLimit ) );
+	}
+
+	if ( includeDiagnostics ) {
+		params.set( 'includeDiagnostics', 'true' );
 	}
 
 	const query = params.toString();
@@ -261,6 +266,7 @@ export async function fetchServerActivityEntries( scopeKey ) {
 			limit: SERVER_ACTIVITY_FETCH_LIMIT,
 			groupBySurface: true,
 			surfaceLimit: SERVER_ACTIVITY_SURFACE_LIMIT,
+			includeDiagnostics: false,
 		} ),
 		method: 'GET',
 	} );
@@ -531,7 +537,8 @@ export async function recordActivityEntry(
 
 			if (
 				persistedEntry?.id &&
-				persistedEntry?.persistence?.status === 'server'
+				persistedEntry?.persistence?.status === 'server' &&
+				persistedEntry?.diagnostic !== true
 			) {
 				const scopeKey = persistedEntry?.document?.scopeKey || null;
 				const currentScopeKey = select.getActivityScopeKey?.() || null;

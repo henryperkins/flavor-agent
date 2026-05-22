@@ -283,6 +283,61 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_get_activity_includes_scoped_outcome_diagnostics_only_when_requested(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		ActivityRepository::create( $this->build_activity_entry( 'activity-1' ) );
+		ActivityRepository::create(
+			[
+				'id'         => 'outcome-1',
+				'type'       => 'recommendation_outcome',
+				'surface'    => 'pattern',
+				'target'     => [
+					'recommendationSetId' => 'set-1',
+					'patternKey'          => 'theme/hero',
+				],
+				'suggestion' => 'Recommendations shown',
+				'after'      => [
+					'outcome' => [
+						'event'               => 'shown',
+						'recommendationSetId' => 'set-1',
+						'visibility'          => 'diagnostic',
+					],
+				],
+				'document'   => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+				'timestamp'  => '2026-03-24T10:00:01Z',
+			]
+		);
+
+		$default_request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$default_request->set_param( 'scopeKey', 'wp_template:theme//home' );
+
+		$default_response = Agent_Controller::handle_get_activity( $default_request );
+		$default_entries  = $default_response instanceof \WP_REST_Response
+			? ( $default_response->get_data()['entries'] ?? [] )
+			: [];
+
+		$this->assertContains( 'activity-1', array_column( $default_entries, 'id' ) );
+		$this->assertNotContains( 'outcome-1', array_column( $default_entries, 'id' ) );
+
+		$diagnostic_request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$diagnostic_request->set_param( 'scopeKey', 'wp_template:theme//home' );
+		$diagnostic_request->set_param( 'includeDiagnostics', true );
+
+		$diagnostic_response = Agent_Controller::handle_get_activity( $diagnostic_request );
+		$diagnostic_entries  = $diagnostic_response instanceof \WP_REST_Response
+			? ( $diagnostic_response->get_data()['entries'] ?? [] )
+			: [];
+
+		$this->assertContains( 'activity-1', array_column( $diagnostic_entries, 'id' ) );
+		$this->assertContains( 'outcome-1', array_column( $diagnostic_entries, 'id' ) );
+	}
+
 	public function test_handle_get_activity_grouped_by_surface_keeps_executable_history_when_diagnostics_are_newer(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
@@ -332,6 +387,52 @@ final class AgentControllerTest extends TestCase {
 		);
 		$this->assertContains( 'activity-pattern-181', array_column( $entries, 'id' ) );
 		$this->assertNotContains( 'activity-pattern-1', array_column( $entries, 'id' ) );
+	}
+
+	public function test_handle_get_activity_grouped_by_surface_honors_include_diagnostics(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		ActivityRepository::create( $this->build_activity_entry( 'activity-template' ) );
+		ActivityRepository::create(
+			[
+				'id'         => 'outcome-pattern',
+				'type'       => 'recommendation_outcome',
+				'surface'    => 'pattern',
+				'target'     => [
+					'recommendationSetId' => 'set-pattern',
+					'patternKey'          => 'theme/hero',
+				],
+				'suggestion' => 'Recommendations shown',
+				'after'      => [
+					'outcome' => [
+						'event'               => 'shown',
+						'recommendationSetId' => 'set-pattern',
+						'visibility'          => 'diagnostic',
+					],
+				],
+				'document'   => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+				'timestamp'  => '2026-03-24T10:00:01Z',
+			]
+		);
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'scopeKey', 'wp_template:theme//home' );
+		$request->set_param( 'groupBySurface', true );
+		$request->set_param( 'surfaceLimit', 20 );
+		$request->set_param( 'includeDiagnostics', true );
+
+		$response = Agent_Controller::handle_get_activity( $request );
+		$entries  = $response instanceof \WP_REST_Response
+			? ( $response->get_data()['entries'] ?? [] )
+			: [];
+
+		$this->assertContains( 'activity-template', array_column( $entries, 'id' ) );
+		$this->assertContains( 'outcome-pattern', array_column( $entries, 'id' ) );
 	}
 
 	public function test_handle_get_activity_supports_global_admin_queries(): void {
