@@ -91,7 +91,7 @@ function main() {
 	}
 
 	const currentNode = process.versions.node;
-	const currentNpm = execFileSync( 'npm', [ '--version' ], {
+	const currentNpm = execFileSync( process.platform === 'win32' ? 'npm.cmd' : 'npm', [ '--version' ], {
 		encoding: 'utf8',
 	} ).trim();
 
