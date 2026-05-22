@@ -26,8 +26,9 @@ The Abilities contract remains available so external agents or admin tools can u
 4. `ContentAbilities` normalizes the request, validates per-post edit access when `postContext.postId > 0`, and passes draft content through `PostContentRenderer`; positive post IDs enable server-side block rendering, while missing or `0` post IDs use the fallback text path
 5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt via `PromptBudget`. The user prompt includes the rendered current-post text under `Existing draft` and, when the author has eligible same-author published posts in the same post type, a `## Site voice samples` section with up to three openings (~1500 chars each, paragraph-snapped) drawn through `PostVoiceSampleCollector`. Voice samples is the only section the budget will drop under pressure. When rendered HTML exposes useful attribute-borne text that would otherwise be stripped from the current post, `PostContentRenderer` appends it as an `[Attribute references]` bullet list.
 6. `WritingPrompt::parse_response()` validates the returned JSON payload
-7. The panel renders summary/content/notes/issues through the shared status and recommendation shell, with explicit editorial-only copy and a copy-to-clipboard handoff for generated text
-8. When document scope is available, the ability execution wrapper persists successful and failed requests as read-only `request_diagnostic` activity rows; the panel shows them in `Recent Content Requests` only while the post/page content surface is available and configured
+7. The panel renders as a Latest Recommendation Workspace. Before any usable output, the full composer is visible. After a usable response, the generated title, summary, and `content` become the primary result, while the mode/prompt composer collapses behind `Refine request`.
+8. `notes[]` and `issues[]` render as collapsed `Editorial Notes` support material, with overflow hidden behind `Show more`; critique mode still treats `content` as the primary recommendation text.
+9. When document scope is available, the ability execution wrapper persists successful and failed requests as read-only `request_diagnostic` activity rows; the panel shows them in collapsed `Recent Content Requests` only while the post/page content surface is available and configured
 
 ## 4. Capability Contract
 
@@ -68,6 +69,7 @@ Output:
 - Sites can tune the prompt token budget via the `flavor_agent_prompt_budget_max_tokens` filter, scope `content`.
 - Invalid model JSON returns a `parse_error`.
 - The first-party UI is editorial-only. There is no preview/apply/undo flow tied to this surface, and copy-to-clipboard does not mutate editor content.
+- Stored result signatures are compared against the live mode, prompt, and post context. Stale results remain readable with a refresh banner, but generated content copy is disabled until refreshed.
 - Scoped content requests are persisted as read-only activity diagnostics when possible. They can appear in the inline request history when the content panel is supported/configured and in the admin audit page, but they are not undoable.
 
 ## 6. Primary Functions And Abilities

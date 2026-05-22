@@ -288,7 +288,7 @@ describe( 'ContentRecommender', () => {
 		);
 	} );
 
-	test( 'renders ready recommendations with generated copy handoff, notes, issues, and activity', async () => {
+	test( 'renders ready recommendations as a latest-result workspace with collapsed supporting detail', async () => {
 		const writeText = jest.fn().mockResolvedValue( undefined );
 		Object.defineProperty( window.navigator, 'clipboard', {
 			value: { writeText },
@@ -363,14 +363,17 @@ describe( 'ContentRecommender', () => {
 		expect( text ).toContain( 'Retail floors.' );
 		expect( text ).toContain( 'WordPress themes.' );
 		expect( text ).toContain( 'Cloud platforms.' );
+		expect( text ).toContain( 'Refine request' );
+		expect( getContainer().querySelector( 'textarea' ) ).toBeNull();
 		expect( text ).toContain( 'Editorial Notes' );
-		expect( text ).toContain( 'Cut the throat-clearing in the opener.' );
-		expect( text ).toContain( 'Technology is rapidly evolving.' );
-		expect( text ).toContain( 'Too abstract.' );
-		expect( text ).toContain(
-			'WordPress changed. Cloud changed. The customer still needed the thing to work.'
+		expect( text ).toContain( '2 notes' );
+		expect( text ).not.toContain(
+			'Cut the throat-clearing in the opener.'
 		);
+		expect( text ).not.toContain( 'Technology is rapidly evolving.' );
+		expect( text ).not.toContain( 'Too abstract.' );
 		expect( text ).toContain( 'Recent Content Requests' );
+		expect( text ).not.toContain( 'Content recommendation request' );
 		expect( text ).not.toContain( 'Generated Content Guidance' );
 
 		const copyButton = Array.from(
@@ -386,6 +389,27 @@ describe( 'ContentRecommender', () => {
 		);
 		expect( getContainer().textContent ).toContain( 'Copied text' );
 
+		const notesToggle = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) =>
+			button.textContent.includes( 'Editorial Notes' )
+		);
+
+		act( () => {
+			notesToggle.click();
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'Cut the throat-clearing in the opener.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Technology is rapidly evolving.'
+		);
+		expect( getContainer().textContent ).toContain( 'Too abstract.' );
+		expect( getContainer().textContent ).toContain(
+			'WordPress changed. Cloud changed. The customer still needed the thing to work.'
+		);
+
 		const activityToggle = Array.from(
 			getContainer().querySelectorAll( 'button' )
 		).find( ( button ) =>
@@ -399,6 +423,66 @@ describe( 'ContentRecommender', () => {
 		expect( getContainer().textContent ).toContain(
 			'Content recommendation request'
 		);
+	} );
+
+	test( 'reopens the composer from refine request with the stored prompt and active mode', () => {
+		const storedPostContext = {
+			postId: 42,
+			postType: 'post',
+			title: 'Working draft',
+			excerpt: '',
+			content: 'Retail floors. WordPress themes.',
+			slug: 'working-draft',
+			status: 'draft',
+		};
+
+		currentState = createState( {
+			store: {
+				contentStatus: 'ready',
+				contentMode: 'edit',
+				contentRequestPrompt: 'Tighten the existing copy.',
+				contentRecommendationRequestSignature:
+					buildContentRecommendationRequestSignature( {
+						mode: 'edit',
+						prompt: 'Tighten the existing copy.',
+						postContext: storedPostContext,
+					} ),
+				contentRecommendation: {
+					mode: 'edit',
+					title: 'Edited draft',
+					summary: 'The opener is tighter.',
+					content: 'Retail floors first. Then themes.',
+				},
+			},
+		} );
+
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		expect( getContainer().querySelector( 'textarea' ) ).toBeNull();
+
+		const refineButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.includes( 'Refine request' ) );
+
+		expect( refineButton.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
+
+		act( () => {
+			refineButton.click();
+		} );
+
+		const textarea = getContainer().querySelector( 'textarea' );
+
+		expect( refineButton.getAttribute( 'aria-expanded' ) ).toBe( 'true' );
+		expect( textarea ).not.toBeNull();
+		expect( textarea.value ).toBe( 'Tighten the existing copy.' );
+
+		const editButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Edit' );
+
+		expect( editButton.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
 	} );
 
 	test( 'renders an empty-result status notice when the response has no usable output', () => {
@@ -423,6 +507,8 @@ describe( 'ContentRecommender', () => {
 		expect( getContainer().textContent ).toContain(
 			'No content recommendation was returned for the current request.'
 		);
+		expect( getContainer().querySelector( 'textarea' ) ).not.toBeNull();
+		expect( getContainer().textContent ).not.toContain( 'Refine request' );
 	} );
 
 	test( 'renders a dismissible request error and clears it when dismissed', () => {
@@ -572,6 +658,14 @@ describe( 'ContentRecommender', () => {
 
 		act( () => {
 			getRoot().render( <ContentRecommender /> );
+		} );
+
+		const refineButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.includes( 'Refine request' ) );
+
+		act( () => {
+			refineButton.click();
 		} );
 
 		// Type a new prompt — the stored signature now drifts.

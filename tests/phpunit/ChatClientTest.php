@@ -311,10 +311,10 @@ final class ChatClientTest extends TestCase {
 	}
 
 	public function test_connector_json_schema_marks_all_object_properties_as_required_for_schema_compatible_connector(): void {
-		WordPressTestState::$options                            = [
+		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
-		WordPressTestState::$connectors                         = [
+		WordPressTestState::$connectors                     = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -325,21 +325,57 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-			WordPressTestState::$ai_client_provider_support     = [
-				'openai' => true,
-			];
-			WordPressTestState::$ai_client_supported            = true;
-			WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Use the current structure."}';
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Use the current structure."}';
 
-			ChatClient::chat(
-				'system prompt',
-				'user prompt',
-				ResponseSchema::get( 'template' )
-			);
+		ChatClient::chat(
+			'system prompt',
+			'user prompt',
+			ResponseSchema::get( 'template' )
+		);
 
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
 
 		$this->assertObjectSchemasRequireAllProperties( $schema );
+	}
+
+	public function test_connector_json_schema_serializes_empty_object_properties_for_schema_compatible_connector(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                     = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Use the current structure."}';
+
+		ChatClient::chat(
+			'system prompt',
+			'user prompt',
+			ResponseSchema::get( 'template' )
+		);
+
+		$schema            = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
+		$attributes_schema = $schema['properties']['suggestions']['items']['properties']['operations']['items']['properties']['expectedTarget']['properties']['attributes'] ?? null;
+
+		$this->assertIsArray( $attributes_schema );
+		$this->assertArrayHasKey( 'properties', $attributes_schema );
+		$this->assertInstanceOf( \stdClass::class, $attributes_schema['properties'] );
+		$this->assertSame( '{}', wp_json_encode( $attributes_schema['properties'] ) );
 	}
 
 	public function test_connector_skips_schema_that_exceeds_union_limit(): void {

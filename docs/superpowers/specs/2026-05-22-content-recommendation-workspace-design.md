@@ -40,9 +40,9 @@ Turn the content recommendation panel into a **Latest Recommendation Workspace**
 
 ## Interaction Design
 
-### Empty State
+### Empty And No-Output State
 
-When there is no stored result:
+When there is no stored result, or the latest stored response has no usable output:
 
 - Show the compact document context at the top:
   - document title or an untitled fallback
@@ -55,10 +55,11 @@ When there is no stored result:
   - mode-specific generate button
 - Show capability or connector notices only when they are relevant.
 - Hide the activity section when there are no matching entries.
+- Keep the composer open after an empty/no-output response so the user can immediately retry from the status notice.
 
 ### Latest Result State
 
-When a stored result exists:
+When a usable stored result exists:
 
 - Keep the same compact document context.
 - Replace the always-open composer with a **Refine request** disclosure:
@@ -99,8 +100,9 @@ Critique responses should not look like a pile of independent notes. The primary
 
 Add a small local workspace state:
 
-- `isComposerOpen`: defaults to `false` when a stored result exists and `true` otherwise; it also collapses after a newly successful fresh result.
-- `hasResult`: continues to come from `getContentRecommendationFreshness()`.
+- `hasResult`: continues to come from `getContentRecommendationFreshness()` and means a stored response exists for freshness/stale checks.
+- `hasOutput`: derives from `hasResult && hasRecommendationOutput( contentRecommendation )` and means the stored response has a title, summary, body, note, or issue worth presenting as the latest workspace result.
+- `isComposerOpen`: defaults to `false` only when `hasOutput` is true and `true` otherwise; it also collapses after a newly successful fresh result with usable output. Empty/no-output responses keep the composer open.
 - `isStaleResult`: continues to gate stale messaging and copy disabling.
 
 Add small internal render helpers rather than broad new abstractions:
@@ -156,6 +158,7 @@ The request and freshness flow stays the same:
 6. The workspace renders the latest stored result, marking it stale when the signatures differ.
 
 No generated text, prompt text, or issue text should be written to activity diagnostics beyond the existing privacy-safe request diagnostic behavior.
+This workspace change must not add new diagnostic fields or start persisting full generated content, note bodies, or issue bodies to activity diagnostics. The existing request diagnostic contract remains as-is, including the server's current compact request metadata, request prompt, and title/summary diagnostic detail.
 
 ## Accessibility
 
@@ -174,6 +177,7 @@ Update `src/content/__tests__/ContentRecommender.test.js`:
 - Before any request, the full composer is visible.
 - After a ready result, the result text is visible and the composer is collapsed behind `Refine request`.
 - Clicking `Refine request` reopens the composer with the stored prompt and active mode.
+- An empty/no-output ready response keeps the composer visible so the user can retry without opening `Refine request`.
 - Fresh generated content can still be copied.
 - Stale generated content still shows the stale banner and copy remains disabled.
 - Editorial notes are collapsed by default after a result and can be expanded.
@@ -184,10 +188,11 @@ Update `src/content/__tests__/ContentRecommender.test.js`:
 
 Update the content recommendation section in `tests/e2e/flavor-agent.smoke.spec.js`:
 
-- Generate a draft/edit/critique as today.
+- Generate a draft, then use `Refine request` to reopen the composer before changing mode or prompt for edit, critique, and the error case.
 - Assert the latest result remains visible after generation.
 - Assert the refine control is available after generation.
-- Assert editorial notes are not all dumped open by default; expand them before checking note/issue text.
+- Make the critique mock response include non-empty `content`, assert that primary critique text is visible before expanding supporting notes, then expand editorial notes before checking note/issue text.
+- Re-query the textarea after opening `Refine request`; do not rely on the pre-collapse locator staying visible.
 
 ### Verification Commands
 

@@ -1013,6 +1013,69 @@
   letter-spacing: 0;
 }
 
+.flavor-agent-content-recommender__refine-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--flavor-agent-editor-stroke-subtle);
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  background: var(--flavor-agent-editor-surface-subtle);
+  color: var(--flavor-agent-editor-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.flavor-agent-content-recommender__refine-toggle:hover {
+  border-color: var(--wpds-color-stroke-surface-neutral, #b3b3b3);
+  background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
+}
+
+.flavor-agent-content-recommender__refine-toggle:focus-visible {
+  outline: 2px solid
+    var(--wpds-color-border-focus, var(--flavor-agent-editor-accent));
+  outline-offset: 2px;
+}
+
+.flavor-agent-content-recommender__refine-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.flavor-agent-content-recommender__refine-label {
+  font-size: var(--wpds-font-size-sm, 12px);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.flavor-agent-content-recommender__refine-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.flavor-agent-content-recommender__prompt-summary {
+  min-width: 0;
+  color: var(--flavor-agent-editor-muted);
+  font-size: var(--wpds-font-size-xs, 11px);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flavor-agent-content-recommender__refine-chevron {
+  flex: 0 0 auto;
+  color: var(--flavor-agent-editor-muted);
+  font-size: 10px;
+  line-height: 1;
+}
+
 .flavor-agent-content-recommender__composer
   .flavor-agent-panel__composer-header {
   flex-wrap: wrap;
@@ -1056,6 +1119,22 @@
 .flavor-agent-content-recommender__result
   .flavor-agent-recommendation-hero__why {
   display: none;
+}
+
+.flavor-agent-content-recommender__editorial-notes
+  .flavor-agent-panel__group-body {
+  gap: 8px;
+}
+
+.flavor-agent-content-recommender__note-card,
+.flavor-agent-content-recommender__issue-card {
+  padding: 8px;
+  background: var(--flavor-agent-editor-surface-subtle);
+  box-shadow: none;
+}
+
+.flavor-agent-content-recommender__issue-card .flavor-agent-card__label {
+  font-size: var(--wpds-font-size-sm, 12px);
 }
 
 .flavor-agent-content-recommender__mode-option.components-button:hover:not(

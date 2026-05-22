@@ -776,9 +776,15 @@ final class WordPressAIClient {
 		}
 
 		if ( self::schema_includes_type( $schema, 'object' ) ) {
-			$properties                     = isset( $schema['properties'] ) && is_array( $schema['properties'] )
-				? $schema['properties']
-				: [];
+			$properties = [];
+
+			if ( isset( $schema['properties'] ) && is_array( $schema['properties'] ) ) {
+				$properties = $schema['properties'];
+			} elseif ( isset( $schema['properties'] ) && is_object( $schema['properties'] ) ) {
+				$properties = get_object_vars( $schema['properties'] );
+			}
+
+			$schema['properties']           = [] === $properties ? new \stdClass() : $properties;
 			$schema['required']             = array_keys( $properties );
 			$schema['additionalProperties'] = false;
 		}

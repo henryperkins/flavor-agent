@@ -2526,7 +2526,8 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 					mode: 'critique',
 					title: 'Critique result',
 					summary: 'The opening needs a more concrete first move.',
-					content: '',
+					content:
+						'The draft needs to lead with the real support moment before it broadens into platform change.',
 					notes: [ 'Lead with the real support moment.' ],
 					issues: [
 						{
@@ -2575,9 +2576,9 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 	await dismissWelcomeGuide( page );
 	await ensurePostDocumentSettingsSidebarOpen( page );
 
-	const promptInput = page
-		.locator( '.flavor-agent-content-recommender textarea' )
-		.first();
+	const getPromptInput = () =>
+		page.locator( '.flavor-agent-content-recommender textarea' ).first();
+	const promptInput = getPromptInput();
 
 	await ensurePanelOpen( page, 'Content Recommendations', promptInput );
 	await promptInput.fill( 'Draft from the working title.' );
@@ -2590,9 +2591,15 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 	);
 	await expect( page.getByText( 'Drafted Content E2E Post' ) ).toBeVisible();
 	await expect( page.getByText( 'Retail floors.' ) ).toBeVisible();
+	await expect(
+		page.getByRole( 'button', { name: /Refine request/ } )
+	).toBeVisible();
 
+	await page.getByRole( 'button', { name: /Refine request/ } ).click();
+	const editPromptInput = getPromptInput();
+	await expect( editPromptInput ).toBeVisible();
 	await page.getByRole( 'button', { name: 'Edit', exact: true } ).click();
-	await promptInput.fill( 'Tighten the existing copy.' );
+	await editPromptInput.fill( 'Tighten the existing copy.' );
 	await page
 		.getByRole( 'button', { name: 'Generate Revision Text' } )
 		.click();
@@ -2604,13 +2611,27 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 	);
 	await expect( page.getByText( 'Edited Content E2E Draft' ) ).toBeVisible();
 
+	await page.getByRole( 'button', { name: /Refine request/ } ).click();
+	const critiquePromptInput = getPromptInput();
+	await expect( critiquePromptInput ).toBeVisible();
 	await page.getByRole( 'button', { name: 'Critique', exact: true } ).click();
-	await promptInput.fill( 'Find the weak lines.' );
+	await critiquePromptInput.fill( 'Find the weak lines.' );
 	await page.getByRole( 'button', { name: 'Generate Critique' } ).click();
 
 	await expect.poll( () => capturedRequests.length ).toBe( 3 );
 	expect( capturedRequests[ 2 ].mode ).toBe( 'critique' );
+	await expect( page.getByText( 'Critique result' ) ).toBeVisible();
+	await expect(
+		page.getByText(
+			'The draft needs to lead with the real support moment before it broadens into platform change.'
+		)
+	).toBeVisible();
 	await expect( page.getByText( 'Editorial Notes' ) ).toBeVisible();
+	await expect(
+		page.getByText( 'Lead with the real support moment.' )
+	).toBeHidden();
+
+	await page.getByRole( 'button', { name: /Editorial Notes/ } ).click();
 	await expect(
 		page.getByText( 'Lead with the real support moment.' )
 	).toBeVisible();
@@ -2619,7 +2640,10 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 	).toBeVisible();
 	await expect( page.getByText( 'Too generic.' ) ).toBeVisible();
 
-	await promptInput.fill( 'force an error' );
+	await page.getByRole( 'button', { name: /Refine request/ } ).click();
+	const errorPromptInput = getPromptInput();
+	await expect( errorPromptInput ).toBeVisible();
+	await errorPromptInput.fill( 'force an error' );
 	await page.getByRole( 'button', { name: 'Generate Critique' } ).click();
 
 	await expect.poll( () => capturedRequests.length ).toBe( 4 );

@@ -21,6 +21,7 @@ import {
 	getConnectorApprovalNotice,
 	getSurfaceCapability,
 } from '../utils/capability-flags';
+import { joinClassNames } from '../utils/format-count';
 import { getContentRecommendationFreshness } from './content-recommendation-request';
 
 const SUPPORTED_POST_TYPES = new Set( [ 'post', 'page' ] );
@@ -78,6 +79,16 @@ function formatContextLabel( value = '' ) {
 		.replace( /\b\w/g, ( character ) => character.toUpperCase() );
 }
 
+function summarizePrompt( prompt = '' ) {
+	const summary = String( prompt ).replace( /\s+/g, ' ' ).trim();
+
+	if ( ! summary ) {
+		return 'No prompt saved';
+	}
+
+	return summary.length > 72 ? `${ summary.slice( 0, 69 ) }...` : summary;
+}
+
 function hasRecommendationOutput( recommendation ) {
 	return Boolean(
 		recommendation?.title ||
@@ -87,6 +98,40 @@ function hasRecommendationOutput( recommendation ) {
 				recommendation.notes.length > 0 ) ||
 			( Array.isArray( recommendation?.issues ) &&
 				recommendation.issues.length > 0 )
+	);
+}
+
+function ContentRequestSummary( {
+	modeLabel = '',
+	prompt = '',
+	isOpen = false,
+	onToggle,
+} ) {
+	return (
+		<button
+			type="button"
+			className="flavor-agent-content-recommender__refine-toggle"
+			aria-expanded={ isOpen }
+			onClick={ onToggle }
+		>
+			<span className="flavor-agent-content-recommender__refine-copy">
+				<span className="flavor-agent-content-recommender__refine-label">
+					Refine request
+				</span>
+				<span className="flavor-agent-content-recommender__refine-summary">
+					<span className="flavor-agent-pill">{ modeLabel }</span>
+					<span className="flavor-agent-content-recommender__prompt-summary">
+						{ summarizePrompt( prompt ) }
+					</span>
+				</span>
+			</span>
+			<span
+				className="flavor-agent-content-recommender__refine-chevron"
+				aria-hidden="true"
+			>
+				{ isOpen ? '\u25B2' : '\u25BC' }
+			</span>
+		</button>
 	);
 }
 
@@ -136,13 +181,18 @@ function ContentBody( { content = '' } ) {
 	);
 }
 
-function ContentIssueCard( { issue = {} } ) {
+function ContentIssueCard( { issue = {}, compact = false } ) {
 	if ( ! issue?.original && ! issue?.problem && ! issue?.revision ) {
 		return null;
 	}
 
 	return (
-		<div className="flavor-agent-card">
+		<div
+			className={ joinClassNames(
+				'flavor-agent-card',
+				compact ? 'flavor-agent-content-recommender__issue-card' : ''
+			) }
+		>
 			<div className="flavor-agent-card__label">
 				{ issue?.original || 'Voice issue' }
 			</div>
@@ -201,8 +251,14 @@ export default function ContentRecommender() {
 	}, [] );
 	const { clearContentError, fetchContentRecommendations, setContentMode } =
 		useDispatch( STORE_NAME );
+	const initialHasOutput =
+		contentStatus === 'ready' &&
+		hasRecommendationOutput( contentRecommendation );
 	const [ prompt, setPrompt ] = useState( '' );
 	const [ copiedContent, setCopiedContent ] = useState( '' );
+	const [ isComposerOpen, setIsComposerOpen ] = useState(
+		() => ! initialHasOutput
+	);
 	const hydratedSignatureRef = useRef( '' );
 
 	useEffect( () => {
@@ -274,6 +330,13 @@ export default function ContentRecommender() {
 	const isStaleResult = freshness.isStaleResult;
 	const hasOutput =
 		hasResult && hasRecommendationOutput( contentRecommendation );
+	useEffect( () => {
+		if ( contentStatus !== 'ready' ) {
+			return;
+		}
+
+		setIsComposerOpen( ! hasOutput );
+	}, [ contentRecommendationRequestSignature, contentStatus, hasOutput ] );
 	const statusNotice = useSelect(
 		( select ) =>
 			select( STORE_NAME ).getSurfaceStatusNotice( 'content', {
@@ -376,42 +439,6 @@ export default function ContentRecommender() {
 
 				{ canRecommend && (
 					<>
-						<SurfaceComposer
-							title={ activeMode.title }
-							meta={
-								<ButtonGroup
-									className="flavor-agent-content-recommender__modes"
-									aria-label="Content mode"
-								>
-									{ CONTENT_MODES.map( ( mode ) => (
-										<Button
-											key={ mode }
-											className="flavor-agent-content-recommender__mode-option"
-											variant="tertiary"
-											isPressed={ mode === contentMode }
-											onClick={ () =>
-												setContentMode( mode )
-											}
-										>
-											{ formatModeLabel( mode ) }
-										</Button>
-									) ) }
-								</ButtonGroup>
-							}
-							prompt={ prompt }
-							onPromptChange={ setPrompt }
-							label={ `What should Flavor Agent do with this ${ documentNoun }?` }
-							hideLabelFromVision
-							placeholder={ activeMode.placeholder }
-							helperText={ activeMode.helperText }
-							rows={ 3 }
-							onFetch={ handleFetch }
-							fetchLabel={ activeMode.fetchLabel }
-							loadingLabel="Requesting content…"
-							isLoading={ contentStatus === 'loading' }
-							className="flavor-agent-content-recommender__composer"
-							starterPrompts={ activeMode.starterPrompts }
-						/>
 						{ connectorApprovalNotice && (
 							<CapabilityNotice
 								surface="content"
@@ -433,7 +460,61 @@ export default function ContentRecommender() {
 							/>
 						) }
 
-						{ hasResult && (
+						{ hasOutput && (
+							<ContentRequestSummary
+								modeLabel={ activeMode.label }
+								prompt={ prompt || contentRequestPrompt }
+								isOpen={ isComposerOpen }
+								onToggle={ () =>
+									setIsComposerOpen(
+										( currentValue ) => ! currentValue
+									)
+								}
+							/>
+						) }
+
+						{ ( ! hasOutput || isComposerOpen ) && (
+							<SurfaceComposer
+								title={ activeMode.title }
+								meta={
+									<ButtonGroup
+										className="flavor-agent-content-recommender__modes"
+										aria-label="Content mode"
+									>
+										{ CONTENT_MODES.map( ( mode ) => (
+											<Button
+												key={ mode }
+												className="flavor-agent-content-recommender__mode-option"
+												variant="tertiary"
+												isPressed={
+													mode === contentMode
+												}
+												onClick={ () =>
+													setContentMode( mode )
+												}
+											>
+												{ formatModeLabel( mode ) }
+											</Button>
+										) ) }
+									</ButtonGroup>
+								}
+								prompt={ prompt }
+								onPromptChange={ setPrompt }
+								label={ `What should Flavor Agent do with this ${ documentNoun }?` }
+								hideLabelFromVision
+								placeholder={ activeMode.placeholder }
+								helperText={ activeMode.helperText }
+								rows={ 3 }
+								onFetch={ handleFetch }
+								fetchLabel={ activeMode.fetchLabel }
+								loadingLabel="Requesting content…"
+								isLoading={ contentStatus === 'loading' }
+								className="flavor-agent-content-recommender__composer"
+								starterPrompts={ activeMode.starterPrompts }
+							/>
+						) }
+
+						{ hasOutput && (
 							<RecommendationHero
 								eyebrow=""
 								title={
@@ -484,12 +565,14 @@ export default function ContentRecommender() {
 										.length
 								}
 								countNoun="note"
-								initialOpen={ true }
+								initialOpen={ false }
+								maxVisible={ 3 }
+								className="flavor-agent-content-recommender__editorial-notes"
 							>
 								{ ( contentRecommendation?.notes || [] ).map(
 									( note, index ) => (
 										<div
-											className="flavor-agent-card"
+											className="flavor-agent-card flavor-agent-content-recommender__note-card"
 											key={ `note-${ index }` }
 										>
 											<p className="flavor-agent-card__description">
@@ -503,6 +586,7 @@ export default function ContentRecommender() {
 										<ContentIssueCard
 											key={ `issue-${ index }` }
 											issue={ issue }
+											compact
 										/>
 									)
 								) }
@@ -514,7 +598,7 @@ export default function ContentRecommender() {
 							description={ `Recent requests for this ${ documentNoun }.` }
 							entries={ activityEntries }
 							initialOpen={ false }
-							maxVisible={ 4 }
+							maxVisible={ 1 }
 						/>
 					</>
 				) }
