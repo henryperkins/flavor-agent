@@ -26,7 +26,9 @@
 		"wp:stop": "node scripts/ensure-local-env.js && node scripts/docker-compose.js down",
 		"wp:reset": "node scripts/ensure-local-env.js && node scripts/docker-compose.js down -v",
 		"wp:e2e:wp70:bootstrap": "node scripts/wp70-e2e.js bootstrap",
-		"wp:e2e:wp70:teardown": "node scripts/wp70-e2e.js teardown"
+		"wp:e2e:wp70:teardown": "node scripts/wp70-e2e.js teardown",
+		"preinstall:preflight": "node scripts/preinstall-preflight.js",
+		"setup:deps": "npm run preinstall:preflight && npm ci"
 	},
 	"devDependencies": {
 		"@playwright/test": "1.58.2",
