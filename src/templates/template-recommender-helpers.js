@@ -591,6 +591,8 @@ export function buildTemplateSuggestionViewModel(
 		suggestionKey: suggestion?.suggestionKey || '',
 		label: suggestion?.label || '',
 		description: suggestion?.description || '',
+		recommendationOutcome: suggestion?.recommendationOutcome,
+		ranking: suggestion?.ranking,
 		executionError:
 			rawOperations.length === 0 || executableOperations.ok
 				? ''

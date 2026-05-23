@@ -8,11 +8,13 @@ export const OUTCOME_EVENTS = Object.freeze( [
 	'selected_for_review',
 	'stale_blocked',
 	'validation_blocked',
+	'insert_failed',
 	'pattern_inserted_from_shelf',
 ] );
 
 const OUTCOME_EVENT_SET = new Set( OUTCOME_EVENTS );
 const TOP_SUGGESTION_CAP = 3;
+const RANKING_SET_CAP = 3;
 const MAX_STRING_LENGTH = 191;
 const MAX_LABEL_LENGTH = 96;
 const UINT32_MODULO = 4294967296;
@@ -24,8 +26,30 @@ const OUTCOME_LABELS = Object.freeze( {
 	selected_for_review: 'Recommendation selected for review',
 	stale_blocked: 'Recommendation blocked by stale context',
 	validation_blocked: 'Recommendation blocked by validation',
+	insert_failed: 'Pattern insertion failed',
 	pattern_inserted_from_shelf: 'Pattern inserted from recommendation shelf',
 } );
+
+const RANKING_EVIDENCE_KEYS = new Set( [
+	'prompt_match',
+	'operation_fit',
+	'supports_fit',
+	'section_role_match',
+	'docs_freshness',
+	'pattern_readiness',
+	'visible_scope_match',
+	'native_preset_fit',
+	'accessibility_fit',
+	'design_semantics_fit',
+] );
+
+const RANKING_PENALTY_KEYS = new Set( [
+	'possible_no_op',
+	'weak_prompt_match',
+	'unsupported_control',
+	'stale_docs',
+	'validation_risk',
+] );
 
 function cleanString( value, maxLength = MAX_STRING_LENGTH ) {
 	if ( value === null || value === undefined ) {
@@ -142,6 +166,143 @@ function normalizeTopSuggestionKeys( keys = [] ) {
 	).slice( 0, TOP_SUGGESTION_CAP );
 }
 
+function clampScore( value ) {
+	const number = Number( value );
+
+	if ( ! Number.isFinite( number ) ) {
+		return null;
+	}
+
+	return Math.max( 0, Math.min( 1, number ) );
+}
+
+function normalizeNumericRankingMap( value, allowedKeys ) {
+	if ( ! value || typeof value !== 'object' || Array.isArray( value ) ) {
+		return {};
+	}
+
+	return Object.fromEntries(
+		Object.entries( value )
+			.map( ( [ key, entry ] ) => [
+				cleanCode( key ),
+				clampScore( entry ),
+			] )
+			.filter(
+				( [ key, entry ] ) => allowedKeys.has( key ) && entry !== null
+			)
+			.slice( 0, 12 )
+	);
+}
+
+function normalizeRankingSnapshot( ranking = null ) {
+	if (
+		! ranking ||
+		typeof ranking !== 'object' ||
+		Array.isArray( ranking )
+	) {
+		return null;
+	}
+
+	const snapshot = {};
+
+	for ( const key of [
+		'modelScore',
+		'deterministicScore',
+		'contextScore',
+		'blendedScore',
+	] ) {
+		const score = clampScore( ranking[ key ] );
+		if ( score !== null ) {
+			snapshot[ key ] = score;
+		}
+	}
+
+	const evidence = normalizeNumericRankingMap(
+		ranking.contextEvidence,
+		RANKING_EVIDENCE_KEYS
+	);
+	if ( Object.keys( evidence ).length ) {
+		snapshot.contextEvidence = evidence;
+	}
+
+	const penalties = normalizeNumericRankingMap(
+		ranking.contextPenalties,
+		RANKING_PENALTY_KEYS
+	);
+	if ( Object.keys( penalties ).length ) {
+		snapshot.contextPenalties = penalties;
+	}
+
+	const rankingVersion = cleanCode( ranking.rankingVersion );
+	if ( rankingVersion ) {
+		snapshot.rankingVersion = rankingVersion;
+	}
+
+	return Object.keys( snapshot ).length ? snapshot : null;
+}
+
+function isStableRankingSetSuggestionKey( value ) {
+	const key = cleanString( value );
+
+	return (
+		/^suggestion:[1-9][0-9]*$/i.test( key ) ||
+		/^[a-z0-9][a-z0-9_-]*:(settings|styles|block|suggestions):[1-9][0-9]*$/i.test(
+			key
+		) ||
+		/^hash_[a-z0-9]+$/i.test( key ) ||
+		/^[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_.-]*$/i.test( key )
+	);
+}
+
+function getStableRankingSetSuggestionKey(
+	suggestion = {},
+	fallback = '',
+	index = 0
+) {
+	const fallbackKey = `suggestion:${ index + 1 }`;
+
+	for ( const candidate of [
+		suggestion?.suggestionKey,
+		suggestion?.recommendationOutcome?.suggestionKey,
+		suggestion?.name,
+		fallback,
+	] ) {
+		const key = cleanString( candidate );
+		if ( key && isStableRankingSetSuggestionKey( key ) ) {
+			return key;
+		}
+	}
+
+	return fallbackKey;
+}
+
+function buildRankingSetFromSuggestions( suggestions = [] ) {
+	if ( ! Array.isArray( suggestions ) ) {
+		return [];
+	}
+
+	return suggestions
+		.map( ( suggestion, index ) => {
+			const ranking = normalizeRankingSnapshot( suggestion?.ranking );
+			const suggestionKey = getStableRankingSetSuggestionKey(
+				suggestion,
+				`suggestion:${ index + 1 }`,
+				index
+			);
+
+			if ( ! ranking || ! suggestionKey ) {
+				return null;
+			}
+
+			return {
+				suggestionKey,
+				ranking,
+			};
+		} )
+		.filter( Boolean )
+		.slice( 0, RANKING_SET_CAP );
+}
+
 export function decorateRecommendationPayload(
 	payload = {},
 	{
@@ -202,6 +363,13 @@ export function decorateRecommendationPayload(
 									)
 								)
 							),
+							...( normalizeRankingSnapshot( suggestion.ranking )
+								? {
+										ranking: normalizeRankingSnapshot(
+											suggestion.ranking
+										),
+								  }
+								: {} ),
 						},
 					};
 			  } )
@@ -226,8 +394,16 @@ export function decorateRecommendationPayload(
 }
 
 function getRecommendationListsFromPayload( payload = {} ) {
-	return [ 'settings', 'styles', 'block', 'suggestions' ].flatMap( ( key ) =>
-		Array.isArray( payload?.[ key ] ) ? payload[ key ] : []
+	const listCandidates = [
+		payload?.settings,
+		payload?.styles,
+		payload?.block,
+		payload?.suggestions,
+		payload?.recommendations,
+	];
+
+	return listCandidates.flatMap( ( list ) =>
+		Array.isArray( list ) ? list : []
 	);
 }
 
@@ -259,13 +435,15 @@ export function getRecommendationOutcomeSummaryFromPayload( payload = {} ) {
 		),
 		topSuggestionKeys: normalizeTopSuggestionKeys(
 			suggestions.map( ( suggestion, index ) =>
-				getSuggestionOutcomeKey(
+				getStableRankingSetSuggestionKey(
 					suggestion,
-					`suggestion:${ index + 1 }`
+					`suggestion:${ index + 1 }`,
+					index
 				)
 			)
 		),
 		resultCount: suggestions.length,
+		rankingSet: buildRankingSetFromSuggestions( suggestions ),
 	};
 }
 
@@ -390,6 +568,7 @@ export function buildRecommendationOutcomeEntry( {
 	target = {},
 	patternKey = '',
 	rank = null,
+	rankingSet = [],
 } = {} ) {
 	const safeEvent = cleanCode( event );
 	const safeSurface = cleanCode( surface );
@@ -434,6 +613,16 @@ export function buildRecommendationOutcomeEntry( {
 		targetRank = target.rank;
 	}
 
+	const rankingSnapshot = normalizeRankingSnapshot( suggestion?.ranking );
+	const normalizedRankingSet = buildRankingSetFromSuggestions( rankingSet );
+	let outcomeRanking = {};
+
+	if ( safeEvent === 'shown' && normalizedRankingSet.length ) {
+		outcomeRanking = { rankingSet: normalizedRankingSet };
+	} else if ( safeEvent !== 'shown' && rankingSnapshot ) {
+		outcomeRanking = { ranking: rankingSnapshot };
+	}
+
 	const targetPayload = {
 		recommendationSetId: setId,
 		...( finalSuggestionKey ? { suggestionKey: finalSuggestionKey } : {} ),
@@ -469,6 +658,7 @@ export function buildRecommendationOutcomeEntry( {
 				resultCount: Number.isInteger( identity.resultCount )
 					? Math.max( 0, identity.resultCount )
 					: 0,
+				...outcomeRanking,
 			},
 		},
 		document: safeDocument,
@@ -493,6 +683,7 @@ export function buildRecommendationOutcomeEntry( {
 				suggestionKey: finalSuggestionKey,
 				sourceRequestSignature: identity.sourceRequestSignature,
 				rank: targetPayload.rank ?? null,
+				...outcomeRanking,
 			},
 		},
 	};

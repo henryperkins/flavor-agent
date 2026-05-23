@@ -74,6 +74,7 @@ final class ResponseSchemaTest extends TestCase {
 				[ 'score', 'reason', 'sourceSignals', 'designPrinciple', 'risk' ],
 				$ranking['required'] ?? null
 			);
+			$this->assert_no_contextual_component_fields_in_llm_ranking_schema( $ranking, $surface );
 		}
 	}
 
@@ -89,6 +90,17 @@ final class ResponseSchemaTest extends TestCase {
 			$this->assertSame(
 				[ 'score', 'reason', 'sourceSignals', 'designPrinciple', 'risk' ],
 				$ranking['required'] ?? null
+			);
+			$this->assert_no_contextual_component_fields_in_llm_ranking_schema( $ranking, "block {$list_key}" );
+		}
+	}
+
+	private function assert_no_contextual_component_fields_in_llm_ranking_schema( array $ranking, string $label ): void {
+		foreach ( [ 'modelScore', 'deterministicScore', 'contextScore', 'blendedScore', 'contextEvidence', 'contextPenalties', 'rankingVersion' ] as $field ) {
+			$this->assertArrayNotHasKey(
+				$field,
+				$ranking['properties'] ?? [],
+				"{$label} LLM ranking schema must not expose plugin-generated {$field}."
 			);
 		}
 	}

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Activity;
 
+use FlavorAgent\Support\RankingContract;
+
 final class RecommendationOutcome {
 
 	public const TYPE = 'recommendation_outcome';
@@ -11,6 +13,7 @@ final class RecommendationOutcome {
 	private const MAX_LABEL_LENGTH   = 96;
 	private const MAX_STRING_LENGTH  = 191;
 	private const TOP_SUGGESTION_CAP = 3;
+	private const RANKING_SET_CAP    = 3;
 
 	private const EVENTS = [
 		'shown',
@@ -18,6 +21,7 @@ final class RecommendationOutcome {
 		'stale_blocked',
 		'validation_blocked',
 		'pattern_inserted_from_shelf',
+		'insert_failed',
 	];
 
 	private const SURFACES = [
@@ -37,6 +41,7 @@ final class RecommendationOutcome {
 		'stale_blocked'               => 'Recommendation blocked by stale context',
 		'validation_blocked'          => 'Recommendation blocked by validation',
 		'pattern_inserted_from_shelf' => 'Pattern inserted from recommendation shelf',
+		'insert_failed'               => 'Pattern insertion failed',
 	];
 
 	/**
@@ -111,10 +116,35 @@ final class RecommendationOutcome {
 			),
 			'resultCount'            => self::normalize_non_negative_int( $outcome['resultCount'] ?? 0 ),
 		];
-		$suggestion         = self::bounded_string(
+		if ( 'shown' === $event ) {
+			$ranking_set = self::normalize_ranking_set( $outcome['rankingSet'] ?? [] );
+			if ( [] !== $ranking_set ) {
+				$normalized_outcome['rankingSet'] = $ranking_set;
+			}
+		} else {
+			$ranking = self::normalize_ranking_snapshot( $outcome['ranking'] ?? $entry['ranking'] ?? null );
+			if ( [] !== $ranking ) {
+				$normalized_outcome['ranking'] = $ranking;
+			}
+		}
+		$suggestion             = self::bounded_string(
 			$entry['suggestion'] ?? self::EVENT_LABELS[ $event ],
 			self::MAX_LABEL_LENGTH
 		);
+		$request_recommendation = [
+			'recommendationSetId'    => $set_id,
+			'suggestionKey'          => $suggestion_key,
+			'sourceRequestSignature' => $normalized_outcome['sourceRequestSignature'],
+			'rank'                   => $target['rank'] ?? null,
+		];
+
+		if ( isset( $normalized_outcome['ranking'] ) ) {
+			$request_recommendation['ranking'] = $normalized_outcome['ranking'];
+		}
+
+		if ( isset( $normalized_outcome['rankingSet'] ) ) {
+			$request_recommendation['rankingSet'] = $normalized_outcome['rankingSet'];
+		}
 
 		return [
 			...$entry,
@@ -129,12 +159,7 @@ final class RecommendationOutcome {
 			],
 			'request'         => [
 				'reference'      => self::build_reference( $surface, $event, $set_id, $suggestion_key ),
-				'recommendation' => [
-					'recommendationSetId'    => $set_id,
-					'suggestionKey'          => $suggestion_key,
-					'sourceRequestSignature' => $normalized_outcome['sourceRequestSignature'],
-					'rank'                   => $target['rank'] ?? null,
-				],
+				'recommendation' => $request_recommendation,
 			],
 			'executionResult' => 'diagnostic',
 			'undo'            => [
@@ -142,6 +167,93 @@ final class RecommendationOutcome {
 			],
 			'diagnostic'      => true,
 		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_ranking_snapshot( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$ranking = [];
+		foreach ( [ 'modelScore', 'deterministicScore', 'contextScore', 'blendedScore' ] as $key ) {
+			if ( isset( $value[ $key ] ) && is_scalar( $value[ $key ] ) && is_numeric( $value[ $key ] ) ) {
+				$ranking[ $key ] = max( 0.0, min( 1.0, (float) $value[ $key ] ) );
+			}
+		}
+
+		$evidence = RankingContract::normalize_numeric_ranking_map( $value['contextEvidence'] ?? null, 'evidence' );
+		if ( [] !== $evidence ) {
+			$ranking['contextEvidence'] = $evidence;
+		}
+
+		$penalties = RankingContract::normalize_numeric_ranking_map( $value['contextPenalties'] ?? null, 'penalty' );
+		if ( [] !== $penalties ) {
+			$ranking['contextPenalties'] = $penalties;
+		}
+
+		$version = sanitize_key( (string) ( $value['rankingVersion'] ?? '' ) );
+		if ( '' !== $version ) {
+			$ranking['rankingVersion'] = $version;
+		}
+
+		return $ranking;
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function normalize_ranking_set( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$items = [];
+		foreach ( $value as $index => $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+
+			$suggestion_key = self::normalize_stable_suggestion_key(
+				$item['suggestionKey'] ?? '',
+				(int) $index
+			);
+			$ranking        = self::normalize_ranking_snapshot( $item['ranking'] ?? [] );
+
+			if ( '' === $suggestion_key || [] === $ranking ) {
+				continue;
+			}
+
+			$items[] = [
+				'suggestionKey' => $suggestion_key,
+				'ranking'       => $ranking,
+			];
+
+			if ( count( $items ) >= self::RANKING_SET_CAP ) {
+				break;
+			}
+		}
+
+		return $items;
+	}
+
+	private static function normalize_stable_suggestion_key( mixed $value, int $index ): string {
+		$key = self::bounded_string( $value );
+
+		if ( '' !== $key && self::is_stable_ranking_suggestion_key( $key ) ) {
+			return $key;
+		}
+
+		return 'suggestion:' . ( $index + 1 );
+	}
+
+	private static function is_stable_ranking_suggestion_key( string $key ): bool {
+		return 1 === preg_match( '/^suggestion:[1-9][0-9]*$/i', $key )
+			|| 1 === preg_match( '/^[a-z0-9][a-z0-9_-]*:(settings|styles|block|suggestions):[1-9][0-9]*$/i', $key )
+			|| 1 === preg_match( '/^hash_[a-z0-9]+$/i', $key )
+			|| 1 === preg_match( '/^[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_.-]*$/i', $key );
 	}
 
 	/**

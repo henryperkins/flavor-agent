@@ -163,6 +163,11 @@ function createSelectMap() {
 					( state.blockEditor.blockRoots || {} )[ clientId ] ?? null
 			),
 			getBlockAttributes: mockGetBlockAttributes,
+			getBlocks: jest.fn(
+				( rootClientId ) =>
+					( state.blockEditor.blocks || {} )[ rootClientId ?? '' ] ??
+					[]
+			),
 			canInsertBlockType: ( ...args ) =>
 				mockCanInsertBlockType( ...args ),
 		},
@@ -223,6 +228,7 @@ describe( 'PatternRecommender', () => {
 				blockOrder: { 'root-a': [] },
 				blockRoots: { 'root-a': null },
 				blockAttributes: {},
+				blocks: { 'root-a': [] },
 			},
 			store: {
 				patternError: '',
@@ -249,6 +255,27 @@ describe( 'PatternRecommender', () => {
 		} );
 		mockRecordRecommendationOutcome.mockReset();
 		mockInsertBlocks.mockReset();
+		mockInsertBlocks.mockImplementation(
+			( blocks, index = null, rootClientId = '' ) => {
+				const key = rootClientId ?? '';
+				const current = [
+					...( ( state.blockEditor.blocks || {} )[ key ] || [] ),
+				];
+				const insertionIndex =
+					Number.isInteger( index ) && index >= 0
+						? Math.min( index, current.length )
+						: current.length;
+
+				state.blockEditor.blocks = {
+					...( state.blockEditor.blocks || {} ),
+					[ key ]: [
+						...current.slice( 0, insertionIndex ),
+						...blocks,
+						...current.slice( insertionIndex ),
+					],
+				};
+			}
+		);
 		mockCreateSuccessNotice.mockReset();
 		mockCreateErrorNotice.mockReset();
 		mockCanInsertBlockType.mockReset();
@@ -826,6 +853,11 @@ describe( 'PatternRecommender', () => {
 			{
 				name: 'theme/hero',
 				reason: 'Matches this insertion point.',
+				ranking: {
+					contextScore: 0.91,
+					blendedScore: 0.88,
+					rankingVersion: 'contextual-ranking-v1',
+				},
 			},
 		];
 		state.allowedPatterns = [
@@ -847,6 +879,15 @@ describe( 'PatternRecommender', () => {
 				reason: 'recommendation_set_visible',
 				resultCount: 1,
 				patternKey: expect.any( String ),
+				rankingSet: [
+					expect.objectContaining( {
+						suggestionKey: 'theme/hero',
+						ranking: expect.objectContaining( {
+							contextScore: 0.91,
+							blendedScore: 0.88,
+						} ),
+					} ),
+				],
 			} )
 		);
 	} );
@@ -1240,6 +1281,11 @@ describe( 'PatternRecommender', () => {
 				name: 'theme/hero',
 				score: 0.94,
 				reason: 'Recommended hero pattern.',
+				ranking: {
+					contextScore: 0.91,
+					blendedScore: 0.88,
+					rankingVersion: 'contextual-ranking-v1',
+				},
 			},
 		];
 		state.store.patternRequestSignature =
@@ -1298,6 +1344,12 @@ describe( 'PatternRecommender', () => {
 				surface: 'pattern',
 				reason: 'insert_blocks_success',
 				patternKey: 'theme/hero',
+				suggestion: expect.objectContaining( {
+					name: 'theme/hero',
+					ranking: expect.objectContaining( {
+						contextScore: 0.91,
+					} ),
+				} ),
 			} )
 		);
 		expect(
@@ -1305,6 +1357,186 @@ describe( 'PatternRecommender', () => {
 				insertedOutcomeIndex
 			]
 		).toBeGreaterThan( mockInsertBlocks.mock.invocationCallOrder[ 0 ] );
+	} );
+
+	test( 'records renderability and insertability drops before hiding the shelf', () => {
+		const inserterContainer = document.createElement( 'div' );
+		const blockedPattern = {
+			name: 'theme/template-with-parts',
+			title: 'Template with parts',
+			blocks: [
+				{ name: 'core/template-part', attributes: { slug: 'header' } },
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hidden',
+				score: 0.95,
+				reason: 'Recommended but not visible to Gutenberg.',
+			},
+			{
+				name: blockedPattern.name,
+				score: 0.94,
+				reason: 'Recommended but not insertable here.',
+			},
+		];
+		state.allowedPatterns = [ blockedPattern ];
+		mockCanInsertBlockType.mockReturnValue( false );
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'validation_blocked',
+				surface: 'pattern',
+				reason: 'not_visible_in_inserter',
+				patternKey: 'theme/hidden',
+			} )
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'validation_blocked',
+				surface: 'pattern',
+				reason: 'disallowed_block_types',
+				patternKey: 'theme/template-with-parts',
+			} )
+		);
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'pattern_inserted_from_shelf',
+			} )
+		);
+	} );
+
+	test( 'records insert failure when Gutenberg rejects insertBlocks', async () => {
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+		mockInsertBlocks.mockImplementationOnce( () => {
+			throw new Error( 'Insert rejected' );
+		} );
+
+		renderComponent();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		await act( async () => {
+			insertButton.click();
+		} );
+
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+			'Cannot insert pattern "Hero" because Gutenberg rejected the insertion request.',
+			{
+				type: 'snackbar',
+				id: 'inserter-notice',
+			}
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'insert_failed',
+				surface: 'pattern',
+				reason: 'insert_blocks_exception',
+				patternKey: 'theme/hero',
+			} )
+		);
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'pattern_inserted_from_shelf',
+			} )
+		);
+	} );
+
+	test( 'records insert failure when post-insert verification cannot find inserted blocks', async () => {
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+		mockInsertBlocks.mockImplementationOnce( () => {} );
+
+		renderComponent();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		await act( async () => {
+			insertButton.click();
+		} );
+
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+			'Cannot confirm pattern "Hero" was inserted. Gutenberg did not report the inserted blocks at the target location.',
+			{
+				type: 'snackbar',
+				id: 'inserter-notice',
+			}
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'insert_failed',
+				surface: 'pattern',
+				reason: 'insert_blocks_noop',
+				patternKey: 'theme/hero',
+			} )
+		);
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'pattern_inserted_from_shelf',
+			} )
+		);
 	} );
 
 	test( 'blocks insert when the server-resolved apply context drifts', async () => {

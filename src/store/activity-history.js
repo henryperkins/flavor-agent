@@ -37,6 +37,13 @@ function isRecommendationOutcomeEntry( entry ) {
 	return entry?.type === 'recommendation_outcome';
 }
 
+export function isDiagnosticActivityEntry( entry ) {
+	return (
+		isRequestDiagnosticEntry( entry ) ||
+		isRecommendationOutcomeEntry( entry )
+	);
+}
+
 function getDiagnosticUndoState( timestamp, undo = {} ) {
 	let status = 'review';
 
@@ -880,7 +887,7 @@ export function getResolvedActivityUndoState(
 
 	const baseUndo = getPreliminaryUndoState( entry, runtimeUndoState );
 
-	if ( isRequestDiagnosticEntry( entry ) ) {
+	if ( isDiagnosticActivityEntry( entry ) ) {
 		return getDiagnosticUndoState(
 			normalizeActivityTimestamp( entry?.timestamp ),
 			baseUndo
@@ -945,7 +952,7 @@ export function getResolvedActivityEntries(
 					? preliminaryUndoStates[ entryIndex ]
 					: getPreliminaryUndoState( entry );
 
-			if ( isRequestDiagnosticEntry( entry ) ) {
+			if ( isDiagnosticActivityEntry( entry ) ) {
 				return getDiagnosticUndoState(
 					normalizeActivityTimestamp( entry?.timestamp ),
 					resolvedUndo
@@ -1003,7 +1010,7 @@ export function getLatestAppliedActivity( entries = [] ) {
 			.reverse()
 			.find(
 				( entry ) =>
-					! isRequestDiagnosticEntry( entry ) &&
+					! isDiagnosticActivityEntry( entry ) &&
 					getBaseUndoState( entry ).status !== 'undone'
 			) || null
 	);

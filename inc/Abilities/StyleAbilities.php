@@ -160,7 +160,16 @@ final class StyleAbilities {
 			return $result;
 		}
 
-		$payload = StylePrompt::parse_response( $result, $context );
+		$payload = StylePrompt::parse_response(
+			$result,
+			$context,
+			[
+				'surface'       => $scope_surface,
+				'context'       => $context,
+				'prompt'        => $prompt,
+				'docsGrounding' => DocsGuidanceResult::public_summary( $docs_result ),
+			]
+		);
 
 		if ( is_wp_error( $payload ) ) {
 			return $payload;

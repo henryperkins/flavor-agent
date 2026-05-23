@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status update (2026-05-23):** Pattern-surface contextual ranking is now part of the current contract. The follow-up plan in `docs/superpowers/plans/2026-05-23-contextual-ranking-outcome-remediation.md` added `RecommendationContextScorer` scoring and `contextual_ranking_v1` source-signal emission to `PatternAbilities::recommend_patterns()` so pattern recommendation outcome diagnostics can join contextual evidence the same way the other recommendation surfaces do. Dedicated JS `PatternRecommender` shelf reordering UI remains deferred to a later Pattern Ranking V1 phase.
+
 **Goal:** Feed real WordPress context into recommendation ranking so Flavor Agent can prefer suggestions that match the user prompt, block capabilities, section role, docs freshness, design semantics, accessibility/context fit, and visible scope before recommendations are shown.
 
 **Architecture:** Add one bounded PHP scoring helper that converts existing request context plus each parsed recommendation into a normalized context score and explainable evidence. Keep `RankingContract::blend_score()` as the scoring seam, keep model-facing LLM ranking schemas stable, and enrich recommendation/output diagnostics with plugin-generated component scores that Outcome Signals V1 can join by recommendation set and suggestion key.
@@ -16,7 +18,7 @@ This plan is the next bounded recommendation phase after Outcome Signals V1. It 
 
 In scope:
 
-- Replace parser-family `context => null` inputs to `RankingContract::blend_score()` for block, style, template, template-part, and navigation recommendations.
+- Replace parser-family `context => null` inputs to `RankingContract::blend_score()` for block, style, template, template-part, navigation, and dedicated pattern recommendations.
 - Score only signals already present in request context, parser output, execution contracts, docs-grounding summaries, pattern visibility, native preset metadata, and current design semantics.
 - Emit per-recommendation ranking metadata: `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, and `rankingVersion`.
 - Add compact local outcome ranking diagnostics: per-suggestion events store one ranking snapshot; aggregate `shown` events store a bounded `rankingSet` summary for the top recommendations. Neither shape stores raw prompts or recommendation text.
@@ -33,7 +35,7 @@ Out of scope:
 - New outcome event types such as dismissed or manually_followed.
 - Complex adaptive ranking.
 - Provider-facing `ResponseSchema` expansion for plugin-generated ranking metadata.
-- Dedicated JS PatternRecommender shelf ranking. Pattern ranking is in scope only when pattern suggestions are emitted through PHP parser surfaces such as block, template, and template-part recommendations. Dedicated pattern shelf ranking belongs in a later Pattern Ranking V1 phase. Do not add contextual ranking logic to `PatternAbilities::recommend_patterns()` in this phase; only preserve public schema compatibility for its existing `ranking` field.
+- Dedicated JS `PatternRecommender` shelf reordering UI. `PatternAbilities::recommend_patterns()` does compute contextual ranking metadata for pattern recommendations, but the client shelf still renders the server-provided ordering and does not add an additional JS ranking pass in this phase.
 
 ## Live Code Findings
 
@@ -61,10 +63,10 @@ These corrections must be treated as part of Contextual Ranking V1, not as optio
    - Proof mechanism: Before implementation, inspect `docs/reference/cross-surface-validation-gates.md` and confirm Gate 7 plus Harness Mapping still require browser evidence for shared recommendation changes. During implementation, run `npm run test:e2e:playground` and `npm run test:e2e:wp70`; if either harness is unavailable or known-red, record the exact blocker or waiver in the implementation notes instead of silently skipping it.
    - Remediation instructions: Keep `node scripts/verify.js --skip-e2e` as the non-browser aggregate step, then add explicit Task 10 steps for both Playwright harnesses before diff hygiene. Update Success Criteria so Contextual Ranking V1 cannot be called done without recorded browser outcomes or an explicit waiver.
 
-2. Shared ranking schema and ranking normalization can touch pattern output despite dedicated pattern shelf ranking being out of scope.
-   - Root issue: `Registration::ranking_contract_schema()` is shared by block, style, template, template-part, navigation, and pattern recommendation output schemas, so extending that helper intentionally changes the public pattern schema. Separately, `PatternAbilities::recommend_patterns()` already passes model/ranker-supplied `$rec['ranking']` into `RankingContract::normalize()`. If `RankingContract::normalize()` preserves input-only `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, or `rankingVersion`, a pattern ranker response can spoof plugin-generated contextual metadata even though this phase does not compute PatternRecommender shelf ranking.
-   - Proof mechanism: Extend `RegistrationTest` to assert the new optional ranking fields on all contextual surfaces and on the existing `flavor-agent/recommend-patterns` output schema. Add a `RankingContractTest` regression proving plugin-owned contextual component fields are ignored when they appear only in `$input` and preserved only when supplied by `$defaults`. Add a `PatternAbilitiesTest` regression where the ranker response includes `ranking.contextScore`, `ranking.contextEvidence`, and `rankingVersion: contextual-ranking-v1`; assert the pattern recommendation output does not include those fields. Run `rg -n "RecommendationContextScorer|contextual-ranking-v1" inc/Abilities/PatternAbilities.php` and expect no matches; that command proves dedicated pattern shelf ranking is deferred.
-   - Remediation instructions: Keep the shared public schema compatibility only if the runtime output contract is also guarded. Treat contextual component fields as plugin-owned defaults in `RankingContract::normalize()`; do not preserve those fields from model/provider `$input` alone. Keep parser surfaces passing plugin-generated component fields through the `$defaults` argument. Leave `PatternAbilities::recommend_patterns()` on the shared base ranking contract without computing or emitting Contextual Ranking V1 metadata. If implementation discovers pattern output must not advertise these optional fields at all, split `Registration::ranking_contract_schema()` into base and contextual helpers, update `RegistrationTest`, and keep the runtime spoofing regressions.
+2. Shared ranking schema and ranking normalization now apply to pattern output.
+   - Root issue: `Registration::ranking_contract_schema()` is shared by block, style, template, template-part, navigation, and pattern recommendation output schemas, so extending that helper intentionally changes the public pattern schema. `PatternAbilities::recommend_patterns()` also passes model/ranker-supplied `$rec['ranking']` into `RankingContract::normalize()`. If `RankingContract::normalize()` preserves input-only `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, or `rankingVersion`, a pattern ranker response can spoof plugin-generated contextual metadata.
+   - Proof mechanism: Extend `RegistrationTest` to assert the new optional ranking fields on all contextual surfaces and on the existing `flavor-agent/recommend-patterns` output schema. Add a `RankingContractTest` regression proving plugin-owned contextual component fields are ignored when they appear only in `$input` and preserved only when supplied by `$defaults`. Add `PatternAbilitiesTest` coverage proving pattern recommendations receive plugin-generated contextual defaults and emit `contextual_ranking_v1`, while ranker-supplied contextual fields alone cannot spoof those plugin-owned fields.
+   - Remediation instructions: Keep shared public schema compatibility only when the runtime output contract is also guarded. Treat contextual component fields as plugin-owned defaults in `RankingContract::normalize()`; do not preserve those fields from model/provider `$input` alone. Pattern recommendations may emit Contextual Ranking V1 metadata only from plugin-generated scorer defaults.
 
 3. Block support-fit scoring could miss the live execution-contract shape.
    - Root issue: The plan originally described block style support using `styleSupportPaths` but did not require a test for the live dot-string format returned by `BlockRecommendationExecutionContract::from_context()`. A scorer that only compares array paths would pass style-surface tests while treating supported block style updates as unsupported or unknown.
@@ -80,6 +82,36 @@ These corrections must be treated as part of Contextual Ranking V1, not as optio
    - Root issue: The current response-schema tests assert the strict LLM `ranking` object is nullable and that its required keys are still `score`, `reason`, `sourceSignals`, `designPrinciple`, and `risk`. Those assertions would still pass if optional `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, or `rankingVersion` were accidentally added to `ResponseSchema`, because the tests do not assert those keys are absent.
    - Proof mechanism: Extend `ResponseSchemaTest` with explicit negative assertions on every strict LLM ranking object for block, style, template, template-part, and navigation. The test must fail if any plugin-generated contextual component field appears in the provider-facing schema, while still confirming nullable ranking support and the existing required-key set.
    - Remediation instructions: Do not add contextual component fields to `inc/LLM/ResponseSchema.php`. Keep those fields on plugin-generated ability output schemas only through `Registration::ranking_contract_schema()`. Add a helper such as `assert_no_contextual_component_fields_in_llm_ranking_schema()` in `ResponseSchemaTest` and call it for every ranking schema node currently covered by the nullable-ranking tests.
+
+6. Contextual ordering fixtures can pass or fail for the wrong reason under existing blend weights.
+   - Root issue: `RankingContract::blend_score()` keeps `model: 0.30`, `deterministic: 0.45`, and `context: 0.25`, while several fixtures intentionally give the context-fit suggestion lower model confidence. A fixture that asserts only the top label may prove deterministic scoring, or fail after a harmless deterministic-score tweak without explaining which component moved.
+   - Proof mechanism: In `RecommendationEvaluationTest`, record `modelScore`, `deterministicScore`, `contextScore`, and `blendedScore` for the top and runner-up suggestions. Assert the winner has `blendedScore >= runnerUp.blendedScore + 0.01` and a higher `contextScore` than the runner-up.
+   - Remediation instructions: Add component snapshot assertions to every contextual fixture that materializes at least two suggestions. Include the component snapshot in the assertion message so an implementation failure shows whether model, deterministic, or context scoring caused the result.
+
+7. Penalty thresholds and support-fit precedence are under-specified.
+   - Root issue: The plan defines penalty keys and an aggregate cap, but the exact triggers and values for `weak_prompt_match` and `validation_risk` were not fixed. Support fit also used broad `allowedPanels` and concrete `styleSupportPaths` as peers, which could make an explicitly unsupported path look supported because its broad panel is allowed.
+   - Proof mechanism: `RecommendationContextScorerTest` must assert exact penalty values, penalty cap behavior, and block support-fit precedence where `styleSupportPaths` omits `color.background` while `allowedPanels` includes `color`.
+   - Remediation instructions: Add a fixed V1 penalty table, cap aggregate penalties at `0.35`, and define support precedence so explicit path inventory wins over broad panel fallback.
+
+8. Outcome ranking diagnostics can leak generated text if `suggestionKey` falls back through label-derived identity.
+   - Root issue: Outcome diagnostics must not store raw prompts or generated recommendation text, but a `rankingSet` implementation that calls `getSuggestionOutcomeKey()` can derive fallback identity from labels or other generated suggestion fields.
+   - Proof mechanism: Add PHP and JS regressions with a suggestion label such as `"Use secret launch copy"` and assert neither `ranking`, `rankingSet`, nor `suggestionKey` contains `secret`, `launch`, or `copy`.
+   - Remediation instructions: For aggregate ranking diagnostics, `rankingSet.suggestionKey` must be an existing stable key, an existing `recommendationOutcome.suggestionKey`, or a deterministic set-local fallback such as `suggestion:1`. It must not derive from raw label, description, operation detail, block content, or pattern payload.
+
+9. Ranking evidence and penalty maps should not use generic structured sanitization.
+   - Root issue: `contextEvidence` and `contextPenalties` are plugin-owned compact numeric maps. Passing them through `sanitize_structured_value()` could preserve nested arrays, strings, or raw payload fragments that do not belong in ranking diagnostics.
+   - Proof mechanism: Add `RankingContractTest` coverage proving raw strings, nested payloads, unknown keys, and out-of-range values are dropped or clamped when plugin defaults provide contextual maps.
+   - Remediation instructions: Add `RankingContract::normalize_numeric_ranking_map()` for contextual ranking maps. It must sanitize keys, restrict to known evidence/penalty keys, clamp values to `0.0..1.0`, cap at 12 entries, and drop non-numeric values.
+
+10. Accessibility and design-semantics scoring can overboost generic suggestions.
+    - Root issue: A rule that boosts accessibility when context or suggestion mentions contrast can reward generic copy solely because current design semantics mention contrast.
+    - Proof mechanism: Add scorer tests where context has `mainDesignIssue: contrast`; a generic suggestion remains neutral for `accessibility_fit`, while a suggestion that explicitly addresses contrast/readability receives the boost.
+    - Remediation instructions: Boost accessibility only when the suggestion addresses accessibility/contrast/readability/focus/keyboard concerns or when both context and suggestion share relevant accessibility tokens. Enumerate the negative/contradictory signals that can demote accessibility and design-semantics fit.
+
+11. Rerank, no-op, and duplicate-source-signal edge cases need explicit regressions.
+    - Root issue: `Prompt::rerank_payload()` assumes parser-generated `modelScore` and `deterministicScore` exist; no-op tests do not yet cover partial updates or exact style no-ops; and repeated parse/rerank paths can append `contextual_ranking_v1` twice if source signals are not deduped.
+    - Proof mechanism: Add block rerank tests for legacy payloads with only `ranking.score`, scorer tests for partial no-ops and style no-op boundaries, and parser/rerank tests that assert `contextual_ranking_v1` appears at most once.
+    - Remediation instructions: Define rerank fallbacks, add conservative no-op tests, centralize plugin-owned ranking component keys in `RankingContract`, and dedupe `sourceSignals` through `RankingContract::normalize()` or `array_unique()`.
 
 ## Scoring Contract
 
@@ -140,6 +172,16 @@ Use these bounded penalties. Each value must be a float from `0.0` to `1.0`, and
 ]
 ```
 
+Use these fixed V1 penalty triggers and values:
+
+| Penalty | Trigger | V1 value |
+| --- | --- | ---: |
+| `weak_prompt_match` | Non-empty prompt and computed `prompt_match < 0.35`. | `0.12` |
+| `possible_no_op` | All proposed shallow scalar changes exactly match current state. | `0.25` |
+| `unsupported_control` | Explicit support inventory exists and requested path, panel, pattern, area, or navigation target is absent. | `0.20` |
+| `stale_docs` | Docs status is `stale` or docs freshness includes `stale`. | `0.15` |
+| `validation_risk` | Rejected operations exist, validation/rejection hints are present, or rejected contrast/accessibility hints are present. | `0.15` |
+
 Use fixed V1 weights:
 
 ```php
@@ -171,6 +213,13 @@ $score = max(
 
 Neutral unknowns are `0.55`, not `0.0`, so a missing optional context signal does not punish otherwise valid recommendations.
 
+Support-fit precedence is fixed for V1:
+
+1. If explicit `styleSupportPaths` inventory exists and a suggestion has a concrete style path, concrete path comparison wins.
+2. `executionContract.allowedPanels` is only a fallback when no concrete style path can be extracted.
+3. If both explicit paths and broad panels exist, an absent concrete path receives `supports_fit: 0.45` plus `unsupported_control: 0.20`, even if the broad panel appears allowed.
+4. Missing support inventory returns neutral `supports_fit: 0.55` and no penalty.
+
 ## Files
 
 Create:
@@ -194,6 +243,7 @@ Modify:
 - `inc/Abilities/Registration.php` - expose plugin-generated ranking fields in public ability output schemas.
 - `inc/Activity/RecommendationOutcome.php` - normalize compact local ranking snapshots and aggregate ranking sets in outcome diagnostics.
 - `src/store/recommendation-outcomes.js` - include compact ranking snapshots and aggregate ranking sets when decorating/building outcome entries.
+- `src/store/__tests__/recommendation-outcomes.test.js` - cover JS ranking snapshot, ranking set, and privacy normalization.
 - `tests/phpunit/RankingContractTest.php` - cover ranking component metadata.
 - `tests/phpunit/RegistrationTest.php` - cover output schema fields, including the intentional shared-schema impact on pattern recommendation output.
 - `tests/phpunit/RecommendationOutcomeTest.php` - cover local outcome ranking snapshots.
@@ -267,7 +317,12 @@ Task 1 must include at least these extra scorer tests:
 - Unsupported paths are penalized only when support inventory exists.
 - Missing support inventory returns neutral `supports_fit`.
 - Block support paths compare live execution-contract dot strings such as `color.background` against block style update paths and do not require array-shaped support paths.
+- Block style support uses explicit path inventory before broad `allowedPanels`, so `style.color.background` is unsupported when `styleSupportPaths` omits `color.background` even if `allowedPanels` contains `color`.
 - Missing visible-scope inventory returns neutral `visible_scope_match: 0.55`, not a positive boost.
+- Generic suggestions are not boosted for accessibility solely because the context mentions contrast.
+- Partial no-ops, where at least one proposed shallow scalar value differs from current state, do not create `possible_no_op`.
+- Style no-op detection is exact: exact current style value matches are penalized, missing current values are not penalized, and preset-to-raw-color equivalence is not treated as a no-op in V1.
+- Aggregate penalty capping is proven by a case whose individual penalties exceed `0.35`.
 
 ## Task 1: Add Context Scorer Tests
 
@@ -568,66 +623,93 @@ final class RecommendationContextScorerTest extends TestCase {
 			]
 		);
 
-	$this->assertSame( 0.55, $unknown['evidence']['supports_fit'] );
-	$this->assertSame( 0.0, $unknown['penalties']['unsupported_control'] );
-	$this->assertLessThan( $unknown['evidence']['supports_fit'], $known_absent['evidence']['supports_fit'] );
-	$this->assertGreaterThan( 0.0, $known_absent['penalties']['unsupported_control'] );
-}
+		$this->assertSame( 0.55, $unknown['evidence']['supports_fit'] );
+		$this->assertSame( 0.0, $unknown['penalties']['unsupported_control'] );
+		$this->assertLessThan( $unknown['evidence']['supports_fit'], $known_absent['evidence']['supports_fit'] );
+		$this->assertGreaterThan( 0.0, $known_absent['penalties']['unsupported_control'] );
+	}
 
-public function test_block_support_fit_accepts_execution_contract_dot_style_paths(): void {
-	$supported = RecommendationContextScorer::score(
-		[
-			'surface'           => 'block',
-			'group'             => 'styles',
-			'suggestion'        => [
-				'label'            => 'Use accent background',
-				'attributeUpdates' => [
-					'style' => [
-						'color' => [
-							'background' => 'var:preset|color|accent',
+	public function test_block_support_fit_accepts_execution_contract_dot_style_paths(): void {
+		$supported = RecommendationContextScorer::score(
+			[
+				'surface'           => 'block',
+				'group'             => 'styles',
+				'suggestion'        => [
+					'label'            => 'Use accent background',
+					'attributeUpdates' => [
+						'style' => [
+							'color' => [
+								'background' => 'var:preset|color|accent',
+							],
 						],
 					],
 				],
-			],
-			'executionContract' => [
-				'panelMappingKnown' => true,
-				'allowedPanels'     => [ 'color' ],
-				'styleSupportPaths' => [ 'color.background' ],
-			],
-		]
-	);
+				'executionContract' => [
+					'panelMappingKnown' => true,
+					'allowedPanels'     => [ 'color' ],
+					'styleSupportPaths' => [ 'color.background' ],
+				],
+			]
+		);
 
-	$unsupported = RecommendationContextScorer::score(
-		[
-			'surface'           => 'block',
-			'group'             => 'styles',
-			'suggestion'        => [
-				'label'            => 'Use accent background',
-				'attributeUpdates' => [
-					'style' => [
-						'color' => [
-							'background' => 'var:preset|color|accent',
+		$unsupported = RecommendationContextScorer::score(
+			[
+				'surface'           => 'block',
+				'group'             => 'styles',
+				'suggestion'        => [
+					'label'            => 'Use accent background',
+					'attributeUpdates' => [
+						'style' => [
+							'color' => [
+								'background' => 'var:preset|color|accent',
+							],
 						],
 					],
 				],
-			],
-			'executionContract' => [
-				'panelMappingKnown' => true,
-				'allowedPanels'     => [ 'typography' ],
-				'styleSupportPaths' => [ 'typography.fontSize' ],
-			],
-		]
-	);
+				'executionContract' => [
+					'panelMappingKnown' => true,
+					'allowedPanels'     => [ 'typography' ],
+					'styleSupportPaths' => [ 'typography.fontSize' ],
+				],
+			]
+		);
 
-	$this->assertSame( 1.0, $supported['evidence']['supports_fit'] );
-	$this->assertSame( 0.0, $supported['penalties']['unsupported_control'] );
-	$this->assertSame( 0.45, $unsupported['evidence']['supports_fit'] );
-	$this->assertGreaterThan( 0.0, $unsupported['penalties']['unsupported_control'] );
-}
+		$this->assertSame( 1.0, $supported['evidence']['supports_fit'] );
+		$this->assertSame( 0.0, $supported['penalties']['unsupported_control'] );
+		$this->assertSame( 0.45, $unsupported['evidence']['supports_fit'] );
+		$this->assertGreaterThan( 0.0, $unsupported['penalties']['unsupported_control'] );
+	}
 
-public function test_visible_scope_is_neutral_without_inventory_and_demotes_known_absent_patterns(): void {
-	$unknown = RecommendationContextScorer::score(
-		[
+	public function test_block_support_fit_prefers_explicit_paths_over_allowed_panels(): void {
+		$result = RecommendationContextScorer::score(
+			[
+				'surface'           => 'block',
+				'group'             => 'styles',
+				'suggestion'        => [
+					'label'            => 'Use accent background',
+					'attributeUpdates' => [
+						'style' => [
+							'color' => [
+								'background' => 'var:preset|color|accent',
+							],
+						],
+					],
+				],
+				'executionContract' => [
+					'panelMappingKnown' => true,
+					'allowedPanels'     => [ 'color' ],
+					'styleSupportPaths' => [ 'typography.fontSize' ],
+				],
+			]
+		);
+
+		$this->assertSame( 0.45, $result['evidence']['supports_fit'] );
+		$this->assertSame( 0.2, $result['penalties']['unsupported_control'] );
+	}
+
+	public function test_visible_scope_is_neutral_without_inventory_and_demotes_known_absent_patterns(): void {
+		$unknown = RecommendationContextScorer::score(
+			[
 				'surface'    => 'template',
 				'suggestion' => [
 					'label'              => 'Use hero pattern',
@@ -661,6 +743,222 @@ public function test_visible_scope_is_neutral_without_inventory_and_demotes_know
 		$this->assertSame( 0.55, $unknown['evidence']['pattern_readiness'] );
 		$this->assertLessThan( $unknown['evidence']['visible_scope_match'], $known_absent['evidence']['visible_scope_match'] );
 		$this->assertLessThan( $unknown['evidence']['pattern_readiness'], $known_absent['evidence']['pattern_readiness'] );
+	}
+
+	public function test_partial_attribute_changes_are_not_marked_as_no_ops(): void {
+		$result = RecommendationContextScorer::score(
+			[
+				'surface'    => 'block',
+				'group'      => 'block',
+				'suggestion' => [
+					'label'            => 'Widen heading alignment',
+					'attributeUpdates' => [
+						'level' => 2,
+						'align' => 'wide',
+					],
+				],
+				'context'    => [
+					'block' => [
+						'name'              => 'core/heading',
+						'currentAttributes' => [
+							'level' => 2,
+							'align' => 'center',
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( 0.0, $result['penalties']['possible_no_op'] );
+	}
+
+	public function test_style_no_op_detection_is_exact_and_conservative(): void {
+		$exact = RecommendationContextScorer::score(
+			[
+				'surface'    => 'style',
+				'suggestion' => [
+					'label'      => 'Keep current background',
+					'operations' => [
+						[
+							'type'      => 'set_styles',
+							'path'      => [ 'color', 'background' ],
+							'value'     => '#123456',
+							'valueType' => 'freeform',
+						],
+					],
+				],
+				'context'    => [
+					'styleContext' => [
+						'currentConfig' => [
+							'styles' => [
+								'color' => [
+									'background' => '#123456',
+								],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$missing_current = RecommendationContextScorer::score(
+			[
+				'surface'    => 'style',
+				'suggestion' => [
+					'label'      => 'Set background',
+					'operations' => [
+						[
+							'type'      => 'set_styles',
+							'path'      => [ 'color', 'background' ],
+							'value'     => '#123456',
+							'valueType' => 'freeform',
+						],
+					],
+				],
+				'context'    => [
+					'styleContext' => [
+						'currentConfig' => [
+							'styles' => [],
+						],
+					],
+				],
+			]
+		);
+
+		$preset_to_raw = RecommendationContextScorer::score(
+			[
+				'surface'    => 'style',
+				'suggestion' => [
+					'label'      => 'Use accent background',
+					'operations' => [
+						[
+							'type'      => 'set_styles',
+							'path'      => [ 'color', 'background' ],
+							'value'     => 'var:preset|color|accent',
+							'valueType' => 'preset',
+						],
+					],
+				],
+				'context'    => [
+					'styleContext' => [
+						'currentConfig' => [
+							'styles' => [
+								'color' => [
+									'background' => '#f5f5f5',
+								],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertGreaterThan( 0.0, $exact['penalties']['possible_no_op'] );
+		$this->assertSame( 0.0, $missing_current['penalties']['possible_no_op'] );
+		$this->assertSame( 0.0, $preset_to_raw['penalties']['possible_no_op'] );
+	}
+
+	public function test_accessibility_fit_requires_suggestion_match_not_context_only(): void {
+		$generic = RecommendationContextScorer::score(
+			[
+				'surface'    => 'style',
+				'suggestion' => [
+					'label'       => 'General polish',
+					'description' => 'Make the section feel more refined.',
+				],
+				'context'    => self::style_context(),
+			]
+		);
+
+		$contrast = RecommendationContextScorer::score(
+			[
+				'surface'    => 'style',
+				'suggestion' => [
+					'label'       => 'Improve color contrast',
+					'description' => 'Increase readable contrast in the hero section.',
+				],
+				'context'    => self::style_context(),
+			]
+		);
+
+		$this->assertSame( 0.55, $generic['evidence']['accessibility_fit'] );
+		$this->assertGreaterThan( $generic['evidence']['accessibility_fit'], $contrast['evidence']['accessibility_fit'] );
+	}
+
+	public function test_penalty_sum_is_capped_before_final_score(): void {
+		$result = RecommendationContextScorer::score(
+			[
+				'surface'       => 'style',
+				'prompt'        => 'Make the hero use the accent background',
+				'suggestion'    => [
+					'label'              => 'Keep current unsupported spacing',
+					'description'        => 'Generic adjustment.',
+					'operations'         => [
+						[
+							'type'      => 'set_styles',
+							'path'      => [ 'spacing', 'margin' ],
+							'value'     => '10px',
+							'valueType' => 'freeform',
+						],
+					],
+					'rejectedOperations' => [
+						[ 'code' => 'unsupported_control' ],
+					],
+				],
+				'context'       => [
+					'styleContext' => [
+						'supportedStylePaths' => [
+							[ 'path' => [ 'color', 'background' ] ],
+						],
+						'currentConfig'       => [
+							'styles' => [
+								'spacing' => [
+									'margin' => '10px',
+								],
+							],
+						],
+					],
+				],
+				'docsGrounding' => [
+					'status'    => 'stale',
+					'freshness' => [ 'stale' ],
+				],
+			]
+		);
+
+		$weighted_score = self::weighted_evidence_score( $result['evidence'] );
+		$penalty_sum    = array_sum( $result['penalties'] );
+		$uncapped_score = max( 0.0, min( 1.0, round( $weighted_score - $penalty_sum, 4 ) ) );
+		$capped_score   = max( 0.0, min( 1.0, round( $weighted_score - min( 0.35, $penalty_sum ), 4 ) ) );
+
+		$this->assertGreaterThan( 0.35, $penalty_sum );
+		$this->assertSame( $capped_score, $result['score'] );
+		$this->assertGreaterThan( $uncapped_score, $result['score'] );
+	}
+
+	/**
+	 * @param array<string, float> $evidence
+	 */
+	private static function weighted_evidence_score( array $evidence ): float {
+		$weights = [
+			'prompt_match'         => 0.18,
+			'operation_fit'        => 0.18,
+			'supports_fit'         => 0.16,
+			'section_role_match'   => 0.12,
+			'docs_freshness'       => 0.12,
+			'pattern_readiness'    => 0.08,
+			'visible_scope_match'  => 0.06,
+			'native_preset_fit'    => 0.06,
+			'accessibility_fit'    => 0.02,
+			'design_semantics_fit' => 0.02,
+		];
+
+		$score = 0.0;
+		foreach ( $weights as $key => $weight ) {
+			$score += (float) ( $evidence[ $key ] ?? 0.55 ) * $weight;
+		}
+
+		return round( $score, 4 );
 	}
 
 	/**
@@ -728,6 +1026,7 @@ Create `inc/Support/RecommendationContextScorer.php` with deterministic scoring.
 - Use unique tokens for weighted prompt-coverage scoring.
 - Never include raw tokens, raw prompts, raw generated text, or context text in returned evidence, penalties, ranking metadata, or diagnostics.
 - Score prompt match from token overlap without letting long suggestion/context text dilute direct prompt matches: blank prompt returns `0.55`; otherwise compute `prompt_coverage = overlap / prompt_token_count` and `candidate_coverage = overlap / candidate_token_count` using `0.0` candidate coverage when the candidate side has no tokens, then return `0.8 * prompt_coverage + 0.2 * candidate_coverage`, clamped and rounded through `score_value()`. This is intentionally not raw Jaccard because the candidate side includes label, description, category, operations, and context tokens.
+- Apply `weak_prompt_match: 0.12` only when the prompt is non-empty and computed `prompt_match < 0.35`.
 - Score docs freshness from public docs summaries:
   - `grounded` with `current` freshness or current release coverage: `1.0`
   - `grounded`: `0.9`
@@ -736,18 +1035,21 @@ Create `inc/Support/RecommendationContextScorer.php` with deterministic scoring.
   - anything else: `0.55`
 - Score preset fit as `1.0` for style operations with `valueType: preset`, `0.75` for style operations that omit a style value, `0.45` for style operations with freeform values when matching presets exist, and `0.65` for style operations with freeform values when no matching preset family exists. If no style operation or style value is involved, return neutral `0.55`.
 - Score operations fit as `1.0` for accepted operations/changes/attribute updates, `0.7` for advisory pattern/block hints, `0.55` for pure advisory text, and `0.25` when rejected operations exist.
+- Apply `validation_risk: 0.15` when `rejectedOperations` is non-empty or sanitized validation/rejection metadata indicates an invalid, stale, unsupported, unsafe, contrast, or accessibility rejection. Do not return validation messages or raw rejection text in scoring output.
 - Score support fit from surviving parser output plus known support context:
   - Canonicalize support paths before comparison: array paths like `[ 'color', 'background' ]`, dot strings like `color.background`, block `attributeUpdates.style.color.background`, and operation `path` arrays must all compare as the same dot-path form.
-  - `1.0` when an operation path is present in `supportedStylePaths`, when block update panel is allowed by `executionContract.allowedPanels`, or when template/template-part operation uses an allowed area/pattern.
+  - `1.0` when an operation path is present in `supportedStylePaths`, when no concrete path can be extracted but the block update panel is allowed by `executionContract.allowedPanels`, or when template/template-part operation uses an allowed area/pattern.
   - `0.45` plus `unsupported_control` penalty `0.2` when an operation references a style path, panel, area, or pattern absent from known context.
   - `0.55` when no support inventory is available.
+  - If explicit `styleSupportPaths` inventory exists and a concrete style path can be extracted, the concrete path result wins over broad panel support. Broad `allowedPanels` is a fallback only when no concrete path exists.
 - Score section role match by comparing `designSemantics.sectionRole`, block structural identity role/location, template type, template-part area, and suggestion tokens.
 - Score pattern readiness as `1.0` when suggested pattern names exist in `context.patterns`, `context.visiblePatternNames`, or block operation allowed patterns; `0.45` when pattern suggestions are present but not visible/known; `0.55` when no pattern is involved.
 - Score visible scope match as `1.0` when suggested pattern or target names are visible in the current context, `0.55` when the surface has no visible-scope inventory, and `0.45` when a suggestion points outside visible scope.
-- Score accessibility fit as `0.9` when context or suggestion mentions contrast/accessibility and does not contain known negative signals; `0.45` plus `validation_risk` `0.1` for rejected contrast/validation hints; `0.55` otherwise.
-- Score design semantics fit as `0.85` when suggestion tokens match `mainDesignIssue`, `sectionRole`, `contrastContext`, `layoutRhythm`, or `typographyRole`; `0.55` otherwise; `0.35` when semantics include negative signals directly contradicted by suggestion tokens.
+- Score accessibility fit as `0.9` only when suggestion tokens address accessibility/contrast/readability/focus/keyboard concerns or when both context and suggestion share relevant accessibility tokens. Do not boost a generic suggestion solely because `designSemantics.mainDesignIssue` is `contrast`. Return `0.45` plus `validation_risk: 0.15` when rejected operations or sanitized validation hints include contrast/accessibility rejection signals; return `0.55` otherwise.
+- Score design semantics fit as `0.85` when suggestion tokens match `mainDesignIssue`, `sectionRole`, `contrastContext`, `layoutRhythm`, or `typographyRole`; `0.55` otherwise. Return `0.35` only for direct, enumerated contradictions: low-contrast context plus tokens such as `reduce contrast` or `low contrast`; legibility or too-small text context plus tokens such as `smaller`, `tiny`, or `decrease font`; crowded/overflow context plus tokens such as `dense`, `tight`, or `add more`.
 - Detect possible no-ops by comparing `suggestion.attributeUpdates` with `context.block.currentAttributes` and by comparing style operation values to `styleContext.currentConfig.styles`; apply `possible_no_op` penalty `0.25` only when all proposed changes exactly match current state after shallow scalar normalization.
-- Do not mark no-ops for preset-to-raw-color equivalence, numeric-string versus numeric equivalence inside complex structures, unordered array equivalence, or missing default values in V1. Those belong in later design diagnosis/ranking phases.
+- Do not mark no-ops for partial matches where at least one proposed shallow scalar changes, preset-to-raw-color equivalence, numeric-string versus numeric equivalence inside complex structures, unordered array equivalence, missing current values, or missing default values in V1. Those belong in later design diagnosis/ranking phases.
+- Compute final score with `min( 0.35, $penalty_sum )`; individual penalties may sum above `0.35` but the aggregate subtraction must not.
 
 - [ ] **Step 3: Run the scorer test**
 
@@ -871,6 +1173,38 @@ public function test_normalize_ignores_contextual_component_metadata_from_model_
 	$this->assertArrayNotHasKey( 'contextPenalties', $result );
 	$this->assertArrayNotHasKey( 'rankingVersion', $result );
 }
+
+public function test_normalize_bounds_contextual_numeric_maps_and_drops_raw_payloads(): void {
+	$result = RankingContract::normalize(
+		[],
+		[
+			'score'            => 0.82,
+			'contextEvidence'  => [
+				'prompt_match'   => 1.2,
+				'raw_text'       => 'Use secret launch copy',
+				'nested_payload' => [ 'label' => 'Use secret launch copy' ],
+				'bad key!'       => 0.4,
+			],
+			'contextPenalties' => [
+				'stale_docs'      => -1,
+				'possible_no_op'  => 0.25,
+				'raw_text'        => 'Use secret launch copy',
+				'nested_payload'  => [ 'label' => 'Use secret launch copy' ],
+			],
+			'rankingVersion'   => 'contextual-ranking-v1',
+		]
+	);
+
+	$this->assertSame( [ 'prompt_match' => 1.0 ], $result['contextEvidence'] );
+	$this->assertSame(
+		[
+			'stale_docs'     => 0.0,
+			'possible_no_op' => 0.25,
+		],
+		$result['contextPenalties']
+	);
+	$this->assertStringNotContainsString( 'secret', wp_json_encode( $result ) );
+}
 ```
 
 In `tests/phpunit/PatternAbilitiesTest.php`, add a runtime regression that proves pattern ranker output cannot spoof contextual ranking metadata while the shared output schema remains compatible:
@@ -927,7 +1261,10 @@ public function test_recommend_patterns_does_not_emit_contextual_ranking_metadat
 	$this->assertArrayNotHasKey( 'contextEvidence', $ranking );
 	$this->assertArrayNotHasKey( 'contextPenalties', $ranking );
 	$this->assertArrayNotHasKey( 'rankingVersion', $ranking );
-	$this->assertSame( [ 'qdrant_semantic', 'llm_ranker' ], $ranking['sourceSignals'] ?? null );
+	$source_signals = is_array( $ranking['sourceSignals'] ?? null ) ? $ranking['sourceSignals'] : [];
+	$this->assertContains( 'qdrant_semantic', $source_signals );
+	$this->assertContains( 'llm_ranker', $source_signals );
+	$this->assertNotContains( 'contextual_ranking_v1', $source_signals );
 }
 ```
 
@@ -1013,13 +1350,38 @@ Expected: FAIL because the new fields are not normalized or declared yet, and be
 
 Update `RankingContract::normalize()` to:
 
+- Add one source of truth for plugin-owned contextual ranking keys:
+
+```php
+public const PLUGIN_COMPONENT_KEYS = [
+	'modelScore',
+	'deterministicScore',
+	'contextScore',
+	'blendedScore',
+	'contextEvidence',
+	'contextPenalties',
+	'rankingVersion',
+];
+```
+
 - Preserve `modelScore` as `float|null`.
 - Preserve `deterministicScore`, `contextScore`, and `blendedScore` as clamped floats when present.
-- Preserve `contextEvidence` and `contextPenalties` through `sanitize_structured_value()`.
+- Preserve `contextEvidence` and `contextPenalties` only through a dedicated numeric map normalizer:
+
+```php
+/**
+ * @param array<int, string> $allowed_keys
+ * @return array<string, float>
+ */
+private static function normalize_numeric_ranking_map( mixed $value, array $allowed_keys = [] ): array
+```
+
+The helper must sanitize keys with `sanitize_key()`, optionally restrict keys to known evidence or penalty keys, clamp numeric values to `0.0..1.0`, cap maps at 12 entries, and drop strings, arrays, objects, and unknown raw payloads. Do not use `sanitize_structured_value()` for `contextEvidence` or `contextPenalties`.
 - Preserve `rankingVersion` as a sanitized string.
 - Treat `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, and `rankingVersion` as plugin-generated fields. When both `$input` and `$defaults` provide those keys, `$defaults` must win so provider/model text cannot spoof plugin component scores or diagnostics.
 - Ignore `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, and `rankingVersion` when they appear only in `$input`. These fields must be emitted only by plugin code through `$defaults`, which keeps `PatternAbilities::recommend_patterns()` from echoing contextual metadata supplied by the pattern ranker.
 - Keep `score` as the primary backward-compatible blended ranking value.
+- Use `RankingContract::PLUGIN_COMPONENT_KEYS` anywhere parsers or tests need to strip model-supplied contextual component fields, instead of repeating the key list by hand.
 
 Do not change `RankingContract::blend_score()` weights in this phase.
 
@@ -1067,15 +1429,16 @@ composer run test:php -- --filter 'RankingContractTest|RegistrationTest|PatternA
 
 Expected: PASS. `PatternAbilitiesTest` must prove a ranker-supplied `ranking.contextScore`, `ranking.contextEvidence`, `ranking.contextPenalties`, or `rankingVersion` does not survive in pattern recommendation output.
 
-- [ ] **Step 6: Prove dedicated pattern shelf ranking stayed out of scope**
+- [ ] **Step 6: Prove dedicated pattern recommendations emit plugin-generated contextual ranking**
 
 Run:
 
 ```bash
-rg -n "RecommendationContextScorer|contextual-ranking-v1" inc/Abilities/PatternAbilities.php
+rg -n "RecommendationContextScorer|contextual_ranking_v1|contextual-ranking-v1" inc/Abilities/PatternAbilities.php tests/phpunit/PatternAbilitiesTest.php
+composer run test:php -- --filter PatternAbilitiesTest
 ```
 
-Expected: no matches. The shared pattern output schema may advertise optional ranking component fields through `Registration::ranking_contract_schema()`, but `PatternAbilities::recommend_patterns()` must not compute Contextual Ranking V1 metadata in this phase.
+Expected: PASS. `inc/Abilities/PatternAbilities.php` should import and call `RecommendationContextScorer`, pattern recommendation output should include plugin-generated `contextScore`, `blendedScore`, `rankingVersion: contextual-ranking-v1`, and `contextual_ranking_v1`, and `PatternAbilitiesTest` should still prove model/provider-supplied contextual component fields cannot spoof plugin-owned defaults.
 
 ## Task 4: Wire Style, Template, Template-Part, and Navigation Parsers
 
@@ -1164,12 +1527,12 @@ Also append `contextual_ranking_v1` to `sourceSignals`.
 Before passing `$ranking_metadata` into `RankingContract::normalize()`, unset any model-supplied plugin component keys:
 
 ```php
-foreach ( [ 'modelScore', 'deterministicScore', 'contextScore', 'blendedScore', 'contextEvidence', 'contextPenalties', 'rankingVersion' ] as $plugin_owned_key ) {
+foreach ( RankingContract::PLUGIN_COMPONENT_KEYS as $plugin_owned_key ) {
 	unset( $ranking_metadata[ $plugin_owned_key ] );
 }
 ```
 
-Add at least one parser-family regression proving a model-supplied `contextScore`, `contextEvidence`, or `rankingVersion` does not override the plugin-generated values.
+When adding `contextual_ranking_v1` to `sourceSignals`, normalize through `RankingContract::normalize()` or `array_values( array_unique( ... ) )` so rerank and parse paths do not duplicate the signal. Add at least one parser-family regression proving a model-supplied `contextScore`, `contextEvidence`, or `rankingVersion` does not override the plugin-generated values and that `sourceSignals` contains `contextual_ranking_v1` at most once.
 
 - [ ] **Step 4: Pass prompt and docs summaries from abilities**
 
@@ -1280,7 +1643,7 @@ $context_result = RecommendationContextScorer::score(
 
 Replace `context => null` in the `blend_score()` call with `$context_result['score']`, and emit the component metadata listed in Task 4.
 
-Before passing `$ranking_metadata` into `RankingContract::normalize()`, unset the same plugin-owned component keys listed in Task 4 so block model output cannot spoof `contextScore`, `contextEvidence`, or `rankingVersion`.
+Before passing `$ranking_metadata` into `RankingContract::normalize()`, unset `RankingContract::PLUGIN_COMPONENT_KEYS` so block model output cannot spoof `contextScore`, `contextEvidence`, or `rankingVersion`.
 
 - [ ] **Step 3: Add final rerank helper after block enforcement**
 
@@ -1314,6 +1677,11 @@ public static function rerank_payload( array $payload, array $context = [], arra
 Implement private `rerank_suggestions()` so it:
 
 - Reads `modelScore` and `deterministicScore` from existing ranking metadata.
+- Uses robust fallbacks for legacy or malformed payloads:
+  - `modelScore`: existing `ranking.modelScore` when numeric, else existing `ranking.score` when numeric, else `null`.
+  - `deterministicScore`: existing `ranking.deterministicScore` when numeric, else existing `ranking.score` when numeric, else neutral `0.55`.
+  - `contextScore`: always recompute from final `operations` and `rejectedOperations`.
+  - Plugin-owned component fields are always regenerated from `$defaults`, never preserved from payload input.
 - Recomputes `contextScore` with final `operations` and `rejectedOperations`.
 - Re-blends `model`, `deterministic`, and `context`.
 - Replaces ranking component fields while preserving model-supplied `reason`, `designPrinciple`, and `risk`.
@@ -1351,6 +1719,8 @@ In `tests/phpunit/PromptRulesTest.php`, add a direct `Prompt::rerank_payload()` 
 
 Assert the accepted operation moves first after rerank, `ranking.contextPenalties.validation_risk` is greater for the rejected suggestion, and model-supplied plugin component fields do not override recomputed values.
 
+Add a legacy-payload rerank case where one suggestion has only `ranking.score` and no `modelScore`/`deterministicScore`; assert rerank still emits fresh `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, and `rankingVersion` without notices.
+
 In `tests/phpunit/BlockAbilitiesTest.php`, add an ability-level regression that exercises the production flow through `BlockAbilities::recommend_block()` with a mocked block recommendation response. Assert the returned payload has:
 
 - parser metadata generated from prompt/docs/execution context,
@@ -1372,6 +1742,7 @@ Expected: PASS after updating exact ranking assertions.
 **Files:**
 
 - Modify: `src/store/recommendation-outcomes.js`
+- Modify: `src/store/__tests__/recommendation-outcomes.test.js`
 - Modify: `inc/Activity/RecommendationOutcome.php`
 - Modify: `tests/phpunit/RecommendationOutcomeTest.php`
 - Modify: `docs/reference/activity-state-machine.md`
@@ -1409,6 +1780,15 @@ function normalizeRankingSnapshot( ranking = null ) {
 	};
 }
 
+function normalizeRankingSuggestionKey( value = '', fallback = '' ) {
+	const key = cleanString( value );
+	if ( /^[A-Za-z0-9:_./-]+$/.test( key ) ) {
+		return key;
+	}
+
+	return cleanString( fallback );
+}
+
 function normalizeRankingSet( suggestions = [] ) {
 	if ( ! Array.isArray( suggestions ) ) {
 		return [];
@@ -1423,8 +1803,14 @@ function normalizeRankingSet( suggestions = [] ) {
 
 			const ranking = normalizeRankingSnapshot( suggestion.ranking );
 			const suggestionKey =
-				cleanString( suggestion.suggestionKey ) ||
-				getSuggestionOutcomeKey( suggestion, `suggestion:${ index + 1 }` );
+				normalizeRankingSuggestionKey(
+					suggestion?.recommendationOutcome?.suggestionKey,
+					''
+				) ||
+				normalizeRankingSuggestionKey(
+					suggestion.suggestionKey,
+					`suggestion:${ index + 1 }`
+				);
 
 			if ( ! ranking || ! suggestionKey ) {
 				return null;
@@ -1441,6 +1827,8 @@ function normalizeRankingSet( suggestions = [] ) {
 		.filter( Boolean );
 }
 ```
+
+`normalizeRankingSet()` must not call `getSuggestionOutcomeKey()` because that helper can derive fallback identity from suggestion labels or other generated fields. For ranking diagnostics, `suggestionKey` must be an existing stable key, an existing `recommendationOutcome.suggestionKey`, or a deterministic set-local fallback such as `suggestion:1`; it must not derive from raw label, description, operation detail, block content, or pattern payload.
 
 Include the snapshot in `decorateRecommendationPayload()`:
 
@@ -1468,7 +1856,7 @@ Extend `buildRecommendationOutcomeEntry()` with a `rankingSet = []` parameter. I
 	: { ranking: normalizeRankingSnapshot( identity.ranking ) } ),
 ```
 
-Implement `normalizeRankingSetFromSummary()` with the same cap and score clamping as `normalizeRankingSet()`, but read already-compact entries shaped as `{ suggestionKey, rank, contextScore, blendedScore, rankingVersion }`.
+Implement `normalizeRankingSetFromSummary()` with the same cap and score clamping as `normalizeRankingSet()`, but read already-compact entries shaped as `{ suggestionKey, rank, contextScore, blendedScore, rankingVersion }`. Reject or replace any summary `suggestionKey` that contains whitespace or generated prose-like text; allowed diagnostics keys are stable ids such as `suggestion:1`, `block:styles:2`, `theme/hero`, or hash-like identifiers.
 
 - [ ] **Step 2: Add PHP outcome snapshot and ranking-set normalization**
 
@@ -1524,7 +1912,7 @@ private static function normalize_ranking_set( mixed $value ): array {
 			continue;
 		}
 
-		$suggestion_key = self::bounded_string( $entry['suggestionKey'] ?? '' );
+		$suggestion_key = self::normalize_ranking_suggestion_key( $entry['suggestionKey'] ?? '' );
 		if ( '' === $suggestion_key ) {
 			continue;
 		}
@@ -1545,7 +1933,7 @@ private static function normalize_ranking_set( mixed $value ): array {
 }
 ```
 
-Add private `normalize_nullable_score()` and `normalize_numeric_map()` helpers that clamp values to `0.0..1.0`, sanitize keys with `sanitize_key()`, and cap maps at 12 entries. After building `$normalized_outcome`, remove empty `ranking` and `rankingSet` entries so non-ranking rows stay compact.
+Add private `normalize_nullable_score()`, `normalize_numeric_map()`, and `normalize_ranking_suggestion_key()` helpers. Scores clamp to `0.0..1.0`; numeric maps sanitize keys with `sanitize_key()` and cap maps at 12 entries; ranking suggestion keys accept only compact stable ids matching `/^[A-Za-z0-9:_\\.\\/-]+$/` and reject whitespace/prose-like keys. After building `$normalized_outcome`, remove empty `ranking` and `rankingSet` entries so non-ranking rows stay compact.
 
 - [ ] **Step 3: Add outcome tests**
 
@@ -1640,6 +2028,41 @@ $this->assertSame( 'one', $entry['after']['outcome']['rankingSet'][0]['suggestio
 $this->assertSame( 0.72, $entry['after']['outcome']['rankingSet'][0]['contextScore'] );
 ```
 
+Add a PHP privacy regression proving `normalize_entry()` does not preserve generated text inside ranking diagnostics:
+
+```php
+$entry = RecommendationOutcome::normalize_entry(
+	[
+		'type'    => RecommendationOutcome::TYPE,
+		'surface' => 'block',
+		'after'   => [
+			'outcome' => [
+				'event'                  => 'shown',
+				'recommendationSetId'    => 'set-1',
+				'sourceRequestSignature' => 'hash_abc123',
+				'rankingSet'             => [
+					[
+						'suggestionKey'  => 'suggestion:1',
+						'rank'           => 1,
+						'rankingVersion' => 'contextual-ranking-v1',
+						'contextScore'   => 0.72,
+						'blendedScore'   => 0.81,
+						'label'          => 'Use secret launch copy',
+						'description'    => 'Use secret launch copy',
+					],
+				],
+			],
+		],
+	]
+);
+
+$encoded = wp_json_encode( $entry['after']['outcome'] );
+$this->assertStringNotContainsString( 'secret', $encoded );
+$this->assertStringNotContainsString( 'launch', $encoded );
+$this->assertStringNotContainsString( 'copy', $encoded );
+$this->assertSame( 'suggestion:1', $entry['after']['outcome']['rankingSet'][0]['suggestionKey'] );
+```
+
 In `src/store/__tests__/recommendation-outcomes.test.js`, add matching JS coverage:
 
 - `decorateRecommendationPayload()` copies each suggestion's compact ranking snapshot into `recommendationOutcome.ranking`.
@@ -1647,6 +2070,7 @@ In `src/store/__tests__/recommendation-outcomes.test.js`, add matching JS covera
 - `buildRecommendationOutcomeEntry( { event: 'shown', rankingSet } )` stores `after.outcome.rankingSet` and omits `after.outcome.ranking`.
 - `buildRecommendationOutcomeEntry( { event: 'selected_for_review', suggestion } )` stores one compact `after.outcome.ranking` and omits `after.outcome.rankingSet`.
 - `blendedScore: 0` survives normalization through nullish fallback and is not replaced by `ranking.score`.
+- A suggestion labeled `"Use secret launch copy"` with no explicit `suggestionKey` produces a `rankingSet` whose keys are set-local fallbacks like `suggestion:1`; assert `JSON.stringify( entry.after.outcome )` does not contain `"secret"`, `"launch"`, or `"copy"`.
 
 - [ ] **Step 4: Update activity docs**
 
@@ -1843,15 +2267,15 @@ return [
 		],
 		'expectedTopLabel'  => 'Lower hierarchy one step',
 	],
-		'block_supported_operation_outranks_rejected_operation' => [
-			'surface'           => 'block',
-			'parser'            => 'block',
-			'lane'              => 'block',
-			'rankedMetricProbe' => true,
-			'enableBlockStructuralActions' => true,
-			'rankingContext'    => [
-				'prompt' => 'Insert the hero pattern after the selected group',
-			],
+	'block_supported_operation_outranks_rejected_operation' => [
+		'surface'                      => 'block',
+		'parser'                       => 'block',
+		'lane'                         => 'block',
+		'rankedMetricProbe'            => true,
+		'enableBlockStructuralActions' => true,
+		'rankingContext'               => [
+			'prompt' => 'Insert the hero pattern after the selected group',
+		],
 		'context'           => [
 			'block'                 => [
 				'name' => 'core/group',
@@ -1877,11 +2301,11 @@ return [
 					'type'        => 'pattern_replacement',
 					'operations'  => [
 						[
-							'type'           => 'replace_block_with_pattern',
-							'patternName'    => 'theme/missing',
-							'targetClientId' => 'block-1',
-							'targetSignature' => 'sig-1',
-							'action'         => 'replace',
+								'type'            => 'replace_block_with_pattern',
+								'patternName'     => 'theme/missing',
+								'targetClientId'  => 'block-1',
+								'targetSignature' => 'sig-1',
+								'action'          => 'replace',
 						],
 					],
 					'confidence'  => 0.9,
@@ -1892,12 +2316,12 @@ return [
 					'type'        => 'pattern_replacement',
 					'operations'  => [
 						[
-							'type'           => 'insert_pattern',
-							'patternName'    => 'theme/hero',
-							'targetClientId' => 'block-1',
-							'targetSignature' => 'sig-1',
-							'position'       => 'insert_after',
-							'action'         => 'insert_after',
+								'type'            => 'insert_pattern',
+								'patternName'     => 'theme/hero',
+								'targetClientId'  => 'block-1',
+								'targetSignature' => 'sig-1',
+								'position'        => 'insert_after',
+								'action'          => 'insert_after',
 						],
 					],
 					'confidence'  => 0.55,
@@ -2175,11 +2599,44 @@ public function test_contextual_ranking_parser_fixtures_choose_expected_top_sugg
 		);
 
 		$ranking = is_array( $suggestions[0]['ranking'] ?? null ) ? $suggestions[0]['ranking'] : [];
-		$this->assertSame( 'contextual-ranking-v1', $ranking['rankingVersion'] ?? null, $name );
-		$this->assertIsFloat( $ranking['contextScore'] ?? null, $name );
-		$this->assertIsArray( $ranking['contextEvidence'] ?? null, $name );
+			$this->assertSame( 'contextual-ranking-v1', $ranking['rankingVersion'] ?? null, $name );
+			$this->assertIsFloat( $ranking['contextScore'] ?? null, $name );
+			$this->assertIsArray( $ranking['contextEvidence'] ?? null, $name );
 
-		if ( ! empty( $fixture['enableBlockStructuralActions'] ) ) {
+			if ( isset( $suggestions[1] ) ) {
+				$top_ranking       = is_array( $suggestions[0]['ranking'] ?? null ) ? $suggestions[0]['ranking'] : [];
+				$runner_up_ranking = is_array( $suggestions[1]['ranking'] ?? null ) ? $suggestions[1]['ranking'] : [];
+				$component_snapshot = [
+					'top'      => [
+						'label'              => (string) ( $suggestions[0]['label'] ?? '' ),
+						'modelScore'         => $top_ranking['modelScore'] ?? null,
+						'deterministicScore' => $top_ranking['deterministicScore'] ?? null,
+						'contextScore'       => $top_ranking['contextScore'] ?? null,
+						'blendedScore'       => $top_ranking['blendedScore'] ?? null,
+					],
+					'runnerUp' => [
+						'label'              => (string) ( $suggestions[1]['label'] ?? '' ),
+						'modelScore'         => $runner_up_ranking['modelScore'] ?? null,
+						'deterministicScore' => $runner_up_ranking['deterministicScore'] ?? null,
+						'contextScore'       => $runner_up_ranking['contextScore'] ?? null,
+						'blendedScore'       => $runner_up_ranking['blendedScore'] ?? null,
+					],
+				];
+				$message = "{$name} ranking components: " . wp_json_encode( $component_snapshot );
+
+				$this->assertGreaterThanOrEqual(
+					(float) ( $runner_up_ranking['blendedScore'] ?? 0 ) + 0.01,
+					(float) ( $top_ranking['blendedScore'] ?? 0 ),
+					$message
+				);
+				$this->assertGreaterThan(
+					(float) ( $runner_up_ranking['contextScore'] ?? 0 ),
+					(float) ( $top_ranking['contextScore'] ?? 0 ),
+					$message
+				);
+			}
+
+			if ( ! empty( $fixture['enableBlockStructuralActions'] ) ) {
 			$accepted_operations = is_array( $suggestions[0]['operations'] ?? null ) ? $suggestions[0]['operations'] : [];
 			$rejected_codes      = array_values(
 				array_filter(
@@ -2196,6 +2653,8 @@ public function test_contextual_ranking_parser_fixtures_choose_expected_top_sugg
 	}
 }
 ```
+
+The component snapshot and `0.01` blended-score margin are required so the fixture fails with useful evidence if a future deterministic-score tweak changes ordering. The `contextScore` comparison prevents a fixture from passing while proving only deterministic ordering.
 
 - [ ] **Step 4: Run contextual fixture test**
 
@@ -2266,21 +2725,11 @@ Expected: PASS.
 
 - [ ] **Step 1: Add negative assertions for plugin-generated component fields**
 
-In `tests/phpunit/ResponseSchemaTest.php`, add a helper:
+In `tests/phpunit/ResponseSchemaTest.php`, import `FlavorAgent\Support\RankingContract` and add a helper:
 
 ```php
 private function assert_no_contextual_component_fields_in_llm_ranking_schema( array $ranking, string $message ): void {
-	foreach (
-		[
-			'modelScore',
-			'deterministicScore',
-			'contextScore',
-			'blendedScore',
-			'contextEvidence',
-			'contextPenalties',
-			'rankingVersion',
-		] as $plugin_generated_field
-	) {
+	foreach ( RankingContract::PLUGIN_COMPONENT_KEYS as $plugin_generated_field ) {
 		$this->assertArrayNotHasKey(
 			$plugin_generated_field,
 			$ranking['properties'] ?? [],
@@ -2406,10 +2855,10 @@ Contextual Ranking V1 is done when:
 
 1. Block, style, template, template-part, and navigation parser families pass non-null context scores into `RankingContract::blend_score()`.
 2. Ability-level tests prove block, style, template, template-part, and navigation recommendation methods pass prompt/docs/execution ranking context into parser/rerank seams.
-3. Context scoring uses bounded, explainable evidence and bounded penalties.
-4. Block, style, template, template-part, and navigation recommendation items include `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, and `rankingVersion: contextual-ranking-v1`; pattern recommendations keep shared schema compatibility but do not emit contextual ranking metadata in this phase, even when the pattern ranker supplies spoofed contextual component fields.
+3. Context scoring uses bounded, explainable evidence, fixed V1 penalty values, a capped aggregate penalty, and explicit support-fit precedence.
+4. Block, style, template, template-part, navigation, and dedicated pattern recommendation items include plugin-generated `modelScore`, `deterministicScore`, `contextScore`, `blendedScore`, `contextEvidence`, `contextPenalties`, and `rankingVersion: contextual-ranking-v1` where that surface has enough context to score. Pattern recommendations also emit a `contextual_ranking_v1` source signal. Spoof protection still applies — model/provider-supplied contextual component fields must not survive `RankingContract::normalize()` unless they came from plugin-generated defaults.
 5. Model/provider-supplied ranking metadata cannot override or create plugin-generated component fields.
-6. Local outcome diagnostics can carry compact per-suggestion ranking snapshots and bounded aggregate `shown` ranking sets without raw prompt text, generated recommendation text, post content, block attributes, validation messages, pattern payloads, remote telemetry, or silent training.
+6. Local outcome diagnostics can carry compact per-suggestion ranking snapshots and bounded aggregate `shown` ranking sets without raw prompt text, generated recommendation text, prose-derived `suggestionKey` values, post content, block attributes, validation messages, pattern payloads, remote telemetry, or silent training.
 7. Fixture-backed parser/scorer tests prove predictable ordering improvements:
    - prompt-matched style suggestions outrank generic suggestions,
    - supported operations outrank unsupported/rejected operations,
@@ -2423,9 +2872,10 @@ Contextual Ranking V1 is done when:
 10. `npm run check:docs`, focused PHP/JS tests, `node scripts/verify.js --skip-e2e`, `npm run test:e2e:playground`, `npm run test:e2e:wp70`, and `git diff --check` have recorded outcomes, or the browser harnesses have explicit recorded blockers/waivers.
 11. Missing optional context produces neutral evidence, not ranking collapse, positive boosts, or unsupported penalties.
 12. Aggregate `shown` diagnostics store a bounded result-set `rankingSet`, while per-suggestion outcomes store a single compact `ranking` snapshot.
-13. Contextual ranking changes are measurable through fixtures without provider calls or external telemetry.
-14. Block support-fit tests prove live execution-contract dot strings such as `color.background` match block style update paths before the scorer assigns support penalties.
+13. Contextual ranking changes are measurable through fixtures without provider calls or external telemetry, and fixture assertions include component snapshots plus a `0.01` blended-score margin over the runner-up.
+14. Block support-fit tests prove live execution-contract dot strings such as `color.background` match block style update paths before the scorer assigns support penalties, and prove explicit path inventory wins over broad `allowedPanels`.
 15. Block contextual-ranking fixtures that assert accepted structural operations declare and fixture-scope the Block Structural Actions precondition instead of relying on the production default.
+16. `contextEvidence` and `contextPenalties` are numeric-only bounded maps from plugin defaults, source signals do not duplicate `contextual_ranking_v1`, and final block rerank works with legacy payloads that only have `ranking.score`.
 
 ## Stop Line
 

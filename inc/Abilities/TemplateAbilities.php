@@ -160,7 +160,16 @@ final class TemplateAbilities {
 			return $result;
 		}
 
-		$payload = TemplatePrompt::parse_response( $result, $context );
+		$payload = TemplatePrompt::parse_response(
+			$result,
+			$context,
+			[
+				'surface'       => 'template',
+				'context'       => $context,
+				'prompt'        => $prompt,
+				'docsGrounding' => DocsGuidanceResult::public_summary( $docs_result ),
+			]
+		);
 
 		if ( is_wp_error( $payload ) ) {
 			return $payload;
@@ -282,7 +291,16 @@ final class TemplateAbilities {
 			return $result;
 		}
 
-		$payload = TemplatePartPrompt::parse_response( $result, $context );
+		$payload = TemplatePartPrompt::parse_response(
+			$result,
+			$context,
+			[
+				'surface'       => 'template-part',
+				'context'       => $context,
+				'prompt'        => $prompt,
+				'docsGrounding' => DocsGuidanceResult::public_summary( $docs_result ),
+			]
+		);
 
 		if ( is_wp_error( $payload ) ) {
 			return $payload;

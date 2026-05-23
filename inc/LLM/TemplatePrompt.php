@@ -9,6 +9,7 @@ namespace FlavorAgent\LLM;
 
 use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\FormatsDocsGuidance;
+use FlavorAgent\Support\RecommendationContextScorer;
 use FlavorAgent\Support\RankingContract;
 
 final class TemplatePrompt {
@@ -510,7 +511,7 @@ EXAMPLE
 	 * @param array  $context Template context used to build the prompt.
 	 * @return array|\WP_Error Validated payload or error.
 	 */
-	public static function parse_response( string $raw, array $context ): array|\WP_Error {
+	public static function parse_response( string $raw, array $context, array $ranking_context = [] ): array|\WP_Error {
 		$cleaned = preg_replace( '/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim( $raw ) );
 		$data    = json_decode( is_string( $cleaned ) ? $cleaned : '', true );
 
@@ -549,7 +550,9 @@ EXAMPLE
 			$empty_area_lookup,
 			$pattern_lookup,
 			$template_block_lookup,
-			$insertion_anchor_lookup
+			$insertion_anchor_lookup,
+			$context,
+			$ranking_context
 		);
 
 		if ( count( $suggestions ) === 0 ) {
@@ -588,7 +591,9 @@ EXAMPLE
 		array $empty_area_lookup,
 		array $pattern_lookup,
 		array $template_block_lookup,
-		array $insertion_anchor_lookup
+		array $insertion_anchor_lookup,
+		array $context = [],
+		array $ranking_context = []
 	): array {
 		$valid = [];
 		$order = 0;
@@ -685,11 +690,13 @@ EXAMPLE
 					'has_description'   => '' !== $entry['description'] ? 0.05 : 0.0,
 				]
 			);
+			$contextual_result   = self::score_contextual_recommendation( $entry, $context, $ranking_context );
+			$context_score       = is_array( $contextual_result ) ? $contextual_result['score'] : null;
 			$computed_score      = RankingContract::blend_score(
 				[
 					'model'         => $model_score,
 					'deterministic' => $deterministic_score,
-					'context'       => null,
+					'context'       => $context_score,
 				]
 			);
 			$source_signals      = [ 'llm_response', 'template_surface' ];
@@ -703,23 +710,34 @@ EXAMPLE
 			if ( [] !== $entry['patternSuggestions'] ) {
 				$source_signals[] = 'has_pattern_suggestions';
 			}
+			if ( is_array( $contextual_result ) ) {
+				$source_signals[] = 'contextual_ranking_v1';
+			}
 
 			$ranking_metadata = $ranking_input;
 			unset( $ranking_metadata['score'], $ranking_metadata['confidence'] );
 
 			$entry['ranking'] = RankingContract::normalize(
 				$ranking_metadata,
-				[
-					'score'         => $computed_score,
-					'reason'        => (string) ( $suggestion['description'] ?? '' ),
-					'sourceSignals' => $source_signals,
-					'safetyMode'    => 'validated',
-					'freshnessMeta' => [
-						'source'  => 'llm',
-						'surface' => 'template',
+				array_merge(
+					[
+						'score'         => $computed_score,
+						'reason'        => (string) ( $suggestion['description'] ?? '' ),
+						'sourceSignals' => $source_signals,
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [
+							'source'  => 'llm',
+							'surface' => 'template',
+						],
+						'operations'    => $entry['operations'],
 					],
-					'operations'    => $entry['operations'],
-				]
+					RankingContract::contextual_component_defaults(
+						$model_score,
+						$deterministic_score,
+						$contextual_result,
+						$computed_score
+					)
+				)
 			);
 
 			$entry['_rankScore'] = $computed_score;
@@ -751,6 +769,23 @@ EXAMPLE
 			),
 			0,
 			3
+		);
+	}
+
+	private static function score_contextual_recommendation( array $suggestion, array $context, array $ranking_context ): ?array {
+		if ( [] === $ranking_context ) {
+			return null;
+		}
+
+		return RecommendationContextScorer::score(
+			[
+				'surface'       => $ranking_context['surface'] ?? 'template',
+				'group'         => 'suggestions',
+				'suggestion'    => $suggestion,
+				'context'       => is_array( $ranking_context['context'] ?? null ) ? $ranking_context['context'] : $context,
+				'prompt'        => $ranking_context['prompt'] ?? '',
+				'docsGrounding' => is_array( $ranking_context['docsGrounding'] ?? null ) ? $ranking_context['docsGrounding'] : [],
+			]
 		);
 	}
 

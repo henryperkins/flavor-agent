@@ -27,7 +27,6 @@ import {
 } from '@wordpress/element';
 
 import AIActivitySection from '../components/AIActivitySection';
-import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
@@ -37,12 +36,12 @@ import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
-	MANUAL_IDEAS_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
 } from '../components/surface-labels';
 import { STORE_NAME } from '../store';
 import {
+	isDiagnosticActivityEntry,
 	getLatestAppliedActivity,
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
@@ -337,7 +336,11 @@ export default function TemplateRecommender() {
 		[ activityLog, blockEditorSelection, templateRef, templateScopeKey ]
 	);
 	const templateActivityEntries = useMemo(
-		() => [ ...resolvedTemplateActivities ].slice( -3 ).reverse(),
+		() =>
+			[ ...resolvedTemplateActivities ]
+				.filter( ( entry ) => ! isDiagnosticActivityEntry( entry ) )
+				.slice( -3 )
+				.reverse(),
 		[ resolvedTemplateActivities ]
 	);
 	const latestTemplateActivity = useMemo(
@@ -596,35 +599,29 @@ export default function TemplateRecommender() {
 	);
 	const suggestionCards = useMemo(
 		() =>
-			visibleRecommendations.map( ( suggestion, index ) =>
-				buildTemplateSuggestionViewModel(
+			visibleRecommendations.map( ( suggestion, index ) => {
+				const suggestionKey =
+					suggestion?.suggestionKey ||
+					getSuggestionCardKey( suggestion, index );
+
+				return buildTemplateSuggestionViewModel(
 					{
 						...suggestion,
-						suggestionKey: getSuggestionCardKey(
-							suggestion,
-							index
-						),
+						suggestionKey,
 					},
 					patternTitleMap
-				)
-			),
+				);
+			} ),
 		[ visibleRecommendations, patternTitleMap ]
-	);
-	const executableSuggestionCards = useMemo(
-		() => suggestionCards.filter( ( suggestion ) => suggestion.canApply ),
-		[ suggestionCards ]
-	);
-	const advisorySuggestionCards = useMemo(
-		() => suggestionCards.filter( ( suggestion ) => ! suggestion.canApply ),
-		[ suggestionCards ]
 	);
 	const selectedSuggestion = useMemo(
 		() =>
-			executableSuggestionCards.find(
+			suggestionCards.find(
 				( suggestion ) =>
+					suggestion.canApply &&
 					suggestion.suggestionKey === selectedSuggestionKey
 			) || null,
-		[ executableSuggestionCards, selectedSuggestionKey ]
+		[ selectedSuggestionKey, suggestionCards ]
 	);
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
@@ -695,10 +692,6 @@ export default function TemplateRecommender() {
 		() => getConnectorApprovalNotice( 'template', errorDetails ),
 		[ errorDetails ]
 	);
-	const showSecondaryGuidance =
-		! hasResult &&
-		templateActivityEntries.length === 0 &&
-		! selectedSuggestionKey;
 	const hasComposerMeta =
 		currentPatternOverrideCount > 0 || currentVisibilityConstraintCount > 0;
 	const dismissStatusNotice = useCallback( () => {
@@ -746,13 +739,9 @@ export default function TemplateRecommender() {
 	}, [] );
 	const handlePreviewSuggestion = useCallback(
 		( suggestionKey ) => {
-			const suggestion =
-				executableSuggestionCards.find(
-					( item ) => item?.suggestionKey === suggestionKey
-				) ||
-				advisorySuggestionCards.find(
-					( item ) => item?.suggestionKey === suggestionKey
-				);
+			const suggestion = suggestionCards.find(
+				( item ) => item?.suggestionKey === suggestionKey
+			);
 
 			if (
 				suggestion &&
@@ -769,10 +758,9 @@ export default function TemplateRecommender() {
 			setTemplateSelectedSuggestion( suggestionKey );
 		},
 		[
-			advisorySuggestionCards,
-			executableSuggestionCards,
 			recordRecommendationOutcome,
 			setTemplateSelectedSuggestion,
+			suggestionCards,
 		]
 	);
 	const handleCancelPreview = useCallback( () => {
@@ -832,12 +820,6 @@ export default function TemplateRecommender() {
 						label="What are you trying to achieve with this template?"
 						hideLabelFromVision
 						rows={ 2 }
-						helperText="Review validated template-part and pattern changes before applying."
-						starterPrompts={ [
-							'Stronger hierarchy',
-							'Clearer opening',
-							'Balanced structure',
-						] }
 						meta={
 							hasComposerMeta ? (
 								<>
@@ -896,90 +878,47 @@ export default function TemplateRecommender() {
 				) }
 
 				{ canRecommend && hasResult && explanation && (
-					<p className="flavor-agent-explanation flavor-agent-panel__note">
-						<LinkedEntityText
-							text={ explanation }
-							entities={ entityMap }
-							onEntityClick={ handleEntityAction }
-						/>
-					</p>
+					<details className="flavor-agent-result-summary">
+						<summary>Why these suggestions</summary>
+						<p className="flavor-agent-explanation flavor-agent-panel__note">
+							<LinkedEntityText
+								text={ explanation }
+								entities={ entityMap }
+								onEntityClick={ handleEntityAction }
+							/>
+						</p>
+					</details>
 				) }
 
-				{ canRecommend && executableSuggestionCards.length > 0 && (
+				{ canRecommend && suggestionCards.length > 0 && (
 					<RecommendationLane
-						title={ REVIEW_LANE_LABEL }
-						tone={ REVIEW_LANE_LABEL }
-						count={ executableSuggestionCards.length }
+						title="Recommendations"
+						count={ suggestionCards.length }
 						countNoun="suggestion"
 					>
-						{ executableSuggestionCards.map(
-							( suggestion, index ) => (
-								<TemplateSuggestionCard
-									key={ `${ resultToken }-${ getSuggestionCardKey(
-										suggestion,
-										index
-									) }` }
-									suggestion={ suggestion }
-									entityMap={ entityMap }
-									isApplied={
-										lastAppliedSuggestionKey ===
-										suggestion.suggestionKey
-									}
-									isApplying={ applyStatus === 'applying' }
-									isStale={ isStaleResult }
-									isSelected={
-										selectedSuggestionKey ===
-										suggestion.suggestionKey
-									}
-									onEntityClick={ handleEntityAction }
-									onPreviewSuggestion={
-										handlePreviewSuggestion
-									}
-								/>
-							)
-						) }
+						{ suggestionCards.map( ( suggestion, index ) => (
+							<TemplateSuggestionCard
+								key={ `${ resultToken }-${ getSuggestionCardKey(
+									suggestion,
+									index
+								) }` }
+								suggestion={ suggestion }
+								entityMap={ entityMap }
+								isApplied={
+									lastAppliedSuggestionKey ===
+									suggestion.suggestionKey
+								}
+								isApplying={ applyStatus === 'applying' }
+								isStale={ isStaleResult }
+								isSelected={
+									selectedSuggestionKey ===
+									suggestion.suggestionKey
+								}
+								onEntityClick={ handleEntityAction }
+								onPreviewSuggestion={ handlePreviewSuggestion }
+							/>
+						) ) }
 					</RecommendationLane>
-				) }
-
-				{ canRecommend && advisorySuggestionCards.length > 0 && (
-					<AIAdvisorySection
-						title={ MANUAL_IDEAS_LABEL }
-						count={ advisorySuggestionCards.length }
-						countNoun="suggestion"
-						initialOpen
-						description={
-							showSecondaryGuidance
-								? 'These ideas stay visible for review, but Flavor Agent could not validate a deterministic structural mutation for them.'
-								: ''
-						}
-					>
-						{ advisorySuggestionCards.map(
-							( suggestion, index ) => (
-								<TemplateSuggestionCard
-									key={ `advisory-${ resultToken }-${ getSuggestionCardKey(
-										suggestion,
-										index
-									) }` }
-									suggestion={ suggestion }
-									entityMap={ entityMap }
-									isApplied={
-										lastAppliedSuggestionKey ===
-										suggestion.suggestionKey
-									}
-									isApplying={ applyStatus === 'applying' }
-									isStale={ isStaleResult }
-									isSelected={
-										selectedSuggestionKey ===
-										suggestion.suggestionKey
-									}
-									onEntityClick={ handleEntityAction }
-									onPreviewSuggestion={
-										handlePreviewSuggestion
-									}
-								/>
-							)
-						) }
-					</AIAdvisorySection>
 				) }
 
 				{ canRecommend && selectedSuggestion && (
@@ -1026,12 +965,13 @@ export default function TemplateRecommender() {
 				) }
 
 				<AIActivitySection
-					description="Newest valid template action can be undone here."
 					entries={ templateActivityEntries }
 					isUndoing={ undoStatus === 'undoing' }
 					onUndo={ handleUndo }
-					initialOpen={ ! hasResult || ! canRecommend }
-					resetKey={ templateRef || 'template' }
+					initialOpen={ false }
+					resetKey={ `${ templateRef || 'template' }:${
+						hasResult ? 'result' : 'empty'
+					}:${ canRecommend ? 'enabled' : 'disabled' }` }
 					maxVisible={ 3 }
 				/>
 			</div>
@@ -1085,11 +1025,9 @@ function TemplateSuggestionCard( {
 								{ summaryParts.join( ' • ' ) }
 							</span>
 						) }
-						{ isSelected && (
-							<span className="flavor-agent-pill flavor-agent-pill--success">
-								Review open
-							</span>
-						) }
+						<span className="flavor-agent-pill">
+							{ suggestion.canApply ? 'Ready' : 'Manual' }
+						</span>
 						{ isApplied && (
 							<span className="flavor-agent-done-badge">
 								Applied
@@ -1130,138 +1068,156 @@ function TemplateSuggestionCard( {
 				</p>
 			) }
 
-			{ hasParts && (
-				<div className="flavor-agent-template-list">
-					<div className="flavor-agent-template-list__header">
-						<div className="flavor-agent-section-label">
-							Template Parts
-						</div>
-						<span className="flavor-agent-pill">
-							{ formatCount(
-								suggestion.templateParts.length,
-								'part'
-							) }
-						</span>
-					</div>
-					{ suggestion.templateParts.map( ( part ) => (
-						<div key={ part.key } className="flavor-agent-tpl-row">
-							<div className="flavor-agent-tpl-row__main">
-								<span className="flavor-agent-tpl-row__mapping">
-									<Tooltip
-										text={ `Select “${ part.slug }” block in editor` }
-									>
+			{ ( hasParts || hasPatterns ) && (
+				<details className="flavor-agent-card__details">
+					<summary>Details</summary>
+					{ hasParts && (
+						<div className="flavor-agent-template-list">
+							<div className="flavor-agent-template-list__header">
+								<div className="flavor-agent-section-label">
+									Template Parts
+								</div>
+								<span className="flavor-agent-pill">
+									{ formatCount(
+										suggestion.templateParts.length,
+										'part'
+									) }
+								</span>
+							</div>
+							{ suggestion.templateParts.map( ( part ) => (
+								<div
+									key={ part.key }
+									className="flavor-agent-tpl-row"
+								>
+									<div className="flavor-agent-tpl-row__main">
+										<span className="flavor-agent-tpl-row__mapping">
+											<Tooltip
+												text={ `Select “${ part.slug }” block in editor` }
+											>
+												<Button
+													size="small"
+													variant="link"
+													onClick={ () =>
+														selectBlockBySlugOrArea(
+															part.slug,
+															part.area
+														)
+													}
+													className="flavor-agent-action-link flavor-agent-action-link--part"
+												>
+													{ part.slug }
+												</Button>
+											</Tooltip>
+
+											<span className="flavor-agent-tpl-row__arrow">
+												→
+											</span>
+
+											<Tooltip
+												text={ `Select “${ part.area }” area in editor` }
+											>
+												<Button
+													size="small"
+													variant="link"
+													onClick={ () =>
+														selectBlockByArea(
+															part.area
+														)
+													}
+													className="flavor-agent-action-link flavor-agent-action-link--area"
+												>
+													{ part.area }
+												</Button>
+											</Tooltip>
+										</span>
+
+										{ part.reason && (
+											<div className="flavor-agent-tpl-row__reason">
+												<LinkedEntityText
+													text={ part.reason }
+													entities={ entityMap }
+													onEntityClick={
+														onEntityClick
+													}
+												/>
+											</div>
+										) }
+									</div>
+
+									{ part.ctaLabel && (
 										<Button
 											size="small"
-											variant="link"
+											variant="tertiary"
 											onClick={ () =>
 												selectBlockBySlugOrArea(
 													part.slug,
 													part.area
 												)
 											}
-											className="flavor-agent-action-link flavor-agent-action-link--part"
+											className="flavor-agent-assign-btn"
 										>
-											{ part.slug }
+											{ part.ctaLabel }
 										</Button>
-									</Tooltip>
+									) }
+								</div>
+							) ) }
+						</div>
+					) }
 
-									<span className="flavor-agent-tpl-row__arrow">
-										→
-									</span>
-
-									<Tooltip
-										text={ `Select “${ part.area }” area in editor` }
+					{ hasPatterns && (
+						<div className="flavor-agent-template-list">
+							<div className="flavor-agent-template-list__header">
+								<div className="flavor-agent-section-label">
+									Suggested Patterns
+								</div>
+								<span className="flavor-agent-pill">
+									{ formatCount(
+										suggestion.patternSuggestions.length,
+										'pattern'
+									) }
+								</span>
+							</div>
+							{ suggestion.patternSuggestions.map(
+								( pattern ) => (
+									<div
+										key={ pattern.name }
+										className="flavor-agent-tpl-row"
 									>
+										<Tooltip
+											text={ `Browse “${ pattern.title }” in pattern inserter` }
+										>
+											<Button
+												size="small"
+												variant="link"
+												onClick={ () =>
+													openInserterForPattern(
+														pattern.title
+													)
+												}
+												className="flavor-agent-action-link flavor-agent-action-link--pattern"
+											>
+												{ pattern.title }
+											</Button>
+										</Tooltip>
+
 										<Button
 											size="small"
-											variant="link"
+											variant="tertiary"
 											onClick={ () =>
-												selectBlockByArea( part.area )
+												openInserterForPattern(
+													pattern.title
+												)
 											}
-											className="flavor-agent-action-link flavor-agent-action-link--area"
+											className="flavor-agent-assign-btn"
 										>
-											{ part.area }
+											{ pattern.ctaLabel }
 										</Button>
-									</Tooltip>
-								</span>
-
-								{ part.reason && (
-									<div className="flavor-agent-tpl-row__reason">
-										<LinkedEntityText
-											text={ part.reason }
-											entities={ entityMap }
-											onEntityClick={ onEntityClick }
-										/>
 									</div>
-								) }
-							</div>
-
-							{ part.ctaLabel && (
-								<Button
-									size="small"
-									variant="tertiary"
-									onClick={ () =>
-										selectBlockBySlugOrArea(
-											part.slug,
-											part.area
-										)
-									}
-									className="flavor-agent-assign-btn"
-								>
-									{ part.ctaLabel }
-								</Button>
+								)
 							) }
 						</div>
-					) ) }
-				</div>
-			) }
-
-			{ hasPatterns && (
-				<div className="flavor-agent-template-list">
-					<div className="flavor-agent-template-list__header">
-						<div className="flavor-agent-section-label">
-							Suggested Patterns
-						</div>
-						<span className="flavor-agent-pill">
-							{ formatCount(
-								suggestion.patternSuggestions.length,
-								'pattern'
-							) }
-						</span>
-					</div>
-					{ suggestion.patternSuggestions.map( ( pattern ) => (
-						<div
-							key={ pattern.name }
-							className="flavor-agent-tpl-row"
-						>
-							<Tooltip
-								text={ `Browse “${ pattern.title }” in pattern inserter` }
-							>
-								<Button
-									size="small"
-									variant="link"
-									onClick={ () =>
-										openInserterForPattern( pattern.title )
-									}
-									className="flavor-agent-action-link flavor-agent-action-link--pattern"
-								>
-									{ pattern.title }
-								</Button>
-							</Tooltip>
-
-							<Button
-								size="small"
-								variant="tertiary"
-								onClick={ () =>
-									openInserterForPattern( pattern.title )
-								}
-								className="flavor-agent-assign-btn"
-							>
-								{ pattern.ctaLabel }
-							</Button>
-						</div>
-					) ) }
-				</div>
+					) }
+				</details>
 			) }
 		</div>
 	);

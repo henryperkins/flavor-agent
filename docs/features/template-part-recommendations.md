@@ -6,7 +6,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Part Recommendations`
 - Scope: only while editing a `wp_template_part` entity
-- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, slug and area badges, explanation text, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, focus-block links, suggested-pattern links, a shared lower review-before-apply panel, recent activity, and inline undo
+- UI shape: shared setup/capability notice when unavailable, otherwise a compact scope bar and prompt field, collapsed result rationale, one `Recommendations` list with compact cards, focus-block and suggested-pattern details behind per-card disclosures, a shared lower review-before-apply panel, collapsed recent activity, and inline undo after the activity section is opened
 
 ## Surfacing Conditions
 
@@ -17,10 +17,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Shared Interaction Model
 
-- Learned-once sequence: intro -> scope/freshness -> prompt -> status/stale refresh -> featured recommendation -> grouped lanes -> lower review panel where needed -> apply where allowed -> undo and history
+- Learned-once sequence: scope/freshness -> prompt -> status/stale refresh -> collapsed rationale -> recommendations -> lower review panel where needed -> apply where allowed -> collapsed undo history
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template-part recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only when the user explicitly opens preview on a validated suggestion
-- The strongest validated suggestion now appears first in a shared recommendation hero; executable suggestions stay in the `Review first` lane and non-deterministic ideas move to `Manual ideas`
+- Executable and advisory suggestions now share one compact `Recommendations` list. Executable cards keep the `Review` button; advisory cards are labeled `Manual`. Focus-block and pattern support material stays available behind each card's `Details` disclosure.
 - Preview uses the shared `AIReviewSection` shell in a dedicated lower panel and post-apply / post-undo feedback uses the same shared status notice pattern as block and template
 - Suggestions that fail deterministic validation stay visible in the shared advisory shell so the user can still review focus blocks and pattern ideas without getting an apply affordance
 - Template-part freshness uses the local request signature plus server review/apply hashes that include the docs-grounding fingerprint. PHP stores `reviewContextSignature` for background review revalidation and `resolvedContextSignature` for apply safety, so unavailable docs grounding can stale stored results while stale/degraded trusted guidance can surface as a warning.
@@ -34,7 +34,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 5. `TemplateAbilities::recommend_template_part()` gathers canonical template-part metadata through `ServerCollector::for_template_part()`, atomically overlays the live unsaved structural slice from the editor, validates path-based targets and anchors against the full live path index, scopes docs grounding with `currentPatternOverrides`, computes `reviewContextSignature` and `resolvedContextSignature` with the docs-grounding fingerprint, returns early for signature-only revalidation, then calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
 6. The parsed response returns explanation text, advisory `blockHints`, advisory `patternSuggestions`, and optional structured `operations`
 7. `buildTemplatePartSuggestionViewModel()` validates the operation sequence before the UI offers preview or apply controls
-8. The user can jump to focus blocks through path-based selection links, browse suggested patterns in the inserter, open the shared lower review panel for validated operations, and confirm apply
+8. The user can expand a card for focus-block links and suggested patterns, browse suggested patterns in the inserter, open the shared lower review panel for validated operations, and confirm apply
 9. `applyTemplatePartSuggestion()` runs the deterministic executor, records activity, and exposes inline undo for the newest valid tail entry
 
 ## Flow Diagram
@@ -295,7 +295,6 @@ Replace and remove operations only stay executable when their `targetPath` is li
 - `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
 - `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
 - `src/components/AIReviewSection.js` — shared review-before-apply panel; see `docs/reference/shared-internals.md`
-- `src/components/AIAdvisorySection.js` — shared advisory-only section; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
 - `src/store/abilities-client.js`
 - `inc/Abilities/RecommendationAbilityExecution.php`

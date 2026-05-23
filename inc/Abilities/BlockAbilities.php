@@ -124,7 +124,15 @@ final class BlockAbilities {
 			return $result;
 		}
 
-		$payload = Prompt::parse_response( $result );
+		$ranking_context = [
+			'surface'           => 'block',
+			'context'           => $context,
+			'prompt'            => $prompt,
+			'docsGrounding'     => DocsGuidanceResult::public_summary( $docs_result ),
+			'executionContract' => $execution_contract,
+		];
+
+		$payload = Prompt::parse_response( $result, $ranking_context );
 
 		if ( is_wp_error( $payload ) ) {
 			return $payload;
@@ -142,6 +150,7 @@ final class BlockAbilities {
 			$execution_contract,
 			$context['blockOperationContext'] ?? []
 		);
+		$payload = Prompt::rerank_payload( $payload, $ranking_context );
 
 		if ( is_wp_error( $payload ) ) {
 			return $payload;

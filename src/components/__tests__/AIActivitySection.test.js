@@ -556,7 +556,7 @@ describe( 'AIActivitySection', () => {
 		);
 	} );
 
-	test( 'renders surface-aware request diagnostic labels', () => {
+	test( 'renders surface-aware diagnostic labels', () => {
 		act( () => {
 			getRoot().render(
 				<AIActivitySection
@@ -613,6 +613,16 @@ describe( 'AIActivitySection', () => {
 								status: 'review',
 							},
 						},
+						{
+							id: 'template-outcome-1',
+							type: 'recommendation_outcome',
+							suggestion: 'Recommendations shown',
+							surface: 'template',
+							undo: {
+								canUndo: false,
+								status: 'not_applicable',
+							},
+						},
 					] }
 				/>
 			);
@@ -633,6 +643,11 @@ describe( 'AIActivitySection', () => {
 		expect( getContainer().textContent ).toContain(
 			'Style Book request diagnostic'
 		);
+		expect( getContainer().textContent ).toContain(
+			'Recommendations shown'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Template action' );
+		expect( getContainer().textContent ).not.toContain( 'Applied' );
 	} );
 
 	test( 'supports collapsed history and show-more overflow behavior', () => {

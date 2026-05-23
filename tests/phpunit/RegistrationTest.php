@@ -637,6 +637,13 @@ final class RegistrationTest extends TestCase {
 			$this->assertSame( 'object', $ranking['properties']['freshnessMeta']['type'] ?? null );
 			$this->assertSame( 'string', $ranking['properties']['designPrinciple']['type'] ?? null );
 			$this->assertSame( 'string', $ranking['properties']['risk']['type'] ?? null );
+			$this->assertSame( 'number', $ranking['properties']['modelScore']['type'] ?? null );
+			$this->assertSame( 'number', $ranking['properties']['deterministicScore']['type'] ?? null );
+			$this->assertSame( 'number', $ranking['properties']['contextScore']['type'] ?? null );
+			$this->assertSame( 'number', $ranking['properties']['blendedScore']['type'] ?? null );
+			$this->assertSame( 'object', $ranking['properties']['contextEvidence']['type'] ?? null );
+			$this->assertSame( 'object', $ranking['properties']['contextPenalties']['type'] ?? null );
+			$this->assertSame( 'string', $ranking['properties']['rankingVersion']['type'] ?? null );
 		}
 
 		$block_ability  = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'] ?? null;
@@ -654,6 +661,9 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame( 'string', $styles_ranking['properties']['risk']['type'] ?? null );
 		$this->assertSame( 'string', $blocks_ranking['properties']['designPrinciple']['type'] ?? null );
 		$this->assertSame( 'string', $blocks_ranking['properties']['risk']['type'] ?? null );
+		$this->assertSame( 'number', $block_ranking['properties']['contextScore']['type'] ?? null );
+		$this->assertSame( 'object', $styles_ranking['properties']['contextEvidence']['type'] ?? null );
+		$this->assertSame( 'string', $blocks_ranking['properties']['rankingVersion']['type'] ?? null );
 	}
 
 	public function test_register_abilities_declares_template_advisory_fields_in_output_schema(): void {
@@ -703,6 +713,9 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame( 'string', $ranking['properties']['risk']['type'] ?? null );
 		$this->assertSame( 'array', $ranking['properties']['operations']['type'] ?? null );
 		$this->assertSame( 'object', $ranking['properties']['operations']['items']['type'] ?? null );
+		$this->assertSame( 'number', $ranking['properties']['contextScore']['type'] ?? null );
+		$this->assertSame( 'object', $ranking['properties']['contextEvidence']['type'] ?? null );
+		$this->assertSame( 'string', $ranking['properties']['rankingVersion']['type'] ?? null );
 	}
 
 	public function test_recommendation_abilities_include_image_guidelines_in_declared_categories(): void {

@@ -6,7 +6,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Recommendations`
 - Scope: only while editing a `wp_template` entity
-- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, grouped `Review first` / `Manual ideas` lanes, a stale-result refresh hero when needed, a shared lower review-before-apply panel, recent activity, and inline undo
+- UI shape: shared setup/capability notice when unavailable, otherwise a compact prompt field, collapsed result rationale, one `Recommendations` list with compact cards, a stale-result refresh treatment when needed, a shared lower review-before-apply panel, collapsed recent activity, and inline undo after the activity section is opened
 
 ## Surfacing Conditions
 
@@ -17,10 +17,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Shared Interaction Model
 
-- Learned-once sequence: scope/freshness -> prompt -> status/stale refresh -> explanation -> grouped lanes -> lower review panel where needed -> apply where allowed -> undo and history. `RecommendationHero` is reserved for stale refresh in the compact template shell.
+- Learned-once sequence: scope/freshness -> prompt -> status/stale refresh -> collapsed rationale -> recommendations -> lower review panel where needed -> apply where allowed -> collapsed undo history. `RecommendationHero` is reserved for stale refresh in the compact template shell.
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only after the user explicitly opens preview on a validated suggestion
-- Fresh template results render explanation text first, then executable suggestions in the `Review first` lane and non-deterministic ideas in `Manual ideas`; stale same-template results surface a refresh hero before those lanes
+- Fresh template results render explanation text behind a `Why these suggestions` disclosure and show executable plus advisory suggestions in one compact `Recommendations` list. Executable cards keep the `Review` button; advisory cards are labeled `Manual`. Stale same-template results keep the stale scope/refresh treatment and disable apply.
 - Preview uses the shared `AIReviewSection` shell in a dedicated lower panel and post-apply / post-undo feedback uses the shared status notice pattern
 - Executable suggestions still require validated operations, while advisory-only suggestions survive server-side parsing when their template-part or pattern summaries validate without a safe deterministic apply path
 - Template freshness now uses the local request signature plus server review/apply hashes that include the docs-grounding fingerprint. PHP stores `reviewContextSignature` for background review revalidation and `resolvedContextSignature` for apply safety, so unavailable docs grounding can stale stored results while stale/degraded trusted guidance can surface as a warning.
@@ -34,7 +34,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 5. `TemplateAbilities::recommend_template()` gathers canonical template metadata through `ServerCollector::for_template()`, atomically overlays the mutable live slot and structure slices from the editor, merges effective `allowedAreas` from server-known capabilities plus unsaved live areas, scopes docs grounding with bounded `visiblePatternNames`, computes `reviewContextSignature` and `resolvedContextSignature` with the docs-grounding fingerprint, returns early for signature-only revalidation, then calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePrompt`
 6. The parsed response returns up to three suggestion cards, preserving validated structured operations for executable ideas and validated summaries for advisory ideas
 7. The UI builds an entity map so template-part slugs, areas, and pattern names inside descriptions and explanations become clickable actions
-8. Selecting an executable suggestion opens the shared lower review panel, which shows the exact validated operations that would run if the user confirms apply
+8. Selecting an executable suggestion opens the shared lower review panel, which shows the exact validated operations that would run if the user confirms apply. Card-level template-part and pattern details stay collapsed behind `Details` until the user asks for them.
 9. `applyTemplateSuggestion()` in the store calls the deterministic executor, records activity, and exposes inline undo for the newest valid tail entry
 
 ## Flow Diagram
@@ -243,7 +243,6 @@ Each suggestion may include at most one `insert_pattern` operation. Executable s
 - `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
 - `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
 - `src/components/AIReviewSection.js` — shared review-before-apply panel; see `docs/reference/shared-internals.md`
-- `src/components/AIAdvisorySection.js` — shared advisory-only section; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
 - `src/store/abilities-client.js`
 - `inc/Abilities/RecommendationAbilityExecution.php`

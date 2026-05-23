@@ -115,6 +115,76 @@ final class RankingContractTest extends TestCase {
 		);
 	}
 
+	public function test_normalize_ignores_plugin_owned_contextual_fields_from_input(): void {
+		$result = RankingContract::normalize(
+			[
+				'score'              => 0.6,
+				'modelScore'         => 1,
+				'deterministicScore' => 1,
+				'contextScore'       => 1,
+				'blendedScore'       => 1,
+				'contextEvidence'    => [
+					'prompt_match' => 1,
+				],
+				'contextPenalties'   => [
+					'stale_docs' => 1,
+				],
+				'rankingVersion'     => 'contextual-ranking-v1',
+			],
+			[]
+		);
+
+		$this->assertArrayNotHasKey( 'modelScore', $result );
+		$this->assertArrayNotHasKey( 'deterministicScore', $result );
+		$this->assertArrayNotHasKey( 'contextScore', $result );
+		$this->assertArrayNotHasKey( 'blendedScore', $result );
+		$this->assertArrayNotHasKey( 'contextEvidence', $result );
+		$this->assertArrayNotHasKey( 'contextPenalties', $result );
+		$this->assertArrayNotHasKey( 'rankingVersion', $result );
+	}
+
+	public function test_normalize_preserves_sanitized_plugin_owned_contextual_defaults(): void {
+		$result = RankingContract::normalize(
+			[],
+			[
+				'score'              => 0.7,
+				'modelScore'         => 0.9,
+				'deterministicScore' => 0.8,
+				'contextScore'       => 0.6,
+				'blendedScore'       => 0.7,
+				'contextEvidence'    => [
+					'prompt_match'         => 1.4,
+					'unsupported_payload'  => 0.8,
+					'supports_fit'         => 'not numeric',
+					'operation_fit'        => 0.6,
+					'section_role_match'   => 0.5,
+					'docs_freshness'       => 0.4,
+					'pattern_readiness'    => 0.3,
+					'visible_scope_match'  => 0.2,
+					'native_preset_fit'    => 0.1,
+					'accessibility_fit'    => 0.0,
+					'design_semantics_fit' => -1,
+				],
+				'contextPenalties'   => [
+					'stale_docs' => 0.15,
+					'bad_key'    => 1,
+				],
+				'rankingVersion'     => 'contextual-ranking-v1',
+			]
+		);
+
+		$this->assertSame( 0.9, $result['modelScore'] );
+		$this->assertSame( 0.8, $result['deterministicScore'] );
+		$this->assertSame( 0.6, $result['contextScore'] );
+		$this->assertSame( 0.7, $result['blendedScore'] );
+		$this->assertSame( 'contextual-ranking-v1', $result['rankingVersion'] );
+		$this->assertSame( 1.0, $result['contextEvidence']['prompt_match'] );
+		$this->assertSame( 0.0, $result['contextEvidence']['design_semantics_fit'] );
+		$this->assertArrayNotHasKey( 'unsupported_payload', $result['contextEvidence'] );
+		$this->assertArrayNotHasKey( 'supports_fit', $result['contextEvidence'] );
+		$this->assertSame( [ 'stale_docs' => 0.15 ], $result['contextPenalties'] );
+	}
+
 	public function test_derive_score_clamps_weighted_signal_sum(): void {
 		$result = RankingContract::derive_score(
 			0.45,

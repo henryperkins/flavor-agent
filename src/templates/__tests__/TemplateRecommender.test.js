@@ -3,6 +3,7 @@ const mockUseSelect = jest.fn();
 const mockClearTemplateRecommendations = jest.fn();
 const mockFetchTemplateRecommendations = jest.fn();
 const mockRevalidateTemplateReviewFreshness = jest.fn();
+const mockRecordRecommendationOutcome = jest.fn();
 const mockSetTemplateSelectedSuggestion = jest.fn();
 const mockUndoActivity = jest.fn();
 const mockGetAllowedPatterns = jest.fn();
@@ -304,6 +305,7 @@ function createDispatchers() {
 		clearTemplateRecommendations: mockClearTemplateRecommendations,
 		clearUndoError: jest.fn(),
 		fetchTemplateRecommendations: mockFetchTemplateRecommendations,
+		recordRecommendationOutcome: mockRecordRecommendationOutcome,
 		revalidateTemplateReviewFreshness:
 			mockRevalidateTemplateReviewFreshness,
 		setTemplateSelectedSuggestion: mockSetTemplateSelectedSuggestion,
@@ -569,11 +571,140 @@ describe( 'TemplateRecommender', () => {
 
 		expect( selectedCard ).not.toBeNull();
 		expect( reviewSections.length ).toBe( 1 );
-		expect( selectedCard?.textContent ).toContain( 'Review open' );
+		expect( selectedCard?.textContent ).not.toContain( 'Review open' );
 		expect( selectedCard?.textContent ).toContain( 'Reviewing' );
 		expect( selectedCard?.contains( reviewSection ) ).toBe( false );
 		expect( selectedCard?.compareDocumentPosition( reviewSection ) ).toBe(
 			DOCUMENT_POSITION_FOLLOWING
+		);
+	} );
+
+	test( 'uses one compact recommendation list instead of split review and manual lanes', async () => {
+		currentState = createState( {
+			store: {
+				templateRecommendations: [
+					SUGGESTION,
+					{
+						label: 'Explore footer links',
+						description: 'Consider stronger footer navigation.',
+						patternSuggestions: [ 'theme/footer' ],
+						operations: [],
+					},
+				],
+				templateSelectedSuggestionKey: null,
+				templateStatus: 'ready',
+			},
+		} );
+
+		await renderPanel();
+
+		const lane = getContainer().querySelector(
+			'.flavor-agent-recommendation-lane'
+		);
+		const laneTitle = lane?.querySelector(
+			'.flavor-agent-panel__group-title'
+		);
+		const cards = getContainer().querySelectorAll(
+			'.flavor-agent-card--template'
+		);
+
+		expect( laneTitle?.textContent ).toBe( 'Recommendations' );
+		expect(
+			Array.from(
+				getContainer().querySelectorAll(
+					'.flavor-agent-panel__group-title'
+				)
+			).some( ( element ) => element.textContent === 'Manual ideas' )
+		).toBe( false );
+		expect( cards.length ).toBe( 2 );
+	} );
+
+	test( 'keeps template card details collapsed until requested', async () => {
+		await renderPanel();
+
+		const details = getContainer().querySelector(
+			'.flavor-agent-card--template details.flavor-agent-card__details'
+		);
+
+		expect( details ).not.toBeNull();
+		expect( details?.hasAttribute( 'open' ) ).toBe( false );
+		expect( details?.querySelector( 'summary' )?.textContent ).toBe(
+			'Details'
+		);
+	} );
+
+	test( 'records template review outcomes with decorated identity and ranking metadata', async () => {
+		const ranking = {
+			modelScore: 0.4,
+			deterministicScore: 0.6,
+			contextScore: 0.9,
+			blendedScore: 0.7,
+			rankingVersion: 'contextual-ranking-v1',
+		};
+		const recommendationOutcome = {
+			recommendationSetId: 'template:set:1',
+			suggestionKey: 'template:suggestions:1',
+			sourceRequestSignature: 'template-context-signature',
+			rank: 1,
+			resultCount: 1,
+		};
+
+		currentState = createState( {
+			store: {
+				templateRecommendations: [
+					{
+						...SUGGESTION,
+						label: 'Use secret launch copy',
+						suggestionKey: 'template:suggestions:1',
+						recommendationOutcome,
+						ranking,
+					},
+				],
+				templateSelectedSuggestionKey: null,
+				templateStatus: 'ready',
+			},
+		} );
+		currentState.store.templateContextSignature =
+			buildTemplateContextSignature( currentState );
+
+		await renderPanel();
+
+		await act( async () => {
+			getButton( 'Review' ).click();
+		} );
+
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'selected_for_review',
+				surface: 'template',
+				reason: 'review_opened',
+				suggestion: expect.objectContaining( {
+					suggestionKey: 'template:suggestions:1',
+					recommendationOutcome,
+					ranking,
+				} ),
+			} )
+		);
+		expect(
+			mockRecordRecommendationOutcome.mock.calls[ 0 ][ 0 ].suggestion
+				.suggestionKey
+		).not.toContain( 'secret' );
+	} );
+
+	test( 'keeps template explanation behind a collapsed summary', async () => {
+		await renderPanel();
+
+		const summary = getContainer().querySelector(
+			'.flavor-agent-result-summary'
+		);
+
+		expect( summary ).not.toBeNull();
+		expect( summary?.hasAttribute( 'open' ) ).toBe( false );
+		expect( summary?.querySelector( 'summary' )?.textContent ).toBe(
+			'Why these suggestions'
+		);
+		expect( summary?.textContent ).toContain(
+			'A focused hero pattern would strengthen the intro.'
 		);
 	} );
 
@@ -830,7 +961,7 @@ describe( 'TemplateRecommender', () => {
 		).toBe( true );
 	} );
 
-	test( 'keeps advisory template suggestions expanded when they are returned', async () => {
+	test( 'keeps advisory template suggestions in the compact list and opens details on request', async () => {
 		currentState = createState( {
 			store: {
 				templateRecommendations: [
@@ -849,9 +980,23 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Manual ideas' ) ).toBe( true );
-		expect( hasText( 'Advisory only' ) ).toBe( true );
+		expect( hasText( 'Recommendations' ) ).toBe( true );
+		expect( hasText( 'Manual ideas' ) ).toBe( false );
+		expect( hasText( 'Advisory only' ) ).toBe( false );
+		expect( hasText( 'Manual' ) ).toBe( true );
 		expect( hasText( 'Explore an editorial collage' ) ).toBe( true );
+
+		const details = getContainer().querySelector(
+			'.flavor-agent-card--template details.flavor-agent-card__details'
+		);
+		expect( details ).not.toBeNull();
+		expect( details?.hasAttribute( 'open' ) ).toBe( false );
+
+		await act( async () => {
+			details.querySelector( 'summary' ).click();
+		} );
+
+		expect( details?.hasAttribute( 'open' ) ).toBe( true );
 		expect( hasText( 'Suggested Patterns' ) ).toBe( true );
 		expect( hasText( 'Footer' ) ).toBe( true );
 		expect( hasText( 'Browse pattern' ) ).toBe( true );
@@ -1416,9 +1561,14 @@ describe( 'TemplateRecommender', () => {
 		).not.toBeNull();
 		expect( hasText( 'Settings > Connectors' ) ).toBe( true );
 		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
-		expect(
-			hasText( 'Newest valid template action can be undone here.' )
-		).toBe( true );
+		expect( hasText( 'Clarify hierarchy' ) ).toBe( false );
+
+		await act( async () => {
+			getContainer()
+				.querySelector( '.flavor-agent-activity-section__toggle' )
+				.click();
+		} );
+
 		expect( hasText( 'Clarify hierarchy' ) ).toBe( true );
 		expect(
 			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
@@ -1427,6 +1577,96 @@ describe( 'TemplateRecommender', () => {
 		).toBe( true );
 		expect( hasText( 'Suggested Composition' ) ).toBe( false );
 		expect( getTextarea() ).toBeNull();
+	} );
+
+	test( 'keeps diagnostic activity out of inline template actions', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'diagnostic-1',
+						type: 'request_diagnostic',
+						surface: 'template',
+						suggestion: 'Template request failed',
+						timestamp: '2026-03-24T10:00:01Z',
+						target: {
+							templateRef: TEMPLATE_REF,
+						},
+						request: {
+							ai: {
+								provider: 'OpenAI',
+								model: 'gpt-5.4',
+							},
+						},
+						undo: {
+							status: 'failed',
+						},
+					},
+					{
+						id: 'outcome-1',
+						type: 'recommendation_outcome',
+						surface: 'template',
+						suggestion: 'Recommendations shown',
+						timestamp: '2026-03-24T10:00:02Z',
+						target: {
+							templateRef: TEMPLATE_REF,
+						},
+						undo: {
+							canUndo: false,
+							status: 'not_applicable',
+						},
+					},
+					{
+						id: 'outcome-2',
+						type: 'recommendation_outcome',
+						surface: 'template',
+						suggestion: 'Recommendation selected',
+						timestamp: '2026-03-24T10:00:03Z',
+						document: {
+							scopeKey: `wp_template:${ TEMPLATE_REF }`,
+						},
+						undo: {
+							canUndo: false,
+							status: 'not_applicable',
+						},
+					},
+					{
+						id: 'activity-1',
+						type: 'apply_template_suggestion',
+						surface: 'template',
+						suggestion: 'Clarify hierarchy',
+						timestamp: '2026-03-24T10:00:00Z',
+						target: {
+							templateRef: TEMPLATE_REF,
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+						},
+					},
+				],
+			},
+		} );
+
+		await renderPanel();
+
+		await act( async () => {
+			getContainer()
+				.querySelector( '.flavor-agent-activity-section__toggle' )
+				.click();
+		} );
+
+		expect( hasText( 'Clarify hierarchy' ) ).toBe( true );
+		expect( hasText( 'Template request failed' ) ).toBe( false );
+		expect( hasText( 'Template request diagnostic' ) ).toBe( false );
+		expect( hasText( 'Recommendations shown' ) ).toBe( false );
+		expect( hasText( 'Recommendation selected' ) ).toBe( false );
+		expect( hasText( 'OpenAI · gpt-5.4' ) ).toBe( false );
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).filter(
+				( button ) => button.textContent === 'Undo'
+			)
+		).toHaveLength( 1 );
 	} );
 
 	test( 'hides the empty activity section when template recommendations are unavailable and no history exists', async () => {

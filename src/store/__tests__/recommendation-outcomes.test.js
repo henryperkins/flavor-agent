@@ -99,6 +99,34 @@ describe( 'recommendation outcomes', () => {
 		).toBeNull();
 	} );
 
+	test( 'builds privacy-safe insert failure outcomes', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+			},
+			event: 'insert_failed',
+			surface: 'pattern',
+			recommendationSetId: 'set-1',
+			suggestionKey: 'theme/hero',
+			reason: 'insert_blocks_noop',
+		} );
+
+		expect( entry ).toEqual(
+			expect.objectContaining( {
+				type: 'recommendation_outcome',
+				suggestion: 'Pattern insertion failed',
+				executionResult: 'diagnostic',
+			} )
+		);
+		expect( entry.after.outcome ).toEqual(
+			expect.objectContaining( {
+				event: 'insert_failed',
+				visibility: 'diagnostic',
+				reason: 'insert_blocks_noop',
+			} )
+		);
+	} );
+
 	test( 'dedupes shown by set and per-suggestion outcomes by reason', () => {
 		const shownKey = buildRecommendationOutcomeDedupeKey( {
 			surface: 'block',
@@ -200,5 +228,193 @@ describe( 'recommendation outcomes', () => {
 				],
 			} )
 		);
+	} );
+
+	test( 'summarizes pattern recommendation ranking sets', () => {
+		const payload = {
+			recommendationOutcome: {
+				recommendationSetId: 'pattern:abc',
+				sourceRequestSignature: 'source:sig',
+			},
+			recommendations: [
+				{
+					name: 'theme/hero',
+					ranking: {
+						contextScore: 0.91,
+						blendedScore: 0.88,
+						rankingVersion: 'contextual-ranking-v1',
+					},
+				},
+			],
+		};
+
+		const summary = getRecommendationOutcomeSummaryFromPayload( payload );
+
+		expect( summary.rankingSet ).toEqual( [
+			expect.objectContaining( {
+				suggestionKey: 'theme/hero',
+				ranking: expect.objectContaining( {
+					contextScore: 0.91,
+					blendedScore: 0.88,
+					rankingVersion: 'contextual-ranking-v1',
+				} ),
+			} ),
+		] );
+	} );
+
+	test( 'includes compact ranking snapshots without label-derived aggregate keys', () => {
+		const payload = decorateRecommendationPayload(
+			{
+				suggestions: [
+					{
+						label: 'Use secret launch copy',
+						ranking: {
+							modelScore: 0.4,
+							deterministicScore: 0.6,
+							contextScore: 0.9,
+							blendedScore: 0.7,
+							contextEvidence: {
+								prompt_match: 0.9,
+								rawText: 'Use secret launch copy',
+							},
+							contextPenalties: {
+								stale_docs: 0.15,
+							},
+							rankingVersion: 'contextual-ranking-v1',
+						},
+					},
+				],
+			},
+			{
+				surface: 'block',
+				recommendationSetId: 'block:ranking:set',
+				sourceRequestSignature: 'signature',
+			}
+		);
+		const summary = getRecommendationOutcomeSummaryFromPayload( payload );
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+			},
+			event: 'shown',
+			surface: 'block',
+			recommendationSetId: summary.recommendationSetId,
+			sourceRequestSignature: summary.sourceRequestSignature,
+			topSuggestionKeys: summary.topSuggestionKeys,
+			resultCount: summary.resultCount,
+			rankingSet: summary.rankingSet,
+		} );
+		const serialized = JSON.stringify( entry );
+
+		expect( summary.rankingSet ).toEqual( [
+			{
+				suggestionKey: 'block:suggestions:1',
+				ranking: expect.objectContaining( {
+					contextScore: 0.9,
+					rankingVersion: 'contextual-ranking-v1',
+				} ),
+			},
+		] );
+		expect( serialized ).not.toContain( 'secret' );
+		expect( serialized ).not.toContain( 'launch' );
+		expect( serialized ).not.toContain( 'copy' );
+		expect( serialized ).not.toContain( 'rawText' );
+	} );
+
+	test( 'keeps aggregate shown ranking sets separate from per-suggestion ranking snapshots', () => {
+		const ranking = {
+			contextScore: 0.9,
+			blendedScore: 0.8,
+			rankingVersion: 'contextual-ranking-v1',
+		};
+		const shown = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+			},
+			event: 'shown',
+			surface: 'block',
+			recommendationSetId: 'block:ranking:set',
+			suggestion: {
+				suggestionKey: 'block:suggestions:1',
+				ranking,
+			},
+			rankingSet: [
+				{
+					suggestionKey: 'block:suggestions:1',
+					ranking,
+				},
+			],
+		} );
+		const selected = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+			},
+			event: 'selected_for_review',
+			surface: 'block',
+			recommendationSetId: 'block:ranking:set',
+			suggestion: {
+				suggestionKey: 'block:suggestions:1',
+				ranking,
+			},
+			rankingSet: [
+				{
+					suggestionKey: 'block:suggestions:1',
+					ranking,
+				},
+			],
+		} );
+
+		expect( shown.after.outcome.rankingSet ).toEqual( [
+			{
+				suggestionKey: 'block:suggestions:1',
+				ranking,
+			},
+		] );
+		expect( shown.after.outcome.ranking ).toBeUndefined();
+		expect( selected.after.outcome.ranking ).toEqual( ranking );
+		expect( selected.after.outcome.rankingSet ).toBeUndefined();
+	} );
+
+	test( 'replaces prose-like ranking-set keys with set-local fallbacks', () => {
+		const ranking = {
+			contextScore: 0.9,
+			rankingVersion: 'contextual-ranking-v1',
+		};
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+			},
+			event: 'shown',
+			surface: 'block',
+			recommendationSetId: 'block:ranking:set',
+			rankingSet: [
+				{
+					suggestionKey: 'use-secret-launch-copy',
+					ranking,
+				},
+				{
+					suggestionKey: 'hash_abc123',
+					ranking,
+				},
+			],
+		} );
+
+		expect( entry.after.outcome.rankingSet ).toEqual( [
+			{
+				suggestionKey: 'suggestion:1',
+				ranking,
+			},
+			{
+				suggestionKey: 'hash_abc123',
+				ranking,
+			},
+		] );
+		expect( JSON.stringify( entry.after.outcome ) ).not.toContain(
+			'secret'
+		);
+		expect( JSON.stringify( entry.after.outcome ) ).not.toContain(
+			'launch'
+		);
+		expect( JSON.stringify( entry.after.outcome ) ).not.toContain( 'copy' );
 	} );
 } );

@@ -109,6 +109,66 @@ final class RecommendationEvaluationTest extends TestCase {
 		$this->assertSame( 1.0, $baseline['noiseRate'] );
 	}
 
+	public function test_contextual_ranking_parser_fixtures_choose_expected_top_suggestions(): void {
+		$fixtures = require __DIR__ . '/fixtures/recommendation-evaluation-contextual-ranking-fixtures.php';
+
+		foreach ( $fixtures as $name => $fixture ) {
+			$this->assertIsArray( $fixture );
+			$materialized = self::materialize_parser_fixture( $fixture );
+			$suggestions  = is_array( $materialized['suggestions'] ?? null ) ? $materialized['suggestions'] : [];
+
+			$this->assertGreaterThanOrEqual( 2, count( $suggestions ), "{$name} must materialize at least two suggestions." );
+			$this->assertSame( $fixture['expectedTopLabel'] ?? null, $suggestions[0]['label'] ?? null, $name );
+
+			$top_ranking    = is_array( $suggestions[0]['ranking'] ?? null ) ? $suggestions[0]['ranking'] : [];
+			$runner_ranking = is_array( $suggestions[1]['ranking'] ?? null ) ? $suggestions[1]['ranking'] : [];
+			$message        = wp_json_encode(
+				[
+					'top'    => [
+						'modelScore'         => $top_ranking['modelScore'] ?? null,
+						'deterministicScore' => $top_ranking['deterministicScore'] ?? null,
+						'contextScore'       => $top_ranking['contextScore'] ?? null,
+						'blendedScore'       => $top_ranking['blendedScore'] ?? null,
+					],
+					'runner' => [
+						'modelScore'         => $runner_ranking['modelScore'] ?? null,
+						'deterministicScore' => $runner_ranking['deterministicScore'] ?? null,
+						'contextScore'       => $runner_ranking['contextScore'] ?? null,
+						'blendedScore'       => $runner_ranking['blendedScore'] ?? null,
+					],
+				]
+			);
+
+			$this->assertGreaterThan(
+				(float) ( $runner_ranking['contextScore'] ?? 0.0 ),
+				(float) ( $top_ranking['contextScore'] ?? 0.0 ),
+				(string) $message
+			);
+			$this->assertGreaterThanOrEqual(
+				(float) ( $runner_ranking['blendedScore'] ?? 0.0 ) + 0.01,
+				(float) ( $top_ranking['blendedScore'] ?? 0.0 ),
+				(string) $message
+			);
+
+			if ( ! empty( $fixture['enableBlockStructuralActions'] ) ) {
+				$this->assertNotEmpty( $suggestions[0]['operations'] ?? [], "{$name} must prove an accepted structural operation." );
+				$this->assertStringNotContainsString(
+					'block_structural_actions_disabled',
+					wp_json_encode( $suggestions[0]['rejectedOperations'] ?? [] )
+				);
+			}
+
+			$this->assertSame(
+				self::normalize_expected_metrics( $fixture['expectedMetrics'] ?? [] ),
+				self::round_metric_values( self::evaluate( [ $materialized ] ) )
+			);
+			$this->assertSame(
+				self::normalize_expected_metrics( $fixture['expectedTopRankedMetrics'] ?? [] ),
+				self::round_metric_values( self::evaluate( [ self::top_ranked_fixture( $materialized ) ] ) )
+			);
+		}
+	}
+
 	/**
 	 * @param array<string, mixed> $fixture
 	 */
@@ -151,9 +211,42 @@ final class RecommendationEvaluationTest extends TestCase {
 		$parser   = is_string( $fixture['parser'] ?? null ) ? $fixture['parser'] : '';
 		$response = is_array( $fixture['response'] ?? null ) ? $fixture['response'] : [];
 		$context  = is_array( $fixture['context'] ?? null ) ? $fixture['context'] : [];
+		if ( is_array( $fixture['rankingContext'] ?? null ) ) {
+			$context['rankingContext'] = array_merge(
+				$fixture['rankingContext'],
+				[
+					'context' => $context,
+				]
+			);
+		}
 
 		$parsed = self::parse_fixture_response( $parser, $response, $context );
 		self::assertIsArray( $parsed );
+
+		if ( 'block' === $parser && ! empty( $fixture['enforceBlockContext'] ) ) {
+			$enable_structural_actions = ! empty( $fixture['enableBlockStructuralActions'] );
+			if ( $enable_structural_actions ) {
+				add_filter( 'flavor_agent_enable_block_structural_actions', '__return_true' );
+			}
+
+			try {
+				$parsed = Prompt::enforce_block_context_rules(
+					$parsed,
+					is_array( $context['block'] ?? null ) ? $context['block'] : [],
+					is_array( $context['rankingContext']['executionContract'] ?? null ) ? $context['rankingContext']['executionContract'] : [],
+					is_array( $context['blockOperationContext'] ?? null ) ? $context['blockOperationContext'] : []
+				);
+				self::assertIsArray( $parsed );
+				$parsed = Prompt::rerank_payload(
+					$parsed,
+					is_array( $context['rankingContext'] ?? null ) ? $context['rankingContext'] : []
+				);
+			} finally {
+				if ( $enable_structural_actions ) {
+					remove_filter( 'flavor_agent_enable_block_structural_actions', '__return_true' );
+				}
+			}
+		}
 
 		$suggestions = self::extract_parser_suggestions( $parser, $fixture, $parsed );
 		$suggestions = self::annotate_parser_rejections_from_response( $suggestions, $response );
@@ -181,11 +274,11 @@ final class RecommendationEvaluationTest extends TestCase {
 		self::assertIsString( $raw );
 
 		$parsed = match ( $parser ) {
-			'block'         => Prompt::parse_response( $raw ),
-			'style'         => StylePrompt::parse_response( $raw, $context ),
-			'template'      => TemplatePrompt::parse_response( $raw, $context ),
-			'template_part' => TemplatePartPrompt::parse_response( $raw, $context ),
-			'navigation'    => NavigationPrompt::parse_response( $raw, $context ),
+			'block'         => Prompt::parse_response( $raw, is_array( $context['rankingContext'] ?? null ) ? $context['rankingContext'] : [] ),
+			'style'         => StylePrompt::parse_response( $raw, $context, is_array( $context['rankingContext'] ?? null ) ? $context['rankingContext'] : [] ),
+			'template'      => TemplatePrompt::parse_response( $raw, $context, is_array( $context['rankingContext'] ?? null ) ? $context['rankingContext'] : [] ),
+			'template_part' => TemplatePartPrompt::parse_response( $raw, $context, is_array( $context['rankingContext'] ?? null ) ? $context['rankingContext'] : [] ),
+			'navigation'    => NavigationPrompt::parse_response( $raw, $context, is_array( $context['rankingContext'] ?? null ) ? $context['rankingContext'] : [] ),
 			default         => self::fail( "Unsupported parser fixture: {$parser}" ),
 		};
 

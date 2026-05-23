@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace FlavorAgent\LLM;
 
 use FlavorAgent\Support\FormatsDocsGuidance;
+use FlavorAgent\Support\RecommendationContextScorer;
 use FlavorAgent\Support\RankingContract;
 
 final class NavigationPrompt {
@@ -263,7 +264,7 @@ SYSTEM;
 	 * @param array  $context      Navigation context used to build the prompt.
 	 * @return array Validated suggestions payload.
 	 */
-	public static function parse_response( string $raw_response, array $context ): array {
+	public static function parse_response( string $raw_response, array $context, array $ranking_context = [] ): array {
 		$cleaned = preg_replace( '/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim( $raw_response ) );
 		$data    = json_decode( $cleaned, true );
 
@@ -282,7 +283,7 @@ SYSTEM;
 			? $data['suggestions']
 			: [];
 
-		$valid = self::validate_suggestions( $suggestions, self::build_target_lookup( $context ) );
+		$valid = self::validate_suggestions( $suggestions, self::build_target_lookup( $context ), $context, $ranking_context );
 
 		return [
 			'suggestions' => array_slice( $valid, 0, 3 ),
@@ -297,7 +298,7 @@ SYSTEM;
 	 * @param array<string, true> $target_lookup Lookup of valid current menu target paths.
 	 * @return array Validated suggestions.
 	 */
-	private static function validate_suggestions( array $suggestions, array $target_lookup ): array {
+	private static function validate_suggestions( array $suggestions, array $target_lookup, array $context = [], array $ranking_context = [] ): array {
 		$allowed_categories = [ 'structure', 'overlay', 'accessibility' ];
 		$allowed_types      = [ 'reorder', 'group', 'ungroup', 'add-submenu', 'flatten', 'set-attribute' ];
 		$structural_types   = [ 'reorder', 'group', 'ungroup', 'add-submenu', 'flatten' ];
@@ -417,11 +418,13 @@ SYSTEM;
 					'has_detail'   => '' !== $description ? 0.07 : 0.0,
 				]
 			);
+			$contextual_result   = self::score_contextual_recommendation( $entry, $context, $ranking_context );
+			$context_score       = is_array( $contextual_result ) ? $contextual_result['score'] : null;
 			$computed_score      = RankingContract::blend_score(
 				[
 					'model'         => $model_score,
 					'deterministic' => $deterministic_score,
-					'context'       => null,
+					'context'       => $context_score,
 				]
 			);
 			$source_signals      = [ 'llm_response', 'navigation_surface', 'category_' . $category ];
@@ -429,23 +432,34 @@ SYSTEM;
 			if ( count( $changes ) > 0 ) {
 				$source_signals[] = 'has_changes';
 			}
+			if ( is_array( $contextual_result ) ) {
+				$source_signals[] = 'contextual_ranking_v1';
+			}
 
 			$ranking_metadata = $ranking_input;
 			unset( $ranking_metadata['score'], $ranking_metadata['confidence'] );
 
 			$entry['ranking'] = RankingContract::normalize(
 				$ranking_metadata,
-				[
-					'score'         => $computed_score,
-					'reason'        => $description,
-					'sourceSignals' => $source_signals,
-					'safetyMode'    => 'validated',
-					'freshnessMeta' => [
-						'source'  => 'llm',
-						'surface' => 'navigation',
+				array_merge(
+					[
+						'score'         => $computed_score,
+						'reason'        => $description,
+						'sourceSignals' => $source_signals,
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [
+							'source'  => 'llm',
+							'surface' => 'navigation',
+						],
+						'advisoryType'  => (string) ( $suggestion['advisoryType'] ?? $category ),
 					],
-					'advisoryType'  => (string) ( $suggestion['advisoryType'] ?? $category ),
-				]
+					RankingContract::contextual_component_defaults(
+						$model_score,
+						$deterministic_score,
+						$contextual_result,
+						$computed_score
+					)
+				)
 			);
 
 			$entry['_rankScore'] = $computed_score;
@@ -473,6 +487,23 @@ SYSTEM;
 				return $suggestion;
 			},
 			$valid
+		);
+	}
+
+	private static function score_contextual_recommendation( array $suggestion, array $context, array $ranking_context ): ?array {
+		if ( [] === $ranking_context ) {
+			return null;
+		}
+
+		return RecommendationContextScorer::score(
+			[
+				'surface'       => $ranking_context['surface'] ?? 'navigation',
+				'group'         => 'suggestions',
+				'suggestion'    => $suggestion,
+				'context'       => is_array( $ranking_context['context'] ?? null ) ? $ranking_context['context'] : $context,
+				'prompt'        => $ranking_context['prompt'] ?? '',
+				'docsGrounding' => is_array( $ranking_context['docsGrounding'] ?? null ) ? $ranking_context['docsGrounding'] : [],
+			]
 		);
 	}
 

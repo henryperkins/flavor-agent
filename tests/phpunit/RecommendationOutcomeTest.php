@@ -76,4 +76,200 @@ final class RecommendationOutcomeTest extends TestCase {
 			$result->get_error_code()
 		);
 	}
+
+	public function test_normalizes_insert_failure_outcome(): void {
+		$result = RecommendationOutcome::normalize_entry(
+			[
+				'type'    => 'recommendation_outcome',
+				'surface' => 'pattern',
+				'target'  => [
+					'recommendationSetId' => 'set-1',
+					'suggestionKey'       => 'theme/hero',
+				],
+				'after'   => [
+					'outcome' => [
+						'event'               => 'insert_failed',
+						'recommendationSetId' => 'set-1',
+						'reason'              => 'insert_blocks_noop',
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'insert_failed', $result['after']['outcome']['event'] );
+		$this->assertSame( 'Pattern insertion failed', $result['suggestion'] );
+		$this->assertSame( 'diagnostic', $result['executionResult'] );
+		$this->assertSame( [ 'status' => 'not_applicable' ], $result['undo'] );
+	}
+
+	public function test_normalizes_bounded_ranking_snapshots_without_generated_text(): void {
+		$result = RecommendationOutcome::normalize_entry(
+			[
+				'type'    => 'recommendation_outcome',
+				'surface' => 'block',
+				'target'  => [
+					'recommendationSetId' => 'set-1',
+				],
+				'after'   => [
+					'outcome' => [
+						'event'               => 'shown',
+						'recommendationSetId' => 'set-1',
+						'rankingSet'          => [
+							[
+								'suggestionKey' => 'suggestion:1',
+								'ranking'       => [
+									'contextScore'     => 0.72,
+									'contextEvidence'  => [
+										'prompt_match' => 0.8,
+										'rawText'      => 'Use secret launch copy',
+									],
+									'contextPenalties' => [
+										'stale_docs' => 0.15,
+									],
+									'rankingVersion'   => 'contextual-ranking-v1',
+								],
+							],
+							[
+								'suggestionKey' => 'Use secret launch copy',
+								'ranking'       => [
+									'contextScore' => 1,
+								],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 2, $result['after']['outcome']['rankingSet'] );
+		$this->assertSame( 'suggestion:1', $result['after']['outcome']['rankingSet'][0]['suggestionKey'] );
+		$this->assertSame( 0.72, $result['after']['outcome']['rankingSet'][0]['ranking']['contextScore'] );
+		$this->assertSame( [ 'prompt_match' => 0.8 ], $result['after']['outcome']['rankingSet'][0]['ranking']['contextEvidence'] );
+		$this->assertSame( 'suggestion:2', $result['after']['outcome']['rankingSet'][1]['suggestionKey'] );
+		$this->assertStringNotContainsString( 'secret', wp_json_encode( $result ) );
+		$this->assertStringNotContainsString( 'launch', wp_json_encode( $result ) );
+		$this->assertStringNotContainsString( 'copy', wp_json_encode( $result ) );
+	}
+
+	public function test_keeps_shown_ranking_sets_separate_from_single_suggestion_ranking_snapshots(): void {
+		$result = RecommendationOutcome::normalize_entry(
+			[
+				'type'    => 'recommendation_outcome',
+				'surface' => 'block',
+				'target'  => [
+					'recommendationSetId' => 'set-1',
+					'suggestionKey'       => 'block:suggestions:1',
+				],
+				'after'   => [
+					'outcome' => [
+						'event'               => 'shown',
+						'recommendationSetId' => 'set-1',
+						'ranking'             => [
+							'contextScore'   => 0.99,
+							'rankingVersion' => 'contextual-ranking-v1',
+						],
+						'rankingSet'          => [
+							[
+								'suggestionKey' => 'block:suggestions:1',
+								'ranking'       => [
+									'contextScore'   => 0.72,
+									'blendedScore'   => 0.81,
+									'rankingVersion' => 'contextual-ranking-v1',
+								],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertArrayHasKey( 'rankingSet', $result['after']['outcome'] );
+		$this->assertArrayNotHasKey( 'ranking', $result['after']['outcome'] );
+		$this->assertArrayHasKey( 'rankingSet', $result['request']['recommendation'] );
+		$this->assertArrayNotHasKey( 'ranking', $result['request']['recommendation'] );
+		$this->assertSame( 0.72, $result['after']['outcome']['rankingSet'][0]['ranking']['contextScore'] );
+	}
+
+	public function test_keeps_selected_ranking_snapshots_separate_from_aggregate_ranking_sets(): void {
+		$result = RecommendationOutcome::normalize_entry(
+			[
+				'type'    => 'recommendation_outcome',
+				'surface' => 'block',
+				'target'  => [
+					'recommendationSetId' => 'set-1',
+					'suggestionKey'       => 'block:suggestions:1',
+				],
+				'after'   => [
+					'outcome' => [
+						'event'               => 'selected_for_review',
+						'recommendationSetId' => 'set-1',
+						'ranking'             => [
+							'contextScore'   => 0.72,
+							'blendedScore'   => 0.81,
+							'rankingVersion' => 'contextual-ranking-v1',
+						],
+						'rankingSet'          => [
+							[
+								'suggestionKey' => 'block:suggestions:1',
+								'ranking'       => [
+									'contextScore' => 0.99,
+								],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertArrayHasKey( 'ranking', $result['after']['outcome'] );
+		$this->assertArrayNotHasKey( 'rankingSet', $result['after']['outcome'] );
+		$this->assertArrayHasKey( 'ranking', $result['request']['recommendation'] );
+		$this->assertArrayNotHasKey( 'rankingSet', $result['request']['recommendation'] );
+		$this->assertSame( 0.72, $result['after']['outcome']['ranking']['contextScore'] );
+	}
+
+	public function test_replaces_prose_like_ranking_set_keys_with_set_local_fallbacks(): void {
+		$result = RecommendationOutcome::normalize_entry(
+			[
+				'type'    => 'recommendation_outcome',
+				'surface' => 'block',
+				'target'  => [
+					'recommendationSetId' => 'set-1',
+				],
+				'after'   => [
+					'outcome' => [
+						'event'               => 'shown',
+						'recommendationSetId' => 'set-1',
+						'rankingSet'          => [
+							[
+								'suggestionKey' => 'use-secret-launch-copy',
+								'ranking'       => [
+									'contextScore'   => 0.72,
+									'rankingVersion' => 'contextual-ranking-v1',
+								],
+							],
+							[
+								'suggestionKey' => 'hash_abc123',
+								'ranking'       => [
+									'contextScore'   => 0.64,
+									'rankingVersion' => 'contextual-ranking-v1',
+								],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'suggestion:1', $result['after']['outcome']['rankingSet'][0]['suggestionKey'] );
+		$this->assertSame( 'hash_abc123', $result['after']['outcome']['rankingSet'][1]['suggestionKey'] );
+		$this->assertStringNotContainsString( 'secret', wp_json_encode( $result['after']['outcome'] ) );
+		$this->assertStringNotContainsString( 'launch', wp_json_encode( $result['after']['outcome'] ) );
+		$this->assertStringNotContainsString( 'copy', wp_json_encode( $result['after']['outcome'] ) );
+	}
 }

@@ -112,6 +112,71 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		$this->assertSame( 'model', $request['ai']['requestSummary']['modelResolutionStatus'] ?? null );
 	}
 
+	public function test_execute_persists_pattern_pipeline_trace_in_request_diagnostic_activity(): void {
+		RecommendationAbilityExecution::execute(
+			'pattern',
+			'flavor-agent/recommend-patterns',
+			[
+				'prompt'   => 'Find a hero pattern.',
+				'document' => [
+					'scopeKey' => 'post:42',
+					'postType' => 'post',
+					'entityId' => '42',
+				],
+			],
+			static fn(): array => [
+				'recommendations' => [
+					[
+						'name'  => 'theme/hero',
+						'title' => 'Hero',
+					],
+				],
+				'diagnostics'     => [
+					'pipelineTrace'      => [
+						'backendRetrieved'        => 3,
+						'visibleScopeDropped'     => 1,
+						'rehydrationDropped'      => 1,
+						'candidatePool'           => 1,
+						'diversityDropped'        => 0,
+						'llmReturned'             => 2,
+						'llmNameMismatchDropped'  => 1,
+						'belowThresholdDropped'   => 0,
+						'returnedRecommendations' => 1,
+					],
+					'dropReasons'        => [
+						'visible_scope'     => 1,
+						'llm_name_mismatch' => 1,
+						'rawPatternTitle'   => 'Private launch hero',
+					],
+					'filteredCandidates' => [
+						'unreadableSyncedPatterns' => 1,
+					],
+				],
+			]
+		);
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+		$this->assertCount( 1, $entries );
+
+		$after = json_decode( (string) ( $entries[0]['after_state'] ?? '' ), true );
+		$this->assertSame(
+			3,
+			$after['pipelineTrace']['backendRetrieved'] ?? null
+		);
+		$this->assertSame(
+			1,
+			$after['pipelineTrace']['llmNameMismatchDropped'] ?? null
+		);
+		$this->assertSame(
+			[
+				'visible_scope'     => 1,
+				'llm_name_mismatch' => 1,
+			],
+			$after['pipelineDropReasons'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Private launch hero', wp_json_encode( $after ) );
+	}
+
 	/**
 	 * @dataProvider request_diagnostic_title_cases
 	 *

@@ -938,7 +938,7 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
 		$this->assertSame(
-			[ 'cloudflare_ai_search', 'llm_ranker' ],
+			[ 'cloudflare_ai_search', 'llm_ranker', 'contextual_ranking_v1' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
 		$this->assertSame(
@@ -1217,15 +1217,15 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 
 		$this->assertSame(
-			[ 'theme/footer-callout', 'theme/hero' ],
+			[ 'theme/hero', 'theme/footer-callout' ],
 			array_column( $result['recommendations'], 'name' )
 		);
 		$this->assertSame(
-			[ 'Excellent fit', 'Matches the header context.' ],
+			[ 'Matches the header context.', 'Excellent fit' ],
 			array_column( $result['recommendations'], 'reason' )
 		);
 		$this->assertSame(
-			[ 'qdrant_semantic', 'llm_ranker', 'qdrant_structural' ],
+			[ 'qdrant_semantic', 'llm_ranker', 'qdrant_structural', 'contextual_ranking_v1' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
 		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
@@ -2522,6 +2522,85 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringNotContainsString( 'Private launch copy', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
+	public function test_recommend_patterns_reports_privacy_safe_pipeline_trace(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:91' => false,
+		];
+		WordPressTestState::$posts        = [
+			91 => $this->synced_pattern_post( 91, 'Private Launch Banner', 'Private launch copy', 'private' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/hero', 0.91 ),
+					$this->pattern_point( 'theme/hidden', 0.99 ),
+					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+					$this->pattern_point( 'theme/weak', 0.05 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.81,
+								'reason' => 'Fits the current context.',
+							],
+							[
+								'name'   => 'theme/missing',
+								'score'  => 0.94,
+								'reason' => 'Model returned a candidate outside the sanitized pool.',
+							],
+							[
+								'name'   => 'theme/weak',
+								'score'  => 0.1,
+								'reason' => 'Too weak.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'theme/hero', 'core/block/91', 'theme/weak' ]
+		);
+
+		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertSame(
+			[
+				'backendRetrieved'        => 4,
+				'visibleScopeDropped'     => 1,
+				'rehydrationDropped'      => 1,
+				'candidatePool'           => 2,
+				'diversityDropped'        => 0,
+				'llmReturned'             => 3,
+				'llmNameMismatchDropped'  => 1,
+				'belowThresholdDropped'   => 1,
+				'returnedRecommendations' => 1,
+			],
+			$result['diagnostics']['pipelineTrace'] ?? null
+		);
+		$this->assertSame(
+			[
+				'visible_scope'             => 1,
+				'synced_rehydration_failed' => 1,
+				'llm_name_mismatch'         => 1,
+				'below_threshold'           => 1,
+			],
+			$result['diagnostics']['dropReasons'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
+	}
+
 	public function test_recommend_patterns_reports_duplicate_unreadable_synced_candidate_once(): void {
 		$this->configure_backends();
 		$this->save_index_state();
@@ -2584,9 +2663,19 @@ final class PatternAbilitiesTest extends TestCase {
 			[
 				'recommendations' => [
 					[
-						'name'   => 'theme/hero',
-						'score'  => 0.82,
-						'reason' => 'Matches the current context.',
+						'name'    => 'theme/hero',
+						'score'   => 0.82,
+						'reason'  => 'Matches the current context.',
+						'ranking' => [
+							'contextScore'     => 1,
+							'contextEvidence'  => [
+								'prompt_match' => 1,
+							],
+							'rankingVersion'   => 'contextual-ranking-v1',
+							'contextPenalties' => [
+								'stale_docs' => 1,
+							],
+						],
 					],
 				],
 			]
@@ -2611,12 +2700,29 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
-		$this->assertSame( 0.82, $result['recommendations'][0]['ranking']['score'] ?? null );
 		$this->assertSame( 'Matches the current context.', $result['recommendations'][0]['ranking']['reason'] ?? null );
 		$this->assertSame( 'validated', $result['recommendations'][0]['ranking']['safetyMode'] ?? null );
 		$this->assertSame(
-			[ 'qdrant_semantic', 'llm_ranker' ],
+			[ 'qdrant_semantic', 'llm_ranker', 'contextual_ranking_v1' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
+		);
+		$this->assertSame( 0.82, $result['recommendations'][0]['ranking']['modelScore'] ?? null );
+		$this->assertSame( 0.71, $result['recommendations'][0]['ranking']['deterministicScore'] ?? null );
+		$this->assertIsFloat( $result['recommendations'][0]['ranking']['contextScore'] ?? null );
+		$this->assertIsFloat( $result['recommendations'][0]['ranking']['blendedScore'] ?? null );
+		$this->assertSame(
+			'contextual-ranking-v1',
+			$result['recommendations'][0]['ranking']['rankingVersion'] ?? null
+		);
+		$this->assertArrayHasKey( 'visible_scope_match', $result['recommendations'][0]['ranking']['contextEvidence'] ?? [] );
+		$this->assertArrayHasKey( 'contextEvidence', $result['recommendations'][0]['ranking'] );
+		$this->assertSame(
+			$result['recommendations'][0]['ranking']['blendedScore'] ?? null,
+			$result['recommendations'][0]['ranking']['score'] ?? null
+		);
+		$this->assertSame(
+			$result['recommendations'][0]['ranking']['blendedScore'] ?? null,
+			$result['recommendations'][0]['score'] ?? null
 		);
 		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );

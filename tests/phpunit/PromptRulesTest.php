@@ -1853,6 +1853,66 @@ TEXT
 		$this->assertSame( [ 'llm_response', 'block_surface', 'has_description' ], $result['block'][0]['ranking']['sourceSignals'] );
 	}
 
+	public function test_rerank_payload_replaces_existing_score_with_contextual_blended_score(): void {
+		$result  = Prompt::rerank_payload(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Use text color',
+						'description'      => 'Set the paragraph text color.',
+						'type'             => 'attribute_change',
+						'attributeUpdates' => [
+							'style' => [
+								'color' => [
+									'text' => '#123456',
+								],
+							],
+						],
+						'ranking'          => [
+							'score'         => 0.9,
+							'sourceSignals' => [ 'model_heading_hierarchy' ],
+						],
+					],
+				],
+				'explanation' => '',
+			],
+			[
+				'surface'           => 'block',
+				'prompt'            => 'Clarify the hero hierarchy.',
+				'context'           => [
+					'block' => [
+						'currentAttributes' => [
+							'style' => [
+								'color' => [
+									'text' => '#000000',
+								],
+							],
+						],
+					],
+				],
+				'executionContract' => [
+					'styleSupportPaths' => [ 'color.background' ],
+				],
+			]
+		);
+		$ranking = $result['block'][0]['ranking'];
+
+		$this->assertNotSame( 0.9, $ranking['score'] );
+		$this->assertSame( $ranking['blendedScore'], $ranking['score'] );
+		$this->assertArrayHasKey( 'contextScore', $ranking );
+		$this->assertSame(
+			1,
+			count(
+				array_filter(
+					$ranking['sourceSignals'],
+					static fn( string $signal ): bool => 'contextual_ranking_v1' === $signal
+				)
+			)
+		);
+	}
+
 	public function test_parse_response_blends_model_score_with_deterministic_quality_when_ranking_blocks(): void {
 		$result = Prompt::parse_response(
 			wp_json_encode(

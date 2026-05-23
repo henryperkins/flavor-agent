@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\LLM;
 
 use FlavorAgent\Support\FormatsDocsGuidance;
+use FlavorAgent\Support\RecommendationContextScorer;
 use FlavorAgent\Support\RankingContract;
 
 final class StylePrompt {
@@ -743,7 +744,7 @@ EXAMPLE
 		return implode( '; ', $parts );
 	}
 
-	public static function parse_response( string $raw, array $context ): array|\WP_Error {
+	public static function parse_response( string $raw, array $context, array $ranking_context = [] ): array|\WP_Error {
 		$cleaned = preg_replace( '/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim( $raw ) );
 		$data    = json_decode( is_string( $cleaned ) ? $cleaned : '', true );
 
@@ -758,7 +759,8 @@ EXAMPLE
 		return [
 			'suggestions' => self::validate_suggestions(
 				is_array( $data['suggestions'] ?? null ) ? $data['suggestions'] : [],
-				$context
+				$context,
+				$ranking_context
 			),
 			'explanation' => sanitize_text_field( (string) ( $data['explanation'] ?? '' ) ),
 		];
@@ -768,7 +770,7 @@ EXAMPLE
 	 * @param array<int, array<string, mixed>> $suggestions
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function validate_suggestions( array $suggestions, array $context ): array {
+	private static function validate_suggestions( array $suggestions, array $context, array $ranking_context = [] ): array {
 		$validated = [];
 		$order     = 0;
 
@@ -821,11 +823,13 @@ EXAMPLE
 					'uses_preset_values' => self::operations_use_preset_values( $effective_operations ) ? 0.25 : 0.0,
 				]
 			);
+			$contextual_result   = self::score_contextual_recommendation( $entry, $context, $ranking_context );
+			$context_score       = is_array( $contextual_result ) ? $contextual_result['score'] : null;
 			$computed_score      = RankingContract::blend_score(
 				[
 					'model'         => $model_score,
 					'deterministic' => $deterministic_score,
-					'context'       => null,
+					'context'       => $context_score,
 				]
 			);
 			$source_signals      = [ 'llm_response', 'style_surface', 'tone_' . $tone ];
@@ -836,23 +840,34 @@ EXAMPLE
 			if ( self::operations_use_preset_values( $effective_operations ) ) {
 				$source_signals[] = 'uses_preset_values';
 			}
+			if ( is_array( $contextual_result ) ) {
+				$source_signals[] = 'contextual_ranking_v1';
+			}
 
 			$ranking_metadata = $ranking_input;
 			unset( $ranking_metadata['score'], $ranking_metadata['confidence'] );
 
 			$entry['ranking'] = RankingContract::normalize(
 				$ranking_metadata,
-				[
-					'score'         => $computed_score,
-					'reason'        => (string) ( $suggestion['description'] ?? '' ),
-					'sourceSignals' => $source_signals,
-					'safetyMode'    => 'validated',
-					'freshnessMeta' => [
-						'source'  => 'llm',
-						'surface' => 'style',
+				array_merge(
+					[
+						'score'         => $computed_score,
+						'reason'        => (string) ( $suggestion['description'] ?? '' ),
+						'sourceSignals' => $source_signals,
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [
+							'source'  => 'llm',
+							'surface' => 'style',
+						],
+						'operations'    => 'executable' === $tone ? $effective_operations : [],
 					],
-					'operations'    => 'executable' === $tone ? $effective_operations : [],
-				]
+					RankingContract::contextual_component_defaults(
+						$model_score,
+						$deterministic_score,
+						$contextual_result,
+						$computed_score
+					)
+				)
 			);
 
 			$entry['_rankScore'] = $computed_score;
@@ -887,6 +902,23 @@ EXAMPLE
 				return $suggestion;
 			},
 			$filtered
+		);
+	}
+
+	private static function score_contextual_recommendation( array $suggestion, array $context, array $ranking_context ): ?array {
+		if ( [] === $ranking_context ) {
+			return null;
+		}
+
+		return RecommendationContextScorer::score(
+			[
+				'surface'       => $ranking_context['surface'] ?? ( $context['scope']['surface'] ?? 'style' ),
+				'group'         => 'suggestions',
+				'suggestion'    => $suggestion,
+				'context'       => is_array( $ranking_context['context'] ?? null ) ? $ranking_context['context'] : $context,
+				'prompt'        => $ranking_context['prompt'] ?? '',
+				'docsGrounding' => is_array( $ranking_context['docsGrounding'] ?? null ) ? $ranking_context['docsGrounding'] : [],
+			]
 		);
 	}
 

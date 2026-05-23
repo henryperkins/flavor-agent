@@ -36,6 +36,7 @@ import { getResolvedContextSignatureFromResponse, STORE_NAME } from '../store';
 import { buildPatternInsertionTargetSignature } from '../utils/recommendation-request-signature';
 import {
 	buildRecommendationSetId,
+	getRecommendationOutcomeSummaryFromPayload,
 	getSuggestionOutcomeKey,
 	normalizeSourceRequestSignature,
 } from '../store/recommendation-outcomes';
@@ -137,6 +138,185 @@ function buildInsertionContext( editor, inserterRootClientId, insertionPoint ) {
 
 function getPatternTitle( pattern ) {
 	return getNonEmptyString( pattern?.title ) || pattern?.name || 'Pattern';
+}
+
+function getBlockListSnapshot( blockEditor, rootClientId ) {
+	if ( typeof blockEditor?.getBlocks !== 'function' ) {
+		return null;
+	}
+
+	const blocks = blockEditor.getBlocks( rootClientId ?? null );
+	if ( ! Array.isArray( blocks ) ) {
+		return null;
+	}
+
+	return blocks.map( ( block ) => ( {
+		clientId: getNonEmptyString( block?.clientId ),
+		name: getNonEmptyString( block?.name ),
+	} ) );
+}
+
+function countBlockNames( blocks ) {
+	return blocks.reduce( ( counts, block ) => {
+		if ( block.name ) {
+			counts.set( block.name, ( counts.get( block.name ) || 0 ) + 1 );
+		}
+
+		return counts;
+	}, new Map() );
+}
+
+function didInsertBlocksAtTarget(
+	beforeSnapshot,
+	afterSnapshot,
+	insertedBlocks,
+	insertionIndex
+) {
+	if (
+		! Array.isArray( beforeSnapshot ) ||
+		! Array.isArray( afterSnapshot ) ||
+		! Array.isArray( insertedBlocks ) ||
+		insertedBlocks.length === 0
+	) {
+		return false;
+	}
+
+	const expectedClientIds = insertedBlocks
+		.map( ( block ) => getNonEmptyString( block?.clientId ) )
+		.filter( Boolean );
+	const afterClientIds = new Set(
+		afterSnapshot.map( ( block ) => block.clientId ).filter( Boolean )
+	);
+
+	if (
+		expectedClientIds.length === insertedBlocks.length &&
+		expectedClientIds.every( ( clientId ) =>
+			afterClientIds.has( clientId )
+		)
+	) {
+		return true;
+	}
+
+	if (
+		afterSnapshot.length <
+		beforeSnapshot.length + insertedBlocks.length
+	) {
+		return false;
+	}
+
+	const expectedNames = insertedBlocks.map( ( block ) =>
+		getNonEmptyString( block?.name )
+	);
+	const boundedIndex =
+		Number.isInteger( insertionIndex ) && insertionIndex >= 0
+			? Math.min(
+					insertionIndex,
+					Math.max( 0, afterSnapshot.length - insertedBlocks.length )
+			  )
+			: Math.max( 0, afterSnapshot.length - insertedBlocks.length );
+	const insertedWindow = afterSnapshot.slice(
+		boundedIndex,
+		boundedIndex + insertedBlocks.length
+	);
+
+	if (
+		insertedWindow.length === insertedBlocks.length &&
+		insertedWindow.every(
+			( block, index ) =>
+				block.name && block.name === expectedNames[ index ]
+		)
+	) {
+		return true;
+	}
+
+	const beforeCounts = countBlockNames( beforeSnapshot );
+	const afterCounts = countBlockNames( afterSnapshot );
+	const expectedCounts = countBlockNames(
+		expectedNames.map( ( name ) => ( { name } ) )
+	);
+
+	for ( const [ name, count ] of expectedCounts.entries() ) {
+		if (
+			( afterCounts.get( name ) || 0 ) -
+				( beforeCounts.get( name ) || 0 ) <
+			count
+		) {
+			return false;
+		}
+	}
+
+	return expectedCounts.size > 0;
+}
+
+function getPatternInsertabilityDropReason(
+	pattern,
+	rootClientId,
+	blockEditor
+) {
+	const blocks = resolvePatternBlocks( pattern );
+
+	if ( blocks.length === 0 ) {
+		return 'empty_pattern_blocks';
+	}
+
+	return getRejectedPatternBlockNames( pattern, rootClientId, blockEditor )
+		.length > 0
+		? 'disallowed_block_types'
+		: '';
+}
+
+function getDroppedRecommendedPatterns(
+	recommendations,
+	builtRecommendedPatterns,
+	rootClientId,
+	blockEditor
+) {
+	if ( ! Array.isArray( recommendations ) ) {
+		return [];
+	}
+
+	const matchedByName = new Map(
+		builtRecommendedPatterns
+			.filter( ( item ) =>
+				getNonEmptyString( item?.recommendation?.name )
+			)
+			.map( ( item ) => [ item.recommendation.name, item ] )
+	);
+	const drops = [];
+
+	recommendations.forEach( ( recommendation ) => {
+		const name = getNonEmptyString( recommendation?.name );
+
+		if ( ! name ) {
+			return;
+		}
+
+		if ( ! matchedByName.has( name ) ) {
+			drops.push( {
+				pattern: null,
+				recommendation,
+				reason: 'not_visible_in_inserter',
+			} );
+		}
+	} );
+
+	builtRecommendedPatterns.forEach( ( item ) => {
+		const reason = getPatternInsertabilityDropReason(
+			item?.pattern,
+			rootClientId,
+			blockEditor
+		);
+
+		if ( reason ) {
+			drops.push( {
+				pattern: item.pattern,
+				recommendation: item.recommendation,
+				reason,
+			} );
+		}
+	} );
+
+	return drops;
 }
 
 function getUnreadableSyncedPatternCount( diagnostics ) {
@@ -474,6 +654,7 @@ export default function PatternRecommender() {
 	const noticeObserverRef = useRef( null );
 	const noticeSlotRef = useRef( null );
 	const shownRecommendationSetRef = useRef( '' );
+	const droppedRecommendationOutcomeRef = useRef( new Set() );
 
 	if ( ! noticeSlotRef.current && typeof document !== 'undefined' ) {
 		const noticeSlot = document.createElement( 'div' );
@@ -503,6 +684,19 @@ export default function PatternRecommender() {
 			);
 		},
 		[ builtRecommendedPatterns, inserterRootClientId ]
+	);
+	const droppedRecommendedPatterns = useSelect(
+		( select ) => {
+			const blockEditor = select( blockEditorStore );
+
+			return getDroppedRecommendedPatterns(
+				recommendations,
+				builtRecommendedPatterns,
+				inserterRootClientId,
+				blockEditor
+			);
+		},
+		[ recommendations, builtRecommendedPatterns, inserterRootClientId ]
 	);
 	const connectorApprovalNotice = useMemo(
 		() => getConnectorApprovalNotice( 'pattern', patternErrorDetails ),
@@ -585,6 +779,23 @@ export default function PatternRecommender() {
 			patternSourceRequestSignature,
 		]
 	);
+	const patternOutcomeSummary = useMemo(
+		() =>
+			getRecommendationOutcomeSummaryFromPayload( {
+				recommendationOutcome: {
+					recommendationSetId: patternRecommendationSetId,
+					sourceRequestSignature: patternSourceRequestSignature,
+				},
+				recommendations: recommendedPatterns.map(
+					( { recommendation } ) => recommendation
+				),
+			} ),
+		[
+			patternRecommendationSetId,
+			patternSourceRequestSignature,
+			recommendedPatterns,
+		]
+	);
 
 	const fetchPatternRecommendationsForCurrentTarget = useCallback(
 		( input = buildBaseInput() ) =>
@@ -641,6 +852,19 @@ export default function PatternRecommender() {
 				recommendedPatterns.findIndex(
 					( item ) => item?.pattern?.name === pattern?.name
 				) + 1;
+			const topSuggestionKeys =
+				Array.isArray( patternOutcomeSummary?.topSuggestionKeys ) &&
+				patternOutcomeSummary.topSuggestionKeys.length > 0
+					? patternOutcomeSummary.topSuggestionKeys
+					: recommendedPatterns
+							.slice( 0, 3 )
+							.map( ( item, index ) =>
+								getSuggestionOutcomeKey(
+									item?.recommendation || item?.pattern || {},
+									item?.pattern?.name ||
+										`pattern:${ index + 1 }`
+								)
+							);
 
 			return {
 				event,
@@ -651,15 +875,18 @@ export default function PatternRecommender() {
 				reason,
 				patternKey: pattern?.name || suggestionKey,
 				rank: rank > 0 ? rank : null,
-				resultCount: recommendedPatterns.length,
-				topSuggestionKeys: recommendedPatterns
-					.slice( 0, 3 )
-					.map( ( item, index ) =>
-						getSuggestionOutcomeKey(
-							item?.recommendation || item?.pattern || {},
-							item?.pattern?.name || `pattern:${ index + 1 }`
-						)
-					),
+				resultCount:
+					patternOutcomeSummary?.resultCount ??
+					recommendedPatterns.length,
+				topSuggestionKeys,
+				...( event === 'shown' &&
+				Array.isArray( patternOutcomeSummary?.rankingSet ) &&
+				patternOutcomeSummary.rankingSet.length > 0
+					? { rankingSet: patternOutcomeSummary.rankingSet }
+					: {} ),
+				...( event !== 'shown' && recommendation
+					? { suggestion: recommendation }
+					: {} ),
 				target: {
 					patternKey: pattern?.name || suggestionKey,
 					rank: rank > 0 ? rank : null,
@@ -669,6 +896,7 @@ export default function PatternRecommender() {
 		},
 		[
 			insertionContext,
+			patternOutcomeSummary,
 			patternRecommendationSetId,
 			patternSourceRequestSignature,
 			recommendedPatterns,
@@ -687,6 +915,50 @@ export default function PatternRecommender() {
 		},
 		[ buildPatternOutcomePayload, recordRecommendationOutcome ]
 	);
+
+	useEffect( () => {
+		if (
+			! canRecommend ||
+			patternStatus !== 'ready' ||
+			! Array.isArray( droppedRecommendedPatterns ) ||
+			droppedRecommendedPatterns.length === 0
+		) {
+			return;
+		}
+
+		droppedRecommendedPatterns.forEach(
+			( { pattern = null, recommendation = null, reason = '' } ) => {
+				const suggestionKey = getSuggestionOutcomeKey(
+					recommendation || pattern || {},
+					pattern?.name || ''
+				);
+				const dedupeKey = [
+					patternRecommendationSetId,
+					suggestionKey,
+					reason,
+				].join( ':' );
+
+				if (
+					droppedRecommendationOutcomeRef.current.has( dedupeKey )
+				) {
+					return;
+				}
+
+				droppedRecommendationOutcomeRef.current.add( dedupeKey );
+				recordPatternOutcome( 'validation_blocked', {
+					pattern,
+					recommendation,
+					reason,
+				} );
+			}
+		);
+	}, [
+		canRecommend,
+		droppedRecommendedPatterns,
+		patternRecommendationSetId,
+		patternStatus,
+		recordPatternOutcome,
+	] );
 
 	const handleInsertPattern = useCallback(
 		async ( pattern, recommendation = null ) => {
@@ -868,12 +1140,81 @@ export default function PatternRecommender() {
 				return;
 			}
 
-			insertBlocks(
-				blocks.map( ( block ) => cloneBlock( block ) ),
-				insertionIndex,
-				inserterRootClientId,
-				true
-			);
+			let insertionVerified = false;
+
+			try {
+				const clonedBlocks = blocks.map( ( block ) =>
+					cloneBlock( block )
+				);
+				const beforeInsertSnapshot = getBlockListSnapshot(
+					registry?.select?.( blockEditorStore ),
+					inserterRootClientId
+				);
+
+				await insertBlocks(
+					clonedBlocks,
+					insertionIndex,
+					inserterRootClientId,
+					true
+				);
+
+				const afterInsertSnapshot = getBlockListSnapshot(
+					registry?.select?.( blockEditorStore ),
+					inserterRootClientId
+				);
+
+				insertionVerified = didInsertBlocksAtTarget(
+					beforeInsertSnapshot,
+					afterInsertSnapshot,
+					clonedBlocks,
+					insertionIndex
+				);
+			} catch {
+				recordPatternOutcome( 'insert_failed', {
+					pattern,
+					recommendation,
+					reason: 'insert_blocks_exception',
+				} );
+				createErrorNotice(
+					sprintf(
+						/* translators: %s: block pattern title. */
+						__(
+							'Cannot insert pattern "%s" because Gutenberg rejected the insertion request.',
+							'flavor-agent'
+						),
+						getPatternTitle( pattern )
+					),
+					{
+						type: 'snackbar',
+						id: 'inserter-notice',
+					}
+				);
+				return;
+			}
+
+			if ( ! insertionVerified ) {
+				recordPatternOutcome( 'insert_failed', {
+					pattern,
+					recommendation,
+					reason: 'insert_blocks_noop',
+				} );
+				createErrorNotice(
+					sprintf(
+						/* translators: %s: block pattern title. */
+						__(
+							'Cannot confirm pattern "%s" was inserted. Gutenberg did not report the inserted blocks at the target location.',
+							'flavor-agent'
+						),
+						getPatternTitle( pattern )
+					),
+					{
+						type: 'snackbar',
+						id: 'inserter-notice',
+					}
+				);
+				return;
+			}
+
 			recordPatternOutcome( 'pattern_inserted_from_shelf', {
 				pattern,
 				recommendation,

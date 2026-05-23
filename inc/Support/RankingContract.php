@@ -6,6 +6,36 @@ namespace FlavorAgent\Support;
 
 final class RankingContract {
 
+	public const CONTEXTUAL_RANKING_VERSION = 'contextual-ranking-v1';
+
+	private const CONTEXTUAL_SCORE_KEYS = [
+		'modelScore',
+		'deterministicScore',
+		'contextScore',
+		'blendedScore',
+	];
+
+	private const CONTEXT_EVIDENCE_KEYS = [
+		'prompt_match',
+		'operation_fit',
+		'supports_fit',
+		'section_role_match',
+		'docs_freshness',
+		'pattern_readiness',
+		'visible_scope_match',
+		'native_preset_fit',
+		'accessibility_fit',
+		'design_semantics_fit',
+	];
+
+	private const CONTEXT_PENALTY_KEYS = [
+		'possible_no_op',
+		'weak_prompt_match',
+		'unsupported_control',
+		'stale_docs',
+		'validation_risk',
+	];
+
 	/**
 	 * @param array<string, mixed> $input
 	 * @param array<string, mixed> $defaults
@@ -75,6 +105,27 @@ final class RankingContract {
 			$contract['advisoryType'] = $advisory_type;
 		}
 
+		foreach ( self::CONTEXTUAL_SCORE_KEYS as $component_key ) {
+			if ( isset( $defaults[ $component_key ] ) && is_scalar( $defaults[ $component_key ] ) && is_numeric( $defaults[ $component_key ] ) ) {
+				$contract[ $component_key ] = self::coerce_score( $defaults[ $component_key ] );
+			}
+		}
+
+		$context_evidence = self::normalize_numeric_ranking_map( $defaults['contextEvidence'] ?? null, 'evidence' );
+		if ( [] !== $context_evidence ) {
+			$contract['contextEvidence'] = $context_evidence;
+		}
+
+		$context_penalties = self::normalize_numeric_ranking_map( $defaults['contextPenalties'] ?? null, 'penalty' );
+		if ( [] !== $context_penalties ) {
+			$contract['contextPenalties'] = $context_penalties;
+		}
+
+		$ranking_version = sanitize_key( (string) ( $defaults['rankingVersion'] ?? '' ) );
+		if ( '' !== $ranking_version ) {
+			$contract['rankingVersion'] = $ranking_version;
+		}
+
 		return $contract;
 	}
 
@@ -139,6 +190,57 @@ final class RankingContract {
 		}
 
 		return self::coerce_score( round( $weighted_score / $total_weight, 4 ) );
+	}
+
+	/**
+	 * @param array{score?: mixed, evidence?: mixed, penalties?: mixed}|null $contextual_result
+	 * @return array<string, mixed>
+	 */
+	public static function contextual_component_defaults( ?float $model_score, float $deterministic_score, ?array $contextual_result, float $blended_score ): array {
+		$defaults = [
+			'deterministicScore' => $deterministic_score,
+			'blendedScore'       => $blended_score,
+		];
+
+		if ( null !== $model_score ) {
+			$defaults['modelScore'] = $model_score;
+		}
+
+		if ( is_array( $contextual_result ) ) {
+			$defaults['contextScore']     = self::resolve_score_candidate( $contextual_result['score'] ?? null ) ?? 0.0;
+			$defaults['contextEvidence']  = is_array( $contextual_result['evidence'] ?? null ) ? $contextual_result['evidence'] : [];
+			$defaults['contextPenalties'] = is_array( $contextual_result['penalties'] ?? null ) ? $contextual_result['penalties'] : [];
+			$defaults['rankingVersion']   = self::CONTEXTUAL_RANKING_VERSION;
+		}
+
+		return $defaults;
+	}
+
+	/**
+	 * @return array<string, float>
+	 */
+	public static function normalize_numeric_ranking_map( mixed $value, string $kind = 'evidence' ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$allowed    = 'penalty' === $kind ? self::CONTEXT_PENALTY_KEYS : self::CONTEXT_EVIDENCE_KEYS;
+		$allowed    = array_fill_keys( $allowed, true );
+		$normalized = [];
+
+		foreach ( $value as $key => $entry ) {
+			$normalized_key = sanitize_key( (string) $key );
+			if ( ! isset( $allowed[ $normalized_key ] ) || ! is_scalar( $entry ) || ! is_numeric( $entry ) ) {
+				continue;
+			}
+
+			$normalized[ $normalized_key ] = self::coerce_score( $entry );
+			if ( count( $normalized ) >= 12 ) {
+				break;
+			}
+		}
+
+		return $normalized;
 	}
 
 	private static function coerce_score( mixed $value ): float {

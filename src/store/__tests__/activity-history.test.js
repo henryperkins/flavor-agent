@@ -431,7 +431,7 @@ describe( 'activity history helpers', () => {
 		] );
 	} );
 
-	test( 'getLatestAppliedActivity skips request diagnostics', () => {
+	test( 'getLatestAppliedActivity skips diagnostic entries', () => {
 		const applied = createActivityEntry( {
 			type: 'apply_template_suggestion',
 			surface: 'template',
@@ -442,8 +442,15 @@ describe( 'activity history helpers', () => {
 			surface: 'template',
 			timestamp: '2026-03-24T10:00:01Z',
 		} );
+		const outcome = createActivityEntry( {
+			type: 'recommendation_outcome',
+			surface: 'template',
+			timestamp: '2026-03-24T10:00:02Z',
+		} );
 
-		expect( getLatestAppliedActivity( [ applied, diagnostic ] ) ).toEqual(
+		expect(
+			getLatestAppliedActivity( [ applied, diagnostic, outcome ] )
+		).toEqual(
 			expect.objectContaining( {
 				id: applied.id,
 			} )

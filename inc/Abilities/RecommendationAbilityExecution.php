@@ -529,6 +529,23 @@ final class RecommendationAbilityExecution {
 		}
 
 		$reference = self::build_request_diagnostic_reference( $surface, $target, $document );
+		$after     = [
+			'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
+			'resultCount'      => self::get_request_result_count( $surface, $payload ),
+			'explanation'      => \trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) ),
+			'diagnosticDetail' => self::build_request_diagnostic_detail( $surface, $payload ),
+			'requestContext'   => $request_context,
+		];
+
+		$pipeline_trace = self::build_request_diagnostic_pipeline_trace( $surface, $payload );
+		if ( [] !== $pipeline_trace ) {
+			$after['pipelineTrace'] = $pipeline_trace;
+		}
+
+		$pipeline_drop_reasons = self::build_request_diagnostic_pipeline_drop_reasons( $surface, $payload );
+		if ( [] !== $pipeline_drop_reasons ) {
+			$after['pipelineDropReasons'] = $pipeline_drop_reasons;
+		}
 
 		ActivityRepository::create(
 			[
@@ -539,13 +556,7 @@ final class RecommendationAbilityExecution {
 				'before'          => [
 					'prompt' => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
 				],
-				'after'           => [
-					'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'resultCount'      => self::get_request_result_count( $surface, $payload ),
-					'explanation'      => \trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) ),
-					'diagnosticDetail' => self::build_request_diagnostic_detail( $surface, $payload ),
-					'requestContext'   => $request_context,
-				],
+				'after'           => $after,
 				'request'         => [
 					'prompt'    => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
 					'reference' => $reference,
@@ -674,6 +685,73 @@ final class RecommendationAbilityExecution {
 		}
 
 		return \trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @return array<string, int>
+	 */
+	private static function build_request_diagnostic_pipeline_trace( string $surface, array $payload ): array {
+		if ( 'pattern' !== $surface ) {
+			return [];
+		}
+
+		$diagnostics = \is_array( $payload['diagnostics'] ?? null ) ? $payload['diagnostics'] : [];
+		$trace       = \is_array( $diagnostics['pipelineTrace'] ?? null ) ? $diagnostics['pipelineTrace'] : [];
+
+		if ( [] === $trace ) {
+			return [];
+		}
+
+		return [
+			'backendRetrieved'        => \max( 0, (int) ( $trace['backendRetrieved'] ?? 0 ) ),
+			'visibleScopeDropped'     => \max( 0, (int) ( $trace['visibleScopeDropped'] ?? 0 ) ),
+			'rehydrationDropped'      => \max( 0, (int) ( $trace['rehydrationDropped'] ?? 0 ) ),
+			'candidatePool'           => \max( 0, (int) ( $trace['candidatePool'] ?? 0 ) ),
+			'diversityDropped'        => \max( 0, (int) ( $trace['diversityDropped'] ?? 0 ) ),
+			'llmReturned'             => \max( 0, (int) ( $trace['llmReturned'] ?? 0 ) ),
+			'llmNameMismatchDropped'  => \max( 0, (int) ( $trace['llmNameMismatchDropped'] ?? 0 ) ),
+			'belowThresholdDropped'   => \max( 0, (int) ( $trace['belowThresholdDropped'] ?? 0 ) ),
+			'returnedRecommendations' => \max( 0, (int) ( $trace['returnedRecommendations'] ?? 0 ) ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @return array<string, int>
+	 */
+	private static function build_request_diagnostic_pipeline_drop_reasons( string $surface, array $payload ): array {
+		if ( 'pattern' !== $surface ) {
+			return [];
+		}
+
+		$diagnostics = \is_array( $payload['diagnostics'] ?? null ) ? $payload['diagnostics'] : [];
+		$reasons     = \is_array( $diagnostics['dropReasons'] ?? null ) ? $diagnostics['dropReasons'] : [];
+		$allowed     = \array_fill_keys(
+			[
+				'visible_scope',
+				'synced_rehydration_failed',
+				'rehydration_failed',
+				'llm_name_mismatch',
+				'below_threshold',
+			],
+			true
+		);
+		$clean       = [];
+
+		foreach ( $reasons as $reason => $count ) {
+			$reason = \sanitize_key( (string) $reason );
+			if ( ! isset( $allowed[ $reason ] ) ) {
+				continue;
+			}
+
+			$count = \max( 0, (int) $count );
+			if ( $count > 0 ) {
+				$clean[ $reason ] = $count;
+			}
+		}
+
+		return $clean;
 	}
 
 	private static function build_failed_request_diagnostic_title( string $surface ): string {

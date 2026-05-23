@@ -103,7 +103,16 @@ final class NavigationAbilities {
 			return $result;
 		}
 
-		$payload = NavigationPrompt::parse_response( $result, $context );
+		$payload = NavigationPrompt::parse_response(
+			$result,
+			$context,
+			[
+				'surface'       => 'navigation',
+				'context'       => $context,
+				'prompt'        => $prompt,
+				'docsGrounding' => DocsGuidanceResult::public_summary( $docs_result ),
+			]
+		);
 		if ( is_wp_error( $payload ) ) {
 			return $payload;
 		}

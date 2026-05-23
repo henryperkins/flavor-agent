@@ -1,11 +1,8 @@
 import { Button } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
+import { isDiagnosticActivityEntry } from '../store/activity-history';
 import { truncateActivityTitle } from '../utils/activity-title';
-
-function isDiagnosticEntry( entry ) {
-	return entry?.type === 'request_diagnostic';
-}
 
 function getRequestMeta( entry ) {
 	const requestMeta = entry?.request?.ai;
@@ -35,11 +32,17 @@ function getExecutionSummary( entry ) {
 }
 
 function getStatusLabel( entry ) {
-	if ( isDiagnosticEntry( entry ) && entry?.undo?.status !== 'failed' ) {
+	if (
+		isDiagnosticActivityEntry( entry ) &&
+		entry?.undo?.status !== 'failed'
+	) {
 		return { label: 'Review', tone: 'review' };
 	}
 
-	if ( isDiagnosticEntry( entry ) && entry?.undo?.status === 'failed' ) {
+	if (
+		isDiagnosticActivityEntry( entry ) &&
+		entry?.undo?.status === 'failed'
+	) {
 		return { label: 'Request failed', tone: 'error' };
 	}
 
@@ -83,7 +86,7 @@ function getStatusLabel( entry ) {
 }
 
 function describeActivity( entry ) {
-	if ( isDiagnosticEntry( entry ) ) {
+	if ( isDiagnosticActivityEntry( entry ) ) {
 		switch ( entry?.surface ) {
 			case 'content':
 				return 'Content request diagnostic';

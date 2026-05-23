@@ -3,6 +3,7 @@ const mockUseSelect = jest.fn();
 const mockGetBlockPatterns = jest.fn();
 const mockFetchTemplatePartRecommendations = jest.fn();
 const mockRevalidateTemplatePartReviewFreshness = jest.fn();
+const mockRecordRecommendationOutcome = jest.fn();
 const mockGetTemplatePartActivityUndoState = jest.fn(
 	( activity ) => activity?.undo || {}
 );
@@ -339,6 +340,7 @@ beforeEach( async () => {
 		clearTemplatePartRecommendations: jest.fn(),
 		clearUndoError: jest.fn(),
 		fetchTemplatePartRecommendations: mockFetchTemplatePartRecommendations,
+		recordRecommendationOutcome: mockRecordRecommendationOutcome,
 		revalidateTemplatePartReviewFreshness:
 			mockRevalidateTemplatePartReviewFreshness,
 		setTemplatePartSelectedSuggestion: jest.fn(),
@@ -455,6 +457,8 @@ describe( 'TemplatePartRecommender', () => {
 				templatePartStatus: 'ready',
 			},
 		} );
+		currentState.store.templatePartContextSignature =
+			buildTemplatePartContextSignature( currentState );
 
 		await renderPanel();
 
@@ -466,12 +470,181 @@ describe( 'TemplatePartRecommender', () => {
 
 		expect( selectedCard ).not.toBeNull();
 		expect( reviewSections.length ).toBe( 1 );
-		expect( selectedCard?.textContent ).toContain( 'Review open' );
+		expect( selectedCard?.textContent ).not.toContain( 'Review open' );
 		expect( selectedCard?.textContent ).toContain( 'Reviewing' );
 		expect( selectedCard?.contains( reviewSection ) ).toBe( false );
 		expect( selectedCard?.compareDocumentPosition( reviewSection ) ).toBe(
 			DOCUMENT_POSITION_FOLLOWING
 		);
+	} );
+
+	test( 'uses one compact recommendation list instead of a featured card and split lanes', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Replace navigation block',
+						description:
+							'Swap the existing navigation block for a utility-links pattern.',
+						operations: [
+							{
+								type: 'replace_block_with_pattern',
+								patternName: 'theme/utility-links',
+								expectedBlockName: 'core/navigation',
+								targetPath: [ 0 ],
+							},
+						],
+					},
+					{
+						label: 'Introduce utility links',
+						description:
+							'Add a compact utility-links pattern near the navigation block.',
+						patternSuggestions: [ 'theme/utility-links' ],
+						operations: [],
+					},
+				],
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey: null,
+				templatePartStatus: 'ready',
+			},
+		} );
+
+		await renderPanel();
+
+		const lane = getContainer().querySelector(
+			'.flavor-agent-recommendation-lane'
+		);
+		const laneTitle = lane?.querySelector(
+			'.flavor-agent-panel__group-title'
+		);
+
+		expect(
+			getContainer().querySelector( '.flavor-agent-recommendation-hero' )
+		).toBeNull();
+		expect( laneTitle?.textContent ).toBe( 'Recommendations' );
+		expect(
+			Array.from(
+				getContainer().querySelectorAll(
+					'.flavor-agent-panel__group-title'
+				)
+			).some( ( element ) => element.textContent === 'Manual ideas' )
+		).toBe( false );
+		expect(
+			getContainer().querySelectorAll( '.flavor-agent-card--template' )
+				.length
+		).toBe( 2 );
+	} );
+
+	test( 'keeps template-part card details collapsed until requested', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Introduce utility links',
+						description:
+							'Add a compact utility-links pattern near the navigation block.',
+						patternSuggestions: [ 'theme/utility-links' ],
+						operations: [],
+					},
+				],
+				templatePartExplanation: 'One advisory idea is available.',
+				templatePartResultRef: 'theme//header',
+				templatePartStatus: 'ready',
+			},
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
+			{
+				name: 'theme/utility-links',
+				title: 'Utility Links',
+			},
+		] );
+
+		await renderPanel();
+
+		const details = getContainer().querySelector(
+			'.flavor-agent-card--template details.flavor-agent-card__details'
+		);
+
+		expect( details ).not.toBeNull();
+		expect( details?.hasAttribute( 'open' ) ).toBe( false );
+		expect( details?.querySelector( 'summary' )?.textContent ).toBe(
+			'Details'
+		);
+	} );
+
+	test( 'records template-part review outcomes with decorated identity and ranking metadata', async () => {
+		const ranking = {
+			modelScore: 0.4,
+			deterministicScore: 0.6,
+			contextScore: 0.9,
+			blendedScore: 0.7,
+			rankingVersion: 'contextual-ranking-v1',
+		};
+		const recommendationOutcome = {
+			recommendationSetId: 'template-part:set:1',
+			suggestionKey: 'template-part:suggestions:1',
+			sourceRequestSignature: 'template-part-context-signature',
+			rank: 1,
+			resultCount: 1,
+		};
+
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Use secret launch copy',
+						description:
+							'Add a compact utility-links pattern near the navigation block.',
+						suggestionKey: 'template-part:suggestions:1',
+						recommendationOutcome,
+						ranking,
+						operations: [
+							{
+								type: 'insert_pattern',
+								patternName: 'theme/utility-links',
+								placement: 'start',
+							},
+						],
+					},
+				],
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey: null,
+				templatePartStatus: 'ready',
+			},
+		} );
+		currentState.store.templatePartContextSignature =
+			buildTemplatePartContextSignature( currentState );
+
+		await renderPanel();
+
+		await act( async () => {
+			getButton( 'Review' ).click();
+		} );
+
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'selected_for_review',
+				surface: 'template-part',
+				reason: 'review_opened',
+				suggestion: expect.objectContaining( {
+					suggestionKey: 'template-part:suggestions:1',
+					recommendationOutcome,
+					ranking,
+				} ),
+			} )
+		);
+		expect(
+			mockRecordRecommendationOutcome.mock.calls[ 0 ][ 0 ].suggestion
+				.suggestionKey
+		).not.toContain( 'secret' );
+	} );
+
+	test( 'uses the compact shell without a separate template-part intro card', async () => {
+		await renderPanel();
+
+		expect(
+			getContainer().querySelector( '.flavor-agent-panel__intro' )
+		).toBeNull();
 	} );
 
 	test( 'labels template-part review controls with the suggestion name', async () => {
@@ -687,7 +860,7 @@ describe( 'TemplatePartRecommender', () => {
 		).toBe( true );
 	} );
 
-	test( 'keeps advisory template-part suggestions expanded when they are returned', async () => {
+	test( 'keeps advisory template-part suggestions in the compact list and opens details on request', async () => {
 		currentState = createState( {
 			store: {
 				templatePartRecommendations: [
@@ -713,11 +886,99 @@ describe( 'TemplatePartRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Manual ideas' ) ).toBe( true );
-		expect( hasText( 'Advisory only' ) ).toBe( true );
+		expect( hasText( 'Recommendations' ) ).toBe( true );
+		expect( hasText( 'Manual ideas' ) ).toBe( false );
+		expect( hasText( 'Manual' ) ).toBe( true );
 		expect( hasText( 'Introduce utility links' ) ).toBe( true );
+
+		const details = getContainer().querySelector(
+			'.flavor-agent-card--template details.flavor-agent-card__details'
+		);
+		expect( details ).not.toBeNull();
+		expect( details?.hasAttribute( 'open' ) ).toBe( false );
+
+		await act( async () => {
+			details.querySelector( 'summary' ).click();
+		} );
+
+		expect( details?.hasAttribute( 'open' ) ).toBe( true );
 		expect( hasText( 'Browse pattern' ) ).toBe( true );
 		expect( hasText( 'One advisory idea is available.' ) ).toBe( true );
+	} );
+
+	test( 'keeps diagnostic activity out of inline template-part actions', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'diagnostic-1',
+						type: 'request_diagnostic',
+						surface: 'template-part',
+						suggestion: 'Template part request failed',
+						timestamp: '2026-03-24T10:00:01Z',
+						target: {
+							templatePartRef: 'theme//header',
+						},
+						request: {
+							ai: {
+								provider: 'OpenAI',
+								model: 'gpt-5.4',
+							},
+						},
+						undo: {
+							status: 'failed',
+						},
+					},
+					{
+						id: 'outcome-1',
+						type: 'recommendation_outcome',
+						surface: 'template-part',
+						suggestion: 'Recommendations shown',
+						timestamp: '2026-03-24T10:00:02Z',
+						target: {
+							templatePartRef: 'theme//header',
+						},
+						undo: {
+							canUndo: false,
+							status: 'not_applicable',
+						},
+					},
+					{
+						id: 'activity-1',
+						type: 'apply_template_part_suggestion',
+						surface: 'template-part',
+						suggestion: 'Clarify header hierarchy',
+						timestamp: '2026-03-24T10:00:00Z',
+						target: {
+							templatePartRef: 'theme//header',
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+						},
+					},
+				],
+			},
+		} );
+
+		await renderPanel();
+
+		await act( async () => {
+			getContainer()
+				.querySelector( '.flavor-agent-activity-section__toggle' )
+				.click();
+		} );
+
+		expect( hasText( 'Clarify header hierarchy' ) ).toBe( true );
+		expect( hasText( 'Template part request failed' ) ).toBe( false );
+		expect( hasText( 'Template part request diagnostic' ) ).toBe( false );
+		expect( hasText( 'Recommendations shown' ) ).toBe( false );
+		expect( hasText( 'OpenAI · gpt-5.4' ) ).toBe( false );
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).filter(
+				( button ) => button.textContent === 'Undo'
+			)
+		).toHaveLength( 1 );
 	} );
 
 	test( 'submits live pattern override metadata with template-part requests', async () => {
@@ -1225,11 +1486,14 @@ describe( 'TemplatePartRecommender', () => {
 		).not.toBeNull();
 		expect( hasText( 'Settings > Connectors' ) ).toBe( true );
 		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
-		expect(
-			hasText(
-				'Template-part actions share the same history and latest-valid undo behavior as the other executable review surfaces.'
-			)
-		).toBe( true );
+		expect( hasText( 'Add utility links' ) ).toBe( false );
+
+		await act( async () => {
+			getContainer()
+				.querySelector( '.flavor-agent-activity-section__toggle' )
+				.click();
+		} );
+
 		expect( hasText( 'Add utility links' ) ).toBe( true );
 		expect( hasText( 'Undo available' ) ).toBe( true );
 		expect( hasText( 'Suggested Composition' ) ).toBe( false );

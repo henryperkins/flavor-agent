@@ -19,6 +19,7 @@ use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\NonNegativeInteger;
 use FlavorAgent\Support\RankingContract;
+use FlavorAgent\Support\RecommendationContextScorer;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\RecommendationReviewSignature;
 use FlavorAgent\Support\StringArray;
@@ -422,24 +423,32 @@ final class PatternAbilities {
 		}
 
 		// Authorize, rehydrate, and dedupe by payload.name, keeping best score.
-		$candidates                            = [];
-		$retrieved_candidate_names             = [];
-		$reported_unreadable_synced_candidates = [];
+		$candidates                                       = [];
+		$retrieved_candidate_names                        = [];
+		$reported_unreadable_synced_candidates            = [];
+		$diagnostics['pipelineTrace']['backendRetrieved'] = count( $retrieved );
 		foreach ( $retrieved as $candidate_hit ) {
 			$payload = is_array( $candidate_hit['payload'] ?? null ) ? $candidate_hit['payload'] : [];
 			$name    = self::resolve_recommendation_candidate_visible_name( $payload );
 
 			if ( $visible_lookup && $name !== '' && ! isset( $visible_lookup[ $name ] ) ) {
+				self::record_pattern_pipeline_drop( $diagnostics, 'visibleScopeDropped', 'visible_scope' );
 				continue;
 			}
 
-			$payload = self::resolve_recommendation_candidate_payload(
+			$was_synced_candidate = self::is_synced_candidate_payload( $payload );
+			$payload              = self::resolve_recommendation_candidate_payload(
 				$payload,
 				$diagnostics,
 				$reported_unreadable_synced_candidates
 			);
 
 			if ( [] === $payload ) {
+				self::record_pattern_pipeline_drop(
+					$diagnostics,
+					'rehydrationDropped',
+					$was_synced_candidate ? 'synced_rehydration_failed' : 'rehydration_failed'
+				);
 				continue;
 			}
 
@@ -449,6 +458,7 @@ final class PatternAbilities {
 			}
 			$retrieved_candidate_names[ $name ] = true;
 			if ( $visible_lookup && ! isset( $visible_lookup[ $name ] ) ) {
+				self::record_pattern_pipeline_drop( $diagnostics, 'visibleScopeDropped', 'visible_scope' );
 				continue;
 			}
 
@@ -491,10 +501,13 @@ final class PatternAbilities {
 				return $right['score'] <=> $left['score'];
 			}
 		);
-		$candidates = self::diversify_candidates(
+		$pre_diversity_count                              = count( $candidates );
+		$candidates                                       = self::diversify_candidates(
 			array_slice( $candidates, 0, self::MAX_LLM_CANDIDATES * 2, true ),
 			self::MAX_LLM_CANDIDATES
 		);
+		$diagnostics['pipelineTrace']['candidatePool']    = count( $candidates );
+		$diagnostics['pipelineTrace']['diversityDropped'] = max( 0, $pre_diversity_count - count( $candidates ) );
 
 		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
 			return DocsGuidanceResult::unavailable_error( $docs_result );
@@ -554,16 +567,19 @@ final class PatternAbilities {
 			);
 		}
 
-		$recommendations     = [];
-		$selected_backend    = PatternRetrievalBackendFactory::selected_backend();
-		$max_recommendations = self::max_recommendations();
-		$score_threshold     = self::recommendation_score_threshold( $selected_backend );
-		foreach ( (array) $data['recommendations'] as $rec ) {
+		$recommendations                             = [];
+		$selected_backend                            = PatternRetrievalBackendFactory::selected_backend();
+		$max_recommendations                         = self::max_recommendations();
+		$score_threshold                             = self::recommendation_score_threshold( $selected_backend );
+		$ranked_recommendations                      = (array) $data['recommendations'];
+		$diagnostics['pipelineTrace']['llmReturned'] = count( $ranked_recommendations );
+		foreach ( $ranked_recommendations as $rec ) {
 			if ( count( $recommendations ) >= $max_recommendations ) {
 				break;
 			}
 			$name = $rec['name'] ?? '';
 			if ( ! isset( $candidates[ $name ] ) ) {
+				self::record_pattern_pipeline_drop( $diagnostics, 'llmNameMismatchDropped', 'llm_name_mismatch' );
 				continue;
 			}
 
@@ -574,6 +590,7 @@ final class PatternAbilities {
 				: [];
 			$score        = isset( $rec['score'] ) ? max( 0.0, min( 1.0, (float) $rec['score'] ) ) : 0.0;
 			if ( $score < $score_threshold ) {
+				self::record_pattern_pipeline_drop( $diagnostics, 'belowThresholdDropped', 'below_threshold' );
 				continue;
 			}
 			$reason         = self::append_pattern_override_reason_hint(
@@ -586,6 +603,51 @@ final class PatternAbilities {
 			if ( Config::PATTERN_BACKEND_QDRANT === $selected_backend && $ran_structural_pass ) {
 				$source_signals[] = 'qdrant_structural';
 			}
+			$model_score         = RankingContract::resolve_score_candidate( $rec['score'] ?? null );
+			$deterministic_score = RankingContract::resolve_score_candidate(
+				$candidates[ $name ]['rankingScore'] ?? null,
+				$candidates[ $name ]['score'] ?? null
+			) ?? 0.0;
+			$contextual_result   = RecommendationContextScorer::score(
+				[
+					'suggestion'    => self::build_contextual_pattern_ranking_suggestion(
+						$name,
+						$payload,
+						$reason,
+						$ranking_hint
+					),
+					'context'       => self::build_contextual_pattern_ranking_context(
+						$post_type,
+						$block_name,
+						$template_type,
+						$root_block,
+						$ancestors,
+						$nearby_siblings,
+						$template_part_area,
+						$template_part_slug,
+						$container_layout,
+						$visible_pattern_names
+					),
+					'docsGrounding' => DocsGuidanceResult::public_summary( $docs_result ),
+					'prompt'        => $prompt,
+				]
+			);
+			$context_score       = is_array( $contextual_result ) ? $contextual_result['score'] : null;
+			$blended_score       = RankingContract::blend_score(
+				[
+					'model'         => $model_score,
+					'deterministic' => $deterministic_score,
+					'context'       => $context_score,
+				]
+			);
+			if ( is_array( $contextual_result ) ) {
+				$source_signals[] = 'contextual_ranking_v1';
+			}
+			$ranking_metadata = is_array( $rec['ranking'] ?? null ) ? $rec['ranking'] : [];
+			foreach ( [ 'score', 'confidence', 'modelScore', 'deterministicScore', 'contextScore', 'blendedScore', 'contextEvidence', 'contextPenalties', 'rankingVersion' ] as $contextual_key ) {
+				unset( $ranking_metadata[ $contextual_key ] );
+			}
+
 			$recommendations[] = [
 				'name'                 => $name,
 				'title'                => $payload['title'] ?? '',
@@ -594,7 +656,7 @@ final class PatternAbilities {
 				'syncedPatternId'      => $payload['syncedPatternId'] ?? 0,
 				'syncStatus'           => $payload['syncStatus'] ?? '',
 				'wpPatternSyncStatus'  => $payload['wpPatternSyncStatus'] ?? '',
-				'score'                => $score,
+				'score'                => $blended_score,
 				'reason'               => $reason,
 				'categories'           => $payload['categories'] ?? [],
 				'patternOverrides'     => $overrides,
@@ -603,22 +665,30 @@ final class PatternAbilities {
 					$ranking_hint
 				),
 				'ranking'              => RankingContract::normalize(
-					is_array( $rec['ranking'] ?? null ) ? $rec['ranking'] : [],
-					[
-						'score'         => $score,
-						'reason'        => $reason,
-						'sourceSignals' => $source_signals,
-						'safetyMode'    => 'validated',
-						'freshnessMeta' => [
-							'indexStatus'                 => (string) ( $state['status'] ?? '' ),
-							'patternBackend'              => $selected_backend,
-							'embeddingSignature'          => (string) ( $state['embedding_signature'] ?? '' ),
-							'qdrantCollection'            => (string) ( $state['qdrant_collection'] ?? '' ),
-							'cloudflareAISearchNamespace' => (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ),
-							'cloudflareAISearchInstance'  => (string) ( $state['cloudflare_ai_search_instance'] ?? '' ),
+					$ranking_metadata,
+					array_merge(
+						[
+							'score'         => $blended_score,
+							'reason'        => $reason,
+							'sourceSignals' => $source_signals,
+							'safetyMode'    => 'validated',
+							'freshnessMeta' => [
+								'indexStatus'        => (string) ( $state['status'] ?? '' ),
+								'patternBackend'     => $selected_backend,
+								'embeddingSignature' => (string) ( $state['embedding_signature'] ?? '' ),
+								'qdrantCollection'   => (string) ( $state['qdrant_collection'] ?? '' ),
+								'cloudflareAISearchNamespace' => (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ),
+								'cloudflareAISearchInstance' => (string) ( $state['cloudflare_ai_search_instance'] ?? '' ),
+							],
+							'rankingHint'   => $ranking_hint,
 						],
-						'rankingHint'   => $ranking_hint,
-					]
+						RankingContract::contextual_component_defaults(
+							$model_score,
+							$deterministic_score,
+							$contextual_result,
+							$blended_score
+						)
+					)
 				),
 				'content'              => $payload['content'] ?? '',
 			];
@@ -628,6 +698,7 @@ final class PatternAbilities {
 			$recommendations,
 			static fn( array $left, array $right ): int => $right['score'] <=> $left['score']
 		);
+		$diagnostics['pipelineTrace']['returnedRecommendations'] = count( $recommendations );
 
 		return self::pattern_recommendation_response(
 			$recommendations,
@@ -687,7 +758,89 @@ final class PatternAbilities {
 			'filteredCandidates' => [
 				'unreadableSyncedPatterns' => 0,
 			],
+			'pipelineTrace'      => [
+				'backendRetrieved'        => 0,
+				'visibleScopeDropped'     => 0,
+				'rehydrationDropped'      => 0,
+				'candidatePool'           => 0,
+				'diversityDropped'        => 0,
+				'llmReturned'             => 0,
+				'llmNameMismatchDropped'  => 0,
+				'belowThresholdDropped'   => 0,
+				'returnedRecommendations' => 0,
+			],
+			'dropReasons'        => [],
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $diagnostics
+	 */
+	private static function record_pattern_pipeline_drop( array &$diagnostics, string $counter_key, string $reason ): void {
+		if ( isset( $diagnostics['pipelineTrace'][ $counter_key ] ) ) {
+			++$diagnostics['pipelineTrace'][ $counter_key ];
+		}
+
+		$reason = sanitize_key( $reason );
+		if ( '' === $reason ) {
+			return;
+		}
+
+		$diagnostics['dropReasons'][ $reason ] = (int) ( $diagnostics['dropReasons'][ $reason ] ?? 0 ) + 1;
+	}
+
+	/**
+	 * @return array<string, int>
+	 */
+	private static function sanitize_pattern_pipeline_trace( mixed $trace ): array {
+		$trace = is_array( $trace ) ? $trace : [];
+
+		return [
+			'backendRetrieved'        => max( 0, (int) ( $trace['backendRetrieved'] ?? 0 ) ),
+			'visibleScopeDropped'     => max( 0, (int) ( $trace['visibleScopeDropped'] ?? 0 ) ),
+			'rehydrationDropped'      => max( 0, (int) ( $trace['rehydrationDropped'] ?? 0 ) ),
+			'candidatePool'           => max( 0, (int) ( $trace['candidatePool'] ?? 0 ) ),
+			'diversityDropped'        => max( 0, (int) ( $trace['diversityDropped'] ?? 0 ) ),
+			'llmReturned'             => max( 0, (int) ( $trace['llmReturned'] ?? 0 ) ),
+			'llmNameMismatchDropped'  => max( 0, (int) ( $trace['llmNameMismatchDropped'] ?? 0 ) ),
+			'belowThresholdDropped'   => max( 0, (int) ( $trace['belowThresholdDropped'] ?? 0 ) ),
+			'returnedRecommendations' => max( 0, (int) ( $trace['returnedRecommendations'] ?? 0 ) ),
+		];
+	}
+
+	/**
+	 * @return array<string, int>
+	 */
+	private static function sanitize_pattern_drop_reasons( mixed $reasons ): array {
+		if ( ! is_array( $reasons ) ) {
+			return [];
+		}
+
+		$allowed = array_fill_keys(
+			[
+				'visible_scope',
+				'synced_rehydration_failed',
+				'rehydration_failed',
+				'llm_name_mismatch',
+				'below_threshold',
+			],
+			true
+		);
+		$clean   = [];
+
+		foreach ( $reasons as $reason => $count ) {
+			$reason = sanitize_key( (string) $reason );
+			if ( ! isset( $allowed[ $reason ] ) ) {
+				continue;
+			}
+
+			$count = max( 0, (int) $count );
+			if ( $count > 0 ) {
+				$clean[ $reason ] = $count;
+			}
+		}
+
+		return $clean;
 	}
 
 	/**
@@ -780,6 +933,8 @@ final class PatternAbilities {
 						(int) ( $diagnostics['filteredCandidates']['unreadableSyncedPatterns'] ?? 0 )
 					),
 				],
+				'pipelineTrace'      => self::sanitize_pattern_pipeline_trace( $diagnostics['pipelineTrace'] ?? [] ),
+				'dropReasons'        => self::sanitize_pattern_drop_reasons( $diagnostics['dropReasons'] ?? [] ),
 			],
 		];
 	}
@@ -1479,6 +1634,76 @@ SYSTEM;
 		}
 
 		return rtrim( $reason, ". \t\n\r\0\x0B" ) . '. ' . $hint;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @param array<string, mixed> $ranking_hint
+	 * @return array<string, mixed>
+	 */
+	private static function build_contextual_pattern_ranking_suggestion( string $name, array $payload, string $reason, array $ranking_hint ): array {
+		return [
+			'name'               => $name,
+			'title'              => sanitize_text_field( (string) ( $payload['title'] ?? '' ) ),
+			'description'        => sanitize_text_field( (string) ( $payload['description'] ?? '' ) ),
+			'reason'             => $reason,
+			'categories'         => StringArray::sanitize( $payload['categories'] ?? [] ),
+			'blockTypes'         => StringArray::sanitize( $payload['blockTypes'] ?? [] ),
+			'templateTypes'      => StringArray::sanitize( $payload['templateTypes'] ?? [] ),
+			'traits'             => StringArray::sanitize( $payload['traits'] ?? [] ),
+			'patternSuggestions' => [
+				[
+					'name' => $name,
+				],
+			],
+			'patternOverrides'   => self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] ),
+			'rankingHint'        => $ranking_hint,
+		];
+	}
+
+	/**
+	 * @param array<int, string> $ancestors
+	 * @param array<int, string> $nearby_siblings
+	 * @param array<int, string> $visible_pattern_names
+	 * @return array<string, mixed>
+	 */
+	private static function build_contextual_pattern_ranking_context(
+		string $post_type,
+		string $block_name,
+		string $template_type,
+		string $root_block,
+		array $ancestors,
+		array $nearby_siblings,
+		string $template_part_area,
+		string $template_part_slug,
+		string $container_layout,
+		array $visible_pattern_names
+	): array {
+		return [
+			'postType'            => $post_type,
+			'templateType'        => $template_type,
+			'area'                => $template_part_area,
+			'visiblePatternNames' => array_values( $visible_pattern_names ),
+			'patterns'            => array_map(
+				static fn( string $name ): array => [ 'name' => $name ],
+				array_values( $visible_pattern_names )
+			),
+			'block'               => [
+				'name'               => $block_name,
+				'structuralIdentity' => [
+					'role'     => $root_block,
+					'location' => $template_part_area,
+				],
+			],
+			'insertionContext'    => [
+				'rootBlock'        => $root_block,
+				'ancestors'        => array_values( $ancestors ),
+				'nearbySiblings'   => array_values( $nearby_siblings ),
+				'templatePartArea' => $template_part_area,
+				'templatePartSlug' => $template_part_slug,
+				'containerLayout'  => $container_layout,
+			],
+		];
 	}
 
 	/**
