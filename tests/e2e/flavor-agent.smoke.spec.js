@@ -38,10 +38,6 @@ const BLOCK_STRUCTURAL_PATTERN_TITLE = 'Block Structural Hero';
 const BLOCK_STRUCTURAL_INSERTED_CONTENT =
 	'Inserted by Flavor Agent structural apply';
 const PATTERN_REASON = 'Recommended for this content block.';
-const PATTERN_SMOKE_PATTERN_NAME = 'flavor-agent/playground-hero-pattern';
-const PATTERN_SMOKE_PATTERN_TITLE = 'Playground Hero Pattern';
-const PATTERN_SMOKE_INSERTED_CONTENT =
-	'Inserted by the pattern recommendation smoke test';
 const NAVIGATION_PROMPT = 'Simplify the header navigation.';
 const TEMPLATE_PROMPT =
 	'Make this template read more like an editorial front page.';
@@ -782,6 +778,61 @@ async function enableMockedRecommendationSurfaces( page, surfaces ) {
 	);
 }
 
+async function expectCollapsedRecommendationSummaryLane( panel ) {
+	const summaries = panel.locator( 'details.flavor-agent-result-summary' );
+	const lanes = panel.locator( '.flavor-agent-recommendation-lane' );
+	const groupTitles = panel.locator( '.flavor-agent-panel__group-title' );
+
+	await expect( summaries ).toHaveCount( 1 );
+	await expect( summaries.first().locator( 'summary' ) ).toHaveText(
+		'Why these suggestions'
+	);
+	await expect
+		.poll( () =>
+			summaries
+				.first()
+				.evaluate( ( summary ) => summary.hasAttribute( 'open' ) )
+		)
+		.toBe( false );
+	await expect( lanes ).toHaveCount( 1 );
+	await expect(
+		lanes.first().locator( '.flavor-agent-panel__group-title' )
+	).toHaveText( 'Recommendations' );
+	await expect(
+		groupTitles.filter( { hasText: 'Manual ideas' } )
+	).toHaveCount( 0 );
+	await expect( groupTitles.filter( { hasText: /^Review$/ } ) ).toHaveCount(
+		0
+	);
+}
+
+async function forceNextPatternInsertFailure( page, patternName, failureMode ) {
+	await page.evaluate(
+		( { nextFailureMode, nextPatternName } ) => {
+			const data = window.flavorAgentData || {};
+
+			data.e2ePatternInsertFailureHarness = true;
+			window.flavorAgentData = data;
+			window.__flavorAgentPatternInsertFailures = {
+				...( window.__flavorAgentPatternInsertFailures || {} ),
+				[ nextPatternName ]: nextFailureMode,
+			};
+		},
+		{
+			nextFailureMode: failureMode,
+			nextPatternName: patternName,
+		}
+	);
+}
+
+async function expectSnackbarMessage( page, message ) {
+	await expect(
+		page.locator( '.components-snackbar__content' ).filter( {
+			hasText: message,
+		} )
+	).toBeVisible();
+}
+
 async function waitForBlockEditorApis( page ) {
 	await page.waitForFunction( () =>
 		Boolean(
@@ -1492,47 +1543,6 @@ async function registerTemplatePattern(
 			patternTitle,
 		}
 	);
-}
-
-async function waitForAllowedPattern( page, patternName ) {
-	await page.waitForFunction( ( nextPatternName ) => {
-		const blockEditor = window.wp?.data?.select( 'core/block-editor' );
-
-		if ( ! blockEditor ) {
-			return false;
-		}
-
-		let getAllowedPatterns = null;
-
-		if ( typeof blockEditor.getAllowedPatterns === 'function' ) {
-			getAllowedPatterns =
-				blockEditor.getAllowedPatterns.bind( blockEditor );
-		} else if (
-			typeof blockEditor.__experimentalGetAllowedPatterns === 'function'
-		) {
-			getAllowedPatterns =
-				blockEditor.__experimentalGetAllowedPatterns.bind(
-					blockEditor
-				);
-		}
-
-		if ( ! getAllowedPatterns ) {
-			return false;
-		}
-
-		const insertionPoint = blockEditor.getBlockInsertionPoint?.() || null;
-		const rootClientId = insertionPoint?.rootClientId ?? null;
-		const rootClientIds =
-			rootClientId === null ? [ null ] : [ rootClientId, null ];
-
-		return rootClientIds.some( ( candidateRootClientId ) => {
-			const patterns = getAllowedPatterns( candidateRootClientId ) || [];
-
-			return patterns.some(
-				( pattern ) => pattern?.name === nextPatternName
-			);
-		} );
-	}, patternName );
 }
 
 async function insertRootParagraphBlock( page, content ) {
@@ -2870,26 +2880,37 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 			)
 				? requestData.visiblePatternNames
 				: [];
-			const recommendationName =
-				visiblePatternNames.find( ( name ) =>
-					name.includes( 'hero' )
-				) ||
-				visiblePatternNames[ 0 ] ||
-				'playground/recommended-pattern';
+			const heroPatternNames = visiblePatternNames.filter( ( name ) =>
+				name.includes( 'hero' )
+			);
+			const recommendationNames = [
+				...heroPatternNames,
+				...visiblePatternNames,
+				'playground/recommended-pattern',
+			]
+				.filter(
+					( name, index, names ) =>
+						name && names.indexOf( name ) === index
+				)
+				.slice( 0, 2 );
 
 			patternRequests.push( {
 				...requestData,
-				mockedRecommendationName: recommendationName,
+				mockedRecommendationNames: recommendationNames,
 			} );
 			await route.fulfill( {
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify( {
-					recommendations: [
-						{
-							name: recommendationName,
-							score: 0.97,
-							reason: PATTERN_REASON,
+					resolvedContextSignature: 'pattern-resolved-context',
+					recommendations: recommendationNames.map(
+						( name, index ) => ( {
+							name,
+							score: 0.97 - index * 0.01,
+							reason:
+								index === 0
+									? 'Exercises the insert exception path.'
+									: PATTERN_REASON,
 							categories: [ 'hero' ],
 							ranking: {
 								sourceSignals: [
@@ -2900,8 +2921,8 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 									matchesNearbyBlock: true,
 								},
 							},
-						},
-					],
+						} )
+					),
 					diagnostics: {
 						filteredCandidates: {
 							unreadableSyncedPatterns: 0,
@@ -2924,12 +2945,6 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		Boolean( window.flavorAgentData?.canRecommendPatterns )
 	);
 	await seedParagraphBlock( page );
-	await registerTemplatePattern( page, {
-		insertedContent: PATTERN_SMOKE_INSERTED_CONTENT,
-		patternName: PATTERN_SMOKE_PATTERN_NAME,
-		patternTitle: PATTERN_SMOKE_PATTERN_TITLE,
-	} );
-	await waitForAllowedPattern( page, PATTERN_SMOKE_PATTERN_NAME );
 	const searchPrompt = 'hero';
 
 	await expect.poll( () => patternRequests.length > 0 ).toBe( true );
@@ -2966,18 +2981,53 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 
 	expect( activeRequest.prompt ).toBe( searchPrompt );
 	expect( activeRequest.visiblePatternNames ).toContain(
-		activeRequest.mockedRecommendationName
+		activeRequest.mockedRecommendationNames.at( -1 )
 	);
 	expect( activeRequest.blockContext ).toEqual( {
 		blockName: 'core/paragraph',
 	} );
 
 	await expect(
-		page.getByLabel( '1 pattern recommendation available' )
+		page.getByLabel( '2 pattern recommendations available' )
 	).toBeVisible();
 	await expect( page.getByText( 'Semantic match' ).first() ).toBeVisible();
 	await expect( page.getByText( 'Model ranked' ).first() ).toBeVisible();
 	await expect( page.getByText( 'Allowed here' ).first() ).toBeVisible();
+
+	const patternShelf = page.locator( '.flavor-agent-pattern-shelf' ).first();
+	const patternItems = patternShelf.locator(
+		'.flavor-agent-pattern-shelf__item'
+	);
+	const exceptionItem = patternItems.first();
+	const noopItem = patternItems.nth( 1 );
+	const exceptionPatternTitle = await exceptionItem
+		.locator( '.flavor-agent-pattern-shelf__title' )
+		.innerText();
+	const noopPatternTitle = await noopItem
+		.locator( '.flavor-agent-pattern-shelf__title' )
+		.innerText();
+
+	await forceNextPatternInsertFailure(
+		page,
+		activeRequest.mockedRecommendationNames[ 0 ],
+		'insert_blocks_exception'
+	);
+	await exceptionItem.getByRole( 'button', { name: /^Insert\b/ } ).click();
+	await expectSnackbarMessage(
+		page,
+		`Cannot insert pattern "${ exceptionPatternTitle }" because Gutenberg rejected the insertion request.`
+	);
+
+	await forceNextPatternInsertFailure(
+		page,
+		activeRequest.mockedRecommendationNames.at( -1 ),
+		'insert_blocks_noop'
+	);
+	await noopItem.getByRole( 'button', { name: /^Insert\b/ } ).click();
+	await expectSnackbarMessage(
+		page,
+		`Cannot confirm pattern "${ noopPatternTitle }" was inserted. Gutenberg did not report the inserted blocks at the target location.`
+	);
 } );
 
 test( '@wp70-site-editor global styles surface previews, applies, and undoes executable recommendations', async ( {
@@ -3615,6 +3665,7 @@ test( '@wp70-site-editor template surface smoke previews and applies executable 
 	} );
 
 	const promptInput = await openTemplateRecommendationsPanel( page );
+	const recommendationsPanel = getPanelBody( promptInput );
 	await promptInput.fill( TEMPLATE_PROMPT );
 	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
 
@@ -3631,6 +3682,7 @@ test( '@wp70-site-editor template surface smoke previews and applies executable 
 	await expect(
 		page.getByText( TEMPLATE_SUGGESTION_LABEL ).first()
 	).toBeVisible();
+	await expectCollapsedRecommendationSummaryLane( recommendationsPanel );
 	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await expect(
 		page
@@ -3945,12 +3997,18 @@ test( 'template surface keeps advisory-only suggestions visible without executab
 		.click();
 
 	await expect.poll( () => templateRequests.length ).toBe( 1 );
-	await expect(
-		recommendationsPanel.getByText( 'Manual ideas' ).first()
-	).toBeVisible();
+	await expectCollapsedRecommendationSummaryLane( recommendationsPanel );
 	await expect(
 		recommendationsPanel.getByText( 'Explore an editorial collage' ).first()
 	).toBeVisible();
+	const advisoryCard = recommendationsPanel
+		.locator( '.flavor-agent-card--template' )
+		.filter( { hasText: 'Explore an editorial collage' } )
+		.first();
+
+	await advisoryCard
+		.locator( 'details.flavor-agent-card__details summary' )
+		.click();
 	await expect(
 		recommendationsPanel.getByText( 'Template Parts' )
 	).toBeVisible();
@@ -4121,6 +4179,7 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 	} );
 
 	const promptInput = await openTemplatePartRecommendationsPanel( page );
+	const recommendationsPanel = getPanelBody( promptInput );
 	await promptInput.fill( TEMPLATE_PART_PROMPT );
 	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
 
@@ -4135,6 +4194,7 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 	await expect(
 		page.getByText( TEMPLATE_PART_SUGGESTION_LABEL ).first()
 	).toBeVisible();
+	await expectCollapsedRecommendationSummaryLane( recommendationsPanel );
 	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await expect(
 		page
@@ -4469,12 +4529,18 @@ test( '@wp70-site-editor template-part surface keeps advisory-only suggestions v
 		.click();
 
 	await expect.poll( () => templatePartRequests.length ).toBe( 1 );
-	await expect(
-		recommendationsPanel.getByText( 'Manual ideas' ).first()
-	).toBeVisible();
+	await expectCollapsedRecommendationSummaryLane( recommendationsPanel );
 	await expect(
 		recommendationsPanel.getByText( 'Introduce utility links' ).first()
 	).toBeVisible();
+	const advisoryCard = recommendationsPanel
+		.locator( '.flavor-agent-card--template' )
+		.filter( { hasText: 'Introduce utility links' } )
+		.first();
+
+	await advisoryCard
+		.locator( 'details.flavor-agent-card__details summary' )
+		.click();
 	await expect(
 		recommendationsPanel.getByText( 'Focus Blocks', { exact: true } )
 	).toBeVisible();
@@ -4644,6 +4710,14 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 	await enableTemplateDocumentSidebar( page );
 	await page.getByRole( 'tab', { name: 'Template', exact: true } ).click();
 	await openTemplateRecommendationsPanel( page );
+	const recentActionsToggle = page
+		.getByRole( 'button', { name: /Recent AI Actions 1 action/ } )
+		.first();
+	if (
+		( await recentActionsToggle.getAttribute( 'aria-expanded' ) ) !== 'true'
+	) {
+		await recentActionsToggle.click();
+	}
 	const templateUndoButton = page
 		.locator( '.flavor-agent-activity-row' )
 		.getByRole( 'button', { name: 'Undo', exact: true } )

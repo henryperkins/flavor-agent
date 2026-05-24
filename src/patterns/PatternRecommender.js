@@ -248,6 +248,31 @@ function didInsertBlocksAtTarget(
 	return expectedCounts.size > 0;
 }
 
+function consumeE2EPatternInsertFailureMode( pattern ) {
+	if (
+		typeof window === 'undefined' ||
+		! window.flavorAgentData?.e2ePatternInsertFailureHarness ||
+		! pattern?.name
+	) {
+		return '';
+	}
+
+	const failures = window.__flavorAgentPatternInsertFailures || {};
+	const failureMode = failures[ pattern.name ];
+
+	if (
+		failureMode !== 'insert_blocks_exception' &&
+		failureMode !== 'insert_blocks_noop'
+	) {
+		return '';
+	}
+
+	delete failures[ pattern.name ];
+	window.__flavorAgentPatternInsertFailures = failures;
+
+	return failureMode;
+}
+
 function getPatternInsertabilityDropReason(
 	pattern,
 	rootClientId,
@@ -1141,8 +1166,14 @@ export default function PatternRecommender() {
 			}
 
 			let insertionVerified = false;
+			const e2eFailureMode =
+				consumeE2EPatternInsertFailureMode( pattern );
 
 			try {
+				if ( e2eFailureMode === 'insert_blocks_exception' ) {
+					throw new Error( 'E2E forced insertBlocks exception' );
+				}
+
 				const clonedBlocks = blocks.map( ( block ) =>
 					cloneBlock( block )
 				);
@@ -1151,24 +1182,26 @@ export default function PatternRecommender() {
 					inserterRootClientId
 				);
 
-				await insertBlocks(
-					clonedBlocks,
-					insertionIndex,
-					inserterRootClientId,
-					true
-				);
+				if ( e2eFailureMode !== 'insert_blocks_noop' ) {
+					await insertBlocks(
+						clonedBlocks,
+						insertionIndex,
+						inserterRootClientId,
+						true
+					);
 
-				const afterInsertSnapshot = getBlockListSnapshot(
-					registry?.select?.( blockEditorStore ),
-					inserterRootClientId
-				);
+					const afterInsertSnapshot = getBlockListSnapshot(
+						registry?.select?.( blockEditorStore ),
+						inserterRootClientId
+					);
 
-				insertionVerified = didInsertBlocksAtTarget(
-					beforeInsertSnapshot,
-					afterInsertSnapshot,
-					clonedBlocks,
-					insertionIndex
-				);
+					insertionVerified = didInsertBlocksAtTarget(
+						beforeInsertSnapshot,
+						afterInsertSnapshot,
+						clonedBlocks,
+						insertionIndex
+					);
+				}
 			} catch {
 				recordPatternOutcome( 'insert_failed', {
 					pattern,

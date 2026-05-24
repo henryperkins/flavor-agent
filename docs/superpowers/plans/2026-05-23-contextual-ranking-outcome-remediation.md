@@ -396,27 +396,16 @@ npm run check:docs
 npm run verify -- --skip-e2e
 ```
 
-- [x] Record any unavailable browser or local WordPress harness as an explicit blocker or waiver.
+- [x] Record browser harness evidence for the user-visible pattern, template, and template-part changes.
 
-Playwright E2E was not run. This is recorded as a release-gate waiver below, not as browser evidence. The aggregate verifier was run with `--skip-e2e` and recorded `e2e-playground` and `e2e-wp70` as skipped in `output/verify/summary.json`.
+Browser evidence recorded on 2026-05-23:
 
-Correction (2026-05-23): an earlier draft of this section claimed E2E could be skipped because the remediation changes "diagnostic outcome metadata only, not user-visible pattern UI behavior." That justification is not accurate for the change set that landed in this dirty tree. Recorded as an explicit waiver against `docs/reference/cross-surface-validation-gates.md` Gate 5 (shared UI taxonomy and mode) and Gate 7 (multi-surface release matrix):
+- `npm run test:e2e:playground -- tests/e2e/flavor-agent.smoke.spec.js -g "pattern surface smoke"`: passed, 1/1 tests. The smoke now exercises both pattern insertion failure snackbar paths, `insert_blocks_exception` and `insert_blocks_noop`, through the real `inserter-notice` snackbar slot.
+- `npm run test:e2e:wp70 -- tests/e2e/flavor-agent.smoke.spec.js -g "template.*surface"`: passed, 5/5 tests. The matching WP 7.0 template/template-part smokes assert the collapsed `Why these suggestions` summary and the single `Recommendations` lane; advisory-only card details are opened before checking their detail rows.
+- `npm run test:e2e:playground`: passed, 10/10 tests.
+- `npm run test:e2e:wp70`: passed, 24/24 tests.
 
-- User-visible UI changes in scope of this remediation: `src/patterns/PatternRecommender.js` now creates two new pattern-insertion failure snackbars (`insert_blocks_exception`, `insert_blocks_noop`) so users see why a pattern they accepted was not actually inserted at the target. These notices ride on the existing `inserter-notice` snackbar slot and the existing `createErrorNotice` channel, so they share styling, dismissal, and accessibility behavior with the other pre-existing pattern inserter notices — but they are new behavior the user will observe and should be exercised against `npm run test:e2e:playground`.
-- Related user-visible UI changes outside this remediation's stated scope but present in the same dirty tree: `src/templates/TemplateRecommender.js` and `src/template-parts/TemplatePartRecommender.js` now render a single collapsible "Recommendations" lane and move the explanation prose into a `<details>` summary, dropping the previous "Review" plus "Manual ideas" split, starter prompts, secondary guidance, and `AIAdvisorySection`. These changes are tracked separately from this plan and own their own Gate 5/Gate 7 evidence on the relevant surface, but they are flagged here because they will be part of the same release matrix and they invalidate the earlier "diagnostic metadata only" rationale for the dirty tree as a whole.
-
-Browser harness availability for the recorded waiver:
-
-- `npm run test:e2e:playground` is the nearest harness for the pattern inserter UI changes and was not executed in this remediation cycle.
-- `npm run test:e2e:wp70` is the nearest harness for the template/template-part panel layout changes. The WP 7.0 harness was not executed in this remediation cycle.
-
-Required follow-up before release sign-off (do not treat the waiver as a permanent pass):
-
-- Run `npm run test:e2e:playground` and assert the pattern inserter snackbar surface still reports `passed/skipped/failed` counts consistent with the 2026-04-22 baseline in `STATUS.md`, with the two new `inserter-notice` failure paths exercised by either an existing or a new smoke step that intentionally hits `insert_blocks_exception` / `insert_blocks_noop`.
-- Run `npm run test:e2e:wp70` and assert the template and template-part Site Editor smokes still pass against the restructured single-lane "Recommendations" layout, or record the exact failure with a follow-up issue.
-- If either harness is unavailable at follow-up time, re-record the specific environment blocker (for example "Docker not on PATH on host X") rather than re-using the prior "diagnostic metadata only" rationale.
-
-The aggregate `--skip-e2e` verifier pass is *not* a substitute for the above and should not be cited as Gate 5 / Gate 7 evidence for the user-visible behavior changes above.
+Remaining browser blocker: none. The earlier Playwright waiver is replaced by the evidence above and should no longer be cited for Gate 5 / Gate 7.
 
 ## Completion Criteria
 
