@@ -10,6 +10,7 @@
 	"scripts": {
 		"build": "wp-scripts build",
 		"audit:screenshot": "node scripts/browser-run-screenshot.js",
+		"audit:visual": "node scripts/browser-run-visual-audit.js",
 		"dist": "bash scripts/build-dist.sh",
 		"ensure:local-env": "node scripts/ensure-local-env.js",
 		"start": "wp-scripts start",
@@ -35,6 +36,7 @@
 		"@wordpress/scripts": "^32.1.0",
 		"eslint": "^10.3.0",
 		"eslint-import-resolver-typescript": "^3.10.1",
+		"playwright-core": "1.60.0",
 		"repomix": "^1.13.1"
 	},
 	"dependencies": {

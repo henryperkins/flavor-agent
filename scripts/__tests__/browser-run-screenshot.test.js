@@ -11,12 +11,19 @@ const {
 	parseArgs,
 	redactMetadata,
 	runCli,
+	SCREENSHOT_ENDPOINT,
 	validateRunConfig,
 } = require( '../browser-run-screenshot.js' );
 
 const AUDIT_BASE_URL = 'https://audit.example';
 
 describe( 'browser-run-screenshot helpers', () => {
+	test( 'uses the current Cloudflare Quick Actions screenshot endpoint path', () => {
+		expect( SCREENSHOT_ENDPOINT ).toBe(
+			'https://api.cloudflare.com/client/v4/accounts/{accountId}/browser-rendering/screenshot'
+		);
+	} );
+
 	test( 'requires a base URL for relative preset URLs without an environment default', () => {
 		const options = parseArgs(
 			[
@@ -353,6 +360,7 @@ describe( 'browser-run-screenshot helpers', () => {
 				'content-type': 'application/json',
 				'cf-ray': 'abc',
 				'content-length': '42',
+				'x-browser-ms-used': '367',
 				'set-cookie': 'wordpress_logged_in=secret',
 				authorization: 'Bearer secret',
 			},
@@ -390,6 +398,7 @@ describe( 'browser-run-screenshot helpers', () => {
 				'content-type': 'application/json',
 				'cf-ray': 'abc',
 				'content-length': '42',
+				'x-browser-ms-used': '367',
 			},
 			outputFile: 'settings.png',
 		} );

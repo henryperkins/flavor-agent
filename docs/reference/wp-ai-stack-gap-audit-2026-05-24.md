@@ -98,17 +98,19 @@ If #159 merges, the `Experiment::register()` pattern Flavor Agent's `FlavorAgent
 
 ### Provider/credentials — **Aligned, with one Secrets Management note**
 
-`wordpress-ai-roadmap-tracking.md` line 311 confirms Workstream C (Provider Ownership Migration, 2026-04-28) removed direct chat fields; chat is fully Connectors-owned. Flavor Agent retains direct credentials only for embeddings:
+`wordpress-ai-roadmap-tracking.md` line 311 confirms Workstream C (Provider Ownership Migration, 2026-04-28) removed direct chat fields; chat is fully Connectors-owned. Flavor Agent retains direct provider/vector-store settings only for embeddings and retrieval:
 
 - `flavor_agent_cloudflare_workers_ai_account_id`
 - `flavor_agent_cloudflare_workers_ai_api_token`
 - `flavor_agent_cloudflare_workers_ai_embedding_model`
+- `flavor_agent_pattern_retrieval_backend`
+- `flavor_agent_cloudflare_pattern_ai_search_instance_id`
 - `flavor_agent_qdrant_url`
 - `flavor_agent_qdrant_key`
 
 The 20 May summary surfaced an exploratory PR **#560** for "Programmatic Encryption & Secrets Management" — a standalone encryption utility built from prior Two-Factor plugin code, "to act as a proving ground for pitching a dedicated core Secrets Management API in 7.1."
 
-Implication: when the Secrets Management API lands in 7.1 (or 7.2), Flavor Agent's five plaintext option-backed secrets become a migration target. They are currently registered with `add_option(..., '', '', false)` (autoload=no) in `flavor-agent.php` lines 40–41 — that's the right baseline, but the migration to a sealed/encrypted backend is foreseeable. **Net-new item not in `wordpress-ai-roadmap-tracking.md`.**
+Implication: when the Secrets Management API lands in 7.1 (or 7.2), Flavor Agent's two true plaintext secret options (`flavor_agent_cloudflare_workers_ai_api_token`, `flavor_agent_qdrant_key`) become migration targets. They are created with `add_option(..., '', '', false)` (autoload=no) in `flavor-agent.php` lines 40–41; the wider dependency-change loop at lines 102–110 watches seven Flavor Agent retrieval/embedding options plus `home`, so audit the adjacent non-secret settings at the same time. **Net-new item not in `wordpress-ai-roadmap-tracking.md`.**
 
 The 22 Apr summary also noted "Embeddings within PHP/WP AI Clients" was blocked at that time, with outreach planned. If embeddings ship in the AI Client itself (rather than requiring direct provider plugins), Flavor Agent's Cloudflare Workers AI embedding path becomes a fallback rather than the primary backend. **Worth a watch entry.**
 
@@ -152,11 +154,11 @@ The numbered "Action implications for Flavor Agent" list in `wordpress-ai-roadma
 
 1. **Update `CLAUDE.md` and `docs/reference/local-environment-setup.md`** to acknowledge MCP Adapter's WP.org plugin path as the primary distribution (verify whether the listing is now live; if it is, switch the example install to `wp plugin install mcp-adapter --activate`). Drives from 22 Apr 2026 distribution decision. Low effort.
 
-2. **Convert `wordpress-ai-roadmap-tracking.md` line 312 framing** from "choose between forwarding or retiring" to "decide whether to also emit AI Client request metadata into core's Request Logging when active." This keeps Flavor Agent's apply/undo log (which Request Logging does not replicate) and adds optional observability correlation. Net code change: small forwarder in `RecommendationAbilityExecution` or `WordPressAIClient` once Request Logging exposes a stable hook.
+2. ~~**Convert `wordpress-ai-roadmap-tracking.md` line 312 framing** from "choose between forwarding or retiring" to "decide whether to also emit AI Client request metadata into core's Request Logging when active." This keeps Flavor Agent's apply/undo log (which Request Logging does not replicate) and adds optional observability correlation. Net code change: small forwarder in `RecommendationAbilityExecution` or `WordPressAIClient` once Request Logging exposes a stable hook.~~ **Done 2026-05-25 via Request Logging bridge: `RequestLoggingBridge` registers the core hooks, enriches request-log context, captures core `log_id`s, suppresses duplicate diagnostics, and lets the Activity admin inspect the matching core row.**
 
 3. **Add `WordPress/ai#21`** to `wordpress-ai-roadmap-tracking.md` "Abilities-related work" section as an active architectural workstream (currently only the consequences are listed; the ticket itself is missing). Note Justin Levine is the named owner.
 
-4. **Add a Secrets Management watch entry** to `wordpress-ai-roadmap-tracking.md` for `WordPress/ai#560`. When this lands in 7.1, the five plaintext-option-backed secrets in `flavor-agent.php` lines 102–110 are the migration targets.
+4. **Add a Secrets Management watch entry** to `wordpress-ai-roadmap-tracking.md` for `WordPress/ai#560`. When this lands in 7.1, the two true secret options in `flavor-agent.php` lines 40–41 are the encrypted-storage migration targets; audit the seven related Flavor Agent retrieval/embedding options in lines 102–110 alongside them.
 
 5. **Add a streaming watch entry** for the 7.1 cycle. No ticket number yet — track from the contributor summaries. When streaming primitives land, `recommend-content` and `recommend-template` are the first candidates and the schema-clearing + review-signature path needs design.
 
@@ -174,9 +176,9 @@ The numbered "Action implications for Flavor Agent" list in `wordpress-ai-roadma
 
 ## Currentness — 2026-05-25
 
-This audit was integrated into the repo's active tracking docs the day after it was written. Two items in the prioritized list now have detailed design docs:
+This audit was integrated into the repo's active tracking docs the day after it was written. One prioritized item has since landed in code, and another now has a detailed design doc:
 
-- **Item 2** (Activity Repository ↔ Request Logging coexistence) is fully designed in [`docs/reference/activity-log-request-logging-coexistence.md`](activity-log-request-logging-coexistence.md). The original "decide whether to also emit" framing has been promoted into a coexistence design that uses the `ai_request_log_context` filter to enrich `wpai_request_logs.context` with Flavor Agent surface/scope/document, suppresses `request_diagnostic` rows when core Request Logging is enabled, and cross-links the admin Activity page. `wordpress-ai-roadmap-tracking.md` action implications #1 and #4 now reference that design.
+- **Item 2** (Activity Repository ↔ Request Logging coexistence) is designed and bridge implemented. [`docs/reference/activity-log-request-logging-coexistence.md`](activity-log-request-logging-coexistence.md) captures the design, and `inc/Activity/RequestLoggingBridge.php` is registered from `flavor-agent.php` on `init`. The bridge uses the `wpai_request_log_context` filter to enrich `wpai_request_logs.context` with Flavor Agent surface/scope/document, captures `wpai_request_logged` IDs, suppresses `request_diagnostic` rows when core Request Logging is enabled, and cross-links the admin Activity page. `docs/reference/activity-log-request-logging-bridge-implementation-plan.md` records the shipped bridge phases, and `wordpress-ai-roadmap-tracking.md` action implications #1 and #4 now mark the work done.
 - **Item 5** (streaming watch entry) is fully designed in [`docs/reference/streaming-recommendations-design.md`](streaming-recommendations-design.md). Surface adoption matrix, schema/review-signature reconciliation, and the trigger condition for starting implementation (php-ai-client 1.4.0 RC + AI plugin streaming Experiment in trunk) live there. `wordpress-ai-roadmap-tracking.md` action implications now include item #10 for this, and the off-board cross-repo section now tracks `WordPress/php-ai-client#100`.
 
 Item 1 (MCP Adapter doc drift) was partially addressed: `CLAUDE.md` and `docs/reference/local-environment-setup.md` now state that WP.org distribution is the planned primary path per the 22 Apr 2026 contributor decision, while keeping the GitHub clone as the active local-setup step. A direct check of `https://wordpress.org/plugins/mcp-adapter/` on 2026-05-25 returned "Plugin not found" / WP.org plugin-directory search results, confirming the listing is **not yet live**. Switch the local-setup steps to `wp plugin install mcp-adapter --activate` only after the slug publishes.

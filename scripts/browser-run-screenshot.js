@@ -58,6 +58,7 @@ const SAFE_RESPONSE_HEADERS = new Set( [
 	'expires',
 	'last-modified',
 	'server',
+	'x-browser-ms-used',
 ] );
 
 const HELP = `Flavor Agent Browser Run screenshot audit

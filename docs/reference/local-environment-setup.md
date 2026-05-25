@@ -130,13 +130,23 @@ Current WP 7.0 browser specs exercise Flavor Agent editor behavior and selected 
 
 ## Remote Screenshot Audits
 
-For quick visual evidence from a public WordPress target, use the optional Cloudflare Browser Run utility:
+For quick visual evidence from a public WordPress target, use the optional Cloudflare Browser Run Quick Actions utility:
 
 ```bash
 export CLOUDFLARE_ACCOUNT_ID="..."
 export CLOUDFLARE_API_TOKEN="..."
 npm run audit:screenshot -- --preset=settings --base-url="https://example.test" --cookies-file=/tmp/wp-admin-cookies.json
 ```
+
+The current Cloudflare product name is Browser Run, but the Quick Actions screenshot endpoint and required token permission still use the former `Browser Rendering` name.
+
+For repeatable visual audits of the plugin, prefer the wrapper:
+
+```bash
+npm run audit:visual -- --target=wp-hperkins --suite=core
+```
+
+The wrapper combines Quick Actions URL checkpoints with Browser Run CDP workflow screenshots. The built-in `wp-hperkins` target uses `https://wp.hperkins.com` plus the local native WordPress root at `/home/dev/wp-hperkins-com` to mint and clean up short-lived WP-CLI auth cookies automatically. Use `--base-url` plus `--wp-path`, or `--base-url` plus `--cookies-file`, for other reachable WordPress targets.
 
 Provide a reachable WordPress target with `--base-url`, a manifest `baseUrl`, or `BROWSER_RUN_DEFAULT_BASE_URL`. Localhost URLs are unsupported unless the operator supplies a reachable tunnel URL.
 
