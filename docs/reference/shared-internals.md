@@ -71,6 +71,51 @@ Pure-function utility with zero internal dependencies. Contains the core of the 
 
 **Consumers:** `src/store/index.js` (uses all apply/undo helpers), `src/store/activity-history.js` (uses `attributeSnapshotsMatch`), `src/inspector/BlockRecommendationsPanel.js` (uses `getBlockSuggestionExecutionInfo`)
 
+### `src/store/recommendation-outcomes.js`
+
+Recommendation outcome decoration, dedupe, and diagnostic activity-entry construction. Each fetched recommendation set is decorated with a stable `recommendationSetId`, suggestion-level `suggestionKey`, and ranking snapshot, so downstream outcome events (`shown`, `selected_for_review`, `stale_blocked`, `validation_blocked`, `insert_failed`, `pattern_inserted_from_shelf`) can be deduplicated and joined back to the originating ranking decision. Outcome entries are written through `createActivityEntry()` with `executionResult: 'diagnostic'` and `undo.canUndo: false` so they coexist with applied/undone entries without polluting the executable activity timeline.
+
+**Key exports:**
+
+| Export                                              | Role                                                                                                                                                                                |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RECOMMENDATION_OUTCOME_TYPE`                       | Activity entry type constant (`'recommendation_outcome'`)                                                                                                                           |
+| `OUTCOME_EVENTS`                                    | Frozen list of accepted outcome event codes                                                                                                                                         |
+| `decorateRecommendationPayload(payload, opts)`      | Decorates `settings` / `styles` / `block` / `suggestions` lists in a payload with stable `suggestionKey`, `recommendationSetId`, `sourceRequestSignature`, and ranking snapshots    |
+| `buildRecommendationSetId(opts)`                    | Builds a deterministic set id from `{ surface, requestToken, sourceRequestSignature, resultRef }`                                                                                  |
+| `buildRecommendationOutcomeEntry(opts)`             | Builds the activity entry for an outcome event, including capped `topSuggestionKeys`, `rankingSet` (for `shown`), and per-suggestion ranking snapshots (for non-`shown` events)     |
+| `buildRecommendationOutcomeDedupeKey(opts)`         | Returns the dedupe key used to prevent duplicate outcome writes; `shown` keys ignore suggestion identity                                                                            |
+| `markRecommendationOutcomePending` / `Recorded`     | Maintains in-process pending and recorded dedupe sets so repeated thunk calls do not re-emit the same outcome                                                                       |
+| `getRecommendationOutcomeSummaryFromPayload`        | Reads the decorated outcome metadata (set id, top suggestion keys, ranking set) back off a payload for downstream surfaces                                                          |
+| `getRecommendationIdentityForApply(suggestion)`     | Returns the minimal identity (`recommendationSetId`, `suggestionKey`, `sourceRequestSignature`, `rank`) needed when an apply path needs to emit `selected_for_review` outcomes      |
+
+**Consumers:** `src/store/index.js`, `src/store/executable-surfaces.js`, `src/patterns/PatternRecommender.js`
+
+### `src/store/request-error-details.js`
+
+Normalizes ability-call error responses into a uniform `{ code, message, data, connectorApproval }` shape so error UI can branch on a stable code instead of parsing free-form messages. When the WP AI Client returns the `wpai_connector_not_approved` code (or its templated message), this module also surfaces the connector id, caller basename, caller display name, and the configured connector-approval admin URL so the UI can deep-link site administrators to the right approval screen.
+
+**Key exports:**
+
+| Export                              | Role                                                                                                                              |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `CONNECTOR_NOT_APPROVED_CODE`       | Constant: `'wpai_connector_not_approved'`                                                                                         |
+| `normalizeRequestErrorDetails(err)` | Returns the canonical error envelope, populating `connectorApproval` only when both `connectorId` and `callerBasename` are present |
+
+**Consumers:** `src/store/index.js`, recommendation-surface error notices
+
+### `src/store/undo-toast-action.js`
+
+Toast-driven undo dispatcher. The shared toast slice carries an `activityId` so the user can trigger undo directly from the toast queue without re-resolving the surface. This module wraps `actions.undoActivity()` with the toast lifecycle: it dismisses the toast on success and swaps it to a presentational error-variant toast (with localized title and auto-dismiss duration) on failure.
+
+**Key exports:**
+
+| Export                          | Role                                                                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `createUndoToastAction(actions)` | Returns a thunk-style action `(toastId, activityId, options)` that dispatches `undoActivity` and patches the toast accordingly |
+
+**Consumers:** `src/store/index.js` (binds to the registered store action creators)
+
 ### `src/store/block-targeting.js`
 
 Minimal module that resolves activity entry targets to live editor blocks and compares recorded paths with the current block tree. This is the bridge between persisted activity entries and the live block editor state.
@@ -182,6 +227,21 @@ These components provide the shared suggestion presentation layers used before r
 Renders the shared recent-actions list for executable surfaces, including ordered undo state, provider/runtime metadata, and inline undo availability. Content uses the same component for read-only request diagnostics.
 
 **Consumers:** Block Inspector, Content, Template, Template-Part, Global Styles, Style Book, admin-adjacent activity helpers (6 editor surfaces plus shared activity utilities)
+
+### `src/components/DocsGroundingNotice.js` and `src/utils/docs-grounding-warning.js`
+
+`DocsGroundingNotice` renders a non-dismissible warning notice when the recommendation result carries a stale, degraded, or missing-current-release-cycle docs-grounding signal. It delegates message resolution to `getDocsGroundingWarningMessage(warning)` from the paired util.
+
+`utils/docs-grounding-warning.js` exposes:
+
+| Export                                       | Role                                                                                                                                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `normalizeDocsGroundingWarning(docsGrounding)` | Returns `null` when grounding is `unavailable`, `current`, or otherwise clean; otherwise returns `{ status, message, coverageStatus, coverageMessage, source, checkedAt }`                                       |
+| `getDocsGroundingWarningMessage(warning)`     | Resolves the user-facing copy for `stale`, `degraded`, and `missing-current-release-cycle` coverage warnings; non-recognized states fall back to the generic "Developer Docs grounding is incomplete." message |
+
+`coverageStatus === 'missing-current-release-cycle'` is the warning fired by the public docs corpus runbook when trusted Make/Core release-cycle posts cannot be confirmed for the active WP version.
+
+**Consumers:** Block Inspector, Content, Template, Template-Part, Navigation, Global Styles, Style Book (any surface that consumes recommendation results carrying `docsGrounding`)
 
 ## Context Helpers
 
@@ -350,6 +410,12 @@ Micro-utility providing `formatCount()` (count formatting with noun pluralizatio
 
 **Consumers:** `src/components/AIAdvisorySection.js`, `src/components/AIReviewSection.js`, `src/components/AIStatusNotice.js`
 
+### `src/utils/activity-title.js`
+
+Single-export helper `truncateActivityTitle(value, maxLength = 96)` that trims an activity title to a maximum length while preferring word-boundary breaks above a `0.65 * limit` floor. The 96-character ceiling matches the `MAX_LABEL_LENGTH` enforced by `recommendation-outcomes.js`.
+
+**Consumers:** activity entry construction, `src/admin/activity-log-utils.js`
+
 ## Style Utilities
 
 ### `src/utils/style-operations.js`
@@ -381,6 +447,36 @@ Builds semantic design metadata (intent labels, hierarchy annotations, accessibi
 | `buildStyleBookDesignSemantics(tokens, config, blockName)` | Builds semantic metadata scoped to a specific Style Book block |
 
 **Consumers:** `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
+
+### `src/utils/recommendation-design-semantics.js`
+
+Cross-surface design-semantics normalizer used by block, template, and template-part prompts. Produces a fixed-vocabulary descriptor that captures the surface (`block` / `template` / `template-part` / `global-styles` / `style-book`), section role, visual density, contrast context, layout rhythm, typography role, design issues, and surface-specific structural detail. Vocabularies are kept small and enum-validated so prompts and downstream scoring read a stable shape regardless of the surface.
+
+**Key exports:**
+
+| Export                                            | Role                                                                                                                                                          |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `normalizeDesignSemantics(value, surface)`        | Coerces an arbitrary semantics object into the canonical schema with allowed-enum guards, capped negative-signal list, and per-surface scalar leaf cap        |
+| `buildBlockDesignSemantics(context)`              | Derives semantics from a block introspection context (section role from identity/location, density from sibling count, layout from parent visual hints, etc.) |
+| `buildTemplateDesignSemantics(opts)`              | Derives semantics from `templateType`, `editorSlots`, `editorStructure`, and `visiblePatternNames`                                                            |
+| `buildTemplatePartDesignSemantics(opts)`          | Derives semantics from `templatePartRef`, `slug`, `area`, `editorStructure`, and `visiblePatternNames`                                                        |
+| `DESIGN_SEMANTICS_LIST_CAP`                       | Constant cap for list-typed fields (e.g. `negativeSignals`)                                                                                                   |
+| `DESIGN_SEMANTICS_SURFACE_LEAF_CAP`               | Constant cap for surface-detail leaves to keep prompt payloads bounded                                                                                        |
+
+**Consumers:** `src/context/collector.js`, template/template-part recommender helpers
+
+### `src/utils/style-support-paths.js`
+
+Style support-path alias normalizer. Maps experimental support paths to their stable equivalents so server and client agree on a single canonical path before downstream allow-listing.
+
+**Key exports:**
+
+| Export                                       | Role                                                                                                                                |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `normalizeStyleSupportPath(supportPath)`     | Returns the stable alias for a single support path (e.g. `typography.__experimentalFontFamily` → `typography.fontFamily`)           |
+| `normalizeStyleSupportPaths(supportPaths)`   | Returns the deduplicated, locale-sorted, alias-normalized array of paths                                                            |
+
+**Consumers:** `src/utils/style-operations.js`, `src/context/theme-tokens.js`
 
 ### `src/utils/style-validation.js`
 
@@ -586,10 +682,14 @@ template-operation-sequence.js -> store/index.js + template-recommender-helpers 
 - `src/store/activity-history.js`
 - `src/store/update-helpers.js`
 - `src/store/block-targeting.js`
+- `src/store/recommendation-outcomes.js`
+- `src/store/request-error-details.js`
+- `src/store/undo-toast-action.js`
 - `src/components/CapabilityNotice.js`
 - `src/components/AIStatusNotice.js`
 - `src/components/AIAdvisorySection.js`
 - `src/components/AIReviewSection.js`
+- `src/components/DocsGroundingNotice.js`
 - `src/context/block-inspector.js`
 - `src/context/theme-tokens.js`
 - `src/utils/editor-context-metadata.js`
@@ -597,6 +697,8 @@ template-operation-sequence.js -> store/index.js + template-recommender-helpers 
 - `src/utils/editor-entity-contracts.js`
 - `src/utils/capability-flags.js`
 - `src/utils/format-count.js`
+- `src/utils/activity-title.js`
+- `src/utils/docs-grounding-warning.js`
 - `src/utils/template-part-areas.js`
 - `src/utils/template-types.js`
 - `src/patterns/compat.js`
@@ -611,7 +713,9 @@ template-operation-sequence.js -> store/index.js + template-recommender-helpers 
 - `src/utils/structural-equality.js`
 - `src/utils/style-operations.js`
 - `src/utils/style-design-semantics.js`
+- `src/utils/style-support-paths.js`
 - `src/utils/style-validation.js`
+- `src/utils/recommendation-design-semantics.js`
 - `src/utils/visible-patterns.js`
 - `src/utils/pattern-names.js`
 - `src/utils/template-operation-sequence.js`
