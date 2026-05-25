@@ -202,6 +202,8 @@ npm run lint:plugin
 
 If the host cannot access Docker volume paths, run `npm run verify -- --skip=lint-plugin` only as an explicit local waiver and record that Plugin Check was not exercised.
 
+On Windows with Docker Desktop, the Linux Docker volume path is usually not visible to host PHP/WP-CLI. Set `PLUGIN_CHECK_USE_DOCKER=1` in `.env` to run the same staged Plugin Check command inside the `wordpress` container after `npm run wp:start` and the WordPress install/bootstrap steps have completed. This keeps Plugin Check as an active gate without requiring host access to `/var/lib/docker/volumes`.
+
 ## Build, Stop, And Reset
 
 Build the plugin once before testing in WordPress, since `build/` is gitignored:

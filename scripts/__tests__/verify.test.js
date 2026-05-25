@@ -18,10 +18,37 @@ const {
 	resolveStepAvailability,
 	snapshotArtifacts,
 } = require( '../verify.js' );
+const { resolveBashExecutable } = require( '../run-bash' );
+
+function probeBash() {
+	const bash = resolveBashExecutable();
+	const probe = spawnSync( bash, [ '--version' ] );
+
+	return probe.status === 0 ? bash : null;
+}
+
+function normalizeBashTempPath( filePath ) {
+	if ( process.platform !== 'win32' || ! filePath.startsWith( '/tmp/' ) ) {
+		return filePath;
+	}
+
+	return path.join( os.tmpdir(), filePath.slice( '/tmp/'.length ) );
+}
 
 describe( 'verify script helpers', () => {
 	test( 'includes the plugin-check step in the aggregate pipeline', () => {
 		expect( STEPS.map( ( step ) => step.name ) ).toContain( 'lint-plugin' );
+	} );
+
+	test( 'prefers Git Bash on Windows when available', () => {
+		const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
+		const resolved = resolveBashExecutable( {
+			platform: 'win32',
+			env: { ProgramFiles: 'C:\\Program Files' },
+			fileExists: ( file ) => file === gitBash,
+		} );
+
+		expect( resolved ).toBe( gitBash );
 	} );
 
 	test( 'rejects an empty --only option before planning a zero-step run', () => {
@@ -92,12 +119,45 @@ describe( 'verify script helpers', () => {
 
 	test( 'marks plugin-check unavailable when wp-cli is missing', () => {
 		const availability = getLintPluginAvailability( {
+			env: { PLUGIN_CHECK_USE_DOCKER: '' },
 			commandExists: ( command ) => command !== 'wp',
 		} );
 
 		expect( availability ).toEqual( {
 			available: false,
 			reason: 'required command not found: wp',
+		} );
+	} );
+
+	test( 'allows Docker-backed plugin-check without host wp-cli', () => {
+		const availability = getLintPluginAvailability( {
+			env: { PLUGIN_CHECK_USE_DOCKER: '1' },
+			commandExists: ( command ) =>
+				command === 'bash' || command === 'docker',
+			runCommand: () => ( { status: 0 } ),
+		} );
+
+		expect( availability ).toEqual( {
+			available: true,
+			context: {
+				docker: true,
+				wpRoot: '/var/www/html',
+				pluginsDir: '/var/www/html/wp-content/plugins',
+			},
+		} );
+	} );
+
+	test( 'marks Docker-backed plugin-check unavailable when the WordPress container is down', () => {
+		const availability = getLintPluginAvailability( {
+			env: { PLUGIN_CHECK_USE_DOCKER: 'true' },
+			commandExists: ( command ) =>
+				command === 'bash' || command === 'docker',
+			runCommand: () => ( { status: 1 } ),
+		} );
+
+		expect( availability ).toEqual( {
+			available: false,
+			reason: 'plugin-check Docker WordPress container unavailable; run npm run wp:start first',
 		} );
 	} );
 
@@ -544,8 +604,8 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 
 	test( 'fails fast with a clear message when WP_PLUGIN_CHECK_PATH is not a WordPress root', () => {
 		// Skip on environments without bash to keep the suite portable.
-		const probe = spawnSync( 'bash', [ '--version' ] );
-		if ( probe.status !== 0 ) {
+		const bash = probeBash();
+		if ( ! bash ) {
 			return;
 		}
 
@@ -554,10 +614,11 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 		);
 
 		try {
-			const result = spawnSync( 'bash', [ scriptPath ], {
+			const result = spawnSync( bash, [ scriptPath ], {
 				encoding: 'utf8',
 				env: {
 					...process.env,
+					PLUGIN_CHECK_USE_DOCKER: '',
 					WP_PLUGIN_CHECK_PATH: tempRoot,
 				},
 			} );
@@ -572,8 +633,8 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 	} );
 
 	test( 'fails when wp-config.php exists but the plugins directory is missing', () => {
-		const probe = spawnSync( 'bash', [ '--version' ] );
-		if ( probe.status !== 0 ) {
+		const bash = probeBash();
+		if ( ! bash ) {
 			return;
 		}
 
@@ -586,10 +647,11 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 				path.join( tempRoot, 'wp-config.php' ),
 				'<?php\n'
 			);
-			const result = spawnSync( 'bash', [ scriptPath ], {
+			const result = spawnSync( bash, [ scriptPath ], {
 				encoding: 'utf8',
 				env: {
 					...process.env,
+					PLUGIN_CHECK_USE_DOCKER: '',
 					WP_PLUGIN_CHECK_PATH: tempRoot,
 				},
 			} );
@@ -602,8 +664,8 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 	} );
 
 	test( 'stages the plugin outside the WordPress plugins directory', () => {
-		const probe = spawnSync( 'bash', [ '--version' ] );
-		if ( probe.status !== 0 ) {
+		const bash = probeBash();
+		if ( ! bash ) {
 			return;
 		}
 
@@ -632,11 +694,12 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 			fs.chmodSync( path.join( binDir, 'composer' ), 0o755 );
 			fs.chmodSync( path.join( binDir, 'wp' ), 0o755 );
 
-			const result = spawnSync( 'bash', [ scriptPath, '--format=json' ], {
+			const result = spawnSync( bash, [ scriptPath, '--format=json' ], {
 				encoding: 'utf8',
 				env: {
 					...process.env,
 					PATH: `${ binDir }${ path.delimiter }${ process.env.PATH }`,
+					PLUGIN_CHECK_USE_DOCKER: '',
 					PLUGIN_CHECK_KEEP_STAGE: '1',
 					PLUGIN_CHECK_STAGE_DIR: stageDir,
 					WP_ARGS_FILE: argsFile,
@@ -651,31 +714,38 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 				.trim()
 				.split( '\n' );
 			const stagedPluginDir = wpArgs[ 2 ];
+			const stagedPluginDirForFs =
+				normalizeBashTempPath( stagedPluginDir );
 			expect( wpArgs[ 0 ] ).toBe( 'plugin' );
 			expect( wpArgs[ 1 ] ).toBe( 'check' );
 			expect(
-				stagedPluginDir.startsWith(
-					`${ stageDir }/flavor-agent-plugin-check-`
+				stagedPluginDirForFs.startsWith(
+					path.join( stageDir, 'flavor-agent-plugin-check-' )
 				)
 			).toBe( true );
 			expect( stagedPluginDir.startsWith( pluginsDir ) ).toBe( false );
 			expect(
 				fs.existsSync(
 					path.join(
-						stagedPluginDir,
+						stagedPluginDirForFs,
 						'2026-05-04-231958-local-command-caveatcaveat-the-messages-below.txt'
 					)
 				)
 			).toBe( false );
 			expect(
-				fs.existsSync( path.join( stagedPluginDir, '.agents' ) )
-			).toBe( false );
-			expect(
-				fs.existsSync( path.join( stagedPluginDir, 'repomix' ) )
+				fs.existsSync( path.join( stagedPluginDirForFs, '.agents' ) )
 			).toBe( false );
 			expect(
 				fs.existsSync(
-					path.join( stagedPluginDir, 'eslint.config.js' )
+					path.join( stagedPluginDirForFs, '.node-version' )
+				)
+			).toBe( false );
+			expect(
+				fs.existsSync( path.join( stagedPluginDirForFs, 'repomix' ) )
+			).toBe( false );
+			expect(
+				fs.existsSync(
+					path.join( stagedPluginDirForFs, 'eslint.config.js' )
 				)
 			).toBe( false );
 			expect( wpArgs ).toContain( `--path=${ wpRoot }` );

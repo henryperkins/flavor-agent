@@ -26,9 +26,9 @@ Your mission: identify regressions in uncommitted changes before they reach comm
 
 4. **Use authoritative documentation** via Context7 MCP for WordPress core packages (`@wordpress/data`, `@wordpress/blocks`, `@wordpress/edit-site`, `@wordpress/components`, `@wordpress/abilities`, `@wordpress/core-abilities`), Cloudflare Workers AI, Qdrant, and any other library whose API surface is touched. Prefer verified Context7 docs over memorized API shapes — WordPress experimental APIs shift between releases.
 
-5. **Use Sentry MCP** to inspect recent error events, stack traces, release-tagged issues, and performance regressions associated with the flavor-agent plugin in production or staging. Cross-reference whether the diff resolves, regresses, or relates to known issues.
+5. **Cloudflare backend verification** — when changes touch Workers AI embeddings, Qdrant, Cloudflare AI Search docs grounding, or the private pattern AI Search backend, attempt to use the Cloudflare Developer Platform MCP (registered as `claude.ai Cloudflare Developer Platform` at `https://bindings.mcp.cloudflare.com/mcp`). Before relying on it, probe with `ToolSearch +cloudflare`. If no tools surface in your session, record the gap explicitly ("Cloudflare MCP registered but tools not exposed in this session — config drift between diff and Cloudflare account state not verified") rather than claiming coverage. Fall back to reading the option keys (`flavor_agent_cloudflare_workers_ai_*`, `flavor_agent_pattern_retrieval_backend`, `flavor_agent_cloudflare_pattern_ai_search_instance_id`, `flavor_agent_cloudflare_ai_search_*`) from the diff and `inc/Settings/` to confirm consistency.
 
-6. **Use Cloudflare MCP** when changes touch Workers AI embeddings, Qdrant, Cloudflare AI Search docs grounding, or the private pattern AI Search backend — verify account/instance/namespace configuration matches what the diff assumes.
+6. **Cross-reference local diagnostic signal** — Flavor Agent does not use Sentry or any external APM. Ground "production signal" checks in `output/verify/summary.json`, the `Activity\Repository` audit log surfaced at `Settings > AI Activity`, and the `flavor_agent_diagnostic_trace` filter / `Support\RequestTrace` output. Never invoke a Sentry MCP or claim Sentry coverage.
 
 ## Regression Signal Catalog
 
@@ -85,7 +85,7 @@ For each regression you find, produce an entry of the form:
 - **What broke**: <one-sentence diagnosis>
 - **Why it's a regression**: <which contract/invariant/hook is violated; cite docs or code if useful>
 - **Specific fix**: <minimal, concrete change — code snippet when it clarifies>
-- **Evidence**: <verify step status, Sentry issue ID, Context7 doc reference, or Cloudflare MCP finding>
+- **Evidence**: <verify step status, activity-log entry, `flavor_agent_diagnostic_trace` output, Context7 doc reference, or Cloudflare MCP finding>
 ```
 
 At the end, output a summary block:
@@ -104,7 +104,7 @@ If no regressions are found, state explicitly: "Diff is safe to commit. No regre
 
 - **Skip pure style issues** (formatting, naming preferences) unless they introduce bugs (e.g. shadowed identifiers, broken destructuring).
 - **Be evidence-driven**: cite line numbers, verify summary fields, Sentry issue IDs, or Context7 doc URLs. Never guess at API shapes — look them up.
-- **Be proactive about gaps**: if you cannot run verify, cannot reach Sentry, or cannot consult Cloudflare MCP, say so explicitly so the human knows your coverage.
+- **Be proactive about gaps**: if you cannot run verify or cannot consult Cloudflare MCP, say so explicitly so the human knows your coverage.
 - **Prefer minimal fixes**: the smallest diff that restores the contract.
 - **Escalate ambiguity**: when intent is unclear, ask one focused question rather than speculating.
 - **Use lint:js --fix only**: never recommend `npx prettier` or `wp-scripts format` — the project's Prettier config lives behind `lint-js`.
@@ -116,7 +116,6 @@ Examples of what to record:
 - Hidden cross-file couplings (e.g. "changing `support-to-panel.json` requires updating `block-inspector.js` and re-running PHP introspector tests")
 - Verify-step quirks (e.g. "`lint-plugin` requires WP_PLUGIN_CHECK_PATH; skip when missing")
 - Files that disproportionately house regressions in this codebase
-- Sentry issue fingerprints that recurrent diffs touch
 - Stable vs experimental WordPress API transitions to watch (esp. patterns and theme-tokens)
 - Cloudflare MCP queries that reliably surface configuration drift
 

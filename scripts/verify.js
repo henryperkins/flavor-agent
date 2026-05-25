@@ -258,10 +258,54 @@ function resolvePluginCheckContext( env = process.env ) {
 function getLintPluginAvailability( {
 	env = process.env,
 	commandExists = hasCommand,
+	runCommand = spawnSync,
 } = {} ) {
 	if ( ! commandExists( 'bash' ) ) {
 		return { available: false, reason: 'required command not found: bash' };
 	}
+
+	if (
+		env.PLUGIN_CHECK_USE_DOCKER === '1' ||
+		env.PLUGIN_CHECK_USE_DOCKER === 'true'
+	) {
+		if ( ! commandExists( 'docker' ) ) {
+			return {
+				available: false,
+				reason: 'required command not found: docker',
+			};
+		}
+
+		const probe = runCommand(
+			'docker',
+			[
+				'compose',
+				'exec',
+				'-T',
+				'wordpress',
+				'test',
+				'-f',
+				'/var/www/html/wp-config.php',
+			],
+			{ cwd: REPO_ROOT, stdio: 'ignore' }
+		);
+
+		if ( probe.status !== 0 ) {
+			return {
+				available: false,
+				reason: 'plugin-check Docker WordPress container unavailable; run npm run wp:start first',
+			};
+		}
+
+		return {
+			available: true,
+			context: {
+				docker: true,
+				wpRoot: '/var/www/html',
+				pluginsDir: '/var/www/html/wp-content/plugins',
+			},
+		};
+	}
+
 	if ( ! commandExists( 'wp' ) ) {
 		return { available: false, reason: 'required command not found: wp' };
 	}

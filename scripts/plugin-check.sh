@@ -53,6 +53,66 @@ plugins_dir="${wp_root}/wp-content/plugins"
 stage_parent="${PLUGIN_CHECK_STAGE_DIR:-${TMPDIR:-/tmp}}"
 staged_plugin_dir=''
 
+run_docker_plugin_check() {
+	docker compose exec -T wordpress bash -s -- "${plugin_slug}" "$@" <<'DOCKER_PLUGIN_CHECK'
+set -euo pipefail
+
+plugin_slug="$1"
+shift
+
+cd /var/www/html/wp-content/plugins/flavor-agent
+
+stage_parent="${PLUGIN_CHECK_STAGE_DIR:-${TMPDIR:-/tmp}}"
+mkdir -p -- "${stage_parent}"
+stage_parent="$(cd -- "${stage_parent}" && pwd)"
+staged_plugin_dir="$(mktemp -d "${stage_parent%/}/${plugin_slug}-plugin-check-XXXXXX")"
+
+cleanup() {
+	if [[ -n "${staged_plugin_dir}" && -d "${staged_plugin_dir}" && -z "${PLUGIN_CHECK_KEEP_STAGE:-}" ]]; then
+		rm -rf -- "${staged_plugin_dir}"
+	fi
+}
+
+trap cleanup EXIT
+
+bash scripts/prepare-release.sh "${staged_plugin_dir}"
+
+echo "Plugin Check staged release: ${staged_plugin_dir}" >&2
+echo "Plugin Check will scan these files:" >&2
+(
+	cd -- "${staged_plugin_dir}"
+	find . -type f | sort | sed 's#^\./# - #'
+) >&2
+
+args=(
+	plugin
+	check
+	"${staged_plugin_dir}"
+	"--path=/var/www/html"
+	"--exclude-directories=vendor,node_modules"
+	"--ignore-codes=WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound,WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound,WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in,WordPress.DB.SlowDBQuery.slow_db_query_tax_query"
+	"--slug=${plugin_slug}"
+)
+
+if [[ " $* " != *" --format="* ]]; then
+	args+=( "--format=strict-table" )
+fi
+
+if [[ -n "${PLUGIN_CHECK_KEEP_STAGE:-}" ]]; then
+	echo "Staged plugin for plugin-check at ${staged_plugin_dir}" >&2
+fi
+
+args+=( "$@" )
+
+wp "${args[@]}" --allow-root
+DOCKER_PLUGIN_CHECK
+}
+
+if [[ "${PLUGIN_CHECK_USE_DOCKER:-}" == "1" || "${PLUGIN_CHECK_USE_DOCKER:-}" == "true" ]]; then
+	run_docker_plugin_check "$@"
+	exit $?
+fi
+
 if [[ ! -f "${wp_root}/wp-config.php" ]]; then
 	echo "Expected a WordPress root at ${wp_root}. Set WP_PLUGIN_CHECK_PATH to override." >&2
 	exit 1

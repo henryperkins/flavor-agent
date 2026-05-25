@@ -14,6 +14,7 @@ eslint.config.js
 .mcp.json
 .npmrc
 .nvmrc
+.node-version
 .playwright-mcp
 .remember
 CLAUDE.md
