@@ -1017,6 +1017,35 @@ function getRequestDiagnostics( request = {}, admin = {} ) {
 	};
 }
 
+function getAiRequestLogMetadata(
+	request = {},
+	admin = {},
+	adminBaseUrl = ''
+) {
+	const requestToken =
+		getAdminMetadataString( admin, 'aiRequestToken' ) ||
+		getAdminMetadataString( admin, 'requestToken' ) ||
+		getFirstString( request, [
+			[ 'ai', 'requestToken' ],
+			[ 'requestToken' ],
+		] );
+	const requestLogId =
+		getAdminMetadataString( admin, 'aiRequestLogId' ) ||
+		getAdminMetadataString( admin, 'requestLogId' ) ||
+		getFirstString( request, [
+			[ 'ai', 'requestLogId' ],
+			[ 'requestLogId' ],
+		] );
+
+	return {
+		aiRequestToken: requestToken,
+		aiRequestLogId: requestLogId,
+		aiRequestLogsUrl: buildAdminUrl( adminBaseUrl, 'tools.php', {
+			page: 'ai-request-logs',
+		} ),
+	};
+}
+
 function getUndoReason( status, resolvedUndo = null, entry = null ) {
 	if ( status === 'applied' && resolvedUndo?.status === 'available' ) {
 		return __(
@@ -1526,6 +1555,11 @@ function normalizeActivityEntry(
 	const admin = getAdminMetadata( entry );
 	const { postType, entityId } = getDocumentContext( entry );
 	const diagnostics = getRequestDiagnostics( request, admin );
+	const aiRequestLog = getAiRequestLogMetadata(
+		request,
+		admin,
+		adminBaseUrl
+	);
 	const resolvedUndo = getResolvedActivityUndoState( entry, allEntries );
 	const status = getActivityStatus( entry, allEntries );
 	const { timestampDisplay, dayKey } = formatActivityTimestamp(
@@ -1664,6 +1698,9 @@ function normalizeActivityEntry(
 		model: diagnostics.model,
 		tokenUsage: diagnostics.tokenUsageLabel,
 		latency: diagnostics.latencyLabel,
+		aiRequestToken: aiRequestLog.aiRequestToken,
+		aiRequestLogId: aiRequestLog.aiRequestLogId,
+		aiRequestLogsUrl: aiRequestLog.aiRequestLogsUrl,
 		requestFallback,
 		targetUrl: targetLink.url,
 		targetLinkLabel: targetLink.label,

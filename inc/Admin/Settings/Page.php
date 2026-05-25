@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Admin\Settings;
 
+use FlavorAgent\Activity\RequestLoggingBridge;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Embeddings\QdrantClient;
@@ -525,6 +526,44 @@ final class Page {
 				<?php echo esc_html__( 'Open Connectors', 'flavor-agent' ); ?>
 			</a>
 		</p>
+		<?php
+		self::render_ai_activity_storage_status();
+	}
+
+	private static function render_ai_activity_storage_status(): void {
+		$core_logging_available = RequestLoggingBridge::is_core_logging_class_available();
+		$core_logging_enabled   = RequestLoggingBridge::is_core_logging_enabled();
+		$tone                   = 'warning';
+		$message                = __( 'Flavor Agent records request diagnostics in its own activity log. Upgrade to WordPress AI 1.0.0+ to access core AI request observability.', 'flavor-agent' );
+		$link_url               = '';
+		$link_label             = '';
+
+		if ( $core_logging_enabled ) {
+			$tone       = 'success';
+			$message    = __( 'AI Request Logging is enabled. Flavor Agent forwards surface, scope, and document context into each Tools > AI Request Logs row.', 'flavor-agent' );
+			$link_url   = admin_url( 'tools.php?page=ai-request-logs' );
+			$link_label = __( 'Open AI Request Logs', 'flavor-agent' );
+		} elseif ( $core_logging_available ) {
+			$message    = __( 'Flavor Agent is recording request diagnostics in its own activity log. Enable the AI Request Logging experiment in Settings > AI to also capture provider, model, token, and cost data centrally.', 'flavor-agent' );
+			$link_url   = admin_url( 'options-general.php?page=ai-wp-admin' );
+			$link_label = __( 'Open AI settings', 'flavor-agent' );
+		}
+
+		self::render_subsection_heading(
+			__( 'AI Activity Storage', 'flavor-agent' ),
+			__( 'Read-only status for recommendation request observability.', 'flavor-agent' )
+		);
+		?>
+		<div class="flavor-agent-settings-status flavor-agent-settings-status--<?php echo esc_attr( $tone ); ?>">
+			<p><?php echo esc_html( $message ); ?></p>
+			<?php if ( '' !== $link_url ) : ?>
+				<p>
+					<a class="button button-secondary" href="<?php echo esc_url( Utils::sanitize_url_value( $link_url ) ); ?>">
+						<?php echo esc_html( $link_label ); ?>
+					</a>
+				</p>
+			<?php endif; ?>
+		</div>
 		<?php
 	}
 

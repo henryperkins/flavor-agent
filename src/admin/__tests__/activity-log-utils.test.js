@@ -393,6 +393,33 @@ describe( 'activity log utils', () => {
 		} );
 	} );
 
+	test( 'normalizeActivityEntries exposes core AI request log identifiers and link', () => {
+		const entries = normalizeActivityEntries(
+			[
+				createEntry( {
+					request: {
+						ai: {
+							requestToken:
+								'7a85fe6b-ad73-4c0f-931b-0b0a70bc09c0',
+							requestLogId:
+								'c85ee60d-700b-48a7-b831-5784d5ad32b1',
+						},
+					},
+				} ),
+			],
+			{
+				adminBaseUrl: 'https://example.test/wp-admin/',
+			}
+		);
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			aiRequestToken: '7a85fe6b-ad73-4c0f-931b-0b0a70bc09c0',
+			aiRequestLogId: 'c85ee60d-700b-48a7-b831-5784d5ad32b1',
+			aiRequestLogsUrl:
+				'https://example.test/wp-admin/tools.php?page=ai-request-logs',
+		} );
+	} );
+
 	test( 'normalizeActivityEntries does not misclassify unchanged structured style payloads as style edits', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {

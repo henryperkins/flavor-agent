@@ -1,15 +1,15 @@
 # Activity Log ↔ Core AI Request Logging Coexistence
 
-**Status:** Design proposal · **Date:** 2026-05-24 · **Driving issue:** `WordPress/ai#437` (merged, shipped in AI 1.0.0 on 2026-05-19)
+**Status:** Shipped bridge design · **Date:** 2026-05-25 · **Driving issue:** `WordPress/ai#437` (merged, shipped in AI 1.0.0 on 2026-05-19)
 
 ## TL;DR
 
 Core AI 1.0.0's Request Logging captures every AI Client HTTP request transparently via the SDK's HTTP transporter decorator. Flavor Agent's `Activity\Repository` captures applied editor changes (block_apply, template_apply, etc.) with undo. These are two different things at two different layers. The right design is **coexistence, not consolidation**:
 
-1. **Enrich** core's Request Logging with Flavor Agent surface/scope/document context via the `ai_request_log_context` filter so each `wpai_request_logs` row knows which Flavor Agent surface and editor scope produced the request.
+1. **Enrich** core's Request Logging with Flavor Agent surface/scope/document context via the `wpai_request_log_context` filter so each `wpai_request_logs` row knows which Flavor Agent surface and editor scope produced the request.
 2. **Stop persisting `request_diagnostic` rows** in `flavor_agent_activity` when core Request Logging is active — they become duplicative noise.
 3. **Keep apply/undo rows** in `flavor_agent_activity` — Request Logging does not capture editor state transitions.
-4. **Cross-link** the admin Activity page to the matching Request Logs row via the core `log_id` UUID, captured from the AI Client response and stored on Flavor Agent's apply rows.
+4. **Cross-link** the admin Activity page to the matching Request Logs row via the core `log_id` UUID, captured from `wpai_request_logged` and stored on Flavor Agent's apply rows.
 
 This eliminates the duplication the audit flagged on 2026-05-24 without losing apply/undo data or the in-editor session history.
 
@@ -24,7 +24,7 @@ Per [WordPress/ai#437](https://github.com/WordPress/ai/pull/437) (architecture q
 > - `Logging_Http_Transporter` decorates requests, capturing timing and delegating to `Log_Data_Extractor`
 > - `Log_Data_Extractor` parses request/response payloads with 4 filter hooks for extensibility:
 >   - `ai_request_log_providers` — customize provider detection
->   - `ai_request_log_context` — filter context data
+>   - `wpai_request_log_context` — filter context data
 >   - `ai_request_log_tokens` — custom token extraction
 >   - `ai_request_log_kind` — request type detection
 > - `AI_Request_Log_Manager` coordinates schema, repository, and cost calculation
@@ -47,7 +47,7 @@ wpai_request_logs:
   status              VARCHAR(32)   -- success/error/...
   error_message       TEXT
   user_id             BIGINT
-  context             LONGTEXT      -- arbitrary JSON; the ai_request_log_context filter writes here
+  context             LONGTEXT      -- arbitrary JSON; the wpai_request_log_context filter writes here
   request_preview     TEXT
   response_preview    TEXT
 ```
@@ -103,7 +103,7 @@ If both are persisted, the same request is recorded twice with different shapes,
 │ wpai_request_logs                                                 │
 │ - One row per AI Client HTTP call (chat() → wp_ai_client_prompt) │
 │ - Captured TRANSPARENTLY by the SDK HTTP transporter decorator   │
-│ - Enriched by Flavor Agent via ai_request_log_context filter     │
+│ - Enriched by Flavor Agent via wpai_request_log_context filter   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -126,26 +126,25 @@ public static function is_core_request_logging_enabled(): bool {
         return false;
     }
     // The Experiment-enabled flag follows the AI plugin's standard pattern.
-    // Confirm exact option key from the shipped 1.0.0 build before implementing.
     return (bool) apply_filters(
-        'wpai_experiment_request_logging_enabled',
-        (bool) get_option( 'wpai_experiment_request_logging_enabled', false )
+        'wpai_feature_ai-request-logging_enabled',
+        (bool) get_option( 'wpai_feature_ai-request-logging_enabled', false )
     );
 }
 ```
 
-The `is_*_enabled()` exact option key needs to be verified against shipped AI 1.0.0 — the contract in the audit's "Action implications" #2 (in `wordpress-ai-roadmap-tracking.md`) should follow it for consistency.
+The shipped implementation also checks the master `wpai_features_enabled` option/filter before treating Request Logging as enabled.
 
-### Context enrichment via `ai_request_log_context`
+### Context enrichment via `wpai_request_log_context`
 
 Flavor Agent registers a filter that injects surface/scope/document/ability metadata into every Flavor Agent–originated AI request:
 
 ```php
 // inc/Activity/RequestLoggingBridge.php (proposed)
 
-add_filter( 'ai_request_log_context', [ self::class, 'inject_flavor_agent_context' ], 10, 2 );
+add_filter( 'wpai_request_log_context', [ self::class, 'inject_flavor_agent_context' ], 10, 3 );
 
-public static function inject_flavor_agent_context( array $context, array $request ): array {
+public static function inject_flavor_agent_context( array $context, array $decoded, array $log_data ): array {
     $tag = FlavorAgentRequestTag::current();
     if ( null === $tag ) {
         return $context;
@@ -156,7 +155,7 @@ public static function inject_flavor_agent_context( array $context, array $reque
         'abilityName'  => $tag->ability_name,
         'scopeKey'     => $tag->scope_key,
         'documentRef'  => $tag->document_ref,
-        'requestRef'   => $tag->request_reference,
+        'requestToken' => $tag->request_token,
         'pluginVersion'=> FLAVOR_AGENT_VERSION,
     ];
 
@@ -168,15 +167,7 @@ The `FlavorAgentRequestTag` is a request-scoped (per-PHP-process) value class th
 
 ### Capturing the core `log_id` back into Flavor Agent
 
-Core Request Logging assigns a UUID `log_id` per request. Flavor Agent needs that UUID to link from its apply rows back to the matching Request Log row.
-
-Two options:
-
-**(a) Read it from a transient/static after the chat returns.** Core Request Logging would have to expose either a filter that fires with the assigned `log_id` after persistence, or a static accessor like `AI_Request_Log_Manager::last_log_id_for_current_request()`. **Not currently part of the public API as documented in PR #437.** Track this — if it doesn't exist yet, it's worth a small upstream issue.
-
-**(b) Have Flavor Agent generate the UUID itself**, attach it to the `ai_request_log_context` payload as `context.flavor_agent.requestRef` (already part of the proposed shape), and also include it in the apply row's `request.ai.requestLogId`. Then admin links go from Flavor Agent's apply row → Request Log filter on `context->flavor_agent.requestRef`. This works today without any upstream change.
-
-**Recommend (b).** It's a one-line UUID generation in `RecommendationAbilityExecution`, and the cross-link is a `JSON_EXTRACT(context, '$.flavor_agent.requestRef') = ?` lookup against `wpai_request_logs`. It also degrades gracefully — if core Request Logging is disabled, the `requestRef` is still useful as Flavor Agent's own diagnostic handle (the field already exists today).
+Core Request Logging assigns a UUID `log_id` per request. Flavor Agent captures that UUID through the shipped `wpai_request_logged` action, which fires after the `wpai_request_logs` row persists and includes the inserted row data. `RequestLoggingBridge` maps the active Flavor Agent `requestToken` to that core UUID, and `RecommendationAbilityExecution` threads both values into `requestMeta` so later apply rows can persist `request.ai.requestLogId`.
 
 ### Stop persisting `request_diagnostic` rows when core logging is active
 
@@ -206,24 +197,25 @@ The same wrap applies to `Cloudflare\AISearchClient::record_request_diagnostic()
 
 ### Admin Activity page — add deep links
 
-`Settings → AI Activity` (`src/admin/activity-log.js`) should gain a column or row-detail action that opens **Tools → AI Request Logs** filtered by the matching `requestRef`. Two implementation paths:
+`Settings → AI Activity` (`src/admin/activity-log.js`) renders a row-detail action when `request.ai.requestLogId` is present:
 
-- **Direct URL with query args** — `admin.php?page=ai-request-logs&context_filter=flavor_agent.requestRef:UUID`. Requires core Request Logs admin to support this query-arg shape. Likely works since the page is DataViews-based and DataViews supports URL-encoded filters.
-- **REST passthrough** — Flavor Agent's admin page calls core's Request Logs REST endpoint to fetch the matching row and renders the cost / token / preview inline. Heavier; defer until there's a UX justification.
+- **Primary:** "View AI request" calls `GET /wp-json/ai/v1/logs/{uuid}` and renders provider, model, duration, tokens, and any request/response previews inline.
+- **Secondary:** "Open in AI Request Logs" opens `tools.php?page=ai-request-logs` in a new tab.
+- **Fallback:** if `request.ai.requestToken` exists but `request.ai.requestLogId` is empty, the detail panel says the AI request log is unavailable, which covers requests made while core logging was disabled.
 
-**Recommend direct URL.** Cross-page navigation is the right separation; embedding core's data inside Flavor Agent's page would create coupling.
+The REST passthrough is necessary because the shipped AI Request Logs admin page does not expose a stable URL query shape for a specific `context.flavor_agent.*` filter.
 
 ### Schema deltas
 
-No changes to `flavor_agent_activity` schema. The existing `request.ai.requestLogId` and `request.reference` fields already exist (see `RecommendationAbilityExecution::persist_request_diagnostic_activity()`); the bridge just populates them with the UUID that's also pushed into `ai_request_log_context`. SCHEMA_VERSION stays at 4.
+No changes to `flavor_agent_activity` schema. The existing `request.ai` carrier can store `requestToken` and `requestLogId`; the bridge populates them from the core-assigned UUID captured through `wpai_request_logged`. SCHEMA_VERSION stays at 4.
 
 ### Settings story
 
-A new "AI Activity" sub-section in `Settings → Flavor Agent → AI Activity` (or a row in the existing settings page) that shows:
+The existing settings page now includes a read-only **AI Activity Storage** block in the AI Model section:
 
-- "Core AI Request Logging: **Enabled** [link to Tools → AI Request Logs]"  ←when active
-- "Core AI Request Logging: **Disabled.** Flavor Agent is keeping its own request diagnostics. To enable richer cost tracking and provider observability, turn on the Request Logging experiment in **Settings → AI**." ← when inactive
-- Always: "Editor applies and undo journal stay in `Settings → AI Activity` regardless."
+- **Not available:** Flavor Agent records request diagnostics in its own activity log and points users to WordPress AI 1.0.0+ for core request observability.
+- **Available but disabled:** Flavor Agent keeps local request diagnostics and links to **Settings → AI** to enable the AI Request Logging experiment.
+- **Enabled:** Flavor Agent forwards surface, scope, and document context into **Tools → AI Request Logs** and links there.
 
 This makes the relationship visible without forcing the site owner to read this design doc.
 
@@ -246,26 +238,21 @@ This makes the relationship visible without forcing the site owner to read this 
 
 ## Open questions
 
-1. **Exact Experiment option key.** Verify `wpai_experiment_request_logging_enabled` against the shipped AI 1.0.0 build. The PR description didn't pin the option name; the implementation may use a different key.
-2. **Does core expose a `log_id` accessor or filter after persistence?** Option (b) above sidesteps the need, but if a clean accessor lands, the design can become slightly simpler (Flavor Agent stops generating its own UUID and reads the core-assigned one).
-3. **Cost data in Activity admin.** Core Request Logging includes `AI_Request_Cost_Calculator` results. Worth surfacing in Flavor Agent's admin Activity row detail? Probably not in v1 — keep the cross-link and let users follow the Tools → AI Request Logs link for cost.
-4. **Docs-grounding forwarding.** Confirm whether core exposes any non-transporter emit path before considering Option B in the docs-grounding section above.
-5. **`@wordpress/dataviews` version skew.** Both Flavor Agent's `src/admin/activity-log.js` and core's Request Logs use DataViews. Verify which version each bundles — if core's WP 7.0 build pulls a newer DataViews than Flavor Agent's `package.json` declares, there could be styling drift on a site that has both pages open.
+1. **Cost data in Activity admin.** Core Request Logging includes cost-calculator data in its own admin surface. Flavor Agent's inline view currently limits itself to provider, model, duration, tokens, and previews.
+2. **Docs-grounding forwarding.** Core Request Logging only captures AI Client HTTP traffic, so docs-grounding diagnostics remain local Flavor Agent activity rows unless upstream exposes a non-transporter emit API.
+3. **`@wordpress/dataviews` version skew.** Both Flavor Agent's `src/admin/activity-log.js` and core's Request Logs use DataViews. Verify visual drift during release QA when both pages are active on the same install.
 
 ## Migration plan
 
-1. **Land the bridge helper** (`inc/Activity/RequestLoggingBridge.php`) with capability detection. No behavior change yet.
-2. **Wire the `ai_request_log_context` filter** to inject Flavor Agent context. Verify in a local stack by triggering a recommendation and inspecting a `wpai_request_logs` row — `context.flavor_agent.surface` should appear.
-3. **Wrap the two `request_diagnostic` `create()` calls** with the capability check.
-4. **Add the requestRef UUID generation** in `RecommendationAbilityExecution` and thread it into both the activity row's `request.ai.requestLogId` and the context filter payload.
-5. **Add the admin cross-link** in `src/admin/activity-log.js` (link out when `requestLogId` is present and core Request Logging is enabled).
-6. **Add the settings sub-section** explaining the relationship.
-7. **PHPUnit:** `RequestLoggingBridgeTest` for capability detection (all four matrix rows above) + `RecommendationAbilityExecutionTest` regression for the conditional skip.
-8. **E2E (playground):** smoke that a triggered recommendation produces exactly one `wpai_request_logs` row (when enabled) and zero `flavor_agent_activity` request_diagnostic rows.
+1. **Phase 1 shipped:** `RequestLoggingBridge` and `FlavorAgentRequestTag` register `wpai_request_log_context` / `wpai_request_logged` and inject Flavor Agent context into core rows.
+2. **Phase 2 shipped:** recommendation responses carry `requestToken` and `requestLogId`, and duplicate `request_diagnostic` rows are suppressed when core Request Logging is enabled.
+3. **Phase 3 shipped:** Activity admin rows with `request.ai.requestLogId` can fetch and render the matching core log inline, with a secondary link to Tools → AI Request Logs.
+4. **Phase 4 shipped:** Settings shows the AI Activity Storage read-only status and docs/status copy reflects the live bridge.
 
 ## Verification
 
-- Code references in this doc point to verified file paths and line numbers as of 2026-05-24.
+- Code references in this doc point to verified file paths and line numbers as of 2026-05-25.
 - Core Request Logging architecture summarized from [WordPress/ai#437](https://github.com/WordPress/ai/pull/437) (merged 2026-05-19 in AI 1.0.0).
 - `wpai_request_logs` schema verified from [`AI_Request_Log_Schema.php`](https://github.com/WordPress/ai/blob/trunk/includes/Logging/AI_Request_Log_Schema.php) at the time of writing.
-- Cross-references the gap audit (`docs/reference/wp-ai-stack-gap-audit-2026-05-24.md`, items 2 in the prioritized list) and the roadmap tracking doc (`docs/reference/wordpress-ai-roadmap-tracking.md`, action implications #1 and #4).
+- The shipped hook names are `wpai_request_log_context` and `wpai_request_logged`; the experiment option is `wpai_feature_ai-request-logging_enabled` behind the master `wpai_features_enabled` gate.
+- Cross-references the gap audit (`docs/reference/wp-ai-stack-gap-audit-2026-05-24.md`, item 2 in the prioritized list) and the roadmap tracking doc (`docs/reference/wordpress-ai-roadmap-tracking.md`, action implications #1 and #4).

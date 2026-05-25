@@ -706,7 +706,188 @@ function ActivityDetailSection( { section, entry } ) {
 	);
 }
 
-function ActivityEntryDetails( { entry } ) {
+function getNumberValue( value ) {
+	const normalized = Number( value );
+
+	return Number.isFinite( normalized ) ? normalized : null;
+}
+
+function formatCoreRequestLogValue( value ) {
+	if ( value === undefined || value === null || value === '' ) {
+		return NOT_RECORDED;
+	}
+
+	return String( value );
+}
+
+function normalizeCoreRequestLogDetails( log ) {
+	const inputTokens = getNumberValue( log?.tokens_input );
+	const outputTokens = getNumberValue( log?.tokens_output );
+	const totalTokens = getNumberValue( log?.tokens_total );
+	const durationMs = getNumberValue( log?.duration_ms );
+	const tokenUsage =
+		totalTokens !== null
+			? `${ totalTokens } total tokens`
+			: [
+					inputTokens !== null ? `${ inputTokens } input` : null,
+					outputTokens !== null ? `${ outputTokens } output` : null,
+			  ]
+					.filter( Boolean )
+					.join( ' / ' );
+
+	return {
+		provider: formatCoreRequestLogValue( log?.provider ),
+		model: formatCoreRequestLogValue( log?.model ),
+		duration: durationMs !== null ? `${ durationMs } ms` : NOT_RECORDED,
+		tokenUsage: tokenUsage || NOT_RECORDED,
+		requestPreview: formatCoreRequestLogValue(
+			log?.request_preview || log?.requestPreview
+		),
+		responsePreview: formatCoreRequestLogValue(
+			log?.response_preview || log?.responsePreview
+		),
+	};
+}
+
+function AiRequestLogPanel( { entry, bootData } ) {
+	const requestLogId = entry?.aiRequestLogId || '';
+	const requestToken = entry?.aiRequestToken || '';
+	const [ requestLogState, setRequestLogState ] = useState( {
+		id: requestLogId,
+		details: null,
+		error: '',
+		isLoading: false,
+	} );
+
+	useEffect( () => {
+		setRequestLogState( {
+			id: requestLogId,
+			details: null,
+			error: '',
+			isLoading: false,
+		} );
+	}, [ requestLogId ] );
+
+	if ( ! requestLogId && ! requestToken ) {
+		return null;
+	}
+
+	if ( ! requestLogId ) {
+		return (
+			<div className="flavor-agent-activity-log__request-log flavor-agent-activity-log__request-log--unavailable">
+				<p className="flavor-agent-activity-log__copy">
+					{ __(
+						'AI request log unavailable (core logging may have been disabled at request time).',
+						'flavor-agent'
+					) }
+				</p>
+			</div>
+		);
+	}
+
+	const loadRequestLog = async () => {
+		setRequestLogState( ( current ) => ( {
+			...current,
+			error: '',
+			isLoading: true,
+		} ) );
+
+		try {
+			const response = await apiFetch( {
+				url: `${ bootData.restUrl }ai/v1/logs/${ encodeURIComponent(
+					requestLogId
+				) }`,
+				headers: {
+					'X-WP-Nonce': bootData.nonce,
+				},
+			} );
+
+			setRequestLogState( {
+				id: requestLogId,
+				details: normalizeCoreRequestLogDetails( response || {} ),
+				error: '',
+				isLoading: false,
+			} );
+		} catch ( fetchError ) {
+			setRequestLogState( {
+				id: requestLogId,
+				details: null,
+				error:
+					fetchError?.message ||
+					__(
+						'Flavor Agent could not load this AI request log.',
+						'flavor-agent'
+					),
+				isLoading: false,
+			} );
+		}
+	};
+
+	const details = requestLogState.details;
+	const rows = details
+		? [
+				[ __( 'Provider', 'flavor-agent' ), details.provider ],
+				[ __( 'Model', 'flavor-agent' ), details.model ],
+				[ __( 'Duration', 'flavor-agent' ), details.duration ],
+				[ __( 'Tokens', 'flavor-agent' ), details.tokenUsage ],
+		  ]
+		: [];
+
+	return (
+		<div className="flavor-agent-activity-log__request-log">
+			<div className="flavor-agent-activity-log__request-log-actions">
+				<Button
+					variant="secondary"
+					onClick={ loadRequestLog }
+					disabled={ requestLogState.isLoading }
+				>
+					{ requestLogState.isLoading && <Spinner /> }
+					{ __( 'View AI request', 'flavor-agent' ) }
+				</Button>
+				{ entry.aiRequestLogsUrl && (
+					<Button
+						href={ entry.aiRequestLogsUrl }
+						target="_blank"
+						rel="noreferrer"
+						variant="secondary"
+					>
+						{ __( 'Open in AI Request Logs', 'flavor-agent' ) }
+					</Button>
+				) }
+			</div>
+			{ requestLogState.error && (
+				<p className="flavor-agent-activity-log__request-log-error">
+					{ requestLogState.error }
+				</p>
+			) }
+			{ details && (
+				<div className="flavor-agent-activity-log__request-log-details">
+					<dl className="flavor-agent-activity-log__detail-grid">
+						{ rows.map( ( [ label, value ] ) => (
+							<ActivityDetailRow
+								key={ label }
+								label={ label }
+								value={ value }
+							/>
+						) ) }
+						<ActivityDetailRow
+							label={ __( 'Request preview', 'flavor-agent' ) }
+							value={ details.requestPreview }
+							kind="code"
+						/>
+						<ActivityDetailRow
+							label={ __( 'Response preview', 'flavor-agent' ) }
+							value={ details.responsePreview }
+							kind="code"
+						/>
+					</dl>
+				</div>
+			) }
+		</div>
+	);
+}
+
+function ActivityEntryDetails( { entry, bootData } ) {
 	if ( ! entry ) {
 		return (
 			<Card className="flavor-agent-activity-log__sidebar-card">
@@ -759,6 +940,7 @@ function ActivityEntryDetails( { entry } ) {
 					</div>
 				</CardHeader>
 				<CardBody>
+					<AiRequestLogPanel entry={ entry } bootData={ bootData } />
 					<div className="flavor-agent-activity-log__detail-sections">
 						{ DETAIL_SECTIONS.map( ( section ) => (
 							<ActivityDetailSection
@@ -1521,7 +1703,10 @@ export function ActivityLogApp( { bootData } ) {
 						</div>
 					</div>
 					<div className="flavor-agent-activity-log__sidebar">
-						<ActivityEntryDetails entry={ selectedEntry } />
+						<ActivityEntryDetails
+							entry={ selectedEntry }
+							bootData={ bootData }
+						/>
 					</div>
 				</div>
 			</DataViews>

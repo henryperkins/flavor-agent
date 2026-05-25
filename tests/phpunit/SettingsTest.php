@@ -1396,6 +1396,62 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_render_page_reports_missing_core_ai_request_logging_storage(): void {
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'AI Activity Storage', $output );
+		$this->assertStringContainsString(
+			'Flavor Agent records request diagnostics in its own activity log. Upgrade to WordPress AI 1.0.0+ to access core AI request observability.',
+			$output
+		);
+	}
+
+	public function test_render_page_links_to_ai_settings_when_core_request_logging_is_disabled(): void {
+		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
+		WordPressTestState::$options = [
+			'wpai_features_enabled'                   => true,
+			'wpai_feature_ai-request-logging_enabled' => false,
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'AI Activity Storage', $output );
+		$this->assertStringContainsString(
+			'Flavor Agent is recording request diagnostics in its own activity log. Enable the AI Request Logging experiment in Settings &gt; AI to also capture provider, model, token, and cost data centrally.',
+			$output
+		);
+		$this->assertStringContainsString(
+			'options-general.php?page=ai-wp-admin',
+			$output
+		);
+	}
+
+	public function test_render_page_links_to_ai_request_logs_when_core_request_logging_is_enabled(): void {
+		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
+		WordPressTestState::$options = [
+			'wpai_features_enabled'                   => true,
+			'wpai_feature_ai-request-logging_enabled' => true,
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'AI Activity Storage', $output );
+		$this->assertStringContainsString(
+			'AI Request Logging is enabled. Flavor Agent forwards surface, scope, and document context into each Tools &gt; AI Request Logs row.',
+			$output
+		);
+		$this->assertStringContainsString(
+			'tools.php?page=ai-request-logs',
+			$output
+		);
+	}
+
 	public function test_render_page_opens_every_section_with_request_scoped_validation_errors(): void {
 		WordPressTestState::$current_user_id = 1;
 		$storage_key                         = Feedback::get_storage_key( 'multi-section-errors' );

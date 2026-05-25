@@ -857,6 +857,101 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'loads and renders core AI request log details from the selected entry', async () => {
+		apiFetch
+			.mockResolvedValueOnce(
+				buildResponse( [
+					createEntry( {
+						id: 'activity-with-core-log',
+						suggestion: 'Recommendation with core log',
+						request: {
+							ai: {
+								requestLogId:
+									'c85ee60d-700b-48a7-b831-5784d5ad32b1',
+								requestToken:
+									'7a85fe6b-ad73-4c0f-931b-0b0a70bc09c0',
+							},
+						},
+					} ),
+				] )
+			)
+			.mockResolvedValueOnce( {
+				id: 'c85ee60d-700b-48a7-b831-5784d5ad32b1',
+				provider: 'openai',
+				model: 'gpt-5.4-mini',
+				duration_ms: 312,
+				tokens_input: 40,
+				tokens_output: 56,
+				tokens_total: 96,
+				request_preview: 'Suggest a stronger intro.',
+				response_preview: 'Use a clearer opening sentence.',
+			} );
+
+		await renderApp();
+
+		const viewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'View AI request' );
+		expect( viewButton ).toBeDefined();
+
+		await act( async () => {
+			viewButton.click();
+		} );
+		await flushEffects();
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				headers: {
+					'X-WP-Nonce': BOOT_DATA.nonce,
+				},
+				url: `${ BOOT_DATA.restUrl }ai/v1/logs/c85ee60d-700b-48a7-b831-5784d5ad32b1`,
+			} )
+		);
+		expect( getContainer().textContent ).toContain( 'openai' );
+		expect( getContainer().textContent ).toContain( 'gpt-5.4-mini' );
+		expect( getContainer().textContent ).toContain( '312 ms' );
+		expect( getContainer().textContent ).toContain( '96 total tokens' );
+		expect( getContainer().textContent ).toContain(
+			'Suggest a stronger intro.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Use a clearer opening sentence.'
+		);
+
+		const requestLogsLink = Array.from(
+			getContainer().querySelectorAll( 'a' )
+		).find( ( link ) => link.textContent === 'Open in AI Request Logs' );
+		expect( requestLogsLink ).toBeDefined();
+		expect( requestLogsLink.getAttribute( 'href' ) ).toBe(
+			`${ BOOT_DATA.adminUrl }tools.php?page=ai-request-logs`
+		);
+	} );
+
+	test( 'renders unavailable AI request log copy when a token has no log id', async () => {
+		await renderApp( [
+			createEntry( {
+				id: 'activity-with-token-only',
+				suggestion: 'Recommendation without captured core log',
+				request: {
+					ai: {
+						requestToken: '7a85fe6b-ad73-4c0f-931b-0b0a70bc09c0',
+						requestLogId: '',
+					},
+				},
+			} ),
+		] );
+
+		expect( getContainer().textContent ).toContain(
+			'AI request log unavailable'
+		);
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
+				( button ) => button.textContent === 'View AI request'
+			)
+		).toBe( false );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	test( 'uses server-backed filter options instead of only the visible page entries', async () => {
 		await renderApp(
 			buildResponse( [ createEntry() ], {

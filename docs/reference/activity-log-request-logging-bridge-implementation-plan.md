@@ -1,6 +1,6 @@
 # Request Logging Bridge — Implementation Plan
 
-**Status:** Implementation-ready plan · **Date:** 2026-05-25 · **Pinned against:** WordPress/ai `1.0.0` (tag SHA `57846e17948088265a78d438f6f0a6c6e7b141e0`) · **Parent design:** [`activity-log-request-logging-coexistence.md`](activity-log-request-logging-coexistence.md)
+**Status:** Implemented · **Date:** 2026-05-25 · **Pinned against:** WordPress/ai `1.0.0` (tag SHA `57846e17948088265a78d438f6f0a6c6e7b141e0`) · **Parent design:** [`activity-log-request-logging-coexistence.md`](activity-log-request-logging-coexistence.md)
 
 ## What changed since the design doc
 

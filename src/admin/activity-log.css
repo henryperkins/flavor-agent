@@ -446,6 +446,46 @@ body.settings_page_flavor-agent-activity {
   border-bottom: 1px solid var(--flavor-agent-activity-log-border-soft);
 }
 
+.flavor-agent-activity-log__request-log {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--flavor-agent-activity-log-border-soft);
+}
+
+.flavor-agent-activity-log__request-log--unavailable {
+  padding: 10px 12px;
+  border: 1px solid var(--flavor-agent-activity-log-border-soft);
+  border-left: 4px solid var(--wpds-color-fg-content-warning-weak, #926300);
+  border-radius: var(--wpds-border-radius-md, 4px);
+  background: var(--wpds-color-bg-surface-warning-weak, #fff7e0);
+}
+
+.flavor-agent-activity-log__request-log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.flavor-agent-activity-log__request-log-actions .components-spinner {
+  margin: 0 6px 0 0;
+}
+
+.flavor-agent-activity-log__request-log-error {
+  margin: 0;
+  color: var(--wpds-color-fg-content-error-weak, #cc1818);
+  font-size: var(--wpds-font-size-sm, 12px);
+  line-height: 1.5;
+}
+
+.flavor-agent-activity-log__request-log-details {
+  padding: 10px 12px;
+  border: 1px solid var(--flavor-agent-activity-log-border-soft);
+  border-radius: var(--wpds-border-radius-md, 4px);
+  background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
+}
+
 /* ---------------------------------------------------------------
  * Sidebar entry-detail sections.
  *
