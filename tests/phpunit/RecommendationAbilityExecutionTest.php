@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\RecommendationAbilityExecution;
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Activity\RequestLoggingBridge;
 use FlavorAgent\Support\FlavorAgentRequestTag;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -68,6 +69,68 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 			'flavor-agent/recommend-template',
 			$request['ai']['ability'] ?? null
 		);
+	}
+
+	public function test_execute_threads_core_request_log_identifiers_and_suppresses_duplicate_diagnostic_activity(): void {
+		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
+		WordPressTestState::$options = [
+			'wpai_features_enabled'                   => true,
+			'wpai_feature_ai-request-logging_enabled' => true,
+		];
+
+		$log_id = '22222222-2222-4222-8222-222222222222';
+
+		$result = RecommendationAbilityExecution::execute(
+			'template',
+			'flavor-agent/recommend-template',
+			[
+				'templateRef' => 'theme//home',
+				'prompt'      => 'Tighten the structure.',
+				'document'    => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+			],
+			static function () use ( $log_id ): array {
+				$tag = FlavorAgentRequestTag::current();
+				if ( ! $tag instanceof FlavorAgentRequestTag ) {
+					throw new \RuntimeException( 'Missing active Flavor Agent request tag.' );
+				}
+
+				RequestLoggingBridge::capture_log_id(
+					$log_id,
+					[
+						'context' => [
+							'flavor_agent' => [
+								'requestToken' => $tag->request_token(),
+							],
+						],
+					]
+				);
+
+				return [
+					'suggestions' => [
+						[
+							'label' => 'Clarify header hierarchy',
+						],
+					],
+					'requestMeta' => [
+						'provider' => 'openai',
+						'model'    => 'gpt-5.4-mini',
+					],
+				];
+			}
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/',
+			$result['requestMeta']['requestToken'] ?? ''
+		);
+		$this->assertSame( $log_id, $result['requestMeta']['requestLogId'] ?? null );
+		$this->assertNull( RequestLoggingBridge::consume_log_id( (string) $result['requestMeta']['requestToken'] ) );
+		$this->assertSame( [], WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [] );
 	}
 
 	public function test_execute_persists_resolved_provider_fields_in_request_diagnostic_activity(): void {

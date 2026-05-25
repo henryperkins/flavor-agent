@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Activity\RequestLoggingBridge;
 use FlavorAgent\Activity\Serializer;
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Guidelines;
@@ -48,8 +49,11 @@ final class RecommendationAbilityExecution {
 		}
 
 		if ( \is_wp_error( $result ) ) {
-			if ( ! $resolve_signature_only && self::should_persist_request_diagnostic( $ability_name, $surface, $client_request ) ) {
-				$result = self::append_request_meta_to_error( $result, $ability_name );
+			if ( ! $resolve_signature_only ) {
+				$result = self::append_request_meta_to_error( $result, $ability_name, $request_tag );
+			}
+
+			if ( ! $resolve_signature_only && self::should_persist_activity_request_diagnostic( $ability_name, $surface, $client_request ) ) {
 				self::persist_request_diagnostic_failure_activity(
 					self::resolve_activity_surface( $surface, $request_input ),
 					$result,
@@ -66,8 +70,8 @@ final class RecommendationAbilityExecution {
 			return $result;
 		}
 
-		$payload = self::append_request_meta( $result, $ability_name );
-		if ( self::should_persist_request_diagnostic( $ability_name, $surface, $client_request ) ) {
+		$payload = self::append_request_meta( $result, $ability_name, $request_tag );
+		if ( self::should_persist_activity_request_diagnostic( $ability_name, $surface, $client_request ) ) {
 			self::persist_request_diagnostic_activity(
 				self::resolve_activity_surface( $surface, $request_input ),
 				$payload,
@@ -298,6 +302,17 @@ final class RecommendationAbilityExecution {
 	/**
 	 * @param array{sessionId: string, requestToken: int|null, abortId: string, aborted: bool, scopeKey: string} $client_request
 	 */
+	private static function should_persist_activity_request_diagnostic( string $ability_name, string $surface, array $client_request ): bool {
+		if ( ! self::should_persist_request_diagnostic( $ability_name, $surface, $client_request ) ) {
+			return false;
+		}
+
+		return RequestLoggingBridge::should_persist_request_diagnostic();
+	}
+
+	/**
+	 * @param array{sessionId: string, requestToken: int|null, abortId: string, aborted: bool, scopeKey: string} $client_request
+	 */
 	private static function should_persist_request_diagnostic( string $ability_name, string $surface, array $client_request ): bool {
 		if ( $client_request['aborted'] ) {
 			return false;
@@ -349,7 +364,7 @@ final class RecommendationAbilityExecution {
 	 * @param array<string, mixed> $payload
 	 * @return array<string, mixed>
 	 */
-	private static function append_request_meta( array $payload, string $ability_name ): array {
+	private static function append_request_meta( array $payload, string $ability_name, FlavorAgentRequestTag $request_tag ): array {
 		$request_meta = \is_array( $payload['requestMeta'] ?? null )
 			? $payload['requestMeta']
 			: Provider::active_chat_request_meta();
@@ -362,12 +377,14 @@ final class RecommendationAbilityExecution {
 			$request_meta = self::append_pattern_request_meta( $request_meta );
 		}
 
+		$request_meta = self::append_request_log_meta( $request_meta, $request_tag );
+
 		$payload['requestMeta'] = $request_meta;
 
 		return $payload;
 	}
 
-	private static function append_request_meta_to_error( \WP_Error $error, string $ability_name ): \WP_Error {
+	private static function append_request_meta_to_error( \WP_Error $error, string $ability_name, FlavorAgentRequestTag $request_tag ): \WP_Error {
 		$code         = $error->get_error_code();
 		$data         = $error->get_error_data( $code );
 		$data         = \is_array( $data )
@@ -385,6 +402,8 @@ final class RecommendationAbilityExecution {
 			$request_meta = self::append_pattern_request_meta( $request_meta );
 		}
 
+		$request_meta = self::append_request_log_meta( $request_meta, $request_tag );
+
 		$data['requestMeta'] = $request_meta;
 
 		return new \WP_Error(
@@ -392,6 +411,19 @@ final class RecommendationAbilityExecution {
 			$error->get_error_message( $code ),
 			$data
 		);
+	}
+
+	/**
+	 * @param array<string, mixed> $request_meta
+	 * @return array<string, mixed>
+	 */
+	private static function append_request_log_meta( array $request_meta, FlavorAgentRequestTag $request_tag ): array {
+		$request_token = $request_tag->request_token();
+
+		$request_meta['requestToken'] = $request_token;
+		$request_meta['requestLogId'] = RequestLoggingBridge::consume_log_id( $request_token ) ?? '';
+
+		return $request_meta;
 	}
 
 	/**
