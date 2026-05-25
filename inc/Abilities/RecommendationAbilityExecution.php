@@ -10,6 +10,7 @@ use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
+use FlavorAgent\Support\FlavorAgentRequestTag;
 use FlavorAgent\Support\StringArray;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -33,11 +34,18 @@ final class RecommendationAbilityExecution {
 		$resolve_signature_only = self::is_signature_only_input( $request_input );
 		$client_request         = self::sanitize_client_request( $request_input['clientRequest'] ?? null );
 		$request_token          = self::latest_request_token( $ability_name, $surface, $client_request );
-		$result                 = self::execute_with_system_instruction(
-			$callback,
-			$execution_input,
-			self::resolve_guidelines_prompt_context( $guideline_context )
-		);
+		$request_tag            = self::build_request_tag( $surface, $ability_name, $request_input, $client_request );
+
+		FlavorAgentRequestTag::start( $request_tag );
+		try {
+			$result = self::execute_with_system_instruction(
+				$callback,
+				$execution_input,
+				self::resolve_guidelines_prompt_context( $guideline_context )
+			);
+		} finally {
+			FlavorAgentRequestTag::finish();
+		}
 
 		if ( \is_wp_error( $result ) ) {
 			if ( ! $resolve_signature_only && self::should_persist_request_diagnostic( $ability_name, $surface, $client_request ) ) {
@@ -70,6 +78,55 @@ final class RecommendationAbilityExecution {
 		}
 
 		return $payload;
+	}
+
+	/**
+	 * @param array<string, mixed> $request_input
+	 * @param array{sessionId: string, requestToken: int|null, abortId: string, aborted: bool, scopeKey: string} $client_request
+	 */
+	private static function build_request_tag(
+		string $surface,
+		string $ability_name,
+		array $request_input,
+		array $client_request
+	): FlavorAgentRequestTag {
+		$document  = \is_array( $request_input['document'] ?? null )
+			? self::sanitize_structured_value( $request_input['document'] )
+			: [];
+		$scope_key = \trim( (string) ( $document['scopeKey'] ?? $client_request['scopeKey'] ?? '' ) );
+
+		return new FlavorAgentRequestTag(
+			$surface,
+			$ability_name,
+			$scope_key,
+			$document,
+			self::generate_request_log_token()
+		);
+	}
+
+	private static function generate_request_log_token(): string {
+		if ( \function_exists( 'wp_generate_uuid4' ) ) {
+			return (string) \wp_generate_uuid4();
+		}
+
+		try {
+			$bytes = \random_bytes( 16 );
+		} catch ( \Throwable ) {
+			$bytes = \hash( 'sha256', \uniqid( '', true ), true );
+		}
+
+		$bytes[6] = \chr( ( \ord( $bytes[6] ) & 0x0f ) | 0x40 );
+		$bytes[8] = \chr( ( \ord( $bytes[8] ) & 0x3f ) | 0x80 );
+		$hex      = \bin2hex( $bytes );
+
+		return \sprintf(
+			'%s-%s-%s-%s-%s',
+			\substr( $hex, 0, 8 ),
+			\substr( $hex, 8, 4 ),
+			\substr( $hex, 12, 4 ),
+			\substr( $hex, 16, 4 ),
+			\substr( $hex, 20, 12 )
+		);
 	}
 
 	/**

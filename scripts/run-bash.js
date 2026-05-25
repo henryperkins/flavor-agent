@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+/* eslint-disable no-console */
+
 const fs = require( 'fs' );
 const path = require( 'path' );
 const { spawnSync } = require( 'child_process' );
@@ -17,9 +19,14 @@ function resolveBashExecutable( {
 	if ( platform === 'win32' ) {
 		const candidates = [
 			env.ProgramFiles &&
-				path.join( env.ProgramFiles, 'Git', 'bin', 'bash.exe' ),
+				path.win32.join( env.ProgramFiles, 'Git', 'bin', 'bash.exe' ),
 			env[ 'ProgramFiles(x86)' ] &&
-				path.join( env[ 'ProgramFiles(x86)' ], 'Git', 'bin', 'bash.exe' ),
+				path.win32.join(
+					env[ 'ProgramFiles(x86)' ],
+					'Git',
+					'bin',
+					'bash.exe'
+				),
 		].filter( Boolean );
 
 		for ( const candidate of candidates ) {

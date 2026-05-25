@@ -211,23 +211,41 @@ The `$captured_log_ids` static is intentionally bounded by `consume_log_id()` re
 namespace FlavorAgent\Support;
 
 final class FlavorAgentRequestTag {
-    public function __construct(
-        public readonly string $surface,
-        public readonly string $ability_name,
-        public readonly string $scope_key,
-        public readonly array  $document_ref,
-        public readonly string $request_token,
-    ) {}
+    private string $surface;
+    private string $ability_name;
+    private string $scope_key;
+    private array $document_ref;
+    private string $request_token;
 
     private static ?self $current = null;
+
+    public function __construct(
+        string $surface,
+        string $ability_name,
+        string $scope_key,
+        array $document_ref,
+        string $request_token
+    ) {
+        $this->surface       = $surface;
+        $this->ability_name  = $ability_name;
+        $this->scope_key     = $scope_key;
+        $this->document_ref  = $document_ref;
+        $this->request_token = $request_token;
+    }
 
     public static function start( self $tag ): void { self::$current = $tag; }
     public static function current(): ?self        { return self::$current; }
     public static function finish(): void          { self::$current = null; }
+
+    public function surface(): string       { return $this->surface; }
+    public function ability_name(): string  { return $this->ability_name; }
+    public function scope_key(): string     { return $this->scope_key; }
+    public function document_ref(): array   { return $this->document_ref; }
+    public function request_token(): string { return $this->request_token; }
 }
 ```
 
-PHP 8.0+ (which Flavor Agent already requires) supports readonly properties via constructor promotion; if WP target slips to 8.0 strict, swap to a plain class with getters.
+Use explicit private properties plus getters so the class stays compatible with Flavor Agent's declared PHP 8.0 floor. Constructor property promotion is available in PHP 8.0, but `readonly` properties are PHP 8.1+ and must not be used unless the plugin raises `Requires PHP`.
 
 `$request_token` is generated per ability execution — `wp_generate_uuid4()` is fine, or `bin2hex( random_bytes( 8 ) )` for a 16-char token, the only requirement is uniqueness within the PHP process.
 

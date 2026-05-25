@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\RecommendationAbilityExecution;
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Support\FlavorAgentRequestTag;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -293,6 +294,86 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 			'After callback.',
 			apply_filters( 'flavor_agent_recommendation_system_instruction', 'After callback.' )
 		);
+	}
+
+	public function test_execute_exposes_flavor_agent_request_tag_during_callback_and_clears_after(): void {
+		$this->assertTrue( \class_exists( FlavorAgentRequestTag::class ) );
+
+		$seen_tag = null;
+
+		$result = RecommendationAbilityExecution::execute(
+			'template',
+			'flavor-agent/recommend-template',
+			[
+				'templateRef'   => 'theme//home',
+				'document'      => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+				'clientRequest' => [
+					'sessionId'    => 'session-1',
+					'requestToken' => 4,
+					'scopeKey'     => 'wp_template:theme//home',
+				],
+			],
+			static function () use ( &$seen_tag ): array {
+				$seen_tag = FlavorAgentRequestTag::current();
+
+				return [
+					'suggestions' => [],
+				];
+			}
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertInstanceOf( FlavorAgentRequestTag::class, $seen_tag );
+		$this->assertSame( 'template', $seen_tag->surface() );
+		$this->assertSame( 'flavor-agent/recommend-template', $seen_tag->ability_name() );
+		$this->assertSame( 'wp_template:theme//home', $seen_tag->scope_key() );
+		$this->assertSame(
+			[
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			],
+			$seen_tag->document_ref()
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/',
+			$seen_tag->request_token()
+		);
+		$this->assertNull( FlavorAgentRequestTag::current() );
+	}
+
+	public function test_execute_clears_flavor_agent_request_tag_when_callback_throws(): void {
+		$this->assertTrue( \class_exists( FlavorAgentRequestTag::class ) );
+
+		try {
+			RecommendationAbilityExecution::execute(
+				'content',
+				'flavor-agent/recommend-content',
+				[
+					'prompt'   => 'Draft intro.',
+					'document' => [
+						'scopeKey' => 'post:42',
+					],
+				],
+				static function (): array {
+					$this_tag = FlavorAgentRequestTag::current();
+					if ( ! $this_tag instanceof FlavorAgentRequestTag ) {
+						throw new \RuntimeException( 'Missing active tag.' );
+					}
+
+					throw new \RuntimeException( 'Generation failed.' );
+				}
+			);
+			$this->fail( 'Expected the callback exception to bubble.' );
+		} catch ( \RuntimeException $exception ) {
+			$this->assertSame( 'Generation failed.', $exception->getMessage() );
+		}
+
+		$this->assertNull( FlavorAgentRequestTag::current() );
 	}
 
 	public function test_execute_preserves_image_guidelines_when_category_declares_images(): void {

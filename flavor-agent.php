@@ -59,6 +59,7 @@ register_deactivation_hook(
 );
 
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
+add_action( 'init', [ FlavorAgent\Activity\RequestLoggingBridge::class, 'register' ], 5 );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );
 add_action( 'init', [ FlavorAgent\Cloudflare\AISearchClient::class, 'schedule_prewarm' ], 7 );
 // Roadmap warm only needs to be scheduled in admin/REST/cron contexts;
