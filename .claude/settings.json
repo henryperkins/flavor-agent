@@ -1,0 +1,27 @@
+{
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "Edit|Write|MultiEdit",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in */build/*|*/vendor/*|*/node_modules/*|*/output/*|*/dist/*) echo \"Blocked: $f is in a generated/dependency directory. Edit source under src/ or inc/ instead.\" >&2; exit 2 ;; esac"
+					}
+				]
+			}
+		],
+		"PostToolUse": [
+			{
+				"matcher": "Edit|Write|MultiEdit",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty'); case \"$f\" in */src/*.js|*/src/*.jsx) [ -x ./node_modules/.bin/eslint ] && ./node_modules/.bin/eslint --fix \"$f\" >/dev/null 2>&1 || true ;; esac",
+						"timeout": 30
+					}
+				]
+			}
+		]
+	}
+}
