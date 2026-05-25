@@ -171,3 +171,14 @@ The numbered "Action implications for Flavor Agent" list in `wordpress-ai-roadma
 - News digest written: `output/wp-core-ai-news-2026-05-25.json` (15 items, 30-day window, 6 sources scanned, 1 skipped due to feed 429).
 - Code references in this audit point to verified file paths and line numbers as of 2026-05-24. Re-verify before acting on items 1–7 — touch points may have shifted in the interim.
 - Cross-checked against `wordpress-ai-roadmap-tracking.md` (last refreshed 2026-05-21) to avoid duplicating its tracking. Items above are deliberately additive.
+
+## Currentness — 2026-05-25
+
+This audit was integrated into the repo's active tracking docs the day after it was written. Two items in the prioritized list now have detailed design docs:
+
+- **Item 2** (Activity Repository ↔ Request Logging coexistence) is fully designed in [`docs/reference/activity-log-request-logging-coexistence.md`](activity-log-request-logging-coexistence.md). The original "decide whether to also emit" framing has been promoted into a coexistence design that uses the `ai_request_log_context` filter to enrich `wpai_request_logs.context` with Flavor Agent surface/scope/document, suppresses `request_diagnostic` rows when core Request Logging is enabled, and cross-links the admin Activity page. `wordpress-ai-roadmap-tracking.md` action implications #1 and #4 now reference that design.
+- **Item 5** (streaming watch entry) is fully designed in [`docs/reference/streaming-recommendations-design.md`](streaming-recommendations-design.md). Surface adoption matrix, schema/review-signature reconciliation, and the trigger condition for starting implementation (php-ai-client 1.4.0 RC + AI plugin streaming Experiment in trunk) live there. `wordpress-ai-roadmap-tracking.md` action implications now include item #10 for this, and the off-board cross-repo section now tracks `WordPress/php-ai-client#100`.
+
+Item 1 (MCP Adapter doc drift) was partially addressed: `CLAUDE.md` and `docs/reference/local-environment-setup.md` now state that WP.org distribution is the planned primary path per the 22 Apr 2026 contributor decision, while keeping the GitHub clone as the active local-setup step. A direct check of `https://wordpress.org/plugins/mcp-adapter/` on 2026-05-25 returned "Plugin not found" / WP.org plugin-directory search results, confirming the listing is **not yet live**. Switch the local-setup steps to `wp plugin install mcp-adapter --activate` only after the slug publishes.
+
+Items 3, 6, 7, and 8 (track `#21` directly, `#560` Secrets Management watch, `#159` Experiment-init watch, vocabulary scan for "Review Notes" / "Refine from Notes") are reflected in `wordpress-ai-roadmap-tracking.md` updates. The vocabulary scan returned no `src/` occurrences as of this date.

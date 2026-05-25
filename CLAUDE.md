@@ -45,7 +45,7 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 
 ### Local WordPress runtime
 
-The representative runtime is WordPress nightly/trunk with these companion plugins active before validating editor, Connectors, Abilities, or MCP: `wordpress-beta-tester`, `gutenberg`, `ai`, `ai-provider-for-openai`, `ai-provider-for-anthropic`, `ai-provider-for-google`, `mcp-adapter` (from `WordPress/mcp-adapter`, not WP.org), `plugin-check`, plus `flavor-agent`. See `docs/reference/local-environment-setup.md` for setup and Plugin Check env exports.
+The representative runtime is WordPress nightly/trunk with these companion plugins active before validating editor, Connectors, Abilities, or MCP: `wordpress-beta-tester`, `gutenberg`, `ai`, `ai-provider-for-openai`, `ai-provider-for-anthropic`, `ai-provider-for-google`, `mcp-adapter` (currently installed from `WordPress/mcp-adapter`; per the 22 Apr 2026 AI contributor decision, WP.org plugin distribution is the planned primary path once the slug is published — the WP.org listing was not yet live as of 2026-05-25, so the GitHub clone remains the active local-setup path), `plugin-check`, plus `flavor-agent`. See `docs/reference/local-environment-setup.md` for setup and Plugin Check env exports.
 
 ### Agent-executable verification
 
