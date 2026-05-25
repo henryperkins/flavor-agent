@@ -165,6 +165,18 @@ public static function inject_flavor_agent_context( array $context, array $decod
 
 The `FlavorAgentRequestTag` is a request-scoped (per-PHP-process) value class that `RecommendationAbilityExecution` populates before calling `WordPressAIClient::chat()` and clears in a `finally`. This is the existing pattern Flavor Agent uses for `Support\RequestTrace::start()/finish()`; reuse the same idiom rather than inventing a new one.
 
+#### The bridge does not gate on `context.source.slug`
+
+An earlier draft also short-circuited when `context['source']['slug'] !== 'flavor-agent'`. That guard is intentionally **not** present in the shipped implementation, because core's source attribution silently misattributes Flavor Agent's requests on any install where the plugin is mounted via symlink:
+
+- `Logging_Http_Transporter::detect_request_source()` walks `debug_backtrace()` and matches each frame's file against `WP_PLUGIN_DIR` with a literal `strpos` prefix check.
+- PHP returns symlink-resolved real paths in the backtrace (Composer's PSR-4 autoloader uses `realpath` when loading classes).
+- When `wp-content/plugins/flavor-agent` is a symlink to a working copy elsewhere on disk (common in dev workflows, Bedrock/Trellis production layouts, and some Docker mount setups), every Flavor Agent frame's real path fails the prefix comparison and the iteration falls through to whichever core frame appears next on the stack — typically `wp-includes/abilities-api/class-wp-ability.php`, which `match_core_source()` happily matches as `wordpress`.
+
+The active `FlavorAgentRequestTag` is the authoritative signal that the in-flight request is Flavor Agent's, regardless of what slug the transporter attributed the row to. Without this guard relaxation, `capture_log_id()` never sees a context with `flavor_agent.requestToken`, `consume_log_id()` always returns null, and every activity row carries `requestToken` but empty `requestLogId` — surfacing the misleading "AI request log unavailable (core logging may have been disabled at request time)" notice on the admin Activity page even when core logging is fully enabled.
+
+The corresponding upstream fix is filed as `WordPress/ai` PR (branch `fix/symlink-source-attribution` on the maintainer's fork) — it makes `match_plugin_source` / `match_mu_plugin_source` / `match_theme_source` and `get_infrastructure_dirs()` symlink-aware so the row also gets the correct `source.slug` value. The bridge change is the defense-in-depth: it keeps capture working on any release of WP AI 1.0.0+, even before the upstream patch lands.
+
 ### Capturing the core `log_id` back into Flavor Agent
 
 Core Request Logging assigns a UUID `log_id` per request. Flavor Agent captures that UUID through the shipped `wpai_request_logged` action, which fires after the `wpai_request_logs` row persists and includes the inserted row data. `RequestLoggingBridge` maps the active Flavor Agent `requestToken` to that core UUID, and `RecommendationAbilityExecution` threads both values into `requestMeta` so later apply rows can persist `request.ai.requestLogId`.
@@ -256,3 +268,4 @@ This makes the relationship visible without forcing the site owner to read this 
 - `wpai_request_logs` schema verified from [`AI_Request_Log_Schema.php`](https://github.com/WordPress/ai/blob/trunk/includes/Logging/AI_Request_Log_Schema.php) at the time of writing.
 - The shipped hook names are `wpai_request_log_context` and `wpai_request_logged`; the experiment option is `wpai_feature_ai-request-logging_enabled` behind the master `wpai_features_enabled` gate.
 - Cross-references the gap audit (`docs/reference/wp-ai-stack-gap-audit-2026-05-24.md`, item 2 in the prioritized list) and the roadmap tracking doc (`docs/reference/wordpress-ai-roadmap-tracking.md`, action implications #1 and #4).
+- The symlink-attribution failure mode was empirically confirmed on a local install where `wp-content/plugins/flavor-agent` is symlinked to a working tree: 810 rows in `wpai_request_logs` total, **zero** with `context.source.slug = 'flavor-agent'`. Every `openai:responses` row attributed to `source.slug = 'wordpress'` with `source.file = 'wp-includes/abilities-api/class-wp-ability.php'`. The bridge's source-slug-independent capture (above) fixes downstream `requestLogId` capture without depending on the upstream attribution fix.

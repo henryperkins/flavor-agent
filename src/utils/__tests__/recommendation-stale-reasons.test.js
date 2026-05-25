@@ -55,6 +55,24 @@ describe( 'getExecutableSurfaceEffectiveStaleReason', () => {
 		).toBe( 'server-apply' );
 	} );
 
+	test( 'preserves stored docs grounding and missing signature apply reasons', () => {
+		expect(
+			getExecutableSurfaceEffectiveStaleReason( {
+				storedStaleReason: 'docs-grounding-unavailable',
+			} )
+		).toBe( 'docs-grounding-unavailable' );
+		expect(
+			getExecutableSurfaceEffectiveStaleReason( {
+				storedStaleReason: 'docs-grounding-changed',
+			} )
+		).toBe( 'docs-grounding-changed' );
+		expect(
+			getExecutableSurfaceEffectiveStaleReason( {
+				storedStaleReason: 'missing-resolved-signature',
+			} )
+		).toBe( 'missing-resolved-signature' );
+	} );
+
 	test( 'ignores unrecognized stored stale reasons', () => {
 		expect(
 			getExecutableSurfaceEffectiveStaleReason( {
@@ -107,6 +125,30 @@ describe( 'getExecutableSurfaceStaleMessage', () => {
 			} )
 		).toBe(
 			'This Template result no longer has trusted WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.'
+		);
+	} );
+
+	test( 'produces docs grounding changed messaging tied to the surface label', () => {
+		expect(
+			getExecutableSurfaceStaleMessage( {
+				surfaceLabel: 'Template',
+				staleReasonType: 'docs-grounding-changed',
+				liveContextLabel: 'the current template',
+			} )
+		).toBe(
+			'This Template result no longer matches the current WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.'
+		);
+	} );
+
+	test( 'produces missing resolved signature messaging tied to the surface label', () => {
+		expect(
+			getExecutableSurfaceStaleMessage( {
+				surfaceLabel: 'Template',
+				staleReasonType: 'missing-resolved-signature',
+				liveContextLabel: 'the current template',
+			} )
+		).toBe(
+			'This Template result is missing server-resolved apply context. Refresh before reviewing or applying anything from the previous result.'
 		);
 	} );
 

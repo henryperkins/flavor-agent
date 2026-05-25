@@ -1,9 +1,9 @@
 {
-  "enabledPlugins": {
-    "playwright@claude-plugins-official": false
-  },
   "enabledMcpjsonServers": [
     "playwright",
     "wpds"
-  ]
+  ],
+  "enabledPlugins": {
+    "playwright@claude-plugins-official": true
+  }
 }

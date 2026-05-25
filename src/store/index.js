@@ -95,6 +95,8 @@ const STORE_NAME = 'flavor-agent';
 const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
 	.toString( 36 )
 	.slice( 2 ) }`;
+const APPLY_RESOLVED_FRESHNESS_ABORT_KEY = '_applyResolvedFreshnessAbort';
+const APPLY_RESOLVED_FRESHNESS_TIMEOUT_MS = 15000;
 const DEFAULT_BLOCK_REQUEST_STATE = {
 	status: 'idle',
 	error: null,
@@ -488,6 +490,51 @@ function buildServerStaleApplyErrorMessage( surface ) {
 	}
 }
 
+function buildMissingResolvedSignatureApplyErrorMessage( surface ) {
+	switch ( surface ) {
+		case 'template':
+			return 'This template result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+		case 'template-part':
+			return 'This template-part result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+		case 'global-styles':
+			return 'This Global Styles result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+		case 'style-book':
+			return 'This Style Book result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+		default:
+			return 'This result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+	}
+}
+
+function buildDocsGroundingUnavailableApplyErrorMessage( surface ) {
+	switch ( surface ) {
+		case 'template':
+			return 'This template result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+		case 'template-part':
+			return 'This template-part result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+		case 'global-styles':
+			return 'This Global Styles result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+		case 'style-book':
+			return 'This Style Book result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+		default:
+			return 'This result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+	}
+}
+
+function buildDocsGroundingChangedApplyErrorMessage( surface ) {
+	switch ( surface ) {
+		case 'template':
+			return 'This template result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+		case 'template-part':
+			return 'This template-part result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+		case 'global-styles':
+			return 'This Global Styles result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+		case 'style-book':
+			return 'This Style Book result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+		default:
+			return 'This result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+	}
+}
+
 function buildServerRevalidationErrorMessage( surface ) {
 	switch ( surface ) {
 		case 'template':
@@ -540,6 +587,28 @@ function getResolvedContextSignatureFromResponse( result = null ) {
 	return resolvedContextSignature || null;
 }
 
+function getDocsGroundingFromResponse( result = null ) {
+	return result?.payload?.docsGrounding || result?.docsGrounding || null;
+}
+
+function getDocsGroundingStatusFromResponse( result = null ) {
+	const docsGrounding = getDocsGroundingFromResponse( result );
+
+	return normalizeStringMessage( docsGrounding?.status );
+}
+
+function getApplyDocsGroundingStaleReason( result = null ) {
+	if ( getDocsGroundingStatusFromResponse( result ) === 'unavailable' ) {
+		return 'docs-grounding-unavailable';
+	}
+
+	return normalizeDocsGroundingWarning(
+		getDocsGroundingFromResponse( result )
+	)
+		? 'docs-grounding-changed'
+		: '';
+}
+
 function getReviewContextSignatureFromResponse( result = null ) {
 	const reviewContextSignature = normalizeStringMessage(
 		result?.payload?.reviewContextSignature ||
@@ -589,22 +658,30 @@ async function guardSurfaceApplyResolvedFreshness( {
 	abilityName,
 	liveRequestInput,
 	storedResolvedContextSignature = null,
+	abortId = null,
+	isCurrent = null,
 	localDispatch,
 	setApplyState,
 } ) {
 	const storedSignature = normalizeStringMessage(
 		storedResolvedContextSignature
 	);
+	const normalizedAbortId =
+		abortId === null || abortId === undefined ? null : String( abortId );
+	const isStillCurrent = () =>
+		typeof isCurrent !== 'function' || isCurrent( storedSignature );
 
 	if ( ! storedSignature ) {
-		const error = buildServerStaleApplyErrorMessage( surface );
+		const error = buildMissingResolvedSignatureApplyErrorMessage( surface );
 
-		localDispatch( setApplyState( 'error', error, 'server-apply' ) );
+		localDispatch(
+			setApplyState( 'error', error, 'missing-resolved-signature' )
+		);
 
 		return {
 			ok: false,
 			error,
-			staleReason: 'server-apply',
+			staleReason: 'missing-resolved-signature',
 		};
 	}
 
@@ -622,11 +699,75 @@ async function guardSurfaceApplyResolvedFreshness( {
 		};
 	}
 
+	const controller =
+		typeof AbortController === 'function' ? new AbortController() : null;
+	let timeoutId = null;
+
+	if ( controller ) {
+		setAbortController(
+			APPLY_RESOLVED_FRESHNESS_ABORT_KEY,
+			normalizedAbortId,
+			controller
+		);
+		timeoutId = setTimeout(
+			() => controller.abort(),
+			APPLY_RESOLVED_FRESHNESS_TIMEOUT_MS
+		);
+	}
+
 	try {
-		const result = await executeFlavorAgentAbility( abilityName, {
-			...requestData,
-			resolveSignatureOnly: true,
-		} );
+		const result = await executeFlavorAgentAbility(
+			abilityName,
+			{
+				...requestData,
+				resolveSignatureOnly: true,
+			},
+			controller
+				? {
+						signal: controller.signal,
+				  }
+				: {}
+		);
+
+		if (
+			controller &&
+			! isCurrentAbortController(
+				APPLY_RESOLVED_FRESHNESS_ABORT_KEY,
+				normalizedAbortId,
+				controller
+			)
+		) {
+			return {
+				ok: false,
+				skipped: true,
+			};
+		}
+
+		if ( ! isStillCurrent() ) {
+			return {
+				ok: false,
+				skipped: true,
+			};
+		}
+
+		const docsGroundingStaleReason =
+			getApplyDocsGroundingStaleReason( result );
+
+		if ( docsGroundingStaleReason === 'docs-grounding-unavailable' ) {
+			const error =
+				buildDocsGroundingUnavailableApplyErrorMessage( surface );
+
+			localDispatch(
+				setApplyState( 'error', error, 'docs-grounding-unavailable' )
+			);
+
+			return {
+				ok: false,
+				error,
+				staleReason: 'docs-grounding-unavailable',
+			};
+		}
+
 		const resolvedContextSignature =
 			getResolvedContextSignatureFromResponse( result );
 
@@ -634,14 +775,21 @@ async function guardSurfaceApplyResolvedFreshness( {
 			! resolvedContextSignature ||
 			resolvedContextSignature !== storedSignature
 		) {
-			const error = buildServerStaleApplyErrorMessage( surface );
+			const staleReason =
+				docsGroundingStaleReason === 'docs-grounding-changed'
+					? 'docs-grounding-changed'
+					: 'server-apply';
+			const error =
+				staleReason === 'docs-grounding-changed'
+					? buildDocsGroundingChangedApplyErrorMessage( surface )
+					: buildServerStaleApplyErrorMessage( surface );
 
-			localDispatch( setApplyState( 'error', error, 'server-apply' ) );
+			localDispatch( setApplyState( 'error', error, staleReason ) );
 
 			return {
 				ok: false,
 				error,
-				staleReason: 'server-apply',
+				staleReason,
 			};
 		}
 
@@ -650,6 +798,21 @@ async function guardSurfaceApplyResolvedFreshness( {
 			resolvedContextSignature,
 		};
 	} catch {
+		if (
+			( controller &&
+				! isCurrentAbortController(
+					APPLY_RESOLVED_FRESHNESS_ABORT_KEY,
+					normalizedAbortId,
+					controller
+				) ) ||
+			! isStillCurrent()
+		) {
+			return {
+				ok: false,
+				skipped: true,
+			};
+		}
+
 		const error = buildServerRevalidationErrorMessage( surface );
 
 		localDispatch( setApplyState( 'error', error ) );
@@ -658,6 +821,18 @@ async function guardSurfaceApplyResolvedFreshness( {
 			ok: false,
 			error,
 		};
+	} finally {
+		if ( timeoutId ) {
+			clearTimeout( timeoutId );
+		}
+
+		if ( controller ) {
+			clearAbortController(
+				APPLY_RESOLVED_FRESHNESS_ABORT_KEY,
+				normalizedAbortId,
+				controller
+			);
+		}
 	}
 }
 
@@ -1032,6 +1207,33 @@ function getNavigationReviewConfig() {
 		setReviewStateAction: actions.setNavigationReviewFreshnessState,
 		surface: 'navigation',
 	} );
+}
+
+function setAbortController( abortKey, abortId, controller ) {
+	if ( abortId === null ) {
+		actions[ abortKey ]?.abort?.();
+		actions[ abortKey ] = controller;
+		return;
+	}
+
+	const currentAbortControllers = isPlainObject( actions[ abortKey ] )
+		? actions[ abortKey ]
+		: {};
+
+	currentAbortControllers[ abortId ]?.abort?.();
+	currentAbortControllers[ abortId ] = controller;
+	actions[ abortKey ] = currentAbortControllers;
+}
+
+function isCurrentAbortController( abortKey, abortId, controller ) {
+	if ( abortId === null ) {
+		return actions[ abortKey ] === controller;
+	}
+
+	return (
+		isPlainObject( actions[ abortKey ] ) &&
+		actions[ abortKey ][ abortId ] === controller
+	);
 }
 
 function clearAbortController( abortKey, abortId, controller ) {
@@ -1662,14 +1864,25 @@ const actions = {
 
 			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
 
+			const storedResolvedContextSignature =
+				select.getBlockResolvedContextSignature?.( clientId ) || null;
+			const storedRequestToken =
+				select.getBlockRequestToken?.( clientId ) || 0;
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface: 'block',
 					abilityName: 'flavor-agent/recommend-block',
 					liveRequestInput,
-					storedResolvedContextSignature:
-						select.getBlockResolvedContextSignature?.( clientId ) ||
-						null,
+					storedResolvedContextSignature,
+					abortId: `block:${ clientId }`,
+					isCurrent: ( storedSignature ) =>
+						normalizeStringMessage(
+							select.getBlockResolvedContextSignature?.(
+								clientId
+							) || ''
+						) === storedSignature &&
+						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+							storedRequestToken,
 					localDispatch,
 					setApplyState: ( status, error, staleReason = null ) =>
 						actions.setBlockApplyState(
@@ -1683,17 +1896,19 @@ const actions = {
 			);
 
 			if ( ! resolvedFreshness.ok ) {
-				localDispatch(
-					actions.recordRecommendationOutcome( {
-						event: 'stale_blocked',
-						surface: 'block',
-						suggestion,
-						reason:
-							resolvedFreshness.staleReason ||
-							'revalidation_failed',
-						target: { clientId },
-					} )
-				);
+				if ( ! resolvedFreshness.skipped ) {
+					localDispatch(
+						actions.recordRecommendationOutcome( {
+							event: 'stale_blocked',
+							surface: 'block',
+							suggestion,
+							reason:
+								resolvedFreshness.staleReason ||
+								'revalidation_failed',
+							target: { clientId },
+						} )
+					);
+				}
 				return false;
 			}
 
@@ -1924,14 +2139,25 @@ const actions = {
 
 			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
 
+			const storedResolvedContextSignature =
+				select.getBlockResolvedContextSignature?.( clientId ) || null;
+			const storedRequestToken =
+				select.getBlockRequestToken?.( clientId ) || 0;
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface: 'block',
 					abilityName: 'flavor-agent/recommend-block',
 					liveRequestInput,
-					storedResolvedContextSignature:
-						select.getBlockResolvedContextSignature?.( clientId ) ||
-						null,
+					storedResolvedContextSignature,
+					abortId: `block:${ clientId }`,
+					isCurrent: ( storedSignature ) =>
+						normalizeStringMessage(
+							select.getBlockResolvedContextSignature?.(
+								clientId
+							) || ''
+						) === storedSignature &&
+						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+							storedRequestToken,
 					localDispatch,
 					setApplyState: ( status, error, staleReason = null ) =>
 						actions.setBlockApplyState(
@@ -1945,17 +2171,19 @@ const actions = {
 			);
 
 			if ( ! resolvedFreshness.ok ) {
-				localDispatch(
-					actions.recordRecommendationOutcome( {
-						event: 'stale_blocked',
-						surface: 'block',
-						suggestion,
-						reason:
-							resolvedFreshness.staleReason ||
-							'revalidation_failed',
-						target: { clientId },
-					} )
-				);
+				if ( ! resolvedFreshness.skipped ) {
+					localDispatch(
+						actions.recordRecommendationOutcome( {
+							event: 'stale_blocked',
+							surface: 'block',
+							suggestion,
+							reason:
+								resolvedFreshness.staleReason ||
+								'revalidation_failed',
+							target: { clientId },
+						} )
+					);
+				}
 				return false;
 			}
 

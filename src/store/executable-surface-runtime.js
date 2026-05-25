@@ -98,6 +98,8 @@ export function createExecutableSurfaceApplyConfig( {
 	executeSuggestion,
 	getStoredRequestSignature,
 	getStoredResolvedContextSignature,
+	getStoredRequestToken = null,
+	getStoredResultToken = null,
 	recordOutcomeAction = null,
 	setApplyStateAction,
 	surface,
@@ -110,6 +112,8 @@ export function createExecutableSurfaceApplyConfig( {
 		executeSuggestion,
 		getStoredRequestSignature,
 		getStoredResolvedContextSignature,
+		getStoredRequestToken,
+		getStoredResultToken,
 		recordOutcomeAction,
 		setApplyState: (
 			status,
@@ -405,6 +409,8 @@ function createExecutableSurfaceApplyAction( {
 	getCurrentActivityScope,
 	getStoredRequestSignature,
 	getStoredResolvedContextSignature,
+	getStoredRequestToken,
+	getStoredResultToken,
 	guardSurfaceApplyFreshness,
 	guardSurfaceApplyResolvedFreshness,
 	recordOutcomeAction,
@@ -467,23 +473,58 @@ function createExecutableSurfaceApplyAction( {
 
 			localDispatch( setApplyState( 'applying' ) );
 
+			const storedResolvedContextSignature =
+				getStoredResolvedContextSignature( select );
+			const storedRequestToken =
+				typeof getStoredRequestToken === 'function'
+					? getStoredRequestToken( select )
+					: null;
+			const storedResultToken =
+				typeof getStoredResultToken === 'function'
+					? getStoredResultToken( select )
+					: null;
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface,
 					abilityName,
 					liveRequestInput,
-					storedResolvedContextSignature:
-						getStoredResolvedContextSignature( select ),
+					storedResolvedContextSignature,
+					abortId: surface,
+					isCurrent: ( storedSignature ) => {
+						const currentResolvedContextSignature =
+							normalizeStringMessage(
+								getStoredResolvedContextSignature( select )
+							);
+						const currentRequestToken =
+							typeof getStoredRequestToken === 'function'
+								? getStoredRequestToken( select )
+								: null;
+						const currentResultToken =
+							typeof getStoredResultToken === 'function'
+								? getStoredResultToken( select )
+								: null;
+
+						return (
+							currentResolvedContextSignature ===
+								storedSignature &&
+							( storedRequestToken === null ||
+								currentRequestToken === storedRequestToken ) &&
+							( storedResultToken === null ||
+								currentResultToken === storedResultToken )
+						);
+					},
 					localDispatch,
 					setApplyState: buildErrorApplyStateAction,
 				}
 			);
 
 			if ( ! resolvedFreshness.ok ) {
-				recordBlockedOutcome(
-					'stale_blocked',
-					resolvedFreshness.staleReason || 'revalidation_failed'
-				);
+				if ( ! resolvedFreshness.skipped ) {
+					recordBlockedOutcome(
+						'stale_blocked',
+						resolvedFreshness.staleReason || 'revalidation_failed'
+					);
+				}
 				return resolvedFreshness;
 			}
 

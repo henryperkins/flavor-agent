@@ -645,6 +645,10 @@ function createApplyConfig( def, actions ) {
 		getStoredRequestSignature: def.buildStoredRequestSignature,
 		getStoredResolvedContextSignature: ( select ) =>
 			select[ def.methodNames.getResolvedContextSignature ]?.() || null,
+		getStoredRequestToken: ( select ) =>
+			select[ def.methodNames.getRequestToken ]?.() || 0,
+		getStoredResultToken: ( select ) =>
+			select[ def.methodNames.getResultToken ]?.() || 0,
 		recordOutcomeAction: actions.recordRecommendationOutcome,
 		setApplyStateAction: actions[ def.methodNames.setApplyState ],
 		surface: def.surface,

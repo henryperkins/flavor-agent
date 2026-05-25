@@ -841,6 +841,12 @@ export function BlockRecommendationsContent( {
 	if ( isStaleResult ) {
 		if ( effectiveStaleReason === 'docs-grounding-unavailable' ) {
 			staleScopeReason = DOCS_GROUNDING_UNAVAILABLE_STALE_REASON;
+		} else if ( effectiveStaleReason === 'docs-grounding-changed' ) {
+			staleScopeReason =
+				'Developer Docs grounding changed. Refresh before applying the previous result.';
+		} else if ( effectiveStaleReason === 'missing-resolved-signature' ) {
+			staleScopeReason =
+				'Server apply context is missing. Refresh before applying the previous result.';
 		} else if ( effectiveStaleReason === 'server-apply' ) {
 			staleScopeReason =
 				'Server apply context changed. Refresh before applying the previous result.';

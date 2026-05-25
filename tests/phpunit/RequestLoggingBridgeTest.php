@@ -103,7 +103,14 @@ final class RequestLoggingBridgeTest extends TestCase {
 		);
 	}
 
-	public function test_context_injection_ignores_non_flavor_agent_sources(): void {
+	public function test_context_injection_uses_active_tag_regardless_of_source_slug(): void {
+		// Logging_Http_Transporter's source attribution silently misfires when
+		// the plugin is mounted via symlink — the real backtrace path doesn't
+		// start with WP_PLUGIN_DIR, so the row gets attributed to whichever
+		// non-skipped frame is next (commonly wp-includes/abilities-api/...).
+		// The active FlavorAgentRequestTag is the authoritative signal that
+		// this request originated from Flavor Agent, so the bridge must inject
+		// its metadata regardless of what slug the transporter assigned.
 		$this->assertTrue( \class_exists( RequestLoggingBridge::class ) );
 		$this->assertTrue( \class_exists( FlavorAgentRequestTag::class ) );
 
@@ -117,16 +124,21 @@ final class RequestLoggingBridgeTest extends TestCase {
 			)
 		);
 
-		$context = [
-			'source' => [
-				'slug' => 'other-plugin',
+		$context = RequestLoggingBridge::inject_flavor_agent_context(
+			[
+				'source' => [
+					'slug' => 'wordpress',
+					'file' => 'wp-includes/abilities-api/class-wp-ability.php',
+				],
 			],
-		];
-
-		$this->assertSame(
-			$context,
-			RequestLoggingBridge::inject_flavor_agent_context( $context, [], [] )
+			[],
+			[]
 		);
+
+		// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Core source slug is lower-case.
+		$this->assertSame( 'wordpress', $context['source']['slug'] ?? null );
+		$this->assertSame( 'request-token-1', $context['flavor_agent']['requestToken'] ?? null );
+		$this->assertSame( 'template', $context['flavor_agent']['surface'] ?? null );
 	}
 
 	public function test_context_injection_adds_flavor_agent_request_metadata(): void {

@@ -16,6 +16,14 @@ export function getExecutableSurfaceEffectiveStaleReason( {
 	}
 
 	if (
+		storedStaleReason === 'docs-grounding-unavailable' ||
+		storedStaleReason === 'docs-grounding-changed' ||
+		storedStaleReason === 'missing-resolved-signature'
+	) {
+		return storedStaleReason;
+	}
+
+	if (
 		storedStaleReason === 'server' ||
 		storedStaleReason === 'server-apply'
 	) {
@@ -44,6 +52,14 @@ export function getExecutableSurfaceStaleMessage( {
 
 	if ( staleReasonType === 'docs-grounding-unavailable' ) {
 		return `This ${ surfaceLabel } result no longer has trusted WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.`;
+	}
+
+	if ( staleReasonType === 'docs-grounding-changed' ) {
+		return `This ${ surfaceLabel } result no longer matches the current WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.`;
+	}
+
+	if ( staleReasonType === 'missing-resolved-signature' ) {
+		return `This ${ surfaceLabel } result is missing server-resolved apply context. Refresh before reviewing or applying anything from the previous result.`;
 	}
 
 	return `This ${ surfaceLabel } result no longer matches ${ liveContextLabel }. Refresh before reviewing or applying anything from the previous result.`;

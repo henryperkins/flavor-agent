@@ -121,6 +121,7 @@ const ABILITY_RUN_PATHS_BY_NAME = Object.fromEntries(
 		ABILITY_RUN_PATHS[ abilityKey ],
 	] )
 );
+const APPLY_RESOLVED_FRESHNESS_TIMEOUT_MS = 15000;
 const DOCS_GROUNDING_PAYLOAD = {
 	status: 'grounded',
 	coverage: {
@@ -177,6 +178,7 @@ describe( 'store action thunks', () => {
 		actions._templatePartAbort = null;
 		actions._globalStylesAbort = null;
 		actions._styleBookAbort = null;
+		actions._applyResolvedFreshnessAbort = null;
 		getTemplateActivityUndoState.mockImplementation(
 			( activity ) => activity?.undo || {}
 		);
@@ -5996,6 +5998,456 @@ describe( 'store action thunks', () => {
 			ok: false,
 			error: 'This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
 			staleReason: 'server-apply',
+		} );
+	} );
+
+	test( 'applyTemplateSuggestion blocks missing stored resolved signatures without recording server drift', async () => {
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getTemplateContextSignature: jest
+				.fn()
+				.mockReturnValue( 'shared-template-context' ),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Clarify the structure.' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( null ),
+		};
+		const currentRequestSignature =
+			buildTemplateRecommendationRequestSignature( {
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+				contextSignature: 'shared-template-context',
+			} );
+
+		const result = await actions.applyTemplateSuggestion(
+			{
+				label: 'Clarify template hierarchy',
+				suggestionKey: 'Clarify template hierarchy-0',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+					},
+				],
+			},
+			currentRequestSignature,
+			{
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+			}
+		)( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setTemplateApplyState(
+				'error',
+				'This template result is missing the server-resolved apply context. Refresh recommendations before applying it.',
+				null,
+				[],
+				'missing-resolved-signature'
+			)
+		);
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'This template result is missing the server-resolved apply context. Refresh recommendations before applying it.',
+			staleReason: 'missing-resolved-signature',
+		} );
+	} );
+
+	test( 'applyTemplateSuggestion classifies apply-time docs grounding outages before signature drift', async () => {
+		apiFetch.mockResolvedValue( {
+			resolvedContextSignature: 'resolved-template-drifted',
+			docsGrounding: {
+				status: 'unavailable',
+				message: 'Developer Docs grounding is unavailable.',
+			},
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getTemplateContextSignature: jest
+				.fn()
+				.mockReturnValue( 'shared-template-context' ),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Clarify the structure.' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-template-stored' ),
+		};
+		const currentRequestSignature =
+			buildTemplateRecommendationRequestSignature( {
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+				contextSignature: 'shared-template-context',
+			} );
+
+		const result = await actions.applyTemplateSuggestion(
+			{
+				label: 'Clarify template hierarchy',
+				suggestionKey: 'Clarify template hierarchy-0',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+					},
+				],
+			},
+			currentRequestSignature,
+			{
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+			}
+		)( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setTemplateApplyState(
+				'error',
+				'This template result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				null,
+				[],
+				'docs-grounding-unavailable'
+			)
+		);
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'This template result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+			staleReason: 'docs-grounding-unavailable',
+		} );
+	} );
+
+	test( 'applyTemplateSuggestion classifies apply-time docs grounding coverage drift before generic server drift', async () => {
+		apiFetch.mockResolvedValue( {
+			resolvedContextSignature: 'resolved-template-drifted',
+			docsGrounding: {
+				status: 'grounded',
+				coverage: {
+					status: 'missing-current-release-cycle',
+					message: 'Current release-cycle docs were not confirmed.',
+				},
+			},
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getTemplateContextSignature: jest
+				.fn()
+				.mockReturnValue( 'shared-template-context' ),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Clarify the structure.' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-template-stored' ),
+		};
+		const currentRequestSignature =
+			buildTemplateRecommendationRequestSignature( {
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+				contextSignature: 'shared-template-context',
+			} );
+
+		const result = await actions.applyTemplateSuggestion(
+			{
+				label: 'Clarify template hierarchy',
+				suggestionKey: 'Clarify template hierarchy-0',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+					},
+				],
+			},
+			currentRequestSignature,
+			{
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+			}
+		)( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setTemplateApplyState(
+				'error',
+				'This template result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				null,
+				[],
+				'docs-grounding-changed'
+			)
+		);
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'This template result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+			staleReason: 'docs-grounding-changed',
+		} );
+	} );
+
+	test( 'applyTemplateSuggestion aborts hung apply-time revalidation', async () => {
+		let requestSignal;
+		apiFetch.mockImplementation( ( request ) => {
+			requestSignal = request.signal;
+
+			if ( ! requestSignal ) {
+				return Promise.resolve( {
+					resolvedContextSignature: 'resolved-template',
+				} );
+			}
+
+			return new Promise( ( _resolve, reject ) => {
+				requestSignal.addEventListener( 'abort', () => {
+					const error = new Error( 'The operation was aborted.' );
+					error.name = 'AbortError';
+					reject( error );
+				} );
+			} );
+		} );
+		applyTemplateSuggestionOperations.mockReturnValue( {
+			ok: true,
+			operations: [],
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getTemplateContextSignature: jest
+				.fn()
+				.mockReturnValue( 'shared-template-context' ),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Clarify the structure.' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-template' ),
+		};
+		const currentRequestSignature =
+			buildTemplateRecommendationRequestSignature( {
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+				contextSignature: 'shared-template-context',
+			} );
+
+		const applyPromise = actions.applyTemplateSuggestion(
+			{
+				label: 'Clarify template hierarchy',
+				suggestionKey: 'Clarify template hierarchy-0',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+					},
+				],
+			},
+			currentRequestSignature,
+			{
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+			}
+		)( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		await Promise.resolve();
+
+		if ( requestSignal ) {
+			jest.advanceTimersByTime( APPLY_RESOLVED_FRESHNESS_TIMEOUT_MS );
+		}
+
+		const result = await applyPromise;
+
+		expect( requestSignal ).toBeInstanceOf( AbortSignal );
+		expect( requestSignal.aborted ).toBe( true );
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Flavor Agent could not revalidate this template result against the current server apply context. Try again or refresh recommendations.',
+		} );
+	} );
+
+	test( 'applyTemplateSuggestion ignores stale apply revalidation responses after a newer result is stored', async () => {
+		let resolveRevalidation;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolveRevalidation = resolve;
+				} )
+		);
+
+		const dispatch = jest.fn();
+		let resolvedContextSignature = 'resolved-template-stored';
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getTemplateContextSignature: jest
+				.fn()
+				.mockReturnValue( 'shared-template-context' ),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Clarify the structure.' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResolvedContextSignature: jest.fn(
+				() => resolvedContextSignature
+			),
+		};
+		const currentRequestSignature =
+			buildTemplateRecommendationRequestSignature( {
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+				contextSignature: 'shared-template-context',
+			} );
+
+		const applyPromise = actions.applyTemplateSuggestion(
+			{
+				label: 'Clarify template hierarchy',
+				suggestionKey: 'Clarify template hierarchy-0',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+					},
+				],
+			},
+			currentRequestSignature,
+			{
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+			}
+		)( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		await Promise.resolve();
+
+		resolvedContextSignature = 'resolved-template-new';
+		resolveRevalidation( {
+			resolvedContextSignature: 'resolved-template-drifted',
+		} );
+
+		const result = await applyPromise;
+
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect(
+			dispatch.mock.calls.some(
+				( [ action ] ) =>
+					action.type === 'SET_TEMPLATE_APPLY_STATE' &&
+					action.status === 'error'
+			)
+		).toBe( false );
+		expect( result ).toEqual( {
+			ok: false,
+			skipped: true,
+		} );
+	} );
+
+	test( 'applyTemplateSuggestion ignores stale apply revalidation responses after a newer request starts', async () => {
+		let resolveRevalidation;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolveRevalidation = resolve;
+				} )
+		);
+		applyTemplateSuggestionOperations.mockReturnValue( {
+			ok: true,
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+				},
+			],
+		} );
+
+		const dispatch = jest.fn();
+		let requestToken = 3;
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getTemplateContextSignature: jest
+				.fn()
+				.mockReturnValue( 'shared-template-context' ),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Clarify the structure.' ),
+			getTemplateRequestToken: jest.fn( () => requestToken ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResultToken: jest.fn().mockReturnValue( 7 ),
+			getTemplateResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-template-stored' ),
+		};
+		const currentRequestSignature =
+			buildTemplateRecommendationRequestSignature( {
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+				contextSignature: 'shared-template-context',
+			} );
+
+		const applyPromise = actions.applyTemplateSuggestion(
+			{
+				label: 'Clarify template hierarchy',
+				suggestionKey: 'Clarify template hierarchy-0',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+					},
+				],
+			},
+			currentRequestSignature,
+			{
+				templateRef: 'theme//home',
+				prompt: 'Clarify the structure.',
+			}
+		)( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		await Promise.resolve();
+
+		requestToken = 4;
+		resolveRevalidation( {
+			resolvedContextSignature: 'resolved-template-stored',
+		} );
+
+		const result = await applyPromise;
+
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect(
+			dispatch.mock.calls.some(
+				( [ action ] ) =>
+					action.type === 'SET_TEMPLATE_APPLY_STATE' &&
+					action.status === 'success'
+			)
+		).toBe( false );
+		expect( result ).toEqual( {
+			ok: false,
+			skipped: true,
 		} );
 	} );
 

@@ -80,13 +80,18 @@ final class RequestLoggingBridge {
 	public static function inject_flavor_agent_context( array $context, array $decoded, array $log_data ): array {
 		unset( $decoded, $log_data );
 
+		// The active FlavorAgentRequestTag is the authoritative signal that this
+		// request originated from Flavor Agent: it is only ::start()ed inside
+		// RecommendationAbilityExecution::execute() and ::finish()ed in a finally.
+		// We deliberately do not gate on $context['source']['slug'] === 'flavor-agent'
+		// because Logging_Http_Transporter attributes the source by walking
+		// debug_backtrace and matching frames against WP_PLUGIN_DIR — that path
+		// comparison silently fails when the plugin is mounted via symlink (the
+		// real frame path doesn't start with WP_PLUGIN_DIR), so the row gets
+		// misattributed to whichever non-skipped frame appears next in the stack
+		// (typically wp-includes/abilities-api/class-wp-ability.php).
 		$tag = FlavorAgentRequestTag::current();
 		if ( ! $tag instanceof FlavorAgentRequestTag ) {
-			return $context;
-		}
-
-		$source_slug = \sanitize_key( (string) ( $context['source']['slug'] ?? '' ) );
-		if ( 'flavor-agent' !== $source_slug ) {
 			return $context;
 		}
 
