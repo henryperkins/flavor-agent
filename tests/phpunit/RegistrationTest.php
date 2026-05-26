@@ -307,6 +307,63 @@ final class RegistrationTest extends TestCase {
 		}
 	}
 
+	public function test_recommendation_abilities_declare_example_input_for_ability_explorer(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		$expected_example_paths = [
+			'flavor-agent/recommend-block'         => [ 'prompt' ],
+			'flavor-agent/recommend-content'       => [ 'prompt', 'voiceProfile' ],
+			'flavor-agent/recommend-patterns'      => [ 'postType', 'templateType', 'prompt' ],
+			'flavor-agent/recommend-navigation'    => [ 'prompt' ],
+			'flavor-agent/recommend-style'         => [ 'prompt' ],
+			'flavor-agent/recommend-template'      => [ 'templateType', 'prompt' ],
+			'flavor-agent/recommend-template-part' => [ 'prompt' ],
+		];
+
+		foreach ( $expected_example_paths as $ability_id => $properties ) {
+			$schema = WordPressTestState::$registered_abilities[ $ability_id ]['input_schema']['properties'] ?? [];
+
+			foreach ( $properties as $property ) {
+				$this->assertArrayHasKey(
+					'example',
+					$schema[ $property ] ?? [],
+					"{$ability_id}.input_schema.properties.{$property} should declare an example for the Abilities Explorer auto-fill."
+				);
+				$this->assertNotEmpty(
+					$schema[ $property ]['example'] ?? null,
+					"{$ability_id}.input_schema.properties.{$property}.example should be non-empty."
+				);
+			}
+		}
+	}
+
+	public function test_preview_recommendation_abilities_inherit_example_input_for_ability_explorer(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$expected_example_paths = [
+			'flavor-agent/preview-recommend-block'         => [ 'prompt' ],
+			'flavor-agent/preview-recommend-navigation'    => [ 'prompt' ],
+			'flavor-agent/preview-recommend-style'         => [ 'prompt' ],
+			'flavor-agent/preview-recommend-template'      => [ 'templateType', 'prompt' ],
+			'flavor-agent/preview-recommend-template-part' => [ 'prompt' ],
+		];
+
+		foreach ( $expected_example_paths as $ability_id => $properties ) {
+			$schema = WordPressTestState::$registered_abilities[ $ability_id ]['input_schema']['properties'] ?? [];
+
+			foreach ( $properties as $property ) {
+				$this->assertArrayHasKey(
+					'example',
+					$schema[ $property ] ?? [],
+					"{$ability_id} should inherit the {$property} example from its parent recommend-* ability."
+				);
+			}
+		}
+	}
+
 	public function test_register_preview_recommendation_abilities(): void {
 		Registration::register_category();
 		Registration::register_abilities();

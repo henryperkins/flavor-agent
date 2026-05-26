@@ -781,6 +781,7 @@ final class Registration {
 					'prompt'               => [
 						'type'        => 'string',
 						'description' => 'Optional user instruction',
+						'example'     => 'Improve the contrast and spacing for accessibility.',
 					],
 					'document'             => $document,
 					'clientRequest'        => $client_request,
@@ -802,10 +803,12 @@ final class Registration {
 					'prompt'        => [
 						'type'        => 'string',
 						'description' => 'Optional user instruction for the content lane.',
+						'example'     => 'Draft a post about how reflective coaching shaped my leadership practice.',
 					],
 					'voiceProfile'  => [
 						'type'        => 'string',
 						'description' => 'Optional extra voice guidance layered on top of the default Henry profile.',
+						'example'     => 'Calm, measured, slightly self-deprecating.',
 					],
 					'postContext'   => self::open_object_schema(
 						[
@@ -840,11 +843,18 @@ final class Registration {
 					'postType'             => [
 						'type'        => 'string',
 						'description' => 'Current post type',
+						'example'     => 'post',
 					],
 					'blockContext'         => self::open_object_schema(),
 					'insertionContext'     => self::pattern_insertion_context_schema(),
-					'templateType'         => [ 'type' => 'string' ],
-					'prompt'               => [ 'type' => 'string' ],
+					'templateType'         => [
+						'type'    => 'string',
+						'example' => 'home',
+					],
+					'prompt'               => [
+						'type'    => 'string',
+						'example' => 'Suggest a hero pattern for the homepage that introduces the team.',
+					],
 					'visiblePatternNames'  => [
 						'type'  => 'array',
 						'items' => [ 'type' => 'string' ],
@@ -868,7 +878,10 @@ final class Registration {
 						'Selected navigation block context snapshot from the editor.'
 					),
 					'blockClientId'        => [ 'type' => 'string' ],
-					'prompt'               => [ 'type' => 'string' ],
+					'prompt'               => [
+						'type'    => 'string',
+						'example' => 'Simplify the menu and add an overlay on mobile.',
+					],
 					'document'             => $document,
 					'clientRequest'        => $client_request,
 					'resolveSignatureOnly' => [
@@ -919,7 +932,10 @@ final class Registration {
 						],
 						'Current style surface editor context needed for style recommendations.'
 					),
-					'prompt'               => [ 'type' => 'string' ],
+					'prompt'               => [
+						'type'    => 'string',
+						'example' => 'Modernize the typography hierarchy and tighten the headings.',
+					],
 					'document'             => $document,
 					'clientRequest'        => $client_request,
 					'resolveSignatureOnly' => [
@@ -936,8 +952,14 @@ final class Registration {
 						'type'        => 'string',
 						'description' => 'Template identifier from the Site Editor.',
 					],
-					'templateType'         => [ 'type' => 'string' ],
-					'prompt'               => [ 'type' => 'string' ],
+					'templateType'         => [
+						'type'    => 'string',
+						'example' => 'home',
+					],
+					'prompt'               => [
+						'type'    => 'string',
+						'example' => 'Add a sidebar with recent posts and tighten the hero spacing.',
+					],
 					'visiblePatternNames'  => [
 						'type'  => 'array',
 						'items' => [ 'type' => 'string' ],
@@ -1049,7 +1071,10 @@ final class Registration {
 						'type'        => 'string',
 						'description' => 'Template-part identifier from the Site Editor.',
 					],
-					'prompt'               => [ 'type' => 'string' ],
+					'prompt'               => [
+						'type'    => 'string',
+						'example' => 'Tighten the header layout and add a sticky behavior on scroll.',
+					],
 					'visiblePatternNames'  => [
 						'type'  => 'array',
 						'items' => [ 'type' => 'string' ],
