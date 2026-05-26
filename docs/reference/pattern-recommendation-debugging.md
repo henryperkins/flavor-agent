@@ -510,7 +510,7 @@ Record this evidence for each backend you tune:
 - embedding model for Qdrant or Cloudflare AI Search managed instance validation
 - active threshold option and value
 - number of candidates before rerank
-- `diagnostics.pipelineTrace` counts, especially `candidatePool`, `llmReturned`, `belowThresholdDropped`, and `returnedRecommendations`
+- `diagnostics.pipelineTrace` counts, especially `candidatePool`, `llmReturned`, `belowThresholdDropped`, `duplicateRowsCollapsed`, and `returnedRecommendations`
 - allow-listed `diagnostics.dropReasons`, especially `below_threshold`
 - number of renderable final recommendations
 - visible scope size

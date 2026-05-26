@@ -1224,6 +1224,7 @@ describe( 'store action thunks', () => {
 				llmNameMismatchDropped: 0,
 				llmMalformedDropped: 1,
 				belowThresholdDropped: 0,
+				duplicateRowsCollapsed: 0,
 				returnedRecommendations: 2,
 			},
 			dropReasons: {

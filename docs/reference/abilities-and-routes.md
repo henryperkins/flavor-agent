@@ -181,6 +181,7 @@ Use it when you need to answer:
       "llmNameMismatchDropped": 0,
       "llmMalformedDropped": 0,
       "belowThresholdDropped": 1,
+      "duplicateRowsCollapsed": 0,
       "returnedRecommendations": 2
     },
     "dropReasons": {

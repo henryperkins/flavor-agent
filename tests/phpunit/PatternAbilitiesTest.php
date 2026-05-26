@@ -2586,6 +2586,7 @@ final class PatternAbilitiesTest extends TestCase {
 				'llmNameMismatchDropped'  => 1,
 				'llmMalformedDropped'     => 0,
 				'belowThresholdDropped'   => 1,
+				'duplicateRowsCollapsed'  => 0,
 				'returnedRecommendations' => 1,
 			],
 			$result['diagnostics']['pipelineTrace'] ?? null
@@ -2889,6 +2890,14 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame(
 			0.95,
 			$result['recommendations'][0]['ranking']['modelScore'] ?? null
+		);
+		$this->assertSame(
+			1,
+			$result['diagnostics']['pipelineTrace']['duplicateRowsCollapsed'] ?? null
+		);
+		$this->assertArrayNotHasKey(
+			'duplicate_row_collapsed',
+			$result['diagnostics']['dropReasons'] ?? []
 		);
 	}
 

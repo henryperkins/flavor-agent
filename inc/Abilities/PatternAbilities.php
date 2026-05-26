@@ -701,10 +701,12 @@ final class PatternAbilities {
 				'content'              => $payload['content'] ?? '',
 			];
 
-			if (
-				! isset( $recommendations_by_name[ $name ] )
-				|| (float) $recommendations_by_name[ $name ]['score'] < $blended_score
-			) {
+			if ( isset( $recommendations_by_name[ $name ] ) ) {
+				++$diagnostics['pipelineTrace']['duplicateRowsCollapsed'];
+				if ( (float) $recommendations_by_name[ $name ]['score'] < $blended_score ) {
+					$recommendations_by_name[ $name ] = $recommendation;
+				}
+			} else {
 				$recommendations_by_name[ $name ] = $recommendation;
 			}
 		}
@@ -785,6 +787,7 @@ final class PatternAbilities {
 				'llmNameMismatchDropped'  => 0,
 				'llmMalformedDropped'     => 0,
 				'belowThresholdDropped'   => 0,
+				'duplicateRowsCollapsed'  => 0,
 				'returnedRecommendations' => 0,
 			],
 			'dropReasons'        => [],
@@ -823,6 +826,7 @@ final class PatternAbilities {
 			'llmNameMismatchDropped'  => max( 0, (int) ( $trace['llmNameMismatchDropped'] ?? 0 ) ),
 			'llmMalformedDropped'     => max( 0, (int) ( $trace['llmMalformedDropped'] ?? 0 ) ),
 			'belowThresholdDropped'   => max( 0, (int) ( $trace['belowThresholdDropped'] ?? 0 ) ),
+			'duplicateRowsCollapsed'  => max( 0, (int) ( $trace['duplicateRowsCollapsed'] ?? 0 ) ),
 			'returnedRecommendations' => max( 0, (int) ( $trace['returnedRecommendations'] ?? 0 ) ),
 		];
 	}

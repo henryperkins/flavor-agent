@@ -802,6 +802,7 @@ final class RecommendationAbilityExecution {
 			'llmNameMismatchDropped'  => \max( 0, (int) ( $trace['llmNameMismatchDropped'] ?? 0 ) ),
 			'llmMalformedDropped'     => \max( 0, (int) ( $trace['llmMalformedDropped'] ?? 0 ) ),
 			'belowThresholdDropped'   => \max( 0, (int) ( $trace['belowThresholdDropped'] ?? 0 ) ),
+			'duplicateRowsCollapsed'  => \max( 0, (int) ( $trace['duplicateRowsCollapsed'] ?? 0 ) ),
 			'returnedRecommendations' => \max( 0, (int) ( $trace['returnedRecommendations'] ?? 0 ) ),
 		];
 	}

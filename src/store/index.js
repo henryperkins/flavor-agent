@@ -107,6 +107,7 @@ const PATTERN_PIPELINE_TRACE_KEYS = Object.freeze( [
 	'llmNameMismatchDropped',
 	'llmMalformedDropped',
 	'belowThresholdDropped',
+	'duplicateRowsCollapsed',
 	'returnedRecommendations',
 ] );
 const PATTERN_PIPELINE_DROP_REASON_KEYS = Object.freeze( [

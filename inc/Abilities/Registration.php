@@ -1196,6 +1196,7 @@ final class Registration {
 									'llmNameMismatchDropped' => [ 'type' => 'integer' ],
 									'llmMalformedDropped' => [ 'type' => 'integer' ],
 									'belowThresholdDropped' => [ 'type' => 'integer' ],
+									'duplicateRowsCollapsed' => [ 'type' => 'integer' ],
 									'returnedRecommendations' => [ 'type' => 'integer' ],
 								]
 							),
