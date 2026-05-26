@@ -104,7 +104,16 @@ abstract class PreviewRecommendationAbility extends Abstract_Ability {
 			return null;
 		}
 
-		return new $parent_class( static::PARENT_ABILITY, [] );
+		$definitions = Registration::recommendation_ability_classes();
+		$definition  = $definitions[ static::PARENT_ABILITY ] ?? null;
+		$properties  = \is_array( $definition )
+			? [
+				'label'       => (string) ( $definition['label'] ?? '' ),
+				'description' => (string) ( $definition['description'] ?? '' ),
+			]
+			: [];
+
+		return new $parent_class( static::PARENT_ABILITY, $properties );
 	}
 
 	/**
