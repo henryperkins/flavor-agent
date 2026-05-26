@@ -170,10 +170,12 @@ final class RegistrationTest extends TestCase {
 		}
 
 		$this->assertFalse(
-			(bool) ( WordPressTestState::$registered_abilities['flavor-agent/introspect-block']['meta']['mcp']['public'] ?? false )
+			(bool) ( WordPressTestState::$registered_abilities['flavor-agent/check-status']['meta']['mcp']['public'] ?? false ),
+			'check-status exposes backend-config inventory and must stay Abilities-API-only.'
 		);
 		$this->assertFalse(
-			(bool) ( WordPressTestState::$registered_abilities['flavor-agent/check-status']['meta']['mcp']['public'] ?? false )
+			(bool) ( WordPressTestState::$registered_abilities['flavor-agent/list-synced-patterns']['meta']['mcp']['public'] ?? false ),
+			'list-synced-patterns can return draft wp_block content and must stay Abilities-API-only.'
 		);
 	}
 
@@ -221,6 +223,7 @@ final class RegistrationTest extends TestCase {
 		$expected = [
 			'destructive' => false,
 			'idempotent'  => false,
+			'openWorld'   => true,
 		];
 
 		foreach ( [
@@ -275,6 +278,146 @@ final class RegistrationTest extends TestCase {
 		}
 	}
 
+	public function test_external_agent_read_abilities_are_mcp_public(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		$expected_mcp = [
+			'public' => true,
+			'type'   => 'tool',
+		];
+
+		foreach ( [
+			'flavor-agent/introspect-block',
+			'flavor-agent/list-allowed-blocks',
+			'flavor-agent/list-patterns',
+			'flavor-agent/get-pattern',
+			'flavor-agent/list-template-parts',
+			'flavor-agent/get-active-theme',
+			'flavor-agent/get-theme-presets',
+			'flavor-agent/get-theme-styles',
+			'flavor-agent/get-theme-tokens',
+		] as $ability_id ) {
+			$ability = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+			$mcp     = $ability['meta']['mcp'] ?? null;
+
+			$this->assertIsArray( $mcp, "{$ability_id} must declare meta.mcp for the universal MCP default server to discover it." );
+			$this->assertSame( $expected_mcp, $mcp, "{$ability_id} meta.mcp must expose public:true and type:'tool'." );
+		}
+	}
+
+	public function test_register_preview_recommendation_abilities(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		foreach (
+			[
+				'flavor-agent/preview-recommend-block',
+				'flavor-agent/preview-recommend-navigation',
+				'flavor-agent/preview-recommend-style',
+				'flavor-agent/preview-recommend-template',
+				'flavor-agent/preview-recommend-template-part',
+			] as $ability_id
+		) {
+			$raw = WordPressTestState::$raw_registered_abilities[ $ability_id ] ?? null;
+
+			$this->assertIsArray( $raw, "Expected raw registration for {$ability_id}." );
+			$this->assertSame( 'flavor-agent', $raw['category'] ?? null, "{$ability_id} must register under the flavor-agent category." );
+			$this->assertArrayHasKey( 'ability_class', $raw, "{$ability_id} must use the ability_class registration shape." );
+		}
+	}
+
+	public function test_preview_recommendation_abilities_are_readonly_and_mcp_public(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$expected_meta_annotations = [
+			'readonly'    => true,
+			'destructive' => false,
+			'idempotent'  => true,
+		];
+
+		foreach (
+			[
+				'flavor-agent/preview-recommend-block',
+				'flavor-agent/preview-recommend-navigation',
+				'flavor-agent/preview-recommend-style',
+				'flavor-agent/preview-recommend-template',
+				'flavor-agent/preview-recommend-template-part',
+			] as $ability_id
+		) {
+			$ability = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+
+			$this->assertIsArray( $ability, "{$ability_id} should be registered." );
+			$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
+			$this->assertTrue( (bool) ( $ability['meta']['readonly'] ?? false ) );
+			$this->assertSame( [ 'public' => true, 'type' => 'tool' ], $ability['meta']['mcp'] ?? null );
+			$this->assertSame( $expected_meta_annotations, $ability['meta']['annotations'] ?? null );
+		}
+	}
+
+	public function test_preview_recommendation_abilities_are_available_without_feature_gate(): void {
+		WordPressTestState::$options['wpai_features_enabled']             = false;
+		WordPressTestState::$options['wpai_feature_flavor-agent_enabled'] = false;
+
+		Registration::register_category();
+		Registration::register_abilities();
+
+		foreach (
+			[
+				'flavor-agent/preview-recommend-block',
+				'flavor-agent/preview-recommend-navigation',
+				'flavor-agent/preview-recommend-style',
+				'flavor-agent/preview-recommend-template',
+				'flavor-agent/preview-recommend-template-part',
+			] as $ability_id
+		) {
+			$this->assertArrayHasKey(
+				$ability_id,
+				WordPressTestState::$registered_abilities,
+				"{$ability_id} should register on the always-on helper path regardless of the Flavor Agent feature gate."
+			);
+		}
+	}
+
+	public function test_preview_recommendation_abilities_strip_resolve_signature_only_and_client_request_from_schema(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		foreach (
+			[
+				'flavor-agent/preview-recommend-block',
+				'flavor-agent/preview-recommend-navigation',
+				'flavor-agent/preview-recommend-style',
+				'flavor-agent/preview-recommend-template',
+				'flavor-agent/preview-recommend-template-part',
+			] as $ability_id
+		) {
+			$properties = WordPressTestState::$registered_abilities[ $ability_id ]['input_schema']['properties'] ?? [];
+
+			$this->assertArrayNotHasKey( 'resolveSignatureOnly', $properties, "{$ability_id} must strip resolveSignatureOnly from its public input schema." );
+			$this->assertArrayNotHasKey( 'clientRequest', $properties, "{$ability_id} must strip clientRequest from its public input schema." );
+		}
+	}
+
+	public function test_internal_read_abilities_are_not_mcp_public(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		foreach ( [
+			'flavor-agent/list-synced-patterns',
+			'flavor-agent/get-synced-pattern',
+			'flavor-agent/check-status',
+		] as $ability_id ) {
+			$ability = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+
+			$this->assertIsArray( $ability, "{$ability_id} should be registered." );
+			$this->assertArrayNotHasKey( 'mcp', $ability['meta'] ?? [], "{$ability_id} must remain Abilities-API-only (synced-pattern entities and backend inventory stay editor-internal)." );
+		}
+	}
+
 	public function test_search_wordpress_docs_does_not_claim_readonly_annotations(): void {
 		Registration::register_category();
 		Registration::register_abilities();
@@ -290,6 +433,7 @@ final class RegistrationTest extends TestCase {
 			[
 				'destructive' => false,
 				'idempotent'  => false,
+				'openWorld'   => true,
 			],
 			$annotations
 		);
@@ -344,6 +488,11 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/get-theme-tokens',
 			'flavor-agent/check-status',
 			'flavor-agent/search-wordpress-docs',
+			'flavor-agent/preview-recommend-block',
+			'flavor-agent/preview-recommend-navigation',
+			'flavor-agent/preview-recommend-style',
+			'flavor-agent/preview-recommend-template',
+			'flavor-agent/preview-recommend-template-part',
 		];
 
 		$actual = array_keys( WordPressTestState::$registered_abilities );

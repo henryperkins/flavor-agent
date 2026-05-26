@@ -140,6 +140,11 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template-part', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-navigation', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-style', 'edit_theme_options', $chat_configured );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-block', 'edit_posts' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-navigation', 'edit_theme_options' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-style', 'edit_theme_options' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-template', 'edit_theme_options' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-template-part', 'edit_theme_options' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/search-wordpress-docs', WordPressDocsAbilities::REQUIRED_CAPABILITY, $cloudflare_configured );
 
 		return $abilities;

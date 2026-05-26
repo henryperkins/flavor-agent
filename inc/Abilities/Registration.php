@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\AI\FeatureBootstrap;
+use FlavorAgent\AI\Abilities\PreviewRecommendBlockAbility;
+use FlavorAgent\AI\Abilities\PreviewRecommendNavigationAbility;
+use FlavorAgent\AI\Abilities\PreviewRecommendStyleAbility;
+use FlavorAgent\AI\Abilities\PreviewRecommendTemplateAbility;
+use FlavorAgent\AI\Abilities\PreviewRecommendTemplatePartAbility;
 use FlavorAgent\AI\Abilities\RecommendBlockAbility;
 use FlavorAgent\AI\Abilities\RecommendContentAbility;
 use FlavorAgent\AI\Abilities\RecommendNavigationAbility;
@@ -38,6 +43,10 @@ final class Registration {
 		self::register_template_abilities();
 		self::register_wordpress_docs_abilities();
 		self::register_infra_abilities();
+
+		if ( FeatureBootstrap::canonical_contracts_available() ) {
+			self::register_preview_recommendation_abilities();
+		}
 	}
 
 	public static function register_recommendation_abilities(): void {
@@ -56,6 +65,73 @@ final class Registration {
 				]
 			);
 		}
+	}
+
+	public static function register_preview_recommendation_abilities(): void {
+		if ( ! FeatureBootstrap::canonical_contracts_available() ) {
+			return;
+		}
+
+		foreach ( self::preview_recommendation_ability_classes() as $ability_id => $definition ) {
+			wp_register_ability(
+				$ability_id,
+				[
+					'label'         => $definition['label'],
+					'description'   => $definition['description'],
+					'category'      => 'flavor-agent',
+					'ability_class' => $definition['ability_class'],
+				]
+			);
+		}
+	}
+
+	/**
+	 * @return array<string, array{label: string, description: string, ability_class: class-string}>
+	 */
+	public static function preview_recommendation_ability_classes(): array {
+		return [
+			'flavor-agent/preview-recommend-block'         => [
+				'label'         => __( 'Preview block recommendation signatures', 'flavor-agent' ),
+				'description'   => __( 'Resolve the apply-context signature for a block recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients.', 'flavor-agent' ),
+				'ability_class' => PreviewRecommendBlockAbility::class,
+			],
+			'flavor-agent/preview-recommend-navigation'    => [
+				'label'         => __( 'Preview navigation recommendation signatures', 'flavor-agent' ),
+				'description'   => __( 'Resolve the review-context signature for a navigation recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients.', 'flavor-agent' ),
+				'ability_class' => PreviewRecommendNavigationAbility::class,
+			],
+			'flavor-agent/preview-recommend-style'         => [
+				'label'         => __( 'Preview style recommendation signatures', 'flavor-agent' ),
+				'description'   => __( 'Resolve the review and apply context signatures for a Global Styles or Style Book recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients.', 'flavor-agent' ),
+				'ability_class' => PreviewRecommendStyleAbility::class,
+			],
+			'flavor-agent/preview-recommend-template'      => [
+				'label'         => __( 'Preview template recommendation signatures', 'flavor-agent' ),
+				'description'   => __( 'Resolve the review and apply context signatures for a template recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients.', 'flavor-agent' ),
+				'ability_class' => PreviewRecommendTemplateAbility::class,
+			],
+			'flavor-agent/preview-recommend-template-part' => [
+				'label'         => __( 'Preview template-part recommendation signatures', 'flavor-agent' ),
+				'description'   => __( 'Resolve the review and apply context signatures for a template-part recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients.', 'flavor-agent' ),
+				'ability_class' => PreviewRecommendTemplatePartAbility::class,
+			],
+		];
+	}
+
+	public static function preview_recommendation_meta(): array {
+		return [
+			'show_in_rest' => true,
+			'readonly'     => true,
+			'mcp'          => [
+				'public' => true,
+				'type'   => 'tool',
+			],
+			'annotations'  => [
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			],
+		];
 	}
 
 	/**
@@ -124,7 +200,7 @@ final class Registration {
 					'type'       => 'object',
 					'properties' => self::block_manifest_schema_properties(),
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 
@@ -179,7 +255,7 @@ final class Registration {
 						'total'  => [ 'type' => 'integer' ],
 					],
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 	}
@@ -240,7 +316,7 @@ final class Registration {
 						'total'    => [ 'type' => 'integer' ],
 					],
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 
@@ -266,7 +342,7 @@ final class Registration {
 					'type'       => 'object',
 					'properties' => self::pattern_schema_properties(),
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 
@@ -391,7 +467,7 @@ final class Registration {
 						],
 					],
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 	}
@@ -465,6 +541,7 @@ final class Registration {
 			'annotations'  => [
 				'destructive' => false,
 				'idempotent'  => false,
+				'openWorld'   => true,
 			],
 		];
 	}
@@ -538,7 +615,7 @@ final class Registration {
 					'type'       => 'object',
 					'properties' => self::active_theme_schema_properties(),
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 
@@ -558,7 +635,7 @@ final class Registration {
 					'type'       => 'object',
 					'properties' => self::theme_presets_schema_properties(),
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 
@@ -578,7 +655,7 @@ final class Registration {
 					'type'       => 'object',
 					'properties' => self::theme_styles_schema_properties(),
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 
@@ -609,7 +686,7 @@ final class Registration {
 						'blockPseudoStyles' => [ 'type' => 'object' ],
 					],
 				],
-				'meta'                => self::readonly_rest_meta(),
+				'meta'                => self::mcp_public_readonly_rest_meta(),
 			]
 		);
 
@@ -1379,6 +1456,7 @@ final class Registration {
 			'annotations'  => [
 				'destructive' => false,
 				'idempotent'  => false,
+				'openWorld'   => true,
 			],
 		];
 	}
@@ -1423,6 +1501,16 @@ final class Registration {
 				'idempotent'  => true,
 			],
 		];
+	}
+
+	private static function mcp_public_readonly_rest_meta(): array {
+		$meta        = self::readonly_rest_meta();
+		$meta['mcp'] = [
+			'public' => true,
+			'type'   => 'tool',
+		];
+
+		return $meta;
 	}
 
 	/**

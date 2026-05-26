@@ -151,7 +151,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 
-The code defines 20 abilities with full JSON Schema input/output definitions. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+The code defines 25 abilities with full JSON Schema input/output definitions: seven recommendation abilities, twelve helper/read abilities, the docs-search ability, and five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 #### Developer Docs
 

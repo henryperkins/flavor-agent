@@ -64,6 +64,39 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/get-theme-styles', $status['availableAbilities'] );
 	}
 
+	public function test_check_status_reports_preview_recommend_block_for_post_editors(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertContains( 'flavor-agent/preview-recommend-block', $status['availableAbilities'] );
+		$this->assertNotContains( 'flavor-agent/preview-recommend-template', $status['availableAbilities'], 'Template previews require edit_theme_options.' );
+		$this->assertNotContains( 'flavor-agent/preview-recommend-style', $status['availableAbilities'] );
+	}
+
+	public function test_check_status_reports_theme_scoped_previews_for_theme_editors(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		foreach (
+			[
+				'flavor-agent/preview-recommend-navigation',
+				'flavor-agent/preview-recommend-style',
+				'flavor-agent/preview-recommend-template',
+				'flavor-agent/preview-recommend-template-part',
+			] as $ability_id
+		) {
+			$this->assertContains( $ability_id, $status['availableAbilities'], "{$ability_id} should be available to edit_theme_options users." );
+		}
+
+		$this->assertNotContains( 'flavor-agent/preview-recommend-block', $status['availableAbilities'], 'preview-recommend-block requires edit_posts.' );
+	}
+
 	public function test_check_status_keeps_list_template_parts_available_for_theme_only_users(): void {
 		WordPressTestState::$capabilities = [
 			'edit_theme_options' => true,

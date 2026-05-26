@@ -120,6 +120,19 @@ The expected local runtime includes these active slugs:
 
 Configure text-generation credentials in `Settings > Connectors`. The WordPress 7.0 Field Guide identifies Anthropic, Google, and OpenAI as the default Connectors screen providers, so the representative local runtime installs the matching WordPress.org-authored provider connector plugins when available. Provider plugins own their provider-specific setup; do not use Flavor Agent's embedding settings as a replacement for the Connectors runtime. In `Settings > Flavor Agent`, configure one Embedding Model for semantic features, then choose Pattern Storage when testing pattern recommendations: Qdrant uses the Embedding Model plus Qdrant, while Cloudflare AI Search uses a private managed pattern index. Developer Docs uses Flavor Agent's built-in public endpoint and does not require local Cloudflare credentials.
 
+## Abilities Explorer (AI plugin Experiment)
+
+The canonical AI plugin ships an Abilities Explorer Experiment that mounts at `Tools > Abilities Explorer` once enabled. It auto-discovers every ability registered with `wp_register_ability()` that declares `meta.show_in_rest = true`, shows the input/output schemas, and lets operators dispatch the ability with custom JSON input directly from wp-admin. It is the primary local harness for verifying Flavor Agent ability wiring without writing a Playwright spec.
+
+Enable it in `Settings > AI > Experiments > Abilities Explorer`, then refresh wp-admin. The Tools menu will pick up the new screen.
+
+Flavor Agent conventions when using the Explorer:
+
+- **All 25 abilities are listed.** The seven recommendation abilities, the twelve helper/read abilities, the docs search, and the five `preview-recommend-*` siblings all appear once registration completes.
+- **Use the preview siblings to dry-run recommendations.** Clicking *Run* on `flavor-agent/recommend-block` with the auto-generated example input invokes the LLM because `resolveSignatureOnly` defaults to `false`. Use `flavor-agent/preview-recommend-block` (and the other four `preview-recommend-*` siblings) instead — they force signature-only execution server-side, strip `clientRequest` to avoid transient writes, and return only the freshness signatures. No chat backend hit, no activity row, no Activity log entry.
+- **Helper abilities are safe to click.** The nine externally-discoverable read helpers (`introspect-block`, `list-allowed-blocks`, `list-patterns`, `get-pattern`, `list-template-parts`, `get-active-theme`, `get-theme-presets`, `get-theme-styles`, `get-theme-tokens`) are read-only and side-effect-free.
+- **Three abilities stay editor-internal.** `list-synced-patterns`, `get-synced-pattern`, and `check-status` are not marked `mcp.public` and stay scoped to Abilities-API consumers; the Explorer still lists them because it reads `show_in_rest`, not `mcp.public`.
+
 ## WP 7.0 Browser Harness Scope
 
 `scripts/wp70-e2e.js` provisions a deterministic Docker-backed browser harness for editor and Site Editor regressions. It is not the full representative local runtime described above unless a test explicitly extends it with companion plugins.
