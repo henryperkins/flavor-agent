@@ -80,7 +80,7 @@ docker compose exec -T wordpress wp plugin install \
 	--allow-root
 ```
 
-Install the MCP Adapter from GitHub. Per the 22 Apr 2026 AI contributor decision, WP.org plugin distribution is the planned primary path; the WP.org listing was not yet live as of 2026-05-25, so representative local setup still clones from `WordPress/mcp-adapter` into `wp-content/plugins` and installs its Composer dependencies. Once the WP.org listing is published, swap the clone-and-composer block below for `wp plugin install mcp-adapter --activate --allow-root`.
+Install the MCP Adapter from GitHub. The upstream README at v0.5.0 (2026-04-15) treats Composer as the primary install method and the plugin form as an alternative, and does not mention WP.org. The 22 Apr 2026 AI contributor summary recorded an intent to add WP.org as the primary distribution, but no WP.org listing is live as of 2026-05-26 and the README has not been updated. Representative local setup clones from `WordPress/mcp-adapter` into `wp-content/plugins` and installs its Composer dependencies; if WP.org publication lands, swap the clone-and-composer block below for `wp plugin install mcp-adapter --activate --allow-root`.
 
 ```bash
 docker compose exec -T wordpress bash -lc 'set -e
@@ -261,4 +261,4 @@ Run `npm run check:docs` whenever contributor-facing setup guidance changes.
 
 - WordPress Beta Tester supports nightly, beta, and release-candidate update channels and a bleeding-edge trunk channel: https://wordpress.org/plugins/wordpress-beta-tester/
 - WP-CLI `wp core update` accepts `--version=nightly`: https://developer.wordpress.org/cli/commands/core/update/
-- MCP Adapter source repo (currently the active local-setup path): https://github.com/WordPress/mcp-adapter. WP.org plugin distribution is the planned primary path per the 22 Apr 2026 AI contributor decision; the WP.org listing was not yet live as of 2026-05-25, so local representative setup continues to clone from GitHub until the slug publishes.
+- MCP Adapter source repo (currently the active local-setup path): https://github.com/WordPress/mcp-adapter. The upstream README at v0.5.0 (2026-04-15) treats Composer as the primary install method and the plugin form as an alternative, and does not mention WP.org. The 22 Apr 2026 AI contributor summary recorded an intent to add WP.org as the primary distribution, but no WP.org listing is live as of 2026-05-26 and the README has not been updated.
