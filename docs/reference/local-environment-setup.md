@@ -255,7 +255,7 @@ For a faster loop during development:
 npm run verify -- --skip-e2e
 ```
 
-Run `npm run check:docs` whenever contributor-facing setup guidance changes.
+Run `npm run check:docs` whenever contributor-facing setup guidance changes. The script requires `rg` (ripgrep) on `PATH`; without it the script exits 2 with a preflight message, and verify-driven strict runs mark the `check-docs` step as skipped (contributing to `incomplete`).
 
 ## References
 

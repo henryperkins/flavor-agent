@@ -66,6 +66,7 @@ The final stdout line is `VERIFY_RESULT={...}` — one-line JSON with `status`, 
 - **`e2e-wp70`** needs Docker. Run `npm run wp:start` (or `npm run wp:e2e:wp70:bootstrap`) first. Without Docker, use `--skip-e2e`.
 - **`e2e-playground`** runs in a Playground browser harness — usually works without Docker, but still requires Playwright browsers installed.
 - **`lint-php` / `test-php`** need `composer install` to have run (PSR-4 autoloader + PHPUnit).
+- **`check-docs`** needs `rg` (ripgrep) — declared in `requires`, so a missing `rg` skips the step and flips strict runs to `incomplete` rather than failing. Only included in `--strict`/`verify:strict` because the step is `optional: true`.
 
 ## Exit codes
 

@@ -64,7 +64,7 @@ const STEPS = [
 	{
 		name: 'check-docs',
 		command: 'npm run check:docs',
-		requires: [ 'node', 'npm' ],
+		requires: [ 'node', 'npm', 'rg' ],
 		optional: true,
 	},
 	{
