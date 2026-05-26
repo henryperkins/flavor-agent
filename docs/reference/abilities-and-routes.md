@@ -64,11 +64,11 @@ Use it when you need to answer:
 - `flavor-agent/list-allowed-blocks` returns the whole registered block registry rather than context-aware inserter results. It now also supports `search`, `category`, `limit`, `offset`, `includeVariations`, and `maxVariations`, returns `total`, and omits `variations` by default. `introspect-block` still returns up to 10 variations; `list-allowed-blocks` truncates only when `includeVariations` is enabled.
 - `flavor-agent/get-theme-styles` returns both raw `styles` and extracted summaries. `elementStyles.base`, `hover`, and `focus` are color-only objects, while `focusVisible` preserves the full `:focus-visible` object.
 - Helper permissions are intentionally asymmetric: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, and `get-theme-tokens` require `edit_posts`; `list-template-parts` allows either editor or theme capability at the boundary but silently coerces `includeContent: true` to metadata-only unless the caller has `edit_theme_options`; the theme-oriented recommendation surfaces remain `edit_theme_options` only.
-- The executable first-party editor surfaces (`block`, `template`, `template-part`, `global-styles`, and `style-book`) still compute a local request signature from the live context signature plus the composer prompt and scoped entity ref. That signature remains client-local and is not POSTed back to PHP.
-- The same five executable surfaces now also store a server `resolvedContextSignature` on normal responses. PHP computes that hash from the server-normalized apply context plus the sanitized prompt, so it still captures server-only context such as theme tokens, pattern candidates, and Style Book block-manifest details without making docs-cache churn part of freshness.
-- Template, template-part, Global Styles, Style Book, and advisory navigation responses also store a server `reviewContextSignature`. These review hashes cover server-owned context plus the docs-grounding fingerprint so background review freshness tracks real server drift and currentness changes without embedding docs guidance text.
-- `flavor-agent/recommend-block`, `flavor-agent/recommend-template`, `flavor-agent/recommend-template-part`, `flavor-agent/recommend-navigation`, and `flavor-agent/recommend-style` accept an optional boolean `resolveSignatureOnly`. When true, they resolve only the current server freshness signature fields and docs-grounding summary from local cache state. They do not call the model, perform foreground docs searches, queue docs warming, queue Core roadmap warming, or write runtime docs diagnostics.
-- `flavor-agent/recommend-patterns` remains a request-time ranking surface with no declared signature-only contract and no freshness fast path. Clients should not send `resolveSignatureOnly`; if supplied anyway, the pattern handler still runs the normal ranking path and does not participate in review/apply freshness revalidation. Pattern reranking still fails closed when docs grounding is unavailable after candidate retrieval.
+- The executable first-party editor surfaces (`block`, `template`, `template-part`, `global-styles`, and `style-book`) still compute a local request signature from the live context signature plus the composer prompt and scoped entity ref. Pattern recommendations compute an analogous insertion-target signature for direct shelf insertion. These signatures remain client-local and are not POSTed back to PHP.
+- The five executable editor surfaces and the Pattern Inserter shelf store a server `resolvedContextSignature` on normal responses. PHP computes that hash from the server-normalized apply or insertion context plus the sanitized prompt, so it still captures server-only context such as theme tokens, pattern candidates, selected pattern backend state, and Style Book block-manifest details.
+- Template, template-part, Global Styles, Style Book, advisory navigation, and pattern responses also store a server `reviewContextSignature`. These review hashes cover server-owned context plus the docs-grounding fingerprint so background review freshness and insertion safety can track server drift and currentness changes without embedding docs guidance text.
+- `flavor-agent/recommend-block`, `flavor-agent/recommend-patterns`, `flavor-agent/recommend-template`, `flavor-agent/recommend-template-part`, `flavor-agent/recommend-navigation`, and `flavor-agent/recommend-style` accept an optional boolean `resolveSignatureOnly`. When true, they resolve only the current server freshness signature fields and docs-grounding summary from local cache state. They do not call the model, perform foreground docs searches, queue docs warming, queue Core roadmap warming, or write runtime docs diagnostics. For `recommend-patterns`, the signature-only path also skips retrieval and reranking.
+- Pattern recommendations remain ranking/browse-only: the signature-only contract protects direct core inserter dispatch from stale server context, but it does not create a Flavor Agent review/apply/undo activity contract.
 
 ## REST Routes
 
@@ -142,6 +142,35 @@ Use it when you need to answer:
 | -------------------- | --------------------------------- | -------------------- | -------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Qdrant               | Cloudflare Workers AI             | Qdrant               | Qdrant               | Qdrant payload filter on `name`                              | Cloudflare Workers AI embeddings, Qdrant, Connectors chat                                                                                                                 |
 | Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | AI Search `ai_search_options.retrieval.filters.pattern_name` | Cloudflare Workers AI account/token plus normalized-AI-Search-model signature validation, validated managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
+
+### Pattern Recommendation Response Shape
+
+```json
+{
+  "recommendations": [
+    {
+      "name": "core/hero-with-cover",
+      "title": "Hero with cover image",
+      "description": "A full-width hero section with a heading and call to action.",
+      "score": 0.91,
+      "source": "registered"
+    }
+  ],
+  "docsGrounding": {
+    "status": "available"
+  },
+  "docsGroundingFingerprint": "sha256-of-docs-grounding",
+  "reviewContextSignature": "sha256-of-pattern-review-context-and-prompt",
+  "resolvedContextSignature": "sha256-of-pattern-insertion-context-and-prompt",
+  "diagnostics": {
+    "filteredCandidates": {
+      "unreadableSyncedPatterns": 0
+    }
+  }
+}
+```
+
+Normal responses include ranked recommendations plus review/apply signatures. Signature-only responses return the same top-level signature and docs-grounding fields with an empty recommendation list.
 
 ### List-Allowed-Blocks Response Shape
 
@@ -772,9 +801,9 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 ## Recommendation Ability Notes
 
 - Recommendation abilities sanitize and normalize structured inputs before handing them to the surface backend
-- Normal `recommend-block` responses include `resolvedContextSignature`. Template, template-part, and style responses include `reviewContextSignature`, `resolvedContextSignature`, and `docsGroundingFingerprint`, and navigation includes `reviewContextSignature` plus `docsGroundingFingerprint` as its server freshness fields.
+- Normal `recommend-block` responses include `resolvedContextSignature`. Pattern, template, template-part, and style responses include `reviewContextSignature`, `resolvedContextSignature`, and `docsGroundingFingerprint`, and navigation includes `reviewContextSignature` plus `docsGroundingFingerprint` as its server freshness fields.
 - Signature-only requests return only the current freshness field(s) and docs-grounding status after normalizing the current server context and prompt; they compute docs grounding from local cache state and skip model calls, foreground docs searches, async docs warming, Core roadmap warming, and runtime docs diagnostics.
-- `flavor-agent/recommend-patterns` remains outside that freshness contract; it has no declared `resolveSignatureOnly` input and still executes the normal ranking handler if an undeclared flag is supplied.
+- `flavor-agent/recommend-patterns` also skips pattern retrieval and reranking in signature-only mode.
 - `flavor-agent/recommend-patterns` can return synced/user pattern recommendations by their `core/block/{id}` names when those names are present in the current `visiblePatternNames` set.
 - `flavor-agent/recommend-patterns` does not accept `editorStructure`; the current pattern ability contract ignores it
 - Template recommendation requests carry an editor-collected `editorStructure` with the live top-level block tree, zeroed empty-state stats when needed, current pattern-override summaries, and current viewport-visibility summaries; the server replaces that mutable slice atomically and derives insertion anchors from the live tree

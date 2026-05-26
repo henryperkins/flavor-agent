@@ -8,7 +8,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Inline success/error notices: shared status notices for immediate post-apply, post-undo, and request/apply/undo failures in those same panels
 - Admin audit surface: `Settings > AI Activity`
 
-Navigation, pattern, and the content recommendation panel do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. The server does, however, persist scoped read-only `request_diagnostic` rows for successful and failed recommendation fetches across content, pattern, navigation, block, template, template-part, Global Styles, and Style Book when a document scope is available. The same activity endpoint also accepts privacy-safe `recommendation_outcome` diagnostics for the closed-loop recommendation funnel: result sets shown in an attached visible recommendation surface, review selections, stale/validation guard blocks, and successful pattern insertions from the Flavor Agent shelf. On executable surfaces, request and outcome rows are separate from later apply-and-undo activity rows, while apply rows remain the authoritative applied-change record. Content request diagnostics appear inline as `Recent Content Requests` only when the content panel is mounted in its supported/configured state; otherwise they remain admin-audit rows. Block request diagnostics can appear inline when a block request fails or returns no block-lane suggestions. Template and template-part diagnostics stay out of the inline sidebar to preserve a navigable apply/review surface. Global Styles and Style Book diagnostics remain eligible for inline hydration only when the stored diagnostic target matches the same current-scope filters used by those panels; otherwise they remain visible through the wp-admin audit page. Navigation and pattern diagnostics appear in the wp-admin audit page.
+Navigation, pattern, and content recommendations do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. Scoped recommendation requests and recommendation outcomes can still persist diagnostic audit rows when a document scope is available; inline hydration is intentionally limited to the surfaces that expose a matching current-scope panel. Exact diagnostic row shapes and route contracts are canonical in `docs/reference/abilities-and-routes.md`.
 
 ## Surfacing Conditions
 
@@ -20,23 +20,22 @@ Navigation, pattern, and the content recommendation panel do not create executab
 
 1. A deterministic apply flow succeeds in the block, template, template-part, Global Styles, or Style Book surface, or a scoped recommendation request succeeds, fails, or returns diagnostic-only output
 2. The store builds a structured activity entry and persists it through the server-backed activity repository
-   The persisted request payload now carries AI execution provenance including provider/backend label, model, configuration owner, credential source, route/ability, and fallback path when the selected provider resolves to a different runtime backend. The repository also projects filterable admin columns from that payload so wp-admin queries do not need to decode every historical `request_json` blob to filter by provider or route metadata.
+   The persisted payload carries AI execution provenance and projected admin columns; exact fields live in `docs/reference/abilities-and-routes.md#activity-entry-shape`.
 3. `ActivitySessionBootstrap()` resolves the current editor scope and calls `loadActivitySession()` whenever the edited entity changes
 4. The store hydrates the current scope from server entries, merges pending local entries, and keeps `sessionStorage` as a cache/fallback for the active surface
-5. `AIActivitySection` renders the newest entries for the current scope as compact diagnostic/action rows with execution summaries, status, optional links to the admin activity page, and inline undo when an executable entry is still valid and tail-undoable. Expanded diagnostic details live in the admin activity page. Content uses the same component for read-only request history only.
+5. `AIActivitySection` renders newest matching entries for the current scope and exposes inline undo only when an executable entry is still valid and tail-undoable
 6. `undoActivity()` validates the live editor state, performs the local undo, and persists the undo-status transition to `POST /flavor-agent/v1/activity/{id}/undo`
-7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` plus custom read-only detail sections that expose provider path, configuration owner, credential source, selected-provider fallback notes, explicit undo reasons, state snapshots with structured diff summaries, and separate review-only / blocked / failed summary buckets alongside quick links
+7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` plus custom read-only detail sections
 
 ## What This Surface Can Do
 
 - Persist block, template, template-part, Global Styles, and Style Book apply events to a shared server-backed activity store
-- Persist read-only `request_diagnostic` audit rows for scoped recommendation fetches across all recommendation surfaces without pretending advisory-only surfaces now support executable apply/undo; content shows those rows inline as `Recent Content Requests` only when its supported/configured panel is mounted, block can prepend diagnostics to `Recent AI Actions` for failed or empty block-lane requests, Global Styles and Style Book can hydrate matching diagnostics, template/template-part keep request diagnostics audit-only, and navigation/pattern diagnostics remain audit-feed only
-- Persist read-only `recommendation_outcome` diagnostic rows for privacy-safe outcome signals. These rows use generic labels, enum reasons, hashed/signature request identifiers, `executionResult: "diagnostic"`, and `undo.status: "not_applicable"`; they are hidden from normal inline activity feeds by default and can be included by audit/debug/evaluation callers that opt in to diagnostics.
+- Persist read-only `request_diagnostic` and `recommendation_outcome` audit rows without turning advisory-only surfaces into executable apply/undo surfaces
 - Hydrate activity back into editor-scoped history when the current entity changes
 - Preserve machine-readable AI request provenance so audit views can explain which backend actually handled a recommendation and where that configuration lives
-- Show ordered undo state: persisted undo status values are `available`, `review`, `not_applicable`, `undone`, and `failed`; runtime/admin projections can derive `blocked` when newer still-applied actions prevent undo. Persistence sync states (`server`/`local` with `syncType` of `undo` or `create`) are tracked separately. `not_applicable` is reserved for diagnostic rows that are not user actions and cannot be undone.
+- Show ordered undo state using the canonical state machine in `docs/reference/activity-state-machine.md`
 - Let the user undo the newest valid tail action directly from the editor panel
-- Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provider ownership, credential-source, ability/route, review-only request diagnostics, undo-reason details, and structured state snapshots
+- Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provenance, diagnostics, undo-reason details, and structured state snapshots
 - Filter audit entries by absolute or relative time without silently broadening malformed date filters; malformed active filters are blocked in the UI or rejected by REST, and `inThePast` and `over` use true timestamp windows, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
@@ -44,12 +43,7 @@ This is still the first audit surface, not the final observability product. It i
 
 ## Ordered Undo Rules
 
-- Undo is tail-ordered: older entries are blocked while newer still-applied AI actions remain
-- Server-side undo transitions are one-way from `available` only; terminal rows cannot be rewritten to a different terminal state
-- Block undo is path-plus-attribute based
-- Template and template-part undo rely on stable locators plus persisted post-apply snapshots
-- Global Styles and Style Book undo both rely on the active `root/globalStyles` entity id plus the persisted post-apply user config snapshot; Style Book also validates the recorded target block before restoring styles
-- If the live editor state no longer matches the recorded post-apply state, the entry becomes blocked or unavailable instead of forcing an unsafe undo
+Undo is tail-ordered and state-validated before a stored action can be reverted. The canonical state model, terminal transitions, per-surface undo inputs, and blocked/unavailable projections live in `docs/reference/activity-state-machine.md`.
 
 ## Primary Functions And Handlers
 

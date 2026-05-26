@@ -55,167 +55,13 @@ User prompt in wp_template_part editor
   -> activity + inline undo
 ```
 
-## Example Request
+## Contract Pointers
 
-```json
-{
-  "templatePartRef": "theme//header",
-  "prompt": "Create a stronger utility row above the main navigation.",
-  "visiblePatternNames": [
-    "core/header-with-utility-row",
-    "core/site-branding-minimal"
-  ],
-  "editorStructure": {
-    "blockTree": [
-      {
-        "path": [0],
-        "name": "core/group",
-        "label": "Group",
-        "attributes": { "tagName": "header" },
-        "childCount": 2,
-        "children": [
-          {
-            "path": [0, 0],
-            "name": "core/site-logo",
-            "label": "Site Logo",
-            "attributes": {},
-            "childCount": 0,
-            "children": []
-          },
-          {
-            "path": [0, 1],
-            "name": "core/navigation",
-            "label": "Navigation",
-            "attributes": { "overlayMenu": "mobile" },
-            "childCount": 0,
-            "children": []
-          }
-        ]
-      }
-    ],
-    "allBlockPaths": [
-      {
-        "path": [0],
-        "name": "core/group",
-        "label": "Group",
-        "attributes": { "tagName": "header" },
-        "childCount": 2
-      },
-      {
-        "path": [0, 0],
-        "name": "core/site-logo",
-        "label": "Site Logo",
-        "attributes": {},
-        "childCount": 0
-      },
-      {
-        "path": [0, 1],
-        "name": "core/navigation",
-        "label": "Navigation",
-        "attributes": { "overlayMenu": "mobile" },
-        "childCount": 0
-      }
-    ],
-    "topLevelBlocks": ["core/group"],
-    "blockCounts": {
-      "core/group": 1,
-      "core/site-logo": 1,
-      "core/navigation": 1
-    },
-    "structureStats": {
-      "blockCount": 3,
-      "maxDepth": 2,
-      "hasNavigation": true,
-      "containsLogo": true,
-      "containsSiteTitle": false,
-      "containsSearch": false,
-      "containsSocialLinks": false,
-      "containsQuery": false,
-      "containsColumns": false,
-      "containsButtons": false,
-      "containsSpacer": false,
-      "containsSeparator": false,
-      "firstTopLevelBlock": "core/group",
-      "lastTopLevelBlock": "core/group",
-      "hasSingleWrapperGroup": true,
-      "isNearlyEmpty": false
-    },
-    "currentPatternOverrides": {
-      "hasOverrides": false,
-      "blockCount": 0,
-      "blockNames": [],
-      "blocks": []
-    },
-    "operationTargets": [
-      {
-        "path": [0],
-        "name": "core/group",
-        "label": "Group",
-        "allowedOperations": ["replace_block_with_pattern", "remove_block"],
-        "allowedInsertions": ["before_block_path", "after_block_path"]
-      },
-      {
-        "path": [0, 1],
-        "name": "core/navigation",
-        "label": "Navigation",
-        "allowedOperations": ["replace_block_with_pattern", "remove_block"],
-        "allowedInsertions": ["before_block_path", "after_block_path"]
-      }
-    ],
-    "insertionAnchors": [
-      { "placement": "start", "label": "Start of template part" },
-      { "placement": "end", "label": "End of template part" },
-      {
-        "placement": "before_block_path",
-        "targetPath": [0, 1],
-        "blockName": "core/navigation",
-        "label": "Before Navigation"
-      }
-    ],
-    "structuralConstraints": {
-      "contentOnlyPaths": [],
-      "lockedPaths": [],
-      "hasContentOnly": false,
-      "hasLockedBlocks": false
-    }
-  }
-}
-```
+- Ability request and response shape: `docs/reference/abilities-and-routes.md#template-part-ability-request`
+- Operation vocabulary, placement rules, and deep-path validation: `docs/reference/template-operations.md#template-part-operations`
+- Activity entry shape and undo lifecycle: `docs/reference/abilities-and-routes.md#activity-entry-shape` and `docs/reference/activity-state-machine.md`
 
 The prompt-facing `blockTree` may stay summarized, but `editorStructure.allBlockPaths` carries the full live path coverage the server uses to validate deep executable targets. Empty template parts still send an explicit structure snapshot with empty trees, zeroed stats, no targets, and start/end anchors.
-
-## Example Response
-
-```json
-{
-  "suggestions": [
-    {
-      "label": "Add a utility row before navigation",
-      "description": "A compact utility row can hold secondary links without crowding the main menu.",
-      "blockHints": [
-        {
-          "path": [0, 1],
-          "label": "Navigation block",
-          "blockName": "core/navigation",
-          "reason": "This is the main anchor for the header's current structure."
-        }
-      ],
-      "patternSuggestions": ["core/header-with-utility-row"],
-      "operations": [
-        {
-          "type": "insert_pattern",
-          "patternName": "core/header-with-utility-row",
-          "placement": "before_block_path",
-          "targetPath": [0, 1]
-        }
-      ]
-    }
-  ],
-  "explanation": "The current header already has a clear navigation anchor, so inserting a utility pattern before that block is a deterministic way to expand the layout.",
-  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt",
-  "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
-}
-```
 
 ## Request Freshness And Server Revalidation
 
@@ -239,20 +85,9 @@ Review Before Apply
 - Offer preview-confirm-apply only for operation sets that survive deterministic validation against executable paths and anchors
 - Record template-part apply actions in the shared activity system and expose inline undo
 
-## Supported Executable Operations
+## Operation Contract
 
-- `insert_pattern`
-- `replace_block_with_pattern`
-- `remove_block`
-
-Supported placement modes today:
-
-- `start`
-- `end`
-- `before_block_path`
-- `after_block_path`
-
-Replace and remove operations only stay executable when their `targetPath` is listed in the prompt's executable operation targets. Insert operations only stay executable when their placement and `targetPath` match the prompt's executable insertion anchors. Deep paths are validated against the full live path index, not only the depth-limited prompt tree.
+Template-part operation types, placement rules, and executable target validation are canonical in `docs/reference/template-operations.md#template-part-operations`. Deep paths are validated against the full live path index, not only the depth-limited prompt tree.
 
 ## Guardrails And Failure Modes
 

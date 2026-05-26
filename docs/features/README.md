@@ -10,6 +10,8 @@ Use these docs when you need exact answers for:
 - which functions, routes, and abilities own the behavior
 - which adjacent docs must stay in sync when the feature moves
 
+These docs should stay feature-facing. Keep exact request/response payloads, route permissions, operation vocabularies, provider precedence, external-service disclosure, and status-only verification history in their canonical reference/status docs.
+
 ## Reading Order
 
 1. `docs/SOURCE_OF_TRUTH.md` - repo-wide product map, feature inventory, and current contract snapshot
@@ -47,6 +49,14 @@ Every feature doc in this directory should answer the same core questions for it
 4. capability contract
 5. guardrails and failure modes
 6. primary functions, routes, and abilities
+
+Use pointers instead of restating canonical details:
+
+- ability and REST payloads, permissions, annotations, and activity row shapes: `docs/reference/abilities-and-routes.md`
+- template, template-part, Global Styles, and Style Book operation vocabularies: `docs/reference/template-operations.md`
+- provider/backend precedence, readiness, and service ownership: `docs/reference/provider-precedence.md`
+- external-service and docs-grounding policy: `docs/reference/external-service-disclosure.md` and `docs/reference/developer-docs-public-corpus-runbook.md`
+- current verification and temporary known issues: `STATUS.md`
 
 ## Update Rule
 

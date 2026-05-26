@@ -55,111 +55,13 @@ User prompt in wp_template editor
   -> activity + inline undo
 ```
 
-## Example Request
+## Contract Pointers
 
-```json
-{
-  "templateRef": "theme//single-post",
-  "templateType": "single",
-  "prompt": "Make the article template feel more magazine-like.",
-  "editorSlots": {
-    "assignedParts": [
-      {
-        "slug": "header",
-        "area": "header"
-      },
-      {
-        "slug": "footer",
-        "area": "footer"
-      }
-    ],
-    "emptyAreas": ["sidebar"]
-  },
-  "editorStructure": {
-    "topLevelBlockTree": [
-      {
-        "path": [0],
-        "name": "core/template-part",
-        "label": "header template part (header)",
-        "attributes": { "slug": "header", "area": "header" },
-        "childCount": 0,
-        "slot": { "slug": "header", "area": "header", "isEmpty": false }
-      },
-      {
-        "path": [1],
-        "name": "core/group",
-        "label": "Group",
-        "attributes": {},
-        "childCount": 2
-      }
-    ],
-    "structureStats": {
-      "blockCount": 4,
-      "maxDepth": 2,
-      "topLevelBlockCount": 2,
-      "hasNavigation": false,
-      "hasQuery": true,
-      "hasTemplateParts": true,
-      "firstTopLevelBlock": "core/template-part",
-      "lastTopLevelBlock": "core/group"
-    },
-    "currentPatternOverrides": {
-      "hasOverrides": false,
-      "blockCount": 0,
-      "blockNames": [],
-      "blocks": []
-    },
-    "currentViewportVisibility": {
-      "hasVisibilityRules": false,
-      "blockCount": 0,
-      "blocks": []
-    }
-  },
-  "visiblePatternNames": [
-    "core/query-offset-feature",
-    "core/post-meta-two-column"
-  ]
-}
-```
+- Ability request and response shape: `docs/reference/abilities-and-routes.md#template-ability-request`
+- Operation vocabulary, placement rules, and anchor validation: `docs/reference/template-operations.md#template-operations`
+- Activity entry shape and undo lifecycle: `docs/reference/abilities-and-routes.md#activity-entry-shape` and `docs/reference/activity-state-machine.md`
 
 `editorSlots.emptyAreas` and `editorSlots.assignedParts` are the live editor occupancy fields. The server keeps canonical capability metadata from the saved template and expands the effective `allowedAreas` set with any unsaved live areas implied by those fields. Empty templates still send `editorSlots` and `editorStructure` with empty arrays and zeroed stats.
-
-## Example Response
-
-```json
-{
-  "suggestions": [
-    {
-      "label": "Use the empty sidebar slot",
-      "description": "Introduce supporting article context without disturbing the main reading flow.",
-      "operations": [
-        {
-          "type": "assign_template_part",
-          "slug": "single-sidebar",
-          "area": "sidebar"
-        },
-        {
-          "type": "insert_pattern",
-          "patternName": "core/post-meta-two-column",
-          "placement": "before_block_path",
-          "targetPath": [1]
-        }
-      ],
-      "templateParts": [
-        {
-          "slug": "single-sidebar",
-          "area": "sidebar",
-          "reason": "This keeps related metadata and supporting blocks out of the article body."
-        }
-      ],
-      "patternSuggestions": ["core/post-meta-two-column"]
-    }
-  ],
-  "explanation": "The template already has stable header and footer assignments, so the open sidebar area is the safest structural opportunity.",
-  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt",
-  "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
-}
-```
 
 ## Request Freshness And Server Revalidation
 
@@ -184,22 +86,9 @@ Review Before Apply
 - Preview the exact operation list before any mutation happens
 - Record template apply actions in the shared activity system and expose inline undo
 
-## Supported Executable Operations
+## Operation Contract
 
-- `assign_template_part`
-- `replace_template_part`
-- `insert_pattern`
-
-`insert_pattern` now supports these bounded placement modes:
-
-- `start`
-- `end`
-- `before_block_path`
-- `after_block_path`
-
-Anchored template insertion is limited to validated top-level anchors gathered by `ServerCollector::for_template()` and the editor structure payload. Every template `insert_pattern` operation must include an explicit placement. `start` and `end` require matching live insertion anchors, while `before_block_path` and `after_block_path` also require a validated `targetPath`. Legacy implicit insertions are rejected by `TemplatePrompt::parse_response()` and `validateTemplateOperationSequence()`.
-
-Each suggestion may include at most one `insert_pattern` operation. Executable suggestions derive `patternSuggestions` from validated insert operations, while advisory-only suggestions may preserve validated pattern names when no safe deterministic insertion anchor is available.
+Template operation types, placement rules, anchor validation, and one-pattern insertion limits are canonical in `docs/reference/template-operations.md#template-operations`.
 
 ## Guardrails And Failure Modes
 

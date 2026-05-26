@@ -39,12 +39,11 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 12. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
 13. The user inserts a recommended pattern directly from the Flavor Agent shelf. Before dispatching core block insertion, the click handler checks the client insertion-target signature, reruns `flavor-agent/recommend-patterns` with `resolveSignatureOnly: true`, and blocks insertion if the server `resolvedContextSignature` no longer matches.
 
-## Pattern Retrieval Backends
+## Contract Pointers
 
-| Pattern backend | Embeddings | Vector/index service | Search service | Required settings |
-| --- | --- | --- | --- | --- |
-| Qdrant | Cloudflare Workers AI | Qdrant | Qdrant | Cloudflare Workers AI embeddings, Qdrant, Connectors chat |
-| Cloudflare AI Search | AI Search managed embedding model | Cloudflare AI Search | Cloudflare AI Search | Cloudflare credentials from the Embedding Model section, managed `flavor-agent-patterns-{site_hash}` instance, Connectors chat |
+- Ability request, response, freshness fields, and retrieval backend matrix: `docs/reference/abilities-and-routes.md#pattern-recommendation-backend-matrix`
+- Provider ownership and credential precedence: `docs/reference/provider-precedence.md#pattern-storage-backend-chain`
+- Production debugging and backend inspection: `docs/reference/pattern-recommendation-debugging.md`
 
 ## What This Surface Can Do
 

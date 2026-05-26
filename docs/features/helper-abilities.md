@@ -6,29 +6,13 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - No dedicated Gutenberg panel or wp-admin screen
 - These abilities are consumed by external AI agents, plugin diagnostics, and admin tooling
-- The server-registered helper abilities are:
-  - `flavor-agent/introspect-block`
-  - `flavor-agent/list-allowed-blocks`
-  - `flavor-agent/list-patterns`
-  - `flavor-agent/get-pattern`
-  - `flavor-agent/list-synced-patterns`
-  - `flavor-agent/get-synced-pattern`
-  - `flavor-agent/list-template-parts`
-  - `flavor-agent/get-active-theme`
-  - `flavor-agent/get-theme-presets`
-  - `flavor-agent/get-theme-styles`
-  - `flavor-agent/get-theme-tokens`
-  - `flavor-agent/check-status`
-  - `flavor-agent/search-wordpress-docs`
+- The exact registered ability list, permissions, schemas, and annotations are canonical in `docs/reference/abilities-and-routes.md#registered-abilities`
 - The settings screen and external diagnostics use `flavor-agent/check-status` to report backend inventory and per-surface readiness
 
 ## Surfacing Conditions
 
-- `flavor-agent/introspect-block`, `flavor-agent/list-allowed-blocks`, `flavor-agent/list-patterns`, `flavor-agent/get-pattern`, `flavor-agent/list-synced-patterns`, `flavor-agent/get-synced-pattern`, `flavor-agent/get-active-theme`, `flavor-agent/get-theme-presets`, `flavor-agent/get-theme-styles`, `flavor-agent/get-theme-tokens`, and `flavor-agent/check-status` require `edit_posts`
-- `flavor-agent/list-template-parts` allows callers with either `edit_posts` or `edit_theme_options`; `includeContent: true` is silently coerced to metadata-only when the caller lacks `edit_theme_options`
-- `flavor-agent/search-wordpress-docs` requires `manage_options` and is not advertised as read-only because direct searches can warm exact/entity caches, update Developer Docs runtime diagnostics, and persist docs-grounding Activity diagnostics.
-- `flavor-agent/check-status` only reports what is currently available; it does not change configuration or retry backends
-- `flavor-agent/search-wordpress-docs` accepts a query plus optional `maxResults` and `entityKey` fields
+- Helper abilities are exposed through the WordPress Abilities API when their capability checks pass. Exact permissions, request fields, response shapes, and read-only annotations are canonical in `docs/reference/abilities-and-routes.md#registered-abilities`.
+- `flavor-agent/check-status` only reports what is currently available; it does not change configuration or retry backends.
 
 ## Shared Interaction Model
 
@@ -42,10 +26,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. `inc/Abilities/Registration.php` registers the ability under the `flavor-agent` category
 3. The ability delegates to a server collector, registry helper, or diagnostics helper
 4. `flavor-agent/check-status` calls `FlavorAgent\Abilities\SurfaceCapabilities::build()` and returns backend inventory plus readiness data
-5. `flavor-agent/get-active-theme`, `flavor-agent/get-theme-presets`, `flavor-agent/get-theme-styles`, and `flavor-agent/get-theme-tokens` read the active theme plus `wp_get_global_settings()` / `wp_get_global_styles()` through `FlavorAgent\Context\ServerCollector`
-6. `flavor-agent/list-patterns`, `flavor-agent/get-pattern`, `flavor-agent/list-synced-patterns`, `flavor-agent/get-synced-pattern`, and `flavor-agent/list-template-parts` expose registry or `wp_block` entity data through `FlavorAgent\Context\ServerCollector`
-7. `flavor-agent/introspect-block` and `flavor-agent/list-allowed-blocks` return block supports, inspector panels, attributes, styles, variations, and allowed inner blocks through the block introspector
-8. `flavor-agent/search-wordpress-docs` sanitizes the query, resolves an optional entity key, and then searches or warms trusted WordPress docs guidance through Cloudflare AI Search
+5. Theme, pattern, template-part, and block-introspection helpers read current WordPress registry/entity state through the server collectors
+6. `flavor-agent/search-wordpress-docs` sanitizes the query, resolves an optional entity key, and then searches or warms trusted WordPress docs guidance through Cloudflare AI Search
 
 ## What This Surface Can Do
 
@@ -58,22 +40,14 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Guardrails And Failure Modes
 
-- Docs search fails closed for empty queries, invalid or unavailable public endpoint config, HTTP/search/parse errors, or untrusted source filtering; a successful search with no trusted chunks returns an empty `guidance` array
-- Only trusted official WordPress developer sources are accepted by the docs-search pipeline: stable Developer Handbook/reference pages, current Developer Blog posts, and current Make/Core release-cycle posts with freshness metadata.
-- Empty docs queries return a `missing_query` error
-- `search-wordpress-docs` may warm exact-query or entity cache entries through the public endpoint for the caller's explicit request; recommendation-time grounding uses the shared bounded foreground/cache fallback path, while signature-only freshness checks read local cache state only.
+- Docs search fails closed for empty queries, unavailable public endpoint config, HTTP/search/parse errors, or untrusted source filtering; source policy and cache behavior are canonical in `docs/reference/developer-docs-public-corpus-runbook.md`.
 - There is no direct apply or undo path for any helper ability
 
-## Current Contract Notes
+## Contract Pointers
 
-- `flavor-agent/get-pattern` resolves by registered pattern name only. The returned `id` is the same string as `name`, and the request-side `patternId` field is an alias for that same string value rather than a separate numeric identifier.
-- `flavor-agent/list-patterns` supports `search`, `limit`, `offset`, and `includeContent`, returns a `total` count, and omits `content` by default for lighter payloads.
-- `flavor-agent/list-synced-patterns` queries `wp_block` posts with `post_status = any`, returns caller-readable results while preserving the helper browse fallback for published patterns, accepts `synced`, `partial`, `unsynced`, or `all` for the `syncStatus` filter, supports `search`, `limit`, `offset`, and `includeContent`, returns a `total` count, and omits `content` by default.
-- `flavor-agent/list-allowed-blocks` returns the full registered block registry, sorted by title and then name. It is not filtered by the current inserter root, post type, or other editor context, but it now supports `search`, `category`, `limit`, `offset`, `includeVariations`, and `maxVariations`, plus a `total` count.
-- `flavor-agent/introspect-block` still returns up to 10 variations. `flavor-agent/list-allowed-blocks` now omits `variations` by default and truncates them only when `includeVariations: true`, using `maxVariations` with a default cap of 10.
-- `flavor-agent/get-theme-styles` returns both raw `styles` and extracted summaries. `elementStyles.base`, `hover`, and `focus` contain only color maps, while `focusVisible` preserves the full `:focus-visible` object.
-- `flavor-agent/check-status` returns backend inventory, `availableAbilities`, and a `surfaces` map keyed by `block`, `pattern`, `content`, `template`, `templatePart`, `navigation`, `globalStyles`, and `styleBook`.
-- Helper permissions are intentionally asymmetric: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, and `get-theme-tokens` require `edit_posts`; `list-template-parts` allows either editor or theme capability at the outer boundary but only returns markup to theme-capable callers; the theme-oriented recommendation surfaces remain `edit_theme_options` only.
+- Exact permissions, request fields, response shapes, and helper contract notes: `docs/reference/abilities-and-routes.md`
+- Provider and backend readiness semantics: `docs/reference/provider-precedence.md`
+- Docs-grounding source policy and corpus operations: `docs/reference/developer-docs-public-corpus-runbook.md`
 
 ## Primary Functions And Handlers
 
@@ -98,20 +72,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Related Routes And Abilities
 
-- Ability: `flavor-agent/introspect-block`
-- Ability: `flavor-agent/list-allowed-blocks`
-- Ability: `flavor-agent/list-patterns`
-- Ability: `flavor-agent/get-pattern`
-- Ability: `flavor-agent/list-synced-patterns`
-- Ability: `flavor-agent/get-synced-pattern`
-- Ability: `flavor-agent/list-template-parts`
-- Ability: `flavor-agent/get-active-theme`
-- Ability: `flavor-agent/get-theme-presets`
-- Ability: `flavor-agent/get-theme-styles`
-- Ability: `flavor-agent/get-theme-tokens`
-- Ability: `flavor-agent/check-status`
-- Ability: `flavor-agent/search-wordpress-docs`
-- There is no plugin-owned `/flavor-agent/v1` route for these helper abilities; they are exposed through the WordPress Abilities API REST surface because the ability registrations set `meta.show_in_rest` to `true`
+The helper ability inventory is canonical in `docs/reference/abilities-and-routes.md#registered-abilities`. There is no plugin-owned `/flavor-agent/v1` route for these helpers; they are exposed through the WordPress Abilities API REST surface because the ability registrations set `meta.show_in_rest` to `true`.
 
 ## Key Implementation Files
 

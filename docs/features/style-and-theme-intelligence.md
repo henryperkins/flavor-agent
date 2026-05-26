@@ -59,131 +59,11 @@ User opens the Site Editor Styles sidebar
   -> activity + inline undo
 ```
 
-## Example Request
+## Contract Pointers
 
-```json
-{
-  "scope": {
-    "surface": "global-styles",
-    "scopeKey": "global_styles:17",
-    "globalStylesId": "17",
-    "postType": "global_styles",
-    "entityId": "17",
-    "entityKind": "root",
-    "entityName": "globalStyles"
-  },
-  "styleContext": {
-    "currentConfig": {
-      "settings": {},
-      "styles": {}
-    },
-    "mergedConfig": {
-      "settings": {},
-      "styles": {}
-    },
-    "availableVariations": [
-      {
-        "title": "Midnight"
-      }
-    ],
-    "themeTokenDiagnostics": {
-      "source": "server",
-      "settingsKey": "wp_get_global_settings",
-      "reason": "server-global-settings"
-    },
-    "templateStructure": [
-      {
-        "name": "core/template-part",
-        "innerBlocks": [{ "name": "core/site-title" }]
-      },
-      {
-        "name": "core/group",
-        "innerBlocks": [{ "name": "core/query-title" }]
-      }
-    ],
-    "templateVisibility": {
-      "hasVisibilityRules": false,
-      "blockCount": 0,
-      "blocks": []
-    }
-  },
-  "prompt": "Make the site feel more editorial."
-}
-```
-
-## Example Response
-
-```json
-{
-  "suggestions": [
-    {
-      "label": "Switch to Midnight",
-      "description": "The darker variation adds stronger contrast without leaving theme-supported presets.",
-      "category": "variation",
-      "tone": "executable",
-      "operations": [
-        {
-          "type": "set_theme_variation",
-          "variationIndex": 0,
-          "variationTitle": "Midnight"
-        }
-      ]
-    }
-  ],
-  "explanation": "The current theme already exposes a registered variation that moves the site toward the requested tone.",
-  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt",
-  "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
-}
-```
-
-## Example Style Book Request
-
-```json
-{
-  "scope": {
-    "surface": "style-book",
-    "scopeKey": "style_book:17:core/group",
-    "globalStylesId": "17",
-    "entityKind": "block",
-    "entityName": "styleBook",
-    "entityId": "core/group",
-    "blockName": "core/group",
-    "blockTitle": "Group"
-  },
-  "styleContext": {
-    "currentConfig": {
-      "settings": {},
-      "styles": {}
-    },
-    "mergedConfig": {
-      "settings": {},
-      "styles": {}
-    },
-    "styleBookTarget": {
-      "blockName": "core/group",
-      "blockTitle": "Group",
-      "currentStyles": {},
-      "mergedStyles": {}
-    },
-    "templateStructure": [
-      {
-        "name": "core/template-part",
-        "innerBlocks": [{ "name": "core/heading" }]
-      },
-      {
-        "name": "core/group",
-        "innerBlocks": [{ "name": "core/paragraph" }]
-      }
-    ],
-    "templateVisibility": {
-      "hasVisibilityRules": false,
-      "blockCount": 0,
-      "blocks": []
-    }
-  },
-  "prompt": "Make this block feel more editorial."
-}
-```
+- Global Styles and Style Book request shapes: `docs/reference/abilities-and-routes.md#style-ability-request` and `docs/reference/abilities-and-routes.md#style-book-ability-request`
+- Operation vocabulary and constraints: `docs/reference/template-operations.md#style-operations`
+- Activity entry shape and undo lifecycle: `docs/reference/abilities-and-routes.md#activity-entry-shape` and `docs/reference/activity-state-machine.md`
 
 ## Request Freshness And Live Context
 
@@ -203,13 +83,9 @@ User opens the Site Editor Styles sidebar
 - Keep theme-token source diagnostics attached to the request contract so degraded token sourcing is visible to the backend
 - Record applied Global Styles and Style Book changes in the shared activity system and expose inline undo when the live state still matches the recorded post-apply config
 
-## Supported Executable Operations
+## Operation Contract
 
-- `set_styles`
-- `set_block_styles`
-- `set_theme_variation`
-
-`set_styles` is valid only for supported site-level style paths and must use theme-backed values when the path points at a preset family. `set_block_styles` is valid only for supported Style Book block paths and must stay inside the validated `styles.blocks[ blockName ]` contract. `set_theme_variation` is valid only on the `global-styles` surface when the referenced variation still exists in the Site Editor runtime, and Style Book suggestions reject it outright.
+Style operation types, surface restrictions, preset requirements, and variation constraints are canonical in `docs/reference/template-operations.md#style-operations`.
 
 ## Guardrails And Failure Modes
 
