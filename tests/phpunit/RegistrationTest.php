@@ -352,7 +352,13 @@ final class RegistrationTest extends TestCase {
 			$this->assertIsArray( $ability, "{$ability_id} should be registered." );
 			$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
 			$this->assertTrue( (bool) ( $ability['meta']['readonly'] ?? false ) );
-			$this->assertSame( [ 'public' => true, 'type' => 'tool' ], $ability['meta']['mcp'] ?? null );
+			$this->assertSame(
+				[
+					'public' => true,
+					'type'   => 'tool',
+				],
+				$ability['meta']['mcp'] ?? null
+			);
 			$this->assertSame( $expected_meta_annotations, $ability['meta']['annotations'] ?? null );
 		}
 	}

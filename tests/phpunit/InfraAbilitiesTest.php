@@ -97,6 +97,29 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertNotContains( 'flavor-agent/preview-recommend-block', $status['availableAbilities'], 'preview-recommend-block requires edit_posts.' );
 	}
 
+	public function test_check_status_hides_preview_recommendation_abilities_when_ai_contracts_are_unavailable(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+
+		add_filter( 'flavor_agent_check_status_preview_recommendation_abilities_available', '__return_false' );
+
+		$status = InfraAbilities::check_status( [] );
+
+		foreach (
+			[
+				'flavor-agent/preview-recommend-block',
+				'flavor-agent/preview-recommend-navigation',
+				'flavor-agent/preview-recommend-style',
+				'flavor-agent/preview-recommend-template',
+				'flavor-agent/preview-recommend-template-part',
+			] as $ability_id
+		) {
+			$this->assertNotContains( $ability_id, $status['availableAbilities'], "{$ability_id} should not be advertised unless its AI ability contract is registered." );
+		}
+	}
+
 	public function test_check_status_keeps_list_template_parts_available_for_theme_only_users(): void {
 		WordPressTestState::$capabilities = [
 			'edit_theme_options' => true,

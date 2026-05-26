@@ -51,17 +51,21 @@ final class InfraAbilities {
 		$cloudflare_runtime_state       = AISearchClient::get_runtime_state();
 		$pattern_readiness              = PatternIndex::recommendation_index_readiness();
 
-		$qdrant_configured       = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
-		$cloudflare_configured   = AISearchClient::is_configured();
-		$active_chat_configured  = ChatClient::is_supported();
-		$recommendations_enabled = FeatureBootstrap::recommendation_feature_enabled();
-		$patterns_configured     = $recommendations_enabled
+		$qdrant_configured                 = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
+		$cloudflare_configured             = AISearchClient::is_configured();
+		$active_chat_configured            = ChatClient::is_supported();
+		$recommendations_enabled           = FeatureBootstrap::recommendation_feature_enabled();
+		$preview_recommendations_available = (bool) apply_filters(
+			'flavor_agent_check_status_preview_recommendation_abilities_available',
+			FeatureBootstrap::canonical_contracts_available()
+		);
+		$patterns_configured               = $recommendations_enabled
 			&& $active_chat_configured
 			&& ! empty( $pattern_readiness['ready'] );
-		$settings_url            = function_exists( 'admin_url' )
+		$settings_url                      = function_exists( 'admin_url' )
 			? admin_url( 'options-general.php?page=flavor-agent' )
 			: '';
-		$connectors_url          = function_exists( 'admin_url' )
+		$connectors_url                    = function_exists( 'admin_url' )
 			? admin_url( 'options-connectors.php' )
 			: '';
 
@@ -69,6 +73,7 @@ final class InfraAbilities {
 			$recommendations_enabled && $active_chat_configured,
 			$recommendations_enabled && $active_chat_configured,
 			$patterns_configured,
+			$preview_recommendations_available,
 			$cloudflare_configured
 		);
 
@@ -115,6 +120,7 @@ final class InfraAbilities {
 		bool $block_recommendations_configured,
 		bool $chat_configured,
 		bool $patterns_configured,
+		bool $preview_recommendations_available,
 		bool $cloudflare_configured
 	): array {
 		$abilities = [];
@@ -140,11 +146,11 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template-part', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-navigation', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-style', 'edit_theme_options', $chat_configured );
-		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-block', 'edit_posts' );
-		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-navigation', 'edit_theme_options' );
-		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-style', 'edit_theme_options' );
-		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-template', 'edit_theme_options' );
-		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-template-part', 'edit_theme_options' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-block', 'edit_posts', $preview_recommendations_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-navigation', 'edit_theme_options', $preview_recommendations_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-style', 'edit_theme_options', $preview_recommendations_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-template', 'edit_theme_options', $preview_recommendations_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-template-part', 'edit_theme_options', $preview_recommendations_available );
 		self::maybe_add_ability( $abilities, 'flavor-agent/search-wordpress-docs', WordPressDocsAbilities::REQUIRED_CAPABILITY, $cloudflare_configured );
 
 		return $abilities;

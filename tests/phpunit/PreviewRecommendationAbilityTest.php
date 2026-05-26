@@ -10,52 +10,13 @@ use FlavorAgent\AI\Abilities\PreviewRecommendNavigationAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendStyleAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendTemplateAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendTemplatePartAbility;
+use FlavorAgent\Tests\Support\PreviewRecommendationFakeParentAbility;
+use FlavorAgent\Tests\Support\PreviewRecommendationFakePreviewAbility;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
-use WordPress\AI\Abstracts\Abstract_Ability;
 
-if ( ! \class_exists( PreviewRecommendationFakeParentAbility::class ) ) {
-	final class PreviewRecommendationFakeParentAbility extends Abstract_Ability {
-
-		/** @var array<int, mixed> */
-		public static array $executions = [];
-
-		/** @var array<int, mixed> */
-		public static array $permission_calls = [];
-
-		public static mixed $execution_result = [];
-
-		public static bool $permission_result = true;
-
-		public static function reset(): void {
-			self::$executions        = [];
-			self::$permission_calls  = [];
-			self::$execution_result  = [];
-			self::$permission_result = true;
-		}
-
-		public function execute_callback( mixed $input ): mixed {
-			self::$executions[] = $input;
-
-			return self::$execution_result;
-		}
-
-		public function permission_callback( mixed $input = null ): bool {
-			self::$permission_calls[] = $input;
-
-			return self::$permission_result;
-		}
-	}
-}
-
-if ( ! \class_exists( PreviewRecommendationFakePreviewAbility::class ) ) {
-	final class PreviewRecommendationFakePreviewAbility extends PreviewRecommendationAbility {
-		protected const ABILITY_NAME   = 'flavor-agent/preview-recommend-fake';
-		protected const PARENT_CLASS   = PreviewRecommendationFakeParentAbility::class;
-		protected const PARENT_ABILITY = 'flavor-agent/recommend-fake';
-		protected const SIGNATURE_KEYS = [ 'reviewContextSignature', 'resolvedContextSignature' ];
-	}
-}
+require_once __DIR__ . '/Support/PreviewRecommendationFakeParentAbility.php';
+require_once __DIR__ . '/Support/PreviewRecommendationFakePreviewAbility.php';
 
 final class PreviewRecommendationAbilityTest extends TestCase {
 
@@ -109,7 +70,10 @@ final class PreviewRecommendationAbilityTest extends TestCase {
 			[
 				'prompt'               => 'hi',
 				'resolveSignatureOnly' => false,
-				'clientRequest'        => [ 'sessionId' => 'sess-1', 'requestToken' => 4 ],
+				'clientRequest'        => [
+					'sessionId'    => 'sess-1',
+					'requestToken' => 4,
+				],
 			]
 		);
 
@@ -186,10 +150,10 @@ final class PreviewRecommendationAbilityTest extends TestCase {
 	public function test_input_schema_strips_resolve_signature_only_and_client_request(): void {
 		foreach (
 			[
-				PreviewRecommendBlockAbility::class      => 'flavor-agent/preview-recommend-block',
-				PreviewRecommendNavigationAbility::class => 'flavor-agent/preview-recommend-navigation',
-				PreviewRecommendStyleAbility::class      => 'flavor-agent/preview-recommend-style',
-				PreviewRecommendTemplateAbility::class   => 'flavor-agent/preview-recommend-template',
+				PreviewRecommendBlockAbility::class        => 'flavor-agent/preview-recommend-block',
+				PreviewRecommendNavigationAbility::class   => 'flavor-agent/preview-recommend-navigation',
+				PreviewRecommendStyleAbility::class        => 'flavor-agent/preview-recommend-style',
+				PreviewRecommendTemplateAbility::class     => 'flavor-agent/preview-recommend-template',
 				PreviewRecommendTemplatePartAbility::class => 'flavor-agent/preview-recommend-template-part',
 			] as $class => $name
 		) {
@@ -208,7 +172,13 @@ final class PreviewRecommendationAbilityTest extends TestCase {
 
 		$this->assertTrue( $meta['show_in_rest'] ?? false );
 		$this->assertTrue( $meta['readonly'] ?? false );
-		$this->assertSame( [ 'public' => true, 'type' => 'tool' ], $meta['mcp'] ?? null );
+		$this->assertSame(
+			[
+				'public' => true,
+				'type'   => 'tool',
+			],
+			$meta['mcp'] ?? null
+		);
 		$this->assertSame(
 			[
 				'readonly'    => true,
@@ -230,10 +200,10 @@ final class PreviewRecommendationAbilityTest extends TestCase {
 
 		foreach (
 			[
-				PreviewRecommendBlockAbility::class      => 'flavor-agent/preview-recommend-block',
-				PreviewRecommendNavigationAbility::class => 'flavor-agent/preview-recommend-navigation',
-				PreviewRecommendStyleAbility::class      => 'flavor-agent/preview-recommend-style',
-				PreviewRecommendTemplateAbility::class   => 'flavor-agent/preview-recommend-template',
+				PreviewRecommendBlockAbility::class        => 'flavor-agent/preview-recommend-block',
+				PreviewRecommendNavigationAbility::class   => 'flavor-agent/preview-recommend-navigation',
+				PreviewRecommendStyleAbility::class        => 'flavor-agent/preview-recommend-style',
+				PreviewRecommendTemplateAbility::class     => 'flavor-agent/preview-recommend-template',
 				PreviewRecommendTemplatePartAbility::class => 'flavor-agent/preview-recommend-template-part',
 			] as $class => $name
 		) {

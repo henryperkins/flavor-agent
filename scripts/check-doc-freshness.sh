@@ -208,6 +208,11 @@ check_present_fixed \
 	"${repo_root}/docs/reference/abilities-and-routes.md"
 
 check_present_fixed \
+	'Abilities Explorer docs should distinguish always-on preflight abilities from feature-gated recommendation abilities' \
+	'Before enabling the Flavor Agent AI feature, the Explorer should list the 18 always-on helper and preflight abilities' \
+	"${repo_root}/docs/reference/local-environment-setup.md"
+
+check_present_fixed \
 	'flavor-agent-readme should describe the eight shipped editor experiences' \
 	'eight primary editor experiences' \
 	"${repo_root}/docs/flavor-agent-readme.md"
