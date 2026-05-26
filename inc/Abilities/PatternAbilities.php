@@ -559,7 +559,7 @@ final class PatternAbilities {
 		$cleaned = preg_replace( '/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim( $ranked ) );
 		$data    = json_decode( $cleaned, true );
 
-		if ( json_last_error() !== JSON_ERROR_NONE || ! isset( $data['recommendations'] ) ) {
+		if ( json_last_error() !== JSON_ERROR_NONE || ! is_array( $data ) || ! isset( $data['recommendations'] ) || ! is_array( $data['recommendations'] ) ) {
 			return new \WP_Error(
 				'parse_error',
 				'Failed to parse ranking response.',
@@ -567,34 +567,38 @@ final class PatternAbilities {
 			);
 		}
 
-		$recommendations                             = [];
+		$recommendations_by_name                     = [];
 		$selected_backend                            = PatternRetrievalBackendFactory::selected_backend();
 		$max_recommendations                         = self::max_recommendations();
 		$score_threshold                             = self::recommendation_score_threshold( $selected_backend );
-		$ranked_recommendations                      = (array) $data['recommendations'];
+		$ranked_recommendations                      = $data['recommendations'];
 		$diagnostics['pipelineTrace']['llmReturned'] = count( $ranked_recommendations );
 		foreach ( $ranked_recommendations as $rec ) {
-			if ( count( $recommendations ) >= $max_recommendations ) {
-				break;
+			if ( ! is_array( $rec ) ) {
+				self::record_pattern_pipeline_drop( $diagnostics, 'llmMalformedDropped', 'llm_malformed_recommendation' );
+				continue;
 			}
-			$name = $rec['name'] ?? '';
+
+			$name        = isset( $rec['name'] ) && is_string( $rec['name'] ) ? trim( $rec['name'] ) : '';
+			$model_score = RankingContract::resolve_score_candidate( $rec['score'] ?? null );
+			if ( '' === $name || null === $model_score ) {
+				self::record_pattern_pipeline_drop( $diagnostics, 'llmMalformedDropped', 'llm_malformed_recommendation' );
+				continue;
+			}
+
 			if ( ! isset( $candidates[ $name ] ) ) {
 				self::record_pattern_pipeline_drop( $diagnostics, 'llmNameMismatchDropped', 'llm_name_mismatch' );
 				continue;
 			}
 
-			$payload      = $candidates[ $name ]['payload'];
-			$overrides    = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
-			$ranking_hint = is_array( $candidates[ $name ]['rankingHint'] ?? null )
+			$payload        = $candidates[ $name ]['payload'];
+			$overrides      = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
+			$ranking_hint   = is_array( $candidates[ $name ]['rankingHint'] ?? null )
 				? $candidates[ $name ]['rankingHint']
 				: [];
-			$score        = isset( $rec['score'] ) ? max( 0.0, min( 1.0, (float) $rec['score'] ) ) : 0.0;
-			if ( $score < $score_threshold ) {
-				self::record_pattern_pipeline_drop( $diagnostics, 'belowThresholdDropped', 'below_threshold' );
-				continue;
-			}
+			$reason_text    = isset( $rec['reason'] ) && is_scalar( $rec['reason'] ) ? (string) $rec['reason'] : '';
 			$reason         = self::append_pattern_override_reason_hint(
-				sanitize_text_field( $rec['reason'] ?? '' ),
+				sanitize_text_field( $reason_text ),
 				$ranking_hint
 			);
 			$source_signals = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend
@@ -603,7 +607,6 @@ final class PatternAbilities {
 			if ( Config::PATTERN_BACKEND_QDRANT === $selected_backend && $ran_structural_pass ) {
 				$source_signals[] = 'qdrant_structural';
 			}
-			$model_score         = RankingContract::resolve_score_candidate( $rec['score'] ?? null );
 			$deterministic_score = RankingContract::resolve_score_candidate(
 				$candidates[ $name ]['rankingScore'] ?? null,
 				$candidates[ $name ]['score'] ?? null
@@ -640,6 +643,11 @@ final class PatternAbilities {
 					'context'       => $context_score,
 				]
 			);
+			if ( $blended_score < $score_threshold ) {
+				self::record_pattern_pipeline_drop( $diagnostics, 'belowThresholdDropped', 'below_threshold' );
+				continue;
+			}
+
 			if ( is_array( $contextual_result ) ) {
 				$source_signals[] = 'contextual_ranking_v1';
 			}
@@ -648,7 +656,7 @@ final class PatternAbilities {
 				unset( $ranking_metadata[ $contextual_key ] );
 			}
 
-			$recommendations[] = [
+			$recommendation = [
 				'name'                 => $name,
 				'title'                => $payload['title'] ?? '',
 				'type'                 => $payload['type'] ?? 'registered',
@@ -692,12 +700,21 @@ final class PatternAbilities {
 				),
 				'content'              => $payload['content'] ?? '',
 			];
+
+			if (
+				! isset( $recommendations_by_name[ $name ] )
+				|| (float) $recommendations_by_name[ $name ]['score'] < $blended_score
+			) {
+				$recommendations_by_name[ $name ] = $recommendation;
+			}
 		}
 
+		$recommendations = array_values( $recommendations_by_name );
 		usort(
 			$recommendations,
 			static fn( array $left, array $right ): int => $right['score'] <=> $left['score']
 		);
+		$recommendations = array_slice( $recommendations, 0, $max_recommendations );
 		$diagnostics['pipelineTrace']['returnedRecommendations'] = count( $recommendations );
 
 		return self::pattern_recommendation_response(
@@ -766,6 +783,7 @@ final class PatternAbilities {
 				'diversityDropped'        => 0,
 				'llmReturned'             => 0,
 				'llmNameMismatchDropped'  => 0,
+				'llmMalformedDropped'     => 0,
 				'belowThresholdDropped'   => 0,
 				'returnedRecommendations' => 0,
 			],
@@ -803,6 +821,7 @@ final class PatternAbilities {
 			'diversityDropped'        => max( 0, (int) ( $trace['diversityDropped'] ?? 0 ) ),
 			'llmReturned'             => max( 0, (int) ( $trace['llmReturned'] ?? 0 ) ),
 			'llmNameMismatchDropped'  => max( 0, (int) ( $trace['llmNameMismatchDropped'] ?? 0 ) ),
+			'llmMalformedDropped'     => max( 0, (int) ( $trace['llmMalformedDropped'] ?? 0 ) ),
 			'belowThresholdDropped'   => max( 0, (int) ( $trace['belowThresholdDropped'] ?? 0 ) ),
 			'returnedRecommendations' => max( 0, (int) ( $trace['returnedRecommendations'] ?? 0 ) ),
 		];
@@ -822,6 +841,7 @@ final class PatternAbilities {
 				'synced_rehydration_failed',
 				'rehydration_failed',
 				'llm_name_mismatch',
+				'llm_malformed_recommendation',
 				'below_threshold',
 			],
 			true

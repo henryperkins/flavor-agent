@@ -1185,6 +1185,21 @@ final class Registration {
 									'unreadableSyncedPatterns' => [ 'type' => 'integer' ],
 								]
 							),
+							'pipelineTrace'      => self::open_object_schema(
+								[
+									'backendRetrieved'    => [ 'type' => 'integer' ],
+									'visibleScopeDropped' => [ 'type' => 'integer' ],
+									'rehydrationDropped'  => [ 'type' => 'integer' ],
+									'candidatePool'       => [ 'type' => 'integer' ],
+									'diversityDropped'    => [ 'type' => 'integer' ],
+									'llmReturned'         => [ 'type' => 'integer' ],
+									'llmNameMismatchDropped' => [ 'type' => 'integer' ],
+									'llmMalformedDropped' => [ 'type' => 'integer' ],
+									'belowThresholdDropped' => [ 'type' => 'integer' ],
+									'returnedRecommendations' => [ 'type' => 'integer' ],
+								]
+							),
+							'dropReasons'        => self::open_object_schema(),
 						]
 					),
 					'reviewContextSignature'   => [ 'type' => 'string' ],

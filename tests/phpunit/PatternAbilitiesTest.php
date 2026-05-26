@@ -876,7 +876,7 @@ final class PatternAbilitiesTest extends TestCase {
 	public function test_recommend_patterns_cloudflare_ai_search_uses_ai_search_source_signal_and_threshold(): void {
 		$this->configure_cloudflare_ai_search_backends();
 		$this->save_cloudflare_ai_search_index_state();
-		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0.5;
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0.75;
 		$this->register_pattern(
 			'theme/hero',
 			[
@@ -2584,6 +2584,7 @@ final class PatternAbilitiesTest extends TestCase {
 				'diversityDropped'        => 0,
 				'llmReturned'             => 3,
 				'llmNameMismatchDropped'  => 1,
+				'llmMalformedDropped'     => 0,
 				'belowThresholdDropped'   => 1,
 				'returnedRecommendations' => 1,
 			],
@@ -2770,6 +2771,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertCount( 8, $result['recommendations'] );
 		$this->assertSame(
 			[
+				'theme/pattern-9',
 				'theme/pattern-8',
 				'theme/pattern-7',
 				'theme/pattern-6',
@@ -2777,9 +2779,166 @@ final class PatternAbilitiesTest extends TestCase {
 				'theme/pattern-4',
 				'theme/pattern-3',
 				'theme/pattern-2',
-				'theme/pattern-1',
 			],
 			array_column( $result['recommendations'], 'name' )
+		);
+	}
+
+	public function test_recommend_patterns_drops_malformed_ranker_rows_without_fatal(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/hero', 0.91 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							'not-a-recommendation-object',
+							[
+								'name'   => [ 'theme/hero' ],
+								'score'  => 0.99,
+								'reason' => 'Malformed name should be dropped.',
+							],
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.82,
+								'reason' => 'Valid row survives.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'theme/hero' ]
+		);
+
+		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertSame(
+			2,
+			$result['diagnostics']['pipelineTrace']['llmMalformedDropped'] ?? null
+		);
+		$this->assertSame(
+			2,
+			$result['diagnostics']['dropReasons']['llm_malformed_recommendation'] ?? null
+		);
+	}
+
+	public function test_recommend_patterns_dedupes_duplicate_ranker_rows_by_best_blended_score(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/hero', 0.91 ),
+					$this->pattern_point( 'theme/sidebar', 0.80 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.35,
+								'reason' => 'Weaker duplicate row.',
+							],
+							[
+								'name'   => 'theme/sidebar',
+								'score'  => 0.84,
+								'reason' => 'Sidebar row remains.',
+							],
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.95,
+								'reason' => 'Stronger duplicate row.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'theme/hero', 'theme/sidebar' ]
+		);
+
+		$this->assertSame(
+			[ 'theme/hero', 'theme/sidebar' ],
+			array_column( $result['recommendations'], 'name' )
+		);
+		$this->assertSame(
+			'Stronger duplicate row.',
+			$result['recommendations'][0]['reason'] ?? null
+		);
+		$this->assertSame(
+			0.95,
+			$result['recommendations'][0]['ranking']['modelScore'] ?? null
+		);
+	}
+
+	public function test_recommend_patterns_applies_threshold_to_blended_scores(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$options['flavor_agent_pattern_recommendation_threshold'] = 0.5;
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/model-favored', 0.10 ),
+					$this->pattern_point( 'theme/context-favored', 0.99 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/model-favored',
+								'score'  => 0.6,
+								'reason' => 'Strong model score but weak deterministic fit.',
+							],
+							[
+								'name'   => 'theme/context-favored',
+								'score'  => 0.2,
+								'reason' => 'Weak model score but strong deterministic fit.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'theme/model-favored', 'theme/context-favored' ]
+		);
+
+		$this->assertSame(
+			[ 'theme/context-favored' ],
+			array_column( $result['recommendations'], 'name' )
+		);
+		$this->assertSame(
+			1,
+			$result['diagnostics']['pipelineTrace']['belowThresholdDropped'] ?? null
 		);
 	}
 
@@ -2795,7 +2954,7 @@ final class PatternAbilitiesTest extends TestCase {
 				[
 					$this->pattern_point( 'theme/pattern-a', 0.91 ),
 					$this->pattern_point( 'theme/pattern-b', 0.89 ),
-					$this->pattern_point( 'theme/pattern-c', 0.88 ),
+					$this->pattern_point( 'theme/pattern-c', 0.10 ),
 				]
 			),
 			$this->ranking_response(

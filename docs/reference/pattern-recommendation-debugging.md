@@ -476,7 +476,7 @@ Most likely causes:
 - raw Qdrant retrieval returned no usable matches
 - raw Cloudflare AI Search retrieval returned no usable chunks
 - synced/user candidates were dropped during request-time `read_post` rehydration
-- reranker scores fell below the score threshold
+- blended recommendation scores fell below the active backend score threshold
 
 Where to look:
 
@@ -489,7 +489,7 @@ Where to look:
 Important nuance:
 
 - this is not automatically a Qdrant failure
-- raw retrieval can succeed while thresholding still removes every final result
+- raw retrieval can succeed while blended-score thresholding still removes every final result
 - raw synced hits can also be correct while current post access removes them before ranking
 - Cloudflare AI Search scores use their own scale. The AI Search backend reads `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search`, while Qdrant reads `flavor_agent_pattern_recommendation_threshold`.
 
@@ -510,6 +510,8 @@ Record this evidence for each backend you tune:
 - embedding model for Qdrant or Cloudflare AI Search managed instance validation
 - active threshold option and value
 - number of candidates before rerank
+- `diagnostics.pipelineTrace` counts, especially `candidatePool`, `llmReturned`, `belowThresholdDropped`, and `returnedRecommendations`
+- allow-listed `diagnostics.dropReasons`, especially `below_threshold`
 - number of renderable final recommendations
 - visible scope size
 
@@ -566,18 +568,18 @@ If raw chunks are wrong:
 
 What it usually means:
 
-- the ranker prompt or the post-rank score filter is the problem
+- the ranker prompt, contextual scorer, or blended-score threshold filter is the problem
 
 Where it happens:
 
 - `ResponsesClient::rank()` call inside `PatternAbilities::recommend_patterns()`
 - JSON parse of the ranker output
-- score threshold filtering after parse
+- blended-score threshold filtering after contextual scoring
 
 What to check:
 
 - can `ResponsesClient::validate_configuration()` still succeed against the WordPress AI Client / Connectors runtime
-- are final scores unexpectedly low
+- are final `score` / `ranking.blendedScore` values unexpectedly low compared with `ranking.modelScore`, `ranking.deterministicScore`, and `ranking.contextScore`
 - do the returned reasons ignore obvious layout traits or the user instruction
 
 Low-priority suspect:

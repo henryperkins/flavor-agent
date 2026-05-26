@@ -8,6 +8,7 @@ const mockFetchPatternRecommendations = jest.fn();
 const mockResolvePatternRecommendationSignature = jest.fn();
 const mockRecordRecommendationOutcome = jest.fn();
 const mockInsertBlocks = jest.fn();
+const mockRemoveBlocks = jest.fn();
 const mockCreateSuccessNotice = jest.fn();
 const mockCreateErrorNotice = jest.fn();
 const mockCanInsertBlockType = jest.fn();
@@ -168,6 +169,21 @@ function createSelectMap() {
 					( state.blockEditor.blocks || {} )[ rootClientId ?? '' ] ??
 					[]
 			),
+			getBlock: jest.fn( ( clientId ) => {
+				for ( const blocks of Object.values(
+					state.blockEditor.blocks || {}
+				) ) {
+					const block = blocks.find(
+						( candidate ) => candidate.clientId === clientId
+					);
+
+					if ( block ) {
+						return block;
+					}
+				}
+
+				return null;
+			} ),
 			canInsertBlockType: ( ...args ) =>
 				mockCanInsertBlockType( ...args ),
 		},
@@ -276,6 +292,21 @@ describe( 'PatternRecommender', () => {
 				};
 			}
 		);
+		mockRemoveBlocks.mockReset();
+		mockRemoveBlocks.mockImplementation( ( clientIds ) => {
+			const ids = new Set( clientIds );
+
+			state.blockEditor.blocks = Object.fromEntries(
+				Object.entries( state.blockEditor.blocks || {} ).map(
+					( [ key, blocks ] ) => [
+						key,
+						blocks.filter(
+							( block ) => ! ids.has( block.clientId )
+						),
+					]
+				)
+			);
+		} );
 		mockCreateSuccessNotice.mockReset();
 		mockCreateErrorNotice.mockReset();
 		mockCanInsertBlockType.mockReset();
@@ -312,6 +343,7 @@ describe( 'PatternRecommender', () => {
 			if ( storeName === 'core/block-editor' ) {
 				return {
 					insertBlocks: mockInsertBlocks,
+					removeBlocks: mockRemoveBlocks,
 				};
 			}
 
@@ -1517,6 +1549,7 @@ describe( 'PatternRecommender', () => {
 		} );
 
 		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+		expect( mockRemoveBlocks ).not.toHaveBeenCalled();
 		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
 			'Cannot confirm pattern "Hero" was inserted. Gutenberg did not report the inserted blocks at the target location.',
 			{
@@ -1535,6 +1568,165 @@ describe( 'PatternRecommender', () => {
 		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
 			expect.objectContaining( {
 				event: 'pattern_inserted_from_shelf',
+			} )
+		);
+	} );
+
+	test( 'records insert failure when Gutenberg inserts the blocks outside the requested target index', async () => {
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					clientId: 'inserted-client',
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.blockEditor.blocks = {
+			'root-a': [
+				{ clientId: 'existing-heading', name: 'core/heading' },
+				{ clientId: 'existing-image', name: 'core/image' },
+			],
+		};
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+		mockInsertBlocks.mockImplementationOnce( ( blocks ) => {
+			state.blockEditor.blocks = {
+				'root-a': [
+					...state.blockEditor.blocks[ 'root-a' ],
+					...blocks,
+				],
+			};
+		} );
+
+		renderComponent();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		await act( async () => {
+			insertButton.click();
+		} );
+
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+		expect( mockRemoveBlocks ).toHaveBeenCalledWith(
+			[ 'inserted-client' ],
+			false
+		);
+		expect( state.blockEditor.blocks[ 'root-a' ] ).toEqual( [
+			{ clientId: 'existing-heading', name: 'core/heading' },
+			{ clientId: 'existing-image', name: 'core/image' },
+		] );
+		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+			'Cannot insert pattern "Hero" at the requested location. Gutenberg inserted it somewhere else, so Flavor Agent removed those blocks.',
+			{
+				type: 'snackbar',
+				id: 'inserter-notice',
+			}
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'insert_failed',
+				surface: 'pattern',
+				reason: 'insert_blocks_wrong_target',
+				patternKey: 'theme/hero',
+			} )
+		);
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'pattern_inserted_from_shelf',
+			} )
+		);
+	} );
+
+	test( 'removes cloned blocks when Gutenberg inserts them into a different root', async () => {
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					clientId: 'inserted-client',
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.blockEditor.blocks = {
+			'root-a': [
+				{ clientId: 'existing-heading', name: 'core/heading' },
+			],
+			'root-b': [ { clientId: 'existing-image', name: 'core/image' } ],
+		};
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+		mockInsertBlocks.mockImplementationOnce( ( blocks ) => {
+			state.blockEditor.blocks = {
+				...state.blockEditor.blocks,
+				'root-b': [
+					...state.blockEditor.blocks[ 'root-b' ],
+					...blocks,
+				],
+			};
+		} );
+
+		renderComponent();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		await act( async () => {
+			insertButton.click();
+		} );
+
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+		expect( mockRemoveBlocks ).toHaveBeenCalledWith(
+			[ 'inserted-client' ],
+			false
+		);
+		expect( state.blockEditor.blocks[ 'root-a' ] ).toEqual( [
+			{ clientId: 'existing-heading', name: 'core/heading' },
+		] );
+		expect( state.blockEditor.blocks[ 'root-b' ] ).toEqual( [
+			{ clientId: 'existing-image', name: 'core/image' },
+		] );
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'insert_failed',
+				surface: 'pattern',
+				reason: 'insert_blocks_wrong_target',
+				patternKey: 'theme/hero',
 			} )
 		);
 	} );

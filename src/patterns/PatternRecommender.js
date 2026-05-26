@@ -181,22 +181,6 @@ function didInsertBlocksAtTarget(
 		return false;
 	}
 
-	const expectedClientIds = insertedBlocks
-		.map( ( block ) => getNonEmptyString( block?.clientId ) )
-		.filter( Boolean );
-	const afterClientIds = new Set(
-		afterSnapshot.map( ( block ) => block.clientId ).filter( Boolean )
-	);
-
-	if (
-		expectedClientIds.length === insertedBlocks.length &&
-		expectedClientIds.every( ( clientId ) =>
-			afterClientIds.has( clientId )
-		)
-	) {
-		return true;
-	}
-
 	if (
 		afterSnapshot.length <
 		beforeSnapshot.length + insertedBlocks.length
@@ -204,16 +188,21 @@ function didInsertBlocksAtTarget(
 		return false;
 	}
 
+	const expectedClientIds = insertedBlocks.map( ( block ) =>
+		getNonEmptyString( block?.clientId )
+	);
 	const expectedNames = insertedBlocks.map( ( block ) =>
 		getNonEmptyString( block?.name )
 	);
-	const boundedIndex =
-		Number.isInteger( insertionIndex ) && insertionIndex >= 0
-			? Math.min(
-					insertionIndex,
-					Math.max( 0, afterSnapshot.length - insertedBlocks.length )
-			  )
-			: Math.max( 0, afterSnapshot.length - insertedBlocks.length );
+	const hasExplicitInsertionIndex =
+		Number.isInteger( insertionIndex ) && insertionIndex >= 0;
+
+	const boundedIndex = hasExplicitInsertionIndex
+		? Math.min(
+				insertionIndex,
+				Math.max( 0, afterSnapshot.length - insertedBlocks.length )
+		  )
+		: Math.max( 0, afterSnapshot.length - insertedBlocks.length );
 	const insertedWindow = afterSnapshot.slice(
 		boundedIndex,
 		boundedIndex + insertedBlocks.length
@@ -221,9 +210,30 @@ function didInsertBlocksAtTarget(
 
 	if (
 		insertedWindow.length === insertedBlocks.length &&
-		insertedWindow.every(
-			( block, index ) =>
-				block.name && block.name === expectedNames[ index ]
+		insertedWindow.every( ( block, index ) => {
+			if ( expectedClientIds[ index ] ) {
+				return block.clientId === expectedClientIds[ index ];
+			}
+
+			return block.name && block.name === expectedNames[ index ];
+		} )
+	) {
+		return true;
+	}
+
+	if ( hasExplicitInsertionIndex ) {
+		return false;
+	}
+
+	const allExpectedClientIdsPresent = expectedClientIds.every( Boolean );
+	const afterClientIds = new Set(
+		afterSnapshot.map( ( block ) => block.clientId ).filter( Boolean )
+	);
+
+	if (
+		allExpectedClientIdsPresent &&
+		expectedClientIds.every( ( clientId ) =>
+			afterClientIds.has( clientId )
 		)
 	) {
 		return true;
@@ -248,6 +258,72 @@ function didInsertBlocksAtTarget(
 	return expectedCounts.size > 0;
 }
 
+function getExpectedInsertedBlockClientIds( insertedBlocks ) {
+	return insertedBlocks
+		.map( ( block ) => getNonEmptyString( block?.clientId ) )
+		.filter( Boolean );
+}
+
+function getBlockPresenceSnapshot( blockEditor, insertedBlocks ) {
+	if (
+		typeof blockEditor?.getBlock !== 'function' ||
+		! Array.isArray( insertedBlocks )
+	) {
+		return null;
+	}
+
+	return new Map(
+		getExpectedInsertedBlockClientIds( insertedBlocks ).map(
+			( clientId ) => [
+				clientId,
+				Boolean( blockEditor.getBlock( clientId ) ),
+			]
+		)
+	);
+}
+
+function getInsertedBlockClientIds(
+	beforePresence,
+	afterPresence,
+	beforeSnapshot,
+	afterSnapshot,
+	insertedBlocks
+) {
+	if ( ! Array.isArray( insertedBlocks ) ) {
+		return [];
+	}
+
+	const expectedClientIds =
+		getExpectedInsertedBlockClientIds( insertedBlocks );
+
+	if ( beforePresence instanceof Map && afterPresence instanceof Map ) {
+		return expectedClientIds.filter(
+			( clientId ) =>
+				beforePresence.get( clientId ) !== true &&
+				afterPresence.get( clientId ) === true
+		);
+	}
+
+	if (
+		! Array.isArray( beforeSnapshot ) ||
+		! Array.isArray( afterSnapshot )
+	) {
+		return [];
+	}
+
+	const beforeClientIds = new Set(
+		beforeSnapshot.map( ( block ) => block.clientId ).filter( Boolean )
+	);
+	const afterClientIds = new Set(
+		afterSnapshot.map( ( block ) => block.clientId ).filter( Boolean )
+	);
+
+	return expectedClientIds.filter(
+		( clientId ) =>
+			! beforeClientIds.has( clientId ) && afterClientIds.has( clientId )
+	);
+}
+
 function consumeE2EPatternInsertFailureMode( pattern ) {
 	if (
 		typeof window === 'undefined' ||
@@ -262,7 +338,8 @@ function consumeE2EPatternInsertFailureMode( pattern ) {
 
 	if (
 		failureMode !== 'insert_blocks_exception' &&
-		failureMode !== 'insert_blocks_noop'
+		failureMode !== 'insert_blocks_noop' &&
+		failureMode !== 'insert_blocks_wrong_target'
 	) {
 		return '';
 	}
@@ -667,7 +744,7 @@ export default function PatternRecommender() {
 		recordRecommendationOutcome,
 		resolvePatternRecommendationSignature,
 	} = useDispatch( STORE_NAME );
-	const { insertBlocks } = useDispatch( blockEditorStore );
+	const { insertBlocks, removeBlocks } = useDispatch( blockEditorStore );
 	const { createSuccessNotice, createErrorNotice } =
 		useDispatch( noticesStore );
 	const effectivePostType =
@@ -1166,6 +1243,7 @@ export default function PatternRecommender() {
 			}
 
 			let insertionVerified = false;
+			let insertedClientIds = [];
 			const e2eFailureMode =
 				consumeE2EPatternInsertFailureMode( pattern );
 
@@ -1177,22 +1255,41 @@ export default function PatternRecommender() {
 				const clonedBlocks = blocks.map( ( block ) =>
 					cloneBlock( block )
 				);
+				const beforeBlockEditor =
+					registry?.select?.( blockEditorStore );
 				const beforeInsertSnapshot = getBlockListSnapshot(
-					registry?.select?.( blockEditorStore ),
+					beforeBlockEditor,
 					inserterRootClientId
+				);
+				const beforeBlockPresence = getBlockPresenceSnapshot(
+					beforeBlockEditor,
+					clonedBlocks
 				);
 
 				if ( e2eFailureMode !== 'insert_blocks_noop' ) {
+					let dispatchInsertionIndex = insertionIndex;
+
+					if ( e2eFailureMode === 'insert_blocks_wrong_target' ) {
+						dispatchInsertionIndex =
+							insertionIndex === 0 ? Number.MAX_SAFE_INTEGER : 0;
+					}
+
 					await insertBlocks(
 						clonedBlocks,
-						insertionIndex,
+						dispatchInsertionIndex,
 						inserterRootClientId,
 						true
 					);
 
+					const afterBlockEditor =
+						registry?.select?.( blockEditorStore );
 					const afterInsertSnapshot = getBlockListSnapshot(
-						registry?.select?.( blockEditorStore ),
+						afterBlockEditor,
 						inserterRootClientId
+					);
+					const afterBlockPresence = getBlockPresenceSnapshot(
+						afterBlockEditor,
+						clonedBlocks
 					);
 
 					insertionVerified = didInsertBlocksAtTarget(
@@ -1201,6 +1298,15 @@ export default function PatternRecommender() {
 						clonedBlocks,
 						insertionIndex
 					);
+					if ( ! insertionVerified ) {
+						insertedClientIds = getInsertedBlockClientIds(
+							beforeBlockPresence,
+							afterBlockPresence,
+							beforeInsertSnapshot,
+							afterInsertSnapshot,
+							clonedBlocks
+						);
+					}
 				}
 			} catch {
 				recordPatternOutcome( 'insert_failed', {
@@ -1226,25 +1332,42 @@ export default function PatternRecommender() {
 			}
 
 			if ( ! insertionVerified ) {
+				const insertedOutsideTarget = insertedClientIds.length > 0;
+				if (
+					insertedOutsideTarget &&
+					typeof removeBlocks === 'function'
+				) {
+					removeBlocks( insertedClientIds, false );
+				}
+				const failureMessage = insertedOutsideTarget
+					? sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot insert pattern "%s" at the requested location. Gutenberg inserted it somewhere else, so Flavor Agent removed those blocks.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
+					  )
+					: sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot confirm pattern "%s" was inserted. Gutenberg did not report the inserted blocks at the target location.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
+					  );
+
 				recordPatternOutcome( 'insert_failed', {
 					pattern,
 					recommendation,
-					reason: 'insert_blocks_noop',
+					reason: insertedOutsideTarget
+						? 'insert_blocks_wrong_target'
+						: 'insert_blocks_noop',
 				} );
-				createErrorNotice(
-					sprintf(
-						/* translators: %s: block pattern title. */
-						__(
-							'Cannot confirm pattern "%s" was inserted. Gutenberg did not report the inserted blocks at the target location.',
-							'flavor-agent'
-						),
-						getPatternTitle( pattern )
-					),
-					{
-						type: 'snackbar',
-						id: 'inserter-notice',
-					}
-				);
+				createErrorNotice( failureMessage, {
+					type: 'snackbar',
+					id: 'inserter-notice',
+				} );
 				return;
 			}
 
@@ -1272,6 +1395,7 @@ export default function PatternRecommender() {
 			effectivePostType,
 			fetchPatternRecommendationsForCurrentTarget,
 			insertBlocks,
+			removeBlocks,
 			insertionIndex,
 			inserterRootClientId,
 			currentInsertionTargetSignature,

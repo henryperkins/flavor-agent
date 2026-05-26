@@ -170,12 +170,27 @@ Use it when you need to answer:
   "diagnostics": {
     "filteredCandidates": {
       "unreadableSyncedPatterns": 0
+    },
+    "pipelineTrace": {
+      "backendRetrieved": 5,
+      "visibleScopeDropped": 0,
+      "rehydrationDropped": 0,
+      "candidatePool": 4,
+      "diversityDropped": 0,
+      "llmReturned": 3,
+      "llmNameMismatchDropped": 0,
+      "llmMalformedDropped": 0,
+      "belowThresholdDropped": 1,
+      "returnedRecommendations": 2
+    },
+    "dropReasons": {
+      "below_threshold": 1
     }
   }
 }
 ```
 
-Normal responses include ranked recommendations plus review/apply signatures. Signature-only responses return the same top-level signature and docs-grounding fields with an empty recommendation list.
+Normal responses include ranked recommendations, aggregate-only pipeline diagnostics, and review/apply signatures. The final `score` and `ranking.blendedScore` are computed from the model score, deterministic backend score, and contextual scorer before thresholding. Signature-only responses return the same top-level signature and docs-grounding fields with an empty recommendation list and zeroed diagnostics.
 
 ### List-Allowed-Blocks Response Shape
 
@@ -809,6 +824,7 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 - Normal `recommend-block` responses include `resolvedContextSignature`. Pattern, template, template-part, and style responses include `reviewContextSignature`, `resolvedContextSignature`, and `docsGroundingFingerprint`, and navigation includes `reviewContextSignature` plus `docsGroundingFingerprint` as its server freshness fields.
 - Signature-only requests return only the current freshness field(s) and docs-grounding status after normalizing the current server context and prompt; they compute docs grounding from local cache state and skip model calls, foreground docs searches, async docs warming, Core roadmap warming, and runtime docs diagnostics.
 - `flavor-agent/recommend-patterns` also skips pattern retrieval and reranking in signature-only mode.
+- `flavor-agent/recommend-patterns` reports aggregate-only `diagnostics.pipelineTrace` and allow-listed `diagnostics.dropReasons` for retrieval, visible-scope, rehydration, ranker-shape, and blended-threshold drops. These diagnostics intentionally avoid raw pattern labels or payload content.
 - `flavor-agent/recommend-patterns` can return synced/user pattern recommendations by their `core/block/{id}` names when those names are present in the current `visiblePatternNames` set.
 - `flavor-agent/recommend-patterns` does not accept `editorStructure`; the current pattern ability contract ignores it
 - Template recommendation requests carry an editor-collected `editorStructure` with the live top-level block tree, zeroed empty-state stats when needed, current pattern-override summaries, and current viewport-visibility summaries; the server replaces that mutable slice atomically and derives insertion anchors from the live tree

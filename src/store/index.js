@@ -97,6 +97,26 @@ const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
 	.slice( 2 ) }`;
 const APPLY_RESOLVED_FRESHNESS_ABORT_KEY = '_applyResolvedFreshnessAbort';
 const APPLY_RESOLVED_FRESHNESS_TIMEOUT_MS = 15000;
+const PATTERN_PIPELINE_TRACE_KEYS = Object.freeze( [
+	'backendRetrieved',
+	'visibleScopeDropped',
+	'rehydrationDropped',
+	'candidatePool',
+	'diversityDropped',
+	'llmReturned',
+	'llmNameMismatchDropped',
+	'llmMalformedDropped',
+	'belowThresholdDropped',
+	'returnedRecommendations',
+] );
+const PATTERN_PIPELINE_DROP_REASON_KEYS = Object.freeze( [
+	'visible_scope',
+	'synced_rehydration_failed',
+	'rehydration_failed',
+	'llm_name_mismatch',
+	'llm_malformed_recommendation',
+	'below_threshold',
+] );
 const DEFAULT_BLOCK_REQUEST_STATE = {
 	status: 'idle',
 	error: null,
@@ -275,6 +295,30 @@ function normalizePatternDiagnostics( diagnostics = null ) {
 	const unreadableSyncedPatterns = Number(
 		diagnostics?.filteredCandidates?.unreadableSyncedPatterns ?? 0
 	);
+	const pipelineTrace = Object.fromEntries(
+		PATTERN_PIPELINE_TRACE_KEYS.map( ( key ) => {
+			const count = Number( diagnostics?.pipelineTrace?.[ key ] ?? 0 );
+
+			return [
+				key,
+				Number.isFinite( count )
+					? Math.max( 0, Math.trunc( count ) )
+					: 0,
+			];
+		} )
+	);
+	const dropReasons = Object.fromEntries(
+		PATTERN_PIPELINE_DROP_REASON_KEYS.map( ( key ) => {
+			const count = Number( diagnostics?.dropReasons?.[ key ] ?? 0 );
+
+			return [
+				key,
+				Number.isFinite( count )
+					? Math.max( 0, Math.trunc( count ) )
+					: 0,
+			];
+		} ).filter( ( [ , count ] ) => count > 0 )
+	);
 
 	return {
 		filteredCandidates: {
@@ -284,6 +328,8 @@ function normalizePatternDiagnostics( diagnostics = null ) {
 				? Math.max( 0, unreadableSyncedPatterns )
 				: 0,
 		},
+		pipelineTrace,
+		...( Object.keys( dropReasons ).length ? { dropReasons } : {} ),
 	};
 }
 

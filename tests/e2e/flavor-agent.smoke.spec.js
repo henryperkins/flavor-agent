@@ -3028,6 +3028,17 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		page,
 		`Cannot confirm pattern "${ noopPatternTitle }" was inserted. Gutenberg did not report the inserted blocks at the target location.`
 	);
+
+	await forceNextPatternInsertFailure(
+		page,
+		activeRequest.mockedRecommendationNames.at( -1 ),
+		'insert_blocks_wrong_target'
+	);
+	await noopItem.getByRole( 'button', { name: /^Insert\b/ } ).click();
+	await expectSnackbarMessage(
+		page,
+		`Cannot insert pattern "${ noopPatternTitle }" at the requested location. Gutenberg inserted it somewhere else, so Flavor Agent removed those blocks.`
+	);
 } );
 
 test( '@wp70-site-editor global styles surface previews, applies, and undoes executable recommendations', async ( {

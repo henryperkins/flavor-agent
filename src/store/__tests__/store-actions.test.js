@@ -1194,6 +1194,15 @@ describe( 'store action thunks', () => {
 					filteredCandidates: {
 						unreadableSyncedPatterns: 3,
 					},
+					pipelineTrace: {
+						backendRetrieved: 5,
+						llmMalformedDropped: 1,
+						returnedRecommendations: 2,
+					},
+					dropReasons: {
+						llm_malformed_recommendation: 1,
+						rawPatternTitle: 'Private launch hero',
+					},
 				},
 				'target-a',
 				null,
@@ -1204,6 +1213,21 @@ describe( 'store action thunks', () => {
 		expect( selectors.getPatternDiagnostics( state ) ).toEqual( {
 			filteredCandidates: {
 				unreadableSyncedPatterns: 3,
+			},
+			pipelineTrace: {
+				backendRetrieved: 5,
+				visibleScopeDropped: 0,
+				rehydrationDropped: 0,
+				candidatePool: 0,
+				diversityDropped: 0,
+				llmReturned: 0,
+				llmNameMismatchDropped: 0,
+				llmMalformedDropped: 1,
+				belowThresholdDropped: 0,
+				returnedRecommendations: 2,
+			},
+			dropReasons: {
+				llm_malformed_recommendation: 1,
 			},
 		} );
 		expect( selectors.getPatternInsertionTargetSignature( state ) ).toBe(
