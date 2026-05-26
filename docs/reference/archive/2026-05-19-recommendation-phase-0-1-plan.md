@@ -82,7 +82,7 @@ The parser fixture matrix must include raw payloads that make those ranked metri
 - Create: `tests/phpunit/fixtures/recommendation-evaluation-fixtures.php`
 - Create: `tests/phpunit/fixtures/recommendation-evaluation-parser-fixtures.php`
 
-- [ ] **Step 1: Add the fixture file**
+- [x] **Step 1: Add the fixture file**
 
 Create the fixture directory first because `tests/phpunit/fixtures/` does not exist in the current checkout:
 
@@ -213,7 +213,7 @@ return [
 ];
 ```
 
-- [ ] **Step 2: Verify fixture loads**
+- [x] **Step 2: Verify fixture loads**
 
 Run:
 
@@ -223,7 +223,7 @@ php -r '$fixtures = require "tests/phpunit/fixtures/recommendation-evaluation-fi
 
 Expected: prints `5`.
 
-- [ ] **Step 3: Add parser-backed fixture file**
+- [x] **Step 3: Add parser-backed fixture file**
 
 Create `tests/phpunit/fixtures/recommendation-evaluation-parser-fixtures.php` with raw parser payloads. This fixture is deliberately separate from the static fixture file so the static Phase 0 baseline remains stable while parser output is still covered before Phase 1 changes ranking.
 
@@ -278,7 +278,7 @@ The parser fixture must not hard-code normalized suggestions. The test added in 
 - Create: `tests/phpunit/RecommendationEvaluationTest.php`
 - Create: `tests/phpunit/fixtures/recommendation-evaluation-baseline.json`
 
-- [ ] **Step 1: Write the failing PHPUnit test**
+- [x] **Step 1: Write the failing PHPUnit test**
 
 Create `tests/phpunit/RecommendationEvaluationTest.php`:
 
@@ -561,7 +561,7 @@ final class RecommendationEvaluationTest extends TestCase {
 
 The test must normalize expected metric rate values before strict comparison. JSON whole-number rates like `1` decode as ints while `evaluate()` returns floats like `1.0`; without `normalize_expected_metrics()`, the baseline can fail because of PHP type identity rather than metric drift. Ranked parser probes must set `rankedMetricProbe` and `expectedTopRankedMetrics`; otherwise Task 7 can pass while Phase 1 only preserves all-suggestion counts.
 
-- [ ] **Step 2: Run the test and verify it fails because the baseline file is missing**
+- [x] **Step 2: Run the test and verify it fails because the baseline file is missing**
 
 Run:
 
@@ -571,7 +571,7 @@ composer run test:php -- --filter RecommendationEvaluationTest
 
 Expected: FAIL because `recommendation-evaluation-baseline.json` does not exist or cannot be decoded. The parser-backed test should already execute the live parser fixtures and fail independently if any parser fixture cannot be materialized or any ranked probe lacks `expectedTopRankedMetrics`.
 
-- [ ] **Step 3: Add the baseline file**
+- [x] **Step 3: Add the baseline file**
 
 Create `tests/phpunit/fixtures/recommendation-evaluation-baseline.json`:
 
@@ -586,7 +586,7 @@ Create `tests/phpunit/fixtures/recommendation-evaluation-baseline.json`:
 }
 ```
 
-- [ ] **Step 4: Run the Phase 0 test**
+- [x] **Step 4: Run the Phase 0 test**
 
 Run:
 
@@ -596,7 +596,7 @@ composer run test:php -- --filter RecommendationEvaluationTest
 
 Expected: PASS for the static baseline assertion, parser-backed all-suggestion assertions, and ranked parser top-suggestion assertions.
 
-- [ ] **Step 5: Commit checkpoint if the operator wants commits**
+- [x] **Step 5: Commit checkpoint if the operator wants commits**
 
 ```bash
 git add tests/phpunit/fixtures/recommendation-evaluation-fixtures.php tests/phpunit/fixtures/recommendation-evaluation-parser-fixtures.php tests/phpunit/fixtures/recommendation-evaluation-baseline.json tests/phpunit/RecommendationEvaluationTest.php
@@ -609,7 +609,7 @@ git commit -m "Add recommendation evaluation baseline harness"
 - Modify: `inc/Support/RankingContract.php`
 - Modify: `tests/phpunit/RankingContractTest.php`
 
-- [ ] **Step 1: Add failing tests for blended scores**
+- [x] **Step 1: Add failing tests for blended scores**
 
 Append these tests to `tests/phpunit/RankingContractTest.php`:
 
@@ -651,7 +651,7 @@ public function test_blend_score_clamps_components(): void {
 }
 ```
 
-- [ ] **Step 2: Run tests and verify they fail**
+- [x] **Step 2: Run tests and verify they fail**
 
 Run:
 
@@ -661,7 +661,7 @@ composer run test:php -- --filter RankingContractTest
 
 Expected: FAIL with `Call to undefined method FlavorAgent\Support\RankingContract::blend_score()`.
 
-- [ ] **Step 3: Implement `RankingContract::blend_score()`**
+- [x] **Step 3: Implement `RankingContract::blend_score()`**
 
 Add this method to `inc/Support/RankingContract.php` after `derive_score()`:
 
@@ -703,7 +703,7 @@ public static function blend_score( array $components, array $weights = [] ): fl
 }
 ```
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run:
 
@@ -733,7 +733,7 @@ Expected: PASS.
 - Modify: `tests/phpunit/TemplatePartPromptTest.php`
 - Modify: `tests/phpunit/NavigationAbilitiesTest.php`
 
-- [ ] **Step 1: Add failing schema and normalization tests**
+- [x] **Step 1: Add failing schema and normalization tests**
 
 Add this test to `tests/phpunit/ResponseSchemaTest.php`:
 
@@ -856,7 +856,7 @@ $this->assertStringContainsString( 'use null for unknown ranking object values',
 
 Use an equivalent assertion only if the implemented prompt text intentionally uses a clearer sentence. The tests must fail against the current prompts because the current JSON examples mention `confidence` but not `ranking`.
 
-- [ ] **Step 2: Run schema tests and verify failure**
+- [x] **Step 2: Run schema tests and verify failure**
 
 Run:
 
@@ -866,7 +866,7 @@ composer run test:php -- --filter 'ResponseSchemaTest|RankingContractTest::test_
 
 Expected: FAIL because `ranking` is absent from strict schemas, prompt examples, and prompt rules, because `RankingContract::normalize()` currently drops the optional structured ranking context fields that the new schema accepts, because ability output schema does not yet expose those preserved context fields, and because model-provided `sourceSignals` currently replace plugin deterministic source signals instead of merging with them.
 
-- [ ] **Step 3: Implement nullable ranking schema, prompt shape, and ranking context preservation**
+- [x] **Step 3: Implement nullable ranking schema, prompt shape, and ranking context preservation**
 
 In `inc/LLM/ResponseSchema.php`, add `ranking` to each strict item schema:
 
@@ -946,7 +946,7 @@ In `inc/Abilities/Registration.php`, update `ranking_contract_schema()` so the p
 
 Keep the schema open for existing surface-specific ranking metadata, but do not rely on `additionalProperties => true` as the only documentation for these two fields. They are now named ranking metadata fields emitted by `RankingContract::normalize()` and accepted by strict LLM ranking objects, so the ability schema should advertise them explicitly.
 
-- [ ] **Step 4: Run schema and prompt-shape tests**
+- [x] **Step 4: Run schema and prompt-shape tests**
 
 Run:
 
@@ -962,7 +962,7 @@ Expected: PASS.
 - Modify: `inc/LLM/Prompt.php`
 - Modify: `tests/phpunit/PromptRulesTest.php`
 
-- [ ] **Step 1: Replace first-score-wins tests with blended-score tests**
+- [x] **Step 1: Replace first-score-wins tests with blended-score tests**
 
 Update `test_parse_response_prefers_explicit_score_over_confidence_when_ranking_blocks()` to assert that deterministic quality can outrank a higher model score:
 
@@ -1046,7 +1046,7 @@ public function test_parse_response_merges_model_source_signals_with_plugin_rank
 }
 ```
 
-- [ ] **Step 2: Run block parser tests and verify failure**
+- [x] **Step 2: Run block parser tests and verify failure**
 
 Run:
 
@@ -1056,7 +1056,7 @@ composer run test:php -- --filter 'PromptRulesTest::test_parse_response_decodes_
 
 Expected: FAIL because the current parser still uses first numeric score/confidence.
 
-- [ ] **Step 3: Update block parser scoring**
+- [x] **Step 3: Update block parser scoring**
 
 In `inc/LLM/Prompt.php`, replace the current `$computed_score` block with this pattern:
 
@@ -1115,7 +1115,7 @@ $normalized['ranking'] = RankingContract::normalize(
 );
 ```
 
-- [ ] **Step 4: Run focused block parser tests**
+- [x] **Step 4: Run focused block parser tests**
 
 Run:
 
@@ -1137,7 +1137,7 @@ Expected: PASS.
 - Modify: `tests/phpunit/TemplatePartPromptTest.php`
 - Modify: `tests/phpunit/NavigationAbilitiesTest.php`
 
-- [ ] **Step 1: Update parser tests from first-score-wins to blended-score behavior**
+- [x] **Step 1: Update parser tests from first-score-wins to blended-score behavior**
 
 For each existing `test_parse_response_prefers_explicit_score_over_confidence_for_sorting()` test, rename it to:
 
@@ -1171,7 +1171,7 @@ $this->assertSame( 0.764, $result['suggestions'][0]['ranking']['score'] );
 
 For each parser family, add or update at least one assertion proving `ranking.sourceSignals` is merged with plugin deterministic signals instead of replacing them. The exact expected plugin signals differ by surface, but every assertion must prove the normalized ranking still contains the relevant surface signal (`style_surface`, `template_surface`, `template_part_surface`, or `navigation_surface`) plus the model-provided signal.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run:
 
@@ -1181,7 +1181,7 @@ composer run test:php -- --filter 'StylePromptTest::test_parse_response_blends_m
 
 Expected: FAIL before parser changes.
 
-- [ ] **Step 3: Apply the same blend pattern to all four parsers**
+- [x] **Step 3: Apply the same blend pattern to all four parsers**
 
 In each parser:
 
@@ -1220,7 +1220,7 @@ unset( $ranking_metadata['score'], $ranking_metadata['confidence'] );
 
 Reuse the existing parser-specific signals as the base deterministic component. Add only the narrow metric-backed deterministic signals needed by the ranked parser fixtures when the live parser already has enough sanitized data or context to compute them, such as no-op avoidance from current state, preset-backed value preference from validated operations, or invalid/downgraded operation penalties from existing validator output. Do not add design-semantics collection, guideline fingerprints, pattern component scoring, or new browser/UI state in this phase.
 
-- [ ] **Step 4: Run the focused parser tests**
+- [x] **Step 4: Run the focused parser tests**
 
 Run:
 
@@ -1235,7 +1235,7 @@ Expected: PASS.
 **Files:**
 - Modify: `tests/phpunit/RecommendationEvaluationTest.php` only if the parser-backed metric assertion added in Task 2 needs to be adjusted for legitimate parser-output changes.
 
-- [ ] **Step 1: Run Phase 0 baseline again**
+- [x] **Step 1: Run Phase 0 baseline again**
 
 Run:
 
@@ -1245,7 +1245,7 @@ composer run test:php -- --filter RecommendationEvaluationTest
 
 Expected: PASS with unchanged static baseline fixture metrics, stable parser all-suggestion metric assertions, and updated ranked parser top-suggestion assertions that show the expected Phase 1 movement.
 
-- [ ] **Step 2: Confirm parser-backed metric coverage still uses live parser output**
+- [x] **Step 2: Confirm parser-backed metric coverage still uses live parser output**
 
 The parser-backed fixtures from Task 2 are mandatory and should already call the relevant live parser before feeding parsed suggestions into `evaluate()`. Do not replace them with hard-coded normalized suggestions while updating Phase 1 ranking behavior. Keep provider calls mocked out.
 
@@ -1289,7 +1289,7 @@ Then compare the Phase 0 and Phase 1 ranked-parser baselines in the implementati
 **Files:**
 - No new files unless verification reveals doc drift.
 
-- [ ] **Step 1: Run focused PHP tests**
+- [x] **Step 1: Run focused PHP tests**
 
 Run:
 
@@ -1299,7 +1299,7 @@ composer run test:php -- --filter 'RecommendationEvaluationTest|ResponseSchemaTe
 
 Expected: PASS.
 
-- [ ] **Step 2: Run docs check**
+- [x] **Step 2: Run docs check**
 
 Run:
 
@@ -1309,7 +1309,7 @@ npm run check:docs
 
 Expected: PASS.
 
-- [ ] **Step 3: Run whitespace check**
+- [x] **Step 3: Run whitespace check**
 
 Run:
 
@@ -1319,7 +1319,7 @@ git diff --check
 
 Expected: no output and exit 0.
 
-- [ ] **Step 4: Run the required cross-surface non-browser aggregate**
+- [x] **Step 4: Run the required cross-surface non-browser aggregate**
 
 This plan changes shared recommendation contracts and parser behavior across more than one surface, so the cross-surface gate is required before the work is considered complete:
 
@@ -1329,7 +1329,7 @@ node scripts/verify.js --skip-e2e
 
 Expected: `VERIFY_RESULT` reports `status: "pass"` and `output/verify/summary.json` records passing `build`, `lint-js`, `lint-plugin`, `unit`, `lint-php`, and `test-php` steps. If the run is `incomplete` because `wp`, `bash`, or `WP_PLUGIN_CHECK_PATH` is unavailable, record that as an environment blocker; do not treat it as a pass. If it fails on unrelated dirty settings work, record the blocker without widening this plan.
 
-- [ ] **Step 5: Record browser evidence or an explicit waiver**
+- [x] **Step 5: Record browser evidence or an explicit waiver**
 
 This Phase 0/1 slice is intended to be PHP/schema/parser-only and should not edit `src/`, `build/`, or wp-admin/editor UI code. If that remains true, record an explicit browser waiver in the implementation notes: "No Playwright run: no browser bundle, UI, or editor interaction changed; covered by parser/schema/PHP gates." If implementation expands into UI or source JS, run the matching harness instead of waiving:
 
@@ -1342,21 +1342,21 @@ Expected: either the waiver is recorded with the no-browser-change rationale, or
 
 ## Self-Review Checklist
 
-- [ ] Phase 0 baseline exists before Phase 1 ranking changes.
-- [ ] Phase 0 fixture counts match the recorded metric math, including 4 accepted operations, 2 rejected operations, and suggestion-level noise accounting.
-- [ ] `tests/phpunit/fixtures/` is created before writing Phase 0 fixture files.
-- [ ] Phase 0 parser-backed fixtures call live parsers and feed parsed suggestions through the same `evaluate()` function before Phase 1 parser changes start.
-- [ ] Ranked parser probes exist for no-op, preset adherence, and invalid/downgraded operation behavior, with `expectedTopRankedMetrics` recorded before Phase 1 ranking changes.
-- [ ] Task 7 records the Phase 0 versus Phase 1 top-ranked parser metric movement instead of treating unchanged all-suggestion metrics as sufficient ranking evidence.
-- [ ] No provider calls are introduced.
-- [ ] `RankingContract::normalize()` does not accidentally overwrite blended scores with model-provided `ranking.score` or `confidence`.
-- [ ] `RankingContract::normalize()` merges model `ranking.sourceSignals` after deterministic plugin/default signals, so provider metadata cannot replace surface/actionability diagnostics.
-- [ ] `RankingContract::normalize()` preserves `designPrinciple` and `risk` when strict schemas accept those ranking fields.
-- [ ] Ability output schemas explicitly expose `ranking.designPrinciple` and `ranking.risk`; they are not left as undocumented open-object properties.
-- [ ] Strict LLM schemas remain strict: no broad `additionalProperties`, and ranking object schemas require `score`, `reason`, `sourceSignals`, `designPrinciple`, and `risk` with nullable values.
-- [ ] Prompt JSON examples and rules for block/style/template/template-part/navigation include required nullable `ranking`, and any ranking object guidance tells providers to include all strict ranking keys with `null` for unknown values.
-- [ ] Existing deterministic `derive_score()` signals are reused as the base for Phase 1, with only narrow metric-backed validation/no-op/preset signals added where the live parser already has enough data.
-- [ ] Parser tests cover all five surfaces.
-- [ ] Pattern recommendations remain browse/rank-only and untouched by this plan.
-- [ ] `node scripts/verify.js --skip-e2e` passes or records an explicit environment/unrelated-work blocker in `output/verify/summary.json`.
-- [ ] Browser evidence is either provided for touched UI surfaces or explicitly waived because this phase remained PHP/schema/parser-only.
+- [x] Phase 0 baseline exists before Phase 1 ranking changes.
+- [x] Phase 0 fixture counts match the recorded metric math, including 4 accepted operations, 2 rejected operations, and suggestion-level noise accounting.
+- [x] `tests/phpunit/fixtures/` is created before writing Phase 0 fixture files.
+- [x] Phase 0 parser-backed fixtures call live parsers and feed parsed suggestions through the same `evaluate()` function before Phase 1 parser changes start.
+- [x] Ranked parser probes exist for no-op, preset adherence, and invalid/downgraded operation behavior, with `expectedTopRankedMetrics` recorded before Phase 1 ranking changes.
+- [x] Task 7 records the Phase 0 versus Phase 1 top-ranked parser metric movement instead of treating unchanged all-suggestion metrics as sufficient ranking evidence.
+- [x] No provider calls are introduced.
+- [x] `RankingContract::normalize()` does not accidentally overwrite blended scores with model-provided `ranking.score` or `confidence`.
+- [x] `RankingContract::normalize()` merges model `ranking.sourceSignals` after deterministic plugin/default signals, so provider metadata cannot replace surface/actionability diagnostics.
+- [x] `RankingContract::normalize()` preserves `designPrinciple` and `risk` when strict schemas accept those ranking fields.
+- [x] Ability output schemas explicitly expose `ranking.designPrinciple` and `ranking.risk`; they are not left as undocumented open-object properties.
+- [x] Strict LLM schemas remain strict: no broad `additionalProperties`, and ranking object schemas require `score`, `reason`, `sourceSignals`, `designPrinciple`, and `risk` with nullable values.
+- [x] Prompt JSON examples and rules for block/style/template/template-part/navigation include required nullable `ranking`, and any ranking object guidance tells providers to include all strict ranking keys with `null` for unknown values.
+- [x] Existing deterministic `derive_score()` signals are reused as the base for Phase 1, with only narrow metric-backed validation/no-op/preset signals added where the live parser already has enough data.
+- [x] Parser tests cover all five surfaces.
+- [x] Pattern recommendations remain browse/rank-only and untouched by this plan.
+- [x] `node scripts/verify.js --skip-e2e` passes or records an explicit environment/unrelated-work blocker in `output/verify/summary.json`.
+- [x] Browser evidence is either provided for touched UI surfaces or explicitly waived because this phase remained PHP/schema/parser-only.

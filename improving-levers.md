@@ -31,7 +31,7 @@ The repo already has useful rails:
 - `inc/Abilities/PatternAbilities.php` already filters visible pattern scope, checks backend readiness, searches Qdrant or Cloudflare AI Search, rehydrates readable synced patterns, dedupes candidates, applies small ranking hints, diversifies candidates, and asks an LLM reranker to score the final set.
 - `inc/Support/RankingContract.php` already normalizes recommendation ranking metadata to a consistent shape.
 - Ability output schemas in `inc/Abilities/Registration.php` expose `ranking` metadata to external consumers.
-- The current working tree already includes the Phase 0/1 slice in progress: `tests/phpunit/RecommendationEvaluationTest.php` plus `tests/phpunit/fixtures/recommendation-evaluation-*` provide the fixture-backed metrics stub, strict LLM schemas in `inc/LLM/ResponseSchema.php` accept nullable `ranking` objects, prompts ask providers for that nullable field, and block/style/template/template-part/navigation parsers blend model and deterministic scores through `RankingContract::blend_score()`.
+- Phases 0, 1, and 2 plus Contextual Ranking V1 are shipped: `tests/phpunit/RecommendationEvaluationTest.php` plus `tests/phpunit/fixtures/recommendation-evaluation-*` provide the fixture-backed metrics stub, strict LLM schemas in `inc/LLM/ResponseSchema.php` accept nullable `ranking` objects, `inc/Support/DesignSemantics.php` normalizes shared semantic context for block/template/template-part prompts, block/style/template/template-part/navigation parsers blend model, deterministic, and `RecommendationContextScorer` context scores through `RankingContract::blend_score()`, and pattern recommendations emit `contextual_ranking_v1` source-signals via plugin-generated defaults.
 - `inc/Support/DocsGuidanceResult.php` fingerprints docs guidance with policy, status, coverage, URLs, source types, content hashes, retrieved timestamps, published dates, and freshness labels.
 - `inc/Abilities/RecommendationAbilityExecution.php` injects formatted site guidelines into the recommendation system instruction.
 
@@ -485,14 +485,14 @@ Add:
 
 ## Suggested Implementation Order
 
-Status note for the May 19, 2026 working tree: Phase 0/1 work is already present in uncommitted source and test files. Keep the Phase 0 and Phase 1 checklists below as the contract and verification gates for that slice, not as evidence that the tree starts from zero.
+Status note (2026-05-26): Phases 0, 1, and 2 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed a slice of Phase 3 via validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phases 3–7 remain unshipped.
 
 ### Phase 0: Measurement Stub
 
-- [ ] Add fixture payloads for common block, style, template, and pattern contexts.
-- [ ] Add deterministic metric output for `invalidOperationRate`, `presetAdherenceRate`, `noOpRate`, and `noiseRate`.
-- [ ] Keep provider calls mocked or fixture-backed.
-- [ ] Record baseline output before changing ranking weights or prompt sections.
+- [x] Add fixture payloads for common block, style, template, and pattern contexts.
+- [x] Add deterministic metric output for `invalidOperationRate`, `presetAdherenceRate`, `noOpRate`, and `noiseRate`.
+- [x] Keep provider calls mocked or fixture-backed.
+- [x] Record baseline output before changing ranking weights or prompt sections.
 
 **Verification:**
 
@@ -505,11 +505,11 @@ git diff --check
 
 ### Phase 1: Ranking And Schema Hardening
 
-- [ ] Add optional `ranking` objects to strict LLM schemas.
-- [ ] Add composite ranking helpers to `RankingContract`, reusing `derive_score()` as the deterministic component seam.
-- [ ] Update block/style/template/template-part/navigation parsers to compute weighted scores.
-- [ ] Add parser tests for high-confidence vague suggestions versus lower-confidence executable suggestions.
-- [ ] Re-run Phase 0 metrics and record the expected movement: lower `noOpRate`, no higher `invalidOperationRate`, and flat-or-better `presetAdherenceRate`.
+- [x] Add optional `ranking` objects to strict LLM schemas.
+- [x] Add composite ranking helpers to `RankingContract`, reusing `derive_score()` as the deterministic component seam.
+- [x] Update block/style/template/template-part/navigation parsers to compute weighted scores.
+- [x] Add parser tests for high-confidence vague suggestions versus lower-confidence executable suggestions.
+- [x] Re-run Phase 0 metrics and record the expected movement: lower `noOpRate`, no higher `invalidOperationRate`, and flat-or-better `presetAdherenceRate`.
 
 **Verification:**
 
@@ -521,14 +521,14 @@ git diff --check
 
 ### Phase 2: Design Semantics Summary
 
-- [ ] Derive block-level `designSemantics` from collector visual hints, parent context, sibling summaries, theme tokens, and operation constraints.
-- [ ] Normalize/sanitize server-side design semantics.
-- [ ] Add prompt sections for block, template, and template-part surfaces.
-- [ ] Reuse existing style `designSemantics` instead of creating a parallel style-only schema.
-- [ ] Include the normalized semantic projection in resolved/review freshness signatures.
-- [ ] Update the local context-signature builders for block, template, template-part, Global Styles, and Style Book so semantic changes can stale stored results before server apply/review checks run.
-- [ ] Add PromptBudget assertions for each new prompt section.
-- [ ] Re-run Phase 0 metrics and record the expected movement: no higher `noiseRate` and no higher `invalidOperationRate`.
+- [x] Derive block-level `designSemantics` from collector visual hints, parent context, sibling summaries, theme tokens, and operation constraints.
+- [x] Normalize/sanitize server-side design semantics.
+- [x] Add prompt sections for block, template, and template-part surfaces.
+- [x] Reuse existing style `designSemantics` instead of creating a parallel style-only schema.
+- [x] Include the normalized semantic projection in resolved/review freshness signatures.
+- [x] Update the local context-signature builders for block, template, template-part, Global Styles, and Style Book so semantic changes can stale stored results before server apply/review checks run.
+- [x] Add PromptBudget assertions for each new prompt section.
+- [x] Re-run Phase 0 metrics and record the expected movement: no higher `noiseRate` and no higher `invalidOperationRate`.
 
 **Verification:**
 

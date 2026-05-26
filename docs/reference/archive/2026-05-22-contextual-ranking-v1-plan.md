@@ -277,7 +277,7 @@ Use these slices if this plan is implemented across commits or PRs:
 - No production file changes.
 - Modify: `tests/phpunit/RecommendationContextScorerTest.php` in Task 1 for fallback coverage.
 
-- [ ] **Step 1: Confirm context field paths by surface**
+- [x] **Step 1: Confirm context field paths by surface**
 
 Before writing scorer implementation code, inspect the current parser and ability contexts and use this fallback map:
 
@@ -297,7 +297,7 @@ Before writing scorer implementation code, inspect the current parser and abilit
 | template-part area | structural identity template area when present | N/A | allowed area / template part summaries | `$context['area']`, `$context['slug']`, `$context['designSemantics']['templatePart']` | overlay template part context when present | Missing area stays neutral. |
 | navigation target/scope | N/A | N/A | N/A | N/A | `$context['location']`, `$context['overlayContext']`, `$context['targetInventory']`, `$context['menuItems']` | Missing target inventory means structural target support is unknown, not unsupported. |
 
-- [ ] **Step 2: Define V1 fallback rules**
+- [x] **Step 2: Define V1 fallback rules**
 
 The scorer must use these fallback rules:
 
@@ -307,7 +307,7 @@ The scorer must use these fallback rules:
 - No-op detection is conservative: mark `possible_no_op` only when proposed values exactly match current values after shallow scalar normalization. Do not treat preset-to-raw-color equivalence, missing defaults, or unordered complex arrays as no-ops in V1.
 - Unknown surfaces must still return a bounded score, bounded evidence, and bounded penalties.
 
-- [ ] **Step 3: Add fallback coverage to Task 1 tests**
+- [x] **Step 3: Add fallback coverage to Task 1 tests**
 
 Task 1 must include at least these extra scorer tests:
 
@@ -330,7 +330,7 @@ Task 1 must include at least these extra scorer tests:
 
 - Create: `tests/phpunit/RecommendationContextScorerTest.php`
 
-- [ ] **Step 1: Write failing scorer tests**
+- [x] **Step 1: Write failing scorer tests**
 
 Create `tests/phpunit/RecommendationContextScorerTest.php`:
 
@@ -993,7 +993,7 @@ final class RecommendationContextScorerTest extends TestCase {
 }
 ```
 
-- [ ] **Step 2: Run the failing scorer test**
+- [x] **Step 2: Run the failing scorer test**
 
 Run:
 
@@ -1009,11 +1009,11 @@ Expected: FAIL because `FlavorAgent\Support\RecommendationContextScorer` does no
 
 - Create: `inc/Support/RecommendationContextScorer.php`
 
-- [ ] **Step 1: Confirm autoload/bootstrap path**
+- [x] **Step 1: Confirm autoload/bootstrap path**
 
 Confirm `FlavorAgent\Support\RecommendationContextScorer` is autoloaded under the existing PSR-4 support namespace. In this repo, `composer.json` maps `FlavorAgent\` to `inc/`, so `inc/Support/RecommendationContextScorer.php` should autoload like `RankingContract`. If a future branch adds manual plugin bootstrap requires, register the file in the same bootstrap path as `RankingContract` before running scorer tests.
 
-- [ ] **Step 2: Add the scorer class**
+- [x] **Step 2: Add the scorer class**
 
 Create `inc/Support/RecommendationContextScorer.php` with deterministic scoring. The implementation must:
 
@@ -1051,7 +1051,7 @@ Create `inc/Support/RecommendationContextScorer.php` with deterministic scoring.
 - Do not mark no-ops for partial matches where at least one proposed shallow scalar changes, preset-to-raw-color equivalence, numeric-string versus numeric equivalence inside complex structures, unordered array equivalence, missing current values, or missing default values in V1. Those belong in later design diagnosis/ranking phases.
 - Compute final score with `min( 0.35, $penalty_sum )`; individual penalties may sum above `0.35` but the aggregate subtraction must not.
 
-- [ ] **Step 3: Run the scorer test**
+- [x] **Step 3: Run the scorer test**
 
 Run:
 
@@ -1071,7 +1071,7 @@ Expected: PASS.
 - Modify: `tests/phpunit/RegistrationTest.php`
 - Modify: `tests/phpunit/PatternAbilitiesTest.php`
 
-- [ ] **Step 1: Add ranking metadata tests**
+- [x] **Step 1: Add ranking metadata tests**
 
 In `tests/phpunit/RankingContractTest.php`, add:
 
@@ -1336,7 +1336,7 @@ private function assert_contextual_ranking_schema_fields( array $ranking, string
 }
 ```
 
-- [ ] **Step 2: Run the failing metadata tests**
+- [x] **Step 2: Run the failing metadata tests**
 
 Run:
 
@@ -1346,7 +1346,7 @@ composer run test:php -- --filter 'RankingContractTest|RegistrationTest|PatternA
 
 Expected: FAIL because the new fields are not normalized or declared yet, and because ranker-supplied contextual component metadata is not yet blocked from pattern output.
 
-- [ ] **Step 3: Preserve component metadata in `RankingContract::normalize()`**
+- [x] **Step 3: Preserve component metadata in `RankingContract::normalize()`**
 
 Update `RankingContract::normalize()` to:
 
@@ -1385,7 +1385,7 @@ The helper must sanitize keys with `sanitize_key()`, optionally restrict keys to
 
 Do not change `RankingContract::blend_score()` weights in this phase.
 
-- [ ] **Step 4: Extend public output schema**
+- [x] **Step 4: Extend public output schema**
 
 Update `Registration::ranking_contract_schema()` with:
 
@@ -1419,7 +1419,7 @@ Update the schema description to say the additional component fields are plugin-
 
 Because `flavor-agent/recommend-patterns` uses the shared helper for its existing `ranking` field, leave the pattern output schema open to the same optional component fields but do not change `PatternAbilities::recommend_patterns()` to compute or emit `contextual-ranking-v1` metadata in this phase.
 
-- [ ] **Step 5: Run metadata tests**
+- [x] **Step 5: Run metadata tests**
 
 Run:
 
@@ -1429,7 +1429,7 @@ composer run test:php -- --filter 'RankingContractTest|RegistrationTest|PatternA
 
 Expected: PASS. `PatternAbilitiesTest` must prove a ranker-supplied `ranking.contextScore`, `ranking.contextEvidence`, `ranking.contextPenalties`, or `rankingVersion` does not survive in pattern recommendation output.
 
-- [ ] **Step 6: Prove dedicated pattern recommendations emit plugin-generated contextual ranking**
+- [x] **Step 6: Prove dedicated pattern recommendations emit plugin-generated contextual ranking**
 
 Run:
 
@@ -1455,7 +1455,7 @@ Expected: PASS. `inc/Abilities/PatternAbilities.php` should import and call `Rec
 - Modify: `tests/phpunit/TemplateAbilitiesTest.php`
 - Modify: `tests/phpunit/NavigationAbilitiesTest.php`
 
-- [ ] **Step 1: Add parser method signatures**
+- [x] **Step 1: Add parser method signatures**
 
 Change parser signatures to accept optional ranking context:
 
@@ -1465,7 +1465,7 @@ public static function parse_response( string $raw, array $context = [], array $
 
 Use the same shape for style, template, template-part, and navigation. Existing tests that pass only `$raw` or `$raw, $context` must continue to work.
 
-- [ ] **Step 2: Use context score in each parser**
+- [x] **Step 2: Use context score in each parser**
 
 In each parser, replace:
 
@@ -1508,7 +1508,7 @@ Set `$surface` to:
 - `template-part`
 - `navigation`
 
-- [ ] **Step 3: Emit component metadata**
+- [x] **Step 3: Emit component metadata**
 
 In each parser's `RankingContract::normalize()` defaults, add:
 
@@ -1534,7 +1534,7 @@ foreach ( RankingContract::PLUGIN_COMPONENT_KEYS as $plugin_owned_key ) {
 
 When adding `contextual_ranking_v1` to `sourceSignals`, normalize through `RankingContract::normalize()` or `array_values( array_unique( ... ) )` so rerank and parse paths do not duplicate the signal. Add at least one parser-family regression proving a model-supplied `contextScore`, `contextEvidence`, or `rankingVersion` does not override the plugin-generated values and that `sourceSignals` contains `contextual_ranking_v1` at most once.
 
-- [ ] **Step 4: Pass prompt and docs summaries from abilities**
+- [x] **Step 4: Pass prompt and docs summaries from abilities**
 
 Update ability calls:
 
@@ -1555,7 +1555,7 @@ Apply the same shape for:
 - `TemplatePartPrompt::parse_response()`
 - `NavigationPrompt::parse_response()`
 
-- [ ] **Step 5: Add ability-level context propagation regressions**
+- [x] **Step 5: Add ability-level context propagation regressions**
 
 Add focused ability tests proving the ability methods pass ranking context into their parser calls:
 
@@ -1565,7 +1565,7 @@ Add focused ability tests proving the ability methods pass ranking context into 
 
 These tests may use the repo's existing provider/client test doubles, but they must assert the ability output shape, not only parser output.
 
-- [ ] **Step 6: Run focused parser and ability tests**
+- [x] **Step 6: Run focused parser and ability tests**
 
 Run:
 
@@ -1584,7 +1584,7 @@ Expected: existing tests pass after updating any exact ranking score assertions 
 - Modify: `tests/phpunit/PromptRulesTest.php`
 - Modify: `tests/phpunit/BlockAbilitiesTest.php`
 
-- [ ] **Step 1: Add context-aware block parse signature**
+- [x] **Step 1: Add context-aware block parse signature**
 
 Change:
 
@@ -1611,7 +1611,7 @@ self::validate_suggestions(
 
 Apply the same pattern for `styles` and `block`.
 
-- [ ] **Step 2: Update `validate_suggestions()`**
+- [x] **Step 2: Update `validate_suggestions()`**
 
 Change:
 
@@ -1645,7 +1645,7 @@ Replace `context => null` in the `blend_score()` call with `$context_result['sco
 
 Before passing `$ranking_metadata` into `RankingContract::normalize()`, unset `RankingContract::PLUGIN_COMPONENT_KEYS` so block model output cannot spoof `contextScore`, `contextEvidence`, or `rankingVersion`.
 
-- [ ] **Step 3: Add final rerank helper after block enforcement**
+- [x] **Step 3: Add final rerank helper after block enforcement**
 
 Add this public helper to `Prompt`:
 
@@ -1688,7 +1688,7 @@ Implement private `rerank_suggestions()` so it:
 - Sorts by recomputed score descending and preserves previous order as tiebreaker.
 - Ignores any model-supplied plugin component fields when recomputing the final ranking metadata.
 
-- [ ] **Step 4: Call rerank after enforcement**
+- [x] **Step 4: Call rerank after enforcement**
 
 In `BlockAbilities::recommend_block()`, change parse/enforcement flow to:
 
@@ -1710,7 +1710,7 @@ $payload = Prompt::rerank_payload( $payload, $context, $ranking_context );
 
 Keep `preFilteringCounts` from before enforcement.
 
-- [ ] **Step 5: Add post-enforcement rerank regressions**
+- [x] **Step 5: Add post-enforcement rerank regressions**
 
 In `tests/phpunit/PromptRulesTest.php`, add a direct `Prompt::rerank_payload()` regression that starts from an already parsed payload containing two block suggestions:
 
@@ -1727,7 +1727,7 @@ In `tests/phpunit/BlockAbilitiesTest.php`, add an ability-level regression that 
 - final ranking order after `Prompt::enforce_block_context_rules()` and `Prompt::rerank_payload()`,
 - unchanged `preFilteringCounts` from before enforcement.
 
-- [ ] **Step 6: Run focused block parser and ability tests**
+- [x] **Step 6: Run focused block parser and ability tests**
 
 Run:
 
@@ -1747,7 +1747,7 @@ Expected: PASS after updating exact ranking assertions.
 - Modify: `tests/phpunit/RecommendationOutcomeTest.php`
 - Modify: `docs/reference/activity-state-machine.md`
 
-- [ ] **Step 1: Add JS outcome snapshot normalization**
+- [x] **Step 1: Add JS outcome snapshot normalization**
 
 In `src/store/recommendation-outcomes.js`, add:
 
@@ -1858,7 +1858,7 @@ Extend `buildRecommendationOutcomeEntry()` with a `rankingSet = []` parameter. I
 
 Implement `normalizeRankingSetFromSummary()` with the same cap and score clamping as `normalizeRankingSet()`, but read already-compact entries shaped as `{ suggestionKey, rank, contextScore, blendedScore, rankingVersion }`. Reject or replace any summary `suggestionKey` that contains whitespace or generated prose-like text; allowed diagnostics keys are stable ids such as `suggestion:1`, `block:styles:2`, `theme/hero`, or hash-like identifiers.
 
-- [ ] **Step 2: Add PHP outcome snapshot and ranking-set normalization**
+- [x] **Step 2: Add PHP outcome snapshot and ranking-set normalization**
 
 In `RecommendationOutcome::normalize_entry()`, add separate ranking shapes to `$normalized_outcome`:
 
@@ -1935,7 +1935,7 @@ private static function normalize_ranking_set( mixed $value ): array {
 
 Add private `normalize_nullable_score()`, `normalize_numeric_map()`, and `normalize_ranking_suggestion_key()` helpers. Scores clamp to `0.0..1.0`; numeric maps sanitize keys with `sanitize_key()` and cap maps at 12 entries; ranking suggestion keys accept only compact stable ids matching `/^[A-Za-z0-9:_\\.\\/-]+$/` and reject whitespace/prose-like keys. After building `$normalized_outcome`, remove empty `ranking` and `rankingSet` entries so non-ranking rows stay compact.
 
-- [ ] **Step 3: Add outcome tests**
+- [x] **Step 3: Add outcome tests**
 
 In `tests/phpunit/RecommendationOutcomeTest.php`, add a case proving per-suggestion ranking snapshots survive and raw text does not get introduced:
 
@@ -2072,11 +2072,11 @@ In `src/store/__tests__/recommendation-outcomes.test.js`, add matching JS covera
 - `blendedScore: 0` survives normalization through nullish fallback and is not replaced by `ranking.score`.
 - A suggestion labeled `"Use secret launch copy"` with no explicit `suggestionKey` produces a `rankingSet` whose keys are set-local fallbacks like `suggestion:1`; assert `JSON.stringify( entry.after.outcome )` does not contain `"secret"`, `"launch"`, or `"copy"`.
 
-- [ ] **Step 4: Update activity docs**
+- [x] **Step 4: Update activity docs**
 
 In `docs/reference/activity-state-machine.md`, update the recommendation-outcome bullet to say local diagnostics may include bounded per-suggestion ranking snapshots for selected/blocked/inserted events and bounded aggregate `rankingSet` summaries for `shown` events. Re-state that neither shape stores raw prompts, generated recommendation text, block attributes, post content, validation messages, pattern payloads, or remote telemetry.
 
-- [ ] **Step 5: Run outcome tests**
+- [x] **Step 5: Run outcome tests**
 
 Run:
 
@@ -2094,7 +2094,7 @@ Expected: PASS.
 - Create: `tests/phpunit/fixtures/recommendation-evaluation-contextual-ranking-fixtures.php`
 - Modify: `tests/phpunit/RecommendationEvaluationTest.php`
 
-- [ ] **Step 1: Add fixture file**
+- [x] **Step 1: Add fixture file**
 
 Create `tests/phpunit/fixtures/recommendation-evaluation-contextual-ranking-fixtures.php` with fixtures for these scenarios:
 
@@ -2505,7 +2505,7 @@ return [
 
 The fixture file may add more cases later, but these named cases are the V1 minimum and every case must include `expectedTopLabel`.
 
-- [ ] **Step 2: Teach evaluation test to pass ranking context and production-equivalent block rerank**
+- [x] **Step 2: Teach evaluation test to pass ranking context and production-equivalent block rerank**
 
 Update the imports in `tests/phpunit/RecommendationEvaluationTest.php`:
 
@@ -2575,7 +2575,7 @@ try {
 
 This keeps the contextual ranking fixtures aligned with `BlockAbilities::recommend_block()`, where operation acceptance/rejection is only known after `Prompt::enforce_block_context_rules()`. The structural-action filter is deliberately fixture-scoped so the default-off production setting stays unchanged and only fixtures that declare `enableBlockStructuralActions` can prove accepted structural operations.
 
-- [ ] **Step 3: Add top-label assertions**
+- [x] **Step 3: Add top-label assertions**
 
 Add a test method:
 
@@ -2656,7 +2656,7 @@ public function test_contextual_ranking_parser_fixtures_choose_expected_top_sugg
 
 The component snapshot and `0.01` blended-score margin are required so the fixture fails with useful evidence if a future deterministic-score tweak changes ordering. The `contextScore` comparison prevents a fixture from passing while proving only deterministic ordering.
 
-- [ ] **Step 4: Run contextual fixture test**
+- [x] **Step 4: Run contextual fixture test**
 
 Run:
 
@@ -2679,7 +2679,7 @@ Expected: PASS.
 - Modify: `tests/phpunit/StyleAbilitiesTest.php`
 - Modify: `tests/phpunit/TemplateAbilitiesTest.php`
 
-- [ ] **Step 1: Add assertions for ranking component fields**
+- [x] **Step 1: Add assertions for ranking component fields**
 
 For each surface parser test that already asserts `ranking.score`, add assertions like:
 
@@ -2702,11 +2702,11 @@ Use the correct list path for block lanes:
 - `$payload['styles'][0]['ranking']`
 - `$payload['block'][0]['ranking']`
 
-- [ ] **Step 2: Update exact score assertions**
+- [x] **Step 2: Update exact score assertions**
 
 Where tests assert exact score values from model/deterministic-only blending, update them to the new scores produced by the context component. Keep exact assertions only when the fixture context is stable. Use `assertGreaterThan()` for ranking-order intent when exact score precision would obscure the behavior under test.
 
-- [ ] **Step 3: Run parser-family tests**
+- [x] **Step 3: Run parser-family tests**
 
 Run:
 
@@ -2723,7 +2723,7 @@ Expected: PASS.
 - No planned production file changes.
 - Modify: `tests/phpunit/ResponseSchemaTest.php`.
 
-- [ ] **Step 1: Add negative assertions for plugin-generated component fields**
+- [x] **Step 1: Add negative assertions for plugin-generated component fields**
 
 In `tests/phpunit/ResponseSchemaTest.php`, import `FlavorAgent\Support\RankingContract` and add a helper:
 
@@ -2753,7 +2753,7 @@ $this->assert_no_contextual_component_fields_in_llm_ranking_schema( $ranking, "b
 
 These negative assertions must be in `ResponseSchemaTest`, not only in a search command, so accidental optional schema drift fails in CI.
 
-- [ ] **Step 2: Run response schema tests**
+- [x] **Step 2: Run response schema tests**
 
 Run:
 
@@ -2763,7 +2763,7 @@ composer run test:php -- --filter ResponseSchemaTest
 
 Expected: PASS. The strict LLM `ranking` object should still require only `score`, `reason`, `sourceSignals`, `designPrinciple`, and `risk`, with nullable object support. Do not add `modelScore`, `contextScore`, `contextEvidence`, or `rankingVersion` to `ResponseSchema`.
 
-- [ ] **Step 3: Search for parser null context**
+- [x] **Step 3: Search for parser null context**
 
 Run:
 
@@ -2779,7 +2779,7 @@ Expected: no matches in parser/ability production code. Matches in tests that in
 
 - Modify: `docs/reference/activity-state-machine.md`
 
-- [ ] **Step 1: Run docs check**
+- [x] **Step 1: Run docs check**
 
 Run:
 
@@ -2789,7 +2789,7 @@ npm run check:docs
 
 Expected: PASS.
 
-- [ ] **Step 2: Run cross-surface PHP suite**
+- [x] **Step 2: Run cross-surface PHP suite**
 
 Run:
 
@@ -2799,7 +2799,7 @@ composer run test:php -- --filter 'RecommendationContextScorerTest|RankingContra
 
 Expected: PASS.
 
-- [ ] **Step 3: Run targeted JS outcome and apply/undo tests**
+- [x] **Step 3: Run targeted JS outcome and apply/undo tests**
 
 Run:
 
@@ -2809,7 +2809,7 @@ npm run test:unit -- recommendation-outcomes store-actions
 
 Expected: PASS. `recommendation-outcomes` covers `ranking`/`rankingSet` diagnostics. `store-actions` protects existing apply/undo behavior while ranking metadata is added to recommendation identities.
 
-- [ ] **Step 4: Run aggregate verifier without browser harnesses**
+- [x] **Step 4: Run aggregate verifier without browser harnesses**
 
 Run:
 
@@ -2819,7 +2819,7 @@ node scripts/verify.js --skip-e2e
 
 Expected: PASS or an explicit known-red/incomplete state unrelated to Contextual Ranking V1. If incomplete, inspect `output/verify/summary.json` and record the exact blocker.
 
-- [ ] **Step 5: Run Playground browser harness**
+- [x] **Step 5: Run Playground browser harness**
 
 Run:
 
@@ -2829,7 +2829,7 @@ npm run test:e2e:playground
 
 Expected: PASS for post editor, block Inspector, pattern inserter, and navigation flows. If this harness is unavailable or known-red, record the exact command output, environment blocker, and waiver decision before sign-off.
 
-- [ ] **Step 6: Run WP 7.0 browser harness**
+- [x] **Step 6: Run WP 7.0 browser harness**
 
 Run:
 
@@ -2839,7 +2839,7 @@ npm run test:e2e:wp70
 
 Expected: PASS for Site Editor template, template-part, Global Styles, Style Book, and refresh/drift-sensitive flows. If this harness is unavailable or known-red, record the exact command output, environment blocker, and waiver decision before sign-off.
 
-- [ ] **Step 7: Run diff hygiene**
+- [x] **Step 7: Run diff hygiene**
 
 Run:
 
