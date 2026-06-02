@@ -307,7 +307,7 @@ final class RegistrationTest extends TestCase {
 		}
 	}
 
-	public function test_recommendation_abilities_declare_example_input_for_ability_explorer(): void {
+	public function test_recommendation_abilities_fold_example_guidance_into_description_for_ability_explorer(): void {
 		Registration::register_category();
 		Registration::register_abilities();
 		Registration::register_recommendation_abilities();
@@ -326,20 +326,25 @@ final class RegistrationTest extends TestCase {
 			$schema = WordPressTestState::$registered_abilities[ $ability_id ]['input_schema']['properties'] ?? [];
 
 			foreach ( $properties as $property ) {
-				$this->assertArrayHasKey(
+				// The non-standard `example` keyword makes the Gutenberg
+				// ajv-draft-04 validator (which the Abilities Explorer uses to
+				// RUN abilities) throw at compile time, so example guidance is
+				// folded into `description` instead.
+				$this->assertArrayNotHasKey(
 					'example',
 					$schema[ $property ] ?? [],
-					"{$ability_id}.input_schema.properties.{$property} should declare an example for the Abilities Explorer auto-fill."
+					"{$ability_id}.input_schema.properties.{$property} must not use the non-draft-04 `example` keyword."
 				);
-				$this->assertNotEmpty(
-					$schema[ $property ]['example'] ?? null,
-					"{$ability_id}.input_schema.properties.{$property}.example should be non-empty."
+				$this->assertStringContainsString(
+					'For example:',
+					(string) ( $schema[ $property ]['description'] ?? '' ),
+					"{$ability_id}.input_schema.properties.{$property}.description should carry example guidance for the Abilities Explorer."
 				);
 			}
 		}
 	}
 
-	public function test_preview_recommendation_abilities_inherit_example_input_for_ability_explorer(): void {
+	public function test_preview_recommendation_abilities_inherit_example_guidance_for_ability_explorer(): void {
 		Registration::register_category();
 		Registration::register_abilities();
 
@@ -355,10 +360,15 @@ final class RegistrationTest extends TestCase {
 			$schema = WordPressTestState::$registered_abilities[ $ability_id ]['input_schema']['properties'] ?? [];
 
 			foreach ( $properties as $property ) {
-				$this->assertArrayHasKey(
+				$this->assertArrayNotHasKey(
 					'example',
 					$schema[ $property ] ?? [],
-					"{$ability_id} should inherit the {$property} example from its parent recommend-* ability."
+					"{$ability_id} must not inherit the non-draft-04 `example` keyword from its parent recommend-* ability."
+				);
+				$this->assertStringContainsString(
+					'For example:',
+					(string) ( $schema[ $property ]['description'] ?? '' ),
+					"{$ability_id} should inherit the {$property} example guidance (in description) from its parent recommend-* ability."
 				);
 			}
 		}

@@ -71,6 +71,107 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		);
 	}
 
+	public function test_execute_coerces_empty_object_typed_output_fields_to_json_objects(): void {
+		$result = RecommendationAbilityExecution::execute(
+			'pattern',
+			'flavor-agent/recommend-patterns',
+			[
+				'postType' => 'page',
+			],
+			static fn(): array => [
+				'recommendations' => [
+					[
+						'name'             => 'theme/hero',
+						'patternOverrides' => [],
+					],
+				],
+				'diagnostics'     => [
+					'filteredCandidates' => [ 'unreadableSyncedPatterns' => 0 ],
+					'pipelineTrace'      => [ 'backendRetrieved' => 0 ],
+					'dropReasons'        => [],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$json = wp_json_encode( $result );
+		$this->assertIsString( $json );
+
+		// Every empty object-typed field in a recommendation output must be
+		// coerced to {} (per the ability output_schema) so the ajv-draft-04
+		// bridge validator accepts it; none may serialize as an empty array.
+		$this->assertStringContainsString( '"patternOverrides":{}', $json );
+		$this->assertStringContainsString( '"dropReasons":{}', $json );
+		$this->assertStringNotContainsString( '"patternOverrides":[]', $json );
+		$this->assertStringNotContainsString( '"dropReasons":[]', $json );
+	}
+
+	public function test_execute_preserves_empty_arrays_when_output_schema_allows_arrays(): void {
+		$result = RecommendationAbilityExecution::execute(
+			'block',
+			'flavor-agent/recommend-block',
+			[
+				'selectedBlock' => [
+					'blockName' => 'core/group',
+				],
+			],
+			static fn(): array => [
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Review variation',
+						'attributeUpdates' => [],
+						'currentValue'     => [],
+						'suggestedValue'   => [],
+					],
+				],
+				'explanation' => 'Empty list values should remain lists when the schema permits arrays.',
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$json = wp_json_encode( $result );
+		$this->assertIsString( $json );
+
+		$this->assertStringContainsString( '"attributeUpdates":{}', $json );
+		$this->assertStringContainsString( '"currentValue":[]', $json );
+		$this->assertStringContainsString( '"suggestedValue":[]', $json );
+		$this->assertStringNotContainsString( '"currentValue":{}', $json );
+		$this->assertStringNotContainsString( '"suggestedValue":{}', $json );
+	}
+
+	public function test_execute_coerces_signature_only_output_object_fields(): void {
+		$result = RecommendationAbilityExecution::execute(
+			'pattern',
+			'flavor-agent/recommend-patterns',
+			[
+				'postType'             => 'page',
+				'resolveSignatureOnly' => true,
+			],
+			static fn(): array => [
+				'recommendations'          => [],
+				'resolvedContextSignature' => 'sig',
+				'diagnostics'              => [
+					'dropReasons' => [],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$json = wp_json_encode( $result );
+		$this->assertIsString( $json );
+
+		// The signature-only early-return path must coerce object-typed maps too,
+		// while leaving the (empty) recommendations list as a JSON array.
+		$this->assertStringContainsString( '"dropReasons":{}', $json );
+		$this->assertStringNotContainsString( '"dropReasons":[]', $json );
+		$this->assertStringContainsString( '"recommendations":[]', $json );
+	}
+
 	public function test_execute_threads_core_request_log_identifiers_and_suppresses_duplicate_diagnostic_activity(): void {
 		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
 		WordPressTestState::$options = [

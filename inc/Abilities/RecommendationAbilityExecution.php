@@ -12,6 +12,7 @@ use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 use FlavorAgent\Support\FlavorAgentRequestTag;
+use FlavorAgent\Support\JsonSchemaObjectCoercion;
 use FlavorAgent\Support\StringArray;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -67,7 +68,9 @@ final class RecommendationAbilityExecution {
 		}
 
 		if ( $resolve_signature_only || ! \is_array( $result ) ) {
-			return $result;
+			return \is_array( $result )
+				? JsonSchemaObjectCoercion::coerce( $result, Registration::recommendation_output_schema( $ability_name ) )
+				: $result;
 		}
 
 		$payload = self::append_request_meta( $result, $ability_name, $request_tag );
@@ -81,7 +84,15 @@ final class RecommendationAbilityExecution {
 			);
 		}
 
-		return $payload;
+		// Coerce empty object-typed fields to JSON objects ({}), per the ability
+		// output_schema, only after activity persistence has read the payload as
+		// PHP arrays. The Gutenberg ajv-draft-04 client (used by the no-signal
+		// bridge transport, the Abilities Explorer, and MCP clients) rejects an
+		// empty array where the schema declares type:object.
+		return JsonSchemaObjectCoercion::coerce(
+			$payload,
+			Registration::recommendation_output_schema( $ability_name )
+		);
 	}
 
 	/**

@@ -1823,6 +1823,145 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
+	test( 're-validates insertability after the awaited revalidation and reports the accurate reason instead of inserting then tearing down', async () => {
+		// Faithful model of real @wordpress/block-editor insertBlocks: it filters
+		// each block through canInsertBlockType against the SAME requested root and
+		// silently drops the disallowed ones — it never relocates blocks to a
+		// different root (see node_modules/@wordpress/block-editor/src/store/
+		// actions.js insertBlocks docblock: "Only allowed blocks are inserted. The
+		// action may fail silently for blocks that are not allowed...").
+		//
+		// Closes the time-of-check/time-of-use gap behind the snackbar: the
+		// canInsertBlockType pre-check (getRejectedPatternBlockNames) runs BEFORE
+		// the awaited resolvePatternRecommendationSignature round-trip; core's own
+		// filter runs AFTER it. When insertability drifts during that await, the
+		// handler must re-validate against the live editor immediately before
+		// dispatching and surface the accurate "not allowed at this insertion
+		// point" reason — NOT dispatch a partial insert that reads as "inserted
+		// somewhere else" and tears out the block that DID validly insert.
+		let revalidated = false;
+		const canInsertNow = ( blockName ) =>
+			revalidated ? blockName !== 'core/heading' : true;
+
+		const inserterContainer = document.createElement( 'div' );
+		const pattern = {
+			name: 'theme/landing',
+			title: 'Landing page for event',
+			blocks: [
+				{ clientId: 'para-a', name: 'core/paragraph', attributes: {} },
+				{ clientId: 'head-b', name: 'core/heading', attributes: {} },
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.blockEditor.blocks = {
+			'root-a': [ { clientId: 'existing-1', name: 'core/spacer' } ],
+		};
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: pattern.name,
+				score: 0.97,
+				reason: 'Recommended landing page.',
+			},
+		];
+		state.allowedPatterns = [ pattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		// Editor insertability drifts across the awaited server revalidation.
+		mockResolvePatternRecommendationSignature.mockImplementation(
+			async () => {
+				revalidated = true;
+				return { resolvedContextSignature: 'resolved-pattern-context' };
+			}
+		);
+
+		// The pre-check and core's insert-time filter both read canInsertBlockType
+		// from the active registry select; the before/after snapshots come from the
+		// same select, so delegate getBlocks/getBlock to the shared map.
+		mockUseRegistry.mockImplementation( () => ( {
+			select: ( storeName ) => {
+				const base = createSelectMap()[ storeName ] || {};
+				if ( storeName === 'core/block-editor' ) {
+					return {
+						...base,
+						canInsertBlockType: ( blockName ) =>
+							canInsertNow( blockName ),
+					};
+				}
+				return base;
+			},
+		} ) );
+
+		// Real core insertBlocks: keep only the canInsertBlockType-allowed blocks
+		// and insert them into the requested root at the requested index.
+		mockInsertBlocks.mockImplementation(
+			( blocks, index = null, rootClientId = '' ) => {
+				const key = rootClientId ?? '';
+				const allowed = blocks.filter( ( block ) =>
+					canInsertNow( block.name )
+				);
+				if ( ! allowed.length ) {
+					return;
+				}
+				const current = [
+					...( ( state.blockEditor.blocks || {} )[ key ] || [] ),
+				];
+				const insertionIndex =
+					Number.isInteger( index ) && index >= 0
+						? Math.min( index, current.length )
+						: current.length;
+				state.blockEditor.blocks = {
+					...( state.blockEditor.blocks || {} ),
+					[ key ]: [
+						...current.slice( 0, insertionIndex ),
+						...allowed,
+						...current.slice( insertionIndex ),
+					],
+				};
+			}
+		);
+
+		renderComponent();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		await act( async () => {
+			insertButton.click();
+		} );
+
+		// Drift is caught by the post-await re-validation: core is never asked to
+		// insert, so there is nothing to tear down and no content is destroyed.
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockRemoveBlocks ).not.toHaveBeenCalled();
+		expect( state.blockEditor.blocks[ 'root-a' ] ).toEqual( [
+			{ clientId: 'existing-1', name: 'core/spacer' },
+		] );
+
+		// The user gets the accurate reason, not the misleading "somewhere else".
+		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+			'Cannot insert pattern "Landing page for event" here. The following blocks are not allowed at this insertion point: core/heading.',
+			{ type: 'snackbar', id: 'inserter-notice' }
+		);
+		expect( mockCreateErrorNotice ).not.toHaveBeenCalledWith(
+			expect.stringContaining( 'inserted it somewhere else' ),
+			expect.anything()
+		);
+
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'validation_blocked',
+				surface: 'pattern',
+				reason: 'disallowed_block_types',
+				patternKey: 'theme/landing',
+			} )
+		);
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+	} );
+
 	test( 'blocks insert when the server-resolved apply context drifts', async () => {
 		const {
 			buildPatternInsertionTargetSignature,

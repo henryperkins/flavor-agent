@@ -780,8 +780,7 @@ final class Registration {
 					'selectedBlock'        => self::selected_block_input_schema(),
 					'prompt'               => [
 						'type'        => 'string',
-						'description' => 'Optional user instruction',
-						'example'     => 'Improve the contrast and spacing for accessibility.',
+						'description' => 'Optional user instruction. For example: "Improve the contrast and spacing for accessibility."',
 					],
 					'document'             => $document,
 					'clientRequest'        => $client_request,
@@ -802,13 +801,11 @@ final class Registration {
 					],
 					'prompt'        => [
 						'type'        => 'string',
-						'description' => 'Optional user instruction for the content lane.',
-						'example'     => 'Draft a post about how reflective coaching shaped my leadership practice.',
+						'description' => 'Optional user instruction for the content lane. For example: "Draft a post about how reflective coaching shaped my leadership practice."',
 					],
 					'voiceProfile'  => [
 						'type'        => 'string',
-						'description' => 'Optional extra voice guidance layered on top of the default Henry profile.',
-						'example'     => 'Calm, measured, slightly self-deprecating.',
+						'description' => 'Optional extra voice guidance layered on top of the default Henry profile. For example: "Calm, measured, slightly self-deprecating."',
 					],
 					'postContext'   => self::open_object_schema(
 						[
@@ -842,18 +839,17 @@ final class Registration {
 				'properties' => [
 					'postType'             => [
 						'type'        => 'string',
-						'description' => 'Current post type',
-						'example'     => 'post',
+						'description' => 'Current post type. For example: "post".',
 					],
 					'blockContext'         => self::open_object_schema(),
 					'insertionContext'     => self::pattern_insertion_context_schema(),
 					'templateType'         => [
-						'type'    => 'string',
-						'example' => 'home',
+						'type'        => 'string',
+						'description' => 'Template type slug. For example: "home".',
 					],
 					'prompt'               => [
-						'type'    => 'string',
-						'example' => 'Suggest a hero pattern for the homepage that introduces the team.',
+						'type'        => 'string',
+						'description' => 'Optional user instruction. For example: "Suggest a hero pattern for the homepage that introduces the team."',
 					],
 					'visiblePatternNames'  => [
 						'type'  => 'array',
@@ -879,8 +875,8 @@ final class Registration {
 					),
 					'blockClientId'        => [ 'type' => 'string' ],
 					'prompt'               => [
-						'type'    => 'string',
-						'example' => 'Simplify the menu and add an overlay on mobile.',
+						'type'        => 'string',
+						'description' => 'Optional user instruction. For example: "Simplify the menu and add an overlay on mobile."',
 					],
 					'document'             => $document,
 					'clientRequest'        => $client_request,
@@ -933,8 +929,8 @@ final class Registration {
 						'Current style surface editor context needed for style recommendations.'
 					),
 					'prompt'               => [
-						'type'    => 'string',
-						'example' => 'Modernize the typography hierarchy and tighten the headings.',
+						'type'        => 'string',
+						'description' => 'Optional user instruction. For example: "Modernize the typography hierarchy and tighten the headings."',
 					],
 					'document'             => $document,
 					'clientRequest'        => $client_request,
@@ -953,12 +949,12 @@ final class Registration {
 						'description' => 'Template identifier from the Site Editor.',
 					],
 					'templateType'         => [
-						'type'    => 'string',
-						'example' => 'home',
+						'type'        => 'string',
+						'description' => 'Template type slug. For example: "home".',
 					],
 					'prompt'               => [
-						'type'    => 'string',
-						'example' => 'Add a sidebar with recent posts and tighten the hero spacing.',
+						'type'        => 'string',
+						'description' => 'Optional user instruction. For example: "Add a sidebar with recent posts and tighten the hero spacing."',
 					],
 					'visiblePatternNames'  => [
 						'type'  => 'array',
@@ -1072,8 +1068,8 @@ final class Registration {
 						'description' => 'Template-part identifier from the Site Editor.',
 					],
 					'prompt'               => [
-						'type'    => 'string',
-						'example' => 'Tighten the header layout and add a sticky behavior on scroll.',
+						'type'        => 'string',
+						'description' => 'Optional user instruction. For example: "Tighten the header layout and add a sticky behavior on scroll."',
 					],
 					'visiblePatternNames'  => [
 						'type'  => 'array',

@@ -1225,14 +1225,22 @@ export default function PatternRecommender() {
 				}
 			}
 
-			const blockEditor = registry?.select?.( blockEditorStore );
-			const rejected = getRejectedPatternBlockNames(
-				pattern,
-				inserterRootClientId,
-				blockEditor
-			);
+			// Both this pre-flight check and the post-revalidation re-check below
+			// reject a pattern whose top-level blocks are not insertable at the
+			// captured root, with the same notice and outcome. Core's insertBlocks
+			// silently drops disallowed blocks, so a stale pass would surface as a
+			// destructive "inserted somewhere else" partial insert.
+			const rejectIfBlocksDisallowed = ( liveEditor ) => {
+				const rejected = getRejectedPatternBlockNames(
+					pattern,
+					inserterRootClientId,
+					liveEditor
+				);
 
-			if ( rejected.length > 0 ) {
+				if ( rejected.length === 0 ) {
+					return false;
+				}
+
 				recordPatternOutcome( 'validation_blocked', {
 					pattern,
 					recommendation,
@@ -1253,6 +1261,15 @@ export default function PatternRecommender() {
 						id: 'inserter-notice',
 					}
 				);
+
+				return true;
+			};
+
+			if (
+				rejectIfBlocksDisallowed(
+					registry?.select?.( blockEditorStore )
+				)
+			) {
 				return;
 			}
 
@@ -1336,6 +1353,22 @@ export default function PatternRecommender() {
 						id: 'inserter-notice',
 					}
 				);
+				return;
+			}
+
+			// The pre-check above ran *before* the awaited server revalidation.
+			// Editor state can drift during that round-trip (a container gains a
+			// templateLock, its block editing mode changes, the captured root is
+			// mutated). Re-validate against the live editor here, with no await
+			// before the dispatch, so core's own canInsertBlockType filter sees
+			// the same state we just checked — otherwise a now-disallowed block is
+			// silently dropped into a partial insert that reads as "inserted
+			// somewhere else" and tears out the blocks that validly inserted.
+			if (
+				rejectIfBlocksDisallowed(
+					registry?.select?.( blockEditorStore )
+				)
+			) {
 				return;
 			}
 
