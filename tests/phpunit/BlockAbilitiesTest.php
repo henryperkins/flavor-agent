@@ -896,7 +896,7 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt );
 	}
 
-	public function test_recommend_block_enforces_missing_release_cycle_coverage_only_when_release_gate_is_enabled(): void {
+	public function test_recommend_block_warns_on_missing_release_cycle_coverage_even_when_release_gate_is_enabled(): void {
 		$this->configure_text_generation_connector();
 		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
 			'status'                 => 'missing-current-release-cycle',
@@ -913,7 +913,7 @@ final class BlockAbilitiesTest extends TestCase {
 				'settings'    => [],
 				'styles'      => [],
 				'block'       => [],
-				'explanation' => 'The model must not run while the gate is enforced.',
+				'explanation' => 'Model still runs: release-cycle currency is now advisory, not a block.',
 			]
 		);
 
@@ -934,13 +934,13 @@ final class BlockAbilitiesTest extends TestCase {
 			remove_filter( 'flavor_agent_docs_grounding_require_current_coverage', '__return_true' );
 		}
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
+		$this->assertIsArray( $result );
 		$this->assertSame(
 			'missing-current-release-cycle',
-			$result->get_error_data()['docsGrounding']['coverage']['status'] ?? null
+			$result['docsGrounding']['coverage']['status'] ?? null
 		);
-		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		// The model runs even with the release gate enabled.
+		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt );
 	}
 
 	public function test_list_allowed_blocks_returns_registered_block_manifests(): void {
