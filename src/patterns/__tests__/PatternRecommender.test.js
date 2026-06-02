@@ -924,6 +924,58 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
+	test( 'records pattern shown once when recommendations hydrate after the inserter opens', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		// Phase 1: inserter open but recommendations still loading, so the shelf is
+		// hidden. The notice slot attaches, but no "shown" outcome fires yet.
+		state.store.patternStatus = 'loading';
+		state.store.patternRecommendations = [];
+		state.allowedPatterns = [];
+
+		renderComponent();
+
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalledWith(
+			expect.objectContaining( { event: 'shown', surface: 'pattern' } )
+		);
+
+		// Phase 2: recommendations hydrate and the shelf becomes visible WITHOUT a
+		// fresh DOM attach (the portal stays mounted across loading -> ready). "shown"
+		// must still fire exactly once. This guards the onAttached-identity-change ->
+		// portal effect re-run -> re-attach chain that replaced the old dedicated
+		// shouldShowPatternShelf effect; if that chain breaks, no "shown" is recorded.
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/paragraph', attributes: {} } ],
+			},
+		];
+
+		renderComponent();
+
+		const shownCalls = mockRecordRecommendationOutcome.mock.calls.filter(
+			( [ payload ] ) =>
+				payload?.event === 'shown' && payload?.surface === 'pattern'
+		);
+
+		expect( shownCalls ).toHaveLength( 1 );
+
+		inserterContainer.remove();
+	} );
+
 	test( 'renders an error notice with retry inside the inserter when ranking fails', () => {
 		const inserterContainer = document.createElement( 'div' );
 
@@ -2268,6 +2320,35 @@ describe( 'PatternRecommender', () => {
 		} );
 	} );
 
+	test( 'does not create the inserter notice slot while the affordance is hidden', () => {
+		const originalCreateElement = document.createElement.bind( document );
+		const createdDivs = [];
+		const createElementSpy = jest
+			.spyOn( document, 'createElement' )
+			.mockImplementation( ( tagName, ...args ) => {
+				const element = originalCreateElement( tagName, ...args );
+
+				if ( tagName === 'div' ) {
+					createdDivs.push( element );
+				}
+
+				return element;
+			} );
+
+		state.isInserterOpen = false;
+
+		renderComponent();
+
+		expect(
+			createdDivs.filter(
+				( element ) =>
+					element.className === 'flavor-agent-pattern-inserter-slot'
+			)
+		).toHaveLength( 0 );
+
+		createElementSpy.mockRestore();
+	} );
+
 	test( 'reattaches the inserter shelf when Gutenberg replaces the container', () => {
 		const firstContainer = document.createElement( 'div' );
 		const secondContainer = document.createElement( 'div' );
@@ -2324,6 +2405,9 @@ describe( 'PatternRecommender', () => {
 		act( () => {
 			observerCallbacks.forEach( ( callback ) => callback( [] ) );
 		} );
+		act( () => {
+			jest.advanceTimersByTime( 50 );
+		} );
 
 		expect(
 			secondContainer.querySelector(
@@ -2341,6 +2425,55 @@ describe( 'PatternRecommender', () => {
 			expect( observer.disconnect ).toHaveBeenCalled();
 		} );
 		secondContainer.remove();
+	} );
+
+	test( 'coalesces inserter notice resyncs during mutation bursts', () => {
+		const inserterContainer = document.createElement( 'div' );
+		const observerCallbacks = [];
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/paragraph', attributes: {} } ],
+			},
+		];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+		mockFindInserterSearchInput.mockReturnValue( null );
+		window.MutationObserver = class MockMutationObserver {
+			constructor( callback ) {
+				this.observe = jest.fn();
+				this.disconnect = jest.fn();
+				observerCallbacks.push( callback );
+			}
+		};
+
+		renderComponent();
+		mockFindInserterContainer.mockClear();
+
+		act( () => {
+			observerCallbacks[ 0 ]( [] );
+			observerCallbacks[ 0 ]( [] );
+			observerCallbacks[ 0 ]( [] );
+		} );
+
+		expect( mockFindInserterContainer ).not.toHaveBeenCalled();
+
+		act( () => {
+			jest.advanceTimersByTime( 50 );
+		} );
+
+		expect( mockFindInserterContainer ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	test( 'keeps search-triggered fetches debounced and includes the selected block context', () => {

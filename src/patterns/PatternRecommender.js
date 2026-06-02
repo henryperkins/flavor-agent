@@ -26,6 +26,7 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
@@ -68,6 +69,143 @@ const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
 
 function getNonEmptyString( value ) {
 	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
+}
+
+function PatternInserterPortal( { children, onAttached } ) {
+	const noticeObserverRef = useRef( null );
+	const noticeResyncTimerRef = useRef( null );
+	const noticeSlotRef = useRef( null );
+	const [ noticeSlotReady, setNoticeSlotReady ] = useState( false );
+
+	useEffect( () => {
+		if ( noticeSlotRef.current || typeof document === 'undefined' ) {
+			return undefined;
+		}
+
+		const noticeSlot = document.createElement( 'div' );
+		noticeSlot.className = INSERTER_SLOT_CLASS;
+		noticeSlotRef.current = noticeSlot;
+		setNoticeSlotReady( true );
+
+		return () => {
+			if ( noticeResyncTimerRef.current ) {
+				window.clearTimeout( noticeResyncTimerRef.current );
+				noticeResyncTimerRef.current = null;
+			}
+
+			if ( noticeObserverRef.current ) {
+				noticeObserverRef.current.disconnect();
+				noticeObserverRef.current = null;
+			}
+
+			if ( noticeSlot.parentNode ) {
+				noticeSlot.parentNode.removeChild( noticeSlot );
+			}
+
+			if ( noticeSlotRef.current === noticeSlot ) {
+				noticeSlotRef.current = null;
+			}
+		};
+	}, [] );
+
+	useEffect( () => {
+		const noticeSlot = noticeSlotRef.current;
+
+		if ( ! noticeSlot ) {
+			return undefined;
+		}
+
+		const cleanupNotice = () => {
+			if ( noticeResyncTimerRef.current ) {
+				window.clearTimeout( noticeResyncTimerRef.current );
+				noticeResyncTimerRef.current = null;
+			}
+
+			if ( noticeObserverRef.current ) {
+				noticeObserverRef.current.disconnect();
+				noticeObserverRef.current = null;
+			}
+
+			if ( noticeSlot.parentNode ) {
+				noticeSlot.parentNode.removeChild( noticeSlot );
+			}
+		};
+
+		const attachNotice = ( inserterContainer ) => {
+			if ( ! inserterContainer ) {
+				return;
+			}
+
+			if ( noticeSlot.parentNode === inserterContainer ) {
+				onAttached();
+				return;
+			}
+
+			if ( noticeSlot.parentNode ) {
+				noticeSlot.parentNode.removeChild( noticeSlot );
+			}
+
+			inserterContainer.insertBefore(
+				noticeSlot,
+				inserterContainer.firstChild
+			);
+			onAttached();
+		};
+
+		const syncNotice = () => {
+			const inserterContainer = findInserterContainer( document );
+
+			if ( ! inserterContainer ) {
+				return;
+			}
+
+			attachNotice( inserterContainer );
+		};
+
+		const scheduleNoticeSync = () => {
+			if ( noticeResyncTimerRef.current ) {
+				return;
+			}
+
+			noticeResyncTimerRef.current = window.setTimeout( () => {
+				noticeResyncTimerRef.current = null;
+				syncNotice();
+			}, 50 );
+		};
+
+		syncNotice();
+
+		if ( ! window.MutationObserver ) {
+			return cleanupNotice;
+		}
+
+		// Gutenberg can replace the inserter container without toggling the
+		// open state, so keep the slot attached for the whole affordance lifetime.
+		const observer = new window.MutationObserver( () => {
+			scheduleNoticeSync();
+		} );
+
+		observer.observe( document.body, {
+			childList: true,
+			subtree: true,
+		} );
+		noticeObserverRef.current = observer;
+
+		return () => {
+			cleanupNotice();
+		};
+		// `onAttached` is a load-bearing dependency, not merely a referenced value.
+		// Its identity changes when the shelf becomes visible (recordShownPatternOutcome
+		// depends on shouldShowPatternShelf), and that re-run is what re-attaches the slot
+		// and records the "shown" outcome for recommendations that hydrate AFTER the
+		// inserter has already opened. Dropping it silently loses that telemetry.
+	}, [ onAttached ] );
+
+	if ( ! noticeSlotReady || ! noticeSlotRef.current ) {
+		return null;
+	}
+
+	return createPortal( children, noticeSlotRef.current );
 }
 
 function buildAncestorEntries( editor, inserterRootClientId ) {
@@ -753,16 +891,8 @@ export default function PatternRecommender() {
 	const observerRef = useRef( null );
 	const listenerRef = useRef( null );
 	const debounceRef = useRef( null );
-	const noticeObserverRef = useRef( null );
-	const noticeSlotRef = useRef( null );
 	const shownRecommendationSetRef = useRef( '' );
 	const droppedRecommendationOutcomeRef = useRef( new Set() );
-
-	if ( ! noticeSlotRef.current && typeof document !== 'undefined' ) {
-		const noticeSlot = document.createElement( 'div' );
-		noticeSlot.className = INSERTER_SLOT_CLASS;
-		noticeSlotRef.current = noticeSlot;
-	}
 
 	const shouldRenderInserterAffordance =
 		isInserterOpen &&
@@ -1429,16 +1559,6 @@ export default function PatternRecommender() {
 	] );
 
 	useEffect( () => {
-		if ( ! shouldShowPatternShelf ) {
-			return;
-		}
-
-		if ( noticeSlotRef.current?.parentNode ) {
-			recordShownPatternOutcome();
-		}
-	}, [ shouldShowPatternShelf, recordShownPatternOutcome ] );
-
-	useEffect( () => {
 		if ( ! canRecommend || ! effectivePostType ) {
 			return;
 		}
@@ -1449,83 +1569,6 @@ export default function PatternRecommender() {
 		effectivePostType,
 		fetchPatternRecommendationsForCurrentTarget,
 	] );
-
-	useEffect( () => {
-		const noticeSlot = noticeSlotRef.current;
-
-		if ( ! noticeSlot ) {
-			return undefined;
-		}
-
-		const cleanupNotice = () => {
-			if ( noticeObserverRef.current ) {
-				noticeObserverRef.current.disconnect();
-				noticeObserverRef.current = null;
-			}
-
-			if ( noticeSlot?.parentNode ) {
-				noticeSlot.parentNode.removeChild( noticeSlot );
-			}
-		};
-
-		const attachNotice = ( inserterContainer ) => {
-			if ( ! noticeSlot || ! inserterContainer ) {
-				return;
-			}
-
-			if ( noticeSlot.parentNode === inserterContainer ) {
-				recordShownPatternOutcome();
-				return;
-			}
-
-			if ( noticeSlot.parentNode ) {
-				noticeSlot.parentNode.removeChild( noticeSlot );
-			}
-
-			inserterContainer.insertBefore(
-				noticeSlot,
-				inserterContainer.firstChild
-			);
-			recordShownPatternOutcome();
-		};
-
-		const syncNotice = () => {
-			const inserterContainer = findInserterContainer( document );
-
-			if ( ! inserterContainer ) {
-				return;
-			}
-
-			attachNotice( inserterContainer );
-		};
-
-		if ( ! shouldRenderInserterAffordance ) {
-			cleanupNotice();
-			return undefined;
-		}
-
-		syncNotice();
-
-		if ( ! window.MutationObserver ) {
-			return cleanupNotice;
-		}
-
-		// Gutenberg can replace the inserter container without toggling the
-		// open state, so keep the slot attached for the whole affordance lifetime.
-		const observer = new window.MutationObserver( () => {
-			syncNotice();
-		} );
-
-		observer.observe( document.body, {
-			childList: true,
-			subtree: true,
-		} );
-		noticeObserverRef.current = observer;
-
-		return () => {
-			cleanupNotice();
-		};
-	}, [ shouldRenderInserterAffordance, recordShownPatternOutcome ] );
 
 	const handleSearchInput = useCallback(
 		( value ) => {
@@ -1635,7 +1678,7 @@ export default function PatternRecommender() {
 		handleSearchInput,
 	] );
 
-	if ( shouldRenderInserterAffordance && noticeSlotRef.current ) {
+	if ( shouldRenderInserterAffordance ) {
 		let notice = null;
 		const docsGroundingNotice =
 			patternStatus === 'ready' ? (
@@ -1689,12 +1732,11 @@ export default function PatternRecommender() {
 			notice = <PatternInserterNotice status="loading" />;
 		}
 
-		return createPortal(
-			<>
+		return (
+			<PatternInserterPortal onAttached={ recordShownPatternOutcome }>
 				{ docsGroundingNotice }
 				{ notice }
-			</>,
-			noticeSlotRef.current
+			</PatternInserterPortal>
 		);
 	}
 
