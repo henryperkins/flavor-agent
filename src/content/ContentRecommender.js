@@ -304,15 +304,7 @@ export default function ContentRecommender() {
 				storedRequestSignature: contentRecommendationRequestSignature,
 				currentMode: contentMode,
 				currentPrompt: prompt,
-				currentPostContext: {
-					postId,
-					postType,
-					title: postTitle,
-					excerpt: postExcerpt,
-					content: postContent,
-					slug: postSlug,
-					status: postStatus,
-				},
+				currentPostContext: postContext,
 				status: contentStatus,
 			} ),
 		[
@@ -320,13 +312,7 @@ export default function ContentRecommender() {
 			contentRecommendation,
 			contentRecommendationRequestSignature,
 			contentStatus,
-			postContent,
-			postExcerpt,
-			postId,
-			postSlug,
-			postStatus,
-			postTitle,
-			postType,
+			postContext,
 			prompt,
 		]
 	);
