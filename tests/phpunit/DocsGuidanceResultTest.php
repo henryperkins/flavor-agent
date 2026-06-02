@@ -117,7 +117,7 @@ final class DocsGuidanceResultTest extends TestCase {
 		$this->assertSame( 'unavailable', $error->get_error_data()['docsGrounding']['status'] ?? null );
 	}
 
-	public function test_required_source_coverage_blocks_stable_docs_only_guidance(): void {
+	public function test_required_source_coverage_degrades_to_warn_for_missing_release_cycle(): void {
 		$result = DocsGuidanceResult::from_guidance(
 			[
 				[
@@ -144,8 +144,62 @@ final class DocsGuidanceResultTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( 'unavailable', $result['status'] );
+		$this->assertSame( 'grounded', $result['status'] );
+		$this->assertTrue( DocsGuidanceResult::is_actionable( $result ) );
+		// The coverage warning still rides along for the UI.
 		$this->assertSame( 'missing-current-release-cycle', $result['coverage']['status'] ?? null );
+	}
+
+	public function test_required_coverage_still_blocks_when_developer_docs_missing(): void {
+		$result = DocsGuidanceResult::from_guidance(
+			[
+				[
+					'sourceType'  => 'make-core',
+					'url'         => 'https://make.wordpress.org/core/2026/05/05/example/',
+					'publishedAt' => '2026-05-05T14:00:00Z',
+					'freshness'   => 'current',
+				],
+			],
+			'recommendation',
+			'foreground-allowed',
+			[
+				'requireCurrentSourceCoverage' => true,
+				'sourceCoverage'               => [
+					'status'           => 'missing-developer-docs',
+					'hasDeveloperDocs' => false,
+					'errorCode'        => 'missing_developer_docs',
+					'errorMessage'     => 'Developer Docs grounding did not return a trusted stable Developer Docs source.',
+				],
+			]
+		);
+
+		$this->assertSame( 'unavailable', $result['status'] );
+		$this->assertFalse( DocsGuidanceResult::is_actionable( $result ) );
+	}
+
+	public function test_required_coverage_still_blocks_on_transport_unavailable(): void {
+		$result = DocsGuidanceResult::from_guidance(
+			[
+				[
+					'sourceType'  => 'developer-docs',
+					'url'         => 'https://developer.wordpress.org/block-editor/',
+					'retrievedAt' => '2026-05-08T14:00:00Z',
+					'freshness'   => 'current',
+				],
+			],
+			'recommendation',
+			'foreground-allowed',
+			[
+				'requireCurrentSourceCoverage' => true,
+				'sourceCoverage'               => [
+					'status'       => 'unavailable',
+					'errorCode'    => 'cloudflare_ai_search_coverage_failed',
+					'errorMessage' => 'Developer Docs coverage probe failed.',
+				],
+			]
+		);
+
+		$this->assertSame( 'unavailable', $result['status'] );
 		$this->assertFalse( DocsGuidanceResult::is_actionable( $result ) );
 	}
 
@@ -179,106 +233,6 @@ final class DocsGuidanceResultTest extends TestCase {
 		$this->assertSame( 'grounded', $result['status'] );
 		$this->assertSame( 'missing-current-release-cycle', $result['coverage']['status'] ?? null );
 		$this->assertTrue( DocsGuidanceResult::is_actionable( $result ) );
-	}
-
-	public function test_within_grace_coverage_satisfies_required_gate(): void {
-		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/',
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'freshness'   => 'current',
-				],
-			],
-			'recommendation',
-			'foreground-allowed',
-			[
-				'requireCurrentSourceCoverage' => true,
-				'sourceCoverage'               => [
-					'status'                  => 'missing-current-release-cycle',
-					'hasDeveloperDocs'        => true,
-					'hasCurrentReleaseCycle'  => false,
-					'sourceTypes'             => [ 'developer-docs' ],
-					'freshness'               => [ 'current' ],
-					'checkedAt'               => '2026-05-26 23:00:00',
-					'errorCode'               => 'missing_current_release_cycle',
-					'errorMessage'            => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-					'withinGrace'             => true,
-					'graceLastKnownCurrentAt' => '2026-05-22 12:00:00',
-					'graceExpiresAt'          => '2026-05-29 12:00:00',
-				],
-			]
-		);
-
-		$this->assertSame( 'grounded', $result['status'] );
-		$this->assertTrue( DocsGuidanceResult::is_actionable( $result ) );
-		$this->assertTrue( $result['coverage']['withinGrace'] );
-		$this->assertSame( '2026-05-22 12:00:00', $result['coverage']['graceLastKnownCurrentAt'] );
-		$this->assertSame( '2026-05-29 12:00:00', $result['coverage']['graceExpiresAt'] );
-	}
-
-	public function test_within_grace_only_satisfies_missing_current_release_cycle_gate(): void {
-		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/',
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'freshness'   => 'current',
-				],
-			],
-			'recommendation',
-			'foreground-allowed',
-			[
-				'requireCurrentSourceCoverage' => true,
-				'sourceCoverage'               => [
-					'status'      => 'unavailable',
-					'errorCode'   => 'transport_failed',
-					'withinGrace' => true,
-				],
-			]
-		);
-
-		$this->assertSame( 'unavailable', $result['status'] );
-		$this->assertFalse( DocsGuidanceResult::is_actionable( $result ) );
-	}
-
-	public function test_within_grace_coverage_surfaces_in_public_summary(): void {
-		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/',
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'freshness'   => 'current',
-				],
-			],
-			'recommendation',
-			'foreground-allowed',
-			[
-				'requireCurrentSourceCoverage' => true,
-				'sourceCoverage'               => [
-					'status'                  => 'missing-current-release-cycle',
-					'hasDeveloperDocs'        => true,
-					'hasCurrentReleaseCycle'  => false,
-					'sourceTypes'             => [ 'developer-docs' ],
-					'freshness'               => [ 'current' ],
-					'checkedAt'               => '2026-05-26 23:00:00',
-					'errorCode'               => 'missing_current_release_cycle',
-					'errorMessage'            => '',
-					'withinGrace'             => true,
-					'graceLastKnownCurrentAt' => '2026-05-22 12:00:00',
-					'graceExpiresAt'          => '2026-05-29 12:00:00',
-				],
-			]
-		);
-
-		$summary = DocsGuidanceResult::public_summary( $result );
-
-		$this->assertTrue( $summary['coverage']['withinGrace'] );
-		$this->assertSame( '2026-05-22 12:00:00', $summary['coverage']['graceLastKnownCurrentAt'] );
-		$this->assertSame( '2026-05-29 12:00:00', $summary['coverage']['graceExpiresAt'] );
 	}
 
 	public function test_unavailable_error_fires_detection_action(): void {

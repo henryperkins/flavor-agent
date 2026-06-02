@@ -105,7 +105,6 @@ final class DocsGuidanceResult {
 				'hasCurrentReleaseCycle' => ! empty( $coverage['hasCurrentReleaseCycle'] ),
 				'sourceTypes'            => (array) ( $coverage['sourceTypes'] ?? [] ),
 				'freshness'              => (array) ( $coverage['freshness'] ?? [] ),
-				'withinGrace'            => ! empty( $coverage['withinGrace'] ),
 			],
 			'guidance' => array_map(
 				static fn ( array $chunk ): array => [
@@ -181,10 +180,7 @@ final class DocsGuidanceResult {
 	 *   freshness: array<int, string>,
 	 *   checkedAt: string,
 	 *   errorCode: string,
-	 *   errorMessage: string,
-	 *   withinGrace: bool,
-	 *   graceLastKnownCurrentAt: string,
-	 *   graceExpiresAt: string
+	 *   errorMessage: string
 	 * }
 	 */
 	private static function normalize_coverage( mixed $coverage ): array {
@@ -193,17 +189,14 @@ final class DocsGuidanceResult {
 		}
 
 		return [
-			'status'                  => sanitize_key( (string) ( $coverage['status'] ?? 'unknown' ) ),
-			'hasDeveloperDocs'        => ! empty( $coverage['hasDeveloperDocs'] ),
-			'hasCurrentReleaseCycle'  => ! empty( $coverage['hasCurrentReleaseCycle'] ),
-			'sourceTypes'             => array_values( array_map( 'sanitize_key', (array) ( $coverage['sourceTypes'] ?? [] ) ) ),
-			'freshness'               => array_values( array_map( 'sanitize_key', (array) ( $coverage['freshness'] ?? [] ) ) ),
-			'checkedAt'               => sanitize_text_field( (string) ( $coverage['checkedAt'] ?? '' ) ),
-			'errorCode'               => sanitize_key( (string) ( $coverage['errorCode'] ?? '' ) ),
-			'errorMessage'            => sanitize_text_field( (string) ( $coverage['errorMessage'] ?? '' ) ),
-			'withinGrace'             => ! empty( $coverage['withinGrace'] ),
-			'graceLastKnownCurrentAt' => sanitize_text_field( (string) ( $coverage['graceLastKnownCurrentAt'] ?? '' ) ),
-			'graceExpiresAt'          => sanitize_text_field( (string) ( $coverage['graceExpiresAt'] ?? '' ) ),
+			'status'                 => sanitize_key( (string) ( $coverage['status'] ?? 'unknown' ) ),
+			'hasDeveloperDocs'       => ! empty( $coverage['hasDeveloperDocs'] ),
+			'hasCurrentReleaseCycle' => ! empty( $coverage['hasCurrentReleaseCycle'] ),
+			'sourceTypes'            => array_values( array_map( 'sanitize_key', (array) ( $coverage['sourceTypes'] ?? [] ) ) ),
+			'freshness'              => array_values( array_map( 'sanitize_key', (array) ( $coverage['freshness'] ?? [] ) ) ),
+			'checkedAt'              => sanitize_text_field( (string) ( $coverage['checkedAt'] ?? '' ) ),
+			'errorCode'              => sanitize_key( (string) ( $coverage['errorCode'] ?? '' ) ),
+			'errorMessage'           => sanitize_text_field( (string) ( $coverage['errorMessage'] ?? '' ) ),
 		];
 	}
 
@@ -216,7 +209,7 @@ final class DocsGuidanceResult {
 			return 'unavailable';
 		}
 
-		if ( $requires_coverage && ! self::coverage_satisfies_required_gate( $coverage ) ) {
+		if ( $requires_coverage && self::coverage_indicates_hard_block( $coverage ) ) {
 			return 'unavailable';
 		}
 
@@ -236,16 +229,19 @@ final class DocsGuidanceResult {
 	}
 
 	/**
+	 * Hard-block only when the coverage probe shows no trusted stable Developer Docs
+	 * (`missing-developer-docs`) or a probe transport failure (`unavailable`). Missing
+	 * release-cycle currency alone degrades-to-warn: the coverage summary still carries
+	 * the warning downstream, so the surface proceeds with a "review current docs" notice.
+	 *
 	 * @param array<string, mixed> $coverage
 	 */
-	private static function coverage_satisfies_required_gate( array $coverage ): bool {
-		$status = sanitize_key( (string) ( $coverage['status'] ?? '' ) );
-
-		if ( 'current' === $status ) {
-			return true;
-		}
-
-		return 'missing-current-release-cycle' === $status && ! empty( $coverage['withinGrace'] );
+	private static function coverage_indicates_hard_block( array $coverage ): bool {
+		return in_array(
+			sanitize_key( (string) ( $coverage['status'] ?? '' ) ),
+			[ 'missing-developer-docs', 'unavailable' ],
+			true
+		);
 	}
 
 	/**

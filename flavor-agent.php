@@ -129,10 +129,6 @@ add_action(
 	[ FlavorAgent\Cloudflare\AISearchClient::class, 'process_context_warm_queue' ]
 );
 add_action(
-	'flavor_agent_docs_grounding_unavailable',
-	[ FlavorAgent\Cloudflare\AISearchClient::class, 'record_coverage_gate_blocked' ]
-);
-add_action(
 	FlavorAgent\Support\CoreRoadmapGuidance::WARM_CRON_HOOK,
 	[ FlavorAgent\Support\CoreRoadmapGuidance::class, 'warm' ],
 	10,

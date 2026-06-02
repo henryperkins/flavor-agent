@@ -5,16 +5,16 @@ This document is the contract reference for the built-in public Developer Docs g
 Use it when you need to answer:
 
 - Who owns the public Cloudflare AI Search corpus used for Developer Docs grounding?
-- Which source scopes and refresh cadence are required before fail-closed recommendation enforcement can ship?
+- Which source scopes and refresh cadence are required before the current-release coverage gate can ship?
 - Which validation evidence must be recorded before enabling the current-release-cycle coverage gate?
 
 Endpoint: `https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search`
 
 Owner: Flavor Agent release maintainer for the built-in public Developer Docs grounding endpoint.
 
-Execution stop line: do not enable fail-closed recommendation enforcement until the person or team with Cloudflare AI Search corpus access has explicitly accepted this ownership and refresh cadence in the release notes or this runbook. Runtime code may emit source-coverage diagnostics while enforcement remains disabled by default.
+Execution stop line: do not enable the current-release coverage gate until the person or team with Cloudflare AI Search corpus access has explicitly accepted this ownership and refresh cadence in the release notes or this runbook. The gate surfaces a trusted-but-degraded warning (it does not block recommendations on the release-cycle dimension), and it stays disabled by default.
 
-Current release decision: for the `v0.1.0` target release environment, corpus ownership and the refresh cadence below are accepted as of the 2026-05-19 validation pass. Enable fail-closed current-release coverage in the target release environment with:
+Current release decision: for the `v0.1.0` target release environment, corpus ownership and the refresh cadence below are accepted as of the 2026-05-19 validation pass. Enable the current-release coverage gate (which surfaces the trusted-but-degraded warning) in the target release environment with:
 
 ```php
 define( 'FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE', true );
@@ -51,7 +51,7 @@ Use this workflow whenever the active WordPress release cycle changes, a Field G
    - WordPress Developer Blog monthly "What's new for developers?" posts and focused developer articles that document active-cycle APIs, block editor changes, theme.json behavior, build tooling, or connector/runtime expectations
 4. Keep supporting sources such as Make/Test, Make/Playground, Make/AI, and Gutenberg GitHub releases in separate research snapshots unless the runtime policy is expanded. They can help humans decide what to ingest, but they do not currently satisfy Flavor Agent's trusted-source coverage gate.
 5. Remove or deprioritize superseded release-cycle source entries when their `published_at` date can no longer pass the freshness windows below. Retaining them as historical search context is acceptable only if current release-cycle sources still rank for the validation query.
-6. After ingestion, run both an MCP search smoke check and the public endpoint validation query. Do not enable or keep fail-closed enforcement unless both the source mix and the freshness metadata match this runbook.
+6. After ingestion, run both an MCP search smoke check and the public endpoint validation query. Do not enable or keep the current-release coverage gate unless both the source mix and the freshness metadata match this runbook.
 
 ## Source Eligibility
 
@@ -98,10 +98,9 @@ Release gate:
 - Confirm release-cycle chunks from `make.wordpress.org/core` or the Developer Blog include a recent `published_at`; a recent `retrieved_at` crawl timestamp does not make an old release-cycle post current. Stable handbook/reference chunks from `developer.wordpress.org` may use `retrieved_at` for crawl freshness because those pages represent maintained reference material rather than dated release-cycle posts.
 - Record the observed `retrieved_at`, `published_at`, source URLs, and result count in the release notes or verification log.
 - Record the validation evidence under `docs/validation/` and make this runbook the final release decision point for enabling `FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE`.
-- Fail-closed recommendation enforcement must stay disabled until the public validation query returns at least one stable `developer-docs` chunk and at least one current `make-core` or `developer-blog` chunk. After corpus ownership accepts that evidence, enable enforcement through `FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE` or the `flavor_agent_docs_grounding_require_current_coverage` filter in the target release environment.
+- Enabling the gate surfaces a warning; it does not fail-close recommendations on the release-cycle dimension. With `FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE` (or the `flavor_agent_docs_grounding_require_current_coverage` filter) on, the coverage probe runs and a missing current release-cycle source attaches a trusted-but-degraded warning to recommendations instead of blocking them. Record the validation evidence before enabling so operators know when the warning is expected.
 
-Coverage grace:
-- Every probe that returns `current` writes a snapshot to the `flavor_agent_docs_source_coverage_last_known_current` option. When a later probe degrades to `missing-current-release-cycle` and the snapshot is within `AISearchClient::SOURCE_COVERAGE_GRACE_TTL` (7 days), the returned coverage is decorated with `withinGrace: true`, `graceLastKnownCurrentAt`, and `graceExpiresAt`. `DocsGuidanceResult` treats `withinGrace` as satisfying the required-coverage gate, so recommendations proceed in `grounded`/`degraded`/`stale` mode and the UI still shows the trusted-but-degraded warning.
-- Grace only applies to `missing-current-release-cycle`; `missing-developer-docs` and transport errors remain blocking because they signal a broader outage.
-- Validation paths (`AISearchClient::validate_configuration()` and the Settings page) do not apply grace — they must see the raw probe result so admins can act on corpus drift.
-- When the gate does block, `DocsGuidanceResult::unavailable_error()` fires the `flavor_agent_docs_grounding_unavailable` action; `AISearchClient::record_coverage_gate_blocked()` records `lastCoverageGateBlockedAt`/`Status`/`Reason`/`InGrace` in the runtime state for diagnostics, surfaced as their own Settings warning. The recorder deliberately does not flip the docs-grounding subsystem `status`, clobber the transport `lastError*` fields, or write an AI Activity row — the coverage gate is a policy outcome, not a search-transport failure, so conflating them would misreport a healthy search subsystem as unavailable and oscillate the status (and activity log) per request. The Settings warning self-heals once a later request passes the gate (`lastCoverageGateBlockedAt` falls behind `lastTrustedSuccessAt`).
+Coverage behavior:
+- `missing-current-release-cycle` (trusted stable Developer Docs present, but no current `make-core`/`developer-blog` source) degrades-to-warn: `DocsGuidanceResult::resolve_status()` resolves `grounded`/`degraded`/`stale` and the coverage summary carries the warning, so recommendations proceed. There is no coverage grace window, last-known-current snapshot, or gate-block Settings warning — make-core publishing is bursty, so blocking on currency would dead-end recommendations during normal between-release lulls.
+- Hard-blocks (`unavailable` status, HTTP 503 via `DocsGuidanceResult::unavailable_error()`, which still fires the `flavor_agent_docs_grounding_unavailable` action) remain for three cases only: no trusted official guidance at all, `missing-developer-docs` (make-core/developer-blog present but no stable Developer Docs backbone), and a coverage-probe transport failure. These are genuine outages, not a release-cycle gap.
+- Validation paths (`AISearchClient::validate_configuration()` and the Settings page) see the raw probe result so admins can act on corpus drift.

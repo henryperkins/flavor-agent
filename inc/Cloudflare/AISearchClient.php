@@ -10,44 +10,42 @@ use FlavorAgent\Support\DocsGuidanceResult;
 
 final class AISearchClient {
 
-	private const DEFAULT_MAX_RESULTS                       = 4;
-	private const MAX_MAX_RESULTS                           = 8;
-	private const CACHE_KEY_PREFIX                          = 'flavor_agent_ai_search_';
-	private const CACHE_SCHEMA_VERSION                      = 3;
-	private const CACHE_TTL                                 = 21600;
-	private const SOURCE_COVERAGE_CACHE_KEY                 = 'flavor_agent_docs_source_coverage_v2';
-	private const SOURCE_COVERAGE_LAST_KNOWN_CURRENT_OPTION = 'flavor_agent_docs_source_coverage_last_known_current';
-	private const SOURCE_COVERAGE_CURRENT_CACHE_TTL         = 21600;
-	private const SOURCE_COVERAGE_NEGATIVE_CACHE_TTL        = 900;
-	private const SOURCE_COVERAGE_ERROR_CACHE_TTL           = 300;
-	private const SOURCE_COVERAGE_GRACE_TTL                 = 604800;
-	private const FAMILY_CACHE_PREFIX                       = 'flavor_agent_docs_family_';
-	private const FAMILY_CACHE_TTL                          = 28800;
-	private const ENTITY_CACHE_PREFIX                       = 'flavor_agent_docs_entity_';
-	private const ENTITY_CACHE_TTL                          = 43200;
-	private const VALIDATION_PROBE_QUERY                    = 'block editor';
-	private const VALIDATION_PROBE_RESULTS                  = 3;
-	private const SOURCE_COVERAGE_PROBE_QUERY               = 'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes';
-	private const SOURCE_COVERAGE_PROBE_RESULTS             = 8;
-	private const DEFAULT_PUBLIC_SEARCH_URL                 = 'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search';
-	private const PUBLIC_HOST_SUFFIX                        = '.search.ai.cloudflare.com';
-	private const PREWARM_STATE_OPTION                      = 'flavor_agent_docs_prewarm_state';
-	private const RUNTIME_STATE_OPTION                      = 'flavor_agent_docs_runtime_state';
-	private const WARM_QUEUE_OPTION                         = 'flavor_agent_docs_warm_queue';
-	private const PREWARM_THROTTLE_SECONDS                  = 3600;
-	private const FOREGROUND_WARM_LOCK_PREFIX               = 'flavor_agent_docs_foreground_warm_';
-	private const FOREGROUND_WARM_LOCK_TTL                  = 30;
-	private const FOREGROUND_WARM_TIMEOUT                   = 5;
-	private const FAIL_CLOSED_FOREGROUND_WARM_TIMEOUT       = 20;
-	private const LAST_KNOWN_CURRENT_GRACE_TTL              = 21600;
-	private const WARM_QUEUE_RETRY_BASE_SECONDS             = 60;
-	private const WARM_QUEUE_RETRY_MAX_SECONDS              = 900;
-	private const MAX_FAMILY_CONTEXT_DEPTH                  = 8;
-	private const GUIDANCE_BLOCK_EDITOR_KEY                 = 'guidance:block-editor';
-	private const GUIDANCE_GLOBAL_STYLES_KEY                = 'guidance:global-styles';
-	private const GUIDANCE_STYLE_BOOK_KEY                   = 'guidance:style-book';
-	private const GUIDANCE_TEMPLATE_KEY                     = 'guidance:template';
-	private const GUIDANCE_TEMPLATE_PART_KEY                = 'guidance:template-part';
+	private const DEFAULT_MAX_RESULTS                 = 4;
+	private const MAX_MAX_RESULTS                     = 8;
+	private const CACHE_KEY_PREFIX                    = 'flavor_agent_ai_search_';
+	private const CACHE_SCHEMA_VERSION                = 3;
+	private const CACHE_TTL                           = 21600;
+	private const SOURCE_COVERAGE_CACHE_KEY           = 'flavor_agent_docs_source_coverage_v2';
+	private const SOURCE_COVERAGE_CURRENT_CACHE_TTL   = 21600;
+	private const SOURCE_COVERAGE_NEGATIVE_CACHE_TTL  = 900;
+	private const SOURCE_COVERAGE_ERROR_CACHE_TTL     = 300;
+	private const FAMILY_CACHE_PREFIX                 = 'flavor_agent_docs_family_';
+	private const FAMILY_CACHE_TTL                    = 28800;
+	private const ENTITY_CACHE_PREFIX                 = 'flavor_agent_docs_entity_';
+	private const ENTITY_CACHE_TTL                    = 43200;
+	private const VALIDATION_PROBE_QUERY              = 'block editor';
+	private const VALIDATION_PROBE_RESULTS            = 3;
+	private const SOURCE_COVERAGE_PROBE_QUERY         = 'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes';
+	private const SOURCE_COVERAGE_PROBE_RESULTS       = 8;
+	private const DEFAULT_PUBLIC_SEARCH_URL           = 'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search';
+	private const PUBLIC_HOST_SUFFIX                  = '.search.ai.cloudflare.com';
+	private const PREWARM_STATE_OPTION                = 'flavor_agent_docs_prewarm_state';
+	private const RUNTIME_STATE_OPTION                = 'flavor_agent_docs_runtime_state';
+	private const WARM_QUEUE_OPTION                   = 'flavor_agent_docs_warm_queue';
+	private const PREWARM_THROTTLE_SECONDS            = 3600;
+	private const FOREGROUND_WARM_LOCK_PREFIX         = 'flavor_agent_docs_foreground_warm_';
+	private const FOREGROUND_WARM_LOCK_TTL            = 30;
+	private const FOREGROUND_WARM_TIMEOUT             = 5;
+	private const FAIL_CLOSED_FOREGROUND_WARM_TIMEOUT = 20;
+	private const LAST_KNOWN_CURRENT_GRACE_TTL        = 21600;
+	private const WARM_QUEUE_RETRY_BASE_SECONDS       = 60;
+	private const WARM_QUEUE_RETRY_MAX_SECONDS        = 900;
+	private const MAX_FAMILY_CONTEXT_DEPTH            = 8;
+	private const GUIDANCE_BLOCK_EDITOR_KEY           = 'guidance:block-editor';
+	private const GUIDANCE_GLOBAL_STYLES_KEY          = 'guidance:global-styles';
+	private const GUIDANCE_STYLE_BOOK_KEY             = 'guidance:style-book';
+	private const GUIDANCE_TEMPLATE_KEY               = 'guidance:template';
+	private const GUIDANCE_TEMPLATE_PART_KEY          = 'guidance:template-part';
 
 	public const PREWARM_CRON_HOOK      = 'flavor_agent_prewarm_docs';
 	public const CONTEXT_WARM_CRON_HOOK = 'flavor_agent_warm_docs_context';
@@ -266,72 +264,37 @@ final class AISearchClient {
 		return $guidance;
 	}
 
-	/**
-	 * Record diagnostics when the docs-grounding coverage gate blocks a recommendation.
-	 *
-	 * Wired to the `flavor_agent_docs_grounding_unavailable` action. Writes only the
-	 * dedicated `lastCoverageGateBlocked*` runtime-state fields so operators can see
-	 * corpus drift (missing-current-release-cycle) without scraping the AI Activity log.
-	 *
-	 * This deliberately does NOT touch the subsystem `status` or the generic `lastError*`
-	 * fields, and passes no `activity_result`: the coverage gate is a policy outcome, not
-	 * a search-transport failure. Conflating the two would mask a healthy search subsystem,
-	 * oscillate the status grounded<->unavailable across requests, and churn the activity
-	 * log. The Settings page surfaces the gate as its own warning (see Admin\Settings\State).
-	 *
-	 * @param array<string, mixed> $result Docs-grounding result that emitted the error.
-	 */
-	public static function record_coverage_gate_blocked( array $result ): void {
-		$coverage = is_array( $result['coverage'] ?? null ) ? $result['coverage'] : [];
-		$state    = self::read_runtime_state();
-
-		$state['lastCoverageGateBlockedAt']      = self::current_runtime_timestamp();
-		$state['lastCoverageGateBlockedStatus']  = sanitize_key( (string) ( $coverage['status'] ?? '' ) );
-		$state['lastCoverageGateBlockedReason']  = sanitize_key( (string) ( $coverage['errorCode'] ?? '' ) );
-		$state['lastCoverageGateBlockedInGrace'] = ! empty( $coverage['withinGrace'] );
-
-		self::write_runtime_state( $state );
-	}
-
 	public static function get_current_source_coverage( bool $allow_probe = false ): array {
 		$cached = get_transient( self::SOURCE_COVERAGE_CACHE_KEY );
 
 		if ( is_array( $cached ) ) {
-			return self::maybe_decorate_with_coverage_grace(
-				self::normalize_source_coverage_summary( $cached )
-			);
+			return self::normalize_source_coverage_summary( $cached );
 		}
 
 		if ( ! $allow_probe ) {
-			return self::maybe_decorate_with_coverage_grace(
-				self::normalize_source_coverage_summary(
-					[
-						'status'       => 'unknown',
-						'errorCode'    => 'coverage_not_checked',
-						'errorMessage' => 'Developer Docs source coverage has not been checked yet.',
-					]
-				)
+			return self::normalize_source_coverage_summary(
+				[
+					'status'       => 'unknown',
+					'errorCode'    => 'coverage_not_checked',
+					'errorMessage' => 'Developer Docs source coverage has not been checked yet.',
+				]
 			);
 		}
 
 		$config = self::get_config();
 		if ( is_wp_error( $config ) ) {
-			return self::maybe_decorate_with_coverage_grace(
-				self::write_source_coverage_cache(
-					[
-						'status'       => 'unavailable',
-						'errorCode'    => $config->get_error_code(),
-						'errorMessage' => $config->get_error_message(),
-					]
-				)
+			return self::write_source_coverage_cache(
+				[
+					'status'       => 'unavailable',
+					'errorCode'    => $config->get_error_code(),
+					'errorMessage' => $config->get_error_message(),
+				]
 			);
 		}
 
 		$coverage = self::probe_current_source_coverage( $config );
 
-		return self::maybe_decorate_with_coverage_grace(
-			self::write_source_coverage_cache( $coverage )
-		);
+		return self::write_source_coverage_cache( $coverage );
 	}
 
 	public static function requires_current_source_coverage(): bool {
@@ -772,30 +735,26 @@ final class AISearchClient {
 	public static function get_runtime_state(): array {
 		if ( ! self::is_configured() ) {
 			return [
-				'status'                         => 'off',
-				'queueDepth'                     => 0,
-				'nextQueueAttemptAt'             => '',
-				'lastSearchAt'                   => '',
-				'lastSearchMode'                 => '',
-				'lastResultCount'                => 0,
-				'lastTrustedSuccessAt'           => '',
-				'lastTrustedSuccessMode'         => '',
-				'lastServedAt'                   => '',
-				'lastServedMode'                 => '',
-				'lastFallbackType'               => '',
-				'lastErrorAt'                    => '',
-				'lastErrorMode'                  => '',
-				'lastErrorCode'                  => '',
-				'lastErrorMessage'               => '',
-				'lastSourceTypes'                => [],
-				'lastFreshness'                  => [],
-				'lastGroundingFingerprint'       => '',
-				'lastRetrievedAt'                => '',
-				'lastPublishedAt'                => '',
-				'lastCoverageGateBlockedAt'      => '',
-				'lastCoverageGateBlockedStatus'  => '',
-				'lastCoverageGateBlockedReason'  => '',
-				'lastCoverageGateBlockedInGrace' => false,
+				'status'                   => 'off',
+				'queueDepth'               => 0,
+				'nextQueueAttemptAt'       => '',
+				'lastSearchAt'             => '',
+				'lastSearchMode'           => '',
+				'lastResultCount'          => 0,
+				'lastTrustedSuccessAt'     => '',
+				'lastTrustedSuccessMode'   => '',
+				'lastServedAt'             => '',
+				'lastServedMode'           => '',
+				'lastFallbackType'         => '',
+				'lastErrorAt'              => '',
+				'lastErrorMode'            => '',
+				'lastErrorCode'            => '',
+				'lastErrorMessage'         => '',
+				'lastSourceTypes'          => [],
+				'lastFreshness'            => [],
+				'lastGroundingFingerprint' => '',
+				'lastRetrievedAt'          => '',
+				'lastPublishedAt'          => '',
 			];
 		}
 
@@ -804,30 +763,26 @@ final class AISearchClient {
 		$next_queue_attempt = self::resolve_next_context_warm_attempt( $queue );
 
 		return [
-			'status'                         => self::resolve_runtime_state_status( $state, $queue ),
-			'queueDepth'                     => count( $queue ),
-			'nextQueueAttemptAt'             => $next_queue_attempt > 0 ? gmdate( 'Y-m-d H:i:s', $next_queue_attempt ) : '',
-			'lastSearchAt'                   => (string) ( $state['lastSearchAt'] ?? '' ),
-			'lastSearchMode'                 => (string) ( $state['lastSearchMode'] ?? '' ),
-			'lastResultCount'                => (int) ( $state['lastResultCount'] ?? 0 ),
-			'lastTrustedSuccessAt'           => (string) ( $state['lastTrustedSuccessAt'] ?? '' ),
-			'lastTrustedSuccessMode'         => (string) ( $state['lastTrustedSuccessMode'] ?? '' ),
-			'lastServedAt'                   => (string) ( $state['lastServedAt'] ?? '' ),
-			'lastServedMode'                 => (string) ( $state['lastServedMode'] ?? '' ),
-			'lastFallbackType'               => (string) ( $state['lastFallbackType'] ?? '' ),
-			'lastErrorAt'                    => (string) ( $state['lastErrorAt'] ?? '' ),
-			'lastErrorMode'                  => (string) ( $state['lastErrorMode'] ?? '' ),
-			'lastErrorCode'                  => (string) ( $state['lastErrorCode'] ?? '' ),
-			'lastErrorMessage'               => (string) ( $state['lastErrorMessage'] ?? '' ),
-			'lastSourceTypes'                => (array) ( $state['lastSourceTypes'] ?? [] ),
-			'lastFreshness'                  => (array) ( $state['lastFreshness'] ?? [] ),
-			'lastGroundingFingerprint'       => (string) ( $state['lastGroundingFingerprint'] ?? '' ),
-			'lastRetrievedAt'                => (string) ( $state['lastRetrievedAt'] ?? '' ),
-			'lastPublishedAt'                => (string) ( $state['lastPublishedAt'] ?? '' ),
-			'lastCoverageGateBlockedAt'      => (string) ( $state['lastCoverageGateBlockedAt'] ?? '' ),
-			'lastCoverageGateBlockedStatus'  => (string) ( $state['lastCoverageGateBlockedStatus'] ?? '' ),
-			'lastCoverageGateBlockedReason'  => (string) ( $state['lastCoverageGateBlockedReason'] ?? '' ),
-			'lastCoverageGateBlockedInGrace' => ! empty( $state['lastCoverageGateBlockedInGrace'] ),
+			'status'                   => self::resolve_runtime_state_status( $state, $queue ),
+			'queueDepth'               => count( $queue ),
+			'nextQueueAttemptAt'       => $next_queue_attempt > 0 ? gmdate( 'Y-m-d H:i:s', $next_queue_attempt ) : '',
+			'lastSearchAt'             => (string) ( $state['lastSearchAt'] ?? '' ),
+			'lastSearchMode'           => (string) ( $state['lastSearchMode'] ?? '' ),
+			'lastResultCount'          => (int) ( $state['lastResultCount'] ?? 0 ),
+			'lastTrustedSuccessAt'     => (string) ( $state['lastTrustedSuccessAt'] ?? '' ),
+			'lastTrustedSuccessMode'   => (string) ( $state['lastTrustedSuccessMode'] ?? '' ),
+			'lastServedAt'             => (string) ( $state['lastServedAt'] ?? '' ),
+			'lastServedMode'           => (string) ( $state['lastServedMode'] ?? '' ),
+			'lastFallbackType'         => (string) ( $state['lastFallbackType'] ?? '' ),
+			'lastErrorAt'              => (string) ( $state['lastErrorAt'] ?? '' ),
+			'lastErrorMode'            => (string) ( $state['lastErrorMode'] ?? '' ),
+			'lastErrorCode'            => (string) ( $state['lastErrorCode'] ?? '' ),
+			'lastErrorMessage'         => (string) ( $state['lastErrorMessage'] ?? '' ),
+			'lastSourceTypes'          => (array) ( $state['lastSourceTypes'] ?? [] ),
+			'lastFreshness'            => (array) ( $state['lastFreshness'] ?? [] ),
+			'lastGroundingFingerprint' => (string) ( $state['lastGroundingFingerprint'] ?? '' ),
+			'lastRetrievedAt'          => (string) ( $state['lastRetrievedAt'] ?? '' ),
+			'lastPublishedAt'          => (string) ( $state['lastPublishedAt'] ?? '' ),
 		];
 	}
 
@@ -1149,30 +1104,26 @@ final class AISearchClient {
 	 */
 	private static function normalize_runtime_state( array $state ): array {
 		return [
-			'status'                         => sanitize_key( (string) ( $state['status'] ?? '' ) ),
-			'lastSearchAt'                   => self::normalize_runtime_timestamp( $state['lastSearchAt'] ?? '' ),
-			'lastSearchMode'                 => sanitize_key( (string) ( $state['lastSearchMode'] ?? '' ) ),
-			'lastResultCount'                => max( 0, (int) ( $state['lastResultCount'] ?? 0 ) ),
-			'lastTrustedSuccessAt'           => self::normalize_runtime_timestamp( $state['lastTrustedSuccessAt'] ?? '' ),
-			'lastTrustedSuccessMode'         => sanitize_key( (string) ( $state['lastTrustedSuccessMode'] ?? '' ) ),
-			'lastServedAt'                   => self::normalize_runtime_timestamp( $state['lastServedAt'] ?? '' ),
-			'lastServedMode'                 => sanitize_key( (string) ( $state['lastServedMode'] ?? '' ) ),
-			'lastFallbackType'               => sanitize_key( (string) ( $state['lastFallbackType'] ?? '' ) ),
-			'lastErrorAt'                    => self::normalize_runtime_timestamp( $state['lastErrorAt'] ?? '' ),
-			'lastErrorMode'                  => sanitize_key( (string) ( $state['lastErrorMode'] ?? '' ) ),
-			'lastErrorCode'                  => sanitize_key( (string) ( $state['lastErrorCode'] ?? '' ) ),
-			'lastErrorMessage'               => sanitize_text_field( (string) ( $state['lastErrorMessage'] ?? '' ) ),
-			'lastSourceTypes'                => array_values( array_map( 'sanitize_key', (array) ( $state['lastSourceTypes'] ?? [] ) ) ),
-			'lastFreshness'                  => array_values( array_map( 'sanitize_key', (array) ( $state['lastFreshness'] ?? [] ) ) ),
-			'lastGroundingFingerprint'       => sanitize_text_field( (string) ( $state['lastGroundingFingerprint'] ?? '' ) ),
-			'lastRetrievedAt'                => sanitize_text_field( (string) ( $state['lastRetrievedAt'] ?? '' ) ),
-			'lastPublishedAt'                => sanitize_text_field( (string) ( $state['lastPublishedAt'] ?? '' ) ),
-			'lastKnownCurrentAt'             => self::normalize_runtime_timestamp( $state['lastKnownCurrentAt'] ?? '' ),
-			'lastKnownCurrentGuidance'       => self::normalize_cached_guidance( (array) ( $state['lastKnownCurrentGuidance'] ?? [] ) ),
-			'lastCoverageGateBlockedAt'      => self::normalize_runtime_timestamp( $state['lastCoverageGateBlockedAt'] ?? '' ),
-			'lastCoverageGateBlockedStatus'  => sanitize_key( (string) ( $state['lastCoverageGateBlockedStatus'] ?? '' ) ),
-			'lastCoverageGateBlockedReason'  => sanitize_key( (string) ( $state['lastCoverageGateBlockedReason'] ?? '' ) ),
-			'lastCoverageGateBlockedInGrace' => ! empty( $state['lastCoverageGateBlockedInGrace'] ),
+			'status'                   => sanitize_key( (string) ( $state['status'] ?? '' ) ),
+			'lastSearchAt'             => self::normalize_runtime_timestamp( $state['lastSearchAt'] ?? '' ),
+			'lastSearchMode'           => sanitize_key( (string) ( $state['lastSearchMode'] ?? '' ) ),
+			'lastResultCount'          => max( 0, (int) ( $state['lastResultCount'] ?? 0 ) ),
+			'lastTrustedSuccessAt'     => self::normalize_runtime_timestamp( $state['lastTrustedSuccessAt'] ?? '' ),
+			'lastTrustedSuccessMode'   => sanitize_key( (string) ( $state['lastTrustedSuccessMode'] ?? '' ) ),
+			'lastServedAt'             => self::normalize_runtime_timestamp( $state['lastServedAt'] ?? '' ),
+			'lastServedMode'           => sanitize_key( (string) ( $state['lastServedMode'] ?? '' ) ),
+			'lastFallbackType'         => sanitize_key( (string) ( $state['lastFallbackType'] ?? '' ) ),
+			'lastErrorAt'              => self::normalize_runtime_timestamp( $state['lastErrorAt'] ?? '' ),
+			'lastErrorMode'            => sanitize_key( (string) ( $state['lastErrorMode'] ?? '' ) ),
+			'lastErrorCode'            => sanitize_key( (string) ( $state['lastErrorCode'] ?? '' ) ),
+			'lastErrorMessage'         => sanitize_text_field( (string) ( $state['lastErrorMessage'] ?? '' ) ),
+			'lastSourceTypes'          => array_values( array_map( 'sanitize_key', (array) ( $state['lastSourceTypes'] ?? [] ) ) ),
+			'lastFreshness'            => array_values( array_map( 'sanitize_key', (array) ( $state['lastFreshness'] ?? [] ) ) ),
+			'lastGroundingFingerprint' => sanitize_text_field( (string) ( $state['lastGroundingFingerprint'] ?? '' ) ),
+			'lastRetrievedAt'          => sanitize_text_field( (string) ( $state['lastRetrievedAt'] ?? '' ) ),
+			'lastPublishedAt'          => sanitize_text_field( (string) ( $state['lastPublishedAt'] ?? '' ) ),
+			'lastKnownCurrentAt'       => self::normalize_runtime_timestamp( $state['lastKnownCurrentAt'] ?? '' ),
+			'lastKnownCurrentGuidance' => self::normalize_cached_guidance( (array) ( $state['lastKnownCurrentGuidance'] ?? [] ) ),
 		];
 	}
 
@@ -2331,17 +2282,14 @@ final class AISearchClient {
 	 */
 	private static function normalize_source_coverage_summary( array $coverage ): array {
 		return [
-			'status'                  => sanitize_key( (string) ( $coverage['status'] ?? 'unknown' ) ),
-			'hasDeveloperDocs'        => ! empty( $coverage['hasDeveloperDocs'] ),
-			'hasCurrentReleaseCycle'  => ! empty( $coverage['hasCurrentReleaseCycle'] ),
-			'sourceTypes'             => array_values( array_map( 'sanitize_key', (array) ( $coverage['sourceTypes'] ?? [] ) ) ),
-			'freshness'               => array_values( array_map( 'sanitize_key', (array) ( $coverage['freshness'] ?? [] ) ) ),
-			'checkedAt'               => sanitize_text_field( (string) ( $coverage['checkedAt'] ?? gmdate( 'Y-m-d H:i:s' ) ) ),
-			'errorCode'               => sanitize_key( (string) ( $coverage['errorCode'] ?? '' ) ),
-			'errorMessage'            => sanitize_text_field( (string) ( $coverage['errorMessage'] ?? '' ) ),
-			'withinGrace'             => ! empty( $coverage['withinGrace'] ),
-			'graceLastKnownCurrentAt' => sanitize_text_field( (string) ( $coverage['graceLastKnownCurrentAt'] ?? '' ) ),
-			'graceExpiresAt'          => sanitize_text_field( (string) ( $coverage['graceExpiresAt'] ?? '' ) ),
+			'status'                 => sanitize_key( (string) ( $coverage['status'] ?? 'unknown' ) ),
+			'hasDeveloperDocs'       => ! empty( $coverage['hasDeveloperDocs'] ),
+			'hasCurrentReleaseCycle' => ! empty( $coverage['hasCurrentReleaseCycle'] ),
+			'sourceTypes'            => array_values( array_map( 'sanitize_key', (array) ( $coverage['sourceTypes'] ?? [] ) ) ),
+			'freshness'              => array_values( array_map( 'sanitize_key', (array) ( $coverage['freshness'] ?? [] ) ) ),
+			'checkedAt'              => sanitize_text_field( (string) ( $coverage['checkedAt'] ?? gmdate( 'Y-m-d H:i:s' ) ) ),
+			'errorCode'              => sanitize_key( (string) ( $coverage['errorCode'] ?? '' ) ),
+			'errorMessage'           => sanitize_text_field( (string) ( $coverage['errorMessage'] ?? '' ) ),
 		];
 	}
 
@@ -2352,10 +2300,6 @@ final class AISearchClient {
 	private static function write_source_coverage_cache( array $coverage ): array {
 		$coverage = self::normalize_source_coverage_summary( $coverage );
 
-		if ( 'current' === sanitize_key( (string) ( $coverage['status'] ?? '' ) ) ) {
-			self::write_last_known_current_coverage_snapshot( $coverage );
-		}
-
 		set_transient(
 			self::SOURCE_COVERAGE_CACHE_KEY,
 			$coverage,
@@ -2363,69 +2307,6 @@ final class AISearchClient {
 		);
 
 		return $coverage;
-	}
-
-	/**
-	 * Decorate the coverage summary with grace fields when the corpus has
-	 * temporarily slipped past the make-core/developer-blog freshness ceiling
-	 * but was recently confirmed current. The underlying status is preserved so
-	 * the UI can still display the warning; the gate consults `withinGrace` to
-	 * decide whether to block.
-	 *
-	 * Grace only applies to `missing-current-release-cycle` — other failure
-	 * modes (no developer-docs, transport errors) remain blocking.
-	 *
-	 * @param array<string, mixed> $coverage
-	 * @return array<string, mixed>
-	 */
-	private static function maybe_decorate_with_coverage_grace( array $coverage ): array {
-		$status = sanitize_key( (string) ( $coverage['status'] ?? '' ) );
-
-		if ( 'missing-current-release-cycle' !== $status ) {
-			return $coverage;
-		}
-
-		$snapshot    = self::read_last_known_current_coverage_snapshot();
-		$recorded_at = (int) ( $snapshot['recordedAt'] ?? 0 );
-
-		if ( $recorded_at <= 0 ) {
-			return $coverage;
-		}
-
-		$expires_at = $recorded_at + self::SOURCE_COVERAGE_GRACE_TTL;
-
-		if ( time() > $expires_at ) {
-			return $coverage;
-		}
-
-		$coverage['withinGrace']             = true;
-		$coverage['graceLastKnownCurrentAt'] = gmdate( 'Y-m-d H:i:s', $recorded_at );
-		$coverage['graceExpiresAt']          = gmdate( 'Y-m-d H:i:s', $expires_at );
-
-		return $coverage;
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private static function read_last_known_current_coverage_snapshot(): array {
-		$snapshot = get_option( self::SOURCE_COVERAGE_LAST_KNOWN_CURRENT_OPTION, [] );
-
-		return is_array( $snapshot ) ? $snapshot : [];
-	}
-
-	/**
-	 * @param array<string, mixed> $coverage
-	 */
-	private static function write_last_known_current_coverage_snapshot( array $coverage ): void {
-		update_option(
-			self::SOURCE_COVERAGE_LAST_KNOWN_CURRENT_OPTION,
-			[
-				'recordedAt' => time(),
-				'coverage'   => $coverage,
-			],
-			false
-		);
 	}
 
 	/**

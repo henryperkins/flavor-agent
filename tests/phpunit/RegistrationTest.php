@@ -1464,18 +1464,11 @@ final class RegistrationTest extends TestCase {
 			'object',
 			$ability['output_schema']['properties']['docsGrounding']['type'] ?? null
 		);
-		$this->assertSame(
-			'boolean',
-			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties']['withinGrace']['type'] ?? null
-		);
-		$this->assertSame(
-			'string',
-			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties']['graceLastKnownCurrentAt']['type'] ?? null
-		);
-		$this->assertSame(
-			'string',
-			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties']['graceExpiresAt']['type'] ?? null
-		);
+		$wordpress_docs_coverage_properties =
+			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties'] ?? [];
+		$this->assertArrayNotHasKey( 'withinGrace', $wordpress_docs_coverage_properties );
+		$this->assertArrayNotHasKey( 'graceLastKnownCurrentAt', $wordpress_docs_coverage_properties );
+		$this->assertArrayNotHasKey( 'graceExpiresAt', $wordpress_docs_coverage_properties );
 		$this->assertSame(
 			'string',
 			$ability['output_schema']['properties']['docsGroundingFingerprint']['type'] ?? null
@@ -1513,9 +1506,9 @@ final class RegistrationTest extends TestCase {
 			$this->assertSame( 'array', $docs_grounding_properties['sourceTypes']['type'] ?? null, $ability_id );
 			$this->assertSame( 'object', $docs_grounding_properties['coverage']['type'] ?? null, $ability_id );
 			$this->assertSame( 'boolean', $coverage_properties['hasCurrentReleaseCycle']['type'] ?? null, $ability_id );
-			$this->assertSame( 'boolean', $coverage_properties['withinGrace']['type'] ?? null, $ability_id );
-			$this->assertSame( 'string', $coverage_properties['graceLastKnownCurrentAt']['type'] ?? null, $ability_id );
-			$this->assertSame( 'string', $coverage_properties['graceExpiresAt']['type'] ?? null, $ability_id );
+			$this->assertArrayNotHasKey( 'withinGrace', $coverage_properties, $ability_id );
+			$this->assertArrayNotHasKey( 'graceLastKnownCurrentAt', $coverage_properties, $ability_id );
+			$this->assertArrayNotHasKey( 'graceExpiresAt', $coverage_properties, $ability_id );
 			$this->assertSame( 'string', $properties['docsGroundingFingerprint']['type'] ?? null, $ability_id );
 		}
 	}

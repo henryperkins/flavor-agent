@@ -454,24 +454,6 @@ final class State {
 				}
 			}
 
-			$coverage_gate_status     = (string) ( $state['runtime_docs_grounding']['lastCoverageGateBlockedStatus'] ?? '' );
-			$coverage_gate_blocked_at = (string) ( $state['runtime_docs_grounding']['lastCoverageGateBlockedAt'] ?? '' );
-			$last_trusted_success_at  = (string) ( $state['runtime_docs_grounding']['lastTrustedSuccessAt'] ?? '' );
-
-			// Surface the release-cycle coverage gate as its own warning, distinct from
-			// the search-transport status. Shown only while the gate-block is the most
-			// recent docs outcome (blocked-at >= last trusted success), so it self-heals
-			// once a later request passes the gate.
-			if (
-				'missing-current-release-cycle' === $coverage_gate_status &&
-				$coverage_gate_blocked_at >= $last_trusted_success_at
-			) {
-				$status_blocks[] = [
-					'tone'    => 'warning',
-					'message' => __( 'Developer Docs recommendations are paused by the release-cycle coverage gate: the corpus is missing current WordPress release-cycle sources and the coverage grace window has lapsed. Docs search itself is healthy and resumes recommendations once current Make/Core or Developer Blog sources return.', 'flavor-agent' ),
-				];
-			}
-
 			if ( in_array( (string) ( $state['prewarm_state']['status'] ?? '' ), [ 'failed', 'partial' ], true ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
