@@ -2372,39 +2372,6 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'abc123', $output );
 	}
 
-	public function test_render_page_shows_coverage_gate_blocked_runtime_warning(): void {
-		WordPressTestState::$options = [
-			'flavor_agent_docs_runtime_state' => [
-				'status'                 => 'grounded',
-				'lastSearchAt'           => gmdate( 'Y-m-d H:i:s', time() - 3600 ),
-				'lastResultCount'        => 2,
-				'lastTrustedSuccessAt'   => gmdate( 'Y-m-d H:i:s', time() - 3600 ),
-				'lastTrustedSuccessMode' => 'foreground',
-			],
-		];
-
-		AISearchClient::record_coverage_gate_blocked(
-			[
-				'status'   => 'unavailable',
-				'coverage' => [
-					'status'       => 'missing-current-release-cycle',
-					'errorCode'    => 'missing_current_release_cycle',
-					'errorMessage' => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-					'withinGrace'  => false,
-				],
-			]
-		);
-
-		ob_start();
-		Settings::render_page();
-		$output = (string) ob_get_clean();
-
-		// The coverage gate is surfaced as its own warning, kept distinct from the
-		// search-transport status (which stays healthy after a successful search).
-		$this->assertStringContainsString( 'paused by the release-cycle coverage gate', $output );
-		$this->assertStringNotContainsString( 'Developer Docs grounding is unavailable.', $output );
-	}
-
 	/**
 	 * @return array<string, mixed>
 	 */

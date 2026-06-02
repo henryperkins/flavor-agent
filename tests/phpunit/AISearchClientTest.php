@@ -691,45 +691,6 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 300, WordPressTestState::$transient_expirations['flavor_agent_docs_source_coverage_v2'] ?? null );
 	}
 
-	public function test_record_coverage_gate_blocked_records_diagnostics_without_clobbering_search_health(): void {
-		WordPressTestState::$options['flavor_agent_docs_runtime_state'] = [
-			'status'                 => 'grounded',
-			'lastSearchAt'           => gmdate( 'Y-m-d H:i:s', time() - 60 ),
-			'lastResultCount'        => 2,
-			'lastTrustedSuccessAt'   => gmdate( 'Y-m-d H:i:s', time() - 60 ),
-			'lastTrustedSuccessMode' => 'foreground',
-		];
-		$result = [
-			'status'   => 'unavailable',
-			'coverage' => [
-				'status'       => 'missing-current-release-cycle',
-				'errorCode'    => 'missing_current_release_cycle',
-				'errorMessage' => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-				'withinGrace'  => false,
-			],
-		];
-
-		AISearchClient::record_coverage_gate_blocked( $result );
-
-		$state = AISearchClient::get_runtime_state();
-
-		// A coverage gate-block is a policy outcome, not a search-transport
-		// failure. Recording it must not force the subsystem status or clobber
-		// the generic transport error fields, which would mask a healthy search
-		// subsystem and oscillate the status (and AI Activity log) per request.
-		$this->assertSame( 'healthy', $state['status'] );
-		$this->assertSame( '', $state['lastErrorAt'] );
-		$this->assertSame( '', $state['lastErrorMode'] );
-		$this->assertSame( '', $state['lastErrorCode'] );
-		$this->assertSame( '', $state['lastErrorMessage'] );
-
-		// The dedicated coverage-gate diagnostics are still captured for operators.
-		$this->assertNotSame( '', $state['lastCoverageGateBlockedAt'] );
-		$this->assertSame( 'missing-current-release-cycle', $state['lastCoverageGateBlockedStatus'] );
-		$this->assertSame( 'missing_current_release_cycle', $state['lastCoverageGateBlockedReason'] );
-		$this->assertFalse( $state['lastCoverageGateBlockedInGrace'] );
-	}
-
 	public function test_validate_configuration_uses_short_ttl_for_missing_release_cycle_results(): void {
 		WordPressTestState::$remote_post_responses = [
 			$this->trusted_docs_response(

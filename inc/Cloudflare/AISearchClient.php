@@ -264,33 +264,6 @@ final class AISearchClient {
 		return $guidance;
 	}
 
-	/**
-	 * Record diagnostics when the docs-grounding coverage gate blocks a recommendation.
-	 *
-	 * Wired to the `flavor_agent_docs_grounding_unavailable` action. Writes only the
-	 * dedicated `lastCoverageGateBlocked*` runtime-state fields so operators can see
-	 * corpus drift (missing-current-release-cycle) without scraping the AI Activity log.
-	 *
-	 * This deliberately does NOT touch the subsystem `status` or the generic `lastError*`
-	 * fields, and passes no `activity_result`: the coverage gate is a policy outcome, not
-	 * a search-transport failure. Conflating the two would mask a healthy search subsystem,
-	 * oscillate the status grounded<->unavailable across requests, and churn the activity
-	 * log. The Settings page surfaces the gate as its own warning (see Admin\Settings\State).
-	 *
-	 * @param array<string, mixed> $result Docs-grounding result that emitted the error.
-	 */
-	public static function record_coverage_gate_blocked( array $result ): void {
-		$coverage = is_array( $result['coverage'] ?? null ) ? $result['coverage'] : [];
-		$state    = self::read_runtime_state();
-
-		$state['lastCoverageGateBlockedAt']      = self::current_runtime_timestamp();
-		$state['lastCoverageGateBlockedStatus']  = sanitize_key( (string) ( $coverage['status'] ?? '' ) );
-		$state['lastCoverageGateBlockedReason']  = sanitize_key( (string) ( $coverage['errorCode'] ?? '' ) );
-		$state['lastCoverageGateBlockedInGrace'] = ! empty( $coverage['withinGrace'] );
-
-		self::write_runtime_state( $state );
-	}
-
 	public static function get_current_source_coverage( bool $allow_probe = false ): array {
 		$cached = get_transient( self::SOURCE_COVERAGE_CACHE_KEY );
 
@@ -762,30 +735,26 @@ final class AISearchClient {
 	public static function get_runtime_state(): array {
 		if ( ! self::is_configured() ) {
 			return [
-				'status'                         => 'off',
-				'queueDepth'                     => 0,
-				'nextQueueAttemptAt'             => '',
-				'lastSearchAt'                   => '',
-				'lastSearchMode'                 => '',
-				'lastResultCount'                => 0,
-				'lastTrustedSuccessAt'           => '',
-				'lastTrustedSuccessMode'         => '',
-				'lastServedAt'                   => '',
-				'lastServedMode'                 => '',
-				'lastFallbackType'               => '',
-				'lastErrorAt'                    => '',
-				'lastErrorMode'                  => '',
-				'lastErrorCode'                  => '',
-				'lastErrorMessage'               => '',
-				'lastSourceTypes'                => [],
-				'lastFreshness'                  => [],
-				'lastGroundingFingerprint'       => '',
-				'lastRetrievedAt'                => '',
-				'lastPublishedAt'                => '',
-				'lastCoverageGateBlockedAt'      => '',
-				'lastCoverageGateBlockedStatus'  => '',
-				'lastCoverageGateBlockedReason'  => '',
-				'lastCoverageGateBlockedInGrace' => false,
+				'status'                   => 'off',
+				'queueDepth'               => 0,
+				'nextQueueAttemptAt'       => '',
+				'lastSearchAt'             => '',
+				'lastSearchMode'           => '',
+				'lastResultCount'          => 0,
+				'lastTrustedSuccessAt'     => '',
+				'lastTrustedSuccessMode'   => '',
+				'lastServedAt'             => '',
+				'lastServedMode'           => '',
+				'lastFallbackType'         => '',
+				'lastErrorAt'              => '',
+				'lastErrorMode'            => '',
+				'lastErrorCode'            => '',
+				'lastErrorMessage'         => '',
+				'lastSourceTypes'          => [],
+				'lastFreshness'            => [],
+				'lastGroundingFingerprint' => '',
+				'lastRetrievedAt'          => '',
+				'lastPublishedAt'          => '',
 			];
 		}
 
@@ -794,30 +763,26 @@ final class AISearchClient {
 		$next_queue_attempt = self::resolve_next_context_warm_attempt( $queue );
 
 		return [
-			'status'                         => self::resolve_runtime_state_status( $state, $queue ),
-			'queueDepth'                     => count( $queue ),
-			'nextQueueAttemptAt'             => $next_queue_attempt > 0 ? gmdate( 'Y-m-d H:i:s', $next_queue_attempt ) : '',
-			'lastSearchAt'                   => (string) ( $state['lastSearchAt'] ?? '' ),
-			'lastSearchMode'                 => (string) ( $state['lastSearchMode'] ?? '' ),
-			'lastResultCount'                => (int) ( $state['lastResultCount'] ?? 0 ),
-			'lastTrustedSuccessAt'           => (string) ( $state['lastTrustedSuccessAt'] ?? '' ),
-			'lastTrustedSuccessMode'         => (string) ( $state['lastTrustedSuccessMode'] ?? '' ),
-			'lastServedAt'                   => (string) ( $state['lastServedAt'] ?? '' ),
-			'lastServedMode'                 => (string) ( $state['lastServedMode'] ?? '' ),
-			'lastFallbackType'               => (string) ( $state['lastFallbackType'] ?? '' ),
-			'lastErrorAt'                    => (string) ( $state['lastErrorAt'] ?? '' ),
-			'lastErrorMode'                  => (string) ( $state['lastErrorMode'] ?? '' ),
-			'lastErrorCode'                  => (string) ( $state['lastErrorCode'] ?? '' ),
-			'lastErrorMessage'               => (string) ( $state['lastErrorMessage'] ?? '' ),
-			'lastSourceTypes'                => (array) ( $state['lastSourceTypes'] ?? [] ),
-			'lastFreshness'                  => (array) ( $state['lastFreshness'] ?? [] ),
-			'lastGroundingFingerprint'       => (string) ( $state['lastGroundingFingerprint'] ?? '' ),
-			'lastRetrievedAt'                => (string) ( $state['lastRetrievedAt'] ?? '' ),
-			'lastPublishedAt'                => (string) ( $state['lastPublishedAt'] ?? '' ),
-			'lastCoverageGateBlockedAt'      => (string) ( $state['lastCoverageGateBlockedAt'] ?? '' ),
-			'lastCoverageGateBlockedStatus'  => (string) ( $state['lastCoverageGateBlockedStatus'] ?? '' ),
-			'lastCoverageGateBlockedReason'  => (string) ( $state['lastCoverageGateBlockedReason'] ?? '' ),
-			'lastCoverageGateBlockedInGrace' => ! empty( $state['lastCoverageGateBlockedInGrace'] ),
+			'status'                   => self::resolve_runtime_state_status( $state, $queue ),
+			'queueDepth'               => count( $queue ),
+			'nextQueueAttemptAt'       => $next_queue_attempt > 0 ? gmdate( 'Y-m-d H:i:s', $next_queue_attempt ) : '',
+			'lastSearchAt'             => (string) ( $state['lastSearchAt'] ?? '' ),
+			'lastSearchMode'           => (string) ( $state['lastSearchMode'] ?? '' ),
+			'lastResultCount'          => (int) ( $state['lastResultCount'] ?? 0 ),
+			'lastTrustedSuccessAt'     => (string) ( $state['lastTrustedSuccessAt'] ?? '' ),
+			'lastTrustedSuccessMode'   => (string) ( $state['lastTrustedSuccessMode'] ?? '' ),
+			'lastServedAt'             => (string) ( $state['lastServedAt'] ?? '' ),
+			'lastServedMode'           => (string) ( $state['lastServedMode'] ?? '' ),
+			'lastFallbackType'         => (string) ( $state['lastFallbackType'] ?? '' ),
+			'lastErrorAt'              => (string) ( $state['lastErrorAt'] ?? '' ),
+			'lastErrorMode'            => (string) ( $state['lastErrorMode'] ?? '' ),
+			'lastErrorCode'            => (string) ( $state['lastErrorCode'] ?? '' ),
+			'lastErrorMessage'         => (string) ( $state['lastErrorMessage'] ?? '' ),
+			'lastSourceTypes'          => (array) ( $state['lastSourceTypes'] ?? [] ),
+			'lastFreshness'            => (array) ( $state['lastFreshness'] ?? [] ),
+			'lastGroundingFingerprint' => (string) ( $state['lastGroundingFingerprint'] ?? '' ),
+			'lastRetrievedAt'          => (string) ( $state['lastRetrievedAt'] ?? '' ),
+			'lastPublishedAt'          => (string) ( $state['lastPublishedAt'] ?? '' ),
 		];
 	}
 
@@ -1139,30 +1104,26 @@ final class AISearchClient {
 	 */
 	private static function normalize_runtime_state( array $state ): array {
 		return [
-			'status'                         => sanitize_key( (string) ( $state['status'] ?? '' ) ),
-			'lastSearchAt'                   => self::normalize_runtime_timestamp( $state['lastSearchAt'] ?? '' ),
-			'lastSearchMode'                 => sanitize_key( (string) ( $state['lastSearchMode'] ?? '' ) ),
-			'lastResultCount'                => max( 0, (int) ( $state['lastResultCount'] ?? 0 ) ),
-			'lastTrustedSuccessAt'           => self::normalize_runtime_timestamp( $state['lastTrustedSuccessAt'] ?? '' ),
-			'lastTrustedSuccessMode'         => sanitize_key( (string) ( $state['lastTrustedSuccessMode'] ?? '' ) ),
-			'lastServedAt'                   => self::normalize_runtime_timestamp( $state['lastServedAt'] ?? '' ),
-			'lastServedMode'                 => sanitize_key( (string) ( $state['lastServedMode'] ?? '' ) ),
-			'lastFallbackType'               => sanitize_key( (string) ( $state['lastFallbackType'] ?? '' ) ),
-			'lastErrorAt'                    => self::normalize_runtime_timestamp( $state['lastErrorAt'] ?? '' ),
-			'lastErrorMode'                  => sanitize_key( (string) ( $state['lastErrorMode'] ?? '' ) ),
-			'lastErrorCode'                  => sanitize_key( (string) ( $state['lastErrorCode'] ?? '' ) ),
-			'lastErrorMessage'               => sanitize_text_field( (string) ( $state['lastErrorMessage'] ?? '' ) ),
-			'lastSourceTypes'                => array_values( array_map( 'sanitize_key', (array) ( $state['lastSourceTypes'] ?? [] ) ) ),
-			'lastFreshness'                  => array_values( array_map( 'sanitize_key', (array) ( $state['lastFreshness'] ?? [] ) ) ),
-			'lastGroundingFingerprint'       => sanitize_text_field( (string) ( $state['lastGroundingFingerprint'] ?? '' ) ),
-			'lastRetrievedAt'                => sanitize_text_field( (string) ( $state['lastRetrievedAt'] ?? '' ) ),
-			'lastPublishedAt'                => sanitize_text_field( (string) ( $state['lastPublishedAt'] ?? '' ) ),
-			'lastKnownCurrentAt'             => self::normalize_runtime_timestamp( $state['lastKnownCurrentAt'] ?? '' ),
-			'lastKnownCurrentGuidance'       => self::normalize_cached_guidance( (array) ( $state['lastKnownCurrentGuidance'] ?? [] ) ),
-			'lastCoverageGateBlockedAt'      => self::normalize_runtime_timestamp( $state['lastCoverageGateBlockedAt'] ?? '' ),
-			'lastCoverageGateBlockedStatus'  => sanitize_key( (string) ( $state['lastCoverageGateBlockedStatus'] ?? '' ) ),
-			'lastCoverageGateBlockedReason'  => sanitize_key( (string) ( $state['lastCoverageGateBlockedReason'] ?? '' ) ),
-			'lastCoverageGateBlockedInGrace' => ! empty( $state['lastCoverageGateBlockedInGrace'] ),
+			'status'                   => sanitize_key( (string) ( $state['status'] ?? '' ) ),
+			'lastSearchAt'             => self::normalize_runtime_timestamp( $state['lastSearchAt'] ?? '' ),
+			'lastSearchMode'           => sanitize_key( (string) ( $state['lastSearchMode'] ?? '' ) ),
+			'lastResultCount'          => max( 0, (int) ( $state['lastResultCount'] ?? 0 ) ),
+			'lastTrustedSuccessAt'     => self::normalize_runtime_timestamp( $state['lastTrustedSuccessAt'] ?? '' ),
+			'lastTrustedSuccessMode'   => sanitize_key( (string) ( $state['lastTrustedSuccessMode'] ?? '' ) ),
+			'lastServedAt'             => self::normalize_runtime_timestamp( $state['lastServedAt'] ?? '' ),
+			'lastServedMode'           => sanitize_key( (string) ( $state['lastServedMode'] ?? '' ) ),
+			'lastFallbackType'         => sanitize_key( (string) ( $state['lastFallbackType'] ?? '' ) ),
+			'lastErrorAt'              => self::normalize_runtime_timestamp( $state['lastErrorAt'] ?? '' ),
+			'lastErrorMode'            => sanitize_key( (string) ( $state['lastErrorMode'] ?? '' ) ),
+			'lastErrorCode'            => sanitize_key( (string) ( $state['lastErrorCode'] ?? '' ) ),
+			'lastErrorMessage'         => sanitize_text_field( (string) ( $state['lastErrorMessage'] ?? '' ) ),
+			'lastSourceTypes'          => array_values( array_map( 'sanitize_key', (array) ( $state['lastSourceTypes'] ?? [] ) ) ),
+			'lastFreshness'            => array_values( array_map( 'sanitize_key', (array) ( $state['lastFreshness'] ?? [] ) ) ),
+			'lastGroundingFingerprint' => sanitize_text_field( (string) ( $state['lastGroundingFingerprint'] ?? '' ) ),
+			'lastRetrievedAt'          => sanitize_text_field( (string) ( $state['lastRetrievedAt'] ?? '' ) ),
+			'lastPublishedAt'          => sanitize_text_field( (string) ( $state['lastPublishedAt'] ?? '' ) ),
+			'lastKnownCurrentAt'       => self::normalize_runtime_timestamp( $state['lastKnownCurrentAt'] ?? '' ),
+			'lastKnownCurrentGuidance' => self::normalize_cached_guidance( (array) ( $state['lastKnownCurrentGuidance'] ?? [] ) ),
 		];
 	}
 
