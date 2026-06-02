@@ -658,6 +658,11 @@ function PatternInserterNotice( {
 			'Flavor Agent did not find a strong pattern match for this insertion point yet.',
 			'flavor-agent'
 		);
+	} else if ( status === 'no-patterns' ) {
+		resolvedMessage = __(
+			"This spot doesn't accept block patterns. Click into the page body (or a container that allows patterns) to get recommendations.",
+			'flavor-agent'
+		);
 	}
 
 	return (
@@ -793,6 +798,18 @@ export default function PatternRecommender() {
 		},
 		[ inserterRootClientId ]
 	);
+	// Top-level allowed patterns distinguish "this container allows no patterns"
+	// from "the editor exposes no patterns at all" (sparse theme or not-yet-hydrated).
+	const topLevelVisiblePatternNames = useSelect(
+		( select ) =>
+			getVisiblePatternNames( null, select( blockEditorStore ) ),
+		[]
+	);
+	const insertionPointAllowsNoPatterns =
+		canRecommend &&
+		hasInsertionPoint &&
+		visiblePatternNames.length === 0 &&
+		topLevelVisiblePatternNames.length > 0;
 	const {
 		patternError,
 		patternErrorDetails,
@@ -1503,7 +1520,11 @@ export default function PatternRecommender() {
 	] );
 
 	useEffect( () => {
-		if ( ! canRecommend || ! effectivePostType ) {
+		if (
+			! canRecommend ||
+			! effectivePostType ||
+			insertionPointAllowsNoPatterns
+		) {
 			return;
 		}
 
@@ -1511,13 +1532,14 @@ export default function PatternRecommender() {
 	}, [
 		canRecommend,
 		effectivePostType,
+		insertionPointAllowsNoPatterns,
 		fetchPatternRecommendationsForCurrentTarget,
 	] );
 
 	const handleSearchInput = useCallback(
 		( value ) => {
 			scheduleSearchFetch( () => {
-				if ( ! effectivePostType ) {
+				if ( ! effectivePostType || insertionPointAllowsNoPatterns ) {
 					return;
 				}
 
@@ -1538,6 +1560,7 @@ export default function PatternRecommender() {
 		},
 		[
 			effectivePostType,
+			insertionPointAllowsNoPatterns,
 			buildBaseInput,
 			selectedBlockName,
 			fetchPatternRecommendationsForCurrentTarget,
@@ -1646,6 +1669,8 @@ export default function PatternRecommender() {
 					diagnostics={ patternDiagnostics }
 				/>
 			);
+		} else if ( insertionPointAllowsNoPatterns ) {
+			notice = <PatternInserterNotice status="no-patterns" />;
 		} else if ( patternStatus === 'error' ) {
 			notice = (
 				<PatternInserterNotice
