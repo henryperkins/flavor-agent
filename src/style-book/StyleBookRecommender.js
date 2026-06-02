@@ -1,4 +1,4 @@
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch, useRegistry, useSelect } from '@wordpress/data';
 import {
 	createPortal,
 	useCallback,
@@ -30,10 +30,6 @@ import {
 	collectThemeTokenDiagnosticsFromSettings,
 } from '../context/theme-tokens';
 import {
-	buildTemplateStructureSnapshot,
-	collectViewportVisibilitySummary,
-} from '../utils/editor-context-metadata';
-import {
 	getExecutableSurfaceEffectiveStaleReason,
 	getExecutableSurfaceStaleMessage,
 } from '../utils/recommendation-stale-reasons';
@@ -42,21 +38,21 @@ import { STORE_NAME } from '../store';
 import {
 	getLatestAppliedActivity,
 	getLatestUndoableActivity,
-	getResolvedActivityEntries,
 } from '../store/activity-history';
 import {
 	getConnectorApprovalNotice,
 	getSurfaceCapability,
 } from '../utils/capability-flags';
 import { buildStyleBookRecommendationRequestSignature } from '../utils/recommendation-request-signature';
-import {
-	buildGlobalStylesRecommendationContextSignature,
-	getGlobalStylesActivityUndoState,
-	getGlobalStylesUserConfig,
-} from '../utils/style-operations';
+import { buildGlobalStylesRecommendationContextSignature } from '../utils/style-operations';
 import { normalizeTemplateType } from '../utils/template-types';
-import { getSuggestionKey } from '../inspector/suggestion-keys';
 import { buildStyleRecommendationRequestInput } from '../style-surfaces/request-input';
+import {
+	selectGlobalStylesDataDependencies,
+	useGlobalStylesData,
+} from '../style-surfaces/use-global-styles-data';
+import { useStyleSurfaceActivityContext } from '../style-surfaces/use-style-surface-activity-context';
+import { useStyleSurfaceDerivedContext } from '../style-surfaces/use-style-surface-derived-context';
 import { getStyleBookUiState, subscribeToStyleBookUi } from './dom';
 import {
 	getStyleSuggestionToneLabel,
@@ -347,6 +343,7 @@ function StyleBookPanel( {
 }
 
 export default function StyleBookRecommender() {
+	const registry = useRegistry();
 	const [ prompt, setPrompt ] = useState( '' );
 	const [ portalNode, setPortalNode ] = useState( null );
 	const hydratedResultKeyRef = useRef( null );
@@ -362,6 +359,15 @@ export default function StyleBookRecommender() {
 		( select ) => select( 'core/block-editor' )?.getSettings?.() || {},
 		[]
 	);
+	const globalStylesDataDependencies = useSelect(
+		( select ) => selectGlobalStylesDataDependencies( select ),
+		[]
+	);
+	const globalStylesData = useGlobalStylesData(
+		registry,
+		globalStylesDataDependencies
+	);
+	const { globalStylesId, currentConfig, mergedConfig } = globalStylesData;
 	const themeTokenDiagnostics = useMemo(
 		() => collectThemeTokenDiagnosticsFromSettings( blockEditorSettings ),
 		[ blockEditorSettings ]
@@ -374,16 +380,11 @@ export default function StyleBookRecommender() {
 	const {
 		isGlobalStylesActive,
 		isSiteEditor,
-		scope,
 		blockType,
-		currentConfig,
-		mergedConfig,
-		currentStyles,
-		mergedStyles,
-		templateStructure,
-		templateVisibility,
-		designSemantics,
-		rawSuggestions,
+		templateSlug,
+		editedBlocks: surfaceEditedBlocks,
+		rawRecommendations,
+		templateType: surfaceTemplateType,
 		currentExplanation,
 		currentRequestPrompt,
 		currentReviewContextSignature,
@@ -397,13 +398,12 @@ export default function StyleBookRecommender() {
 		selectedSuggestionKey,
 		applyStatus,
 		undoStatus,
-		activityEntries,
+		activityLog,
+		lastUndoneActivityId,
 		currentError,
 		currentErrorDetails,
 		currentApplyError,
 		currentUndoError,
-		hasUndoSuccess,
-		buildNotice,
 	} = useSelect(
 		( select ) => {
 			const interfaceStore = select( 'core/interface' );
@@ -418,97 +418,25 @@ export default function StyleBookRecommender() {
 				editedPostType === 'wp_template'
 					? editSite?.getEditedPostId?.() || ''
 					: '';
-			const templateSlug =
+			const selectedTemplateSlug =
 				typeof editedTemplateRef === 'string' ? editedTemplateRef : '';
-			const templateType = normalizeTemplateType( templateSlug ) || '';
-			const globalStylesData = getGlobalStylesUserConfig( {
-				select: ( storeName ) => select( storeName ),
-			} );
+			const templateType =
+				normalizeTemplateType( selectedTemplateSlug ) || '';
 			const blockName = styleBookTargetBlockName;
-			const blockTitle = styleBookTargetBlockTitle;
-			const styleScope =
-				globalStylesData?.globalStylesId && blockName
-					? {
-							surface: 'style-book',
-							scopeKey: `style_book:${ globalStylesData.globalStylesId }:${ blockName }`,
-							globalStylesId: globalStylesData.globalStylesId,
-							postType: 'global_styles',
-							entityId: blockName,
-							entityKind: 'block',
-							entityName: 'styleBook',
-							templateSlug,
-							templateType,
-							blockName,
-							blockTitle,
-					  }
-					: null;
-			const scopedEntries = ( store?.getActivityLog?.() || [] ).filter(
-				( entry ) =>
-					entry?.surface === 'style-book' &&
-					String( entry?.target?.globalStylesId || '' ) ===
-						String( globalStylesData?.globalStylesId || '' ) &&
-					String( entry?.target?.blockName || '' ) === blockName
-			);
-			const resolvedActivityEntries = getResolvedActivityEntries(
-				scopedEntries,
-				( entry ) =>
-					getGlobalStylesActivityUndoState( entry, {
-						select: ( storeName ) => select( storeName ),
-					} )
-			);
-			const selectorLastUndoneActivityId =
-				store?.getLastUndoneActivityId?.() || null;
-			const hasUndoSuccessForScope =
-				typeof selectorLastUndoneActivityId === 'string' &&
-				resolvedActivityEntries.some(
-					( entry ) =>
-						entry?.id === selectorLastUndoneActivityId &&
-						entry?.undo?.status === 'undone'
-				);
-			const mappedSuggestions = (
-				store?.getStyleBookRecommendations?.() || []
-			).map( ( suggestion, index ) => ( {
-				...suggestion,
-				suggestionKey: getSuggestionKey( suggestion, index ),
-			} ) );
-			const editedBlocks = blockEditor?.getBlocks?.() || [];
+			const editedBlocks = blockEditor?.getBlocks?.() || null;
 
 			return {
 				isGlobalStylesActive:
 					activeComplementaryArea === 'edit-site/global-styles',
 				isSiteEditor: Boolean( editSite ),
-				scope: styleScope,
 				blockType: blockName
 					? blocksStore?.getBlockType?.( blockName ) || null
 					: null,
-				currentConfig: globalStylesData?.userConfig || {
-					settings: {},
-					styles: {},
-					_links: {},
-				},
-				mergedConfig: globalStylesData?.mergedConfig || {
-					settings: {},
-					styles: {},
-					_links: {},
-				},
-				currentStyles: getBlockStyleBranch(
-					globalStylesData?.userConfig || {},
-					blockName
-				),
-				mergedStyles: getBlockStyleBranch(
-					globalStylesData?.mergedConfig || {},
-					blockName
-				),
-				templateStructure:
-					buildTemplateStructureSnapshot( editedBlocks ),
-				templateVisibility:
-					collectViewportVisibilitySummary( editedBlocks ),
-				designSemantics: buildStyleBookDesignSemantics( editedBlocks, {
-					blockName,
-					blockTitle,
-					templateType,
-				} ),
-				rawSuggestions: mappedSuggestions,
+				templateSlug: selectedTemplateSlug,
+				editedBlocks,
+				rawRecommendations:
+					store?.getStyleBookRecommendations?.() || null,
+				templateType,
 				currentExplanation: store?.getStyleBookExplanation?.() || '',
 				currentRequestPrompt:
 					store?.getStyleBookRequestPrompt?.() || '',
@@ -528,24 +456,88 @@ export default function StyleBookRecommender() {
 					store?.getStyleBookSelectedSuggestionKey?.() || null,
 				applyStatus: store?.getStyleBookApplyStatus?.() || 'idle',
 				undoStatus: store?.getUndoStatus?.() || 'idle',
-				activityEntries: resolvedActivityEntries,
+				activityLog: store?.getActivityLog?.() || null,
+				lastUndoneActivityId:
+					store?.getLastUndoneActivityId?.() || null,
 				currentError: store?.getStyleBookError?.() || null,
 				currentErrorDetails:
 					store?.getStyleBookErrorDetails?.() || null,
 				currentApplyError: store?.getStyleBookApplyError?.() || null,
 				currentUndoError: store?.getUndoError?.() || null,
-				hasUndoSuccess: hasUndoSuccessForScope,
-				buildNotice: store?.getSurfaceStatusNotice
-					? ( options ) =>
-							store.getSurfaceStatusNotice(
-								'style-book',
-								options
-							)
-					: null,
 			};
 		},
-		[ styleBookTargetBlockName, styleBookTargetBlockTitle ]
+		[ styleBookTargetBlockName ]
 	);
+
+	const scope = useMemo(
+		() =>
+			globalStylesId && styleBookTargetBlockName
+				? {
+						surface: 'style-book',
+						scopeKey: `style_book:${ globalStylesId }:${ styleBookTargetBlockName }`,
+						globalStylesId,
+						postType: 'global_styles',
+						entityId: styleBookTargetBlockName,
+						entityKind: 'block',
+						entityName: 'styleBook',
+						templateSlug,
+						templateType: surfaceTemplateType,
+						blockName: styleBookTargetBlockName,
+						blockTitle: styleBookTargetBlockTitle,
+				  }
+				: null,
+		[
+			globalStylesId,
+			styleBookTargetBlockName,
+			styleBookTargetBlockTitle,
+			surfaceTemplateType,
+			templateSlug,
+		]
+	);
+	const currentStyles = useMemo(
+		() => getBlockStyleBranch( currentConfig, styleBookTargetBlockName ),
+		[ currentConfig, styleBookTargetBlockName ]
+	);
+	const mergedStyles = useMemo(
+		() => getBlockStyleBranch( mergedConfig, styleBookTargetBlockName ),
+		[ mergedConfig, styleBookTargetBlockName ]
+	);
+	const { activityEntries, hasUndoSuccess } = useStyleSurfaceActivityContext(
+		{
+			surface: 'style-book',
+			activityLog,
+			globalStylesId,
+			blockName: styleBookTargetBlockName,
+			registry,
+			lastUndoneActivityId,
+			runtimeDependency: globalStylesData,
+		}
+	);
+
+	const buildDesignSemantics = useCallback(
+		( blocks ) =>
+			buildStyleBookDesignSemantics( blocks, {
+				blockName: styleBookTargetBlockName,
+				blockTitle: styleBookTargetBlockTitle,
+				templateType: surfaceTemplateType,
+			} ),
+		[
+			styleBookTargetBlockName,
+			styleBookTargetBlockTitle,
+			surfaceTemplateType,
+		]
+	);
+	const {
+		templateStructure,
+		templateVisibility,
+		designSemantics,
+		rawSuggestions,
+	} = useStyleSurfaceDerivedContext( {
+		editedBlocks: surfaceEditedBlocks,
+		rawRecommendations,
+		buildDesignSemantics,
+	} );
+
 	const executionContract = useMemo(
 		() =>
 			buildBlockStyleExecutionContractFromSettings(
@@ -686,36 +678,55 @@ export default function StyleBookRecommender() {
 	const isLoading = status === 'loading';
 	const isApplying = applyStatus === 'applying';
 	const isUndoing = undoStatus === 'undoing';
-	const baseNotice = buildNotice
-		? buildNotice( {
-				requestError: currentError,
-				requestErrorDetails: currentErrorDetails,
-				applyError: currentApplyError,
-				undoError: hasUndoSuccess ? '' : currentUndoError,
-				undoSuccessMessage: hasUndoSuccess
-					? 'Flavor Agent restored the previous Style Book block styles.'
-					: '',
-				applySuccessMessage: hasApplySuccess
-					? 'Flavor Agent applied the selected Style Book change.'
-					: '',
-				requestStatus: status,
-				isStale: isStaleResult,
-				hasResult,
-				hasSuggestions: suggestions.length > 0,
-				hasPreview: Boolean( selectedSuggestion ),
-				hasOperations:
-					( selectedSuggestion?.operations || [] ).length > 0,
-				applyStatus,
-				undoStatus,
-				onDismissAction: Boolean( currentError ),
-				onApplyDismissAction: Boolean( currentApplyError ),
-				onUndoDismissAction: Boolean( currentUndoError ),
-				emptyMessage:
-					'No safe Style Book changes were returned for this prompt.',
-				advisoryMessage:
-					'Review a theme-backed block style change before applying it.',
-		  } )
-		: null;
+	const baseNotice = useMemo(
+		() =>
+			registry
+				.select( STORE_NAME )
+				?.getSurfaceStatusNotice?.( 'style-book', {
+					requestError: currentError,
+					requestErrorDetails: currentErrorDetails,
+					applyError: currentApplyError,
+					undoError: hasUndoSuccess ? '' : currentUndoError,
+					undoSuccessMessage: hasUndoSuccess
+						? 'Flavor Agent restored the previous Style Book block styles.'
+						: '',
+					applySuccessMessage: hasApplySuccess
+						? 'Flavor Agent applied the selected Style Book change.'
+						: '',
+					requestStatus: status,
+					isStale: isStaleResult,
+					hasResult,
+					hasSuggestions: suggestions.length > 0,
+					hasPreview: Boolean( selectedSuggestion ),
+					hasOperations:
+						( selectedSuggestion?.operations || [] ).length > 0,
+					applyStatus,
+					undoStatus,
+					onDismissAction: Boolean( currentError ),
+					onApplyDismissAction: Boolean( currentApplyError ),
+					onUndoDismissAction: Boolean( currentUndoError ),
+					emptyMessage:
+						'No safe Style Book changes were returned for this prompt.',
+					advisoryMessage:
+						'Review a theme-backed block style change before applying it.',
+				} ) || null,
+		[
+			applyStatus,
+			currentApplyError,
+			currentError,
+			currentErrorDetails,
+			currentUndoError,
+			hasApplySuccess,
+			hasResult,
+			hasUndoSuccess,
+			isStaleResult,
+			registry,
+			selectedSuggestion,
+			status,
+			suggestions.length,
+			undoStatus,
+		]
+	);
 	const connectorApprovalNotice = useMemo(
 		() => getConnectorApprovalNotice( 'style-book', currentErrorDetails ),
 		[ currentErrorDetails ]

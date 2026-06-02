@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-05-25
+> Last updated: 2026-06-02
 
 ## Working
 
@@ -65,6 +65,7 @@ All three REST route paths under `/flavor-agent/v1/` are working. Recommendation
 
 ## Recent Verification
 
+- 2026-06-02 `useSelect` referential-stability follow-up: moved per-surface derivations out of `mapSelect` into memoized hooks (content, pattern, Global Styles, Style Book) so `useSelect` returns only stable store references and primitives, addressing Gutenberg's "useSelect returns different values" warning and the associated re-render/refetch churn (observed ~27 `recommend-patterns` fires on a single post-editor load before the fix). The new hooks are documented in [`docs/reference/shared-internals.md`](docs/reference/shared-internals.md) under "Surface Derivation Hooks". `npm run test:unit` passed (`1341` passed, `100` suites) and `npm run lint:js` plus `npm run check:docs` were green on this checkout. Browser harnesses (`verify --skip-e2e`, Playwright, live console probes) were not re-run in this pass.
 - 2026-05-02 template surface release closeout: `npm run test:e2e:wp70` passed (`20` passed, `0` failed) on the Docker-backed WP 7.0 harness, covering template preview/apply/activity, template-part coverage, refresh-safe template undo, and drift-disabled template undo.
 - 2026-04-29 cross-surface validation follow-up: `npm run test:e2e:wp70` passed (`14` passed, `0` failed) on the Docker-backed WP 7.0 harness. This clears the four 2026-04-22 Site Editor reds for Global Styles executable undo, template-part executable undo, template undo after refresh, and template undo disabled after inserted-pattern drift.
 - 2026-04-29 Plugin Check path follow-up: `WP_PLUGIN_CHECK_PATH=/var/lib/docker/volumes/wordpress_wordpress_data/_data WORDPRESS_DB_HOST="$(docker exec wordpress-db-1 hostname -i):3306" WORDPRESS_DB_NAME=wordpress WORDPRESS_DB_USER=wordpress WORDPRESS_DB_PASSWORD=wordpress node scripts/verify.js --skip-e2e` passed with `build`, `lint-js`, `lint-plugin`, `unit`, `lint-php`, and `test-php` green. Plugin Check emitted one non-failing `WordPress.DB.SlowDBQuery.slow_db_query_tax_query` warning.

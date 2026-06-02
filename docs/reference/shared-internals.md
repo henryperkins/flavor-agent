@@ -374,6 +374,22 @@ Block structural role inference. Recursively annotates a block tree with semanti
 
 **Consumers:** `src/context/collector.js`
 
+## Surface Derivation Hooks
+
+`useSelect( mapSelect )` callbacks on the recommendation surfaces must return **only stable store references and primitives**. Any derivation done inside `mapSelect` — `.filter()`, `.map()`, object/array literals, `[]`/`{}` fallbacks, or block-tree walks — allocates a fresh reference on every store tick even when the relevant state is unchanged. That trips Gutenberg's dev warning (`The useSelect hook returns different values when called with the same state and parameters`) and drives real re-render/refetch churn.
+
+Each surface therefore selects raw references/primitives, then moves derivation into a memoized hook keyed on those references, so the derived objects keep a stable identity until their inputs actually change. **The selected references double as the memo invalidation keys, so correctness depends on those keys being a complete cover of every input the derivation reads** — e.g. live Global Styles undo validity invalidates through the memoized runtime-data reference, and pattern insertion targeting invalidates through the `getBlocks()` / `getBlockOrder()` references rather than re-walking the tree inside `mapSelect`.
+
+| Hook | Surface(s) | Derives | Tested by |
+| ---- | ---------- | ------- | --------- |
+| `src/content/use-content-derived-context.js` | Content | `postContext` (id/type/title/excerpt/content/slug/status) and content-scoped, reversed `activityEntries` | `src/content/__tests__/use-content-derived-context.test.js` |
+| `src/style-surfaces/use-style-surface-derived-context.js` | Global Styles, Style Book | `templateStructure`, `templateVisibility`, `designSemantics` (per-surface builder injected via `useCallback`), and suggestion-key-tagged `rawSuggestions` | `src/style-surfaces/__tests__/use-style-surface-derived-context.test.js` |
+| `src/style-surfaces/use-style-surface-activity-context.js` | Global Styles, Style Book | scoped `activityEntries` with live undo validity (`getResolvedActivityEntries` + `getGlobalStylesActivityUndoState`) and `hasUndoSuccess`, keyed by the activity-log ref, Global Styles ID, Style Book block, and memoized live runtime data | `src/style-surfaces/__tests__/use-style-surface-activity-context.test.js` |
+| `src/style-surfaces/use-global-styles-data.js` | Global Styles, Style Book | raw config-dependency selection (`selectGlobalStylesDataDependencies`) plus normalized `currentConfig`/`mergedConfig`/`availableVariations` over frozen stable empty fallbacks (`EMPTY_STYLE_CONFIG`, `EMPTY_STYLE_VARIATIONS`) | `src/style-surfaces/__tests__/use-global-styles-data.test.js` |
+| `src/patterns/use-pattern-insertion-context.js` | Pattern | `insertionContext` (`rootBlock`, `ancestors`, `nearbySiblings`, template-part area/slug, container layout) from a live block-tree walk keyed by primitive insertion-point fields plus stable block-tree / sibling-order refs; also exports `getNonEmptyString` and `buildInsertionContext` | `src/patterns/__tests__/use-pattern-insertion-context.test.js` |
+
+**Consumers:** `src/content/ContentRecommender.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`, `src/patterns/PatternRecommender.js`
+
 ## Entity And Capability Utilities
 
 ### `src/utils/editor-entity-contracts.js`
@@ -707,6 +723,11 @@ template-operation-sequence.js -> store/index.js + template-recommender-helpers 
 - `src/patterns/inserter-badge-state.js`
 - `src/patterns/recommendation-utils.js`
 - `src/global-styles/selectors.js`
+- `src/content/use-content-derived-context.js`
+- `src/style-surfaces/use-style-surface-derived-context.js`
+- `src/style-surfaces/use-style-surface-activity-context.js`
+- `src/style-surfaces/use-global-styles-data.js`
+- `src/patterns/use-pattern-insertion-context.js`
 - `src/context/collector.js`
 - `src/context/theme-settings.js`
 - `src/utils/context-signature.js`
