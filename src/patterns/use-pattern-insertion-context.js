@@ -32,7 +32,8 @@ export function buildAncestorEntries( editor, inserterRootClientId ) {
 export function buildInsertionContext(
 	editor,
 	inserterRootClientId,
-	insertionPoint
+	insertionPoint,
+	siblingOrder
 ) {
 	const ancestorEntries = buildAncestorEntries(
 		editor,
@@ -53,14 +54,16 @@ export function buildInsertionContext(
 		rootEntry?.attributes?.layout?.type
 	);
 	const rootBlock = getNonEmptyString( rootEntry?.blockName );
-	const siblingOrder = editor.getBlockOrder?.( inserterRootClientId ) || [];
-	const insertIndex = insertionPoint?.index ?? siblingOrder.length;
+	const resolvedSiblingOrder = Array.isArray( siblingOrder )
+		? siblingOrder
+		: editor.getBlockOrder?.( inserterRootClientId ) || [];
+	const insertIndex = insertionPoint?.index ?? resolvedSiblingOrder.length;
 	const nearbySiblings = [];
 	const start = Math.max( 0, insertIndex - 3 );
-	const end = Math.min( siblingOrder.length, insertIndex + 3 );
+	const end = Math.min( resolvedSiblingOrder.length, insertIndex + 3 );
 
 	for ( let i = start; i < end; i++ ) {
-		const name = editor.getBlockName?.( siblingOrder[ i ] );
+		const name = editor.getBlockName?.( resolvedSiblingOrder[ i ] );
 
 		if ( name ) {
 			nearbySiblings.push( name );
@@ -88,17 +91,27 @@ export function usePatternInsertionContext( {
 	siblingOrder,
 } ) {
 	return useMemo( () => {
+		// `blockTree` (a stable `getBlocks()` reference) is consumed only as a
+		// memo-invalidation key: the ancestor walk reads live block state via
+		// `editor` selectors, so keying on the block-tree reference recomputes
+		// the context when an ancestor's attributes change without re-walking
+		// the tree on every unrelated store tick. `siblingOrder` is both a key
+		// and the data source for nearby-sibling resolution below.
 		void blockTree;
-		void siblingOrder;
 
 		if ( ! enabled || ! editor ) {
 			return null;
 		}
 
-		return buildInsertionContext( editor, inserterRootClientId, {
-			rootClientId: inserterRootClientId,
-			index: insertionIndex,
-		} );
+		return buildInsertionContext(
+			editor,
+			inserterRootClientId,
+			{
+				rootClientId: inserterRootClientId,
+				index: insertionIndex,
+			},
+			siblingOrder
+		);
 	}, [
 		blockTree,
 		editor,
