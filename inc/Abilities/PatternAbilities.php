@@ -428,10 +428,14 @@ final class PatternAbilities {
 		$reported_unreadable_synced_candidates            = [];
 		$diagnostics['pipelineTrace']['backendRetrieved'] = count( $retrieved );
 		foreach ( $retrieved as $candidate_hit ) {
-			$payload = is_array( $candidate_hit['payload'] ?? null ) ? $candidate_hit['payload'] : [];
-			$name    = self::resolve_recommendation_candidate_visible_name( $payload );
+			$payload      = is_array( $candidate_hit['payload'] ?? null ) ? $candidate_hit['payload'] : [];
+			$visible_name = self::resolve_recommendation_candidate_visible_name( $payload );
 
-			if ( $visible_lookup && $name !== '' && ! isset( $visible_lookup[ $name ] ) ) {
+			if ( $visible_name !== '' ) {
+				$retrieved_candidate_names[ $visible_name ] = true;
+			}
+
+			if ( $visible_lookup && $visible_name !== '' && ! isset( $visible_lookup[ $visible_name ] ) ) {
 				self::record_pattern_pipeline_drop( $diagnostics, 'visibleScopeDropped', 'visible_scope' );
 				continue;
 			}
@@ -456,7 +460,6 @@ final class PatternAbilities {
 			if ( $name === '' ) {
 				continue;
 			}
-			$retrieved_candidate_names[ $name ] = true;
 			if ( $visible_lookup && ! isset( $visible_lookup[ $name ] ) ) {
 				self::record_pattern_pipeline_drop( $diagnostics, 'visibleScopeDropped', 'visible_scope' );
 				continue;
@@ -2239,7 +2242,7 @@ SYSTEM;
 	private static function recommendation_score_threshold( string $backend ): float {
 		$option  = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend
 			? Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH
-			: 'flavor_agent_pattern_recommendation_threshold';
+			: Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_QDRANT;
 		$default = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend
 			? Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT
 			: self::DEFAULT_RECOMMENDATION_SCORE_THRESHOLD;

@@ -380,6 +380,19 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'missing_credentials', $result->get_error_code() );
 	}
 
+	public function test_pattern_recommendation_threshold_option_keys_are_config_constants(): void {
+		$constants = new \ReflectionClass( Config::class );
+
+		$this->assertSame(
+			'flavor_agent_pattern_recommendation_threshold',
+			$constants->getConstant( 'OPTION_PATTERN_RECOMMENDATION_THRESHOLD_QDRANT' )
+		);
+		$this->assertSame(
+			'flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search',
+			$constants->getConstant( 'OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH' )
+		);
+	}
+
 	public function test_recommend_patterns_short_circuits_explicitly_empty_visible_patterns_before_backend_validation(): void {
 		$result = $this->recommend_patterns(
 			[
@@ -2601,6 +2614,12 @@ final class PatternAbilitiesTest extends TestCase {
 			$result['diagnostics']['dropReasons'] ?? null
 		);
 		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$this->assertStringContainsString(
+			'Unique retrieved candidates before visibility filtering: 4',
+			(string) ( $ranking_request['input'] ?? '' )
+		);
 	}
 
 	public function test_recommend_patterns_reports_duplicate_unreadable_synced_candidate_once(): void {
