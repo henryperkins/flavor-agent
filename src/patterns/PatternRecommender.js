@@ -47,6 +47,7 @@ import {
 	getSurfaceCapability,
 } from '../utils/capability-flags';
 import { normalizeTemplateType } from '../utils/template-types';
+import { extractPatternNames } from '../utils/pattern-names';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
 import { getAllowedPatterns } from './pattern-settings';
@@ -658,6 +659,11 @@ function PatternInserterNotice( {
 			'Flavor Agent did not find a strong pattern match for this insertion point yet.',
 			'flavor-agent'
 		);
+	} else if ( status === 'no-patterns' ) {
+		resolvedMessage = __(
+			"This spot doesn't accept block patterns. Click into the page body (or a container that allows patterns) to get recommendations.",
+			'flavor-agent'
+		);
 	}
 
 	return (
@@ -793,6 +799,23 @@ export default function PatternRecommender() {
 		},
 		[ inserterRootClientId ]
 	);
+	// Top-level allowed patterns distinguish "this container allows no patterns"
+	// from "the editor exposes no patterns at all" (sparse theme or not-yet-hydrated).
+	// Subscribe to the stable (core-memoized) allowed-patterns array and derive the
+	// names with useMemo so this does not return a fresh array on every store tick.
+	const topLevelAllowedPatterns = useSelect(
+		( select ) => getAllowedPatterns( null, select( blockEditorStore ) ),
+		[]
+	);
+	const topLevelVisiblePatternNames = useMemo(
+		() => extractPatternNames( topLevelAllowedPatterns ),
+		[ topLevelAllowedPatterns ]
+	);
+	const insertionPointAllowsNoPatterns =
+		canRecommend &&
+		hasInsertionPoint &&
+		visiblePatternNames.length === 0 &&
+		topLevelVisiblePatternNames.length > 0;
 	const {
 		patternError,
 		patternErrorDetails,
@@ -1503,7 +1526,11 @@ export default function PatternRecommender() {
 	] );
 
 	useEffect( () => {
-		if ( ! canRecommend || ! effectivePostType ) {
+		if (
+			! canRecommend ||
+			! effectivePostType ||
+			insertionPointAllowsNoPatterns
+		) {
 			return;
 		}
 
@@ -1511,13 +1538,14 @@ export default function PatternRecommender() {
 	}, [
 		canRecommend,
 		effectivePostType,
+		insertionPointAllowsNoPatterns,
 		fetchPatternRecommendationsForCurrentTarget,
 	] );
 
 	const handleSearchInput = useCallback(
 		( value ) => {
 			scheduleSearchFetch( () => {
-				if ( ! effectivePostType ) {
+				if ( ! effectivePostType || insertionPointAllowsNoPatterns ) {
 					return;
 				}
 
@@ -1538,6 +1566,7 @@ export default function PatternRecommender() {
 		},
 		[
 			effectivePostType,
+			insertionPointAllowsNoPatterns,
 			buildBaseInput,
 			selectedBlockName,
 			fetchPatternRecommendationsForCurrentTarget,
@@ -1646,6 +1675,8 @@ export default function PatternRecommender() {
 					diagnostics={ patternDiagnostics }
 				/>
 			);
+		} else if ( insertionPointAllowsNoPatterns ) {
+			notice = <PatternInserterNotice status="no-patterns" />;
 		} else if ( patternStatus === 'error' ) {
 			notice = (
 				<PatternInserterNotice

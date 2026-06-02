@@ -375,8 +375,10 @@ describe( 'PatternRecommender', () => {
 			( clientId ) =>
 				( state.blockEditor.blockAttributes || {} )[ clientId ] || {}
 		);
-		mockGetAllowedPatterns.mockImplementation(
-			() => state.allowedPatterns
+		mockGetAllowedPatterns.mockImplementation( ( rootClientId ) =>
+			rootClientId === null && state.topLevelAllowedPatterns !== undefined
+				? state.topLevelAllowedPatterns
+				: state.allowedPatterns
 		);
 		mockGetVisiblePatternNames.mockImplementation(
 			() => state.visiblePatternNames
@@ -753,6 +755,44 @@ describe( 'PatternRecommender', () => {
 			'Flavor Agent did not find a strong pattern match for this insertion point yet.'
 		);
 		expect( document.body.textContent ).toContain( 'No matches yet' );
+	} );
+
+	test( 'renders a no-patterns notice and skips the fetch when the insertion point allows no patterns', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.visiblePatternNames = [];
+		state.topLevelAllowedPatterns = [ { name: 'theme/hero' } ];
+		state.store.patternStatus = 'idle';
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain(
+			"This spot doesn't accept block patterns."
+		);
+		expect( document.body.textContent ).not.toContain(
+			'Flavor Agent did not find a strong pattern match'
+		);
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+	} );
+
+	test( 'does not show the no-patterns notice when the editor exposes no patterns at all', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.visiblePatternNames = [];
+		state.topLevelAllowedPatterns = [];
+		state.store.patternStatus = 'idle';
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).not.toContain(
+			"This spot doesn't accept block patterns."
+		);
 	} );
 
 	test( 'uses unreadable synced-pattern diagnostics for the empty state message', () => {
