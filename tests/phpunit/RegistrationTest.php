@@ -1465,6 +1465,18 @@ final class RegistrationTest extends TestCase {
 			$ability['output_schema']['properties']['docsGrounding']['type'] ?? null
 		);
 		$this->assertSame(
+			'boolean',
+			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties']['withinGrace']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties']['graceLastKnownCurrentAt']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties']['graceExpiresAt']['type'] ?? null
+		);
+		$this->assertSame(
 			'string',
 			$ability['output_schema']['properties']['docsGroundingFingerprint']['type'] ?? null
 		);
@@ -1494,27 +1506,17 @@ final class RegistrationTest extends TestCase {
 				? $ability['output_schema']['properties']
 				: [];
 
+			$docs_grounding_properties = $properties['docsGrounding']['properties'] ?? [];
+			$coverage_properties       = $docs_grounding_properties['coverage']['properties'] ?? [];
+
 			$this->assertSame( 'object', $properties['docsGrounding']['type'] ?? null, $ability_id );
-			$this->assertSame(
-				'array',
-				$properties['docsGrounding']['properties']['sourceTypes']['type'] ?? null,
-				$ability_id
-			);
-			$this->assertSame(
-				'object',
-				$properties['docsGrounding']['properties']['coverage']['type'] ?? null,
-				$ability_id
-			);
-			$this->assertSame(
-				'boolean',
-				$properties['docsGrounding']['properties']['coverage']['properties']['hasCurrentReleaseCycle']['type'] ?? null,
-				$ability_id
-			);
-			$this->assertSame(
-				'string',
-				$properties['docsGroundingFingerprint']['type'] ?? null,
-				$ability_id
-			);
+			$this->assertSame( 'array', $docs_grounding_properties['sourceTypes']['type'] ?? null, $ability_id );
+			$this->assertSame( 'object', $docs_grounding_properties['coverage']['type'] ?? null, $ability_id );
+			$this->assertSame( 'boolean', $coverage_properties['hasCurrentReleaseCycle']['type'] ?? null, $ability_id );
+			$this->assertSame( 'boolean', $coverage_properties['withinGrace']['type'] ?? null, $ability_id );
+			$this->assertSame( 'string', $coverage_properties['graceLastKnownCurrentAt']['type'] ?? null, $ability_id );
+			$this->assertSame( 'string', $coverage_properties['graceExpiresAt']['type'] ?? null, $ability_id );
+			$this->assertSame( 'string', $properties['docsGroundingFingerprint']['type'] ?? null, $ability_id );
 		}
 	}
 

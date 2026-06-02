@@ -69,6 +69,19 @@ final class DocsGuidanceResult {
 	 * @param array<string, mixed> $result
 	 */
 	public static function unavailable_error( array $result ): \WP_Error {
+		if ( function_exists( 'do_action' ) ) {
+			/**
+			 * Fires when the docs-grounding gate blocks a recommendation request.
+			 *
+			 * Listeners can record diagnostics or schedule recovery work. Carries the
+			 * full normalized result (including coverage) so observers can branch on
+			 * the specific failure mode (missing official guidance vs. coverage drift).
+			 *
+			 * @param array<string, mixed> $result Normalized docs-grounding result.
+			 */
+			do_action( 'flavor_agent_docs_grounding_unavailable', $result );
+		}
+
 		return new \WP_Error(
 			'flavor_agent_docs_grounding_unavailable',
 			'Flavor Agent could not verify current WordPress developer guidance for this recommendation. Try again after Developer Docs grounding refreshes.',
@@ -92,6 +105,7 @@ final class DocsGuidanceResult {
 				'hasCurrentReleaseCycle' => ! empty( $coverage['hasCurrentReleaseCycle'] ),
 				'sourceTypes'            => (array) ( $coverage['sourceTypes'] ?? [] ),
 				'freshness'              => (array) ( $coverage['freshness'] ?? [] ),
+				'withinGrace'            => ! empty( $coverage['withinGrace'] ),
 			],
 			'guidance' => array_map(
 				static fn ( array $chunk ): array => [
@@ -167,7 +181,10 @@ final class DocsGuidanceResult {
 	 *   freshness: array<int, string>,
 	 *   checkedAt: string,
 	 *   errorCode: string,
-	 *   errorMessage: string
+	 *   errorMessage: string,
+	 *   withinGrace: bool,
+	 *   graceLastKnownCurrentAt: string,
+	 *   graceExpiresAt: string
 	 * }
 	 */
 	private static function normalize_coverage( mixed $coverage ): array {
@@ -176,14 +193,17 @@ final class DocsGuidanceResult {
 		}
 
 		return [
-			'status'                 => sanitize_key( (string) ( $coverage['status'] ?? 'unknown' ) ),
-			'hasDeveloperDocs'       => ! empty( $coverage['hasDeveloperDocs'] ),
-			'hasCurrentReleaseCycle' => ! empty( $coverage['hasCurrentReleaseCycle'] ),
-			'sourceTypes'            => array_values( array_map( 'sanitize_key', (array) ( $coverage['sourceTypes'] ?? [] ) ) ),
-			'freshness'              => array_values( array_map( 'sanitize_key', (array) ( $coverage['freshness'] ?? [] ) ) ),
-			'checkedAt'              => sanitize_text_field( (string) ( $coverage['checkedAt'] ?? '' ) ),
-			'errorCode'              => sanitize_key( (string) ( $coverage['errorCode'] ?? '' ) ),
-			'errorMessage'           => sanitize_text_field( (string) ( $coverage['errorMessage'] ?? '' ) ),
+			'status'                  => sanitize_key( (string) ( $coverage['status'] ?? 'unknown' ) ),
+			'hasDeveloperDocs'        => ! empty( $coverage['hasDeveloperDocs'] ),
+			'hasCurrentReleaseCycle'  => ! empty( $coverage['hasCurrentReleaseCycle'] ),
+			'sourceTypes'             => array_values( array_map( 'sanitize_key', (array) ( $coverage['sourceTypes'] ?? [] ) ) ),
+			'freshness'               => array_values( array_map( 'sanitize_key', (array) ( $coverage['freshness'] ?? [] ) ) ),
+			'checkedAt'               => sanitize_text_field( (string) ( $coverage['checkedAt'] ?? '' ) ),
+			'errorCode'               => sanitize_key( (string) ( $coverage['errorCode'] ?? '' ) ),
+			'errorMessage'            => sanitize_text_field( (string) ( $coverage['errorMessage'] ?? '' ) ),
+			'withinGrace'             => ! empty( $coverage['withinGrace'] ),
+			'graceLastKnownCurrentAt' => sanitize_text_field( (string) ( $coverage['graceLastKnownCurrentAt'] ?? '' ) ),
+			'graceExpiresAt'          => sanitize_text_field( (string) ( $coverage['graceExpiresAt'] ?? '' ) ),
 		];
 	}
 
@@ -196,7 +216,7 @@ final class DocsGuidanceResult {
 			return 'unavailable';
 		}
 
-		if ( $requires_coverage && 'current' !== sanitize_key( (string) ( $coverage['status'] ?? '' ) ) ) {
+		if ( $requires_coverage && ! self::coverage_satisfies_required_gate( $coverage ) ) {
 			return 'unavailable';
 		}
 
@@ -213,6 +233,19 @@ final class DocsGuidanceResult {
 		}
 
 		return 'stale';
+	}
+
+	/**
+	 * @param array<string, mixed> $coverage
+	 */
+	private static function coverage_satisfies_required_gate( array $coverage ): bool {
+		$status = sanitize_key( (string) ( $coverage['status'] ?? '' ) );
+
+		if ( 'current' === $status ) {
+			return true;
+		}
+
+		return 'missing-current-release-cycle' === $status && ! empty( $coverage['withinGrace'] );
 	}
 
 	/**

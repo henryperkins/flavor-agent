@@ -412,6 +412,9 @@ final class AISearchClientTest extends TestCase {
 	}
 
 	public function test_validate_configuration_uses_probe_and_current_source_coverage_searches(): void {
+		$retrieved_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 86400 );
+		$published_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 86400 );
+
 		WordPressTestState::$options               = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -432,7 +435,7 @@ final class AISearchClientTest extends TestCase {
 										'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
 										'metadata' => [],
 									],
-									'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\n---\nUse block supports to expose design tools.",
+									'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"{$retrieved_at}\"\n---\nUse block supports to expose design tools.",
 								],
 							],
 						],
@@ -453,7 +456,7 @@ final class AISearchClientTest extends TestCase {
 										'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
 										'metadata' => [],
 									],
-									'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\n---\nUse block supports to expose design tools.",
+									'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\nretrieved_at: \"{$retrieved_at}\"\n---\nUse block supports to expose design tools.",
 								],
 								[
 									'id'   => 'make-core',
@@ -461,7 +464,7 @@ final class AISearchClientTest extends TestCase {
 										'key'      => 'ai-search/wp-dev-docs/make.wordpress.org/core/2026/05/08/current-editor-guidance/136f765ace420bbea73a493de6698debade0c95a80f90ce5fc7dc1dbe2ebd6ff/part-0001.md',
 										'metadata' => [],
 									],
-									'text' => "---\nsource_url: \"https://make.wordpress.org/core/2026/05/08/current-editor-guidance/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\npublished_at: \"2026-05-08T13:00:00Z\"\n---\nWordPress 7.0 provides current editor guidance.",
+									'text' => "---\nsource_url: \"https://make.wordpress.org/core/2026/05/08/current-editor-guidance/\"\nretrieved_at: \"{$retrieved_at}\"\npublished_at: \"{$published_at}\"\n---\nWordPress 7.0 provides current editor guidance.",
 								],
 							],
 						],
@@ -600,20 +603,23 @@ final class AISearchClientTest extends TestCase {
 	}
 
 	public function test_source_coverage_probe_caches_current_summary_for_recommendations(): void {
+		$retrieved_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 86400 );
+		$published_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 86400 );
+
 		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
 			[
 				$this->trusted_docs_chunk(
 					'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
 					'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
 					'Use block supports to expose design tools.',
-					'2026-05-08T14:00:00Z'
+					$retrieved_at
 				),
 				$this->trusted_docs_chunk(
 					'ai-search/wp-dev-docs/make.wordpress.org/core/2026/05/08/current-editor-guidance/136f765ace420bbea73a493de6698debade0c95a80f90ce5fc7dc1dbe2ebd6ff/part-0001.md',
 					'https://make.wordpress.org/core/2026/05/08/current-editor-guidance/',
 					'Current editor guidance.',
-					'2026-05-08T14:00:00Z',
-					'2026-05-08T13:00:00Z'
+					$retrieved_at,
+					$published_at
 				),
 			]
 		);
@@ -631,20 +637,23 @@ final class AISearchClientTest extends TestCase {
 	}
 
 	public function test_source_coverage_probe_uses_full_ttl_for_current_results(): void {
+		$retrieved_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 86400 );
+		$published_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 86400 );
+
 		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
 			[
 				$this->trusted_docs_chunk(
 					'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
 					'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
 					'Use block supports to expose design tools.',
-					'2026-05-08T14:00:00Z'
+					$retrieved_at
 				),
 				$this->trusted_docs_chunk(
 					'ai-search/wp-dev-docs/make.wordpress.org/core/2026/05/08/current-editor-guidance/part-0001.md',
 					'https://make.wordpress.org/core/2026/05/08/current-editor-guidance/',
 					'Current editor guidance.',
-					'2026-05-08T14:00:00Z',
-					'2026-05-08T13:00:00Z'
+					$retrieved_at,
+					$published_at
 				),
 			]
 		);
@@ -680,6 +689,176 @@ final class AISearchClientTest extends TestCase {
 
 		$this->assertSame( 'unavailable', $coverage['status'] );
 		$this->assertSame( 300, WordPressTestState::$transient_expirations['flavor_agent_docs_source_coverage_v2'] ?? null );
+	}
+
+	public function test_current_coverage_probe_seeds_last_known_current_snapshot(): void {
+		$retrieved_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 86400 );
+		$published_at = gmdate( 'Y-m-d\TH:i:s\Z', time() - 86400 );
+
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+					'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+					'Use block supports to expose design tools.',
+					$retrieved_at
+				),
+				$this->trusted_docs_chunk(
+					'ai-search/wp-dev-docs/make.wordpress.org/core/recent-editor-guidance/part-0001.md',
+					'https://make.wordpress.org/core/recent-editor-guidance/',
+					'Recent editor guidance.',
+					$retrieved_at,
+					$published_at
+				),
+			]
+		);
+
+		$coverage = AISearchClient::get_current_source_coverage( true );
+
+		$this->assertSame( 'current', $coverage['status'] );
+
+		$snapshot = WordPressTestState::$options['flavor_agent_docs_source_coverage_last_known_current'] ?? null;
+
+		$this->assertIsArray( $snapshot );
+		$this->assertArrayHasKey( 'recordedAt', $snapshot );
+		$this->assertGreaterThan( time() - 60, (int) $snapshot['recordedAt'] );
+	}
+
+	public function test_missing_current_release_cycle_within_grace_window_decorates_coverage(): void {
+		WordPressTestState::$options['flavor_agent_docs_source_coverage_last_known_current'] = [
+			'recordedAt' => time() - ( 3 * 86400 ),
+			'coverage'   => [
+				'status'           => 'current',
+				'hasDeveloperDocs' => true,
+				'sourceTypes'      => [ 'developer-docs', 'make-core' ],
+				'freshness'        => [ 'current' ],
+			],
+		];
+
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+					'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+					'Use block supports to expose design tools.',
+					'2026-05-08T14:00:00Z'
+				),
+			]
+		);
+
+		$coverage = AISearchClient::get_current_source_coverage( true );
+
+		$this->assertSame( 'missing-current-release-cycle', $coverage['status'] );
+		$this->assertTrue( $coverage['withinGrace'] );
+		$this->assertNotEmpty( $coverage['graceLastKnownCurrentAt'] );
+		$this->assertNotEmpty( $coverage['graceExpiresAt'] );
+	}
+
+	public function test_missing_current_release_cycle_past_grace_window_stays_raw(): void {
+		WordPressTestState::$options['flavor_agent_docs_source_coverage_last_known_current'] = [
+			'recordedAt' => time() - ( 30 * 86400 ),
+			'coverage'   => [
+				'status'      => 'current',
+				'sourceTypes' => [ 'developer-docs', 'make-core' ],
+			],
+		];
+
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+					'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+					'Use block supports to expose design tools.',
+					'2026-05-08T14:00:00Z'
+				),
+			]
+		);
+
+		$coverage = AISearchClient::get_current_source_coverage( true );
+
+		$this->assertSame( 'missing-current-release-cycle', $coverage['status'] );
+		$this->assertFalse( $coverage['withinGrace'] );
+		$this->assertSame( '', $coverage['graceLastKnownCurrentAt'] );
+	}
+
+	public function test_missing_developer_docs_status_never_gets_grace(): void {
+		WordPressTestState::$options['flavor_agent_docs_source_coverage_last_known_current'] = [
+			'recordedAt' => time() - 86400,
+			'coverage'   => [
+				'status' => 'current',
+			],
+		];
+
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response( [] );
+
+		$coverage = AISearchClient::get_current_source_coverage( true );
+
+		$this->assertSame( 'missing-developer-docs', $coverage['status'] );
+		$this->assertFalse( $coverage['withinGrace'] );
+	}
+
+	public function test_cached_missing_current_release_cycle_read_applies_grace(): void {
+		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
+			'status'                 => 'missing-current-release-cycle',
+			'hasDeveloperDocs'       => true,
+			'hasCurrentReleaseCycle' => false,
+			'sourceTypes'            => [ 'developer-docs' ],
+			'freshness'              => [ 'current' ],
+			'checkedAt'              => gmdate( 'Y-m-d H:i:s' ),
+			'errorCode'              => 'missing_current_release_cycle',
+			'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
+		];
+
+		WordPressTestState::$options['flavor_agent_docs_source_coverage_last_known_current'] = [
+			'recordedAt' => time() - ( 2 * 86400 ),
+			'coverage'   => [
+				'status' => 'current',
+			],
+		];
+
+		$coverage = AISearchClient::get_current_source_coverage( false );
+
+		$this->assertSame( 'missing-current-release-cycle', $coverage['status'] );
+		$this->assertTrue( $coverage['withinGrace'] );
+	}
+
+	public function test_record_coverage_gate_blocked_records_diagnostics_without_clobbering_search_health(): void {
+		WordPressTestState::$options['flavor_agent_docs_runtime_state'] = [
+			'status'                 => 'grounded',
+			'lastSearchAt'           => gmdate( 'Y-m-d H:i:s', time() - 60 ),
+			'lastResultCount'        => 2,
+			'lastTrustedSuccessAt'   => gmdate( 'Y-m-d H:i:s', time() - 60 ),
+			'lastTrustedSuccessMode' => 'foreground',
+		];
+		$result = [
+			'status'   => 'unavailable',
+			'coverage' => [
+				'status'       => 'missing-current-release-cycle',
+				'errorCode'    => 'missing_current_release_cycle',
+				'errorMessage' => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
+				'withinGrace'  => false,
+			],
+		];
+
+		AISearchClient::record_coverage_gate_blocked( $result );
+
+		$state = AISearchClient::get_runtime_state();
+
+		// A coverage gate-block is a policy outcome, not a search-transport
+		// failure. Recording it must not force the subsystem status or clobber
+		// the generic transport error fields, which would mask a healthy search
+		// subsystem and oscillate the status (and AI Activity log) per request.
+		$this->assertSame( 'healthy', $state['status'] );
+		$this->assertSame( '', $state['lastErrorAt'] );
+		$this->assertSame( '', $state['lastErrorMode'] );
+		$this->assertSame( '', $state['lastErrorCode'] );
+		$this->assertSame( '', $state['lastErrorMessage'] );
+
+		// The dedicated coverage-gate diagnostics are still captured for operators.
+		$this->assertNotSame( '', $state['lastCoverageGateBlockedAt'] );
+		$this->assertSame( 'missing-current-release-cycle', $state['lastCoverageGateBlockedStatus'] );
+		$this->assertSame( 'missing_current_release_cycle', $state['lastCoverageGateBlockedReason'] );
+		$this->assertFalse( $state['lastCoverageGateBlockedInGrace'] );
 	}
 
 	public function test_validate_configuration_uses_short_ttl_for_missing_release_cycle_results(): void {
