@@ -47,6 +47,7 @@ import {
 	getSurfaceCapability,
 } from '../utils/capability-flags';
 import { normalizeTemplateType } from '../utils/template-types';
+import { extractPatternNames } from '../utils/pattern-names';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
 import { getAllowedPatterns } from './pattern-settings';
@@ -800,10 +801,15 @@ export default function PatternRecommender() {
 	);
 	// Top-level allowed patterns distinguish "this container allows no patterns"
 	// from "the editor exposes no patterns at all" (sparse theme or not-yet-hydrated).
-	const topLevelVisiblePatternNames = useSelect(
-		( select ) =>
-			getVisiblePatternNames( null, select( blockEditorStore ) ),
+	// Subscribe to the stable (core-memoized) allowed-patterns array and derive the
+	// names with useMemo so this does not return a fresh array on every store tick.
+	const topLevelAllowedPatterns = useSelect(
+		( select ) => getAllowedPatterns( null, select( blockEditorStore ) ),
 		[]
+	);
+	const topLevelVisiblePatternNames = useMemo(
+		() => extractPatternNames( topLevelAllowedPatterns ),
+		[ topLevelAllowedPatterns ]
 	);
 	const insertionPointAllowsNoPatterns =
 		canRecommend &&

@@ -375,14 +375,13 @@ describe( 'PatternRecommender', () => {
 			( clientId ) =>
 				( state.blockEditor.blockAttributes || {} )[ clientId ] || {}
 		);
-		mockGetAllowedPatterns.mockImplementation(
-			() => state.allowedPatterns
+		mockGetAllowedPatterns.mockImplementation( ( rootClientId ) =>
+			rootClientId === null && state.topLevelAllowedPatterns !== undefined
+				? state.topLevelAllowedPatterns
+				: state.allowedPatterns
 		);
-		mockGetVisiblePatternNames.mockImplementation( ( rootClientId ) =>
-			rootClientId === null &&
-			state.topLevelVisiblePatternNames !== undefined
-				? state.topLevelVisiblePatternNames
-				: state.visiblePatternNames
+		mockGetVisiblePatternNames.mockImplementation(
+			() => state.visiblePatternNames
 		);
 		window.flavorAgentData = { canRecommendPatterns: true };
 		originalMutationObserver = window.MutationObserver;
@@ -764,7 +763,7 @@ describe( 'PatternRecommender', () => {
 		inserterContainer.className = 'block-editor-inserter__panel-content';
 		document.body.appendChild( inserterContainer );
 		state.visiblePatternNames = [];
-		state.topLevelVisiblePatternNames = [ 'theme/hero' ];
+		state.topLevelAllowedPatterns = [ { name: 'theme/hero' } ];
 		state.store.patternStatus = 'idle';
 		mockFindInserterContainer.mockReturnValue( inserterContainer );
 
@@ -785,7 +784,7 @@ describe( 'PatternRecommender', () => {
 		inserterContainer.className = 'block-editor-inserter__panel-content';
 		document.body.appendChild( inserterContainer );
 		state.visiblePatternNames = [];
-		state.topLevelVisiblePatternNames = [];
+		state.topLevelAllowedPatterns = [];
 		state.store.patternStatus = 'idle';
 		mockFindInserterContainer.mockReturnValue( inserterContainer );
 
