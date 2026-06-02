@@ -566,23 +566,20 @@ final class Registration {
 					'type'                 => 'object',
 					'additionalProperties' => false,
 					'properties'           => [
-						'status'                  => [ 'type' => 'string' ],
-						'hasDeveloperDocs'        => [ 'type' => 'boolean' ],
-						'hasCurrentReleaseCycle'  => [ 'type' => 'boolean' ],
-						'sourceTypes'             => [
+						'status'                 => [ 'type' => 'string' ],
+						'hasDeveloperDocs'       => [ 'type' => 'boolean' ],
+						'hasCurrentReleaseCycle' => [ 'type' => 'boolean' ],
+						'sourceTypes'            => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
 						],
-						'freshness'               => [
+						'freshness'              => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
 						],
-						'checkedAt'               => [ 'type' => 'string' ],
-						'errorCode'               => [ 'type' => 'string' ],
-						'errorMessage'            => [ 'type' => 'string' ],
-						'withinGrace'             => [ 'type' => 'boolean' ],
-						'graceLastKnownCurrentAt' => [ 'type' => 'string' ],
-						'graceExpiresAt'          => [ 'type' => 'string' ],
+						'checkedAt'              => [ 'type' => 'string' ],
+						'errorCode'              => [ 'type' => 'string' ],
+						'errorMessage'           => [ 'type' => 'string' ],
 					],
 				],
 				'fingerprint' => [ 'type' => 'string' ],
