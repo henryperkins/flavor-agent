@@ -16,6 +16,7 @@ import CapabilityNotice from '../components/CapabilityNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import StaleResultBanner from '../components/StaleResultBanner';
 import SurfaceComposer from '../components/SurfaceComposer';
+import { useContentDerivedContext } from './use-content-derived-context';
 import { STORE_NAME } from '../store';
 import {
 	getConnectorApprovalNotice,
@@ -213,7 +214,7 @@ function ContentIssueCard( { issue = {}, compact = false } ) {
 export default function ContentRecommender() {
 	const canRecommend = getSurfaceCapability( 'content' ).available;
 	const {
-		activityEntries,
+		activityLog,
 		contentError,
 		contentErrorDetails,
 		contentMode,
@@ -221,15 +222,19 @@ export default function ContentRecommender() {
 		contentRecommendationRequestSignature,
 		contentRequestPrompt,
 		contentStatus,
-		postContext,
+		postId,
+		postType,
+		postTitle,
+		postExcerpt,
+		postContent,
+		postSlug,
+		postStatus,
 	} = useSelect( ( select ) => {
 		const editor = select( 'core/editor' );
 		const store = select( STORE_NAME );
 
 		return {
-			activityEntries: ( store.getActivityLog?.() || [] )
-				.filter( ( entry ) => entry?.surface === 'content' )
-				.reverse(),
+			activityLog: store.getActivityLog?.() || null,
 			contentError: store.getContentError?.() || null,
 			contentErrorDetails: store.getContentErrorDetails?.() || null,
 			contentMode: store.getContentMode?.() || 'draft',
@@ -238,17 +243,25 @@ export default function ContentRecommender() {
 				store.getContentRecommendationRequestSignature?.() || '',
 			contentRequestPrompt: store.getContentRequestPrompt?.() || '',
 			contentStatus: store.getContentStatus?.() || 'idle',
-			postContext: {
-				postId: editor?.getCurrentPostId?.() || null,
-				postType: editor?.getCurrentPostType?.() || '',
-				title: editor?.getEditedPostAttribute?.( 'title' ) || '',
-				excerpt: editor?.getEditedPostAttribute?.( 'excerpt' ) || '',
-				content: editor?.getEditedPostAttribute?.( 'content' ) || '',
-				slug: editor?.getEditedPostAttribute?.( 'slug' ) || '',
-				status: editor?.getEditedPostAttribute?.( 'status' ) || '',
-			},
+			postId: editor?.getCurrentPostId?.() || null,
+			postType: editor?.getCurrentPostType?.() || '',
+			postTitle: editor?.getEditedPostAttribute?.( 'title' ) || '',
+			postExcerpt: editor?.getEditedPostAttribute?.( 'excerpt' ) || '',
+			postContent: editor?.getEditedPostAttribute?.( 'content' ) || '',
+			postSlug: editor?.getEditedPostAttribute?.( 'slug' ) || '',
+			postStatus: editor?.getEditedPostAttribute?.( 'status' ) || '',
 		};
 	}, [] );
+	const { activityEntries, postContext } = useContentDerivedContext( {
+		activityLog,
+		postId,
+		postType,
+		title: postTitle,
+		excerpt: postExcerpt,
+		content: postContent,
+		slug: postSlug,
+		status: postStatus,
+	} );
 	const { clearContentError, fetchContentRecommendations, setContentMode } =
 		useDispatch( STORE_NAME );
 	const initialHasOutput =
@@ -283,15 +296,6 @@ export default function ContentRecommender() {
 		contentRequestPrompt,
 		contentStatus,
 	] );
-	const {
-		content: postContent,
-		excerpt: postExcerpt,
-		postId,
-		postType,
-		slug: postSlug,
-		status: postStatus,
-		title: postTitle,
-	} = postContext;
 	const hasSupportedPost = SUPPORTED_POST_TYPES.has( postContext.postType );
 	const freshness = useMemo(
 		() =>
@@ -369,15 +373,7 @@ export default function ContentRecommender() {
 		fetchContentRecommendations( {
 			mode: contentMode,
 			prompt,
-			postContext: {
-				postId: postContext.postId,
-				postType: postContext.postType,
-				title: postContext.title,
-				excerpt: postContext.excerpt,
-				content: postContext.content,
-				slug: postContext.slug,
-				status: postContext.status,
-			},
+			postContext,
 		} );
 	}, [ contentMode, fetchContentRecommendations, postContext, prompt ] );
 	const handleCopyContent = useCallback( async () => {

@@ -1,4 +1,5 @@
 const mockUseDispatch = jest.fn();
+const mockUseRegistry = jest.fn();
 const mockUseSelect = jest.fn();
 const mockFetchStyleBookRecommendations = jest.fn();
 const mockRevalidateStyleBookReviewFreshness = jest.fn();
@@ -37,6 +38,7 @@ jest.mock( '@wordpress/components', () =>
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
+	useRegistry: ( ...args ) => mockUseRegistry( ...args ),
 	useSelect: ( ...args ) => mockUseSelect( ...args ),
 } ) );
 
@@ -397,9 +399,102 @@ beforeEach( () => {
 		onChange( getMockStyleBookUiState() );
 		return () => {};
 	} );
+	const getSurfaceStatusNotice = ( surface, options = {} ) => {
+		void surface;
+
+		if ( options.undoError ) {
+			return {
+				source: 'undo',
+				tone: 'error',
+				message: options.undoError,
+				actionType: null,
+				actionLabel: '',
+			};
+		}
+
+		if ( options.undoSuccessMessage ) {
+			return {
+				source: 'undo',
+				tone: 'success',
+				message: options.undoSuccessMessage,
+				actionType: null,
+				actionLabel: '',
+			};
+		}
+
+		if ( options.applyError ) {
+			return {
+				source: 'apply',
+				tone: 'error',
+				message: options.applyError,
+				actionType: null,
+				actionLabel: '',
+			};
+		}
+
+		if ( options.applySuccessMessage ) {
+			return {
+				source: 'apply',
+				tone: 'success',
+				message: options.applySuccessMessage,
+				actionType: 'undo',
+				actionLabel: 'Undo',
+			};
+		}
+
+		if ( options.requestError ) {
+			return {
+				source: 'request',
+				tone: 'error',
+				message: options.requestError,
+			};
+		}
+
+		if (
+			options.hasResult &&
+			! options.hasSuggestions &&
+			options.emptyMessage
+		) {
+			return {
+				source: 'empty',
+				tone: 'info',
+				message: options.emptyMessage,
+			};
+		}
+
+		return null;
+	};
+
+	mockUseRegistry.mockReset();
+	mockUseRegistry.mockImplementation( () => ( {
+		select: ( storeName ) => {
+			if ( storeName === 'flavor-agent' ) {
+				return {
+					getSurfaceStatusNotice,
+				};
+			}
+
+			return {};
+		},
+	} ) );
 
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( ( storeName ) => {
+			if ( storeName === 'core' ) {
+				return {
+					getCurrentGlobalStylesId: () =>
+						currentGlobalStylesData?.globalStylesId || null,
+					getEditedEntityRecord: () =>
+						currentGlobalStylesData?.userConfig || null,
+					getEntityRecord: () =>
+						currentGlobalStylesData?.userConfig || null,
+					getCurrentThemeBaseGlobalStyles: () =>
+						currentGlobalStylesData?.mergedConfig || null,
+					getCurrentThemeGlobalStylesVariations: () =>
+						currentGlobalStylesData?.variations || null,
+				};
+			}
+
 			if ( storeName === 'core/block-editor' ) {
 				return {
 					getSettings: () => currentBlockEditorSettings,
@@ -456,71 +551,7 @@ beforeEach( () => {
 					getUndoError: () => currentStoreState.undoError,
 					getLastUndoneActivityId: () =>
 						currentStoreState.lastUndoneActivityId,
-					getSurfaceStatusNotice: ( surface, options = {} ) => {
-						void surface;
-
-						if ( options.undoError ) {
-							return {
-								source: 'undo',
-								tone: 'error',
-								message: options.undoError,
-								actionType: null,
-								actionLabel: '',
-							};
-						}
-
-						if ( options.undoSuccessMessage ) {
-							return {
-								source: 'undo',
-								tone: 'success',
-								message: options.undoSuccessMessage,
-								actionType: null,
-								actionLabel: '',
-							};
-						}
-
-						if ( options.applyError ) {
-							return {
-								source: 'apply',
-								tone: 'error',
-								message: options.applyError,
-								actionType: null,
-								actionLabel: '',
-							};
-						}
-
-						if ( options.applySuccessMessage ) {
-							return {
-								source: 'apply',
-								tone: 'success',
-								message: options.applySuccessMessage,
-								actionType: 'undo',
-								actionLabel: 'Undo',
-							};
-						}
-
-						if ( options.requestError ) {
-							return {
-								source: 'request',
-								tone: 'error',
-								message: options.requestError,
-							};
-						}
-
-						if (
-							options.hasResult &&
-							! options.hasSuggestions &&
-							options.emptyMessage
-						) {
-							return {
-								source: 'empty',
-								tone: 'info',
-								message: options.emptyMessage,
-							};
-						}
-
-						return null;
-					},
+					getSurfaceStatusNotice,
 				};
 			}
 

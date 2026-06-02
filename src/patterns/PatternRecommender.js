@@ -46,14 +46,14 @@ import {
 	getConnectorApprovalNotice,
 	getSurfaceCapability,
 } from '../utils/capability-flags';
-import {
-	getTemplatePartAreaLookup,
-	inferTemplatePartArea,
-} from '../utils/template-part-areas';
 import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
 import { getAllowedPatterns } from './pattern-settings';
+import {
+	getNonEmptyString,
+	usePatternInsertionContext,
+} from './use-pattern-insertion-context';
 import {
 	filterInsertableRecommendedPatterns,
 	getRejectedPatternBlockNames,
@@ -66,10 +66,8 @@ import {
 
 const SEARCH_DEBOUNCE_MS = 400;
 const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
-
-function getNonEmptyString( value ) {
-	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
-}
+const EMPTY_BLOCK_TREE = [];
+const EMPTY_SIBLING_ORDER = [];
 
 function PatternInserterPortal( { children, onAttached } ) {
 	const noticeObserverRef = useRef( null );
@@ -206,72 +204,6 @@ function PatternInserterPortal( { children, onAttached } ) {
 	}
 
 	return createPortal( children, noticeSlotRef.current );
-}
-
-function buildAncestorEntries( editor, inserterRootClientId ) {
-	if ( ! inserterRootClientId ) {
-		return [];
-	}
-
-	const ancestors = [];
-	let parentId = inserterRootClientId;
-
-	while ( parentId ) {
-		ancestors.unshift( {
-			clientId: parentId,
-			blockName: editor.getBlockName?.( parentId ) || '',
-			attributes: editor.getBlockAttributes?.( parentId ) || {},
-		} );
-		parentId = editor.getBlockRootClientId?.( parentId ) ?? null;
-	}
-
-	return ancestors;
-}
-
-function buildInsertionContext( editor, inserterRootClientId, insertionPoint ) {
-	const ancestorEntries = buildAncestorEntries(
-		editor,
-		inserterRootClientId
-	);
-	const rootEntry = ancestorEntries[ ancestorEntries.length - 1 ] || null;
-	const areaLookup = getTemplatePartAreaLookup();
-	const nearestTemplatePart = [ ...ancestorEntries ]
-		.reverse()
-		.find( ( entry ) => entry.blockName === 'core/template-part' );
-	const templatePartArea = nearestTemplatePart
-		? inferTemplatePartArea( nearestTemplatePart.attributes, areaLookup )
-		: '';
-	const templatePartSlug = getNonEmptyString(
-		nearestTemplatePart?.attributes?.slug
-	);
-	const containerLayout = getNonEmptyString(
-		rootEntry?.attributes?.layout?.type
-	);
-	const rootBlock = getNonEmptyString( rootEntry?.blockName );
-	const siblingOrder = editor.getBlockOrder?.( inserterRootClientId ) || [];
-	const insertIndex = insertionPoint?.index ?? siblingOrder.length;
-	const nearbySiblings = [];
-	const start = Math.max( 0, insertIndex - 3 );
-	const end = Math.min( siblingOrder.length, insertIndex + 3 );
-
-	for ( let i = start; i < end; i++ ) {
-		const name = editor.getBlockName?.( siblingOrder[ i ] );
-
-		if ( name ) {
-			nearbySiblings.push( name );
-		}
-	}
-
-	return {
-		...( rootBlock ? { rootBlock } : {} ),
-		ancestors: ancestorEntries
-			.map( ( entry ) => entry.blockName )
-			.filter( Boolean ),
-		nearbySiblings,
-		...( templatePartArea ? { templatePartArea } : {} ),
-		...( templatePartSlug ? { templatePartSlug } : {} ),
-		...( containerLayout ? { containerLayout } : {} ),
-	};
 }
 
 function getPatternTitle( pattern ) {
@@ -808,29 +740,41 @@ export default function PatternRecommender() {
 
 		return select( blockEditorStore ).getBlockName( clientId );
 	}, [] );
-	const insertionPoint = useSelect(
+	const { hasInsertionPoint, inserterRootClientId, insertionIndex } =
+		useSelect( ( select ) => {
+			const point =
+				select( blockEditorStore ).getBlockInsertionPoint?.() || null;
+
+			return {
+				hasInsertionPoint: Boolean( point ),
+				inserterRootClientId: point?.rootClientId ?? null,
+				insertionIndex: point?.index,
+			};
+		}, [] );
+	const insertionBlockEditor = useMemo(
+		() => registry.select( blockEditorStore ),
+		[ registry ]
+	);
+	const insertionBlockTree = useSelect(
 		( select ) =>
-			select( blockEditorStore ).getBlockInsertionPoint?.() || null,
+			select( blockEditorStore ).getBlocks?.() || EMPTY_BLOCK_TREE,
 		[]
 	);
-	const inserterRootClientId = insertionPoint?.rootClientId ?? null;
-	const insertionIndex = insertionPoint?.index;
-	const insertionContext = useSelect(
-		( select ) => {
-			if ( ! insertionPoint ) {
-				return null;
-			}
-
-			const editor = select( blockEditorStore );
-
-			return buildInsertionContext(
-				editor,
-				inserterRootClientId,
-				insertionPoint
-			);
-		},
-		[ inserterRootClientId, insertionPoint ]
+	const insertionSiblingOrder = useSelect(
+		( select ) =>
+			select( blockEditorStore ).getBlockOrder?.(
+				inserterRootClientId
+			) || EMPTY_SIBLING_ORDER,
+		[ inserterRootClientId ]
 	);
+	const insertionContext = usePatternInsertionContext( {
+		enabled: hasInsertionPoint,
+		editor: insertionBlockEditor,
+		inserterRootClientId,
+		insertionIndex,
+		blockTree: insertionBlockTree,
+		siblingOrder: insertionSiblingOrder,
+	} );
 	const visiblePatternNames = useSelect(
 		( select ) => {
 			return getVisiblePatternNames(

@@ -1,4 +1,4 @@
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch, useRegistry, useSelect } from '@wordpress/data';
 import {
 	createPortal,
 	useCallback,
@@ -30,16 +30,18 @@ import {
 	collectThemeTokenDiagnosticsFromSettings,
 } from '../context/theme-tokens';
 import {
-	buildTemplateStructureSnapshot,
-	collectViewportVisibilitySummary,
-} from '../utils/editor-context-metadata';
-import {
 	getExecutableSurfaceEffectiveStaleReason,
 	getExecutableSurfaceStaleMessage,
 } from '../utils/recommendation-stale-reasons';
 import { buildGlobalStyleDesignSemantics } from '../utils/style-design-semantics';
 import { getStyleBookUiState, subscribeToStyleBookUi } from '../style-book/dom';
 import { buildStyleRecommendationRequestInput } from '../style-surfaces/request-input';
+import {
+	selectGlobalStylesDataDependencies,
+	useGlobalStylesData,
+} from '../style-surfaces/use-global-styles-data';
+import { useStyleSurfaceActivityContext } from '../style-surfaces/use-style-surface-activity-context';
+import { useStyleSurfaceDerivedContext } from '../style-surfaces/use-style-surface-derived-context';
 import {
 	getStyleSuggestionToneLabel,
 	isInlineStyleNotice,
@@ -50,20 +52,14 @@ import { STORE_NAME } from '../store';
 import {
 	getLatestAppliedActivity,
 	getLatestUndoableActivity,
-	getResolvedActivityEntries,
 } from '../store/activity-history';
 import {
 	getConnectorApprovalNotice,
 	getSurfaceCapability,
 } from '../utils/capability-flags';
 import { buildGlobalStylesRecommendationRequestSignature } from '../utils/recommendation-request-signature';
-import {
-	buildGlobalStylesRecommendationContextSignature,
-	getGlobalStylesActivityUndoState,
-	getGlobalStylesUserConfig,
-} from '../utils/style-operations';
+import { buildGlobalStylesRecommendationContextSignature } from '../utils/style-operations';
 import { normalizeTemplateType } from '../utils/template-types';
-import { getSuggestionKey } from '../inspector/suggestion-keys';
 
 function GlobalStylesPanel( {
 	prompt,
@@ -334,6 +330,7 @@ function GlobalStylesPanel( {
 }
 
 export default function GlobalStylesRecommender() {
+	const registry = useRegistry();
 	const [ prompt, setPrompt ] = useState( '' );
 	const [ portalNode, setPortalNode ] = useState( null );
 	const hydratedResultKeyRef = useRef( null );
@@ -349,6 +346,16 @@ export default function GlobalStylesRecommender() {
 		( select ) => select( 'core/block-editor' )?.getSettings?.() || {},
 		[]
 	);
+	const globalStylesDataDependencies = useSelect(
+		( select ) => selectGlobalStylesDataDependencies( select ),
+		[]
+	);
+	const globalStylesData = useGlobalStylesData(
+		registry,
+		globalStylesDataDependencies
+	);
+	const { globalStylesId, currentConfig, mergedConfig, availableVariations } =
+		globalStylesData;
 	const sidebarMountNode = styleBookUiState?.sidebarMountNode || null;
 	const themeTokenDiagnostics = useMemo(
 		() => collectThemeTokenDiagnosticsFromSettings( blockEditorSettings ),
@@ -365,14 +372,10 @@ export default function GlobalStylesRecommender() {
 	const {
 		isGlobalStylesActive,
 		isSiteEditor,
-		scope,
-		currentConfig,
-		mergedConfig,
-		availableVariations,
-		templateStructure,
-		templateVisibility,
-		designSemantics,
-		rawSuggestions,
+		templateSlug,
+		editedBlocks: surfaceEditedBlocks,
+		rawRecommendations,
+		templateType: surfaceTemplateType,
 		currentExplanation,
 		currentRequestPrompt,
 		currentReviewContextSignature,
@@ -386,13 +389,12 @@ export default function GlobalStylesRecommender() {
 		selectedSuggestionKey,
 		applyStatus,
 		undoStatus,
-		activityEntries,
+		activityLog,
+		lastUndoneActivityId,
 		currentError,
 		currentErrorDetails,
 		currentApplyError,
 		currentUndoError,
-		hasUndoSuccess,
-		buildNotice,
 	} = useSelect( ( select ) => {
 		const interfaceStore = select( 'core/interface' );
 		const editSite = select( 'core/edit-site' );
@@ -405,79 +407,21 @@ export default function GlobalStylesRecommender() {
 			editedPostType === 'wp_template'
 				? editSite?.getEditedPostId?.() || ''
 				: '';
-		const templateSlug =
+		const selectedTemplateSlug =
 			typeof editedTemplateRef === 'string' ? editedTemplateRef : '';
-		const templateType = normalizeTemplateType( templateSlug ) || '';
-		const globalStylesData = getGlobalStylesUserConfig( {
-			select: ( storeName ) => select( storeName ),
-		} );
-		const scopedEntries = ( store?.getActivityLog?.() || [] ).filter(
-			( entry ) =>
-				entry?.surface === 'global-styles' &&
-				String( entry?.target?.globalStylesId || '' ) ===
-					String( globalStylesData?.globalStylesId || '' )
-		);
-		const resolvedActivityEntries = getResolvedActivityEntries(
-			scopedEntries,
-			( entry ) =>
-				getGlobalStylesActivityUndoState( entry, {
-					select: ( storeName ) => select( storeName ),
-				} )
-		);
-		const selectorLastUndoneActivityId =
-			store?.getLastUndoneActivityId?.() || null;
-		const hasUndoSuccessForScope =
-			typeof selectorLastUndoneActivityId === 'string' &&
-			resolvedActivityEntries.some(
-				( entry ) =>
-					entry?.id === selectorLastUndoneActivityId &&
-					entry?.undo?.status === 'undone'
-			);
-		const mappedSuggestions = (
-			store?.getGlobalStylesRecommendations?.() || []
-		).map( ( suggestion, index ) => ( {
-			...suggestion,
-			suggestionKey: getSuggestionKey( suggestion, index ),
-		} ) );
-		const editedBlocks = blockEditor?.getBlocks?.() || [];
+		const templateType =
+			normalizeTemplateType( selectedTemplateSlug ) || '';
+		const editedBlocks = blockEditor?.getBlocks?.() || null;
 
 		return {
 			isGlobalStylesActive:
 				activeComplementaryArea === 'edit-site/global-styles',
 			isSiteEditor: Boolean( editSite ),
-			scope: globalStylesData
-				? {
-						surface: 'global-styles',
-						scopeKey: `global_styles:${ globalStylesData.globalStylesId }`,
-						globalStylesId: globalStylesData.globalStylesId,
-						postType: 'global_styles',
-						entityId: globalStylesData.globalStylesId,
-						entityKind: 'root',
-						entityName: 'globalStyles',
-						templateSlug,
-						templateType,
-				  }
-				: null,
-			currentConfig: globalStylesData?.userConfig || {
-				settings: {},
-				styles: {},
-				_links: {},
-			},
-			mergedConfig: globalStylesData?.mergedConfig || {
-				settings: {},
-				styles: {},
-				_links: {},
-			},
-			availableVariations: Array.isArray( globalStylesData?.variations )
-				? globalStylesData.variations
-				: [],
-			templateStructure: buildTemplateStructureSnapshot( editedBlocks ),
-			templateVisibility:
-				collectViewportVisibilitySummary( editedBlocks ),
-			designSemantics: buildGlobalStyleDesignSemantics( editedBlocks, {
-				templateType,
-			} ),
-			rawSuggestions: mappedSuggestions,
+			templateSlug: selectedTemplateSlug,
+			editedBlocks,
+			rawRecommendations:
+				store?.getGlobalStylesRecommendations?.() || null,
+			templateType,
 			currentExplanation: store?.getGlobalStylesExplanation?.() || '',
 			currentRequestPrompt: store?.getGlobalStylesRequestPrompt?.() || '',
 			currentReviewContextSignature:
@@ -496,18 +440,60 @@ export default function GlobalStylesRecommender() {
 				store?.getGlobalStylesSelectedSuggestionKey?.() || null,
 			applyStatus: store?.getGlobalStylesApplyStatus?.() || 'idle',
 			undoStatus: store?.getUndoStatus?.() || 'idle',
-			activityEntries: resolvedActivityEntries,
+			activityLog: store?.getActivityLog?.() || null,
+			lastUndoneActivityId: store?.getLastUndoneActivityId?.() || null,
 			currentError: store?.getGlobalStylesError?.() || null,
 			currentErrorDetails: store?.getGlobalStylesErrorDetails?.() || null,
 			currentApplyError: store?.getGlobalStylesApplyError?.() || null,
 			currentUndoError: store?.getUndoError?.() || null,
-			hasUndoSuccess: hasUndoSuccessForScope,
-			buildNotice: store?.getSurfaceStatusNotice
-				? ( options ) =>
-						store.getSurfaceStatusNotice( 'global-styles', options )
-				: null,
 		};
 	}, [] );
+
+	const scope = useMemo(
+		() =>
+			globalStylesId
+				? {
+						surface: 'global-styles',
+						scopeKey: `global_styles:${ globalStylesId }`,
+						globalStylesId,
+						postType: 'global_styles',
+						entityId: globalStylesId,
+						entityKind: 'root',
+						entityName: 'globalStyles',
+						templateSlug,
+						templateType: surfaceTemplateType,
+				  }
+				: null,
+		[ globalStylesId, surfaceTemplateType, templateSlug ]
+	);
+	const { activityEntries, hasUndoSuccess } = useStyleSurfaceActivityContext(
+		{
+			surface: 'global-styles',
+			activityLog,
+			globalStylesId,
+			registry,
+			lastUndoneActivityId,
+			runtimeDependency: globalStylesData,
+		}
+	);
+
+	const buildDesignSemantics = useCallback(
+		( blocks ) =>
+			buildGlobalStyleDesignSemantics( blocks, {
+				templateType: surfaceTemplateType,
+			} ),
+		[ surfaceTemplateType ]
+	);
+	const {
+		templateStructure,
+		templateVisibility,
+		designSemantics,
+		rawSuggestions,
+	} = useStyleSurfaceDerivedContext( {
+		editedBlocks: surfaceEditedBlocks,
+		rawRecommendations,
+		buildDesignSemantics,
+	} );
 
 	const recommendationContextSignature =
 		buildGlobalStylesRecommendationContextSignature( {
@@ -634,36 +620,55 @@ export default function GlobalStylesRecommender() {
 	const isLoading = status === 'loading';
 	const isApplying = applyStatus === 'applying';
 	const isUndoing = undoStatus === 'undoing';
-	const baseNotice = buildNotice
-		? buildNotice( {
-				requestError: currentError,
-				requestErrorDetails: currentErrorDetails,
-				applyError: currentApplyError,
-				undoError: hasUndoSuccess ? '' : currentUndoError,
-				undoSuccessMessage: hasUndoSuccess
-					? 'Flavor Agent restored the previous Global Styles config.'
-					: '',
-				applySuccessMessage: hasApplySuccess
-					? 'Flavor Agent applied the selected Global Styles change.'
-					: '',
-				requestStatus: status,
-				isStale: isStaleResult,
-				hasResult,
-				hasSuggestions: suggestions.length > 0,
-				hasPreview: Boolean( selectedSuggestion ),
-				hasOperations:
-					( selectedSuggestion?.operations || [] ).length > 0,
-				applyStatus,
-				undoStatus,
-				onDismissAction: Boolean( currentError ),
-				onApplyDismissAction: Boolean( currentApplyError ),
-				onUndoDismissAction: Boolean( currentUndoError ),
-				emptyMessage:
-					'No safe Global Styles changes were returned for this prompt.',
-				advisoryMessage:
-					'Review a theme-backed change before applying it.',
-		  } )
-		: null;
+	const baseNotice = useMemo(
+		() =>
+			registry
+				.select( STORE_NAME )
+				?.getSurfaceStatusNotice?.( 'global-styles', {
+					requestError: currentError,
+					requestErrorDetails: currentErrorDetails,
+					applyError: currentApplyError,
+					undoError: hasUndoSuccess ? '' : currentUndoError,
+					undoSuccessMessage: hasUndoSuccess
+						? 'Flavor Agent restored the previous Global Styles config.'
+						: '',
+					applySuccessMessage: hasApplySuccess
+						? 'Flavor Agent applied the selected Global Styles change.'
+						: '',
+					requestStatus: status,
+					isStale: isStaleResult,
+					hasResult,
+					hasSuggestions: suggestions.length > 0,
+					hasPreview: Boolean( selectedSuggestion ),
+					hasOperations:
+						( selectedSuggestion?.operations || [] ).length > 0,
+					applyStatus,
+					undoStatus,
+					onDismissAction: Boolean( currentError ),
+					onApplyDismissAction: Boolean( currentApplyError ),
+					onUndoDismissAction: Boolean( currentUndoError ),
+					emptyMessage:
+						'No safe Global Styles changes were returned for this prompt.',
+					advisoryMessage:
+						'Review a theme-backed change before applying it.',
+				} ) || null,
+		[
+			applyStatus,
+			currentApplyError,
+			currentError,
+			currentErrorDetails,
+			currentUndoError,
+			hasApplySuccess,
+			hasResult,
+			hasUndoSuccess,
+			isStaleResult,
+			registry,
+			selectedSuggestion,
+			status,
+			suggestions.length,
+			undoStatus,
+		]
+	);
 	const connectorApprovalNotice = useMemo(
 		() =>
 			getConnectorApprovalNotice( 'global-styles', currentErrorDetails ),
