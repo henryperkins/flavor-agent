@@ -122,9 +122,9 @@ final class Validation {
 		return $count;
 	}
 
-	public static function sanitize_block_structural_actions_enabled( mixed $value ): bool {
+	public static function sanitize_dual_log_request_diagnostics( mixed $value ): bool {
 		$enabled = self::parse_boolean_flag( $value );
-		Feedback::mark_section_changed_by_option( Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, $enabled );
+		Feedback::mark_section_changed_by_option( Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS, $enabled );
 
 		return $enabled;
 	}

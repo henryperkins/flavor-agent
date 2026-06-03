@@ -53,7 +53,7 @@ If a surface fails check 1 or 2, remove or hide it. If it fails check 3, keep it
 
 ## Current Release Blockers
 
-- Block structural apply is default-on as of 2026-06-03, carried by the `@wp70-site-editor` block structural review / replace / undo E2E coverage in `tests/e2e/flavor-agent.smoke.spec.js` (the fresh WP 7.0 browser evidence this blocker required). Opt-out is via the setting or the `flavor_agent_enable_block_structural_actions` filter; the `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant only force-enables. Release notes should still label this path beta until the opt-out toggle is removed.
+- Block structural apply is default-on as of 2026-06-03, carried by the `@wp70-site-editor` block structural review / replace / undo E2E coverage in `tests/e2e/flavor-agent.smoke.spec.js` (the fresh WP 7.0 browser evidence this blocker required). Opt-out is via the `flavor_agent_enable_block_structural_actions` filter only; the experimental admin setting and the `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant were removed when the feature graduated on 2026-06-03.
 - Style and Style Book can claim validated `theme.json` operations and deterministic color-contrast downgrades today, but should not make broad design-quality or accessibility-quality claims beyond that bounded validator.
 - Unmerged remote feature branches are behind current `master`; cherry-pick small proven changes only. Do not merge broad stale branches as-is.
 
@@ -111,7 +111,7 @@ Follow the canonical stop lines in [surfaces/release-stop-lines.md#block-recomme
 
 ### Release Actions
 
-- [ ] Keep the Block Structural Actions admin setting off by default and keep `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` default false for the release unless the release is explicitly beta.
+- [ ] Block Structural Actions is unconditionally on; the only opt-out is the `flavor_agent_enable_block_structural_actions` filter (the admin setting and `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant were removed at graduation). Confirm the filter still force-disables for an emergency opt-out.
 - [ ] If structural apply ships, add release notes that it is review-first and limited to validated selected-block pattern insert/replace.
 - [ ] Confirm stale selected-block results remain visible, marked stale, and non-executable.
 - [ ] Confirm locked, content-only, missing, moved, or changed targets fail closed.

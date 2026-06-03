@@ -52,11 +52,7 @@ final class SettingsRegistrarTest extends TestCase {
 			[ Settings::class, 'sanitize_guideline_blocks' ],
 			$settings[ Guidelines::OPTION_BLOCKS ]['sanitize_callback']
 		);
-		$this->assertSame( 'boolean', $settings[ Config::OPTION_BLOCK_STRUCTURAL_ACTIONS ]['type'] );
-		$this->assertSame(
-			[ Settings::class, 'sanitize_block_structural_actions_enabled' ],
-			$settings[ Config::OPTION_BLOCK_STRUCTURAL_ACTIONS ]['sanitize_callback']
-		);
+		$this->assertArrayNotHasKey( 'flavor_agent_block_structural_actions_enabled', $settings );
 		$this->assertSame( 'string', $settings[ Config::OPTION_REASONING_EFFORT ]['type'] );
 		$this->assertSame(
 			[ Settings::class, 'sanitize_reasoning_effort' ],
@@ -122,13 +118,9 @@ final class SettingsRegistrarTest extends TestCase {
 			Guidelines::OPTION_ADDITIONAL,
 			$fields['flavor_agent_guidelines']
 		);
-		$this->assertArrayHasKey(
-			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
+		$this->assertArrayNotHasKey(
+			'flavor_agent_block_structural_actions_enabled',
 			$fields['flavor_agent_experimental_features']
-		);
-		$this->assertSame(
-			[ Settings::class, 'render_checkbox_field' ],
-			$fields['flavor_agent_experimental_features'][ Config::OPTION_BLOCK_STRUCTURAL_ACTIONS ]['callback']
 		);
 		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_ai_search_account_id', $settings );
 		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_ai_search_instance_id', $settings );

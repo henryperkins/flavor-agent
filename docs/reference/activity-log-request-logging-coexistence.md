@@ -2,12 +2,14 @@
 
 **Status:** Shipped bridge design · **Date:** 2026-05-25 · **Driving issue:** `WordPress/ai#437` (merged, shipped in AI 1.0.0 on 2026-05-19)
 
+> **Update (2026-06-03):** The original design below **suppressed** Flavor Agent's `request_diagnostic` rows whenever core Request Logging was enabled. That default was reversed: Flavor Agent now **dual-logs by default**, keeping its own `request_diagnostic` rows (surface, result count, pipeline trace, undo lineage) alongside core's logs. The behavior is gated by `RequestLoggingBridge::should_persist_request_diagnostic()` plus the **AI Activity Dual Logging** experiment (Settings > Flavor Agent > Experimental Features, on by default); disabling that option restores the suppress-and-defer behavior described below. Passages that still describe unconditional suppression reflect the original 2026-05-25 design.
+
 ## TL;DR
 
 Core AI 1.0.0's Request Logging captures every AI Client HTTP request transparently via the SDK's HTTP transporter decorator. Flavor Agent's `Activity\Repository` captures applied editor changes (block_apply, template_apply, etc.) with undo. These are two different things at two different layers. The right design is **coexistence, not consolidation**:
 
 1. **Enrich** core's Request Logging with Flavor Agent surface/scope/document context via the `wpai_request_log_context` filter so each `wpai_request_logs` row knows which Flavor Agent surface and editor scope produced the request.
-2. **Stop persisting `request_diagnostic` rows** in `flavor_agent_activity` when core Request Logging is active — they become duplicative noise.
+2. **Dual-log by default (opt-out available).** Flavor Agent keeps writing its own `request_diagnostic` rows to `flavor_agent_activity` even when core Request Logging is active, because they carry surface, result-count, pipeline-trace, and undo-lineage detail that core's HTTP-layer logs do not. The "AI Activity Dual Logging" experiment (Settings > Flavor Agent > Experimental Features, on by default) controls this; disabling it defers to core's Tools > AI Request Logs alone. *(Revised 2026-06-03; the original bridge suppressed these rows whenever core logging was on.)*
 3. **Keep apply/undo rows** in `flavor_agent_activity` — Request Logging does not capture editor state transitions.
 4. **Cross-link** the admin Activity page to the matching Request Logs row via the core `log_id` UUID, captured from `wpai_request_logged` and stored on Flavor Agent's apply rows.
 
@@ -181,12 +183,12 @@ The corresponding upstream fix is filed as `WordPress/ai` PR (branch `fix/symlin
 
 Core Request Logging assigns a UUID `log_id` per request. Flavor Agent captures that UUID through the shipped `wpai_request_logged` action, which fires after the `wpai_request_logs` row persists and includes the inserted row data. `RequestLoggingBridge` maps the active Flavor Agent `requestToken` to that core UUID, and `RecommendationAbilityExecution` threads both values into `requestMeta` so later apply rows can persist `request.ai.requestLogId`.
 
-### Stop persisting `request_diagnostic` rows when core logging is active
+### Persisting `request_diagnostic` rows when core logging is active
 
-In `inc/Abilities/RecommendationAbilityExecution.php`, wrap the two `Activity\Repository::create()` calls (lines 550 and 599) with a capability check:
+In `inc/Abilities/RecommendationAbilityExecution.php`, the `request_diagnostic` `Activity\Repository::create()` calls are gated on `RequestLoggingBridge::should_persist_request_diagnostic()`:
 
 ```php
-if ( ! Activity\RequestLoggingBridge::is_core_request_logging_enabled() ) {
+if ( Activity\RequestLoggingBridge::should_persist_request_diagnostic() ) {
     Activity\Repository::create( [
         'type'    => 'request_diagnostic',
         // …existing payload…
@@ -194,7 +196,7 @@ if ( ! Activity\RequestLoggingBridge::is_core_request_logging_enabled() ) {
 }
 ```
 
-When core Request Logging is on, the AI request is already in `wpai_request_logs` with full Flavor Agent context (via the filter); the parallel `request_diagnostic` row adds no information. When core Request Logging is off (Experiment disabled or AI plugin missing), Flavor Agent continues to write its own diagnostic rows exactly as today — no behavior change.
+`should_persist_request_diagnostic()` returns `true` when core Request Logging is off, and — **as of 2026-06-03** — also returns `true` by default when core logging is on, because the bootstrap installs the `flavor_agent_persist_request_diagnostic_with_core_logging` filter from the on-by-default **AI Activity Dual Logging** option. So Flavor Agent dual-logs: core captures the AI request (with Flavor Agent context via the `wpai_request_log_context` filter) and Flavor Agent keeps its own richer diagnostic row. Disabling the option makes the method return `false` when core logging is on, restoring the original suppress-and-defer behavior. *(The original design unconditionally skipped the row via `is_core_request_logging_enabled()`.)*
 
 The same wrap applies to `Cloudflare\AISearchClient::record_request_diagnostic()` (line 1590) — but docs grounding goes through Cloudflare's HTTP, **not** the AI Client transporter, so it is *not* automatically captured by core Request Logging. Decide separately:
 
@@ -227,7 +229,7 @@ The existing settings page now includes a read-only **AI Activity Storage** bloc
 
 - **Not available:** Flavor Agent records request diagnostics in its own activity log and points users to WordPress AI 1.0.0+ for core request observability.
 - **Available but disabled:** Flavor Agent keeps local request diagnostics and links to **Settings → AI** to enable the AI Request Logging experiment.
-- **Enabled:** Flavor Agent forwards surface, scope, and document context into **Tools → AI Request Logs** and links there.
+- **Enabled:** Flavor Agent forwards surface, scope, and document context into **Tools → AI Request Logs** and, with AI Activity Dual Logging on (default), also keeps its own `request_diagnostic` rows in **Settings → AI Activity**; the block links to both and notes which mode is active.
 
 This makes the relationship visible without forcing the site owner to read this design doc.
 
@@ -245,7 +247,7 @@ This makes the relationship visible without forcing the site owner to read this 
 |---|---|---|
 | No | n/a | Flavor Agent writes request_diagnostic + apply rows. Unchanged from today. |
 | Yes (≥1.0.0) | Off | Flavor Agent writes request_diagnostic + apply rows. Unchanged from today. |
-| Yes (≥1.0.0) | On | Flavor Agent skips request_diagnostic, writes apply rows with `request.ai.requestLogId` = UUID. Core captures the AI request with Flavor Agent context attached via filter. |
+| Yes (≥1.0.0) | On | **Dual logging (default):** Flavor Agent keeps writing request_diagnostic + apply rows (apply rows carry `request.ai.requestLogId` = UUID); core also captures the AI request with Flavor Agent context attached via filter. With AI Activity Dual Logging **off**, Flavor Agent skips request_diagnostic and defers to core. |
 | Yes, AI plugin downgraded mid-session | n/a → n/a | Bridge re-checks capability per request; behaves as the table above. No persistent state in Flavor Agent that depends on the bridge being on. |
 
 ## Open questions
@@ -257,7 +259,7 @@ This makes the relationship visible without forcing the site owner to read this 
 ## Migration plan
 
 1. **Phase 1 shipped:** `RequestLoggingBridge` and `FlavorAgentRequestTag` register `wpai_request_log_context` / `wpai_request_logged` and inject Flavor Agent context into core rows.
-2. **Phase 2 shipped:** recommendation responses carry `requestToken` and `requestLogId`, and duplicate `request_diagnostic` rows are suppressed when core Request Logging is enabled.
+2. **Phase 2 shipped:** recommendation responses carry `requestToken` and `requestLogId`. Duplicate `request_diagnostic` rows were originally suppressed when core Request Logging was enabled; as of 2026-06-03 they are kept by default (AI Activity Dual Logging), with suppression available as an opt-out.
 3. **Phase 3 shipped:** Activity admin rows with `request.ai.requestLogId` can fetch and render the matching core log inline, with a secondary link to Tools → AI Request Logs.
 4. **Phase 4 shipped:** Settings shows the AI Activity Storage read-only status and docs/status copy reflects the live bridge.
 

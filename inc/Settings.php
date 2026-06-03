@@ -123,8 +123,8 @@ final class Settings {
 		return Validation::sanitize_pattern_max_recommendations( $value );
 	}
 
-	public static function sanitize_block_structural_actions_enabled( mixed $value ): bool {
-		return Validation::sanitize_block_structural_actions_enabled( $value );
+	public static function sanitize_dual_log_request_diagnostics( mixed $value ): bool {
+		return Validation::sanitize_dual_log_request_diagnostics( $value );
 	}
 
 	public static function sanitize_reasoning_effort( mixed $value ): string {

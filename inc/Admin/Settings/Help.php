@@ -38,7 +38,7 @@ final class Help {
 					'',
 					[
 						'<p>' . esc_html__( 'Use Connectors for text generation. Flavor Agent shows the active chat path here.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and beta feature toggles.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback.', 'flavor-agent' ) . '</p>',
 					]
 				),
@@ -69,7 +69,7 @@ final class Help {
 						'<p>' . esc_html__( 'Pattern Sync stays unavailable until the selected storage path is configured. The sync panel shows stale reasons, last errors, and technical index details.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'When core Guidelines are available, Flavor Agent reads them first.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Guidelines import fills the form. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Structural block actions are beta controls. Leave them off unless testing review-first insert and replace flows.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'AI Activity Dual Logging keeps Flavor Agent request diagnostics alongside core AI Request Logs when core logging is enabled.', 'flavor-agent' ) . '</p>',
 					]
 				),
 				'priority' => 30,

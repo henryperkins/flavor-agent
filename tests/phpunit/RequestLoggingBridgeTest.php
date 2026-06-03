@@ -57,6 +57,10 @@ final class RequestLoggingBridgeTest extends TestCase {
 		];
 
 		$this->assertTrue( RequestLoggingBridge::is_core_logging_enabled() );
+		// Class-level default WITHOUT the plugin bootstrap loaded: absent the
+		// flavor_agent_persist_request_diagnostic_with_core_logging opt-in, core logging
+		// suppresses the duplicate diagnostic. The bootstrap flips this to dual logging by
+		// default — see PluginLifecycleTest::test_bootstrap_dual_logs_request_diagnostics_by_default_with_core_logging.
 		$this->assertFalse( RequestLoggingBridge::should_persist_request_diagnostic() );
 	}
 

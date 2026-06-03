@@ -184,10 +184,10 @@ final class Registrar {
 		);
 		register_setting(
 			Config::OPTION_GROUP,
-			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
+			Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS,
 			[
 				'type'              => 'boolean',
-				'sanitize_callback' => [ Settings::class, 'sanitize_block_structural_actions_enabled' ],
+				'sanitize_callback' => [ Settings::class, 'sanitize_dual_log_request_diagnostics' ],
 				'default'           => true,
 			]
 		);
@@ -463,16 +463,16 @@ final class Registrar {
 			]
 		);
 		add_settings_field(
-			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
-			'Block Structural Actions',
+			Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS,
+			'AI Activity Dual Logging',
 			[ Settings::class, 'render_checkbox_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_experimental_features',
 			[
-				'option'      => Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
-				'label_for'   => Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
-				'label'       => 'Enable structural block actions',
-				'description' => 'Adds review-first insert and replace actions for the selected block.',
+				'option'      => Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS,
+				'label_for'   => Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS,
+				'label'       => 'Always record request diagnostics in the Flavor Agent activity log',
+				'description' => 'When core AI Request Logging is enabled, also keep Flavor Agent request diagnostics (surface, result count, pipeline trace, undo lineage) in Settings &gt; AI Activity. Disable to defer to the core Tools &gt; AI Request Logs alone.',
 				'default'     => true,
 			]
 		);

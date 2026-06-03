@@ -17,7 +17,7 @@ final class Config {
 	public const GROUP_EXPERIMENTS                               = 'experiments';
 	public const OPTION_REASONING_EFFORT                         = 'flavor_agent_reasoning_effort';
 	public const OPTION_LEGACY_AZURE_REASONING_EFFORT            = 'flavor_agent_azure_reasoning_effort';
-	public const OPTION_BLOCK_STRUCTURAL_ACTIONS                 = 'flavor_agent_block_structural_actions_enabled';
+	public const OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS             = 'flavor_agent_dual_log_request_diagnostics';
 	public const OPTION_PATTERN_RETRIEVAL_BACKEND                = 'flavor_agent_pattern_retrieval_backend';
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID  = 'flavor_agent_cloudflare_pattern_ai_search_account_id';
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE   = 'flavor_agent_cloudflare_pattern_ai_search_namespace';

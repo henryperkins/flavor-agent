@@ -182,7 +182,7 @@ final class Page {
 	public static function render_experimental_features_section(): void {
 		printf(
 			'<p class="flavor-agent-settings-inline-meta">%s</p>',
-			esc_html__( 'Beta feature toggles.', 'flavor-agent' )
+			esc_html__( 'AI Activity logging controls.', 'flavor-agent' )
 		);
 	}
 
@@ -535,18 +535,31 @@ final class Page {
 		$core_logging_enabled   = RequestLoggingBridge::is_core_logging_enabled();
 		$tone                   = 'warning';
 		$message                = __( 'Flavor Agent records request diagnostics in its own activity log. Upgrade to WordPress AI 1.0.0+ to access core AI request observability.', 'flavor-agent' );
-		$link_url               = '';
-		$link_label             = '';
+		$links                  = [];
 
 		if ( $core_logging_enabled ) {
-			$tone       = 'success';
-			$message    = __( 'AI Request Logging is enabled. Flavor Agent forwards surface, scope, and document context into each Tools > AI Request Logs row.', 'flavor-agent' );
-			$link_url   = admin_url( 'tools.php?page=ai-request-logs' );
-			$link_label = __( 'Open AI Request Logs', 'flavor-agent' );
+			$dual_logging = ! function_exists( '\\flavor_agent_dual_log_request_diagnostics_enabled' )
+				|| \flavor_agent_dual_log_request_diagnostics_enabled();
+			$tone         = 'success';
+			$message      = $dual_logging
+				? __( 'AI Request Logging is enabled. Flavor Agent also records its own request diagnostics here and forwards surface, scope, and document context into each Tools > AI Request Logs row (dual logging).', 'flavor-agent' )
+				: __( 'AI Request Logging is enabled. Flavor Agent defers to core logging and forwards surface, scope, and document context into each Tools > AI Request Logs row.', 'flavor-agent' );
+			$links[]      = [
+				'url'   => admin_url( 'tools.php?page=ai-request-logs' ),
+				'label' => __( 'Open AI Request Logs', 'flavor-agent' ),
+			];
+			if ( $dual_logging ) {
+				$links[] = [
+					'url'   => admin_url( 'options-general.php?page=flavor-agent-activity' ),
+					'label' => __( 'Open AI Activity', 'flavor-agent' ),
+				];
+			}
 		} elseif ( $core_logging_available ) {
-			$message    = __( 'Flavor Agent is recording request diagnostics in its own activity log. Enable the AI Request Logging experiment in Settings > AI to also capture provider, model, token, and cost data centrally.', 'flavor-agent' );
-			$link_url   = admin_url( 'options-general.php?page=ai-wp-admin' );
-			$link_label = __( 'Open AI settings', 'flavor-agent' );
+			$message = __( 'Flavor Agent is recording request diagnostics in its own activity log. Enable the AI Request Logging experiment in Settings > AI to also capture provider, model, token, and cost data centrally.', 'flavor-agent' );
+			$links[] = [
+				'url'   => admin_url( 'options-general.php?page=ai-wp-admin' ),
+				'label' => __( 'Open AI settings', 'flavor-agent' ),
+			];
 		}
 
 		self::render_subsection_heading(
@@ -556,13 +569,13 @@ final class Page {
 		?>
 		<div class="flavor-agent-settings-status flavor-agent-settings-status--<?php echo esc_attr( $tone ); ?>">
 			<p><?php echo esc_html( $message ); ?></p>
-			<?php if ( '' !== $link_url ) : ?>
+			<?php foreach ( $links as $link ) : ?>
 				<p>
-					<a class="button button-secondary" href="<?php echo esc_url( Utils::sanitize_url_value( $link_url ) ); ?>">
-						<?php echo esc_html( $link_label ); ?>
+					<a class="button button-secondary" href="<?php echo esc_url( Utils::sanitize_url_value( $link['url'] ) ); ?>">
+						<?php echo esc_html( $link['label'] ); ?>
 					</a>
 				</p>
-			<?php endif; ?>
+			<?php endforeach; ?>
 		</div>
 		<?php
 	}
@@ -776,7 +789,7 @@ final class Page {
 		self::render_registered_fields_table(
 			'flavor_agent_experimental_features',
 			[
-				Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
+				Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS,
 			]
 		);
 	}

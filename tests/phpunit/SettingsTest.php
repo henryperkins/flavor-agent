@@ -1247,63 +1247,111 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Saved value hidden. Leave blank to keep it, or enter a replacement.', $output );
 	}
 
-	public function test_register_settings_exposes_block_structural_actions_toggle(): void {
+	public function test_register_settings_does_not_expose_block_structural_actions_toggle(): void {
 		Settings::register_settings();
 
-		$this->assertArrayHasKey(
+		// The experimental opt-out was removed when block structural actions
+		// graduated to default-on; the option and its settings field are gone.
+		$this->assertArrayNotHasKey(
 			'flavor_agent_block_structural_actions_enabled',
 			$GLOBALS['wp_registered_settings']
 		);
-		$this->assertSame(
-			'boolean',
-			$GLOBALS['wp_registered_settings']['flavor_agent_block_structural_actions_enabled']['type']
-		);
-		$this->assertSame(
-			[ Settings::class, 'sanitize_block_structural_actions_enabled' ],
-			$GLOBALS['wp_registered_settings']['flavor_agent_block_structural_actions_enabled']['sanitize_callback']
-		);
-		$this->assertArrayHasKey(
+		$this->assertArrayNotHasKey(
 			'flavor_agent_block_structural_actions_enabled',
 			$GLOBALS['wp_settings_fields'][ Config::PAGE_SLUG ]['flavor_agent_experimental_features']
 		);
 	}
 
-	public function test_render_page_includes_experimental_structural_actions_toggle(): void {
+	public function test_render_page_omits_retired_structural_actions_toggle(): void {
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		// The Experimental Features section still renders (it now hosts the
+		// dual-logging toggle), but the retired structural opt-out must be gone.
+		$this->assertStringContainsString( '6. Experimental Features', $output );
+		$this->assertStringNotContainsString(
+			'name="flavor_agent_block_structural_actions_enabled"',
+			$output
+		);
+		$this->assertStringNotContainsString( 'Enable structural block actions', $output );
+		$this->assertStringNotContainsString(
+			'Adds review-first insert and replace actions for the selected block.',
+			$output
+		);
+	}
+
+	public function test_experiments_overview_status_follows_dual_logging_setting(): void {
+		// The Experimental Features overview badge must reflect the only toggle
+		// the section still hosts (dual logging), not the retired structural gate.
+		WordPressTestState::$options['flavor_agent_dual_log_request_diagnostics'] = false;
+		$this->assertSame(
+			'Off',
+			State::get_experiments_overview_status( State::get_page_state() )['label']
+		);
+
+		WordPressTestState::$options['flavor_agent_dual_log_request_diagnostics'] = true;
+		$this->assertSame(
+			'On',
+			State::get_experiments_overview_status( State::get_page_state() )['label']
+		);
+	}
+
+	public function test_register_settings_exposes_dual_logging_toggle(): void {
+		Settings::register_settings();
+
+		$this->assertArrayHasKey(
+			'flavor_agent_dual_log_request_diagnostics',
+			$GLOBALS['wp_registered_settings']
+		);
+		$this->assertSame(
+			'boolean',
+			$GLOBALS['wp_registered_settings']['flavor_agent_dual_log_request_diagnostics']['type']
+		);
+		$this->assertSame(
+			[ Settings::class, 'sanitize_dual_log_request_diagnostics' ],
+			$GLOBALS['wp_registered_settings']['flavor_agent_dual_log_request_diagnostics']['sanitize_callback']
+		);
+		$this->assertArrayHasKey(
+			'flavor_agent_dual_log_request_diagnostics',
+			$GLOBALS['wp_settings_fields'][ Config::PAGE_SLUG ]['flavor_agent_experimental_features']
+		);
+	}
+
+	public function test_render_page_includes_dual_logging_toggle(): void {
 		WordPressTestState::$options = [
-			'flavor_agent_block_structural_actions_enabled' => true,
+			'flavor_agent_dual_log_request_diagnostics' => true,
 		];
 
 		ob_start();
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
-		$this->assertStringContainsString( '6. Experimental Features', $output );
-		$this->assertStringContainsString( 'Block Structural Actions', $output );
+		$this->assertStringContainsString( 'AI Activity Dual Logging', $output );
 		$this->assertStringContainsString(
-			'name="flavor_agent_block_structural_actions_enabled"',
+			'name="flavor_agent_dual_log_request_diagnostics"',
 			$output
 		);
 		$this->assertStringContainsString( 'type="checkbox"', $output );
 		$this->assertStringContainsString( 'checked="checked"', $output );
-		$this->assertStringContainsString( 'Enable structural block actions', $output );
 		$this->assertStringContainsString(
-			'Adds review-first insert and replace actions for the selected block.',
+			'Always record request diagnostics in the Flavor Agent activity log',
 			$output
 		);
 	}
 
-	public function test_sanitize_block_structural_actions_does_not_mark_default_true_as_changed(): void {
+	public function test_sanitize_dual_log_request_diagnostics_records_change_when_disabled(): void {
 		$_POST = [
 			'option_page'                        => Config::OPTION_GROUP,
-			'flavor_agent_settings_feedback_key' => 'experiments-default',
+			'flavor_agent_settings_feedback_key' => 'experiments-dual-logging',
 		];
 
-		// Structural actions are on by default, so saving the on value is not a change.
-		$this->assertTrue( Settings::sanitize_block_structural_actions_enabled( '1' ) );
+		// Dual logging is on by default, so saving the on value is not a change.
+		$this->assertTrue( Settings::sanitize_dual_log_request_diagnostics( '1' ) );
 		$this->assertSame( [], WordPressTestState::$transients );
 
-		// Turning the feature off differs from the default and is recorded as a change.
-		$this->assertFalse( Settings::sanitize_block_structural_actions_enabled( '0' ) );
+		// Turning it off differs from the default and is recorded as a change.
+		$this->assertFalse( Settings::sanitize_dual_log_request_diagnostics( '0' ) );
 		$feedback = array_values( WordPressTestState::$transients )[0] ?? [];
 
 		$this->assertTrue( (bool) ( $feedback['changed_sections']['experiments'] ?? false ) );
@@ -1319,7 +1367,7 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'flavor-agent-overview', $screen->help_tabs[0]['id'] );
 		$this->assertSame( 'Overview', $screen->help_tabs[0]['title'] );
 		$this->assertStringContainsString( 'Use Connectors for text generation. Flavor Agent shows the active chat path here.', $screen->help_tabs[0]['content'] );
-		$this->assertStringContainsString( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and beta feature toggles.', $screen->help_tabs[0]['content'] );
+		$this->assertStringContainsString( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls.', $screen->help_tabs[0]['content'] );
 		$this->assertStringContainsString( 'When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback.', $screen->help_tabs[0]['content'] );
 		$this->assertSame( 'flavor-agent-configuration', $screen->help_tabs[1]['id'] );
 		$this->assertStringContainsString( 'Pattern Storage chooses where the pattern catalog is indexed.', $screen->help_tabs[1]['content'] );
@@ -1329,7 +1377,8 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Developer Docs use the built-in developer.wordpress.org grounding path.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'The Developer Docs group shows compact runtime status.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'When core Guidelines are available, Flavor Agent reads them first.', $screen->help_tabs[2]['content'] );
-		$this->assertStringContainsString( 'Structural block actions are beta controls.', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'AI Activity Dual Logging keeps Flavor Agent request diagnostics alongside core AI Request Logs when core logging is enabled.', $screen->help_tabs[2]['content'] );
+		$this->assertStringNotContainsString( 'Structural block actions are beta controls.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'Quick Links', $screen->help_sidebar );
 		$this->assertStringContainsString( 'options-connectors.php', $screen->help_sidebar );
 		$this->assertStringContainsString( 'flavor-agent-activity', $screen->help_sidebar );
@@ -1366,7 +1415,8 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( '5. Guidelines', $output );
 		$this->assertStringContainsString( 'Site and block guidance.', $output );
 		$this->assertStringContainsString( '6. Experimental Features', $output );
-		$this->assertStringContainsString( 'Beta feature toggles.', $output );
+		$this->assertStringContainsString( 'AI Activity logging controls.', $output );
+		$this->assertStringNotContainsString( 'Beta feature toggles.', $output );
 		$this->assertStringContainsString( 'Optional', $output );
 		$this->assertStringNotContainsString( 'Cloudflare Override', $output );
 		$this->assertStringNotContainsString( 'Override values are live-probed before saving', $output );
@@ -1433,7 +1483,7 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_render_page_links_to_ai_request_logs_when_core_request_logging_is_enabled(): void {
+	public function test_render_page_links_to_request_logs_and_activity_when_dual_logging_is_enabled(): void {
 		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
 		WordPressTestState::$options = [
 			'wpai_features_enabled'                   => true,
@@ -1446,13 +1496,52 @@ final class SettingsTest extends TestCase {
 
 		$this->assertStringContainsString( 'AI Activity Storage', $output );
 		$this->assertStringContainsString(
-			'AI Request Logging is enabled. Flavor Agent forwards surface, scope, and document context into each Tools &gt; AI Request Logs row.',
+			'AI Request Logging is enabled. Flavor Agent also records its own request diagnostics here and forwards surface, scope, and document context into each Tools &gt; AI Request Logs row (dual logging).',
 			$output
 		);
 		$this->assertStringContainsString(
 			'tools.php?page=ai-request-logs',
 			$output
 		);
+		$this->assertStringContainsString( 'Open AI Activity', $output );
+		$this->assertMatchesRegularExpression(
+			'#href="[^"]*options-general\.php\?page=flavor-agent-activity"\s*>\s*Open AI Activity#',
+			$output
+		);
+	}
+
+	/**
+	 * Loads the real plugin so flavor_agent_dual_log_request_diagnostics_enabled()
+	 * exists and the dual-logging filter can flip render_page() into defer mode;
+	 * without it Page.php's function_exists() guard pins $dual_logging to true.
+	 * A separate process keeps the unguarded plugin require from colliding with
+	 * the in-process SettingsTest cases.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_render_page_omits_ai_activity_link_when_dual_logging_is_disabled(): void {
+		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
+		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
+		\add_filter( 'flavor_agent_dual_log_request_diagnostics', '__return_false' );
+		WordPressTestState::$options = [
+			'wpai_features_enabled'                   => true,
+			'wpai_feature_ai-request-logging_enabled' => true,
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString(
+			'AI Request Logging is enabled. Flavor Agent defers to core logging and forwards surface, scope, and document context into each Tools &gt; AI Request Logs row.',
+			$output
+		);
+		$this->assertStringContainsString(
+			'tools.php?page=ai-request-logs',
+			$output
+		);
+		$this->assertStringNotContainsString( 'Open AI Activity', $output );
 	}
 
 	public function test_render_page_opens_every_section_with_request_scoped_validation_errors(): void {

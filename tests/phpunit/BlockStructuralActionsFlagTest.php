@@ -13,20 +13,38 @@ use PHPUnit\Framework\TestCase;
  */
 final class BlockStructuralActionsFlagTest extends TestCase {
 
-	/**
-	 * @dataProvider false_like_values
-	 *
-	 * @param mixed $value False-like constant value.
-	 */
-	public function test_false_like_constant_does_not_disable_default_on( mixed $value ): void {
+	public function test_enabled_by_default_without_option_or_filter(): void {
 		WordPressTestState::reset();
-		define( 'FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS', $value );
 		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
 
-		// The constant can only force structural actions on; a false-like value
-		// leaves the on-by-default option intact. Disabling is done via the
-		// flavor_agent_enable_block_structural_actions filter.
 		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
+	}
+
+	/**
+	 * The opt-out setting was removed when the feature graduated; a stale saved
+	 * option value must no longer change the resolved state. Sites disable the
+	 * feature through the flavor_agent_enable_block_structural_actions filter.
+	 *
+	 * @dataProvider saved_option_values
+	 *
+	 * @param mixed $value Stale saved option value.
+	 */
+	public function test_saved_option_value_is_ignored( mixed $value ): void {
+		WordPressTestState::reset();
+		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
+
+		WordPressTestState::$options['flavor_agent_block_structural_actions_enabled'] = $value;
+
+		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
+	}
+
+	public function test_plugin_does_not_define_force_enable_constant(): void {
+		WordPressTestState::reset();
+		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
+
+		// The developer force-enable constant was retired alongside the option;
+		// the filter is the only remaining control.
+		$this->assertFalse( defined( 'FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS' ) );
 	}
 
 	/**
@@ -34,7 +52,7 @@ final class BlockStructuralActionsFlagTest extends TestCase {
 	 *
 	 * @param mixed $value False-like filtered value.
 	 */
-	public function test_filter_false_like_values_do_not_enable_block_structural_actions( mixed $value ): void {
+	public function test_filter_false_like_values_disable_block_structural_actions( mixed $value ): void {
 		WordPressTestState::reset();
 		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
 
@@ -46,7 +64,7 @@ final class BlockStructuralActionsFlagTest extends TestCase {
 		$this->assertFalse( flavor_agent_block_structural_actions_enabled() );
 	}
 
-	public function test_filter_true_like_values_enable_block_structural_actions(): void {
+	public function test_filter_true_like_values_keep_block_structural_actions_enabled(): void {
 		WordPressTestState::reset();
 		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
 
@@ -58,19 +76,16 @@ final class BlockStructuralActionsFlagTest extends TestCase {
 		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
 	}
 
-	public function test_saved_admin_setting_enables_block_structural_actions(): void {
-		WordPressTestState::reset();
-		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
-
-		WordPressTestState::$options['flavor_agent_block_structural_actions_enabled'] = true;
-
-		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
-		$this->assertTrue(
-			flavor_agent_get_editor_bootstrap_data(
-				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
-				'https://example.test/wp-admin/options-connectors.php'
-			)['enableBlockStructuralActions']
-		);
+	/**
+	 * @return array<string, array{0: mixed}>
+	 */
+	public function saved_option_values(): array {
+		return [
+			'disabled bool'   => [ false ],
+			'disabled string' => [ '0' ],
+			'enabled bool'    => [ true ],
+			'enabled string'  => [ '1' ],
+		];
 	}
 
 	/**
