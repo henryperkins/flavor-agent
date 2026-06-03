@@ -1292,16 +1292,18 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_sanitize_block_structural_actions_does_not_mark_default_false_as_changed(): void {
+	public function test_sanitize_block_structural_actions_does_not_mark_default_true_as_changed(): void {
 		$_POST = [
 			'option_page'                        => Config::OPTION_GROUP,
 			'flavor_agent_settings_feedback_key' => 'experiments-default',
 		];
 
-		$this->assertFalse( Settings::sanitize_block_structural_actions_enabled( '0' ) );
+		// Structural actions are on by default, so saving the on value is not a change.
+		$this->assertTrue( Settings::sanitize_block_structural_actions_enabled( '1' ) );
 		$this->assertSame( [], WordPressTestState::$transients );
 
-		$this->assertTrue( Settings::sanitize_block_structural_actions_enabled( '1' ) );
+		// Turning the feature off differs from the default and is recorded as a change.
+		$this->assertFalse( Settings::sanitize_block_structural_actions_enabled( '0' ) );
 		$feedback = array_values( WordPressTestState::$transients )[0] ?? [];
 
 		$this->assertTrue( (bool) ( $feedback['changed_sections']['experiments'] ?? false ) );

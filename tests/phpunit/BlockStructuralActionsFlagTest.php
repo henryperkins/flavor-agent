@@ -16,14 +16,17 @@ final class BlockStructuralActionsFlagTest extends TestCase {
 	/**
 	 * @dataProvider false_like_values
 	 *
-	 * @param mixed $value False-like flag value.
+	 * @param mixed $value False-like constant value.
 	 */
-	public function test_constant_false_like_values_do_not_enable_block_structural_actions( mixed $value ): void {
+	public function test_false_like_constant_does_not_disable_default_on( mixed $value ): void {
 		WordPressTestState::reset();
 		define( 'FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS', $value );
 		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
 
-		$this->assertFalse( flavor_agent_block_structural_actions_enabled() );
+		// The constant can only force structural actions on; a false-like value
+		// leaves the on-by-default option intact. Disabling is done via the
+		// flavor_agent_enable_block_structural_actions filter.
+		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
 	}
 
 	/**

@@ -201,13 +201,22 @@ function rejectOperation( rawOperation, code, message ) {
 	};
 }
 
+function coerceStructuralFlag( value ) {
+	// wp_localize_script serializes PHP booleans to scalars: true becomes the
+	// string "1" and false becomes "". Coerce rather than compare to `true` so
+	// the server-provided bootstrap flag is honored in the real editor.
+	return value === true || value === 1 || value === '1' || value === 'true';
+}
+
 export function isBlockStructuralActionsEnabled( data = null ) {
 	if ( data && typeof data === 'object' ) {
-		return data.enableBlockStructuralActions === true;
+		return coerceStructuralFlag( data.enableBlockStructuralActions );
 	}
 
 	if ( typeof window !== 'undefined' ) {
-		return window.flavorAgentData?.enableBlockStructuralActions === true;
+		return coerceStructuralFlag(
+			window.flavorAgentData?.enableBlockStructuralActions
+		);
 	}
 
 	return false;

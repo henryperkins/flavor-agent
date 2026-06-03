@@ -254,6 +254,27 @@ describe( 'block operation catalog', () => {
 		] );
 	} );
 
+	test( 'treats the wp_localize_script string flag as enabled', () => {
+		// wp_localize_script serializes the PHP boolean true as the string "1"
+		// and false as "", so the gate must coerce rather than compare to true.
+		expect(
+			isBlockStructuralActionsEnabled( {
+				enableBlockStructuralActions: '1',
+			} )
+		).toBe( true );
+		expect(
+			isBlockStructuralActionsEnabled( {
+				enableBlockStructuralActions: '',
+			} )
+		).toBe( false );
+
+		window.flavorAgentData = { enableBlockStructuralActions: '1' };
+		expect( isBlockStructuralActionsEnabled() ).toBe( true );
+
+		window.flavorAgentData = { enableBlockStructuralActions: '' };
+		expect( isBlockStructuralActionsEnabled() ).toBe( false );
+	} );
+
 	test( 'rejects multiple proposed operations in M2', () => {
 		const result = validateBlockOperationSequence(
 			[

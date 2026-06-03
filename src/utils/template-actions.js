@@ -606,7 +606,7 @@ function restoreBlockSnapshotsAtInsertionPoint(
 	blockEditorDispatch.insertBlocks(
 		rebuildBlocksFromSnapshots( snapshots ),
 		index,
-		resolvedRoot.rootClientId,
+		normalizeInsertionRoot( resolvedRoot.rootClientId ),
 		true,
 		0
 	);
@@ -667,6 +667,16 @@ function isAncestorPath( ancestorPath = [], descendantPath = [] ) {
 	return ancestorPath.every(
 		( segment, index ) => descendantPath[ index ] === segment
 	);
+}
+
+// Core's controlled top-level block list is keyed by '' and its insertBlocks
+// reducer does not normalize a null/undefined root to it: dispatching null
+// records the blocks in byClientId without adding them to the root order, so
+// they never render and post-insert verification reports them missing (the same
+// fix lives in PatternRecommender and block-structural-actions). Normalize the
+// captured root to '' at every insert dispatch; nested string roots pass through.
+function normalizeInsertionRoot( rootClientId ) {
+	return rootClientId ?? '';
 }
 
 function buildRootLocator( rootClientId ) {
@@ -2159,7 +2169,7 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 				blockEditorDispatch.insertBlocks(
 					operation.blocks,
 					operation.index,
-					operation.rootClientId,
+					normalizeInsertionRoot( operation.rootClientId ),
 					true,
 					0
 				);
@@ -2302,7 +2312,7 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				editorDispatch.insertBlocks(
 					operation.blocks,
 					operation.index,
-					resolvedRoot.rootClientId,
+					normalizeInsertionRoot( resolvedRoot.rootClientId ),
 					true,
 					0
 				);
@@ -2438,7 +2448,7 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				editorDispatch.insertBlocks(
 					operation.blocks,
 					operation.index,
-					resolvedRoot.rootClientId,
+					normalizeInsertionRoot( resolvedRoot.rootClientId ),
 					true,
 					0
 				);
@@ -3220,7 +3230,7 @@ export function undoTemplatePartSuggestionOperations( activity ) {
 						operation.removedBlocksSnapshot
 					),
 					operation.index,
-					resolvedRoot.rootClientId,
+					normalizeInsertionRoot( resolvedRoot.rootClientId ),
 					true,
 					0
 				);
@@ -3249,7 +3259,7 @@ export function undoTemplatePartSuggestionOperations( activity ) {
 						operation.removedBlocksSnapshot
 					),
 					operation.index,
-					resolvedRoot.rootClientId,
+					normalizeInsertionRoot( resolvedRoot.rootClientId ),
 					true,
 					0
 				);

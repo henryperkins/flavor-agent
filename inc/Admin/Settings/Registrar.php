@@ -188,7 +188,7 @@ final class Registrar {
 			[
 				'type'              => 'boolean',
 				'sanitize_callback' => [ Settings::class, 'sanitize_block_structural_actions_enabled' ],
-				'default'           => false,
+				'default'           => true,
 			]
 		);
 
@@ -473,6 +473,7 @@ final class Registrar {
 				'label_for'   => Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
 				'label'       => 'Enable structural block actions',
 				'description' => 'Adds review-first insert and replace actions for the selected block.',
+				'default'     => true,
 			]
 		);
 	}

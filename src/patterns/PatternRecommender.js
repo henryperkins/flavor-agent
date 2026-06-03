@@ -1399,6 +1399,17 @@ export default function PatternRecommender() {
 				if ( e2eFailureMode !== 'insert_blocks_noop' ) {
 					let dispatchInsertionIndex = insertionIndex;
 
+					// Core keys the (controlled) top-level block list by '', and
+					// its insertBlocks reducer does not normalize a null root to
+					// it. Dispatching with null records the blocks in byClientId
+					// without adding them to the root order, so they never render
+					// and post-insert verification tears them back out as
+					// "inserted somewhere else". getBlockInsertionPoint() reports
+					// undefined for a top-level point (captured here as null), so
+					// normalize it to '' before dispatching. Nested string roots
+					// are left unchanged.
+					const insertRootClientId = inserterRootClientId ?? '';
+
 					if ( e2eFailureMode === 'insert_blocks_wrong_target' ) {
 						dispatchInsertionIndex =
 							insertionIndex === 0 ? Number.MAX_SAFE_INTEGER : 0;
@@ -1407,7 +1418,7 @@ export default function PatternRecommender() {
 					await insertBlocks(
 						clonedBlocks,
 						dispatchInsertionIndex,
-						inserterRootClientId,
+						insertRootClientId,
 						true
 					);
 

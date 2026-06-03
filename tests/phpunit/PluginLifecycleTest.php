@@ -124,20 +124,19 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_pattern_ai_search_api_token', WordPressTestState::$options );
 	}
 
-	public function test_block_structural_actions_rollout_flag_defaults_off_and_is_filterable(): void {
-		$this->assertFalse( FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS );
-		$this->assertFalse( flavor_agent_block_structural_actions_enabled() );
-		$this->assertFalse(
+	public function test_block_structural_actions_enabled_by_default_and_is_filterable(): void {
+		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
+		$this->assertTrue(
 			flavor_agent_get_editor_bootstrap_data(
 				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 				'https://example.test/wp-admin/options-connectors.php'
 			)['enableBlockStructuralActions']
 		);
 
-		add_filter( 'flavor_agent_enable_block_structural_actions', '__return_true' );
+		add_filter( 'flavor_agent_enable_block_structural_actions', '__return_false' );
 
-		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
-		$this->assertTrue(
+		$this->assertFalse( flavor_agent_block_structural_actions_enabled() );
+		$this->assertFalse(
 			flavor_agent_get_editor_bootstrap_data(
 				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 				'https://example.test/wp-admin/options-connectors.php'

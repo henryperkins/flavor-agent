@@ -39,7 +39,7 @@ final class State {
 		$guidelines_storage       = Guidelines::storage_status();
 		$structural_actions_on    = function_exists( '\\flavor_agent_block_structural_actions_enabled' )
 			? \flavor_agent_block_structural_actions_enabled()
-			: self::parse_boolean_flag( get_option( Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, false ) );
+			: self::parse_boolean_flag( get_option( Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, true ) );
 
 		return [
 			'selected_provider'                         => $selected_provider,

@@ -1823,6 +1823,210 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
+	test( 'inserts a top-level pattern at the controlled root ("") instead of the null root that orphans blocks', async () => {
+		// Faithful model of the real post editor: the top-level block list is a
+		// CONTROLLED inner-block list keyed by ''. Dispatching
+		// insertBlocks( blocks, index, null ) records the blocks in byClientId
+		// (so getBlock finds them) but never adds them to the '' order — they
+		// never render and the count never grows. Passing '' (or undefined)
+		// works. getBlockInsertionPoint() returns rootClientId: undefined for a
+		// top-level point, which the component must NOT coerce to null before
+		// dispatching, or every top-level pattern insert orphans then self-tears
+		// out as "inserted somewhere else".
+		const inserterContainer = document.createElement( 'div' );
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+
+		const allowedPattern = {
+			name: 'theme/landing',
+			title: 'Landing page for event',
+			blocks: [
+				{ clientId: 'pat-a', name: 'core/cover', attributes: {} },
+				{ clientId: 'pat-b', name: 'core/columns', attributes: {} },
+			],
+		};
+
+		// Top-level insertion point: no rootClientId (core returns undefined).
+		state.blockEditor.insertionPoint = { index: 2 };
+		state.blockEditor.blocks = {
+			'': [
+				{ clientId: 'existing-1', name: 'core/paragraph' },
+				{ clientId: 'existing-2', name: 'core/image' },
+			],
+		};
+		state.blockEditor.blockOrder = { '': [ 'existing-1', 'existing-2' ] };
+		state.visiblePatternNames = [ 'theme/landing' ];
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/landing',
+				score: 0.97,
+				reason: 'Recommended landing page.',
+			},
+		];
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		// Real controlled-root behavior: null does NOT normalize to ''.
+		const orphaned = [];
+		mockInsertBlocks.mockImplementation(
+			( blocks, index, rootClientId ) => {
+				if ( rootClientId === null ) {
+					// Orphaned: present via getBlock, absent from the '' order.
+					orphaned.push( ...blocks );
+					state.blockEditor.blocks = {
+						...state.blockEditor.blocks,
+						__orphaned__: [
+							...( state.blockEditor.blocks.__orphaned__ || [] ),
+							...blocks,
+						],
+					};
+					return;
+				}
+
+				const key = rootClientId === undefined ? '' : rootClientId;
+				const current = [
+					...( ( state.blockEditor.blocks || {} )[ key ] || [] ),
+				];
+				const at =
+					Number.isInteger( index ) && index >= 0
+						? Math.min( index, current.length )
+						: current.length;
+				state.blockEditor.blocks = {
+					...( state.blockEditor.blocks || {} ),
+					[ key ]: [
+						...current.slice( 0, at ),
+						...blocks,
+						...current.slice( at ),
+					],
+				};
+			}
+		);
+
+		renderComponent();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		await act( async () => {
+			insertButton.click();
+		} );
+
+		// The component must dispatch the top-level insert with the controlled
+		// root key '' (never null) so core actually commits and renders it.
+		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
+		const insertRootArg = mockInsertBlocks.mock.calls[ 0 ][ 2 ];
+		expect( insertRootArg ).toBe( '' );
+		expect( insertRootArg ).not.toBeNull();
+
+		// Pattern landed in the real top-level list; nothing was orphaned or
+		// torn out, and the user is told it succeeded.
+		expect( orphaned ).toEqual( [] );
+		expect( mockRemoveBlocks ).not.toHaveBeenCalled();
+		expect(
+			( state.blockEditor.blocks[ '' ] || [] ).map(
+				( block ) => block.clientId
+			)
+		).toEqual( expect.arrayContaining( [ 'pat-a', 'pat-b' ] ) );
+		expect( mockCreateErrorNotice ).not.toHaveBeenCalledWith(
+			expect.stringContaining( 'inserted it somewhere else' ),
+			expect.anything()
+		);
+		expect( mockCreateSuccessNotice ).toHaveBeenCalled();
+	} );
+
+	test( 'inserts a nested pattern at its non-empty root, never normalizing it to the controlled root ("")', async () => {
+		// Companion to the top-level test: the fix normalizes only null/undefined
+		// roots to ''. A nested (non-empty) insertion root must pass through to
+		// insertBlocks verbatim so the pattern lands inside the targeted
+		// container (e.g. a column/group), not at the document root. Guards
+		// against a future refactor that over-normalizes every root.
+		const inserterContainer = document.createElement( 'div' );
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+
+		const allowedPattern = {
+			name: 'theme/card',
+			title: 'Card',
+			blocks: [
+				{ clientId: 'pat-a', name: 'core/paragraph', attributes: {} },
+			],
+		};
+
+		// Nested insertion point: getBlockInsertionPoint resolves a real container.
+		state.blockEditor.insertionPoint = {
+			rootClientId: 'root-a',
+			index: 1,
+		};
+		state.blockEditor.blocks = {
+			'root-a': [
+				{ clientId: 'existing-1', name: 'core/paragraph' },
+				{ clientId: 'existing-2', name: 'core/image' },
+			],
+		};
+		state.blockEditor.blockOrder = {
+			'root-a': [ 'existing-1', 'existing-2' ],
+		};
+		state.visiblePatternNames = [ 'theme/card' ];
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{ name: 'theme/card', score: 0.95, reason: 'Recommended card.' },
+		];
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		// Same faithful model: a null root would orphan; a real root inserts there.
+		mockInsertBlocks.mockImplementation(
+			( blocks, index, rootClientId ) => {
+				if ( rootClientId === null ) {
+					return;
+				}
+				const key = rootClientId === undefined ? '' : rootClientId;
+				const current = [
+					...( ( state.blockEditor.blocks || {} )[ key ] || [] ),
+				];
+				const at =
+					Number.isInteger( index ) && index >= 0
+						? Math.min( index, current.length )
+						: current.length;
+				state.blockEditor.blocks = {
+					...( state.blockEditor.blocks || {} ),
+					[ key ]: [
+						...current.slice( 0, at ),
+						...blocks,
+						...current.slice( at ),
+					],
+				};
+			}
+		);
+
+		renderComponent();
+
+		const insertButton = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Insert' );
+
+		await act( async () => {
+			insertButton.click();
+		} );
+
+		// The nested root is forwarded verbatim — NOT normalized to ''.
+		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
+		const insertRootArg = mockInsertBlocks.mock.calls[ 0 ][ 2 ];
+		expect( insertRootArg ).toBe( 'root-a' );
+		expect( insertRootArg ).not.toBe( '' );
+
+		// Pattern landed inside the targeted container; nothing torn out.
+		expect( mockRemoveBlocks ).not.toHaveBeenCalled();
+		expect(
+			( state.blockEditor.blocks[ 'root-a' ] || [] ).map(
+				( block ) => block.clientId
+			)
+		).toEqual( expect.arrayContaining( [ 'pat-a' ] ) );
+		expect( mockCreateSuccessNotice ).toHaveBeenCalled();
+	} );
+
 	test( 're-validates insertability after the awaited revalidation and reports the accurate reason instead of inserting then tearing down', async () => {
 		// Faithful model of real @wordpress/block-editor insertBlocks: it filters
 		// each block through canInsertBlockType against the SAME requested root and

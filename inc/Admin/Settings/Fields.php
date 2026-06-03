@@ -183,7 +183,7 @@ final class Fields {
 		$field_id       = (string) ( $args['label_for'] ?? $option );
 		$label          = (string) ( $args['label'] ?? '' );
 		$description    = (string) ( $args['description'] ?? '' );
-		$value          = self::parse_boolean_field_value( get_option( $option, false ) );
+		$value          = self::parse_boolean_field_value( get_option( $option, (bool) ( $args['default'] ?? false ) ) );
 		$description_id = '' !== $description ? $field_id . '-description' : '';
 		$attributes     = [
 			'type'  => 'checkbox',
