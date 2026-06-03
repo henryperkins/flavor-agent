@@ -70,7 +70,7 @@ flavor-agent/
     style-surfaces/         Shared Global Styles + Style Book helpers
     template-parts/         Template-part recommender
     templates/              Template recommender
-    test-utils/             React 18 test harness + WP component mocks
+    test-utils/             React DOM test harness + WP component mocks
     utils/                  Operation catalogs, validators, signatures, action helpers
   tests/
     phpunit/                PHP unit tests (one per major class)

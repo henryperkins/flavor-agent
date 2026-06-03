@@ -1,0 +1,115 @@
+# Gutenberg 23.3 Nightly Runtime Validation Checklist
+
+Use this checklist for the representative nightly runtime pass after the React 19
+toolchain bump. The non-browser build/test layer is covered by the local npm
+graph and aggregate verifier; this checklist covers runtime behavior that unit
+tests and the existing Playwright topology do not structurally exercise against
+nightly Gutenberg and companion plugin versions.
+
+Record every item as `pass`, `fail`, or `not-testable`. A missing harness,
+unavailable experiment, or absent runtime prerequisite is an explicit waiver
+with a reason, not a silent skip. Treat this as additive to
+`docs/reference/cross-surface-validation-gates.md`.
+
+## Preconditions
+
+- WordPress nightly/trunk is installed.
+- Gutenberg `23.3.0` is active.
+- Required companion plugins are active: AI, provider connector plugins, MCP
+  Adapter, Plugin Check, and Flavor Agent.
+- `npm run build` has been run after the React 19 toolchain bump, so `build/*`
+  is fresh.
+- `FeatureBootstrap::editor_runtime_available()` is true; otherwise editor
+  scripts do not enqueue and the runtime pass is invalid.
+- At least one text-generation Connector is approved, so recommendation
+  surfaces can return live results.
+- For the style-state section, enable the Gutenberg style-states or responsive
+  styles experiment. If the experiment label is absent in the nightly, mark the
+  section `not-testable` with that reason.
+- Keep DevTools console and the Network panel open while running editor flows.
+
+## A. React 19 Runtime Smoke
+
+- Open the post editor. Confirm there are no React 19 warnings about refs,
+  removed lifecycles, ref cleanup, or Flavor Agent runtime errors.
+- Select a block. Confirm the Flavor Agent panel renders in the Settings tab.
+- Type a prompt and fetch a suggestion. Confirm results render.
+- Switch selected blocks. Confirm the prompt resets exactly once.
+- Watch Network while fetching. Confirm there are no duplicate
+  `/wp-abilities/.../run` or activity calls from React 19 effect behavior.
+- Apply a suggestion. Confirm the applied pill appears.
+- Undo via the toast. Confirm the toast shortcut `mod+alt+shift+u` focuses the
+  toast.
+- For content, pattern, navigation, template, template-part, Global Styles, and
+  Style Book surfaces, run fetch, apply, and undo once where the surface is
+  executable. Confirm each executable run writes the expected AI Activity
+  request diagnostic row.
+
+## B. Style-State Inspector Interaction
+
+- Select a state-capable block such as Button or Group.
+- Enter a pseudo-state or viewport state.
+- Observe Flavor Agent delegated chip groups for color, typography, dimensions,
+  border, filter, and background.
+- Confirm chips either render coherently or hide cleanly. There must be no
+  orphaned groups, duplicated groups, console errors, or broken
+  `grid-column: 1 / -1` ToolsPanel span.
+- With a non-base state selected, apply a style suggestion.
+- Confirm the apply path writes to base `attributes.style.*`, leaves
+  state-scoped styles intact, and undo restores cleanly.
+- Log any case where a suggestion appears state-applicable but silently targets
+  base styles. That is a forward-compat follow-up, not necessarily a release
+  blocker when state styles remain intact.
+
+## C. Abilities Bridge Defer
+
+- On a fresh editor load, do not open the command palette.
+- Call `window.flavorAgentAbilities.executeAbility(...)` with a valid
+  recommendation payload matching the panel request shape. Do not use an empty
+  `{}` probe, because Gutenberg's strict schema validation can confound this
+  test.
+- Confirm the call resolves without requiring the command palette to be opened
+  first.
+- Run a normal "Get Suggestion" through the panel. Confirm the primary
+  `store/abilities-client.js` to REST path still works.
+
+## D. Pattern Inserter
+
+- Open the inserter and switch to Patterns.
+- Confirm `InserterBadge` mounts.
+- Confirm `src/patterns/inserter-dom.js` selectors still resolve the inserter
+  panel content, content menu, and search input.
+- Confirm recommendations populate.
+- Insert a recommended pattern. Confirm insertion lands at the intended
+  location and does not create a null-root orphan.
+
+## E. Style Book And Global Styles DOM
+
+- Open the Site Editor.
+- In Styles, confirm `GlobalStylesRecommender` mounts.
+- Fetch, preview, apply, and undo a Global Styles operation.
+- Open Style Book.
+- Confirm `StyleBookRecommender` mounts through `src/style-book/dom.js`.
+- Confirm the `.edit-site-global-styles-screen-style-book` and
+  `.editor-style-book__iframe` locators still resolve.
+- If the admin-bar experiment is enabled, confirm it does not shift the mount
+  node or break iframe detection.
+
+## F. Connectors Graduation And Chat
+
+- Open Settings > Connectors. Confirm the screen is present and functional in
+  the WordPress 7.0 compatibility runtime.
+- Confirm chat-backed Flavor Agent surfaces return live results through an
+  approved Connector.
+- Revoke Connector approval.
+- Confirm affected surfaces show the graceful `wpai_connector_not_approved`
+  notice path rather than crashing.
+
+## G. Low-Risk UI Watch Items
+
+- Confirm Template and Template-Part recommender tooltips position and dismiss
+  correctly under the current overlay slot behavior.
+- Confirm Dimensions chip placement still reads sensibly after Layout moves
+  near the styles tab.
+- Open Settings > AI Activity. Confirm DataViews renders and first-click row
+  selection works.

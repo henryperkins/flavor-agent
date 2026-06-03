@@ -194,6 +194,7 @@ Action implications 4, 5, 7, and 8 above describe upstream pressures with no cor
 ## Related References
 
 - `docs/reference/wordpress-ai-roadmap-tracking.md` — board pressure (project 240) and active overlap with Flavor Agent surfaces.
+- `docs/reference/gutenberg-23-3-nightly-validation-checklist.md` — manual runtime checklist for Gutenberg 23.3, React 19, Connectors, Abilities bridge, Inspector style states, pattern inserter, and Style Book checks.
 - `docs/wordpress-7.0-gutenberg-23-impact-brief.md` — point-in-time compatibility brief for the WP 7.0 release cycle.
 - `docs/wordpress-7.0-developer-docs-index.md` — broader upstream source map for WP 7.0.
 - `docs/wp7-migration-opportunities.md` — older migration snapshot.

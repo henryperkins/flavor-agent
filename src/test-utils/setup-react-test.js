@@ -5,7 +5,7 @@ const { act } = require( 'react' );
 const { createRoot } = require( '@wordpress/element' );
 
 /**
- * Sets up a React 18 DOM test harness with container/root lifecycle.
+ * Sets up a React DOM test harness with container/root lifecycle.
  *
  * Returns getter functions so callers always see the current beforeEach value.
  *
