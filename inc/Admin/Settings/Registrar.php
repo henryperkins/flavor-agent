@@ -472,7 +472,7 @@ final class Registrar {
 				'option'      => Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS,
 				'label_for'   => Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS,
 				'label'       => 'Always record request diagnostics in the Flavor Agent activity log',
-				'description' => 'When core AI Request Logging is enabled, also keep Flavor Agent request diagnostics (surface, result count, pipeline trace, undo lineage) in Settings &gt; AI Activity. Disable to defer to the core Tools &gt; AI Request Logs alone.',
+				'description' => 'When core AI Request Logging is enabled, also keep Flavor Agent request diagnostics (surface, result count, pipeline trace, undo lineage) in Settings > AI Activity. Disable to defer to the core Tools > AI Request Logs alone.',
 				'default'     => true,
 			]
 		);

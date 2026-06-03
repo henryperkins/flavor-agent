@@ -200,7 +200,9 @@ check_absent \
 check_absent \
 	'retired block structural actions admin setting/constant control wording still appears in live docs' \
 	'the default-on admin setting, the developer constant, and the final override filter' \
-	"${live_docs[@]}"
+	"${live_docs[@]}" \
+	"${repo_root}/docs/features/block-recommendations.md" \
+	"${repo_root}/docs/reference/release-surface-scope-review.md"
 
 check_absent \
 	'old seven-surface capability notice wording still appears in live docs' \

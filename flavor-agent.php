@@ -66,7 +66,7 @@ add_action( 'init', [ FlavorAgent\Activity\RequestLoggingBridge::class, 'registe
 add_filter(
 	'flavor_agent_persist_request_diagnostic_with_core_logging',
 	static function ( $persist ) {
-		return (bool) $persist || flavor_agent_dual_log_request_diagnostics_enabled();
+		return flavor_agent_parse_boolean_flag( $persist ) || flavor_agent_dual_log_request_diagnostics_enabled();
 	}
 );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );

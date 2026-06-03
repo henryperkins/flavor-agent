@@ -53,6 +53,12 @@ final class SettingsRegistrarTest extends TestCase {
 			$settings[ Guidelines::OPTION_BLOCKS ]['sanitize_callback']
 		);
 		$this->assertArrayNotHasKey( 'flavor_agent_block_structural_actions_enabled', $settings );
+		$this->assertArrayHasKey( Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS, $settings );
+		$this->assertSame( 'boolean', $settings[ Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS ]['type'] );
+		$this->assertSame(
+			[ Settings::class, 'sanitize_dual_log_request_diagnostics' ],
+			$settings[ Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS ]['sanitize_callback']
+		);
 		$this->assertSame( 'string', $settings[ Config::OPTION_REASONING_EFFORT ]['type'] );
 		$this->assertSame(
 			[ Settings::class, 'sanitize_reasoning_effort' ],
@@ -120,6 +126,10 @@ final class SettingsRegistrarTest extends TestCase {
 		);
 		$this->assertArrayNotHasKey(
 			'flavor_agent_block_structural_actions_enabled',
+			$fields['flavor_agent_experimental_features']
+		);
+		$this->assertArrayHasKey(
+			Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS,
 			$fields['flavor_agent_experimental_features']
 		);
 		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_ai_search_account_id', $settings );

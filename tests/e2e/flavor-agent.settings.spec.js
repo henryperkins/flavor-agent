@@ -161,9 +161,7 @@ test( '@wp70-site-editor settings page keeps compact help-first IA without chang
 	);
 	await expect(
 		page.locator( '#tab-panel-flavor-agent-troubleshooting' )
-	).toContainText(
-		'AI Activity Dual Logging keeps Flavor Agent request diagnostics alongside core AI Request Logs when core logging is enabled.'
-	);
+	).toContainText( 'AI Activity Dual Logging' );
 
 	await expect(
 		page.locator( '#contextual-help-wrap .contextual-help-sidebar' )

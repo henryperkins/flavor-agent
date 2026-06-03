@@ -77,7 +77,7 @@ This document is the surface-specific release planning source of truth. Canonica
 
 | Surface | Release verdict | Why it belongs | Release stop |
 | --- | --- | --- | --- |
-| Block recommendations | Keep, central surface | Native block decisions benefit from immediate context-aware help. | One-click apply only for safe local attributes; structural apply default-on as of 2026-06-03 (beta-labeled, WP 7.0 E2E evidence). |
+| Block recommendations | Keep, central surface | Native block decisions benefit from immediate context-aware help. | One-click apply only for safe local attributes; structural apply default-on as of 2026-06-03 (graduated; WP 7.0 E2E evidence). |
 | Pattern recommendations | Keep, thin surface | Native inserter ranking helps users choose from available patterns. | Browse/rank only; no Flavor Agent pattern insertion ownership or undo. |
 | Content recommendations | Keep, editorial-only | Draft/edit/critique belongs in the post/page editor. | No automatic post mutation until a full reviewed apply/undo contract exists. |
 | Navigation recommendations | Keep, advisory-only | Navigation advice helps when scoped to selected navigation blocks. | No apply until the Gutenberg navigation editing surface is stable enough. |
@@ -99,7 +99,7 @@ This is the clearest product-center surface. The selected block is the right con
 
 Good enough to merit release presence: yes.
 
-Release-quality as-is: yes for safe local attribute recommendations; not yet for default-on structural apply.
+Release-quality as-is: yes for safe local attribute recommendations and for default-on structural apply (graduated 2026-06-03 with WP 7.0 E2E evidence).
 
 The surface is coherent when it remains the direct-apply exception. It becomes incoherent if structural pattern insertion and replacement feel like unreviewed AI edits or if delegated Inspector subpanels become separate apply surfaces.
 
@@ -492,7 +492,7 @@ Do not add:
 
 ### Scope Freeze
 
-- [ ] Block structural apply is default-on (2026-06-03); release notes must label it beta until the opt-out toggle is removed.
+- [ ] Block structural apply is default-on (2026-06-03) and graduated; the experimental opt-out toggle and `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant were removed, so the only opt-out is the `flavor_agent_enable_block_structural_actions` filter.
 - [ ] Pattern recommendations browse/rank-only.
 - [ ] Content recommendations editorial-only.
 - [ ] Navigation recommendations advisory-only.

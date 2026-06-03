@@ -538,8 +538,9 @@ final class Page {
 		$links                  = [];
 
 		if ( $core_logging_enabled ) {
-			$dual_logging = ! function_exists( '\\flavor_agent_dual_log_request_diagnostics_enabled' )
-				|| \flavor_agent_dual_log_request_diagnostics_enabled();
+			$dual_logging = function_exists( '\\flavor_agent_dual_log_request_diagnostics_enabled' )
+				? \flavor_agent_dual_log_request_diagnostics_enabled()
+				: (bool) get_option( Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS, true );
 			$tone         = 'success';
 			$message      = $dual_logging
 				? __( 'AI Request Logging is enabled. Flavor Agent also records its own request diagnostics here and forwards surface, scope, and document context into each Tools > AI Request Logs row (dual logging).', 'flavor-agent' )
