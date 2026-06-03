@@ -53,7 +53,7 @@ If a surface fails check 1 or 2, remove or hide it. If it fails check 3, keep it
 
 ## Current Release Blockers
 
-- Block structural apply is default-on as of 2026-06-03, carried by the `@wp70-site-editor` block structural review / replace / undo E2E coverage in `tests/e2e/flavor-agent.smoke.spec.js` (the fresh WP 7.0 browser evidence this blocker required). The opt-out setting / constant / filter remain available; release notes should still label this path beta until that toggle is removed.
+- Block structural apply is default-on as of 2026-06-03, carried by the `@wp70-site-editor` block structural review / replace / undo E2E coverage in `tests/e2e/flavor-agent.smoke.spec.js` (the fresh WP 7.0 browser evidence this blocker required). Opt-out is via the setting or the `flavor_agent_enable_block_structural_actions` filter; the `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant only force-enables. Release notes should still label this path beta until the opt-out toggle is removed.
 - Style and Style Book can claim validated `theme.json` operations and deterministic color-contrast downgrades today, but should not make broad design-quality or accessibility-quality claims beyond that bounded validator.
 - Unmerged remote feature branches are behind current `master`; cherry-pick small proven changes only. Do not merge broad stale branches as-is.
 
