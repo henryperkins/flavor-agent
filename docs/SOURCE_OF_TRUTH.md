@@ -173,7 +173,7 @@ Settings page at `Settings > Flavor Agent` renders six top-level accordion group
 - **Patterns** -- Pattern Storage selector, Qdrant URL/key, managed Cloudflare AI Search pattern-index status, backend-specific ranking thresholds, max results, and the `Sync Pattern Catalog` status/metrics/manual trigger panel. Pattern Storage is infrastructure, not another AI model choice.
 - **Developer Docs** -- Built-in public Cloudflare AI Search developer-doc grounding, source status, max result count, runtime grounding diagnostics, and docs prewarm diagnostics.
 - **Guidelines** -- Site/copy/image/additional guidelines, block-specific notes for content-role blocks, and JSON import/export tooling. Runtime recommendations read the core/Gutenberg Guidelines store first when the `wp_guideline` model is present, with legacy Flavor Agent options retained as migration/admin tooling and fallback storage.
-- **Experimental Features** -- Block structural action opt-in controls.
+- **Experimental Features** -- AI Activity Dual Logging controls. Block structural actions graduated to unconditionally-on on 2026-06-03 and are no longer listed here; the only opt-out is the `flavor_agent_enable_block_structural_actions` filter.
 
 Exact provider ownership, credential precedence, backend validation requirements, and external-service disclosure live in [`reference/provider-precedence.md`](reference/provider-precedence.md) and [`reference/external-service-disclosure.md`](reference/external-service-disclosure.md). Settings-screen behavior lives in [`features/settings-backends-and-sync.md`](features/settings-backends-and-sync.md).
 

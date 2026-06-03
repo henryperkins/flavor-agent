@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Activity\RequestLoggingBridge;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\OpenAI\Provider;
@@ -142,6 +143,23 @@ final class PluginLifecycleTest extends TestCase {
 				'https://example.test/wp-admin/options-connectors.php'
 			)['enableBlockStructuralActions']
 		);
+	}
+
+	public function test_bootstrap_dual_logs_request_diagnostics_by_default_with_core_logging(): void {
+		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
+		WordPressTestState::$options['wpai_features_enabled']                   = true;
+		WordPressTestState::$options['wpai_feature_ai-request-logging_enabled'] = true;
+
+		$this->assertTrue( RequestLoggingBridge::is_core_logging_enabled() );
+
+		// The bootstrap registers the flavor_agent_persist_request_diagnostic_with_core_logging
+		// filter, so AI Activity Dual Logging is on by default: Flavor Agent keeps its own
+		// request_diagnostic row alongside core's Tools > AI Request Logs.
+		$this->assertTrue( RequestLoggingBridge::should_persist_request_diagnostic() );
+
+		// Disabling the dual-logging option defers to core logging alone.
+		WordPressTestState::$options['flavor_agent_dual_log_request_diagnostics'] = false;
+		$this->assertFalse( RequestLoggingBridge::should_persist_request_diagnostic() );
 	}
 
 	public function test_editor_bootstrap_exposes_activity_log_url_for_admins(): void {

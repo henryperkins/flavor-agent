@@ -74,7 +74,7 @@ test( '@wp70-site-editor settings page keeps compact help-first IA without chang
 	).toContainText( 'Site and block guidance.' );
 	await expect(
 		experimentsSection.locator( sectionSummarySelector )
-	).toContainText( 'Beta feature toggles.' );
+	).toContainText( 'AI Activity logging controls.' );
 
 	const chatInitiallyOpen = await chatSection.evaluate(
 		( section ) => section.open
@@ -161,7 +161,7 @@ test( '@wp70-site-editor settings page keeps compact help-first IA without chang
 	);
 	await expect(
 		page.locator( '#tab-panel-flavor-agent-troubleshooting' )
-	).toContainText( 'Structural block actions are beta controls.' );
+	).toContainText( 'AI Activity Dual Logging' );
 
 	await expect(
 		page.locator( '#contextual-help-wrap .contextual-help-sidebar' )

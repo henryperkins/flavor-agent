@@ -20,9 +20,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'FLAVOR_AGENT_VERSION', '0.1.0' );
-if ( ! defined( 'FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS' ) ) {
-	define( 'FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS', false );
-}
 define( 'FLAVOR_AGENT_FILE', __FILE__ );
 define( 'FLAVOR_AGENT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_AGENT_URL', plugin_dir_url( __FILE__ ) );
@@ -60,6 +57,18 @@ register_deactivation_hook(
 
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
 add_action( 'init', [ FlavorAgent\Activity\RequestLoggingBridge::class, 'register' ], 5 );
+// When the WordPress AI plugin's "AI Request Logging" experiment is enabled the
+// bridge defaults to deferring to core logging. The "AI Activity Dual Logging"
+// setting (Settings > Flavor Agent > Experimental Features, on by default) opts
+// back in so the Settings > AI Activity audit log keeps recording its own request
+// diagnostics alongside core's Tools > AI Request Logs. See
+// inc/Activity/RequestLoggingBridge.php::should_persist_request_diagnostic().
+add_filter(
+	'flavor_agent_persist_request_diagnostic_with_core_logging',
+	static function ( $persist ) {
+		return flavor_agent_parse_boolean_flag( $persist ) || flavor_agent_dual_log_request_diagnostics_enabled();
+	}
+);
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );
 add_action( 'init', [ FlavorAgent\Cloudflare\AISearchClient::class, 'schedule_prewarm' ], 7 );
 // Roadmap warm only needs to be scheduled in admin/REST/cron contexts;
@@ -187,16 +196,21 @@ function flavor_agent_enqueue_editor(): void {
 }
 
 function flavor_agent_block_structural_actions_enabled(): bool {
-	$enabled = flavor_agent_parse_boolean_flag(
-		get_option( FlavorAgent\Admin\Settings\Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, true )
-	);
-
-	if ( flavor_agent_parse_boolean_flag( FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS ) ) {
-		$enabled = true;
-	}
-
+	// Block structural actions graduated from their experimental opt-out on
+	// 2026-06-03 and are unconditionally on. The
+	// flavor_agent_enable_block_structural_actions filter is retained as a
+	// runtime kill-switch (e.g. an emergency opt-out) and is now the only control.
 	return flavor_agent_parse_boolean_flag(
-		apply_filters( 'flavor_agent_enable_block_structural_actions', $enabled )
+		apply_filters( 'flavor_agent_enable_block_structural_actions', true )
+	);
+}
+
+function flavor_agent_dual_log_request_diagnostics_enabled(): bool {
+	return flavor_agent_parse_boolean_flag(
+		apply_filters(
+			'flavor_agent_dual_log_request_diagnostics',
+			get_option( FlavorAgent\Admin\Settings\Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS, true )
+		)
 	);
 }
 

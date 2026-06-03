@@ -422,7 +422,7 @@ final class Feedback {
 			Guidelines::OPTION_IMAGES,
 			Guidelines::OPTION_ADDITIONAL,
 			Guidelines::OPTION_BLOCKS => [ Config::GROUP_GUIDELINES ],
-			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS => [ Config::GROUP_EXPERIMENTS ],
+			Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS => [ Config::GROUP_EXPERIMENTS ],
 			'flavor_agent_cloudflare_workers_ai_account_id',
 			'flavor_agent_cloudflare_workers_ai_api_token' => [ Config::GROUP_EMBEDDINGS ],
 			default => [],
@@ -446,7 +446,7 @@ final class Feedback {
 	private static function get_default_option_value_for_feedback( string $option_name ): mixed {
 		return match ( $option_name ) {
 			Config::OPTION_REASONING_EFFORT => 'medium',
-			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS => true,
+			Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS => true,
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_QDRANT,
 			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH => Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT,
 			default => '',

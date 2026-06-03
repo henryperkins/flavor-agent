@@ -212,7 +212,7 @@ Configured options:
 - `flavor_agent_guideline_images`
 - `flavor_agent_guideline_additional`
 - `flavor_agent_guideline_blocks`
-- `flavor_agent_block_structural_actions_enabled`
+- `flavor_agent_dual_log_request_diagnostics`
 
 `flavor_agent_openai_provider` is kept as a compatibility option for older saved chat/provider state. The settings screen writes `cloudflare_workers_ai` for the embedding path on save.
 

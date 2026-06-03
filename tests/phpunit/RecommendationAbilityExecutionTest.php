@@ -173,6 +173,10 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 	}
 
 	public function test_execute_threads_core_request_log_identifiers_and_suppresses_duplicate_diagnostic_activity(): void {
+		// Core logging enabled WITHOUT the plugin bootstrap dual-logging filter, so
+		// execute() defers to core and suppresses the duplicate local diagnostic. With the
+		// bootstrap loaded, AI Activity Dual Logging keeps the local row by default — see
+		// PluginLifecycleTest::test_bootstrap_dual_logs_request_diagnostics_by_default_with_core_logging.
 		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
 		WordPressTestState::$options = [
 			'wpai_features_enabled'                   => true,

@@ -68,6 +68,7 @@ final class UninstallOptions {
 			'flavor_agent_guideline_blocks',
 			'flavor_agent_guidelines_migration_status',
 			'flavor_agent_block_structural_actions_enabled',
+			'flavor_agent_dual_log_request_diagnostics',
 		];
 	}
 

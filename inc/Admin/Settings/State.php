@@ -37,9 +37,9 @@ final class State {
 		$runtime_docs_grounding   = AISearchClient::get_runtime_state();
 		$guidelines_enabled       = Guidelines::has_any();
 		$guidelines_storage       = Guidelines::storage_status();
-		$structural_actions_on    = function_exists( '\\flavor_agent_block_structural_actions_enabled' )
-			? \flavor_agent_block_structural_actions_enabled()
-			: self::parse_boolean_flag( get_option( Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, true ) );
+		$dual_logging_on          = function_exists( '\\flavor_agent_dual_log_request_diagnostics_enabled' )
+			? \flavor_agent_dual_log_request_diagnostics_enabled()
+			: self::parse_boolean_flag( get_option( Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS, true ) );
 
 		return [
 			'selected_provider'                         => $selected_provider,
@@ -59,7 +59,7 @@ final class State {
 			'runtime_docs_grounding'                    => $runtime_docs_grounding,
 			'guidelines_enabled'                        => $guidelines_enabled,
 			'guidelines_storage'                        => $guidelines_storage,
-			'block_structural_actions_enabled'          => $structural_actions_on,
+			'dual_log_request_diagnostics_enabled'      => $dual_logging_on,
 		];
 	}
 
@@ -201,10 +201,10 @@ final class State {
 				'open'    => false,
 			],
 			Config::GROUP_EXPERIMENTS => [
-				'summary' => __( 'Beta feature toggles.', 'flavor-agent' ),
+				'summary' => __( 'AI Activity logging controls.', 'flavor-agent' ),
 				'badges'  => [
 					self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
-					self::make_badge( __( 'Beta', 'flavor-agent' ), 'accent' ),
+					self::make_badge( __( 'Logging', 'flavor-agent' ), 'accent' ),
 				],
 				'status'  => $experiments_status,
 				'open'    => false,
@@ -321,7 +321,7 @@ final class State {
 	 * @return array{label: string, tone: string}
 	 */
 	public static function get_experiments_overview_status( array $state ): array {
-		if ( empty( $state['block_structural_actions_enabled'] ) ) {
+		if ( empty( $state['dual_log_request_diagnostics_enabled'] ) ) {
 			return self::make_badge( __( 'Off', 'flavor-agent' ), 'neutral' );
 		}
 
