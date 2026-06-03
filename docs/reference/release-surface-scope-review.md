@@ -53,7 +53,7 @@ If a surface fails check 1 or 2, remove or hide it. If it fails check 3, keep it
 
 ## Current Release Blockers
 
-- Block structural apply should remain default-off unless the release explicitly labels it beta and carries fresh WP 7.0 browser evidence.
+- Block structural apply is default-on as of 2026-06-03, carried by the `@wp70-site-editor` block structural review / replace / undo E2E coverage in `tests/e2e/flavor-agent.smoke.spec.js` (the fresh WP 7.0 browser evidence this blocker required). The opt-out setting / constant / filter remain available; release notes should still label this path beta until that toggle is removed.
 - Style and Style Book can claim validated `theme.json` operations and deterministic color-contrast downgrades today, but should not make broad design-quality or accessibility-quality claims beyond that bounded validator.
 - Unmerged remote feature branches are behind current `master`; cherry-pick small proven changes only. Do not merge broad stale branches as-is.
 
@@ -77,7 +77,7 @@ This document is the surface-specific release planning source of truth. Canonica
 
 | Surface | Release verdict | Why it belongs | Release stop |
 | --- | --- | --- | --- |
-| Block recommendations | Keep, central surface | Native block decisions benefit from immediate context-aware help. | One-click apply only for safe local attributes; structural apply default-off unless beta. |
+| Block recommendations | Keep, central surface | Native block decisions benefit from immediate context-aware help. | One-click apply only for safe local attributes; structural apply default-on as of 2026-06-03 (beta-labeled, WP 7.0 E2E evidence). |
 | Pattern recommendations | Keep, thin surface | Native inserter ranking helps users choose from available patterns. | Browse/rank only; no Flavor Agent pattern insertion ownership or undo. |
 | Content recommendations | Keep, editorial-only | Draft/edit/critique belongs in the post/page editor. | No automatic post mutation until a full reviewed apply/undo contract exists. |
 | Navigation recommendations | Keep, advisory-only | Navigation advice helps when scoped to selected navigation blocks. | No apply until the Gutenberg navigation editing surface is stable enough. |
@@ -492,7 +492,7 @@ Do not add:
 
 ### Scope Freeze
 
-- [ ] Block structural apply default-off unless explicitly beta.
+- [ ] Block structural apply is default-on (2026-06-03); release notes must label it beta until the opt-out toggle is removed.
 - [ ] Pattern recommendations browse/rank-only.
 - [ ] Content recommendations editorial-only.
 - [ ] Navigation recommendations advisory-only.

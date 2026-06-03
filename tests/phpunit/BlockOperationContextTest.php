@@ -98,6 +98,8 @@ final class BlockOperationContextTest extends TestCase {
 	}
 
 	public function test_editor_context_drops_block_operation_context_when_rollout_is_disabled(): void {
+		add_filter( 'flavor_agent_enable_block_structural_actions', '__return_false' );
+
 		$prepared = $this->invoke_prepare_recommend_block_input(
 			[
 				'editorContext' => [
@@ -293,6 +295,8 @@ final class BlockOperationContextTest extends TestCase {
 	}
 
 	public function test_enforce_block_context_rules_rejects_operations_when_flag_is_disabled(): void {
+		add_filter( 'flavor_agent_enable_block_structural_actions', '__return_false' );
+
 		$result = Prompt::enforce_block_context_rules(
 			[
 				'settings'    => [],

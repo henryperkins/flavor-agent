@@ -412,7 +412,12 @@ function restoreRemovedBlocks( operation, blockEditorDispatch ) {
 	blockEditorDispatch.insertBlocks?.(
 		removedBlocks,
 		operation.index,
-		resolveRootClientId( operation.rootLocator ),
+		// Core keys the controlled top-level block list by '' and its
+		// insertBlocks reducer does not normalize a null root to it: dispatching
+		// null records the blocks in byClientId without adding them to the root
+		// order, so the restored block never renders. Normalize to '' (nested
+		// string roots are preserved by resolveRootClientId).
+		resolveRootClientId( operation.rootLocator ) ?? '',
 		true,
 		0
 	);

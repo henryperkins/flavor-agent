@@ -2489,6 +2489,364 @@ test( '@wp70-site-editor block structural review applies, blocks locked targets,
 		} );
 } );
 
+test( '@wp70-site-editor block structural review surfaces by default without flag injection', async ( {
+	page,
+} ) => {
+	test.setTimeout( 180_000 );
+	resetWp70TemplateSmokeState();
+
+	const TEST_RESOLVED_SIGNATURE =
+		'test-resolved-signature-block-structural-default';
+
+	await page.route(
+		recommendationAbilityRoute( 'recommend-block' ),
+		async ( route ) => {
+			const request = route.request();
+			let body = {};
+			try {
+				body = getAbilityRequestInput( request.postDataJSON() || {} );
+			} catch {
+				body = {};
+			}
+
+			if ( body?.resolveSignatureOnly ) {
+				await route.fulfill( {
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify( {
+						payload: {
+							resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+						},
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					} ),
+				} );
+				return;
+			}
+
+			const operationContext =
+				body?.editorContext?.blockOperationContext || {};
+			const targetClientId = operationContext.targetClientId || '';
+			const targetBlockName =
+				operationContext.targetBlockName || 'core/paragraph';
+			const targetSignature = operationContext.targetSignature || '';
+			const operation = {
+				catalogVersion: 1,
+				type: 'insert_pattern',
+				patternName: BLOCK_STRUCTURAL_PATTERN_NAME,
+				targetClientId,
+				targetType: 'block',
+				targetSignature,
+				expectedTarget: {
+					clientId: targetClientId,
+					name: targetBlockName,
+				},
+				position: 'insert_after',
+			};
+
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					payload: {
+						settings: [],
+						styles: [],
+						block: [
+							{
+								label: 'Insert structural pattern',
+								description:
+									'Insert a reviewed pattern after the selected block.',
+								type: 'pattern_replacement',
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						explanation: 'Mocked structural block recs',
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					},
+					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+				} ),
+			} );
+		}
+	);
+
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+
+	// Default-on reaches the browser bootstrap with no test-side injection.
+	// wp_localize_script serializes the PHP boolean true as the string "1", so
+	// the bootstrap delivers an enabled encoding (not the literal boolean).
+	const bootstrapFlag = await page.evaluate(
+		() => window.flavorAgentData?.enableBlockStructuralActions
+	);
+	expect( [ true, 1, '1', 'true' ] ).toContain( bootstrapFlag );
+
+	const clientId = await seedParagraphBlock( page );
+	await registerTemplatePattern( page, {
+		insertedContent: BLOCK_STRUCTURAL_INSERTED_CONTENT,
+		patternName: BLOCK_STRUCTURAL_PATTERN_NAME,
+		patternTitle: BLOCK_STRUCTURAL_PATTERN_TITLE,
+	} );
+	await ensureSettingsSidebarOpen( page );
+
+	const promptInput = page.getByPlaceholder(
+		'Describe the outcome you want for this block.'
+	);
+
+	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+	// The review-first structural lane surfaces purely from the default-on flag.
+	await expect( page.getByText( 'Review first' ).first() ).toBeVisible();
+	await page.getByRole( 'button', { name: 'Review' } ).click();
+	await page
+		.getByRole( 'button', { name: 'Apply reviewed structure' } )
+		.click();
+
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( { insertedContent, selectedClientId } ) => {
+					const flavorAgent = window.wp.data.select( 'flavor-agent' );
+					const blocks =
+						window.wp.data
+							.select( 'core/block-editor' )
+							.getBlocks?.() || [];
+
+					return {
+						applyStatus:
+							flavorAgent.getBlockApplyStatus?.(
+								selectedClientId
+							) || '',
+						hasInsertedContent:
+							JSON.stringify( blocks ).includes(
+								insertedContent
+							),
+					};
+				},
+				{
+					insertedContent: BLOCK_STRUCTURAL_INSERTED_CONTENT,
+					selectedClientId: clientId,
+				}
+			)
+		)
+		.toEqual( {
+			applyStatus: 'success',
+			hasInsertedContent: true,
+		} );
+} );
+
+test( '@wp70-site-editor block structural replace applies and undoes', async ( {
+	page,
+} ) => {
+	test.setTimeout( 180_000 );
+	resetWp70TemplateSmokeState();
+
+	const TEST_RESOLVED_SIGNATURE =
+		'test-resolved-signature-block-structural-replace';
+
+	await page.route(
+		recommendationAbilityRoute( 'recommend-block' ),
+		async ( route ) => {
+			const request = route.request();
+			let body = {};
+			try {
+				body = getAbilityRequestInput( request.postDataJSON() || {} );
+			} catch {
+				body = {};
+			}
+
+			if ( body?.resolveSignatureOnly ) {
+				await route.fulfill( {
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify( {
+						payload: {
+							resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+						},
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					} ),
+				} );
+				return;
+			}
+
+			const operationContext =
+				body?.editorContext?.blockOperationContext || {};
+			const targetClientId = operationContext.targetClientId || '';
+			const targetBlockName =
+				operationContext.targetBlockName || 'core/paragraph';
+			const targetSignature = operationContext.targetSignature || '';
+			const operation = {
+				catalogVersion: 1,
+				type: 'replace_block_with_pattern',
+				patternName: BLOCK_STRUCTURAL_PATTERN_NAME,
+				targetClientId,
+				targetType: 'block',
+				targetSignature,
+				action: 'replace',
+				expectedTarget: {
+					clientId: targetClientId,
+					name: targetBlockName,
+				},
+			};
+
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					payload: {
+						settings: [],
+						styles: [],
+						block: [
+							{
+								label: 'Replace block with pattern',
+								description:
+									'Replace the selected block with a reviewed pattern.',
+								type: 'pattern_replacement',
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						explanation: 'Mocked structural block recs',
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					},
+					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+				} ),
+			} );
+		}
+	);
+
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+
+	const clientId = await seedParagraphBlock( page );
+	await registerTemplatePattern( page, {
+		insertedContent: BLOCK_STRUCTURAL_INSERTED_CONTENT,
+		patternName: BLOCK_STRUCTURAL_PATTERN_NAME,
+		patternTitle: BLOCK_STRUCTURAL_PATTERN_TITLE,
+	} );
+	await ensureSettingsSidebarOpen( page );
+
+	const promptInput = page.getByPlaceholder(
+		'Describe the outcome you want for this block.'
+	);
+
+	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+	await expect( page.getByText( 'Review first' ).first() ).toBeVisible();
+	await page.getByRole( 'button', { name: 'Review' } ).click();
+	await page
+		.getByRole( 'button', { name: 'Apply reviewed structure' } )
+		.click();
+
+	// Replace removes the original paragraph and inserts the pattern in its place.
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( { insertedContent, selectedClientId } ) => {
+					const flavorAgent = window.wp.data.select( 'flavor-agent' );
+					const blockEditor =
+						window.wp.data.select( 'core/block-editor' );
+					const blocks = blockEditor.getBlocks?.() || [];
+					const lastActivity =
+						[ ...( flavorAgent.getActivityLog?.() || [] ) ]
+							.reverse()
+							.find(
+								( entry ) =>
+									entry?.type !== 'request_diagnostic'
+							) || null;
+
+					return {
+						applyStatus:
+							flavorAgent.getBlockApplyStatus?.(
+								selectedClientId
+							) || '',
+						hasInsertedContent:
+							JSON.stringify( blocks ).includes(
+								insertedContent
+							),
+						originalStillPresent: Boolean(
+							blockEditor.getBlock?.( selectedClientId )
+						),
+						hasOriginalContent:
+							JSON.stringify( blocks ).includes( 'Hello world' ),
+						activityType: lastActivity?.type || '',
+						undoStatus: lastActivity?.undo?.status || '',
+					};
+				},
+				{
+					insertedContent: BLOCK_STRUCTURAL_INSERTED_CONTENT,
+					selectedClientId: clientId,
+				}
+			)
+		)
+		.toEqual( {
+			applyStatus: 'success',
+			hasInsertedContent: true,
+			originalStillPresent: false,
+			hasOriginalContent: false,
+			activityType: 'apply_block_structural_suggestion',
+			undoStatus: 'available',
+		} );
+
+	const undoResult = await page.evaluate( async () => {
+		const flavorAgent = window.wp.data.select( 'flavor-agent' );
+		const activity =
+			[ ...( flavorAgent.getActivityLog?.() || [] ) ]
+				.reverse()
+				.find(
+					( entry ) =>
+						entry?.type === 'apply_block_structural_suggestion' &&
+						entry?.undo?.canUndo
+				) || null;
+
+		if ( ! activity?.id ) {
+			return {
+				ok: false,
+				error: 'No structural activity was available to undo.',
+			};
+		}
+
+		return window.wp.data
+			.dispatch( 'flavor-agent' )
+			.undoActivity( activity.id );
+	} );
+
+	expect( undoResult ).toEqual( expect.objectContaining( { ok: true } ) );
+
+	// Undo restores the original paragraph and removes the inserted pattern.
+	await expect
+		.poll( () =>
+			page.evaluate( ( insertedContent ) => {
+				const blocks =
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getBlocks?.() || [];
+
+				return {
+					hasInsertedContent:
+						JSON.stringify( blocks ).includes( insertedContent ),
+					hasOriginalContent:
+						JSON.stringify( blocks ).includes( 'Hello world' ),
+				};
+			}, BLOCK_STRUCTURAL_INSERTED_CONTENT )
+		)
+		.toEqual( {
+			hasInsertedContent: false,
+			hasOriginalContent: true,
+		} );
+} );
+
 test( '@wp70-site-editor content recommendation surface drafts, edits, critiques, and reports REST errors', async ( {
 	page,
 } ) => {
@@ -3039,6 +3397,145 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		page,
 		`Cannot insert pattern "${ noopPatternTitle }" at the requested location. Gutenberg inserted it somewhere else, so Flavor Agent removed those blocks.`
 	);
+} );
+
+test( 'pattern surface inserts a recommended pattern at the top-level root and renders it', async ( {
+	page,
+} ) => {
+	// Regression guard for the null-root orphan bug. getBlockInsertionPoint()
+	// reports rootClientId: undefined for a top-level point; the surface must
+	// dispatch that to insertBlocks as '' (not null). The post editor's
+	// top-level list is a *controlled* inner-block list keyed by '', and core's
+	// insertBlocks reducer does NOT normalize null to it: a null root records
+	// the blocks in byClientId (so getBlock finds them) but never adds them to
+	// the root order, so they never render and the surface tears them out as
+	// "inserted somewhere else". The unit mocks could not catch this (they key
+	// null === ''); only a real top-level editor insert proves the blocks land.
+	const patternRequests = [];
+
+	await page.route(
+		recommendationAbilityRoute( 'recommend-patterns' ),
+		async ( route ) => {
+			const requestData = getAbilityRequestInput(
+				route.request().postDataJSON()
+			);
+			const visiblePatternNames = Array.isArray(
+				requestData.visiblePatternNames
+			)
+				? requestData.visiblePatternNames
+				: [];
+			// Recommend a real, editor-visible (therefore top-level-insertable)
+			// pattern so the insert exercises the genuine resolve+dispatch path.
+			const recommendationNames = visiblePatternNames.slice( 0, 1 );
+
+			patternRequests.push( {
+				...requestData,
+				mockedRecommendationNames: recommendationNames,
+			} );
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature: 'pattern-resolved-context',
+					recommendations: recommendationNames.map( ( name ) => ( {
+						name,
+						score: 0.97,
+						reason: PATTERN_REASON,
+						categories: [ 'hero' ],
+					} ) ),
+					diagnostics: {
+						filteredCandidates: { unreadableSyncedPatterns: 0 },
+					},
+				} ),
+			} );
+		}
+	);
+
+	await enableMockedRecommendationSurfaces( page, [ 'pattern' ] );
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+
+	await page.waitForFunction( () =>
+		Boolean( window.flavorAgentData?.canRecommendPatterns )
+	);
+	// Seeds and SELECTS a single top-level paragraph, so the captured insertion
+	// root is undefined -> the null/'' code path under test.
+	await seedParagraphBlock( page );
+	await dismissWelcomeGuide( page );
+
+	await page
+		.getByRole( 'button', { name: 'Block Inserter', exact: true } )
+		.click();
+	await dismissWelcomeGuide( page );
+
+	const searchInput = await getVisibleSearchInput( page );
+	await expect( searchInput ).toBeVisible();
+	await searchInput.click();
+	await searchInput.fill( '' );
+	await searchInput.pressSequentially( 'hero', { delay: 20 } );
+
+	await expect
+		.poll(
+			() =>
+				patternRequests.findLast(
+					( request ) => request?.prompt === 'hero'
+				) || null,
+			{ timeout: 10000 }
+		)
+		.not.toBeNull();
+
+	const firstItem = page
+		.locator( '.flavor-agent-pattern-shelf' )
+		.first()
+		.locator( '.flavor-agent-pattern-shelf__item' )
+		.first();
+	await expect( firstItem ).toBeVisible();
+	const patternTitle = await firstItem
+		.locator( '.flavor-agent-pattern-shelf__title' )
+		.innerText();
+
+	const topLevelOrderBefore = await page.evaluate(
+		() =>
+			(
+				window.wp.data
+					.select( 'core/block-editor' )
+					.getBlockOrder( '' ) || []
+			).length
+	);
+
+	// Real insert — no forced failure harness this time.
+	await firstItem.getByRole( 'button', { name: /^Insert\b/ } ).click();
+
+	// The success snackbar only renders when post-insert verification confirms
+	// the blocks landed at the target. A null root orphans them and yields the
+	// "inserted it somewhere else" snackbar instead, so this assertion fails
+	// the moment the surface regresses to passing null.
+	await expectSnackbarMessage(
+		page,
+		`Block pattern "${ patternTitle }" inserted.`
+	);
+	await expect(
+		page.locator( '.components-snackbar__content' )
+	).not.toHaveText( /inserted it somewhere else/ );
+
+	// Defense in depth: the blocks must really be in the controlled top-level
+	// order, not merely present-but-orphaned in byClientId.
+	await expect
+		.poll( () =>
+			page.evaluate(
+				() =>
+					(
+						window.wp.data
+							.select( 'core/block-editor' )
+							.getBlockOrder( '' ) || []
+					).length
+			)
+		)
+		.toBeGreaterThan( topLevelOrderBefore );
 } );
 
 test( '@wp70-site-editor global styles surface previews, applies, and undoes executable recommendations', async ( {
@@ -3705,8 +4202,10 @@ test( '@wp70-site-editor template surface smoke previews and applies executable 
 	await expect
 		.poll( () =>
 			page.evaluate(
-				( { patternName } ) => {
+				( { patternName, insertedContent } ) => {
 					const flavorAgent = window.wp.data.select( 'flavor-agent' );
+					const blockEditor =
+						window.wp.data.select( 'core/block-editor' );
 					const operations =
 						flavorAgent.getTemplateLastAppliedOperations?.() || [];
 					const activityLog = flavorAgent.getActivityLog?.() || [];
@@ -3722,11 +4221,18 @@ test( '@wp70-site-editor template surface smoke previews and applies executable 
 								operation?.type === 'insert_pattern' &&
 								operation?.patternName === patternName
 						),
+						// Regression guard for the template null-root orphan:
+						// the inserted pattern must land in the rendered block
+						// tree, not be orphaned in byClientId by a null root.
+						hasInsertedContent: JSON.stringify(
+							blockEditor.getBlocks?.() || []
+						).includes( insertedContent ),
 						lastActivityType: lastActivity?.type || '',
 					};
 				},
 				{
 					patternName: TEMPLATE_PATTERN_NAME,
+					insertedContent: TEMPLATE_INSERTED_CONTENT,
 				}
 			)
 		)
@@ -3734,6 +4240,7 @@ test( '@wp70-site-editor template surface smoke previews and applies executable 
 			applyStatus: 'success',
 			applyError: '',
 			hasInsertOperation: true,
+			hasInsertedContent: true,
 			lastActivityType: 'apply_template_suggestion',
 		} );
 

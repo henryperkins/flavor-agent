@@ -603,7 +603,7 @@ describe( 'template-actions', () => {
 		expect( insertBlocks ).toHaveBeenCalledWith(
 			[ createParagraphBlock( 'pattern-1', 'Inserted' ) ],
 			0,
-			null,
+			'',
 			true,
 			0
 		);
@@ -798,7 +798,7 @@ describe( 'template-actions', () => {
 		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalledWith(
 			[ createParagraphBlock( 'pattern-1', 'Inserted' ) ],
 			0,
-			null,
+			'',
 			true,
 			0
 		);
@@ -1009,7 +1009,7 @@ describe( 'template-actions', () => {
 		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalledWith(
 			[ createParagraphBlock( 'pattern-1', 'Inserted' ) ],
 			1,
-			null,
+			'',
 			true,
 			0
 		);
@@ -1457,7 +1457,7 @@ describe( 'template-actions', () => {
 		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalledWith(
 			[ createParagraphBlock( 'pattern-1', 'Utility' ) ],
 			1,
-			null,
+			'',
 			true,
 			0
 		);
@@ -1521,7 +1521,7 @@ describe( 'template-actions', () => {
 		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalledWith(
 			[ createParagraphBlock( 'pattern-1', 'Utility' ) ],
 			1,
-			null,
+			'',
 			true,
 			0
 		);
@@ -2464,7 +2464,7 @@ describe( 'template-actions', () => {
 				} ),
 			],
 			1,
-			null,
+			'',
 			true,
 			0
 		);
@@ -2532,7 +2532,7 @@ describe( 'template-actions', () => {
 				} ),
 			],
 			1,
-			null,
+			'',
 			true,
 			0
 		);

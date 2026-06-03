@@ -446,7 +446,7 @@ final class Feedback {
 	private static function get_default_option_value_for_feedback( string $option_name ): mixed {
 		return match ( $option_name ) {
 			Config::OPTION_REASONING_EFFORT => 'medium',
-			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS => false,
+			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS => true,
 			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_QDRANT,
 			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH => Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT,
 			default => '',
