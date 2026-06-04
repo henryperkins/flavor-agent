@@ -11,6 +11,7 @@ use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\RecommendationContextScorer;
 use FlavorAgent\Support\RankingContract;
+use FlavorAgent\Support\ValidationReason;
 
 final class TemplatePartPrompt {
 
@@ -701,13 +702,15 @@ EXAMPLE
 				is_array( $suggestion['patternSuggestions'] ?? null ) ? $suggestion['patternSuggestions'] : [],
 				$pattern_lookup
 			);
-			$operations          = self::validate_operations(
+			$operations_result   = self::validate_operations(
 				is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [],
 				$block_lookup,
 				$pattern_lookup,
 				$operation_target_lookup,
 				$insertion_anchor_lookup
 			);
+			$operations          = $operations_result['operations'];
+			$validation_reasons  = ValidationReason::normalize( $operations_result['reasons'] );
 
 			if ( count( $operations ) > 0 ) {
 				foreach ( $operations as $operation ) {
@@ -741,6 +744,7 @@ EXAMPLE
 				'blockHints'         => $block_hints,
 				'patternSuggestions' => $pattern_suggestions,
 				'operations'         => $operations,
+				'validationReasons'  => $validation_reasons,
 			];
 
 			$ranking_input       = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
@@ -859,12 +863,18 @@ EXAMPLE
 	}
 
 	/**
+	 * Validate generation-time template-part operations, returning surviving
+	 * executable operations alongside the specific rejection reasons that were
+	 * accumulated. Each deterministic rejection branch emits a precise
+	 * ValidationReason vocabulary code; no branch funnels into the generic
+	 * operation_validation_failed fallback.
+	 *
 	 * @param array<int, mixed>                   $operations
 	 * @param array<string, array<string, mixed>> $block_lookup
 	 * @param array<string, true>                 $pattern_lookup
 	 * @param array<string, array<string, mixed>> $operation_target_lookup
 	 * @param array<string, array<string, mixed>> $insertion_anchor_lookup
-	 * @return array<int, array<string, string>>
+	 * @return array{operations: array<int, array<string, mixed>>, reasons: array<int, array{code: string, severity: string, message?: string}>}
 	 */
 	private static function validate_operations(
 		array $operations,
@@ -874,10 +884,14 @@ EXAMPLE
 		array $insertion_anchor_lookup
 	): array {
 		if ( count( $operations ) > 3 ) {
-			return [];
+			return [
+				'operations' => [],
+				'reasons'    => ValidationReason::normalize( [ [ 'code' => 'too_many_operations' ] ] ),
+			];
 		}
 
 		$valid              = [];
+		$reasons            = [];
 		$targeted_paths     = [];
 		$allowed_placements = [
 			'start'             => true,
@@ -888,6 +902,7 @@ EXAMPLE
 
 		foreach ( $operations as $operation ) {
 			if ( ! is_array( $operation ) ) {
+				$reasons[] = [ 'code' => 'malformed_operation' ];
 				continue;
 			}
 
@@ -901,11 +916,13 @@ EXAMPLE
 					$placement    = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
 					$target_path  = self::sanitize_block_path( $operation['targetPath'] ?? null );
 
-					if (
-						'' === $pattern_name
-						|| ! isset( $pattern_lookup[ $pattern_name ] )
-						|| ! isset( $allowed_placements[ $placement ] )
-					) {
+					if ( '' === $pattern_name || ! isset( $pattern_lookup[ $pattern_name ] ) ) {
+						$reasons[] = [ 'code' => 'unknown_pattern' ];
+						continue 2;
+					}
+
+					if ( ! isset( $allowed_placements[ $placement ] ) ) {
+						$reasons[] = [ 'code' => 'invalid_placement' ];
 						continue 2;
 					}
 
@@ -918,37 +935,43 @@ EXAMPLE
 							)
 						)
 					) {
+						$reasons[] = [ 'code' => 'invalid_anchor' ];
 						continue 2;
 					}
 
 					if (
-							in_array( $placement, [ 'start', 'end' ], true )
-							&& ! isset( $insertion_anchor_lookup[ $placement ] )
-						) {
+						in_array( $placement, [ 'start', 'end' ], true )
+						&& ! isset( $insertion_anchor_lookup[ $placement ] )
+					) {
+						$reasons[] = [ 'code' => 'invalid_anchor' ];
 						continue 2;
 					}
 
-						$normalized = [
-							'type'        => 'insert_pattern',
-							'patternName' => $pattern_name,
-							'placement'   => $placement,
-						];
+					$normalized = [
+						'type'        => 'insert_pattern',
+						'patternName' => $pattern_name,
+						'placement'   => $placement,
+					];
 
-						if ( null !== $target_path ) {
-							if ( self::has_overlapping_template_part_operation_path( $targeted_paths, $target_path ) ) {
-								return [];
-							}
-
-							$targeted_paths[]         = $target_path;
-							$normalized['targetPath'] = $target_path;
-
-							$target_node = $block_lookup[ self::block_path_key( $target_path ) ] ?? null;
-							if ( is_array( $target_node ) ) {
-								$normalized['expectedTarget'] = self::build_expected_target( $target_node );
-							}
+					if ( null !== $target_path ) {
+						if ( self::has_overlapping_template_part_operation_path( $targeted_paths, $target_path ) ) {
+							$reasons[] = [ 'code' => 'overlapping_block_paths' ];
+							return [
+								'operations' => [],
+								'reasons'    => ValidationReason::normalize( $reasons ),
+							];
 						}
 
-						$valid[] = $normalized;
+						$targeted_paths[]         = $target_path;
+						$normalized['targetPath'] = $target_path;
+
+						$target_node = $block_lookup[ self::block_path_key( $target_path ) ] ?? null;
+						if ( is_array( $target_node ) ) {
+							$normalized['expectedTarget'] = self::build_expected_target( $target_node );
+						}
+					}
+
+					$valid[] = $normalized;
 					break;
 
 				case 'replace_block_with_pattern':
@@ -958,12 +981,13 @@ EXAMPLE
 					$expected_block_name = sanitize_text_field( (string) ( $operation['expectedBlockName'] ?? '' ) );
 					$target_path         = self::sanitize_block_path( $operation['targetPath'] ?? null );
 
-					if (
-							'' === $pattern_name ||
-							'' === $expected_block_name ||
-							null === $target_path ||
-							! isset( $pattern_lookup[ $pattern_name ] )
-						) {
+					if ( '' === $pattern_name || ! isset( $pattern_lookup[ $pattern_name ] ) ) {
+						$reasons[] = [ 'code' => 'unknown_pattern' ];
+						continue 2;
+					}
+
+					if ( '' === $expected_block_name || null === $target_path ) {
+						$reasons[] = [ 'code' => 'invalid_anchor' ];
 						continue 2;
 					}
 
@@ -977,11 +1001,16 @@ EXAMPLE
 						! in_array( 'replace_block_with_pattern', $target_meta['allowedOperations'] ?? [], true ) ||
 						sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
 					) {
+						$reasons[] = [ 'code' => 'invalid_anchor' ];
 						continue 2;
 					}
 
 					if ( self::has_overlapping_template_part_operation_path( $targeted_paths, $target_path ) ) {
-						return [];
+						$reasons[] = [ 'code' => 'overlapping_block_paths' ];
+						return [
+							'operations' => [],
+							'reasons'    => ValidationReason::normalize( $reasons ),
+						];
 					}
 
 					$targeted_paths[] = $target_path;
@@ -1000,6 +1029,7 @@ EXAMPLE
 					$target_path         = self::sanitize_block_path( $operation['targetPath'] ?? null );
 
 					if ( '' === $expected_block_name || null === $target_path ) {
+						$reasons[] = [ 'code' => 'invalid_anchor' ];
 						continue 2;
 					}
 
@@ -1008,16 +1038,21 @@ EXAMPLE
 					$target_meta = $operation_target_lookup[ $path_key ] ?? null;
 
 					if (
-							! is_array( $target_node ) ||
-							! is_array( $target_meta ) ||
-							! in_array( 'remove_block', $target_meta['allowedOperations'] ?? [], true ) ||
-							sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
-						) {
+						! is_array( $target_node ) ||
+						! is_array( $target_meta ) ||
+						! in_array( 'remove_block', $target_meta['allowedOperations'] ?? [], true ) ||
+						sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
+					) {
+						$reasons[] = [ 'code' => 'invalid_anchor' ];
 						continue 2;
 					}
 
 					if ( self::has_overlapping_template_part_operation_path( $targeted_paths, $target_path ) ) {
-						return [];
+						$reasons[] = [ 'code' => 'overlapping_block_paths' ];
+						return [
+							'operations' => [],
+							'reasons'    => ValidationReason::normalize( $reasons ),
+						];
 					}
 
 					$targeted_paths[] = $target_path;
@@ -1029,10 +1064,39 @@ EXAMPLE
 						'targetPath'        => $target_path,
 					];
 					break;
+
+				default:
+					$reasons[] = [ 'code' => 'unknown_operation_type' ];
+					continue 2;
 			}
 		}
 
-		return $valid;
+		return [
+			'operations' => $valid,
+			'reasons'    => ValidationReason::normalize( $reasons ),
+		];
+	}
+
+	/**
+	 * Test seam exposing the private generation-time template-part operation
+	 * validator so the per-branch reason-code coverage suite can assert one
+	 * specific code per rejection branch without driving the full parse_response
+	 * pipeline. The validator takes four positional lookup arguments; this seam
+	 * unpacks them from a keyed array.
+	 *
+	 * @param array<int, mixed>    $operations Raw operations from a suggestion.
+	 * @param array<string, mixed> $lookups    Keyed validator lookups
+	 *                                         (block/pattern/target/anchor).
+	 * @return array{operations: array<int, array<string, mixed>>, reasons: array<int, array{code: string, severity: string, message?: string}>}
+	 */
+	public static function validate_operations_for_tests( array $operations, array $lookups ): array {
+		return self::validate_operations(
+			$operations,
+			is_array( $lookups['block'] ?? null ) ? $lookups['block'] : [],
+			is_array( $lookups['pattern'] ?? null ) ? $lookups['pattern'] : [],
+			is_array( $lookups['target'] ?? null ) ? $lookups['target'] : [],
+			is_array( $lookups['anchor'] ?? null ) ? $lookups['anchor'] : []
+		);
 	}
 
 	/**
