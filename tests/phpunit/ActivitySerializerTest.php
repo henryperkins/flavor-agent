@@ -73,6 +73,35 @@ final class ActivitySerializerTest extends TestCase {
 		);
 	}
 
+	public function test_apply_row_request_recommendation_validation_reason_round_trips(): void {
+		$entry = [
+			'type'    => 'apply_template_suggestion',
+			'surface' => 'template',
+			'request' => [
+				'recommendation' => [
+					'recommendationSetId' => 'template:0:hash_x',
+					'suggestionKey'       => 'suggestion:1',
+					'validationReason'    => 'failed_contrast',
+				],
+			],
+		];
+
+		$out = Serializer::normalize_entry( $entry );
+
+		$this->assertSame(
+			'failed_contrast',
+			$out['request']['recommendation']['validationReason']
+		);
+		$this->assertSame(
+			'template:0:hash_x',
+			$out['request']['recommendation']['recommendationSetId']
+		);
+		$this->assertSame(
+			'suggestion:1',
+			$out['request']['recommendation']['suggestionKey']
+		);
+	}
+
 	public function test_derive_entity_uses_surface_specific_refs(): void {
 		$this->assertSame(
 			[
