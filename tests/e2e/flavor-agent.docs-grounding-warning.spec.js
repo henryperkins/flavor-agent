@@ -81,6 +81,7 @@ async function enableMockedPatternRecommendations( page ) {
 				available: true,
 				reason: 'ready',
 				owner: 'connectors',
+				patternRuntimeSignature: 'mock-pattern-runtime',
 			};
 
 			return data;
