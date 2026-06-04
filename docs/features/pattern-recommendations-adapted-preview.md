@@ -103,11 +103,18 @@ This rule keeps the current `visiblePatternNames` and allowed-pattern selector c
 
 The preview must satisfy these rules:
 
-- It renders the same adapted blocks that `insertBlocks()` will receive.
+- It renders the exact adapted block instances that `insertBlocks()` will receive, not a re-cloned copy. The adapted clone is built once, memoized on the source pattern, adaptation plan, and target signature, rendered in `BlockPreview`, and inserted as that same array — so the previewed clientIds flow into the existing post-dispatch verification and `BlockPreview` does not remount on every render. The current direct-insert path re-clones with `cloneBlock()` immediately before dispatch; the adapted path must instead hold its single clone in state.
 - It is keyed to the current insertion target signature and server `resolvedContextSignature`.
 - It invalidates when the insertion root, insertion index, server-resolved context, theme tokens, or source pattern changes.
 - It clearly distinguishes adapted output from original pattern output.
 - It fails closed when adapted blocks cannot be safely built or rendered.
+
+Two freshness inputs are not covered by today's signatures and need explicit handling:
+
+- The insertion target signature (`buildPatternInsertionTargetSignature`) hashes post type, template type, inserter root, insertion index, and insertion context — it has no theme-token dimension, so theme-token invalidation is net-new work. It must be a bounded hash: folding broad context into a freshness key has already caused a false-positive stale rejection on every Insert click on this surface, so the adaptation stale key should add only what adaptation actually reads.
+- The server `resolvedContextSignature` guards the docs-grounding fingerprint and pattern-catalog identity; it does not see client adaptation inputs such as sibling hierarchy or theme tokens. Adaptation staleness is a separate client-side dimension layered on top of the server signature, not a replacement for it.
+
+The preview inherits the shelf's existing safety filters: only patterns that already pass the unsafe-binding-source filter (`getUnsafePatternBindingSourceNames`) and the allowed-block-type check reach a preview action. `BlockPreview` renders blocks the same way the editor does, so a pattern carrying a server-only binding source would hit the same renderer that crashes on it in the editor; adaptation must never add or alter bindings, and the preview must not bypass that filter. `BlockPreview` is not currently used anywhere in the codebase, so its behavior with adapted trees needs its own validation.
 
 If the preview becomes stale, the UI should refresh or ask the user to rerun the recommendation rather than inserting an old adapted block tree.
 
@@ -122,6 +129,8 @@ Supported modes should be explicit:
 - Use supported Pattern Overrides or bindings where WordPress exposes a safe per-instance customization path.
 
 The first implementation should prefer unchanged synced references unless the user explicitly chooses an adapted detached copy or the platform exposes a reliable per-instance override contract.
+
+Because `resolvePatternBlocks()` returns a single `core/block` reference for a synced pattern, there is no cloned tree to cosmetically adapt without detaching. In v1 the `Preview adapted` and `Insert adapted` actions are therefore hidden or disabled for synced references, so the surface never offers an adapted action that silently equals the original — only `Insert original` (the unchanged reference) is shown.
 
 ## Data Model
 
@@ -159,6 +168,8 @@ Adaptation requires both pre-insert and post-insert validation:
 - Confirm the live insertion target and server-resolved context still match.
 - Confirm post-dispatch block presence at the requested target, reusing the existing wrong-target rollback behavior.
 
+Most of these checks already exist on the direct-insert path, and the adapted path should route through them rather than re-implement them: the allowed-at-the-insertion-root checks (top-level and per-block registered type) are `getRejectedPatternBlockNames`, backed by `canInsertBlockType`, and the post-dispatch presence check plus wrong-target rollback are `didInsertBlocksAtTarget` and `removeBlocks()`. The adapted insert must run the same apply-time `rejectIfBlocksDisallowed` re-check the direct path uses in `PatternRecommender.js`, not a parallel one, so both paths see identical live-editor state immediately before dispatch. Only the adaptation-specific checks are net-new: registered/allowed-by-supports attribute writes, theme-preset existence, and confirming adaptation did not produce an empty or invalid tree.
+
 Any validation failure should block adapted insertion and leave the original recommendation available when it remains safe.
 
 ## Telemetry And Diagnostics
@@ -169,6 +180,8 @@ Recommendation outcome diagnostics should distinguish adapted interactions from 
 - `adapted_inserted_from_preview`
 - `adaptation_blocked`
 - `adapted_insert_failed`
+
+These event names must be added to the frozen `OUTCOME_EVENTS` allowlist and the `OUTCOME_LABELS` map in `src/store/recommendation-outcomes.js`. The outcome builder hard-gates on `OUTCOME_EVENT_SET`, so an unregistered event is silently dropped by `recordRecommendationOutcome` rather than logged. They extend the existing surface vocabulary (`shown`, `pattern_inserted_from_shelf`, `validation_blocked`, `stale_blocked`, `insert_failed`) and, like those, surface in `Settings > AI Activity` as diagnostic-visibility rows.
 
 Useful reason codes:
 
@@ -220,6 +233,8 @@ E2E coverage should prove:
 - the inserted result matches the previewed adaptation,
 - stale insertion target changes block adapted insertion and refresh recommendations.
 
+The E2E suite should extend the existing pattern-insert failure harness — `consumeE2EPatternInsertFailureMode` and the `window.flavorAgentData.e2ePatternInsertFailureHarness` hook (with `window.__flavorAgentPatternInsertFailures`) in `PatternRecommender.js` — to cover the adapted path across its forced exception, no-op, and wrong-target modes, rather than introducing a second harness.
+
 ## Open Decisions
 
 - Whether adapted insertion should be the default action or a secondary action behind `Preview`.
@@ -239,3 +254,9 @@ Build the smallest trustworthy version:
 5. Treat synced patterns as unchanged references in v1.
 
 This slice proves the user value without changing the ranking backend, pattern index, or existing pattern recommendation contract.
+
+## Related
+
+`docs/reference/block-operation-pipeline-extension-notes.md` reaches the same "adapt a pattern instead of inserting it verbatim" idea from the block inspector's structural-operation surface. Its "Make Patterns Smarter And Parameterized" section is the content-adaptation counterpart to this doc's cosmetic adaptation, and the `parameters` capability it describes needs the same sub-block addressing primitive defined here (`changes[].path`) — which is drift-free in this surface only because the path targets a detached clone that is not yet in the editor.
+
+The deterministic, validated, sub-block-addressed mutation engine — the executor maps the change, the model never authors blocks — should be built once and shared between the two surfaces rather than implemented twice (this doc's proposed `src/patterns/pattern-adaptation.js` and that doc's extension of `parseBlocksForOperation` want the same module). The open decision above on content-text adaptation is the same decision as that doc's `parameters` capability; resolve it for both surfaces together.
