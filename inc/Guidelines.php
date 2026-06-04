@@ -20,6 +20,11 @@ final class Guidelines {
 	private const GUIDELINE_CATEGORIES    = [ 'site', 'copy', 'images', 'additional' ];
 
 	/**
+	 * Versioned prefix for the guideline attribution id. See {@see self::version_id()}.
+	 */
+	private const VERSION_PREFIX = 'gv1:';
+
+	/**
 	 * @return array{site: string, copy: string, images: string, additional: string, blocks: array<string, string>}
 	 */
 	public static function get_all(): array {
@@ -28,6 +33,60 @@ final class Guidelines {
 
 	public static function has_any(): bool {
 		return RepositoryResolver::has_any( self::get_all() );
+	}
+
+	/**
+	 * Stable attribution id for the guideline set currently in effect.
+	 *
+	 * Recorded on recommendation activity rows so future learning-loop outcome
+	 * data stays attributable to the guideline version that produced the request.
+	 * This is attribution metadata only — never a freshness or staleness input.
+	 */
+	public static function version_id(): string {
+		return self::version_id_for( self::get_all() );
+	}
+
+	/**
+	 * Fingerprint of a normalized structured guideline projection. Whitespace-only
+	 * or block-ordering-only differences do not change it; semantic changes do.
+	 *
+	 * @param array<string, mixed> $guidelines
+	 */
+	public static function version_id_for( array $guidelines ): string {
+		$normalize = static function ( mixed $value ): string {
+			$text      = is_string( $value ) ? $value : '';
+			$collapsed = preg_replace( '/\s+/u', ' ', $text );
+
+			return trim( is_string( $collapsed ) ? $collapsed : $text );
+		};
+
+		$projection = [
+			'site'       => $normalize( $guidelines['site'] ?? '' ),
+			'copy'       => $normalize( $guidelines['copy'] ?? '' ),
+			'images'     => $normalize( $guidelines['images'] ?? '' ),
+			'additional' => $normalize( $guidelines['additional'] ?? '' ),
+			'blocks'     => [],
+		];
+
+		$blocks = is_array( $guidelines['blocks'] ?? null ) ? $guidelines['blocks'] : [];
+
+		foreach ( $blocks as $block_name => $guideline ) {
+			if ( ! is_string( $block_name ) ) {
+				continue;
+			}
+
+			$normalized_guideline = $normalize( $guideline );
+
+			if ( '' !== $normalized_guideline ) {
+				$projection['blocks'][ $block_name ] = $normalized_guideline;
+			}
+		}
+
+		ksort( $projection['blocks'], SORT_STRING );
+
+		$encoded = wp_json_encode( $projection );
+
+		return self::VERSION_PREFIX . substr( hash( 'sha256', is_string( $encoded ) ? $encoded : '' ), 0, 16 );
 	}
 
 	/**

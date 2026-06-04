@@ -664,9 +664,10 @@ final class RecommendationAbilityExecution {
 				],
 				'after'           => $after,
 				'request'         => [
-					'prompt'    => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'reference' => $reference,
-					'ai'        => \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [],
+					'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'reference'        => $reference,
+					'ai'               => \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [],
+					'guidelineVersion' => Guidelines::version_id(),
 				],
 				'document'        => $document,
 				'executionResult' => 'review',
@@ -765,10 +766,11 @@ final class RecommendationAbilityExecution {
 					'requestContext' => $request_context,
 				],
 				'request'         => [
-					'prompt'    => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'reference' => $reference,
-					'ai'        => \is_array( $error_data['requestMeta'] ?? null ) ? $error_data['requestMeta'] : [],
-					'error'     => [
+					'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'reference'        => $reference,
+					'ai'               => \is_array( $error_data['requestMeta'] ?? null ) ? $error_data['requestMeta'] : [],
+					'guidelineVersion' => Guidelines::version_id(),
+					'error'            => [
 						'code'    => \trim( (string) $error->get_error_code() ),
 						'message' => $message,
 						'data'    => $error_data,

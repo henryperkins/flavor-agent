@@ -281,6 +281,42 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		$this->assertSame( 'model', $request['ai']['requestSummary']['modelResolutionStatus'] ?? null );
 	}
 
+	public function test_execute_stamps_guideline_version_in_request_diagnostic_activity(): void {
+		WordPressTestState::$options = [
+			\FlavorAgent\Guidelines::OPTION_SITE => 'Calm, precise brand voice.',
+			\FlavorAgent\Guidelines::OPTION_COPY => 'Use active voice.',
+		];
+
+		RecommendationAbilityExecution::execute(
+			'template',
+			'flavor-agent/recommend-template',
+			[
+				'templateRef' => 'theme//home',
+				'prompt'      => 'Tighten the structure.',
+				'document'    => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+			],
+			static fn(): array => [
+				'suggestions' => [],
+				'explanation' => 'Use fewer competing sections.',
+				'requestMeta' => [],
+			]
+		);
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+		$this->assertCount( 1, $entries );
+
+		$request = json_decode( (string) ( $entries[0]['request_json'] ?? '' ), true );
+		$this->assertSame(
+			\FlavorAgent\Guidelines::version_id(),
+			$request['guidelineVersion'] ?? null
+		);
+		$this->assertStringStartsWith( 'gv1:', (string) ( $request['guidelineVersion'] ?? '' ) );
+	}
+
 	public function test_execute_persists_pattern_pipeline_trace_in_request_diagnostic_activity(): void {
 		RecommendationAbilityExecution::execute(
 			'pattern',
