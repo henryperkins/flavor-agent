@@ -147,6 +147,7 @@ function getTemplatePartTargetPathConflict(
 		return {
 			ok: false,
 			error: 'This suggestion targets overlapping template-part block paths and cannot be applied automatically.',
+			code: 'overlapping_block_paths',
 		};
 	}
 
@@ -158,6 +159,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 		return {
 			ok: false,
 			error: 'This suggestion does not include any executable template operations.',
+			code: 'no_executable_operations',
 		};
 	}
 
@@ -181,6 +183,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template-part assignments must include both a slug and an area.',
+						code: 'invalid_template_area',
 					};
 				}
 
@@ -188,6 +191,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: `This suggestion targets the “${ area }” area more than once and cannot be applied automatically.`,
+						code: 'duplicate_area_mutation',
 					};
 				}
 
@@ -211,6 +215,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template-part replacements must include currentSlug, slug, and area.',
+						code: 'invalid_template_area',
 					};
 				}
 
@@ -218,6 +223,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: `This suggestion targets the “${ area }” area more than once and cannot be applied automatically.`,
+						code: 'duplicate_area_mutation',
 					};
 				}
 
@@ -251,6 +257,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Pattern insertions must include a pattern name.',
+						code: 'unknown_pattern',
 					};
 				}
 
@@ -258,6 +265,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Only one pattern insertion can be applied automatically per suggestion.',
+						code: 'repeated_pattern_insert',
 					};
 				}
 
@@ -266,6 +274,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template pattern insertions that include a targetPath must provide a non-empty array of non-negative indexes.',
+						code: 'invalid_anchor',
 					};
 				}
 
@@ -273,6 +282,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template pattern insertions must include a placement.',
+						code: 'invalid_placement',
 					};
 				}
 
@@ -286,6 +296,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template pattern insertions must use start, end, before_block_path, or after_block_path.',
+						code: 'invalid_placement',
 					};
 				}
 
@@ -293,6 +304,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Anchored template pattern insertions must include a targetPath.',
+						code: 'invalid_anchor',
 					};
 				}
 
@@ -323,6 +335,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 					error: `Unsupported template operation “${
 						type || 'unknown'
 					}”.`,
+					code: 'unknown_operation_type',
 				};
 		}
 	}
@@ -338,6 +351,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 		return {
 			ok: false,
 			error: 'This suggestion does not include any executable template-part operations.',
+			code: 'no_executable_operations',
 		};
 	}
 
@@ -345,6 +359,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 		return {
 			ok: false,
 			error: 'Template-part suggestions can apply at most 3 operations automatically.',
+			code: 'too_many_operations',
 		};
 	}
 
@@ -371,10 +386,19 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					rawOperation?.expectedTarget
 				);
 
-				if ( ! patternName || ! placement ) {
+				if ( ! patternName ) {
 					return {
 						ok: false,
 						error: 'Template-part pattern insertions must include both a pattern name and placement.',
+						code: 'unknown_pattern',
+					};
+				}
+
+				if ( ! placement ) {
+					return {
+						ok: false,
+						error: 'Template-part pattern insertions must include both a pattern name and placement.',
+						code: 'invalid_placement',
 					};
 				}
 
@@ -387,6 +411,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template-part pattern insertions must use an explicit start, end, before_block_path, or after_block_path placement.',
+						code: 'invalid_placement',
 					};
 				}
 
@@ -394,6 +419,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Anchored template-part pattern insertions must include a targetPath.',
+						code: 'invalid_anchor',
 					};
 				}
 
@@ -442,10 +468,19 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					rawOperation?.targetPath
 				);
 
-				if ( ! patternName || ! expectedTarget?.name || ! targetPath ) {
+				if ( ! patternName ) {
 					return {
 						ok: false,
 						error: 'Template-part block replacements must include patternName, expectedBlockName, and targetPath.',
+						code: 'unknown_pattern',
+					};
+				}
+
+				if ( ! expectedTarget?.name || ! targetPath ) {
+					return {
+						ok: false,
+						error: 'Template-part block replacements must include patternName, expectedBlockName, and targetPath.',
+						code: 'invalid_anchor',
 					};
 				}
 
@@ -456,6 +491,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template-part block replacements must use a matching expectedBlockName and expectedTarget.name.',
+						code: 'invalid_anchor',
 					};
 				}
 
@@ -494,6 +530,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template-part block removals must include expectedBlockName and targetPath.',
+						code: 'invalid_anchor',
 					};
 				}
 
@@ -504,6 +541,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					return {
 						ok: false,
 						error: 'Template-part block removals must use a matching expectedBlockName and expectedTarget.name.',
+						code: 'invalid_anchor',
 					};
 				}
 
@@ -532,6 +570,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					error: `Unsupported template-part operation “${
 						type || 'unknown'
 					}”.`,
+					code: 'unknown_operation_type',
 				};
 		}
 	}
