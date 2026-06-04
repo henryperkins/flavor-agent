@@ -541,4 +541,79 @@ describe( 'validationReason on outcomes', () => {
 		} );
 		expect( entry.after.outcome ).not.toHaveProperty( 'validationReason' );
 	} );
+
+	it( 'stamps the vocabulary version on validation_blocked outcomes (reason slot holds a vocab code)', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'validation_blocked',
+			surface: 'template',
+			recommendationSetId: 'template:1:set',
+			suggestionKey: 'template:suggestions:1',
+			reason: 'unsupported_path',
+		} );
+		expect( entry.after.outcome.reason ).toBe( 'unsupported_path' );
+		expect( entry.after.outcome.validationVocabularyVersion ).toBe(
+			'validation-reasons-v1'
+		);
+	} );
+
+	it( 'co-locates the vocabulary version with the sibling reason on selected_for_review', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'selected_for_review',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			suggestionKey: 'style:styles:1',
+			reason: 'review_opened',
+			suggestion: {
+				ranking: { blendedScore: 0.4 },
+				validationReasons: [
+					{ code: 'failed_contrast', severity: 'downgraded' },
+				],
+			},
+		} );
+		expect( entry.after.outcome.validationReason ).toBe(
+			'failed_contrast'
+		);
+		expect( entry.after.outcome.validationVocabularyVersion ).toBe(
+			'validation-reasons-v1'
+		);
+	} );
+
+	it( 'omits the vocabulary version on selected_for_review when reason-less', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'selected_for_review',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			suggestionKey: 'style:styles:1',
+			reason: 'review_opened',
+			suggestion: { ranking: { blendedScore: 0.4 } },
+		} );
+		expect( entry.after.outcome ).not.toHaveProperty(
+			'validationVocabularyVersion'
+		);
+	} );
+
+	it( 'never stamps the vocabulary version on shown outcomes (rankingSet items carry it)', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'shown',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			rankingSet: [
+				{
+					suggestionKey: 'style:styles:1',
+					ranking: { blendedScore: 0.4 },
+					validationReasons: [ { code: 'failed_contrast' } ],
+				},
+			],
+		} );
+		expect( entry.after.outcome ).not.toHaveProperty(
+			'validationVocabularyVersion'
+		);
+		expect(
+			entry.after.outcome.rankingSet[ 0 ].validationVocabularyVersion
+		).toBe( 'validation-reasons-v1' );
+	} );
 } );

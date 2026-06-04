@@ -312,14 +312,17 @@ final class RecommendationOutcomeTest extends TestCase {
 		$entry = $this->outcomeEntry(
 			'selected_for_review',
 			[
-				'reason'           => 'review_opened',
-				'validationReason' => 'failed_contrast',
+				'reason'                      => 'review_opened',
+				'validationReason'            => 'failed_contrast',
+				'validationVocabularyVersion' => 'validation-reasons-v1',
 			]
 		);
 		$out   = RecommendationOutcome::normalize_entry( $entry );
 
 		$this->assertSame( 'review_opened', $out['after']['outcome']['reason'] ); // dedupe-bearing slot unchanged.
 		$this->assertSame( 'failed_contrast', $out['after']['outcome']['validationReason'] ); // sibling.
+		// The client co-locates the vocab version with the sibling reason; it must round-trip.
+		$this->assertSame( 'validation-reasons-v1', $out['after']['outcome']['validationVocabularyVersion'] );
 	}
 
 	/**

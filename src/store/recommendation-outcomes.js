@@ -642,6 +642,14 @@ export function buildRecommendationOutcomeEntry( {
 		safeEvent !== 'shown'
 			? primaryValidationReason( suggestion?.validationReasons )
 			: null;
+	// Co-locate the vocabulary version with the reason code the server reads
+	// from this outcome: validation_blocked always carries a vocab code in its
+	// `reason` slot, and selected_for_review carries it on the sibling
+	// `validationReason` when present. `shown` is excluded — its rankingSet
+	// items already stamp the version per-suggestion.
+	const stampsVocabularyVersion =
+		safeEvent === 'validation_blocked' ||
+		( safeEvent === 'selected_for_review' && !! engagedPrimary );
 
 	const targetPayload = {
 		recommendationSetId: setId,
@@ -681,6 +689,12 @@ export function buildRecommendationOutcomeEntry( {
 				...outcomeRanking,
 				...( engagedPrimary
 					? { validationReason: engagedPrimary.code }
+					: {} ),
+				...( stampsVocabularyVersion
+					? {
+							validationVocabularyVersion:
+								VALIDATION_REASONS_VERSION,
+					  }
 					: {} ),
 			},
 		},
