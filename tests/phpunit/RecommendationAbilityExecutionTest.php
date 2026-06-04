@@ -886,4 +886,45 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 			],
 		];
 	}
+
+	public function test_request_diagnostic_aggregates_validation_reasons_for_executable_surface(): void {
+		$payload = [
+			'styles' => [
+				[
+					'label'             => 'a',
+					'validationReasons' => [
+						[
+							'code'     => 'failed_contrast',
+							'severity' => 'downgraded',
+						],
+					],
+				],
+				[
+					'label'             => 'b',
+					'validationReasons' => [
+						[
+							'code'     => 'unsupported_path',
+							'severity' => 'rejected',
+						],
+					],
+				],
+			],
+		];
+
+		$aggregate = RecommendationAbilityExecution::aggregate_validation_reasons_for_tests( 'global-styles', $payload );
+
+		$this->assertSame(
+			[
+				'failed_contrast'  => 1,
+				'unsupported_path' => 1,
+			],
+			$aggregate['reasonCounts']
+		);
+		$this->assertSame( 'validation-reasons-v1', $aggregate['validationVocabularyVersion'] );
+	}
+
+	public function test_aggregate_is_empty_for_clean_pass(): void {
+		$aggregate = RecommendationAbilityExecution::aggregate_validation_reasons_for_tests( 'template', [ 'suggestions' => [ [ 'label' => 'clean' ] ] ] );
+		$this->assertSame( [], $aggregate );
+	}
 }
