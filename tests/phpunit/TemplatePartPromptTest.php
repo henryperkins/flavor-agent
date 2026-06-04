@@ -384,6 +384,7 @@ final class TemplatePartPromptTest extends TestCase {
 					],
 					'patternSuggestions' => [ 'theme/header-utility' ],
 					'operations'         => [],
+					'validationReasons'  => [],
 				],
 			],
 			$this->strip_ranking_from_entries( $result['suggestions'] )
@@ -508,6 +509,12 @@ final class TemplatePartPromptTest extends TestCase {
 								'attributes' => [],
 								'childCount' => 0,
 							],
+						],
+					],
+					'validationReasons'  => [
+						[
+							'code'     => 'invalid_placement',
+							'severity' => 'rejected',
 						],
 					],
 				],
@@ -692,6 +699,7 @@ final class TemplatePartPromptTest extends TestCase {
 							'targetPath'        => [ 0, 0 ],
 						],
 					],
+					'validationReasons'  => [],
 				],
 			],
 			$this->strip_ranking_from_entries( $result['suggestions'] )
@@ -778,6 +786,12 @@ final class TemplatePartPromptTest extends TestCase {
 					'blockHints'         => [],
 					'patternSuggestions' => [ 'theme/header-utility' ],
 					'operations'         => [],
+					'validationReasons'  => [
+						[
+							'code'     => 'overlapping_block_paths',
+							'severity' => 'rejected',
+						],
+					],
 				],
 			],
 			$this->strip_ranking_from_entries( $result['suggestions'] )
@@ -1189,5 +1203,249 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertStringContainsString( '"ranking": null', $system );
 		$this->assertStringContainsString( 'return ranking as null', strtolower( $system ) );
 		$this->assertStringContainsString( 'use null for unknown ranking object values', strtolower( $system ) );
+	}
+
+	/**
+	 * Shared validator lookups for the per-branch reason-code suite.
+	 *
+	 * The `start` / `end` insertion anchors are deliberately omitted so that a
+	 * start-placement insert with an otherwise-valid pattern still falls through
+	 * to the start/end anchor-missing branch. A `before_block_path|0.1` anchor
+	 * and the `[ 0, 1 ]` block node are present so anchored inserts can resolve
+	 * when a targetPath is supplied, while replace/remove targets at `[ 0 ]` and
+	 * `[ 0, 1 ]` let the overlap branch be exercised deterministically.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	private function reason_branch_lookups(): array {
+		return [
+			'block'   => [
+				'0'   => [ 'name' => 'core/group' ],
+				'0.1' => [ 'name' => 'core/navigation' ],
+			],
+			'pattern' => [
+				'a/b' => true,
+			],
+			'target'  => [
+				'0'   => [
+					'name'              => 'core/group',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+				'0.1' => [
+					'name'              => 'core/navigation',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+			],
+			'anchor'  => [
+				'before_block_path|0.1' => [
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0, 1 ],
+				],
+			],
+		];
+	}
+
+	/**
+	 * @dataProvider templatePartRejectionBranches
+	 *
+	 * @param array<int, mixed> $operations
+	 */
+	public function test_each_template_part_branch_maps_to_a_specific_code( array $operations, string $expected_code ): void {
+		$result = TemplatePartPrompt::validate_operations_for_tests( $operations, $this->reason_branch_lookups() );
+
+		$codes = array_column( $result['reasons'], 'code' );
+
+		$this->assertContains( $expected_code, $codes );
+		$this->assertNotContains( 'operation_validation_failed', $codes );
+	}
+
+	/**
+	 * @return array<string, array{0: array<int, mixed>, 1: string}>
+	 */
+	public function templatePartRejectionBranches(): array {
+		return [
+			'too many operations'           => [
+				array_fill(
+					0,
+					4,
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'a/b',
+						'placement'   => 'start',
+					]
+				),
+				'too_many_operations',
+			],
+			'insert empty pattern name'     => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => '',
+						'placement'   => 'start',
+					],
+				],
+				'unknown_pattern',
+			],
+			'insert unknown pattern name'   => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'nope',
+						'placement'   => 'start',
+					],
+				],
+				'unknown_pattern',
+			],
+			'insert invalid placement'      => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'a/b',
+						'placement'   => 'sideways',
+					],
+				],
+				'invalid_placement',
+			],
+			'insert anchored missing path'  => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'a/b',
+						'placement'   => 'before_block_path',
+					],
+				],
+				'invalid_anchor',
+			],
+			'insert start anchor missing'   => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'a/b',
+						'placement'   => 'start',
+					],
+				],
+				'invalid_anchor',
+			],
+			'insert overlapping paths'      => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'a/b',
+						'placement'   => 'before_block_path',
+						'targetPath'  => [ 0, 1 ],
+					],
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'a/b',
+						'placement'   => 'before_block_path',
+						'targetPath'  => [ 0, 1 ],
+					],
+				],
+				'overlapping_block_paths',
+			],
+			'replace missing pattern name'  => [
+				[
+					[
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => '',
+						'expectedBlockName' => 'core/navigation',
+						'targetPath'        => [ 0, 1 ],
+					],
+				],
+				'unknown_pattern',
+			],
+			'replace unknown pattern name'  => [
+				[
+					[
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => 'nope',
+						'expectedBlockName' => 'core/navigation',
+						'targetPath'        => [ 0, 1 ],
+					],
+				],
+				'unknown_pattern',
+			],
+			'replace missing target path'   => [
+				[
+					[
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => 'a/b',
+						'expectedBlockName' => 'core/navigation',
+					],
+				],
+				'invalid_anchor',
+			],
+			'replace target node mismatch'  => [
+				[
+					[
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => 'a/b',
+						'expectedBlockName' => 'core/paragraph',
+						'targetPath'        => [ 0, 1 ],
+					],
+				],
+				'invalid_anchor',
+			],
+			'replace overlapping paths'     => [
+				[
+					[
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => 'a/b',
+						'expectedBlockName' => 'core/group',
+						'targetPath'        => [ 0 ],
+					],
+					[
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => 'a/b',
+						'expectedBlockName' => 'core/navigation',
+						'targetPath'        => [ 0, 1 ],
+					],
+				],
+				'overlapping_block_paths',
+			],
+			'remove missing target path'    => [
+				[
+					[
+						'type'              => 'remove_block',
+						'expectedBlockName' => 'core/navigation',
+					],
+				],
+				'invalid_anchor',
+			],
+			'remove target node mismatch'   => [
+				[
+					[
+						'type'              => 'remove_block',
+						'expectedBlockName' => 'core/paragraph',
+						'targetPath'        => [ 0, 1 ],
+					],
+				],
+				'invalid_anchor',
+			],
+			'remove overlapping paths'      => [
+				[
+					[
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => 'a/b',
+						'expectedBlockName' => 'core/group',
+						'targetPath'        => [ 0 ],
+					],
+					[
+						'type'              => 'remove_block',
+						'expectedBlockName' => 'core/navigation',
+						'targetPath'        => [ 0, 1 ],
+					],
+				],
+				'overlapping_block_paths',
+			],
+			'malformed non-array operation' => [
+				[ 'not-an-array' ],
+				'malformed_operation',
+			],
+			'unknown operation type'        => [
+				[ [ 'type' => 'frobnicate' ] ],
+				'unknown_operation_type',
+			],
+		];
 	}
 }

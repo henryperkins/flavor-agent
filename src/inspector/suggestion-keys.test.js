@@ -57,4 +57,16 @@ describe( 'suggestion key helpers', () => {
 
 		expect( first ).not.toBe( second );
 	} );
+
+	test( 'ignores validationReasons when computing the key', () => {
+		const base = { panel: 'styles', label: 'x', operations: [] };
+		const withReasons = {
+			...base,
+			validationReasons: [ { code: 'failed_contrast' } ],
+		};
+
+		expect( getSuggestionKey( withReasons ) ).toBe(
+			getSuggestionKey( base )
+		);
+	} );
 } );

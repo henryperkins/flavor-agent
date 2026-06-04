@@ -560,7 +560,8 @@ function createExecutableSurfaceApplyAction( {
 				);
 				recordBlockedOutcome(
 					'validation_blocked',
-					'operation_validation_failed'
+					normalizeStringMessage( result?.code ) ||
+						'operation_validation_failed'
 				);
 
 				return result;

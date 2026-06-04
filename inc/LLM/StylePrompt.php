@@ -7,6 +7,7 @@ namespace FlavorAgent\LLM;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\RecommendationContextScorer;
 use FlavorAgent\Support\RankingContract;
+use FlavorAgent\Support\ValidationReason;
 
 final class StylePrompt {
 
@@ -779,12 +780,24 @@ EXAMPLE
 				continue;
 			}
 
-			$input_operations     = is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [];
-			$operations           = self::validate_operations( $input_operations, $context );
-			$operation_dropped    = count( $input_operations ) !== count( $operations );
-			$contrast_result      = StyleContrastValidator::evaluate( $operations, $context );
-			$contrast_failed      = ! $contrast_result['passed'];
-			$should_downgrade     = $operation_dropped || $contrast_failed;
+			$input_operations  = is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [];
+			$operations_result = self::validate_operations( $input_operations, $context );
+			$operations        = $operations_result['operations'];
+			$operation_dropped = count( $input_operations ) !== count( $operations );
+			$contrast_result   = StyleContrastValidator::evaluate( $operations, $context );
+			$contrast_failed   = ! $contrast_result['passed'];
+			$should_downgrade  = $operation_dropped || $contrast_failed;
+
+			$reasons = $operations_result['reasons'];
+			if ( $contrast_failed ) {
+				$reasons[] = [
+					'code'     => 'failed_contrast',
+					'severity' => 'downgraded',
+				];
+			}
+			if ( [] === $operations && [] !== $input_operations && [] === $reasons ) {
+				$reasons[] = [ 'code' => 'no_executable_operations' ];
+			}
 			$effective_operations = $should_downgrade ? [] : $operations;
 			$tone                 = 'executable' === sanitize_key( (string) ( $suggestion['tone'] ?? '' ) )
 				&& [] !== $effective_operations
@@ -805,6 +818,8 @@ EXAMPLE
 				'tone'        => $tone,
 				'operations'  => 'executable' === $tone ? $effective_operations : [],
 			];
+
+			$entry['validationReasons'] = ValidationReason::normalize( $reasons );
 
 			$ranking_input       = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
 			$model_score         = RankingContract::resolve_score_candidate(
@@ -1014,6 +1029,7 @@ EXAMPLE
 	private static function validate_operations( array $operations, array $context ): array {
 		$validated_styles      = [];
 		$validated_variation   = [];
+		$reasons               = [];
 		$scope                 = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
 		$style_context         = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
 		$supported_paths       = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
@@ -1026,6 +1042,7 @@ EXAMPLE
 
 		foreach ( $operations as $operation ) {
 			if ( ! is_array( $operation ) ) {
+				$reasons[] = [ 'code' => 'malformed_operation' ];
 				continue;
 			}
 
@@ -1033,17 +1050,20 @@ EXAMPLE
 
 			if ( 'set_styles' === $type || 'set_block_styles' === $type ) {
 				if ( 'set_styles' === $type && 'style-book' === $surface ) {
+					$reasons[] = [ 'code' => 'unsupported_scope' ];
 					continue;
 				}
 
 				if ( 'set_block_styles' === $type ) {
 					if ( 'style-book' !== $surface ) {
+						$reasons[] = [ 'code' => 'unsupported_scope' ];
 						continue;
 					}
 
 					$block_name = sanitize_text_field( (string) ( $operation['blockName'] ?? '' ) );
 
 					if ( '' === $block_name || '' === $target_style_book_key || $block_name !== $target_style_book_key ) {
+						$reasons[] = [ 'code' => 'missing_style_book_target' ];
 						continue;
 					}
 				}
@@ -1062,6 +1082,7 @@ EXAMPLE
 				$path_entry = self::find_supported_path( $path, $supported_paths );
 
 				if ( [] === $path || [] === $path_entry ) {
+					$reasons[] = [ 'code' => 'unsupported_path' ];
 					continue;
 				}
 
@@ -1073,6 +1094,7 @@ EXAMPLE
 					$validated_freeform = self::validate_freeform_style_value( $path, $value );
 
 					if ( ! $validated_freeform['valid'] ) {
+						$reasons[] = [ 'code' => 'invalid_freeform_value' ];
 						continue;
 					}
 
@@ -1095,28 +1117,34 @@ EXAMPLE
 				$normalized_preset_type = self::normalize_preset_type( $preset_type );
 
 				if ( 'preset' !== $value_type || '' === $preset_slug ) {
+					$reasons[] = [ 'code' => 'preset_required' ];
 					continue;
 				}
 
 				if ( $normalized_value_source !== $normalized_preset_type ) {
+					$reasons[] = [ 'code' => 'preset_metadata_mismatch' ];
 					continue;
 				}
 
 				$parsed_value = self::parse_preset_value( $value );
 
 				if ( [] === $parsed_value ) {
+					$reasons[] = [ 'code' => 'preset_reference_mismatch' ];
 					continue;
 				}
 
 				if ( $normalized_value_source !== ( $parsed_value['type'] ?? '' ) ) {
+					$reasons[] = [ 'code' => 'preset_reference_mismatch' ];
 					continue;
 				}
 
 				if ( $preset_slug !== ( $parsed_value['slug'] ?? '' ) ) {
+					$reasons[] = [ 'code' => 'preset_reference_mismatch' ];
 					continue;
 				}
 
 				if ( ! self::preset_exists( $style_context['themeTokens'] ?? [], $normalized_preset_type, $preset_slug ) ) {
+					$reasons[] = [ 'code' => 'preset_unavailable' ];
 					continue;
 				}
 
@@ -1135,31 +1163,57 @@ EXAMPLE
 
 			if ( 'set_theme_variation' === $type ) {
 				if ( 'style-book' === $surface ) {
+					$reasons[] = [ 'code' => 'unsupported_scope' ];
 					continue;
 				}
 
 				$variation = self::resolve_variation_operation( $operation, $variations );
 
 				if ( [] === $variation ) {
+					$reasons[] = [ 'code' => 'unavailable_variation' ];
 					continue;
 				}
 
-				$variation_index = $variation['index'];
-				$variation_title = $variation['title'];
+					$variation_index = $variation['index'];
+					$variation_title = $variation['title'];
 
-				if ( [] === $validated_variation ) {
+				if ( [] !== $validated_variation ) {
+					$reasons[] = [ 'code' => 'multi_operation_unsupported' ];
+					continue;
+				}
+
 					$validated_variation = [
 						'type'           => 'set_theme_variation',
 						'variationIndex' => $variation_index,
 						'variationTitle' => $variation_title,
 					];
-				}
+					continue;
 			}
+
+				$reasons[] = [ 'code' => 'unknown_operation_type' ];
 		}
 
-		return [] !== $validated_variation
+			$styles = [] !== $validated_variation
 			? array_merge( [ $validated_variation ], $validated_styles )
 			: $validated_styles;
+
+		return [
+			'operations' => $styles,
+			'reasons'    => ValidationReason::normalize( $reasons ),
+		];
+	}
+
+	/**
+	 * Test seam exposing the private generation-time operation validator so the
+	 * per-branch reason-code coverage suite can assert one specific code per
+	 * rejection branch without driving the full parse_response pipeline.
+	 *
+	 * @param array<int, mixed>    $operations Raw operations from a suggestion.
+	 * @param array<string, mixed> $context    Style recommendation context.
+	 * @return array{operations: array<int, array<string, mixed>>, reasons: array<int, array{code: string, severity: string, message?: string}>}
+	 */
+	public static function validate_operations_for_tests( array $operations, array $context ): array {
+		return self::validate_operations( $operations, $context );
 	}
 
 	/**

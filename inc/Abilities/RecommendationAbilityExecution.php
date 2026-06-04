@@ -14,6 +14,7 @@ use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 use FlavorAgent\Support\FlavorAgentRequestTag;
 use FlavorAgent\Support\JsonSchemaObjectCoercion;
 use FlavorAgent\Support\StringArray;
+use FlavorAgent\Support\ValidationReason;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -647,6 +648,11 @@ final class RecommendationAbilityExecution {
 			$after['pipelineDropReasons'] = $pipeline_drop_reasons;
 		}
 
+		$validation_aggregate = self::aggregate_validation_reasons( $surface, $payload );
+		if ( [] !== $validation_aggregate ) {
+			$after['validationReasons'] = $validation_aggregate;
+		}
+
 		ActivityRepository::create(
 			[
 				'type'            => 'request_diagnostic',
@@ -673,6 +679,53 @@ final class RecommendationAbilityExecution {
 				'timestamp'       => \gmdate( 'c' ),
 			]
 		);
+	}
+
+	/**
+	 * Audit-only: count validationReasons across an executable surface's suggestions.
+	 * Identified by requestRef on the request_diagnostic row; never the loop join.
+	 *
+	 * @param array<string, mixed> $payload
+	 * @return array{reasonCounts: array<string, int>, validationVocabularyVersion: string}|array{}
+	 */
+	private static function aggregate_validation_reasons( string $surface, array $payload ): array {
+		if ( ! \in_array( $surface, [ 'block', 'style', 'template', 'template-part', 'global-styles', 'style-book' ], true ) ) {
+			return [];
+		}
+
+		$counts = [];
+		foreach ( [ 'settings', 'styles', 'block', 'suggestions' ] as $list_key ) {
+			$list = \is_array( $payload[ $list_key ] ?? null ) ? $payload[ $list_key ] : [];
+			foreach ( $list as $suggestion ) {
+				if ( ! \is_array( $suggestion ) ) {
+					continue;
+				}
+
+				$reasons = \is_array( $suggestion['validationReasons'] ?? null ) ? $suggestion['validationReasons'] : [];
+				foreach ( ValidationReason::normalize( $reasons ) as $reason ) {
+					$counts[ $reason['code'] ] = ( $counts[ $reason['code'] ] ?? 0 ) + 1;
+				}
+			}
+		}
+
+		if ( [] === $counts ) {
+			return [];
+		}
+
+		return [
+			'reasonCounts'                => $counts,
+			'validationVocabularyVersion' => ValidationReason::VERSION,
+		];
+	}
+
+	/**
+	 * Test seam for {@see self::aggregate_validation_reasons()}.
+	 *
+	 * @param array<string, mixed> $payload
+	 * @return array{reasonCounts: array<string, int>, validationVocabularyVersion: string}|array{}
+	 */
+	public static function aggregate_validation_reasons_for_tests( string $surface, array $payload ): array {
+		return self::aggregate_validation_reasons( $surface, $payload );
 	}
 
 	/**

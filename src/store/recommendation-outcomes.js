@@ -1,4 +1,8 @@
 import { createActivityEntry } from './activity-history';
+import {
+	primaryValidationReason,
+	VALIDATION_REASONS_VERSION,
+} from '../utils/validation-reasons';
 
 export const RECOMMENDATION_OUTCOME_TYPE = 'recommendation_outcome';
 export const OUTCOME_VISIBILITY = 'diagnostic';
@@ -276,7 +280,7 @@ function getStableRankingSetSuggestionKey(
 	return fallbackKey;
 }
 
-function buildRankingSetFromSuggestions( suggestions = [] ) {
+export function buildRankingSetFromSuggestions( suggestions = [] ) {
 	if ( ! Array.isArray( suggestions ) ) {
 		return [];
 	}
@@ -294,9 +298,26 @@ function buildRankingSetFromSuggestions( suggestions = [] ) {
 				return null;
 			}
 
+			const primary = primaryValidationReason(
+				suggestion?.validationReasons
+			);
+			const validationReason =
+				primary?.code || cleanCode( suggestion?.validationReason );
+			const validationVocabularyVersion = primary
+				? VALIDATION_REASONS_VERSION
+				: cleanString( suggestion?.validationVocabularyVersion );
+
 			return {
 				suggestionKey,
 				ranking,
+				...( validationReason
+					? {
+							validationReason,
+							...( validationVocabularyVersion
+								? { validationVocabularyVersion }
+								: {} ),
+					  }
+					: {} ),
 			};
 		} )
 		.filter( Boolean )
@@ -623,6 +644,19 @@ export function buildRecommendationOutcomeEntry( {
 		outcomeRanking = { ranking: rankingSnapshot };
 	}
 
+	const engagedPrimary =
+		safeEvent !== 'shown'
+			? primaryValidationReason( suggestion?.validationReasons )
+			: null;
+	// Co-locate the vocabulary version with the reason code the server reads
+	// from this outcome: validation_blocked always carries a vocab code in its
+	// `reason` slot, and selected_for_review carries it on the sibling
+	// `validationReason` when present. `shown` is excluded — its rankingSet
+	// items already stamp the version per-suggestion.
+	const stampsVocabularyVersion =
+		safeEvent === 'validation_blocked' ||
+		( safeEvent === 'selected_for_review' && !! engagedPrimary );
+
 	const targetPayload = {
 		recommendationSetId: setId,
 		...( finalSuggestionKey ? { suggestionKey: finalSuggestionKey } : {} ),
@@ -659,6 +693,15 @@ export function buildRecommendationOutcomeEntry( {
 					? Math.max( 0, identity.resultCount )
 					: 0,
 				...outcomeRanking,
+				...( engagedPrimary
+					? { validationReason: engagedPrimary.code }
+					: {} ),
+				...( stampsVocabularyVersion
+					? {
+							validationVocabularyVersion:
+								VALIDATION_REASONS_VERSION,
+					  }
+					: {} ),
 			},
 		},
 		document: safeDocument,
@@ -696,11 +739,14 @@ export function getRecommendationIdentityForApply( suggestion = {} ) {
 		return null;
 	}
 
+	const primary = primaryValidationReason( suggestion?.validationReasons );
+
 	return {
 		recommendationSetId: identity.recommendationSetId,
 		suggestionKey:
 			identity.suggestionKey || getSuggestionOutcomeKey( suggestion, '' ),
 		sourceRequestSignature: identity.sourceRequestSignature,
 		rank: identity.rank,
+		...( primary ? { validationReason: primary.code } : {} ),
 	};
 }

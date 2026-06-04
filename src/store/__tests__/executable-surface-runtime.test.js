@@ -259,4 +259,131 @@ describe( 'executable-surface runtime apply thunk', () => {
 		resolveFreshness( { ok: true } );
 		await resultPromise;
 	} );
+
+	test( 'records the validator code on validation_blocked, not the generic fallback', async () => {
+		const recordOutcomeAction = jest.fn( ( outcome ) => ( {
+			type: 'RECORD_OUTCOME',
+			...outcome,
+		} ) );
+		const setApplyState = jest.fn( ( status, payload ) => ( {
+			type: 'APPLY_STATE',
+			status,
+			payload,
+		} ) );
+		const thunk = buildExecutableSurfaceApplyThunk(
+			{
+				applyFailureMessage: 'Apply failed.',
+				abilityName: 'test/apply',
+				buildActivityEntry: null,
+				executeSuggestion: jest.fn( () =>
+					Promise.resolve( {
+						ok: false,
+						error: 'This suggestion targets overlapping template-part block paths and cannot be applied automatically.',
+						code: 'overlapping_block_paths',
+					} )
+				),
+				getStoredRequestSignature: jest.fn( () => 'request' ),
+				getStoredResolvedContextSignature: jest.fn( () => 'resolved' ),
+				recordOutcomeAction,
+				setApplyState,
+				surface: 'template-part',
+				unexpectedErrorMessage: 'Unexpected failure.',
+			},
+			{ suggestionKey: 'suggestion-overlap' },
+			'request',
+			{ prompt: 'Refine the template part.' },
+			{
+				dispatchToastForActivity: null,
+				getCurrentActivityScope: jest.fn( () => ( {
+					key: 'template_part:home//header',
+				} ) ),
+				guardSurfaceApplyFreshness: jest.fn( () => null ),
+				guardSurfaceApplyResolvedFreshness: jest.fn( () =>
+					Promise.resolve( { ok: true } )
+				),
+				recordActivityEntry: jest.fn( () => Promise.resolve( null ) ),
+				syncActivitySession: jest.fn(),
+			}
+		);
+
+		const result = await thunk( {
+			dispatch: ( action ) => action,
+			registry: {},
+			select: {},
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				code: 'overlapping_block_paths',
+			} )
+		);
+		expect( recordOutcomeAction ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'validation_blocked',
+				surface: 'template-part',
+				reason: 'overlapping_block_paths',
+			} )
+		);
+	} );
+
+	test( 'falls back to operation_validation_failed when the result code is not a string', async () => {
+		const recordOutcomeAction = jest.fn( ( outcome ) => ( {
+			type: 'RECORD_OUTCOME',
+			...outcome,
+		} ) );
+		const thunk = buildExecutableSurfaceApplyThunk(
+			{
+				applyFailureMessage: 'Apply failed.',
+				abilityName: 'test/apply',
+				buildActivityEntry: null,
+				executeSuggestion: jest.fn( () =>
+					Promise.resolve( {
+						ok: false,
+						error: 'Apply failed for an unmapped reason.',
+						code: { value: 'overlapping_block_paths' },
+					} )
+				),
+				getStoredRequestSignature: jest.fn( () => 'request' ),
+				getStoredResolvedContextSignature: jest.fn( () => 'resolved' ),
+				recordOutcomeAction,
+				setApplyState: jest.fn( ( status, payload ) => ( {
+					type: 'APPLY_STATE',
+					status,
+					payload,
+				} ) ),
+				surface: 'global-styles',
+				unexpectedErrorMessage: 'Unexpected failure.',
+			},
+			{ suggestionKey: 'suggestion-unmapped' },
+			'request',
+			{ prompt: 'Refine styles.' },
+			{
+				dispatchToastForActivity: null,
+				getCurrentActivityScope: jest.fn( () => ( {
+					key: 'global_styles:17',
+				} ) ),
+				guardSurfaceApplyFreshness: jest.fn( () => null ),
+				guardSurfaceApplyResolvedFreshness: jest.fn( () =>
+					Promise.resolve( { ok: true } )
+				),
+				recordActivityEntry: jest.fn( () => Promise.resolve( null ) ),
+				syncActivitySession: jest.fn(),
+			}
+		);
+
+		await thunk( {
+			dispatch: ( action ) => action,
+			registry: {},
+			select: {},
+		} );
+
+		expect( recordOutcomeAction ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'validation_blocked',
+				surface: 'global-styles',
+				reason: 'operation_validation_failed',
+			} )
+		);
+	} );
 } );

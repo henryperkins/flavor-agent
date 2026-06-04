@@ -356,6 +356,17 @@ final class StyleAbilities {
 	}
 
 	private static function build_review_context_signature( string $surface, array $context, string $docs_grounding_fingerprint = '' ): string {
+		return RecommendationReviewSignature::from_payload(
+			$surface,
+			self::build_review_context_payload( $surface, $context, $docs_grounding_fingerprint )
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @return array<string, mixed>
+	 */
+	private static function build_review_context_payload( string $surface, array $context, string $docs_grounding_fingerprint = '' ): array {
 		$style_context = self::normalize_map( $context['styleContext'] ?? [] );
 		$payload       = [
 			'themeTokens'              => self::normalize_review_theme_tokens(
@@ -370,7 +381,49 @@ final class StyleAbilities {
 			);
 		}
 
-		return RecommendationReviewSignature::from_payload( $surface, $payload );
+		return $payload;
+	}
+
+	/**
+	 * Test seam: returns the genuine resolved/review context-input arrays handed
+	 * to RecommendationResolvedSignature / RecommendationReviewSignature for a
+	 * representative request, before any response suggestion is parsed.
+	 *
+	 * Mirrors the signature call path in recommend_style() (the docs-grounding
+	 * fingerprint is collected in signature-only mode so no AI Connector or
+	 * remote docs call is made).
+	 *
+	 * @param array<string, mixed> $input
+	 * @return array{resolved: array<string, mixed>, review: array<string, mixed>}|\WP_Error
+	 */
+	public static function build_signature_payloads_for_tests( array $input ): array|\WP_Error {
+		$scope         = self::normalize_map( $input['scope'] ?? [] );
+		$style_context = self::normalize_map( $input['styleContext'] ?? [] );
+		$prompt        = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
+		$scope_surface = self::normalize_style_surface( (string) ( $scope['surface'] ?? '' ) );
+
+		$context = self::build_context_for_surface( $scope_surface, $scope, $style_context );
+
+		if ( is_wp_error( $context ) ) {
+			return $context;
+		}
+
+		$docs_result = self::collect_wordpress_docs_guidance_result(
+			$context,
+			$prompt,
+			[ 'signatureOnly' => true ]
+		);
+
+		$fingerprint = (string) ( $docs_result['fingerprint'] ?? '' );
+
+		return [
+			'resolved' => [
+				'context'                  => $context,
+				'prompt'                   => $prompt,
+				'docsGroundingFingerprint' => $fingerprint,
+			],
+			'review'   => self::build_review_context_payload( $scope_surface, $context, $fingerprint ),
+		];
 	}
 
 	/**

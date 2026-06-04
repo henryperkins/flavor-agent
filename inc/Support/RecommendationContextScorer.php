@@ -365,15 +365,16 @@ final class RecommendationContextScorer {
 	}
 
 	private static function has_validation_risk( array $suggestion ): bool {
-		if ( [] !== self::list_value( $suggestion['rejectedOperations'] ?? [] ) ) {
-			return true;
+		$reasons = self::list_value( $suggestion['validationReasons'] ?? [] );
+		foreach ( $reasons as $reason ) {
+			$severity = is_array( $reason ) ? (string) ( $reason['severity'] ?? '' ) : '';
+			if ( 'rejected' === $severity || 'downgraded' === $severity ) {
+				return true;
+			}
 		}
 
-		$text = strtolower( implode( ' ', self::text_values( $suggestion, 30 ) ) );
-		return str_contains( $text, 'rejected' )
-			|| str_contains( $text, 'invalid' )
-			|| str_contains( $text, 'validation' )
-			|| str_contains( $text, 'contrast failed' );
+		// Block compatibility: rejectedOperations predates validationReasons.
+		return [] !== self::list_value( $suggestion['rejectedOperations'] ?? [] );
 	}
 
 	private static function is_possible_no_op( array $suggestion, array $context ): bool {

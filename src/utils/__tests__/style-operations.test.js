@@ -376,6 +376,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: expect.stringContaining( 'Contrast check' ),
+				code: 'failed_contrast',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
@@ -421,6 +422,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: expect.stringContaining( 'Contrast check unavailable' ),
+				code: 'failed_contrast',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
@@ -458,6 +460,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: expect.stringContaining( 'color.background' ),
+				code: 'unsupported_path',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
@@ -488,6 +491,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: expect.stringContaining( 'customCSS' ),
+				code: 'unsupported_path',
 			} )
 		);
 		expect( currentRecord ).toEqual( initialRecord );
@@ -536,6 +540,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: expect.stringContaining( 'accent' ),
+				code: 'preset_unavailable',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
@@ -559,6 +564,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: expect.stringContaining( 'typography.fontSize' ),
+				code: 'preset_metadata_mismatch',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
@@ -625,6 +631,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: 'Style Book suggestions cannot switch the active site theme variation.',
+				code: 'unsupported_scope',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
@@ -652,6 +659,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: 'Style Book suggestions cannot apply site-level Global Styles operations.',
+				code: 'unsupported_scope',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
@@ -679,6 +687,7 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: 'Global Styles suggestions cannot apply Style Book block operations.',
+				code: 'unsupported_scope',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
@@ -762,6 +771,30 @@ describe( 'style-operations', () => {
 			expect.objectContaining( {
 				ok: false,
 				error: 'Style Book suggestion target "core/paragraph" no longer matches the active Style Book block "core/heading".',
+				code: 'missing_style_book_target',
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations requires a theme preset value type', () => {
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'color', 'background' ],
+					value: '#abcdef',
+					valueType: 'custom',
+					presetSlug: 'accent',
+					presetType: 'color',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				code: 'preset_required',
 			} )
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();

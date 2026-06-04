@@ -6,8 +6,67 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Support\RecommendationContextScorer;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 
 final class RecommendationContextScorerTest extends TestCase {
+
+	/**
+	 * @param array<string, mixed> $suggestion
+	 */
+	private function invokeHasValidationRisk( array $suggestion ): bool {
+		$method = new ReflectionMethod( RecommendationContextScorer::class, 'has_validation_risk' );
+		$method->setAccessible( true );
+
+		return (bool) $method->invoke( null, $suggestion );
+	}
+
+	public function test_validation_reasons_trigger_validation_risk_across_surfaces(): void {
+		$suggestion = [
+			'validationReasons' => [
+				[
+					'code'     => 'unsupported_path',
+					'severity' => 'rejected',
+				],
+			],
+		];
+		$this->assertTrue( $this->invokeHasValidationRisk( $suggestion ) );
+
+		$downgraded = [
+			'validationReasons' => [
+				[
+					'code'     => 'failed_contrast',
+					'severity' => 'downgraded',
+				],
+			],
+		];
+		$this->assertTrue( $this->invokeHasValidationRisk( $downgraded ) );
+	}
+
+	public function test_no_op_severity_does_not_trigger_validation_risk(): void {
+		$suggestion = [
+			'validationReasons' => [
+				[
+					'code'     => 'no_op',
+					'severity' => 'no_op',
+				],
+			],
+		];
+		$this->assertFalse( $this->invokeHasValidationRisk( $suggestion ) );
+	}
+
+	public function test_prose_only_text_no_longer_triggers_validation_risk(): void {
+		// Regression guard: "invalid" / "rejected" in prose must NOT set the penalty.
+		$suggestion = [
+			'label'       => 'Avoid invalid contrast pairings',
+			'description' => 'rejected ideas',
+		];
+		$this->assertFalse( $this->invokeHasValidationRisk( $suggestion ) );
+	}
+
+	public function test_rejected_operations_still_trigger_for_block_compat(): void {
+		$suggestion = [ 'rejectedOperations' => [ [ 'code' => 'stale_target' ] ] ];
+		$this->assertTrue( $this->invokeHasValidationRisk( $suggestion ) );
+	}
 
 	public function test_scores_dot_string_style_support_paths_and_penalizes_absent_concrete_paths(): void {
 		$supported   = RecommendationContextScorer::score(

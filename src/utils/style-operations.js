@@ -359,6 +359,7 @@ function getUnavailableContrastResult( side, scopeKey ) {
 	return {
 		ok: false,
 		error: `Contrast check unavailable: unresolved ${ side } at ${ scopeKey }.`,
+		code: 'failed_contrast',
 	};
 }
 
@@ -429,6 +430,7 @@ function validateReadableColorContrast( operations = [], context = {} ) {
 		return {
 			ok: false,
 			error: 'Contrast check unavailable: theme variation and color overrides must be reviewed separately.',
+			code: 'failed_contrast',
 		};
 	}
 
@@ -461,6 +463,7 @@ function validateReadableColorContrast( operations = [], context = {} ) {
 		return {
 			ok: false,
 			error: 'Contrast check unavailable: unsupported readable color path.',
+			code: 'failed_contrast',
 		};
 	}
 
@@ -510,6 +513,7 @@ function validateReadableColorContrast( operations = [], context = {} ) {
 					backgroundOperation,
 					background.hex
 				) }" at ${ scopeKey }, below the 4.5:1 minimum.`,
+				code: 'failed_contrast',
 			};
 		}
 	}
@@ -1018,6 +1022,7 @@ function validatePresetStyleOperation(
 		return {
 			ok: false,
 			error: `The suggested ${ surfaceLabel } value for ${ pathKey } must use a theme preset. ${ surfaceLabel } changed; regenerate suggestions.`,
+			code: 'preset_required',
 		};
 	}
 
@@ -1029,6 +1034,7 @@ function validatePresetStyleOperation(
 		return {
 			ok: false,
 			error: `The suggested ${ surfaceLabel } preset metadata for ${ pathKey } no longer matches the live theme contract. ${ surfaceLabel } changed; regenerate suggestions.`,
+			code: 'preset_metadata_mismatch',
 		};
 	}
 
@@ -1042,6 +1048,7 @@ function validatePresetStyleOperation(
 		return {
 			ok: false,
 			error: `The suggested ${ surfaceLabel } preset reference for ${ pathKey } no longer matches its metadata. ${ surfaceLabel } changed; regenerate suggestions.`,
+			code: 'preset_reference_mismatch',
 		};
 	}
 
@@ -1056,6 +1063,7 @@ function validatePresetStyleOperation(
 			error: `The ${ displayPresetType(
 				expectedPresetType
 			) } preset "${ presetSlug }" is no longer available. ${ surfaceLabel } changed; regenerate suggestions.`,
+			code: 'preset_unavailable',
 		};
 	}
 
@@ -1080,6 +1088,7 @@ function applyPathBasedStyleOperation( {
 		return {
 			ok: false,
 			error: `A ${ surfaceLabel } operation is missing its style path.`,
+			code: 'unsupported_path',
 		};
 	}
 
@@ -1094,6 +1103,7 @@ function applyPathBasedStyleOperation( {
 			error: `The ${ surfaceLabel } path ${ getStylePathKey(
 				operation.path
 			) } is no longer supported. ${ surfaceLabel } changed; regenerate suggestions.`,
+			code: 'unsupported_path',
 		};
 	}
 
@@ -1112,6 +1122,7 @@ function applyPathBasedStyleOperation( {
 				error: `The suggested ${ surfaceLabel } value for ${ getStylePathKey(
 					operation.path
 				) } must stay freeform. ${ surfaceLabel } changed; regenerate suggestions.`,
+				code: 'invalid_freeform_value',
 			};
 		}
 
@@ -1128,6 +1139,7 @@ function applyPathBasedStyleOperation( {
 					`The suggested ${ surfaceLabel } value for ${ getStylePathKey(
 						operation.path
 					) } is invalid.`,
+				code: 'invalid_freeform_value',
 			};
 		}
 
@@ -1204,6 +1216,7 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: 'Style Book suggestions cannot apply site-level Global Styles operations.',
+				code: 'unsupported_scope',
 			};
 		}
 
@@ -1222,6 +1235,7 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: 'Global Styles suggestions cannot apply Style Book block operations.',
+				code: 'unsupported_scope',
 			};
 		}
 
@@ -1234,6 +1248,7 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: 'A Style Book operation is missing its target block name.',
+				code: 'missing_style_book_target',
 			};
 		}
 
@@ -1241,6 +1256,7 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: 'Style Book suggestions require the active Style Book block scope before applying.',
+				code: 'missing_style_book_target',
 			};
 		}
 
@@ -1248,6 +1264,7 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: `Style Book suggestion target "${ blockName }" no longer matches the active Style Book block "${ expectedStyleBookBlockName }".`,
+				code: 'missing_style_book_target',
 			};
 		}
 
@@ -1257,6 +1274,7 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: `The Style Book target block "${ blockName }" is no longer registered in the editor.`,
+				code: 'missing_style_book_target',
 			};
 		}
 
@@ -1284,6 +1302,7 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: 'Style Book suggestions cannot switch the active site theme variation.',
+				code: 'unsupported_scope',
 			};
 		}
 
@@ -1293,6 +1312,7 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: 'The suggested theme variation is no longer available in the Site Editor.',
+				code: 'unavailable_variation',
 			};
 		}
 
@@ -1316,6 +1336,7 @@ function applyOperationToConfig( {
 		error: `Unsupported Global Styles operation: ${
 			operation?.type || 'unknown'
 		}.`,
+		code: 'unsupported_scope',
 	};
 }
 
@@ -1363,6 +1384,7 @@ export function applyGlobalStyleSuggestionOperations(
 		return {
 			ok: false,
 			error: 'This Global Styles suggestion does not include executable operations.',
+			code: 'no_executable_operations',
 		};
 	}
 

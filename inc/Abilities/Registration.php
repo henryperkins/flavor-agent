@@ -1305,6 +1305,7 @@ final class Registration {
 									'items' => [ 'type' => 'string' ],
 								],
 								'ranking'            => self::ranking_contract_schema(),
+								'validationReasons'  => self::validation_reasons_schema(),
 							]
 						),
 					],
@@ -1363,6 +1364,7 @@ final class Registration {
 									),
 								],
 								'ranking'            => self::ranking_contract_schema(),
+								'validationReasons'  => self::validation_reasons_schema(),
 							]
 						),
 					],
@@ -1993,6 +1995,38 @@ final class Registration {
 		return $schema;
 	}
 
+	/**
+	 * Output-schema fragment for the per-suggestion `validationReasons` array.
+	 *
+	 * `code` is a BOUNDED STRING (maxLength + pattern), NOT an enum (design
+	 * decision OD-1): the versioned reason vocabulary grows over releases, and
+	 * the Gutenberg ajv-draft-04 strict client validator would reject the WHOLE
+	 * recommendation payload on a single out-of-enum value. `severity` is a
+	 * fixed 3-value set and is safely enumerated.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function validation_reasons_schema(): array {
+		return [
+			'type'  => 'array',
+			'items' => [
+				'type'       => 'object',
+				'properties' => [
+					'code'     => [
+						'type'      => 'string',
+						'maxLength' => 64,
+						'pattern'   => '^[a-z0-9_-]+$',
+					],
+					'severity' => [
+						'type' => 'string',
+						'enum' => [ 'rejected', 'downgraded', 'no_op' ],
+					],
+					'message'  => [ 'type' => 'string' ],
+				],
+			],
+		];
+	}
+
 	private static function suggestion_output_schema(): array {
 		$suggestion_schema       = [
 			'type'       => 'object',
@@ -2086,6 +2120,8 @@ final class Registration {
 			],
 		];
 
+		$block_suggestion_schema['properties']['validationReasons'] = self::validation_reasons_schema();
+
 		return self::with_docs_grounding_output_schema(
 			[
 				'type'       => 'object',
@@ -2128,11 +2164,11 @@ final class Registration {
 						'items' => [
 							'type'       => 'object',
 							'properties' => [
-								'label'       => [ 'type' => 'string' ],
-								'description' => [ 'type' => 'string' ],
-								'category'    => [ 'type' => 'string' ],
-								'tone'        => [ 'type' => 'string' ],
-								'operations'  => [
+								'label'             => [ 'type' => 'string' ],
+								'description'       => [ 'type' => 'string' ],
+								'category'          => [ 'type' => 'string' ],
+								'tone'              => [ 'type' => 'string' ],
+								'operations'        => [
 									'type'  => 'array',
 									'items' => [
 										'type'       => 'object',
@@ -2153,7 +2189,8 @@ final class Registration {
 										],
 									],
 								],
-								'ranking'     => self::ranking_contract_schema(),
+								'ranking'           => self::ranking_contract_schema(),
+								'validationReasons' => self::validation_reasons_schema(),
 							],
 						],
 					],

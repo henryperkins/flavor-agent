@@ -371,6 +371,7 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'This suggestion targets the “header” area more than once and cannot be applied automatically.',
+			code: 'duplicate_area_mutation',
 		} );
 	} );
 
@@ -392,6 +393,7 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'Template-part block removals must include expectedBlockName and targetPath.',
+			code: 'invalid_anchor',
 		} );
 	} );
 
@@ -429,6 +431,7 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'Only one pattern insertion can be applied automatically per suggestion.',
+			code: 'repeated_pattern_insert',
 		} );
 	} );
 
@@ -455,6 +458,7 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'Template pattern insertions must include a placement.',
+			code: 'invalid_placement',
 		} );
 	} );
 
@@ -482,6 +486,7 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'Template pattern insertions must include a placement.',
+			code: 'invalid_placement',
 		} );
 	} );
 
@@ -509,6 +514,7 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'Template pattern insertions that include a targetPath must provide a non-empty array of non-negative indexes.',
+			code: 'invalid_anchor',
 		} );
 	} );
 
@@ -1425,6 +1431,7 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'Template-part pattern insertions must include both a pattern name and placement.',
+			code: 'invalid_placement',
 		} );
 	} );
 

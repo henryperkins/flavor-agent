@@ -54,58 +54,15 @@ final class TemplateAbilities {
 			FILTER_VALIDATE_BOOLEAN
 		);
 
-		$template_ref          = isset( $input['templateRef'] )
-			? trim( (string) $input['templateRef'] )
-			: '';
-		$template_type         = isset( $input['templateType'] ) && is_string( $input['templateType'] ) && $input['templateType'] !== ''
-			? $input['templateType']
-			: null;
-		$prompt                = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
-		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
-			? StringArray::sanitize( $input['visiblePatternNames'] )
-			: null;
-
-		if ( $template_ref === '' ) {
-			return new \WP_Error(
-				'missing_template_ref',
-				'A templateRef is required.',
-				[ 'status' => 400 ]
-			);
+		$prepared = self::prepare_template_signature_context( $input );
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
 		}
 
-		$context = ServerCollector::for_template( $template_ref, $template_type, $visible_pattern_names );
-		if ( is_wp_error( $context ) ) {
-			return $context;
-		}
-
-		$review_context = ServerCollector::for_template(
-			$template_ref,
-			is_string( $context['templateType'] ?? null ) && '' !== $context['templateType']
-				? sanitize_key( (string) $context['templateType'] )
-				: $template_type,
-			null
-		);
-		if ( is_wp_error( $review_context ) ) {
-			return $review_context;
-		}
-
-		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
-			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];
-		}
-
-		$editor_slots     = self::normalize_template_editor_slots( $input['editorSlots'] ?? null );
-		$editor_structure = self::normalize_template_editor_structure( $input['editorStructure'] ?? null );
-		$context          = self::apply_template_live_slot_context( $context, $editor_slots );
-		$context          = self::apply_template_live_structure_context( $context, $editor_structure );
-		$design_semantics = DesignSemantics::normalize(
-			$input['designSemantics'] ?? [],
-			'template'
-		);
-		if ( ! empty( $design_semantics ) ) {
-			$context['designSemantics']        = $design_semantics;
-			$review_context['designSemantics'] = $design_semantics;
-		}
-		$docs_result = self::collect_wordpress_docs_guidance_result(
+		$context        = $prepared['context'];
+		$review_context = $prepared['reviewContext'];
+		$prompt         = $prepared['prompt'];
+		$docs_result    = self::collect_wordpress_docs_guidance_result(
 			$context,
 			$prompt,
 			[
@@ -1500,7 +1457,122 @@ final class TemplateAbilities {
 		return array_values( $anchors );
 	}
 
+	/**
+	 * Build the request-side resolved/review template context from a normalized
+	 * input, before any AI response is parsed. Single source of truth shared by
+	 * recommend_template() and the signature-boundary test seam.
+	 *
+	 * @param array<string, mixed> $input
+	 * @return array{context: array<string, mixed>, reviewContext: array<string, mixed>, prompt: string}|\WP_Error
+	 */
+	private static function prepare_template_signature_context( array $input ): array|\WP_Error {
+		$template_ref          = isset( $input['templateRef'] )
+			? trim( (string) $input['templateRef'] )
+			: '';
+		$template_type         = isset( $input['templateType'] ) && is_string( $input['templateType'] ) && $input['templateType'] !== ''
+			? $input['templateType']
+			: null;
+		$prompt                = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
+		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
+			? StringArray::sanitize( $input['visiblePatternNames'] )
+			: null;
+
+		if ( $template_ref === '' ) {
+			return new \WP_Error(
+				'missing_template_ref',
+				'A templateRef is required.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$context = ServerCollector::for_template( $template_ref, $template_type, $visible_pattern_names );
+		if ( is_wp_error( $context ) ) {
+			return $context;
+		}
+
+		$review_context = ServerCollector::for_template(
+			$template_ref,
+			is_string( $context['templateType'] ?? null ) && '' !== $context['templateType']
+				? sanitize_key( (string) $context['templateType'] )
+				: $template_type,
+			null
+		);
+		if ( is_wp_error( $review_context ) ) {
+			return $review_context;
+		}
+
+		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
+			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];
+		}
+
+		$editor_slots     = self::normalize_template_editor_slots( $input['editorSlots'] ?? null );
+		$editor_structure = self::normalize_template_editor_structure( $input['editorStructure'] ?? null );
+		$context          = self::apply_template_live_slot_context( $context, $editor_slots );
+		$context          = self::apply_template_live_structure_context( $context, $editor_structure );
+		$design_semantics = DesignSemantics::normalize(
+			$input['designSemantics'] ?? [],
+			'template'
+		);
+		if ( ! empty( $design_semantics ) ) {
+			$context['designSemantics']        = $design_semantics;
+			$review_context['designSemantics'] = $design_semantics;
+		}
+
+		return [
+			'context'       => $context,
+			'reviewContext' => $review_context,
+			'prompt'        => $prompt,
+		];
+	}
+
+	/**
+	 * Test seam: returns the genuine resolved/review context-input arrays handed
+	 * to RecommendationResolvedSignature / RecommendationReviewSignature for a
+	 * representative template request, before any response suggestion is parsed.
+	 *
+	 * Mirrors the signature call path in recommend_template() (docs grounding is
+	 * collected in signature-only mode so no AI Connector or remote docs call is
+	 * made).
+	 *
+	 * @param array<string, mixed> $input
+	 * @return array{resolved: array<string, mixed>, review: array<string, mixed>}|\WP_Error
+	 */
+	public static function build_template_signature_payloads_for_tests( array $input ): array|\WP_Error {
+		$prepared = self::prepare_template_signature_context( self::normalize_input( $input ) );
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
+		}
+
+		$docs_result = self::collect_wordpress_docs_guidance_result(
+			$prepared['context'],
+			$prepared['prompt'],
+			[ 'signatureOnly' => true ]
+		);
+
+		$fingerprint = (string) ( $docs_result['fingerprint'] ?? '' );
+
+		return [
+			'resolved' => [
+				'context'                  => $prepared['context'],
+				'prompt'                   => $prepared['prompt'],
+				'docsGroundingFingerprint' => $fingerprint,
+			],
+			'review'   => self::build_template_review_context_payload( $prepared['reviewContext'], $fingerprint ),
+		];
+	}
+
 	private static function build_template_review_context_signature( array $context, string $docs_grounding_fingerprint = '' ): string {
+		return RecommendationReviewSignature::from_payload(
+			'template',
+			self::build_template_review_context_payload( $context, $docs_grounding_fingerprint )
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @return array<string, mixed>
+	 */
+	private static function build_template_review_context_payload( array $context, string $docs_grounding_fingerprint = '' ): array {
 		$payload      = [
 			'template'                 => self::normalize_template_review_identity( $context ),
 			'allowedAreas'             => self::normalize_template_review_allowed_areas(
@@ -1530,10 +1602,7 @@ final class TemplateAbilities {
 			$payload['designSemantics'] = $design_semantics;
 		}
 
-		return RecommendationReviewSignature::from_payload(
-			'template',
-			$payload
-		);
+		return $payload;
 	}
 
 	private static function build_template_part_review_context_signature( array $context, string $docs_grounding_fingerprint = '' ): string {

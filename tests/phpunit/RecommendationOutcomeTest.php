@@ -272,4 +272,103 @@ final class RecommendationOutcomeTest extends TestCase {
 		$this->assertStringNotContainsString( 'launch', wp_json_encode( $result['after']['outcome'] ) );
 		$this->assertStringNotContainsString( 'copy', wp_json_encode( $result['after']['outcome'] ) );
 	}
+
+	public function test_ranking_set_item_carries_validation_reason_and_version(): void {
+		$entry = $this->shownEntry(
+			[
+				'rankingSet' => [
+					[
+						'suggestionKey'               => 'block:block:1',
+						'ranking'                     => [ 'blendedScore' => 0.5 ],
+						'validationReason'            => 'failed_contrast',
+						'validationVocabularyVersion' => 'validation-reasons-v1',
+					],
+				],
+			]
+		);
+
+		$out  = RecommendationOutcome::normalize_entry( $entry );
+		$item = $out['after']['outcome']['rankingSet'][0];
+
+		$this->assertSame( 'failed_contrast', $item['validationReason'] );
+		$this->assertSame( 'validation-reasons-v1', $item['validationVocabularyVersion'] );
+	}
+
+	public function test_validation_blocked_keeps_primary_reason_and_version(): void {
+		$entry = $this->outcomeEntry(
+			'validation_blocked',
+			[
+				'reason'                      => 'unsupported_path',
+				'validationVocabularyVersion' => 'validation-reasons-v1',
+			]
+		);
+		$out   = RecommendationOutcome::normalize_entry( $entry );
+
+		$this->assertSame( 'unsupported_path', $out['after']['outcome']['reason'] );
+		$this->assertSame( 'validation-reasons-v1', $out['after']['outcome']['validationVocabularyVersion'] );
+	}
+
+	public function test_selected_for_review_carries_sibling_validation_reason_without_touching_reason_slot(): void {
+		$entry = $this->outcomeEntry(
+			'selected_for_review',
+			[
+				'reason'                      => 'review_opened',
+				'validationReason'            => 'failed_contrast',
+				'validationVocabularyVersion' => 'validation-reasons-v1',
+			]
+		);
+		$out   = RecommendationOutcome::normalize_entry( $entry );
+
+		$this->assertSame( 'review_opened', $out['after']['outcome']['reason'] ); // dedupe-bearing slot unchanged.
+		$this->assertSame( 'failed_contrast', $out['after']['outcome']['validationReason'] ); // sibling.
+		// The client co-locates the vocab version with the sibling reason; it must round-trip.
+		$this->assertSame( 'validation-reasons-v1', $out['after']['outcome']['validationVocabularyVersion'] );
+	}
+
+	/**
+	 * @param array<string, mixed> $outcome
+	 * @return array<string, mixed>
+	 */
+	private function shownEntry( array $outcome ): array {
+		return [
+			'type'    => 'recommendation_outcome',
+			'surface' => 'block',
+			'target'  => [
+				'recommendationSetId' => 'set-1',
+			],
+			'after'   => [
+				'outcome' => array_merge(
+					[
+						'event'               => 'shown',
+						'recommendationSetId' => 'set-1',
+					],
+					$outcome
+				),
+			],
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $outcome
+	 * @return array<string, mixed>
+	 */
+	private function outcomeEntry( string $event, array $outcome ): array {
+		return [
+			'type'    => 'recommendation_outcome',
+			'surface' => 'block',
+			'target'  => [
+				'recommendationSetId' => 'set-1',
+				'suggestionKey'       => 'block:suggestions:1',
+			],
+			'after'   => [
+				'outcome' => array_merge(
+					[
+						'event'               => $event,
+						'recommendationSetId' => 'set-1',
+					],
+					$outcome
+				),
+			],
+		];
+	}
 }

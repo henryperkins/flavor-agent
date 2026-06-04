@@ -1,4 +1,5 @@
 import {
+	buildRankingSetFromSuggestions,
 	buildRecommendationOutcomeDedupeKey,
 	buildRecommendationOutcomeEntry,
 	buildRecommendationSetId,
@@ -416,5 +417,229 @@ describe( 'recommendation outcomes', () => {
 			'launch'
 		);
 		expect( JSON.stringify( entry.after.outcome ) ).not.toContain( 'copy' );
+	} );
+} );
+
+describe( 'validationReason on outcomes', () => {
+	beforeEach( () => {
+		resetRecommendationOutcomeDedupeForTests();
+	} );
+
+	it( 'carries the primary reason + version into rankingSet items', () => {
+		const set = buildRankingSetFromSuggestions( [
+			{
+				suggestionKey: 'style:styles:1',
+				ranking: { blendedScore: 0.4 },
+				validationReasons: [
+					{ code: 'failed_contrast', severity: 'downgraded' },
+				],
+			},
+		] );
+		expect( set[ 0 ].validationReason ).toBe( 'failed_contrast' );
+		expect( set[ 0 ].validationVocabularyVersion ).toBe(
+			'validation-reasons-v1'
+		);
+	} );
+
+	it( 'selects the highest-severity reason for rankingSet items', () => {
+		const set = buildRankingSetFromSuggestions( [
+			{
+				suggestionKey: 'style:styles:1',
+				ranking: { blendedScore: 0.4 },
+				validationReasons: [
+					{ code: 'failed_contrast', severity: 'downgraded' },
+					{ code: 'unsupported_path', severity: 'rejected' },
+				],
+			},
+		] );
+		expect( set[ 0 ].validationReason ).toBe( 'unsupported_path' );
+	} );
+
+	it( 'leaves reason-less rankingSet items identical to today', () => {
+		const set = buildRankingSetFromSuggestions( [
+			{
+				suggestionKey: 'style:styles:1',
+				ranking: { blendedScore: 0.4 },
+			},
+		] );
+		expect( set[ 0 ] ).toEqual( {
+			suggestionKey: 'style:styles:1',
+			ranking: { blendedScore: 0.4 },
+		} );
+		expect( set[ 0 ] ).not.toHaveProperty( 'validationReason' );
+		expect( set[ 0 ] ).not.toHaveProperty( 'validationVocabularyVersion' );
+	} );
+
+	it( 'carries the primary reason into the apply identity', () => {
+		const identity = getRecommendationIdentityForApply( {
+			recommendationOutcome: {
+				recommendationSetId: 's:0:h',
+				suggestionKey: 'k',
+			},
+			validationReasons: [ { code: 'unsupported_path' } ],
+		} );
+		expect( identity.validationReason ).toBe( 'unsupported_path' );
+	} );
+
+	it( 'omits validationReason from the apply identity when reason-less', () => {
+		const identity = getRecommendationIdentityForApply( {
+			recommendationOutcome: {
+				recommendationSetId: 's:0:h',
+				suggestionKey: 'k',
+			},
+		} );
+		expect( identity ).not.toHaveProperty( 'validationReason' );
+	} );
+
+	it( 'adds a sibling validationReason on selected_for_review without touching reason', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'selected_for_review',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			suggestionKey: 'style:styles:1',
+			reason: 'review_opened',
+			suggestion: {
+				ranking: { blendedScore: 0.4 },
+				validationReasons: [
+					{ code: 'failed_contrast', severity: 'downgraded' },
+				],
+			},
+		} );
+		expect( entry.after.outcome.reason ).toBe( 'review_opened' );
+		expect( entry.after.outcome.validationReason ).toBe(
+			'failed_contrast'
+		);
+	} );
+
+	it( 'never stamps a sibling validationReason on shown outcomes', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'shown',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			rankingSet: [
+				{
+					suggestionKey: 'style:styles:1',
+					ranking: { blendedScore: 0.4 },
+					validationReasons: [ { code: 'failed_contrast' } ],
+				},
+			],
+		} );
+		expect( entry.after.outcome ).not.toHaveProperty( 'validationReason' );
+	} );
+
+	it( 'omits the sibling validationReason on selected_for_review when reason-less', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'selected_for_review',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			suggestionKey: 'style:styles:1',
+			reason: 'review_opened',
+			suggestion: { ranking: { blendedScore: 0.4 } },
+		} );
+		expect( entry.after.outcome ).not.toHaveProperty( 'validationReason' );
+	} );
+
+	it( 'stamps the vocabulary version on validation_blocked outcomes (reason slot holds a vocab code)', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'validation_blocked',
+			surface: 'template',
+			recommendationSetId: 'template:1:set',
+			suggestionKey: 'template:suggestions:1',
+			reason: 'unsupported_path',
+		} );
+		expect( entry.after.outcome.reason ).toBe( 'unsupported_path' );
+		expect( entry.after.outcome.validationVocabularyVersion ).toBe(
+			'validation-reasons-v1'
+		);
+	} );
+
+	it( 'co-locates the vocabulary version with the sibling reason on selected_for_review', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'selected_for_review',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			suggestionKey: 'style:styles:1',
+			reason: 'review_opened',
+			suggestion: {
+				ranking: { blendedScore: 0.4 },
+				validationReasons: [
+					{ code: 'failed_contrast', severity: 'downgraded' },
+				],
+			},
+		} );
+		expect( entry.after.outcome.validationReason ).toBe(
+			'failed_contrast'
+		);
+		expect( entry.after.outcome.validationVocabularyVersion ).toBe(
+			'validation-reasons-v1'
+		);
+	} );
+
+	it( 'omits the vocabulary version on selected_for_review when reason-less', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'selected_for_review',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			suggestionKey: 'style:styles:1',
+			reason: 'review_opened',
+			suggestion: { ranking: { blendedScore: 0.4 } },
+		} );
+		expect( entry.after.outcome ).not.toHaveProperty(
+			'validationVocabularyVersion'
+		);
+	} );
+
+	it( 'never stamps the vocabulary version on shown outcomes (rankingSet items carry it)', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'shown',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			rankingSet: [
+				{
+					suggestionKey: 'style:styles:1',
+					ranking: { blendedScore: 0.4 },
+					validationReasons: [ { code: 'failed_contrast' } ],
+				},
+			],
+		} );
+		expect( entry.after.outcome ).not.toHaveProperty(
+			'validationVocabularyVersion'
+		);
+		expect(
+			entry.after.outcome.rankingSet[ 0 ].validationVocabularyVersion
+		).toBe( 'validation-reasons-v1' );
+	} );
+
+	it( 'preserves pre-normalized validation metadata on shown rankingSet items', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'shown',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			rankingSet: [
+				{
+					suggestionKey: 'style:styles:1',
+					ranking: { blendedScore: 0.4 },
+					validationReason: 'failed_contrast',
+					validationVocabularyVersion: 'validation-reasons-v1',
+				},
+			],
+		} );
+		expect( entry.after.outcome ).not.toHaveProperty(
+			'validationVocabularyVersion'
+		);
+		expect( entry.after.outcome.rankingSet[ 0 ] ).toEqual(
+			expect.objectContaining( {
+				validationReason: 'failed_contrast',
+				validationVocabularyVersion: 'validation-reasons-v1',
+			} )
+		);
 	} );
 } );

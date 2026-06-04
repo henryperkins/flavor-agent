@@ -218,6 +218,7 @@ final class PromptRulesTest extends TestCase {
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -261,6 +262,7 @@ final class PromptRulesTest extends TestCase {
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -669,6 +671,7 @@ TEXT
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -717,6 +720,7 @@ TEXT
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -766,6 +770,7 @@ TEXT
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -1001,6 +1006,7 @@ TEXT
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -1138,6 +1144,7 @@ TEXT
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -1217,6 +1224,7 @@ TEXT
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -1289,6 +1297,7 @@ TEXT
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
@@ -1383,6 +1392,7 @@ TEXT
 					'proposedOperations' => [],
 					'operations'         => [],
 					'rejectedOperations' => [],
+					'validationReasons'  => [],
 				],
 			],
 			$result['block']
