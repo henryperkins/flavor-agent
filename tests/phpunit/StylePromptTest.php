@@ -1504,4 +1504,242 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( 'return ranking as null', strtolower( $system ) );
 		$this->assertStringContainsString( 'use null for unknown ranking object values', strtolower( $system ) );
 	}
+
+	/**
+	 * Shared style context for branch coverage. `surface` is injected per row so
+	 * a single helper can drive both global-styles and style-book rejections.
+	 *
+	 * @param string $surface Scope surface (`global-styles` or `style-book`).
+	 * @return array<string, mixed>
+	 */
+	private function branch_context( string $surface = 'global-styles' ): array {
+		return [
+			'scope'        => [
+				'surface'   => $surface,
+				'blockName' => 'style-book' === $surface ? 'core/group' : '',
+			],
+			'styleContext' => [
+				'themeTokens'         => [
+					// preset_exists() reads the string `colors` list, not colorPresets.
+					'colors' => [ 'accent: #ff5500' ],
+				],
+				'supportedStylePaths' => [
+					[
+						'path'        => [ 'color', 'background' ],
+						'valueSource' => 'color',
+					],
+					[
+						'path'        => [ 'typography', 'lineHeight' ],
+						'valueSource' => 'freeform',
+					],
+				],
+				'availableVariations' => [
+					[
+						'title'    => 'Default',
+						'settings' => [],
+						'styles'   => [],
+					],
+					[
+						'title'    => 'Midnight',
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * One row per deterministic rejection branch in validate_operations().
+	 *
+	 * @return array<string, array{0: mixed, 1: array<string, mixed>, 2: string}>
+	 */
+	public function styleRejectionBranches(): array {
+		return [
+			'malformed operation entry'                  => [
+				'not-an-array',
+				$this->branch_context(),
+				'malformed_operation',
+			],
+			'set_styles on style-book scope'             => [
+				[
+					'type'  => 'set_styles',
+					'path'  => [ 'color', 'background' ],
+					'value' => '#abcdef',
+				],
+				$this->branch_context( 'style-book' ),
+				'unsupported_scope',
+			],
+			'set_block_styles on global-styles scope'    => [
+				[
+					'type'      => 'set_block_styles',
+					'blockName' => 'core/group',
+					'path'      => [ 'color', 'background' ],
+					'value'     => '#abcdef',
+				],
+				$this->branch_context(),
+				'unsupported_scope',
+			],
+			'set_block_styles missing style-book target' => [
+				[
+					'type'      => 'set_block_styles',
+					'blockName' => 'core/paragraph',
+					'path'      => [ 'color', 'background' ],
+					'value'     => 'var:preset|color|accent',
+				],
+				$this->branch_context( 'style-book' ),
+				'missing_style_book_target',
+			],
+			'unsupported path'                           => [
+				[
+					'type'  => 'set_styles',
+					'path'  => [ 'spacing', 'blockGap' ],
+					'value' => '1rem',
+				],
+				$this->branch_context(),
+				'unsupported_path',
+			],
+			'invalid freeform value'                     => [
+				[
+					'type'  => 'set_styles',
+					'path'  => [ 'typography', 'lineHeight' ],
+					'value' => 'not-a-line-height',
+				],
+				$this->branch_context(),
+				'invalid_freeform_value',
+			],
+			'preset required but freeform given'         => [
+				[
+					'type'      => 'set_styles',
+					'path'      => [ 'color', 'background' ],
+					'value'     => 'var:preset|color|accent',
+					'valueType' => 'freeform',
+				],
+				$this->branch_context(),
+				'preset_required',
+			],
+			'preset required but slug missing'           => [
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => '',
+				],
+				$this->branch_context(),
+				'preset_required',
+			],
+			'preset metadata type mismatch'              => [
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'fontSize',
+					'presetSlug' => 'accent',
+				],
+				$this->branch_context(),
+				'preset_metadata_mismatch',
+			],
+			'preset value unparseable'                   => [
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => '#abcdef',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				$this->branch_context(),
+				'preset_reference_mismatch',
+			],
+			'preset parsed type mismatch'                => [
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|font-size|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				$this->branch_context(),
+				'preset_reference_mismatch',
+			],
+			'preset parsed slug mismatch'                => [
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|other',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				$this->branch_context(),
+				'preset_reference_mismatch',
+			],
+			'preset not present in theme'                => [
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|missing',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'missing',
+				],
+				$this->branch_context(),
+				'preset_unavailable',
+			],
+			'set_theme_variation on style-book scope'    => [
+				[
+					'type'           => 'set_theme_variation',
+					'variationIndex' => 1,
+					'variationTitle' => 'Midnight',
+				],
+				$this->branch_context( 'style-book' ),
+				'unsupported_scope',
+			],
+			'unresolvable theme variation'               => [
+				[
+					'type'           => 'set_theme_variation',
+					'variationIndex' => 99,
+					'variationTitle' => 'Nonexistent',
+				],
+				$this->branch_context(),
+				'unavailable_variation',
+			],
+		];
+	}
+
+	/**
+	 * @dataProvider styleRejectionBranches
+	 *
+	 * @param mixed                $operation    Single operation under test.
+	 * @param array<string, mixed> $context      Style context.
+	 * @param string               $expected_code Expected per-branch reason code.
+	 */
+	public function test_each_style_validation_branch_maps_to_a_specific_code(
+		mixed $operation,
+		array $context,
+		string $expected_code
+	): void {
+		$result = StylePrompt::validate_operations_for_tests( [ $operation ], $context );
+		$codes  = array_column( $result['reasons'], 'code' );
+
+		$this->assertContains(
+			$expected_code,
+			$codes,
+			sprintf( 'Expected reason code "%s"; got: %s', $expected_code, implode( ', ', $codes ) )
+		);
+		$this->assertNotContains(
+			'operation_validation_failed',
+			$codes,
+			'Deterministic style branches must map to a specific code, never the generic fallback.'
+		);
+		$this->assertSame(
+			[],
+			$result['operations'],
+			'A rejected operation must not survive into the operations list.'
+		);
+	}
 }
