@@ -7,19 +7,30 @@ namespace FlavorAgent\Activity;
 final class RecommendationOutcomeMetrics {
 
 	/**
+	 * Outcome surfaces whose validation_blocked reasons use the versioned reason
+	 * vocabulary. `pattern` is intentionally excluded: it emits unversioned
+	 * pipeline reasons (e.g. empty_pattern_blocks, disallowed_block_types,
+	 * not_visible_in_inserter) that must not pollute the per-reason breakdown.
+	 *
+	 * @var array<int, string>
+	 */
+	private const EXECUTABLE_OUTCOME_SURFACES = [ 'block', 'template', 'template-part', 'global-styles', 'style-book' ];
+
+	/**
 	 * @param array<int, array<string, mixed>> $entries
-	 * @return array<string, float|int>
+	 * @return array<string, float|int|array<string, int>>
 	 */
 	public static function evaluate( array $entries ): array {
-		$shown_sets                = [];
-		$pattern_shown_sets        = [];
-		$selected_sets             = [];
-		$pattern_insert_sets       = [];
-		$stale_blocked_events      = [];
-		$validation_blocked_events = [];
-		$attempted_events          = [];
-		$linked_applied_sets       = [];
-		$unlinked_apply_count      = 0;
+		$shown_sets                   = [];
+		$pattern_shown_sets           = [];
+		$selected_sets                = [];
+		$pattern_insert_sets          = [];
+		$stale_blocked_events         = [];
+		$validation_blocked_events    = [];
+		$validation_blocked_by_reason = [];
+		$attempted_events             = [];
+		$linked_applied_sets          = [];
+		$unlinked_apply_count         = 0;
 
 		foreach ( $entries as $entry ) {
 			if ( ! is_array( $entry ) ) {
@@ -68,6 +79,13 @@ final class RecommendationOutcomeMetrics {
 				if ( 'validation_blocked' === $event ) {
 					$validation_blocked_events[ $event_key ] = true;
 					$attempted_events[ $event_key ]          = true;
+
+					if ( in_array( $surface, self::EXECUTABLE_OUTCOME_SURFACES, true ) ) {
+						$reason = (string) ( $outcome['reason'] ?? '' );
+						if ( '' !== $reason ) {
+							$validation_blocked_by_reason[ $reason ] = ( $validation_blocked_by_reason[ $reason ] ?? 0 ) + 1;
+						}
+					}
 				}
 
 				continue;
@@ -108,6 +126,7 @@ final class RecommendationOutcomeMetrics {
 			'patternInsertionRate'      => self::rate( count( $pattern_insert_sets ), $pattern_shown_count ),
 			'staleBlockedRate'          => self::rate( count( $stale_blocked_events ), $attempted_count ),
 			'validationBlockedRate'     => self::rate( count( $validation_blocked_events ), $attempted_count ),
+			'validationBlockedByReason' => $validation_blocked_by_reason,
 			'applyConversionRate'       => self::rate( $shown_apply_set_count, $shown_count ),
 			'reviewApplyConversionRate' => self::rate( $review_apply_set_count, $selected_count ),
 			'unlinkedApplyCount'        => $unlinked_apply_count,
