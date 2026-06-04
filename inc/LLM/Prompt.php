@@ -9,6 +9,7 @@ use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\RecommendationContextScorer;
 use FlavorAgent\Support\RankingContract;
+use FlavorAgent\Support\ValidationReason;
 
 final class Prompt {
 
@@ -1199,6 +1200,17 @@ SYSTEM;
 
 					$suggestion['operations']         = $validation['operations'];
 					$suggestion['rejectedOperations'] = $validation['rejectedOperations'];
+					// Pass-through: block rejection codes ARE the validation-reasons
+					// vocabulary, so this never changes block behavior (zero regression).
+					$suggestion['validationReasons'] = ValidationReason::normalize(
+						array_map(
+							static fn( array $rejection ): array => [
+								'code'    => $rejection['code'] ?? '',
+								'message' => $rejection['message'] ?? '',
+							],
+							$validation['rejectedOperations']
+						)
+					);
 
 					return $suggestion;
 				},
