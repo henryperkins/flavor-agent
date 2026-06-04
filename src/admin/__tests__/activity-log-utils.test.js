@@ -115,6 +115,56 @@ describe( 'activity log utils', () => {
 		} );
 	} );
 
+	test( 'normalizeActivityEntries exposes allow-listed no-model request markers', () => {
+		const entries = normalizeActivityEntries( [
+			{
+				type: 'request_diagnostic',
+				after: {
+					modelRequest: {
+						attempted: false,
+						reason: 'no_rankable_candidates',
+					},
+				},
+				request: {
+					ai: {
+						requestToken: 'token-only',
+					},
+				},
+			},
+		] );
+
+		expect( entries[ 0 ].modelRequest ).toEqual( {
+			attempted: false,
+			reason: 'no_rankable_candidates',
+		} );
+	} );
+
+	test( 'normalizeActivityEntries drops malformed no-model request markers', () => {
+		const entries = normalizeActivityEntries( [
+			{
+				type: 'request_diagnostic',
+				after: {
+					modelRequest: {
+						attempted: true,
+						reason: 'no_rankable_candidates',
+					},
+				},
+			},
+			{
+				type: 'request_diagnostic',
+				after: {
+					modelRequest: {
+						attempted: false,
+						reason: 'not_allowed',
+					},
+				},
+			},
+		] );
+
+		expect( entries[ 0 ].modelRequest ).toBeNull();
+		expect( entries[ 1 ].modelRequest ).toBeNull();
+	} );
+
 	test( 'normalizeActivityEntries truncates verbose stored suggestion titles', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {

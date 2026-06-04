@@ -768,6 +768,19 @@ function AiRequestLogPanel( { entry, bootData } ) {
 		} );
 	}, [ requestLogId ] );
 
+	if ( entry?.modelRequest?.attempted === false ) {
+		return (
+			<div className="flavor-agent-activity-log__request-log flavor-agent-activity-log__request-log--no-model">
+				<p className="flavor-agent-activity-log__copy">
+					{ __(
+						'No model request was attempted for this diagnostic.',
+						'flavor-agent'
+					) }
+				</p>
+			</div>
+		);
+	}
+
 	if ( ! requestLogId && ! requestToken ) {
 		return null;
 	}
