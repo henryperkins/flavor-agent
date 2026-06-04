@@ -255,11 +255,11 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 	}
 
 	public function test_pattern_surface_exposes_runtime_signature_when_index_is_usable(): void {
-		WordPressTestState::$capabilities = [
+		WordPressTestState::$capabilities        = [
 			'edit_theme_options' => true,
 			'manage_options'     => true,
 		];
-		WordPressTestState::$options      = [
+		WordPressTestState::$options             = [
 			'flavor_agent_openai_provider'                 => 'cloudflare_workers_ai',
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
@@ -270,7 +270,7 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 			'wpai_features_enabled'                        => true,
 			'wpai_feature_flavor-agent_enabled'            => true,
 		];
-		WordPressTestState::$connectors   = [
+		WordPressTestState::$connectors          = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
