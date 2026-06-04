@@ -81,14 +81,37 @@ describe( 'inserter-dom', () => {
 			).toBe( true );
 		} );
 
-		test( 'falls back to toolbar buttons whose aria-label mentions inserter', () => {
+		test( 'falls back only to explicit block inserter labels', () => {
 			document.body.innerHTML = `
 				<div class="edit-site-header__start">
 					<button id="undo" aria-label="Undo"></button>
-					<button id="ins" aria-label="Block Inserter"></button>
+					<button id="ins" aria-label="Toggle block inserter"></button>
 				</div>
 			`;
+
 			expect( findInserterToggle( document )?.id ).toBe( 'ins' );
+		} );
+
+		test( 'rejects list view and document outline buttons near the inserter', () => {
+			document.body.innerHTML = `
+				<div class="edit-post-header-toolbar">
+					<button id="outline" aria-label="Document overview"></button>
+					<button id="list" aria-label="List View"></button>
+					<button id="ins" class="block-editor-inserter__toggle" aria-label="Toggle block inserter"></button>
+				</div>
+			`;
+
+			expect( findInserterToggle( document )?.id ).toBe( 'ins' );
+		} );
+
+		test( 'does not use generic inserter labels without block intent', () => {
+			document.body.innerHTML = `
+				<div class="edit-post-header-toolbar">
+					<button id="generic" aria-label="Open inserter tools"></button>
+				</div>
+			`;
+
+			expect( findInserterToggle( document ) ).toBeNull();
 		} );
 
 		test( 'ignores toolbar buttons whose aria-label does not match', () => {

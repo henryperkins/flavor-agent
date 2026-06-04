@@ -168,15 +168,18 @@ describe( 'InserterBadge', () => {
 			await Promise.resolve();
 		} );
 
+		const badgeAnchor = button.nextElementSibling;
 		expect(
-			anchor.classList.contains( 'flavor-agent-inserter-badge-anchor' )
+			badgeAnchor?.classList.contains(
+				'flavor-agent-inserter-badge-anchor'
+			)
 		).toBe( true );
 		expect(
-			anchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+			badgeAnchor?.querySelector( '.flavor-agent-inserter-badge--ready' )
 		).not.toBeNull();
 	} );
 
-	test( 'moves the anchor class when the toolbar toggle remounts', async () => {
+	test( 'moves the badge anchor when the toolbar toggle remounts', async () => {
 		const firstAnchor = document.createElement( 'div' );
 		const firstButton = document.createElement( 'button' );
 		const nextAnchor = document.createElement( 'div' );
@@ -190,7 +193,7 @@ describe( 'InserterBadge', () => {
 		renderComponent();
 
 		expect(
-			firstAnchor.classList.contains(
+			firstButton.nextElementSibling?.classList.contains(
 				'flavor-agent-inserter-badge-anchor'
 			)
 		).toBe( true );
@@ -203,22 +206,18 @@ describe( 'InserterBadge', () => {
 			await Promise.resolve();
 		} );
 
+		const movedAnchor = nextButton.nextElementSibling;
 		expect(
-			firstAnchor.classList.contains(
-				'flavor-agent-inserter-badge-anchor'
-			)
-		).toBe( false );
-		expect(
-			nextAnchor.classList.contains(
+			movedAnchor?.classList.contains(
 				'flavor-agent-inserter-badge-anchor'
 			)
 		).toBe( true );
 		expect(
-			nextAnchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+			movedAnchor?.querySelector( '.flavor-agent-inserter-badge--ready' )
 		).not.toBeNull();
 	} );
 
-	test( 'adds and removes the anchor class around the resolved toggle parent', () => {
+	test( 'renders the badge inside a dedicated anchor next to the resolved toggle', () => {
 		const toolbar = document.createElement( 'div' );
 		const anchor = document.createElement( 'div' );
 		const button = document.createElement( 'button' );
@@ -231,19 +230,22 @@ describe( 'InserterBadge', () => {
 
 		renderComponent();
 
+		const badgeAnchor = button.nextElementSibling;
 		expect(
-			anchor.classList.contains( 'flavor-agent-inserter-badge-anchor' )
+			badgeAnchor?.classList.contains(
+				'flavor-agent-inserter-badge-anchor'
+			)
 		).toBe( true );
 		expect(
-			anchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+			badgeAnchor?.querySelector( '.flavor-agent-inserter-badge--ready' )
 		).not.toBeNull();
 		expect(
-			anchor
-				.querySelector( '.flavor-agent-inserter-badge--ready' )
+			badgeAnchor
+				?.querySelector( '.flavor-agent-inserter-badge--ready' )
 				?.getAttribute( 'title' )
 		).toBe( 'Hero match.' );
 		expect(
-			anchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+			badgeAnchor?.querySelector( '.flavor-agent-inserter-badge--ready' )
 				?.tagName
 		).toBe( 'OUTPUT' );
 
@@ -252,8 +254,34 @@ describe( 'InserterBadge', () => {
 		} );
 
 		expect(
-			anchor.classList.contains( 'flavor-agent-inserter-badge-anchor' )
-		).toBe( false );
+			anchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+		).toBeNull();
+	} );
+
+	test( 'portals into a dedicated adjacent anchor instead of the shared toolbar parent', async () => {
+		const toolbar = document.createElement( 'div' );
+		const button = document.createElement( 'button' );
+		const sibling = document.createElement( 'button' );
+
+		toolbar.className = 'edit-post-header-toolbar';
+		button.className = 'block-editor-inserter__toggle';
+		sibling.setAttribute( 'aria-label', 'Document overview' );
+		toolbar.appendChild( button );
+		toolbar.appendChild( sibling );
+		document.body.appendChild( toolbar );
+		mockFindInserterToggle.mockReturnValue( button );
+
+		renderComponent();
+
+		const anchor = toolbar.querySelector(
+			'.flavor-agent-inserter-badge-anchor'
+		);
+		expect( anchor ).not.toBeNull();
+		expect( anchor.previousSibling ).toBe( button );
+		expect( anchor.parentElement ).toBe( toolbar );
+		expect(
+			toolbar.querySelector( '.flavor-agent-inserter-badge--ready' )
+		).toBe( anchor.querySelector( '.flavor-agent-inserter-badge--ready' ) );
 	} );
 
 	test( 'hides ready badge when raw recommendations have no allowed matches', () => {
