@@ -1196,6 +1196,25 @@ final class RegistrationTest extends TestCase {
 		$this->assertTrue( $permission_callback( [] ) );
 	}
 
+	public function test_recommend_patterns_schema_exposes_request_purpose_model_request_and_runtime_signature(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-patterns'] ?? null;
+		$this->assertIsArray( $ability );
+
+		$input_properties = $ability['input_schema']['properties'] ?? [];
+		$this->assertArrayHasKey( 'requestPurpose', $input_properties );
+		$this->assertSame( 'string', $input_properties['requestPurpose']['type'] ?? null );
+		$this->assertTrue( $ability['input_schema']['additionalProperties'] ?? false );
+
+		$output_properties = $ability['output_schema']['properties'] ?? [];
+		$this->assertArrayHasKey( 'patternRuntimeSignature', $output_properties );
+		$this->assertSame( 'string', $output_properties['patternRuntimeSignature']['type'] ?? null );
+		$this->assertArrayHasKey( 'modelRequest', $output_properties['diagnostics']['properties'] ?? [] );
+	}
+
 	public function test_pattern_recommendation_permission_callback_checks_document_entity_scope(): void {
 		Registration::register_category();
 		Registration::register_recommendation_abilities();

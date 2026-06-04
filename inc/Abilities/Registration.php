@@ -835,8 +835,8 @@ final class Registration {
 				],
 			],
 			'flavor-agent/recommend-patterns' => [
-				'type'       => 'object',
-				'properties' => [
+				'type'                 => 'object',
+				'properties'           => [
 					'postType'             => [
 						'type'        => 'string',
 						'description' => 'Current post type. For example: "post".',
@@ -861,8 +861,13 @@ final class Registration {
 						'type'        => 'boolean',
 						'description' => 'When true, only resolve the server-issued apply-context signature and review freshness signature without calling retrieval or the model. Useful for revalidating a pattern recommendation before inserting it.',
 					],
+					'requestPurpose'       => [
+						'type'        => 'string',
+						'description' => 'Optional client request purpose. The editor sends "inserter_ranking" only for real inserter-triggered pattern ranking requests.',
+					],
 				],
-				'required'   => [ 'postType' ],
+				'additionalProperties' => true,
+				'required'             => [ 'postType' ],
 			],
 			'flavor-agent/recommend-navigation' => [
 				'type'       => 'object',
@@ -1197,10 +1202,17 @@ final class Registration {
 								]
 							),
 							'dropReasons'        => self::open_object_schema(),
+							'modelRequest'       => self::open_object_schema(
+								[
+									'attempted' => [ 'type' => 'boolean' ],
+									'reason'    => [ 'type' => 'string' ],
+								]
+							),
 						]
 					),
 					'reviewContextSignature'   => [ 'type' => 'string' ],
 					'resolvedContextSignature' => [ 'type' => 'string' ],
+					'patternRuntimeSignature'  => [ 'type' => 'string' ],
 					'requestMeta'              => self::open_object_schema(),
 				],
 			]

@@ -49,6 +49,10 @@ final class PatternAbilities {
 	private const MAX_LLM_CONTENT_PREVIEW_CHARS          = 240;
 	private const SYNCED_PATTERN_NAME_PREFIX             = 'core/block/';
 
+	private const PATTERN_REQUEST_PURPOSE_INSERTER_RANKING       = 'inserter_ranking';
+	private const PATTERN_MODEL_REQUEST_NO_RANKABLE_CANDIDATES   = 'no_rankable_candidates';
+	private const PATTERN_MODEL_REQUEST_MISSING_VISIBLE_PATTERNS = 'missing_visible_patterns';
+
 	public static function list_patterns( mixed $input ): array {
 		$input           = self::normalize_input( $input );
 		$categories      = $input['categories'] ?? null;
@@ -220,6 +224,8 @@ final class PatternAbilities {
 			$state
 		);
 
+		$pattern_runtime_signature = self::pattern_runtime_signature_from_state( $state );
+
 		if ( $resolve_signature_only ) {
 			$docs_result = self::collect_wordpress_docs_guidance_result(
 				[
@@ -258,7 +264,8 @@ final class PatternAbilities {
 				$diagnostics,
 				$docs_result,
 				$review_context_signature,
-				$resolved_context_signature
+				$resolved_context_signature,
+				$pattern_runtime_signature
 			);
 		}
 
@@ -522,7 +529,8 @@ final class PatternAbilities {
 				$diagnostics,
 				$docs_result,
 				$review_context_signature,
-				$resolved_context_signature
+				$resolved_context_signature,
+				$pattern_runtime_signature
 			);
 		}
 
@@ -727,7 +735,8 @@ final class PatternAbilities {
 			$diagnostics,
 			$docs_result,
 			$review_context_signature,
-			$resolved_context_signature
+			$resolved_context_signature,
+			$pattern_runtime_signature
 		);
 	}
 
@@ -916,6 +925,25 @@ final class PatternAbilities {
 		return $context;
 	}
 
+	public static function current_pattern_runtime_signature(): string {
+		$state = PatternIndex::get_runtime_state();
+
+		return self::pattern_runtime_signature_from_state( $state );
+	}
+
+	private static function pattern_runtime_signature_from_state( array $state ): string {
+		if ( ! PatternIndex::has_usable_index( $state ) ) {
+			return '';
+		}
+
+		return sanitize_text_field(
+			RecommendationResolvedSignature::from_payload(
+				'pattern-runtime',
+				self::build_pattern_catalog_signature_context( $state )
+			)
+		);
+	}
+
 	private static function build_pattern_catalog_signature_context( array $state ): array {
 		$stale_reasons = StringArray::sanitize( $state['stale_reasons'] ?? [] );
 
@@ -945,9 +973,10 @@ final class PatternAbilities {
 		array $diagnostics,
 		array $docs_result = [],
 		string $review_context_signature = '',
-		string $resolved_context_signature = ''
+		string $resolved_context_signature = '',
+		string $pattern_runtime_signature = ''
 	): array {
-		return [
+		$response = [
 			'recommendations'          => $recommendations,
 			'docsGrounding'            => [] !== $docs_result ? DocsGuidanceResult::public_summary( $docs_result ) : null,
 			'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
@@ -964,6 +993,12 @@ final class PatternAbilities {
 				'dropReasons'        => self::sanitize_pattern_drop_reasons( $diagnostics['dropReasons'] ?? [] ),
 			],
 		];
+
+		if ( '' !== $pattern_runtime_signature ) {
+			$response['patternRuntimeSignature'] = $pattern_runtime_signature;
+		}
+
+		return $response;
 	}
 
 	/**
