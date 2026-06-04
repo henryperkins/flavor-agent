@@ -1,4 +1,8 @@
 import { createActivityEntry } from './activity-history';
+import {
+	primaryValidationReason,
+	VALIDATION_REASONS_VERSION,
+} from '../utils/validation-reasons';
 
 export const RECOMMENDATION_OUTCOME_TYPE = 'recommendation_outcome';
 export const OUTCOME_VISIBILITY = 'diagnostic';
@@ -276,7 +280,7 @@ function getStableRankingSetSuggestionKey(
 	return fallbackKey;
 }
 
-function buildRankingSetFromSuggestions( suggestions = [] ) {
+export function buildRankingSetFromSuggestions( suggestions = [] ) {
 	if ( ! Array.isArray( suggestions ) ) {
 		return [];
 	}
@@ -294,9 +298,20 @@ function buildRankingSetFromSuggestions( suggestions = [] ) {
 				return null;
 			}
 
+			const primary = primaryValidationReason(
+				suggestion?.validationReasons
+			);
+
 			return {
 				suggestionKey,
 				ranking,
+				...( primary
+					? {
+							validationReason: primary.code,
+							validationVocabularyVersion:
+								VALIDATION_REASONS_VERSION,
+					  }
+					: {} ),
 			};
 		} )
 		.filter( Boolean )
@@ -623,6 +638,11 @@ export function buildRecommendationOutcomeEntry( {
 		outcomeRanking = { ranking: rankingSnapshot };
 	}
 
+	const engagedPrimary =
+		safeEvent !== 'shown'
+			? primaryValidationReason( suggestion?.validationReasons )
+			: null;
+
 	const targetPayload = {
 		recommendationSetId: setId,
 		...( finalSuggestionKey ? { suggestionKey: finalSuggestionKey } : {} ),
@@ -659,6 +679,9 @@ export function buildRecommendationOutcomeEntry( {
 					? Math.max( 0, identity.resultCount )
 					: 0,
 				...outcomeRanking,
+				...( engagedPrimary
+					? { validationReason: engagedPrimary.code }
+					: {} ),
 			},
 		},
 		document: safeDocument,
@@ -696,11 +719,14 @@ export function getRecommendationIdentityForApply( suggestion = {} ) {
 		return null;
 	}
 
+	const primary = primaryValidationReason( suggestion?.validationReasons );
+
 	return {
 		recommendationSetId: identity.recommendationSetId,
 		suggestionKey:
 			identity.suggestionKey || getSuggestionOutcomeKey( suggestion, '' ),
 		sourceRequestSignature: identity.sourceRequestSignature,
 		rank: identity.rank,
+		...( primary ? { validationReason: primary.code } : {} ),
 	};
 }
