@@ -1207,6 +1207,90 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( 'Contrast check:', $parsed['suggestions'][0]['description'] );
 	}
 
+	public function test_parse_response_records_failed_contrast_reason_when_paired_color_ops_fail_contrast(): void {
+		$parsed = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Soft on soft',
+							'description' => 'Use the wash on base.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|wash',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'wash',
+								],
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|base',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'base',
+								],
+							],
+						],
+					],
+					'explanation' => 'demo',
+				]
+			),
+			$this->build_global_styles_context_with_low_contrast_palette()
+		);
+
+		$this->assertSame( 'advisory', $parsed['suggestions'][0]['tone'] );
+		$codes = array_column( $parsed['suggestions'][0]['validationReasons'] ?? [], 'code' );
+		$this->assertContains(
+			'failed_contrast',
+			$codes,
+			sprintf( 'Expected failed_contrast reason; got: %s', implode( ', ', $codes ) )
+		);
+		$this->assertSame(
+			'downgraded',
+			$parsed['suggestions'][0]['validationReasons'][ array_search( 'failed_contrast', $codes, true ) ]['severity'] ?? null
+		);
+	}
+
+	public function test_parse_response_records_no_executable_operations_backstop_when_ops_emptied_without_other_reason(): void {
+		$parsed = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Inert change',
+							'description' => 'An op of an unrecognized type leaves nothing executable.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'  => 'unknown_operation',
+									'path'  => [ 'color', 'background' ],
+									'value' => 'var:preset|color|accent',
+								],
+							],
+						],
+					],
+					'explanation' => 'demo',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertSame( 'advisory', $parsed['suggestions'][0]['tone'] );
+		$this->assertSame( [], $parsed['suggestions'][0]['operations'] );
+		$codes = array_column( $parsed['suggestions'][0]['validationReasons'] ?? [], 'code' );
+		$this->assertContains(
+			'no_executable_operations',
+			$codes,
+			sprintf( 'Expected no_executable_operations backstop; got: %s', implode( ', ', $codes ) )
+		);
+	}
+
 	public function test_parse_response_uses_validation_prefix_when_drop_and_contrast_both_fire(): void {
 		$parsed = StylePrompt::parse_response(
 			wp_json_encode(
