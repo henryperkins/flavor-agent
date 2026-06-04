@@ -2760,6 +2760,34 @@ const actions = {
 							insertionTargetSignature
 						)
 					);
+
+					const cacheKey =
+						typeof requestContext?.cacheKey === 'string'
+							? requestContext.cacheKey
+							: '';
+					if ( cacheKey ) {
+						localDispatch(
+							actions.setPatternRankingCacheEntry( cacheKey, {
+								recommendations: result.recommendations || [],
+								diagnostics: result.diagnostics || null,
+								requestSignature,
+								insertionTargetSignature,
+								resolvedContextSignature:
+									getResolvedContextSignatureFromResponse(
+										result
+									) || '',
+								docsGroundingWarning:
+									normalizeDocsGroundingWarning(
+										result.docsGrounding
+									),
+								patternRuntimeSignature:
+									getPatternRuntimeSignatureFromResponse(
+										result
+									),
+							} )
+						);
+					}
+
 					return reloadStoreActivitySession(
 						localDispatch,
 						registry,

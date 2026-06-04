@@ -296,6 +296,12 @@ export function getSurfaceCapability( surface, input = null ) {
 		message:
 			structuredCapability?.message ||
 			getDefaultMessage( surface, reason ),
+		patternRuntimeSignature:
+			surface === 'pattern'
+				? normalizeString(
+						structuredCapability?.patternRuntimeSignature
+				  )
+				: '',
 	};
 }
 

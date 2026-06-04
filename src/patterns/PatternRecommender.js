@@ -34,7 +34,10 @@ import { store as noticesStore } from '@wordpress/notices';
 import CapabilityNotice from '../components/CapabilityNotice';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import { getResolvedContextSignatureFromResponse, STORE_NAME } from '../store';
-import { buildPatternInsertionTargetSignature } from '../utils/recommendation-request-signature';
+import {
+	buildPatternInsertionTargetSignature,
+	buildPatternRecommendationRequestSignature,
+} from '../utils/recommendation-request-signature';
 import {
 	buildRecommendationSetId,
 	getRecommendationOutcomeSummaryFromPayload,
@@ -739,7 +742,10 @@ function PatternInserterNotice( {
 
 export default function PatternRecommender() {
 	const registry = useRegistry();
-	const canRecommend = getSurfaceCapability( 'pattern' ).available;
+	const patternCapability = getSurfaceCapability( 'pattern' );
+	const canRecommend = patternCapability.available;
+	const currentPatternRuntimeSignature =
+		patternCapability.patternRuntimeSignature || '';
 	const postType = useSelect(
 		( select ) => select( editorStore ).getCurrentPostType(),
 		[]
@@ -855,6 +861,7 @@ export default function PatternRecommender() {
 		patternInsertionTargetSignature,
 		patternResolvedContextSignature,
 		patternDocsGroundingWarning,
+		getPatternRankingCacheEntry,
 	} = useSelect( ( select ) => {
 		const store = select( STORE_NAME );
 
@@ -871,12 +878,14 @@ export default function PatternRecommender() {
 				store.getPatternResolvedContextSignature?.() || '',
 			patternDocsGroundingWarning:
 				store.getPatternDocsGroundingWarning?.() || null,
+			getPatternRankingCacheEntry: store.getPatternRankingCacheEntry,
 		};
 	}, [] );
 	const {
 		fetchPatternRecommendations,
 		recordRecommendationOutcome,
 		resolvePatternRecommendationSignature,
+		hydratePatternRecommendationsFromCache,
 	} = useDispatch( STORE_NAME );
 	const { insertBlocks, removeBlocks } = useDispatch( blockEditorStore );
 	const { createSuccessNotice, createErrorNotice } =
@@ -958,12 +967,17 @@ export default function PatternRecommender() {
 			input.insertionContext = insertionContext;
 		}
 
+		if ( selectedBlockName ) {
+			input.blockContext = { blockName: selectedBlockName };
+		}
+
 		return input;
 	}, [
 		effectivePostType,
 		templateType,
 		visiblePatternNames,
 		insertionContext,
+		selectedBlockName,
 	] );
 
 	const currentInsertionTargetSignature = useMemo(
@@ -982,6 +996,16 @@ export default function PatternRecommender() {
 			insertionIndex,
 			insertionContext,
 		]
+	);
+	const currentPatternCacheKey = useMemo(
+		() =>
+			currentPatternRuntimeSignature
+				? buildPatternRecommendationRequestSignature( {
+						...buildBaseInput(),
+						patternRuntimeSignature: currentPatternRuntimeSignature,
+				  } )
+				: '',
+		[ buildBaseInput, currentPatternRuntimeSignature ]
 	);
 	const patternSourceRequestSignature = useMemo(
 		() =>
@@ -1034,12 +1058,20 @@ export default function PatternRecommender() {
 
 	const fetchPatternRecommendationsForCurrentTarget = useCallback(
 		( input = buildBaseInput() ) =>
-			fetchPatternRecommendations( input, {
-				insertionTargetSignature: currentInsertionTargetSignature,
-			} ),
+			fetchPatternRecommendations(
+				{
+					...input,
+					requestPurpose: 'inserter_ranking',
+				},
+				{
+					insertionTargetSignature: currentInsertionTargetSignature,
+					cacheKey: currentPatternCacheKey,
+				}
+			),
 		[
 			buildBaseInput,
 			currentInsertionTargetSignature,
+			currentPatternCacheKey,
 			fetchPatternRecommendations,
 		]
 	);
@@ -1063,14 +1095,21 @@ export default function PatternRecommender() {
 	);
 
 	const handleRetry = useCallback( () => {
-		if ( ! canRecommend || ! effectivePostType ) {
+		if (
+			! canRecommend ||
+			! isInserterOpen ||
+			! effectivePostType ||
+			! currentPatternRuntimeSignature
+		) {
 			return;
 		}
 
 		fetchPatternRecommendationsForCurrentTarget();
 	}, [
 		canRecommend,
+		isInserterOpen,
 		effectivePostType,
+		currentPatternRuntimeSignature,
 		fetchPatternRecommendationsForCurrentTarget,
 	] );
 
@@ -1608,8 +1647,21 @@ export default function PatternRecommender() {
 	useEffect( () => {
 		if (
 			! canRecommend ||
+			! isInserterOpen ||
 			! effectivePostType ||
-			insertionPointAllowsNoPatterns
+			! currentPatternRuntimeSignature ||
+			insertionPointAllowsNoPatterns ||
+			visiblePatternNames.length === 0
+		) {
+			return;
+		}
+
+		const cacheEntry =
+			currentPatternCacheKey &&
+			getPatternRankingCacheEntry?.( currentPatternCacheKey );
+		if (
+			cacheEntry &&
+			hydratePatternRecommendationsFromCache( cacheEntry )
 		) {
 			return;
 		}
@@ -1617,19 +1669,30 @@ export default function PatternRecommender() {
 		fetchPatternRecommendationsForCurrentTarget();
 	}, [
 		canRecommend,
+		isInserterOpen,
 		effectivePostType,
+		currentPatternRuntimeSignature,
 		insertionPointAllowsNoPatterns,
+		visiblePatternNames.length,
+		currentPatternCacheKey,
+		getPatternRankingCacheEntry,
+		hydratePatternRecommendationsFromCache,
 		fetchPatternRecommendationsForCurrentTarget,
 	] );
 
 	const handleSearchInput = useCallback(
 		( value ) => {
 			scheduleSearchFetch( () => {
-				if ( ! effectivePostType || insertionPointAllowsNoPatterns ) {
+				if (
+					! effectivePostType ||
+					! currentPatternRuntimeSignature ||
+					insertionPointAllowsNoPatterns
+				) {
 					return;
 				}
 
-				// buildBaseInput() already carries the latest insertionContext.
+				// buildBaseInput() already carries the latest insertionContext
+				// and selected block context.
 				const input = buildBaseInput();
 				const trimmedValue = value.trim();
 
@@ -1637,18 +1700,14 @@ export default function PatternRecommender() {
 					input.prompt = trimmedValue;
 				}
 
-				if ( selectedBlockName ) {
-					input.blockContext = { blockName: selectedBlockName };
-				}
-
 				fetchPatternRecommendationsForCurrentTarget( input );
 			} );
 		},
 		[
 			effectivePostType,
+			currentPatternRuntimeSignature,
 			insertionPointAllowsNoPatterns,
 			buildBaseInput,
-			selectedBlockName,
 			fetchPatternRecommendationsForCurrentTarget,
 			scheduleSearchFetch,
 		]

@@ -70,6 +70,13 @@ describe( 'buildPatternRecommendationRequestSignature', () => {
 				},
 			} )
 		).not.toBe( baseline );
+
+		expect(
+			buildPatternRecommendationRequestSignature( {
+				...baseInput,
+				patternRuntimeSignature: 'runtime-a',
+			} )
+		).not.toBe( baseline );
 	} );
 } );
 

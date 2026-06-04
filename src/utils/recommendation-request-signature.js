@@ -164,6 +164,9 @@ export function buildPatternRecommendationRequestSignature( input = {} ) {
 		),
 		insertionContext: normalizedInput.insertionContext || null,
 		blockContext: normalizedInput.blockContext || null,
+		patternRuntimeSignature: normalizeStringValue(
+			normalizedInput.patternRuntimeSignature
+		),
 	} );
 }
 
