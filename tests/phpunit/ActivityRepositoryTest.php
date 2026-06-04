@@ -116,6 +116,138 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	public function test_create_logs_database_error_when_insert_fails(): void {
+		$original_wpdb = $GLOBALS['wpdb'] ?? null;
+		$previous_log  = \ini_get( 'error_log' );
+		$log_file      = tempnam( sys_get_temp_dir(), 'flavor-agent-activity-' );
+		$failed_wpdb   = new class() extends \wpdb {
+			public string $last_error = 'Data too long for column "entity_ref" at row 1';
+
+			public function insert( string $table, array $data, array $format = [] ) {
+				unset( $table, $data, $format );
+
+				return false;
+			}
+		};
+
+		Repository::install();
+
+		if ( $original_wpdb instanceof \wpdb ) {
+			$failed_wpdb->prefix = $original_wpdb->prefix;
+		}
+
+		\ini_set( 'error_log', false === $log_file ? '' : $log_file );
+		$GLOBALS['wpdb'] = $failed_wpdb;
+
+		try {
+			$result = Repository::create(
+				$this->build_template_entry( 'activity-insert-failure', '2026-03-24T10:00:00Z' )
+			);
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'flavor_agent_activity_insert_failed', $result->get_error_code() );
+			$this->assertStringContainsString(
+				'flavor_agent_activity_insert_failed: Data too long for column "entity_ref" at row 1',
+				(string) file_get_contents( (string) $log_file )
+			);
+		} finally {
+			$GLOBALS['wpdb'] = $original_wpdb;
+			\ini_set( 'error_log', false === $previous_log ? '' : (string) $previous_log );
+
+			if ( false !== $log_file && file_exists( $log_file ) ) {
+				unlink( $log_file );
+			}
+		}
+	}
+
+	public function test_admin_projection_bounds_varchar_columns_and_keeps_full_reference_searchable(): void {
+		$multibyte_marker = (string) json_decode( '"\u00e9\u96ea\ud83d\ude42"' );
+		$long_reference   = 'outcome:pattern:pattern_inserted_from_shelf:' . str_repeat( 'visible-pattern-name-' . $multibyte_marker . '-', 20 );
+		$entry            = [
+			'id'         => 'activity-long-projection',
+			'type'       => 'apply_custom_projection_operation',
+			'surface'    => 'template',
+			'target'     => [
+				'blockName' => 'core/' . str_repeat( 'deeply-nested-pattern-block-', 10 ),
+				'blockPath' => range( 0, 80 ),
+			],
+			'suggestion' => 'Projection bounding repro.',
+			'before'     => [
+				'operations' => [],
+			],
+			'after'      => [
+				'operations' => [
+					[
+						'type' => str_repeat( 'custom_projection_operation_', 8 ),
+					],
+				],
+			],
+			'request'    => [
+				'prompt'    => 'Keep the complete reference searchable.',
+				'reference' => $long_reference,
+				'ai'        => [
+					'backendLabel'          => str_repeat( 'WordPress AI Client ', 14 ),
+					'model'                 => str_repeat( 'provider-managed-model-', 12 ),
+					'pathLabel'             => str_repeat( 'WordPress AI Client via Settings > Flavor Agent ', 7 ),
+					'ownerLabel'            => str_repeat( 'Settings > Flavor Agent ', 12 ),
+					'credentialSourceLabel' => str_repeat( 'Provider-managed ', 8 ),
+					'selectedProviderLabel' => str_repeat( 'Azure OpenAI ', 18 ),
+					'ability'               => 'flavor-agent/' . str_repeat( 'recommend-pattern-', 16 ),
+					'route'                 => 'wp-abilities:' . str_repeat( 'flavor-agent/recommend-pattern:', 9 ),
+				],
+			],
+			'document'   => [
+				'scopeKey' => 'post:' . str_repeat( 'entity-', 40 ),
+				'postType' => str_repeat( 'custom-post-type-', 6 ),
+				'entityId' => str_repeat( 'entity-', 40 ),
+			],
+			'timestamp'  => '2026-03-24T10:00:00Z',
+		];
+
+		$projection = $this->build_admin_projection( $entry );
+		$limits     = [
+			'admin_post_type'           => 64,
+			'admin_entity_id'           => 191,
+			'admin_block_path'          => 191,
+			'admin_operation_type'      => 64,
+			'admin_operation_label'     => 191,
+			'admin_provider'            => 191,
+			'admin_model'               => 191,
+			'admin_provider_path'       => 255,
+			'admin_configuration_owner' => 191,
+			'admin_credential_source'   => 64,
+			'admin_selected_provider'   => 191,
+			'admin_request_ability'     => 191,
+			'admin_request_route'       => 191,
+			'admin_request_reference'   => 191,
+		];
+
+		foreach ( $limits as $column => $limit ) {
+			$this->assertLessThanOrEqual(
+				$limit,
+				$this->string_length( (string) ( $projection[ $column ] ?? '' ) ),
+				$column . ' must fit its schema width.'
+			);
+		}
+
+		$this->assertStringStartsWith(
+			'outcome:pattern:pattern_inserted_from_shelf:',
+			(string) $projection['admin_request_reference']
+		);
+		$this->assertStringEndsWith(
+			'-' . substr( md5( $long_reference ), 0, 8 ),
+			(string) $projection['admin_request_reference']
+		);
+		$this->assertSame(
+			1,
+			preg_match( '//u', (string) $projection['admin_request_reference'] )
+		);
+		$this->assertStringContainsString(
+			$long_reference,
+			(string) $projection['admin_search_text']
+		);
+	}
+
 	public function test_query_returns_the_latest_window_for_a_scope(): void {
 		Repository::install();
 
@@ -1771,5 +1903,24 @@ final class ActivityRepositoryTest extends TestCase {
 			],
 			'timestamp'  => $timestamp,
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 * @return array<string, mixed>
+	 */
+	private function build_admin_projection( array $entry ): array {
+		$method = new \ReflectionMethod( Repository::class, 'build_admin_projection_from_entry' );
+		$method->setAccessible( true );
+
+		$projection = $method->invoke( null, $entry );
+
+		return is_array( $projection ) ? $projection : [];
+	}
+
+	private function string_length( string $value ): int {
+		return function_exists( 'mb_strlen' )
+			? mb_strlen( $value, 'UTF-8' )
+			: strlen( $value );
 	}
 }

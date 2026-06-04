@@ -62,6 +62,21 @@ describe( 'style-book/dom selectors', () => {
 			);
 		} );
 
+		test( 'falls back to the Style Book preview host when the Styles sidebar is absent', () => {
+			document.body.innerHTML = `
+				<div class="interface-interface-skeleton__content">
+					<div id="style-book-preview" class="editor-style-book">
+						<div class="editor-style-book__preview">
+							<iframe class="editor-style-book__iframe"></iframe>
+						</div>
+					</div>
+				</div>
+			`;
+			expect( findStylesSidebarMountNode( document )?.id ).toBe(
+				'style-book-preview'
+			);
+		} );
+
 		test( 'avoids choosing between multiple unrelated Styles regions', () => {
 			document.body.innerHTML = `
 				<div role="region" aria-label="Styles" id="theme-styles"></div>
@@ -271,6 +286,19 @@ describe( 'style-book/dom selectors', () => {
 				sidebarMountNode: null,
 				target: { blockName: 'core/heading', blockTitle: 'Heading' },
 			} );
+		} );
+
+		test( 'reports the Style Book preview host as the mount node when no sidebar exists', () => {
+			document.body.innerHTML = `
+				<div id="style-book-preview" class="editor-style-book">
+					<iframe class="editor-style-book__iframe"></iframe>
+				</div>
+			`;
+
+			const state = getStyleBookUiState( document );
+
+			expect( state.isActive ).toBe( true );
+			expect( state.sidebarMountNode?.id ).toBe( 'style-book-preview' );
 		} );
 
 		test( 'reports the resolved Styles sidebar mount node', () => {

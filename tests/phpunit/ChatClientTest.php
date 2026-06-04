@@ -342,7 +342,7 @@ final class ChatClientTest extends TestCase {
 		$this->assertObjectSchemasRequireAllProperties( $schema );
 	}
 
-	public function test_connector_json_schema_serializes_empty_object_properties_for_schema_compatible_connector(): void {
+	public function test_connector_json_schema_uses_primitive_style_operation_values_for_schema_compatible_connector(): void {
 		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
@@ -366,16 +366,54 @@ final class ChatClientTest extends TestCase {
 		ChatClient::chat(
 			'system prompt',
 			'user prompt',
-			ResponseSchema::get( 'template' )
+			ResponseSchema::get( 'style' )
 		);
 
-		$schema            = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
-		$attributes_schema = $schema['properties']['suggestions']['items']['properties']['operations']['items']['properties']['expectedTarget']['properties']['attributes'] ?? null;
+		$schema       = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
+		$value_schema = $schema['properties']['suggestions']['items']['properties']['operations']['items']['properties']['value'] ?? null;
 
-		$this->assertIsArray( $attributes_schema );
-		$this->assertArrayHasKey( 'properties', $attributes_schema );
-		$this->assertInstanceOf( \stdClass::class, $attributes_schema['properties'] );
-		$this->assertSame( '{}', wp_json_encode( $attributes_schema['properties'] ) );
+		$this->assertIsArray( $value_schema );
+		$this->assertSame( [ 'string', 'number', 'boolean', 'null' ], $value_schema['type'] ?? null );
+		$this->assertArrayNotHasKey( 'items', $value_schema );
+		$this->assertArrayNotHasKey( 'properties', $value_schema );
+	}
+
+	public function test_connector_json_schema_omits_server_generated_template_expected_targets_for_schema_compatible_connector(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                     = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Use the current structure."}';
+
+		foreach ( [ 'template', 'template_part' ] as $surface ) {
+			WordPressTestState::$last_ai_client_prompt = [];
+
+			ChatClient::chat(
+				'system prompt',
+				'user prompt',
+				ResponseSchema::get( $surface )
+			);
+
+			$schema     = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
+			$properties = $schema['properties']['suggestions']['items']['properties']['operations']['items']['properties'] ?? [];
+
+			$this->assertIsArray( $properties );
+			$this->assertArrayNotHasKey( 'expectedTarget', $properties, "{$surface} LLM schema should not request server-generated expectedTarget fingerprints." );
+		}
 	}
 
 	public function test_connector_skips_schema_that_exceeds_union_limit(): void {

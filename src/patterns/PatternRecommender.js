@@ -58,6 +58,7 @@ import {
 import {
 	filterInsertableRecommendedPatterns,
 	getRejectedPatternBlockNames,
+	getUnsafePatternBindingSourceNames,
 	resolvePatternBlocks,
 } from './pattern-insertability';
 import {
@@ -432,6 +433,10 @@ function getPatternInsertabilityDropReason(
 		return 'empty_pattern_blocks';
 	}
 
+	if ( getUnsafePatternBindingSourceNames( pattern ).length > 0 ) {
+		return 'unsafe_binding_sources';
+	}
+
 	return getRejectedPatternBlockNames( pattern, rootClientId, blockEditor )
 		.length > 0
 		? 'disallowed_block_types'
@@ -512,6 +517,18 @@ function getUnreadableSyncedPatternMessage( diagnostics ) {
 	} skipped because current WordPress permissions do not allow read access.`;
 }
 
+function getUnsafeBindingSourcesSkippedMessage( count ) {
+	if ( count <= 0 ) {
+		return '';
+	}
+
+	return `${ formatCount( count, 'ranked pattern' ) } ${
+		count === 1 ? 'was' : 'were'
+	} skipped because ${
+		count === 1 ? 'its' : 'their'
+	} block bindings are not safe to render in the current editor.`;
+}
+
 function PatternFilteredCandidateNotice( { diagnostics } ) {
 	const message = getUnreadableSyncedPatternMessage( diagnostics );
 
@@ -529,12 +546,24 @@ function PatternFilteredCandidateNotice( { diagnostics } ) {
 function getPatternEmptyMessage(
 	recommendations,
 	diagnostics,
-	{ matchedRecommendationCount = 0, insertableRecommendationCount = 0 } = {}
+	{
+		matchedRecommendationCount = 0,
+		insertableRecommendationCount = 0,
+		unsafeBindingSourceDropCount = 0,
+	} = {}
 ) {
 	const unreadableMessage = getUnreadableSyncedPatternMessage( diagnostics );
 
 	if ( unreadableMessage ) {
 		return unreadableMessage;
+	}
+
+	const unsafeBindingSourcesMessage = getUnsafeBindingSourcesSkippedMessage(
+		unsafeBindingSourceDropCount
+	);
+
+	if ( unsafeBindingSourcesMessage ) {
+		return unsafeBindingSourcesMessage;
 	}
 
 	if (
@@ -896,6 +925,13 @@ export default function PatternRecommender() {
 			);
 		},
 		[ recommendations, builtRecommendedPatterns, inserterRootClientId ]
+	);
+	const unsafeBindingSourceDropCount = useMemo(
+		() =>
+			droppedRecommendedPatterns.filter(
+				( { reason } ) => reason === 'unsafe_binding_sources'
+			).length,
+		[ droppedRecommendedPatterns ]
 	);
 	const connectorApprovalNotice = useMemo(
 		() => getConnectorApprovalNotice( 'pattern', patternErrorDetails ),
@@ -1741,6 +1777,7 @@ export default function PatternRecommender() {
 								builtRecommendedPatterns.length,
 							insertableRecommendationCount:
 								recommendedPatterns.length,
+							unsafeBindingSourceDropCount,
 						}
 					) }
 				/>

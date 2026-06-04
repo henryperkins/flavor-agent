@@ -31,6 +31,13 @@ const STYLE_BOOK_CONTAINER_SELECTOR = [
 	'[data-wp-component="GlobalStylesSidebar"]',
 ].join( ', ' );
 
+const STYLE_BOOK_PREVIEW_MOUNT_SELECTOR = [
+	'.editor-style-book',
+	'.edit-site-style-book',
+	'.edit-site-global-styles-screen-style-book',
+	'[data-wp-component="StyleBook"]',
+].join( ', ' );
+
 const STYLE_BOOK_IFRAME_SELECTOR = [
 	'.editor-style-book__iframe',
 	'iframe[title="Style Book"]',
@@ -263,6 +270,14 @@ function getScopedStylesRegion( stylesRegions ) {
 	);
 }
 
+function findStyleBookPreviewMountNode( documentRoot ) {
+	const iframe =
+		queryFirst( documentRoot, '.editor-style-book__iframe' ) ||
+		queryFirst( documentRoot, STYLE_BOOK_IFRAME_SELECTOR );
+
+	return closestMatching( iframe, STYLE_BOOK_PREVIEW_MOUNT_SELECTOR );
+}
+
 function findStyleBookExampleForBlockName( iframeDocument, blockName ) {
 	if ( ! iframeDocument || ! blockName ) {
 		return null;
@@ -348,11 +363,17 @@ export function findStylesSidebarMountNode( root = document ) {
 		documentRoot,
 		'[role="region"][aria-label="Styles"]'
 	);
+	const scopedStylesRegion = getScopedStylesRegion( stylesRegions );
 
-	return (
-		getScopedStylesRegion( stylesRegions ) ||
-		( stylesRegions.length === 1 ? stylesRegions[ 0 ] : null )
-	);
+	if ( scopedStylesRegion ) {
+		return scopedStylesRegion;
+	}
+
+	if ( stylesRegions.length === 1 ) {
+		return stylesRegions[ 0 ];
+	}
+
+	return findStyleBookPreviewMountNode( documentRoot );
 }
 
 export function findStyleBookIframe( root = document ) {

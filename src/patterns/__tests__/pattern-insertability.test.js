@@ -1,8 +1,11 @@
 const mockCreateBlock = jest.fn();
 const mockRawHandler = jest.fn();
+const mockGetBlockBindingsSources = jest.fn();
 
 jest.mock( '@wordpress/blocks', () => ( {
 	createBlock: ( ...args ) => mockCreateBlock( ...args ),
+	getBlockBindingsSources: ( ...args ) =>
+		mockGetBlockBindingsSources( ...args ),
 	rawHandler: ( ...args ) => mockRawHandler( ...args ),
 } ) );
 
@@ -21,6 +24,8 @@ describe( 'resolvePatternBlocks', () => {
 		} ) );
 		mockRawHandler.mockReset();
 		mockRawHandler.mockReturnValue( [] );
+		mockGetBlockBindingsSources.mockReset();
+		mockGetBlockBindingsSources.mockReturnValue( {} );
 	} );
 
 	test( 'resolves synced user patterns to a core/block reference', () => {
@@ -148,5 +153,80 @@ describe( 'filterInsertableRecommendedPatterns', () => {
 				blockEditor
 			)
 		).toEqual( [ acceptedPair ] );
+	} );
+
+	test( 'drops patterns bound to client sources without getValues', () => {
+		const unsafePair = {
+			pattern: {
+				name: 'twentytwentyfive/binding-format',
+				blocks: [
+					{
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [
+							{
+								name: 'core/paragraph',
+								attributes: {
+									metadata: {
+										bindings: {
+											content: {
+												source: 'twentytwentyfive/format',
+											},
+										},
+									},
+								},
+							},
+						],
+					},
+				],
+			},
+			recommendation: {
+				name: 'twentytwentyfive/binding-format',
+				reason: 'Post format label.',
+			},
+		};
+		const safePair = {
+			pattern: {
+				name: 'theme/pattern-overrides',
+				blocks: [
+					{
+						name: 'core/paragraph',
+						attributes: {
+							metadata: {
+								bindings: {
+									content: {
+										source: 'core/pattern-overrides',
+									},
+								},
+							},
+						},
+					},
+				],
+			},
+			recommendation: {
+				name: 'theme/pattern-overrides',
+				reason: 'Safe overrides.',
+			},
+		};
+		const blockEditor = {
+			canInsertBlockType: jest.fn( () => true ),
+		};
+
+		mockGetBlockBindingsSources.mockReturnValue( {
+			'core/pattern-overrides': {
+				getValues: jest.fn(),
+			},
+			'twentytwentyfive/format': {
+				getValues: undefined,
+			},
+		} );
+
+		expect(
+			filterInsertableRecommendedPatterns(
+				[ unsafePair, safePair ],
+				'root-a',
+				blockEditor
+			)
+		).toEqual( [ safePair ] );
 	} );
 } );

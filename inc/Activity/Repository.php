@@ -23,6 +23,22 @@ final class Repository {
 	private const ADMIN_HISTORY_QUERY_ENTITY_BATCH_SIZE   = 50;
 	private const ADMIN_HISTORY_QUERY_KEY_SEPARATOR       = "\x1F";
 	private const ADMIN_PROJECTION_SELECT_SQL             = 'id, activity_id, user_id, surface, entity_type, entity_ref, document_scope_key, activity_type, suggestion, undo_state, execution_result, created_at, admin_post_type, admin_entity_id, admin_block_path, admin_operation_type, admin_operation_label, admin_provider, admin_model, admin_provider_path, admin_configuration_owner, admin_credential_source, admin_selected_provider, admin_request_ability, admin_request_route, admin_request_reference, admin_request_prompt, admin_search_text';
+	private const ADMIN_PROJECTION_VARCHAR_LIMITS         = [
+		'admin_post_type'           => 64,
+		'admin_entity_id'           => 191,
+		'admin_block_path'          => 191,
+		'admin_operation_type'      => 64,
+		'admin_operation_label'     => 191,
+		'admin_provider'            => 191,
+		'admin_model'               => 191,
+		'admin_provider_path'       => 255,
+		'admin_configuration_owner' => 191,
+		'admin_credential_source'   => 64,
+		'admin_selected_provider'   => 191,
+		'admin_request_ability'     => 191,
+		'admin_request_route'       => 191,
+		'admin_request_reference'   => 191,
+	];
 
 	public static function maybe_install(): void {
 		$installed_version = (int) get_option( self::SCHEMA_OPTION, 0 );
@@ -194,6 +210,13 @@ final class Repository {
 		$inserted = $wpdb->insert( self::table_name(), $record );
 
 		if ( false === $inserted ) {
+			$last_error = is_string( $wpdb->last_error ?? null ) ? trim( $wpdb->last_error ) : '';
+
+			if ( '' !== $last_error && function_exists( 'error_log' ) ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Permanent diagnostic for otherwise opaque plugin-owned table insert failures.
+				error_log( 'flavor_agent_activity_insert_failed: ' . $last_error );
+			}
+
 			return new \WP_Error(
 				'flavor_agent_activity_insert_failed',
 				'Flavor Agent could not persist the activity entry.',
@@ -968,7 +991,7 @@ final class Repository {
 			$diagnostic_search_text
 		);
 
-		return [
+		$projection = [
 			'admin_post_type'           => $post_type,
 			'admin_entity_id'           => $entity_id,
 			'admin_block_path'          => $block_path,
@@ -986,6 +1009,8 @@ final class Repository {
 			'admin_request_prompt'      => '' !== $prompt ? $prompt : null,
 			'admin_search_text'         => $search_text,
 		];
+
+		return self::fit_admin_projection_varchar_values( $projection );
 	}
 
 	/**
@@ -994,6 +1019,70 @@ final class Repository {
 	 */
 	private static function build_admin_projection_from_row( array $row ): array {
 		return self::build_admin_projection_from_entry( Serializer::hydrate_row( $row ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $projection
+	 * @return array<string, mixed>
+	 */
+	private static function fit_admin_projection_varchar_values( array $projection ): array {
+		foreach ( self::ADMIN_PROJECTION_VARCHAR_LIMITS as $column => $limit ) {
+			$projection[ $column ] = self::fit_admin_projection_varchar_value(
+				trim( (string) ( $projection[ $column ] ?? '' ) ),
+				$limit
+			);
+		}
+
+		return $projection;
+	}
+
+	private static function fit_admin_projection_varchar_value( string $value, int $limit ): string {
+		if ( '' === $value || $limit <= 0 ) {
+			return '';
+		}
+
+		if ( self::admin_projection_string_length( $value ) <= $limit ) {
+			return $value;
+		}
+
+		$hash   = substr( md5( $value ), 0, 8 );
+		$suffix = '-' . $hash;
+
+		if ( $limit <= strlen( $suffix ) ) {
+			return self::admin_projection_substring( $hash, 0, $limit );
+		}
+
+		$head_length = $limit - strlen( $suffix );
+
+		return rtrim( self::admin_projection_substring( $value, 0, $head_length ) ) . $suffix;
+	}
+
+	private static function admin_projection_string_length( string $value ): int {
+		if ( function_exists( 'mb_strlen' ) ) {
+			return mb_strlen( $value, 'UTF-8' );
+		}
+
+		$count = preg_match_all( '/./us', $value, $matches );
+
+		return false !== $count ? (int) $count : strlen( $value );
+	}
+
+	private static function admin_projection_substring( string $value, int $start, int $length ): string {
+		if ( $length <= 0 ) {
+			return '';
+		}
+
+		if ( function_exists( 'mb_substr' ) ) {
+			return mb_substr( $value, $start, $length, 'UTF-8' );
+		}
+
+		$count = preg_match_all( '/./us', $value, $matches );
+
+		if ( false !== $count && isset( $matches[0] ) && is_array( $matches[0] ) ) {
+			return implode( '', array_slice( $matches[0], $start, $length ) );
+		}
+
+		return substr( $value, $start, $length );
 	}
 
 	/**

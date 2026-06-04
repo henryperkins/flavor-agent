@@ -26,6 +26,7 @@
 		"wp:start": "node scripts/ensure-local-env.js && node scripts/docker-compose.js up -d --build",
 		"wp:stop": "node scripts/ensure-local-env.js && node scripts/docker-compose.js down",
 		"wp:reset": "node scripts/ensure-local-env.js && node scripts/docker-compose.js down -v",
+		"wp:browser-url": "node scripts/wordpress-browser-url.js",
 		"wp:e2e:wp70:bootstrap": "node scripts/wp70-e2e.js bootstrap",
 		"wp:e2e:wp70:teardown": "node scripts/wp70-e2e.js teardown",
 		"preinstall:preflight": "node scripts/preinstall-preflight.js",

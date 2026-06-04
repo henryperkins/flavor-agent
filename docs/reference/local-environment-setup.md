@@ -44,6 +44,18 @@ npm run wp:start
 The first run creates `.env` from `.env.example` through `scripts/ensure-local-env.js` before starting containers. The wrapper in `scripts/docker-compose.js` uses the Docker Compose CLI plugin when available and falls back to `docker-compose`.
 The WordPress service also listens on the configured `WORDPRESS_PORT` inside the container so Site Health REST API and loopback checks can call `http://localhost:8888` from both the host and the container. On startup it ensures `wp-content/upgrade` is writable by the web server user for plugin and theme update checks.
 
+### Browser Auth Base URL
+
+Browser automation must use the same origin WordPress advertises in its `home` option. `localhost` and `127.0.0.1` are separate browser cookie origins; if a probe logs in on one host and WordPress redirects to the other, wp-admin appears logged out and editor-store waits time out.
+
+For one-off Playwright probes against the Docker-backed local stack, resolve the canonical browser URL first:
+
+```bash
+npm run --silent wp:browser-url
+```
+
+Use that value as the Playwright `baseURL` and login target. The helper prefers explicit overrides such as `FLAVOR_AGENT_BROWSER_BASE_URL`, then reads `wp option get home` from the WordPress container, and only falls back to `http://localhost:${WORDPRESS_PORT:-8888}` when the container is unavailable. The dedicated WP 7.0 harness remains separate: use `getWp70HarnessConfig().baseURL`, because the harness sets WordPress `home` and `siteurl` to the same origin during bootstrap.
+
 Install WordPress if the database volume is new. The examples below use the Docker Compose CLI form; if your host only has `docker-compose`, use `node scripts/docker-compose.js exec -T ...` or the wrapper-backed npm scripts instead.
 
 ```bash

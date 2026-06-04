@@ -761,6 +761,9 @@ export default function StyleBookRecommender() {
 	const capability = getSurfaceCapability( 'style-book' );
 	const capabilityAvailable =
 		capability.available && Boolean( scope ) && Boolean( blockType );
+	const shouldTrackStyleBookUi = Boolean(
+		isSiteEditor || isGlobalStylesActive || isStyleBookUiActive
+	);
 	const dismissStatusNotice = useCallback( () => {
 		switch ( notice?.source ) {
 			case 'request':
@@ -784,16 +787,16 @@ export default function StyleBookRecommender() {
 	] );
 
 	useEffect( () => {
-		if ( ! isGlobalStylesActive || typeof document === 'undefined' ) {
+		if ( ! shouldTrackStyleBookUi || typeof document === 'undefined' ) {
 			return undefined;
 		}
 
 		return subscribeToStyleBookUi( document, setStyleBookUiState );
-	}, [ isGlobalStylesActive ] );
+	}, [ shouldTrackStyleBookUi ] );
 
 	useEffect( () => {
 		if (
-			! isGlobalStylesActive ||
+			! isSiteEditor ||
 			! isStyleBookUiActive ||
 			! sidebarMountNode ||
 			typeof document === 'undefined'
@@ -811,7 +814,7 @@ export default function StyleBookRecommender() {
 			nextPortalNode.remove();
 			setPortalNode( null );
 		};
-	}, [ isGlobalStylesActive, isStyleBookUiActive, sidebarMountNode ] );
+	}, [ isSiteEditor, isStyleBookUiActive, sidebarMountNode ] );
 
 	const previousScopeKey = useRef( scope?.scopeKey || null );
 	const previousRecommendationContextSignature = useRef(
@@ -957,7 +960,7 @@ export default function StyleBookRecommender() {
 		[ undoActivity ]
 	);
 
-	if ( ! isSiteEditor || ! isGlobalStylesActive || ! isStyleBookUiActive ) {
+	if ( ! isSiteEditor || ! isStyleBookUiActive ) {
 		return null;
 	}
 

@@ -67,17 +67,16 @@ final class ResponseSchema {
 								'type'  => 'array',
 								'items' => self::strict_object(
 									[
-										'type'           => [
+										'type'        => [
 											'type' => 'string',
 											'enum' => [ 'assign_template_part', 'replace_template_part', 'insert_pattern' ],
 										],
-										'slug'           => self::nullable_string(),
-										'area'           => self::nullable_string(),
-										'currentSlug'    => self::nullable_string(),
-										'patternName'    => self::nullable_string(),
-										'placement'      => self::nullable_string(),
-										'targetPath'     => self::nullable_integer_array(),
-										'expectedTarget' => self::nullable_expected_target_schema(),
+										'slug'        => self::nullable_string(),
+										'area'        => self::nullable_string(),
+										'currentSlug' => self::nullable_string(),
+										'patternName' => self::nullable_string(),
+										'placement'   => self::nullable_string(),
+										'targetPath'  => self::nullable_integer_array(),
 									]
 								),
 							],
@@ -136,15 +135,14 @@ final class ResponseSchema {
 								'type'  => 'array',
 								'items' => self::strict_object(
 									[
-										'type'           => [
+										'type'        => [
 											'type' => 'string',
 											'enum' => [ 'insert_pattern', 'replace_block_with_pattern', 'remove_block' ],
 										],
-										'patternName'    => self::nullable_string(),
-										'placement'      => self::nullable_string(),
-										'targetPath'     => self::nullable_integer_array(),
+										'patternName' => self::nullable_string(),
+										'placement'   => self::nullable_string(),
+										'targetPath'  => self::nullable_integer_array(),
 										'expectedBlockName' => self::nullable_string(),
-										'expectedTarget' => self::nullable_expected_target_schema(),
 									]
 								),
 							],
@@ -350,24 +348,6 @@ final class ResponseSchema {
 		);
 	}
 
-	private static function nullable_expected_target_schema(): array {
-		return self::nullable_strict_object(
-			[
-				'name'       => self::nullable_string(),
-				'label'      => self::nullable_string(),
-				'attributes' => [ 'type' => 'object' ],
-				'childCount' => self::nullable_integer(),
-				'slot'       => self::nullable_strict_object(
-					[
-						'slug'    => self::nullable_string(),
-						'area'    => self::nullable_string(),
-						'isEmpty' => self::nullable_boolean(),
-					]
-				),
-			]
-		);
-	}
-
 	private static function strict_object( array $properties ): array {
 		return [
 			'type'                 => 'object',
@@ -377,19 +357,8 @@ final class ResponseSchema {
 		];
 	}
 
-	private static function nullable_strict_object( array $properties ): array {
-		$schema         = self::strict_object( $properties );
-		$schema['type'] = [ 'object', 'null' ];
-
-		return $schema;
-	}
-
 	private static function nullable_string(): array {
 		return [ 'type' => [ 'string', 'null' ] ];
-	}
-
-	private static function nullable_boolean(): array {
-		return [ 'type' => [ 'boolean', 'null' ] ];
 	}
 
 	private static function nullable_integer(): array {
@@ -437,7 +406,7 @@ final class ResponseSchema {
 
 	private static function any_value(): array {
 		return [
-			'type' => [ 'string', 'number', 'boolean', 'object', 'array', 'null' ],
+			'type' => [ 'string', 'number', 'boolean', 'null' ],
 		];
 	}
 }

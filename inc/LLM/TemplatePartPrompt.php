@@ -74,7 +74,7 @@ Rules:
   - `before_block_path`
   - `after_block_path`
 - `before_block_path` and `after_block_path` MUST include `targetPath`.
-- Any path-based operation SHOULD include `expectedTarget` with the live block fingerprint from the executable target list.
+- Do not include `expectedTarget`; the server attaches the live block fingerprint from `targetPath`.
 - `replace_block_with_pattern` MUST include `targetPath`, `expectedBlockName`, and `patternName`.
 - `remove_block` MUST include `targetPath` and `expectedBlockName`.
 - Every executable `targetPath` MUST resolve to a real path from the Executable Operation Targets or Executable Insertion Anchors lists.

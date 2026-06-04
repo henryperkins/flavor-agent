@@ -171,6 +171,7 @@ let currentStyleBookUiState = null;
 let styleBookUiSubscriber = null;
 let currentEditedTemplateId = null;
 let currentEditedBlocks = null;
+let currentActiveComplementaryArea = 'edit-site/global-styles';
 const DOCS_WARNING_TEXT =
 	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
 const DOCS_GROUNDING_WARNING = {
@@ -185,6 +186,7 @@ function getMockStyleBookUiState() {
 			document.querySelector( '.editor-global-styles-sidebar__panel' ) ||
 			document.querySelector( '.editor-global-styles-sidebar' ) ||
 			document.querySelector( '[role="region"][aria-label="Styles"]' ) ||
+			document.querySelector( '.editor-style-book' ) ||
 			null,
 	};
 }
@@ -380,6 +382,7 @@ beforeEach( () => {
 			blockTitle: 'Paragraph',
 		},
 	};
+	currentActiveComplementaryArea = 'edit-site/global-styles';
 	mockSurfaceCapability = {
 		available: true,
 	};
@@ -504,7 +507,8 @@ beforeEach( () => {
 
 			if ( storeName === 'core/interface' ) {
 				return {
-					getActiveComplementaryArea: () => 'edit-site/global-styles',
+					getActiveComplementaryArea: () =>
+						currentActiveComplementaryArea,
 				};
 			}
 
@@ -767,6 +771,73 @@ describe( 'StyleBookRecommender', () => {
 		} );
 
 		expect( document.body.textContent ).toBe( '' );
+	} );
+
+	test( 'renders into the Style Book preview host when the Styles sidebar mount is missing', () => {
+		sidebar.remove();
+		const styleBookPreview = document.createElement( 'div' );
+		styleBookPreview.className = 'editor-style-book';
+		document.body.appendChild( styleBookPreview );
+
+		try {
+			act( () => {
+				getRoot().render( <StyleBookRecommender /> );
+			} );
+
+			expect(
+				styleBookPreview.querySelector(
+					'.flavor-agent-style-book-panel'
+				)
+			).not.toBeNull();
+			expect( styleBookPreview.textContent ).toContain(
+				'Press Cmd/Ctrl+Enter to submit.'
+			);
+		} finally {
+			styleBookPreview.remove();
+		}
+	} );
+
+	test( 'renders into the Style Book preview host when the global styles sidebar is inactive', () => {
+		currentActiveComplementaryArea = 'edit-post/document';
+		sidebar.remove();
+		const styleBookPreview = document.createElement( 'div' );
+		styleBookPreview.className = 'editor-style-book';
+		document.body.appendChild( styleBookPreview );
+
+		try {
+			act( () => {
+				getRoot().render( <StyleBookRecommender /> );
+			} );
+
+			expect(
+				styleBookPreview.querySelector(
+					'.flavor-agent-style-book-panel'
+				)
+			).not.toBeNull();
+		} finally {
+			styleBookPreview.remove();
+		}
+	} );
+
+	test( 'renders into the route-local Styles region when the global styles sidebar is inactive', () => {
+		currentActiveComplementaryArea = 'edit-post/document';
+		sidebar.remove();
+		const stylesRegion = document.createElement( 'div' );
+		stylesRegion.setAttribute( 'role', 'region' );
+		stylesRegion.setAttribute( 'aria-label', 'Styles' );
+		document.body.appendChild( stylesRegion );
+
+		try {
+			act( () => {
+				getRoot().render( <StyleBookRecommender /> );
+			} );
+
+			expect(
+				stylesRegion.querySelector( '.flavor-agent-style-book-panel' )
+			).not.toBeNull();
+		} finally {
+			stylesRegion.remove();
+		}
 	} );
 
 	test( 'passes the undo guidance to the recent style-book activity section', () => {

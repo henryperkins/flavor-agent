@@ -39,13 +39,23 @@ with a reason, not a silent skip. Treat this as additive to
   `/wp-abilities/.../run` or activity calls from React 19 effect behavior.
 - Apply a suggestion. Confirm the applied pill appears.
 - Undo via the toast. Confirm the toast shortcut `mod+alt+shift+u` focuses the
-  toast.
+  toast — press it promptly, as success toasts auto-dismiss after ~6s (an empty
+  toast region after a pause is the dismiss window, not a regression; the inline
+  `Undo` pill persists either way).
 - For content, pattern, navigation, template, template-part, Global Styles, and
   Style Book surfaces, run fetch, apply, and undo once where the surface is
   executable. Confirm each executable run writes the expected AI Activity
   request diagnostic row.
 
 ## B. Style-State Inspector Interaction
+
+**Provenance:** style states span two releases this codebase skipped
+reviewing. The feature began in Gutenberg 23.2 (`#77513` Responsive Global
+Block Styles with States, `#78000` Refactor Client-Side Style States to Use
+Nodes) and continued in 23.3 (`#76491` pseudo states on single block
+instances, `#78280` show only supported Inspector controls when a state is
+selected, `#78384` responsive block instance styles, `#78230` hide Styles tab
+in preview mode). This is the highest-priority runtime check in this pass.
 
 - Select a state-capable block such as Button or Group.
 - Enter a pseudo-state or viewport state.
@@ -75,10 +85,17 @@ with a reason, not a silent skip. Treat this as additive to
 
 ## D. Pattern Inserter
 
+**Provenance:** the inserter DOM evolved across both skipped releases: 23.2
+`#77698` (inserter search input made sticky while scrolling) and 23.3 `#77656`
+(pattern list-item titles migrated to `Text` from `@wordpress/ui`), `#78568`
+(lazy-fetch user pattern categories). The container selectors are expected to
+survive, but verify against the live DOM.
+
 - Open the inserter and switch to Patterns.
 - Confirm `InserterBadge` mounts.
 - Confirm `src/patterns/inserter-dom.js` selectors still resolve the inserter
-  panel content, content menu, and search input.
+  panel content, content menu, and search input, including with the search
+  input in its new sticky-while-scrolling position (`#77698`).
 - Confirm recommendations populate.
 - Insert a recommended pattern. Confirm insertion lands at the intended
   location and does not create a null-root orphan.
@@ -102,8 +119,16 @@ with a reason, not a silent skip. Treat this as additive to
 - Confirm chat-backed Flavor Agent surfaces return live results through an
   approved Connector.
 - Revoke Connector approval.
-- Confirm affected surfaces show the graceful `wpai_connector_not_approved`
-  notice path rather than crashing.
+- Confirm affected surfaces degrade gracefully rather than crashing. With the
+  connector fully revoked, FA preflight (`SurfaceCapabilities`) disables the
+  surface first — expect `block_backend_unconfigured` /
+  `plugin_provider_unconfigured` preflight states and a
+  `missing_text_generation_provider` ability error, not
+  `wpai_connector_not_approved`. That path is the HTTP-layer fallback for the
+  narrower case where a call passes preflight but is blocked at the connector
+  layer; its handler is unit-covered in
+  `src/store/__tests__/request-error-details.test.js`, so it need not be forced
+  through this runtime scenario.
 
 ## G. Low-Risk UI Watch Items
 

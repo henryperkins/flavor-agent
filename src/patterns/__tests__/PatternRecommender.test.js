@@ -3,6 +3,7 @@ const mockUseRegistry = jest.fn();
 const mockUseSelect = jest.fn();
 const mockCloneBlock = jest.fn();
 const mockCreateBlock = jest.fn();
+const mockGetBlockBindingsSources = jest.fn();
 const mockParse = jest.fn();
 const mockFetchPatternRecommendations = jest.fn();
 const mockResolvePatternRecommendationSignature = jest.fn();
@@ -37,6 +38,8 @@ jest.mock( '@wordpress/block-editor', () => ( {
 jest.mock( '@wordpress/blocks', () => ( {
 	cloneBlock: ( ...args ) => mockCloneBlock( ...args ),
 	createBlock: ( ...args ) => mockCreateBlock( ...args ),
+	getBlockBindingsSources: ( ...args ) =>
+		mockGetBlockBindingsSources( ...args ),
 	parse: ( ...args ) => mockParse( ...args ),
 } ) );
 
@@ -263,6 +266,8 @@ describe( 'PatternRecommender', () => {
 		mockUseSelect.mockReset();
 		mockCloneBlock.mockReset();
 		mockCreateBlock.mockReset();
+		mockGetBlockBindingsSources.mockReset();
+		mockGetBlockBindingsSources.mockReturnValue( {} );
 		mockParse.mockReset();
 		mockFetchPatternRecommendations.mockReset();
 		mockResolvePatternRecommendationSignature.mockReset();
@@ -2528,6 +2533,64 @@ describe( 'PatternRecommender', () => {
 				'.flavor-agent-pattern-shelf__item'
 			)
 		).toBeNull();
+	} );
+
+	test( 'flags recommendations with unsafe block binding sources', () => {
+		const inserterContainer = document.createElement( 'div' );
+		const unsafePattern = {
+			name: 'twentytwentyfive/binding-format',
+			title: 'Post format name',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						metadata: {
+							bindings: {
+								content: {
+									source: 'twentytwentyfive/format',
+								},
+							},
+						},
+					},
+				},
+			],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: unsafePattern.name,
+				score: 0.94,
+				reason: 'Matches the post format.',
+			},
+		];
+		state.allowedPatterns = [ unsafePattern ];
+		mockGetBlockBindingsSources.mockReturnValue( {
+			'twentytwentyfive/format': {
+				getValues: undefined,
+			},
+		} );
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain(
+			'1 ranked pattern was skipped because its block bindings are not safe to render in the current editor.'
+		);
+		expect(
+			inserterContainer.querySelector(
+				'.flavor-agent-pattern-shelf__item'
+			)
+		).toBeNull();
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'validation_blocked',
+				reason: 'unsafe_binding_sources',
+				patternKey: unsafePattern.name,
+			} )
+		);
 	} );
 
 	test( 'shows an error notice and skips dispatch when the resolved blocks are not allowed at the insertion point', () => {
