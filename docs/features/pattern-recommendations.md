@@ -17,16 +17,24 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - Qdrant storage readiness requires the Cloudflare Workers AI Embedding Model plus Qdrant URL/key
 - Cloudflare AI Search backend readiness requires the Embedding Model Cloudflare account/token plus the normalized AI Search embedding model and a managed site-owned Cloudflare AI Search pattern instance validated against those values; it does not call plugin-owned embedding generation or Qdrant
 - A post type must be available from `core/editor`
-- Passive fetch runs when the editor loads
+- No model-backed ranking runs on editor load; the first real ranking is sent only after the block inserter opens with a non-empty visible-pattern scope
 - Active refresh runs when the inserter search input changes while the inserter is open
 - Results are scoped by `visiblePatternNames`, derived from the current inserter root so nested insertion contexts only see patterns WordPress already allows there; requests without that scope, or with an explicit empty scope, return no recommendations
 - Recommended items only render when the current Gutenberg allowed-pattern selector exposes a matching pattern for this insertion point; otherwise the inserter shows an explicit “not currently exposing those patterns” message instead of patching core registry data
 - When `window.flavorAgentData.canRecommendPatterns` is false, no fetch runs and opening the inserter shows the shared unavailable-state notice instead of a silent no-op
 
+## Ranking Warm-Up And Target Cache
+
+Pattern recommendations do not run a model-backed ranking request on editor load. The editor may warm capability, backend, connector, docs-grounding, and visible-pattern readiness state, but the first real `recommend-patterns` call is sent only after block inserter intent and only when the current insertion point exposes non-empty `visiblePatternNames`.
+
+Completed pattern rankings are cached per insertion target. The cache key includes post type, template type, root client ID, insertion index, insertion context, visible pattern scope, prompt/search text, selected block context, and the server-provided `patternRuntimeSignature`. Cache hits hydrate the store with a fresh request token and preserve the stored request signature, insertion-target signature, server `resolvedContextSignature`, docs-grounding warning, diagnostics, and runtime signature. Insert still revalidates the server apply context before dispatching blocks.
+
+When a real inserter-intent request ends before a model call, diagnostics carry `diagnostics.modelRequest.attempted === false` with an allow-listed reason such as `no_rankable_candidates` or `missing_visible_patterns`. Activity renders that as a no-model diagnostic instead of implying a missing core AI request log.
+
 ## End-To-End Flow
 
 1. `PatternRecommender()` in `src/patterns/PatternRecommender.js` builds a base input from post type, template type, and the current visible pattern set
-2. The component triggers `fetchPatternRecommendations()` on editor load and on debounced inserter-search changes
+2. The component triggers `fetchPatternRecommendations()` on block inserter intent (open with a non-empty visible-pattern scope) and on debounced inserter-search changes, tagging each request with `requestPurpose: "inserter_ranking"`
 3. The store executes the `flavor-agent/recommend-patterns` ability with the request input
 4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the ability input to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state, then computes review/apply signatures from the normalized request context, docs-grounding fingerprint, and stable pattern-catalog identity
