@@ -1521,4 +1521,425 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertStringContainsString( 'return ranking as null', strtolower( $system ) );
 		$this->assertStringContainsString( 'use null for unknown ranking object values', strtolower( $system ) );
 	}
+
+	/**
+	 * Base lookup set that makes a "happy-path" assign/replace/insert validate.
+	 *
+	 * Individual data-provider rows override slices of this set so each row can
+	 * deterministically reach exactly one rejection branch while every earlier
+	 * guard in the validator passes.
+	 *
+	 * @return array{
+	 *     unused: array<string, array{area: string}>,
+	 *     assigned: array{bySlug: array<string, array{slug: string, area: string}>, byArea: array<string, array{slug: string, area: string}>},
+	 *     allowed: array<string, true>,
+	 *     empty: array<string, true>,
+	 *     pattern: array<string, mixed>,
+	 *     block: array<string, array<string, mixed>>,
+	 *     anchor: array<string, array<string, mixed>>
+	 * }
+	 */
+	private function template_operation_lookups(): array {
+		return [
+			'unused'   => [
+				'header-a' => [ 'area' => 'header' ],
+				'header-b' => [ 'area' => 'header' ],
+				'footer-a' => [ 'area' => 'footer' ],
+			],
+			'assigned' => [
+				'bySlug' => [
+					'old-footer' => [
+						'slug' => 'old-footer',
+						'area' => 'footer',
+					],
+				],
+				'byArea' => [
+					'footer' => [
+						'slug' => 'old-footer',
+						'area' => 'footer',
+					],
+				],
+			],
+			'allowed'  => [
+				'header' => true,
+				'footer' => true,
+			],
+			'empty'    => [
+				'header' => true,
+			],
+			'pattern'  => [
+				'my/pattern'    => true,
+				'other/pattern' => true,
+			],
+			'block'    => [
+				'0' => [
+					'name' => 'core/group',
+					'path' => [ 0 ],
+				],
+			],
+			'anchor'   => [
+				'start' => [ 'placement' => 'start' ],
+				'end'   => [ 'placement' => 'end' ],
+			],
+		];
+	}
+
+	/**
+	 * Merge per-row lookup overrides over the happy-path base set.
+	 *
+	 * @param array<string, mixed> $overrides
+	 * @return array<string, mixed>
+	 */
+	private function lookups_with( array $overrides ): array {
+		return array_merge( $this->template_operation_lookups(), $overrides );
+	}
+
+	/**
+	 * One row per deterministic rejection branch in
+	 * validate_template_operations(), mapping operations -> the single specific
+	 * reason code that branch must now emit.
+	 *
+	 * @return array<string, array{0: array<int, mixed>, 1: array<string, mixed>, 2: string}>
+	 */
+	public function templateRejectionBranches(): array {
+		return [
+			// :1142-1144 — operation is not an array.
+			'malformed: non-array operation'            => [
+				[ 'not-an-array' ],
+				$this->template_operation_lookups(),
+				'malformed_operation',
+			],
+
+			// :1153-1155 — assign targets an area already mutated this call.
+			'assign: area already mutated'              => [
+				[
+					[
+						'type' => 'assign_template_part',
+						'slug' => 'header-a',
+						'area' => 'header',
+					],
+					[
+						'type' => 'assign_template_part',
+						'slug' => 'header-b',
+						'area' => 'header',
+					],
+				],
+				$this->template_operation_lookups(),
+				'duplicate_area_mutation',
+			],
+
+			// :1157-1163 (split) — assign slug/area is not a valid unused part.
+			'assign: not a valid unused part'           => [
+				[
+					[
+						'type' => 'assign_template_part',
+						'slug' => 'does-not-exist',
+						'area' => 'header',
+					],
+				],
+				$this->template_operation_lookups(),
+				'invalid_template_area',
+			],
+
+			// :1157-1163 (split) — assign area is not empty (already assigned).
+			'assign: area not empty / already assigned' => [
+				[
+					[
+						'type' => 'assign_template_part',
+						'slug' => 'footer-a',
+						'area' => 'footer',
+					],
+				],
+				$this->template_operation_lookups(),
+				'duplicate_area_mutation',
+			],
+
+			// :1193-1195 — replace has no assigned part / empty current slug.
+			'replace: no assigned part'                 => [
+				[
+					[
+						'type' => 'replace_template_part',
+						'slug' => 'header-a',
+						'area' => 'sidebar',
+					],
+				],
+				$this->template_operation_lookups(),
+				'no_assigned_part',
+			],
+
+			// :1201-1203 — replace derives an empty area.
+			'replace: area empty after derivation'      => [
+				[
+					[
+						'type'        => 'replace_template_part',
+						'currentSlug' => 'broken',
+						'slug'        => 'header-a',
+					],
+				],
+				$this->lookups_with(
+					[
+						'assigned' => [
+							'bySlug' => [
+								'broken' => [
+									'slug' => 'broken',
+									'area' => '',
+								],
+							],
+							'byArea' => [],
+						],
+					]
+				),
+				'invalid_template_area',
+			],
+
+			// :1205-1207 — replace targets an area already mutated this call.
+			'replace: area already mutated'             => [
+				[
+					[
+						'type'        => 'replace_template_part',
+						'currentSlug' => 'old-footer',
+						'slug'        => 'footer-a',
+						'area'        => 'footer',
+					],
+					[
+						'type'        => 'replace_template_part',
+						'currentSlug' => 'footer-a',
+						'slug'        => 'header-a',
+						'area'        => 'footer',
+					],
+				],
+				$this->template_operation_lookups(),
+				'duplicate_area_mutation',
+			],
+
+			// :1209-1211 — replace slug/area is not a valid unused part.
+			'replace: not a valid unused part'          => [
+				[
+					[
+						'type'        => 'replace_template_part',
+						'currentSlug' => 'old-footer',
+						'slug'        => 'does-not-exist',
+						'area'        => 'footer',
+					],
+				],
+				$this->template_operation_lookups(),
+				'invalid_template_area',
+			],
+
+			// :1213-1218 — replace target area differs from the assigned area.
+			'replace: assigned area mismatch'           => [
+				[
+					[
+						'type'        => 'replace_template_part',
+						'currentSlug' => 'mismatch-part',
+						'slug'        => 'header-a',
+						'area'        => 'header',
+					],
+				],
+				$this->lookups_with(
+					[
+						'assigned' => [
+							'bySlug' => [
+								'mismatch-part' => [
+									'slug' => 'mismatch-part',
+									'area' => 'sidebar',
+								],
+							],
+							'byArea' => [],
+						],
+					]
+				),
+				'area_mismatch',
+			],
+
+			// :1220-1222 — replace currentSlug === slug (no-op).
+			'replace: same slug no-op'                  => [
+				[
+					[
+						'type'        => 'replace_template_part',
+						'currentSlug' => 'header-a',
+						'slug'        => 'header-a',
+						'area'        => 'header',
+					],
+				],
+				$this->lookups_with(
+					[
+						'assigned' => [
+							'bySlug' => [
+								'header-a' => [
+									'slug' => 'header-a',
+									'area' => 'header',
+								],
+							],
+							'byArea' => [],
+						],
+					]
+				),
+				'same_slug_no_op',
+			],
+
+			// :1248-1254 (split) — insert with an empty pattern name.
+			'insert: empty pattern name'                => [
+				[
+					[
+						'type'      => 'insert_pattern',
+						'placement' => 'start',
+					],
+				],
+				$this->template_operation_lookups(),
+				'unknown_pattern',
+			],
+
+			// :1248-1254 (split) — insert with an empty placement.
+			'insert: empty placement'                   => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'my/pattern',
+					],
+				],
+				$this->template_operation_lookups(),
+				'invalid_placement',
+			],
+
+			// :1248-1254 (split) — insert pattern not in the candidate lookup.
+			'insert: pattern not in lookup'             => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'ghost/pattern',
+						'placement'   => 'start',
+					],
+				],
+				$this->template_operation_lookups(),
+				'unknown_pattern',
+			],
+
+			// :1263-1265 — insert placement value is not in the allow-list.
+			'insert: placement not allowed'             => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'my/pattern',
+						'placement'   => 'middle',
+					],
+				],
+				$this->template_operation_lookups(),
+				'invalid_placement',
+			],
+
+			// :1267-1269 — insert targetPath key present but malformed.
+			'insert: malformed targetPath'              => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'my/pattern',
+						'placement'   => 'before_block_path',
+						'targetPath'  => [ 'not-an-index' ],
+					],
+				],
+				$this->template_operation_lookups(),
+				'invalid_anchor',
+			],
+
+			// :1271-1279 — insert anchored path missing/unknown in block lookup.
+			'insert: anchored path unknown'             => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'my/pattern',
+						'placement'   => 'after_block_path',
+						'targetPath'  => [ 5 ],
+					],
+				],
+				$this->template_operation_lookups(),
+				'invalid_anchor',
+			],
+
+			// :1281-1286 — insert start/end anchor missing from anchor lookup.
+			'insert: start/end anchor missing'          => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'my/pattern',
+						'placement'   => 'start',
+					],
+				],
+				$this->lookups_with(
+					[
+						'anchor' => [
+							'end' => [ 'placement' => 'end' ],
+						],
+					]
+				),
+				'invalid_anchor',
+			],
+
+			// :1288-1290 — insert is the second pattern insert this call.
+			'insert: repeated pattern insert'           => [
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'my/pattern',
+						'placement'   => 'start',
+					],
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'other/pattern',
+						'placement'   => 'end',
+					],
+				],
+				$this->template_operation_lookups(),
+				'repeated_pattern_insert',
+			],
+
+			// :1315-1316 — unknown operation type (default branch).
+			'default: unknown operation type'           => [
+				[
+					[ 'type' => 'totally_bogus_operation' ],
+				],
+				$this->template_operation_lookups(),
+				'unknown_operation_type',
+			],
+		];
+	}
+
+	/**
+	 * @dataProvider templateRejectionBranches
+	 *
+	 * @param array<int, mixed>    $operations Raw operations from a suggestion.
+	 * @param array<string, mixed> $lookups    Per-row validator lookups.
+	 * @param string               $expected   Expected specific reason code.
+	 */
+	public function test_each_template_operation_branch_maps_to_a_specific_code(
+		array $operations,
+		array $lookups,
+		string $expected
+	): void {
+		$result = TemplatePrompt::validate_template_operations_for_tests( $operations, $lookups );
+
+		$this->assertTrue( $result['invalid'], 'Branch should be rejected.' );
+		$this->assertSame( $expected, $result['code'] );
+		$this->assertNotSame( 'operation_validation_failed', $result['code'] );
+		$this->assertSame( [], $result['operations'] );
+	}
+
+	public function test_validate_template_operations_returns_empty_code_on_success(): void {
+		$lookups = $this->template_operation_lookups();
+
+		$result = TemplatePrompt::validate_template_operations_for_tests(
+			[
+				[
+					'type' => 'assign_template_part',
+					'slug' => 'header-a',
+					'area' => 'header',
+				],
+			],
+			$lookups
+		);
+
+		$this->assertFalse( $result['invalid'] );
+		$this->assertSame( '', $result['code'] );
+		$this->assertCount( 1, $result['operations'] );
+	}
 }

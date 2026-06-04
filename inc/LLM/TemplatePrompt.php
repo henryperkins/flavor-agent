@@ -1105,12 +1105,16 @@ EXAMPLE
 	}
 
 	/**
-	 * @return array{operations: array<int, array<string, mixed>>, invalid: bool}
+	 * @param string $code Specific rejection reason code (a ValidationReason
+	 *                     vocabulary code). Defaults to the generic fallback,
+	 *                     which no deterministic branch should ever hit.
+	 * @return array{operations: array<int, array<string, mixed>>, invalid: bool, code: string}
 	 */
-	private static function invalid_template_operations_result(): array {
+	private static function invalid_template_operations_result( string $code = 'operation_validation_failed' ): array {
 		return [
 			'operations' => [],
 			'invalid'    => true,
+			'code'       => $code,
 		];
 	}
 
@@ -1123,7 +1127,7 @@ EXAMPLE
 	 * @param array $pattern_lookup Candidate pattern lookup.
 	 * @param array<string, array<string, mixed>> $template_block_lookup Template top-level block lookup.
 	 * @param array<string, array<string, mixed>> $insertion_anchor_lookup Template insertion anchor lookup.
-	 * @return array{operations: array<int, array<string, mixed>>, invalid: bool}
+	 * @return array{operations: array<int, array<string, mixed>>, invalid: bool, code: string}
 	 */
 	private static function validate_template_operations(
 		array $operations,
@@ -1140,7 +1144,7 @@ EXAMPLE
 
 		foreach ( $operations as $operation ) {
 			if ( ! is_array( $operation ) ) {
-				return self::invalid_template_operations_result();
+				return self::invalid_template_operations_result( 'malformed_operation' );
 			}
 
 			$type = sanitize_key( (string) ( $operation['type'] ?? '' ) );
@@ -1151,15 +1155,15 @@ EXAMPLE
 					$area = sanitize_key( (string) ( $operation['area'] ?? '' ) );
 
 					if ( isset( $state['mutatedAreas'][ $area ] ) ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'duplicate_area_mutation' );
 					}
 
-					if (
-						! self::is_valid_unused_template_part( $slug, $area, $unused_part_lookup, $allowed_area_lookup )
-						|| ! isset( $state['emptyAreas'][ $area ] )
-						|| isset( $state['byArea'][ $area ] )
-					) {
-						return self::invalid_template_operations_result();
+					if ( ! self::is_valid_unused_template_part( $slug, $area, $unused_part_lookup, $allowed_area_lookup ) ) {
+						return self::invalid_template_operations_result( 'invalid_template_area' );
+					}
+
+					if ( ! isset( $state['emptyAreas'][ $area ] ) || isset( $state['byArea'][ $area ] ) ) {
+						return self::invalid_template_operations_result( 'duplicate_area_mutation' );
 					}
 
 					$valid[]                        = [
@@ -1191,7 +1195,7 @@ EXAMPLE
 					}
 
 					if ( ! is_array( $assigned_part ) || $current_slug === '' ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'no_assigned_part' );
 					}
 
 					if ( $area === '' ) {
@@ -1199,26 +1203,26 @@ EXAMPLE
 					}
 
 					if ( $area === '' ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'invalid_template_area' );
 					}
 
 					if ( isset( $state['mutatedAreas'][ $area ] ) ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'duplicate_area_mutation' );
 					}
 
 					if ( ! self::is_valid_unused_template_part( $slug, $area, $unused_part_lookup, $allowed_area_lookup ) ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'invalid_template_area' );
 					}
 
 					if (
 						sanitize_key( (string) ( $assigned_part['area'] ?? '' ) ) !== ''
 						&& sanitize_key( (string) ( $assigned_part['area'] ?? '' ) ) !== $area
 					) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'area_mismatch' );
 					}
 
 					if ( $current_slug === $slug ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'same_slug_no_op' );
 					}
 
 					$valid[] = [
@@ -1245,12 +1249,16 @@ EXAMPLE
 					$placement       = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
 					$target_path     = self::sanitize_block_path( $operation['targetPath'] ?? null );
 
-					if (
-						$pattern_name === ''
-						|| $placement === ''
-						|| ! isset( $pattern_lookup[ $pattern_name ] )
-					) {
-						return self::invalid_template_operations_result();
+					if ( $pattern_name === '' ) {
+						return self::invalid_template_operations_result( 'unknown_pattern' );
+					}
+
+					if ( $placement === '' ) {
+						return self::invalid_template_operations_result( 'invalid_placement' );
+					}
+
+					if ( ! isset( $pattern_lookup[ $pattern_name ] ) ) {
+						return self::invalid_template_operations_result( 'unknown_pattern' );
 					}
 
 					$allowed_placements = [
@@ -1261,11 +1269,11 @@ EXAMPLE
 					];
 
 					if ( $placement !== '' && ! isset( $allowed_placements[ $placement ] ) ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'invalid_placement' );
 					}
 
 					if ( $has_target_path && $target_path === null ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'invalid_anchor' );
 					}
 
 					if (
@@ -1275,18 +1283,18 @@ EXAMPLE
 							! isset( $template_block_lookup[ self::block_path_key( $target_path ) ] )
 						)
 					) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'invalid_anchor' );
 					}
 
 					if (
 						in_array( $placement, [ self::TEMPLATE_PLACEMENT_START, self::TEMPLATE_PLACEMENT_END ], true ) &&
 						! isset( $insertion_anchor_lookup[ $placement ] )
 					) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'invalid_anchor' );
 					}
 
 					if ( $state['patternInsertCount'] > 0 ) {
-						return self::invalid_template_operations_result();
+						return self::invalid_template_operations_result( 'repeated_pattern_insert' );
 					}
 
 					$normalized = [
@@ -1313,14 +1321,40 @@ EXAMPLE
 					break;
 
 				default:
-					return self::invalid_template_operations_result();
+					return self::invalid_template_operations_result( 'unknown_operation_type' );
 			}
 		}
 
 		return [
 			'operations' => $valid,
 			'invalid'    => false,
+			'code'       => '',
 		];
+	}
+
+	/**
+	 * Test seam exposing the private generation-time template-operation
+	 * validator so the per-branch reason-code coverage suite can assert one
+	 * specific code per rejection branch without driving the full
+	 * parse_response pipeline. The validator takes eight positional lookup
+	 * arguments; this seam unpacks them from a keyed array.
+	 *
+	 * @param array<int, mixed>    $operations Raw operations from a suggestion.
+	 * @param array<string, mixed> $lookups    Keyed validator lookups
+	 *                                         (unused/assigned/allowed/empty/pattern/block/anchor).
+	 * @return array{operations: array<int, array<string, mixed>>, invalid: bool, code: string}
+	 */
+	public static function validate_template_operations_for_tests( array $operations, array $lookups ): array {
+		return self::validate_template_operations(
+			$operations,
+			is_array( $lookups['unused'] ?? null ) ? $lookups['unused'] : [],
+			is_array( $lookups['assigned'] ?? null ) ? $lookups['assigned'] : [],
+			is_array( $lookups['allowed'] ?? null ) ? $lookups['allowed'] : [],
+			is_array( $lookups['empty'] ?? null ) ? $lookups['empty'] : [],
+			is_array( $lookups['pattern'] ?? null ) ? $lookups['pattern'] : [],
+			is_array( $lookups['block'] ?? null ) ? $lookups['block'] : [],
+			is_array( $lookups['anchor'] ?? null ) ? $lookups['anchor'] : []
+		);
 	}
 
 	/**
