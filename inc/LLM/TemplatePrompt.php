@@ -11,6 +11,7 @@ use FlavorAgent\Support\DesignSemantics;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\RecommendationContextScorer;
 use FlavorAgent\Support\RankingContract;
+use FlavorAgent\Support\ValidationReason;
 
 final class TemplatePrompt {
 
@@ -609,6 +610,7 @@ EXAMPLE
 				'operations'         => [],
 				'templateParts'      => [],
 				'patternSuggestions' => [],
+				'validationReasons'  => [],
 			];
 
 			$validated_template_parts      = self::validate_template_part_summaries(
@@ -633,12 +635,14 @@ EXAMPLE
 				$insertion_anchor_lookup
 			);
 			$validated_operations          = $validated_operations_result['operations'];
+			$reasons                       = [];
 
 			if ( ! empty( $validated_operations_result['invalid'] ) ) {
-				continue;
-			}
-
-			if ( count( $validated_operations ) === 0 ) {
+				// Survivorship fix: keep the advisory remnant, record the reason.
+				$operation_code       = (string) ( $validated_operations_result['code'] ?? '' );
+				$reasons[]            = [ 'code' => '' !== $operation_code ? $operation_code : 'operation_validation_failed' ];
+				$validated_operations = [];
+			} elseif ( count( $validated_operations ) === 0 ) {
 				$derived_operations = self::derive_template_operations(
 					$validated_template_parts,
 					$assigned_part_lookup,
@@ -646,10 +650,12 @@ EXAMPLE
 				);
 
 				if ( ! empty( $derived_operations['invalid'] ) ) {
-					continue;
+					$derived_code         = (string) ( $derived_operations['code'] ?? '' );
+					$reasons[]            = [ 'code' => '' !== $derived_code ? $derived_code : 'operation_validation_failed' ];
+					$validated_operations = [];
+				} else {
+					$validated_operations = $derived_operations['operations'];
 				}
-
-				$validated_operations = $derived_operations['operations'];
 			}
 
 			if ( count( $validated_operations ) > 0 ) {
@@ -665,6 +671,8 @@ EXAMPLE
 				$entry['templateParts']      = $validated_template_parts;
 				$entry['patternSuggestions'] = $validated_pattern_suggestions;
 			}
+
+			$entry['validationReasons'] = ValidationReason::normalize( $reasons );
 
 			if (
 				count( $entry['operations'] ) === 0
@@ -1358,10 +1366,49 @@ EXAMPLE
 	}
 
 	/**
+	 * Test seam for {@see self::validate_template_suggestions()}. The production
+	 * signature takes positional lookups; this seam unpacks them from the same
+	 * keyed array shape used by validate_template_operations_for_tests().
+	 *
+	 * @param array<int, mixed>    $suggestions Raw suggestions from the model.
+	 * @param array<string, mixed> $lookups     Keyed validator lookups
+	 *                                          (unused/assigned/allowed/empty/pattern/block/anchor).
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function validate_template_suggestions_for_tests( array $suggestions, array $lookups ): array {
+		return self::validate_template_suggestions(
+			$suggestions,
+			is_array( $lookups['unused'] ?? null ) ? $lookups['unused'] : [],
+			is_array( $lookups['assigned'] ?? null ) ? $lookups['assigned'] : [],
+			is_array( $lookups['allowed'] ?? null ) ? $lookups['allowed'] : [],
+			is_array( $lookups['empty'] ?? null ) ? $lookups['empty'] : [],
+			is_array( $lookups['pattern'] ?? null ) ? $lookups['pattern'] : [],
+			is_array( $lookups['block'] ?? null ) ? $lookups['block'] : [],
+			is_array( $lookups['anchor'] ?? null ) ? $lookups['anchor'] : []
+		);
+	}
+
+	/**
+	 * Test seam for {@see self::derive_template_operations()}.
+	 *
+	 * @param array<int, array{slug: string, area: string, reason: string}> $template_parts       Validated template parts.
+	 * @param array<string, mixed>                                          $assigned_part_lookup Assigned template-part lookup.
+	 * @param array<string, true>                                           $empty_area_lookup    Explicitly empty area lookup.
+	 * @return array{operations: array<int, array<string, string>>, invalid: bool, code: string}
+	 */
+	public static function derive_template_operations_for_tests(
+		array $template_parts,
+		array $assigned_part_lookup,
+		array $empty_area_lookup
+	): array {
+		return self::derive_template_operations( $template_parts, $assigned_part_lookup, $empty_area_lookup );
+	}
+
+	/**
 	 * @param array<int, array{slug: string, area: string, reason: string}> $template_parts
 	 * @param array $assigned_part_lookup Assigned template-part lookup.
 	 * @param array<string, true> $empty_area_lookup Explicitly empty area lookup.
-	 * @return array{operations: array<int, array<string, string>>, invalid: bool}
+	 * @return array{operations: array<int, array<string, string>>, invalid: bool, code: string}
 	 */
 	private static function derive_template_operations(
 		array $template_parts,
@@ -1385,6 +1432,7 @@ EXAMPLE
 				return [
 					'operations' => [],
 					'invalid'    => true,
+					'code'       => 'duplicate_area_mutation',
 				];
 			}
 
@@ -1412,6 +1460,7 @@ EXAMPLE
 		return [
 			'operations' => array_slice( $operations, 0, 4 ),
 			'invalid'    => false,
+			'code'       => '',
 		];
 	}
 

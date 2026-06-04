@@ -327,6 +327,7 @@ final class TemplatePromptTest extends TestCase {
 						],
 					],
 					'patternSuggestions' => [ 'theme/hero' ],
+					'validationReasons'  => [],
 				],
 			],
 			$this->strip_ranking_from_entries( $result['suggestions'] )
@@ -613,6 +614,7 @@ final class TemplatePromptTest extends TestCase {
 					'operations'         => [],
 					'templateParts'      => [],
 					'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
+					'validationReasons'  => [],
 				],
 			],
 			$this->strip_ranking_from_entries( $result['suggestions'] )
@@ -867,6 +869,7 @@ final class TemplatePromptTest extends TestCase {
 					'operations'         => [],
 					'templateParts'      => [],
 					'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
+					'validationReasons'  => [],
 				],
 			],
 			$this->strip_ranking_from_entries( $result['suggestions'] )
@@ -1184,6 +1187,7 @@ final class TemplatePromptTest extends TestCase {
 					],
 					'templateParts'      => [],
 					'patternSuggestions' => [ 'theme/hero' ],
+					'validationReasons'  => [],
 				],
 			],
 			$this->strip_ranking_from_entries( $result['suggestions'] )
@@ -1592,6 +1596,83 @@ final class TemplatePromptTest extends TestCase {
 	 */
 	private function lookups_with( array $overrides ): array {
 		return array_merge( $this->template_operation_lookups(), $overrides );
+	}
+
+	/**
+	 * Full keyed-lookups base set for the suggestion-level seam.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function lookups(): array {
+		return $this->template_operation_lookups();
+	}
+
+	/**
+	 * Assigned-part lookup for the derive seam.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function assignedLookup(): array {
+		return $this->template_operation_lookups()['assigned'];
+	}
+
+	/**
+	 * Explicitly-empty area lookup for the derive seam.
+	 *
+	 * @return array<string, true>
+	 */
+	private function emptyLookup(): array {
+		return $this->template_operation_lookups()['empty'];
+	}
+
+	public function test_invalid_operations_keep_advisory_remnant_with_reasons(): void {
+		// A suggestion with an invalid operation but valid templateParts must be KEPT
+		// as an advisory remnant carrying validationReasons (not discarded).
+		$suggestions = [
+			[
+				'label'         => 'Footer composition',
+				'operations'    => [
+					[
+						'type' => 'assign_template_part',
+						'slug' => 'unknown',
+						'area' => 'footer',
+					],
+				],
+				'templateParts' => [
+					[
+						'slug'   => 'footer-a',
+						'area'   => 'footer',
+						'reason' => 'fills footer',
+					],
+				],
+			],
+		];
+
+		$out = TemplatePrompt::validate_template_suggestions_for_tests( $suggestions, $this->lookups() );
+
+		$this->assertCount( 1, $out ); // NOT discarded.
+		$this->assertSame( [], $out[0]['operations'] ); // operations emptied.
+		$this->assertNotEmpty( $out[0]['templateParts'] ); // advisory remnant kept.
+		$this->assertNotEmpty( $out[0]['validationReasons'] ); // reason recorded.
+	}
+
+	public function test_derive_duplicate_area_returns_code(): void {
+		$result = TemplatePrompt::derive_template_operations_for_tests(
+			[
+				[
+					'slug' => 'a',
+					'area' => 'header',
+				],
+				[
+					'slug' => 'b',
+					'area' => 'header',
+				],
+			],
+			$this->assignedLookup(),
+			$this->emptyLookup()
+		);
+		$this->assertTrue( $result['invalid'] );
+		$this->assertSame( 'duplicate_area_mutation', $result['code'] );
 	}
 
 	/**
