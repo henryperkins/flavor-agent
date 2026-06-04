@@ -327,7 +327,7 @@ describe( 'executable-surface runtime apply thunk', () => {
 		);
 	} );
 
-	test( 'falls back to operation_validation_failed when the result has no code', async () => {
+	test( 'falls back to operation_validation_failed when the result code is not a string', async () => {
 		const recordOutcomeAction = jest.fn( ( outcome ) => ( {
 			type: 'RECORD_OUTCOME',
 			...outcome,
@@ -341,6 +341,7 @@ describe( 'executable-surface runtime apply thunk', () => {
 					Promise.resolve( {
 						ok: false,
 						error: 'Apply failed for an unmapped reason.',
+						code: { value: 'overlapping_block_paths' },
 					} )
 				),
 				getStoredRequestSignature: jest.fn( () => 'request' ),

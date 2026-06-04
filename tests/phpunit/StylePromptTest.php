@@ -1256,7 +1256,7 @@ final class StylePromptTest extends TestCase {
 		);
 	}
 
-	public function test_parse_response_records_no_executable_operations_backstop_when_ops_emptied_without_other_reason(): void {
+	public function test_parse_response_records_unknown_operation_reason_when_ops_are_emptied(): void {
 		$parsed = StylePrompt::parse_response(
 			wp_json_encode(
 				[
@@ -1283,12 +1283,12 @@ final class StylePromptTest extends TestCase {
 
 		$this->assertSame( 'advisory', $parsed['suggestions'][0]['tone'] );
 		$this->assertSame( [], $parsed['suggestions'][0]['operations'] );
-		$codes = array_column( $parsed['suggestions'][0]['validationReasons'] ?? [], 'code' );
-		$this->assertContains(
-			'no_executable_operations',
-			$codes,
-			sprintf( 'Expected no_executable_operations backstop; got: %s', implode( ', ', $codes ) )
-		);
+			$codes = array_column( $parsed['suggestions'][0]['validationReasons'] ?? [], 'code' );
+			$this->assertContains(
+				'unknown_operation_type',
+				$codes,
+				sprintf( 'Expected unknown_operation_type reason; got: %s', implode( ', ', $codes ) )
+			);
 	}
 
 	public function test_parse_response_uses_validation_prefix_when_drop_and_contrast_both_fire(): void {
@@ -1792,6 +1792,13 @@ final class StylePromptTest extends TestCase {
 				$this->branch_context(),
 				'unavailable_variation',
 			],
+			'unknown operation type'                     => [
+				[
+					'type' => 'rotate_styles',
+				],
+				$this->branch_context(),
+				'unknown_operation_type',
+			],
 		];
 	}
 
@@ -1825,5 +1832,30 @@ final class StylePromptTest extends TestCase {
 			$result['operations'],
 			'A rejected operation must not survive into the operations list.'
 		);
+	}
+
+	public function test_duplicate_theme_variation_emits_reason_and_keeps_first_variation(): void {
+		$result = StylePrompt::validate_operations_for_tests(
+			[
+				[
+					'type'           => 'set_theme_variation',
+					'variationIndex' => 0,
+					'variationTitle' => 'Default',
+				],
+				[
+					'type'           => 'set_theme_variation',
+					'variationIndex' => 1,
+					'variationTitle' => 'Midnight',
+				],
+			],
+			$this->branch_context()
+		);
+		$codes  = array_column( $result['reasons'], 'code' );
+
+		$this->assertContains( 'multi_operation_unsupported', $codes );
+		$this->assertNotContains( 'operation_validation_failed', $codes );
+		$this->assertCount( 1, $result['operations'] );
+		$this->assertSame( 'set_theme_variation', $result['operations'][0]['type'] );
+		$this->assertSame( 0, $result['operations'][0]['variationIndex'] );
 	}
 }

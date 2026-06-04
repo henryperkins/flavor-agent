@@ -899,6 +899,7 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 						],
 					],
 				],
+				'malformed-suggestion-row',
 				[
 					'label'             => 'b',
 					'validationReasons' => [
@@ -908,6 +909,7 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 						],
 					],
 				],
+				123,
 			],
 		];
 

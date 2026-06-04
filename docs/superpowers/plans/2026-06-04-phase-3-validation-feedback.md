@@ -1859,7 +1859,9 @@ Expected: PASS (the keys are response-side; they never enter request-side contex
 Run the spec's verification block:
 
 ```bash
+composer run lint:php
 composer run test:php -- --filter 'ValidationReasonTest|ValidationReasonParityTest|RecommendationEvaluationTest|BlockAbilitiesTest|StyleAbilitiesTest|TemplatePromptTest|TemplatePartPromptTest|RecommendationOutcomeTest|RecommendationAbilityExecutionTest|RecommendationContextScorerTest|SerializerTest|SignatureBoundaryTest'
+npm run lint:js
 npm run test:unit -- --runInBand src/store/__tests__/recommendation-outcomes.test.js src/store/__tests__/executable-surface-runtime.test.js src/utils/__tests__/validation-reasons.test.js
 node scripts/verify.js --skip-e2e   # inspect output/verify/summary.json -> status: pass
 npm run check:docs

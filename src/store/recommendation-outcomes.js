@@ -301,15 +301,21 @@ export function buildRankingSetFromSuggestions( suggestions = [] ) {
 			const primary = primaryValidationReason(
 				suggestion?.validationReasons
 			);
+			const validationReason =
+				primary?.code || cleanCode( suggestion?.validationReason );
+			const validationVocabularyVersion = primary
+				? VALIDATION_REASONS_VERSION
+				: cleanString( suggestion?.validationVocabularyVersion );
 
 			return {
 				suggestionKey,
 				ranking,
-				...( primary
+				...( validationReason
 					? {
-							validationReason: primary.code,
-							validationVocabularyVersion:
-								VALIDATION_REASONS_VERSION,
+							validationReason,
+							...( validationVocabularyVersion
+								? { validationVocabularyVersion }
+								: {} ),
 					  }
 					: {} ),
 			};

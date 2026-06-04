@@ -92,6 +92,24 @@ final class ValidationReasonTest extends TestCase {
 		$this->assertSame( 'unsupported_path', $primary['code'] );
 	}
 
+	public function test_primary_prefers_first_reason_when_severity_ties(): void {
+		$primary = ValidationReason::primary(
+			[
+				[
+					'code'     => 'failed_contrast',
+					'severity' => 'downgraded',
+				],
+				[
+					'code'     => 'advisory_only',
+					'severity' => 'downgraded',
+				],
+			]
+		);
+
+		$this->assertSame( 'failed_contrast', $primary['code'] );
+		$this->assertSame( 'downgraded', $primary['severity'] );
+	}
+
 	public function test_primary_returns_empty_array_for_no_reasons(): void {
 		$this->assertSame( [], ValidationReason::primary( [] ) );
 	}

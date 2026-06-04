@@ -1174,20 +1174,26 @@ EXAMPLE
 					continue;
 				}
 
-				$variation_index = $variation['index'];
-				$variation_title = $variation['title'];
+					$variation_index = $variation['index'];
+					$variation_title = $variation['title'];
 
-				if ( [] === $validated_variation ) {
+				if ( [] !== $validated_variation ) {
+					$reasons[] = [ 'code' => 'multi_operation_unsupported' ];
+					continue;
+				}
+
 					$validated_variation = [
 						'type'           => 'set_theme_variation',
 						'variationIndex' => $variation_index,
 						'variationTitle' => $variation_title,
 					];
-				}
+					continue;
 			}
+
+				$reasons[] = [ 'code' => 'unknown_operation_type' ];
 		}
 
-		$styles = [] !== $validated_variation
+			$styles = [] !== $validated_variation
 			? array_merge( [ $validated_variation ], $validated_styles )
 			: $validated_styles;
 

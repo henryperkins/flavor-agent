@@ -697,6 +697,10 @@ final class RecommendationAbilityExecution {
 		foreach ( [ 'settings', 'styles', 'block', 'suggestions' ] as $list_key ) {
 			$list = \is_array( $payload[ $list_key ] ?? null ) ? $payload[ $list_key ] : [];
 			foreach ( $list as $suggestion ) {
+				if ( ! \is_array( $suggestion ) ) {
+					continue;
+				}
+
 				$reasons = \is_array( $suggestion['validationReasons'] ?? null ) ? $suggestion['validationReasons'] : [];
 				foreach ( ValidationReason::normalize( $reasons ) as $reason ) {
 					$counts[ $reason['code'] ] = ( $counts[ $reason['code'] ] ?? 0 ) + 1;

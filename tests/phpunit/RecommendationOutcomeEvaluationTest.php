@@ -20,6 +20,7 @@ final class RecommendationOutcomeEvaluationTest extends TestCase {
 			self::outcome( 'pattern_inserted_from_shelf', 'pattern', 'set-2', 'p1', 'insert_blocks_success' ),
 			self::outcome( 'stale_blocked', 'template', 'set-3', 's3', 'resolved_context_changed' ),
 			self::outcome( 'validation_blocked', 'template', 'set-3', 's3', 'disallowed_operation' ),
+			self::outcome( 'validation_blocked', 'template', 'set-3', 's3', 'disallowed_operation' ),
 			self::apply( 'template', '', '' ),
 		];
 

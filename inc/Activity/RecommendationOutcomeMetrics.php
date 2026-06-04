@@ -77,10 +77,11 @@ final class RecommendationOutcomeMetrics {
 				}
 
 				if ( 'validation_blocked' === $event ) {
+					$is_new_validation_blocked               = ! isset( $validation_blocked_events[ $event_key ] );
 					$validation_blocked_events[ $event_key ] = true;
 					$attempted_events[ $event_key ]          = true;
 
-					if ( in_array( $surface, self::EXECUTABLE_OUTCOME_SURFACES, true ) ) {
+					if ( $is_new_validation_blocked && in_array( $surface, self::EXECUTABLE_OUTCOME_SURFACES, true ) ) {
 						$reason = (string) ( $outcome['reason'] ?? '' );
 						if ( '' !== $reason ) {
 							$validation_blocked_by_reason[ $reason ] = ( $validation_blocked_by_reason[ $reason ] ?? 0 ) + 1;

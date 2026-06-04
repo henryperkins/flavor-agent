@@ -616,4 +616,30 @@ describe( 'validationReason on outcomes', () => {
 			entry.after.outcome.rankingSet[ 0 ].validationVocabularyVersion
 		).toBe( 'validation-reasons-v1' );
 	} );
+
+	it( 'preserves pre-normalized validation metadata on shown rankingSet items', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42' },
+			event: 'shown',
+			surface: 'style',
+			recommendationSetId: 'style:1:set',
+			rankingSet: [
+				{
+					suggestionKey: 'style:styles:1',
+					ranking: { blendedScore: 0.4 },
+					validationReason: 'failed_contrast',
+					validationVocabularyVersion: 'validation-reasons-v1',
+				},
+			],
+		} );
+		expect( entry.after.outcome ).not.toHaveProperty(
+			'validationVocabularyVersion'
+		);
+		expect( entry.after.outcome.rankingSet[ 0 ] ).toEqual(
+			expect.objectContaining( {
+				validationReason: 'failed_contrast',
+				validationVocabularyVersion: 'validation-reasons-v1',
+			} )
+		);
+	} );
 } );
