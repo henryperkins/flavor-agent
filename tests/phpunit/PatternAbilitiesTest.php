@@ -553,6 +553,45 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( '', PatternAbilities::current_pattern_runtime_signature() );
 	}
 
+	public function test_recommend_patterns_keeps_direct_empty_visible_scope_response_without_no_model_marker(): void {
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertSame( [ 'recommendations' => [] ], $result );
+	}
+
+	public function test_recommend_patterns_marks_missing_visible_patterns_only_for_inserter_ranking(): void {
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'       => 'page',
+				'requestPurpose' => 'inserter_ranking',
+			]
+		);
+
+		$this->assertSame( [], $result['recommendations'] ?? null );
+		$this->assertSame(
+			[
+				'attempted' => false,
+				'reason'    => 'missing_visible_patterns',
+			],
+			$result['diagnostics']['modelRequest'] ?? null
+		);
+	}
+
+	public function test_recommend_patterns_sanitizes_unknown_request_purpose_as_omitted(): void {
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'       => 'page',
+				'requestPurpose' => 'inserter ranking<script>',
+			]
+		);
+
+		$this->assertSame( [ 'recommendations' => [] ], $result );
+	}
+
 	public function test_recommend_patterns_signatures_ignore_catalog_sync_timestamp(): void {
 		$input = [
 			'postType'             => 'page',

@@ -382,6 +382,43 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		$this->assertStringNotContainsString( 'Private launch hero', wp_json_encode( $after ) );
 	}
 
+	public function test_execute_persists_pattern_no_model_marker_on_request_diagnostic_after(): void {
+		RecommendationAbilityExecution::execute(
+			'pattern',
+			'flavor-agent/recommend-patterns',
+			[
+				'postType' => 'page',
+				'document' => [
+					'scopeKey' => 'post:42',
+					'postType' => 'post',
+					'entityId' => '42',
+				],
+			],
+			static fn(): array => [
+				'recommendations' => [],
+				'diagnostics'     => [
+					'modelRequest' => [
+						'attempted' => false,
+						'reason'    => 'no_rankable_candidates',
+					],
+				],
+			]
+		);
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+		$this->assertCount( 1, $entries );
+
+		$after = json_decode( (string) ( $entries[0]['after_state'] ?? '' ), true );
+		$this->assertSame(
+			[
+				'attempted' => false,
+				'reason'    => 'no_rankable_candidates',
+			],
+			$after['modelRequest'] ?? null
+		);
+		$this->assertArrayNotHasKey( 'modelRequest', $after['requestContext'] ?? [] );
+	}
+
 	/**
 	 * @dataProvider request_diagnostic_title_cases
 	 *
