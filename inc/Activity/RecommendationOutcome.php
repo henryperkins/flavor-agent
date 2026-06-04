@@ -127,6 +127,19 @@ final class RecommendationOutcome {
 				$normalized_outcome['ranking'] = $ranking;
 			}
 		}
+
+		$vocab_version = sanitize_text_field( (string) ( $outcome['validationVocabularyVersion'] ?? '' ) );
+		if ( '' !== $vocab_version ) {
+			$normalized_outcome['validationVocabularyVersion'] = substr( $vocab_version, 0, 64 );
+		}
+
+		if ( in_array( $event, [ 'selected_for_review' ], true ) ) {
+			$sibling = sanitize_key( (string) ( $outcome['validationReason'] ?? '' ) );
+			if ( '' !== $sibling ) {
+				$normalized_outcome['validationReason'] = $sibling;
+			}
+		}
+
 		$suggestion             = self::bounded_string(
 			$entry['suggestion'] ?? self::EVENT_LABELS[ $event ],
 			self::MAX_LABEL_LENGTH
@@ -226,10 +239,22 @@ final class RecommendationOutcome {
 				continue;
 			}
 
-			$items[] = [
+			$item_out = [
 				'suggestionKey' => $suggestion_key,
 				'ranking'       => $ranking,
 			];
+
+			$validation_reason = sanitize_key( (string) ( $item['validationReason'] ?? '' ) );
+			if ( '' !== $validation_reason ) {
+				$item_out['validationReason'] = $validation_reason;
+			}
+
+			$vocab_version = sanitize_text_field( (string) ( $item['validationVocabularyVersion'] ?? '' ) );
+			if ( '' !== $vocab_version ) {
+				$item_out['validationVocabularyVersion'] = substr( $vocab_version, 0, 64 );
+			}
+
+			$items[] = $item_out;
 
 			if ( count( $items ) >= self::RANKING_SET_CAP ) {
 				break;
