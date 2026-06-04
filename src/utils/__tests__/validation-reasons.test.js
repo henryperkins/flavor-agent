@@ -1,5 +1,6 @@
 import {
 	VALIDATION_REASONS_VERSION,
+	getValidationReasonLabel,
 	getValidationReasonSeverity,
 	primaryValidationReason,
 } from '../validation-reasons';
@@ -37,5 +38,24 @@ describe( 'validation-reasons vocabulary', () => {
 
 	it( 'returns null primary for an empty list', () => {
 		expect( primaryValidationReason( [] ) ).toBeNull();
+	} );
+
+	describe( 'getValidationReasonLabel', () => {
+		it( 'returns a concise non-empty label for a known code', () => {
+			const label = getValidationReasonLabel( 'failed_contrast' );
+			expect( typeof label ).toBe( 'string' );
+			expect( label.length ).toBeGreaterThan( 0 );
+		} );
+
+		it( 'humanizes unknown codes as a fallback', () => {
+			expect( getValidationReasonLabel( 'some_new_reason' ) ).toBe(
+				'Some new reason'
+			);
+		} );
+
+		it( 'returns an empty string for an empty code', () => {
+			expect( getValidationReasonLabel( '' ) ).toBe( '' );
+			expect( getValidationReasonLabel() ).toBe( '' );
+		} );
 	} );
 } );

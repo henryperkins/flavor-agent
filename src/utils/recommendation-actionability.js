@@ -12,6 +12,7 @@ import {
 	BLOCK_OPERATION_ERROR_STALE_TARGET,
 	BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED,
 } from './block-operation-catalog';
+import { primaryValidationReason } from './validation-reasons';
 
 export const ACTIONABILITY_TIER_INLINE_SAFE = 'inline-safe';
 export const ACTIONABILITY_TIER_REVIEW_SAFE = 'review-safe';
@@ -347,6 +348,43 @@ export function classifyOperationActionability( {
 	return buildActionability( ACTIONABILITY_TIER_ADVISORY, reasons, {
 		advisoryOperationsRejected: operations,
 	} );
+}
+
+/**
+ * Cross-surface actionability for style/template/template-part suggestions.
+ *
+ * Unlike the block-specific classifiers above, these surfaces carry their
+ * server-side validation outcome as a `validationReasons` list (vocabulary in
+ * `shared/validation-reasons.json`) rather than coded `rejectedOperations`. A
+ * suggestion with no executable `operations` but with `validationReasons` was
+ * rejected-but-kept-advisory; this surfaces the highest-severity reason code
+ * so the panel can render a concise human-readable explanation alongside it.
+ *
+ * Callers may also pass a `surface` key for context; it is intentionally not
+ * consumed here because tiering depends only on operations and reasons.
+ *
+ * @param {Object}                                   [input]                   Classifier input.
+ * @param {Array}                                    [input.operations]        Executable operations the suggestion still carries.
+ * @param {Array<{code: string, severity?: string}>} [input.validationReasons] Server-side validation reasons.
+ * @return {{tier: string, reasonCode: (string|null)}} Tier plus the primary reason code (null when none applies).
+ */
+export function classifyRecommendationActionability( {
+	operations = [],
+	validationReasons = [],
+} = {} ) {
+	const executableOperations = normalizeExecutableOperations( operations );
+
+	if ( executableOperations.length > 0 ) {
+		return {
+			tier: ACTIONABILITY_TIER_REVIEW_SAFE,
+			reasonCode: null,
+		};
+	}
+
+	return {
+		tier: ACTIONABILITY_TIER_ADVISORY,
+		reasonCode: primaryValidationReason( validationReasons )?.code ?? null,
+	};
 }
 
 export function summarizeActionability( actionabilities = [] ) {
