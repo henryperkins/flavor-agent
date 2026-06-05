@@ -13,6 +13,7 @@
 		"audit:visual": "node scripts/browser-run-visual-audit.js",
 		"dist": "bash scripts/build-dist.sh",
 		"ensure:local-env": "node scripts/ensure-local-env.js",
+		"install:codex-skills": "node scripts/install-codex-skills.js",
 		"start": "wp-scripts start",
 		"lint:js": "wp-scripts lint-js src/",
 		"lint:plugin": "node scripts/run-bash.js scripts/plugin-check.sh",

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Flavor Agent UI / Theme / Style Review"
+  short_description: "Flavor Agent UI/theme/style/a11y review (P0–P3, no edits)"
+  default_prompt: "Use $ui-theme-style-review to audit the Flavor Agent editor and admin UI for confirmed theme, style, accessibility, and stale-state issues."
+
+policy:
+  allow_implicit_invocation: true
