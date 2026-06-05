@@ -1,0 +1,7 @@
+interface:
+  display_name: "Verify Pipeline (Flavor Agent)"
+  short_description: "Run/interpret Flavor Agent's verify pipeline"
+  default_prompt: "Use $verify-pipeline to pick a verify mode and interpret output/verify/summary.json for Flavor Agent."
+
+policy:
+  allow_implicit_invocation: true
