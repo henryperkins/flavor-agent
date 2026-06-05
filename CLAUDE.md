@@ -41,11 +41,11 @@ composer test:php      # PHPUnit tests
 vendor/bin/phpunit     # PHPUnit tests (direct)
 ```
 
-PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.g. `store/update-helpers.test.js`) or in `__tests__/` directories.
+PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.g. `src/store/update-helpers.test.js`) or in `__tests__/` directories.
 
 ### Local WordPress runtime
 
-The representative runtime is WordPress nightly/trunk with these companion plugins active before validating editor, Connectors, Abilities, or MCP: `wordpress-beta-tester`, `gutenberg`, `ai`, `ai-provider-for-openai`, `ai-provider-for-anthropic`, `ai-provider-for-google`, `mcp-adapter` (installed from `WordPress/mcp-adapter`; the upstream README at v0.5.0 — 2026-04-15 — treats Composer as the primary install method and the plugin form as an alternative, and does not mention WP.org. The 22 Apr 2026 AI contributor summary recorded an intent to add WP.org as the primary distribution, but no WP.org listing is live as of 2026-05-26 and the README has not been updated. The GitHub clone remains the active local-setup path), `plugin-check`, plus `flavor-agent`. See `docs/reference/local-environment-setup.md` for setup and Plugin Check env exports.
+The representative runtime is WordPress nightly/trunk with these companion plugins active before validating editor, Connectors, Abilities, or MCP: `wordpress-beta-tester`, `gutenberg`, `ai`, `ai-provider-for-openai`, `ai-provider-for-anthropic`, `ai-provider-for-google`, `mcp-adapter` (installed from `WordPress/mcp-adapter`; the upstream README at v0.5.0 — 2026-04-15 — treats Composer as the primary install method and the plugin form as an alternative, and does not mention WP.org. The 22 Apr 2026 AI contributor summary recorded an intent to add WP.org as the primary distribution, but no WP.org listing is confirmed live as of 2026-06-04 and the README has not been updated. The GitHub clone remains the active local-setup path), `plugin-check`, plus `flavor-agent`. See `docs/reference/local-environment-setup.md` for setup and Plugin Check env exports.
 
 ### Agent-executable verification
 

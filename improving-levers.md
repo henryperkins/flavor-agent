@@ -303,7 +303,7 @@ Add deterministic validators and scorers for:
 
 ## Priority 5: Tie Guidelines To Recommendations For Attribution
 
-**Goal:** Keep structuring guidelines for prompt steering, and stamp the guideline version that produced each recommendation onto its activity/outcome record — as **attribution metadata for the future learning loop, not a freshness or staleness input**.
+**Goal:** Keep structuring guidelines for prompt steering, and stamp the guideline version that produced each recommendation request onto request-diagnostic activity metadata — as **attribution metadata for the future learning loop, not a freshness or staleness input**.
 
 > Re-scoped 2026-06-04. The original "guideline freshness" goal (make guideline edits stale prior recommendations) was dropped after review — see Current Gap below.
 
@@ -313,7 +313,7 @@ Guidelines are formatted as text by `Guidelines::format_prompt_context()` and in
 
 An earlier version of this priority proposed feeding a guidelines fingerprint into recommendation *freshness* signatures so guideline edits would stale prior recommendations. **That freshness goal was dropped.** Recommendations are generated on demand and live only for the session/selection; for guideline-change invalidation to ever fire, the same unapplied recommendation would have to survive a server-side guideline edit mid-flow — a real-world non-issue — and a global guideline fingerprint used as a staleness input would also over-invalidate unrelated recommendations. Guideline-as-staleness is therefore explicitly out of scope.
 
-The genuine, future-facing need is **attribution**. When the live learning loop (see the Phase 3 reframing) consumes apply / undo / ignore outcomes, two recommendations produced in the same context under different guideline sets must not be conflated. Recording the guideline version that produced each recommendation keeps outcomes attributable to their constraint set and enables before/after measurement when guidelines change. The version id is a fingerprint of a normalized structured projection (not raw text), so whitespace-only or ordering-only edits do not change it — only semantic changes do.
+The genuine, future-facing need is **attribution**. When the live learning loop (see the Phase 3 reframing) consumes apply / undo / ignore outcomes, two recommendations produced in the same context under different guideline sets must not be conflated. Recording the guideline version that produced each recommendation request keeps outcomes attributable to their constraint set and enables before/after measurement when guidelines change. The version id is a fingerprint of a normalized structured projection (not raw text), so whitespace-only or ordering-only edits do not change it — only semantic changes do.
 
 ### Proposed Guideline Model
 
@@ -339,19 +339,20 @@ Keep compatibility with existing `site`, `copy`, `images`, `additional`, and blo
 
 ### Implementation Seams
 
-- Guideline storage + version-id mint on save/update: `inc/Guidelines.php` and the settings save path; persist as an option such as `flavor_agent_guidelines_version`.
-- Version-id source: a fingerprint of the normalized structured guideline projection (so cosmetic edits do not change it). `inc/Guidelines/PromptGuidelinesFormatter.php` already filters per-ability categories and is the natural place to derive the projection.
-- Stamp at generation: `inc/Abilities/RecommendationAbilityExecution.php` records the in-effect id onto the request-diagnostic (and engaged-outcome) rows.
-- Activity persistence: `inc/Activity/Repository.php` and `inc/Activity/Serializer.php` carry the id as an attribution attribute.
+- Version-id source: `Guidelines::version_id()` computes a `gv1:` fingerprint from the normalized structured guideline projection at generation time, so cosmetic edits do not change it and no persisted option is required.
+- Stamp at generation: `inc/Abilities/RecommendationAbilityExecution.php` records the in-effect id onto request-diagnostic rows for recommendation requests.
+- Activity persistence: `inc/Activity/Repository.php` and `inc/Activity/Serializer.php` already carry the id through the request JSON payload; no schema column is required for the current attribution seam.
+- Future outcome propagation: if the learning loop starts consuming engaged outcome/apply rows as the primary signal, copy the originating request's `guidelineVersion` forward rather than recomputing the then-current guideline id.
 - Explicitly **not** touched: resolved/review freshness signatures (`inc/Support/RecommendationResolvedSignature.php`, `inc/Support/RecommendationReviewSignature.php`). The id is never a freshness input.
 
 ### Acceptance Criteria
 
-- On guidelines save/update, a stable **guideline version id** is minted from the normalized structured guideline projection (persisted in an option such as `flavor_agent_guidelines_version`). Whitespace-only or ordering-only edits do not change it; only semantic changes do.
-- Each recommendation's activity records (the request-diagnostic row, and engaged-outcome rows) carry the guideline version id that was in effect at generation, as attribution metadata.
+- A stable **guideline version id** is derived from the normalized structured guideline projection. Whitespace-only or ordering-only edits do not change it; only semantic changes do.
+- Each recommendation request's request-diagnostic activity row carries the guideline version id that was in effect at generation, as attribution metadata.
 - The id is attribution-only: it is **not** part of any resolved/review freshness signature, does **not** change `resolveSignatureOnly`, and does **not** stale or regenerate prior recommendations on any surface.
 - Existing behavior remains compatible with upstream `WordPress\AI\format_guidelines_for_prompt()` when available.
-- Tests prove: the id is recorded on outcome rows; a semantic guideline save changes it; a whitespace/order-only save does not; and that no freshness signature or `resolveSignatureOnly` result changes when guidelines change.
+- Tests prove: the id is recorded on request-diagnostic rows; semantic guideline changes change it; whitespace/order-only changes do not.
+- Future learning-loop work should add tests proving engaged outcome/apply rows preserve the originating request's id and that no freshness signature or `resolveSignatureOnly` result changes when guidelines change.
 - The prompt-steering behavior is unchanged — guidelines still shape generation exactly as today; this priority only adds recorded attribution.
 
 ## Priority 6: Split Docs Content Freshness From Runtime Freshness
@@ -484,9 +485,86 @@ Add:
 - Known-bad contexts produce higher-ranked actionable suggestions.
 - Prompt token deltas are visible per surface before expanding prompt sections again.
 
+## Priority 9: Build A Site-Local Learning Layer
+
+**Goal:** Turn Flavor Agent's own activity and outcome records into explainable, site-local ranking evidence before considering any model fine-tuning, hidden memory, or provider-specific adaptation.
+
+### Operating Principles
+
+- Learning stays local to the WordPress site unless an operator explicitly exports fixtures.
+- The first learning layer is read/report-only. It explains outcomes before it changes ranking.
+- Aggregates and derived preference summaries are preferred over raw prompts, full block trees, or provider payloads.
+- Every future score adjustment must be traceable to a local outcome, validation reason, ranking component, guideline version, docs fingerprint, pattern trait, or operation type.
+- `shown` is exposure, not approval. Strong learning signals come from selected-for-review, apply/insert, undo, validation-blocked, stale-blocked, and failed insertion events.
+- Derived preferences should become explicit, editable site guidance instead of invisible model memory.
+
+### Attribution Contract
+
+The learning layer needs a generation-level join contract that is stable across PHP-created request diagnostics, JS-created outcome rows, and apply/undo rows:
+
+```json
+{
+  "generationId": "recgen:template:...",
+  "recommendationSetId": "set:template:...",
+  "surface": "block|content|pattern|template|template-part|navigation|global-styles|style-book",
+  "ability": "flavor-agent/recommend-template",
+  "sourceRequestSignature": "...",
+  "guidelineVersion": "gv1:...",
+  "docsContentFingerprint": "...",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6",
+  "rankingVersion": "contextual_ranking_v1",
+  "validationVocabularyVersion": "validation-reasons-v1"
+}
+```
+
+Keep this metadata small and join-oriented. The request-diagnostic row can hold the richest generation metadata; engaged outcome/apply rows should carry the stable join keys and the originating attribution ids needed to query back to the request when details are required.
+
+### Outcome Signal Weights
+
+Start with conservative, auditable weights:
+
+- `shown`: exposure count only.
+- `selected_for_review`: weak positive signal.
+- `applied` / `pattern_inserted_from_shelf`: strong positive signal.
+- `undo`: strong negative signal for the operation/context pair, not necessarily for the whole surface.
+- `validation_blocked`: negative safety signal tied to the validation reason and operation type.
+- `stale_blocked`: context-drift signal; do not penalize the recommendation quality without corroborating evidence.
+- `insert_failed`: negative execution signal tied to pattern insertability or target context.
+- ignored-after-shown: weak negative only after a replacement request, entity switch, or enough elapsed time; never infer rejection from a single impression.
+
+### Learning Outputs
+
+The first useful outputs are operator/developer reports, not automatic behavior changes:
+
+- Surface health: exposure, review, apply, undo, and blocked rates by surface.
+- Operation health: apply/undo/block rates by operation type and validation reason.
+- Ranking health: which `ranking.sourceSignals` correlate with review/apply/undo.
+- Pattern health: top-three relevance, insert failures, visible-scope misses, and trait/component-score correlations.
+- Guideline health: outcome changes across `guidelineVersion` values without using the id as freshness.
+- Provider/model health: model/provider outcome differences after normalizing by surface and operation type.
+- Fixture harvest: high-signal clusters that should become offline evaluation fixtures.
+
+### Implementation Seams
+
+- Join keys and attribution metadata: `src/store/recommendation-outcomes.js`, `src/store/activity-undo.js`, `inc/Abilities/RecommendationAbilityExecution.php`, and `inc/Activity/RecommendationOutcome.php`.
+- Aggregation/query layer: `inc/Activity/Repository.php`, `inc/Activity/RecommendationOutcomeMetrics.php`, and `inc/REST/Agent_Controller.php`.
+- Admin reports: `src/admin/activity-log.js` and `src/admin/activity-log-utils.js`, gated behind `manage_options`.
+- Offline fixture harvest: `tests/phpunit/RecommendationEvaluationTest.php` and `tests/phpunit/fixtures/recommendation-evaluation-*`.
+- Ranking feedback application: `inc/Support/RankingContract.php`, surface parsers, and `inc/Support/RecommendationContextScorer.php`.
+- Preference surfacing: `Guidelines::format_prompt_context()` and the settings/admin guideline save path, with explicit operator review before any derived preference becomes prompt guidance.
+
+### Acceptance Criteria
+
+- A server-minted generation id joins request-diagnostic rows to shown, selected-for-review, apply, undo, and blocked/failed outcome rows.
+- Learning reports can explain outcome rates by surface, operation type, validation reason, ranking signal, guideline version, provider/model, and pattern trait without exposing raw provider payloads.
+- No automatic ranking change ships before the report-only layer and fixture-harvest path prove that the aggregate signal is useful.
+- Fixture generation is explicit and reviewable; private site content is not exported by default.
+- Any ranking adjustment is bounded, versioned, and visible in `ranking.sourceSignals` or diagnostics.
+
 ## Suggested Implementation Order
 
-Status note (updated 2026-06-04): Phases 0, 1, and 2 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed a slice of Phase 3 via validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`). Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phases 4–7 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work — pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) — should come first.
+Status note (updated 2026-06-04): Phases 0, 1, and 2 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed a slice of Phase 3 via validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`). Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phase 4's initial request-diagnostic attribution seam is shipped, but engaged outcome propagation remains future learning-loop work. Phases 5–12 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work — pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) — should come first.
 
 ### Phase 0: Measurement Stub
 
@@ -564,10 +642,11 @@ git diff --check
 
 Re-scoped 2026-06-04 from "Guidelines Freshness." Guideline-as-staleness was dropped as a real-world non-issue (see Priority 5); this is now a small attribution seam. Sequence it **after** the felt-value work (pattern relevance, design validators) — do it when the learning loop is actually on the horizon.
 
-- [ ] Mint a stable guideline version id from the normalized structured guideline projection on guidelines save/update (e.g., option `flavor_agent_guidelines_version`); cosmetic edits do not change it.
-- [ ] Stamp the in-effect id onto request-diagnostic and engaged-outcome activity rows at generation time.
-- [ ] Persist and expose the id through the activity repository/serializer as attribution metadata.
-- [ ] Tests: id recorded on outcome rows; semantic save changes it; whitespace/order-only save does not; no freshness signature or `resolveSignatureOnly` result changes when guidelines change.
+- [x] Derive a stable guideline version id from the normalized structured guideline projection at generation time; cosmetic edits do not change it.
+- [x] Stamp the in-effect id onto request-diagnostic activity rows for recommendation requests.
+- [x] Persist and expose the id through the existing request JSON payload carried by the activity repository/serializer.
+- [x] Tests: id recorded on request-diagnostic rows; semantic changes alter the id; whitespace/order-only changes do not.
+- [ ] Future learning-loop work: propagate the originating request id to engaged outcome/apply rows if those rows become the attribution source, and prove no freshness signature or `resolveSignatureOnly` result changes when guidelines change.
 
 **Verification:**
 
@@ -629,13 +708,93 @@ npm run check:docs
 git diff --check
 ```
 
+### Phase 8: Learning Attribution Join Contract
+
+- [ ] Mint a server-side `generationId` for each non-signature-only recommendation request.
+- [ ] Carry `generationId`, `recommendationSetId`, `sourceRequestSignature`, `guidelineVersion`, docs content/runtime fingerprints, provider/model, ranking version, and validation vocabulary version through request-diagnostic metadata.
+- [ ] Propagate the originating generation/join ids into shown, selected-for-review, apply/insert, undo, stale-blocked, validation-blocked, and insert-failed rows.
+- [ ] Keep the join payload bounded and avoid storing raw provider payloads, full block trees, or large prompt context in outcome rows.
+- [ ] Add serializer and repository tests proving the join survives round-trips across diagnostic, outcome, apply, and undo rows.
+
+**Verification:**
+
+```bash
+composer run test:php -- --filter 'RecommendationAbilityExecution|RecommendationOutcome|ActivitySerializer|ActivityRepository'
+npm run test:unit -- --runInBand src/store/__tests__/recommendation-outcomes.test.js src/store/__tests__/activity-undo.test.js src/store/__tests__/store-actions.test.js
+npm run check:docs
+git diff --check
+```
+
+### Phase 9: Learning Reports
+
+- [ ] Add read-only aggregate queries for outcome rates by surface, operation type, validation reason, ranking signal, guideline version, provider/model, and pattern trait.
+- [ ] Surface those aggregates in the admin activity UI behind `manage_options`.
+- [ ] Treat `shown` as exposure only; avoid deriving ignored-after-shown negatives until replacement/time-window semantics are defined and tested.
+- [ ] Keep reports bounded and sanitized; link to representative activity rows instead of embedding raw prompts or full context payloads.
+
+**Verification:**
+
+```bash
+composer run test:php -- --filter 'RecommendationOutcomeMetrics|ActivityRepository|AgentControllerTest'
+npm run test:unit -- --runInBand src/admin/__tests__/activity-log-utils.test.js
+npm run check:docs
+git diff --check
+```
+
+### Phase 10: Fixture Harvest From Learning Signals
+
+- [ ] Identify high-signal clusters from local reports, such as frequent undo for raw color operations, repeated validation blocks by operation type, or pattern insert failures by trait.
+- [ ] Add an explicit, operator/developer-controlled fixture export path that redacts or summarizes private content by default.
+- [ ] Convert exported clusters into offline `RecommendationEvaluationTest` fixtures before changing ranking behavior.
+- [ ] Record expected metric movement for each harvested fixture.
+
+**Verification:**
+
+```bash
+composer run test:php -- --filter 'RecommendationEvaluation|RecommendationOutcomeMetrics'
+npm run check:docs
+git diff --check
+```
+
+### Phase 11: Bounded Local Ranking Feedback
+
+- [ ] Apply site-local aggregate signals as small, capped ranking adjustments only after the report and fixture layers are in place.
+- [ ] Version each adjustment family and expose it through `ranking.sourceSignals` or diagnostics.
+- [ ] Penalize operation/context pairs with repeated undo or validation blocks; do not globally suppress a surface from sparse data.
+- [ ] Boost only stable positives, such as repeated apply/review of preset-backed, validation-safe operations in similar contexts.
+- [ ] Provide an operator switch or diagnostic setting to disable learned ranking adjustments for troubleshooting.
+
+**Verification:**
+
+```bash
+composer run test:php -- --filter 'RankingContract|RecommendationEvaluation|BlockAbilitiesTest|StyleAbilitiesTest|TemplateAbilitiesTest|PatternAbilitiesTest'
+npm run test:unit -- --runInBand src/store/__tests__/recommendation-outcomes.test.js
+npm run check:docs
+git diff --check
+```
+
+### Phase 12: Editable Site Preference Summaries
+
+- [ ] Derive candidate preference summaries from repeated local outcomes, such as "prefer editorial patterns" or "avoid raw shadows on article content."
+- [ ] Present candidates to operators as explicit guideline suggestions rather than silently injecting them into prompts.
+- [ ] Record the guideline version before and after accepted preference changes so later reports can measure effect without using guideline ids for freshness.
+- [ ] Keep rejected preference candidates out of future prompts unless the operator later accepts them.
+
+**Verification:**
+
+```bash
+composer run test:php -- --filter 'Guidelines|RecommendationOutcomeMetrics|RecommendationAbilityExecution'
+npm run check:docs
+git diff --check
+```
+
 ## Risk Controls
 
 - Do not widen pattern recommendations into apply/undo semantics while improving rank quality.
 - Do not let docs guidance crowd out local design context for purely visual suggestions.
 - Do not hash volatile diagnostics or labels into applicability signatures.
 - Do not hash raw guideline text when a normalized structured guideline projection is available.
-- Do not turn the guideline version id into a freshness or staleness input. It is attribution metadata recorded on outcomes; guideline edits must not stale, gate, or regenerate prior recommendations.
+- Do not turn the guideline version id into a freshness or staleness input. It is attribution metadata recorded on request diagnostics and future learning-loop outcomes; guideline edits must not stale, gate, or regenerate prior recommendations.
 - Do not remove fail-closed docs-grounding behavior for API/currentness-sensitive recommendations.
 - Do not make model ranking authoritative over validator results.
 - Do not let added prompt sections bypass `PromptBudget` caps.
@@ -643,19 +802,21 @@ git diff --check
 - Do not create a second style semantics system when `StylePrompt` already has `designSemantics`.
 - Do not claim a metrics gate passed without running `RecommendationEvaluationTest` in the same phase verification.
 - Do not claim pattern `resolveSignatureOnly` freshness parity unless the pattern ability actually exposes that input or an intentionally separate pattern freshness signal is documented and tested.
+- Do not treat a single `shown` event as approval, rejection, or quality evidence.
+- Do not add hidden model memory, cross-site learning, or automatic fine-tuning from activity rows.
+- Do not let learned ranking adjustments bypass validation, capability checks, or content-only/editing-mode restrictions.
+- Do not turn derived preferences into prompt guidance without explicit operator review.
 
 ## Practical Stop Line
 
-The first useful milestone is complete when:
+The first useful milestone through Phase 3 is complete when:
 
 - the fixture-backed Phase 0 metrics stub exists and has baseline output;
 - strict LLM schemas can accept structured ranking;
 - composite ranking prevents confidence-only suggestions from dominating;
 - block/style/template/template-part prompts include explicit `designSemantics` summaries;
-- guideline version ids are recorded on recommendation outcomes for future attribution (guideline-as-staleness intentionally dropped — see Priority 5);
 - validation reasons are available for ranking and diagnostics;
-- docs retrieval refreshes do not stale unchanged guidance content;
 - targeted PHP and JS tests cover those contracts;
 - each phase can report at least one metric movement or preservation target.
 
-After that, pattern metadata enrichment and expanded evaluation metrics become the next strategic improvements.
+After that, design validators, docs fingerprint splitting, pattern metadata enrichment, the site-local learning layer, and expanded evaluation metrics remain the next strategic improvements.
