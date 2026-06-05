@@ -89,9 +89,12 @@ export default function InserterBadge() {
 
 	useEffect( () => {
 		const clearAnchor = () => {
+			// Our dedicated anchor only ever holds this component's own portal
+			// output, so remove it whenever it is ours. A childNodes-empty
+			// guard was unreliable: on unmount React tears the portal output
+			// down after this cleanup runs, which would leave the span behind.
 			if (
-				anchorRef.current?.classList?.contains( BADGE_ANCHOR_CLASS ) &&
-				anchorRef.current.childNodes.length === 0
+				anchorRef.current?.classList?.contains( BADGE_ANCHOR_CLASS )
 			) {
 				anchorRef.current.remove();
 			}
@@ -134,8 +137,7 @@ export default function InserterBadge() {
 			}
 
 			if (
-				anchorRef.current?.classList?.contains( BADGE_ANCHOR_CLASS ) &&
-				anchorRef.current.childNodes.length === 0
+				anchorRef.current?.classList?.contains( BADGE_ANCHOR_CLASS )
 			) {
 				anchorRef.current.remove();
 			}

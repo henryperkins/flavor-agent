@@ -934,7 +934,7 @@ describe( 'ActivityLogApp', () => {
 				suggestion: 'Recommendation without captured core log',
 				request: {
 					ai: {
-						requestToken: '7a85fe6b-ad73-4c0f-931b-0b0a70bc09c0',
+						requestToken: 'test-request-token',
 						requestLogId: '',
 					},
 				},
@@ -965,7 +965,7 @@ describe( 'ActivityLogApp', () => {
 				},
 				request: {
 					ai: {
-						requestToken: '7a85fe6b-ad73-4c0f-931b-0b0a70bc09c0',
+						requestToken: 'test-request-token',
 						requestLogId: '',
 					},
 				},

@@ -1065,7 +1065,11 @@ export default function PatternRecommender() {
 				},
 				{
 					insertionTargetSignature: currentInsertionTargetSignature,
-					cacheKey: currentPatternCacheKey,
+					// Only the base inserter-open ranking is cached per target.
+					// Search refinements ( input.prompt ) re-fetch and are not
+					// cached, so a search never overwrites the cached base
+					// ranking and no unread search keys accumulate.
+					cacheKey: input.prompt ? '' : currentPatternCacheKey,
 				}
 			),
 		[

@@ -6,6 +6,7 @@ const mockCreateBlock = jest.fn();
 const mockGetBlockBindingsSources = jest.fn();
 const mockParse = jest.fn();
 const mockFetchPatternRecommendations = jest.fn();
+const mockFetchPatternRequestContext = jest.fn();
 const mockHydratePatternRecommendationsFromCache = jest.fn();
 const mockResolvePatternRecommendationSignature = jest.fn();
 const mockRecordRecommendationOutcome = jest.fn();
@@ -280,6 +281,7 @@ describe( 'PatternRecommender', () => {
 		mockGetBlockBindingsSources.mockReturnValue( {} );
 		mockParse.mockReset();
 		mockFetchPatternRecommendations.mockReset();
+		mockFetchPatternRequestContext.mockReset();
 		mockHydratePatternRecommendationsFromCache.mockReset();
 		mockResolvePatternRecommendationSignature.mockReset();
 		mockResolvePatternRecommendationSignature.mockResolvedValue( {
@@ -347,8 +349,10 @@ describe( 'PatternRecommender', () => {
 		mockUseDispatch.mockImplementation( ( storeName ) => {
 			if ( storeName === 'flavor-agent' ) {
 				return {
-					fetchPatternRecommendations: ( input ) =>
-						mockFetchPatternRecommendations( input ),
+					fetchPatternRecommendations: ( input, requestContext ) => {
+						mockFetchPatternRequestContext( requestContext );
+						return mockFetchPatternRecommendations( input );
+					},
 					resolvePatternRecommendationSignature: ( input ) =>
 						mockResolvePatternRecommendationSignature( input ),
 					recordRecommendationOutcome: ( outcome ) =>
@@ -3085,6 +3089,16 @@ describe( 'PatternRecommender', () => {
 				blockName: 'core/heading',
 			},
 		} );
+
+		// Regression: the base inserter-open ranking (call 1) is cached under a
+		// non-empty target key, while the search refinement (call 2) is not
+		// cached, so a search can never overwrite the cached base ranking.
+		expect(
+			mockFetchPatternRequestContext.mock.calls[ 0 ][ 0 ].cacheKey
+		).not.toBe( '' );
+		expect(
+			mockFetchPatternRequestContext.mock.calls[ 1 ][ 0 ].cacheKey
+		).toBe( '' );
 	} );
 
 	test( 'reattaches the inserter search listener when Gutenberg replaces the input', () => {

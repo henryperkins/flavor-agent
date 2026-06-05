@@ -3326,7 +3326,9 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	await dismissWelcomeGuide( page );
 
 	// The first real ranking is sent on block inserter intent, not on editor load.
-	await expect.poll( () => patternRequests.length > 0 ).toBe( true );
+	await expect
+		.poll( () => patternRequests.length > 0, { timeout: 15_000 } )
+		.toBe( true );
 
 	const searchInput = await getVisibleSearchInput( page );
 

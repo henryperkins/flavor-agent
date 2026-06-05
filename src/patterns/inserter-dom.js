@@ -80,7 +80,11 @@ const INSERTER_DENY_LABEL =
 	/list\s*view|outline|document\s*overview|hierarchy|structure/i;
 
 function getButtonLabel( button ) {
-	return button?.getAttribute?.( 'aria-label' ) || button?.textContent || '';
+	return String(
+		button?.getAttribute?.( 'aria-label' ) || button?.textContent || ''
+	)
+		.replace( /\s+/g, ' ' )
+		.trim();
 }
 
 function isDeniedToolbarButton( button ) {
