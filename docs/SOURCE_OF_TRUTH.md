@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-05-21
+> Last updated: 2026-06-05
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -207,7 +207,10 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 
 ### Current Open Backlog
 
+For the consolidated work queue, source docs, gating state, and suggested next planning order, see [`reference/current-open-work.md`](reference/current-open-work.md).
+
 - Deepen the new admin activity page into a richer audit/observability surface with a visual diff viewer, broader diagnostics, and a cleaner action/discovery layer.
+- Continue the `improving-levers.md` roadmap from the unshipped phases after Phase 3: docs fingerprint split, pattern metadata/component ranking, expanded evaluation, learning attribution, learning reports, fixture harvest, bounded local ranking feedback, and editable site preference summaries. Shipped implementation plans are archived under `docs/superpowers/plans/archive/` and are not active backlog.
 - Swap the Docker-backed WP 7.0 browser harness from the beta image to the official stable `7.0` image once it exists, and keep Docker available in environments that run that harness.
 - Revisit navigation apply only if a bounded previewable/undoable executor becomes its own tracked post-v1 milestone.
 - Keep Interactivity API work in the future backlog, not the current remediation backlog, until the plugin grows a front-end runtime surface.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status update (2026-05-23):** Pattern-surface contextual ranking is now part of the current contract. The follow-up plan in `docs/superpowers/plans/2026-05-23-contextual-ranking-outcome-remediation.md` added `RecommendationContextScorer` scoring and `contextual_ranking_v1` source-signal emission to `PatternAbilities::recommend_patterns()` so pattern recommendation outcome diagnostics can join contextual evidence the same way the other recommendation surfaces do. Dedicated JS `PatternRecommender` shelf reordering UI remains deferred to a later Pattern Ranking V1 phase.
+> **Status update (2026-05-23):** Pattern-surface contextual ranking is now part of the current contract. The archived follow-up plan in `docs/superpowers/plans/archive/2026-05-23-contextual-ranking-outcome-remediation.md` added `RecommendationContextScorer` scoring and `contextual_ranking_v1` source-signal emission to `PatternAbilities::recommend_patterns()` so pattern recommendation outcome diagnostics can join contextual evidence the same way the other recommendation surfaces do. Dedicated JS `PatternRecommender` shelf reordering UI remains deferred to a later Pattern Ranking V1 phase.
 
 **Goal:** Feed real WordPress context into recommendation ranking so Flavor Agent can prefer suggestions that match the user prompt, block capabilities, section role, docs freshness, design semantics, accessibility/context fit, and visible scope before recommendations are shown.
 

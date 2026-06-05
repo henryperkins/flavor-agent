@@ -1,7 +1,7 @@
 # Phase 3: Validation Feedback & Diagnostics — Design
 
 - **Date:** 2026-06-04
-- **Status:** Revised after review rounds 4–5 (all findings confirmed against HEAD and folded in); OD-1 and OD-2 resolved (R5). **Ready for the implementation plan.**
+- **Status:** Implemented via #29 (`c2a22f5`); historical design context. The shipped implementation plan is archived at `docs/superpowers/plans/archive/2026-06-04-phase-3-validation-feedback.md`, and `improving-levers.md` now treats Phase 3 as shipped.
 - **Scope:** Cross-surface — the four executable recommendation parsers (block, style, template, template-part) plus shared subsystems: ranking (`RecommendationContextScorer`), recommendation-outcome capture/metrics (`RecommendationOutcome*`, `recommendation-outcomes.js`, `executable-surface-runtime.js`), and (audit-only) request diagnostics (`RecommendationAbilityExecution`). Cross-surface validation gates (`docs/reference/cross-surface-validation-gates.md`) apply.
 - **Roadmap:** Phase 3 of `improving-levers.md`. **Reframed:** the consuming north star is a **live learning loop** that adapts ranking from real apply / undo / ignore outcomes on production sites. Phase 3's outputs are therefore *training inputs*, which raises signal consistency, joinability, stability, and unbiasedness from "nice" to "load-bearing."
 - **Related:** Contextual Ranking V1 (`inc/Support/RecommendationContextScorer.php`) — already carries a `validation_risk` penalty. `inc/Activity/RecommendationOutcome.php` + `RecommendationOutcomeMetrics.php` — the live-loop substrate this builds on. Supersedes the validation half of `improving-levers.md` Phase 3's checklist, which predates that substrate and is partly stale.

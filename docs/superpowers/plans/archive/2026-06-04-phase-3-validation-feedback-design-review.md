@@ -1,5 +1,7 @@
 # Phase 3 Validation Feedback Design Review
 
+> Status: Archived 2026-06-05. Review findings were folded into the shipped Phase 3 validation feedback work; retained only as historical review context.
+
 **Source:** Review of `docs/superpowers/specs/2026-06-04-phase-3-validation-feedback-design.md`  
 **Date:** 2026-06-04
 

@@ -1,5 +1,7 @@
 # Pattern Recommendation Warm-Up and Inserter Badge Implementation Plan
 
+> Status: Archived 2026-06-05. Shipped via pattern warm-up and inserter badge work; retained only as historical execution context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move pattern ranking from passive editor load to inserter intent, add target-scoped ranking cache with runtime-signature freshness, preserve no-model diagnostics accurately, and anchor the inserter badge only to the real block inserter button.

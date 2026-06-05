@@ -1,7 +1,7 @@
 # Pattern Insertion-Context Message — Design
 
 - **Date:** 2026-06-02
-- **Status:** Approved (Approach B)
+- **Status:** Implemented; historical design context. The current pattern recommender skips server fetches for insertion points that accept no patterns and renders the dedicated no-patterns notice.
 - **Scope:** Single surface (pattern recommender, client-only). Independent of PR #25.
 
 ## Problem

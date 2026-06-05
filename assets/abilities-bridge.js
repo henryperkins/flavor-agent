@@ -1,49 +1,16 @@
 /* eslint-disable import/no-unresolved */
 import * as coreAbilities from '@wordpress/core-abilities';
 import { executeAbility } from '@wordpress/abilities';
+import {
+	buildAbilityRunPath,
+	normalizeAbilityExecutionResult,
+	shouldFallbackToAbilityRest,
+} from './ability-execution-utils.js';
 
 const ready =
 	coreAbilities.ready && typeof coreAbilities.ready.then === 'function'
 		? coreAbilities.ready
 		: Promise.resolve();
-
-function buildAbilityRunPath( abilityName ) {
-	const encoded = String( abilityName )
-		.split( '/' )
-		.map( encodeURIComponent )
-		.join( '/' );
-
-	return `/wp-abilities/v1/abilities/${ encoded }/run`;
-}
-
-function normalizeResult( result ) {
-	if ( ! result || typeof result !== 'object' || Array.isArray( result ) ) {
-		return result;
-	}
-
-	if ( Object.prototype.hasOwnProperty.call( result, 'payload' ) ) {
-		return result.payload;
-	}
-
-	if ( Object.prototype.hasOwnProperty.call( result, 'result' ) ) {
-		return result.result;
-	}
-
-	if ( Object.prototype.hasOwnProperty.call( result, 'output' ) ) {
-		return result.output;
-	}
-
-	return result;
-}
-
-function shouldFallbackToRest( error ) {
-	const message = typeof error?.message === 'string' ? error.message : '';
-
-	return (
-		error?.code === 'ability_not_found' ||
-		message.includes( 'Ability not found' )
-	);
-}
 
 /**
  * Self-healing executeAbility.
@@ -64,19 +31,21 @@ function shouldFallbackToRest( error ) {
  */
 async function executeAbilityWithRestFallback( abilityName, input ) {
 	try {
-		return normalizeResult( await executeAbility( abilityName, input ) );
+		return normalizeAbilityExecutionResult(
+			await executeAbility( abilityName, input )
+		);
 	} catch ( error ) {
 		const apiFetch =
 			typeof window !== 'undefined' ? window.wp?.apiFetch : null;
 
 		if (
-			! shouldFallbackToRest( error ) ||
+			! shouldFallbackToAbilityRest( error ) ||
 			typeof apiFetch !== 'function'
 		) {
 			throw error;
 		}
 
-		return normalizeResult(
+		return normalizeAbilityExecutionResult(
 			await apiFetch( {
 				path: buildAbilityRunPath( abilityName ),
 				method: 'POST',

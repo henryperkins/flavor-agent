@@ -33,15 +33,17 @@ const MAX_VISIBLE = 3;
 const DEFAULT_SUCCESS_MS = 6000;
 const DEFAULT_ERROR_MS = 8000;
 
-const SURFACE_TITLES = Object.freeze( {
+const SURFACE_TITLE_BY_KEY = Object.freeze( {
 	block: __( 'Block updated', 'flavor-agent' ),
 	template: __( 'Template applied', 'flavor-agent' ),
-	templatePart: __( 'Template part applied', 'flavor-agent' ),
 	'template-part': __( 'Template part applied', 'flavor-agent' ),
-	globalStyles: __( 'Global styles updated', 'flavor-agent' ),
 	'global-styles': __( 'Global styles updated', 'flavor-agent' ),
-	styleBook: __( 'Style Book updated', 'flavor-agent' ),
 	'style-book': __( 'Style Book updated', 'flavor-agent' ),
+} );
+const SURFACE_TITLE_ALIASES = Object.freeze( {
+	templatePart: 'template-part',
+	globalStyles: 'global-styles',
+	styleBook: 'style-book',
 } );
 const FALLBACK_SURFACE_TITLE = __( 'Update applied', 'flavor-agent' );
 const UNDO_LABEL = __( 'Undo', 'flavor-agent' );
@@ -54,8 +56,13 @@ function generateToastId() {
 }
 
 function getSurfaceTitle( surface ) {
-	if ( typeof surface === 'string' && SURFACE_TITLES[ surface ] ) {
-		return SURFACE_TITLES[ surface ];
+	const surfaceKey =
+		typeof surface === 'string'
+			? SURFACE_TITLE_ALIASES[ surface ] || surface
+			: '';
+
+	if ( surfaceKey && SURFACE_TITLE_BY_KEY[ surfaceKey ] ) {
+		return SURFACE_TITLE_BY_KEY[ surfaceKey ];
 	}
 
 	return FALLBACK_SURFACE_TITLE;

@@ -24,6 +24,7 @@ jest.mock( '@wordpress/blocks', () => ( {
 } ) );
 
 import apiFetch from '@wordpress/api-fetch';
+import { normalizeAbilityExecutionResult } from '../../../assets/ability-execution-utils';
 
 import {
 	applyGlobalStyleSuggestionOperations,
@@ -60,6 +61,7 @@ import {
 	reducer,
 	selectors,
 } from '../index';
+import { getClientRequestSessionId } from '../client-request-identity';
 import { CONNECTOR_NOT_APPROVED_CODE } from '../request-error-details';
 import { resetRecommendationOutcomeDedupeForTests } from '../recommendation-outcomes';
 
@@ -150,14 +152,16 @@ function expectAbilityRunRequest( abilityKey, input ) {
 
 function installAbilitiesBridge() {
 	window.flavorAgentAbilities = {
-		executeAbility: jest.fn( ( abilityName, data ) =>
-			apiFetch( {
-				path: ABILITY_RUN_PATHS_BY_NAME[ abilityName ],
-				method: 'POST',
-				data: {
-					input: data,
-				},
-			} )
+		executeAbility: jest.fn( async ( abilityName, data ) =>
+			normalizeAbilityExecutionResult(
+				await apiFetch( {
+					path: ABILITY_RUN_PATHS_BY_NAME[ abilityName ],
+					method: 'POST',
+					data: {
+						input: data,
+					},
+				} )
+			)
 		),
 	};
 }
@@ -294,6 +298,7 @@ describe( 'store action thunks', () => {
 						editorContext: context,
 						clientId: 'block-1',
 						clientRequest: expect.objectContaining( {
+							sessionId: getClientRequestSessionId(),
 							requestToken: 3,
 							abortId: 'block-1',
 							scopeKey: 'post:42',

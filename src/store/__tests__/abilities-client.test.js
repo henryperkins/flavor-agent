@@ -4,9 +4,9 @@ import apiFetch from '@wordpress/api-fetch';
 
 import {
 	buildAbilityRunPath,
-	executeFlavorAgentAbility,
 	normalizeAbilityExecutionResult,
-} from '../abilities-client';
+} from '../../../assets/ability-execution-utils';
+import { executeFlavorAgentAbility } from '../abilities-client';
 
 describe( 'abilities client', () => {
 	beforeEach( () => {
@@ -28,9 +28,7 @@ describe( 'abilities client', () => {
 
 	test( 'executeFlavorAgentAbility prefers the bridge when abort is not required', async () => {
 		const executeAbility = jest.fn().mockResolvedValue( {
-			payload: {
-				explanation: 'Bridge result',
-			},
+			explanation: 'Bridge result',
 		} );
 
 		window.flavorAgentAbilities = { executeAbility };
@@ -49,6 +47,28 @@ describe( 'abilities client', () => {
 				prompt: 'Tighten this copy.',
 			}
 		);
+		expect( apiFetch ).not.toHaveBeenCalled();
+	} );
+
+	test( 'executeFlavorAgentAbility does not normalize bridge results a second time', async () => {
+		const executeAbility = jest.fn().mockResolvedValue( {
+			result: {
+				suggestions: [],
+			},
+		} );
+
+		window.flavorAgentAbilities = { executeAbility };
+
+		await expect(
+			executeFlavorAgentAbility( 'flavor-agent/recommend-block', {
+				prompt: 'Keep the result property intact.',
+			} )
+		).resolves.toEqual( {
+			result: {
+				suggestions: [],
+			},
+		} );
+
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
@@ -96,9 +116,7 @@ describe( 'abilities client', () => {
 			resolveReady = resolve;
 		} );
 		const executeAbility = jest.fn().mockResolvedValue( {
-			payload: {
-				explanation: 'Ready bridge result',
-			},
+			explanation: 'Ready bridge result',
 		} );
 
 		window.flavorAgentAbilities = { ready, executeAbility };

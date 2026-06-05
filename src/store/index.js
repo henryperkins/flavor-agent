@@ -77,6 +77,7 @@ import {
 	getBlockPatterns,
 } from '../patterns/pattern-settings';
 import { executeFlavorAgentAbility } from './abilities-client';
+import { buildClientRequestIdentity } from './client-request-identity';
 import { normalizeRequestErrorDetails } from './request-error-details';
 import {
 	buildRecommendationOutcomeDedupeKey,
@@ -92,9 +93,6 @@ import {
 } from './recommendation-outcomes';
 
 const STORE_NAME = 'flavor-agent';
-const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
-	.toString( 36 )
-	.slice( 2 ) }`;
 const APPLY_RESOLVED_FRESHNESS_ABORT_KEY = '_applyResolvedFreshnessAbort';
 const APPLY_RESOLVED_FRESHNESS_TIMEOUT_MS = 15000;
 const PATTERN_PIPELINE_TRACE_KEYS = Object.freeze( [
@@ -744,20 +742,6 @@ function stripContextSignatureFromRequestInput( requestInput = null ) {
 	const { contextSignature, ...requestData } = requestInput;
 
 	return requestData;
-}
-
-function buildClientRequestIdentity( {
-	abortId = null,
-	requestData = {},
-	requestToken = null,
-} = {} ) {
-	return {
-		sessionId: CLIENT_REQUEST_SESSION_ID,
-		requestToken: Number.isFinite( requestToken ) ? requestToken : null,
-		abortId:
-			abortId === null || abortId === undefined ? '' : String( abortId ),
-		scopeKey: requestData?.document?.scopeKey || '',
-	};
 }
 
 function attachClientRequestIdentity( requestData = {}, clientRequest = null ) {

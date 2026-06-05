@@ -18,6 +18,12 @@ No Flavor Agent release-risk bug was found by static inspection alone. This is
 not release evidence for Gutenberg 23.3 runtime compatibility because the editor
 and WordPress stack never became available.
 
+Currentness note, 2026-06-05 repo hygiene pass: this file remains a historical
+record of the shell where it was executed. The current Linux checkout has
+Node/npm, PHP, `node_modules/`, `vendor/`, and `build/` available; the remaining
+representative validation gap is the WordPress/Docker/browser runtime, not those
+basic local dependencies.
+
 ## Sources Consulted
 
 - Make/Core release post:

@@ -46,7 +46,9 @@ export function getCurrentThemeBaseGlobalStyles( coreSelect ) {
 	);
 }
 
-export function getCurrentThemeGlobalStylesVariations( coreSelect ) {
+export const EMPTY_GLOBAL_STYLE_VARIATIONS = Object.freeze( [] );
+
+export function getCurrentThemeGlobalStylesVariationRecords( coreSelect ) {
 	const stableVariations = safelyCallSelector(
 		coreSelect,
 		'getCurrentThemeGlobalStylesVariations'
@@ -63,5 +65,12 @@ export function getCurrentThemeGlobalStylesVariations( coreSelect ) {
 
 	return Array.isArray( experimentalVariations )
 		? experimentalVariations
-		: [];
+		: null;
+}
+
+export function getCurrentThemeGlobalStylesVariations( coreSelect ) {
+	return (
+		getCurrentThemeGlobalStylesVariationRecords( coreSelect ) ||
+		EMPTY_GLOBAL_STYLE_VARIATIONS
+	);
 }

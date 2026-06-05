@@ -1,6 +1,6 @@
 # Content Recommendation Latest Recommendation Workspace
 
-**Status:** Approved direction, awaiting implementation
+**Status:** Implemented; historical design context. The current `src/content/ContentRecommender.js` workspace uses the latest-result/refine-request layout described here, with current behavior documented in `docs/features/content-recommendations.md`.
 **Date:** 2026-05-22
 **Author:** Henry Perkins (with Codex)
 **Tracker:** Content Recommendations UI overload review (this session)

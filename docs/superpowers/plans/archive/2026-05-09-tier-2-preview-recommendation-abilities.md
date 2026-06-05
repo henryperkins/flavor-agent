@@ -1,5 +1,7 @@
 # Tier 2: Read-only preview recommendation abilities — Implementation Plan
 
+> Status: Archived 2026-06-05. Shipped in the current ability contract; retained only as historical execution context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add five read-only sibling abilities (`flavor-agent/preview-recommend-{block,navigation,style,template,template-part}`) that wrap the executable recommend-* parents, force `resolveSignatureOnly:true` server-side, strip `clientRequest` to suppress request-token transients, and return signature-only output. Always available behind `canonical_contracts_available()`; MCP-public on the default ability bridge only.
@@ -1302,7 +1304,7 @@ Expected: 7–8 commits on top of the spec commit (`60ae7a2`), each with a clear
 
 ## Execution handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-05-09-tier-2-preview-recommendation-abilities.md`. Two execution options:
+Plan complete and saved to `docs/superpowers/plans/archive/2026-05-09-tier-2-preview-recommendation-abilities.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** — Dispatch a fresh subagent per task, review between tasks, fast iteration.
 

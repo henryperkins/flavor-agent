@@ -44,13 +44,17 @@ Read these documents in this order:
 3. `STATUS.md`
    - Current verified state, known issues, recent verification, and top-level documentation map.
    - This is the fastest way to answer "what is true in the tree today?"
-4. `docs/FEATURE_SURFACE_MATRIX.md`
+4. `docs/reference/current-open-work.md`
+   - One-page current work queue: implementation candidates, release-validation chores, upstream watch items, and non-active backlog.
+   - Start here when the question is "what should happen next?"
+5. `docs/FEATURE_SURFACE_MATRIX.md`
    - Fast scan of every shipped surface, where it appears, and when it is gated.
    - Start here when the question is "where does this feature actually show up?"
-5. `docs/features/README.md`
+6. `docs/features/README.md`
    - Entry point for the per-surface deep dives.
    - Use this when you need exact end-to-end user flow details.
-6. `docs/reference/`
+7. `docs/reference/`
+   - `current-open-work.md` — current implementation candidates, release-validation chores, upstream watch items, and non-active backlog.
    - `abilities-and-routes.md` — abilities, REST routes, permissions, and first-party callers.
    - `shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers.
    - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
@@ -68,10 +72,10 @@ Read these documents in this order:
    - `gutenberg-feature-tracking.md` — version-keyed map of Gutenberg releases, stabilized APIs, and forward-looking iteration issues mapped to Flavor Agent code paths, plus a refresh procedure.
    - `local-environment-setup.md` — representative local WordPress nightly/trunk setup and companion-plugin activation checklist.
    - `agentic-plan-implementation-guide.md` — durable rules for temporary implementation plans.
-7. `docs/flavor-agent-readme.md`
+8. `docs/flavor-agent-readme.md`
    - Editor-flow and architecture walkthrough.
    - Use this as the architecture-oriented companion to the feature docs.
-8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
+9. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
    - Release-cycle research snapshots for upstream WordPress changes that matter to Flavor Agent.
    - Use the snapshots for compatibility context.
 
@@ -87,15 +91,20 @@ Each top-level doc has one job:
    - What is currently working?
    - What is known broken, partial, or unverified?
    - What checks most recently passed?
-3. `docs/FEATURE_SURFACE_MATRIX.md` answers:
+3. `docs/reference/current-open-work.md` answers:
+   - Which work is actually still open?
+   - Which items are actionable now, gated on upstream, release-validation chores, or not active backlog?
+   - Which source doc owns the detailed design or verification gate?
+4. `docs/FEATURE_SURFACE_MATRIX.md` answers:
    - Where does each feature surface appear?
    - Under what conditions does it show, hide, or degrade?
    - Which surfaces support deterministic apply and inline undo?
-4. `docs/features/` answers:
+5. `docs/features/` answers:
    - How do the user-facing editor flows work?
    - What can each surface do today?
    - Which UI, store, REST, and backend layers make it work?
-5. `docs/reference/` answers:
+6. `docs/reference/` answers:
+   - `current-open-work.md` — Which work remains open, what is blocked, and what needs a fresh plan before coding?
    - `abilities-and-routes.md` — Which ability or route owns a contract? Which permissions and backend gates apply?
    - `shared-internals.md` — Which cross-cutting store utilities, shared UI components, and context helpers do the surfaces share?
    - `recommendation-ui-consistency.md` — Which interaction model does each surface use, and which differences are intentional exceptions?
@@ -113,10 +122,10 @@ Each top-level doc has one job:
    - `gutenberg-feature-tracking.md` — Which Gutenberg release stabilized an API the repo shims, and which iteration issue or forthcoming change should the repo watch?
    - `local-environment-setup.md` — Which local WordPress, Gutenberg, connector, and plugin-check setup is representative for manual testing?
    - `agentic-plan-implementation-guide.md` — How should temporary implementation plans be formatted and retired?
-6. `docs/flavor-agent-readme.md` answers:
+7. `docs/flavor-agent-readme.md` answers:
    - How does the broader editor architecture fit together?
    - How do the surface docs fit into the repo-level implementation story?
-7. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md` answer:
+8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md` answer:
    - Which upstream WordPress 7.0 and Gutenberg changes matter to Flavor Agent?
    - Which release-cycle notes are authoritative or merely supplemental?
    - Which migration or tooling opportunities are worth tracking without treating them as shipped repo behavior?
@@ -140,17 +149,20 @@ Right now the intended doc stack is:
 
 1. Goal and guardrails: `docs/SOURCE_OF_TRUTH.md`
 2. Current state: `STATUS.md`
-3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
-4. Per-surface deep dives: `docs/features/README.md`
-5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, developer-docs-public-corpus-runbook, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
-6. Architecture companion: `docs/flavor-agent-readme.md`
-7. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
+3. Current work queue: `docs/reference/current-open-work.md`
+4. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
+5. Per-surface deep dives: `docs/features/README.md`
+6. Programmatic and UI contract docs: `docs/reference/` (current-open-work, abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, developer-docs-public-corpus-runbook, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
+7. Architecture companion: `docs/flavor-agent-readme.md`
+8. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
 
-If those seven documentation groups stay aligned, the repo has a solid documentation backbone.
+If those eight documentation groups stay aligned, the repo has a solid documentation backbone.
 
 ## Temporary Artifacts
 
-Point-in-time artifacts do not belong in the durable reading order. Completed implementation plans, code audits, and clipped external research should be deleted once their outcomes move into code, tests, `STATUS.md`, or the backbone docs.
+Point-in-time artifacts do not belong in the durable reading order. Completed implementation plans, code audits, and clipped external research should be deleted or moved to an explicit archive once their outcomes move into code, tests, `STATUS.md`, or the backbone docs.
+
+Archived files under `docs/superpowers/plans/archive/` are historical execution/review context only. Do not treat them as active backlog, and do not start implementation from an archived plan without first re-grounding it against the current source tree and writing a fresh active plan. Design specs under `docs/superpowers/specs/` may also be historical once their status line says implemented; use the live feature/reference docs as the current contract.
 
 Retain only artifacts with an active maintenance job:
 
@@ -169,6 +181,6 @@ Before adding a new Markdown file under `docs/`, prefer one of these paths:
 
 1. update an existing backbone, feature, or reference doc;
 2. create a short release/validation artifact with a clear deletion point;
-3. keep long implementation plans outside the durable docs tree unless they are actively being executed.
+3. keep long implementation plans outside the durable docs tree unless they are actively being executed; if a repo-local copy must be retained after execution, move it under an archive path and add an explicit status banner.
 
 If a document is kept long-term, add or preserve enough context for a future maintainer to know its status, owner, and update trigger.

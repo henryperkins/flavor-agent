@@ -60,7 +60,7 @@ Re-run the verification gates on the exact commit you tag.
 
 ## Architecture at a glance
 
-Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin apps under `src/`, and compiled assets in `build/`. The runtime defines 20 WordPress Ability contracts across recommendation, helper, docs, style, pattern, template, navigation, and infrastructure categories; helper/read abilities register whenever the Abilities API exists, while recommendation abilities also require the WordPress AI feature gate. The remaining plugin REST API stays intentionally thin for activity persistence, undo, and pattern sync.
+Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin apps under `src/`, and compiled assets in `build/`. The runtime defines 25 WordPress Ability contracts across recommendation, helper/read, docs-search, preview, style, pattern, template, navigation, and infrastructure categories; helper/read abilities and the five signature-only `preview-recommend-*` siblings register whenever their core contracts are available, while recommendation abilities also require the WordPress AI feature gate. The remaining plugin REST API stays intentionally thin for activity persistence, undo, and pattern sync.
 
 The editor app mounts first-party UI into native Gutenberg and Site Editor locations: block Inspector panels, post/page document panels, the pattern inserter, template and template-part panels, Global Styles, Style Book, and navigation-block advisory sections. Activity records are written server-side and reused by inline editor history plus the wp-admin audit page.
 

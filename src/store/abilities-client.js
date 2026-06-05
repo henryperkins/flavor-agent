@@ -1,48 +1,11 @@
 import apiFetch from '@wordpress/api-fetch';
+import {
+	buildAbilityRunPath,
+	normalizeAbilityExecutionResult,
+	shouldFallbackToAbilityRest,
+} from '../../assets/ability-execution-utils';
 
-function isPlainObject( value ) {
-	return Boolean(
-		value && typeof value === 'object' && ! Array.isArray( value )
-	);
-}
-
-export function buildAbilityRunPath( abilityName ) {
-	const encodedAbilityName = String( abilityName )
-		.split( '/' )
-		.map( encodeURIComponent )
-		.join( '/' );
-
-	return `/wp-abilities/v1/abilities/${ encodedAbilityName }/run`;
-}
-
-export function normalizeAbilityExecutionResult( result ) {
-	if ( ! isPlainObject( result ) ) {
-		return result;
-	}
-
-	if ( Object.prototype.hasOwnProperty.call( result, 'payload' ) ) {
-		return result.payload;
-	}
-
-	if ( Object.prototype.hasOwnProperty.call( result, 'result' ) ) {
-		return result.result;
-	}
-
-	if ( Object.prototype.hasOwnProperty.call( result, 'output' ) ) {
-		return result.output;
-	}
-
-	return result;
-}
-
-function shouldFallbackToRest( error ) {
-	const message = typeof error?.message === 'string' ? error.message : '';
-
-	return (
-		error?.code === 'ability_not_found' ||
-		message.includes( 'Ability not found' )
-	);
-}
+export { buildAbilityRunPath, normalizeAbilityExecutionResult };
 
 async function isBridgeReady( bridgeApi ) {
 	const ready = bridgeApi?.ready;
@@ -97,11 +60,9 @@ export async function executeFlavorAgentAbility(
 	if ( typeof bridge === 'function' && ! signal ) {
 		if ( await isBridgeReady( bridgeApi ) ) {
 			try {
-				return normalizeAbilityExecutionResult(
-					await bridge( abilityName, data )
-				);
+				return await bridge( abilityName, data );
 			} catch ( error ) {
-				if ( ! shouldFallbackToRest( error ) ) {
+				if ( ! shouldFallbackToAbilityRest( error ) ) {
 					throw error;
 				}
 			}

@@ -239,6 +239,15 @@ export default function UndoToast( {
 	const undoTitle = undoDisabled
 		? __( 'Undo unavailable for this change', 'flavor-agent' )
 		: undefined;
+	const undoDescriptionId = undoDisabled
+		? `${ id }-undo-disabled-reason`
+		: undefined;
+	const progressStyle = {
+		'--flavor-agent-toast-auto-dismiss-ms': `${ Math.max(
+			0,
+			Number( autoDismissMs ) || 0
+		) }ms`,
+	};
 
 	return (
 		// The wrapper owns hover/focus/keyboard handlers for auto-dismiss and
@@ -296,12 +305,18 @@ export default function UndoToast( {
 				onClick={ handleUndoClick }
 				onKeyDown={ handleUndoKeyDown }
 				aria-disabled={ undoDisabled || undefined }
+				aria-describedby={ undoDescriptionId }
 				tabIndex={ 0 }
 				title={ undoTitle }
 				icon={ undo }
 			>
 				{ undoLabel }
 			</Button>
+			{ undoTitle && (
+				<span id={ undoDescriptionId } className="screen-reader-text">
+					{ undoTitle }
+				</span>
+			) }
 
 			<Button
 				className="flavor-agent-toast__close"
@@ -310,7 +325,11 @@ export default function UndoToast( {
 				label={ __( 'Dismiss', 'flavor-agent' ) }
 			/>
 
-			<span className={ progressClassName } aria-hidden="true" />
+			<span
+				className={ progressClassName }
+				style={ progressStyle }
+				aria-hidden="true"
+			/>
 		</div>
 	);
 }

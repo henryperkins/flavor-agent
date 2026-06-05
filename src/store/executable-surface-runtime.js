@@ -1,10 +1,7 @@
 import { executeFlavorAgentAbility } from './abilities-client';
+import { buildClientRequestIdentity } from './client-request-identity';
 import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
 import { normalizeRequestErrorDetails } from './request-error-details';
-
-const CLIENT_REQUEST_SESSION_ID = `flavor-agent-${ Date.now() }-${ Math.random()
-	.toString( 36 )
-	.slice( 2 ) }`;
 
 function normalizeRequestInput( requestInput ) {
 	return requestInput && typeof requestInput === 'object' ? requestInput : {};
@@ -21,20 +18,6 @@ function stripContextSignatureFromRequestInput( requestInput = null ) {
 	void contextSignature;
 
 	return requestData;
-}
-
-function buildClientRequestIdentity( {
-	abortId = null,
-	requestData = {},
-	requestToken = null,
-} = {} ) {
-	return {
-		sessionId: CLIENT_REQUEST_SESSION_ID,
-		requestToken: Number.isFinite( requestToken ) ? requestToken : null,
-		abortId:
-			abortId === null || abortId === undefined ? '' : String( abortId ),
-		scopeKey: requestData?.document?.scopeKey || '',
-	};
 }
 
 export function createExecutableSurfaceFetchConfig( {

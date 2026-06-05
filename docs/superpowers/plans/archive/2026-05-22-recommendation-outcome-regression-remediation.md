@@ -1,5 +1,7 @@
 # Recommendation Outcome Regression Remediation Implementation Plan
 
+> Status: Archived 2026-06-05. Shipped with the recommendation outcome diagnostics remediation; retained only as historical execution context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the new recommendation outcome diagnostics accurate, retrievable, retry-safe, and test-pinned without changing Flavor Agent's existing apply/undo ownership boundaries.

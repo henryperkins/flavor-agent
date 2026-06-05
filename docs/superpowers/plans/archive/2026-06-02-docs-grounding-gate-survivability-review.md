@@ -1,5 +1,7 @@
 # Docs-Grounding Gate Survivability Plan Review
 
+> Status: Archived 2026-06-05. Review findings were resolved before implementation; retained only as historical review context.
+
 ## Status
 
 Resolved in the current plan draft.

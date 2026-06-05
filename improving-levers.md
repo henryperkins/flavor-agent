@@ -564,7 +564,7 @@ The first useful outputs are operator/developer reports, not automatic behavior 
 
 ## Suggested Implementation Order
 
-Status note (updated 2026-06-04): Phases 0, 1, and 2 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed a slice of Phase 3 via validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`). Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phase 4's initial request-diagnostic attribution seam is shipped, but engaged outcome propagation remains future learning-loop work. Phases 5–12 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work — pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) — should come first.
+Status note (updated 2026-06-05): Phases 0, 1, and 2 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed a slice of Phase 3 via validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`); its implementation plan is archived at `docs/superpowers/plans/archive/2026-06-04-phase-3-validation-feedback.md`. Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phase 4's initial request-diagnostic attribution seam is shipped, but engaged outcome propagation remains future learning-loop work. Phases 5–12 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work — pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) — should come first.
 
 ### Phase 0: Measurement Stub
 
@@ -621,7 +621,7 @@ git diff --check
 
 ### Phase 3: Validation Feedback And Diagnostics
 
-Shipped 2026-06-04 via #29 (`c2a22f5`) as a versioned cross-surface `validation-reasons-v1` signal — design in `docs/superpowers/specs/2026-06-04-phase-3-validation-feedback-design.md`, implementation in the matching plan. The design spec supersedes the validation half of the original checklist below; boxes are checked against what actually landed.
+Shipped 2026-06-04 via #29 (`c2a22f5`) as a versioned cross-surface `validation-reasons-v1` signal — design in `docs/superpowers/specs/2026-06-04-phase-3-validation-feedback-design.md`, implementation plan archived at `docs/superpowers/plans/archive/2026-06-04-phase-3-validation-feedback.md`. The design spec supersedes the validation half of the original checklist below; boxes are checked against what actually landed.
 
 - [x] Normalize validation reasons across executable surfaces.
 - [x] Include validation state in ranking components.

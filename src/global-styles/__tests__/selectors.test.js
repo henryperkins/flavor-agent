@@ -4,6 +4,7 @@ const path = require( 'path' );
 import {
 	getCurrentGlobalStylesId,
 	getCurrentThemeBaseGlobalStyles,
+	getCurrentThemeGlobalStylesVariationRecords,
 	getCurrentThemeGlobalStylesVariations,
 } from '../selectors';
 
@@ -54,6 +55,11 @@ describe( 'global styles selector adapter', () => {
 				getCurrentThemeGlobalStylesVariations: () => null,
 			} )
 		).toEqual( [] );
+		expect(
+			getCurrentThemeGlobalStylesVariationRecords( {
+				getCurrentThemeGlobalStylesVariations: () => null,
+			} )
+		).toBeNull();
 	} );
 
 	test( 'fails closed when Global Styles selector calls throw', () => {
@@ -85,6 +91,9 @@ describe( 'global styles selector adapter', () => {
 		expect(
 			getCurrentThemeGlobalStylesVariations( throwingCoreSelect )
 		).toEqual( [] );
+		expect(
+			getCurrentThemeGlobalStylesVariationRecords( throwingCoreSelect )
+		).toBeNull();
 	} );
 
 	test( 'documents the selector adapter as the allowed Global Styles experimental boundary', () => {

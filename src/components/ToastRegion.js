@@ -36,12 +36,14 @@ function getRegionRoot() {
 	if ( ! root ) {
 		root = document.createElement( 'div' );
 		root.className = 'flavor-agent-toast-region';
-		root.setAttribute(
-			'aria-label',
-			__( 'Flavor Agent recent changes', 'flavor-agent' )
-		);
 		document.body.appendChild( root );
 	}
+
+	root.setAttribute( 'role', 'region' );
+	root.setAttribute(
+		'aria-label',
+		__( 'Flavor Agent recent changes', 'flavor-agent' )
+	);
 
 	return root;
 }

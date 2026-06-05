@@ -2,7 +2,7 @@
 
 ## Execution Protocol
 
-Use this protocol for any implementation plan that carries structured task steps. Long-form plans should live outside the durable docs tree (issue tracker, PR description, or temporary working notes) and be deleted after execution; this guide stays in `docs/reference/` because the conventions outlive any individual plan.
+Use this protocol for any implementation plan that carries structured task steps. Long-form plans should live outside the durable docs tree (issue tracker, PR description, or temporary working notes) and be deleted or archived after execution; this guide stays in `docs/reference/` because the conventions outlive any individual plan.
 
 - Follow a worker-oriented execution loop when implementing a plan.
 - Use one of:
@@ -11,6 +11,7 @@ Use this protocol for any implementation plan that carries structured task steps
 - Keep plan steps as checkbox tasks and preserve completion state.
 - Prefer incremental tasks and explicit sequencing when dependencies exist.
 - Keep drift-prone sections (scope, prerequisites, verification) current when context changes.
+- When execution finishes, move any retained repo-local plan under `docs/superpowers/plans/archive/` with an explicit archived-status banner, or delete it after the outcome is represented in code, tests, `STATUS.md`, `docs/features/`, or `docs/reference/`.
 
 ## Standard Step Format
 

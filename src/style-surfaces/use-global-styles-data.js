@@ -3,6 +3,7 @@ import { useMemo } from '@wordpress/element';
 import {
 	getCurrentGlobalStylesId,
 	getCurrentThemeBaseGlobalStyles,
+	getCurrentThemeGlobalStylesVariationRecords,
 } from '../global-styles/selectors';
 import { getGlobalStylesUserConfig } from '../utils/style-operations';
 
@@ -15,34 +16,6 @@ export const EMPTY_STYLE_CONFIG = Object.freeze( {
 	_links: Object.freeze( {} ),
 } );
 export const EMPTY_STYLE_VARIATIONS = Object.freeze( [] );
-
-function safelyCallSelector( coreSelect, selectorName ) {
-	try {
-		return coreSelect?.[ selectorName ]?.();
-	} catch {
-		return undefined;
-	}
-}
-
-function getCurrentThemeGlobalStylesVariationRecords( coreSelect ) {
-	const stableVariations = safelyCallSelector(
-		coreSelect,
-		'getCurrentThemeGlobalStylesVariations'
-	);
-
-	if ( Array.isArray( stableVariations ) ) {
-		return stableVariations;
-	}
-
-	const experimentalVariations = safelyCallSelector(
-		coreSelect,
-		'__experimentalGetCurrentThemeGlobalStylesVariations'
-	);
-
-	return Array.isArray( experimentalVariations )
-		? experimentalVariations
-		: null;
-}
 
 export function selectGlobalStylesDataDependencies( select ) {
 	const coreSelect = select( 'core' ) || {};

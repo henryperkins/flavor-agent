@@ -1,5 +1,7 @@
 # Uncommitted Settings and Dual Logging Review
 
+> Status: Archived 2026-06-05. Findings were resolved in the same working tree; retained only as historical review context.
+
 ## Core Reason
 
 The patch graduates Block Structural Actions from an experimental admin/constant toggle to default-on with only the `flavor_agent_enable_block_structural_actions` filter as a kill switch. It also reuses the Experimental Features section for a new default-on `AI Activity Dual Logging` setting that keeps local Flavor Agent request diagnostics even when core AI Request Logging is enabled.

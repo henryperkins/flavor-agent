@@ -112,6 +112,8 @@ The admin screen initially showed only 4 "failed" rows with summary cards scoped
 2. **Memoize the three FA `useSelect` returns** (Finding 1).
 3. **Bundled-DataViews `inert`** (Finding 2) — revisit only when core retries React 19.
 
+Currentness note, 2026-06-05: the `useSelect` memoization follow-up is no longer open in the current checkout; `STATUS.md` records the 2026-06-02 referential-stability pass and its verification. The manual real-browser Site Editor pass and React 19 / bundled DataViews watch remain the live takeaways.
+
 ## Evidence appendix
 
 - React: `wp.element.version` 19.2.4 (23.3.0) → `null` + `window.React.version` 18.3.1, `react`/`react-dom` `?ver=18.3.1` (23.3.2).

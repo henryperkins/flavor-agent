@@ -1,7 +1,7 @@
 # Docs-Grounding Coverage Gate: Survivability Design
 
 - **Date:** 2026-06-02
-- **Status:** Approved — OD-1 resolved (narrow block kept); ready for implementation plan
+- **Status:** Implemented; historical design context. The shipped implementation plan is archived at `docs/superpowers/plans/archive/2026-06-02-docs-grounding-gate-survivability.md`, and current behavior is documented in `docs/reference/developer-docs-public-corpus-runbook.md` and `docs/features/settings-backends-and-sync.md`.
 - **Scope:** Shared subsystem (docs grounding) — affects every recommendation surface that gates on `DocsGuidanceResult::is_actionable()`
 - **Related:** Commit `5b82ab2` (grace window + decoupled gate diagnostics) — this design supersedes the coverage-gate half of it.
 

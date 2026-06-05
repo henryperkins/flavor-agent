@@ -201,6 +201,21 @@ describe( 'buildToastForActivity', () => {
 			'flavor-agent'
 		);
 		expect( i18n.__ ).toHaveBeenCalledWith( 'Undo', 'flavor-agent' );
+		expect(
+			i18n.__.mock.calls.filter(
+				( [ text ] ) => text === 'Template part applied'
+			)
+		).toHaveLength( 1 );
+		expect(
+			i18n.__.mock.calls.filter(
+				( [ text ] ) => text === 'Global styles updated'
+			)
+		).toHaveLength( 1 );
+		expect(
+			i18n.__.mock.calls.filter(
+				( [ text ] ) => text === 'Style Book updated'
+			)
+		).toHaveLength( 1 );
 	} );
 
 	it( 'block surface produces a success toast with the persisted entry id', () => {

@@ -1,12 +1,12 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-06-02
+> Last updated: 2026-06-05
 
 ## Working
 
 ### Abilities API (WordPress 7.0+)
 
-Flavor Agent defines 20 ability contracts. The 13 helper/read abilities register whenever the Abilities API is available; the 7 recommendation abilities register only when the WordPress AI plugin feature contracts are available and the Flavor Agent feature is enabled through the AI plugin feature toggles. Useful recommendation output still depends on the per-surface capability and backend gates documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md). The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`) — lives there too.
+Flavor Agent defines 25 ability contracts. The 13 helper/search abilities register whenever the Abilities API is available; the five `preview-recommend-*` signature-only siblings register when the canonical WordPress AI contracts are available; the seven recommendation abilities register only when the WordPress AI plugin feature contracts are available and the Flavor Agent feature is enabled through the AI plugin feature toggles. Useful recommendation output still depends on the per-surface capability and backend gates documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md). The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) — lives there too.
 
 - **Block**: `recommend-block`, `introspect-block`, `list-allowed-blocks`
 - **Content**: `recommend-content`
@@ -14,6 +14,7 @@ Flavor Agent defines 20 ability contracts. The 13 helper/read abilities register
 - **Template**: `recommend-template`, `recommend-template-part`, `list-template-parts`
 - **Navigation**: `recommend-navigation`
 - **Style**: `recommend-style`
+- **Preview**: `preview-recommend-block`, `preview-recommend-navigation`, `preview-recommend-style`, `preview-recommend-template`, `preview-recommend-template-part`
 - **Docs**: `search-wordpress-docs`
 - **Infra**: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, `get-theme-tokens`, `check-status`
 
@@ -48,12 +49,15 @@ All three REST route paths under `/flavor-agent/v1/` are working. Recommendation
 
 ## Open Backlog
 
+The consolidated current work queue now lives in [`docs/reference/current-open-work.md`](docs/reference/current-open-work.md). Use it to separate actionable implementation candidates from release-validation chores, upstream watch items, and historical archived plans.
+
 - [x] Added live WordPress smoke coverage for `get-theme-styles`, `list-synced-patterns`, `get-synced-pattern`, and `list-allowed-blocks` in `tests/e2e/flavor-agent-helper-abilities.spec.js`, using the WP 7.0 abilities REST endpoints directly. The current host has Docker available, and the helper smoke specs passed in the 2026-04-29 WP 7.0 rerun.
 - [x] Made an explicit permission decision for helper theme reads versus theme-editing surfaces: `get-active-theme` / `get-theme-presets` / `get-theme-styles` / `get-theme-tokens` stay at `edit_posts`, and `list-template-parts` now accepts editor or theme capability at the outer boundary while returning markup only to theme-capable callers.
 - [x] Promoted synced-pattern `partial` to a first-class `syncStatus` value and filter while still preserving raw `wpPatternSyncStatus`.
 - [x] Revisited payload size and semantics for the new list helpers: `list-allowed-blocks`, `list-patterns`, and `list-synced-patterns` now support pagination and lighter payload modes, and each list now returns `total`.
 - [x] Added classic-theme, child-theme, and plugin-dense helper smoke coverage through the new WP 7.0 fixture themes/plugin and helper smoke spec. The helper smoke specs passed in the 2026-04-29 WP 7.0 rerun.
 - Deepen the new admin activity page with row-level actions, richer visual before/after inspection, and tighter ability-to-audit cross-reference metadata rather than treating audit visibility as greenfield work.
+- Continue the `improving-levers.md` roadmap from its unshipped phases: docs fingerprint split, pattern metadata/component ranking, expanded evaluation, learning attribution, learning reports, fixture harvest, bounded local ranking feedback, and editable site preference summaries. The 2026-06-04 Phase 3 validation feedback and pattern warm-up/inserter badge plans are archived because their outcomes are now in code and feature docs.
 - [x] Closed the remaining WP 7.0 Site Editor blockers in the current checkout validation: the Global Styles undo-state assertion, template-part undo availability after apply, template undo persistence after refresh, and template undo availability after inserted-pattern changes all passed on 2026-04-29.
 - [x] Restored a fully local Plugin Check path for this host: use `WP_PLUGIN_CHECK_PATH=/var/lib/docker/volumes/wordpress_wordpress_data/_data` plus the Docker-backed WordPress DB env so `lint-plugin` runs as a gate instead of remaining `incomplete`.
 - Swap the Docker-backed WP 7.0 browser harness from the beta image to the official stable `7.0` image once it exists, and keep Docker available in environments that run that harness.
@@ -65,6 +69,9 @@ All three REST route paths under `/flavor-agent/v1/` are working. Recommendation
 
 ## Recent Verification
 
+- 2026-06-05 open-work consolidation: added `docs/reference/current-open-work.md` as the live queue for implementation candidates, release-validation chores, upstream watch items, and non-active backlog; wired it into the docs backbone, `STATUS.md`, and `docs/SOURCE_OF_TRUTH.md`; reconciled remaining live 20-ability references to the current 25-ability contract; and rechecked all 77 repo/workspace doc-like files for missed open-work signals, including the untracked root `ConfirmedFindings.txt` review artifact. This pass changed docs only.
+- 2026-06-05 docs hygiene follow-up: completed implementation/review artifacts under `docs/superpowers/plans/` were moved to `docs/superpowers/plans/archive/` with explicit archived-status banners, current ability-count/status prose was reconciled with the canonical 25-ability contract, and shipped design specs under `docs/superpowers/specs/` were marked as historical implementation context. This pass changed docs only.
+- 2026-06-04/2026-06-05 Gutenberg 23.3 runtime follow-up: the 2026-06-04 runtime pass is the current representative browser evidence (`docs/reference/gutenberg-23-3-nightly-validation-2026-06-04.md`): post editor, abilities bridge, pattern inserter, Connectors, and AI Activity passed; real-browser Site Editor Global Styles/Style Book remains carried forward because headless canvas did not render. The 2026-06-05 validation artifact is an incomplete historical shell run; this checkout now has Node/npm/PHP, `node_modules/`, `vendor/`, and `build/`, so its basic-tooling blocker is no longer current for this environment.
 - 2026-06-02 `useSelect` referential-stability follow-up: moved per-surface derivations out of `mapSelect` into memoized hooks (content, pattern, Global Styles, Style Book) so `useSelect` returns only stable store references and primitives, addressing Gutenberg's "useSelect returns different values" warning and the associated re-render/refetch churn (observed ~27 `recommend-patterns` fires on a single post-editor load before the fix). The new hooks are documented in [`docs/reference/shared-internals.md`](docs/reference/shared-internals.md) under "Surface Derivation Hooks". `npm run test:unit` passed (`1341` passed, `100` suites) and `npm run lint:js` plus `npm run check:docs` were green on this checkout. Browser harnesses (`verify --skip-e2e`, Playwright, live console probes) were not re-run in this pass.
 - 2026-05-02 template surface release closeout: `npm run test:e2e:wp70` passed (`20` passed, `0` failed) on the Docker-backed WP 7.0 harness, covering template preview/apply/activity, template-part coverage, refresh-safe template undo, and drift-disabled template undo.
 - 2026-04-29 cross-surface validation follow-up: `npm run test:e2e:wp70` passed (`14` passed, `0` failed) on the Docker-backed WP 7.0 harness. This clears the four 2026-04-22 Site Editor reds for Global Styles executable undo, template-part executable undo, template undo after refresh, and template undo disabled after inserted-pattern drift.

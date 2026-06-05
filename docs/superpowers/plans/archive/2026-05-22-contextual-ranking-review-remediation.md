@@ -1,5 +1,7 @@
 # Contextual Ranking Review Remediation Plan
 
+> Status: Archived 2026-06-05. Shipped with the contextual ranking and outcome diagnostics work; retained only as historical execution context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` for parallelizable test and implementation work, or `superpowers:executing-plans` if working this plan serially. Follow the checkbox tasks in order, keep each step small, and run the listed verification command before marking a task complete.
 
 **Goal:** Fix all confirmed regressions from the uncommitted contextual-ranking review so block rerank scores, style-surface context scoring, and inline activity history all honor the contracts already documented and tested elsewhere.

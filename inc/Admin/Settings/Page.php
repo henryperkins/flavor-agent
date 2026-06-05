@@ -623,9 +623,18 @@ final class Page {
 	private static function render_pattern_recommendations_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_PATTERNS, $state, $feedback );
 
-		$selected_backend  = (string) ( $state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
-		$qdrant_active     = Config::PATTERN_BACKEND_QDRANT === $selected_backend;
-		$cloudflare_active = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend;
+		$selected_backend   = (string) ( $state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
+		$qdrant_active      = Config::PATTERN_BACKEND_QDRANT === $selected_backend;
+		$cloudflare_active  = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend;
+		$has_feedback_error = Feedback::feedback_group_has_tone( $feedback, Config::GROUP_PATTERNS, 'error' );
+		$ranking_attributes = [
+			'class'                          => 'flavor-agent-settings-subpanel',
+			'data-flavor-agent-nested-panel' => 'pattern-ranking',
+		];
+
+		if ( $has_feedback_error ) {
+			$ranking_attributes['data-flavor-agent-validation-error'] = 'true';
+		}
 		?>
 		<p class="description">
 			<?php echo esc_html__( 'Choose where the pattern catalog is stored.', 'flavor-agent' ); ?>
@@ -669,7 +678,7 @@ final class Page {
 			self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
 			?>
 		</div>
-		<details class="flavor-agent-settings-subpanel">
+		<details<?php Utils::render_html_attributes( $ranking_attributes ); ?><?php echo $has_feedback_error ? ' open' : ''; ?>>
 			<summary class="flavor-agent-settings-subpanel__summary">
 				<?php echo esc_html__( 'Advanced Ranking', 'flavor-agent' ); ?>
 			</summary>
@@ -687,7 +696,7 @@ final class Page {
 				?>
 			</div>
 		</details>
-		<?php self::render_sync_panel( $state ); ?>
+		<?php self::render_sync_panel( $state, $has_feedback_error ); ?>
 		<?php
 	}
 
@@ -754,6 +763,7 @@ final class Page {
 	private static function render_guidelines_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_GUIDELINES, $state, $feedback );
 		self::render_registered_section_callback( 'flavor_agent_guidelines' );
+		$has_feedback_error = Feedback::feedback_group_has_tone( $feedback, Config::GROUP_GUIDELINES, 'error' );
 		?>
 		<div class="flavor-agent-guidelines" data-flavor-agent-guidelines-root>
 			<div class="flavor-agent-guidelines__notice" data-guidelines-notice aria-live="polite"></div>
@@ -774,7 +784,7 @@ final class Page {
 					Guidelines::OPTION_ADDITIONAL,
 				]
 			);
-			self::render_guidelines_blocks_panel();
+			self::render_guidelines_blocks_panel( $has_feedback_error );
 			self::render_guidelines_actions_panel();
 			?>
 		</div>
@@ -795,13 +805,22 @@ final class Page {
 		);
 	}
 
-	private static function render_guidelines_blocks_panel(): void {
+	private static function render_guidelines_blocks_panel( bool $has_feedback_error = false ): void {
 		$block_guidelines = Guidelines::get_block_guidelines();
 		$block_options    = Guidelines::get_content_block_options();
 		$guidelines_json  = Utils::encode_json_payload( $block_guidelines );
 		$options_json     = Utils::encode_json_payload( $block_options, '[]', JSON_HEX_TAG );
+		$panel_attributes = [
+			'class'                          => 'flavor-agent-settings-subpanel flavor-agent-guidelines__blocks-panel',
+			'data-flavor-agent-nested-panel' => 'block-guidelines',
+		];
+		$is_open          = [] !== $block_guidelines || $has_feedback_error;
+
+		if ( $has_feedback_error ) {
+			$panel_attributes['data-flavor-agent-validation-error'] = 'true';
+		}
 		?>
-		<details class="flavor-agent-settings-subpanel flavor-agent-guidelines__blocks-panel"<?php echo [] !== $block_guidelines ? ' open' : ''; ?>>
+		<details<?php Utils::render_html_attributes( $panel_attributes ); ?><?php echo $is_open ? ' open' : ''; ?>>
 			<summary class="flavor-agent-settings-subpanel__summary">
 				<?php echo esc_html__( 'Block Guidelines', 'flavor-agent' ); ?>
 			</summary>
@@ -1102,11 +1121,15 @@ final class Page {
 			$advanced_details[] = sprintf( 'Error message: %s', $error_message );
 		}
 
+		$advanced_attributes = [
+			'data-flavor-agent-status-details' => 'cloudflare-pattern-ai-search',
+		];
+
 		?>
 		<div class="flavor-agent-settings-status flavor-agent-settings-status--<?php echo esc_attr( $tone ); ?>">
 			<p><?php echo esc_html( $message ); ?></p>
 			<?php if ( [] !== $advanced_details ) : ?>
-				<details>
+				<details<?php Utils::render_html_attributes( $advanced_attributes ); ?><?php echo 'error' === $tone ? ' open' : ''; ?>>
 					<summary><?php echo esc_html__( 'Advanced details', 'flavor-agent' ); ?></summary>
 					<?php foreach ( $advanced_details as $detail ) : ?>
 						<p><?php echo esc_html( $detail ); ?></p>
@@ -1205,7 +1228,7 @@ final class Page {
 		<?php
 	}
 
-	private static function render_sync_panel( array $page_state ): void {
+	private static function render_sync_panel( array $page_state, bool $has_feedback_error = false ): void {
 		$state              = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
 		$saved_backend      = (string) ( $page_state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
 		$has_prerequisites  = ! empty( $page_state['patterns_ready'] );
@@ -1231,6 +1254,11 @@ final class Page {
 		$prerequisite_id        = 'flavor-agent-sync-prerequisites';
 		$sync_summary_sentence  = self::get_pattern_sync_status_sentence( $page_state );
 		$is_syncing             = 'indexing' === sanitize_key( (string) ( $state['status'] ?? '' ) );
+		$panel_attributes       = [
+			'class'                        => 'flavor-agent-settings-subpanel flavor-agent-settings-subpanel--sync',
+			'data-flavor-agent-sync-panel' => 'true',
+		];
+		$is_open                = $has_feedback_error || self::should_open_sync_panel( $page_state );
 		$sync_button_attributes = [
 			'type'          => 'button',
 			'id'            => 'flavor-agent-sync-button',
@@ -1247,8 +1275,12 @@ final class Page {
 				$sync_button_attributes['aria-describedby'] = 'flavor-agent-sync-summary';
 			}
 		}
+
+		if ( $has_feedback_error ) {
+			$panel_attributes['data-flavor-agent-validation-error'] = 'true';
+		}
 		?>
-		<details class="flavor-agent-settings-subpanel flavor-agent-settings-subpanel--sync" data-flavor-agent-sync-panel<?php echo self::should_open_sync_panel( $page_state ) ? ' open' : ''; ?>>
+		<details<?php Utils::render_html_attributes( $panel_attributes ); ?><?php echo $is_open ? ' open' : ''; ?>>
 			<summary class="flavor-agent-settings-subpanel__summary">
 				<span><?php echo esc_html__( 'Sync Pattern Catalog', 'flavor-agent' ); ?></span>
 				<?php self::render_badge( State::make_badge( $status_label, $status_tone ), [ 'data-pattern-status-badge' => 'panel' ] ); ?>

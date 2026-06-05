@@ -1,6 +1,6 @@
 # Tier 2 — Read-only preview recommendation abilities
 
-**Status:** Approved direction, awaiting implementation
+**Status:** Implemented; historical design context. The five `preview-recommend-*` abilities are part of the current 25-ability contract, and the shipped implementation plan is archived at `docs/superpowers/plans/archive/2026-05-09-tier-2-preview-recommendation-abilities.md`.
 **Date:** 2026-05-09
 **Author:** Henry Perkins (with Claude)
 **Tracker:** Flavor Agent Ability Explorer / MCP review (this session)

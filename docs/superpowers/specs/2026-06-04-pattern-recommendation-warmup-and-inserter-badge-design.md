@@ -1,7 +1,7 @@
 # Pattern Recommendation Warm-Up & Inserter Badge — Design
 
 - **Date:** 2026-06-04
-- **Status:** Approved design; ready for implementation planning.
+- **Status:** Implemented; historical design context. The shipped implementation plan is archived at `docs/superpowers/plans/archive/2026-06-04-pattern-recommendation-warmup-and-inserter-badge.md`, and current behavior is documented in `docs/features/pattern-recommendations.md`.
 - **Scope:** Pattern recommender only. Client trigger behavior, target-scoped ranking cache, request logging semantics for no-op/no-model pattern probes, pattern runtime-signature exposure, and inserter badge DOM anchoring. No changes to ranking prompts, pattern retrieval backends, or insertion rollback behavior. Apply-time freshness semantics are preserved, but the live ranking/apply input contract is intentionally tightened by adding `blockContext.blockName` where the selected block is known.
 
 ## Problem

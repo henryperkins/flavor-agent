@@ -84,6 +84,7 @@ describe( 'ToastRegion — portal mount', () => {
 
 		expect( root ).toBeTruthy();
 		expect( root.parentElement ).toBe( document.body );
+		expect( root.getAttribute( 'role' ) ).toBe( 'region' );
 		expect( root.getAttribute( 'aria-label' ) ).toBe(
 			'Flavor Agent recent changes'
 		);

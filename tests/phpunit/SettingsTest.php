@@ -1092,6 +1092,10 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'Managed pattern index provisioning failed', $output );
+		$this->assertMatchesRegularExpression(
+			'/<details(?=[^>]*data-flavor-agent-status-details="cloudflare-pattern-ai-search")(?=[^>]*\bopen\b)[^>]*>/',
+			$output
+		);
 		$this->assertStringContainsString( 'Error code: cloudflare_pattern_ai_search_instance_list_error', $output );
 		$this->assertStringContainsString( 'Error message: Cloudflare AI Search instance list failed (HTTP 403): Authentication failed.', $output );
 		$this->assertStringNotContainsString( 'token-xyz', $output );
@@ -1580,6 +1584,50 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertMatchesRegularExpression(
 			'/<details(?=[^>]*data-flavor-agent-section="patterns")(?=[^>]*data-flavor-agent-validation-error="true")(?=[^>]*\bopen\b)[^>]*>/',
+			$output
+		);
+	}
+
+	public function test_render_page_opens_nested_panels_with_request_scoped_validation_errors(): void {
+		WordPressTestState::$current_user_id = 1;
+		$storage_key                         = Feedback::get_storage_key( 'nested-panel-errors' );
+
+		WordPressTestState::$transients[ $storage_key ] = [
+			'messages'      => [
+				Config::GROUP_PATTERNS   => [
+					[
+						'tone'    => 'error',
+						'message' => 'Pattern storage validation failed.',
+					],
+				],
+				Config::GROUP_GUIDELINES => [
+					[
+						'tone'    => 'error',
+						'message' => 'Block guidelines validation failed.',
+					],
+				],
+			],
+			'focus_section' => Config::GROUP_PATTERNS,
+		];
+		$_GET = [
+			'settings-updated'                   => 'true',
+			'flavor_agent_settings_feedback_key' => 'nested-panel-errors',
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertMatchesRegularExpression(
+			'/<details(?=[^>]*data-flavor-agent-nested-panel="pattern-ranking")(?=[^>]*data-flavor-agent-validation-error="true")(?=[^>]*\bopen\b)[^>]*>/',
+			$output
+		);
+		$this->assertMatchesRegularExpression(
+			'/<details(?=[^>]*data-flavor-agent-sync-panel)(?=[^>]*data-flavor-agent-validation-error="true")(?=[^>]*\bopen\b)[^>]*>/',
+			$output
+		);
+		$this->assertMatchesRegularExpression(
+			'/<details(?=[^>]*data-flavor-agent-nested-panel="block-guidelines")(?=[^>]*data-flavor-agent-validation-error="true")(?=[^>]*\bopen\b)[^>]*>/',
 			$output
 		);
 	}

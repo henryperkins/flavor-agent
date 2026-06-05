@@ -1,5 +1,7 @@
 # Docs-Grounding Coverage Gate Survivability — Implementation Plan
 
+> Status: Archived 2026-06-05. Shipped as the docs-grounding degrade-to-warn behavior; retained only as historical execution context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop the docs-grounding coverage gate from hard-blocking recommendations (HTTP 503 `flavor_agent_docs_grounding_unavailable`) when the corpus merely lacks a recent make-core/dev-blog release-cycle source; degrade-to-warn instead, and remove the now-dead coverage-gate grace machinery and its diagnostic surface.

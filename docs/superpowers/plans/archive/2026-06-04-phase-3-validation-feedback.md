@@ -1,5 +1,7 @@
 # Phase 3: Validation Feedback & Diagnostics — Implementation Plan
 
+> Status: Archived 2026-06-05. Shipped via #29 (`c2a22f5`); retained only as historical execution context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Produce a stable, consistent, joinable validation-reason signal across the four executable recommendation parsers (block, style, template, template-part), captured on the records the live learning loop already join-keys and ranking-stamps.

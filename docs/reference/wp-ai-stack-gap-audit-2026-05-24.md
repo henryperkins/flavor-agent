@@ -2,6 +2,8 @@
 
 Audit grounded in the last 30 days of WordPress core AI activity (Make WP AI, Make WP Core, WordPress.org Developer Blog, WordPress News). Purpose: surface where Flavor Agent's current code, docs, and roadmap are aligned with — or drifting from — the post-WP 7.0 AI stack, with special attention to items that landed AFTER the 2026-05-21 refresh of `wordpress-ai-roadmap-tracking.md`.
 
+> Currentness note, 2026-06-05: this remains a dated audit snapshot. Subsequent preview-ability work raised the current contract to 25 abilities (seven recommendation, twelve helper/read, one docs search, and five preview siblings). The ability-scale watch item remains valid, but use `docs/reference/current-open-work.md` and `docs/reference/abilities-and-routes.md` for the current count.
+
 ## How to read this
 
 - **Aligned** — Flavor Agent matches canonical guidance; no action needed.
@@ -54,11 +56,11 @@ Watch item is `WordPress/ai#595` — "deepest originating extension caller attri
 
 ### Abilities registration — `inc/Abilities/Registration.php`, `inc/AI/Abilities/Recommend*Ability.php` — **Watch (architectural pressure rising)**
 
-Flavor Agent registers 20 abilities under the `flavor-agent/` category — 7 recommendation abilities plus 13 helper/read abilities (block introspection, list-allowed-blocks, list-patterns, get-pattern, list-synced-patterns, get-synced-pattern, list-template-parts, search-wordpress-docs, get-active-theme, get-theme-presets, get-theme-styles, get-theme-tokens, check-status).
+At the time of this audit, Flavor Agent registered 20 abilities under the `flavor-agent/` category — 7 recommendation abilities plus 13 helper/read abilities (block introspection, list-allowed-blocks, list-patterns, get-pattern, list-synced-patterns, get-synced-pattern, list-template-parts, search-wordpress-docs, get-active-theme, get-theme-presets, get-theme-styles, get-theme-tokens, check-status). The current contract is 25 abilities after the five `preview-recommend-*` siblings shipped.
 
 The 20 May contributor summary identified the **`WordPress/ai#21` "supporting massive scale"** discussion as a high-priority architectural concern: "long-term optimization required to safely register, filter, and surface hundreds or thousands of concurrent abilities within an active system without introducing database degradation." Action item assigned to `@justlevine`. Separately, the team named **"find abilities" discovery** as the next technical milestone, mirroring the third-party "find tool" pattern.
 
-`wordpress-ai-roadmap-tracking.md` already lists this as a future action ("Plan ability consolidation. Decide whether the 20 defined abilities under `flavor-agent/` collapse into a smaller router surface…"). What's new from the 20 May meeting: this is now an *active* architectural workstream with named owners. Recommend:
+`wordpress-ai-roadmap-tracking.md` already lists this as a future action ("Plan ability consolidation. Decide whether the defined abilities under `flavor-agent/` collapse into a smaller router surface..."). What's new from the 20 May meeting: this is now an *active* architectural workstream with named owners. Recommend:
 
 - Avoid registering additional helper abilities in the short term unless they bring obvious value.
 - Track `#21` directly (not just via the AI 1.0.0 milestone) and prepare a position on whether Flavor Agent's helper abilities should collapse behind a discovery layer once `find-abilities` lands.

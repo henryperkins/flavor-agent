@@ -2720,12 +2720,11 @@
   height: 2px;
   background: var(--flavor-agent-color-accent);
   transform-origin: left center;
-  animation: flavor-agent-toast-progress 6s linear forwards;
+  animation: flavor-agent-toast-progress var(--flavor-agent-toast-auto-dismiss-ms, 6000ms) linear forwards;
 }
 
 .flavor-agent-toast--error .flavor-agent-toast__progress {
   background: color-mix(in srgb, var(--flavor-agent-color-error) 56%, white);
-  animation-duration: 8s;
 }
 
 .flavor-agent-toast--warning .flavor-agent-toast__progress {

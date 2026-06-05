@@ -144,6 +144,25 @@ describe( 'UndoToast — rendering', () => {
 		expect( undoBtn.getAttribute( 'title' ) ).toBe(
 			'Undo unavailable for this change'
 		);
+		const descriptionId = undoBtn.getAttribute( 'aria-describedby' );
+
+		expect( descriptionId ).toBe( 'toast-1-undo-disabled-reason' );
+		expect( document.getElementById( descriptionId ).textContent ).toBe(
+			'Undo unavailable for this change'
+		);
+		expect( document.getElementById( descriptionId ).className ).toContain(
+			'screen-reader-text'
+		);
+	} );
+
+	test( 'progress bar duration follows the toast auto-dismiss payload', () => {
+		renderToast( { autoDismissMs: 12500 } );
+
+		expect(
+			getProgress().style.getPropertyValue(
+				'--flavor-agent-toast-auto-dismiss-ms'
+			)
+		).toBe( '12500ms' );
 	} );
 
 	test( 'clicking Undo invokes onUndo with the toast id when enabled', () => {

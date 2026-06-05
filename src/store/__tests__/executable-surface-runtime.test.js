@@ -3,6 +3,7 @@ import {
 	buildExecutableSurfaceApplyThunk,
 	buildExecutableSurfaceReviewFreshnessThunk,
 } from '../executable-surface-runtime';
+import { getClientRequestSessionId } from '../client-request-identity';
 
 jest.mock( '../abilities-client', () => ( {
 	executeFlavorAgentAbility: jest.fn(),
@@ -75,6 +76,16 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 			requestToken: 3,
 			staleReason: 'docs-grounding-unavailable',
 		} );
+		expect( executeFlavorAgentAbility ).toHaveBeenCalledWith(
+			'test/review',
+			expect.objectContaining( {
+				resolveSignatureOnly: true,
+				clientRequest: expect.objectContaining( {
+					sessionId: getClientRequestSessionId(),
+					requestToken: 3,
+				} ),
+			} )
+		);
 		expect( result ).toEqual( {
 			ok: false,
 			staleReason: 'docs-grounding-unavailable',
