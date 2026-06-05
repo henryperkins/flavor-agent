@@ -1,10 +1,14 @@
 # Gutenberg 23.3 Nightly Runtime Validation Checklist
 
-Use this checklist for the representative nightly runtime pass after the React 19
-toolchain bump. The non-browser build/test layer is covered by the local npm
-graph and aggregate verifier; this checklist covers runtime behavior that unit
-tests and the existing Playwright topology do not structurally exercise against
-nightly Gutenberg and companion plugin versions.
+Use this checklist for the representative nightly runtime pass against the
+Gutenberg 23.3 release line. Gutenberg 23.3.0 shipped the React 19 upgrade in
+the 03 Jun Make/Core release post, 23.3.1 added React compatibility polyfills,
+and 23.3.2 reverted the React 19 upgrade. Record the exact active patch level
+and treat React-specific checks according to the installed runtime. The
+non-browser build/test layer is covered by the local npm graph and aggregate
+verifier; this checklist covers runtime behavior that unit tests and the
+existing Playwright topology do not structurally exercise against nightly
+Gutenberg and companion plugin versions.
 
 Record every item as `pass`, `fail`, or `not-testable`. A missing harness,
 unavailable experiment, or absent runtime prerequisite is an explicit waiver
@@ -14,24 +18,51 @@ with a reason, not a silent skip. Treat this as additive to
 ## Preconditions
 
 - WordPress nightly/trunk is installed.
-- Gutenberg `23.3.0` is active.
+- Gutenberg `23.3.x` is active, and the exact version is recorded. Use
+  Gutenberg `23.3.0` or `23.3.1` when the goal is to exercise the React 19
+  runtime itself; if the active runtime is `23.3.2` or later, mark React
+  19-only assertions `not-testable` and run the patch-aware React compatibility
+  smoke below instead. Sources: Make/Core 23.3 release post
+  https://make.wordpress.org/core/2026/06/03/whats-new-in-gutenberg-23-3-03-jun/,
+  GitHub 23.3.1 release https://github.com/WordPress/gutenberg/releases/tag/v23.3.1,
+  GitHub 23.3.2 release https://github.com/WordPress/gutenberg/releases/tag/v23.3.2,
+  React 19 revert PR https://github.com/WordPress/gutenberg/pull/78940.
 - Required companion plugins are active: AI, provider connector plugins, MCP
   Adapter, Plugin Check, and Flavor Agent.
-- `npm run build` has been run after the React 19 toolchain bump, so `build/*`
-  is fresh.
+- `npm run build` has been run after the current dependency and Gutenberg
+  patch-level selection, so `build/*` is fresh for the runtime under test.
 - `FeatureBootstrap::editor_runtime_available()` is true; otherwise editor
   scripts do not enqueue and the runtime pass is invalid.
 - At least one text-generation Connector is approved, so recommendation
   surfaces can return live results.
 - For the style-state section, enable the Gutenberg style-states or responsive
-  styles experiment. If the experiment label is absent in the nightly, mark the
-  section `not-testable` with that reason.
+  styles experiment if the installed build still gates those controls behind an
+  experiment. If pseudo-state controls are already available without an
+  experiment label, continue the section and record that condition; the
+  single-block pseudo-state PR notes that block instance pseudo-state support is
+  not necessarily experiment-gated. Source:
+  https://github.com/WordPress/gutenberg/pull/76491.
 - Keep DevTools console and the Network panel open while running editor flows.
 
-## A. React 19 Runtime Smoke
+## A. Patch-Aware React Runtime Smoke
+
+- Record the active Gutenberg plugin version and the editor runtime's React /
+  ReactDOM versions before starting. Do not infer React 19 coverage from the
+  major Gutenberg version alone because `23.3.2` reverted the React 19 upgrade.
+  Sources: https://github.com/WordPress/gutenberg/releases/tag/v23.3.1,
+  https://github.com/WordPress/gutenberg/releases/tag/v23.3.2,
+  https://github.com/WordPress/gutenberg/pull/78899,
+  https://github.com/WordPress/gutenberg/pull/78923,
+  https://github.com/WordPress/gutenberg/pull/78940.
 
 - Open the post editor. Confirm there are no React 19 warnings about refs,
-  removed lifecycles, ref cleanup, or Flavor Agent runtime errors.
+  removed lifecycles, ref cleanup, or Flavor Agent runtime errors when running a
+  React 19 build. If the active build has reverted React 19, mark the React
+  19-warning assertion `not-testable` with the active version and verify that
+  the editor has no stale React-compatibility errors such as
+  `ReactCurrentOwner`, missing `ReactDOM.render` / `hydrate` /
+  `unmountComponentAtNode`, legacy/transitional React element mismatch, or
+  Flavor Agent runtime errors.
 - Select a block. Confirm the Flavor Agent panel renders in the Settings tab.
 - Type a prompt and fetch a suggestion. Confirm results render.
 - Switch selected blocks. Confirm the prompt resets exactly once.
@@ -39,7 +70,7 @@ with a reason, not a silent skip. Treat this as additive to
   `/wp-abilities/.../run` or activity calls from React 19 effect behavior.
 - Apply a suggestion. Confirm the applied pill appears.
 - Undo via the toast. Confirm the toast shortcut `mod+alt+shift+u` focuses the
-  toast — press it promptly, as success toasts auto-dismiss after ~6s (an empty
+  toast; press it promptly, as success toasts auto-dismiss after ~6s (an empty
   toast region after a pause is the dismiss window, not a regression; the inline
   `Undo` pill persists either way).
 - For content, pattern, navigation, template, template-part, Global Styles, and
@@ -121,7 +152,7 @@ survive, but verify against the live DOM.
 - Revoke Connector approval.
 - Confirm affected surfaces degrade gracefully rather than crashing. With the
   connector fully revoked, FA preflight (`SurfaceCapabilities`) disables the
-  surface first — expect `block_backend_unconfigured` /
+  surface first; expect `block_backend_unconfigured` /
   `plugin_provider_unconfigured` preflight states and a
   `missing_text_generation_provider` ability error, not
   `wpai_connector_not_approved`. That path is the HTTP-layer fallback for the
