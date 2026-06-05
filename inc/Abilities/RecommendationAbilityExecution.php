@@ -648,6 +648,11 @@ final class RecommendationAbilityExecution {
 			$after['pipelineDropReasons'] = $pipeline_drop_reasons;
 		}
 
+		$model_request = self::sanitize_request_diagnostic_model_request( $payload );
+		if ( [] !== $model_request ) {
+			$after['modelRequest'] = $model_request;
+		}
+
 		$validation_aggregate = self::aggregate_validation_reasons( $surface, $payload );
 		if ( [] !== $validation_aggregate ) {
 			$after['validationReasons'] = $validation_aggregate;
@@ -664,9 +669,10 @@ final class RecommendationAbilityExecution {
 				],
 				'after'           => $after,
 				'request'         => [
-					'prompt'    => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'reference' => $reference,
-					'ai'        => \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [],
+					'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'reference'        => $reference,
+					'ai'               => \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [],
+					'guidelineVersion' => Guidelines::version_id(),
 				],
 				'document'        => $document,
 				'executionResult' => 'review',
@@ -765,10 +771,11 @@ final class RecommendationAbilityExecution {
 					'requestContext' => $request_context,
 				],
 				'request'         => [
-					'prompt'    => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'reference' => $reference,
-					'ai'        => \is_array( $error_data['requestMeta'] ?? null ) ? $error_data['requestMeta'] : [],
-					'error'     => [
+					'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'reference'        => $reference,
+					'ai'               => \is_array( $error_data['requestMeta'] ?? null ) ? $error_data['requestMeta'] : [],
+					'guidelineVersion' => Guidelines::version_id(),
+					'error'            => [
 						'code'    => \trim( (string) $error->get_error_code() ),
 						'message' => $message,
 						'data'    => $error_data,
@@ -908,6 +915,28 @@ final class RecommendationAbilityExecution {
 		}
 
 		return $clean;
+	}
+
+	private static function sanitize_request_diagnostic_model_request( array $payload ): array {
+		$diagnostics   = \is_array( $payload['diagnostics'] ?? null ) ? $payload['diagnostics'] : [];
+		$model_request = \is_array( $diagnostics['modelRequest'] ?? null ) ? $diagnostics['modelRequest'] : [];
+
+		if ( false !== ( $model_request['attempted'] ?? null ) ) {
+			return [];
+		}
+
+		$reason = isset( $model_request['reason'] ) && \is_string( $model_request['reason'] )
+			? \sanitize_key( $model_request['reason'] )
+			: '';
+
+		if ( ! \in_array( $reason, [ 'no_rankable_candidates', 'missing_visible_patterns' ], true ) ) {
+			return [];
+		}
+
+		return [
+			'attempted' => false,
+			'reason'    => $reason,
+		];
 	}
 
 	private static function build_failed_request_diagnostic_title( string $surface ): string {

@@ -494,6 +494,104 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_recommend_patterns_returns_pattern_runtime_signature_for_signature_only_runtime_state(): void {
+		$this->save_index_state(
+			[
+				'fingerprint'          => 'catalog-fingerprint-runtime-a',
+				'pattern_fingerprints' => [
+					'theme/hero' => 'pattern-fingerprint-a',
+				],
+			]
+		);
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'             => 'page',
+				'visiblePatternNames'  => [ 'theme/hero' ],
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', (string) ( $result['patternRuntimeSignature'] ?? '' ) );
+
+		$this->save_index_state(
+			[
+				'fingerprint'          => 'catalog-fingerprint-runtime-b',
+				'pattern_fingerprints' => [
+					'theme/hero' => 'pattern-fingerprint-b',
+				],
+			]
+		);
+
+		$changed = PatternAbilities::recommend_patterns(
+			[
+				'postType'             => 'page',
+				'visiblePatternNames'  => [ 'theme/hero' ],
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		$this->assertNotSame(
+			$result['patternRuntimeSignature'] ?? null,
+			$changed['patternRuntimeSignature'] ?? null
+		);
+	}
+
+	public function test_current_pattern_runtime_signature_is_blank_before_runtime_state_is_usable(): void {
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'         => 'uninitialized',
+					'last_synced_at' => '',
+					'fingerprint'    => '',
+				]
+			)
+		);
+
+		$this->assertSame( '', PatternAbilities::current_pattern_runtime_signature() );
+	}
+
+	public function test_recommend_patterns_keeps_direct_empty_visible_scope_response_without_no_model_marker(): void {
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertSame( [ 'recommendations' => [] ], $result );
+	}
+
+	public function test_recommend_patterns_marks_missing_visible_patterns_only_for_inserter_ranking(): void {
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'       => 'page',
+				'requestPurpose' => 'inserter_ranking',
+			]
+		);
+
+		$this->assertSame( [], $result['recommendations'] ?? null );
+		$this->assertSame(
+			[
+				'attempted' => false,
+				'reason'    => 'missing_visible_patterns',
+			],
+			$result['diagnostics']['modelRequest'] ?? null
+		);
+	}
+
+	public function test_recommend_patterns_sanitizes_unknown_request_purpose_as_omitted(): void {
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'       => 'page',
+				'requestPurpose' => 'inserter ranking<script>',
+			]
+		);
+
+		$this->assertSame( [ 'recommendations' => [] ], $result );
+	}
+
 	public function test_recommend_patterns_signatures_ignore_catalog_sync_timestamp(): void {
 		$input = [
 			'postType'             => 'page',

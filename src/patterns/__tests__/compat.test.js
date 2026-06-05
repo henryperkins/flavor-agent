@@ -387,20 +387,37 @@ describe( 'findInserterToggle', () => {
 		expect( toggle.textContent ).toBe( '+' );
 	} );
 
-	test( 'falls back to aria-label scanning when class selector misses', () => {
+	test( 'falls back only to explicit block inserter labels', () => {
 		document.body.innerHTML = `
-			<div class="edit-post-header-toolbar">
-				<button aria-label="Open inserter panel">+</button>
-				<button aria-label="Undo">u</button>
+			<div class="edit-site-header__start">
+				<button id="undo" aria-label="Undo"></button>
+				<button id="ins" aria-label="Toggle block inserter"></button>
 			</div>
 		`;
 
-		const toggle = findInserterToggle();
+		expect( findInserterToggle( document )?.id ).toBe( 'ins' );
+	} );
 
-		expect( toggle ).not.toBeNull();
-		expect( toggle.getAttribute( 'aria-label' ) ).toBe(
-			'Open inserter panel'
-		);
+	test( 'rejects list view and document outline buttons near the inserter', () => {
+		document.body.innerHTML = `
+			<div class="edit-post-header-toolbar">
+				<button id="outline" aria-label="Document overview"></button>
+				<button id="list" aria-label="List View"></button>
+				<button id="ins" class="block-editor-inserter__toggle" aria-label="Toggle block inserter"></button>
+			</div>
+		`;
+
+		expect( findInserterToggle( document )?.id ).toBe( 'ins' );
+	} );
+
+	test( 'does not use generic inserter labels without block intent', () => {
+		document.body.innerHTML = `
+			<div class="edit-post-header-toolbar">
+				<button id="generic" aria-label="Open inserter tools"></button>
+			</div>
+		`;
+
+		expect( findInserterToggle( document ) ).toBeNull();
 	} );
 
 	test( 'finds toggle in site editor toolbar', () => {

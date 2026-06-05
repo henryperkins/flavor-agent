@@ -27,6 +27,25 @@ import {
 	getPatternBadgeReason,
 } from './recommendation-utils';
 
+const BADGE_ANCHOR_CLASS = 'flavor-agent-inserter-badge-anchor';
+
+function getOrCreateBadgeAnchor( button ) {
+	if ( ! button?.parentElement ) {
+		return null;
+	}
+
+	const next = button.nextElementSibling;
+	if ( next?.classList?.contains( BADGE_ANCHOR_CLASS ) ) {
+		return next;
+	}
+
+	const anchor = document.createElement( 'span' );
+	anchor.className = BADGE_ANCHOR_CLASS;
+	button.insertAdjacentElement( 'afterend', anchor );
+
+	return anchor;
+}
+
 export default function InserterBadge() {
 	const patternState = useSelect( ( select ) => {
 		const store = select( STORE_NAME );
@@ -70,13 +89,17 @@ export default function InserterBadge() {
 
 	useEffect( () => {
 		const clearAnchor = () => {
-			if ( anchorRef.current ) {
-				anchorRef.current.classList.remove(
-					'flavor-agent-inserter-badge-anchor'
-				);
-				anchorRef.current = null;
+			// Our dedicated anchor only ever holds this component's own portal
+			// output, so remove it whenever it is ours. A childNodes-empty
+			// guard was unreliable: on unmount React tears the portal output
+			// down after this cleanup runs, which would leave the span behind.
+			if (
+				anchorRef.current?.classList?.contains( BADGE_ANCHOR_CLASS )
+			) {
+				anchorRef.current.remove();
 			}
 
+			anchorRef.current = null;
 			setAnchor( null );
 		};
 
@@ -101,7 +124,7 @@ export default function InserterBadge() {
 		};
 		const refreshAnchor = () => {
 			const button = findInserterToggle();
-			const nextAnchor = button?.parentElement || null;
+			const nextAnchor = getOrCreateBadgeAnchor( button );
 
 			if ( nextAnchor ) {
 				stopRetry();
@@ -113,17 +136,10 @@ export default function InserterBadge() {
 				return;
 			}
 
-			if ( anchorRef.current ) {
-				anchorRef.current.classList.remove(
-					'flavor-agent-inserter-badge-anchor'
-				);
-			}
-
-			if ( nextAnchor ) {
-				// Use a CSS class instead of mutating inline styles.
-				nextAnchor.classList.add(
-					'flavor-agent-inserter-badge-anchor'
-				);
+			if (
+				anchorRef.current?.classList?.contains( BADGE_ANCHOR_CLASS )
+			) {
+				anchorRef.current.remove();
 			}
 
 			anchorRef.current = nextAnchor;

@@ -21,6 +21,24 @@ describe( 'capability-flags', () => {
 		delete window.flavorAgentData;
 	} );
 
+	test( 'getSurfaceCapability preserves patternRuntimeSignature for pattern surface', () => {
+		window.flavorAgentData = {
+			capabilities: {
+				surfaces: {
+					pattern: {
+						available: true,
+						reason: 'ready',
+						patternRuntimeSignature: 'runtime-a',
+					},
+				},
+			},
+		};
+
+		expect(
+			getSurfaceCapability( 'pattern' ).patternRuntimeSignature
+		).toBe( 'runtime-a' );
+	} );
+
 	test( 'uses structured surface metadata when available', () => {
 		window.flavorAgentData = {
 			capabilities: {

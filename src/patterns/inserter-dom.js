@@ -75,6 +75,37 @@ export function findInserterSearchInput( root ) {
 	return null;
 }
 
+const INSERTER_ALLOW_LABEL = /^(toggle\s+)?(add\s+)?block\s+inserter$/i;
+const INSERTER_DENY_LABEL =
+	/list\s*view|outline|document\s*overview|hierarchy|structure/i;
+
+function getButtonLabel( button ) {
+	return String(
+		button?.getAttribute?.( 'aria-label' ) || button?.textContent || ''
+	)
+		.replace( /\s+/g, ' ' )
+		.trim();
+}
+
+function isDeniedToolbarButton( button ) {
+	const label = getButtonLabel( button );
+	const className = button?.className || '';
+
+	return INSERTER_DENY_LABEL.test( `${ label } ${ className }` );
+}
+
+function isAllowedInserterButton( button ) {
+	if ( ! button || isDeniedToolbarButton( button ) ) {
+		return false;
+	}
+
+	if ( button.matches?.( INSERTER_TOGGLE_SELECTOR ) ) {
+		return true;
+	}
+
+	return INSERTER_ALLOW_LABEL.test( getButtonLabel( button ) );
+}
+
 export function findInserterToggle( root = document ) {
 	if ( ! root?.querySelector || ! root?.querySelectorAll ) {
 		return null;
@@ -82,7 +113,7 @@ export function findInserterToggle( root = document ) {
 
 	const primary = root.querySelector( INSERTER_TOGGLE_SELECTOR );
 
-	if ( primary ) {
+	if ( isAllowedInserterButton( primary ) ) {
 		return primary;
 	}
 
@@ -93,9 +124,7 @@ export function findInserterToggle( root = document ) {
 	);
 
 	for ( const button of allButtons ) {
-		const label = button.getAttribute( 'aria-label' ) || '';
-
-		if ( /inserter/i.test( label ) ) {
+		if ( isAllowedInserterButton( button ) ) {
 			return button;
 		}
 	}

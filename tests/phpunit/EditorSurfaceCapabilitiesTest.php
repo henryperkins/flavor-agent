@@ -7,6 +7,7 @@ namespace FlavorAgent\Tests;
 require_once __DIR__ . '/support/editor-surface-capabilities-bootstrap.php';
 
 use FlavorAgent\Admin\Settings\Config;
+use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -251,5 +252,54 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 
 		$this->assertFalse( $capabilities['pattern']['available'] );
 		$this->assertSame( 'needs_sync', $capabilities['pattern']['reason'] );
+	}
+
+	public function test_pattern_surface_exposes_runtime_signature_when_index_is_usable(): void {
+		WordPressTestState::$capabilities        = [
+			'edit_theme_options' => true,
+			'manage_options'     => true,
+		];
+		WordPressTestState::$options             = [
+			'flavor_agent_openai_provider'                 => 'cloudflare_workers_ai',
+			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
+			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			'connectors_ai_openai_api_key'                 => 'connector-key',
+			'wpai_features_enabled'                        => true,
+			'wpai_feature_flavor-agent_enabled'            => true,
+		];
+		WordPressTestState::$connectors          = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'         => 'ready',
+					'fingerprint'    => 'fingerprint-123',
+					'last_synced_at' => '2026-06-04T00:00:00+00:00',
+					'indexed_count'  => 3,
+				]
+			)
+		);
+
+		$capabilities = \flavor_agent_get_editor_surface_capabilities(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php'
+		);
+
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', $capabilities['pattern']['patternRuntimeSignature'] ?? '' );
 	}
 }

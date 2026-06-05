@@ -176,6 +176,8 @@ const DEFAULT_STATE = {
 	patternInsertionTargetSignature: '',
 	patternResolvedContextSignature: '',
 	patternDocsGroundingWarning: null,
+	patternRuntimeSignature: '',
+	patternRankingCache: {},
 	...createExecutableSurfaceDefaultState(),
 	...toastsDefaultState,
 };
@@ -292,6 +294,26 @@ function pickAttributeSnapshot( attributes = {}, keys = [] ) {
 	}, {} );
 }
 
+const PATTERN_MODEL_REQUEST_REASONS = new Set( [
+	'no_rankable_candidates',
+	'missing_visible_patterns',
+] );
+
+function normalizePatternModelRequest( marker = null ) {
+	if (
+		! marker ||
+		marker.attempted !== false ||
+		! PATTERN_MODEL_REQUEST_REASONS.has( marker.reason )
+	) {
+		return null;
+	}
+
+	return {
+		attempted: false,
+		reason: marker.reason,
+	};
+}
+
 function normalizePatternDiagnostics( diagnostics = null ) {
 	const unreadableSyncedPatterns = Number(
 		diagnostics?.filteredCandidates?.unreadableSyncedPatterns ?? 0
@@ -320,6 +342,9 @@ function normalizePatternDiagnostics( diagnostics = null ) {
 			];
 		} ).filter( ( [ , count ] ) => count > 0 )
 	);
+	const modelRequest = normalizePatternModelRequest(
+		diagnostics?.modelRequest
+	);
 
 	return {
 		filteredCandidates: {
@@ -331,6 +356,45 @@ function normalizePatternDiagnostics( diagnostics = null ) {
 		},
 		pipelineTrace,
 		...( Object.keys( dropReasons ).length ? { dropReasons } : {} ),
+		...( modelRequest ? { modelRequest } : {} ),
+	};
+}
+
+function normalizePatternCacheEntry( entry = null ) {
+	if ( ! isPlainObject( entry ) ) {
+		return null;
+	}
+
+	const requestSignature = normalizeStringMessage( entry.requestSignature );
+	const insertionTargetSignature = normalizeStringMessage(
+		entry.insertionTargetSignature
+	);
+	const resolvedContextSignature = normalizeStringMessage(
+		entry.resolvedContextSignature
+	);
+	const patternRuntimeSignature = normalizeStringMessage(
+		entry.patternRuntimeSignature
+	);
+
+	if (
+		! requestSignature ||
+		! insertionTargetSignature ||
+		! resolvedContextSignature ||
+		! patternRuntimeSignature
+	) {
+		return null;
+	}
+
+	return {
+		recommendations: Array.isArray( entry.recommendations )
+			? entry.recommendations
+			: [],
+		diagnostics: entry.diagnostics || null,
+		docsGroundingWarning: entry.docsGroundingWarning || null,
+		requestSignature,
+		insertionTargetSignature,
+		resolvedContextSignature,
+		patternRuntimeSignature,
 	};
 }
 
@@ -632,6 +696,13 @@ function getResolvedContextSignatureFromResponse( result = null ) {
 	);
 
 	return resolvedContextSignature || null;
+}
+
+function getPatternRuntimeSignatureFromResponse( result = null ) {
+	return normalizeStringMessage(
+		result?.payload?.patternRuntimeSignature ||
+			result?.patternRuntimeSignature
+	);
 }
 
 function getDocsGroundingFromResponse( result = null ) {
@@ -2419,7 +2490,8 @@ const actions = {
 		diagnostics = null,
 		insertionTargetSignature = '',
 		docsGroundingWarning = null,
-		resolvedContextSignature = ''
+		resolvedContextSignature = '',
+		patternRuntimeSignature = ''
 	) {
 		return {
 			type: 'SET_PATTERN_RECS',
@@ -2430,6 +2502,56 @@ const actions = {
 			insertionTargetSignature,
 			docsGroundingWarning,
 			resolvedContextSignature,
+			patternRuntimeSignature,
+		};
+	},
+
+	setPatternRankingCacheEntry( cacheKey = '', entry = null ) {
+		return {
+			type: 'SET_PATTERN_RANKING_CACHE_ENTRY',
+			cacheKey,
+			entry: normalizePatternCacheEntry( entry ),
+		};
+	},
+
+	hydratePatternRecommendationsFromCache( entry ) {
+		return ( { dispatch, select } ) => {
+			const normalized = normalizePatternCacheEntry( entry );
+
+			if ( ! normalized ) {
+				return false;
+			}
+
+			if ( actions._patternAbort ) {
+				actions._patternAbort.abort?.();
+				actions._patternAbort = null;
+			}
+
+			const requestToken = ( select.getPatternRequestToken?.() || 0 ) + 1;
+
+			dispatch(
+				actions.setPatternRecommendations(
+					normalized.recommendations,
+					requestToken,
+					normalized.requestSignature,
+					normalized.diagnostics,
+					normalized.insertionTargetSignature,
+					normalized.docsGroundingWarning,
+					normalized.resolvedContextSignature,
+					normalized.patternRuntimeSignature
+				)
+			);
+			dispatch(
+				actions.setPatternStatus(
+					'ready',
+					null,
+					requestToken,
+					normalized.requestSignature,
+					normalized.insertionTargetSignature
+				)
+			);
+
+			return true;
 		};
 	},
 
@@ -2625,7 +2747,8 @@ const actions = {
 								result.docsGrounding
 							),
 							getResolvedContextSignatureFromResponse( result ) ||
-								''
+								'',
+							getPatternRuntimeSignatureFromResponse( result )
 						)
 					);
 					localDispatch(
@@ -2637,6 +2760,34 @@ const actions = {
 							insertionTargetSignature
 						)
 					);
+
+					const cacheKey =
+						typeof requestContext?.cacheKey === 'string'
+							? requestContext.cacheKey
+							: '';
+					if ( cacheKey ) {
+						localDispatch(
+							actions.setPatternRankingCacheEntry( cacheKey, {
+								recommendations: result.recommendations || [],
+								diagnostics: result.diagnostics || null,
+								requestSignature,
+								insertionTargetSignature,
+								resolvedContextSignature:
+									getResolvedContextSignatureFromResponse(
+										result
+									) || '',
+								docsGroundingWarning:
+									normalizeDocsGroundingWarning(
+										result.docsGrounding
+									),
+								patternRuntimeSignature:
+									getPatternRuntimeSignatureFromResponse(
+										result
+									),
+							} )
+						);
+					}
+
 					return reloadStoreActivitySession(
 						localDispatch,
 						registry,
@@ -3438,6 +3589,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 					action.status === 'loading' || action.status === 'error'
 						? null
 						: state.patternDocsGroundingWarning,
+				patternRuntimeSignature:
+					action.status === 'loading' || action.status === 'error'
+						? ''
+						: state.patternRuntimeSignature,
 			};
 		case 'SET_CONTENT_STATUS':
 			if ( action.requestToken < ( state.contentRequestToken || 0 ) ) {
@@ -3533,6 +3688,22 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: '',
 				patternDocsGroundingWarning:
 					action.docsGroundingWarning ?? null,
+				patternRuntimeSignature:
+					typeof action.patternRuntimeSignature === 'string'
+						? action.patternRuntimeSignature
+						: '',
+			};
+		case 'SET_PATTERN_RANKING_CACHE_ENTRY':
+			if ( ! action.cacheKey || ! action.entry ) {
+				return state;
+			}
+
+			return {
+				...state,
+				patternRankingCache: {
+					...state.patternRankingCache,
+					[ action.cacheKey ]: action.entry,
+				},
 			};
 		case 'SET_NAVIGATION_STATUS':
 			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
@@ -3728,6 +3899,10 @@ const selectors = {
 		state.patternResolvedContextSignature || '',
 	getPatternDocsGroundingWarning: ( state ) =>
 		state.patternDocsGroundingWarning || null,
+	getPatternRuntimeSignature: ( state ) =>
+		state.patternRuntimeSignature || '',
+	getPatternRankingCacheEntry: ( state, cacheKey = '' ) =>
+		state.patternRankingCache?.[ cacheKey ] || null,
 	getContentRecommendation: ( state ) => state.contentRecommendation,
 	getContentRecommendationRequestSignature: ( state ) =>
 		state.contentRecommendationRequestSignature || '',

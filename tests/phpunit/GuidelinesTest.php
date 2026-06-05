@@ -303,4 +303,81 @@ final class GuidelinesTest extends TestCase {
 			Guidelines::get_content_block_options()
 		);
 	}
+
+	public function test_version_id_for_is_prefixed_and_deterministic(): void {
+		$guidelines = [
+			'site'       => 'Calm, precise brand voice.',
+			'copy'       => 'Use active voice.',
+			'images'     => 'Documentary photography.',
+			'additional' => 'Avoid lorem ipsum.',
+			'blocks'     => [
+				'core/paragraph' => 'Keep paragraphs concise.',
+			],
+		];
+
+		$id = Guidelines::version_id_for( $guidelines );
+
+		$this->assertStringStartsWith( 'gv1:', $id );
+		$this->assertSame( $id, Guidelines::version_id_for( $guidelines ) );
+	}
+
+	public function test_version_id_for_ignores_whitespace_and_block_ordering(): void {
+		$base = [
+			'site'       => 'Calm, precise brand voice.',
+			'copy'       => 'Use active voice.',
+			'images'     => '',
+			'additional' => '',
+			'blocks'     => [
+				'core/paragraph' => 'Keep paragraphs concise.',
+				'core/heading'   => 'Sentence case headings.',
+			],
+		];
+
+		$cosmetic = [
+			'site'       => "  Calm,   precise\n\nbrand voice.  ",
+			'copy'       => "Use active voice.\n",
+			'images'     => '',
+			'additional' => '',
+			'blocks'     => [
+				'core/heading'   => 'Sentence case headings.',
+				'core/paragraph' => '  Keep paragraphs concise. ',
+			],
+		];
+
+		$this->assertSame(
+			Guidelines::version_id_for( $base ),
+			Guidelines::version_id_for( $cosmetic )
+		);
+	}
+
+	public function test_version_id_for_changes_on_semantic_change(): void {
+		$base = [
+			'site'       => 'Calm, precise brand voice.',
+			'copy'       => 'Use active voice.',
+			'images'     => '',
+			'additional' => '',
+			'blocks'     => [],
+		];
+
+		$changed         = $base;
+		$changed['copy'] = 'Use a playful, bold voice.';
+
+		$this->assertNotSame(
+			Guidelines::version_id_for( $base ),
+			Guidelines::version_id_for( $changed )
+		);
+	}
+
+	public function test_version_id_reads_current_guidelines(): void {
+		WordPressTestState::$options = [
+			Guidelines::OPTION_SITE => 'Marketing site for a design studio.',
+			Guidelines::OPTION_COPY => 'Use active voice.',
+		];
+
+		$this->assertSame(
+			Guidelines::version_id_for( Guidelines::get_all() ),
+			Guidelines::version_id()
+		);
+		$this->assertStringStartsWith( 'gv1:', Guidelines::version_id() );
+	}
 }

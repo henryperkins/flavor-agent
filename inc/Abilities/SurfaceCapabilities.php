@@ -103,6 +103,29 @@ final class SurfaceCapabilities {
 				'flavor-agent'
 			);
 
+		$pattern_surface                            = self::build_surface(
+			$pattern_available,
+			$pattern_available ? 'ready' : self::pattern_unavailable_reason( $chat_available, $pattern_reason ),
+			'plugin_settings',
+			$pattern_message,
+			self::build_actions(
+				$can_manage_settings,
+				[
+					[
+						'label' => 'Settings > Flavor Agent',
+						'href'  => $settings_url,
+					],
+					[
+						'label' => 'Settings > Connectors',
+						'href'  => $connectors_url,
+					],
+				]
+			),
+			$can_manage_settings ? 'Settings > Flavor Agent' : '',
+			$can_manage_settings ? $settings_url : ''
+		);
+		$pattern_surface['patternRuntimeSignature'] = PatternAbilities::current_pattern_runtime_signature();
+
 		return [
 			'block'        => self::build_surface(
 				$block_available,
@@ -121,27 +144,7 @@ final class SurfaceCapabilities {
 				$can_manage_settings ? 'Settings > Connectors' : '',
 				$can_manage_settings ? $connectors_url : ''
 			),
-			'pattern'      => self::build_surface(
-				$pattern_available,
-				$pattern_available ? 'ready' : self::pattern_unavailable_reason( $chat_available, $pattern_reason ),
-				'plugin_settings',
-				$pattern_message,
-				self::build_actions(
-					$can_manage_settings,
-					[
-						[
-							'label' => 'Settings > Flavor Agent',
-							'href'  => $settings_url,
-						],
-						[
-							'label' => 'Settings > Connectors',
-							'href'  => $connectors_url,
-						],
-					]
-				),
-				$can_manage_settings ? 'Settings > Flavor Agent' : '',
-				$can_manage_settings ? $settings_url : ''
-			),
+			'pattern'      => $pattern_surface,
 			'content'      => self::build_surface(
 				$chat_available,
 				$chat_available ? 'ready' : 'plugin_provider_unconfigured',
@@ -326,10 +329,10 @@ final class SurfaceCapabilities {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'available'          => [ 'type' => 'boolean' ],
-				'reason'             => [ 'type' => 'string' ],
-				'owner'              => [ 'type' => 'string' ],
-				'actions'            => [
+				'available'               => [ 'type' => 'boolean' ],
+				'reason'                  => [ 'type' => 'string' ],
+				'owner'                   => [ 'type' => 'string' ],
+				'actions'                 => [
 					'type'  => 'array',
 					'items' => [
 						'type'       => 'object',
@@ -339,10 +342,11 @@ final class SurfaceCapabilities {
 						],
 					],
 				],
-				'configurationLabel' => [ 'type' => 'string' ],
-				'configurationUrl'   => [ 'type' => 'string' ],
-				'message'            => [ 'type' => 'string' ],
-				'advisoryOnly'       => [ 'type' => 'boolean' ],
+				'configurationLabel'      => [ 'type' => 'string' ],
+				'configurationUrl'        => [ 'type' => 'string' ],
+				'message'                 => [ 'type' => 'string' ],
+				'advisoryOnly'            => [ 'type' => 'boolean' ],
+				'patternRuntimeSignature' => [ 'type' => 'string' ],
 			],
 		];
 	}

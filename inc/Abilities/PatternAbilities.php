@@ -49,6 +49,10 @@ final class PatternAbilities {
 	private const MAX_LLM_CONTENT_PREVIEW_CHARS          = 240;
 	private const SYNCED_PATTERN_NAME_PREFIX             = 'core/block/';
 
+	private const PATTERN_REQUEST_PURPOSE_INSERTER_RANKING       = 'inserter_ranking';
+	private const PATTERN_MODEL_REQUEST_NO_RANKABLE_CANDIDATES   = 'no_rankable_candidates';
+	private const PATTERN_MODEL_REQUEST_MISSING_VISIBLE_PATTERNS = 'missing_visible_patterns';
+
 	public static function list_patterns( mixed $input ): array {
 		$input           = self::normalize_input( $input );
 		$categories      = $input['categories'] ?? null;
@@ -151,18 +155,36 @@ final class PatternAbilities {
 	 * search, LLM ranking, rehydrate from Qdrant payloads.
 	 */
 	public static function recommend_patterns( mixed $input ): array|\WP_Error {
-		$input                  = self::normalize_input( $input );
-		$resolve_signature_only = filter_var(
+		$input                       = self::normalize_input( $input );
+		$resolve_signature_only      = filter_var(
 			$input['resolveSignatureOnly'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
 		);
+		$request_purpose             = isset( $input['requestPurpose'] ) && is_string( $input['requestPurpose'] )
+			? sanitize_key( $input['requestPurpose'] )
+			: '';
+		$is_inserter_ranking_request = self::PATTERN_REQUEST_PURPOSE_INSERTER_RANKING === $request_purpose;
 
 		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
 			? StringArray::sanitize( $input['visiblePatternNames'] )
 			: null;
 
 		if ( ! $resolve_signature_only && ( null === $visible_pattern_names || [] === $visible_pattern_names ) ) {
-			return [ 'recommendations' => [] ];
+			if ( ! $is_inserter_ranking_request ) {
+				return [ 'recommendations' => [] ];
+			}
+
+			return self::pattern_recommendation_response(
+				[],
+				self::empty_pattern_recommendation_diagnostics(),
+				[],
+				'',
+				'',
+				[
+					'attempted' => false,
+					'reason'    => self::PATTERN_MODEL_REQUEST_MISSING_VISIBLE_PATTERNS,
+				]
+			);
 		}
 
 		$diagnostics = self::empty_pattern_recommendation_diagnostics();
@@ -220,6 +242,8 @@ final class PatternAbilities {
 			$state
 		);
 
+		$pattern_runtime_signature = self::pattern_runtime_signature_from_state( $state );
+
 		if ( $resolve_signature_only ) {
 			$docs_result = self::collect_wordpress_docs_guidance_result(
 				[
@@ -258,7 +282,9 @@ final class PatternAbilities {
 				$diagnostics,
 				$docs_result,
 				$review_context_signature,
-				$resolved_context_signature
+				$resolved_context_signature,
+				null,
+				$pattern_runtime_signature
 			);
 		}
 
@@ -522,7 +548,12 @@ final class PatternAbilities {
 				$diagnostics,
 				$docs_result,
 				$review_context_signature,
-				$resolved_context_signature
+				$resolved_context_signature,
+				[
+					'attempted' => false,
+					'reason'    => self::PATTERN_MODEL_REQUEST_NO_RANKABLE_CANDIDATES,
+				],
+				$pattern_runtime_signature
 			);
 		}
 
@@ -727,7 +758,9 @@ final class PatternAbilities {
 			$diagnostics,
 			$docs_result,
 			$review_context_signature,
-			$resolved_context_signature
+			$resolved_context_signature,
+			null,
+			$pattern_runtime_signature
 		);
 	}
 
@@ -916,6 +949,25 @@ final class PatternAbilities {
 		return $context;
 	}
 
+	public static function current_pattern_runtime_signature(): string {
+		$state = PatternIndex::get_runtime_state();
+
+		return self::pattern_runtime_signature_from_state( $state );
+	}
+
+	private static function pattern_runtime_signature_from_state( array $state ): string {
+		if ( ! PatternIndex::has_usable_index( $state ) ) {
+			return '';
+		}
+
+		return sanitize_text_field(
+			RecommendationResolvedSignature::from_payload(
+				'pattern-runtime',
+				self::build_pattern_catalog_signature_context( $state )
+			)
+		);
+	}
+
 	private static function build_pattern_catalog_signature_context( array $state ): array {
 		$stale_reasons = StringArray::sanitize( $state['stale_reasons'] ?? [] );
 
@@ -945,9 +997,11 @@ final class PatternAbilities {
 		array $diagnostics,
 		array $docs_result = [],
 		string $review_context_signature = '',
-		string $resolved_context_signature = ''
+		string $resolved_context_signature = '',
+		?array $model_request = null,
+		string $pattern_runtime_signature = ''
 	): array {
-		return [
+		$response = [
 			'recommendations'          => $recommendations,
 			'docsGrounding'            => [] !== $docs_result ? DocsGuidanceResult::public_summary( $docs_result ) : null,
 			'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
@@ -963,6 +1017,36 @@ final class PatternAbilities {
 				'pipelineTrace'      => self::sanitize_pattern_pipeline_trace( $diagnostics['pipelineTrace'] ?? [] ),
 				'dropReasons'        => self::sanitize_pattern_drop_reasons( $diagnostics['dropReasons'] ?? [] ),
 			],
+		];
+
+		$normalized_model_request = self::sanitize_pattern_model_request_marker( $model_request );
+		if ( [] !== $normalized_model_request ) {
+			$response['diagnostics']['modelRequest'] = $normalized_model_request;
+		}
+
+		if ( '' !== $pattern_runtime_signature ) {
+			$response['patternRuntimeSignature'] = $pattern_runtime_signature;
+		}
+
+		return $response;
+	}
+
+	private static function sanitize_pattern_model_request_marker( ?array $model_request ): array {
+		if ( ! is_array( $model_request ) || false !== ( $model_request['attempted'] ?? null ) ) {
+			return [];
+		}
+
+		$reason = isset( $model_request['reason'] ) && is_string( $model_request['reason'] )
+			? sanitize_key( $model_request['reason'] )
+			: '';
+
+		if ( ! in_array( $reason, [ self::PATTERN_MODEL_REQUEST_NO_RANKABLE_CANDIDATES, self::PATTERN_MODEL_REQUEST_MISSING_VISIBLE_PATTERNS ], true ) ) {
+			return [];
+		}
+
+		return [
+			'attempted' => false,
+			'reason'    => $reason,
 		];
 	}
 

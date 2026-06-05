@@ -1183,6 +1183,146 @@ describe( 'store action thunks', () => {
 		} );
 	} );
 
+	test( 'setPatternRecommendations preserves allow-listed modelRequest diagnostics and pattern runtime signature', () => {
+		const action = actions.setPatternRecommendations(
+			[ { name: 'theme/hero' } ],
+			3,
+			'request-signature',
+			{
+				modelRequest: {
+					attempted: false,
+					reason: 'no_rankable_candidates',
+				},
+			},
+			'insertion-signature',
+			null,
+			'resolved-context',
+			'pattern-runtime-a'
+		);
+		const state = reducer( undefined, action );
+
+		expect( state.patternDiagnostics.modelRequest ).toEqual( {
+			attempted: false,
+			reason: 'no_rankable_candidates',
+		} );
+		expect( state.patternRuntimeSignature ).toBe( 'pattern-runtime-a' );
+	} );
+
+	test( 'setPatternRecommendations drops malformed modelRequest diagnostics', () => {
+		const state = reducer(
+			undefined,
+			actions.setPatternRecommendations( [], 1, 'request-signature', {
+				modelRequest: {
+					attempted: true,
+					reason: 'no_rankable_candidates',
+				},
+			} )
+		);
+
+		expect( state.patternDiagnostics.modelRequest ).toBeUndefined();
+	} );
+
+	test( 'hydratePatternRecommendationsFromCache uses a fresh token and aborts in-flight pattern requests', () => {
+		const abort = jest.fn();
+		actions._patternAbort = { abort };
+		const dispatch = jest.fn();
+		const select = {
+			getPatternRequestToken: jest.fn( () => 4 ),
+		};
+
+		actions.hydratePatternRecommendationsFromCache( {
+			recommendations: [ { name: 'theme/hero' } ],
+			diagnostics: {
+				modelRequest: {
+					attempted: false,
+					reason: 'no_rankable_candidates',
+				},
+			},
+			requestSignature: 'request-cache',
+			insertionTargetSignature: 'target-cache',
+			resolvedContextSignature: 'resolved-cache',
+			docsGroundingWarning: { status: 'grounded' },
+			patternRuntimeSignature: 'runtime-cache',
+		} )( { dispatch, select } );
+
+		expect( abort ).toHaveBeenCalled();
+		expect( actions._patternAbort ).toBeNull();
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining( {
+				type: 'SET_PATTERN_RECS',
+				requestToken: 5,
+				requestSignature: 'request-cache',
+				insertionTargetSignature: 'target-cache',
+				resolvedContextSignature: 'resolved-cache',
+				patternRuntimeSignature: 'runtime-cache',
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining( {
+				type: 'SET_PATTERN_STATUS',
+				status: 'ready',
+				requestToken: 5,
+				requestSignature: 'request-cache',
+				insertionTargetSignature: 'target-cache',
+			} )
+		);
+	} );
+
+	test( 'hydratePatternRecommendationsFromCache rejects incomplete cache entries', () => {
+		const dispatch = jest.fn();
+		const select = {
+			getPatternRequestToken: jest.fn( () => 4 ),
+		};
+
+		const result = actions.hydratePatternRecommendationsFromCache( {
+			recommendations: [ { name: 'theme/hero' } ],
+			requestSignature: 'request-cache',
+			insertionTargetSignature: 'target-cache',
+			resolvedContextSignature: '',
+			patternRuntimeSignature: 'runtime-cache',
+		} )( { dispatch, select } );
+
+		expect( result ).toBe( false );
+		expect( dispatch ).not.toHaveBeenCalled();
+	} );
+
+	test( 'setPatternRankingCacheEntry stores only complete cache entries', () => {
+		let state = reducer(
+			undefined,
+			actions.setPatternRankingCacheEntry( 'cache-key-a', {
+				recommendations: [ { name: 'theme/hero' } ],
+				requestSignature: 'request-cache',
+				insertionTargetSignature: 'target-cache',
+				resolvedContextSignature: 'resolved-cache',
+				patternRuntimeSignature: 'runtime-cache',
+			} )
+		);
+
+		expect( state.patternRankingCache[ 'cache-key-a' ] ).toEqual(
+			expect.objectContaining( {
+				requestSignature: 'request-cache',
+				insertionTargetSignature: 'target-cache',
+				resolvedContextSignature: 'resolved-cache',
+				patternRuntimeSignature: 'runtime-cache',
+			} )
+		);
+
+		state = reducer(
+			state,
+			actions.setPatternRankingCacheEntry( 'cache-key-b', {
+				recommendations: [ { name: 'theme/cards' } ],
+				requestSignature: 'request-cache-b',
+				insertionTargetSignature: 'target-cache-b',
+				resolvedContextSignature: '',
+				patternRuntimeSignature: 'runtime-cache',
+			} )
+		);
+
+		expect( state.patternRankingCache[ 'cache-key-b' ] ).toBeUndefined();
+	} );
+
 	test( 'stores pattern diagnostics for selectors', () => {
 		const state = reducer(
 			undefined,

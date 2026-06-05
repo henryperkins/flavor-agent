@@ -301,17 +301,19 @@ Add deterministic validators and scorers for:
 - Diagnostics stay bounded and sanitized: no raw provider payloads, no full block trees, and no routine pass logs.
 - Metrics gate: rejected executable operations lower the final score, and advisory remnants do not increase `invalidOperationRate`.
 
-## Priority 5: Structure Guidelines And Add Guidelines Freshness
+## Priority 5: Tie Guidelines To Recommendations For Attribution
 
-**Goal:** Treat guidelines as first-class design constraints that affect prompt output and recommendation freshness.
+**Goal:** Keep structuring guidelines for prompt steering, and stamp the guideline version that produced each recommendation onto its activity/outcome record — as **attribution metadata for the future learning loop, not a freshness or staleness input**.
 
-### Current Gap
+> Re-scoped 2026-06-04. The original "guideline freshness" goal (make guideline edits stale prior recommendations) was dropped after review — see Current Gap below.
 
-Guidelines are formatted as text by `Guidelines::format_prompt_context()` and injected by `RecommendationAbilityExecution::execute_with_system_instruction()`. That improves generation, but recommendation signatures are computed inside individual ability callbacks and do not obviously include a guidelines fingerprint.
+### Current Gap And Scope Correction (2026-06-04)
 
-Changing brand or design guidance can therefore change generation without clearly invalidating old recommendation results.
+Guidelines are formatted as text by `Guidelines::format_prompt_context()` and injected by `RecommendationAbilityExecution::execute_with_system_instruction()`, so they already steer generation. Every fresh generation reads current guidelines.
 
-This invalidation is desired. If an admin changes the site's design or brand guidance, old recommendations were generated under different constraints. The fingerprint should be based on a normalized structured projection, not raw text, so whitespace-only or ordering-only changes do not create unnecessary churn.
+An earlier version of this priority proposed feeding a guidelines fingerprint into recommendation *freshness* signatures so guideline edits would stale prior recommendations. **That freshness goal was dropped.** Recommendations are generated on demand and live only for the session/selection; for guideline-change invalidation to ever fire, the same unapplied recommendation would have to survive a server-side guideline edit mid-flow — a real-world non-issue — and a global guideline fingerprint used as a staleness input would also over-invalidate unrelated recommendations. Guideline-as-staleness is therefore explicitly out of scope.
+
+The genuine, future-facing need is **attribution**. When the live learning loop (see the Phase 3 reframing) consumes apply / undo / ignore outcomes, two recommendations produced in the same context under different guideline sets must not be conflated. Recording the guideline version that produced each recommendation keeps outcomes attributable to their constraint set and enables before/after measurement when guidelines change. The version id is a fingerprint of a normalized structured projection (not raw text), so whitespace-only or ordering-only edits do not change it — only semantic changes do.
 
 ### Proposed Guideline Model
 
@@ -337,21 +339,20 @@ Keep compatibility with existing `site`, `copy`, `images`, `additional`, and blo
 
 ### Implementation Seams
 
-- Guideline storage and formatting: `inc/Guidelines.php`
-- Prompt formatting: `inc/Guidelines/PromptGuidelinesFormatter.php`
-- Execution injection: `inc/Abilities/RecommendationAbilityExecution.php`
-- Ability signatures: `inc/Abilities/BlockAbilities.php`, `StyleAbilities.php`, `TemplateAbilities.php`, `PatternAbilities.php`
-- Signature hashing: `inc/Support/RecommendationResolvedSignature.php` and `inc/Support/RecommendationSignature.php`
+- Guideline storage + version-id mint on save/update: `inc/Guidelines.php` and the settings save path; persist as an option such as `flavor_agent_guidelines_version`.
+- Version-id source: a fingerprint of the normalized structured guideline projection (so cosmetic edits do not change it). `inc/Guidelines/PromptGuidelinesFormatter.php` already filters per-ability categories and is the natural place to derive the projection.
+- Stamp at generation: `inc/Abilities/RecommendationAbilityExecution.php` records the in-effect id onto the request-diagnostic (and engaged-outcome) rows.
+- Activity persistence: `inc/Activity/Repository.php` and `inc/Activity/Serializer.php` carry the id as an attribution attribute.
+- Explicitly **not** touched: resolved/review freshness signatures (`inc/Support/RecommendationResolvedSignature.php`, `inc/Support/RecommendationReviewSignature.php`). The id is never a freshness input.
 
 ### Acceptance Criteria
 
-- Recommendation responses include or internally use a stable `guidelinesFingerprint`.
-- For signature-backed recommendation surfaces, `resolveSignatureOnly` changes when relevant guidelines change. That currently means block, style, template, template-part, and navigation; pattern recommendations do not expose `resolveSignatureOnly` today.
-- Pattern recommendations either expose a pattern-specific `guidelinesFingerprint` in their response/ranking diagnostics or first add an explicit pattern signature-only contract before claiming `resolveSignatureOnly` parity.
+- On guidelines save/update, a stable **guideline version id** is minted from the normalized structured guideline projection (persisted in an option such as `flavor_agent_guidelines_version`). Whitespace-only or ordering-only edits do not change it; only semantic changes do.
+- Each recommendation's activity records (the request-diagnostic row, and engaged-outcome rows) carry the guideline version id that was in effect at generation, as attribution metadata.
+- The id is attribution-only: it is **not** part of any resolved/review freshness signature, does **not** change `resolveSignatureOnly`, and does **not** stale or regenerate prior recommendations on any surface.
 - Existing behavior remains compatible with upstream `WordPress\AI\format_guidelines_for_prompt()` when available.
-- Tests prove guideline-only changes stale previous block/style/template/template-part/navigation results and prove the chosen pattern-specific freshness signal changes when pattern-relevant guidelines change.
-- Whitespace-only guideline changes do not stale results when the normalized structured projection is unchanged.
-- Metrics gate: guideline-specific fixtures preserve `presetAdherenceRate` and lower `noiseRate` when guidelines explicitly say to avoid a class of suggestion.
+- Tests prove: the id is recorded on outcome rows; a semantic guideline save changes it; a whitespace/order-only save does not; and that no freshness signature or `resolveSignatureOnly` result changes when guidelines change.
+- The prompt-steering behavior is unchanged — guidelines still shape generation exactly as today; this priority only adds recorded attribution.
 
 ## Priority 6: Split Docs Content Freshness From Runtime Freshness
 
@@ -485,7 +486,7 @@ Add:
 
 ## Suggested Implementation Order
 
-Status note (updated 2026-06-04): Phases 0, 1, and 2 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed a slice of Phase 3 via validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`). Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phases 4–7 remain unshipped.
+Status note (updated 2026-06-04): Phases 0, 1, and 2 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed a slice of Phase 3 via validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`). Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phases 4–7 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work — pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) — should come first.
 
 ### Phase 0: Measurement Stub
 
@@ -559,20 +560,19 @@ npm run check:docs
 git diff --check
 ```
 
-### Phase 4: Guidelines Freshness
+### Phase 4: Guideline Attribution Id (demoted — future-proofing, not a milestone gate)
 
-- [ ] Derive a stable guidelines fingerprint from a normalized structured guideline projection.
-- [ ] Pass that fingerprint into ability execution input.
-- [ ] Include the fingerprint in resolved/review signatures for block, style, template, template-part, and navigation.
-- [ ] Add a pattern-specific guidelines freshness signal, or add a deliberate `resolveSignatureOnly` contract for pattern recommendations before asserting signature-only parity.
-- [ ] Add signature-only tests proving guidelines changes stale old results on signature-backed surfaces.
-- [ ] Add pattern tests proving pattern-relevant guidelines change the chosen pattern freshness signal.
-- [ ] Add tests proving whitespace-only guideline changes do not stale old results.
+Re-scoped 2026-06-04 from "Guidelines Freshness." Guideline-as-staleness was dropped as a real-world non-issue (see Priority 5); this is now a small attribution seam. Sequence it **after** the felt-value work (pattern relevance, design validators) — do it when the learning loop is actually on the horizon.
+
+- [ ] Mint a stable guideline version id from the normalized structured guideline projection on guidelines save/update (e.g., option `flavor_agent_guidelines_version`); cosmetic edits do not change it.
+- [ ] Stamp the in-effect id onto request-diagnostic and engaged-outcome activity rows at generation time.
+- [ ] Persist and expose the id through the activity repository/serializer as attribution metadata.
+- [ ] Tests: id recorded on outcome rows; semantic save changes it; whitespace/order-only save does not; no freshness signature or `resolveSignatureOnly` result changes when guidelines change.
 
 **Verification:**
 
 ```bash
-composer run test:php -- --filter 'RecommendationEvaluationTest|GuidelinesTest|RecommendationAbilityExecutionTest|BlockAbilitiesTest|StyleAbilitiesTest|TemplateAbilitiesTest|PatternAbilitiesTest|NavigationAbilitiesTest'
+composer run test:php -- --filter 'Guidelines|RecommendationAbilityExecution|Activity|Serializer'
 npm run check:docs
 git diff --check
 ```
@@ -635,6 +635,7 @@ git diff --check
 - Do not let docs guidance crowd out local design context for purely visual suggestions.
 - Do not hash volatile diagnostics or labels into applicability signatures.
 - Do not hash raw guideline text when a normalized structured guideline projection is available.
+- Do not turn the guideline version id into a freshness or staleness input. It is attribution metadata recorded on outcomes; guideline edits must not stale, gate, or regenerate prior recommendations.
 - Do not remove fail-closed docs-grounding behavior for API/currentness-sensitive recommendations.
 - Do not make model ranking authoritative over validator results.
 - Do not let added prompt sections bypass `PromptBudget` caps.
@@ -651,7 +652,7 @@ The first useful milestone is complete when:
 - strict LLM schemas can accept structured ranking;
 - composite ranking prevents confidence-only suggestions from dominating;
 - block/style/template/template-part prompts include explicit `designSemantics` summaries;
-- guideline changes participate in freshness signatures;
+- guideline version ids are recorded on recommendation outcomes for future attribution (guideline-as-staleness intentionally dropped — see Priority 5);
 - validation reasons are available for ranking and diagnostics;
 - docs retrieval refreshes do not stale unchanged guidance content;
 - targeted PHP and JS tests cover those contracts;

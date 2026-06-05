@@ -700,6 +700,11 @@ async function enableMockedRecommendationSurfaces( page, surfaces ) {
 					};
 				}
 
+				if ( data.capabilities.surfaces.pattern ) {
+					data.capabilities.surfaces.pattern.patternRuntimeSignature =
+						'mock-pattern-runtime';
+				}
+
 				return data;
 			};
 
@@ -767,6 +772,11 @@ async function enableMockedRecommendationSurfaces( page, surfaces ) {
 					reason: 'ready',
 					owner: 'connectors',
 				};
+			}
+
+			if ( data.capabilities.surfaces.pattern ) {
+				data.capabilities.surfaces.pattern.patternRuntimeSignature =
+					'mock-pattern-runtime';
 			}
 
 			window.flavorAgentData = data;
@@ -3305,7 +3315,6 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	await seedParagraphBlock( page );
 	const searchPrompt = 'hero';
 
-	await expect.poll( () => patternRequests.length > 0 ).toBe( true );
 	await dismissWelcomeGuide( page );
 
 	await page
@@ -3315,6 +3324,11 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		} )
 		.click();
 	await dismissWelcomeGuide( page );
+
+	// The first real ranking is sent on block inserter intent, not on editor load.
+	await expect
+		.poll( () => patternRequests.length > 0, { timeout: 15_000 } )
+		.toBe( true );
 
 	const searchInput = await getVisibleSearchInput( page );
 
@@ -3536,6 +3550,96 @@ test( 'pattern surface inserts a recommended pattern at the top-level root and r
 			)
 		)
 		.toBeGreaterThan( topLevelOrderBefore );
+} );
+
+test( 'pattern badge attaches to the block inserter button, not document overview', async ( {
+	page,
+} ) => {
+	await page.route(
+		recommendationAbilityRoute( 'recommend-patterns' ),
+		async ( route ) => {
+			const requestData = getAbilityRequestInput(
+				route.request().postDataJSON()
+			);
+			const visiblePatternNames = Array.isArray(
+				requestData.visiblePatternNames
+			)
+				? requestData.visiblePatternNames
+				: [];
+			const recommendationNames = visiblePatternNames.slice( 0, 1 );
+
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature: 'pattern-resolved-context',
+					recommendations: recommendationNames.map( ( name ) => ( {
+						name,
+						score: 0.97,
+						reason: PATTERN_REASON,
+						categories: [ 'hero' ],
+					} ) ),
+					diagnostics: {
+						filteredCandidates: { unreadableSyncedPatterns: 0 },
+					},
+				} ),
+			} );
+		}
+	);
+
+	await enableMockedRecommendationSurfaces( page, [ 'pattern' ] );
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+
+	await page.waitForFunction( () =>
+		Boolean( window.flavorAgentData?.canRecommendPatterns )
+	);
+	await seedParagraphBlock( page );
+	await dismissWelcomeGuide( page );
+
+	const inserter = page
+		.getByRole( 'button', { name: 'Block Inserter', exact: true } )
+		.first();
+	await expect( inserter ).toBeVisible();
+	await inserter.click();
+	await dismissWelcomeGuide( page );
+
+	// Proves the inserter-intent ranking returned renderable recommendations,
+	// which is what flips the badge out of its hidden state.
+	await expect(
+		page.locator( '.flavor-agent-pattern-shelf__item' ).first()
+	).toBeVisible( { timeout: 15_000 } );
+
+	// The badge then mounts in a dedicated span anchored immediately after the
+	// real block inserter toggle.
+	const badgeAnchor = page
+		.locator( '.flavor-agent-inserter-badge-anchor' )
+		.first();
+	await expect( badgeAnchor ).toBeAttached( { timeout: 15_000 } );
+
+	const anchorNeighbor = await badgeAnchor.evaluate( ( anchor ) => {
+		const previous = anchor.previousElementSibling;
+
+		return {
+			hasBadge: Boolean(
+				anchor.querySelector( '.flavor-agent-inserter-badge' )
+			),
+			label:
+				previous?.getAttribute( 'aria-label' ) ||
+				previous?.textContent ||
+				'',
+		};
+	} );
+
+	expect( anchorNeighbor.hasBadge ).toBe( true );
+	expect( anchorNeighbor.label ).toMatch( /block inserter/i );
+	expect( anchorNeighbor.label ).not.toMatch(
+		/list\s*view|outline|document\s*overview|hierarchy|structure/i
+	);
 } );
 
 test( '@wp70-site-editor global styles surface previews, applies, and undoes executable recommendations', async ( {

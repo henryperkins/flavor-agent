@@ -934,7 +934,7 @@ describe( 'ActivityLogApp', () => {
 				suggestion: 'Recommendation without captured core log',
 				request: {
 					ai: {
-						requestToken: '7a85fe6b-ad73-4c0f-931b-0b0a70bc09c0',
+						requestToken: 'test-request-token',
 						requestLogId: '',
 					},
 				},
@@ -949,6 +949,35 @@ describe( 'ActivityLogApp', () => {
 				( button ) => button.textContent === 'View AI request'
 			)
 		).toBe( false );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'renders no-model copy before unavailable request-log copy', async () => {
+		await renderApp( [
+			createEntry( {
+				id: 'activity-no-model',
+				suggestion: 'No rankable patterns',
+				after: {
+					modelRequest: {
+						attempted: false,
+						reason: 'no_rankable_candidates',
+					},
+				},
+				request: {
+					ai: {
+						requestToken: 'test-request-token',
+						requestLogId: '',
+					},
+				},
+			} ),
+		] );
+
+		expect( getContainer().textContent ).toContain(
+			'No model request was attempted for this diagnostic.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'AI request log unavailable'
+		);
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 	} );
 

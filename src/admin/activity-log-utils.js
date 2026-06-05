@@ -1540,6 +1540,30 @@ export function writePersistedActivityView( view, storage, options = {} ) {
 	}
 }
 
+const MODEL_REQUEST_REASONS = new Set( [
+	'no_rankable_candidates',
+	'missing_visible_patterns',
+] );
+
+function normalizeModelRequestMarker( entry ) {
+	const marker =
+		entry?.after?.modelRequest ||
+		entry?.response?.diagnostics?.modelRequest;
+
+	if (
+		! marker ||
+		marker.attempted !== false ||
+		! MODEL_REQUEST_REASONS.has( marker.reason )
+	) {
+		return null;
+	}
+
+	return {
+		attempted: false,
+		reason: marker.reason,
+	};
+}
+
 function normalizeActivityEntry(
 	entry,
 	allEntries = [],
@@ -1701,6 +1725,7 @@ function normalizeActivityEntry(
 		aiRequestToken: aiRequestLog.aiRequestToken,
 		aiRequestLogId: aiRequestLog.aiRequestLogId,
 		aiRequestLogsUrl: aiRequestLog.aiRequestLogsUrl,
+		modelRequest: normalizeModelRequestMarker( entry ),
 		requestFallback,
 		targetUrl: targetLink.url,
 		targetLinkLabel: targetLink.label,

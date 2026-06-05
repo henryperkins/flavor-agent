@@ -6,6 +6,8 @@ const mockCreateBlock = jest.fn();
 const mockGetBlockBindingsSources = jest.fn();
 const mockParse = jest.fn();
 const mockFetchPatternRecommendations = jest.fn();
+const mockFetchPatternRequestContext = jest.fn();
+const mockHydratePatternRecommendationsFromCache = jest.fn();
 const mockResolvePatternRecommendationSignature = jest.fn();
 const mockRecordRecommendationOutcome = jest.fn();
 const mockInsertBlocks = jest.fn();
@@ -214,6 +216,14 @@ function createSelectMap() {
 			getPatternDocsGroundingWarning: jest.fn(
 				() => state.store.patternDocsGroundingWarning
 			),
+			getPatternRankingCacheEntry: jest.fn(
+				( cacheKey ) =>
+					state.store.patternRankingCache?.[ cacheKey ] ||
+					Object.values(
+						state.store.patternRankingCache || {}
+					)[ 0 ] ||
+					null
+			),
 		},
 	};
 }
@@ -259,6 +269,7 @@ describe( 'PatternRecommender', () => {
 				patternInsertionTargetSignature: '',
 				patternResolvedContextSignature: 'resolved-pattern-context',
 				patternDocsGroundingWarning: null,
+				patternRankingCache: {},
 			},
 		};
 		mockUseDispatch.mockReset();
@@ -270,6 +281,8 @@ describe( 'PatternRecommender', () => {
 		mockGetBlockBindingsSources.mockReturnValue( {} );
 		mockParse.mockReset();
 		mockFetchPatternRecommendations.mockReset();
+		mockFetchPatternRequestContext.mockReset();
+		mockHydratePatternRecommendationsFromCache.mockReset();
 		mockResolvePatternRecommendationSignature.mockReset();
 		mockResolvePatternRecommendationSignature.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-pattern-context',
@@ -336,12 +349,16 @@ describe( 'PatternRecommender', () => {
 		mockUseDispatch.mockImplementation( ( storeName ) => {
 			if ( storeName === 'flavor-agent' ) {
 				return {
-					fetchPatternRecommendations: ( input ) =>
-						mockFetchPatternRecommendations( input ),
+					fetchPatternRecommendations: ( input, requestContext ) => {
+						mockFetchPatternRequestContext( requestContext );
+						return mockFetchPatternRecommendations( input );
+					},
 					resolvePatternRecommendationSignature: ( input ) =>
 						mockResolvePatternRecommendationSignature( input ),
 					recordRecommendationOutcome: ( outcome ) =>
 						mockRecordRecommendationOutcome( outcome ),
+					hydratePatternRecommendationsFromCache: ( entry ) =>
+						mockHydratePatternRecommendationsFromCache( entry ),
 				};
 			}
 
@@ -388,7 +405,18 @@ describe( 'PatternRecommender', () => {
 		mockGetVisiblePatternNames.mockImplementation(
 			() => state.visiblePatternNames
 		);
-		window.flavorAgentData = { canRecommendPatterns: true };
+		window.flavorAgentData = {
+			canRecommendPatterns: true,
+			capabilities: {
+				surfaces: {
+					pattern: {
+						available: true,
+						reason: 'ready',
+						patternRuntimeSignature: 'runtime-a',
+					},
+				},
+			},
+		};
 		originalMutationObserver = window.MutationObserver;
 	} );
 
@@ -530,6 +558,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'page',
 			visiblePatternNames: [ 'theme/hero' ],
 			insertionContext: {
@@ -593,6 +622,15 @@ describe( 'PatternRecommender', () => {
 		};
 		window.flavorAgentData = {
 			canRecommendPatterns: true,
+			capabilities: {
+				surfaces: {
+					pattern: {
+						available: true,
+						reason: 'ready',
+						patternRuntimeSignature: 'runtime-a',
+					},
+				},
+			},
 			templatePartAreas: {
 				'site-header': 'header',
 			},
@@ -601,6 +639,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'page',
 			visiblePatternNames: [ 'theme/hero' ],
 			insertionContext: {
@@ -632,6 +671,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'page',
 			visiblePatternNames: [ 'theme/hero' ],
 			insertionContext: {
@@ -1054,6 +1094,7 @@ describe( 'PatternRecommender', () => {
 		} );
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'page',
 			visiblePatternNames: [ 'theme/hero' ],
 			insertionContext: {
@@ -2734,28 +2775,20 @@ describe( 'PatternRecommender', () => {
 		}
 	} );
 
-	test( 'refetches when visible pattern names hydrate after the initial empty load', () => {
+	test( 'does not rank until visible pattern names hydrate after an empty load', () => {
 		state.visiblePatternNames = [];
 
 		renderComponent();
 
-		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
-			postType: 'page',
-			visiblePatternNames: [],
-			insertionContext: {
-				rootBlock: 'core/group',
-				ancestors: [ 'core/group' ],
-				nearbySiblings: [],
-			},
-		} );
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
 
 		state.visiblePatternNames = [ 'theme/hero' ];
 
 		renderComponent();
 
-		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 2 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
 		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'page',
 			visiblePatternNames: [ 'theme/hero' ],
 			insertionContext: {
@@ -2764,6 +2797,87 @@ describe( 'PatternRecommender', () => {
 				nearbySiblings: [],
 			},
 		} );
+	} );
+
+	test( 'does not dispatch a real ranking before inserter intent', () => {
+		state.isInserterOpen = false;
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+	} );
+
+	test( 'dispatches first real ranking on inserter open with requestPurpose and selected block context', () => {
+		state.blockEditor.selectedBlockClientId = 'selected-a';
+		state.blockEditor.selectedBlockName = 'core/heading';
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				postType: 'page',
+				visiblePatternNames: [ 'theme/hero' ],
+				requestPurpose: 'inserter_ranking',
+				blockContext: {
+					blockName: 'core/heading',
+				},
+			} )
+		);
+	} );
+
+	test( 'does not rank when the current insertion point has no visible pattern scope', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.visiblePatternNames = [];
+		state.topLevelAllowedPatterns = [ { name: 'theme/hero' } ];
+		state.store.patternStatus = 'idle';
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+		expect( document.body.textContent ).toContain(
+			"This spot doesn't accept block patterns."
+		);
+	} );
+
+	test( 'bypasses cache and real ranking when runtime signature is unavailable', () => {
+		window.flavorAgentData.capabilities.surfaces.pattern.patternRuntimeSignature =
+			'';
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+		expect(
+			mockHydratePatternRecommendationsFromCache
+		).not.toHaveBeenCalled();
+	} );
+
+	test( 'hydrates cached recommendations for the same target and runtime signature', () => {
+		mockHydratePatternRecommendationsFromCache.mockReturnValue( true );
+		state.store.patternRankingCache = {
+			'cache-key-a': {
+				recommendations: [ { name: 'theme/hero' } ],
+				requestSignature: 'request-cache',
+				insertionTargetSignature: 'target-cache',
+				resolvedContextSignature: 'resolved-cache',
+				patternRuntimeSignature: 'runtime-a',
+			},
+		};
+
+		renderComponent();
+
+		expect(
+			mockHydratePatternRecommendationsFromCache
+		).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				recommendations: [ { name: 'theme/hero' } ],
+				patternRuntimeSignature: 'runtime-a',
+			} )
+		);
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
 	} );
 
 	test( 'does not create the inserter notice slot while the affordance is hidden', () => {
@@ -2962,6 +3076,7 @@ describe( 'PatternRecommender', () => {
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 2 );
 		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'page',
 			visiblePatternNames: [ 'theme/hero' ],
 			insertionContext: {
@@ -2974,6 +3089,16 @@ describe( 'PatternRecommender', () => {
 				blockName: 'core/heading',
 			},
 		} );
+
+		// Regression: the base inserter-open ranking (call 1) is cached under a
+		// non-empty target key, while the search refinement (call 2) is not
+		// cached, so a search can never overwrite the cached base ranking.
+		expect(
+			mockFetchPatternRequestContext.mock.calls[ 0 ][ 0 ].cacheKey
+		).not.toBe( '' );
+		expect(
+			mockFetchPatternRequestContext.mock.calls[ 1 ][ 0 ].cacheKey
+		).toBe( '' );
 	} );
 
 	test( 'reattaches the inserter search listener when Gutenberg replaces the input', () => {
@@ -3040,6 +3165,7 @@ describe( 'PatternRecommender', () => {
 		} );
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'page',
 			visiblePatternNames: [ 'theme/hero' ],
 			insertionContext: {
@@ -3063,6 +3189,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'page',
 			templateType: 'front-page',
 			visiblePatternNames: [ 'theme/hero' ],
@@ -3084,6 +3211,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'wp_template',
 			templateType: 'front-page',
 			visiblePatternNames: [ 'theme/hero' ],
@@ -3119,6 +3247,7 @@ describe( 'PatternRecommender', () => {
 		} );
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'wp_template',
 			templateType: 'front-page',
 			visiblePatternNames: [ 'theme/hero' ],
@@ -3166,6 +3295,7 @@ describe( 'PatternRecommender', () => {
 		} );
 
 		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			requestPurpose: 'inserter_ranking',
 			postType: 'wp_template',
 			templateType: 'front-page',
 			visiblePatternNames: [ 'theme/hero' ],
