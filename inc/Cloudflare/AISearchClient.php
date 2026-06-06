@@ -27,7 +27,7 @@ final class AISearchClient {
 	private const VALIDATION_PROBE_RESULTS            = 3;
 	private const SOURCE_COVERAGE_PROBE_QUERY         = 'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes';
 	private const SOURCE_COVERAGE_PROBE_RESULTS       = 8;
-	private const DEFAULT_PUBLIC_SEARCH_URL           = 'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search';
+	private const DEFAULT_PUBLIC_SEARCH_URL           = 'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search';
 	private const PUBLIC_HOST_SUFFIX                  = '.search.ai.cloudflare.com';
 	private const PREWARM_STATE_OPTION                = 'flavor_agent_docs_prewarm_state';
 	private const RUNTIME_STATE_OPTION                = 'flavor_agent_docs_runtime_state';
@@ -2608,7 +2608,81 @@ final class AISearchClient {
 			return true;
 		}
 
-		return self::normalize_source_key_identity( $source_key, $instance_id ) === $url_identity;
+		$key_identity = self::normalize_source_key_identity( $source_key, $instance_id );
+
+		if ( $key_identity !== '' ) {
+			return $key_identity === $url_identity;
+		}
+
+		// Cloudflare AI Search caps item filenames at 128 bytes, so deep developer
+		// docs URLs cannot embed their full path in the item key (see
+		// scripts/update-docs-ai-search.js buildItemKey). Those managed keys carry
+		// only a bounded slug plus a short hash, so they do not reconstruct a URL
+		// above. Accept them when the key is in our managed namespace and its host
+		// segment matches the already trust-scoped URL; forged or traversing keys
+		// (wrong namespace, "..", encoded delimiters) still fail this check.
+		return self::source_key_matches_trusted_host( $source_key, $url, $instance_id );
+	}
+
+	private static function source_key_matches_trusted_host( string $source_key, string $url, ?string $instance_id = null ): bool {
+		$key = strtolower( trim( $source_key ) );
+
+		if ( strncmp( $key, 'ai-search/', 10 ) !== 0 ) {
+			return false;
+		}
+
+		if ( self::path_contains_untrusted_segments( $key ) ) {
+			return false;
+		}
+
+		$segments = array_values(
+			array_filter(
+				explode( '/', $key ),
+				static fn ( string $segment ): bool => $segment !== ''
+			)
+		);
+
+		// ai-search / {instance} / {host} / {at least one bounded path or hash segment}
+		if ( count( $segments ) < 4 ) {
+			return false;
+		}
+
+		// Only accept keys minted for one of our managed docs instances. Without
+		// this, a forged key such as ai-search/attacker/developer.wordpress.org/...
+		// would pass on the host segment alone and borrow the trust of an
+		// (independently trust-scoped) URL. Mirrors the instance allowlist used by
+		// parse_trusted_source_key_url().
+		if ( ! in_array( $segments[1], self::managed_source_key_instances( $instance_id ), true ) ) {
+			return false;
+		}
+
+		$url_host = wp_parse_url( $url, PHP_URL_HOST );
+
+		if ( ! is_string( $url_host ) || '' === $url_host ) {
+			return false;
+		}
+
+		return $segments[2] === strtolower( $url_host );
+	}
+
+	/**
+	 * Managed docs AI Search instance aliases that may legitimately appear as the
+	 * instance segment of a bounded item key.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function managed_source_key_instances( ?string $instance_id = null ): array {
+		return array_values(
+			array_unique(
+				array_filter(
+					[
+						'wp-dev',
+						'wp-dev-docs',
+						self::normalize_source_key_instance_id( $instance_id ),
+					]
+				)
+			)
+		);
 	}
 
 	private static function normalize_source_key_identity( string $source_key, ?string $instance_id = null ): string {

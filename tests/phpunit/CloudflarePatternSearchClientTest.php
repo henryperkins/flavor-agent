@@ -23,11 +23,11 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertFalse( PatternSearchClient::is_configured() );
 		$this->assertFalse( PatternSearchClient::is_configured( 'account-123', 'patterns', 'pattern-index', '' ) );
 
-		$result = PatternSearchClient::validate_configuration( 'account-123', '', 'pattern-index', 'token-xyz' );
+		$result = PatternSearchClient::validate_configuration( 'account-123', 'legacy-namespace', '', 'token-xyz' );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'missing_cloudflare_pattern_ai_search_credentials', $result->get_error_code() );
-		$this->assertStringContainsString( 'namespace', $result->get_error_message() );
+		$this->assertStringContainsString( 'instance ID', $result->get_error_message() );
 	}
 
 	public function test_saved_configuration_rejects_non_managed_instance_id_even_with_valid_signature(): void {
@@ -60,7 +60,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertStringContainsString( PatternSearchInstanceManager::managed_instance_id(), $result->get_error_message() );
 	}
 
-	public function test_validate_configuration_probes_namespaced_search_url(): void {
+	public function test_validate_configuration_probes_managed_storage_search_url(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
@@ -81,7 +81,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 
 		$this->assertTrue( $result );
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/pattern-index/search',
+			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/pattern-index/search',
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertSame(
@@ -174,7 +174,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		);
 		$this->assertSame(
 			sprintf(
-				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/%s/search',
+				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/%s/search',
 				PatternSearchInstanceManager::managed_instance_id()
 			),
 			WordPressTestState::$last_remote_post['url']
@@ -405,7 +405,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertSame( [], $result );
 		$this->assertSame(
 			sprintf(
-				'https://api.cloudflare.com/client/v4/accounts/workers-account/ai-search/namespaces/patterns/instances/%s/search',
+				'https://api.cloudflare.com/client/v4/accounts/workers-account/ai-search/instances/%s/search',
 				PatternSearchInstanceManager::managed_instance_id()
 			),
 			WordPressTestState::$last_remote_post['url']
@@ -465,7 +465,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertTrue( $result );
 		$this->assertSame(
 			sprintf(
-				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/%s/items',
+				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/%s/items',
 				PatternSearchInstanceManager::managed_instance_id()
 			),
 			WordPressTestState::$last_remote_post['url']
@@ -592,7 +592,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 
 				$this->assertSame(
 					sprintf(
-						'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/%s/items',
+						'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/%s/items',
 						PatternSearchInstanceManager::managed_instance_id()
 					),
 					$call['url'] ?? null
@@ -668,7 +668,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertTrue( $result );
 		$this->assertSame(
 			sprintf(
-				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/patterns/instances/%s/items/theme-hero',
+				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/%s/items/theme-hero',
 				PatternSearchInstanceManager::managed_instance_id()
 			),
 			WordPressTestState::$last_remote_post['url']

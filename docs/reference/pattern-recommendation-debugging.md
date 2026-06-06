@@ -86,7 +86,6 @@ Focus on:
 - `indexed_count`
 - `qdrant_collection`
 - `pattern_backend`
-- `cloudflare_ai_search_namespace`
 - `cloudflare_ai_search_instance`
 - `cloudflare_ai_search_signature`
 - `embedding_dimension`
@@ -417,7 +416,6 @@ What to check:
 - `stale_reasons`
 - `qdrant_collection`
 - `pattern_backend`
-- `cloudflare_ai_search_namespace`
 - `cloudflare_ai_search_instance`
 - `cloudflare_ai_search_signature`
 - `embedding_signature`
@@ -562,7 +560,7 @@ If raw chunks are wrong:
 - confirm `PatternIndex::sync()` uploaded changed items with `wait_for_completion=false`
 - confirm current pattern items have `status: completed`; queued/pending items keep the index in `indexing`, and retryable capacity errors schedule another sync
 - confirm stale remote items were deleted by Cloudflare's generated item `id`, not by Flavor Agent's stable pattern ID
-- confirm the AI Search namespace is the fixed `patterns` namespace and the runtime instance is the deterministic managed `flavor-agent-patterns-{site_hash}` instance
+- confirm the runtime instance is the deterministic managed `flavor-agent-patterns-{site_hash}` instance
 
 ### Raw Qdrant hits look good but final recommendations still look wrong
 
