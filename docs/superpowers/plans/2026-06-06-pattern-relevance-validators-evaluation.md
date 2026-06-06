@@ -68,14 +68,14 @@ public function test_expanded_quality_metrics_match_recorded_fixture_output(): v
 	$this->assertSame(
 		[
 			'fixtures'                 => 4,
-			'suggestions'              => 8,
-			'invalidOperationRate'     => 0.125,
-			'presetAdherenceRate'      => 0.75,
-			'noOpRate'                 => 0.125,
+			'suggestions'              => 7,
+			'invalidOperationRate'     => 0.25,
+			'presetAdherenceRate'      => 0.5,
+			'noOpRate'                 => 0.1429,
 			'noiseRate'                => 0.0,
-			'contrastPreservationRate' => 0.75,
-			'topThreeRelevanceRate'    => 0.75,
-			'staleFalsePositiveRate'   => 0.25,
+			'contrastPreservationRate' => 0.5,
+			'topThreeRelevanceRate'    => 1.0,
+			'staleFalsePositiveRate'   => 1.0,
 			'promptTokenDeltaMax'      => 72,
 		],
 		self::round_metric_values( self::evaluate( $fixtures ) )
@@ -683,9 +683,14 @@ $this->assertSame( 'contextual-ranking-v1', $ranking['rankingVersion'] ?? null )
 $this->assertIsArray( $ranking['rankingHint']['componentScores'] ?? null );
 $this->assertGreaterThan( 0.0, $ranking['rankingHint']['componentScores']['design'] ?? 0.0 );
 $this->assertContains( 'component_ranking_v1', $ranking['sourceSignals'] ?? [] );
+
+$prompt_payload = WordPressTestState::$last_ai_client_prompt;
+$candidate_json = wp_json_encode( $prompt_payload );
+$this->assertStringContainsString( '"componentScores"', (string) $candidate_json );
+$this->assertStringContainsString( '"design"', (string) $candidate_json );
 ```
 
-Use the existing `PatternAbilitiesTest` recommendation stubs and mirror the local fixture style instead of adding live provider calls.
+Use the existing `PatternAbilitiesTest` recommendation stubs and mirror the local fixture style instead of adding live provider calls. The test must prove both the returned `ranking.rankingHint.componentScores` contract and the model prompt candidate payload, because `PatternAbilities::build_candidates_for_llm()` sends the allow-listed output of `prepare_candidate_ranking_hint_for_llm()` rather than the raw `rankingHint` array.
 
 - [ ] **Step 3: Run tests and confirm failure**
 
@@ -850,7 +855,25 @@ When building `sourceSignals`, add:
 $source_signals[] = 'component_ranking_v1';
 ```
 
-Ensure `build_candidates_for_llm()` already passes `rankingHints`; after this change the JSON candidate payload includes `componentScores` without another field.
+Update `prepare_candidate_ranking_hint_for_llm()` so it allow-lists normalized component scores for the model prompt payload:
+
+```php
+$component_scores = is_array( $ranking_hint['componentScores'] ?? null ) ? $ranking_hint['componentScores'] : [];
+$hint['componentScores'] = [];
+foreach ( [ 'semantic', 'structure', 'design', 'area', 'override', 'blended' ] as $score_key ) {
+	if ( isset( $component_scores[ $score_key ] ) && is_numeric( $component_scores[ $score_key ] ) ) {
+		$hint['componentScores'][ $score_key ] = round( max( 0.0, min( 1.0, (float) $component_scores[ $score_key ] ) ), 4 );
+	}
+}
+```
+
+Also update the empty-hint guard in `prepare_candidate_ranking_hint_for_llm()` so `componentScores` alone keeps the hint in the payload:
+
+```php
+&& [] === $hint['componentScores']
+```
+
+`build_candidates_for_llm()` already passes the prepared `rankingHints` field, but it does not pass unknown raw `rankingHint` keys. Component scores only reach the JSON candidate payload after this allow-list update.
 
 - [ ] **Step 6: Run focused ranking tests**
 
@@ -901,9 +924,8 @@ public function test_quality_signals_boost_preset_contrast_safe_suggestions(): v
 		]
 	);
 
-	$this->assertGreaterThanOrEqual( 0.60, $result['score'] );
-	$this->assertGreaterThan( 0.55, $result['evidence']['accessibility_fit'] );
-	$this->assertGreaterThan( 0.55, $result['evidence']['native_preset_fit'] );
+	$this->assertGreaterThan( 0.55, $result['evidence']['contrast_preserved'] );
+	$this->assertGreaterThan( 0.55, $result['evidence']['preset_adherence'] );
 	$this->assertArrayNotHasKey( 'duplicate_or_noop', $result['penalties'] );
 }
 
@@ -923,8 +945,10 @@ public function test_quality_signals_penalize_failed_contrast_and_no_op(): void 
 		]
 	);
 
-	$this->assertLessThan( 0.55, $result['score'] );
+	$this->assertLessThan( 0.55, $result['evidence']['contrast_preserved'] );
+	$this->assertLessThan( 0.55, $result['evidence']['preset_adherence'] );
 	$this->assertArrayHasKey( 'failed_contrast', $result['penalties'] );
+	$this->assertArrayHasKey( 'raw_value_when_preset_available', $result['penalties'] );
 	$this->assertArrayHasKey( 'duplicate_or_noop', $result['penalties'] );
 }
 ```
