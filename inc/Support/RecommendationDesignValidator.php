@@ -56,6 +56,15 @@ final class RecommendationDesignValidator {
 			}
 		}
 
+		$quality_signals = is_array( $suggestion['qualitySignals'] ?? null ) ? $suggestion['qualitySignals'] : [];
+		if ( array_key_exists( 'contrastPreserved', $quality_signals ) ) {
+			if ( null === $quality_signals['contrastPreserved'] ) {
+				return null;
+			}
+
+			return ! empty( $quality_signals['contrastPreserved'] );
+		}
+
 		return null;
 	}
 

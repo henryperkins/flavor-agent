@@ -820,6 +820,11 @@ EXAMPLE
 			];
 
 			$entry['validationReasons'] = ValidationReason::normalize( $reasons );
+			if ( $contrast_result['passed'] && self::operations_include_readable_color_pair( $entry['operations'] ) ) {
+				$entry['qualitySignals'] = [
+					'contrastPreserved' => true,
+				];
+			}
 			$entry                      = self::apply_design_validation( $entry, $context, $ranking_context );
 
 			$ranking_input       = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
@@ -973,6 +978,45 @@ EXAMPLE
 			$value      = is_string( $operation['value'] ?? null ) ? $operation['value'] : '';
 
 			if ( 'preset' === $value_type || str_starts_with( $value, 'var:preset|' ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $operations
+	 */
+	private static function operations_include_readable_color_pair( array $operations ): bool {
+		$groups = [];
+
+		foreach ( $operations as $operation ) {
+			if ( ! is_array( $operation ) ) {
+				continue;
+			}
+
+			$path = is_array( $operation['path'] ?? null ) ? array_values( array_map( 'strval', $operation['path'] ) ) : [];
+			if ( count( $path ) < 2 ) {
+				continue;
+			}
+
+			$side = end( $path );
+			if ( ! is_string( $side ) || ! in_array( $side, [ 'text', 'background' ], true ) || ! in_array( 'color', $path, true ) ) {
+				continue;
+			}
+
+			$scope_key = 'root';
+			$color_pos = array_search( 'color', $path, true );
+			if ( is_int( $color_pos ) && $color_pos >= 2 && 'elements' === ( $path[0] ?? '' ) ) {
+				$scope_key = 'elements.' . sanitize_key( $path[1] );
+			}
+
+			$groups[ $scope_key ][ $side ] = true;
+		}
+
+		foreach ( $groups as $sides ) {
+			if ( ! empty( $sides['text'] ) && ! empty( $sides['background'] ) ) {
 				return true;
 			}
 		}
