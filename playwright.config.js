@@ -10,6 +10,10 @@ const playgroundTmpDir = path.join( rootDir, 'output/playground-tmp' );
 
 fs.mkdirSync( playgroundTmpDir, { recursive: true } );
 
+function quoteShellArg( value ) {
+	return `"${ String( value ).replace( /"/g, '\\"' ) }"`;
+}
+
 // Ensure the SHELL environment variable is set to the detected bash path
 // to avoid ENOENT errors on Windows when Playwright tries to spawn a shell
 if ( process.platform === 'win32' ) {
@@ -45,8 +49,8 @@ module.exports = defineConfig( {
 			`--port ${ port }`,
 			'--wp=6.9.4',
 			'--login',
-			`--mount-dir ${ pluginDir } /wordpress/wp-content/plugins/flavor-agent`,
-			`--mount-dir ${ muPluginDir } /wordpress/wp-content/mu-plugins`,
+			`--mount-dir ${ quoteShellArg( pluginDir ) } /wordpress/wp-content/plugins/flavor-agent`,
+			`--mount-dir ${ quoteShellArg( muPluginDir ) } /wordpress/wp-content/mu-plugins`,
 			'--verbosity=quiet',
 		].join( ' ' ),
 		env: {

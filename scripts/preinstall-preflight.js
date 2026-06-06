@@ -80,6 +80,24 @@ function satisfiesRange( versionString, rangeString ) {
 	} );
 }
 
+function getNpmVersion( {
+	platform = process.platform,
+	env = process.env,
+	execFileSync: execFileSyncImpl = execFileSync,
+} = {} ) {
+	if ( platform === 'win32' ) {
+		return execFileSyncImpl(
+			env.ComSpec || 'cmd.exe',
+			[ '/d', '/s', '/c', 'npm --version' ],
+			{ encoding: 'utf8' }
+		).trim();
+	}
+
+	return execFileSyncImpl( 'npm', [ '--version' ], {
+		encoding: 'utf8',
+	} ).trim();
+}
+
 function main() {
 	const packagePath = path.resolve( __dirname, '..', 'package.json' );
 	let packageJson;
@@ -99,9 +117,7 @@ function main() {
 	}
 
 	const currentNode = process.versions.node;
-	const currentNpm = execFileSync( process.platform === 'win32' ? 'npm.cmd' : 'npm', [ '--version' ], {
-		encoding: 'utf8',
-	} ).trim();
+	const currentNpm = getNpmVersion();
 
 	const nodeOk = ! nodeRange || satisfiesRange( currentNode, nodeRange );
 	const npmOk = ! npmRange || satisfiesRange( currentNpm, npmRange );
@@ -122,4 +138,12 @@ function main() {
 	process.exit( 1 );
 }
 
-main();
+if ( require.main === module ) {
+	main();
+}
+
+module.exports = {
+	getNpmVersion,
+	parseVersion,
+	satisfiesRange,
+};

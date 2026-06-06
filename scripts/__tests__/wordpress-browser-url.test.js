@@ -1,5 +1,7 @@
 'use strict';
 
+const path = require( 'path' );
+
 const {
 	assertSameBrowserOrigin,
 	normalizeWordPressBrowserBaseUrl,
@@ -31,7 +33,7 @@ describe( 'wordpress-browser-url helpers', () => {
 		expect( execFileSync ).toHaveBeenCalledWith(
 			process.execPath,
 			expect.arrayContaining( [
-				'/repo/scripts/docker-compose.js',
+				path.join( '/repo', 'scripts', 'docker-compose.js' ),
 				'exec',
 				'-T',
 				'wordpress',
