@@ -119,18 +119,23 @@ final class PatternDesignMetadata {
 	}
 
 	private static function color_mood( string $content ): string {
-		$lower = strtolower( $content );
-
-		if ( str_contains( $lower, 'backgroundcolor":"contrast' ) || str_contains( $lower, 'dimratio":70' ) || str_contains( $lower, 'dimratio":80' ) || str_contains( $lower, 'dimratio":90' ) ) {
+		// Match serialized block attributes tolerantly: Gutenberg normally emits
+		// compact JSON ("backgroundColor":"contrast") but hand-authored patterns
+		// may pretty-print with whitespace. The unanchored value match preserves
+		// theme color-scale slugs (contrast-2, base-2, accent-3) as the same mood.
+		if (
+			preg_match( '/"backgroundColor"\s*:\s*"contrast/i', $content )
+			|| preg_match( '/"dimRatio"\s*:\s*(?:70|80|90)/i', $content )
+		) {
 			return 'dark';
 		}
-		if ( str_contains( $lower, 'backgroundcolor":"base' ) || str_contains( $lower, 'backgroundcolor":"white' ) ) {
+		if ( preg_match( '/"backgroundColor"\s*:\s*"(?:base|white)/i', $content ) ) {
 			return 'light';
 		}
-		if ( str_contains( $lower, 'backgroundcolor":"accent' ) ) {
+		if ( preg_match( '/"backgroundColor"\s*:\s*"accent/i', $content ) ) {
 			return 'accent';
 		}
-		if ( str_contains( $lower, 'wp:image' ) || str_contains( $lower, 'wp:cover' ) || str_contains( $lower, 'wp:gallery' ) ) {
+		if ( str_contains( $content, 'wp:image' ) || str_contains( $content, 'wp:cover' ) || str_contains( $content, 'wp:gallery' ) ) {
 			return 'image-heavy';
 		}
 

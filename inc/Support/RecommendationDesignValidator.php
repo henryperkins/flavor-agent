@@ -151,38 +151,47 @@ final class RecommendationDesignValidator {
 	 */
 	private static function is_no_op( array $suggestion, array $context ): bool {
 		$updates = $suggestion['attributeUpdates'] ?? null;
-		$current = $context['currentState']['attributes'] ?? $context['block']['attributes'] ?? null;
+		$current = $context['block']['currentAttributes']
+			?? $context['currentState']['attributes']
+			?? $context['block']['attributes']
+			?? null;
 
-		if ( ! is_array( $updates ) || ! is_array( $current ) ) {
+		if ( ! is_array( $updates ) || ! is_array( $current ) || [] === $updates ) {
 			return false;
 		}
 
-		return self::normalize_comparison_array( $updates ) === self::normalize_comparison_array( $current );
+		// A suggestion is a no-op when every attribute it proposes already holds the
+		// proposed value. The current attribute set is a superset in practice (blocks
+		// carry layout, className, metadata, etc.), so compare the proposed updates as
+		// a subset rather than requiring an exact match against the full attribute set.
+		// Mirrors RecommendationContextScorer::is_possible_no_op().
+		return self::updates_match_current( $updates, $current );
 	}
 
 	/**
-	 * @param array<mixed> $value
-	 * @return array<mixed>
+	 * @param array<string, mixed> $updates
+	 * @param array<string, mixed> $current
 	 */
-	private static function normalize_comparison_array( array $value ): array {
-		foreach ( $value as $key => $entry ) {
-			if ( is_array( $entry ) ) {
-				$value[ $key ] = self::normalize_comparison_array( $entry );
+	private static function updates_match_current( array $updates, array $current ): bool {
+		foreach ( $updates as $key => $value ) {
+			if ( ! array_key_exists( $key, $current ) ) {
+				return false;
+			}
+
+			if ( is_array( $value ) ) {
+				if ( ! is_array( $current[ $key ] ) || ! self::updates_match_current( $value, $current[ $key ] ) ) {
+					return false;
+				}
+
+				continue;
+			}
+
+			if ( $value !== $current[ $key ] ) {
+				return false;
 			}
 		}
 
-		if ( ! self::is_list_array( $value ) ) {
-			ksort( $value );
-		}
-
-		return $value;
-	}
-
-	/**
-	 * @param array<mixed> $value
-	 */
-	private static function is_list_array( array $value ): bool {
-		return [] === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
+		return true;
 	}
 
 	/**

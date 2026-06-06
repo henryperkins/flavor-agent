@@ -152,6 +152,71 @@ final class RecommendationContextScorerTest extends TestCase {
 		$this->assertContains( 'duplicate_or_noop', array_column( $result['validationReasons'], 'code' ) );
 	}
 
+	public function test_design_validator_detects_no_op_against_superset_block_attributes(): void {
+		// The live block carries many attributes (className, metadata, sibling style
+		// branches); a targeted update that already matches the current value is a
+		// no-op even though it is only a subset of the full attribute set.
+		$result = RecommendationDesignValidator::analyze(
+			[
+				'attributeUpdates' => [
+					'style' => [
+						'color' => [
+							'background' => 'var:preset|color|base',
+						],
+					],
+				],
+			],
+			[
+				'block' => [
+					'currentAttributes' => [
+						'className' => 'is-style-default',
+						'metadata'  => [ 'name' => 'Hero' ],
+						'style'     => [
+							'color'   => [
+								'background' => 'var:preset|color|base',
+								'text'       => 'var:preset|color|contrast',
+							],
+							'spacing' => [
+								'padding' => 'var:preset|spacing|small',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertTrue( $result['qualitySignals']['noOp'] ?? false );
+		$this->assertContains( 'duplicate_or_noop', array_column( $result['validationReasons'], 'code' ) );
+	}
+
+	public function test_design_validator_does_not_flag_no_op_when_proposed_value_differs(): void {
+		$result = RecommendationDesignValidator::analyze(
+			[
+				'attributeUpdates' => [
+					'style' => [
+						'color' => [
+							'background' => 'var:preset|color|accent',
+						],
+					],
+				],
+			],
+			[
+				'block' => [
+					'currentAttributes' => [
+						'style' => [
+							'color' => [
+								'background' => 'var:preset|color|base',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertFalse( $result['qualitySignals']['noOp'] ?? false );
+		$this->assertNotContains( 'duplicate_or_noop', array_column( $result['validationReasons'], 'code' ) );
+	}
+
 	public function test_scores_dot_string_style_support_paths_and_penalizes_absent_concrete_paths(): void {
 		$supported   = RecommendationContextScorer::score(
 			[

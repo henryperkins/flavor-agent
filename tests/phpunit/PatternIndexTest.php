@@ -108,6 +108,19 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 'two-column', $metadata['layoutShape'] );
 	}
 
+	public function test_pattern_design_metadata_color_mood_tolerates_whitespace_in_block_attributes(): void {
+		// Hand-authored patterns may pretty-print block attribute JSON with spaces;
+		// the mood heuristic must still recognize the background color / overlay.
+		$metadata = \FlavorAgent\Patterns\PatternDesignMetadata::extract(
+			[
+				'name'    => 'theme/spaced-hero',
+				'content' => '<!-- wp:cover {"dimRatio": 80, "backgroundColor": "contrast"} --><!-- /wp:cover -->',
+			]
+		);
+
+		$this->assertSame( 'dark', $metadata['colorMood'] );
+	}
+
 	public function test_embedding_text_includes_pattern_design_metadata(): void {
 		$text = PatternIndex::build_embedding_text(
 			[
