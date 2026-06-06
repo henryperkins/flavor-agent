@@ -1194,6 +1194,81 @@ final class TemplatePromptTest extends TestCase {
 		);
 	}
 
+	public function test_parse_response_records_design_validator_complexity_signals_for_template_patterns(): void {
+		$context = [
+			'assignedParts'            => [],
+			'availableParts'           => [],
+			'allowedAreas'             => [],
+			'emptyAreas'               => [],
+			'designSemantics'          => [
+				'sectionRole' => 'header',
+			],
+			'patterns'                 => [
+				[
+					'name' => 'theme/mega-header',
+				],
+			],
+			'topLevelBlockTree'        => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/template-part',
+					'label'      => 'Header template part',
+					'attributes' => [
+						'slug' => 'header',
+						'area' => 'header',
+					],
+					'childCount' => 0,
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'end',
+					'label'     => 'End of template',
+				],
+			],
+		];
+
+		$result = TemplatePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'             => 'Add a dense header pattern',
+							'description'       => 'Insert the larger header pattern at the end.',
+							'contentBlockCount' => 12,
+							'operations'        => [
+								[
+									'type'        => 'insert_pattern',
+									'patternName' => 'theme/mega-header',
+									'placement'   => 'end',
+								],
+							],
+							'ranking'           => [
+								'score' => 0.83,
+							],
+						],
+					],
+				]
+			),
+			$context,
+			[
+				'surface' => 'template',
+				'prompt'  => 'Keep the header lightweight.',
+				'context' => $context,
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$suggestion = $result['suggestions'][0];
+		$codes      = array_column( $suggestion['validationReasons'] ?? [], 'code' );
+
+		$this->assertFalse( $suggestion['qualitySignals']['complexityFit'] ?? true );
+		$this->assertContains( 'excessive_visual_complexity', $codes );
+		$this->assertContains( 'design_validator_v1', $suggestion['ranking']['sourceSignals'] ?? [] );
+		$this->assertArrayHasKey( 'excessive_visual_complexity', $suggestion['ranking']['contextPenalties'] ?? [] );
+	}
+
 	public function test_parse_response_rejects_anchored_pattern_insertions_for_unknown_top_level_paths(): void {
 		$context = [
 			'assignedParts'     => [],

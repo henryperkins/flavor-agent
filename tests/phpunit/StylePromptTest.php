@@ -1166,6 +1166,164 @@ final class StylePromptTest extends TestCase {
 		);
 	}
 
+	public function test_parse_response_records_design_validator_typography_and_preset_signals(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Raw typography value',
+							'description' => 'Use a one-off line-height value for the section.',
+							'category'    => 'typography',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'typography', 'lineHeight' ],
+									'value'     => '1.2',
+									'valueType' => 'freeform',
+								],
+							],
+							'ranking'     => [
+								'score' => 0.81,
+							],
+						],
+					],
+				]
+			),
+			[
+				'scope'        => [
+					'surface' => 'global-styles',
+				],
+				'styleContext' => [
+					'themeTokens'         => [
+						'colors'        => [],
+						'colorPresets'  => [],
+						'elementStyles' => [],
+					],
+					'mergedConfig'        => [ 'styles' => [] ],
+					'currentConfig'       => [
+						'styles'   => [],
+						'settings' => [],
+					],
+					'supportedStylePaths' => [
+						[
+							'path'        => [ 'typography', 'lineHeight' ],
+							'valueSource' => 'freeform',
+						],
+					],
+				],
+			],
+			[
+				'surface' => 'style',
+				'prompt'  => 'Keep typography aligned to the theme scale.',
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$suggestion = $result['suggestions'][0];
+		$codes      = array_column( $suggestion['validationReasons'] ?? [], 'code' );
+
+		$this->assertFalse( $suggestion['qualitySignals']['presetBacked'] ?? true );
+		$this->assertContains( 'raw_value_when_preset_available', $codes );
+		$this->assertContains( 'design_validator_v1', $suggestion['ranking']['sourceSignals'] ?? [] );
+		$this->assertArrayHasKey( 'raw_value_when_preset_available', $suggestion['ranking']['contextPenalties'] ?? [] );
+	}
+
+	public function test_parse_response_records_positive_contrast_signal_when_paired_color_ops_pass(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Readable color pair',
+							'description' => 'Use the high contrast pair.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|base',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'base',
+								],
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|contrast',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'contrast',
+								],
+							],
+							'ranking'     => [
+								'score' => 0.77,
+							],
+						],
+					],
+				]
+			),
+			[
+				'scope'        => [
+					'surface' => 'global-styles',
+				],
+				'styleContext' => [
+					'themeTokens'         => [
+						'colors'        => [ 'base: #ffffff', 'contrast: #111111' ],
+						'colorPresets'  => [
+							[
+								'slug'  => 'base',
+								'color' => '#ffffff',
+							],
+							[
+								'slug'  => 'contrast',
+								'color' => '#111111',
+							],
+						],
+						'elementStyles' => [],
+					],
+					'mergedConfig'        => [
+						'styles' => [
+							'color' => [
+								'background' => '#ffffff',
+								'text'       => '#111111',
+							],
+						],
+					],
+					'currentConfig'       => [
+						'styles'   => [],
+						'settings' => [],
+					],
+					'supportedStylePaths' => [
+						[
+							'path'        => [ 'color', 'background' ],
+							'valueSource' => 'color',
+						],
+						[
+							'path'        => [ 'color', 'text' ],
+							'valueSource' => 'color',
+						],
+					],
+				],
+			],
+			[
+				'surface' => 'style',
+				'prompt'  => 'Improve contrast.',
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$suggestion = $result['suggestions'][0];
+
+		$this->assertTrue( $suggestion['qualitySignals']['contrastPreserved'] ?? false );
+		$this->assertContains( 'design_validator_v1', $suggestion['ranking']['sourceSignals'] ?? [] );
+		$this->assertGreaterThan( 0.55, $suggestion['ranking']['contextEvidence']['contrast_preserved'] ?? 0.0 );
+	}
+
 	public function test_parse_response_downgrades_low_contrast_executable_suggestion_to_advisory(): void {
 		$parsed = StylePrompt::parse_response(
 			wp_json_encode(

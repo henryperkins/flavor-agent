@@ -936,6 +936,72 @@ final class TemplatePartPromptTest extends TestCase {
 		);
 	}
 
+	public function test_parse_response_records_design_validator_complexity_signals_for_template_part_patterns(): void {
+		$context = [
+			'templatePartArea'      => 'header',
+			'blockTree'             => [],
+			'patterns'              => [
+				[
+					'name' => 'theme/mega-header',
+				],
+			],
+			'insertionAnchors'      => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template part',
+				],
+			],
+			'operationTargets'      => [],
+			'structuralConstraints' => [
+				'contentOnlyPaths' => [],
+				'lockedPaths'      => [],
+				'hasContentOnly'   => false,
+				'hasLockedBlocks'  => false,
+			],
+		];
+
+		$result = TemplatePartPrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'              => 'Add dense header pattern',
+							'description'        => 'Insert a larger header pattern into the part.',
+							'contentBlockCount'  => 12,
+							'patternSuggestions' => [ 'theme/mega-header' ],
+							'operations'         => [
+								[
+									'type'        => 'insert_pattern',
+									'patternName' => 'theme/mega-header',
+									'placement'   => 'start',
+								],
+							],
+							'ranking'            => [
+								'score' => 0.84,
+							],
+						],
+					],
+				]
+			),
+			$context,
+			[
+				'surface' => 'template-part',
+				'prompt'  => 'Keep the header lightweight.',
+				'context' => $context,
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$suggestion = $result['suggestions'][0];
+		$codes      = array_column( $suggestion['validationReasons'] ?? [], 'code' );
+
+		$this->assertFalse( $suggestion['qualitySignals']['complexityFit'] ?? true );
+		$this->assertContains( 'excessive_visual_complexity', $codes );
+		$this->assertContains( 'design_validator_v1', $suggestion['ranking']['sourceSignals'] ?? [] );
+		$this->assertArrayHasKey( 'excessive_visual_complexity', $suggestion['ranking']['contextPenalties'] ?? [] );
+	}
+
 	public function test_parse_response_rejects_start_insertions_without_a_start_anchor(): void {
 		$context = [
 			'blockTree'        => [],

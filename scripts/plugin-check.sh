@@ -4,7 +4,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 plugin_dir="$(cd -- "${script_dir}/.." && pwd)"
-plugin_slug="${PLUGIN_SLUG:-$(basename "${plugin_dir}")}"
+plugin_slug="${PLUGIN_SLUG:-flavor-agent}"
 
 load_local_env() {
 	local env_file="${plugin_dir}/.env"

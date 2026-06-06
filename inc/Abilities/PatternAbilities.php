@@ -11,6 +11,7 @@ use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Context\SyncedPatternRepository;
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Patterns\PatternComponentScorer;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 use FlavorAgent\Support\CollectsDocsGuidance;
@@ -504,16 +505,39 @@ final class PatternAbilities {
 		}
 
 		foreach ( $candidates as &$candidate ) {
-			$ranking_hint = self::build_candidate_ranking_hint(
-				is_array( $candidate['payload'] ?? null ) ? $candidate['payload'] : [],
+			$payload                    = is_array( $candidate['payload'] ?? null ) ? $candidate['payload'] : [];
+			$ranking_hint               = self::build_candidate_ranking_hint(
+				$payload,
 				$block_name,
 				$nearby_siblings,
 				$is_custom_block_context
 			);
+			$component_scores           = PatternComponentScorer::score(
+				(float) ( $candidate['score'] ?? 0.0 ),
+				$payload,
+				[
+					'rootBlock'            => $root_block,
+					'nearbySiblings'       => $nearby_siblings,
+					'templatePartArea'     => $template_part_area,
+					'isCustomBlockContext' => $is_custom_block_context,
+				]
+			);
+			$semantic_score             = max( 0.0, min( 1.0, (float) ( $candidate['score'] ?? 0.0 ) ) );
+			$neutral_component_blended  = ( 0.45 * $semantic_score ) + 0.3025;
+			$component_score_adjustment = max(
+				-0.15,
+				min( 0.15, (float) $component_scores['blended'] - $neutral_component_blended )
+			);
 
-			$candidate['rankingHint']  = $ranking_hint;
-			$candidate['rankingScore'] = (float) $candidate['score']
-				+ (float) ( $ranking_hint['bonus'] ?? 0.0 );
+			$ranking_hint['componentScores'] = $component_scores;
+			$candidate['rankingHint']        = $ranking_hint;
+			$candidate['rankingScore']       = max(
+				0.0,
+				min(
+					1.0,
+					$semantic_score + $component_score_adjustment + (float) ( $ranking_hint['bonus'] ?? 0.0 )
+				)
+			);
 		}
 		unset( $candidate );
 
@@ -640,6 +664,9 @@ final class PatternAbilities {
 				: [ 'qdrant_semantic', 'llm_ranker' ];
 			if ( Config::PATTERN_BACKEND_QDRANT === $selected_backend && $ran_structural_pass ) {
 				$source_signals[] = 'qdrant_structural';
+			}
+			if ( is_array( $ranking_hint['componentScores'] ?? null ) ) {
+				$source_signals[] = 'component_ranking_v1';
 			}
 			$deterministic_score = RankingContract::resolve_score_candidate(
 				$candidates[ $name ]['rankingScore'] ?? null,
@@ -1703,6 +1730,11 @@ SYSTEM;
 			'usesDefaultBinding'       => ! empty( $ranking_hint['usesDefaultBinding'] ),
 			'summary'                  => $summary,
 		];
+		$component_scores           = is_array( $ranking_hint['componentScores'] ?? null ) ? $ranking_hint['componentScores'] : [];
+
+		if ( [] !== $component_scores ) {
+			$hint['componentScores'] = $component_scores;
+		}
 
 		if (
 			$summary === ''
@@ -1712,6 +1744,7 @@ SYSTEM;
 			&& ! $hint['matchesNearbyCustomBlock']
 			&& ! $hint['supportsCustomBlocks']
 			&& ! $hint['usesDefaultBinding']
+			&& [] === $component_scores
 		) {
 			return [];
 		}

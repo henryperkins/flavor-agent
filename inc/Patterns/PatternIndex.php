@@ -43,7 +43,7 @@ final class PatternIndex {
 	];
 
 	/** Increment when the embedding text template changes. */
-	public const EMBEDDING_RECIPE_VERSION = 3;
+	public const EMBEDDING_RECIPE_VERSION = 4;
 
 	/** Fixed UUID v5 namespace (DNS namespace from RFC 4122). */
 	private const UUID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
@@ -366,6 +366,12 @@ final class PatternIndex {
 			$parts[] = 'Layout traits: ' . implode( ', ', $traits );
 		}
 
+		$design_metadata  = self::design_metadata_for_pattern( $pattern );
+		$metadata_summary = PatternDesignMetadata::summarize( $design_metadata );
+		if ( '' !== $metadata_summary ) {
+			$parts[] = 'Design metadata: ' . $metadata_summary;
+		}
+
 		$pattern_overrides = is_array( $pattern['patternOverrides'] ?? null )
 			? $pattern['patternOverrides']
 			: [];
@@ -394,6 +400,14 @@ final class PatternIndex {
 		}
 
 		return implode( "\n", array_filter( $parts ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $pattern
+	 * @return array<string, mixed>
+	 */
+	public static function design_metadata_for_pattern( array $pattern ): array {
+		return PatternDesignMetadata::extract( $pattern );
 	}
 
 	/**
@@ -1182,6 +1196,7 @@ final class PatternIndex {
 					'templateTypes'       => $p['templateTypes'] ?? [],
 					'patternOverrides'    => $p['patternOverrides'] ?? [],
 					'traits'              => self::infer_layout_traits( $p ),
+					'designMetadata'      => self::design_metadata_for_pattern( $p ),
 					'type'                => $p['type'] ?? 'registered',
 					'source'              => $p['source'] ?? 'registered',
 					'syncedPatternId'     => $p['syncedPatternId'] ?? 0,

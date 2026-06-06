@@ -55,7 +55,7 @@ return [
 							'position'        => 'insert_after',
 						],
 					],
-					'confidence'       => 0.70,
+					'confidence'       => 0.69,
 				],
 				[
 					'label'            => 'Insert hero pattern',

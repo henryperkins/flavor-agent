@@ -39,7 +39,7 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the ability input to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state, then computes review/apply signatures from the normalized request context, docs-grounding fingerprint, and stable pattern-catalog identity
 6. `PatternIndex::sync()` maintains the selected retrieval backend corpus made from registered block patterns plus public-safe published user `wp_block` patterns across sync states normalized to Gutenberg's user-pattern name format, `core/block/{id}`
-7. The backend builds a query string, pulls WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` using the same bounded foreground grounding path as other recommendation surfaces, retrieves candidates through the selected pattern backend, rehydrates synced candidates from current published readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()`, and filters out low-confidence results
+7. The backend builds a query string, pulls WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` using the same bounded foreground grounding path as other recommendation surfaces, retrieves candidates through the selected pattern backend, rehydrates synced candidates from current published readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()` with design metadata and component-score context, and filters out low-confidence results
 8. The Qdrant backend embeds the pattern query through Cloudflare Workers AI and retrieves semantic and structural candidates from Qdrant
 9. The Cloudflare AI Search backend sends the query and `visiblePatternNames` filter to the private pattern AI Search instance, using Cloudflare-managed indexing/search instead of `EmbeddingClient` or `QdrantClient`
 10. The store saves the recommendations plus the server `resolvedContextSignature`, and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
@@ -63,7 +63,7 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
 - Show inserter-level status as shelf, loading, empty, unavailable, or error feedback
 - Explain missing embedding, Qdrant, private Cloudflare AI Search, or chat setup paths inside the native inserter before any recommendation request can succeed
-- Show compact "why this pattern" metadata in the inserter shelf using source signals, matched category, allowed inserter context, and nearby-block fit where those fields are available.
+- Show compact "why this pattern" metadata in the inserter shelf using source signals, matched category, allowed inserter context, component scores, design metadata, and nearby-block fit where those fields are available.
 
 ## Guardrails And Failure Modes
 
@@ -100,6 +100,7 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 | Qdrant embeddings | `EmbeddingClient::embed()` | Turns the query into a vector for the Qdrant backend only |
 | Qdrant vector search | `QdrantClient::search()` | Retrieves semantic and structural candidates for the Qdrant backend only |
 | Private AI Search | `PatternSearchClient::search_patterns()` | Retrieves filtered candidates from Cloudflare AI Search Pattern Storage |
+| Design metadata and component ranking | `PatternDesignMetadata` / `PatternComponentScorer` | Adds pattern-trait text to embedding/search payloads and exposes component scores through `ranking.rankingHint.componentScores` |
 | Ranking | `ResponsesClient::rank()` | Produces the final ordered recommendation set |
 
 ## Related Abilities

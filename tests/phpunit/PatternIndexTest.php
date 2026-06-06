@@ -74,9 +74,99 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 'Block types: core/group, core/heading', $lines[3] );
 		$this->assertSame( 'Template types: home, front-page', $lines[4] );
 		$this->assertSame( 'Layout traits: simple, text-focused, showcase', $lines[5] );
-		$this->assertSame( 'Pattern overrides: yes', $lines[6] );
-		$this->assertSame( 'Override-ready core/heading: content', $lines[7] );
-		$this->assertSame( str_repeat( 'x', 500 ), $lines[8] );
+		$this->assertSame( 'Design metadata: sectionRole=unknown; layoutShape=unknown; visualDensity=sparse; colorMood=unknown; typographyRole=unknown; interactionRole=static-content; templateAreaAffinity=content; blockComplexity=low; contentSpecificity=generic', $lines[6] );
+		$this->assertSame( 'Pattern overrides: yes', $lines[7] );
+		$this->assertSame( 'Override-ready core/heading: content', $lines[8] );
+		$this->assertSame( str_repeat( 'x', 500 ), $lines[9] );
+	}
+
+	public function test_pattern_design_metadata_identifies_hero_cover_shape_and_mood(): void {
+		$metadata = \FlavorAgent\Patterns\PatternDesignMetadata::extract(
+			[
+				'name'       => 'theme/hero',
+				'categories' => [ 'featured' ],
+				'content'    => '<!-- wp:cover {"dimRatio":70,"backgroundColor":"contrast"} --><!-- wp:heading --><h2>Hero</h2><!-- /wp:heading --><!-- wp:buttons --><!-- /wp:buttons --><!-- /wp:cover -->',
+			]
+		);
+
+		$this->assertSame( 'hero', $metadata['sectionRole'] );
+		$this->assertSame( 'cover', $metadata['layoutShape'] );
+		$this->assertSame( 'dark', $metadata['colorMood'] );
+		$this->assertSame( 'marketing', $metadata['typographyRole'] );
+		$this->assertSame( 'content', $metadata['templateAreaAffinity'] );
+		$this->assertContains( 'contrast', $metadata['styleTokenUsage'] );
+	}
+
+	public function test_pattern_design_metadata_counts_only_column_opening_blocks_for_layout_shape(): void {
+		$metadata = \FlavorAgent\Patterns\PatternDesignMetadata::extract(
+			[
+				'name'    => 'theme/two-columns',
+				'content' => '<!-- wp:columns --><!-- wp:column --><!-- wp:paragraph --><p>Left</p><!-- /wp:paragraph --><!-- /wp:column --><!-- wp:column --><!-- wp:paragraph --><p>Right</p><!-- /wp:paragraph --><!-- /wp:column --><!-- /wp:columns -->',
+			]
+		);
+
+		$this->assertSame( 'two-column', $metadata['layoutShape'] );
+	}
+
+	public function test_pattern_design_metadata_color_mood_tolerates_whitespace_in_block_attributes(): void {
+		// Hand-authored patterns may pretty-print block attribute JSON with spaces;
+		// the mood heuristic must still recognize the background color / overlay.
+		$metadata = \FlavorAgent\Patterns\PatternDesignMetadata::extract(
+			[
+				'name'    => 'theme/spaced-hero',
+				'content' => '<!-- wp:cover {"dimRatio": 80, "backgroundColor": "contrast"} --><!-- /wp:cover -->',
+			]
+		);
+
+		$this->assertSame( 'dark', $metadata['colorMood'] );
+	}
+
+	public function test_embedding_text_includes_pattern_design_metadata(): void {
+		$text = PatternIndex::build_embedding_text(
+			[
+				'name'       => 'theme/footer-links',
+				'title'      => 'Footer Links',
+				'categories' => [ 'footer' ],
+				'content'    => '<!-- wp:group --><!-- wp:navigation /--><!-- wp:social-links /--><!-- /wp:group -->',
+			]
+		);
+
+		$this->assertStringContainsString( 'Design metadata:', $text );
+		$this->assertStringContainsString( 'templateAreaAffinity=footer', $text );
+		$this->assertStringContainsString( 'interactionRole=navigation', $text );
+	}
+
+	public function test_sync_persists_pattern_design_metadata_in_qdrant_payload(): void {
+		$this->register_pattern(
+			'theme/hero',
+			[
+				'title'      => 'Hero',
+				'categories' => [ 'featured' ],
+				'content'    => '<!-- wp:cover {"dimRatio":70,"backgroundColor":"contrast"} --><!-- wp:heading --><h2>Hero</h2><!-- /wp:heading --><!-- wp:buttons --><!-- /wp:buttons --><!-- /wp:cover -->',
+			]
+		);
+
+		$this->queue_signature_probe();
+		$this->queue_ensure_collection( false );
+		$this->queue_scroll( [] );
+		$this->queue_embeddings(
+			[
+				[ 0.11, 0.22 ],
+			]
+		);
+		$this->queue_qdrant_success( '/points', 'PUT' );
+
+		$result = PatternIndex::sync();
+
+		$this->assertSame( 1, $result['indexed'] );
+
+		$upsert_call = $this->find_remote_post_call( '/points', 'PUT' );
+		$upsert_body = $this->decode_request_body( $upsert_call );
+		$payload     = $upsert_body['points'][0]['payload'] ?? [];
+
+		$this->assertSame( 'hero', $payload['designMetadata']['sectionRole'] ?? null );
+		$this->assertSame( 'cover', $payload['designMetadata']['layoutShape'] ?? null );
+		$this->assertContains( 'contrast', $payload['designMetadata']['styleTokenUsage'] ?? [] );
 	}
 
 	public function test_compute_fingerprint_changes_when_pattern_override_metadata_changes(): void {
@@ -892,6 +982,33 @@ final class PatternIndexTest extends TestCase {
 		$this->assertStringContainsString( 'filename="' . $hero_uuid . '.md"', (string) $request_bodies );
 		$this->assertStringContainsString( 'filename="' . $footer_uuid . '.md"', (string) $request_bodies );
 		$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\nfalse", (string) $request_bodies );
+	}
+
+	public function test_cloudflare_ai_search_sync_uploads_pattern_design_metadata(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$this->register_pattern(
+			'theme/hero',
+			[
+				'title'      => 'Hero',
+				'categories' => [ 'featured' ],
+				'content'    => '<!-- wp:cover {"dimRatio":70,"backgroundColor":"contrast"} --><!-- wp:heading --><h2>Hero</h2><!-- /wp:heading --><!-- wp:buttons --><!-- /wp:buttons --><!-- /wp:cover -->',
+			]
+		);
+
+		$this->queue_cloudflare_item_list( [] );
+		$this->queue_cloudflare_success_responses( 1 );
+		$this->queue_cloudflare_completed_items_for_patterns( $this->current_patterns() );
+
+		$result = PatternIndex::sync();
+
+		$this->assertSame( 1, $result['indexed'] );
+
+		$request_bodies = $this->remote_post_request_bodies();
+
+		$this->assertStringContainsString( 'Design metadata:', (string) $request_bodies );
+		$this->assertStringContainsString( 'sectionRole=hero', (string) $request_bodies );
+		$this->assertStringContainsString( 'layoutShape=cover', (string) $request_bodies );
+		$this->assertStringContainsString( 'styleTokenUsage=contrast', (string) $request_bodies );
 	}
 
 	public function test_cloudflare_ai_search_sync_uploads_public_safe_synced_patterns_only(): void {

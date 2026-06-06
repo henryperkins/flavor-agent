@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Support\RecommendationContextScorer;
+use FlavorAgent\Support\RecommendationDesignValidator;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -66,6 +67,154 @@ final class RecommendationContextScorerTest extends TestCase {
 	public function test_rejected_operations_still_trigger_for_block_compat(): void {
 		$suggestion = [ 'rejectedOperations' => [ [ 'code' => 'stale_target' ] ] ];
 		$this->assertTrue( $this->invokeHasValidationRisk( $suggestion ) );
+	}
+
+	public function test_quality_signals_boost_preset_contrast_safe_suggestions(): void {
+		$result = RecommendationContextScorer::score(
+			[
+				'suggestion' => [
+					'label'          => 'Use the contrast preset',
+					'qualitySignals' => [
+						'contrastPreserved' => true,
+						'presetBacked'      => true,
+						'noOp'              => false,
+					],
+				],
+				'context'    => [],
+				'prompt'     => 'Improve readability',
+			]
+		);
+
+		$this->assertGreaterThanOrEqual( 0.60, $result['score'] );
+		$this->assertGreaterThan( 0.55, $result['evidence']['accessibility_fit'] );
+		$this->assertGreaterThan( 0.55, $result['evidence']['native_preset_fit'] );
+		$this->assertGreaterThan( 0.55, $result['evidence']['contrast_preserved'] );
+		$this->assertGreaterThan( 0.55, $result['evidence']['preset_adherence'] );
+		$this->assertArrayNotHasKey( 'duplicate_or_noop', $result['penalties'] );
+	}
+
+	public function test_quality_signals_penalize_failed_contrast_and_no_op(): void {
+		$result = RecommendationContextScorer::score(
+			[
+				'suggestion' => [
+					'label'          => 'Keep the same low contrast color',
+					'qualitySignals' => [
+						'contrastPreserved' => false,
+						'presetBacked'      => false,
+						'noOp'              => true,
+					],
+				],
+				'context'    => [],
+				'prompt'     => 'Improve readability',
+			]
+		);
+
+		$this->assertLessThan( 0.55, $result['score'] );
+		$this->assertArrayHasKey( 'failed_contrast', $result['penalties'] );
+		$this->assertArrayHasKey( 'duplicate_or_noop', $result['penalties'] );
+	}
+
+	public function test_design_validator_detects_no_op_when_attribute_key_order_differs(): void {
+		$result = RecommendationDesignValidator::analyze(
+			[
+				'attributeUpdates' => [
+					'style' => [
+						'spacing' => [
+							'margin'  => 'var:preset|spacing|medium',
+							'padding' => 'var:preset|spacing|small',
+						],
+						'color'   => [
+							'text'       => 'var:preset|color|contrast',
+							'background' => 'var:preset|color|base',
+						],
+					],
+				],
+			],
+			[
+				'currentState' => [
+					'attributes' => [
+						'style' => [
+							'color'   => [
+								'background' => 'var:preset|color|base',
+								'text'       => 'var:preset|color|contrast',
+							],
+							'spacing' => [
+								'padding' => 'var:preset|spacing|small',
+								'margin'  => 'var:preset|spacing|medium',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertTrue( $result['qualitySignals']['noOp'] ?? false );
+		$this->assertContains( 'duplicate_or_noop', array_column( $result['validationReasons'], 'code' ) );
+	}
+
+	public function test_design_validator_detects_no_op_against_superset_block_attributes(): void {
+		// The live block carries many attributes (className, metadata, sibling style
+		// branches); a targeted update that already matches the current value is a
+		// no-op even though it is only a subset of the full attribute set.
+		$result = RecommendationDesignValidator::analyze(
+			[
+				'attributeUpdates' => [
+					'style' => [
+						'color' => [
+							'background' => 'var:preset|color|base',
+						],
+					],
+				],
+			],
+			[
+				'block' => [
+					'currentAttributes' => [
+						'className' => 'is-style-default',
+						'metadata'  => [ 'name' => 'Hero' ],
+						'style'     => [
+							'color'   => [
+								'background' => 'var:preset|color|base',
+								'text'       => 'var:preset|color|contrast',
+							],
+							'spacing' => [
+								'padding' => 'var:preset|spacing|small',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertTrue( $result['qualitySignals']['noOp'] ?? false );
+		$this->assertContains( 'duplicate_or_noop', array_column( $result['validationReasons'], 'code' ) );
+	}
+
+	public function test_design_validator_does_not_flag_no_op_when_proposed_value_differs(): void {
+		$result = RecommendationDesignValidator::analyze(
+			[
+				'attributeUpdates' => [
+					'style' => [
+						'color' => [
+							'background' => 'var:preset|color|accent',
+						],
+					],
+				],
+			],
+			[
+				'block' => [
+					'currentAttributes' => [
+						'style' => [
+							'color' => [
+								'background' => 'var:preset|color|base',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertFalse( $result['qualitySignals']['noOp'] ?? false );
+		$this->assertNotContains( 'duplicate_or_noop', array_column( $result['validationReasons'], 'code' ) );
 	}
 
 	public function test_scores_dot_string_style_support_paths_and_penalizes_absent_concrete_paths(): void {
