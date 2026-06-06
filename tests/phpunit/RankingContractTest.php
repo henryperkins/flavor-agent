@@ -49,6 +49,38 @@ final class RankingContractTest extends TestCase {
 		$this->assertSame( 'Matches slot constraints.', $result['rankingHint']['summary'] );
 	}
 
+	public function test_ranking_hint_component_scores_round_trip_as_bounded_plugin_owned_scores(): void {
+		$ranking = RankingContract::normalize(
+			[],
+			[
+				'score'       => 0.82,
+				'rankingHint' => [
+					'componentScores' => [
+						'semantic'   => 1.40,
+						'structure'  => -0.20,
+						'design'     => '0.90',
+						'area'       => 'not numeric',
+						'override'   => 0.40,
+						'blended'    => 0.74,
+						'untrusted'  => 0.99,
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'semantic'  => 1.0,
+				'structure' => 0.0,
+				'design'    => 0.90,
+				'area'      => 0.0,
+				'override'  => 0.40,
+				'blended'   => 0.74,
+			],
+			$ranking['rankingHint']['componentScores']
+		);
+	}
+
 	public function test_normalize_uses_confidence_when_score_is_malformed(): void {
 		$result = RankingContract::normalize(
 			[

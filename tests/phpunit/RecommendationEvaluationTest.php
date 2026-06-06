@@ -169,6 +169,26 @@ final class RecommendationEvaluationTest extends TestCase {
 		}
 	}
 
+	public function test_expanded_quality_metrics_match_recorded_fixture_output(): void {
+		$fixtures = require __DIR__ . '/fixtures/recommendation-evaluation-expanded-fixtures.php';
+
+		$this->assertSame(
+			[
+				'fixtures'                 => 4,
+				'suggestions'              => 8,
+				'invalidOperationRate'     => 0.125,
+				'presetAdherenceRate'      => 0.75,
+				'noOpRate'                 => 0.125,
+				'noiseRate'                => 0.0,
+				'contrastPreservationRate' => 0.75,
+				'topThreeRelevanceRate'    => 0.75,
+				'staleFalsePositiveRate'   => 0.25,
+				'promptTokenDeltaMax'      => 72,
+			],
+			self::round_metric_values( self::evaluate( $fixtures ) )
+		);
+	}
+
 	/**
 	 * @param array<string, mixed> $fixture
 	 */
@@ -380,6 +400,13 @@ final class RecommendationEvaluationTest extends TestCase {
 		$no_op_count                   = 0;
 		$already_good_suggestion_count = 0;
 		$already_good_noise_count      = 0;
+		$contrast_candidates           = 0;
+		$contrast_preserved            = 0;
+		$top_three_relevance_fixtures  = 0;
+		$top_three_relevant_hits       = 0;
+		$stale_applicable_count        = 0;
+		$stale_false_positive_count    = 0;
+		$prompt_token_delta_max        = 0;
 
 		foreach ( $fixtures as $fixture ) {
 			$suggestions        = is_array( $fixture['suggestions'] ?? null ) ? $fixture['suggestions'] : [];
@@ -388,6 +415,39 @@ final class RecommendationEvaluationTest extends TestCase {
 			if ( ! empty( $fixture['alreadyGood'] ) ) {
 				$already_good_suggestion_count += count( $suggestions );
 				$already_good_noise_count      += count( $suggestions );
+			}
+
+			$expected_relevant_keys = is_array( $fixture['expectedRelevantKeys'] ?? null )
+				? array_values( array_map( 'strval', $fixture['expectedRelevantKeys'] ) )
+				: [];
+			if ( [] !== $expected_relevant_keys ) {
+				++$top_three_relevance_fixtures;
+				$top_three_keys = array_map(
+					static fn( array $suggestion ): string => sanitize_text_field(
+						(string) ( $suggestion['name'] ?? $suggestion['suggestionKey'] ?? $suggestion['label'] ?? '' )
+					),
+					array_slice( array_filter( $suggestions, 'is_array' ), 0, 3 )
+				);
+				if ( [] !== array_intersect( $expected_relevant_keys, $top_three_keys ) ) {
+					++$top_three_relevant_hits;
+				}
+			}
+
+			if ( ! empty( $fixture['shouldRemainApplicable'] ) ) {
+				++$stale_applicable_count;
+				if ( ! empty( $fixture['wasMarkedStale'] ) ) {
+					++$stale_false_positive_count;
+				}
+			}
+
+			$baseline_tokens = isset( $fixture['promptTokenBaselineEstimate'] ) && is_numeric( $fixture['promptTokenBaselineEstimate'] )
+				? (int) $fixture['promptTokenBaselineEstimate']
+				: null;
+			$actual_tokens   = isset( $fixture['promptTokenEstimate'] ) && is_numeric( $fixture['promptTokenEstimate'] )
+				? (int) $fixture['promptTokenEstimate']
+				: null;
+			if ( null !== $baseline_tokens && null !== $actual_tokens ) {
+				$prompt_token_delta_max = max( $prompt_token_delta_max, max( 0, $actual_tokens - $baseline_tokens ) );
 			}
 
 			foreach ( $suggestions as $suggestion ) {
@@ -416,16 +476,28 @@ final class RecommendationEvaluationTest extends TestCase {
 				if ( self::is_no_op_suggestion( $suggestion, $fixture ) ) {
 					++$no_op_count;
 				}
+
+				$quality_signals = is_array( $suggestion['qualitySignals'] ?? null ) ? $suggestion['qualitySignals'] : [];
+				if ( array_key_exists( 'contrastPreserved', $quality_signals ) ) {
+					++$contrast_candidates;
+					if ( ! empty( $quality_signals['contrastPreserved'] ) ) {
+						++$contrast_preserved;
+					}
+				}
 			}
 		}
 
 		return [
-			'fixtures'             => count( $fixtures ),
-			'suggestions'          => $total_suggestions,
-			'invalidOperationRate' => self::rate( $rejected_operation_count, $operation_count + $rejected_operation_count ),
-			'presetAdherenceRate'  => self::rate( $preset_backed, $preset_candidates ),
-			'noOpRate'             => self::rate( $no_op_count, $total_suggestions ),
-			'noiseRate'            => self::rate( $already_good_noise_count, $already_good_suggestion_count ),
+			'fixtures'                 => count( $fixtures ),
+			'suggestions'              => $total_suggestions,
+			'invalidOperationRate'     => self::rate( $rejected_operation_count, $operation_count + $rejected_operation_count ),
+			'presetAdherenceRate'      => self::rate( $preset_backed, $preset_candidates ),
+			'noOpRate'                 => self::rate( $no_op_count, $total_suggestions ),
+			'noiseRate'                => self::rate( $already_good_noise_count, $already_good_suggestion_count ),
+			'contrastPreservationRate' => self::rate( $contrast_preserved, $contrast_candidates ),
+			'topThreeRelevanceRate'    => self::rate( $top_three_relevant_hits, $top_three_relevance_fixtures ),
+			'staleFalsePositiveRate'   => self::rate( $stale_false_positive_count, $stale_applicable_count ),
+			'promptTokenDeltaMax'      => $prompt_token_delta_max,
 		];
 	}
 
@@ -481,7 +553,20 @@ final class RecommendationEvaluationTest extends TestCase {
 	 * @return array<string, float|int>
 	 */
 	private static function normalize_expected_metrics( array $metrics ): array {
-		foreach ( [ 'invalidOperationRate', 'presetAdherenceRate', 'noOpRate', 'noiseRate' ] as $key ) {
+		foreach (
+			[
+				'contrastPreservationRate' => 0,
+				'topThreeRelevanceRate'    => 0,
+				'staleFalsePositiveRate'   => 0,
+				'promptTokenDeltaMax'      => 0,
+			] as $key => $default
+		) {
+			if ( ! array_key_exists( $key, $metrics ) ) {
+				$metrics[ $key ] = $default;
+			}
+		}
+
+		foreach ( [ 'invalidOperationRate', 'presetAdherenceRate', 'noOpRate', 'noiseRate', 'contrastPreservationRate', 'topThreeRelevanceRate', 'staleFalsePositiveRate' ] as $key ) {
 			if ( array_key_exists( $key, $metrics ) && is_numeric( $metrics[ $key ] ) ) {
 				$metrics[ $key ] = round( (float) $metrics[ $key ], 4 );
 			}

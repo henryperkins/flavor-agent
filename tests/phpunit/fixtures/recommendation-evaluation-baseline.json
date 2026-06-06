@@ -4,5 +4,9 @@
   "invalidOperationRate": 0.3333,
   "presetAdherenceRate": 0.5,
   "noOpRate": 0.1667,
-  "noiseRate": 1
+  "noiseRate": 1,
+  "contrastPreservationRate": 0,
+  "topThreeRelevanceRate": 0,
+  "staleFalsePositiveRate": 0,
+  "promptTokenDeltaMax": 0
 }

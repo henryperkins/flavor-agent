@@ -19,6 +19,12 @@ final class RecommendationContextScorer {
 		'native_preset_fit',
 		'accessibility_fit',
 		'design_semantics_fit',
+		'contrast_preserved',
+		'preset_adherence',
+		'spacing_scale_fit',
+		'typography_readability',
+		'responsive_sanity',
+		'complexity_fit',
 	];
 
 	public const PENALTY_KEYS = [
@@ -27,27 +33,43 @@ final class RecommendationContextScorer {
 		'unsupported_control',
 		'stale_docs',
 		'validation_risk',
+		'failed_contrast',
+		'raw_value_when_preset_available',
+		'duplicate_or_noop',
+		'responsive_visibility_risk',
+		'excessive_visual_complexity',
 	];
 
 	private const EVIDENCE_WEIGHTS = [
-		'prompt_match'         => 0.18,
-		'operation_fit'        => 0.18,
-		'supports_fit'         => 0.16,
-		'section_role_match'   => 0.12,
-		'docs_freshness'       => 0.12,
-		'pattern_readiness'    => 0.08,
-		'visible_scope_match'  => 0.06,
-		'native_preset_fit'    => 0.06,
-		'accessibility_fit'    => 0.02,
-		'design_semantics_fit' => 0.02,
+		'prompt_match'           => 0.15,
+		'operation_fit'          => 0.14,
+		'supports_fit'           => 0.13,
+		'section_role_match'     => 0.10,
+		'docs_freshness'         => 0.10,
+		'pattern_readiness'      => 0.07,
+		'visible_scope_match'    => 0.05,
+		'native_preset_fit'      => 0.04,
+		'accessibility_fit'      => 0.02,
+		'design_semantics_fit'   => 0.02,
+		'contrast_preserved'     => 0.04,
+		'preset_adherence'       => 0.04,
+		'spacing_scale_fit'      => 0.025,
+		'typography_readability' => 0.025,
+		'responsive_sanity'      => 0.025,
+		'complexity_fit'         => 0.025,
 	];
 
 	private const PENALTY_VALUES = [
-		'weak_prompt_match'   => 0.12,
-		'possible_no_op'      => 0.25,
-		'unsupported_control' => 0.20,
-		'stale_docs'          => 0.15,
-		'validation_risk'     => 0.15,
+		'weak_prompt_match'                 => 0.12,
+		'possible_no_op'                    => 0.25,
+		'unsupported_control'               => 0.20,
+		'stale_docs'                        => 0.15,
+		'validation_risk'                   => 0.15,
+		'failed_contrast'                   => 0.20,
+		'raw_value_when_preset_available'   => 0.12,
+		'duplicate_or_noop'                 => 0.20,
+		'responsive_visibility_risk'        => 0.15,
+		'excessive_visual_complexity'       => 0.12,
 	];
 
 	/**
@@ -95,6 +117,7 @@ final class RecommendationContextScorer {
 		$evidence['native_preset_fit']    = self::score_native_preset_fit( $suggestion );
 		$evidence['accessibility_fit']    = self::score_accessibility_fit( $suggestion, $context );
 		$evidence['design_semantics_fit'] = self::score_design_semantics_fit( $suggestion, $context );
+		self::apply_quality_signals( $suggestion, $evidence, $penalties );
 
 		if ( self::is_possible_no_op( $suggestion, $context ) ) {
 			$penalties['possible_no_op'] = self::PENALTY_VALUES['possible_no_op'];
@@ -116,6 +139,65 @@ final class RecommendationContextScorer {
 			'evidence'  => $evidence,
 			'penalties' => $penalties,
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $suggestion
+	 * @param array<string, float> $evidence
+	 * @param array<string, float> $penalties
+	 */
+	private static function apply_quality_signals( array $suggestion, array &$evidence, array &$penalties ): void {
+		$quality = self::map( $suggestion['qualitySignals'] ?? [] );
+
+		$evidence['contrast_preserved'] = array_key_exists( 'contrastPreserved', $quality )
+			? ( ! empty( $quality['contrastPreserved'] ) ? 0.85 : 0.25 )
+			: 0.55;
+		$evidence['preset_adherence'] = array_key_exists( 'presetBacked', $quality )
+			? ( ! empty( $quality['presetBacked'] ) ? 0.85 : 0.35 )
+			: 0.55;
+		$evidence['spacing_scale_fit'] = array_key_exists( 'spacingScaleFit', $quality )
+			? ( false === $quality['spacingScaleFit'] ? 0.35 : 0.75 )
+			: 0.55;
+		$evidence['typography_readability'] = array_key_exists( 'typographyReadable', $quality )
+			? ( false === $quality['typographyReadable'] ? 0.35 : 0.75 )
+			: 0.55;
+		$evidence['responsive_sanity'] = array_key_exists( 'responsiveSane', $quality )
+			? ( false === $quality['responsiveSane'] ? 0.35 : 0.75 )
+			: 0.55;
+		$evidence['complexity_fit'] = array_key_exists( 'complexityFit', $quality )
+			? ( false === $quality['complexityFit'] ? 0.35 : 0.75 )
+			: 0.55;
+
+		if ( array_key_exists( 'contrastPreserved', $quality ) ) {
+			if ( ! empty( $quality['contrastPreserved'] ) ) {
+				$evidence['accessibility_fit'] = max( $evidence['accessibility_fit'], 0.85 );
+				$evidence['prompt_match']      = max( $evidence['prompt_match'], 0.55 );
+				unset( $penalties['weak_prompt_match'] );
+			} else {
+				$evidence['accessibility_fit'] = min( $evidence['accessibility_fit'], 0.35 );
+				$penalties['failed_contrast'] = self::PENALTY_VALUES['failed_contrast'];
+			}
+		}
+
+		if ( array_key_exists( 'presetBacked', $quality ) ) {
+			if ( ! empty( $quality['presetBacked'] ) ) {
+				$evidence['native_preset_fit'] = max( $evidence['native_preset_fit'], 0.85 );
+				$evidence['operation_fit']     = max( $evidence['operation_fit'], 0.65 );
+			} else {
+				$evidence['native_preset_fit'] = min( $evidence['native_preset_fit'], 0.35 );
+				$penalties['raw_value_when_preset_available'] = self::PENALTY_VALUES['raw_value_when_preset_available'];
+			}
+		}
+
+		if ( ! empty( $quality['noOp'] ) ) {
+			$penalties['duplicate_or_noop'] = self::PENALTY_VALUES['duplicate_or_noop'];
+		}
+		if ( array_key_exists( 'responsiveSane', $quality ) && false === $quality['responsiveSane'] ) {
+			$penalties['responsive_visibility_risk'] = self::PENALTY_VALUES['responsive_visibility_risk'];
+		}
+		if ( array_key_exists( 'complexityFit', $quality ) && false === $quality['complexityFit'] ) {
+			$penalties['excessive_visual_complexity'] = self::PENALTY_VALUES['excessive_visual_complexity'];
+		}
 	}
 
 	/**

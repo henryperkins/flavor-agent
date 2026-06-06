@@ -6,6 +6,7 @@ namespace FlavorAgent\Cloudflare;
 
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Embeddings\BaseHttpClient;
+use FlavorAgent\Patterns\PatternDesignMetadata;
 
 final class PatternSearchClient extends BaseHttpClient {
 
@@ -703,6 +704,9 @@ final class PatternSearchClient extends BaseHttpClient {
 		$block_types    = self::pattern_list( $pattern, [ 'blockTypes', 'block_types' ] );
 		$template_types = self::pattern_list( $pattern, [ 'templateTypes', 'template_types' ] );
 		$traits         = self::pattern_list( $pattern, [ 'inferredTraits', 'inferred_traits', 'traits' ] );
+		$design_metadata = is_array( $pattern['designMetadata'] ?? null )
+			? $pattern['designMetadata']
+			: ( is_array( $pattern['design_metadata'] ?? null ) ? $pattern['design_metadata'] : PatternDesignMetadata::extract( $pattern ) );
 		$content        = self::sanitize_pattern_content(
 			(string) (
 				$pattern['content']
@@ -732,12 +736,37 @@ final class PatternSearchClient extends BaseHttpClient {
 		$lines[] = '- Block types: ' . self::format_list( $block_types );
 		$lines[] = '- Template types: ' . self::format_list( $template_types );
 		$lines[] = '- Inferred traits: ' . self::format_list( $traits );
+		if ( [] !== $design_metadata ) {
+			$lines[] = '- Design metadata: ' . self::format_design_metadata( $design_metadata );
+		}
 		$lines[] = '';
 		$lines[] = '## Pattern Content';
 		$lines[] = '' !== $content ? $content : '(No pattern content provided.)';
 		$lines[] = '';
 
 		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<string, mixed> $metadata
+	 */
+	private static function format_design_metadata( array $metadata ): string {
+		$parts = [];
+
+		foreach ( $metadata as $key => $value ) {
+			if ( is_array( $value ) ) {
+				if ( [] !== $value ) {
+					$parts[] = sanitize_text_field( (string) $key ) . '=' . implode( '|', array_map( 'strval', $value ) );
+				}
+				continue;
+			}
+
+			if ( is_scalar( $value ) && '' !== (string) $value ) {
+				$parts[] = sanitize_text_field( (string) $key ) . '=' . sanitize_text_field( (string) $value );
+			}
+		}
+
+		return implode( '; ', $parts );
 	}
 
 	private static function sanitize_pattern_content( string $content ): string {

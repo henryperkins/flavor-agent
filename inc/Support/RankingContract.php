@@ -26,6 +26,12 @@ final class RankingContract {
 		'native_preset_fit',
 		'accessibility_fit',
 		'design_semantics_fit',
+		'contrast_preserved',
+		'preset_adherence',
+		'spacing_scale_fit',
+		'typography_readability',
+		'responsive_sanity',
+		'complexity_fit',
 	];
 
 	private const CONTEXT_PENALTY_KEYS = [
@@ -34,6 +40,11 @@ final class RankingContract {
 		'unsupported_control',
 		'stale_docs',
 		'validation_risk',
+		'failed_contrast',
+		'raw_value_when_preset_available',
+		'duplicate_or_noop',
+		'responsive_visibility_risk',
+		'excessive_visual_complexity',
 	];
 
 	/**
@@ -93,7 +104,7 @@ final class RankingContract {
 			$contract['operations'] = $operations;
 		}
 
-		$ranking_hint = self::normalize_ranking_hint( $input['rankingHint'] ?? $defaults['rankingHint'] ?? null );
+		$ranking_hint = self::normalize_ranking_hint( $input['rankingHint'] ?? null, $defaults['rankingHint'] ?? null );
 		if ( [] !== $ranking_hint ) {
 			$contract['rankingHint'] = $ranking_hint;
 		}
@@ -331,12 +342,33 @@ final class RankingContract {
 	/**
 	 * @return array<string, mixed>
 	 */
-	private static function normalize_ranking_hint( mixed $ranking_hint ): array {
-		if ( ! is_array( $ranking_hint ) ) {
-			return [];
+	private static function normalize_ranking_hint( mixed $ranking_hint, mixed $default_ranking_hint = null ): array {
+		$default_hint = is_array( $default_ranking_hint ) ? self::sanitize_structured_value( $default_ranking_hint ) : [];
+		$input_hint   = is_array( $ranking_hint ) ? self::sanitize_structured_value( $ranking_hint ) : [];
+		unset( $input_hint['componentScores'] );
+
+		$normalized = array_merge( $default_hint, $input_hint );
+
+		if ( is_array( $default_ranking_hint['componentScores'] ?? null ) ) {
+			$normalized['componentScores'] = self::normalize_component_scores( $default_ranking_hint['componentScores'] );
+		} else {
+			unset( $normalized['componentScores'] );
 		}
 
-		return self::sanitize_structured_value( $ranking_hint );
+		return $normalized;
+	}
+
+	/**
+	 * @return array{semantic: float, structure: float, design: float, area: float, override: float, blended: float}
+	 */
+	private static function normalize_component_scores( array $scores ): array {
+		$normalized = [];
+
+		foreach ( [ 'semantic', 'structure', 'design', 'area', 'override', 'blended' ] as $key ) {
+			$normalized[ $key ] = self::coerce_score( $scores[ $key ] ?? 0.0 );
+		}
+
+		return $normalized;
 	}
 
 	private static function sanitize_structured_value( mixed $value ): mixed {

@@ -68,6 +68,51 @@ final class RecommendationContextScorerTest extends TestCase {
 		$this->assertTrue( $this->invokeHasValidationRisk( $suggestion ) );
 	}
 
+	public function test_quality_signals_boost_preset_contrast_safe_suggestions(): void {
+		$result = RecommendationContextScorer::score(
+			[
+				'suggestion' => [
+					'label'          => 'Use the contrast preset',
+					'qualitySignals' => [
+						'contrastPreserved' => true,
+						'presetBacked'      => true,
+						'noOp'              => false,
+					],
+				],
+				'context'    => [],
+				'prompt'     => 'Improve readability',
+			]
+		);
+
+		$this->assertGreaterThanOrEqual( 0.60, $result['score'] );
+		$this->assertGreaterThan( 0.55, $result['evidence']['accessibility_fit'] );
+		$this->assertGreaterThan( 0.55, $result['evidence']['native_preset_fit'] );
+		$this->assertGreaterThan( 0.55, $result['evidence']['contrast_preserved'] );
+		$this->assertGreaterThan( 0.55, $result['evidence']['preset_adherence'] );
+		$this->assertArrayNotHasKey( 'duplicate_or_noop', $result['penalties'] );
+	}
+
+	public function test_quality_signals_penalize_failed_contrast_and_no_op(): void {
+		$result = RecommendationContextScorer::score(
+			[
+				'suggestion' => [
+					'label'          => 'Keep the same low contrast color',
+					'qualitySignals' => [
+						'contrastPreserved' => false,
+						'presetBacked'      => false,
+						'noOp'              => true,
+					],
+				],
+				'context'    => [],
+				'prompt'     => 'Improve readability',
+			]
+		);
+
+		$this->assertLessThan( 0.55, $result['score'] );
+		$this->assertArrayHasKey( 'failed_contrast', $result['penalties'] );
+		$this->assertArrayHasKey( 'duplicate_or_noop', $result['penalties'] );
+	}
+
 	public function test_scores_dot_string_style_support_paths_and_penalizes_absent_concrete_paths(): void {
 		$supported   = RecommendationContextScorer::score(
 			[

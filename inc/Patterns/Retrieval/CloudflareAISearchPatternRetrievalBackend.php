@@ -93,6 +93,7 @@ final class CloudflareAISearchPatternRetrievalBackend implements PatternRetrieva
 				'syncStatus'          => '',
 				'wpPatternSyncStatus' => '',
 				'content'             => '',
+				'designMetadata'      => [],
 			];
 		}
 
@@ -100,11 +101,12 @@ final class CloudflareAISearchPatternRetrievalBackend implements PatternRetrieva
 
 		if ( is_array( $current_pattern ) ) {
 			$current_pattern['traits'] = PatternIndex::infer_layout_traits( $current_pattern );
+			$current_pattern['designMetadata'] = PatternIndex::design_metadata_for_pattern( $current_pattern );
 
 			return $current_pattern;
 		}
 
-		return [
+		$payload = [
 			'id'               => $name,
 			'name'             => $name,
 			'title'            => $name,
@@ -118,6 +120,9 @@ final class CloudflareAISearchPatternRetrievalBackend implements PatternRetrieva
 			'source'           => sanitize_text_field( (string) ( $hit['source'] ?? 'cloudflare_ai_search' ) ),
 			'content'          => sanitize_textarea_field( (string) ( $hit['text'] ?? '' ) ),
 		];
+		$payload['designMetadata'] = PatternIndex::design_metadata_for_pattern( $payload );
+
+		return $payload;
 	}
 
 	private function core_block_id( string $name ): int {

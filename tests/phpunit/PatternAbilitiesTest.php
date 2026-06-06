@@ -742,6 +742,70 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringNotContainsString( 'Hidden copy', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
+	public function test_recommend_patterns_exposes_component_scores_in_ranking_hint(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'recommendations' => [
+					[
+						'name'   => 'theme/header-fit',
+						'score'  => 0.82,
+						'reason' => 'Matches the header insertion point.',
+					],
+				],
+			]
+		);
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/header-fit',
+						0.72,
+						[
+							'traits'         => [ 'simple', 'navigation' ],
+							'designMetadata' => [
+								'sectionRole'          => 'header',
+								'layoutShape'          => 'single-column',
+								'visualDensity'        => 'sparse',
+								'colorMood'            => 'unknown',
+								'typographyRole'       => 'navigation',
+								'interactionRole'      => 'navigation',
+								'templateAreaAffinity' => 'header',
+								'styleTokenUsage'      => [],
+								'blockComplexity'      => 'low',
+								'contentSpecificity'   => 'generic',
+							],
+						]
+					),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[ 'theme/header-fit' ]
+		);
+
+		$this->assertNotInstanceOf(
+			\WP_Error::class,
+			$result,
+			$result instanceof \WP_Error ? $result->get_error_code() . ': ' . $result->get_error_message() : ''
+		);
+		$this->assertSame( [ 'theme/header-fit' ], array_column( $result['recommendations'], 'name' ) );
+
+		$ranking = $result['recommendations'][0]['ranking'] ?? [];
+
+		$this->assertSame( 'contextual-ranking-v1', $ranking['rankingVersion'] ?? null );
+		$this->assertIsArray( $ranking['rankingHint']['componentScores'] ?? null );
+		$this->assertGreaterThan( 0.0, $ranking['rankingHint']['componentScores']['design'] ?? 0.0 );
+		$this->assertContains( 'component_ranking_v1', $ranking['sourceSignals'] ?? [] );
+	}
+
 	public function test_recommend_patterns_cloudflare_ai_search_keeps_registered_uuid_metadata_in_registered_lane(): void {
 		$this->configure_cloudflare_ai_search_backends();
 		$this->save_cloudflare_ai_search_index_state();
@@ -1049,7 +1113,7 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
 		$this->assertSame(
-			[ 'cloudflare_ai_search', 'llm_ranker', 'contextual_ranking_v1' ],
+			[ 'cloudflare_ai_search', 'llm_ranker', 'component_ranking_v1', 'contextual_ranking_v1' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
 		$this->assertSame(
@@ -1336,7 +1400,7 @@ final class PatternAbilitiesTest extends TestCase {
 			array_column( $result['recommendations'], 'reason' )
 		);
 		$this->assertSame(
-			[ 'qdrant_semantic', 'llm_ranker', 'qdrant_structural', 'contextual_ranking_v1' ],
+			[ 'qdrant_semantic', 'llm_ranker', 'qdrant_structural', 'component_ranking_v1', 'contextual_ranking_v1' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
 		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
@@ -2822,7 +2886,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'Matches the current context.', $result['recommendations'][0]['ranking']['reason'] ?? null );
 		$this->assertSame( 'validated', $result['recommendations'][0]['ranking']['safetyMode'] ?? null );
 		$this->assertSame(
-			[ 'qdrant_semantic', 'llm_ranker', 'contextual_ranking_v1' ],
+			[ 'qdrant_semantic', 'llm_ranker', 'component_ranking_v1', 'contextual_ranking_v1' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
 		$this->assertSame( 0.82, $result['recommendations'][0]['ranking']['modelScore'] ?? null );
