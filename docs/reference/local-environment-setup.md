@@ -181,7 +181,7 @@ Browser Run screenshots are supporting visual evidence only. They do not replace
 
 ## Cloudflare Pattern AI Search Metadata
 
-Before selecting Cloudflare AI Search as the pattern retrieval backend, save Cloudflare account ID and API token values under Embedding Model; the embedding model can be saved explicitly or left blank to use the default Workers AI embedding model. When Cloudflare AI Search Pattern Storage is selected, Flavor Agent creates or adopts a dedicated managed AI Search instance named `flavor-agent-patterns-{site_hash}` in the `patterns` namespace. The token must have AI Search permissions in addition to Workers AI embedding access.
+Before selecting Cloudflare AI Search as the pattern retrieval backend, save Cloudflare account ID and API token values under Embedding Model; the embedding model can be saved explicitly or left blank to use the default Workers AI embedding model. When Cloudflare AI Search Pattern Storage is selected, Flavor Agent creates or adopts a dedicated managed AI Search instance named `flavor-agent-patterns-{site_hash}`. The token must have AI Search permissions in addition to Workers AI embedding access.
 
 The managed instance uses built-in storage, Cloudflare-managed R2 and Vectorize resources, hybrid keyword/vector indexing, 1024-token chunks, 15 percent overlap, and exactly these five custom metadata fields:
 

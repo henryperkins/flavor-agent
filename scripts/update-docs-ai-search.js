@@ -182,10 +182,14 @@ function sourceRootsForRelease( release ) {
 	].map( normalizeTrustedUrl ).filter( Boolean );
 }
 
-function normalizeTrustedUrl( value ) {
+function normalizeTrustedUrl( value, base = '' ) {
 	let url;
+	const raw = String( value || '' ).trim();
+	if ( ! raw ) {
+		return '';
+	}
 	try {
-		url = new URL( String( value || '' ).trim() );
+		url = base ? new URL( raw, base ) : new URL( raw );
 	} catch {
 		return '';
 	}
@@ -314,6 +318,7 @@ async function discoverSourceUrls( roots, options ) {
 	const discovered = new Set( roots );
 	const visitedSitemaps = new Set();
 	const queue = [ ...sitemapUrls ];
+	const queuedSitemaps = new Set( queue );
 
 	while ( queue.length > 0 ) {
 		const batch = queue.splice( 0, SITEMAP_CONCURRENCY );
@@ -327,8 +332,9 @@ async function discoverSourceUrls( roots, options ) {
 				continue;
 			}
 			for ( const sitemapUrl of result.value.sitemaps ) {
-				if ( ! visitedSitemaps.has( sitemapUrl ) ) {
+				if ( ! visitedSitemaps.has( sitemapUrl ) && ! queuedSitemaps.has( sitemapUrl ) ) {
 					queue.push( sitemapUrl );
+					queuedSitemaps.add( sitemapUrl );
 				}
 			}
 			for ( const loc of result.value.urls ) {
@@ -410,11 +416,19 @@ async function readSitemap( sitemapUrl, visited ) {
 
 	const sitemaps = [];
 	const urls = [];
+	const seenSitemaps = new Set();
+	const seenUrls = new Set();
 	for ( const loc of locs ) {
 		if ( /\.xml(?:\.gz)?(?:$|\?)/i.test( loc ) || /sitemap/i.test( loc ) ) {
-			sitemaps.push( loc );
+			if ( ! seenSitemaps.has( loc ) ) {
+				seenSitemaps.add( loc );
+				sitemaps.push( loc );
+			}
 		} else {
-			urls.push( loc );
+			if ( ! seenUrls.has( loc ) ) {
+				seenUrls.add( loc );
+				urls.push( loc );
+			}
 		}
 	}
 
@@ -437,7 +451,7 @@ async function buildEntryForUrl( url, roots, options ) {
 	}
 
 	const html = response.text;
-	const canonical = normalizeTrustedUrl( extractCanonicalUrl( html, response.url ) || response.url );
+	const canonical = normalizeTrustedUrl( extractCanonicalUrl( html, response.url ) || response.url, response.url );
 	if ( ! canonical || ! urlMatchesRoots( canonical, roots ) ) {
 		throw new Error( `Canonical URL is outside trusted roots: ${ canonical || response.url }` );
 	}
@@ -618,12 +632,16 @@ function extractMainHtml( html ) {
 }
 
 function htmlToMarkdown( html ) {
+	const codeBlocks = [];
 	let text = String( html || '' )
 		.replace( /<script\b[\s\S]*?<\/script>/gi, ' ' )
 		.replace( /<style\b[\s\S]*?<\/style>/gi, ' ' )
 		.replace( /<svg\b[\s\S]*?<\/svg>/gi, ' ' )
 		.replace( /<(nav|header|footer|aside|form)\b[\s\S]*?<\/\1>/gi, ' ' )
 		.replace( /<!--[\s\S]*?-->/g, ' ' )
+		.replace( /<pre\b[^>]*>\s*<code\b[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, ( _, code ) => stashCodeBlock( code, codeBlocks ) )
+		.replace( /<pre\b[^>]*>([\s\S]*?)<\/pre>/gi, ( _, code ) => stashCodeBlock( code, codeBlocks ) )
+		.replace( /<code\b[^>]*>([\s\S]*?)<\/code>/gi, '`$1`' )
 		.replace( /<h1\b[^>]*>([\s\S]*?)<\/h1>/gi, '\n# $1\n' )
 		.replace( /<h2\b[^>]*>([\s\S]*?)<\/h2>/gi, '\n## $1\n' )
 		.replace( /<h3\b[^>]*>([\s\S]*?)<\/h3>/gi, '\n### $1\n' )
@@ -638,8 +656,33 @@ function htmlToMarkdown( html ) {
 	text = text.replace( /[ \t]+/g, ' ' );
 	text = text.replace( /\n[ \t]+/g, '\n' );
 	text = text.replace( /\n{3,}/g, '\n\n' );
+	text = cleanText( text );
+	text = restoreCodeBlocks( text, codeBlocks );
+	text = text.replace( /\n{3,}/g, '\n\n' );
 
-	return cleanText( text );
+	return text.trim();
+}
+
+function stashCodeBlock( rawCode, codeBlocks ) {
+	const code = decodeHtml(
+		String( rawCode || '' )
+			.replace( /<br\s*\/?>/gi, '\n' )
+			.replace( /<[^>]+>/g, '' )
+	)
+		.replace( /^\n+|\n+$/g, '' );
+	const index = codeBlocks.push( code ) - 1;
+
+	return `\n\n@@FLAVOR_AGENT_CODE_BLOCK_${ index }@@\n\n`;
+}
+
+function restoreCodeBlocks( text, codeBlocks ) {
+	return String( text || '' ).replace(
+		/@@FLAVOR_AGENT_CODE_BLOCK_(\d+)@@/g,
+		( _, index ) => {
+			const code = codeBlocks[ Number.parseInt( index, 10 ) ] || '';
+			return `\n\n\`\`\`\n${ code }\n\`\`\`\n\n`;
+		}
+	);
 }
 
 function decodeHtml( value ) {
@@ -1154,10 +1197,14 @@ if ( require.main === module ) {
 }
 
 module.exports = {
+	discoverSourceUrls,
 	extractTitle,
+	htmlToMarkdown,
 	manifestEntry,
 	cleanText,
 	flattenString,
 	buildItemKey,
 	boundedSlug,
+	normalizeTrustedUrl,
+	readSitemap,
 };
