@@ -56,13 +56,13 @@ final class RankingContractTest extends TestCase {
 				'score'       => 0.82,
 				'rankingHint' => [
 					'componentScores' => [
-						'semantic'   => 1.40,
-						'structure'  => -0.20,
-						'design'     => '0.90',
-						'area'       => 'not numeric',
-						'override'   => 0.40,
-						'blended'    => 0.74,
-						'untrusted'  => 0.99,
+						'semantic'  => 1.40,
+						'structure' => -0.20,
+						'design'    => '0.90',
+						'area'      => 'not numeric',
+						'override'  => 0.40,
+						'blended'   => 0.74,
+						'untrusted' => 0.99,
 					],
 				],
 			]

@@ -100,13 +100,13 @@ final class CloudflareAISearchPatternRetrievalBackend implements PatternRetrieva
 		$current_pattern = ServerCollector::for_pattern( $name );
 
 		if ( is_array( $current_pattern ) ) {
-			$current_pattern['traits'] = PatternIndex::infer_layout_traits( $current_pattern );
+			$current_pattern['traits']         = PatternIndex::infer_layout_traits( $current_pattern );
 			$current_pattern['designMetadata'] = PatternIndex::design_metadata_for_pattern( $current_pattern );
 
 			return $current_pattern;
 		}
 
-		$payload = [
+		$payload                   = [
 			'id'               => $name,
 			'name'             => $name,
 			'title'            => $name,

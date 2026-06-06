@@ -366,7 +366,7 @@ final class PatternIndex {
 			$parts[] = 'Layout traits: ' . implode( ', ', $traits );
 		}
 
-		$design_metadata = self::design_metadata_for_pattern( $pattern );
+		$design_metadata  = self::design_metadata_for_pattern( $pattern );
 		$metadata_summary = PatternDesignMetadata::summarize( $design_metadata );
 		if ( '' !== $metadata_summary ) {
 			$parts[] = 'Design metadata: ' . $metadata_summary;

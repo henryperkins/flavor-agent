@@ -825,7 +825,7 @@ EXAMPLE
 					'contrastPreserved' => true,
 				];
 			}
-			$entry                      = self::apply_design_validation( $entry, $context, $ranking_context );
+			$entry = self::apply_design_validation( $entry, $context, $ranking_context );
 
 			$ranking_input       = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
 			$model_score         = RankingContract::resolve_score_candidate(
@@ -937,7 +937,7 @@ EXAMPLE
 		$analysis_context = is_array( $ranking_context['context'] ?? null ) ? $ranking_context['context'] : $context;
 		$result           = \FlavorAgent\Support\RecommendationDesignValidator::analyze( $entry, $analysis_context );
 
-		$entry['qualitySignals'] = $result['qualitySignals'];
+		$entry['qualitySignals']    = $result['qualitySignals'];
 		$entry['validationReasons'] = ValidationReason::normalize(
 			array_merge(
 				is_array( $entry['validationReasons'] ?? null ) ? $entry['validationReasons'] : [],

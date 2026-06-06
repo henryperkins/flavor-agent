@@ -60,16 +60,16 @@ final class RecommendationContextScorer {
 	];
 
 	private const PENALTY_VALUES = [
-		'weak_prompt_match'                 => 0.12,
-		'possible_no_op'                    => 0.25,
-		'unsupported_control'               => 0.20,
-		'stale_docs'                        => 0.15,
-		'validation_risk'                   => 0.15,
-		'failed_contrast'                   => 0.20,
-		'raw_value_when_preset_available'   => 0.12,
-		'duplicate_or_noop'                 => 0.20,
-		'responsive_visibility_risk'        => 0.15,
-		'excessive_visual_complexity'       => 0.12,
+		'weak_prompt_match'               => 0.12,
+		'possible_no_op'                  => 0.25,
+		'unsupported_control'             => 0.20,
+		'stale_docs'                      => 0.15,
+		'validation_risk'                 => 0.15,
+		'failed_contrast'                 => 0.20,
+		'raw_value_when_preset_available' => 0.12,
+		'duplicate_or_noop'               => 0.20,
+		'responsive_visibility_risk'      => 0.15,
+		'excessive_visual_complexity'     => 0.12,
 	];
 
 	/**
@@ -149,22 +149,22 @@ final class RecommendationContextScorer {
 	private static function apply_quality_signals( array $suggestion, array &$evidence, array &$penalties ): void {
 		$quality = self::map( $suggestion['qualitySignals'] ?? [] );
 
-		$evidence['contrast_preserved'] = array_key_exists( 'contrastPreserved', $quality )
+		$evidence['contrast_preserved']     = array_key_exists( 'contrastPreserved', $quality )
 			? ( ! empty( $quality['contrastPreserved'] ) ? 0.85 : 0.25 )
 			: 0.55;
-		$evidence['preset_adherence'] = array_key_exists( 'presetBacked', $quality )
+		$evidence['preset_adherence']       = array_key_exists( 'presetBacked', $quality )
 			? ( ! empty( $quality['presetBacked'] ) ? 0.85 : 0.35 )
 			: 0.55;
-		$evidence['spacing_scale_fit'] = array_key_exists( 'spacingScaleFit', $quality )
+		$evidence['spacing_scale_fit']      = array_key_exists( 'spacingScaleFit', $quality )
 			? ( false === $quality['spacingScaleFit'] ? 0.35 : 0.75 )
 			: 0.55;
 		$evidence['typography_readability'] = array_key_exists( 'typographyReadable', $quality )
 			? ( false === $quality['typographyReadable'] ? 0.35 : 0.75 )
 			: 0.55;
-		$evidence['responsive_sanity'] = array_key_exists( 'responsiveSane', $quality )
+		$evidence['responsive_sanity']      = array_key_exists( 'responsiveSane', $quality )
 			? ( false === $quality['responsiveSane'] ? 0.35 : 0.75 )
 			: 0.55;
-		$evidence['complexity_fit'] = array_key_exists( 'complexityFit', $quality )
+		$evidence['complexity_fit']         = array_key_exists( 'complexityFit', $quality )
 			? ( false === $quality['complexityFit'] ? 0.35 : 0.75 )
 			: 0.55;
 
@@ -175,7 +175,7 @@ final class RecommendationContextScorer {
 				unset( $penalties['weak_prompt_match'] );
 			} else {
 				$evidence['accessibility_fit'] = min( $evidence['accessibility_fit'], 0.35 );
-				$penalties['failed_contrast'] = self::PENALTY_VALUES['failed_contrast'];
+				$penalties['failed_contrast']  = self::PENALTY_VALUES['failed_contrast'];
 			}
 		}
 
@@ -184,7 +184,7 @@ final class RecommendationContextScorer {
 				$evidence['native_preset_fit'] = max( $evidence['native_preset_fit'], 0.85 );
 				$evidence['operation_fit']     = max( $evidence['operation_fit'], 0.65 );
 			} else {
-				$evidence['native_preset_fit'] = min( $evidence['native_preset_fit'], 0.35 );
+				$evidence['native_preset_fit']                = min( $evidence['native_preset_fit'], 0.35 );
 				$penalties['raw_value_when_preset_available'] = self::PENALTY_VALUES['raw_value_when_preset_available'];
 			}
 		}

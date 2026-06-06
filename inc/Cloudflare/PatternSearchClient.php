@@ -698,16 +698,16 @@ final class PatternSearchClient extends BaseHttpClient {
 	 * @param array{pattern_name:string,candidate_type:string,source:string,synced_id:string,public_safe:bool} $metadata
 	 */
 	private static function build_pattern_markdown( array $pattern, array $metadata ): string {
-		$title          = self::pattern_text( $pattern, [ 'title' ], $metadata['pattern_name'] );
-		$description    = self::pattern_text( $pattern, [ 'description' ] );
-		$categories     = self::pattern_list( $pattern, [ 'categories' ] );
-		$block_types    = self::pattern_list( $pattern, [ 'blockTypes', 'block_types' ] );
-		$template_types = self::pattern_list( $pattern, [ 'templateTypes', 'template_types' ] );
-		$traits         = self::pattern_list( $pattern, [ 'inferredTraits', 'inferred_traits', 'traits' ] );
+		$title           = self::pattern_text( $pattern, [ 'title' ], $metadata['pattern_name'] );
+		$description     = self::pattern_text( $pattern, [ 'description' ] );
+		$categories      = self::pattern_list( $pattern, [ 'categories' ] );
+		$block_types     = self::pattern_list( $pattern, [ 'blockTypes', 'block_types' ] );
+		$template_types  = self::pattern_list( $pattern, [ 'templateTypes', 'template_types' ] );
+		$traits          = self::pattern_list( $pattern, [ 'inferredTraits', 'inferred_traits', 'traits' ] );
 		$design_metadata = is_array( $pattern['designMetadata'] ?? null )
 			? $pattern['designMetadata']
 			: ( is_array( $pattern['design_metadata'] ?? null ) ? $pattern['design_metadata'] : PatternDesignMetadata::extract( $pattern ) );
-		$content        = self::sanitize_pattern_content(
+		$content         = self::sanitize_pattern_content(
 			(string) (
 				$pattern['content']
 				?? $pattern['pattern_content']
@@ -715,7 +715,7 @@ final class PatternSearchClient extends BaseHttpClient {
 				?? ''
 			)
 		);
-		$lines          = [
+		$lines           = [
 			'# ' . $title,
 			'',
 		];

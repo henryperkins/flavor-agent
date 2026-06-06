@@ -3,11 +3,11 @@
 declare(strict_types=1);
 
 return [
-	'pattern_top_three_relevance'     => [
-		'surface'                 => 'pattern',
-		'expectedRelevantKeys'    => [ 'theme/hero-contrast', 'theme/hero-centered' ],
+	'pattern_top_three_relevance'       => [
+		'surface'                => 'pattern',
+		'expectedRelevantKeys'   => [ 'theme/hero-contrast', 'theme/hero-centered' ],
 		'shouldRemainApplicable' => true,
-		'suggestions'             => [
+		'suggestions'            => [
 			[
 				'name'       => 'theme/hero-contrast',
 				'operations' => [
@@ -33,10 +33,10 @@ return [
 		],
 	],
 	'style_contrast_and_preset_quality' => [
-		'surface'                 => 'style',
-		'expectedRelevantKeys'    => [ 'Use readable accent contrast' ],
+		'surface'                => 'style',
+		'expectedRelevantKeys'   => [ 'Use readable accent contrast' ],
 		'shouldRemainApplicable' => true,
-		'suggestions'             => [
+		'suggestions'            => [
 			[
 				'label'          => 'Use readable accent contrast',
 				'operations'     => [
@@ -63,7 +63,10 @@ return [
 					],
 				],
 				'validationReasons' => [
-					[ 'code' => 'failed_contrast', 'severity' => 'error' ],
+					[
+						'code'     => 'failed_contrast',
+						'severity' => 'error',
+					],
 				],
 				'qualitySignals'    => [
 					'contrastPreserved' => false,
@@ -71,7 +74,7 @@ return [
 			],
 		],
 	],
-	'stale_false_positive_probe'     => [
+	'stale_false_positive_probe'        => [
 		'surface'                     => 'block',
 		'expectedRelevantKeys'        => [ 'Apply a different useful style' ],
 		'shouldRemainApplicable'      => true,
@@ -114,11 +117,11 @@ return [
 			'attributes' => [ 'className' => 'is-style-fill' ],
 		],
 	],
-	'invalid_operation_probe'        => [
-		'surface'                 => 'template',
-		'expectedRelevantKeys'    => [ 'Insert valid footer CTA' ],
+	'invalid_operation_probe'           => [
+		'surface'                => 'template',
+		'expectedRelevantKeys'   => [ 'Insert valid footer CTA' ],
 		'shouldRemainApplicable' => true,
-		'suggestions'             => [
+		'suggestions'            => [
 			[
 				'label'              => 'Insert valid footer CTA',
 				'operations'         => [

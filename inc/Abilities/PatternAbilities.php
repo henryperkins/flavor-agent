@@ -505,14 +505,14 @@ final class PatternAbilities {
 		}
 
 		foreach ( $candidates as &$candidate ) {
-			$payload       = is_array( $candidate['payload'] ?? null ) ? $candidate['payload'] : [];
-			$ranking_hint = self::build_candidate_ranking_hint(
+			$payload                    = is_array( $candidate['payload'] ?? null ) ? $candidate['payload'] : [];
+			$ranking_hint               = self::build_candidate_ranking_hint(
 				$payload,
 				$block_name,
 				$nearby_siblings,
 				$is_custom_block_context
 			);
-			$component_scores = PatternComponentScorer::score(
+			$component_scores           = PatternComponentScorer::score(
 				(float) ( $candidate['score'] ?? 0.0 ),
 				$payload,
 				[
@@ -1730,7 +1730,7 @@ SYSTEM;
 			'usesDefaultBinding'       => ! empty( $ranking_hint['usesDefaultBinding'] ),
 			'summary'                  => $summary,
 		];
-		$component_scores            = is_array( $ranking_hint['componentScores'] ?? null ) ? $ranking_hint['componentScores'] : [];
+		$component_scores           = is_array( $ranking_hint['componentScores'] ?? null ) ? $ranking_hint['componentScores'] : [];
 
 		if ( [] !== $component_scores ) {
 			$hint['componentScores'] = $component_scores;

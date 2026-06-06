@@ -2640,7 +2640,7 @@ SYSTEM;
 		$context = is_array( $ranking_context['context'] ?? null ) ? $ranking_context['context'] : [];
 		$result  = \FlavorAgent\Support\RecommendationDesignValidator::analyze( $suggestion, $context );
 
-		$suggestion['qualitySignals'] = $result['qualitySignals'];
+		$suggestion['qualitySignals']    = $result['qualitySignals'];
 		$suggestion['validationReasons'] = ValidationReason::normalize(
 			array_merge(
 				is_array( $suggestion['validationReasons'] ?? null ) ? $suggestion['validationReasons'] : [],

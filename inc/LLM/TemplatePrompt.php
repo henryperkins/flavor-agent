@@ -796,7 +796,7 @@ EXAMPLE
 		$analysis_context = is_array( $ranking_context['context'] ?? null ) ? $ranking_context['context'] : $context;
 		$result           = \FlavorAgent\Support\RecommendationDesignValidator::analyze( $entry, $analysis_context );
 
-		$entry['qualitySignals'] = $result['qualitySignals'];
+		$entry['qualitySignals']    = $result['qualitySignals'];
 		$entry['validationReasons'] = ValidationReason::normalize(
 			array_merge(
 				is_array( $entry['validationReasons'] ?? null ) ? $entry['validationReasons'] : [],
