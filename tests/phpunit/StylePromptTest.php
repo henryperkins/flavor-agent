@@ -1166,6 +1166,71 @@ final class StylePromptTest extends TestCase {
 		);
 	}
 
+	public function test_parse_response_records_design_validator_typography_and_preset_signals(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Raw typography value',
+							'description' => 'Use a one-off line-height value for the section.',
+							'category'    => 'typography',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'typography', 'lineHeight' ],
+									'value'     => '1.2',
+									'valueType' => 'freeform',
+								],
+							],
+							'ranking'     => [
+								'score' => 0.81,
+							],
+						],
+					],
+				]
+			),
+			[
+				'scope'        => [
+					'surface' => 'global-styles',
+				],
+				'styleContext' => [
+					'themeTokens'         => [
+						'colors'        => [],
+						'colorPresets'  => [],
+						'elementStyles' => [],
+					],
+					'mergedConfig'        => [ 'styles' => [] ],
+					'currentConfig'       => [
+						'styles'   => [],
+						'settings' => [],
+					],
+					'supportedStylePaths' => [
+						[
+							'path'        => [ 'typography', 'lineHeight' ],
+							'valueSource' => 'freeform',
+						],
+					],
+				],
+			],
+			[
+				'surface' => 'style',
+				'prompt'  => 'Keep typography aligned to the theme scale.',
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$suggestion = $result['suggestions'][0];
+		$codes      = array_column( $suggestion['validationReasons'] ?? [], 'code' );
+
+		$this->assertFalse( $suggestion['qualitySignals']['presetBacked'] ?? true );
+		$this->assertContains( 'raw_value_when_preset_available', $codes );
+		$this->assertContains( 'design_validator_v1', $suggestion['ranking']['sourceSignals'] ?? [] );
+		$this->assertArrayHasKey( 'raw_value_when_preset_available', $suggestion['ranking']['contextPenalties'] ?? [] );
+	}
+
 	public function test_parse_response_downgrades_low_contrast_executable_suggestion_to_advisory(): void {
 		$parsed = StylePrompt::parse_response(
 			wp_json_encode(

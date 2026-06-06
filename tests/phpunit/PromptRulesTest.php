@@ -2039,6 +2039,49 @@ TEXT
 		$this->assertSame( 'Executable update', $result['block'][0]['label'] );
 	}
 
+	public function test_parse_response_records_design_validator_no_op_signals_for_block_updates(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'            => 'No-op heading level',
+							'description'      => 'Keep the heading level unchanged.',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => [
+								'level' => 2,
+							],
+							'ranking'          => [
+								'score' => 0.82,
+							],
+						],
+					],
+				]
+			),
+			[
+				'surface' => 'block',
+				'prompt'  => 'Keep the heading level unchanged.',
+				'context' => [
+					'block' => [
+						'attributes' => [
+							'level' => 2,
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$suggestion = $result['block'][0];
+		$codes      = array_column( $suggestion['validationReasons'] ?? [], 'code' );
+
+		$this->assertTrue( $suggestion['qualitySignals']['noOp'] ?? false );
+		$this->assertContains( 'duplicate_or_noop', $codes );
+		$this->assertContains( 'design_validator_v1', $suggestion['ranking']['sourceSignals'] ?? [] );
+		$this->assertArrayHasKey( 'duplicate_or_noop', $suggestion['ranking']['contextPenalties'] ?? [] );
+	}
+
 	public function test_build_system_includes_required_nullable_ranking_shape_for_strict_schema(): void {
 		$system = Prompt::build_system();
 

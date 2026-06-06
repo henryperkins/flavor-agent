@@ -1107,6 +1107,7 @@ SYSTEM;
 								$ranking['deterministicScore'] ?? null,
 								$ranking['score'] ?? null
 							) ?? 0.0;
+							$suggestion          = self::apply_design_validation( $suggestion, $ranking_context );
 							$contextual_result   = self::score_contextual_recommendation( $suggestion, $group, $ranking_context );
 							$context_score       = is_array( $contextual_result ) ? $contextual_result['score'] : null;
 							$computed_score      = RankingContract::blend_score(
@@ -1117,6 +1118,9 @@ SYSTEM;
 								]
 							);
 							$source_signals      = is_array( $ranking['sourceSignals'] ?? null ) ? $ranking['sourceSignals'] : [];
+							if ( isset( $suggestion['qualitySignals'] ) ) {
+								$source_signals[] = 'design_validator_v1';
+							}
 							if ( is_array( $contextual_result ) ) {
 								$source_signals[] = 'contextual_ranking_v1';
 							}
@@ -2548,6 +2552,7 @@ SYSTEM;
 					'has_preview'            => null !== $normalized['preview'] ? 0.05 : 0.0,
 				]
 			);
+			$normalized             = self::apply_design_validation( $normalized, $ranking_context );
 			$contextual_result      = self::score_contextual_recommendation( $normalized, $group, $ranking_context );
 			$context_score          = is_array( $contextual_result ) ? $contextual_result['score'] : null;
 			$computed_score         = RankingContract::blend_score(
@@ -2565,6 +2570,9 @@ SYSTEM;
 
 			if ( '' !== $normalized['description'] ) {
 				$source_signals[] = 'has_description';
+			}
+			if ( isset( $normalized['qualitySignals'] ) ) {
+				$source_signals[] = 'design_validator_v1';
 			}
 			if ( is_array( $contextual_result ) ) {
 				$source_signals[] = 'contextual_ranking_v1';
@@ -2622,6 +2630,25 @@ SYSTEM;
 			},
 			$valid
 		);
+	}
+
+	private static function apply_design_validation( array $suggestion, array $ranking_context ): array {
+		if ( [] === $ranking_context ) {
+			return $suggestion;
+		}
+
+		$context = is_array( $ranking_context['context'] ?? null ) ? $ranking_context['context'] : [];
+		$result  = \FlavorAgent\Support\RecommendationDesignValidator::analyze( $suggestion, $context );
+
+		$suggestion['qualitySignals'] = $result['qualitySignals'];
+		$suggestion['validationReasons'] = ValidationReason::normalize(
+			array_merge(
+				is_array( $suggestion['validationReasons'] ?? null ) ? $suggestion['validationReasons'] : [],
+				$result['validationReasons']
+			)
+		);
+
+		return $suggestion;
 	}
 
 	private static function score_contextual_recommendation( array $suggestion, string $group, array $ranking_context ): ?array {

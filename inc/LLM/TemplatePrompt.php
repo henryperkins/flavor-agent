@@ -613,6 +613,10 @@ EXAMPLE
 				'validationReasons'  => [],
 			];
 
+			if ( isset( $suggestion['contentBlockCount'] ) && is_numeric( $suggestion['contentBlockCount'] ) ) {
+				$entry['contentBlockCount'] = max( 0, (int) $suggestion['contentBlockCount'] );
+			}
+
 			$validated_template_parts      = self::validate_template_part_summaries(
 				is_array( $suggestion['templateParts'] ?? null ) ? $suggestion['templateParts'] : [],
 				$unused_part_lookup,
@@ -673,6 +677,7 @@ EXAMPLE
 			}
 
 			$entry['validationReasons'] = ValidationReason::normalize( $reasons );
+			$entry                      = self::apply_design_validation( $entry, $context, $ranking_context );
 
 			if (
 				count( $entry['operations'] ) === 0
@@ -717,6 +722,9 @@ EXAMPLE
 			}
 			if ( [] !== $entry['patternSuggestions'] ) {
 				$source_signals[] = 'has_pattern_suggestions';
+			}
+			if ( isset( $entry['qualitySignals'] ) ) {
+				$source_signals[] = 'design_validator_v1';
 			}
 			if ( is_array( $contextual_result ) ) {
 				$source_signals[] = 'contextual_ranking_v1';
@@ -778,6 +786,25 @@ EXAMPLE
 			0,
 			3
 		);
+	}
+
+	private static function apply_design_validation( array $entry, array $context, array $ranking_context ): array {
+		if ( [] === $ranking_context ) {
+			return $entry;
+		}
+
+		$analysis_context = is_array( $ranking_context['context'] ?? null ) ? $ranking_context['context'] : $context;
+		$result           = \FlavorAgent\Support\RecommendationDesignValidator::analyze( $entry, $analysis_context );
+
+		$entry['qualitySignals'] = $result['qualitySignals'];
+		$entry['validationReasons'] = ValidationReason::normalize(
+			array_merge(
+				is_array( $entry['validationReasons'] ?? null ) ? $entry['validationReasons'] : [],
+				$result['validationReasons']
+			)
+		);
+
+		return $entry;
 	}
 
 	private static function score_contextual_recommendation( array $suggestion, array $context, array $ranking_context ): ?array {
