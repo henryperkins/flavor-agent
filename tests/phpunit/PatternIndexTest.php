@@ -97,6 +97,17 @@ final class PatternIndexTest extends TestCase {
 		$this->assertContains( 'contrast', $metadata['styleTokenUsage'] );
 	}
 
+	public function test_pattern_design_metadata_counts_only_column_opening_blocks_for_layout_shape(): void {
+		$metadata = \FlavorAgent\Patterns\PatternDesignMetadata::extract(
+			[
+				'name'    => 'theme/two-columns',
+				'content' => '<!-- wp:columns --><!-- wp:column --><!-- wp:paragraph --><p>Left</p><!-- /wp:paragraph --><!-- /wp:column --><!-- wp:column --><!-- wp:paragraph --><p>Right</p><!-- /wp:paragraph --><!-- /wp:column --><!-- /wp:columns -->',
+			]
+		);
+
+		$this->assertSame( 'two-column', $metadata['layoutShape'] );
+	}
+
 	public function test_embedding_text_includes_pattern_design_metadata(): void {
 		$text = PatternIndex::build_embedding_text(
 			[

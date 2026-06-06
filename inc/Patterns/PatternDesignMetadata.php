@@ -94,7 +94,9 @@ final class PatternDesignMetadata {
 			return 'media-left';
 		}
 		if ( str_contains( $content, 'wp:columns' ) ) {
-			return substr_count( $content, 'wp:column' ) > 2 ? 'grid' : 'two-column';
+			$column_count = (int) preg_match_all( '/<!--\s+wp:column\b/', $content );
+
+			return $column_count > 2 ? 'grid' : 'two-column';
 		}
 		if ( str_contains( $content, 'wp:group' ) ) {
 			return 'single-column';

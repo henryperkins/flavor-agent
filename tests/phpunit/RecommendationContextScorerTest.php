@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Support\RecommendationContextScorer;
+use FlavorAgent\Support\RecommendationDesignValidator;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -111,6 +112,44 @@ final class RecommendationContextScorerTest extends TestCase {
 		$this->assertLessThan( 0.55, $result['score'] );
 		$this->assertArrayHasKey( 'failed_contrast', $result['penalties'] );
 		$this->assertArrayHasKey( 'duplicate_or_noop', $result['penalties'] );
+	}
+
+	public function test_design_validator_detects_no_op_when_attribute_key_order_differs(): void {
+		$result = RecommendationDesignValidator::analyze(
+			[
+				'attributeUpdates' => [
+					'style' => [
+						'spacing' => [
+							'margin'  => 'var:preset|spacing|medium',
+							'padding' => 'var:preset|spacing|small',
+						],
+						'color'   => [
+							'text'       => 'var:preset|color|contrast',
+							'background' => 'var:preset|color|base',
+						],
+					],
+				],
+			],
+			[
+				'currentState' => [
+					'attributes' => [
+						'style' => [
+							'color'   => [
+								'background' => 'var:preset|color|base',
+								'text'       => 'var:preset|color|contrast',
+							],
+							'spacing' => [
+								'padding' => 'var:preset|spacing|small',
+								'margin'  => 'var:preset|spacing|medium',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertTrue( $result['qualitySignals']['noOp'] ?? false );
+		$this->assertContains( 'duplicate_or_noop', array_column( $result['validationReasons'], 'code' ) );
 	}
 
 	public function test_scores_dot_string_style_support_paths_and_penalizes_absent_concrete_paths(): void {

@@ -144,7 +144,36 @@ final class RecommendationDesignValidator {
 		$updates = $suggestion['attributeUpdates'] ?? null;
 		$current = $context['currentState']['attributes'] ?? $context['block']['attributes'] ?? null;
 
-		return is_array( $updates ) && is_array( $current ) && $updates === $current;
+		if ( ! is_array( $updates ) || ! is_array( $current ) ) {
+			return false;
+		}
+
+		return self::normalize_comparison_array( $updates ) === self::normalize_comparison_array( $current );
+	}
+
+	/**
+	 * @param array<mixed> $value
+	 * @return array<mixed>
+	 */
+	private static function normalize_comparison_array( array $value ): array {
+		foreach ( $value as $key => $entry ) {
+			if ( is_array( $entry ) ) {
+				$value[ $key ] = self::normalize_comparison_array( $entry );
+			}
+		}
+
+		if ( ! self::is_list_array( $value ) ) {
+			ksort( $value );
+		}
+
+		return $value;
+	}
+
+	/**
+	 * @param array<mixed> $value
+	 */
+	private static function is_list_array( array $value ): bool {
+		return [] === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
 	}
 
 	/**
