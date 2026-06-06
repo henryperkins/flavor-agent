@@ -2621,10 +2621,10 @@ final class AISearchClient {
 		// above. Accept them when the key is in our managed namespace and its host
 		// segment matches the already trust-scoped URL; forged or traversing keys
 		// (wrong namespace, "..", encoded delimiters) still fail this check.
-		return self::source_key_matches_trusted_host( $source_key, $url );
+		return self::source_key_matches_trusted_host( $source_key, $url, $instance_id );
 	}
 
-	private static function source_key_matches_trusted_host( string $source_key, string $url ): bool {
+	private static function source_key_matches_trusted_host( string $source_key, string $url, ?string $instance_id = null ): bool {
 		$key = strtolower( trim( $source_key ) );
 
 		if ( strncmp( $key, 'ai-search/', 10 ) !== 0 ) {
@@ -2647,6 +2647,15 @@ final class AISearchClient {
 			return false;
 		}
 
+		// Only accept keys minted for one of our managed docs instances. Without
+		// this, a forged key such as ai-search/attacker/developer.wordpress.org/...
+		// would pass on the host segment alone and borrow the trust of an
+		// (independently trust-scoped) URL. Mirrors the instance allowlist used by
+		// parse_trusted_source_key_url().
+		if ( ! in_array( $segments[1], self::managed_source_key_instances( $instance_id ), true ) ) {
+			return false;
+		}
+
 		$url_host = wp_parse_url( $url, PHP_URL_HOST );
 
 		if ( ! is_string( $url_host ) || '' === $url_host ) {
@@ -2654,6 +2663,26 @@ final class AISearchClient {
 		}
 
 		return $segments[2] === strtolower( $url_host );
+	}
+
+	/**
+	 * Managed docs AI Search instance aliases that may legitimately appear as the
+	 * instance segment of a bounded item key.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function managed_source_key_instances( ?string $instance_id = null ): array {
+		return array_values(
+			array_unique(
+				array_filter(
+					[
+						'wp-dev',
+						'wp-dev-docs',
+						self::normalize_source_key_instance_id( $instance_id ),
+					]
+				)
+			)
+		);
 	}
 
 	private static function normalize_source_key_identity( string $source_key, ?string $instance_id = null ): string {

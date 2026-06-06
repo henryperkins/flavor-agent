@@ -239,6 +239,27 @@ function urlMatchesRoots( url, roots ) {
 	return roots.some( ( root ) => url === root || url.startsWith( root ) );
 }
 
+// Only fetch sitemaps that live on one of the trusted roots' origins. Sitemap
+// references come from robots.txt and nested <loc> entries, i.e. remote-controlled
+// input fetched by a secret-bearing workflow runner — constraining them to the
+// allowed https origins removes that SSRF surface.
+function sitemapUrlWithinOrigins( value, allowedOrigins ) {
+	const raw = String( value || '' ).trim();
+	if ( ! raw ) {
+		return '';
+	}
+	let url;
+	try {
+		url = new URL( raw );
+	} catch {
+		return '';
+	}
+	if ( url.protocol !== 'https:' ) {
+		return '';
+	}
+	return allowedOrigins.has( url.origin ) ? url.toString() : '';
+}
+
 async function fetchText( url, options = {} ) {
 	const controller = new AbortController();
 	const timeout = setTimeout( () => controller.abort(), options.timeoutMs || REQUEST_TIMEOUT_MS );
@@ -265,8 +286,18 @@ async function fetchText( url, options = {} ) {
 	}
 }
 
+async function fetchWithTimeout( url, init = {}, timeoutMs = REQUEST_TIMEOUT_MS ) {
+	const controller = new AbortController();
+	const timeout = setTimeout( () => controller.abort(), timeoutMs );
+	try {
+		return await fetch( url, { ...init, signal: controller.signal } );
+	} finally {
+		clearTimeout( timeout );
+	}
+}
+
 async function fetchJson( url, requestOptions = {} ) {
-	const response = await fetch( url, requestOptions );
+	const response = await fetchWithTimeout( url, requestOptions );
 	const text = await response.text();
 	let data;
 	try {
@@ -306,12 +337,15 @@ async function discoverSourceUrls( roots, options ) {
 		return dedupeUrls( explicit.filter( ( url ) => urlMatchesRoots( url, roots ) || roots.includes( url ) ) );
 	}
 
-	const hosts = [ ...new Set( roots.map( ( root ) => new URL( root ).origin ) ) ];
+	const allowedOrigins = new Set( roots.map( ( root ) => new URL( root ).origin ) );
 	const sitemapUrls = new Set();
 
-	for ( const origin of hosts ) {
+	for ( const origin of allowedOrigins ) {
 		for ( const sitemapUrl of await discoverRobotsSitemaps( origin ) ) {
-			sitemapUrls.add( sitemapUrl );
+			const normalized = sitemapUrlWithinOrigins( sitemapUrl, allowedOrigins );
+			if ( normalized ) {
+				sitemapUrls.add( normalized );
+			}
 		}
 	}
 
@@ -332,9 +366,10 @@ async function discoverSourceUrls( roots, options ) {
 				continue;
 			}
 			for ( const sitemapUrl of result.value.sitemaps ) {
-				if ( ! visitedSitemaps.has( sitemapUrl ) && ! queuedSitemaps.has( sitemapUrl ) ) {
-					queue.push( sitemapUrl );
-					queuedSitemaps.add( sitemapUrl );
+				const normalized = sitemapUrlWithinOrigins( sitemapUrl, allowedOrigins );
+				if ( normalized && ! visitedSitemaps.has( normalized ) && ! queuedSitemaps.has( normalized ) ) {
+					queue.push( normalized );
+					queuedSitemaps.add( normalized );
 				}
 			}
 			for ( const loc of result.value.urls ) {
@@ -902,6 +937,16 @@ function shouldUpload( entry, existingItem ) {
 	return true;
 }
 
+function evaluateSettlement( latest, desiredKeys ) {
+	const scoped = latest.filter( ( item ) => desiredKeys.has( String( item.key || '' ) ) );
+	const seen = new Set( scoped.map( ( item ) => String( item.key || '' ) ) );
+	const missing = [ ...desiredKeys ].filter( ( key ) => ! seen.has( key ) );
+	const pending = scoped.filter( ( item ) => [ 'queued', 'running', 'outdated' ].includes( String( item.status || '' ) ) );
+	const errors = scoped.filter( ( item ) => [ 'error', 'skipped' ].includes( String( item.status || '' ) ) );
+
+	return { missing, pending, errors };
+}
+
 async function pollUntilSettled( desiredKeys, options, auth ) {
 	if ( options.dryRun || options.pollSeconds <= 0 || desiredKeys.size === 0 ) {
 		return { skipped: true, pending: 0, errors: [] };
@@ -911,22 +956,23 @@ async function pollUntilSettled( desiredKeys, options, auth ) {
 	let latest = [];
 	while ( Date.now() < deadline ) {
 		latest = await listBuiltinItems( options, auth );
-		const scoped = latest.filter( ( item ) => desiredKeys.has( String( item.key || '' ) ) );
-		const pending = scoped.filter( ( item ) => [ 'queued', 'running', 'outdated' ].includes( String( item.status || '' ) ) );
-		const errors = scoped.filter( ( item ) => [ 'error', 'skipped' ].includes( String( item.status || '' ) ) );
+		const { missing, pending, errors } = evaluateSettlement( latest, desiredKeys );
 
-		if ( pending.length === 0 ) {
+		// Keys that never appear (dropped write / eventual-consistency lag) are not
+		// "pending" in the listing, so success must also require zero missing keys —
+		// otherwise an incomplete corpus would settle as "ok".
+		if ( pending.length === 0 && missing.length === 0 ) {
 			return { skipped: false, pending: 0, errors };
 		}
 
 		await delay( 5000 );
 	}
 
-	const scoped = latest.filter( ( item ) => desiredKeys.has( String( item.key || '' ) ) );
+	const { missing, pending, errors } = evaluateSettlement( latest, desiredKeys );
 	return {
 		skipped: false,
-		pending: scoped.filter( ( item ) => [ 'queued', 'running', 'outdated' ].includes( String( item.status || '' ) ) ).length,
-		errors: scoped.filter( ( item ) => [ 'error', 'skipped' ].includes( String( item.status || '' ) ) ),
+		pending: missing.length + pending.length,
+		errors,
 	};
 }
 
@@ -935,7 +981,7 @@ function delay( ms ) {
 }
 
 async function validatePublicEndpoint( options ) {
-	const response = await fetch( options.publicUrl, {
+	const response = await fetchWithTimeout( options.publicUrl, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
@@ -1198,6 +1244,7 @@ if ( require.main === module ) {
 
 module.exports = {
 	discoverSourceUrls,
+	evaluateSettlement,
 	extractTitle,
 	htmlToMarkdown,
 	manifestEntry,
@@ -1207,4 +1254,5 @@ module.exports = {
 	boundedSlug,
 	normalizeTrustedUrl,
 	readSitemap,
+	sitemapUrlWithinOrigins,
 };

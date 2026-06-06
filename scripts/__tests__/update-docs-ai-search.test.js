@@ -2,9 +2,11 @@
 
 const {
 	discoverSourceUrls,
+	evaluateSettlement,
 	htmlToMarkdown,
 	normalizeTrustedUrl,
 	readSitemap,
+	sitemapUrlWithinOrigins,
 } = require( '../update-docs-ai-search.js' );
 
 function mockTextResponse( text, url, contentType = 'application/xml' ) {
@@ -133,5 +135,88 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( markdown ).toContain(
 			'export default function Edit() {\n\treturn <InnerBlocks />;\n}'
 		);
+	} );
+
+	test( 'sitemapUrlWithinOrigins only accepts trusted https origins', () => {
+		const allowed = new Set( [ 'https://developer.wordpress.org' ] );
+
+		expect(
+			sitemapUrlWithinOrigins(
+				'https://developer.wordpress.org/sitemap-index.xml',
+				allowed
+			)
+		).toBe( 'https://developer.wordpress.org/sitemap-index.xml' );
+
+		// SSRF surface: off-origin and non-https references are rejected.
+		expect( sitemapUrlWithinOrigins( 'https://attacker.example/x.xml', allowed ) ).toBe( '' );
+		expect( sitemapUrlWithinOrigins( 'http://developer.wordpress.org/x.xml', allowed ) ).toBe( '' );
+		expect( sitemapUrlWithinOrigins( 'not a url', allowed ) ).toBe( '' );
+		expect( sitemapUrlWithinOrigins( '', allowed ) ).toBe( '' );
+	} );
+
+	test( 'discoverSourceUrls does not fetch sitemaps from untrusted origins', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href === 'https://developer.wordpress.org/robots.txt' ) {
+				return mockTextResponse(
+					[
+						'Sitemap: https://developer.wordpress.org/sitemap-index.xml',
+						'Sitemap: https://attacker.example/evil-sitemap.xml',
+					].join( '\n' ),
+					href,
+					'text/plain'
+				);
+			}
+			if ( href === 'https://developer.wordpress.org/sitemap-index.xml' ) {
+				return mockTextResponse(
+					[
+						'<urlset>',
+						'<url><loc>https://developer.wordpress.org/block-editor/reference-guides/</loc></url>',
+						'</urlset>',
+					].join( '' ),
+					href
+				);
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const urls = await discoverSourceUrls(
+			[ 'https://developer.wordpress.org/block-editor/' ],
+			{ sourceUrls: [], sourceFile: '', limit: 0 }
+		);
+
+		expect( urls ).toEqual( [
+			'https://developer.wordpress.org/block-editor/',
+			'https://developer.wordpress.org/block-editor/reference-guides/',
+		] );
+		// The untrusted sitemap was never requested.
+		expect(
+			global.fetch.mock.calls.some(
+				( [ url ] ) => String( url ) === 'https://attacker.example/evil-sitemap.xml'
+			)
+		).toBe( false );
+	} );
+
+	test( 'evaluateSettlement treats never-seen desired keys as missing', () => {
+		const desiredKeys = new Set( [ 'key-a', 'key-b' ] );
+
+		// key-b never appears in the listing → must not settle as complete.
+		const partial = evaluateSettlement(
+			[ { key: 'key-a', status: 'completed' } ],
+			desiredKeys
+		);
+		expect( partial.missing ).toEqual( [ 'key-b' ] );
+		expect( partial.pending ).toHaveLength( 0 );
+
+		// All present and completed → nothing missing or pending.
+		const settled = evaluateSettlement(
+			[
+				{ key: 'key-a', status: 'completed' },
+				{ key: 'key-b', status: 'completed' },
+			],
+			desiredKeys
+		);
+		expect( settled.missing ).toEqual( [] );
+		expect( settled.pending ).toHaveLength( 0 );
 	} );
 } );

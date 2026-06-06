@@ -320,6 +320,43 @@ final class AISearchClientTest extends TestCase {
 		$this->assertCount( 0, $result['guidance'] );
 	}
 
+	public function test_search_rejects_bounded_source_key_with_forged_instance_segment(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'default/green-sun',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'search_query' => 'private apis',
+					'chunks'       => [
+						[
+							'id'    => 'chunk-1',
+							'score' => 0.9,
+							'type'  => 'text',
+							'item'  => [
+								// Forged instance segment: the host segment matches the trusted
+								// metadata URL, but "attacker" is not a managed docs instance.
+								'key'       => 'ai-search/attacker/developer.wordpress.org/block-editor-reference-guides-packages-packages-private-a/8d704f871324191e/part-0001.md',
+								'timestamp' => 1775925540000,
+							],
+							'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/packages/packages-private-apis/\"\n---\nForged chunk body.",
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'private apis' );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 0, $result['guidance'] );
+	}
+
 	public function test_search_normalizes_crlf_frontmatter_before_extracting_url_and_excerpt(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
