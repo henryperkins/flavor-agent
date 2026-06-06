@@ -31,7 +31,6 @@ final class Validation {
 		],
 		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => [
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
-			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 		],
 		'flavor_agent_qdrant_key'                      => [
@@ -408,7 +407,6 @@ final class Validation {
 					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => sanitize_text_field(
 						$workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? ''
 					),
-					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 					Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => self::read_posted_text_value(
 						Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 						$current_values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ]
@@ -448,9 +446,7 @@ final class Validation {
 		$account_id      = $workers_ai_values['flavor_agent_cloudflare_workers_ai_account_id'] ?? '';
 		$api_token       = $workers_ai_values['flavor_agent_cloudflare_workers_ai_api_token'] ?? '';
 		$embedding_model = $workers_ai_values['flavor_agent_cloudflare_workers_ai_embedding_model'] ?? WorkersAIEmbeddingConfiguration::DEFAULT_MODEL;
-
 		$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID ]  = sanitize_text_field( $account_id );
-		$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ]   = Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE;
 		$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN ]   = sanitize_text_field( $api_token );
 		$values[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID ] = PatternSearchInstanceManager::managed_instance_id();
 
@@ -643,7 +639,6 @@ final class Validation {
 			[
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID => 'sanitize_text_field',
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => 'sanitize_text_field',
-				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE => 'sanitize_text_field',
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => 'sanitize_text_field',
 			]
 		);

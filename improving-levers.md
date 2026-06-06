@@ -2,7 +2,16 @@
 
 **Scope:** Actionable exploration for making Flavor Agent recommendations more contextual, WordPress-native, design-minded, and freshness-aware.
 
-**Repo baseline checked:** May 19, 2026, against the live `/home/dev/flavor-agent` tree.
+**Repo baseline checked:** June 6, 2026, against the live `/home/dev/flavor-agent` tree.
+
+## Current implementation state
+
+As of 2026-06-06, this file is a roadmap and execution plan, not an achieved contract document.
+
+- Shipped in this codebase: Phases 0, 1, 2, and 3, plus Contextual Ranking V1 and the Phase 4 request-diagnostic guideline attribution id.
+- Remaining unshipped work: engaged outcome attribution for the future learning loop, docs freshness split (Phase 5), pattern metadata and component-score ranking (Phase 6), expanded validators (Priority 4), and the larger Phase 7+ measurement / learning loop.
+- Priority 5 remains scoped to attribution metadata rather than a production stale gate, consistent with current guidance in this file and recent implementation evidence.
+- Adapted pattern preview is a related product-surface outline, not an implemented part of this roadmap. If pursued, it should build on the unshipped pattern relevance work here and the shared deterministic mutation engine described in `docs/features/pattern-recommendations-adapted-preview.md`.
 
 **North star:** Recommendations should feel like they came from a careful WordPress designer who understands the active theme, supported block controls, surrounding layout, site guidelines, current WordPress APIs, accessibility constraints, and when doing nothing is better than adding noise.
 
@@ -564,7 +573,7 @@ The first useful outputs are operator/developer reports, not automatic behavior 
 
 ## Suggested Implementation Order
 
-Status note (updated 2026-06-05): Phases 0, 1, and 2 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed a slice of Phase 3 via validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`); its implementation plan is archived at `docs/superpowers/plans/archive/2026-06-04-phase-3-validation-feedback.md`. Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phase 4's initial request-diagnostic attribution seam is shipped, but engaged outcome propagation remains future learning-loop work. Phases 5–12 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work — pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) — should come first.
+Status note (updated 2026-06-06): Phases 0, 1, 2, and 3 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`); its implementation plan is archived at `docs/superpowers/plans/archive/2026-06-04-phase-3-validation-feedback.md`. Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phase 4's initial request-diagnostic attribution seam is shipped, but engaged outcome propagation remains future learning-loop work. Phases 5-12 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work - pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) - should come first.
 
 ### Phase 0: Measurement Stub
 

@@ -873,7 +873,7 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 0, $result['removed'] );
 		$this->assertSame( 'ready', $result['status'] );
 		$this->assertSame( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH, $state['pattern_backend'] );
-		$this->assertSame( 'patterns', $state['cloudflare_ai_search_namespace'] );
+		$this->assertSame( '', $state['cloudflare_ai_search_namespace'] );
 		$this->assertSame( PatternSearchInstanceManager::managed_instance_id(), $state['cloudflare_ai_search_instance'] );
 		$this->assertNotSame( '', $state['cloudflare_ai_search_signature'] );
 		$this->assertSame( PatternIndex::compute_fingerprint( $patterns ), $state['fingerprint'] );
@@ -1467,7 +1467,7 @@ final class PatternIndexTest extends TestCase {
 					'fingerprint'                    => PatternIndex::compute_fingerprint( $patterns ),
 					'qdrant_url'                     => '',
 					'qdrant_collection'              => '',
-					'cloudflare_ai_search_namespace' => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+					'cloudflare_ai_search_namespace' => '',
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => $this->expected_cloudflare_ai_search_signature(),
 					'openai_provider'                => '',

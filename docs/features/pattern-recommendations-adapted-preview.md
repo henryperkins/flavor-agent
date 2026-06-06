@@ -2,6 +2,17 @@
 
 This is a forward-looking feature outline for extending the existing Pattern Recommendations surface. It builds on `docs/features/pattern-recommendations.md`, where Flavor Agent currently ranks patterns, displays them in the native Gutenberg inserter, and inserts the selected pattern as Gutenberg exposes it.
 
+## Current Implementation State
+
+As of 2026-06-06, adapted pattern preview is not implemented. The live pattern surface is still the direct-insert contract:
+
+- `src/patterns/PatternRecommender.js` resolves the matched Gutenberg pattern, validates freshness and insertability, dispatches `insertBlocks()`, and verifies the result at the requested target.
+- `src/patterns/pattern-insertability.js` owns the reusable block-resolution and allowed-block checks through `resolvePatternBlocks()` and `getRejectedPatternBlockNames()`.
+- `src/store/recommendation-outcomes.js` only allows the existing pattern events (`shown`, `pattern_inserted_from_shelf`, `validation_blocked`, `stale_blocked`, and `insert_failed`); adapted preview and adapted insert events are not registered yet.
+- No `BlockPreview`-based adapted preview component, `pattern-adaptation.js` module, or `adaptationPlan` runtime contract exists in `src/patterns/`.
+
+The WordPress 7.0 Pattern Overrides premise in this outline remains current for custom blocks: attributes that opt into Block Bindings can participate in overrides, but that is still a per-instance content override path rather than an arbitrary cosmetic mutation path for a synced `core/block` reference.
+
 ## Goal
 
 Let users insert patterns that both fit the current insertion point and visually align with the surrounding page. The feature should preserve the existing structural recommendation contract, add a bounded cosmetic adaptation step, and show a visual preview of the exact adapted block tree before insertion.

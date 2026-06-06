@@ -55,7 +55,7 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 'rewritten query', $result['query'] );
 		$this->assertCount( 1, $result['guidance'] );
 			$this->assertSame(
-				'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+				'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 				WordPressTestState::$last_remote_post['url']
 			);
 			$this->assertArrayNotHasKey(
@@ -121,7 +121,7 @@ final class AISearchClientTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame(
-			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertArrayNotHasKey(
@@ -164,7 +164,7 @@ final class AISearchClientTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame(
-			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertArrayNotHasKey(
@@ -172,7 +172,7 @@ final class AISearchClientTest extends TestCase {
 			WordPressTestState::$last_remote_post['args']['headers']
 		);
 		$this->assertSame(
-			'c5d54c4a-27df-4034-80da-ca6054684fcd',
+			'ba566764-a507-4cd0-8cc8-cffbbde72ac3',
 			AISearchClient::configured_instance_id()
 		);
 	}
@@ -206,7 +206,7 @@ final class AISearchClientTest extends TestCase {
 							'score' => 0.77,
 							'type'  => 'text',
 							'item'  => [
-								'key'       => 'ai-search/c5d54c4a-27df-4034-80da-ca6054684fcd/developer.wordpress.org/block-editor/reference-guides/packages/packages-block-editor/27cdbd65c37e71c679c075cbf9b1443c019c399384140cae7323fcfa3ae26769/part-0001.md',
+								'key'       => 'ai-search/ba566764-a507-4cd0-8cc8-cffbbde72ac3/developer.wordpress.org/block-editor/reference-guides/packages/packages-block-editor/27cdbd65c37e71c679c075cbf9b1443c019c399384140cae7323fcfa3ae26769/part-0001.md',
 								'timestamp' => 1775925540000,
 							],
 							'text'  => 'Instance-keyed chunks can derive the docs URL for the built-in public endpoint.',
@@ -220,7 +220,7 @@ final class AISearchClientTest extends TestCase {
 
 			$this->assertIsArray( $result );
 			$this->assertSame(
-				'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+				'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 				WordPressTestState::$last_remote_post['url']
 			);
 		$this->assertCount( 2, $result['guidance'] );
@@ -236,6 +236,88 @@ final class AISearchClientTest extends TestCase {
 			'https://developer.wordpress.org/block-editor/reference-guides/packages/packages-block-editor/',
 			$result['guidance'][1]['url']
 		);
+	}
+
+	public function test_search_accepts_bounded_managed_source_key_when_path_exceeds_filename_limit(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'default/green-sun',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'search_query' => 'private apis',
+					'chunks'       => [
+						[
+							'id'    => 'chunk-1',
+							'score' => 0.9,
+							'type'  => 'text',
+							'item'  => [
+								// Cloudflare caps item filenames at 128 bytes, so deep docs URLs
+								// ship a bounded slug + short hash that cannot reconstruct the path.
+								'key'       => 'ai-search/wp-dev/developer.wordpress.org/block-editor-reference-guides-packages-packages-private-a/8d704f871324191e/part-0001.md',
+								'timestamp' => 1775925540000,
+							],
+							'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/packages/packages-private-apis/\"\n---\nPrivate APIs let packages share unstable code.",
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'private apis' );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, $result['guidance'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/block-editor/reference-guides/packages/packages-private-apis/',
+			$result['guidance'][0]['url']
+		);
+		$this->assertSame(
+			'ai-search/wp-dev/developer.wordpress.org/block-editor-reference-guides-packages-packages-private-a/8d704f871324191e/part-0001.md',
+			$result['guidance'][0]['sourceKey']
+		);
+		$this->assertStringContainsString( 'Private APIs', $result['guidance'][0]['excerpt'] );
+	}
+
+	public function test_search_rejects_non_managed_source_key_even_with_trusted_metadata_url(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'default/green-sun',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'search_query' => 'private apis',
+					'chunks'       => [
+						[
+							'id'    => 'chunk-1',
+							'score' => 0.9,
+							'type'  => 'text',
+							'item'  => [
+								// Forged: trusted-looking metadata URL but a key outside the managed namespace.
+								'key'       => 'internal/developer.wordpress.org/block-editor/reference-guides/packages/packages-private-apis/part-0001.md',
+								'timestamp' => 1775925540000,
+							],
+							'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/packages/packages-private-apis/\"\n---\nForged chunk body.",
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'private apis' );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 0, $result['guidance'] );
 	}
 
 	public function test_search_normalizes_crlf_frontmatter_before_extracting_url_and_excerpt(): void {
@@ -477,7 +559,7 @@ final class AISearchClientTest extends TestCase {
 
 		$this->assertSame(
 			[
-				'id'      => 'c5d54c4a-27df-4034-80da-ca6054684fcd',
+				'id'      => 'ba566764-a507-4cd0-8cc8-cffbbde72ac3',
 				'source'  => 'public',
 				'enabled' => true,
 				'paused'  => false,
@@ -485,7 +567,7 @@ final class AISearchClientTest extends TestCase {
 			$result
 		);
 		$this->assertSame(
-			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
@@ -915,7 +997,7 @@ final class AISearchClientTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame(
-			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 			WordPressTestState::$last_remote_post['url']
 		);
 		$this->assertSame( [], AISearchClient::maybe_search( 'template parts' ) );
@@ -1796,7 +1878,7 @@ final class AISearchClientTest extends TestCase {
 			WordPressTestState::$transients
 		);
 			$this->assertSame(
-				'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+				'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 				WordPressTestState::$last_remote_post['url']
 			);
 		$this->assertSame( [], WordPressTestState::$options['flavor_agent_docs_warm_queue'] ?? [] );
@@ -1947,7 +2029,7 @@ final class AISearchClientTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'http_request_failed', $result->get_error_code() );
 			$this->assertSame(
-				'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+				'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 				WordPressTestState::$last_remote_post['url']
 			);
 	}
@@ -2069,11 +2151,11 @@ final class AISearchClientTest extends TestCase {
 
 		$result = $method->invoke(
 			null,
-			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/mcp'
+			'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/mcp'
 		);
 
 		$this->assertSame(
-			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 			$result
 		);
 	}

@@ -723,7 +723,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 		$this->assertStringContainsString(
-			sprintf( '/ai-search/namespaces/patterns/instances/%s/search', PatternSearchInstanceManager::managed_instance_id() ),
+			sprintf( '/ai-search/instances/%s/search', PatternSearchInstanceManager::managed_instance_id() ),
 			WordPressTestState::$remote_post_calls[0]['url'] ?? ''
 		);
 		$this->assertStringNotContainsString( '/embeddings', wp_json_encode( WordPressTestState::$remote_post_calls ) );
@@ -3327,7 +3327,7 @@ final class PatternAbilitiesTest extends TestCase {
 					'fingerprint'                    => 'cloudflare-fingerprint-123',
 					'qdrant_url'                     => '',
 					'qdrant_collection'              => '',
-					'cloudflare_ai_search_namespace' => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+					'cloudflare_ai_search_namespace' => '',
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => $this->expected_cloudflare_ai_search_signature(),
 					'openai_provider'                => '',

@@ -942,7 +942,6 @@ final class PatternIndex {
 	 * @param array<string, mixed>             $state
 	 */
 	private static function do_cloudflare_ai_search_sync( array $patterns, string $fingerprint, array $state ): array|\WP_Error {
-		$namespace                     = Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE;
 		$instance                      = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
 		$signature                     = self::cloudflare_ai_search_signature();
 		$previous_pattern_fingerprints = is_array( $state['pattern_fingerprints'] ?? null )
@@ -966,7 +965,6 @@ final class PatternIndex {
 		$needs_reindex = ! $has_usable_index
 			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH
 			|| $state['fingerprint'] !== $fingerprint
-			|| ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== $namespace
 			|| ( $state['cloudflare_ai_search_instance'] ?? '' ) !== $instance
 			|| ( $state['cloudflare_ai_search_signature'] ?? '' ) !== $signature
 			|| empty( $previous_pattern_fingerprints );
@@ -992,7 +990,6 @@ final class PatternIndex {
 		// fingerprint cache and re-upload every pattern.
 		$requires_full_reindex = empty( $previous_pattern_fingerprints )
 			|| ( $state['pattern_backend'] ?? '' ) !== Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH
-			|| ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== $namespace
 			|| ( $state['cloudflare_ai_search_instance'] ?? '' ) !== $instance
 			|| ( $state['cloudflare_ai_search_signature'] ?? '' ) !== $signature;
 
@@ -1094,7 +1091,7 @@ final class PatternIndex {
 			'fingerprint'                    => $fingerprint,
 			'qdrant_url'                     => '',
 			'qdrant_collection'              => '',
-			'cloudflare_ai_search_namespace' => $namespace,
+			'cloudflare_ai_search_namespace' => '',
 			'cloudflare_ai_search_instance'  => $instance,
 			'cloudflare_ai_search_signature' => $signature,
 			'openai_provider'                => '',
@@ -1256,8 +1253,7 @@ final class PatternIndex {
 
 		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend ) {
 			if (
-				(string) ( $state['cloudflare_ai_search_namespace'] ?? '' ) !== Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE
-				|| (string) ( $state['cloudflare_ai_search_instance'] ?? '' ) !== trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) )
+				(string) ( $state['cloudflare_ai_search_instance'] ?? '' ) !== trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) )
 			) {
 				$reasons[] = 'cloudflare_ai_search_instance_changed';
 			}
