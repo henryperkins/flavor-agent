@@ -11,9 +11,11 @@ Use it when you need to answer:
 
 ## Status
 
-Updated: 2026-06-05.
+Updated: 2026-06-06.
 
 Source basis: all repository/workspace doc-like files enumerated on 2026-06-05 (77 files: 69 under `docs/`, 8 root docs including the untracked `ConfirmedFindings.txt`; dependency/generated directories excluded). Open-work signals were compared across `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `improving-levers.md`, `docs/features/`, `docs/reference/`, `docs/wp7-migration-opportunities.md`, release docs, root docs, and the Gutenberg 23.3 validation records.
+
+2026-06-06 branch refresh: the pattern relevance / design-validator / expanded-evaluation cluster is no longer active open work on this checkout. The current implementation adds pattern design metadata to index/search payloads, component ranking hints, parser-emitted design quality signals, new shared validation reason codes, and offline metrics for contrast preservation, top-three relevance, stale false positives, and prompt token deltas.
 
 Archived files under `docs/superpowers/plans/archive/` and implemented design specs under `docs/superpowers/specs/` are historical context only. Do not treat them as active implementation plans. Any item below needs a fresh source-grounded plan before code changes unless the change is a narrow docs or verification update.
 
@@ -23,10 +25,7 @@ These items are not blocked by a known upstream API prerequisite. They still nee
 
 | Workstream | Why it is open | Current source | Next move |
 | --- | --- | --- | --- |
-| Pattern relevance and metadata/component ranking | Pattern ranking has contextual scoring, but the richer pattern-trait/component-score layer is still unshipped. | `improving-levers.md` Phase 6 / Priority 7; `docs/features/pattern-recommendations.md`; `docs/reference/pattern-recommendation-debugging.md` | Write a fresh design/implementation plan before changing index payloads, retrieval scoring, or ranker prompts. |
-| Remaining design validators | Phase 3 shipped normalized validation reasons, but the broader deterministic design validators remain open: contrast preservation, preset usage, typography readability, spacing scale adherence, duplicate/no-op checks, parent/sibling match checks, responsive visibility sanity, and excessive-complexity checks. | `improving-levers.md` Priority 4 "Design Validators" and Phase 7 metrics | Scope per-surface validator additions with fixture-backed metrics before making ranking depend on them. |
 | Docs fingerprint split | Docs guidance still has mixed content/runtime freshness in applicability signatures. The open goal is to stale recommendations only when guidance content changes, while keeping runtime metadata in diagnostics. | `improving-levers.md` Phase 5; `inc/Support/DocsGuidanceResult.php`; docs-grounding feature docs | Plan as a shared-subsystem change with signature and ability tests. |
-| Expanded evaluation harness | The existing fixture harness is useful, but top-three pattern relevance, contrast preservation, stale false-positive/negative rates, prompt token deltas, and experiment comparison output are still missing. | `improving-levers.md` Phase 7; `tests/phpunit/RecommendationEvaluationTest.php` | Prefer this before tuning ranking weights or claiming quality movement. |
 | Learning attribution join contract | Request diagnostics have partial attribution, but the future learning loop still needs a server-side generation id and bounded join metadata propagated through shown, review, apply/insert, undo, stale-blocked, validation-blocked, and insert-failed rows. | `improving-levers.md` Phase 8 and Phase 4 future-learning note; `inc/Activity/*`; `src/store/recommendation-outcomes.js` | Treat as a shared activity/recommendation contract change. |
 | Admin activity deepening and learning reports | `Settings > AI Activity` is a first audit slice, not a full observability product. Row actions/discovery, richer before/after visual inspection, and aggregate reports remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md` | Start with product/UI design because this changes wp-admin workflows and report semantics. |
 | Pattern adapted preview | The pattern surface currently inserts ranked patterns as Gutenberg exposes them. A forward-looking design exists for previewing and inserting a cosmetically adapted clone, with explicit open decisions around default action, content adaptation, synced-pattern detachment, local-versus-model planning, and original/adapted comparison. | `docs/features/pattern-recommendations-adapted-preview.md`; `docs/reference/block-operation-pipeline-extension-notes.md`; `docs/features/pattern-recommendations.md` | Do not implement from the outline alone. Write a fresh plan that shares the deterministic sub-block mutation engine with any block-operation expansion. |
@@ -92,8 +91,7 @@ These can turn into implementation work only after the upstream contract changes
 
 ## Suggested Next Planning Order
 
-1. Pattern relevance plus the missing design validators, with the evaluation harness expanded enough to prove movement.
-2. Docs fingerprint split if the priority is shared-subsystem correctness rather than product-visible recommendation quality.
-3. Pattern adapted preview or block-operation expansion if the priority is a new product surface; plan the shared sub-block mutation engine once, not separately per surface.
-4. Learning attribution and admin activity reports if the priority is the future learning loop.
-5. Release-validation chores before any v0.1.0 sign-off or upstream compatibility claim.
+1. Docs fingerprint split if the priority is shared-subsystem correctness rather than product-visible recommendation quality.
+2. Pattern adapted preview or block-operation expansion if the priority is a new product surface; plan the shared sub-block mutation engine once, not separately per surface.
+3. Learning attribution and admin activity reports if the priority is the future learning loop.
+4. Release-validation chores before any v0.1.0 sign-off or upstream compatibility claim.
