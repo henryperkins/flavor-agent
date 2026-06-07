@@ -2,7 +2,7 @@
 
 > Last updated: 2026-06-05
 > Version: 0.1.0
-> Support floor: WordPress 7.0+, PHP 8.0+
+> Support floor: WordPress 7.0+, PHP 8.2+
 
 ## Documentation Backbone
 

@@ -45,7 +45,7 @@ For a representative development environment, use the local setup notes in [`doc
 
 - Version: `0.1.0`
 - WordPress: requires and tests against WordPress 7.0+
-- PHP: requires PHP 8.0+
+- PHP: requires PHP 8.2+
 - JavaScript toolchain: Node 20/npm 10 or Node 24/npm 11
 - Canonical status log: [`STATUS.md`](STATUS.md)
 - Release notes draft: [`docs/releases/v0.1.0.md`](docs/releases/v0.1.0.md)

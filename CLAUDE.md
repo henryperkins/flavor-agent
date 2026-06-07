@@ -2,7 +2,7 @@
 
 WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, post/page content drafting and critique, indexed pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
 
-Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
+Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.2+
 
 ## MCP Tooling
 
