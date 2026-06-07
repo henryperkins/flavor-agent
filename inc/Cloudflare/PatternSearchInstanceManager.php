@@ -13,7 +13,17 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	public const OWNER_MARKER_NAME   = '__flavor_agent_owner__';
 	public const PROVISION_CRON_HOOK = 'flavor_agent_provision_pattern_ai_search';
 
+	/**
+	 * Upper bound on how many provisioning cron runs may reschedule themselves
+	 * while waiting for Cloudflare to finish indexing the owner marker (or to
+	 * recover from a transient error) before the attempt is recorded as failed.
+	 */
+	public const MARKER_PROVISION_MAX_ATTEMPTS = 12;
+
 	private const REQUEST_TIMEOUT                      = 20;
+	private const MARKER_POLL_ATTEMPTS                 = 3;
+	private const MARKER_POLL_INTERVAL                 = 2;
+	private const MARKER_PROVISION_RETRY_DELAY         = 30;
 	private const LIST_ITEMS_PER_PAGE                  = 50;
 	private const SITE_HASH_LENGTH                     = 16;
 	private const SUPPORTED_AI_SEARCH_EMBEDDING_MODELS = [
@@ -61,7 +71,8 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	 *   managed_status: string,
 	 *   last_error_code: string,
 	 *   last_error: string,
-	 *   owner_marker_repair: string
+	 *   owner_marker_repair: string,
+	 *   marker_attempts: string
 	 * }
 	 */
 	public static function get_provisioning_state(): array {
@@ -80,6 +91,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			'last_error_code'     => sanitize_key( (string) ( $state['last_error_code'] ?? '' ) ),
 			'last_error'          => sanitize_text_field( (string) ( $state['last_error'] ?? '' ) ),
 			'owner_marker_repair' => sanitize_key( (string) ( $state['owner_marker_repair'] ?? '' ) ),
+			'marker_attempts'     => (string) (int) ( $state['marker_attempts'] ?? 0 ),
 		];
 	}
 
@@ -139,6 +151,8 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			return;
 		}
 
+		self::raise_request_time_limit();
+
 		$managed = self::ensure_managed_instance(
 			$account_id,
 			$api_token,
@@ -147,6 +161,11 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		);
 
 		if ( is_wp_error( $managed ) ) {
+			if ( self::should_retry_marker_provisioning( $managed, $state ) ) {
+				self::reschedule_marker_provisioning( $state, $signature, $managed );
+				return;
+			}
+
 			delete_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE );
 			self::save_provisioning_state(
 				[
@@ -278,7 +297,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			return $marker;
 		}
 
-		$validated_marker = self::validate_owner_marker( $config['account_id'], $config['api_token'], self::managed_instance_id() );
+		$validated_marker = self::confirm_owner_marker( $config['account_id'], $config['api_token'], self::managed_instance_id() );
 
 		if ( is_wp_error( $validated_marker ) ) {
 			return $validated_marker;
@@ -349,6 +368,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 					'last_error_code'     => '',
 					'last_error'          => '',
 					'owner_marker_repair' => '',
+					'marker_attempts'     => '',
 				],
 				array_map( 'sanitize_text_field', $state )
 			),
@@ -596,7 +616,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			self::authorization_headers( $api_token ),
 			[
 				'metadata'            => self::encode_item_upload_metadata( self::owner_marker_metadata() ),
-				'wait_for_completion' => 'true',
+				'wait_for_completion' => 'false',
 			],
 			[
 				'name'         => 'file',
@@ -612,7 +632,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			return $response;
 		}
 
-		if ( ! in_array( $response['status'], [ 200, 201 ], true ) ) {
+		if ( ! in_array( $response['status'], [ 200, 201, 202 ], true ) ) {
 			return new \WP_Error(
 				'cloudflare_pattern_ai_search_owner_marker_error',
 				self::remote_failure_message( 'Flavor Agent could not write the Cloudflare AI Search owner marker.', $response ),
@@ -677,6 +697,90 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		);
 	}
 
+	/**
+	 * Confirm the owner marker is visible, doing a short bounded poll while
+	 * Cloudflare finishes indexing the asynchronously-uploaded marker item.
+	 *
+	 * The upload is sent with wait_for_completion=false so no single request
+	 * holds the connection open through embedding/indexing, so the marker may
+	 * not appear on the first read. This poll is intentionally short (a fixed
+	 * interval, capped attempts) to keep the cron worker well under typical
+	 * max_execution_time; when it is exhausted the caller reschedules the
+	 * provisioning cron to keep waiting. Retry the "not yet visible" condition
+	 * and transient transport/upstream errors; a mismatch (foreign owner) is
+	 * terminal.
+	 */
+	private static function confirm_owner_marker( string $account_id, string $api_token, string $instance_id ): true|\WP_Error {
+		$attempts = self::marker_poll_attempts();
+		$interval = self::marker_poll_interval();
+		$last     = new \WP_Error(
+			'cloudflare_pattern_ai_search_owner_marker_missing',
+			'The existing Cloudflare AI Search managed pattern index is missing the Flavor Agent owner marker.',
+			[ 'status' => 409 ]
+		);
+
+		for ( $attempt = 1; $attempt <= $attempts; $attempt++ ) {
+			$result = self::validate_owner_marker( $account_id, $api_token, $instance_id );
+
+			if ( ! is_wp_error( $result ) ) {
+				return true;
+			}
+
+			if ( ! self::is_owner_marker_missing_error( $result ) && ! self::is_transient_remote_error( $result ) ) {
+				return $result;
+			}
+
+			$last = $result;
+
+			if ( $attempt < $attempts ) {
+				self::pause( $interval );
+			}
+		}
+
+		return $last;
+	}
+
+	private static function marker_poll_attempts(): int {
+		$attempts = (int) apply_filters(
+			'flavor_agent_cloudflare_pattern_ai_search_marker_poll_attempts',
+			self::MARKER_POLL_ATTEMPTS
+		);
+
+		return max( 1, min( 20, $attempts ) );
+	}
+
+	private static function marker_poll_interval(): int {
+		$interval = (int) apply_filters(
+			'flavor_agent_cloudflare_pattern_ai_search_marker_poll_interval',
+			self::MARKER_POLL_INTERVAL
+		);
+
+		return max( 0, min( 60, $interval ) );
+	}
+
+	private static function pause( int $seconds ): void {
+		$seconds = (int) apply_filters(
+			'flavor_agent_cloudflare_pattern_ai_search_marker_poll_sleep',
+			$seconds
+		);
+
+		if ( $seconds > 0 ) {
+			sleep( $seconds );
+		}
+	}
+
+	/**
+	 * Best-effort removal of the execution-time ceiling for the provisioning
+	 * cron worker. The bounded in-request poll plus cron reschedule already keep
+	 * each run short; this is defense-in-depth for hosts that run WP-Cron inside
+	 * a request with a low max_execution_time.
+	 */
+	private static function raise_request_time_limit(): void {
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( 0 );
+		}
+	}
+
 	private static function repair_missing_owner_marker( string $account_id, string $api_token, string $instance_id ): true|\WP_Error {
 		$item_ids = self::list_builtin_item_ids( $account_id, $api_token, $instance_id );
 
@@ -701,7 +805,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			return $marker;
 		}
 
-		return self::validate_owner_marker( $account_id, $api_token, $instance_id );
+		return self::confirm_owner_marker( $account_id, $api_token, $instance_id );
 	}
 
 	/**
@@ -785,6 +889,76 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 
 	private static function is_owner_marker_missing_error( \WP_Error $error ): bool {
 		return 'cloudflare_pattern_ai_search_owner_marker_missing' === $error->get_error_code();
+	}
+
+	private static function should_retry_marker_provisioning( \WP_Error $error, array $state ): bool {
+		if ( ! self::is_retryable_provisioning_error( $error ) ) {
+			return false;
+		}
+
+		return (int) ( $state['marker_attempts'] ?? 0 ) < self::MARKER_PROVISION_MAX_ATTEMPTS;
+	}
+
+	/**
+	 * A provisioning attempt is worth rescheduling when the managed instance
+	 * exists (or was just created) but the owner marker has not finished indexing
+	 * yet, or when a transient transport/upstream error interrupted the run. The
+	 * "already contains items" conflict reuses the missing code but is terminal,
+	 * so it is excluded via its item_count signal.
+	 */
+	private static function is_retryable_provisioning_error( \WP_Error $error ): bool {
+		if ( self::is_owner_marker_missing_error( $error ) ) {
+			$data = $error->get_error_data();
+
+			return ! is_array( $data ) || empty( $data['item_count'] );
+		}
+
+		return self::is_transient_remote_error( $error );
+	}
+
+	/**
+	 * Transient = retryable rate limit (429), any 5xx upstream response, or a
+	 * transport-level timeout (normalize_transport_error maps these to status
+	 * 504). Client errors (4xx other than 429) and ownership mismatches are
+	 * terminal and must not loop the provisioning cron.
+	 */
+	private static function is_transient_remote_error( \WP_Error $error ): bool {
+		$data = $error->get_error_data();
+
+		if ( ! is_array( $data ) ) {
+			return false;
+		}
+
+		if ( ! empty( $data['retryable'] ) ) {
+			return true;
+		}
+
+		if ( (int) ( $data['http_status'] ?? 0 ) >= 500 ) {
+			return true;
+		}
+
+		return 504 === (int) ( $data['status'] ?? 0 );
+	}
+
+	private static function reschedule_marker_provisioning( array $state, string $signature, \WP_Error $error ): void {
+		// owner_marker_repair is intentionally dropped: the marker upload has
+		// already been attempted this cycle, so later runs only re-validate
+		// (re-running repair would risk uploading a duplicate marker item).
+		self::save_provisioning_state(
+			[
+				'status'          => 'provisioning',
+				'signature'       => $signature,
+				'requested_at'    => (string) ( $state['requested_at'] ?? '' ),
+				'managed_status'  => 'awaiting_owner_marker',
+				'marker_attempts' => (string) ( (int) ( $state['marker_attempts'] ?? 0 ) + 1 ),
+				'last_error_code' => (string) $error->get_error_code(),
+				'last_error'      => $error->get_error_message(),
+			]
+		);
+
+		if ( ! wp_next_scheduled( self::PROVISION_CRON_HOOK ) ) {
+			wp_schedule_single_event( time() + self::MARKER_PROVISION_RETRY_DELAY, self::PROVISION_CRON_HOOK );
+		}
 	}
 
 	/**
