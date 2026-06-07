@@ -296,7 +296,7 @@ For cross-surface or shared-subsystem changes, treat `docs/reference/cross-surfa
 
 ## Compatibility Notes
 
-- Plugin header now targets WordPress 7.0+ and PHP 8.0+.
+- Plugin header now targets WordPress 7.0+ and PHP 8.2+.
 - The editor-side inserter enhancement uses DOM access for the search input observer and the toolbar badge anchor. It is editor-specific code, not a DOM-free abstraction.
 - The pattern surface now routes settings-key and DOM-selector differences through `src/patterns/compat.js`, probing future stable APIs first but treating `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the current upstream baseline on Gutenberg trunk / WordPress 7.0.
 - Theme-token source selection now lives in `src/context/theme-settings.js`, which promotes the stable `features` path only when parity with `__experimentalFeatures` is proven and otherwise passes the experimental source through to `src/context/theme-tokens.js`.

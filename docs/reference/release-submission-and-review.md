@@ -60,7 +60,7 @@ Required after listing screenshots are created:
 Header constraints specific to this plugin:
 
 - `Requires at least` reflects the lowest WordPress version actually tested. Currently 7.0.
-- `Requires PHP` reflects the lowest PHP version actually tested. Currently 8.0.
+- `Requires PHP` reflects the lowest PHP version actually tested. Currently 8.2 (the codebase relies on PHP 8.1 `readonly` properties and 8.2 `true|` union return types, so it cannot load on 8.0/8.1).
 - `Stable tag` will not point to a real SVN tag at first submission, because SVN access is only granted on approval. It points to the version of the zip uploaded for review.
 - `Tags` are descriptive only. No marketing terms, no third-party trademarks, no "AI" used in a way that implies official endorsement.
 - License is GPLv2 or compatible.
