@@ -5,6 +5,7 @@ import {
 	buildUndoAttributeUpdates,
 	getBlockSuggestionExecutionInfo,
 	getSuggestionAttributeUpdates,
+	orderBlockAttributeSuggestionsForBatch,
 	recordedAttributeSnapshotMatchesCurrent,
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
@@ -2439,5 +2440,77 @@ describe( 'update helpers', () => {
 				{ content: '<p>One</p><p>Two</p>' }
 			)
 		).toBe( false );
+	} );
+
+	test( 'sanitizeRecommendationsForContext preserves groupId and recommendedSets', () => {
+		const result = sanitizeRecommendationsForContext(
+			{
+				settings: [
+					{
+						label: 'Turn on drop cap',
+						panel: 'general',
+						type: 'attribute_change',
+						attributeUpdates: { dropCap: true },
+						groupId: 'hero-polish',
+					},
+				],
+				styles: [
+					{
+						label: 'Use accent background',
+						panel: 'color',
+						type: 'attribute_change',
+						attributeUpdates: { backgroundColor: 'accent' },
+						groupId: 'hero-polish',
+					},
+				],
+				block: [],
+				recommendedSets: [
+					{
+						id: 'hero-polish',
+						label: 'Hero polish',
+						reason: 'Apply these together.',
+					},
+				],
+				explanation: 'A grouped result.',
+			},
+			{},
+			{
+				panelMappingKnown: false,
+				allowedPanels: [],
+				configAttributeKeys: [ 'dropCap' ],
+				styleSupportPaths: [],
+				presetSlugs: {
+					color: [ 'accent' ],
+				},
+			}
+		);
+
+		expect( result.settings[ 0 ].groupId ).toBe( 'hero-polish' );
+		expect( result.styles[ 0 ].groupId ).toBe( 'hero-polish' );
+		expect( result.recommendedSets ).toEqual( [
+			{
+				id: 'hero-polish',
+				label: 'Hero polish',
+				reason: 'Apply these together.',
+			},
+		] );
+	} );
+
+	test( 'orderBlockAttributeSuggestionsForBatch uses settings then styles result order', () => {
+		const ordered = orderBlockAttributeSuggestionsForBatch( [
+			{ suggestionKey: 'block:styles:2', label: 'Second style' },
+			{ suggestionKey: 'block:settings:2', label: 'Second setting' },
+			{ suggestionKey: 'block:styles:1', label: 'First style' },
+			{ suggestionKey: 'block:settings:1', label: 'First setting' },
+		] );
+
+		expect(
+			ordered.map( ( suggestion ) => suggestion.suggestionKey )
+		).toEqual( [
+			'block:settings:1',
+			'block:settings:2',
+			'block:styles:1',
+			'block:styles:2',
+		] );
 	} );
 } );

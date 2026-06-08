@@ -1332,10 +1332,6 @@ export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 	};
 }
 
-export function buildActivityTargetUrl( entry, adminBaseUrl = '' ) {
-	return buildActivityTargetLink( entry, adminBaseUrl ).url;
-}
-
 export function formatActivityTimestamp(
 	timestamp,
 	{ locale = '', timeZone = 'UTC' } = {}

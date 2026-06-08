@@ -211,6 +211,30 @@ final class DocsGroundingSourcePolicyTest extends TestCase {
 		$this->assertTrue( $current_make_core['hasCurrentReleaseCycle'] );
 	}
 
+	public function test_source_coverage_accepts_release_day_or_newer_release_cycle_sources(): void {
+		$coverage = DocsGroundingSourcePolicy::source_coverage_summary(
+			[
+				[
+					'sourceType'  => 'developer-docs',
+					'retrievedAt' => '2026-06-15T00:00:00Z',
+					'publishedAt' => '',
+					'freshness'   => 'current',
+				],
+				[
+					'sourceType'  => 'make-core',
+					'retrievedAt' => '2026-06-15T00:00:00Z',
+					'publishedAt' => '2026-05-20T12:00:00Z',
+				],
+			],
+			strtotime( '2026-06-15T00:00:00Z' )
+		);
+
+		$this->assertSame( 'current', $coverage['status'] );
+		$this->assertTrue( $coverage['hasDeveloperDocs'] );
+		$this->assertTrue( $coverage['hasCurrentReleaseCycle'] );
+		$this->assertContains( 'stale', $coverage['freshness'] );
+	}
+
 	public function test_source_coverage_does_not_trust_recent_crawl_time_for_old_release_cycle_posts(): void {
 		$coverage = DocsGroundingSourcePolicy::source_coverage_summary(
 			[

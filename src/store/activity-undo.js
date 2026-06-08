@@ -44,6 +44,7 @@ import {
 	syncActivitySession,
 } from './activity-session';
 import { getRecommendationIdentityForApply } from './recommendation-outcomes';
+import { formatCount } from '../utils/format-count';
 
 function getEntityActivityEntries( activityLog, activity ) {
 	const entityKey = getActivityEntityKey( activity );
@@ -170,6 +171,66 @@ export function buildBlockActivityEntry( {
 		},
 		suggestion: suggestion?.label || '',
 		suggestionKey: suggestion?.suggestionKey || null,
+		before: {
+			attributes: beforeAttributes,
+		},
+		after: {
+			attributes: afterAttributes,
+		},
+		prompt: requestPrompt,
+		requestRef: `block:${ clientId }:${ requestToken }`,
+		requestMeta,
+		recommendation: getRecommendationIdentityForApply( suggestion ),
+		document: buildActivityDocument( scope ),
+	} );
+}
+
+export function buildBlockBatchActivityEntry( {
+	afterAttributes,
+	beforeAttributes,
+	blockContext,
+	blockPath = null,
+	clientId,
+	memberSuggestionKeys = [],
+	recommendationSetId = '',
+	requestPrompt = '',
+	requestMeta = null,
+	requestToken = 0,
+	scope = null,
+	suggestionKey,
+} ) {
+	const members = Array.from(
+		new Set(
+			( Array.isArray( memberSuggestionKeys )
+				? memberSuggestionKeys
+				: []
+			)
+				.map( ( key ) => String( key || '' ) )
+				.filter( Boolean )
+		)
+	);
+	const suggestion = {
+		label: formatCount( members.length, 'suggestion' ),
+		suggestionKey,
+		members,
+		recommendationOutcome: {
+			recommendationSetId,
+			suggestionKey,
+			members,
+		},
+	};
+
+	return createActivityEntry( {
+		type: 'apply_suggestion',
+		surface: 'block',
+		target: {
+			clientId,
+			blockName: blockContext?.name || '',
+			blockPath: Array.isArray( blockPath ) ? blockPath : [],
+			members,
+		},
+		suggestion: suggestion.label,
+		suggestionKey,
 		before: {
 			attributes: beforeAttributes,
 		},

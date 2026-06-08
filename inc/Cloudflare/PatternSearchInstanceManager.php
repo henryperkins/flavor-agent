@@ -12,6 +12,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 
 	public const OWNER_MARKER_NAME   = '__flavor_agent_owner__';
 	public const PROVISION_CRON_HOOK = 'flavor_agent_provision_pattern_ai_search';
+	public const MANAGED_NAMESPACE   = 'default';
 
 	/**
 	 * Upper bound on how many provisioning cron runs may reschedule themselves
@@ -39,6 +40,10 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 
 	public static function managed_instance_id(): string {
 		return 'flavor-agent-patterns-' . self::site_hash();
+	}
+
+	public static function managed_namespace(): string {
+		return self::MANAGED_NAMESPACE;
 	}
 
 	public static function is_managed_instance_id( string $instance_id ): bool {
@@ -180,6 +185,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		}
 
 		update_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, $managed['instance_id'], false );
+		update_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE, self::managed_namespace(), false );
 		update_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE, $signature, false );
 		self::save_provisioning_state(
 			[
@@ -420,7 +426,12 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	}
 
 	private static function instance_items_url( string $account_id, string $instance_id ): string {
-		return self::instances_url( $account_id ) . '/' . rawurlencode( $instance_id ) . '/items';
+		return sprintf(
+			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/namespaces/%s/instances/%s/items',
+			rawurlencode( $account_id ),
+			rawurlencode( self::managed_namespace() ),
+			rawurlencode( $instance_id )
+		);
 	}
 
 	/**

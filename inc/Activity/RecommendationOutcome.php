@@ -282,14 +282,6 @@ final class RecommendationOutcome {
 	}
 
 	/**
-	 * @param array<int, array<string, mixed>> $entries
-	 * @return array<string, float|int>
-	 */
-	public static function evaluate_metrics( array $entries ): array {
-		return RecommendationOutcomeMetrics::evaluate( $entries );
-	}
-
-	/**
 	 * @param array<int, string> $allowed
 	 */
 	private static function normalize_enum( mixed $value, array $allowed ): string {

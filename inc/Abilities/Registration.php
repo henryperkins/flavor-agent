@@ -2056,6 +2056,7 @@ final class Registration {
 				'preview'          => [ 'type' => [ 'string', 'null' ] ],
 				'presetSlug'       => [ 'type' => [ 'string', 'null' ] ],
 				'cssVar'           => [ 'type' => [ 'string', 'null' ] ],
+				'groupId'          => [ 'type' => [ 'string', 'null' ] ],
 				'ranking'          => self::ranking_contract_schema(),
 			],
 		];
@@ -2149,6 +2150,17 @@ final class Registration {
 					'block'                    => [
 						'type'  => 'array',
 						'items' => $block_suggestion_schema,
+					],
+					'recommendedSets'          => [
+						'type'  => 'array',
+						'items' => [
+							'type'       => 'object',
+							'properties' => [
+								'id'     => [ 'type' => 'string' ],
+								'label'  => [ 'type' => 'string' ],
+								'reason' => [ 'type' => 'string' ],
+							],
+						],
 					],
 					'explanation'              => [ 'type' => 'string' ],
 					'preFilteringCounts'       => [

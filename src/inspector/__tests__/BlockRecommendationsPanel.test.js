@@ -5,10 +5,12 @@ const mockFetchBlockRecommendations = jest.fn();
 const mockApplyBlockStructuralSuggestion = jest.fn();
 const mockRevalidateBlockReviewFreshness = jest.fn();
 const mockCollectBlockContext = jest.fn();
+const mockGetBlockPatterns = jest.fn();
 const mockGetBlocks = jest.fn();
 const mockClearBlockError = jest.fn();
 const mockClearUndoError = jest.fn();
 const mockUndoActivity = jest.fn();
+const mockApplySelectedSuggestions = jest.fn();
 const mockGetLatestAppliedActivity = jest.fn();
 const mockGetLatestUndoableActivity = jest.fn();
 const mockGetResolvedActivityEntries = jest.fn();
@@ -69,6 +71,10 @@ jest.mock( '../../utils/block-recommendation-context', () => ( {
 		JSON.stringify( context || {} ),
 } ) );
 
+jest.mock( '../../patterns/compat', () => ( {
+	getBlockPatterns: ( ...args ) => mockGetBlockPatterns( ...args ),
+} ) );
+
 jest.mock( '../../store/activity-history', () => ( {
 	getBlockActivityUndoState: ( ...args ) =>
 		mockGetBlockActivityUndoState( ...args ),
@@ -105,7 +111,41 @@ jest.mock( '../NavigationRecommendations', () => ( props ) => {
 } );
 jest.mock( '../SuggestionChips', () => ( props ) => {
 	mockSuggestionChips( props );
-	return null;
+
+	if ( ! props.selectable ) {
+		return null;
+	}
+
+	return (
+		<div role="group" aria-label={ props.label }>
+			{ props.suggestions.map( ( suggestion, index ) => {
+				const key = suggestion.suggestionKey;
+				const applied = props.appliedKeys?.has?.( key ) || false;
+				const checked =
+					props.selectedKeys?.has?.( key ) || applied || false;
+				const disabled = props.disabled || applied || false;
+
+				return (
+					// eslint-disable-next-line jsx-a11y/label-has-associated-control
+					<label
+						key={ key || `selectable-row-${ index }` }
+						data-suggestion-key={ key }
+					>
+						<input
+							type="checkbox"
+							aria-label={ suggestion.label }
+							data-suggestion-key={ key }
+							checked={ checked }
+							disabled={ disabled }
+							onChange={ () => props.onToggleSelected?.( key ) }
+						/>
+						{ suggestion.label }
+						{ applied ? <span>Applied</span> : null }
+					</label>
+				);
+			} ) }
+		</div>
+	);
 } );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -355,6 +395,109 @@ function getTextarea() {
 	return getContainer().querySelector( 'textarea' );
 }
 
+function buildPanelRecommendations( {
+	recommendationSetId = 'block:1:hash_a',
+	settingsLabel = 'Wide layout',
+	settingsGroupId = '',
+	stylesLabel = 'Accent background',
+	stylesGroupId = '',
+	recommendedSets = [],
+} = {} ) {
+	return {
+		prompt: '',
+		blockName: 'core/group',
+		blockContext: { name: 'core/group' },
+		settings: [
+			{
+				label: settingsLabel,
+				panel: 'layout',
+				type: 'attribute_change',
+				attributeUpdates: { align: 'wide' },
+				groupId: settingsGroupId,
+				suggestionKey: 'block:settings:1',
+				recommendationOutcome: { recommendationSetId },
+			},
+		],
+		styles: [
+			{
+				label: stylesLabel,
+				panel: 'color',
+				type: 'attribute_change',
+				attributeUpdates: {
+					style: { color: { background: 'var:preset|color|accent' } },
+				},
+				groupId: stylesGroupId,
+				suggestionKey: 'block:styles:1',
+				recommendationOutcome: { recommendationSetId },
+			},
+		],
+		block: [],
+		recommendedSets,
+		recommendationOutcome: { recommendationSetId },
+		explanation: 'Grouped suggestions.',
+	};
+}
+
+function renderBlockRecommendationsPanel( {
+	recommendations = buildPanelRecommendations(),
+	context = { block: { name: 'core/group' } },
+	dispatchOverrides = {},
+} = {} ) {
+	mockUseDispatch.mockImplementation( () => ( {
+		clearBlockError: mockClearBlockError,
+		clearUndoError: mockClearUndoError,
+		applyBlockStructuralSuggestion: mockApplyBlockStructuralSuggestion,
+		applySelectedSuggestions: mockApplySelectedSuggestions,
+		fetchBlockRecommendations: mockFetchBlockRecommendations,
+		revalidateBlockReviewFreshness: mockRevalidateBlockReviewFreshness,
+		undoActivity: mockUndoActivity,
+		...dispatchOverrides,
+	} ) );
+	currentState = createState( {
+		store: {
+			blockRecommendations: {
+				'block-1': recommendations,
+			},
+			blockContextSignatures: {
+				'block-1': JSON.stringify( context ),
+			},
+			blockResolvedContextSignatures: {
+				'block-1': 'resolved-sig',
+			},
+			blockStatuses: {
+				'block-1': 'ready',
+			},
+			blockRequestTokens: {
+				'block-1': 1,
+			},
+		},
+	} );
+	mockCollectBlockContext.mockReturnValue( context );
+	renderContent();
+
+	return {
+		rerender: ( nextOptions = {} ) =>
+			renderBlockRecommendationsPanel( {
+				recommendations,
+				context,
+				dispatchOverrides,
+				...nextOptions,
+			} ),
+	};
+}
+
+function findPanelButton( labelText ) {
+	return Array.from( getContainer().querySelectorAll( 'button' ) ).find(
+		( element ) => element.textContent === labelText
+	);
+}
+
+function findSelectableCheckbox( suggestionLabel ) {
+	return getContainer().querySelector(
+		`input[type="checkbox"][aria-label="${ suggestionLabel }"]`
+	);
+}
+
 beforeEach( () => {
 	jest.clearAllMocks();
 	jest.useFakeTimers();
@@ -370,6 +513,7 @@ beforeEach( () => {
 			name: 'core/paragraph',
 		},
 	} );
+	mockGetBlockPatterns.mockReturnValue( [] );
 	mockGetResolvedActivityEntries.mockImplementation(
 		( entries ) => entries || []
 	);
@@ -389,6 +533,7 @@ beforeEach( () => {
 		clearBlockError: mockClearBlockError,
 		clearUndoError: mockClearUndoError,
 		applyBlockStructuralSuggestion: mockApplyBlockStructuralSuggestion,
+		applySelectedSuggestions: mockApplySelectedSuggestions,
 		fetchBlockRecommendations: mockFetchBlockRecommendations,
 		revalidateBlockReviewFreshness: mockRevalidateBlockReviewFreshness,
 		undoActivity: mockUndoActivity,
@@ -1395,6 +1540,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			},
 		} );
 
+		mockGetBlockPatterns.mockReturnValue( [
+			{ name: 'theme/hero', title: 'Hero Section' },
+		] );
+
 		renderContent();
 
 		expect( getContainer().textContent ).toContain( 'Review first' );
@@ -1408,17 +1557,20 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain(
 			'Insert pattern after the selected block.'
 		);
-		expect( getContainer().textContent ).toContain( 'Pattern: theme/hero' );
-		expect( getContainer().textContent ).toContain( 'Target: block-1' );
 		expect( getContainer().textContent ).toContain(
-			'Expected block: core/group'
+			'Pattern: Hero Section'
 		);
+		expect( getContainer().textContent ).toContain( 'Target: Group' );
 		expect( getContainer().textContent ).toContain(
-			'Target signature: target-sig'
+			'Position: After this block'
 		);
-		expect( getContainer().textContent ).toContain(
-			'Position: insert_after'
+		expect( getContainer().textContent ).not.toContain(
+			'Target signature'
 		);
+		expect( getContainer().textContent ).not.toContain( 'target-sig' );
+		expect( getContainer().textContent ).not.toContain( 'Target: block-1' );
+		expect( getContainer().textContent ).not.toContain( 'Expected block' );
+		expect( getContainer().textContent ).not.toContain( 'Action:' );
 		expect( getContainer().textContent ).not.toContain( 'Manual ideas' );
 		expect( mockSuggestionChips ).not.toHaveBeenCalled();
 
@@ -1506,6 +1658,116 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				clientId: 'block-1',
 				editorContext: liveContext,
 			} )
+		);
+	} );
+
+	test( 'renders human review details without leaking internal tokens for replace operations', () => {
+		const liveContext = {
+			block: {
+				name: 'core/paragraph',
+			},
+		};
+		const contextSignature = JSON.stringify( liveContext );
+		const targetSignature =
+			'{"childCount":0,"clientId":"block-1","name":"core/paragraph"}';
+		const operation = {
+			catalogVersion: 1,
+			type: 'replace_block_with_pattern',
+			patternName: 'twentytwentyfive/banner-intro',
+			targetClientId: 'block-1',
+			targetSignature,
+			targetType: 'block',
+			expectedTarget: {
+				clientId: 'block-1',
+				name: 'core/paragraph',
+			},
+			action: 'replace',
+		};
+
+		mockGetBlockPatterns.mockReturnValue( [
+			{ name: 'twentytwentyfive/banner-intro', title: 'Intro Banner' },
+		] );
+		mockCollectBlockContext.mockReturnValue( liveContext );
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/paragraph',
+						attributes: {},
+						innerBlocks: [],
+					},
+				},
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/paragraph',
+						attributes: {},
+						innerBlocks: [],
+					},
+				],
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Replace with intro banner pattern',
+								description:
+									'Replacing this paragraph with the intro banner gives a complete hero composition.',
+								type: 'pattern_replacement',
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						blockContext: {
+							name: 'core/paragraph',
+							blockOperationContext: {
+								enableBlockStructuralActions: true,
+								targetClientId: 'block-1',
+								targetBlockName: 'core/paragraph',
+								targetSignature,
+								isTargetLocked: false,
+								isContentOnly: false,
+								allowedPatterns: [
+									{
+										name: 'twentytwentyfive/banner-intro',
+										title: 'Intro Banner',
+										allowedActions: [ 'replace' ],
+									},
+								],
+							},
+						},
+					},
+				},
+				blockContextSignatures: {
+					'block-1': contextSignature,
+				},
+				blockRequestTokens: {
+					'block-1': 7,
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		const text = getContainer().textContent;
+
+		expect( text ).toContain(
+			'Replace the selected block with a pattern.'
+		);
+		expect( text ).toContain( 'Pattern: Intro Banner' );
+		expect( text ).toContain( 'Target: Paragraph' );
+		expect( text ).not.toContain( 'Target signature' );
+		expect( text ).not.toContain( 'childCount' );
+		expect( text ).not.toContain( 'Action: replace' );
+		expect( text ).not.toContain(
+			'Pattern: twentytwentyfive/banner-intro'
 		);
 	} );
 
@@ -1605,6 +1867,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			},
 		} );
 
+		mockGetBlockPatterns.mockReturnValue( [
+			{ name: 'theme/hero', title: 'Hero Section' },
+		] );
+
 		renderContent();
 
 		expect( getContainer().textContent ).toContain( 'Apply now' );
@@ -1615,9 +1881,14 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain(
 			'Insert pattern after the selected block.'
 		);
-		expect( getContainer().textContent ).toContain( 'Pattern: theme/hero' );
 		expect( getContainer().textContent ).toContain(
-			'Position: insert_after'
+			'Pattern: Hero Section'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Position: After this block'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Target signature'
 		);
 		expect( mockSuggestionChips ).toHaveBeenCalledWith(
 			expect.objectContaining( {
@@ -2683,5 +2954,237 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			updatedContext,
 			''
 		);
+	} );
+
+	test( 'preselects visible settings and styles members from recommended sets only', () => {
+		renderBlockRecommendationsPanel( {
+			recommendations: {
+				prompt: '',
+				blockName: 'core/group',
+				blockContext: { name: 'core/group' },
+				settings: [
+					{
+						label: 'Wide layout',
+						panel: 'layout',
+						type: 'attribute_change',
+						attributeUpdates: { align: 'wide' },
+						groupId: 'hero-polish',
+						suggestionKey: 'block:settings:1',
+					},
+				],
+				styles: [
+					{
+						label: 'Accent background',
+						panel: 'color',
+						type: 'attribute_change',
+						attributeUpdates: {
+							style: {
+								color: {
+									background: 'var:preset|color|accent',
+								},
+							},
+						},
+						groupId: 'hero-polish',
+						suggestionKey: 'block:styles:1',
+					},
+				],
+				block: [],
+				recommendedSets: [
+					{
+						id: 'hero-polish',
+						label: 'Hero polish',
+						reason: 'Apply these together.',
+					},
+					{
+						id: 'block-only',
+						label: 'Block-only set',
+						reason: 'This must not render.',
+					},
+				],
+				recommendationSetId: 'block:1:hash_a',
+				explanation: 'Grouped suggestions.',
+			},
+		} );
+
+		expect( findSelectableCheckbox( 'Wide layout' ).checked ).toBe( true );
+		expect( findSelectableCheckbox( 'Accent background' ).checked ).toBe(
+			true
+		);
+		expect( getContainer().textContent ).toContain(
+			'Recommended together'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Apply these together.'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Block-only set' );
+
+		const applyButton = findPanelButton( 'Apply selected (2)' );
+		expect( applyButton ).toBeTruthy();
+		expect( applyButton.disabled ).toBe( false );
+	} );
+
+	test( 'clears selection when recommendationSetId changes even with same request signature', () => {
+		const { rerender } = renderBlockRecommendationsPanel( {
+			recommendations: buildPanelRecommendations( {
+				recommendationSetId: 'block:1:hash_a',
+				settingsLabel: 'Wide layout',
+			} ),
+		} );
+
+		act( () => {
+			findSelectableCheckbox( 'Wide layout' ).click();
+		} );
+		expect( findPanelButton( 'Apply selected (1)' ) ).toBeTruthy();
+
+		rerender( {
+			recommendations: buildPanelRecommendations( {
+				recommendationSetId: 'block:2:hash_a',
+				settingsLabel: 'Full width',
+			} ),
+		} );
+
+		expect( findSelectableCheckbox( 'Full width' ).checked ).toBe( false );
+		expect( findPanelButton( 'Apply selected (0)' ) ).toBeTruthy();
+	} );
+
+	test( 'resets selection when only recommendationSetId changes with referentially stable suggestion arrays', () => {
+		// Production decoration carries the set id at
+		// `recommendations.recommendationOutcome.recommendationSetId`, never at a
+		// top-level `recommendationSetId`. Reuse the same settings/styles array
+		// references across the rerender so the reset cannot ride on a changed
+		// `selectableSuggestions` reference — only the set id moves.
+		const sharedSettings = [
+			{
+				label: 'Wide layout',
+				panel: 'layout',
+				type: 'attribute_change',
+				attributeUpdates: { align: 'wide' },
+				groupId: '',
+				suggestionKey: 'block:settings:1',
+				recommendationOutcome: {
+					recommendationSetId: 'block:1:hash_a',
+				},
+			},
+		];
+		const sharedStyles = [
+			{
+				label: 'Accent background',
+				panel: 'color',
+				type: 'attribute_change',
+				attributeUpdates: {
+					style: { color: { background: 'var:preset|color|accent' } },
+				},
+				groupId: '',
+				suggestionKey: 'block:styles:1',
+				recommendationOutcome: {
+					recommendationSetId: 'block:1:hash_a',
+				},
+			},
+		];
+		const sharedRecommendedSets = [];
+		const baseRecommendations = {
+			prompt: '',
+			blockName: 'core/group',
+			blockContext: { name: 'core/group' },
+			settings: sharedSettings,
+			styles: sharedStyles,
+			block: [],
+			recommendedSets: sharedRecommendedSets,
+			explanation: 'Grouped suggestions.',
+		};
+
+		const { rerender } = renderBlockRecommendationsPanel( {
+			recommendations: {
+				...baseRecommendations,
+				recommendationOutcome: {
+					recommendationSetId: 'block:1:hash_a',
+				},
+			},
+		} );
+
+		act( () => {
+			findSelectableCheckbox( 'Wide layout' ).click();
+		} );
+		expect( findPanelButton( 'Apply selected (1)' ) ).toBeTruthy();
+
+		rerender( {
+			recommendations: {
+				...baseRecommendations,
+				recommendationOutcome: {
+					recommendationSetId: 'block:2:hash_a',
+				},
+			},
+		} );
+
+		expect( findSelectableCheckbox( 'Wide layout' ).checked ).toBe( false );
+		expect( findPanelButton( 'Apply selected (0)' ) ).toBeTruthy();
+	} );
+
+	test( 'apply selected dispatches one cross-lane batch in canonical order', async () => {
+		const applySelectedSuggestions = jest.fn( async () => true );
+		renderBlockRecommendationsPanel( {
+			dispatchOverrides: { applySelectedSuggestions },
+			recommendations: buildPanelRecommendations( {
+				recommendationSetId: 'block:1:hash_a',
+			} ),
+		} );
+
+		await act( async () => {
+			findPanelButton( 'Select all' ).click();
+			await Promise.resolve();
+		} );
+
+		await act( async () => {
+			findPanelButton( 'Apply selected (2)' ).click();
+			await Promise.resolve();
+		} );
+
+		expect( applySelectedSuggestions ).toHaveBeenCalledTimes( 1 );
+		expect(
+			applySelectedSuggestions.mock.calls[ 0 ][ 1 ].map(
+				( suggestion ) => suggestion.suggestionKey
+			)
+		).toEqual( [ 'block:settings:1', 'block:styles:1' ] );
+	} );
+
+	test( 'self apply keeps selectable result fresh through panel rerender', async () => {
+		const applySelectedSuggestions = jest.fn( async () => true );
+		// Reuse one stable recommendations reference (the store returns a stable
+		// object), so the rerender does not artificially re-run the reset effect.
+		const recommendations = buildPanelRecommendations( {
+			recommendationSetId: 'block:1:hash_a',
+			settingsLabel: 'Wide layout',
+		} );
+		const { rerender } = renderBlockRecommendationsPanel( {
+			dispatchOverrides: { applySelectedSuggestions },
+			recommendations,
+		} );
+
+		await act( async () => {
+			findPanelButton( 'Select all' ).click();
+			await Promise.resolve();
+		} );
+		await act( async () => {
+			findPanelButton( 'Apply selected (2)' ).click();
+			await Promise.resolve();
+		} );
+		expect( applySelectedSuggestions ).toHaveBeenCalledTimes( 1 );
+
+		// Re-render with the post-apply block context. The re-baseline kept the
+		// stored signature aligned with the new live signature, so the result
+		// stays fresh and the applied rows stay applied.
+		rerender( {
+			context: {
+				block: { name: 'core/group', attributes: { align: 'wide' } },
+			},
+		} );
+
+		expect( getContainer().textContent ).not.toContain(
+			'Block or prompt changed'
+		);
+		const applyButton = findPanelButton( 'Apply selected (0)' );
+		expect( applyButton ).toBeTruthy();
+		expect( applyButton.disabled ).toBe( true );
+		expect( getContainer().textContent ).toContain( 'Applied' );
 	} );
 } );

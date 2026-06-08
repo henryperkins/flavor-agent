@@ -519,12 +519,6 @@ function validateBlockOperation( rawOperation, context, patternLookup ) {
 	}
 }
 
-export function normalizeAllowedPatternsForBlockOperations(
-	allowedPatterns = []
-) {
-	return Array.from( getAllowedPatternLookup( allowedPatterns ).values() );
-}
-
 export function validateBlockOperationSequence(
 	operations = [],
 	context = {}

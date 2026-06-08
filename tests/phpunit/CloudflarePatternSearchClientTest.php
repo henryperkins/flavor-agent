@@ -465,7 +465,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertTrue( $result );
 		$this->assertSame(
 			sprintf(
-				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/%s/items',
+				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/default/instances/%s/items',
 				PatternSearchInstanceManager::managed_instance_id()
 			),
 			WordPressTestState::$last_remote_post['url']
@@ -590,16 +590,16 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		foreach ( WordPressTestState::$remote_post_calls as $call ) {
 			$body = (string) ( $call['args']['body'] ?? '' );
 
-				$this->assertSame(
-					sprintf(
-						'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/%s/items',
-						PatternSearchInstanceManager::managed_instance_id()
-					),
-					$call['url'] ?? null
-				);
-				$this->assertStringContainsString( 'filename="stable-pattern-id.md"', $body );
-				$this->assertStringContainsString( '"synced_id":""', $body );
-				$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\ntrue", $body );
+			$this->assertSame(
+				sprintf(
+					'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/default/instances/%s/items',
+					PatternSearchInstanceManager::managed_instance_id()
+				),
+				$call['url'] ?? null
+			);
+			$this->assertStringContainsString( 'filename="stable-pattern-id.md"', $body );
+			$this->assertStringContainsString( '"synced_id":""', $body );
+			$this->assertStringContainsString( "name=\"wait_for_completion\"\r\n\r\ntrue", $body );
 		}
 	}
 
@@ -643,10 +643,33 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$result = PatternSearchClient::list_pattern_item_ids();
 
 		$this->assertSame( [ 'theme-hero', 'theme-footer', 'theme-pricing' ], $result );
+		$this->assertStringContainsString(
+			sprintf( '/ai-search/namespaces/default/instances/%s/items', PatternSearchInstanceManager::managed_instance_id() ),
+			WordPressTestState::$remote_get_calls[0]['url'] ?? ''
+		);
+		$this->assertStringContainsString(
+			sprintf( '/ai-search/namespaces/default/instances/%s/items', PatternSearchInstanceManager::managed_instance_id() ),
+			WordPressTestState::$remote_get_calls[1]['url'] ?? ''
+		);
 		$this->assertStringContainsString( 'page=1', WordPressTestState::$remote_get_calls[0]['url'] ?? '' );
 		$this->assertStringContainsString( 'page=2', WordPressTestState::$remote_get_calls[1]['url'] ?? '' );
 		$this->assertStringContainsString( 'per_page=50', WordPressTestState::$remote_get_calls[0]['url'] ?? '' );
 		$this->assertStringContainsString( 'source=builtin', WordPressTestState::$remote_get_calls[0]['url'] ?? '' );
+	}
+
+	public function test_saved_legacy_pattern_ai_search_namespace_is_ignored_for_item_routes(): void {
+		$this->seed_options();
+		WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE ] = 'legacy-patterns';
+		WordPressTestState::$remote_get_response = $this->item_list_response( [], 0, 1, 0, 50 );
+
+		$result = PatternSearchClient::list_pattern_item_ids();
+
+		$this->assertSame( [], $result );
+		$this->assertStringContainsString(
+			sprintf( '/ai-search/namespaces/default/instances/%s/items', PatternSearchInstanceManager::managed_instance_id() ),
+			WordPressTestState::$last_remote_get['url'] ?? ''
+		);
+		$this->assertStringNotContainsString( 'legacy-patterns', WordPressTestState::$last_remote_get['url'] ?? '' );
 	}
 
 	public function test_delete_pattern_calls_item_endpoint_and_treats_404_as_success(): void {
@@ -668,7 +691,7 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertTrue( $result );
 		$this->assertSame(
 			sprintf(
-				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/%s/items/theme-hero',
+				'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/default/instances/%s/items/theme-hero',
 				PatternSearchInstanceManager::managed_instance_id()
 			),
 			WordPressTestState::$last_remote_post['url']

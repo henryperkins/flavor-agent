@@ -13,7 +13,6 @@ import {
 	ACTIONABILITY_TIER_REVIEW_SAFE,
 	classifyBlockSuggestionActionability,
 	classifyOperationActionability,
-	classifyRecommendationActionability,
 	summarizeActionability,
 } from '../recommendation-actionability';
 import {
@@ -267,52 +266,5 @@ describe( 'recommendation actionability', () => {
 				[ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ]: 1,
 			},
 		} );
-	} );
-
-	it( 'surfaces a concise reason for rejected-but-advisory style/template suggestions', () => {
-		const tier = classifyRecommendationActionability( {
-			surface: 'global-styles',
-			operations: [],
-			validationReasons: [
-				{ code: 'failed_contrast', severity: 'downgraded' },
-			],
-		} );
-		expect( tier.tier ).toBe( 'advisory' );
-		expect( tier.reasonCode ).toBe( 'failed_contrast' );
-	} );
-
-	it( 'picks the highest-severity validation reason as the reason code', () => {
-		const tier = classifyRecommendationActionability( {
-			surface: 'template',
-			operations: [],
-			validationReasons: [
-				{ code: 'failed_contrast', severity: 'downgraded' },
-				{ code: 'unsupported_path', severity: 'rejected' },
-			],
-		} );
-		expect( tier.tier ).toBe( ACTIONABILITY_TIER_ADVISORY );
-		expect( tier.reasonCode ).toBe( 'unsupported_path' );
-	} );
-
-	it( 'does not downgrade suggestions that carry executable operations', () => {
-		const tier = classifyRecommendationActionability( {
-			surface: 'global-styles',
-			operations: [ { type: 'set_global_style', path: 'color.text' } ],
-			validationReasons: [
-				{ code: 'failed_contrast', severity: 'downgraded' },
-			],
-		} );
-		expect( tier.tier ).toBe( ACTIONABILITY_TIER_REVIEW_SAFE );
-		expect( tier.reasonCode ).toBeNull();
-	} );
-
-	it( 'returns advisory with a null reason code when nothing is actionable', () => {
-		const tier = classifyRecommendationActionability( {
-			surface: 'template-part',
-			operations: [],
-			validationReasons: [],
-		} );
-		expect( tier.tier ).toBe( ACTIONABILITY_TIER_ADVISORY );
-		expect( tier.reasonCode ).toBeNull();
 	} );
 } );

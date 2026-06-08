@@ -20,7 +20,6 @@ import {
 	BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
 	buildBlockOperationValidationContext,
 	isBlockStructuralActionsEnabled,
-	normalizeAllowedPatternsForBlockOperations,
 	validateBlockOperationSequence,
 } from '../block-operation-catalog';
 
@@ -62,18 +61,6 @@ function getRejectedCodes( result ) {
 describe( 'block operation catalog', () => {
 	afterEach( () => {
 		delete window.flavorAgentData;
-	} );
-
-	test( 'normalizes allowed pattern context for prompt inputs', () => {
-		expect(
-			normalizeAllowedPatternsForBlockOperations( [
-				...allowedPatterns,
-				{
-					name: '',
-					allowedActions: [ BLOCK_OPERATION_ACTION_REPLACE ],
-				},
-			] )
-		).toEqual( allowedPatterns );
 	} );
 
 	test( 'adapts nested block operation context for validation', () => {

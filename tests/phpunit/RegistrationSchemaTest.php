@@ -112,4 +112,20 @@ final class RegistrationSchemaTest extends TestCase {
 			);
 		}
 	}
+
+	public function test_block_output_schema_exposes_group_ids_and_recommended_sets(): void {
+		$schema = Registration::recommendation_output_schema( 'flavor-agent/recommend-block' );
+
+		$this->assertArrayHasKey( 'recommendedSets', $schema['properties'] );
+		$this->assertSame( 'array', $schema['properties']['recommendedSets']['type'] );
+		$this->assertSame( 'object', $schema['properties']['recommendedSets']['items']['type'] );
+		$this->assertSame( 'string', $schema['properties']['recommendedSets']['items']['properties']['id']['type'] );
+		$this->assertSame( 'string', $schema['properties']['recommendedSets']['items']['properties']['label']['type'] );
+		$this->assertSame( 'string', $schema['properties']['recommendedSets']['items']['properties']['reason']['type'] );
+
+		foreach ( [ 'settings', 'styles', 'block' ] as $lane ) {
+			$item = $schema['properties'][ $lane ]['items'];
+			$this->assertSame( [ 'string', 'null' ], $item['properties']['groupId']['type'] ?? null, "Block {$lane} output items must expose groupId." );
+		}
+	}
 }

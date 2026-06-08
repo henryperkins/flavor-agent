@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-06-05
+> Last updated: 2026-06-08
 
 ## Working
 
@@ -69,6 +69,7 @@ The consolidated current work queue now lives in [`docs/reference/current-open-w
 
 ## Recent Verification
 
+- 2026-06-08 block multi-apply: Settings and Styles block suggestions now support panel-scoped multi-select, recommended-together bundle hints (`recommendedSets` plus per-item `groupId`), one combined undo entry, and post-apply re-baselining so self-applies stay fresh; executable Block-lane and structural Review-lane suggestions stay one-at-a-time. Targeted PHPUnit (`ResponseSchemaTest|RegistrationSchemaTest|PromptRulesTest`) and the full `npm run test:unit` run are green (`1437` passed, `105` suites); `node scripts/verify.js --skip-e2e` and `npm run check:docs` are the remaining non-browser gates.
 - 2026-06-06 pattern relevance branch: pattern design metadata now feeds embedding/search payloads, pattern recommendations expose component ranking hints, executable recommendation parsers emit deterministic design-quality signals and shared validation reason codes, and the offline recommendation evaluation harness now tracks contrast preservation, top-three relevance, stale false positives, and prompt token delta movement.
 - 2026-06-05 open-work consolidation: added `docs/reference/current-open-work.md` as the live queue for implementation candidates, release-validation chores, upstream watch items, and non-active backlog; wired it into the docs backbone, `STATUS.md`, and `docs/SOURCE_OF_TRUTH.md`; reconciled remaining live 20-ability references to the current 25-ability contract; and rechecked all 77 repo/workspace doc-like files for missed open-work signals, including the untracked root `ConfirmedFindings.txt` review artifact. This pass changed docs only.
 - 2026-06-05 docs hygiene follow-up: completed implementation/review artifacts under `docs/superpowers/plans/` were moved to `docs/superpowers/plans/archive/` with explicit archived-status banners, current ability-count/status prose was reconciled with the canonical 25-ability contract, and shipped design specs under `docs/superpowers/specs/` were marked as historical implementation context. This pass changed docs only.

@@ -518,31 +518,3 @@ export function findBranchRoot( path ) {
 
 	return path[ 0 ] || null;
 }
-
-export function buildStructuralContext( tree, selectedClientId, options = {} ) {
-	const annotatedTree = annotateStructuralIdentity( tree, options );
-	const path = findNodePath(
-		annotatedTree,
-		( node ) => node?.clientId === selectedClientId
-	);
-
-	if ( ! path ) {
-		return {
-			annotatedTree,
-			blockIdentity: {},
-			structuralAncestors: [],
-			branchRoot: null,
-		};
-	}
-
-	const selectedNode = path[ path.length - 1 ];
-
-	return {
-		annotatedTree,
-		blockIdentity: selectedNode?.structuralIdentity || {},
-		structuralAncestors: path
-			.slice( 0, -1 )
-			.map( ( node ) => toStructuralSummary( node ) ),
-		branchRoot: findBranchRoot( path ),
-	};
-}

@@ -1,4 +1,10 @@
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( '../../context/collector', () => ( {
+	getLiveBlockContextData: jest.fn( () => ( {
+		context: { block: { name: 'core/group' } },
+		signature: 'live-block-context-signature',
+	} ) ),
+} ) );
 jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplatePartSuggestionOperations: jest.fn(),
 	applyTemplateSuggestionOperations: jest.fn(),
@@ -60,6 +66,7 @@ import {
 	getResolvedContextSignatureFromResponse,
 	reducer,
 	selectors,
+	_testOnly,
 } from '../index';
 import { getClientRequestSessionId } from '../client-request-identity';
 import { CONNECTOR_NOT_APPROVED_CODE } from '../request-error-details';
@@ -163,6 +170,102 @@ function installAbilitiesBridge() {
 				} )
 			)
 		),
+	};
+}
+
+function createSelectorsForState( getState ) {
+	return Object.fromEntries(
+		Object.entries( selectors ).map( ( [ key, selector ] ) => [
+			key,
+			( ...args ) => selector( getState(), ...args ),
+		] )
+	);
+}
+
+function createStoreSelectWithState( overrides = {} ) {
+	const baseState = reducer( undefined, {} );
+	const state = {
+		...baseState,
+		...overrides,
+		blockRequestState: {
+			...baseState.blockRequestState,
+			...( overrides.blockRequestState || {} ),
+		},
+		blockRecommendations: {
+			...baseState.blockRecommendations,
+			...( overrides.blockRecommendations || {} ),
+		},
+	};
+
+	return createSelectorsForState( () => state );
+}
+
+function createBlockApplyRegistry( {
+	attributes = {},
+	nextAttributes = null,
+	updateBlockAttributes = jest.fn(),
+	blocks = null,
+} = {} ) {
+	let currentAttributes = attributes;
+	const wrappedUpdateBlockAttributes = jest.fn( ( clientId, updates ) => {
+		currentAttributes = nextAttributes || {
+			...currentAttributes,
+			...updates,
+		};
+		updateBlockAttributes( clientId, updates );
+	} );
+	const blockList = blocks || [
+		{
+			clientId: 'block-1',
+			name: 'core/group',
+			attributes: currentAttributes,
+			innerBlocks: [],
+		},
+	];
+	const blockEditorSelect = {
+		getBlock: jest.fn( ( clientId ) => {
+			const block =
+				blockList.find(
+					( candidate ) => candidate.clientId === clientId
+				) || null;
+			return block ? { ...block, attributes: currentAttributes } : null;
+		} ),
+		getBlockAttributes: jest.fn( () => currentAttributes ),
+		getBlockCount: jest.fn( () => blockList.length ),
+		getBlockEditingMode: jest.fn( () => 'default' ),
+		getBlockName: jest.fn( () => 'core/group' ),
+		getBlockOrder: jest.fn( () =>
+			blockList.map( ( block ) => block.clientId )
+		),
+		getBlockParents: jest.fn( () => [] ),
+		getBlockRootClientId: jest.fn( () => '' ),
+		getBlocks: jest.fn( () =>
+			blockList.map( ( block ) => ( {
+				...block,
+				attributes:
+					block.clientId === 'block-1'
+						? currentAttributes
+						: block.attributes,
+			} ) )
+		),
+		getSettings: jest.fn( () => ( {} ) ),
+	};
+	const blocksSelect = {
+		getBlockStyles: jest.fn( () => [] ),
+		getBlockType: jest.fn( () => ( { name: 'core/group' } ) ),
+		getBlockVariations: jest.fn( () => [] ),
+	};
+
+	return {
+		dispatch: jest.fn( ( storeName ) =>
+			storeName === 'core/block-editor'
+				? { updateBlockAttributes: wrappedUpdateBlockAttributes }
+				: {}
+		),
+		select: jest.fn( ( storeName ) =>
+			storeName === 'core/block-editor' ? blockEditorSelect : blocksSelect
+		),
+		updateBlockAttributes: wrappedUpdateBlockAttributes,
 	};
 }
 
@@ -8508,5 +8611,555 @@ describe( 'store action thunks', () => {
 				} ),
 			] )
 		);
+	} );
+
+	test( 'apply resolved freshness adopts server drift when rebaseline is pending', async () => {
+		const dispatch = jest.fn();
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 1,
+					contextSignature: 'client-sig',
+					resolvedContextSignature: 'old-server-sig',
+					resolvedRebaselinePending: true,
+				},
+			},
+			blockRecommendations: {
+				'block-1': { prompt: 'Improve this block.' },
+			},
+		} );
+		apiFetch.mockResolvedValueOnce( {
+			result: {
+				resolvedContextSignature: 'new-server-sig',
+				docsGrounding: { status: 'grounded' },
+			},
+		} );
+
+		await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Wide layout',
+				panel: 'layout',
+				type: 'attribute_change',
+				attributeUpdates: { align: 'wide' },
+				suggestionKey: 'block:settings:1',
+			},
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'client-sig',
+			} ),
+			{
+				clientId: 'block-1',
+				editorContext: { name: 'core/group' },
+				contextSignature: 'client-sig',
+				prompt: 'Improve this block.',
+			}
+		)( { dispatch, registry: createBlockApplyRegistry(), select } );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.adoptBlockResolvedContextBaseline(
+				'block-1',
+				'new-server-sig'
+			)
+		);
+	} );
+
+	test( 'pending rebaseline does not adopt docs grounding changed in apply guard', async () => {
+		const setApplyState = jest.fn(
+			( status, error, staleReason = null ) => ( {
+				type: 'APPLY_STATE',
+				status,
+				error,
+				staleReason,
+			} )
+		);
+		const localDispatch = jest.fn();
+		apiFetch.mockResolvedValueOnce( {
+			result: {
+				resolvedContextSignature: 'new-server-sig',
+				docsGrounding: DOCS_GROUNDING_PAYLOAD,
+			},
+		} );
+
+		const result = await _testOnly.guardSurfaceApplyResolvedFreshness( {
+			surface: 'block',
+			abilityName: 'flavor-agent/recommend-block',
+			liveRequestInput: {
+				clientId: 'block-1',
+				editorContext: { name: 'core/group' },
+			},
+			storedResolvedContextSignature: 'old-server-sig',
+			rebaselinePending: true,
+			localDispatch,
+			setApplyState,
+		} );
+
+		expect( result.ok ).toBe( false );
+		expect( result.staleReason ).toBe( 'docs-grounding-changed' );
+		expect( localDispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				staleReason: 'docs-grounding-changed',
+			} )
+		);
+	} );
+
+	test( 'revalidateBlockReviewFreshness adopts resolved signature when rebaseline is pending', async () => {
+		let state = reducer( undefined, {} );
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-1', 'loading', null, 1 )
+		);
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-1',
+				{
+					settings: [],
+					styles: [],
+					block: [],
+					explanation: '',
+					prompt: 'Improve this block.',
+				},
+				1,
+				'client-sig',
+				null,
+				'old-server-sig'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setBlockResolvedRebaselinePending( 'block-1', true )
+		);
+		const dispatch = jest.fn( ( action ) => {
+			state = reducer( state, action );
+		} );
+		const select = createSelectorsForState( () => state );
+		apiFetch.mockResolvedValueOnce( {
+			result: {
+				resolvedContextSignature: 'new-server-sig',
+				docsGrounding: { status: 'grounded' },
+			},
+		} );
+
+		await actions.revalidateBlockReviewFreshness(
+			'block-1',
+			{
+				clientId: 'block-1',
+				editorContext: { name: 'core/group' },
+				contextSignature: 'client-sig',
+				prompt: 'Improve this block.',
+			},
+			{
+				requestSignature: buildBlockRecommendationRequestSignature( {
+					clientId: 'block-1',
+					prompt: 'Improve this block.',
+					contextSignature: 'client-sig',
+				} ),
+				requestToken: 1,
+			}
+		)( { dispatch, select } );
+
+		expect(
+			selectors.getBlockResolvedContextSignature( state, 'block-1' )
+		).toBe( 'new-server-sig' );
+		expect(
+			selectors.isBlockResolvedRebaselinePending( state, 'block-1' )
+		).toBe( false );
+		expect( selectors.getBlockStaleReason( state, 'block-1' ) ).toBeNull();
+	} );
+
+	test( 'late background revalidation cannot stale a newer adopted rebaseline', async () => {
+		let state = reducer( undefined, {} );
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-1', 'loading', null, 1 )
+		);
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-1',
+				{
+					settings: [],
+					styles: [],
+					block: [],
+					explanation: '',
+					prompt: 'Improve this block.',
+				},
+				1,
+				'client-sig',
+				null,
+				'server-sig-a'
+			)
+		);
+
+		let resolveFirst;
+		apiFetch.mockReturnValueOnce(
+			new Promise( ( resolve ) => {
+				resolveFirst = resolve;
+			} )
+		);
+		const dispatch = jest.fn( ( action ) => {
+			state = reducer( state, action );
+		} );
+		const select = createSelectorsForState( () => state );
+		const requestInput = {
+			clientId: 'block-1',
+			editorContext: { name: 'core/group' },
+			contextSignature: 'client-sig',
+			prompt: 'Improve this block.',
+		};
+		const requestSignature = buildBlockRecommendationRequestSignature( {
+			clientId: 'block-1',
+			prompt: 'Improve this block.',
+			contextSignature: 'client-sig',
+		} );
+
+		const first = actions.revalidateBlockReviewFreshness(
+			'block-1',
+			requestInput,
+			{
+				requestSignature,
+				requestToken: 1,
+			}
+		)( { dispatch, select } );
+
+		state = reducer(
+			state,
+			actions.adoptBlockResolvedContextBaseline(
+				'block-1',
+				'server-sig-b'
+			)
+		);
+		resolveFirst( {
+			result: {
+				resolvedContextSignature: 'server-sig-c',
+				docsGrounding: { status: 'grounded' },
+			},
+		} );
+		await first;
+
+		expect(
+			selectors.getBlockResolvedContextSignature( state, 'block-1' )
+		).toBe( 'server-sig-b' );
+		expect( selectors.getBlockStaleReason( state, 'block-1' ) ).toBeNull();
+	} );
+
+	test( 'applySelectedSuggestions folds cross-lane updates once in canonical order', async () => {
+		const updateBlockAttributes = jest.fn();
+		const registry = createBlockApplyRegistry( {
+			attributes: {
+				className: 'custom-class is-style-fill',
+				style: { spacing: { padding: '1rem' } },
+				metadata: { bindings: { url: { source: 'core/post-meta' } } },
+			},
+			updateBlockAttributes,
+		} );
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 1,
+					contextSignature: 'client-sig',
+					resolvedContextSignature: 'server-sig',
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Improve this block.',
+					blockContext: { name: 'core/group' },
+					executionContract: {
+						allowedPanels: [ 'layout', 'color', 'styles' ],
+						configAttributeKeys: [ 'align' ],
+						styleSupportPaths: [ 'color.background' ],
+						presetSlugs: { color: [ 'accent' ] },
+						registeredStyles: [ 'rounded' ],
+					},
+				},
+			},
+		} );
+		const dispatch = jest.fn();
+		apiFetch.mockResolvedValueOnce( {
+			result: {
+				resolvedContextSignature: 'server-sig',
+				docsGrounding: { status: 'grounded' },
+			},
+		} );
+
+		const didApply = await actions.applySelectedSuggestions(
+			'block-1',
+			[
+				{
+					label: 'Rounded style',
+					panel: 'styles',
+					type: 'style_variation',
+					attributeUpdates: { className: 'is-style-rounded' },
+					suggestionKey: 'block:styles:2',
+					recommendationOutcome: {
+						recommendationSetId: 'block:1:hash_set',
+					},
+				},
+				{
+					label: 'Wide layout',
+					panel: 'layout',
+					type: 'attribute_change',
+					attributeUpdates: { align: 'wide' },
+					suggestionKey: 'block:settings:1',
+					recommendationOutcome: {
+						recommendationSetId: 'block:1:hash_set',
+					},
+				},
+				{
+					label: 'Accent background',
+					panel: 'color',
+					type: 'attribute_change',
+					attributeUpdates: {
+						style: {
+							color: { background: 'var:preset|color|accent' },
+						},
+					},
+					suggestionKey: 'block:styles:1',
+					recommendationOutcome: {
+						recommendationSetId: 'block:1:hash_set',
+					},
+				},
+			],
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'client-sig',
+			} ),
+			{
+				clientId: 'block-1',
+				editorContext: { name: 'core/group' },
+				contextSignature: 'client-sig',
+				prompt: 'Improve this block.',
+			}
+		)( { dispatch, registry, select } );
+
+		expect( didApply ).toBe( true );
+		expect( updateBlockAttributes ).toHaveBeenCalledTimes( 1 );
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
+			align: 'wide',
+			style: {
+				spacing: { padding: '1rem' },
+				color: { background: 'var:preset|color|accent' },
+			},
+			className: 'custom-class is-style-rounded',
+		} );
+		const successAction = dispatch.mock.calls
+			.map( ( [ action ] ) => action )
+			.find(
+				( action ) =>
+					action.type === 'SET_BLOCK_APPLY_STATE' &&
+					action.status === 'success'
+			);
+		expect( successAction.suggestionKey ).toMatch(
+			/^block-batch:block:1:/
+		);
+	} );
+
+	test( 'applySelectedSuggestions records validation blocked when all selected suggestions resolve empty', async () => {
+		const dispatch = jest.fn();
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 1,
+					contextSignature: 'client-sig',
+					resolvedContextSignature: 'server-sig',
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Improve this block.',
+					blockContext: { name: 'core/group' },
+					executionContract: { attributes: {} },
+				},
+			},
+		} );
+		apiFetch.mockResolvedValueOnce( {
+			result: {
+				resolvedContextSignature: 'server-sig',
+				docsGrounding: { status: 'grounded' },
+			},
+		} );
+
+		const didApply = await actions.applySelectedSuggestions(
+			'block-1',
+			[
+				{
+					label: 'Unsupported change',
+					panel: 'layout',
+					type: 'attribute_change',
+					attributeUpdates: { align: 'wide' },
+					suggestionKey: 'block:settings:1',
+				},
+			],
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'client-sig',
+			} ),
+			{
+				clientId: 'block-1',
+				editorContext: { name: 'core/group' },
+				contextSignature: 'client-sig',
+				prompt: 'Improve this block.',
+			}
+		)( { dispatch, registry: createBlockApplyRegistry(), select } );
+
+		expect( didApply ).toBe( false );
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.'
+			)
+		);
+		// recordRecommendationOutcome is a thunk, so the only function dispatched
+		// in this blocked path is the validation_blocked outcome record.
+		expect(
+			dispatch.mock.calls.some(
+				( [ action ] ) => typeof action === 'function'
+			)
+		).toBe( true );
+	} );
+
+	test( 'applySelectedSuggestions rebaselines before logging activity or success', async () => {
+		const dispatchOrder = [];
+		const dispatch = jest.fn( ( action ) => {
+			dispatchOrder.push( action.type );
+		} );
+		const registry = createBlockApplyRegistry( {
+			attributes: { align: '' },
+			nextAttributes: { align: 'wide' },
+		} );
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 1,
+					contextSignature: 'client-sig',
+					resolvedContextSignature: 'server-sig',
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Improve this block.',
+					blockContext: { name: 'core/group' },
+					executionContract: {
+						allowedPanels: [ 'layout' ],
+						configAttributeKeys: [ 'align' ],
+					},
+				},
+			},
+		} );
+		apiFetch.mockResolvedValueOnce( {
+			result: {
+				resolvedContextSignature: 'server-sig',
+				docsGrounding: { status: 'grounded' },
+			},
+		} );
+
+		await actions.applySelectedSuggestions(
+			'block-1',
+			[
+				{
+					label: 'Wide layout',
+					panel: 'layout',
+					type: 'attribute_change',
+					attributeUpdates: { align: 'wide' },
+					suggestionKey: 'block:settings:1',
+				},
+			],
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'client-sig',
+			} ),
+			{
+				clientId: 'block-1',
+				editorContext: { name: 'core/group' },
+				contextSignature: 'client-sig',
+				prompt: 'Improve this block.',
+			}
+		)( { dispatch, registry, select } );
+
+		expect(
+			dispatchOrder.indexOf( 'SET_BLOCK_CLIENT_CONTEXT_BASELINE' )
+		).toBeLessThan( dispatchOrder.indexOf( 'LOG_ACTIVITY' ) );
+		expect(
+			dispatchOrder.indexOf( 'SET_BLOCK_RESOLVED_REBASELINE_PENDING' )
+		).toBeLessThan( dispatchOrder.indexOf( 'LOG_ACTIVITY' ) );
+		// The success apply state is the last SET_BLOCK_APPLY_STATE; the first is
+		// the 'applying' transition that necessarily precedes the re-baseline.
+		expect(
+			dispatchOrder.indexOf( 'SET_BLOCK_CLIENT_CONTEXT_BASELINE' )
+		).toBeLessThan( dispatchOrder.lastIndexOf( 'SET_BLOCK_APPLY_STATE' ) );
+	} );
+
+	test( 'applySuggestion rebaselines client context before logging activity', async () => {
+		const dispatchOrder = [];
+		const dispatch = jest.fn( ( action ) => {
+			dispatchOrder.push( action.type );
+		} );
+		const registry = createBlockApplyRegistry( {
+			attributes: { align: '' },
+			nextAttributes: { align: 'wide' },
+		} );
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 1,
+					contextSignature: 'client-sig',
+					resolvedContextSignature: 'server-sig',
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Improve this block.',
+					blockContext: { name: 'core/group' },
+					executionContract: {
+						allowedPanels: [ 'layout' ],
+						configAttributeKeys: [ 'align' ],
+					},
+				},
+			},
+		} );
+		apiFetch.mockResolvedValueOnce( {
+			result: {
+				resolvedContextSignature: 'server-sig',
+				docsGrounding: { status: 'grounded' },
+			},
+		} );
+
+		await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Wide layout',
+				panel: 'layout',
+				type: 'attribute_change',
+				attributeUpdates: { align: 'wide' },
+				suggestionKey: 'block:settings:1',
+			},
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'client-sig',
+			} ),
+			{
+				clientId: 'block-1',
+				editorContext: { name: 'core/group' },
+				contextSignature: 'client-sig',
+				prompt: 'Improve this block.',
+			}
+		)( { dispatch, registry, select } );
+
+		expect(
+			dispatchOrder.indexOf( 'SET_BLOCK_CLIENT_CONTEXT_BASELINE' )
+		).toBeLessThan( dispatchOrder.indexOf( 'LOG_ACTIVITY' ) );
 	} );
 } );

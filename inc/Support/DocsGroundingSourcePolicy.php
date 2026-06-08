@@ -10,7 +10,8 @@ final class DocsGroundingSourcePolicy {
 	public const SOURCE_DEVELOPER_BLOG = 'developer-blog';
 	public const SOURCE_MAKE_CORE      = 'make-core';
 
-	private const SECONDS_PER_DAY = 86400;
+	private const SECONDS_PER_DAY             = 86400;
+	private const CURRENT_RELEASE_PUBLIC_DATE = '2026-05-20T00:00:00Z';
 
 	private const TRUSTED_SCOPES = [
 		self::SOURCE_DEVELOPER_DOCS => [
@@ -177,10 +178,7 @@ final class DocsGroundingSourcePolicy {
 				$has_developer_docs = true;
 			}
 
-			if (
-				in_array( $source_type, [ self::SOURCE_DEVELOPER_BLOG, self::SOURCE_MAKE_CORE ], true )
-				&& 'current' === $freshness
-			) {
+			if ( self::release_cycle_source_satisfies_current_gate( $chunk, $source_type, $freshness ) ) {
 				$has_current_release_cycle = true;
 			}
 		}
@@ -231,6 +229,29 @@ final class DocsGroundingSourcePolicy {
 			false !== $retrieved ? (int) $retrieved : 0,
 			false !== $published ? (int) $published : 0
 		);
+	}
+
+	/**
+	 * After WordPress 7.0 shipped, release-cycle sources from the public release
+	 * date onward remain valid coverage even when the short rolling Make/Core or
+	 * Developer Blog freshness windows age out between release bursts.
+	 *
+	 * @param array<string, mixed> $chunk
+	 */
+	private static function release_cycle_source_satisfies_current_gate( array $chunk, string $source_type, string $freshness ): bool {
+		if ( ! in_array( $source_type, [ self::SOURCE_DEVELOPER_BLOG, self::SOURCE_MAKE_CORE ], true ) ) {
+			return false;
+		}
+
+		if ( 'current' === $freshness ) {
+			return true;
+		}
+
+		$published_at = trim( (string) ( $chunk['publishedAt'] ?? '' ) );
+		$published    = '' !== $published_at ? strtotime( $published_at ) : false;
+		$release_date = strtotime( self::CURRENT_RELEASE_PUBLIC_DATE );
+
+		return false !== $published && false !== $release_date && (int) $published >= (int) $release_date;
 	}
 
 	/**

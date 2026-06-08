@@ -642,4 +642,120 @@ describe( 'validationReason on outcomes', () => {
 			} )
 		);
 	} );
+
+	test( 'decorateRecommendationPayload preserves recommended sets and group ids', () => {
+		const decorated = decorateRecommendationPayload(
+			{
+				settings: [
+					{
+						label: 'Wide layout',
+						panel: 'layout',
+						type: 'attribute_change',
+						attributeUpdates: { align: 'wide' },
+						groupId: 'hero-polish',
+					},
+				],
+				styles: [],
+				block: [],
+				recommendedSets: [
+					{
+						id: 'hero-polish',
+						label: 'Hero polish',
+						reason: 'Apply these together.',
+					},
+				],
+			},
+			{
+				surface: 'block',
+				recommendationSetId: 'block:1:hash_abc',
+				sourceRequestSignature: 'sig-a',
+			}
+		);
+
+		expect( decorated.settings[ 0 ].groupId ).toBe( 'hero-polish' );
+		expect( decorated.recommendedSets ).toEqual( [
+			{
+				id: 'hero-polish',
+				label: 'Hero polish',
+				reason: 'Apply these together.',
+			},
+		] );
+	} );
+
+	test( 'getRecommendationIdentityForApply supports ordered batch members', () => {
+		const identity = getRecommendationIdentityForApply( {
+			suggestionKey: 'block-batch:block:1:hash_set:hash_members',
+			recommendationOutcome: {
+				recommendationSetId: 'block:1:hash_set',
+				sourceRequestSignature: 'hash_source',
+			},
+			members: [ 'block:settings:1', 'block:styles:1' ],
+		} );
+
+		expect( identity ).toEqual(
+			expect.objectContaining( {
+				recommendationSetId: 'block:1:hash_set',
+				suggestionKey: 'block-batch:block:1:hash_set:hash_members',
+				members: [ 'block:settings:1', 'block:styles:1' ],
+			} )
+		);
+	} );
+
+	test( 'buildRecommendationOutcomeEntry persists selected members for a blocked batch', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
+			event: 'validation_blocked',
+			surface: 'block',
+			suggestion: {
+				suggestionKey: 'block-batch:block:1:hash_set:hash_members',
+				members: [ 'block:settings:1', 'block:styles:1' ],
+				recommendationOutcome: {
+					recommendationSetId: 'block:1:hash_set',
+				},
+			},
+			recommendationSetId: 'block:1:hash_set',
+			reason: 'operation_validation_failed',
+			target: {
+				clientId: 'block-1',
+				members: [ 'block:settings:1', 'block:styles:1' ],
+			},
+		} );
+
+		expect( entry.target.members ).toEqual( [
+			'block:settings:1',
+			'block:styles:1',
+		] );
+		expect( entry.request.recommendation.members ).toEqual( [
+			'block:settings:1',
+			'block:styles:1',
+		] );
+	} );
+
+	test( 'buildRecommendationOutcomeEntry omits members for a single non-batch outcome', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
+			event: 'validation_blocked',
+			surface: 'block',
+			suggestion: {
+				suggestionKey: 'block:settings:1',
+				recommendationOutcome: {
+					recommendationSetId: 'block:1:hash_set',
+				},
+			},
+			recommendationSetId: 'block:1:hash_set',
+			reason: 'operation_validation_failed',
+			target: { clientId: 'block-1' },
+		} );
+
+		expect( entry.target ).not.toHaveProperty( 'members' );
+		expect( entry.request.recommendation ).not.toHaveProperty( 'members' );
+	} );
 } );

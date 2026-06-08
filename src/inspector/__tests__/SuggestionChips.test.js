@@ -419,4 +419,78 @@ describe( 'SuggestionChips', () => {
 			true
 		);
 	} );
+
+	test( 'renders selectable checkbox rows without calling instant apply', () => {
+		const onToggleSelected = jest.fn();
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					suggestions={ [
+						{
+							label: 'Accent background',
+							description: 'Use accent color.',
+							currentValue: 'None',
+							suggestedValue: 'Accent',
+							preview: '#335CFF',
+							suggestionKey: 'block:styles:1',
+						},
+					] }
+					label="AI style suggestions"
+					selectable
+					selectedKeys={ new Set( [ 'block:styles:1' ] ) }
+					onToggleSelected={ onToggleSelected }
+				/>
+			);
+		} );
+
+		const checkbox = getContainer().querySelector(
+			'input[type="checkbox"]'
+		);
+		expect( checkbox ).not.toBeNull();
+		expect( checkbox.checked ).toBe( true );
+		expect( getContainer().querySelector( 'button' ) ).toBeNull();
+		expect( mockApplySuggestion ).not.toHaveBeenCalled();
+
+		act( () => {
+			checkbox.click();
+		} );
+
+		expect( onToggleSelected ).toHaveBeenCalledWith( 'block:styles:1' );
+		expect( getContainer().textContent ).toContain( 'None' );
+		expect( getContainer().textContent ).toContain( 'Accent' );
+	} );
+
+	test( 'renders applied selectable rows as checked disabled applied state', () => {
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					suggestions={ [
+						{
+							label: 'Accent background',
+							currentValue: 'None',
+							suggestedValue: 'Accent',
+							suggestionKey: 'block:styles:1',
+						},
+					] }
+					label="AI style suggestions"
+					selectable
+					selectedKeys={ new Set( [ 'block:styles:1' ] ) }
+					appliedKeys={ new Set( [ 'block:styles:1' ] ) }
+					onToggleSelected={ jest.fn() }
+				/>
+			);
+		} );
+
+		const checkbox = getContainer().querySelector(
+			'input[type="checkbox"]'
+		);
+		expect( checkbox.disabled ).toBe( true );
+		expect( checkbox.checked ).toBe( true );
+		expect( getContainer().textContent ).toContain( 'Applied' );
+		expect(
+			getContainer().querySelector( '.flavor-agent-chip-row__values' )
+		).toBeNull();
+	} );
 } );

@@ -1448,6 +1448,19 @@
   color: var(--flavor-agent-editor-muted);
 }
 
+.flavor-agent-card__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: var(--wpds-font-size-sm, 12px);
+  line-height: 1.45;
+  color: var(--flavor-agent-editor-muted);
+  overflow-wrap: anywhere;
+}
+
 .flavor-agent-card__value-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -1556,6 +1569,71 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 0;
+}
+
+/* Selectable Settings/Styles suggestion row for panel-scoped multi-apply.
+   The checkbox + label sits on its own line (full width, so a multi-word label
+   wraps naturally) and the optional preview swatch + current→suggested value
+   summary stack beneath it in the `__meta` row. A side-by-side label|value
+   layout collides in the ~250px Inspector column when both are multi-word. */
+.flavor-agent-chip-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.flavor-agent-chip-row .components-checkbox-control {
+  min-width: 0;
+}
+
+.flavor-agent-chip-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Indent under the checkbox label (box + margin; 16px box + 8px margin on
+     wp-admin ≥600px, where the --checkbox-input-* tokens aren't in scope on
+     this sibling element). */
+  padding-inline-start: 24px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.flavor-agent-chip-row__values,
+.flavor-agent-chip-row__status {
+  color: var(--flavor-agent-editor-text-subtle, #757575);
+  font-size: var(--wpds-font-size-sm, 12px);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.flavor-agent-chip-row.is-applied {
+  opacity: 0.78;
+}
+
+/* Panel-scoped multi-apply footer: an optional full-width "Recommended
+   together" card sits above the Select all / Apply selected actions. The
+   footer is a flex child of `.flavor-agent-block-panel`, so the panel's
+   column gap handles vertical spacing. */
+.flavor-agent-block-panel__batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--flavor-agent-editor-space-8, 8px);
+}
+
+.flavor-agent-block-panel__recommended-set {
+  flex: 1 0 100%;
+  padding: var(--flavor-agent-editor-space-12, 12px);
+  border: 1px solid var(--flavor-agent-editor-stroke-subtle);
+  border-radius: var(--flavor-agent-editor-radius-lg);
+  background: var(--flavor-agent-editor-panel-bg);
+}
+
+.flavor-agent-block-panel__recommended-set
+  .flavor-agent-panel__note
+  + .flavor-agent-panel__note {
+  margin-top: 4px;
 }
 
 /* Suggestion chip — atomic AI accept pill. The left edge carries the

@@ -786,7 +786,7 @@ The client sends live slot data including `assignedParts`, `emptyAreas`, and `al
 }
 ```
 
-The POST response shape is backend-neutral because it only reports queue status. The GET response returns the live `runtimeState` plus `requestMeta.route` for settings polling. The persisted `flavor_agent_pattern_index_state` records `pattern_backend`, Qdrant state fields for Qdrant, and `cloudflare_ai_search_instance` plus `cloudflare_ai_search_signature` for Cloudflare AI Search. The legacy `cloudflare_ai_search_namespace` state key remains present but is blank for managed-storage instances.
+The POST response shape is backend-neutral because it only reports queue status. The GET response returns the live `runtimeState` plus `requestMeta.route` for settings polling. The persisted `flavor_agent_pattern_index_state` records `pattern_backend`, Qdrant state fields for Qdrant, and `cloudflare_ai_search_namespace`, `cloudflare_ai_search_instance`, plus `cloudflare_ai_search_signature` for Cloudflare AI Search. Managed pattern-storage instances use Cloudflare's `default` namespace.
 
 ### Activity Entry Shape
 

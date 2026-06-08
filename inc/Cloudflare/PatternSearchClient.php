@@ -336,7 +336,7 @@ final class PatternSearchClient extends BaseHttpClient {
 	}
 
 	/**
-	 * @return array{accountId:string,instanceId:string,searchUrl:string,itemsUrl:string,apiToken:string}|\WP_Error
+	 * @return array{accountId:string,namespaceId:string,instanceId:string,searchUrl:string,itemsUrl:string,apiToken:string}|\WP_Error
 	 */
 	private static function get_config(
 		?string $account_id = null,
@@ -348,17 +348,23 @@ final class PatternSearchClient extends BaseHttpClient {
 		$account_id      = self::normalize_config_value(
 			$account_id ?? get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' )
 		);
-		unset( $namespace_id );
-		$instance_id = self::normalize_config_value(
+		$namespace_id    = self::normalize_config_value(
+			$namespace_id ?? PatternSearchInstanceManager::managed_namespace()
+		);
+		$instance_id     = self::normalize_config_value(
 			$instance_id ?? get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' )
 		);
-		$api_token   = self::normalize_config_value(
+		$api_token       = self::normalize_config_value(
 			$api_token ?? get_option( 'flavor_agent_cloudflare_workers_ai_api_token', '' )
 		);
-		$missing     = [];
+		$missing         = [];
 
 		if ( '' === $account_id ) {
 			$missing[] = 'account ID';
+		}
+
+		if ( '' === $namespace_id ) {
+			$missing[] = 'namespace';
 		}
 
 		if ( '' === $instance_id ) {
@@ -426,11 +432,12 @@ final class PatternSearchClient extends BaseHttpClient {
 		$instance_url = self::instance_url( $account_id, $instance_id );
 
 		return [
-			'accountId'  => $account_id,
-			'instanceId' => $instance_id,
-			'searchUrl'  => $instance_url . '/search',
-			'itemsUrl'   => $instance_url . '/items',
-			'apiToken'   => $api_token,
+			'accountId'   => $account_id,
+			'namespaceId' => $namespace_id,
+			'instanceId'  => $instance_id,
+			'searchUrl'   => $instance_url . '/search',
+			'itemsUrl'    => self::instance_items_url( $account_id, $namespace_id, $instance_id ),
+			'apiToken'    => $api_token,
 		];
 	}
 
@@ -438,6 +445,15 @@ final class PatternSearchClient extends BaseHttpClient {
 		return sprintf(
 			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/instances/%s',
 			rawurlencode( $account_id ),
+			rawurlencode( $instance_id )
+		);
+	}
+
+	private static function instance_items_url( string $account_id, string $namespace_id, string $instance_id ): string {
+		return sprintf(
+			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/namespaces/%s/instances/%s/items',
+			rawurlencode( $account_id ),
+			rawurlencode( $namespace_id ),
 			rawurlencode( $instance_id )
 		);
 	}

@@ -161,13 +161,169 @@ final class PromptRulesTest extends TestCase {
 
 		$this->assertSame(
 			[
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => [],
-				'explanation' => '',
+				'settings'        => [],
+				'styles'          => [],
+				'block'           => [],
+				'recommendedSets' => [],
+				'explanation'     => '',
 			],
 			$result
 		);
+	}
+
+	public function test_parse_response_preserves_group_ids_and_recommended_sets(): void {
+		$parsed = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'        => [
+						[
+							'label'            => 'Use wide width',
+							'description'      => 'The layout needs more horizontal room.',
+							'panel'            => 'layout',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => '{"align":"wide"}',
+							'currentValue'     => 'Default',
+							'suggestedValue'   => 'Wide',
+							'isCurrentStyle'   => false,
+							'isRecommended'    => true,
+							'confidence'       => 0.86,
+							'preview'          => '',
+							'presetSlug'       => '',
+							'cssVar'           => '',
+							'groupId'          => 'hero-polish',
+						],
+					],
+					'styles'          => [
+						[
+							'label'            => 'Use accent background',
+							'description'      => 'The accent color creates stronger hierarchy.',
+							'panel'            => 'color',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => '{"style":{"color":{"background":"var:preset|color|accent"}}}',
+							'currentValue'     => 'None',
+							'suggestedValue'   => 'Accent',
+							'isCurrentStyle'   => false,
+							'isRecommended'    => true,
+							'confidence'       => 0.82,
+							'preview'          => '#335CFF',
+							'presetSlug'       => 'accent',
+							'cssVar'           => 'var:preset|color|accent',
+							'groupId'          => 'hero-polish',
+						],
+					],
+					'block'           => [],
+					'recommendedSets' => [
+						[
+							'id'     => 'hero-polish',
+							'label'  => 'Hero polish',
+							'reason' => 'These layout and color changes work together.',
+							'extra'  => 'discarded',
+						],
+					],
+					'explanation'     => 'Two suggestions work together.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $parsed );
+		$this->assertSame( 'hero-polish', $parsed['settings'][0]['groupId'] );
+		$this->assertSame( 'hero-polish', $parsed['styles'][0]['groupId'] );
+		$this->assertSame(
+			[
+				[
+					'id'     => 'hero-polish',
+					'label'  => 'Hero polish',
+					'reason' => 'These layout and color changes work together.',
+				],
+			],
+			$parsed['recommendedSets']
+		);
+	}
+
+	public function test_enforce_block_context_rules_prunes_recommended_sets_with_no_visible_members(): void {
+		$payload  = [
+			'settings'        => [
+				[
+					'label'            => 'Use a custom unsupported attribute',
+					'description'      => 'This will be filtered by execution contract.',
+					'panel'            => 'layout',
+					'type'             => 'attribute_change',
+					'attributeUpdates' => [ 'unsupportedAttr' => 'value' ],
+					'groupId'          => 'filtered-set',
+				],
+			],
+			'styles'          => [
+				[
+					'label'            => 'Use accent background',
+					'description'      => 'This remains visible.',
+					'panel'            => 'color',
+					'type'             => 'attribute_change',
+					'attributeUpdates' => [ 'style' => [ 'color' => [ 'background' => '#335CFF' ] ] ],
+					'groupId'          => 'visible-set',
+				],
+			],
+			'block'           => [
+				[
+					'label'            => 'Block-only bundled suggestion',
+					'description'      => 'Block lane is ignored for recommended set membership.',
+					'panel'            => 'advanced',
+					'type'             => 'attribute_change',
+					'attributeUpdates' => [ 'anchor' => 'hero' ],
+					'groupId'          => 'block-only-set',
+				],
+			],
+			'recommendedSets' => [
+				[
+					'id'     => 'filtered-set',
+					'label'  => 'Filtered',
+					'reason' => 'No member survives.',
+				],
+				[
+					'id'     => 'visible-set',
+					'label'  => 'Visible',
+					'reason' => 'One selectable member survives.',
+				],
+				[
+					'id'     => 'block-only-set',
+					'label'  => 'Block only',
+					'reason' => 'Block lane is not selectable.',
+				],
+			],
+			'explanation'     => 'Bundle pruning.',
+		];
+		$block    = [
+			'name'            => 'core/group',
+			'inspectorPanels' => [ 'color' ],
+		];
+		$contract = [
+			'allowedPanels'     => [ 'color' ],
+			'styleSupportPaths' => [ 'color.background' ],
+			'presetSlugs'       => [ 'color' => [] ],
+			'enabledFeatures'   => [ 'backgroundColor' => true ],
+		];
+
+		$filtered = Prompt::enforce_block_context_rules( $payload, $block, $contract );
+
+		$this->assertSame(
+			[
+				[
+					'id'     => 'visible-set',
+					'label'  => 'Visible',
+					'reason' => 'One selectable member survives.',
+				],
+			],
+			$filtered['recommendedSets']
+		);
+	}
+
+	public function test_build_system_describes_multi_apply_bundles(): void {
+		$system = Prompt::build_system();
+
+		$this->assertStringContainsString( 'The user can apply multiple Settings and Styles suggestions at once', $system );
+		$this->assertStringContainsString( 'Use a shared groupId', $system );
+		$this->assertStringContainsString( 'recommendedSets', $system );
+		$this->assertStringContainsString( 'never include executable Block-lane suggestions in recommendedSets', $system );
+		$this->assertStringContainsString( 'always emit groupId as an empty string for ungrouped items', $system );
 	}
 
 	public function test_enforce_block_context_rules_filters_non_content_updates_for_block_level_content_only(): void {
@@ -576,6 +732,7 @@ TEXT
 					'preview'            => null,
 					'presetSlug'         => null,
 					'cssVar'             => null,
+					'groupId'            => '',
 					'operations'         => [],
 					'proposedOperations' => [],
 					'rejectedOperations' => [],
@@ -876,6 +1033,7 @@ TEXT
 					'preview'          => null,
 					'presetSlug'       => null,
 					'cssVar'           => null,
+					'groupId'          => '',
 				],
 			],
 			$this->strip_ranking_from_entries( $result['styles'] )

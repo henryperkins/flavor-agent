@@ -3391,7 +3391,7 @@ final class PatternAbilitiesTest extends TestCase {
 					'fingerprint'                    => 'cloudflare-fingerprint-123',
 					'qdrant_url'                     => '',
 					'qdrant_collection'              => '',
-					'cloudflare_ai_search_namespace' => '',
+					'cloudflare_ai_search_namespace' => 'default',
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => $this->expected_cloudflare_ai_search_signature(),
 					'openai_provider'                => '',

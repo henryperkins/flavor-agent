@@ -188,7 +188,7 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend reuses the Embedding Model account/token to create or adopt a managed private AI Search pattern index, then uploads sanitized public-safe registered and published user pattern markdown.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend reuses the Embedding Model account/token to create or adopt a managed private AI Search pattern index in Cloudflare's `default` namespace, then uploads sanitized public-safe registered and published user pattern markdown.
 
 Flavor Agent uses its built-in public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not enter Cloudflare account, instance, or token values for Developer Docs.
 

@@ -3,7 +3,6 @@ import {
 	DEFAULT_ACTIVITY_VIEW,
 	areActivityViewsEqual,
 	buildActivityTargetLink,
-	buildActivityTargetUrl,
 	formatActivityTimestamp,
 	normalizeActivityEntries,
 	normalizeStoredActivityView,
@@ -591,34 +590,6 @@ describe( 'activity log utils', () => {
 			operationType: 'insert',
 			operationTypeLabel: 'Insert pattern',
 		} );
-	} );
-
-	test( 'buildActivityTargetUrl returns site editor and post editor links', () => {
-		const templateUrl = buildActivityTargetUrl(
-			createEntry( {
-				surface: 'template',
-				target: {
-					templateRef: 'theme//home',
-				},
-				document: {
-					scopeKey: 'wp_template:theme//home',
-					postType: 'wp_template',
-					entityId: 'theme//home',
-				},
-			} ),
-			'https://example.test/wp-admin/'
-		);
-		const postUrl = buildActivityTargetUrl(
-			createEntry(),
-			'https://example.test/wp-admin/'
-		);
-
-		expect( templateUrl ).toContain( '/wp-admin/site-editor.php?' );
-		expect( templateUrl ).toContain( 'postType=wp_template' );
-		expect( templateUrl ).toContain( 'postId=theme%2F%2Fhome' );
-		expect( postUrl ).toBe(
-			'https://example.test/wp-admin/post.php?post=42&action=edit'
-		);
 	} );
 
 	test( 'formatActivityTimestamp uses the same timezone basis for grouping and display', () => {

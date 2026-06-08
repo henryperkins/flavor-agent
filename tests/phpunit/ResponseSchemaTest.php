@@ -95,6 +95,29 @@ final class ResponseSchemaTest extends TestCase {
 		}
 	}
 
+	public function test_block_schema_declares_group_ids_and_recommended_sets(): void {
+		$schema = ResponseSchema::get( 'block' );
+
+		$this->assertIsArray( $schema );
+		$this->assertArrayHasKey( 'recommendedSets', $schema['properties'] );
+		$this->assertContains( 'recommendedSets', $schema['required'] );
+		$this->assertSame( 'array', $schema['properties']['recommendedSets']['type'] );
+
+		$set = $schema['properties']['recommendedSets']['items'];
+		$this->assertSame( 'object', $set['type'] );
+		$this->assertFalse( (bool) $set['additionalProperties'] );
+		$this->assertSame( [ 'id', 'label', 'reason' ], $set['required'] );
+		$this->assertSame( 'string', $set['properties']['id']['type'] );
+		$this->assertSame( 'string', $set['properties']['label']['type'] );
+		$this->assertSame( 'string', $set['properties']['reason']['type'] );
+
+		foreach ( [ 'settings', 'styles', 'block' ] as $lane ) {
+			$item = $schema['properties'][ $lane ]['items'];
+			$this->assertSame( 'string', $item['properties']['groupId']['type'] ?? null, "Block {$lane} items must carry groupId." );
+			$this->assertContains( 'groupId', $item['required'], "Block {$lane} items must require groupId under strict schema." );
+		}
+	}
+
 	private function assert_no_contextual_component_fields_in_llm_ranking_schema( array $ranking, string $label ): void {
 		foreach ( [ 'modelScore', 'deterministicScore', 'contextScore', 'blendedScore', 'contextEvidence', 'contextPenalties', 'rankingVersion' ] as $field ) {
 			$this->assertArrayNotHasKey(

@@ -93,6 +93,31 @@ function mockWpComponents( overrides = {} ) {
 
 	return {
 		Button,
+		CheckboxControl: ( {
+			__nextHasNoMarginBottom,
+			checked,
+			className,
+			disabled,
+			label,
+			onChange = () => {},
+			...props
+		} ) => {
+			void __nextHasNoMarginBottom;
+
+			return createElement(
+				'label',
+				{ className },
+				createElement( 'input', {
+					type: 'checkbox',
+					'aria-label': label,
+					checked: Boolean( checked ),
+					disabled: Boolean( disabled ),
+					onChange: ( event ) => onChange( event.target.checked ),
+					...props,
+				} ),
+				label ? createElement( 'span', null, label ) : null
+			);
+		},
 		ButtonGroup: ( { children, className, ...props } ) =>
 			createElement(
 				'div',

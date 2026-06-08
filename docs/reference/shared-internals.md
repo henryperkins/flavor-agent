@@ -367,7 +367,6 @@ Block structural role inference. Recursively annotates a block tree with semanti
 | Export                                                    | Role                                                                                                 |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `annotateStructuralIdentity(tree, options)`               | Recursive tree walker that attaches `structuralIdentity` objects to every node                       |
-| `buildStructuralContext(tree, selectedClientId, options)` | Orchestrates annotation + path finding to produce a complete structural context for a selected block |
 | `toStructuralSummary(node)`                               | Extracts a compact summary for LLM prompt use                                                        |
 | `findNodePath(tree, predicate)`                           | Finds the path (array of tree indices) to the first node matching a predicate                        |
 | `findBranchRoot(tree, path)`                              | Finds the nearest template-part root ancestor in a node path                                         |

@@ -1,3 +1,9 @@
+jest.mock( '../../context/collector', () => ( {
+	getLiveBlockContextData: jest.fn( () => ( {
+		context: { block: { name: 'core/group' } },
+		signature: 'live-block-context-signature',
+	} ) ),
+} ) );
 jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplateSuggestionOperations: jest.fn(),
 	getTemplateActivityUndoState: jest.fn(

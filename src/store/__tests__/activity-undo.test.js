@@ -20,6 +20,7 @@ jest.mock( '../../utils/block-structural-actions', () => ( {
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 import {
+	buildBlockBatchActivityEntry,
 	buildGlobalStylesActivityEntry,
 	buildStyleBookActivityEntry,
 	createUndoActivityAction,
@@ -329,5 +330,41 @@ describe( 'createUndoActivityAction', () => {
 					action.error === 'There is no AI action available to undo.'
 			)
 		).toBe( false );
+	} );
+
+	test( 'buildBlockBatchActivityEntry records ordered members and noun phrase', () => {
+		const entry = buildBlockBatchActivityEntry( {
+			afterAttributes: {
+				align: 'wide',
+				style: { color: { background: 'var:preset|color|accent' } },
+			},
+			beforeAttributes: {
+				align: undefined,
+				style: {},
+			},
+			blockContext: { name: 'core/group' },
+			blockPath: [ 0 ],
+			clientId: 'block-1',
+			memberSuggestionKeys: [ 'block:settings:1', 'block:styles:1' ],
+			recommendationSetId: 'block:1:hash_set',
+			requestPrompt: 'Improve this block.',
+			requestToken: 1,
+			scope: { scopeKey: 'post:1' },
+			suggestionKey: 'block-batch:block:1:hash_set:hash_members',
+		} );
+
+		expect( entry.type ).toBe( 'apply_suggestion' );
+		expect( entry.suggestion ).toBe( '2 suggestions' );
+		expect( entry.suggestionKey ).toBe(
+			'block-batch:block:1:hash_set:hash_members'
+		);
+		expect( entry.target.members ).toEqual( [
+			'block:settings:1',
+			'block:styles:1',
+		] );
+		expect( entry.request.recommendation.members ).toEqual( [
+			'block:settings:1',
+			'block:styles:1',
+		] );
 	} );
 } );

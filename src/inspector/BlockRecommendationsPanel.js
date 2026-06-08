@@ -10,6 +10,7 @@ import {
 	useState,
 } from '@wordpress/element';
 import { starFilled as icon } from '@wordpress/icons';
+import { __, sprintf } from '@wordpress/i18n';
 
 import { STORE_NAME } from '../store';
 import {
@@ -18,7 +19,10 @@ import {
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
 } from '../store/activity-history';
-import { getBlockSuggestionExecutionInfo } from '../store/update-helpers';
+import {
+	getBlockSuggestionExecutionInfo,
+	orderBlockAttributeSuggestionsForBatch,
+} from '../store/update-helpers';
 import { getBlockRecommendationFreshness } from './block-recommendation-request';
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
@@ -42,6 +46,7 @@ import {
 	getSurfaceCapability,
 } from '../utils/capability-flags';
 import { describeEditorBlockLabel } from '../utils/editor-context-metadata';
+import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import {
 	ACTIONABILITY_REASON_MANUAL_COPY_ONLY,
 	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
@@ -333,6 +338,65 @@ function buildReviewRemainderSuggestion( suggestion ) {
 	};
 }
 
+function selectionSetsEqual( a, b ) {
+	if ( a === b ) {
+		return true;
+	}
+	if ( a.size !== b.size ) {
+		return false;
+	}
+	for ( const value of a ) {
+		if ( ! b.has( value ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function getRecommendationSetId( recommendations ) {
+	// Decoration carries the set id on the result's `recommendationOutcome`
+	// (see `decorateRecommendationPayload`); there is no top-level
+	// `recommendationSetId`, so reading that would always resolve to '' and the
+	// selection reset would silently fall back to suggestion-array identity.
+	return recommendations?.recommendationOutcome?.recommendationSetId || '';
+}
+
+function getSelectableSuggestions( settingsSuggestions, styleSuggestions ) {
+	return orderBlockAttributeSuggestionsForBatch( [
+		...settingsSuggestions,
+		...styleSuggestions,
+	] ).filter(
+		( suggestion ) =>
+			! suggestion?.disabled &&
+			! suggestion?.isCurrentStyle &&
+			suggestion?.suggestionKey
+	);
+}
+
+function getVisibleRecommendedSets(
+	recommendedSets = [],
+	selectableSuggestions = []
+) {
+	const visibleGroups = new Set(
+		selectableSuggestions
+			.map( ( suggestion ) => suggestion.groupId || '' )
+			.filter( Boolean )
+	);
+
+	return ( Array.isArray( recommendedSets ) ? recommendedSets : [] ).filter(
+		( set ) => set?.id && visibleGroups.has( set.id )
+	);
+}
+
+function getPreselectedKeysFromSets( visibleSets, selectableSuggestions ) {
+	const setIds = new Set( visibleSets.map( ( set ) => set.id ) );
+	return new Set(
+		selectableSuggestions
+			.filter( ( suggestion ) => setIds.has( suggestion.groupId ) )
+			.map( ( suggestion ) => suggestion.suggestionKey )
+	);
+}
+
 export function BlockRecommendationsContent( {
 	clientId,
 	eyebrow = 'Selected Block',
@@ -371,6 +435,7 @@ export function BlockRecommendationsContent( {
 		clearBlockError,
 		clearUndoError,
 		applyBlockStructuralSuggestion,
+		applySelectedSuggestions,
 		recordRecommendationOutcome,
 		revalidateBlockReviewFreshness,
 		undoActivity,
@@ -464,6 +529,109 @@ export function BlockRecommendationsContent( {
 		hasBlockSuggestions ||
 		settingsSuggestions.length > 0 ||
 		styleSuggestions.length > 0;
+	const recommendationSetId = getRecommendationSetId( recommendations );
+	const selectableSuggestions = useMemo(
+		() => getSelectableSuggestions( settingsSuggestions, styleSuggestions ),
+		[ settingsSuggestions, styleSuggestions ]
+	);
+	const visibleRecommendedSets = useMemo(
+		() =>
+			getVisibleRecommendedSets(
+				recommendations?.recommendedSets,
+				selectableSuggestions
+			),
+		[ recommendations?.recommendedSets, selectableSuggestions ]
+	);
+	const [ selectedSuggestionKeys, setSelectedSuggestionKeys ] = useState(
+		() => new Set()
+	);
+	const [ appliedSuggestionKeys, setAppliedSuggestionKeys ] = useState(
+		() => new Set()
+	);
+
+	useEffect( () => {
+		const nextSelected = isStaleResult
+			? new Set()
+			: getPreselectedKeysFromSets(
+					visibleRecommendedSets,
+					selectableSuggestions
+			  );
+
+		// Preserve the existing reference when the selection is unchanged so a
+		// no-preselect result does not trigger a spurious extra render pass.
+		setSelectedSuggestionKeys( ( current ) =>
+			selectionSetsEqual( current, nextSelected ) ? current : nextSelected
+		);
+		setAppliedSuggestionKeys( ( current ) =>
+			current.size === 0 ? current : new Set()
+		);
+	}, [
+		recommendationSetId,
+		isStaleResult,
+		selectableSuggestions,
+		visibleRecommendedSets,
+	] );
+
+	const executableSelectedSuggestions = useMemo(
+		() =>
+			selectableSuggestions.filter(
+				( suggestion ) =>
+					selectedSuggestionKeys.has( suggestion.suggestionKey ) &&
+					! appliedSuggestionKeys.has( suggestion.suggestionKey )
+			),
+		[ appliedSuggestionKeys, selectableSuggestions, selectedSuggestionKeys ]
+	);
+
+	const toggleSelectedSuggestion = useCallback( ( key ) => {
+		setSelectedSuggestionKeys( ( current ) => {
+			const next = new Set( current );
+			if ( next.has( key ) ) {
+				next.delete( key );
+			} else {
+				next.add( key );
+			}
+			return next;
+		} );
+	}, [] );
+
+	const handleSelectAllSuggestions = useCallback( () => {
+		setSelectedSuggestionKeys(
+			new Set(
+				selectableSuggestions.map(
+					( suggestion ) => suggestion.suggestionKey
+				)
+			)
+		);
+	}, [ selectableSuggestions ] );
+
+	const handleApplySelectedSuggestions = useCallback( async () => {
+		if ( executableSelectedSuggestions.length === 0 ) {
+			return;
+		}
+
+		const didApply = await applySelectedSuggestions(
+			clientId,
+			executableSelectedSuggestions,
+			currentRequestSignature,
+			currentRequestInput
+		);
+
+		if ( didApply ) {
+			setAppliedSuggestionKeys( ( current ) => {
+				const next = new Set( current );
+				for ( const suggestion of executableSelectedSuggestions ) {
+					next.add( suggestion.suggestionKey );
+				}
+				return next;
+			} );
+		}
+	}, [
+		applySelectedSuggestions,
+		clientId,
+		currentRequestInput,
+		currentRequestSignature,
+		executableSelectedSuggestions,
+	] );
 	const { statusNotice } = useSelect( ( select ) => {
 		const store = select( STORE_NAME );
 
@@ -498,6 +666,20 @@ export function BlockRecommendationsContent( {
 			} ),
 		};
 	} );
+	// Block patterns are registered before the editor mounts and this map does
+	// not read from the data store, so a one-shot useMemo is correct here — a
+	// useSelect without a select() call would subscribe to nothing anyway.
+	const patternTitleMap = useMemo( () => {
+		const patterns = getCompatBlockPatterns();
+
+		return patterns.reduce( ( accumulator, pattern ) => {
+			if ( pattern?.name ) {
+				accumulator[ pattern.name ] = pattern.title || pattern.name;
+			}
+
+			return accumulator;
+		}, {} );
+	}, [] );
 	const connectorApprovalNotice = useMemo(
 		() => getConnectorApprovalNotice( 'block', errorDetails ),
 		[ errorDetails ]
@@ -984,6 +1166,7 @@ export function BlockRecommendationsContent( {
 						<ReviewSuggestionCard
 							key={ getSuggestionKey( suggestion ) }
 							suggestion={ suggestion }
+							patternTitleMap={ patternTitleMap }
 							isActive={
 								activeReviewSuggestion &&
 								getSuggestionKey( activeReviewSuggestion ) ===
@@ -1019,6 +1202,10 @@ export function BlockRecommendationsContent( {
 						disabled={
 							isStaleResult || blockApplyStatus === 'applying'
 						}
+						selectable
+						selectedKeys={ selectedSuggestionKeys }
+						appliedKeys={ appliedSuggestionKeys }
+						onToggleSelected={ toggleSelectedSuggestion }
 					/>
 				</RecommendationLane>
 			) }
@@ -1042,8 +1229,63 @@ export function BlockRecommendationsContent( {
 						disabled={
 							isStaleResult || blockApplyStatus === 'applying'
 						}
+						selectable
+						selectedKeys={ selectedSuggestionKeys }
+						appliedKeys={ appliedSuggestionKeys }
+						onToggleSelected={ toggleSelectedSuggestion }
 					/>
 				</RecommendationLane>
+			) }
+
+			{ selectableSuggestions.length > 0 && (
+				<div className="flavor-agent-block-panel__batch-actions">
+					{ visibleRecommendedSets.length > 0 && ! isStaleResult && (
+						<div
+							className="flavor-agent-block-panel__recommended-set"
+							role="group"
+							aria-label={ __(
+								'Recommended together',
+								'flavor-agent'
+							) }
+						>
+							<div className="flavor-agent-section-label">
+								{ __( 'Recommended together', 'flavor-agent' ) }
+							</div>
+							{ visibleRecommendedSets.map( ( set ) => (
+								<p
+									key={ set.id }
+									className="flavor-agent-panel__note"
+								>
+									{ set.reason || set.label }
+								</p>
+							) ) }
+						</div>
+					) }
+					<Button
+						variant="secondary"
+						onClick={ handleSelectAllSuggestions }
+						disabled={
+							isStaleResult || blockApplyStatus === 'applying'
+						}
+					>
+						{ __( 'Select all', 'flavor-agent' ) }
+					</Button>
+					<Button
+						variant="primary"
+						onClick={ () => void handleApplySelectedSuggestions() }
+						disabled={
+							isStaleResult ||
+							blockApplyStatus === 'applying' ||
+							executableSelectedSuggestions.length === 0
+						}
+					>
+						{ sprintf(
+							/* translators: %d: number of selected suggestions to apply. */
+							__( 'Apply selected (%d)', 'flavor-agent' ),
+							executableSelectedSuggestions.length
+						) }
+					</Button>
+				</div>
 			) }
 
 			{ advisoryBlockSuggestions.length > 0 && (
@@ -1085,25 +1327,48 @@ export function BlockRecommendationsContent( {
 function getReviewOperationSummary( operation = {} ) {
 	if ( operation?.type === 'insert_pattern' ) {
 		return operation.position === 'insert_before'
-			? 'Insert pattern before the selected block.'
-			: 'Insert pattern after the selected block.';
+			? __( 'Insert pattern before the selected block.', 'flavor-agent' )
+			: __( 'Insert pattern after the selected block.', 'flavor-agent' );
 	}
 
 	if ( operation?.type === 'replace_block_with_pattern' ) {
-		return 'Replace the selected block with a pattern.';
+		return __(
+			'Replace the selected block with a pattern.',
+			'flavor-agent'
+		);
 	}
 
-	return 'Review structural operation.';
+	return __( 'Review structural operation.', 'flavor-agent' );
 }
 
-function getReviewOperationDetails( operation = {} ) {
+function formatReviewPosition( position ) {
+	if ( position === 'insert_before' ) {
+		return __( 'Before this block', 'flavor-agent' );
+	}
+
+	if ( position === 'insert_after' ) {
+		return __( 'After this block', 'flavor-agent' );
+	}
+
+	return '';
+}
+
+function getReviewOperationDetails( operation = {}, patternTitleMap = {} ) {
+	const expectedName = operation.expectedTarget?.name || '';
+
 	return [
-		[ 'Pattern', operation.patternName ],
-		[ 'Target', operation.targetClientId ],
-		[ 'Expected block', operation.expectedTarget?.name ],
-		[ 'Target signature', operation.targetSignature ],
-		[ 'Position', operation.position ],
-		[ 'Action', operation.action ],
+		[
+			__( 'Pattern', 'flavor-agent' ),
+			patternTitleMap[ operation.patternName ] || operation.patternName,
+		],
+		[
+			__( 'Target', 'flavor-agent' ),
+			expectedName ? describeEditorBlockLabel( expectedName ) : '',
+		],
+		[
+			__( 'Position', 'flavor-agent' ),
+			formatReviewPosition( operation.position ),
+		],
 	].filter( ( [ , value ] ) => typeof value === 'string' && value !== '' );
 }
 
@@ -1116,6 +1381,7 @@ function getReviewDetailsId( suggestion ) {
 
 function ReviewSuggestionCard( {
 	suggestion,
+	patternTitleMap = {},
 	isActive,
 	isStale,
 	canApplyReviewedStructure,
@@ -1135,8 +1401,8 @@ function ReviewSuggestionCard( {
 	const operationSummaries = executableOperations.map(
 		getReviewOperationSummary
 	);
-	const operationDetails = executableOperations.flatMap(
-		getReviewOperationDetails
+	const operationDetails = executableOperations.flatMap( ( operation ) =>
+		getReviewOperationDetails( operation, patternTitleMap )
 	);
 	const label = suggestion?.label || 'Suggestion';
 	const reviewDetailsId = getReviewDetailsId( suggestion );

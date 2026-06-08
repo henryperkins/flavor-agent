@@ -2,10 +2,11 @@
  * Suggestion chips for Inspector sub-panels.
  * Renders compact apply buttons inside ToolsPanel grids.
  */
-import { Button } from '@wordpress/components';
+import { Button, CheckboxControl } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { useMemo } from '@wordpress/element';
 import { check } from '@wordpress/icons';
+import { __ } from '@wordpress/i18n';
 
 import {
 	getTonePillClassName,
@@ -24,7 +25,7 @@ import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
 function buildChipFeedback( suggestion, key ) {
 	return {
 		key,
-		label: suggestion?.label || 'Suggestion',
+		label: suggestion?.label || __( 'Suggestion', 'flavor-agent' ),
 	};
 }
 
@@ -39,6 +40,10 @@ export default function SuggestionChips( {
 	interactive = true,
 	title = '',
 	tone = '',
+	selectable = false,
+	selectedKeys = new Set(),
+	appliedKeys = new Set(),
+	onToggleSelected = null,
 } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
 	// Passive mirrors never apply, and interactive chips called with both
@@ -147,8 +152,10 @@ export default function SuggestionChips( {
 					aria-live="polite"
 				>
 					<p className="flavor-agent-panel__intro-copy">
-						These hints mirror the latest AI Recommendations result.
-						Apply them from that main panel.
+						{ __(
+							'These hints mirror the latest AI Recommendations result. Apply them from that main panel.',
+							'flavor-agent'
+						) }
 					</p>
 				</div>
 			) }
@@ -160,9 +167,10 @@ export default function SuggestionChips( {
 					aria-live="polite"
 				>
 					<p className="flavor-agent-panel__intro-copy">
-						These suggestions reflect the last AI Recommendations
-						request. Refresh that main panel to update them for the
-						current block.
+						{ __(
+							'These suggestions reflect the last AI Recommendations request. Refresh that main panel to update them for the current block.',
+							'flavor-agent'
+						) }
 					</p>
 				</div>
 			) }
@@ -211,6 +219,69 @@ export default function SuggestionChips( {
 									/>
 								) }
 							</span>
+						);
+					}
+
+					if ( selectable ) {
+						const isSelected = selectedKeys.has( key );
+						const isApplied = appliedKeys.has( key );
+						const isRowDisabled =
+							Boolean( s?.isCurrentStyle ) ||
+							Boolean( s?.disabled ) ||
+							isApplied ||
+							disabled ||
+							isStale;
+
+						return (
+							<div
+								key={ key }
+								className={ `flavor-agent-chip-row${
+									isApplied ? ' is-applied' : ''
+								}` }
+								style={
+									s.preview
+										? {
+												'--flavor-agent-chip-preview':
+													s.preview,
+										  }
+										: undefined
+								}
+							>
+								<CheckboxControl
+									label={ s.label }
+									checked={ isSelected || isApplied }
+									disabled={ isRowDisabled }
+									onChange={ () => {
+										if (
+											typeof onToggleSelected ===
+											'function'
+										) {
+											onToggleSelected( key );
+										}
+									} }
+								/>
+								<div className="flavor-agent-chip-row__meta">
+									{ s.preview && ! isApplied && (
+										<span
+											className="flavor-agent-chip__preview"
+											aria-hidden="true"
+										/>
+									) }
+									{ isApplied ? (
+										<span className="flavor-agent-chip-row__status">
+											{ __( 'Applied', 'flavor-agent' ) }
+										</span>
+									) : (
+										<span className="flavor-agent-chip-row__values">
+											{ s.currentValue || '' }
+											{ s.currentValue || s.suggestedValue
+												? ' -> '
+												: '' }
+											{ s.suggestedValue || '' }
+										</span>
+									) }
+								</div>
+							</div>
 						);
 					}
 

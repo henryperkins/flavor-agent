@@ -27,19 +27,6 @@ final class RecommendationContextScorer {
 		'complexity_fit',
 	];
 
-	public const PENALTY_KEYS = [
-		'possible_no_op',
-		'weak_prompt_match',
-		'unsupported_control',
-		'stale_docs',
-		'validation_risk',
-		'failed_contrast',
-		'raw_value_when_preset_available',
-		'duplicate_or_noop',
-		'responsive_visibility_risk',
-		'excessive_visual_complexity',
-	];
-
 	private const EVIDENCE_WEIGHTS = [
 		'prompt_match'           => 0.15,
 		'operation_fit'          => 0.14,

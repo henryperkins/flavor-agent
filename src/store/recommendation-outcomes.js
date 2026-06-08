@@ -557,6 +557,15 @@ export function buildRecommendationIdentityFromSuggestion(
 		resultCount = outcome.resultCount;
 	}
 
+	let members = [];
+	if ( Array.isArray( overrides.members ) ) {
+		members = overrides.members;
+	} else if ( Array.isArray( suggestion?.members ) ) {
+		members = suggestion.members;
+	} else if ( Array.isArray( outcome.members ) ) {
+		members = outcome.members;
+	}
+
 	return {
 		recommendationSetId: cleanString(
 			overrides.recommendationSetId || outcome.recommendationSetId
@@ -572,6 +581,7 @@ export function buildRecommendationIdentityFromSuggestion(
 		rank,
 		topSuggestionKeys,
 		resultCount,
+		members: normalizeTopSuggestionKeys( members ),
 	};
 }
 
@@ -668,6 +678,7 @@ export function buildRecommendationOutcomeEntry( {
 			? { clientId: cleanString( target.clientId ) }
 			: {} ),
 		...( Number.isInteger( targetRank ) ? { rank: targetRank } : {} ),
+		...( identity.members.length ? { members: identity.members } : {} ),
 	};
 	const entry = createActivityEntry( {
 		type: RECOMMENDATION_OUTCOME_TYPE,
@@ -726,6 +737,9 @@ export function buildRecommendationOutcomeEntry( {
 				suggestionKey: finalSuggestionKey,
 				sourceRequestSignature: identity.sourceRequestSignature,
 				rank: targetPayload.rank ?? null,
+				...( identity.members.length
+					? { members: identity.members }
+					: {} ),
 				...outcomeRanking,
 			},
 		},
@@ -747,6 +761,7 @@ export function getRecommendationIdentityForApply( suggestion = {} ) {
 			identity.suggestionKey || getSuggestionOutcomeKey( suggestion, '' ),
 		sourceRequestSignature: identity.sourceRequestSignature,
 		rank: identity.rank,
+		members: Array.isArray( identity.members ) ? identity.members : [],
 		...( primary ? { validationReason: primary.code } : {} ),
 	};
 }

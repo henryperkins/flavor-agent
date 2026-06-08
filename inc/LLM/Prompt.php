@@ -78,6 +78,7 @@ Respond with a JSON object (no markdown fences, no explanation outside the JSON)
   "settings": [],
   "styles": [],
   "block": [],
+  "recommendedSets": [],
   "explanation": "One sentence summary of your recommendations."
 }
 
@@ -96,6 +97,7 @@ Each item in settings/styles is an object:
   "preview": "Hex color for visual preview swatch or empty string",
   "presetSlug": "Theme preset slug or empty string",
   "cssVar": "CSS custom property reference or empty string",
+  "groupId": "",
   "ranking": null
 }
 
@@ -115,6 +117,7 @@ Each item in block is an object:
   "preview": "Hex color for visual preview swatch or empty string",
   "presetSlug": "Theme preset slug or empty string",
   "cssVar": "CSS custom property reference or empty string",
+  "groupId": "",
   "ranking": null
 }
 
@@ -167,6 +170,11 @@ Rules:
 - When a block supports both aspect ratio and explicit height, never suggest setting both in the same recommendation. Choose aspectRatio or height/minHeight, not both.
 - Preserve Gutenberg attribute key casing exactly in attributeUpdates (for example, backgroundColor and metadata.blockVisibility).
 - If suggesting a registered style variation, use "type": "style_variation" and include the exact attributeUpdates needed to activate it.
+- The user can apply multiple Settings and Styles suggestions at once, possibly spanning both lanes. Use a shared groupId to mark a coherent set that should be applied together for the best result.
+- Use recommendedSets for optional bundle hints. Each recommendedSets item must use an id that matches one or more Settings or Styles groupId values, plus a short label and reason.
+- Never group mutually exclusive suggestions, including two style_variation suggestions or aspectRatio and height changes that conflict.
+- Block-lane suggestions stay one-at-a-time; never include executable Block-lane suggestions in recommendedSets, and let them carry groupId as an empty string only.
+- Because the schema is strict, always emit groupId as an empty string for ungrouped items and recommendedSets as an empty array when no bundle is useful.
 SYSTEM;
 	}
 
@@ -897,19 +905,100 @@ SYSTEM;
 		$explanation = is_scalar( $explanation ) ? sanitize_text_field( (string) $explanation ) : '';
 
 		return [
-			'settings'    => self::validate_suggestions(
+			'settings'        => self::validate_suggestions(
 				self::normalize_response_suggestion_list( $data['settings'] ?? null, 'settings' ),
 				'settings',
 				$ranking_context
 			),
-			'styles'      => self::validate_suggestions(
+			'styles'          => self::validate_suggestions(
 				self::normalize_response_suggestion_list( $data['styles'] ?? null, 'styles' ),
 				'styles',
 				$ranking_context
 			),
-			'block'       => self::validate_suggestions( $block_suggestions, 'block', $ranking_context ),
-			'explanation' => $explanation,
+			'block'           => self::validate_suggestions( $block_suggestions, 'block', $ranking_context ),
+			'recommendedSets' => self::normalize_recommended_sets( $data['recommendedSets'] ?? [] ),
+			'explanation'     => $explanation,
 		];
+	}
+
+	/**
+	 * Normalize the optional top-level `recommendedSets` bundle hints into a clean
+	 * list of unique id/label/reason objects. Unknown keys are discarded and
+	 * entries without a usable id are dropped.
+	 *
+	 * @param mixed $sets
+	 * @return array<int, array{id:string,label:string,reason:string}>
+	 */
+	private static function normalize_recommended_sets( mixed $sets ): array {
+		if ( ! is_array( $sets ) ) {
+			return [];
+		}
+
+		$normalized = [];
+		$seen       = [];
+
+		foreach ( $sets as $set ) {
+			if ( ! is_array( $set ) ) {
+				continue;
+			}
+
+			$id = sanitize_key( $set['id'] ?? '' );
+			if ( '' === $id || isset( $seen[ $id ] ) ) {
+				continue;
+			}
+
+			$seen[ $id ]  = true;
+			$normalized[] = [
+				'id'     => $id,
+				'label'  => sanitize_text_field( (string) ( $set['label'] ?? $id ) ),
+				'reason' => sanitize_text_field( (string) ( $set['reason'] ?? '' ) ),
+			];
+		}
+
+		return $normalized;
+	}
+
+	private static function normalize_group_id( mixed $value ): string {
+		return sanitize_key( is_scalar( $value ) ? (string) $value : '' );
+	}
+
+	/**
+	 * Drop any `recommendedSets` entry whose id is not referenced by a still-visible,
+	 * still-selectable Settings or Styles suggestion (one with a non-empty
+	 * attributeUpdates payload). Block-lane suggestions never count toward set
+	 * membership because they stay one-at-a-time.
+	 *
+	 * @param array<string, mixed> $payload
+	 * @return array<string, mixed>
+	 */
+	private static function prune_recommended_sets_for_selectable_members( array $payload ): array {
+		$sets = self::normalize_recommended_sets( $payload['recommendedSets'] ?? [] );
+		if ( [] === $sets ) {
+			$payload['recommendedSets'] = [];
+			return $payload;
+		}
+
+		$visible_group_ids = [];
+		foreach ( [ 'settings', 'styles' ] as $lane ) {
+			foreach ( is_array( $payload[ $lane ] ?? null ) ? $payload[ $lane ] : [] as $suggestion ) {
+				if ( ! is_array( $suggestion ) || empty( $suggestion['attributeUpdates'] ) ) {
+					continue;
+				}
+				$group_id = self::normalize_group_id( $suggestion['groupId'] ?? '' );
+				if ( '' !== $group_id ) {
+					$visible_group_ids[ $group_id ] = true;
+				}
+			}
+		}
+
+		$payload['recommendedSets'] = array_values(
+			array_filter(
+				$sets,
+				static fn( array $set ): bool => isset( $visible_group_ids[ $set['id'] ] )
+			)
+		);
+
+		return $payload;
 	}
 
 	private static function clean_response_text( string $raw ): string {
@@ -1032,12 +1121,17 @@ SYSTEM;
 
 		if ( $restrictions['disabled'] ) {
 			return [
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => [],
-				'explanation' => '',
+				'settings'        => [],
+				'styles'          => [],
+				'block'           => [],
+				'recommendedSets' => [],
+				'explanation'     => '',
 			];
 		}
+
+		// Capture the bundle hints before the execution-contract filter rebuilds the
+		// payload from a whitelist that would otherwise drop this top-level key.
+		$recommended_sets = is_array( $payload['recommendedSets'] ?? null ) ? $payload['recommendedSets'] : [];
 
 		$payload = self::normalize_block_payload_for_execution( $payload );
 		$payload = self::filter_payload_for_execution_contract( $payload, $execution_contract, $block );
@@ -1045,29 +1139,32 @@ SYSTEM;
 		$payload = self::enforce_block_operation_context_rules( $payload, $block_operation_context );
 
 		if ( ! $restrictions['contentOnly'] ) {
-			return $payload;
+			$payload['recommendedSets'] = $recommended_sets;
+
+			return self::prune_recommended_sets_for_selectable_members( $payload );
 		}
 
 		$content_attribute_keys = array_keys( $block['contentAttributes'] ?? [] );
 
 		if ( self::uses_inner_blocks_as_content( $block ) ) {
 			return [
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => array_values(
+				'settings'        => [],
+				'styles'          => [],
+				'block'           => array_values(
 					array_filter(
 						$payload['block'] ?? [],
 						fn( array $suggestion ): bool => self::is_advisory_only_block_type( $suggestion['type'] ?? null )
 					)
 				),
-				'explanation' => $payload['explanation'] ?? '',
+				'recommendedSets' => [],
+				'explanation'     => $payload['explanation'] ?? '',
 			];
 		}
 
 		return [
-			'settings'    => [],
-			'styles'      => [],
-			'block'       => array_values(
+			'settings'        => [],
+			'styles'          => [],
+			'block'           => array_values(
 				array_filter(
 					array_map(
 						fn( array $suggestion ) => self::filter_suggestion_for_content_only( $suggestion, $content_attribute_keys ),
@@ -1075,7 +1172,8 @@ SYSTEM;
 					)
 				)
 			),
-			'explanation' => $payload['explanation'] ?? '',
+			'recommendedSets' => [],
+			'explanation'     => $payload['explanation'] ?? '',
 		];
 	}
 
@@ -1184,7 +1282,9 @@ SYSTEM;
 			);
 		}
 
-		return $payload;
+		$payload['recommendedSets'] = self::normalize_recommended_sets( $payload['recommendedSets'] ?? [] );
+
+		return self::prune_recommended_sets_for_selectable_members( $payload );
 	}
 
 	private static function enforce_block_operation_context_rules( array $payload, array $block_operation_context ): array {
@@ -2527,6 +2627,7 @@ SYSTEM;
 				'preview'          => $preview,
 				'presetSlug'       => $preset_slug,
 				'cssVar'           => $css_var,
+				'groupId'          => self::normalize_group_id( $s['groupId'] ?? '' ),
 			];
 
 			if ( 'block' === $group ) {

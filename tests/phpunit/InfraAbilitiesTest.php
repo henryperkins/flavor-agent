@@ -637,7 +637,7 @@ final class InfraAbilitiesTest extends TestCase {
 					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 					'qdrant_url'                     => '',
 					'qdrant_collection'              => '',
-					'cloudflare_ai_search_namespace' => '',
+					'cloudflare_ai_search_namespace' => 'default',
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => PatternSearchInstanceManager::credential_signature(
 						(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),

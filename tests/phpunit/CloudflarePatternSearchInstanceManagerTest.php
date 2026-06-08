@@ -136,13 +136,19 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( PatternSearchInstanceManager::managed_instance_id(), $result['instance_id'] );
 		$this->assertSame( 'created', $result['status'] );
-		$this->assertStringContainsString( '/ai-search/instances', WordPressTestState::$remote_get_calls[0]['url'] );
-		$this->assertStringContainsString( '/ai-search/instances', WordPressTestState::$remote_post_calls[0]['url'] );
-		$this->assertStringContainsString( '/items', WordPressTestState::$remote_post_calls[1]['url'] );
-		$this->assertStringContainsString( '"pattern_name":"__flavor_agent_owner__"', WordPressTestState::$remote_post_calls[1]['args']['body'] );
-		$this->assertStringContainsString( '"public_safe":"true"', WordPressTestState::$remote_post_calls[1]['args']['body'] );
-		$this->assertStringContainsString( '/items?', WordPressTestState::$remote_get_calls[1]['url'] );
-		$this->assertStringContainsString( 'metadata_filter=', WordPressTestState::$remote_get_calls[1]['url'] );
+			$this->assertStringContainsString( '/ai-search/instances', WordPressTestState::$remote_get_calls[0]['url'] );
+			$this->assertStringContainsString( '/ai-search/instances', WordPressTestState::$remote_post_calls[0]['url'] );
+			$this->assertStringContainsString(
+				sprintf( '/ai-search/namespaces/default/instances/%s/items', PatternSearchInstanceManager::managed_instance_id() ),
+				WordPressTestState::$remote_post_calls[1]['url']
+			);
+			$this->assertStringContainsString( '"pattern_name":"__flavor_agent_owner__"', WordPressTestState::$remote_post_calls[1]['args']['body'] );
+			$this->assertStringContainsString( '"public_safe":"true"', WordPressTestState::$remote_post_calls[1]['args']['body'] );
+			$this->assertStringContainsString(
+				sprintf( '/ai-search/namespaces/default/instances/%s/items?', PatternSearchInstanceManager::managed_instance_id() ),
+				WordPressTestState::$remote_get_calls[1]['url']
+			);
+			$this->assertStringContainsString( 'metadata_filter=', WordPressTestState::$remote_get_calls[1]['url'] );
 
 		$owner_marker_url = WordPressTestState::$remote_get_calls[1]['url'];
 		$query            = [];
@@ -415,14 +421,22 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 			'ready',
 			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['status'] ?? ''
 		);
-		$this->assertSame(
-			'repaired_owner_marker',
-			WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['managed_status'] ?? ''
-		);
-		$this->assertStringContainsString( 'source=builtin', WordPressTestState::$remote_get_calls[2]['url'] ?? '' );
-		$this->assertStringContainsString( 'per_page=50', WordPressTestState::$remote_get_calls[2]['url'] ?? '' );
-		$this->assertStringContainsString( '"public_safe":"true"', WordPressTestState::$remote_post_calls[0]['args']['body'] ?? '' );
-		$this->assertNotFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+			$this->assertSame(
+				'repaired_owner_marker',
+				WordPressTestState::$options[ Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE ]['managed_status'] ?? ''
+			);
+			$this->assertStringContainsString(
+				sprintf( '/ai-search/namespaces/default/instances/%s/items', PatternSearchInstanceManager::managed_instance_id() ),
+				WordPressTestState::$remote_get_calls[2]['url'] ?? ''
+			);
+			$this->assertStringContainsString( 'source=builtin', WordPressTestState::$remote_get_calls[2]['url'] ?? '' );
+			$this->assertStringContainsString( 'per_page=50', WordPressTestState::$remote_get_calls[2]['url'] ?? '' );
+			$this->assertStringContainsString(
+				sprintf( '/ai-search/namespaces/default/instances/%s/items', PatternSearchInstanceManager::managed_instance_id() ),
+				WordPressTestState::$remote_post_calls[0]['url'] ?? ''
+			);
+			$this->assertStringContainsString( '"public_safe":"true"', WordPressTestState::$remote_post_calls[0]['args']['body'] ?? '' );
+			$this->assertNotFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
 	}
 
 	public function test_process_managed_instance_provisioning_does_not_repair_missing_owner_marker_when_instance_has_items(): void {

@@ -35,6 +35,7 @@ import {
 } from './activity-session';
 import {
 	buildBlockActivityEntry,
+	buildBlockBatchActivityEntry,
 	buildBlockStructuralActivityEntry,
 	createUndoActivityAction,
 	findBlockPath,
@@ -68,6 +69,7 @@ import {
 	buildSafeAttributeUpdates,
 	buildBlockRecommendationDiagnostics,
 	getBlockSuggestionExecutionInfo,
+	orderBlockAttributeSuggestionsForBatch,
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
 import { isPlainObject } from '../utils/type-guards';
@@ -86,11 +88,13 @@ import {
 	clearRecommendationOutcomePending,
 	decorateRecommendationPayload,
 	getRecommendationOutcomeSummaryFromPayload,
+	hashOutcomeValue,
 	hasPendingRecommendationOutcome,
 	hasRecordedRecommendationOutcome,
 	markRecommendationOutcomePending,
 	markRecommendationOutcomeRecorded,
 } from './recommendation-outcomes';
+import { getLiveBlockContextData } from '../context/collector';
 
 const STORE_NAME = 'flavor-agent';
 const APPLY_RESOLVED_FRESHNESS_ABORT_KEY = '_applyResolvedFreshnessAbort';
@@ -129,6 +133,7 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 	lastAppliedSuggestionKey: null,
 	staleReason: null,
 	docsGroundingWarning: null,
+	resolvedRebaselinePending: false,
 };
 
 const DEFAULT_STATE = {
@@ -760,6 +765,8 @@ async function guardSurfaceApplyResolvedFreshness( {
 	abilityName,
 	liveRequestInput,
 	storedResolvedContextSignature = null,
+	rebaselinePending = false,
+	adoptResolvedContextSignature = null,
 	abortId = null,
 	isCurrent = null,
 	localDispatch,
@@ -855,36 +862,19 @@ async function guardSurfaceApplyResolvedFreshness( {
 		const docsGroundingStaleReason =
 			getApplyDocsGroundingStaleReason( result );
 
-		if ( docsGroundingStaleReason === 'docs-grounding-unavailable' ) {
-			const error =
-				buildDocsGroundingUnavailableApplyErrorMessage( surface );
-
-			localDispatch(
-				setApplyState( 'error', error, 'docs-grounding-unavailable' )
-			);
-
-			return {
-				ok: false,
-				error,
-				staleReason: 'docs-grounding-unavailable',
-			};
-		}
-
-		const resolvedContextSignature =
-			getResolvedContextSignatureFromResponse( result );
-
+		// Docs-grounding drift blocks the apply even when a rebaseline is pending:
+		// the resolved signature folds in the docs fingerprint, but the response
+		// also carries an independent docsGrounding summary, so adoption never masks
+		// it (review fix #5).
 		if (
-			! resolvedContextSignature ||
-			resolvedContextSignature !== storedSignature
+			docsGroundingStaleReason === 'docs-grounding-unavailable' ||
+			docsGroundingStaleReason === 'docs-grounding-changed'
 		) {
-			const staleReason =
-				docsGroundingStaleReason === 'docs-grounding-changed'
-					? 'docs-grounding-changed'
-					: 'server-apply';
+			const staleReason = docsGroundingStaleReason;
 			const error =
-				staleReason === 'docs-grounding-changed'
-					? buildDocsGroundingChangedApplyErrorMessage( surface )
-					: buildServerStaleApplyErrorMessage( surface );
+				staleReason === 'docs-grounding-unavailable'
+					? buildDocsGroundingUnavailableApplyErrorMessage( surface )
+					: buildDocsGroundingChangedApplyErrorMessage( surface );
 
 			localDispatch( setApplyState( 'error', error, staleReason ) );
 
@@ -892,6 +882,40 @@ async function guardSurfaceApplyResolvedFreshness( {
 				ok: false,
 				error,
 				staleReason,
+			};
+		}
+
+		const resolvedContextSignature =
+			getResolvedContextSignatureFromResponse( result );
+
+		// Pure server-context drift on a self-apply re-baseline: adopt the freshly
+		// resolved signature as the new baseline instead of staling the result.
+		if ( rebaselinePending && resolvedContextSignature ) {
+			if ( typeof adoptResolvedContextSignature === 'function' ) {
+				localDispatch(
+					adoptResolvedContextSignature( resolvedContextSignature )
+				);
+			}
+
+			return {
+				ok: true,
+				resolvedContextSignature,
+				adopted: true,
+			};
+		}
+
+		if (
+			! resolvedContextSignature ||
+			resolvedContextSignature !== storedSignature
+		) {
+			const error = buildServerStaleApplyErrorMessage( surface );
+
+			localDispatch( setApplyState( 'error', error, 'server-apply' ) );
+
+			return {
+				ok: false,
+				error,
+				staleReason: 'server-apply',
 			};
 		}
 
@@ -1453,6 +1477,44 @@ async function runAbortableRecommendationRequest( {
 	}
 }
 
+// Re-anchor a block recommendation result to the post-apply block so a self-apply
+// does not stale its own result. The client signature MUST be produced by the same
+// exported collector helper the panel uses (getLiveBlockContextData) so the panel
+// stays fresh on the next render, and the resolved layer is flagged pending so the
+// next guard / background revalidation adopts the new server signature.
+function rebaselineBlockAfterAttributeApply( {
+	clientId,
+	localDispatch,
+	registry,
+} ) {
+	const liveData = getLiveBlockContextData(
+		registry.select.bind( registry ),
+		clientId
+	);
+
+	if ( liveData.signature ) {
+		localDispatch(
+			actions.setBlockClientContextBaseline(
+				clientId,
+				liveData.signature
+			)
+		);
+	}
+
+	localDispatch(
+		actions.setBlockResolvedRebaselinePending( clientId, true )
+	);
+}
+
+function buildBlockBatchSuggestionKey(
+	recommendationSetId,
+	memberSuggestionKeys
+) {
+	return `block-batch:${
+		recommendationSetId || 'unknown'
+	}:${ hashOutcomeValue( memberSuggestionKeys ) }`;
+}
+
 const actions = {
 	setBlockRequestState(
 		clientId,
@@ -1528,6 +1590,30 @@ const actions = {
 			type: 'SET_BLOCK_DOCS_GROUNDING_WARNING',
 			clientId,
 			docsGroundingWarning,
+		};
+	},
+
+	setBlockClientContextBaseline( clientId, contextSignature ) {
+		return {
+			type: 'SET_BLOCK_CLIENT_CONTEXT_BASELINE',
+			clientId,
+			contextSignature,
+		};
+	},
+
+	setBlockResolvedRebaselinePending( clientId, pending = true ) {
+		return {
+			type: 'SET_BLOCK_RESOLVED_REBASELINE_PENDING',
+			clientId,
+			pending: pending === true,
+		};
+	},
+
+	adoptBlockResolvedContextBaseline( clientId, resolvedContextSignature ) {
+		return {
+			type: 'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE',
+			clientId,
+			resolvedContextSignature,
 		};
 	},
 
@@ -1976,6 +2062,15 @@ const actions = {
 					abilityName: 'flavor-agent/recommend-block',
 					liveRequestInput,
 					storedResolvedContextSignature,
+					rebaselinePending:
+						select.isBlockResolvedRebaselinePending?.(
+							clientId
+						) === true,
+					adoptResolvedContextSignature: ( resolvedSignature ) =>
+						actions.adoptBlockResolvedContextBaseline(
+							clientId,
+							resolvedSignature
+						),
 					abortId: `block:${ clientId }`,
 					isCurrent: ( storedSignature ) =>
 						normalizeStringMessage(
@@ -2122,6 +2217,12 @@ const actions = {
 					return false;
 				}
 
+				rebaselineBlockAfterAttributeApply( {
+					clientId,
+					localDispatch,
+					registry,
+				} );
+
 				const persistedBlockEntry = await logStoreActivityEntry(
 					localDispatch,
 					select,
@@ -2183,6 +2284,280 @@ const actions = {
 				);
 				throw error;
 			}
+		};
+	},
+
+	applySelectedSuggestions(
+		clientId,
+		suggestions = [],
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
+		return async ( { dispatch: localDispatch, registry, select } ) => {
+			if ( select.getBlockApplyStatus?.( clientId ) === 'applying' ) {
+				return false;
+			}
+
+			const orderedSuggestions =
+				orderBlockAttributeSuggestionsForBatch( suggestions );
+			const memberSuggestionKeys = orderedSuggestions
+				.map( ( suggestion ) => suggestion?.suggestionKey || '' )
+				.filter( Boolean );
+			const recommendationSetId =
+				orderedSuggestions[ 0 ]?.recommendationOutcome
+					?.recommendationSetId ||
+				select.getBlockRecommendations?.( clientId )?.settings?.[ 0 ]
+					?.recommendationOutcome?.recommendationSetId ||
+				'';
+			const batchSuggestionKey = buildBlockBatchSuggestionKey(
+				recommendationSetId,
+				memberSuggestionKeys
+			);
+			const applyErrorMessage =
+				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.';
+
+			const staleApplyResult = guardSurfaceApplyFreshness( {
+				surface: 'block',
+				currentRequestSignature,
+				getStoredRequestSignature: () =>
+					buildBlockRecommendationRequestSignature( {
+						clientId,
+						prompt:
+							select.getBlockRecommendations?.( clientId )
+								?.prompt || '',
+						contextSignature:
+							select.getBlockRecommendationContextSignature?.(
+								clientId
+							) || null,
+					} ),
+				localDispatch,
+				setApplyState: ( status, error, staleReason = null ) =>
+					actions.setBlockApplyState(
+						clientId,
+						status,
+						error,
+						batchSuggestionKey,
+						staleReason
+					),
+			} );
+
+			if ( staleApplyResult ) {
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion: {
+							suggestionKey: batchSuggestionKey,
+							members: memberSuggestionKeys,
+							recommendationOutcome: { recommendationSetId },
+						},
+						reason: staleApplyResult.staleReason || 'client',
+						target: { clientId, members: memberSuggestionKeys },
+					} )
+				);
+				return false;
+			}
+
+			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
+
+			const storedResolvedContextSignature =
+				select.getBlockResolvedContextSignature?.( clientId ) || null;
+			const storedRequestToken =
+				select.getBlockRequestToken?.( clientId ) || 0;
+			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
+				{
+					surface: 'block',
+					abilityName: 'flavor-agent/recommend-block',
+					liveRequestInput,
+					storedResolvedContextSignature,
+					rebaselinePending:
+						select.isBlockResolvedRebaselinePending?.(
+							clientId
+						) === true,
+					adoptResolvedContextSignature: ( resolvedSignature ) =>
+						actions.adoptBlockResolvedContextBaseline(
+							clientId,
+							resolvedSignature
+						),
+					abortId: `block:${ clientId }`,
+					isCurrent: ( storedSignature ) =>
+						normalizeStringMessage(
+							select.getBlockResolvedContextSignature?.(
+								clientId
+							) || ''
+						) === storedSignature &&
+						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+							storedRequestToken,
+					localDispatch,
+					setApplyState: ( status, error, staleReason = null ) =>
+						actions.setBlockApplyState(
+							clientId,
+							status,
+							error,
+							batchSuggestionKey,
+							staleReason
+						),
+				}
+			);
+
+			if ( ! resolvedFreshness.ok ) {
+				if ( ! resolvedFreshness.skipped ) {
+					localDispatch(
+						actions.recordRecommendationOutcome( {
+							event: 'stale_blocked',
+							surface: 'block',
+							suggestion: {
+								suggestionKey: batchSuggestionKey,
+								members: memberSuggestionKeys,
+								recommendationOutcome: { recommendationSetId },
+							},
+							reason:
+								resolvedFreshness.staleReason ||
+								'revalidation_failed',
+							target: { clientId, members: memberSuggestionKeys },
+						} )
+					);
+				}
+				return false;
+			}
+
+			const scope = getCurrentActivityScope( registry );
+			syncStoreActivitySession( localDispatch, select, scope );
+			const storedRecommendations =
+				select.getBlockRecommendations?.( clientId ) || {};
+			const blockContext = storedRecommendations.blockContext || {};
+			const executionContract =
+				storedRecommendations.executionContract || null;
+			const blockEditorSelect =
+				registry?.select?.( 'core/block-editor' ) || {};
+			const blockEditorDispatch =
+				registry?.dispatch?.( 'core/block-editor' ) || {};
+			const currentAttributes =
+				blockEditorSelect.getBlockAttributes?.( clientId ) || {};
+			let workingAttributes = { ...currentAttributes };
+			const appliedKeys = new Set();
+
+			for ( const suggestion of orderedSuggestions ) {
+				const { allowedUpdates } = getBlockSuggestionExecutionInfo(
+					suggestion,
+					blockContext,
+					executionContract
+				);
+				if ( Object.keys( allowedUpdates ).length === 0 ) {
+					continue;
+				}
+
+				const patch = buildSafeAttributeUpdates(
+					workingAttributes,
+					allowedUpdates
+				);
+				for ( const key of Object.keys( patch ) ) {
+					appliedKeys.add( key );
+				}
+				workingAttributes = {
+					...workingAttributes,
+					...patch,
+				};
+			}
+
+			const appliedAttributeKeys = [ ...appliedKeys ];
+			if (
+				appliedAttributeKeys.length === 0 ||
+				attributeSnapshotsMatch( currentAttributes, workingAttributes )
+			) {
+				if ( appliedAttributeKeys.length === 0 ) {
+					localDispatch(
+						actions.setBlockApplyState(
+							clientId,
+							'error',
+							applyErrorMessage
+						)
+					);
+					localDispatch(
+						actions.recordRecommendationOutcome( {
+							event: 'validation_blocked',
+							surface: 'block',
+							suggestion: {
+								suggestionKey: batchSuggestionKey,
+								members: memberSuggestionKeys,
+								recommendationOutcome: { recommendationSetId },
+							},
+							reason: 'operation_validation_failed',
+							target: { clientId, members: memberSuggestionKeys },
+						} )
+					);
+				} else {
+					localDispatch(
+						actions.setBlockApplyState( clientId, 'idle' )
+					);
+				}
+				return false;
+			}
+
+			const safeUpdates = pickAttributeSnapshot(
+				workingAttributes,
+				appliedAttributeKeys
+			);
+			blockEditorDispatch.updateBlockAttributes( clientId, safeUpdates );
+			rebaselineBlockAfterAttributeApply( {
+				clientId,
+				localDispatch,
+				registry,
+			} );
+
+			const persistedBlockEntry = await logStoreActivityEntry(
+				localDispatch,
+				select,
+				buildBlockBatchActivityEntry( {
+					afterAttributes: pickAttributeSnapshot(
+						workingAttributes,
+						appliedAttributeKeys
+					),
+					beforeAttributes: pickAttributeSnapshot(
+						currentAttributes,
+						appliedAttributeKeys
+					),
+					blockContext,
+					blockPath: findBlockPath(
+						blockEditorSelect.getBlocks?.() || [],
+						clientId
+					),
+					clientId,
+					memberSuggestionKeys,
+					recommendationSetId,
+					requestPrompt: storedRecommendations.prompt || '',
+					requestMeta: storedRecommendations.requestMeta || null,
+					requestToken: select.getBlockRequestToken( clientId ) || 0,
+					scope,
+					suggestionKey: batchSuggestionKey,
+				} )
+			);
+
+			localDispatch(
+				actions.setBlockApplyState(
+					clientId,
+					'success',
+					null,
+					batchSuggestionKey
+				)
+			);
+			localDispatch(
+				actions.enqueueToast(
+					buildToastForActivity( {
+						surface: 'block',
+						persistedEntry: persistedBlockEntry,
+						suggestion: {
+							label:
+								persistedBlockEntry?.suggestion ||
+								'suggestions',
+							suggestionKey: batchSuggestionKey,
+						},
+						extras: { blockContext },
+					} )
+				)
+			);
+
+			return true;
 		};
 	},
 
@@ -3069,6 +3444,54 @@ const actions = {
 					return;
 				}
 
+				// A pending self-apply re-baseline adopts the freshly resolved
+				// server signature instead of staling the result — but still honors
+				// docs-grounding-unavailable and surfaces a docs-grounding-changed
+				// warning, exactly as the non-pending path does.
+				const rebaselinePending =
+					select.isBlockResolvedRebaselinePending?.( clientId ) ===
+					true;
+
+				if ( rebaselinePending ) {
+					if ( docsGroundingStatus === 'unavailable' ) {
+						dispatch(
+							actions.setBlockApplyState(
+								clientId,
+								'idle',
+								null,
+								null,
+								'docs-grounding-unavailable'
+							)
+						);
+						dispatch(
+							actions.setBlockDocsGroundingWarning(
+								clientId,
+								null
+							)
+						);
+						return;
+					}
+
+					if ( docsGroundingWarning || currentDocsGroundingWarning ) {
+						dispatch(
+							actions.setBlockDocsGroundingWarning(
+								clientId,
+								docsGroundingWarning
+							)
+						);
+					}
+
+					if ( serverSig ) {
+						dispatch(
+							actions.adoptBlockResolvedContextBaseline(
+								clientId,
+								serverSig
+							)
+						);
+					}
+					return;
+				}
+
 				if ( docsGroundingStatus === 'unavailable' ) {
 					dispatch(
 						actions.setBlockApplyState(
@@ -3221,6 +3644,10 @@ function reducer( state = DEFAULT_STATE, action ) {
 							action.status === 'loading'
 								? null
 								: currentEntry.resolvedContextSignature,
+						resolvedRebaselinePending:
+							action.status === 'loading'
+								? false
+								: currentEntry.resolvedRebaselinePending,
 						staleReason:
 							action.status === 'loading'
 								? null
@@ -3274,6 +3701,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						applyError: null,
 						lastAppliedSuggestionKey: null,
 						staleReason: null,
+						resolvedRebaselinePending: false,
 						docsGroundingWarning: normalizeDocsGroundingWarning(
 							action.recommendations?.docsGrounding
 						),
@@ -3325,6 +3753,58 @@ function reducer( state = DEFAULT_STATE, action ) {
 						docsGroundingWarning: action.staleReason
 							? null
 							: currentEntry.docsGroundingWarning,
+					},
+				},
+			};
+		}
+		case 'SET_BLOCK_CLIENT_CONTEXT_BASELINE': {
+			const currentEntry = getStoredBlockRequestState(
+				state,
+				action.clientId
+			);
+			return {
+				...state,
+				blockRequestState: {
+					...state.blockRequestState,
+					[ action.clientId ]: {
+						...currentEntry,
+						contextSignature: action.contextSignature || null,
+						staleReason: null,
+					},
+				},
+			};
+		}
+		case 'SET_BLOCK_RESOLVED_REBASELINE_PENDING': {
+			const currentEntry = getStoredBlockRequestState(
+				state,
+				action.clientId
+			);
+			return {
+				...state,
+				blockRequestState: {
+					...state.blockRequestState,
+					[ action.clientId ]: {
+						...currentEntry,
+						resolvedRebaselinePending: action.pending === true,
+					},
+				},
+			};
+		}
+		case 'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE': {
+			const currentEntry = getStoredBlockRequestState(
+				state,
+				action.clientId
+			);
+			return {
+				...state,
+				blockRequestState: {
+					...state.blockRequestState,
+					[ action.clientId ]: {
+						...currentEntry,
+						resolvedContextSignature:
+							action.resolvedContextSignature || null,
+						resolvedRebaselinePending: false,
+						staleReason: null,
 					},
 				},
 			};
@@ -3855,6 +4335,9 @@ const selectors = {
 		getStoredBlockRequestState( state, clientId ).lastAppliedSuggestionKey,
 	getBlockStaleReason: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).staleReason,
+	isBlockResolvedRebaselinePending: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId )
+			.resolvedRebaselinePending === true,
 	isBlockLoading: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).status === 'loading',
 	getBlockRecommendations: ( state, clientId ) =>
@@ -4005,6 +4488,10 @@ const selectors = {
 const store = createReduxStore( STORE_NAME, { reducer, actions, selectors } );
 
 register( store );
+
+export const _testOnly = {
+	guardSurfaceApplyResolvedFreshness,
+};
 
 export {
 	actions,

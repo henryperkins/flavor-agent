@@ -314,22 +314,6 @@ final class AISearchClient {
 
 	/**
 	 * Best-effort cache lookup for prompt grounding.
-	 * Exact-query cache remains authoritative; entity cache is only a fallback.
-	 *
-	 * @return array<int, array<string, mixed>>
-	 */
-	public static function maybe_search_with_entity_fallback( string $query, string $entity_key = '', ?int $max_results = null ): array {
-		$guidance = self::maybe_search( $query, $max_results );
-
-		if ( [] !== $guidance ) {
-			return $guidance;
-		}
-
-		return self::maybe_search_entity( $entity_key );
-	}
-
-	/**
-	 * Best-effort cache lookup for prompt grounding.
 	 *
 	 * Checks exact-query cache first, then a stable context-family cache, and
 	 * finally falls back to the broad entity cache. If exact/family caches miss,

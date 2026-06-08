@@ -61,13 +61,6 @@ export const STYLE_PANEL_DELEGATIONS = [
 ];
 
 /**
- * Style panels delegated to sub-panel chip groups.
- */
-export const DELEGATED_STYLE_PANELS = new Set(
-	STYLE_PANEL_DELEGATIONS.map( ( { panel } ) => panel )
-);
-
-/**
  * Settings panels delegated to sub-panel chip groups.
  */
 export const SETTINGS_PANEL_DELEGATIONS = [
@@ -96,26 +89,3 @@ export const SETTINGS_PANEL_DELEGATIONS = [
 		title: 'List View',
 	},
 ];
-
-/**
- * Settings panels delegated to sub-panel chip groups.
- */
-export const DELEGATED_SETTINGS_PANELS = new Set(
-	SETTINGS_PANEL_DELEGATIONS.map( ( { panel } ) => panel )
-);
-
-/**
- * @param {string} panel Panel key.
- * @return {boolean} Whether this panel is rendered as sub-panel style chips.
- */
-export function isDelegatedStylePanel( panel ) {
-	return DELEGATED_STYLE_PANELS.has( panel );
-}
-
-/**
- * @param {string} panel Panel key.
- * @return {boolean} Whether this panel is rendered as sub-panel settings chips.
- */
-export function isDelegatedSettingsPanel( panel ) {
-	return DELEGATED_SETTINGS_PANELS.has( panel );
-}

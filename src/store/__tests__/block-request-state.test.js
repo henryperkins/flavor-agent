@@ -1,3 +1,9 @@
+jest.mock( '../../context/collector', () => ( {
+	getLiveBlockContextData: jest.fn( () => ( {
+		context: { block: { name: 'core/group' } },
+		signature: 'live-block-context-signature',
+	} ) ),
+} ) );
 jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplateSuggestionOperations: jest.fn(),
 	getTemplateActivityUndoState: jest.fn(
@@ -590,5 +596,77 @@ describe( 'block request state', () => {
 		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
 			'advisory-ready'
 		);
+	} );
+
+	test( 'setBlockClientContextBaseline updates context signature and clears stale reason', () => {
+		let state = reducer( undefined, {} );
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-1',
+				{ settings: [], styles: [], block: [], explanation: '' },
+				1,
+				'old-client-sig',
+				null,
+				'old-server-sig'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setBlockApplyState(
+				'block-1',
+				'idle',
+				null,
+				null,
+				'server'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockClientContextBaseline( 'block-1', 'new-client-sig' )
+		);
+
+		expect(
+			selectors.getBlockRecommendationContextSignature( state, 'block-1' )
+		).toBe( 'new-client-sig' );
+		expect( selectors.getBlockStaleReason( state, 'block-1' ) ).toBeNull();
+	} );
+
+	test( 'resolved rebaseline pending can be set adopted and cleared', () => {
+		let state = reducer( undefined, {} );
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-1',
+				{ settings: [], styles: [], block: [], explanation: '' },
+				1,
+				'client-sig',
+				null,
+				'old-server-sig'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockResolvedRebaselinePending( 'block-1', true )
+		);
+		expect(
+			selectors.isBlockResolvedRebaselinePending( state, 'block-1' )
+		).toBe( true );
+
+		state = reducer(
+			state,
+			actions.adoptBlockResolvedContextBaseline(
+				'block-1',
+				'new-server-sig'
+			)
+		);
+		expect(
+			selectors.getBlockResolvedContextSignature( state, 'block-1' )
+		).toBe( 'new-server-sig' );
+		expect(
+			selectors.isBlockResolvedRebaselinePending( state, 'block-1' )
+		).toBe( false );
 	} );
 } );

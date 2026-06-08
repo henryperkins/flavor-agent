@@ -41,6 +41,14 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/referen
 - The main block panel is now the only executable block surface; delegated native sub-panels mirror the current result but do not own apply, refresh, or activity state
 - `Recent AI Actions` and block undo use the same shared activity treatment as the template and template-part surfaces
 
+## Multi-Apply For Settings And Styles
+
+The block recommendation panel lets users select multiple Settings and Styles suggestions from the same fresh result and apply them as one editor mutation. The apply creates one activity entry and one undo action. Block-lane executable suggestions and structural Review suggestions remain single-action flows.
+
+Recommended bundle hints come from `recommendedSets` plus per-suggestion `groupId`. The UI only renders bundle affordances for visible selectable Settings and Styles members; Block-lane members never pre-select or count toward the batch.
+
+Applying suggestions from a fresh result does not stale that result: `applySuggestion()` and the batch `applySelectedSuggestions()` thunk re-baseline the stored client and server context signatures to the post-apply block, so the user can keep applying without refreshing. Docs-grounding drift (`docs-grounding-unavailable` / `docs-grounding-changed`) still blocks the apply and is never masked by re-baselining.
+
 ## End-To-End Flow
 
 1. The user selects a block and optionally enters a prompt in `BlockRecommendationsContent`

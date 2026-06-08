@@ -444,10 +444,6 @@ final class DocsPrewarmTest extends TestCase {
 		// Normal cache-only maybe_search still works fine.
 		$this->assertSame( [], AISearchClient::maybe_search( 'some query', 4 ) );
 		$this->assertSame( [], AISearchClient::maybe_search_entity( 'core/paragraph' ) );
-		$this->assertSame(
-			[],
-			AISearchClient::maybe_search_with_entity_fallback( 'some query', 'core/paragraph', 4 )
-		);
 	}
 
 	// ------------------------------------------------------------------

@@ -1079,47 +1079,6 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_maybe_search_with_entity_fallback_prefers_query_cache(): void {
-		WordPressTestState::$options = [
-			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
-			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
-			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
-		];
-
-		$query_guidance  = [
-			[
-				'id'        => 'query-chunk',
-				'title'     => 'Navigation layout guidance',
-				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
-				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
-				'excerpt'   => 'Specific footer navigation guidance.',
-				'score'     => 0.95,
-			],
-		];
-		$entity_guidance = [
-			[
-				'id'        => 'entity-chunk',
-				'title'     => 'Navigation block reference',
-				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
-				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
-				'excerpt'   => 'Generic navigation block guidance.',
-				'score'     => 0.82,
-			],
-		];
-
-		WordPressTestState::$transients[ $this->build_cache_key( 'navigation footer guidance', 4 ) ] = $query_guidance;
-		WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/navigation' ) ]        = $entity_guidance;
-
-		$result = AISearchClient::maybe_search_with_entity_fallback(
-			'navigation footer guidance',
-			'core/navigation',
-			4
-		);
-
-		$this->assertSame( $query_guidance, $result );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
-	}
-
 	public function test_cache_keys_ignore_removed_legacy_developer_docs_credentials(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -1216,36 +1175,6 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_maybe_search_with_entity_fallback_uses_entity_cache_on_query_miss(): void {
-		WordPressTestState::$options = [
-			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
-			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
-			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
-		];
-
-		$entity_guidance = [
-			[
-				'id'        => 'entity-chunk',
-				'title'     => 'Template hierarchy',
-				'sourceKey' => 'developer.wordpress.org/themes/templates/template-hierarchy',
-				'url'       => 'https://developer.wordpress.org/themes/templates/template-hierarchy/',
-				'excerpt'   => '404 templates should prioritize recovery paths.',
-				'score'     => 0.88,
-			],
-		];
-
-		WordPressTestState::$transients[ $this->build_entity_cache_key( 'template:404' ) ] = $entity_guidance;
-
-		$result = AISearchClient::maybe_search_with_entity_fallback(
-			'missing query cache',
-			'template:404',
-			4
-		);
-
-		$this->assertSame( $entity_guidance, $result );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
-	}
-
 	public function test_maybe_search_with_cache_fallbacks_prefers_family_cache_before_entity_cache(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -1294,45 +1223,6 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( $family_guidance, $result );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 		$this->assertArrayNotHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
-	}
-
-	public function test_maybe_search_with_entity_fallback_ignores_invalid_entity_keys(): void {
-		WordPressTestState::$options = [
-			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
-			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
-			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
-		];
-
-		$query_guidance = [
-			[
-				'id'        => 'query-chunk',
-				'title'     => 'Template parts REST reference',
-				'sourceKey' => 'developer.wordpress.org/rest-api/reference/wp_template_parts',
-				'url'       => 'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
-				'excerpt'   => 'Template part areas define where a template part can be used.',
-				'score'     => 0.87,
-			],
-		];
-
-		WordPressTestState::$transients[ $this->build_cache_key( 'template part area guidance', 4 ) ] = $query_guidance;
-
-		$this->assertSame(
-			$query_guidance,
-			AISearchClient::maybe_search_with_entity_fallback(
-				'template part area guidance',
-				'not-a-valid-entity-key',
-				4
-			)
-		);
-		$this->assertSame(
-			[],
-			AISearchClient::maybe_search_with_entity_fallback(
-				'missing query cache',
-				'not-a-valid-entity-key',
-				4
-			)
-		);
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_maybe_search_with_cache_fallbacks_queues_async_warm_after_query_and_family_miss(): void {

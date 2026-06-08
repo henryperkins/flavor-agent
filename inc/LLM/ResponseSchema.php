@@ -37,19 +37,29 @@ final class ResponseSchema {
 	private static function block_schema(): array {
 		return self::strict_object(
 			[
-				'settings'    => [
+				'settings'        => [
 					'type'  => 'array',
 					'items' => self::block_setting_style_item_schema(),
 				],
-				'styles'      => [
+				'styles'          => [
 					'type'  => 'array',
 					'items' => self::block_setting_style_item_schema(),
 				],
-				'block'       => [
+				'block'           => [
 					'type'  => 'array',
 					'items' => self::block_block_item_schema(),
 				],
-				'explanation' => [ 'type' => 'string' ],
+				'recommendedSets' => [
+					'type'  => 'array',
+					'items' => self::strict_object(
+						[
+							'id'     => [ 'type' => 'string' ],
+							'label'  => [ 'type' => 'string' ],
+							'reason' => [ 'type' => 'string' ],
+						]
+					),
+				],
+				'explanation'     => [ 'type' => 'string' ],
 			]
 		);
 	}
@@ -328,6 +338,7 @@ final class ResponseSchema {
 			'preview'        => [ 'type' => 'string' ],
 			'presetSlug'     => [ 'type' => 'string' ],
 			'cssVar'         => [ 'type' => 'string' ],
+			'groupId'        => [ 'type' => 'string' ],
 		];
 	}
 

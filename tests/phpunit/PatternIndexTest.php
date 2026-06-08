@@ -963,7 +963,7 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 0, $result['removed'] );
 		$this->assertSame( 'ready', $result['status'] );
 		$this->assertSame( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH, $state['pattern_backend'] );
-		$this->assertSame( '', $state['cloudflare_ai_search_namespace'] );
+		$this->assertSame( 'default', $state['cloudflare_ai_search_namespace'] );
 		$this->assertSame( PatternSearchInstanceManager::managed_instance_id(), $state['cloudflare_ai_search_instance'] );
 		$this->assertNotSame( '', $state['cloudflare_ai_search_signature'] );
 		$this->assertSame( PatternIndex::compute_fingerprint( $patterns ), $state['fingerprint'] );
@@ -1112,7 +1112,14 @@ final class PatternIndexTest extends TestCase {
 		$this->assertArrayNotHasKey( $removed_uuid, $state['pattern_fingerprints'] );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 
-		$delete_call = $this->find_remote_post_call( '/items/' . rawurlencode( 'cloudflare-removed-item' ), 'DELETE' );
+		$delete_call = $this->find_remote_post_call(
+			sprintf(
+				'/ai-search/namespaces/default/instances/%s/items/%s',
+				PatternSearchInstanceManager::managed_instance_id(),
+				rawurlencode( 'cloudflare-removed-item' )
+			),
+			'DELETE'
+		);
 		$this->assertSame( 'DELETE', $delete_call['args']['method'] ?? null );
 	}
 
@@ -1189,24 +1196,43 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 1, $result['removed'] );
 		$this->assertNull(
 			$this->find_optional_remote_post_call(
-				'/items/' . rawurlencode( PatternSearchInstanceManager::OWNER_MARKER_NAME ),
+				sprintf(
+					'/ai-search/namespaces/default/instances/%s/items/%s',
+					PatternSearchInstanceManager::managed_instance_id(),
+					rawurlencode( PatternSearchInstanceManager::OWNER_MARKER_NAME )
+				),
 				'DELETE'
 			)
 		);
 		$this->assertNull(
 			$this->find_optional_remote_post_call(
-				'/items/' . rawurlencode( 'cloudflare-owner-marker-123' ),
+				sprintf(
+					'/ai-search/namespaces/default/instances/%s/items/%s',
+					PatternSearchInstanceManager::managed_instance_id(),
+					rawurlencode( 'cloudflare-owner-marker-123' )
+				),
 				'DELETE'
 			)
 		);
 		$this->assertNull(
 			$this->find_optional_remote_post_call(
-				'/items/' . rawurlencode( 'manual-operator-note' ),
+				sprintf(
+					'/ai-search/namespaces/default/instances/%s/items/%s',
+					PatternSearchInstanceManager::managed_instance_id(),
+					rawurlencode( 'manual-operator-note' )
+				),
 				'DELETE'
 			)
 		);
 		$this->assertIsArray(
-			$this->find_remote_post_call( '/items/' . rawurlencode( 'cloudflare-removed-item' ), 'DELETE' )
+			$this->find_remote_post_call(
+				sprintf(
+					'/ai-search/namespaces/default/instances/%s/items/%s',
+					PatternSearchInstanceManager::managed_instance_id(),
+					rawurlencode( 'cloudflare-removed-item' )
+				),
+				'DELETE'
+			)
 		);
 	}
 
@@ -1317,7 +1343,14 @@ final class PatternIndexTest extends TestCase {
 		$this->assertNull( $state['last_synced_at'] );
 		$this->assertNotFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
 		$this->assertIsArray(
-			$this->find_remote_post_call( '/items/' . rawurlencode( 'cloudflare-hero-error' ), 'DELETE' )
+			$this->find_remote_post_call(
+				sprintf(
+					'/ai-search/namespaces/default/instances/%s/items/%s',
+					PatternSearchInstanceManager::managed_instance_id(),
+					rawurlencode( 'cloudflare-hero-error' )
+				),
+				'DELETE'
+			)
 		);
 	}
 
@@ -1389,8 +1422,31 @@ final class PatternIndexTest extends TestCase {
 
 		$this->assertSame( 1, $result['indexed'] );
 		$this->assertIsArray(
-			$this->find_remote_post_call( '/items', 'POST' )
+			$this->find_remote_post_call(
+				sprintf(
+					'/ai-search/namespaces/default/instances/%s/items',
+					PatternSearchInstanceManager::managed_instance_id()
+				),
+				'POST'
+			)
 		);
+	}
+
+	public function test_cloudflare_ai_search_namespace_drift_marks_ready_index_stale(): void {
+		$this->configure_cloudflare_ai_search_backends();
+		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
+		$this->save_ready_cloudflare_ai_search_state_for_patterns(
+			$this->current_patterns(),
+			[
+				'cloudflare_ai_search_namespace' => '',
+			]
+		);
+
+		$state = PatternIndex::get_runtime_state();
+
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'cloudflare_ai_search_namespace_changed', $state['stale_reasons'] );
+		$this->assertTrue( PatternIndex::has_compatibility_drift( $state ) );
 	}
 
 	public function test_runtime_state_marks_pattern_backend_changes_stale(): void {
@@ -1584,7 +1640,7 @@ final class PatternIndexTest extends TestCase {
 					'fingerprint'                    => PatternIndex::compute_fingerprint( $patterns ),
 					'qdrant_url'                     => '',
 					'qdrant_collection'              => '',
-					'cloudflare_ai_search_namespace' => '',
+					'cloudflare_ai_search_namespace' => 'default',
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => $this->expected_cloudflare_ai_search_signature(),
 					'openai_provider'                => '',

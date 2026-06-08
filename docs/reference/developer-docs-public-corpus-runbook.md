@@ -66,7 +66,7 @@ Use this workflow whenever the active WordPress release cycle changes, a Field G
    - Make/Core Gutenberg release posts that are inside the active core cycle or are needed as cutting-edge compatibility context
    - WordPress Developer Blog monthly "What's new for developers?" posts and focused developer articles that document active-cycle APIs, block editor changes, theme.json behavior, build tooling, or connector/runtime expectations
 4. Keep supporting sources such as Make/Test, Make/Playground, Make/AI, and Gutenberg GitHub releases in separate research snapshots unless the runtime policy is expanded. They can help humans decide what to ingest, but they do not currently satisfy Flavor Agent's trusted-source coverage gate.
-5. Remove or deprioritize superseded release-cycle source entries when their `published_at` date can no longer pass the freshness windows below. Retaining them as historical search context is acceptable only if current release-cycle sources still rank for the validation query.
+5. Remove or deprioritize superseded release-cycle source entries when their `published_at` date can no longer pass the freshness windows or WordPress 7.0 release-date rule below. Retaining them as historical search context is acceptable only if current release-cycle sources still rank for the validation query.
 6. After ingestion, run both an MCP search smoke check and the public endpoint validation query. Do not enable or keep the current-release coverage gate unless both the source mix and the freshness metadata match this runbook.
 
 ## Source Eligibility
@@ -83,7 +83,7 @@ Current release-cycle and cutting-edge developer update sources qualify only whe
 - `developer.wordpress.org/news/`
 - `make.wordpress.org/core/`
 
-For current-release coverage, `make-core` chunks must be published within 21 days of validation, and `developer-blog` chunks must be published within 45 days. Recrawling an old release post does not make it current. Stable `developer-docs` chunks may use crawl freshness and are current for 90 days.
+For current-release coverage, `make-core` chunks qualify when they are published within 21 days of validation, and `developer-blog` chunks qualify when they are published within 45 days. For WordPress 7.0, a `make-core` or `developer-blog` chunk also qualifies when its `published_at` is on or after the May 20, 2026 public release date. Recrawling an older release post does not make it current. Stable `developer-docs` chunks may use crawl freshness and are current for 90 days.
 
 The corpus may include additional official WordPress project sources for agent research, but Flavor Agent's recommendation grounding must still filter by `inc/Support/DocsGroundingSourcePolicy.php`. Do not treat sources outside the trusted scopes as satisfying the release gate unless the policy, tests, and this runbook are updated together.
 
@@ -111,7 +111,7 @@ Release gate:
 - In an agent session with the MCP server available, run the same query through `wordpress-docs-ai-search` and confirm the returned chunks include the stable docs plus current-cycle sources expected below.
 - Query the public endpoint with the same request shape used by `AISearchClient::build_search_request_body()`: a user message containing the validation query and `ai_search_options.retrieval.max_num_results` set to at least `4`.
 - Confirm at least one `developer-docs` chunk and at least one `make-core` or `developer-blog` chunk.
-- Confirm release-cycle chunks from `make.wordpress.org/core` or the Developer Blog include a recent `published_at`; a recent `retrieved_at` crawl timestamp does not make an old release-cycle post current. Stable handbook/reference chunks from `developer.wordpress.org` may use `retrieved_at` for crawl freshness because those pages represent maintained reference material rather than dated release-cycle posts.
+- Confirm release-cycle chunks from `make.wordpress.org/core` or the Developer Blog include a qualifying `published_at`: within the rolling freshness window, or on/after May 20, 2026 for WordPress 7.0. A recent `retrieved_at` crawl timestamp does not make an older release-cycle post current. Stable handbook/reference chunks from `developer.wordpress.org` may use `retrieved_at` for crawl freshness because those pages represent maintained reference material rather than dated release-cycle posts.
 - Record the observed `retrieved_at`, `published_at`, source URLs, and result count in the release notes or verification log.
 - Record the validation evidence under `docs/validation/` and make this runbook the final release decision point for enabling `FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE`.
 - Enabling the gate surfaces a warning; it does not fail-close recommendations on the release-cycle dimension. With `FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE` (or the `flavor_agent_docs_grounding_require_current_coverage` filter) on, the coverage probe runs and a missing current release-cycle source attaches a trusted-but-degraded warning to recommendations instead of blocking them. Record the validation evidence before enabling so operators know when the warning is expected.

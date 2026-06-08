@@ -1,7 +1,4 @@
-import {
-	annotateStructuralIdentity,
-	buildStructuralContext,
-} from '../structural-identity';
+import { annotateStructuralIdentity } from '../structural-identity';
 
 describe( 'structural-identity', () => {
 	test( 'distinguishes navigation blocks by their template-part location', () => {
@@ -103,51 +100,6 @@ describe( 'structural-identity', () => {
 		expect( annotated[ 0 ].structuralIdentity.evidence ).toContain(
 			'inherited-query'
 		);
-	} );
-
-	test( 'buildStructuralContext returns the nearest structural branch', () => {
-		const tree = [
-			{
-				clientId: 'header-part',
-				name: 'core/template-part',
-				title: 'Template Part',
-				currentAttributes: { slug: 'header' },
-				innerBlocks: [
-					{
-						clientId: 'header-group',
-						name: 'core/group',
-						title: 'Group',
-						currentAttributes: {},
-						innerBlocks: [
-							{
-								clientId: 'header-nav',
-								name: 'core/navigation',
-								title: 'Navigation',
-								currentAttributes: { ref: 11 },
-								innerBlocks: [],
-							},
-						],
-					},
-				],
-			},
-		];
-
-		const context = buildStructuralContext( tree, 'header-nav', {
-			templatePartAreas: {
-				header: 'header',
-			},
-		} );
-
-		expect( context.blockIdentity.role ).toBe( 'primary-navigation' );
-		expect( context.structuralAncestors ).toEqual(
-			expect.arrayContaining( [
-				expect.objectContaining( {
-					block: 'core/template-part',
-					role: 'header-slot',
-				} ),
-			] )
-		);
-		expect( context.branchRoot?.clientId ).toBe( 'header-part' );
 	} );
 
 	test( 'falls back to a generic block identity when the block key is empty', () => {

@@ -301,7 +301,25 @@ function filterThemeSafeAttributeUpdates( attributeUpdates ) {
  * @param {Object} recommendations Raw recommendations payload.
  * @return {Object} Normalized recommendations groups.
  */
+function normalizeRecommendedSets( recommendations ) {
+	return Array.isArray( recommendations?.recommendedSets )
+		? recommendations.recommendedSets
+				.map( ( set ) =>
+					set && typeof set === 'object'
+						? {
+								id: String( set.id || '' ),
+								label: String( set.label || set.id || '' ),
+								reason: String( set.reason || '' ),
+						  }
+						: null
+				)
+				.filter( ( set ) => set && set.id )
+		: [];
+}
+
 function normalizeSuggestionGroups( recommendations ) {
+	const recommendedSets = normalizeRecommendedSets( recommendations );
+
 	return {
 		settings: Array.isArray( recommendations?.settings )
 			? recommendations.settings
@@ -312,8 +330,69 @@ function normalizeSuggestionGroups( recommendations ) {
 		block: Array.isArray( recommendations?.block )
 			? recommendations.block
 			: [],
+		// Only surface bundle hints when at least one survives normalization so
+		// the carried shape stays identical to today for un-bundled results.
+		...( recommendedSets.length > 0 ? { recommendedSets } : {} ),
 		explanation: recommendations?.explanation || '',
 	};
+}
+
+const BATCH_LANE_ORDER = {
+	settings: 0,
+	styles: 1,
+};
+
+function getSuggestionBatchOrderParts( suggestion = {} ) {
+	const key = String( suggestion?.suggestionKey || '' );
+	const match = key.match( /^block:(settings|styles):([1-9][0-9]*)$/ );
+	const lane =
+		match?.[ 1 ] || suggestion?.lane || suggestion?.panelGroup || '';
+	const laneOrder = Object.prototype.hasOwnProperty.call(
+		BATCH_LANE_ORDER,
+		lane
+	)
+		? BATCH_LANE_ORDER[ lane ]
+		: 99;
+	const position = match ? Number( match[ 2 ] ) : Number.MAX_SAFE_INTEGER;
+
+	return {
+		laneOrder,
+		position,
+		key,
+	};
+}
+
+/**
+ * Order block Settings + Styles suggestions for a single canonical batch apply:
+ * Settings suggestions first, Styles suggestions second, and original decorated
+ * result order within each lane. This same ordering anchors the batch activity
+ * identity, so it must be deterministic.
+ *
+ * @param {Array} suggestions Combined cross-lane selection.
+ * @return {Array} Suggestions in canonical batch order.
+ */
+export function orderBlockAttributeSuggestionsForBatch( suggestions = [] ) {
+	if ( ! Array.isArray( suggestions ) ) {
+		return [];
+	}
+
+	return [ ...suggestions ]
+		.filter(
+			( suggestion ) => suggestion && typeof suggestion === 'object'
+		)
+		.sort( ( left, right ) => {
+			const leftOrder = getSuggestionBatchOrderParts( left );
+			const rightOrder = getSuggestionBatchOrderParts( right );
+
+			if ( leftOrder.laneOrder !== rightOrder.laneOrder ) {
+				return leftOrder.laneOrder - rightOrder.laneOrder;
+			}
+			if ( leftOrder.position !== rightOrder.position ) {
+				return leftOrder.position - rightOrder.position;
+			}
+
+			return leftOrder.key.localeCompare( rightOrder.key );
+		} );
 }
 
 /**
