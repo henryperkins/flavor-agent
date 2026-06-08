@@ -2,7 +2,6 @@
 'use strict';
 
 const crypto = require( 'node:crypto' );
-const fs = require( 'node:fs' );
 const fsp = require( 'node:fs/promises' );
 const path = require( 'node:path' );
 
@@ -17,6 +16,11 @@ const KEY_MAX_BYTES = 128;
 const SITEMAP_CONCURRENCY = 4;
 const PAGE_CONCURRENCY = 5;
 const REQUEST_TIMEOUT_MS = 30_000;
+const MAKE_CORE_DEFAULT_MAX_AGE_DAYS = 180;
+const DAY_MS = 86_400_000;
+const MAX_FETCH_BYTES = 12_000_000;
+const PREPARED_REGRESSION_RATIO = 0.8;
+const BUILD_ERROR_ATTENTION_RATIO = 0.02;
 const VALIDATION_QUERY = 'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes';
 
 const METADATA_SCHEMA = [
@@ -37,11 +41,19 @@ Options:
   --release=<slug>       Active WordPress major release slug, e.g. 7-0.
   --instance=<id>        AI Search instance ID. Defaults to env or wp-dev.
   --public-url=<url>     Public /search endpoint used for validation.
-  --source-url=<url>     Add a specific trusted URL. May be repeated.
-  --source-file=<path>   JSON array or newline-delimited list of trusted URLs.
+  --source-url=<url>     Restrict the run to specific trusted URLs (replaces sitemap
+                         discovery). May be repeated. Targeted runs never delete stale items.
+  --source-file=<path>   JSON array or newline-delimited trusted URL list (replaces sitemap
+                         discovery; targeted runs never delete stale items).
   --limit=<n>            Limit discovered URLs, useful for smoke tests.
+  --make-core-max-age-days=<n>  Only ingest make.wordpress.org/core posts published
+                         within this many days (by /core/YYYY/MM/DD/ permalink date).
+                         0 ingests every matched post. Default: 180.
   --dry-run              Discover and build payloads without Cloudflare writes.
-  --no-delete            Do not delete stale managed wp-dev-docs-* items.
+  --delete-stale         Opt in to deleting stale managed docs items. Off by default and
+                         always skipped for --limit, --source-url/--source-file, and any
+                         run with discovery/build/upload/poll/validation problems.
+  --no-delete            Force stale deletion off (overrides --delete-stale).
   --skip-configure       Do not update the instance metadata schema.
   --poll-seconds=<n>     Poll uploaded items before validation. Default: 180.
   --output=<dir>         Write summary artifacts here.
@@ -61,8 +73,9 @@ function parseArgs( argv ) {
 		sourceUrls: [],
 		sourceFile: '',
 		limit: 0,
+		makeCoreMaxAgeDays: MAKE_CORE_DEFAULT_MAX_AGE_DAYS,
 		dryRun: false,
-		deleteStale: true,
+		deleteStale: false,
 		configureInstance: true,
 		pollSeconds: 180,
 		outputDir: DEFAULT_OUTPUT_DIR,
@@ -75,6 +88,10 @@ function parseArgs( argv ) {
 		}
 		if ( arg === '--dry-run' ) {
 			options.dryRun = true;
+			continue;
+		}
+		if ( arg === '--delete-stale' ) {
+			options.deleteStale = true;
 			continue;
 		}
 		if ( arg === '--no-delete' ) {
@@ -112,6 +129,9 @@ function parseArgs( argv ) {
 			case 'limit':
 				options.limit = normalizeNonNegativeInteger( value, 'limit' );
 				break;
+			case 'make-core-max-age-days':
+				options.makeCoreMaxAgeDays = normalizeNonNegativeInteger( value, 'make-core-max-age-days' );
+				break;
 			case 'poll-seconds':
 				options.pollSeconds = normalizeNonNegativeInteger( value, 'poll-seconds' );
 				break;
@@ -131,11 +151,11 @@ function parseArgs( argv ) {
 }
 
 function normalizeNonNegativeInteger( value, label ) {
-	const number = Number.parseInt( value, 10 );
-	if ( ! Number.isFinite( number ) || number < 0 ) {
+	const raw = String( value ?? '' ).trim();
+	if ( ! /^\d+$/.test( raw ) ) {
 		throw new Error( `--${ label } must be a non-negative integer.` );
 	}
-	return number;
+	return Number( raw );
 }
 
 function normalizeRelease( value ) {
@@ -169,17 +189,21 @@ function normalizePublicSearchUrl( value ) {
 	return url.toString();
 }
 
-function sourceRootsForRelease( release ) {
+function sourceRootsForRelease() {
+	// developer.wordpress.org posts live directly under these handbook/news roots, so a
+	// urlMatchesRoots() startsWith match discovers them from the sitemaps. Make/Core
+	// release-cycle posts live under dated /core/YYYY/MM/DD/ permalinks rather than under
+	// the release hub or tag archives, so the trusted root is the broad /core/ scope and
+	// discoverSourceUrls() then bounds them to recent posts via withinMakeCoreWindow() to
+	// avoid pulling the decade-long Make/Core archive.
 	return [
 		'https://developer.wordpress.org/block-editor/',
 		'https://developer.wordpress.org/rest-api/',
 		'https://developer.wordpress.org/themes/',
 		'https://developer.wordpress.org/reference/',
 		'https://developer.wordpress.org/news/',
-		`https://make.wordpress.org/core/${ release }/`,
-		`https://make.wordpress.org/core/tag/dev-notes-${ release }/`,
-		'https://make.wordpress.org/core/tag/gutenberg-new/',
-	].map( normalizeTrustedUrl ).filter( Boolean );
+		'https://make.wordpress.org/core/',
+	].map( ( value ) => normalizeTrustedUrl( value ) ).filter( Boolean );
 }
 
 function normalizeTrustedUrl( value, base = '' ) {
@@ -235,8 +259,74 @@ function isTrustedPath( url ) {
 	return false;
 }
 
-function urlMatchesRoots( url, roots ) {
-	return roots.some( ( root ) => url === root || url.startsWith( root ) );
+function urlMatchesRoots( value, roots ) {
+	let url;
+	try {
+		url = new URL( value );
+	} catch {
+		return false;
+	}
+	const urlPath = url.pathname.replace( /\/+$/, '' );
+	return roots.some( ( rootValue ) => {
+		let root;
+		try {
+			root = new URL( rootValue );
+		} catch {
+			return false;
+		}
+		if ( url.origin !== root.origin ) {
+			return false;
+		}
+		const rootPath = root.pathname.replace( /\/+$/, '' );
+		return urlPath === rootPath || urlPath.startsWith( `${ rootPath }/` );
+	} );
+}
+
+// Make/Core posts use dated permalinks (/core/YYYY/MM/DD/slug/). Parse that date so
+// discovery can keep the current release cycle and drop the long-tail archive. Returns
+// the UTC publish-day timestamp in ms, or null for non-make-core or undated URLs.
+function makeCorePostDate( url ) {
+	let parsed;
+	try {
+		parsed = new URL( url );
+	} catch {
+		return null;
+	}
+	if ( parsed.hostname.toLowerCase() !== 'make.wordpress.org' ) {
+		return null;
+	}
+	const match = parsed.pathname.match( /^\/core\/(\d{4})\/(\d{2})\/(\d{2})\// );
+	if ( ! match ) {
+		return null;
+	}
+	const timestamp = Date.parse( `${ match[ 1 ] }-${ match[ 2 ] }-${ match[ 3 ] }T00:00:00Z` );
+	return Number.isFinite( timestamp ) ? timestamp : null;
+}
+
+function makeCoreRecencyCutoff( options ) {
+	const now = Number.isFinite( options.now ) ? options.now : Date.now();
+	const maxAgeDays = Number.isFinite( options.makeCoreMaxAgeDays )
+		? options.makeCoreMaxAgeDays
+		: MAKE_CORE_DEFAULT_MAX_AGE_DAYS;
+	return maxAgeDays > 0 ? now - maxAgeDays * DAY_MS : null;
+}
+
+// developer.wordpress.org reference/handbook URLs are undated and always pass; only
+// bulk-discovered make.wordpress.org/core posts are gated to the recency window. A null
+// cutoff (max-age-days=0) disables the gate. Explicit --source-url entries bypass this
+// gate entirely (see discoverSourceUrls).
+function withinMakeCoreWindow( url, cutoffMs ) {
+	let host;
+	try {
+		host = new URL( url ).hostname.toLowerCase();
+	} catch {
+		return false;
+	}
+	if ( host !== 'make.wordpress.org' || cutoffMs === null ) {
+		return true;
+	}
+	const published = makeCorePostDate( url );
+	return published !== null && published >= cutoffMs;
 }
 
 // Only fetch sitemaps that live on one of the trusted roots' origins. Sitemap
@@ -260,11 +350,46 @@ function sitemapUrlWithinOrigins( value, allowedOrigins ) {
 	return allowedOrigins.has( url.origin ) ? url.toString() : '';
 }
 
+async function readLimitedText( response, maxBytes ) {
+	const declared = Number( response.headers.get( 'content-length' ) || 0 );
+	if ( Number.isFinite( declared ) && declared > maxBytes ) {
+		throw new Error( `Response exceeds ${ maxBytes } bytes (declared ${ declared }).` );
+	}
+
+	// Real fetch bodies are capped incrementally; responses without a readable stream
+	// (e.g. test mocks) fall back to text() with a post-hoc byte check.
+	if ( ! response.body || typeof response.body.getReader !== 'function' ) {
+		const text = await response.text();
+		if ( Buffer.byteLength( text, 'utf8' ) > maxBytes ) {
+			throw new Error( `Response exceeds ${ maxBytes } bytes.` );
+		}
+		return text;
+	}
+
+	const reader = response.body.getReader();
+	const chunks = [];
+	let total = 0;
+	while ( true ) {
+		const { done, value } = await reader.read();
+		if ( done ) {
+			break;
+		}
+		total += value.byteLength;
+		if ( total > maxBytes ) {
+			await reader.cancel();
+			throw new Error( `Response exceeds ${ maxBytes } bytes.` );
+		}
+		chunks.push( Buffer.from( value ) );
+	}
+	return Buffer.concat( chunks ).toString( 'utf8' );
+}
+
 async function fetchText( url, options = {} ) {
 	const controller = new AbortController();
 	const timeout = setTimeout( () => controller.abort(), options.timeoutMs || REQUEST_TIMEOUT_MS );
 	try {
 		const response = await fetch( url, {
+			redirect: 'follow',
 			headers: {
 				'Accept': options.accept || 'text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
 				'User-Agent': USER_AGENT,
@@ -272,12 +397,30 @@ async function fetchText( url, options = {} ) {
 			},
 			signal: controller.signal,
 		} );
-		const text = await response.text();
+
+		// fetch() follows redirects; a trusted sitemap/page that 30x-es off-origin must not
+		// be read by this secret-bearing runner. Validate the final origin before the body.
+		const finalUrl = response.url || url;
+		if ( options.allowedOrigins ) {
+			let finalOrigin = '';
+			try {
+				finalOrigin = new URL( finalUrl ).origin;
+			} catch {
+				finalOrigin = '';
+			}
+			if ( ! options.allowedOrigins.has( finalOrigin ) ) {
+				throw new Error( `Refusing redirect outside trusted origins: ${ finalUrl }` );
+			}
+		}
+
+		const text = await readLimitedText( response, options.maxBytes || MAX_FETCH_BYTES );
 		if ( ! response.ok ) {
-			throw new Error( `HTTP ${ response.status } fetching ${ url }: ${ text.slice( 0, 160 ) }` );
+			const error = new Error( `HTTP ${ response.status } fetching ${ url }: ${ text.slice( 0, 160 ) }` );
+			error.status = response.status;
+			throw error;
 		}
 		return {
-			url: response.url || url,
+			url: finalUrl,
 			text,
 			contentType: response.headers.get( 'content-type' ) || '',
 		};
@@ -334,7 +477,10 @@ function extractRemoteMessage( data ) {
 async function discoverSourceUrls( roots, options ) {
 	const explicit = await readExplicitSourceUrls( options );
 	if ( explicit.length > 0 ) {
-		return dedupeUrls( explicit.filter( ( url ) => urlMatchesRoots( url, roots ) || roots.includes( url ) ) );
+		return {
+			urls: dedupeUrls( explicit.filter( ( url ) => urlMatchesRoots( url, roots ) || roots.includes( url ) ) ),
+			errors: [],
+		};
 	}
 
 	const allowedOrigins = new Set( roots.map( ( root ) => new URL( root ).origin ) );
@@ -349,7 +495,25 @@ async function discoverSourceUrls( roots, options ) {
 		}
 	}
 
+	// WordPress exposes wp-sitemap.xml at each site root. On subdirectory multisites
+	// (e.g. make.wordpress.org/core/) the network-root robots.txt does not advertise the
+	// subsite sitemap, so also seed each trusted root's own sitemap. The origin SSRF
+	// guard still applies, and unknown roots simply 404 and are skipped.
+	for ( const root of roots ) {
+		for ( const candidate of [ 'wp-sitemap.xml', 'sitemap.xml' ] ) {
+			const normalized = sitemapUrlWithinOrigins(
+				new URL( candidate, root ).toString(),
+				allowedOrigins
+			);
+			if ( normalized ) {
+				sitemapUrls.add( normalized );
+			}
+		}
+	}
+
 	const discovered = new Set( roots );
+	const makeCoreCutoff = makeCoreRecencyCutoff( options );
+	const discoveryErrors = [];
 	const visitedSitemaps = new Set();
 	const queue = [ ...sitemapUrls ];
 	const queuedSitemaps = new Set( queue );
@@ -357,12 +521,20 @@ async function discoverSourceUrls( roots, options ) {
 	while ( queue.length > 0 ) {
 		const batch = queue.splice( 0, SITEMAP_CONCURRENCY );
 		const batchResults = await Promise.allSettled(
-			batch.map( ( sitemapUrl ) => readSitemap( sitemapUrl, visitedSitemaps ) )
+			batch.map( ( sitemapUrl ) => readSitemap( sitemapUrl, visitedSitemaps, allowedOrigins ) )
 		);
 
 		for ( const result of batchResults ) {
 			if ( result.status !== 'fulfilled' ) {
-				console.warn( result.reason.message );
+				const reason = result.reason || {};
+				console.warn( reason.message );
+				// A 404 means the sitemap is legitimately absent (speculative root-relative
+				// seeds, cross-subsite robots.txt entries). Under-discovery from genuine 404s
+				// is caught by the prepared-count regression guard; only non-404 failures
+				// (5xx, network, parse) are discovery errors that block stale deletion.
+				if ( reason.status !== 404 ) {
+					discoveryErrors.push( reason.message );
+				}
 				continue;
 			}
 			for ( const sitemapUrl of result.value.sitemaps ) {
@@ -374,7 +546,11 @@ async function discoverSourceUrls( roots, options ) {
 			}
 			for ( const loc of result.value.urls ) {
 				const normalized = normalizeTrustedUrl( loc );
-				if ( normalized && urlMatchesRoots( normalized, roots ) ) {
+				if (
+					normalized &&
+					urlMatchesRoots( normalized, roots ) &&
+					withinMakeCoreWindow( normalized, makeCoreCutoff )
+				) {
 					discovered.add( normalized );
 				}
 			}
@@ -382,11 +558,14 @@ async function discoverSourceUrls( roots, options ) {
 	}
 
 	const urls = [ ...discovered ].sort();
-	return options.limit > 0 ? urls.slice( 0, options.limit ) : urls;
+	return {
+		urls: options.limit > 0 ? urls.slice( 0, options.limit ) : urls,
+		errors: discoveryErrors,
+	};
 }
 
 async function readExplicitSourceUrls( options ) {
-	const urls = options.sourceUrls.map( normalizeTrustedUrl ).filter( Boolean );
+	const urls = options.sourceUrls.map( ( value ) => normalizeTrustedUrl( value ) ).filter( Boolean );
 
 	if ( ! options.sourceFile ) {
 		return urls;
@@ -416,13 +595,13 @@ async function readExplicitSourceUrls( options ) {
 }
 
 function dedupeUrls( urls ) {
-	return [ ...new Set( urls.map( normalizeTrustedUrl ).filter( Boolean ) ) ].sort();
+	return [ ...new Set( urls.map( ( value ) => normalizeTrustedUrl( value ) ).filter( Boolean ) ) ].sort();
 }
 
 async function discoverRobotsSitemaps( origin ) {
 	const robotsUrl = new URL( '/robots.txt', origin ).toString();
 	try {
-		const response = await fetchText( robotsUrl, { accept: 'text/plain,*/*;q=0.8' } );
+		const response = await fetchText( robotsUrl, { accept: 'text/plain,*/*;q=0.8', allowedOrigins: new Set( [ origin ] ) } );
 		const sitemaps = response.text.split( /\r?\n/ )
 			.map( ( line ) => line.match( /^\s*sitemap:\s*(\S+)/i ) )
 			.filter( Boolean )
@@ -438,13 +617,13 @@ async function discoverRobotsSitemaps( origin ) {
 	return [ new URL( '/sitemap.xml', origin ).toString() ];
 }
 
-async function readSitemap( sitemapUrl, visited ) {
+async function readSitemap( sitemapUrl, visited, allowedOrigins = null ) {
 	if ( visited.has( sitemapUrl ) ) {
 		return { urls: [], sitemaps: [] };
 	}
 	visited.add( sitemapUrl );
 
-	const response = await fetchText( sitemapUrl, { accept: 'application/xml,text/xml,*/*;q=0.8' } );
+	const response = await fetchText( sitemapUrl, { accept: 'application/xml,text/xml,*/*;q=0.8', allowedOrigins } );
 	const locs = [ ...response.text.matchAll( /<loc>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/loc>|<loc>\s*([^<]+)\s*<\/loc>/gi ) ]
 		.map( ( match ) => decodeXml( match[ 1 ] || match[ 2 ] || '' ).trim() )
 		.filter( Boolean );
@@ -480,7 +659,18 @@ function decodeXml( value ) {
 }
 
 async function buildEntryForUrl( url, roots, options ) {
-	const response = await fetchText( url );
+	const allowedOrigins = new Set(
+		roots
+			.map( ( root ) => {
+				try {
+					return new URL( root ).origin;
+				} catch {
+					return '';
+				}
+			} )
+			.filter( Boolean )
+	);
+	const response = await fetchText( url, { allowedOrigins } );
 	if ( response.contentType && ! /html|xml|text/i.test( response.contentType ) ) {
 		throw new Error( `Unsupported content type ${ response.contentType }` );
 	}
@@ -745,6 +935,25 @@ function flattenString( value ) {
 	return Buffer.from( String( value || '' ), 'utf8' ).toString( 'utf8' );
 }
 
+function truncateUtf8ToBytes( value, maxBytes ) {
+	let output = String( value || '' );
+	if ( maxBytes <= 0 ) {
+		return '';
+	}
+	// Trim ~5% of characters per pass and re-measure bytes, so we never cut on a partial
+	// multibyte sequence the way a raw byte subarray would.
+	while ( Buffer.byteLength( output, 'utf8' ) > maxBytes ) {
+		const next = Math.floor( output.length * 0.95 );
+		output = next < output.length ? output.slice( 0, next ) : output.slice( 0, -1 );
+	}
+	// Never end on a lone high surrogate (a split astral character).
+	const last = output.charCodeAt( output.length - 1 );
+	if ( last >= 0xd800 && last <= 0xdbff ) {
+		output = output.slice( 0, -1 );
+	}
+	return output;
+}
+
 function buildMarkdownDocument( entry ) {
 	const frontmatter = [
 		'---',
@@ -757,13 +966,25 @@ function buildMarkdownDocument( entry ) {
 		'',
 	].filter( ( line ) => line !== '' ).join( '\n' );
 
-	let body = `${ frontmatter }# ${ entry.title }\n\n${ entry.markdown }\n`;
-	if ( Buffer.byteLength( body, 'utf8' ) > MAX_UPLOAD_BYTES ) {
-		const budget = MAX_UPLOAD_BYTES - Buffer.byteLength( frontmatter, 'utf8' ) - 256;
-		body = `${ frontmatter }# ${ entry.title }\n\n${ Buffer.from( entry.markdown ).subarray( 0, budget ).toString( 'utf8' ) }\n\n[Content truncated before upload to fit Cloudflare AI Search item limits.]\n`;
+	const prefix = `${ frontmatter }# ${ entry.title }\n\n`;
+	const suffix = '\n\n[Content truncated before upload to fit Cloudflare AI Search item limits.]\n';
+
+	const full = `${ prefix }${ entry.markdown }\n`;
+	if ( Buffer.byteLength( full, 'utf8' ) <= MAX_UPLOAD_BYTES ) {
+		return full;
 	}
 
-	return body;
+	// Budget against the actual prefix + suffix bytes (not just frontmatter), so an unusually
+	// large title/frontmatter can never let the final body exceed the cap.
+	const markdownBudget =
+		MAX_UPLOAD_BYTES -
+		Buffer.byteLength( prefix, 'utf8' ) -
+		Buffer.byteLength( suffix, 'utf8' );
+	if ( markdownBudget <= 0 ) {
+		throw new Error( 'Frontmatter and title exceed the Cloudflare AI Search item size limit.' );
+	}
+
+	return `${ prefix }${ truncateUtf8ToBytes( entry.markdown, markdownBudget ) }${ suffix }`;
 }
 
 function yamlQuote( value ) {
@@ -947,6 +1168,98 @@ function evaluateSettlement( latest, desiredKeys ) {
 	return { missing, pending, errors };
 }
 
+function isSettlementComplete( settlement ) {
+	const missing = Array.isArray( settlement?.missing ) ? settlement.missing : [];
+	const pending = Array.isArray( settlement?.pending ) ? settlement.pending : [];
+	const errors = Array.isArray( settlement?.errors ) ? settlement.errors : [];
+	return missing.length === 0 && pending.length === 0 && errors.length === 0;
+}
+
+function explicitSourcesRequested( options ) {
+	const urls = Array.isArray( options?.sourceUrls ) ? options.sourceUrls : [];
+	const file = typeof options?.sourceFile === 'string' ? options.sourceFile.trim() : '';
+	return urls.length > 0 || file !== '';
+}
+
+function isManagedDocsKey( key, instance ) {
+	return key.startsWith( `ai-search/${ instance }/` ) ||
+		key.startsWith( 'ai-search/wp-dev-docs/' ) ||
+		key.startsWith( LEGACY_ITEM_KEY_PREFIX );
+}
+
+// Stale deletion is the one destructive step, so it runs only for a full, demonstrably
+// healthy run. Targeted runs (explicit --source-url/--source-file) and any build, upload,
+// poll, or validation problem disable it so a degraded discovery cannot wipe the corpus.
+function resolveStaleDeletion( run ) {
+	if ( run.dryRun ) {
+		return { delete: false, reason: 'dry-run' };
+	}
+	if ( ! run.deleteStale ) {
+		return { delete: false, reason: 'disabled' };
+	}
+	if ( run.explicitSources ) {
+		return { delete: false, reason: 'targeted-source-run' };
+	}
+	if ( run.limit > 0 ) {
+		return { delete: false, reason: 'limited-run' };
+	}
+	if ( run.discoveryErrors > 0 ) {
+		return { delete: false, reason: 'discovery-errors' };
+	}
+	if ( run.pollSkipped ) {
+		return { delete: false, reason: 'poll-skipped' };
+	}
+	if ( ! ( run.prepared > 0 ) ) {
+		return { delete: false, reason: 'no-prepared-documents' };
+	}
+	if ( run.buildErrors > 0 ) {
+		return { delete: false, reason: 'build-errors' };
+	}
+	if ( run.uploadErrors > 0 ) {
+		return { delete: false, reason: 'upload-errors' };
+	}
+	if ( run.pollPending > 0 ) {
+		return { delete: false, reason: 'pending-items' };
+	}
+	if ( run.pollErrors > 0 ) {
+		return { delete: false, reason: 'item-errors' };
+	}
+	if ( run.validationOk !== true ) {
+		return { delete: false, reason: 'validation-failed' };
+	}
+	// Guard against a discovery that quietly under-counted: if a prior manifest existed and
+	// this run prepared far fewer docs, refuse to prune rather than gut the corpus.
+	if (
+		run.previousManifestCount > 0 &&
+		run.prepared < run.previousManifestCount * PREPARED_REGRESSION_RATIO
+	) {
+		return { delete: false, reason: 'prepared-count-regression' };
+	}
+	return { delete: true, reason: 'healthy' };
+}
+
+function resolveSummaryStatus( run ) {
+	if ( run.dryRun ) {
+		return 'ok';
+	}
+	const discovered = run.discovered || 0;
+	const buildErrors = run.buildErrors || 0;
+	const builtNothing = run.prepared === 0 && discovered > 0;
+	const buildErrorRatio = discovered > 0 ? buildErrors / discovered : 0;
+	if (
+		run.validationOk === false ||
+		run.uploadErrors > 0 ||
+		run.pollPending > 0 ||
+		run.pollErrors > 0 ||
+		( run.discoveryErrors || 0 ) > 0 ||
+		builtNothing ||
+		buildErrorRatio > BUILD_ERROR_ATTENTION_RATIO
+	) {
+		return 'needs-attention';
+	}
+	return 'ok';
+}
+
 async function pollUntilSettled( desiredKeys, options, auth ) {
 	if ( options.dryRun || options.pollSeconds <= 0 || desiredKeys.size === 0 ) {
 		return { skipped: true, pending: 0, errors: [] };
@@ -956,13 +1269,13 @@ async function pollUntilSettled( desiredKeys, options, auth ) {
 	let latest = [];
 	while ( Date.now() < deadline ) {
 		latest = await listBuiltinItems( options, auth );
-		const { missing, pending, errors } = evaluateSettlement( latest, desiredKeys );
+		const settlement = evaluateSettlement( latest, desiredKeys );
 
 		// Keys that never appear (dropped write / eventual-consistency lag) are not
-		// "pending" in the listing, so success must also require zero missing keys —
-		// otherwise an incomplete corpus would settle as "ok".
-		if ( pending.length === 0 && missing.length === 0 ) {
-			return { skipped: false, pending: 0, errors };
+		// "pending" in the listing, so success requires zero missing keys; item-level
+		// error/skip statuses must also clear, or a degraded index would settle as "ok".
+		if ( isSettlementComplete( settlement ) ) {
+			return { skipped: false, pending: 0, errors: settlement.errors };
 		}
 
 		await delay( 5000 );
@@ -1062,27 +1375,13 @@ function classifySourceUrl( value ) {
 	return '';
 }
 
-async function mapLimit( items, limit, callback ) {
-	const results = new Array( items.length );
-	let index = 0;
-
-	async function worker() {
-		while ( index < items.length ) {
-			const current = index++;
-			results[ current ] = await callback( items[ current ], current );
-		}
-	}
-
-	await Promise.all( Array.from( { length: Math.min( limit, items.length ) }, worker ) );
-	return results;
-}
-
 async function processEntries( urls, roots, options, auth, existingByKey ) {
 	const desiredKeys = new Set();
 	const manifest = [];
 	const uploaded = [];
 	const skipped = [];
 	const uploadErrors = [];
+	const buildErrors = [];
 	let prepared = 0;
 
 	let index = 0;
@@ -1094,6 +1393,7 @@ async function processEntries( urls, roots, options, auth, existingByKey ) {
 			try {
 				entry = await buildEntryForUrl( url, roots, options );
 			} catch ( error ) {
+				buildErrors.push( { url, message: error.message } );
 				console.warn( `Skipping ${ url }: ${ error.message }` );
 				continue;
 			}
@@ -1125,6 +1425,7 @@ async function processEntries( urls, roots, options, auth, existingByKey ) {
 		uploaded,
 		skipped,
 		uploadErrors,
+		buildErrors,
 		prepared,
 	};
 }
@@ -1150,15 +1451,30 @@ async function writeSummary( options, summary, manifest ) {
 	);
 }
 
+async function readPreviousManifestCount( options ) {
+	try {
+		const raw = await fsp.readFile( path.join( options.outputDir, 'manifest.json' ), 'utf8' );
+		const parsed = JSON.parse( raw );
+		return Array.isArray( parsed ) ? parsed.length : 0;
+	} catch {
+		return 0;
+	}
+}
+
 async function main() {
 	const options = parseArgs( process.argv.slice( 2 ) );
 	const auth = getAuth( options );
-	const roots = sourceRootsForRelease( options.release );
+	const roots = sourceRootsForRelease();
 	const startedAt = new Date().toISOString();
 
 	console.log( `Discovering trusted WordPress docs sources for ${ options.release }...` );
-	const urls = await discoverSourceUrls( roots, options );
+	const discovery = await discoverSourceUrls( roots, options );
+	const urls = discovery.urls;
+	const discoveryErrorCount = discovery.errors.length;
 	console.log( `Discovered ${ urls.length } source URLs.` );
+	if ( discoveryErrorCount > 0 ) {
+		console.warn( `Discovery hit ${ discoveryErrorCount } sitemap error(s); stale deletion will be skipped.` );
+	}
 
 	let configureResult = { skipped: true };
 	let existingItems = [];
@@ -1182,7 +1498,36 @@ async function main() {
 	const processed = await processEntries( urls, roots, options, auth, existingByKey );
 	console.log( `Prepared ${ processed.prepared } uploadable Markdown documents.` );
 
-	if ( options.deleteStale ) {
+	// Uploads happen inside processEntries; settle and validate BEFORE any destructive
+	// deletion so a degraded discovery/build cannot prune the corpus (resolveStaleDeletion).
+	poll = await pollUntilSettled( processed.desiredKeys, options, auth );
+	if ( ! options.dryRun ) {
+		validation = await validatePublicEndpoint( options );
+	}
+
+	const uploadErrorCount = processed.uploadErrors.length;
+	const buildErrorCount = processed.buildErrors.length;
+	const pollPending = poll.pending || 0;
+	const pollErrorCount = Array.isArray( poll.errors ) ? poll.errors.length : 0;
+
+	const previousManifestCount = await readPreviousManifestCount( options );
+	const deletion = resolveStaleDeletion( {
+		dryRun: options.dryRun,
+		deleteStale: options.deleteStale,
+		explicitSources: explicitSourcesRequested( options ),
+		limit: options.limit,
+		discoveryErrors: discoveryErrorCount,
+		pollSkipped: poll.skipped === true,
+		prepared: processed.prepared,
+		buildErrors: buildErrorCount,
+		uploadErrors: uploadErrorCount,
+		pollPending,
+		pollErrors: pollErrorCount,
+		validationOk: validation.ok,
+		previousManifestCount,
+	} );
+
+	if ( deletion.delete ) {
 		const stale = existingItems.filter( ( item ) => {
 			const key = String( item.key || '' );
 			return isManagedDocsKey( key, options.instance ) && ! processed.desiredKeys.has( key );
@@ -1190,22 +1535,22 @@ async function main() {
 		for ( const item of stale ) {
 			deleted.push( await deleteItem( item, options, auth ) );
 		}
-
-		function isManagedDocsKey( key, instance ) {
-			return key.startsWith( `ai-search/${ instance }/` ) ||
-				key.startsWith( 'ai-search/wp-dev-docs/' ) ||
-				key.startsWith( LEGACY_ITEM_KEY_PREFIX );
-		}
+	} else if ( options.deleteStale && ! options.dryRun ) {
+		console.warn( `Skipping stale deletion: ${ deletion.reason }.` );
 	}
 
-	poll = await pollUntilSettled( processed.desiredKeys, options, auth );
-	if ( ! options.dryRun ) {
-		validation = await validatePublicEndpoint( options );
-	}
-
-	const uploadErrorCount = processed.uploadErrors.length;
 	const summary = {
-		status: ! options.dryRun && ( validation.ok === false || uploadErrorCount > 0 ) ? 'needs-attention' : 'ok',
+		status: resolveSummaryStatus( {
+			dryRun: options.dryRun,
+			discovered: urls.length,
+			prepared: processed.prepared,
+			uploadErrors: uploadErrorCount,
+			pollPending,
+			pollErrors: pollErrorCount,
+			validationOk: validation.ok,
+			buildErrors: buildErrorCount,
+			discoveryErrors: discoveryErrorCount,
+		} ),
 		startedAt,
 		finishedAt: new Date().toISOString(),
 		dryRun: options.dryRun,
@@ -1215,14 +1560,19 @@ async function main() {
 		sourceUrls: urls.length,
 		preparedDocuments: processed.prepared,
 		configureResult,
+		staleDeletion: { performed: deletion.delete, reason: deletion.reason },
 		counts: {
 			uploaded: processed.uploaded.length,
 			skipped: processed.skipped.length,
 			deleted: deleted.length,
+			discoveryErrors: discoveryErrorCount,
+			buildErrors: buildErrorCount,
 			uploadErrors: uploadErrorCount,
-			pending: poll.pending || 0,
-			errors: Array.isArray( poll.errors ) ? poll.errors.length : 0,
+			pending: pollPending,
+			errors: pollErrorCount,
 		},
+		discoveryErrors: discovery.errors.slice( 0, 10 ),
+		buildErrors: processed.buildErrors.slice( 0, 10 ),
 		uploadErrors: processed.uploadErrors.slice( 0, 10 ),
 		validation,
 	};
@@ -1245,14 +1595,23 @@ if ( require.main === module ) {
 module.exports = {
 	discoverSourceUrls,
 	evaluateSettlement,
+	isSettlementComplete,
+	resolveStaleDeletion,
+	resolveSummaryStatus,
 	extractTitle,
+	fetchText,
 	htmlToMarkdown,
+	makeCorePostDate,
 	manifestEntry,
 	cleanText,
 	flattenString,
 	buildItemKey,
 	boundedSlug,
 	normalizeTrustedUrl,
+	parseArgs,
 	readSitemap,
 	sitemapUrlWithinOrigins,
+	sourceRootsForRelease,
+	truncateUtf8ToBytes,
+	urlMatchesRoots,
 };

@@ -18,8 +18,8 @@ on:
         description: 'Optional URL limit for smoke runs'
         required: false
         default: ''
-      no_delete:
-        description: 'Do not delete stale managed docs items'
+      delete_stale:
+        description: 'Delete stale managed docs items (opt-in; only applied on a clean full run)'
         type: boolean
         required: false
         default: false
@@ -40,7 +40,7 @@ jobs:
       INPUT_RELEASE: ${{ github.event.inputs.release || '7-0' }}
       INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
       INPUT_LIMIT: ${{ github.event.inputs.limit || '' }}
-      INPUT_NO_DELETE: ${{ github.event.inputs.no_delete || 'false' }}
+      INPUT_DELETE_STALE: ${{ github.event.inputs.delete_stale || 'false' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -68,8 +68,8 @@ jobs:
           if [[ -n "${INPUT_LIMIT}" ]]; then
             args+=( "--limit=${INPUT_LIMIT}" )
           fi
-          if [[ "${INPUT_NO_DELETE}" == "true" ]]; then
-            args+=( "--no-delete" )
+          if [[ "${INPUT_DELETE_STALE}" == "true" ]]; then
+            args+=( "--delete-stale" )
           fi
           node scripts/update-docs-ai-search.js "${args[@]}"
 

@@ -3,10 +3,19 @@
 const {
 	discoverSourceUrls,
 	evaluateSettlement,
+	fetchText,
 	htmlToMarkdown,
+	isSettlementComplete,
+	makeCorePostDate,
 	normalizeTrustedUrl,
+	parseArgs,
 	readSitemap,
+	resolveStaleDeletion,
+	resolveSummaryStatus,
 	sitemapUrlWithinOrigins,
+	sourceRootsForRelease,
+	truncateUtf8ToBytes,
+	urlMatchesRoots,
 } = require( '../update-docs-ai-search.js' );
 
 function mockTextResponse( text, url, contentType = 'application/xml' ) {
@@ -77,6 +86,12 @@ describe( 'update-docs-ai-search helpers', () => {
 					href
 				);
 			}
+			if (
+				href === 'https://developer.wordpress.org/block-editor/wp-sitemap.xml' ||
+				href === 'https://developer.wordpress.org/block-editor/sitemap.xml'
+			) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
 			throw new Error( `Unexpected fetch: ${ href }` );
 		} );
 
@@ -88,7 +103,7 @@ describe( 'update-docs-ai-search helpers', () => {
 			'https://developer.wordpress.org/block-editor-sitemap.xml',
 		] );
 
-		const urls = await discoverSourceUrls(
+		const { urls } = await discoverSourceUrls(
 			[ 'https://developer.wordpress.org/block-editor/' ],
 			{ sourceUrls: [], sourceFile: '', limit: 0 }
 		);
@@ -177,10 +192,16 @@ describe( 'update-docs-ai-search helpers', () => {
 					href
 				);
 			}
+			if (
+				href === 'https://developer.wordpress.org/block-editor/wp-sitemap.xml' ||
+				href === 'https://developer.wordpress.org/block-editor/sitemap.xml'
+			) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
 			throw new Error( `Unexpected fetch: ${ href }` );
 		} );
 
-		const urls = await discoverSourceUrls(
+		const { urls } = await discoverSourceUrls(
 			[ 'https://developer.wordpress.org/block-editor/' ],
 			{ sourceUrls: [], sourceFile: '', limit: 0 }
 		);
@@ -218,5 +239,386 @@ describe( 'update-docs-ai-search helpers', () => {
 		);
 		expect( settled.missing ).toEqual( [] );
 		expect( settled.pending ).toHaveLength( 0 );
+	} );
+
+	test( 'makeCorePostDate parses dated Make/Core post URLs and ignores the rest', () => {
+		expect(
+			makeCorePostDate( 'https://make.wordpress.org/core/2026/05/14/wordpress-7-0-field-guide/' )
+		).toBe( Date.parse( '2026-05-14T00:00:00Z' ) );
+		expect( makeCorePostDate( 'https://make.wordpress.org/core/7-0/' ) ).toBeNull();
+		expect( makeCorePostDate( 'https://make.wordpress.org/core/handbook/about/' ) ).toBeNull();
+		expect( makeCorePostDate( 'https://developer.wordpress.org/news/2026/05/01/post/' ) ).toBeNull();
+	} );
+
+	test( 'discoverSourceUrls keeps recent Make/Core posts and drops stale or undated ones', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href === 'https://make.wordpress.org/robots.txt' ) {
+				return mockTextResponse(
+					'Sitemap: https://make.wordpress.org/wp-sitemap.xml',
+					href,
+					'text/plain'
+				);
+			}
+			if ( href === 'https://make.wordpress.org/wp-sitemap.xml' ) {
+				return mockTextResponse(
+					[
+						'<sitemapindex>',
+						'<sitemap><loc>https://make.wordpress.org/wp-sitemap-posts-post-1.xml</loc></sitemap>',
+						'</sitemapindex>',
+					].join( '' ),
+					href
+				);
+			}
+			if ( href === 'https://make.wordpress.org/wp-sitemap-posts-post-1.xml' ) {
+				return mockTextResponse(
+					[
+						'<urlset>',
+						'<url><loc>https://make.wordpress.org/core/2026/06/03/dev-chat-agenda-june-03-2026/</loc></url>',
+						'<url><loc>https://make.wordpress.org/core/2025/01/15/old-dev-note/</loc></url>',
+						'<url><loc>https://make.wordpress.org/core/handbook/about/</loc></url>',
+						'</urlset>',
+					].join( '' ),
+					href
+				);
+			}
+			if (
+				href === 'https://make.wordpress.org/core/wp-sitemap.xml' ||
+				href === 'https://make.wordpress.org/core/sitemap.xml'
+			) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const { urls } = await discoverSourceUrls(
+			[ 'https://make.wordpress.org/core/' ],
+			{
+				sourceUrls: [],
+				sourceFile: '',
+				limit: 0,
+				makeCoreMaxAgeDays: 180,
+				now: Date.parse( '2026-06-08T00:00:00Z' ),
+			}
+		);
+
+		expect( urls ).toEqual( [
+			'https://make.wordpress.org/core/',
+			'https://make.wordpress.org/core/2026/06/03/dev-chat-agenda-june-03-2026/',
+		] );
+	} );
+
+	test( 'discoverSourceUrls keeps explicitly supplied Make/Core URLs regardless of age', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			throw new Error( `Unexpected fetch: ${ String( url ) }` );
+		} );
+
+		const { urls } = await discoverSourceUrls(
+			[ 'https://make.wordpress.org/core/' ],
+			{
+				sourceUrls: [ 'https://make.wordpress.org/core/2020/01/01/ancient-note/' ],
+				sourceFile: '',
+				limit: 0,
+				makeCoreMaxAgeDays: 180,
+				now: Date.parse( '2026-06-08T00:00:00Z' ),
+			}
+		);
+
+		expect( urls ).toEqual( [
+			'https://make.wordpress.org/core/2020/01/01/ancient-note/',
+		] );
+	} );
+
+	test( 'discoverSourceUrls discovers Make/Core posts via the /core/ subsite sitemap', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href === 'https://make.wordpress.org/robots.txt' ) {
+				// Network-root robots.txt does not advertise the /core/ subsite sitemap.
+				return mockTextResponse(
+					'Sitemap: https://make.wordpress.org/wp-sitemap.xml',
+					href,
+					'text/plain'
+				);
+			}
+			if ( href === 'https://make.wordpress.org/wp-sitemap.xml' ) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
+			if ( href === 'https://make.wordpress.org/core/wp-sitemap.xml' ) {
+				return mockTextResponse(
+					[
+						'<sitemapindex>',
+						'<sitemap><loc>https://make.wordpress.org/core/wp-sitemap-posts-post-1.xml</loc></sitemap>',
+						'</sitemapindex>',
+					].join( '' ),
+					href
+				);
+			}
+			if ( href === 'https://make.wordpress.org/core/wp-sitemap-posts-post-1.xml' ) {
+				return mockTextResponse(
+					[
+						'<urlset>',
+						'<url><loc>https://make.wordpress.org/core/2026/06/03/whats-new-in-gutenberg-23-3-03-jun/</loc></url>',
+						'</urlset>',
+					].join( '' ),
+					href
+				);
+			}
+			if ( href === 'https://make.wordpress.org/core/sitemap.xml' ) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const { urls } = await discoverSourceUrls(
+			[ 'https://make.wordpress.org/core/' ],
+			{
+				sourceUrls: [],
+				sourceFile: '',
+				limit: 0,
+				makeCoreMaxAgeDays: 180,
+				now: Date.parse( '2026-06-08T00:00:00Z' ),
+			}
+		);
+
+		expect( urls ).toContain(
+			'https://make.wordpress.org/core/2026/06/03/whats-new-in-gutenberg-23-3-03-jun/'
+		);
+	} );
+
+	test( 'discoverSourceUrls counts non-404 sitemap failures as discovery errors but ignores 404s', async () => {
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const httpError = ( status, href ) =>
+			Promise.resolve( {
+				ok: false,
+				status,
+				url: href,
+				text: () => Promise.resolve( 'error body' ),
+				headers: { get: () => '' },
+			} );
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href === 'https://make.wordpress.org/robots.txt' ) {
+				return mockTextResponse( 'Sitemap: https://make.wordpress.org/wp-sitemap.xml', href, 'text/plain' );
+			}
+			if ( href === 'https://make.wordpress.org/wp-sitemap.xml' ) {
+				return mockTextResponse(
+					[
+						'<sitemapindex>',
+						'<sitemap><loc>https://make.wordpress.org/core/wp-sitemap-posts-post-1.xml</loc></sitemap>',
+						'<sitemap><loc>https://make.wordpress.org/core/wp-sitemap-posts-post-2.xml</loc></sitemap>',
+						'</sitemapindex>',
+					].join( '' ),
+					href
+				);
+			}
+			// One advertised child is absent (404 → benign); one is a 500 outage (counts).
+			if ( href === 'https://make.wordpress.org/core/wp-sitemap-posts-post-1.xml' ) {
+				return httpError( 404, href );
+			}
+			if ( href === 'https://make.wordpress.org/core/wp-sitemap-posts-post-2.xml' ) {
+				return httpError( 500, href );
+			}
+			if (
+				href === 'https://make.wordpress.org/core/wp-sitemap.xml' ||
+				href === 'https://make.wordpress.org/core/sitemap.xml'
+			) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const { errors } = await discoverSourceUrls(
+			[ 'https://make.wordpress.org/core/' ],
+			{
+				sourceUrls: [],
+				sourceFile: '',
+				limit: 0,
+				makeCoreMaxAgeDays: 180,
+				now: Date.parse( '2026-06-08T00:00:00Z' ),
+			}
+		);
+
+		expect( errors ).toHaveLength( 1 );
+	} );
+
+	test( 'sourceRootsForRelease returns every trusted root, not just the first', () => {
+		expect( sourceRootsForRelease() ).toEqual( [
+			'https://developer.wordpress.org/block-editor/',
+			'https://developer.wordpress.org/rest-api/',
+			'https://developer.wordpress.org/themes/',
+			'https://developer.wordpress.org/reference/',
+			'https://developer.wordpress.org/news/',
+			'https://make.wordpress.org/core/',
+		] );
+	} );
+
+	test( 'discoverSourceUrls keeps every explicitly supplied URL, not just the first', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			throw new Error( `Unexpected fetch: ${ String( url ) }` );
+		} );
+
+		const { urls } = await discoverSourceUrls(
+			[ 'https://make.wordpress.org/core/' ],
+			{
+				sourceUrls: [
+					'https://make.wordpress.org/core/2026/05/14/wordpress-7-0-field-guide/',
+					'https://make.wordpress.org/core/2026/06/03/whats-new-in-gutenberg-23-3-03-jun/',
+				],
+				sourceFile: '',
+				limit: 0,
+				makeCoreMaxAgeDays: 180,
+				now: Date.parse( '2026-06-08T00:00:00Z' ),
+			}
+		);
+
+		expect( urls ).toEqual( [
+			'https://make.wordpress.org/core/2026/05/14/wordpress-7-0-field-guide/',
+			'https://make.wordpress.org/core/2026/06/03/whats-new-in-gutenberg-23-3-03-jun/',
+		] );
+	} );
+
+	test( 'isSettlementComplete requires nothing missing, pending, or errored', () => {
+		expect( isSettlementComplete( { missing: [], pending: [], errors: [] } ) ).toBe( true );
+		expect( isSettlementComplete( { missing: [ 'k' ], pending: [], errors: [] } ) ).toBe( false );
+		expect( isSettlementComplete( { missing: [], pending: [ {} ], errors: [] } ) ).toBe( false );
+		// Item-level errors must block settlement (previously a run settled as complete).
+		expect( isSettlementComplete( { missing: [], pending: [], errors: [ {} ] } ) ).toBe( false );
+	} );
+
+	test( 'resolveStaleDeletion only deletes on a fully healthy full-corpus run', () => {
+		const healthy = {
+			dryRun: false,
+			deleteStale: true,
+			explicitSources: false,
+			prepared: 10,
+			buildErrors: 0,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: true,
+		};
+		expect( resolveStaleDeletion( healthy ).delete ).toBe( true );
+
+		expect( resolveStaleDeletion( { ...healthy, deleteStale: false } ).delete ).toBe( false );
+		// Targeted --source-url/--source-file runs never prune the full corpus.
+		expect( resolveStaleDeletion( { ...healthy, explicitSources: true } ).delete ).toBe( false );
+		// A broadly failed discovery/build must not be allowed to wipe the corpus.
+		expect( resolveStaleDeletion( { ...healthy, prepared: 0 } ).delete ).toBe( false );
+		expect( resolveStaleDeletion( { ...healthy, buildErrors: 3 } ).delete ).toBe( false );
+		expect( resolveStaleDeletion( { ...healthy, uploadErrors: 1 } ).delete ).toBe( false );
+		expect( resolveStaleDeletion( { ...healthy, pollPending: 2 } ).delete ).toBe( false );
+		expect( resolveStaleDeletion( { ...healthy, pollErrors: 1 } ).delete ).toBe( false );
+		expect( resolveStaleDeletion( { ...healthy, validationOk: false } ).delete ).toBe( false );
+	} );
+
+	test( 'resolveSummaryStatus flags poll, upload, validation, and total-build failures', () => {
+		const clean = {
+			dryRun: false,
+			discovered: 100,
+			prepared: 100,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: true,
+		};
+		expect( resolveSummaryStatus( clean ) ).toBe( 'ok' );
+		expect( resolveSummaryStatus( { ...clean, validationOk: false } ) ).toBe( 'needs-attention' );
+		expect( resolveSummaryStatus( { ...clean, uploadErrors: 1 } ) ).toBe( 'needs-attention' );
+		expect( resolveSummaryStatus( { ...clean, pollPending: 1 } ) ).toBe( 'needs-attention' );
+		expect( resolveSummaryStatus( { ...clean, pollErrors: 1 } ) ).toBe( 'needs-attention' );
+		// Discovered URLs but built nothing → systemic failure.
+		expect( resolveSummaryStatus( { ...clean, prepared: 0 } ) ).toBe( 'needs-attention' );
+		// Dry runs never fail on these signals.
+		expect(
+			resolveSummaryStatus( { ...clean, dryRun: true, validationOk: false, prepared: 0 } )
+		).toBe( 'ok' );
+	} );
+
+	test( 'resolveStaleDeletion blocks limited, discovery-error, poll-skipped, and regressed runs', () => {
+		const healthy = {
+			dryRun: false,
+			deleteStale: true,
+			explicitSources: false,
+			limit: 0,
+			discoveryErrors: 0,
+			pollSkipped: false,
+			prepared: 100,
+			buildErrors: 0,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: true,
+			previousManifestCount: 100,
+		};
+		expect( resolveStaleDeletion( healthy ).delete ).toBe( true );
+		expect( resolveStaleDeletion( { ...healthy, limit: 10 } ).reason ).toBe( 'limited-run' );
+		expect( resolveStaleDeletion( { ...healthy, discoveryErrors: 1 } ).reason ).toBe( 'discovery-errors' );
+		expect( resolveStaleDeletion( { ...healthy, pollSkipped: true } ).reason ).toBe( 'poll-skipped' );
+		// A run preparing 100 docs against a prior 1000-doc corpus is an 80%+ collapse → refuse.
+		expect( resolveStaleDeletion( { ...healthy, previousManifestCount: 1000 } ).reason ).toBe( 'prepared-count-regression' );
+	} );
+
+	test( 'resolveSummaryStatus flags discovery errors and a high build-error ratio', () => {
+		const clean = {
+			dryRun: false,
+			discovered: 100,
+			prepared: 100,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: true,
+			buildErrors: 0,
+			discoveryErrors: 0,
+		};
+		expect( resolveSummaryStatus( clean ) ).toBe( 'ok' );
+		expect( resolveSummaryStatus( { ...clean, discoveryErrors: 1 } ) ).toBe( 'needs-attention' );
+		// A couple of flaky pages are tolerated; a large fraction is not.
+		expect( resolveSummaryStatus( { ...clean, buildErrors: 1 } ) ).toBe( 'ok' );
+		expect( resolveSummaryStatus( { ...clean, buildErrors: 5 } ) ).toBe( 'needs-attention' );
+	} );
+
+	test( 'parseArgs rejects partial numeric values', () => {
+		expect( () => parseArgs( [ '--limit=10abc' ] ) ).toThrow( 'limit must be a non-negative integer' );
+		expect( () => parseArgs( [ '--poll-seconds=' ] ) ).toThrow( 'poll-seconds must be a non-negative integer' );
+		expect( parseArgs( [ '--limit=10' ] ).limit ).toBe( 10 );
+	} );
+
+	test( 'parseArgs makes stale deletion opt-in via --delete-stale', () => {
+		expect( parseArgs( [] ).deleteStale ).toBe( false );
+		expect( parseArgs( [ '--delete-stale' ] ).deleteStale ).toBe( true );
+		expect( parseArgs( [ '--delete-stale', '--no-delete' ] ).deleteStale ).toBe( false );
+	} );
+
+	test( 'urlMatchesRoots matches roots regardless of trailing slash', () => {
+		const roots = [ 'https://developer.wordpress.org/reference/' ];
+		expect( urlMatchesRoots( 'https://developer.wordpress.org/reference', roots ) ).toBe( true );
+		expect( urlMatchesRoots( 'https://developer.wordpress.org/reference/classes/wp/', roots ) ).toBe( true );
+		expect( urlMatchesRoots( 'https://developer.wordpress.org/reference-guides/', roots ) ).toBe( false );
+		expect( urlMatchesRoots( 'https://make.wordpress.org/reference/', roots ) ).toBe( false );
+	} );
+
+	test( 'truncateUtf8ToBytes respects the byte budget without splitting multibyte characters', () => {
+		const multibyte = '★'.repeat( 100 ); // each ★ is 3 UTF-8 bytes
+		const out = truncateUtf8ToBytes( multibyte, 10 );
+		expect( Buffer.byteLength( out, 'utf8' ) ).toBeLessThanOrEqual( 10 );
+		expect( out.includes( '�' ) ).toBe( false );
+		expect( out ).toBe( '★★★' ); // 9 bytes — the largest whole-character fit
+	} );
+
+	test( 'fetchText rejects redirects that leave the trusted origins', async () => {
+		global.fetch = jest.fn( () =>
+			Promise.resolve( {
+				ok: true,
+				status: 200,
+				url: 'https://evil.example/landing',
+				text: () => Promise.resolve( 'redirected body' ),
+				headers: { get: () => '' },
+			} )
+		);
+		await expect(
+			fetchText( 'https://developer.wordpress.org/block-editor/', {
+				allowedOrigins: new Set( [ 'https://developer.wordpress.org' ] ),
+			} )
+		).rejects.toThrow( 'Refusing redirect outside trusted origins' );
 	} );
 } );

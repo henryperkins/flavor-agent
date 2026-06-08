@@ -28,17 +28,15 @@ Required source scopes:
 - `https://developer.wordpress.org/themes/`
 - `https://developer.wordpress.org/reference/`
 - `https://developer.wordpress.org/news/`
-- `https://make.wordpress.org/core/7-0/`
-- `https://make.wordpress.org/core/tag/dev-notes-7-0/`
-- `https://make.wordpress.org/core/tag/gutenberg-new/`
+- `https://make.wordpress.org/core/` (release-cycle posts under dated `/core/YYYY/MM/DD/` permalinks, bounded to a recency window — see Source Update Workflow)
 
-Replace the release-specific Make/Core entries whenever the active major-release cycle changes. Keep the stable `developer.wordpress.org` scopes unless `DocsGroundingSourcePolicy` changes.
+The updater discovers Make/Core posts from the `make.wordpress.org/core/` subsite sitemap (`/core/wp-sitemap.xml`, since the network-root `robots.txt` does not advertise it) and keeps only those whose permalink date falls within `--make-core-max-age-days` (default 180). That captures the active cycle's dev notes, Field Guide, RC, and Gutenberg-release posts without dragging in the long-tail Make/Core archive, and it self-maintains across release cycles without per-release tag edits. Keep the stable `developer.wordpress.org` scopes unless `DocsGroundingSourcePolicy` changes.
 
 ## Source Update Workflow
 
 The `wordpress-docs-ai-search` MCP server and Flavor Agent's built-in Developer Docs grounding path both depend on the public Cloudflare AI Search corpus. Updating MCP source coverage means updating that corpus, not changing the Codex or Claude MCP registration. Client MCP config only points agents at the search endpoint.
 
-The preferred updater is the scheduled/manual GitHub Actions workflow at `.github/workflows/update-docs-ai-search.yml`. It runs `npm run docs:ai-search:update -- --release=7-0`, discovers trusted source URLs, uploads changed Markdown items into the `wp-dev` AI Search built-in storage using bounded source keys shaped like `ai-search/wp-dev/{host}/{path-slug}/{short-hash}/part-0001.md` (capped at 128 bytes to satisfy Cloudflare's item-filename limit; the full canonical URL and content hash travel in item metadata, not the key), removes stale managed docs items, polls item status, and validates the public endpoint. Configure these repository secrets before enabling scheduled writes:
+The preferred updater is the scheduled/manual GitHub Actions workflow at `.github/workflows/update-docs-ai-search.yml`. It runs `npm run docs:ai-search:update -- --release=7-0`, discovers trusted source URLs, uploads changed Markdown items into the `wp-dev` AI Search built-in storage using bounded source keys shaped like `ai-search/wp-dev/{host}/{path-slug}/{short-hash}/part-0001.md` (capped at 128 bytes to satisfy Cloudflare's item-filename limit; the full canonical URL and content hash travel in item metadata, not the key), polls item status, validates the public endpoint, and — only when stale deletion is explicitly enabled (`--delete-stale`), the full run is healthy (no discovery/build/upload/poll/validation problems), it is not a targeted run, and the prepared count has not regressed — removes stale managed docs items. Configure these repository secrets before enabling scheduled writes:
 
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_AI_SEARCH_API_TOKEN` with Account > AI Search:Edit and Account > AI Search:Run
@@ -53,6 +51,8 @@ For a local smoke test that does not write to Cloudflare:
 ```bash
 npm run docs:ai-search:update -- --dry-run --source-url=https://developer.wordpress.org/block-editor/
 ```
+
+Make/Core recency is tunable with `--make-core-max-age-days=<n>` (default 180; `0` ingests every matched post). Stale deletion is **opt-in**: pass `--delete-stale` (or set the workflow's `delete_stale` input) — it is off by default. Even when enabled it is skipped for `--limit`, targeted `--source-url`/`--source-file` runs, any sitemap/discovery error, skipped polling, item/upload/build/validation failures, or a prepared-count regression versus the previous manifest. Targeted runs replace sitemap discovery and never delete, so they are safe for spot-checks.
 
 Use this workflow whenever the active WordPress release cycle changes, a Field Guide or release candidate post lands, a dev-note batch is edited, a Gutenberg release materially changes editor APIs, or the validation query stops returning current release-cycle sources.
 
