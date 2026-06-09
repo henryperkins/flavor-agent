@@ -1240,6 +1240,12 @@ describe( 'store action thunks', () => {
 	} );
 
 	test( 'resolvePatternRecommendationSignature revalidates the current document-scoped pattern input without mutating state', async () => {
+		const executeAbility = jest.fn().mockRejectedValue( {
+			code: 'ability_invalid_output',
+			message: 'Bridge output schema rejected the payload.',
+		} );
+
+		window.flavorAgentAbilities = { executeAbility };
 		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-pattern-context',
 			reviewContextSignature: 'review-pattern-context',
@@ -1289,6 +1295,7 @@ describe( 'store action thunks', () => {
 			resolvedContextSignature: 'resolved-pattern-context',
 			reviewContextSignature: 'review-pattern-context',
 		} );
+		expect( executeAbility ).not.toHaveBeenCalled();
 	} );
 
 	test( 'setPatternRecommendations preserves allow-listed modelRequest diagnostics and pattern runtime signature', () => {
@@ -5297,6 +5304,12 @@ describe( 'store action thunks', () => {
 	);
 
 	test( 'revalidateBlockReviewFreshness marks wrapped signature-only drift stale', async () => {
+		const executeAbility = jest.fn().mockRejectedValue( {
+			code: 'ability_invalid_output',
+			message: 'Bridge output schema rejected the payload.',
+		} );
+
+		window.flavorAgentAbilities = { executeAbility };
 		apiFetch.mockResolvedValue( {
 			payload: {
 				resolvedContextSignature: 'resolved-block-next',
@@ -5341,6 +5354,7 @@ describe( 'store action thunks', () => {
 				'server'
 			)
 		);
+		expect( executeAbility ).not.toHaveBeenCalled();
 	} );
 
 	test( 'revalidateBlockReviewFreshness leaves matching wrapped signatures fresh', async () => {

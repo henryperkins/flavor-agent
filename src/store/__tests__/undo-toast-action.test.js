@@ -89,7 +89,6 @@ describe( 'undoToastAction — result handling', () => {
 			title: 'Undo failed',
 			errorHint: 'Server returned 500.',
 			autoDismissMs: TOAST_DEFAULTS.errorMs,
-			interacted: false,
 		} );
 	} );
 

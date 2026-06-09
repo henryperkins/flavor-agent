@@ -10,7 +10,18 @@ jest.mock( '@wordpress/blocks', () => ( {
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: {},
 } ) );
+jest.mock( '@wordpress/i18n', () => ( {
+	__: jest.fn( ( text ) => text ),
+	sprintf: jest.fn( ( template, ...args ) =>
+		args.reduce( ( message, value, index ) => {
+			const positional = new RegExp( `%${ index + 1 }\\$s`, 'g' );
 
+			return message.replace( positional, value ).replace( '%s', value );
+		}, template )
+	),
+} ) );
+
+const i18n = require( '@wordpress/i18n' );
 const { select, dispatch } = require( '@wordpress/data' );
 const { store: blocksStore } = require( '@wordpress/blocks' );
 const { store: blockEditorStore } = require( '@wordpress/block-editor' );
@@ -34,6 +45,16 @@ describe( 'style-operations', () => {
 	let registeredBlockTypes;
 
 	beforeEach( () => {
+		i18n.__.mockImplementation( ( text ) => text );
+		i18n.sprintf.mockImplementation( ( template, ...args ) =>
+			args.reduce( ( message, value, index ) => {
+				const positional = new RegExp( `%${ index + 1 }\\$s`, 'g' );
+
+				return message
+					.replace( positional, value )
+					.replace( '%s', value );
+			}, template )
+		);
 		blockEditorSettings = {
 			features: {
 				color: {
@@ -860,6 +881,10 @@ describe( 'style-operations', () => {
 				ok: false,
 				error: 'Contrast check unavailable: theme variation and color overrides must be reviewed separately.',
 			} )
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'Contrast check unavailable: theme variation and color overrides must be reviewed separately.',
+			'flavor-agent'
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
 		expect( currentRecord ).toEqual( initialRecord );

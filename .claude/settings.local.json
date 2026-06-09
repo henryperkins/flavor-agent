@@ -1,7 +1,8 @@
 {
   "enabledMcpjsonServers": [
     "playwright",
-    "wpds"
+    "wpds",
+    "wordpress-docs-ai-search"
   ],
   "enabledPlugins": {
     "playwright@claude-plugins-official": true

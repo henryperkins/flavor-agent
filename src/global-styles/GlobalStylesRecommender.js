@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 
 import { formatCount } from '../utils/format-count';
 import AIActivitySection from '../components/AIActivitySection';
@@ -106,13 +107,18 @@ function GlobalStylesPanel( {
 
 	if ( isStale ) {
 		staleReason = getExecutableSurfaceStaleMessage( {
-			surfaceLabel: 'Global Styles',
+			surfaceLabel: __( 'Global Styles', 'flavor-agent' ),
 			staleReasonType,
-			liveContextLabel: 'the current live style state or prompt',
+			liveContextLabel: __(
+				'the current live style state or prompt',
+				'flavor-agent'
+			),
 		} );
 	} else if ( showSecondaryGuidance ) {
-		reviewHint =
-			'Only the operations shown here will run against the current Global Styles scope.';
+		reviewHint = __(
+			'Only the operations shown here will run against the current Global Styles scope.',
+			'flavor-agent'
+		);
 	}
 
 	return (

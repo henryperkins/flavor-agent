@@ -7,6 +7,7 @@
  */
 import { rawHandler } from '@wordpress/blocks';
 import { createReduxStore, register } from '@wordpress/data';
+import { __ } from '@wordpress/i18n';
 
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import {
@@ -577,90 +578,180 @@ function getBlockHasResult( state, clientId ) {
 function buildClientStaleApplyErrorMessage( surface ) {
 	switch ( surface ) {
 		case 'template':
-			return 'This template result is stale. Refresh recommendations before applying it.';
+			return __(
+				'This template result is stale. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'template-part':
-			return 'This template-part result is stale. Refresh recommendations before applying it.';
+			return __(
+				'This template-part result is stale. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'global-styles':
-			return 'This Global Styles result is stale. Refresh recommendations before applying it.';
+			return __(
+				'This Global Styles result is stale. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'style-book':
-			return 'This Style Book result is stale. Refresh recommendations before applying it.';
+			return __(
+				'This Style Book result is stale. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		default:
-			return 'This result is stale. Refresh recommendations before applying it.';
+			return __(
+				'This result is stale. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 	}
 }
 
 function buildServerStaleApplyErrorMessage( surface ) {
 	switch ( surface ) {
 		case 'template':
-			return 'This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'template-part':
-			return 'This template-part result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This template-part result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'global-styles':
-			return 'This Global Styles result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This Global Styles result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'style-book':
-			return 'This Style Book result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This Style Book result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		default:
-			return 'This result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 	}
 }
 
 function buildMissingResolvedSignatureApplyErrorMessage( surface ) {
 	switch ( surface ) {
 		case 'template':
-			return 'This template result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This template result is missing the server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'template-part':
-			return 'This template-part result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This template-part result is missing the server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'global-styles':
-			return 'This Global Styles result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This Global Styles result is missing the server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'style-book':
-			return 'This Style Book result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This Style Book result is missing the server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		default:
-			return 'This result is missing the server-resolved apply context. Refresh recommendations before applying it.';
+			return __(
+				'This result is missing the server-resolved apply context. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 	}
 }
 
 function buildDocsGroundingUnavailableApplyErrorMessage( surface ) {
 	switch ( surface ) {
 		case 'template':
-			return 'This template result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This template result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'template-part':
-			return 'This template-part result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This template-part result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'global-styles':
-			return 'This Global Styles result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This Global Styles result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'style-book':
-			return 'This Style Book result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This Style Book result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		default:
-			return 'This result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 	}
 }
 
 function buildDocsGroundingChangedApplyErrorMessage( surface ) {
 	switch ( surface ) {
 		case 'template':
-			return 'This template result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This template result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'template-part':
-			return 'This template-part result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This template-part result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'global-styles':
-			return 'This Global Styles result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This Global Styles result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		case 'style-book':
-			return 'This Style Book result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This Style Book result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 		default:
-			return 'This result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.';
+			return __(
+				'This result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'flavor-agent'
+			);
 	}
 }
 
 function buildServerRevalidationErrorMessage( surface ) {
 	switch ( surface ) {
 		case 'template':
-			return 'Flavor Agent could not revalidate this template result against the current server apply context. Try again or refresh recommendations.';
+			return __(
+				'Flavor Agent could not revalidate this template result against the current server apply context. Try again or refresh recommendations.',
+				'flavor-agent'
+			);
 		case 'template-part':
-			return 'Flavor Agent could not revalidate this template-part result against the current server apply context. Try again or refresh recommendations.';
+			return __(
+				'Flavor Agent could not revalidate this template-part result against the current server apply context. Try again or refresh recommendations.',
+				'flavor-agent'
+			);
 		case 'global-styles':
-			return 'Flavor Agent could not revalidate this Global Styles result against the current server apply context. Try again or refresh recommendations.';
+			return __(
+				'Flavor Agent could not revalidate this Global Styles result against the current server apply context. Try again or refresh recommendations.',
+				'flavor-agent'
+			);
 		case 'style-book':
-			return 'Flavor Agent could not revalidate this Style Book result against the current server apply context. Try again or refresh recommendations.';
+			return __(
+				'Flavor Agent could not revalidate this Style Book result against the current server apply context. Try again or refresh recommendations.',
+				'flavor-agent'
+			);
 		default:
-			return 'Flavor Agent could not revalidate this result against the current server apply context. Try again or refresh recommendations.';
+			return __(
+				'Flavor Agent could not revalidate this result against the current server apply context. Try again or refresh recommendations.',
+				'flavor-agent'
+			);
 	}
 }
 
@@ -2992,7 +3083,8 @@ const actions = {
 
 			return executeFlavorAgentAbility(
 				'flavor-agent/recommend-patterns',
-				requestData
+				requestData,
+				{ forceRest: true }
 			);
 		};
 	},
@@ -3412,7 +3504,8 @@ const actions = {
 					{
 						...requestInput,
 						resolveSignatureOnly: true,
-					}
+					},
+					{ forceRest: true }
 				);
 
 				const serverSig =

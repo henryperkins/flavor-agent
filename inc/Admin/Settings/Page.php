@@ -1106,19 +1106,31 @@ final class Page {
 		$advanced_details = [];
 
 		if ( '' !== $instance_id ) {
-			$advanced_details[] = sprintf( 'Instance ID: %s', $instance_id );
+			$advanced_details[] = sprintf(
+				/* translators: %s: Cloudflare AI Search instance ID. */
+				__( 'Instance ID: %s', 'flavor-agent' ),
+				$instance_id
+			);
 		}
 
 		$error_code = sanitize_key( (string) ( $details['error_code'] ?? '' ) );
 
 		if ( '' !== $error_code ) {
-			$advanced_details[] = sprintf( 'Error code: %s', $error_code );
+			$advanced_details[] = sprintf(
+				/* translators: %s: error code returned while provisioning Cloudflare AI Search. */
+				__( 'Error code: %s', 'flavor-agent' ),
+				$error_code
+			);
 		}
 
 		$error_message = trim( sanitize_text_field( (string) ( $details['error_message'] ?? '' ) ) );
 
 		if ( '' !== $error_message ) {
-			$advanced_details[] = sprintf( 'Error message: %s', $error_message );
+			$advanced_details[] = sprintf(
+				/* translators: %s: error message returned while provisioning Cloudflare AI Search. */
+				__( 'Error message: %s', 'flavor-agent' ),
+				$error_message
+			);
 		}
 
 		$advanced_attributes = [

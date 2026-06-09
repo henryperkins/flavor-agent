@@ -1,3 +1,15 @@
+jest.mock( '@wordpress/i18n', () => ( {
+	__: jest.fn( ( text ) => text ),
+	sprintf: jest.fn( ( template, ...args ) =>
+		args.reduce( ( message, value, index ) => {
+			const positional = new RegExp( `%${ index + 1 }\\$s`, 'g' );
+
+			return message.replace( positional, value ).replace( '%s', value );
+		}, template )
+	),
+} ) );
+
+import * as i18n from '@wordpress/i18n';
 import {
 	getExecutableSurfaceEffectiveStaleReason,
 	getExecutableSurfaceStaleMessage,
@@ -83,6 +95,10 @@ describe( 'getExecutableSurfaceEffectiveStaleReason', () => {
 } );
 
 describe( 'getExecutableSurfaceStaleMessage', () => {
+	beforeEach( () => {
+		jest.clearAllMocks();
+	} );
+
 	test( 'returns an empty string when no stale reason is provided', () => {
 		expect(
 			getExecutableSurfaceStaleMessage( {
@@ -101,6 +117,10 @@ describe( 'getExecutableSurfaceStaleMessage', () => {
 			} )
 		).toBe(
 			'This Global Styles result no longer matches the current server review context. Refresh before reviewing or applying anything from the previous result.'
+		);
+		expect( i18n.__ ).toHaveBeenCalledWith(
+			'This %s result no longer matches the current server review context. Refresh before reviewing or applying anything from the previous result.',
+			'flavor-agent'
 		);
 	} );
 

@@ -62,6 +62,34 @@ function normalizeString( value ) {
 	return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
+function coerceLocalizedBoolean( value, fallback = true ) {
+	if ( value === undefined || value === null ) {
+		return fallback;
+	}
+
+	if ( value === false || value === 0 ) {
+		return false;
+	}
+
+	if ( typeof value === 'string' ) {
+		const normalized = value.trim().toLowerCase();
+
+		if (
+			normalized === '' ||
+			normalized === '0' ||
+			normalized === 'false'
+		) {
+			return false;
+		}
+
+		if ( normalized === '1' || normalized === 'true' ) {
+			return true;
+		}
+	}
+
+	return fallback;
+}
+
 function normalizeActions( actions ) {
 	if ( ! Array.isArray( actions ) ) {
 		return [];
@@ -71,7 +99,7 @@ function normalizeActions( actions ) {
 }
 
 function getDefaultActions( surface, data, reason ) {
-	if ( data?.canManageFlavorAgentSettings === false ) {
+	if ( ! coerceLocalizedBoolean( data?.canManageFlavorAgentSettings ) ) {
 		return [];
 	}
 
@@ -333,7 +361,9 @@ export function getConnectorApprovalNotice(
 	}
 
 	const data = getFlavorAgentData( input );
-	const canManageApprovals = data.canManageFlavorAgentSettings !== false;
+	const canManageApprovals = coerceLocalizedBoolean(
+		data.canManageFlavorAgentSettings
+	);
 	const href = canManageApprovals
 		? normalizeString( approval.adminUrl || data.connectorApprovalUrl )
 		: '';

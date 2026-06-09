@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 
 import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
@@ -72,9 +73,12 @@ const ENTITY_ACTION_SELECT_BLOCK_HINT = 'select-block-hint';
 
 function getTemplatePartStaleMessage( staleReasonType ) {
 	return getExecutableSurfaceStaleMessage( {
-		surfaceLabel: 'template-part',
+		surfaceLabel: __( 'template-part', 'flavor-agent' ),
 		staleReasonType,
-		liveContextLabel: 'the current live structure or prompt',
+		liveContextLabel: __(
+			'the current live structure or prompt',
+			'flavor-agent'
+		),
 	} );
 }
 

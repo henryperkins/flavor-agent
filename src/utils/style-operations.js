@@ -1,5 +1,6 @@
 import { dispatch, select } from '@wordpress/data';
 import { store as blocksStore } from '@wordpress/blocks';
+import { __, sprintf } from '@wordpress/i18n';
 
 import {
 	buildBlockStyleExecutionContractFromSettings,
@@ -358,7 +359,15 @@ function getMergedComplementHex( scopeKey, side, context = {} ) {
 function getUnavailableContrastResult( side, scopeKey ) {
 	return {
 		ok: false,
-		error: `Contrast check unavailable: unresolved ${ side } at ${ scopeKey }.`,
+		error: sprintf(
+			/* translators: 1: color side, such as "background" or "text". 2: style scope key. */
+			__(
+				'Contrast check unavailable: unresolved %1$s at %2$s.',
+				'flavor-agent'
+			),
+			side,
+			scopeKey
+		),
 		code: 'failed_contrast',
 	};
 }
@@ -429,7 +438,10 @@ function validateReadableColorContrast( operations = [], context = {} ) {
 	) {
 		return {
 			ok: false,
-			error: 'Contrast check unavailable: theme variation and color overrides must be reviewed separately.',
+			error: __(
+				'Contrast check unavailable: theme variation and color overrides must be reviewed separately.',
+				'flavor-agent'
+			),
 			code: 'failed_contrast',
 		};
 	}
@@ -462,7 +474,10 @@ function validateReadableColorContrast( operations = [], context = {} ) {
 	if ( unsupported ) {
 		return {
 			ok: false,
-			error: 'Contrast check unavailable: unsupported readable color path.',
+			error: __(
+				'Contrast check unavailable: unsupported readable color path.',
+				'flavor-agent'
+			),
 			code: 'failed_contrast',
 		};
 	}
@@ -504,15 +519,17 @@ function validateReadableColorContrast( operations = [], context = {} ) {
 		if ( ratio < CONTRAST_AA_THRESHOLD ) {
 			return {
 				ok: false,
-				error: `Contrast check: ${ ratio.toFixed(
-					1
-				) }:1 between "${ getContrastLabel(
-					textOperation,
-					text.hex
-				) }" and "${ getContrastLabel(
-					backgroundOperation,
-					background.hex
-				) }" at ${ scopeKey }, below the 4.5:1 minimum.`,
+				error: sprintf(
+					/* translators: 1: contrast ratio. 2: text color label. 3: background color label. 4: style scope key. */
+					__(
+						'Contrast check: %1$s:1 between "%2$s" and "%3$s" at %4$s, below the 4.5:1 minimum.',
+						'flavor-agent'
+					),
+					ratio.toFixed( 1 ),
+					getContrastLabel( textOperation, text.hex ),
+					getContrastLabel( backgroundOperation, background.hex ),
+					scopeKey
+				),
 				code: 'failed_contrast',
 			};
 		}

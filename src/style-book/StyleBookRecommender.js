@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 
 import { formatCount } from '../utils/format-count';
 import AIActivitySection from '../components/AIActivitySection';
@@ -115,19 +116,34 @@ function StyleBookPanel( {
 
 	if ( showSecondaryGuidance ) {
 		promptHelp = blockTitle
-			? `Flavor Agent will keep changes inside the theme-backed Style Book controls for ${ blockTitle }. Raw CSS and custom CSS are out of scope.`
-			: 'Select a Style Book example to request safe, theme-backed block style changes. Raw CSS and custom CSS are out of scope.';
+			? sprintf(
+					/* translators: %s: selected Style Book block title. */
+					__(
+						'Flavor Agent will keep changes inside the theme-backed Style Book controls for %s. Raw CSS and custom CSS are out of scope.',
+						'flavor-agent'
+					),
+					blockTitle
+			  )
+			: __(
+					'Select a Style Book example to request safe, theme-backed block style changes. Raw CSS and custom CSS are out of scope.',
+					'flavor-agent'
+			  );
 	}
 
 	if ( isStale ) {
 		staleReason = getExecutableSurfaceStaleMessage( {
-			surfaceLabel: 'Style Book',
+			surfaceLabel: __( 'Style Book', 'flavor-agent' ),
 			staleReasonType,
-			liveContextLabel: 'the current live block styles or prompt',
+			liveContextLabel: __(
+				'the current live block styles or prompt',
+				'flavor-agent'
+			),
 		} );
 	} else if ( showSecondaryGuidance ) {
-		reviewHint =
-			'Only the operations shown here will run against the active Style Book example.';
+		reviewHint = __(
+			'Only the operations shown here will run against the active Style Book example.',
+			'flavor-agent'
+		);
 	}
 
 	return (

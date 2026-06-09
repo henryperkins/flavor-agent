@@ -14,7 +14,6 @@ function buildErrorPatch( errorHint ) {
 		title: UNDO_FAILED_TITLE,
 		errorHint: errorHint || FALLBACK_ERROR_HINT,
 		autoDismissMs: TOAST_DEFAULTS.errorMs,
-		interacted: false,
 	};
 }
 

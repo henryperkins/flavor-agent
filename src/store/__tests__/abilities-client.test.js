@@ -245,6 +245,47 @@ describe( 'abilities client', () => {
 		} );
 	} );
 
+	test( 'executeFlavorAgentAbility skips the bridge when REST is forced', async () => {
+		const executeAbility = jest.fn().mockRejectedValue( {
+			code: 'ability_invalid_output',
+			message: 'Bridge output schema rejected the payload.',
+		} );
+
+		window.flavorAgentAbilities = { executeAbility };
+		apiFetch.mockResolvedValue( {
+			result: {
+				resolvedContextSignature: 'rest-signature',
+			},
+		} );
+
+		await expect(
+			executeFlavorAgentAbility(
+				'flavor-agent/recommend-patterns',
+				{
+					visiblePatternNames: [ 'theme/hero' ],
+					resolveSignatureOnly: true,
+				},
+				{
+					forceRest: true,
+				}
+			)
+		).resolves.toEqual( {
+			resolvedContextSignature: 'rest-signature',
+		} );
+
+		expect( executeAbility ).not.toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/wp-abilities/v1/abilities/flavor-agent/recommend-patterns/run',
+			method: 'POST',
+			data: {
+				input: {
+					visiblePatternNames: [ 'theme/hero' ],
+					resolveSignatureOnly: true,
+				},
+			},
+		} );
+	} );
+
 	test( 'executeFlavorAgentAbility falls back to REST when bridge is unavailable without abort signal', async () => {
 		apiFetch.mockResolvedValue( {
 			result: {

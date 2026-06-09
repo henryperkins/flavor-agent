@@ -287,14 +287,18 @@ function createExecutableSurfaceReviewFreshnessAction( {
 			try {
 				// Server review freshness includes a compact docs-grounding fingerprint,
 				// not the full grounded prompt text.
-				const result = await executeFlavorAgentAbility( abilityName, {
-					...requestData,
-					resolveSignatureOnly: true,
-					clientRequest: buildClientRequestIdentity( {
-						requestData,
-						requestToken,
-					} ),
-				} );
+				const result = await executeFlavorAgentAbility(
+					abilityName,
+					{
+						...requestData,
+						resolveSignatureOnly: true,
+						clientRequest: buildClientRequestIdentity( {
+							requestData,
+							requestToken,
+						} ),
+					},
+					{ forceRest: true }
+				);
 				const reviewContextSignature = normalizeStringMessage(
 					getReviewContextSignatureFromResponse( result )
 				);

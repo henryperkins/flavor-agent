@@ -84,7 +84,8 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 					sessionId: getClientRequestSessionId(),
 					requestToken: 3,
 				} ),
-			} )
+			} ),
+			{ forceRest: true }
 		);
 		expect( result ).toEqual( {
 			ok: false,

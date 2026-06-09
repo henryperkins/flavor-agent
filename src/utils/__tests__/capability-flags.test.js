@@ -134,6 +134,36 @@ describe( 'capability-flags', () => {
 		} );
 	} );
 
+	test( 'treats localized empty settings capability as non-admin approval state', () => {
+		window.flavorAgentData = {
+			canRecommendContent: '1',
+			canManageFlavorAgentSettings: '',
+			connectorApprovalUrl: '',
+			capabilities: {
+				surfaces: {
+					content: { available: true, reason: 'ready', actions: [] },
+				},
+			},
+		};
+
+		const notice = getConnectorApprovalNotice( 'content', {
+			connectorApproval: {
+				connectorId: 'openai',
+				callerBasename: 'flavor-agent/flavor-agent.php',
+				callerName: 'Flavor Agent',
+				adminUrl:
+					'https://example.test/wp-admin/tools.php?page=ai-connector-approval',
+			},
+		} );
+
+		expect( notice ).toMatchObject( {
+			message:
+				'Flavor Agent needs administrator approval to use the openai connector. An approval request for flavor-agent/flavor-agent.php has been submitted. Ask an administrator to review it in Connector Approvals.',
+			actions: [],
+			actionHref: '',
+		} );
+	} );
+
 	test( 'falls back to the connectors setup path when only legacy editor flags are available', () => {
 		window.flavorAgentData = {
 			canRecommendBlocks: false,
@@ -191,6 +221,22 @@ describe( 'capability-flags', () => {
 		window.flavorAgentData = {
 			canManageFlavorAgentSettings: false,
 			canRecommendTemplateParts: false,
+			settingsUrl:
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+		};
+
+		expect( getCapabilityNotice( 'template-part' ) ).toMatchObject( {
+			status: 'warning',
+			actionLabel: '',
+			actionHref: '',
+			actions: [],
+		} );
+	} );
+
+	test( 'suppresses legacy fallback links when localized settings capability is empty', () => {
+		window.flavorAgentData = {
+			canManageFlavorAgentSettings: '',
+			canRecommendTemplateParts: '',
 			settingsUrl:
 				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 		};

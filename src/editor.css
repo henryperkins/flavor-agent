@@ -1346,7 +1346,7 @@
 .flavor-agent-result-summary,
 .flavor-agent-card__details {
   border: 1px solid var(--flavor-agent-editor-stroke-subtle);
-  border-radius: var(--flavor-agent-editor-radius-md, 4px);
+  border-radius: var(--wpds-border-radius-md, 4px);
   background: var(--flavor-agent-editor-panel-bg);
 }
 
@@ -1531,12 +1531,6 @@
   white-space: normal;
 }
 
-/* Applied state: brief confirmation feedback */
-.flavor-agent-card__apply--applied {
-  color: var(--wpds-color-fg-content-success-weak, #007f30);
-  pointer-events: none;
-}
-
 /* ---------------------------------------------------------------
  * Suggestion chips (ToolsPanel sub-panels)
  * --------------------------------------------------------------- */
@@ -1601,7 +1595,7 @@
 
 .flavor-agent-chip-row__values,
 .flavor-agent-chip-row__status {
-  color: var(--flavor-agent-editor-text-subtle, #757575);
+  color: var(--flavor-agent-editor-muted);
   font-size: var(--wpds-font-size-sm, 12px);
   line-height: 1.4;
   overflow-wrap: anywhere;

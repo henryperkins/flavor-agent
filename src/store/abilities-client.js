@@ -43,7 +43,7 @@ async function executeAbilityViaRest( abilityName, data, { signal } = {} ) {
 export async function executeFlavorAgentAbility(
 	abilityName,
 	data,
-	{ signal } = {}
+	{ signal, forceRest = false } = {}
 ) {
 	if ( ! abilityName ) {
 		const error = new Error(
@@ -57,7 +57,7 @@ export async function executeFlavorAgentAbility(
 		typeof window !== 'undefined' ? window.flavorAgentAbilities : null;
 	const bridge = bridgeApi?.executeAbility;
 
-	if ( typeof bridge === 'function' && ! signal ) {
+	if ( typeof bridge === 'function' && ! signal && ! forceRest ) {
 		if ( await isBridgeReady( bridgeApi ) ) {
 			try {
 				return await bridge( abilityName, data );

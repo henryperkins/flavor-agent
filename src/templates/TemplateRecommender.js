@@ -25,6 +25,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 
 import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
@@ -90,20 +91,20 @@ import { buildTemplateDesignSemantics } from '../utils/recommendation-design-sem
 
 function formatBlockLabel( block ) {
 	if ( ! block ) {
-		return 'the template';
+		return __( 'the template', 'flavor-agent' );
 	}
 
 	if ( block.name === 'core/template-part' ) {
 		return (
 			block.attributes?.slug ||
 			block.attributes?.area ||
-			'current template part'
+			__( 'current template part', 'flavor-agent' )
 		);
 	}
 
 	return block.name
 		? block.name.replace( 'core/', '' ).replaceAll( '-', ' ' )
-		: 'the current block';
+		: __( 'the current block', 'flavor-agent' );
 }
 
 function getBlockByPath( blocks, path = [] ) {
@@ -132,21 +133,23 @@ function formatBlockPath( path = [] ) {
 		return '';
 	}
 
-	return `Path ${ path
-		.map( ( value ) => Number( value ) + 1 )
-		.join( ' > ' ) }`;
+	return sprintf(
+		/* translators: %s: one-based nested block path. */
+		__( 'Path %s', 'flavor-agent' ),
+		path.map( ( value ) => Number( value ) + 1 ).join( ' > ' )
+	);
 }
 
 function formatPlacementLabel( placement = '' ) {
 	switch ( placement ) {
 		case 'start':
-			return 'Start of template';
+			return __( 'Start of template', 'flavor-agent' );
 		case 'end':
-			return 'End of template';
+			return __( 'End of template', 'flavor-agent' );
 		case 'before_block_path':
-			return 'Before target block';
+			return __( 'Before target block', 'flavor-agent' );
 		case 'after_block_path':
-			return 'After target block';
+			return __( 'After target block', 'flavor-agent' );
 		default:
 			return '';
 	}
@@ -168,14 +171,14 @@ function describeTemplatePatternPlacement(
 	if ( placement === 'start' ) {
 		return {
 			mappingLabel: formatPlacementLabel( placement ),
-			reason: 'at the start of the template.',
+			reason: __( 'at the start of the template.', 'flavor-agent' ),
 		};
 	}
 
 	if ( placement === 'end' ) {
 		return {
 			mappingLabel: formatPlacementLabel( placement ),
-			reason: 'at the end of the template.',
+			reason: __( 'at the end of the template.', 'flavor-agent' ),
 		};
 	}
 
@@ -183,19 +186,31 @@ function describeTemplatePatternPlacement(
 		placement === 'before_block_path' ||
 		placement === 'after_block_path'
 	) {
-		const relation = placement === 'before_block_path' ? 'before' : 'after';
+		const relation =
+			placement === 'before_block_path'
+				? __( 'before', 'flavor-agent' )
+				: __( 'after', 'flavor-agent' );
 		const blockLabel = targetBlock
 			? formatBlockLabel( targetBlock )
-			: 'target block';
+			: __( 'target block', 'flavor-agent' );
 		const pathLabel = targetPath
 			? formatBlockPath( targetPath )
-			: 'target path';
+			: __( 'target path', 'flavor-agent' );
 
 		return {
-			mappingLabel: `${ formatPlacementLabel(
-				placement
-			) } (${ pathLabel })`,
-			reason: `${ relation } ${ blockLabel } at ${ pathLabel }.`,
+			mappingLabel: sprintf(
+				/* translators: 1: placement label. 2: block path label. */
+				__( '%1$s (%2$s)', 'flavor-agent' ),
+				formatPlacementLabel( placement ),
+				pathLabel
+			),
+			reason: sprintf(
+				/* translators: 1: before/after relation. 2: block label. 3: block path label. */
+				__( '%1$s %2$s at %3$s.', 'flavor-agent' ),
+				relation,
+				blockLabel,
+				pathLabel
+			),
 		};
 	}
 
@@ -211,28 +226,39 @@ function describeInsertionPoint( {
 	insertionPoint,
 } ) {
 	if ( selectedBlock ) {
-		return `after ${ formatBlockLabel( selectedBlock ) }`;
+		return sprintf(
+			/* translators: %s: selected block label. */
+			__( 'after %s', 'flavor-agent' ),
+			formatBlockLabel( selectedBlock )
+		);
 	}
 
 	if ( rootBlock ) {
-		return `inside ${ formatBlockLabel( rootBlock ) }`;
+		return sprintf(
+			/* translators: %s: root block label. */
+			__( 'inside %s', 'flavor-agent' ),
+			formatBlockLabel( rootBlock )
+		);
 	}
 
 	if (
 		Number.isFinite( insertionPoint?.index ) &&
 		insertionPoint.index === 0
 	) {
-		return 'at the start of the template';
+		return __( 'at the start of the template', 'flavor-agent' );
 	}
 
-	return 'at the end of the template';
+	return __( 'at the end of the template', 'flavor-agent' );
 }
 
 function getTemplateStaleMessage( staleReasonType ) {
 	return getExecutableSurfaceStaleMessage( {
-		surfaceLabel: 'template',
+		surfaceLabel: __( 'template', 'flavor-agent' ),
 		staleReasonType,
-		liveContextLabel: 'the current live template or prompt',
+		liveContextLabel: __(
+			'the current live template or prompt',
+			'flavor-agent'
+		),
 	} );
 }
 

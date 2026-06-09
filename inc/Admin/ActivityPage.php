@@ -19,8 +19,8 @@ final class ActivityPage {
 	public static function add_menu(): void {
 		$hook = add_submenu_page(
 			'options-general.php',
-			'Flavor Agent Activity',
-			'AI Activity',
+			__( 'Flavor Agent Activity', 'flavor-agent' ),
+			__( 'AI Activity', 'flavor-agent' ),
 			'manage_options',
 			self::PAGE_SLUG,
 			[ __CLASS__, 'render_page' ]
