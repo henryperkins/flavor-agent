@@ -1,9 +1,13 @@
 'use strict';
 
+const crypto = require( 'node:crypto' );
+
 const {
+	contentHashForEntry,
 	discoverSourceUrls,
 	evaluateSettlement,
 	existingItemsByUrl,
+	buildMarkdownDocument,
 	isFreshByLastmod,
 	fetchText,
 	htmlToMarkdown,
@@ -560,6 +564,34 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( resolveStaleDeletion( { ...healthy, previousManifestCount: 1000 } ).reason ).toBe( 'prepared-count-regression' );
 	} );
 
+	test( 'resolveStaleDeletion tolerates build errors within the attention ratio of discovered URLs', () => {
+		const healthy = {
+			dryRun: false,
+			deleteStale: true,
+			explicitSources: false,
+			limit: 0,
+			discoveryErrors: 0,
+			pollSkipped: false,
+			discovered: 13314,
+			prepared: 13212,
+			buildErrors: 102,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: true,
+			previousManifestCount: 13000,
+		};
+
+		// ~0.8% of discovered pages persistently fail to build (binary attachment
+		// pages in the sitemaps); that noise must not leave stale generations
+		// unprunable forever.
+		expect( resolveStaleDeletion( healthy ) ).toEqual( { delete: true, reason: 'healthy' } );
+		// Above the 2% attention ratio it is a systemic build problem → refuse.
+		expect( resolveStaleDeletion( { ...healthy, buildErrors: 300 } ).reason ).toBe( 'build-errors' );
+		// Build errors without discovery context stay blocking (conservative).
+		expect( resolveStaleDeletion( { ...healthy, discovered: 0, buildErrors: 3 } ).reason ).toBe( 'build-errors' );
+	} );
+
 	test( 'resolveSummaryStatus flags discovery errors and a high build-error ratio', () => {
 		const clean = {
 			dryRun: false,
@@ -645,6 +677,22 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( isFreshByLastmod( 'not-a-date', completed( '2026-06-06T00:00:00Z' ) ) ).toBe( false );
 	} );
 
+	test( 'isFreshByLastmod accepts epoch-ms retrieved_at as returned by the Cloudflare items API', () => {
+		const completedAtMs = ( retrievedAtMs ) => ( {
+			status: 'completed',
+			metadata: { retrieved_at: retrievedAtMs },
+		} );
+
+		// The items API normalizes datetime metadata to epoch milliseconds, not the ISO
+		// strings the updater uploads, so a numeric crawl time must still allow reuse.
+		expect(
+			isFreshByLastmod( '2026-05-01T00:00:00Z', completedAtMs( Date.parse( '2026-06-06T00:00:00Z' ) ) )
+		).toBe( true );
+		expect(
+			isFreshByLastmod( '2026-06-07T00:00:00Z', completedAtMs( Date.parse( '2026-06-06T00:00:00Z' ) ) )
+		).toBe( false );
+	} );
+
 	test( 'existingItemsByUrl indexes items by normalized source URL', () => {
 		const base = 'https://developer.wordpress.org/block-editor/reference-guides/';
 		const map = existingItemsByUrl( [
@@ -656,6 +704,107 @@ describe( 'update-docs-ai-search helpers', () => {
 
 		expect( map.size ).toBe( 1 );
 		expect( map.get( base ).key ).toBe( 'k1' );
+	} );
+
+	test( 'existingItemsByUrl keeps the newest retrieved item for duplicate source URLs', () => {
+		const base = 'https://developer.wordpress.org/block-editor/reference-guides/';
+		const map = existingItemsByUrl( [
+			{
+				key: 'old-generation',
+				status: 'completed',
+				metadata: {
+					source_url: base,
+					retrieved_at: '2026-06-06T00:00:00Z',
+				},
+			},
+			{
+				key: 'new-generation',
+				status: 'completed',
+				metadata: {
+					source_url: `${ base }?utm=1#frag`,
+					retrieved_at: '2026-06-08T00:00:00Z',
+				},
+			},
+			{
+				key: 'undated-generation',
+				status: 'completed',
+				metadata: {
+					source_url: base,
+				},
+			},
+		] );
+
+		expect( map.size ).toBe( 1 );
+		expect( map.get( base ).key ).toBe( 'new-generation' );
+	} );
+
+	test( 'existingItemsByUrl keeps the newest generation when retrieved_at is epoch milliseconds', () => {
+		const base = 'https://developer.wordpress.org/block-editor/reference-guides/';
+		// Older generation listed first: the buggy path treats numeric timestamps as
+		// unparseable and keeps the first-listed item, so ordering matters here.
+		const map = existingItemsByUrl( [
+			{
+				key: 'old-generation',
+				status: 'completed',
+				metadata: { source_url: base, retrieved_at: Date.parse( '2026-06-06T00:00:00Z' ) },
+			},
+			{
+				key: 'new-generation',
+				status: 'completed',
+				metadata: { source_url: base, retrieved_at: Date.parse( '2026-06-08T00:00:00Z' ) },
+			},
+		] );
+
+		expect( map.size ).toBe( 1 );
+		expect( map.get( base ).key ).toBe( 'new-generation' );
+	} );
+
+	test( 'contentHashForEntry folds the document layout version into the hash', () => {
+		const canonical = 'https://developer.wordpress.org/block-editor/';
+		const markdown = '# Block Editor\n\nBody.';
+		const legacyHash = crypto
+			.createHash( 'sha256' )
+			.update( canonical + '\n' + markdown )
+			.digest( 'hex' );
+
+		const hash = contentHashForEntry( canonical, markdown );
+
+		expect( hash ).toMatch( /^[0-9a-f]{64}$/ );
+		// Deterministic for identical inputs, sensitive to content changes.
+		expect( contentHashForEntry( canonical, markdown ) ).toBe( hash );
+		expect( contentHashForEntry( canonical, `${ markdown }!` ) ).not.toBe( hash );
+		// Diverges from the pre-layout-version formula so stored items built under an
+		// older document layout mint new keys and re-upload instead of being skipped
+		// as unchanged (shouldUpload matches on content_hash; --full only re-fetches).
+		expect( hash ).not.toBe( legacyHash );
+	} );
+
+	test( 'buildMarkdownDocument keeps titles in metadata without prepending a standalone H1', () => {
+		const body = buildMarkdownDocument( {
+			canonical: 'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+			title: 'Block Metadata',
+			retrievedAt: '2026-06-08T12:00:00.000Z',
+			publishedAt: '',
+			contentHash: 'abc123',
+			markdown: '# Block Metadata\n\nThe block metadata file defines block behavior.',
+		} );
+
+		expect( body ).toBe(
+			[
+				'---',
+				'source_url: "https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/"',
+				'retrieved_at: "2026-06-08T12:00:00.000Z"',
+				'content_hash: "abc123"',
+				'title: "Block Metadata"',
+				'---',
+				'',
+				'# Block Metadata',
+				'',
+				'The block metadata file defines block behavior.',
+				'',
+			].join( '\n' )
+		);
+		expect( body ).not.toContain( '# Block Metadata\n\n# Block Metadata' );
 	} );
 
 	test( 'discoverSourceUrls captures sitemap lastmod for content URLs', async () => {

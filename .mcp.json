@@ -1,3 +1,8 @@
 {
-	"mcpServers": {}
+	"mcpServers": {
+		"wordpress-docs-ai-search": {
+			"type": "http",
+			"url": "https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/mcp"
+		}
+	}
 }

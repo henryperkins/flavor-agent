@@ -24,6 +24,13 @@ const DAY_MS = 86_400_000;
 const MAX_FETCH_BYTES = 12_000_000;
 const PREPARED_REGRESSION_RATIO = 0.8;
 const BUILD_ERROR_ATTENTION_RATIO = 0.02;
+// Bump whenever buildMarkdownDocument's stored layout changes (v2: dropped the
+// standalone `# title` H1 that produced title-only first chunks). The version is
+// folded into the content hash, so every item mints a new key and re-uploads on
+// the next `--full` run — shouldUpload() skips on a matching content_hash and
+// --full alone only re-fetches, so a layout change cannot propagate without this.
+// Prune the superseded generation afterwards with a delete-stale run.
+const DOC_LAYOUT_VERSION = 2;
 const VALIDATION_QUERY = 'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes';
 
 const METADATA_SCHEMA = [
@@ -754,7 +761,7 @@ async function buildEntryForUrl( url, roots, options ) {
 
 	const retrievedAt = new Date().toISOString();
 	const publishedAt = extractPublishedAt( html );
-	const contentHash = sha256( canonical + '\n' + markdown );
+	const contentHash = contentHashForEntry( canonical, markdown );
 	const key = buildItemKey( canonical, contentHash, options.instance );
 	const body = buildMarkdownDocument( {
 		canonical,
@@ -782,6 +789,10 @@ async function buildEntryForUrl( url, roots, options ) {
 			contentHash,
 		} ),
 	};
+}
+
+function contentHashForEntry( canonical, markdown ) {
+	return sha256( canonical + '\n' + DOC_LAYOUT_VERSION + '\n' + markdown );
 }
 
 function buildItemKey( canonical, contentHash, instance ) {
@@ -1031,7 +1042,7 @@ function buildMarkdownDocument( entry ) {
 		'',
 	].filter( ( line ) => line !== '' ).join( '\n' );
 
-	const prefix = `${ frontmatter }# ${ entry.title }\n\n`;
+	const prefix = `${ frontmatter }\n\n`;
 	const suffix = '\n\n[Content truncated before upload to fit Cloudflare AI Search item limits.]\n';
 
 	const full = `${ prefix }${ entry.markdown }\n`;
@@ -1046,7 +1057,7 @@ function buildMarkdownDocument( entry ) {
 		Buffer.byteLength( prefix, 'utf8' ) -
 		Buffer.byteLength( suffix, 'utf8' );
 	if ( markdownBudget <= 0 ) {
-		throw new Error( 'Frontmatter and title exceed the Cloudflare AI Search item size limit.' );
+		throw new Error( 'Frontmatter exceeds the Cloudflare AI Search item size limit.' );
 	}
 
 	return `${ prefix }${ truncateUtf8ToBytes( entry.markdown, markdownBudget ) }${ suffix }`;
@@ -1224,6 +1235,19 @@ function shouldUpload( entry, existingItem ) {
 }
 
 /**
+ * Parse a metadata timestamp into epoch milliseconds. The updater uploads ISO
+ * strings, but Cloudflare AI Search normalizes datetime metadata (see
+ * METADATA_SCHEMA) and returns it as epoch milliseconds from the items and
+ * search APIs — accept both shapes, returning NaN for anything else.
+ */
+function parseTimestampMs( value ) {
+	if ( typeof value === 'number' ) {
+		return Number.isFinite( value ) ? value : NaN;
+	}
+	return Date.parse( String( value || '' ) );
+}
+
+/**
  * Decide whether a page can be reused without re-fetching, comparing the sitemap
  * <lastmod> against when we last crawled it. Conservative: only true with a
  * parseable lastmod, a completed existing item, and a crawl at/after the last
@@ -1239,7 +1263,7 @@ function isFreshByLastmod( lastmod, existingItem ) {
 	const metadata = existingItem.metadata && typeof existingItem.metadata === 'object' ? existingItem.metadata : {};
 	const retrievedAt = metadata.retrieved_at || metadata.retrievedAt || '';
 	const lastModifiedMs = Date.parse( lastmod );
-	const retrievedMs = Date.parse( retrievedAt );
+	const retrievedMs = parseTimestampMs( retrievedAt );
 	if ( Number.isNaN( lastModifiedMs ) || Number.isNaN( retrievedMs ) ) {
 		return false;
 	}
@@ -1261,11 +1285,23 @@ function existingItemsByUrl( items ) {
 		}
 		const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
 		const normalized = normalizeTrustedUrl( metadata.source_url || metadata.sourceUrl || '' );
-		if ( normalized && ! map.has( normalized ) ) {
+		if (
+			normalized &&
+			( ! map.has( normalized ) || itemRetrievedAtMs( item ) > itemRetrievedAtMs( map.get( normalized ) ) )
+		) {
 			map.set( normalized, item );
 		}
 	}
 	return map;
+}
+
+function itemRetrievedAtMs( item ) {
+	const metadata = item && typeof item === 'object' && item.metadata && typeof item.metadata === 'object'
+		? item.metadata
+		: {};
+	const retrievedAt = metadata.retrieved_at || metadata.retrievedAt || '';
+	const timestamp = parseTimestampMs( retrievedAt );
+	return Number.isNaN( timestamp ) ? -Infinity : timestamp;
 }
 
 function evaluateSettlement( latest, desiredKeys ) {
@@ -1298,8 +1334,9 @@ function isManagedDocsKey( key, instance ) {
 }
 
 // Stale deletion is the one destructive step, so it runs only for a full, demonstrably
-// healthy run. Targeted runs (explicit --source-url/--source-file) and any build, upload,
-// poll, or validation problem disable it so a degraded discovery cannot wipe the corpus.
+// healthy run. Targeted runs (explicit --source-url/--source-file), an out-of-ratio build
+// failure, and any upload, poll, or validation problem disable it so a degraded
+// discovery cannot wipe the corpus.
 function resolveStaleDeletion( run ) {
 	if ( run.dryRun ) {
 		return { delete: false, reason: 'dry-run' };
@@ -1322,7 +1359,16 @@ function resolveStaleDeletion( run ) {
 	if ( ! ( run.prepared > 0 ) ) {
 		return { delete: false, reason: 'no-prepared-documents' };
 	}
-	if ( run.buildErrors > 0 ) {
+	// Persistent low-level build noise (binary attachment pages discovered from the
+	// sitemaps) must not leave stale generations unprunable forever; only a build-error
+	// ratio above the same attention threshold used by resolveSummaryStatus() is a
+	// systemic failure. Without a discovered count, any build error stays blocking.
+	const discoveredCount = run.discovered || 0;
+	const buildErrorCount = run.buildErrors || 0;
+	const buildErrorRatio = discoveredCount > 0
+		? buildErrorCount / discoveredCount
+		: ( buildErrorCount > 0 ? 1 : 0 );
+	if ( buildErrorRatio > BUILD_ERROR_ATTENTION_RATIO ) {
 		return { delete: false, reason: 'build-errors' };
 	}
 	if ( run.uploadErrors > 0 ) {
@@ -1665,6 +1711,7 @@ async function main() {
 		limit: options.limit,
 		discoveryErrors: discoveryErrorCount,
 		pollSkipped: poll.skipped === true,
+		discovered: urls.length,
 		prepared: processed.prepared,
 		buildErrors: buildErrorCount,
 		uploadErrors: uploadErrorCount,
@@ -1740,6 +1787,7 @@ if ( require.main === module ) {
 }
 
 module.exports = {
+	contentHashForEntry,
 	discoverSourceUrls,
 	existingItemsByUrl,
 	isFreshByLastmod,
@@ -1754,6 +1802,7 @@ module.exports = {
 	manifestEntry,
 	cleanText,
 	flattenString,
+	buildMarkdownDocument,
 	buildItemKey,
 	boundedSlug,
 	normalizeTrustedUrl,

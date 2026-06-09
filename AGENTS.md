@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## MCP Tooling
-Use the available MCP server tools liberally when they can speed up implementation, verification, or research. Prefer the `wpds` MCP server for WordPress Design System work, and Context7 for general library, API, and SDK documentation. When the `wordpress-docs-ai-search` MCP server is available, consult it for WordPress plugin, Gutenberg, block editor, theme.json, and current release-cycle decisions; treat results as grounding input and still apply the plugin's trusted-source/currentness rules from `inc/Cloudflare/AISearchClient.php` and `inc/Support/DocsGroundingSourcePolicy.php`.
+Use the available MCP server tools liberally when they can speed up implementation, verification, or research. Prefer the `wpds` MCP server for WordPress Design System work, and Context7 for general library, API, and SDK documentation. When the `wordpress-docs-ai-search` MCP server is available, consult it for Gutenberg, block editor, REST API, theme/theme.json, code-reference, Developer Blog, and current release-cycle decisions covered by the managed corpus; do not treat it as complete Plugin Handbook coverage unless the runbook's corpus scopes include that source. Treat results as grounding input and still apply the plugin's trusted-source/currentness rules from `inc/Cloudflare/AISearchClient.php` and `inc/Support/DocsGroundingSourcePolicy.php`.
 
 ## Agent Skills & Prompts
 Reusable review/automation aids are version-controlled in three tool-specific homes:

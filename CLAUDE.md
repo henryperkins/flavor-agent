@@ -6,7 +6,7 @@ Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.2+
 
 ## MCP Tooling
 
-Use available MCP tools when they can speed up implementation, verification, or research. When the `wordpress-docs-ai-search` MCP server is available, consult it for WordPress plugin, Gutenberg, block editor, theme.json, and current release-cycle decisions; treat results as grounding input and still apply the plugin's trusted-source/currentness rules from `inc/Cloudflare/AISearchClient.php` and `inc/Support/DocsGroundingSourcePolicy.php`.
+Use available MCP tools when they can speed up implementation, verification, or research. When the `wordpress-docs-ai-search` MCP server is available, consult it for Gutenberg, block editor, REST API, theme/theme.json, code-reference, Developer Blog, and current release-cycle decisions covered by the managed corpus; do not treat it as complete Plugin Handbook coverage unless the runbook's corpus scopes include that source. Treat results as grounding input and still apply the plugin's trusted-source/currentness rules from `inc/Cloudflare/AISearchClient.php` and `inc/Support/DocsGroundingSourcePolicy.php`.
 
 ## Commands
 
