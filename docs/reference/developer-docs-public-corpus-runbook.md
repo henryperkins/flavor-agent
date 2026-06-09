@@ -54,6 +54,8 @@ npm run docs:ai-search:update -- --dry-run --source-url=https://developer.wordpr
 
 Make/Core recency is tunable with `--make-core-max-age-days=<n>` (default 180; `0` ingests every matched post). Stale deletion is **opt-in**: pass `--delete-stale` (or set the workflow's `delete_stale` input) — it is off by default. Even when enabled it is skipped for `--limit`, targeted `--source-url`/`--source-file` runs, any sitemap/discovery error, skipped polling, item/upload/build/validation failures, or a prepared-count regression versus the previous manifest. Targeted runs replace sitemap discovery and never delete, so they are safe for spot-checks.
 
+The updater is **incremental**: it reads each sitemap's `<lastmod>` and skips re-fetching any page whose existing corpus item was already crawled at or after that timestamp (matched by `source_url`). Only new or changed pages are fetched and uploaded, which keeps the weekly run well inside the Actions timeout and gentle on developer.wordpress.org / make.wordpress.org (a full re-fetch of the ~13k discovered URLs otherwise overruns the job). Page fetches retry transient `5xx`/`429` responses. Pass `--full` (or `--force-refetch`) to bypass the skip and re-fetch every discovered URL — use it after changing the extraction/Markdown logic so existing items rebuild. Conditional HTTP requests are not used because developer.wordpress.org pages return no `Last-Modified`/`ETag`.
+
 Use this workflow whenever the active WordPress release cycle changes, a Field Guide or release candidate post lands, a dev-note batch is edited, a Gutenberg release materially changes editor APIs, or the validation query stops returning current release-cycle sources.
 
 1. Set the active release identifier for the cycle, such as `7-0`.
@@ -120,3 +122,16 @@ Coverage behavior:
 - `missing-current-release-cycle` (trusted stable Developer Docs present, but no current `make-core`/`developer-blog` source) degrades-to-warn: `DocsGuidanceResult::resolve_status()` resolves `grounded`/`degraded`/`stale` and the coverage summary carries the warning, so recommendations proceed. There is no coverage grace window, last-known-current snapshot, or gate-block Settings warning — make-core publishing is bursty, so blocking on currency would dead-end recommendations during normal between-release lulls.
 - Hard-blocks (`unavailable` status, HTTP 503 via `DocsGuidanceResult::unavailable_error()`, which still fires the `flavor_agent_docs_grounding_unavailable` action) remain for three cases only: no trusted official guidance at all, `missing-developer-docs` (make-core/developer-blog present but no stable Developer Docs backbone), and a coverage-probe transport failure. These are genuine outages, not a release-cycle gap.
 - Validation paths (`AISearchClient::validate_configuration()` and the Settings page) see the raw probe result so admins can act on corpus drift.
+
+## MCP search endpoint behavior
+
+The `wordpress-docs-ai-search` MCP server points agents at the same corpus through the `/mcp` endpoint (sibling to the plugin's `/search` endpoint on instance `ba566764`). That endpoint behaves differently from the `/search` request the plugin builds, and agents must account for it (verified 2026-06-08):
+
+- **`max_num_results` is ignored.** Requests at both `ai_search_options.max_num_results` and the Cloudflare-documented `ai_search_options.retrieval.max_num_results` returned the default (~10) chunk count regardless of the requested cap.
+- **`filters` are ignored.** An impossible `source_url` equality filter returned the full unfiltered result set instead of zero matches.
+- Results are **not de-duplicated by source** (several chunks of one page can appear), the rewritten `search_query` can introduce misleading terms (for example expanding "Abilities API" toward "user capabilities"), and archive/index pages (`/news/`, `/news/all-posts/`) can rank highly.
+
+Consequences:
+
+- Agents consuming the MCP server must apply the trusted-source and currency rules in `inc/Support/DocsGroundingSourcePolicy.php` themselves and must not rely on server-side bounding or filtering.
+- The plugin's recommendation grounding is unaffected: it queries `/search` with `ai_search_options.retrieval.*` and enforces trust, freshness, and source classification in PHP (`DocsGroundingSourcePolicy` + `AISearchClient::normalize_chunks()`), independent of any Cloudflare-side filtering. De-duplication is intentionally not applied in `normalize_chunks()` because distinct chunks usually carry different excerpts of the same page, and `source_coverage_summary()` already collapses duplicate source types via `array_unique`, so the coverage gate is not skewed by repeated chunks.
