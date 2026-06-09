@@ -15,6 +15,9 @@ const MAX_UPLOAD_BYTES = 3_900_000;
 const KEY_MAX_BYTES = 128;
 const SITEMAP_CONCURRENCY = 4;
 const PAGE_CONCURRENCY = 5;
+const FETCH_RETRIES = 2;
+const FETCH_RETRY_BASE_MS = 500;
+const RETRYABLE_STATUS = new Set( [ 429, 500, 502, 503, 504 ] );
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAKE_CORE_DEFAULT_MAX_AGE_DAYS = 180;
 const DAY_MS = 86_400_000;
@@ -54,6 +57,8 @@ Options:
                          always skipped for --limit, --source-url/--source-file, and any
                          run with discovery/build/upload/poll/validation problems.
   --no-delete            Force stale deletion off (overrides --delete-stale).
+  --full                 Re-fetch every discovered URL even if unchanged since the
+                         last ingest (bypasses the sitemap-lastmod incremental skip).
   --skip-configure       Do not update the instance metadata schema.
   --poll-seconds=<n>     Poll uploaded items before validation. Default: 180.
   --output=<dir>         Write summary artifacts here.
@@ -78,6 +83,7 @@ function parseArgs( argv ) {
 		deleteStale: false,
 		configureInstance: true,
 		pollSeconds: 180,
+		fullRefetch: false,
 		outputDir: DEFAULT_OUTPUT_DIR,
 	};
 
@@ -96,6 +102,10 @@ function parseArgs( argv ) {
 		}
 		if ( arg === '--no-delete' ) {
 			options.deleteStale = false;
+			continue;
+		}
+		if ( arg === '--full' || arg === '--force-refetch' ) {
+			options.fullRefetch = true;
 			continue;
 		}
 		if ( arg === '--skip-configure' ) {
@@ -385,18 +395,48 @@ async function readLimitedText( response, maxBytes ) {
 }
 
 async function fetchText( url, options = {} ) {
+	// Retries are opt-in (default 0) so discovery/validation keep their fail-fast
+	// behavior; page fetches pass retries to ride out transient upstream 5xx/429
+	// and network blips instead of turning every blip into a build error.
+	const retries = Number.isInteger( options.retries ) && options.retries > 0 ? options.retries : 0;
+	const maxAttempts = retries + 1;
+	let lastError;
+	for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
+		try {
+			return await fetchTextOnce( url, options );
+		} catch ( error ) {
+			lastError = error;
+			if ( ! error || error.retryable !== true || attempt === maxAttempts ) {
+				throw error;
+			}
+			await delay( FETCH_RETRY_BASE_MS * 2 ** ( attempt - 1 ) );
+		}
+	}
+	throw lastError;
+}
+
+async function fetchTextOnce( url, options = {} ) {
 	const controller = new AbortController();
 	const timeout = setTimeout( () => controller.abort(), options.timeoutMs || REQUEST_TIMEOUT_MS );
 	try {
-		const response = await fetch( url, {
-			redirect: 'follow',
-			headers: {
-				'Accept': options.accept || 'text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
-				'User-Agent': USER_AGENT,
-				...( options.headers || {} ),
-			},
-			signal: controller.signal,
-		} );
+		let response;
+		try {
+			response = await fetch( url, {
+				redirect: 'follow',
+				headers: {
+					'Accept': options.accept || 'text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
+					'User-Agent': USER_AGENT,
+					...( options.headers || {} ),
+				},
+				signal: controller.signal,
+			} );
+		} catch ( error ) {
+			// Network failure or timeout abort: transient, so allow a retry.
+			if ( error && typeof error === 'object' ) {
+				error.retryable = true;
+			}
+			throw error;
+		}
 
 		// fetch() follows redirects; a trusted sitemap/page that 30x-es off-origin must not
 		// be read by this secret-bearing runner. Validate the final origin before the body.
@@ -409,6 +449,7 @@ async function fetchText( url, options = {} ) {
 				finalOrigin = '';
 			}
 			if ( ! options.allowedOrigins.has( finalOrigin ) ) {
+				// Off-origin redirect is a hard security stop, never retried.
 				throw new Error( `Refusing redirect outside trusted origins: ${ finalUrl }` );
 			}
 		}
@@ -417,6 +458,7 @@ async function fetchText( url, options = {} ) {
 		if ( ! response.ok ) {
 			const error = new Error( `HTTP ${ response.status } fetching ${ url }: ${ text.slice( 0, 160 ) }` );
 			error.status = response.status;
+			error.retryable = RETRYABLE_STATUS.has( response.status );
 			throw error;
 		}
 		return {
@@ -480,6 +522,7 @@ async function discoverSourceUrls( roots, options ) {
 		return {
 			urls: dedupeUrls( explicit.filter( ( url ) => urlMatchesRoots( url, roots ) || roots.includes( url ) ) ),
 			errors: [],
+			lastmods: {},
 		};
 	}
 
@@ -512,6 +555,7 @@ async function discoverSourceUrls( roots, options ) {
 	}
 
 	const discovered = new Set( roots );
+	const lastmods = new Map();
 	const makeCoreCutoff = makeCoreRecencyCutoff( options );
 	const discoveryErrors = [];
 	const visitedSitemaps = new Set();
@@ -552,6 +596,10 @@ async function discoverSourceUrls( roots, options ) {
 					withinMakeCoreWindow( normalized, makeCoreCutoff )
 				) {
 					discovered.add( normalized );
+					const lastmod = result.value.lastmods && result.value.lastmods.get( loc );
+					if ( lastmod && ! lastmods.has( normalized ) ) {
+						lastmods.set( normalized, lastmod );
+					}
 				}
 			}
 		}
@@ -561,6 +609,7 @@ async function discoverSourceUrls( roots, options ) {
 	return {
 		urls: options.limit > 0 ? urls.slice( 0, options.limit ) : urls,
 		errors: discoveryErrors,
+		lastmods: Object.fromEntries( lastmods ),
 	};
 }
 
@@ -646,7 +695,23 @@ async function readSitemap( sitemapUrl, visited, allowedOrigins = null ) {
 		}
 	}
 
-	return { urls, sitemaps };
+	// Pair each content <loc> with its <lastmod> (URL-set sitemaps only) so the
+	// updater can skip re-fetching pages unchanged since the last crawl.
+	const lastmods = new Map();
+	for ( const block of response.text.matchAll( /<url\b[^>]*>([\s\S]*?)<\/url>/gi ) ) {
+		const inner = block[ 1 ];
+		const locMatch = inner.match( /<loc>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]+))\s*<\/loc>/i );
+		const loc = decodeXml( ( locMatch && ( locMatch[ 1 ] || locMatch[ 2 ] ) ) || '' ).trim();
+		if ( ! loc ) {
+			continue;
+		}
+		const lastmodMatch = inner.match( /<lastmod>\s*([^<]+?)\s*<\/lastmod>/i );
+		if ( lastmodMatch ) {
+			lastmods.set( loc, lastmodMatch[ 1 ].trim() );
+		}
+	}
+
+	return { urls, sitemaps, lastmods };
 }
 
 function decodeXml( value ) {
@@ -670,7 +735,7 @@ async function buildEntryForUrl( url, roots, options ) {
 			} )
 			.filter( Boolean )
 	);
-	const response = await fetchText( url, { allowedOrigins } );
+	const response = await fetchText( url, { allowedOrigins, retries: FETCH_RETRIES } );
 	if ( response.contentType && ! /html|xml|text/i.test( response.contentType ) ) {
 		throw new Error( `Unsupported content type ${ response.contentType }` );
 	}
@@ -1158,6 +1223,51 @@ function shouldUpload( entry, existingItem ) {
 	return true;
 }
 
+/**
+ * Decide whether a page can be reused without re-fetching, comparing the sitemap
+ * <lastmod> against when we last crawled it. Conservative: only true with a
+ * parseable lastmod, a completed existing item, and a crawl at/after the last
+ * modification. Any uncertainty falls through to a fresh fetch.
+ */
+function isFreshByLastmod( lastmod, existingItem ) {
+	if ( ! lastmod || ! existingItem || typeof existingItem !== 'object' ) {
+		return false;
+	}
+	if ( String( existingItem.status || '' ) !== 'completed' ) {
+		return false;
+	}
+	const metadata = existingItem.metadata && typeof existingItem.metadata === 'object' ? existingItem.metadata : {};
+	const retrievedAt = metadata.retrieved_at || metadata.retrievedAt || '';
+	const lastModifiedMs = Date.parse( lastmod );
+	const retrievedMs = Date.parse( retrievedAt );
+	if ( Number.isNaN( lastModifiedMs ) || Number.isNaN( retrievedMs ) ) {
+		return false;
+	}
+	return retrievedMs >= lastModifiedMs;
+}
+
+/**
+ * Index existing built-in items by normalized source URL so a discovered URL can
+ * be matched to the item already in the corpus.
+ *
+ * @param {Array<object>} items
+ * @return {Map<string, object>}
+ */
+function existingItemsByUrl( items ) {
+	const map = new Map();
+	for ( const item of Array.isArray( items ) ? items : [] ) {
+		if ( ! item || typeof item !== 'object' ) {
+			continue;
+		}
+		const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+		const normalized = normalizeTrustedUrl( metadata.source_url || metadata.sourceUrl || '' );
+		if ( normalized && ! map.has( normalized ) ) {
+			map.set( normalized, item );
+		}
+	}
+	return map;
+}
+
 function evaluateSettlement( latest, desiredKeys ) {
 	const scoped = latest.filter( ( item ) => desiredKeys.has( String( item.key || '' ) ) );
 	const seen = new Set( scoped.map( ( item ) => String( item.key || '' ) ) );
@@ -1375,7 +1485,7 @@ function classifySourceUrl( value ) {
 	return '';
 }
 
-async function processEntries( urls, roots, options, auth, existingByKey ) {
+async function processEntries( urls, roots, options, auth, existingByKey, lastmods = {}, existingByUrl = new Map() ) {
 	const desiredKeys = new Set();
 	const manifest = [];
 	const uploaded = [];
@@ -1383,12 +1493,32 @@ async function processEntries( urls, roots, options, auth, existingByKey ) {
 	const uploadErrors = [];
 	const buildErrors = [];
 	let prepared = 0;
+	let reused = 0;
 
 	let index = 0;
 	async function worker() {
 		while ( index < urls.length ) {
 			const current = index++;
 			const url = urls[ current ];
+
+			// Incremental skip: if the sitemap reports this page unchanged since we last
+			// crawled it, reuse the existing item instead of re-fetching. This is what
+			// keeps the weekly run inside the job timeout and gentle on the upstream.
+			if ( ! options.fullRefetch ) {
+				const existingByUrlItem = existingByUrl.get( url );
+				if ( isFreshByLastmod( lastmods[ url ], existingByUrlItem ) ) {
+					const reusedKey = String( existingByUrlItem.key || '' );
+					if ( reusedKey ) {
+						++prepared;
+						++reused;
+						desiredKeys.add( reusedKey );
+						manifest.push( manifestEntryFromExisting( existingByUrlItem, url ) );
+						skipped.push( { key: reusedKey, reason: 'fresh-lastmod' } );
+						continue;
+					}
+				}
+			}
+
 			let entry;
 			try {
 				entry = await buildEntryForUrl( url, roots, options );
@@ -1427,6 +1557,7 @@ async function processEntries( urls, roots, options, auth, existingByKey ) {
 		uploadErrors,
 		buildErrors,
 		prepared,
+		reused,
 	};
 }
 
@@ -1439,6 +1570,19 @@ function manifestEntry( entry ) {
 		publishedAt: entry.publishedAt,
 		contentHash: entry.contentHash,
 		bodyBytes: entry.bodyBytes,
+	};
+}
+
+function manifestEntryFromExisting( item, url ) {
+	const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+	return {
+		key: String( item.key || '' ),
+		url: metadata.source_url || url,
+		title: metadata.title || '',
+		retrievedAt: metadata.retrieved_at || '',
+		publishedAt: metadata.published_at || '',
+		contentHash: metadata.content_hash || '',
+		bodyBytes: 0,
 	};
 }
 
@@ -1494,9 +1638,12 @@ async function main() {
 			existingByKey.set( key, item );
 		}
 	}
+	const existingByUrl = existingItemsByUrl( existingItems );
 
-	const processed = await processEntries( urls, roots, options, auth, existingByKey );
-	console.log( `Prepared ${ processed.prepared } uploadable Markdown documents.` );
+	const processed = await processEntries( urls, roots, options, auth, existingByKey, discovery.lastmods, existingByUrl );
+	console.log(
+		`Prepared ${ processed.prepared } Markdown documents (${ processed.reused } reused unchanged via sitemap lastmod).`
+	);
 
 	// Uploads happen inside processEntries; settle and validate BEFORE any destructive
 	// deletion so a degraded discovery/build cannot prune the corpus (resolveStaleDeletion).
@@ -1594,6 +1741,8 @@ if ( require.main === module ) {
 
 module.exports = {
 	discoverSourceUrls,
+	existingItemsByUrl,
+	isFreshByLastmod,
 	evaluateSettlement,
 	isSettlementComplete,
 	resolveStaleDeletion,

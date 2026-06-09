@@ -3,6 +3,8 @@
 const {
 	discoverSourceUrls,
 	evaluateSettlement,
+	existingItemsByUrl,
+	isFreshByLastmod,
 	fetchText,
 	htmlToMarkdown,
 	isSettlementComplete,
@@ -620,5 +622,74 @@ describe( 'update-docs-ai-search helpers', () => {
 				allowedOrigins: new Set( [ 'https://developer.wordpress.org' ] ),
 			} )
 		).rejects.toThrow( 'Refusing redirect outside trusted origins' );
+	} );
+
+	test( 'isFreshByLastmod reuses only completed items crawled at/after the sitemap lastmod', () => {
+		const completed = ( retrievedAt ) => ( {
+			status: 'completed',
+			metadata: { retrieved_at: retrievedAt },
+		} );
+
+		// Crawled after the page's last modification -> safe to reuse.
+		expect( isFreshByLastmod( '2026-05-01T00:00:00Z', completed( '2026-06-06T00:00:00Z' ) ) ).toBe( true );
+		// Page modified after our crawl -> must re-fetch.
+		expect( isFreshByLastmod( '2026-06-07T00:00:00Z', completed( '2026-06-06T00:00:00Z' ) ) ).toBe( false );
+		// Missing lastmod, missing item, non-completed status, missing crawl time, or
+		// unparseable dates all fall through to a fresh fetch.
+		expect( isFreshByLastmod( '', completed( '2026-06-06T00:00:00Z' ) ) ).toBe( false );
+		expect( isFreshByLastmod( '2026-05-01T00:00:00Z', null ) ).toBe( false );
+		expect(
+			isFreshByLastmod( '2026-05-01T00:00:00Z', { status: 'queued', metadata: { retrieved_at: '2026-06-06T00:00:00Z' } } )
+		).toBe( false );
+		expect( isFreshByLastmod( '2026-05-01T00:00:00Z', { status: 'completed', metadata: {} } ) ).toBe( false );
+		expect( isFreshByLastmod( 'not-a-date', completed( '2026-06-06T00:00:00Z' ) ) ).toBe( false );
+	} );
+
+	test( 'existingItemsByUrl indexes items by normalized source URL', () => {
+		const base = 'https://developer.wordpress.org/block-editor/reference-guides/';
+		const map = existingItemsByUrl( [
+			{ key: 'k1', status: 'completed', metadata: { source_url: base } },
+			{ key: 'k2', status: 'completed', metadata: {} }, // no source_url -> skipped
+			{ key: 'k3', status: 'completed', metadata: { source_url: `${ base }?utm=1#frag` } }, // normalizes to k1's URL -> first wins
+			'not-an-object',
+		] );
+
+		expect( map.size ).toBe( 1 );
+		expect( map.get( base ).key ).toBe( 'k1' );
+	} );
+
+	test( 'discoverSourceUrls captures sitemap lastmod for content URLs', async () => {
+		const contentUrl = 'https://developer.wordpress.org/block-editor/reference-guides/';
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href === 'https://developer.wordpress.org/robots.txt' ) {
+				return mockTextResponse( 'Sitemap: https://developer.wordpress.org/sitemap.xml', href, 'text/plain' );
+			}
+			if ( href === 'https://developer.wordpress.org/sitemap.xml' ) {
+				return mockTextResponse(
+					[
+						'<urlset>',
+						`<url><loc>${ contentUrl }</loc><lastmod>2026-05-31T11:45:20Z</lastmod></url>`,
+						'</urlset>',
+					].join( '' ),
+					href
+				);
+			}
+			if (
+				href === 'https://developer.wordpress.org/block-editor/wp-sitemap.xml' ||
+				href === 'https://developer.wordpress.org/block-editor/sitemap.xml'
+			) {
+				return mockTextResponse( '<urlset></urlset>', href );
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const result = await discoverSourceUrls(
+			[ 'https://developer.wordpress.org/block-editor/' ],
+			{ sourceUrls: [], sourceFile: '', limit: 0 }
+		);
+
+		expect( result.urls ).toContain( contentUrl );
+		expect( result.lastmods[ contentUrl ] ).toBe( '2026-05-31T11:45:20Z' );
 	} );
 } );
