@@ -93,10 +93,6 @@ final class TemplateAbilities {
 			];
 		}
 
-		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
-			return DocsGuidanceResult::unavailable_error( $docs_result );
-		}
-
 		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system        = TemplatePrompt::build_system();
 		$user          = TemplatePrompt::build_user(
@@ -222,10 +218,6 @@ final class TemplateAbilities {
 				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
 				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
-		}
-
-		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
-			return DocsGuidanceResult::unavailable_error( $docs_result );
 		}
 
 		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );

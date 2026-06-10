@@ -43,10 +43,14 @@ final class DocsGuidanceResult {
 	 * @return array<string, mixed>
 	 */
 	public static function public_summary( array $result ): array {
+		$guidance = is_array( $result['guidance'] ?? null ) ? $result['guidance'] : [];
+
 		return [
 			'status'      => sanitize_key( (string) ( $result['status'] ?? 'unavailable' ) ),
 			'mode'        => sanitize_key( (string) ( $result['mode'] ?? '' ) ),
 			'transport'   => sanitize_key( (string) ( $result['transport'] ?? '' ) ),
+			'available'   => [] !== $guidance,
+			'count'       => count( $guidance ),
 			'sourceTypes' => array_values( array_map( 'sanitize_key', (array) ( $result['sourceTypes'] ?? [] ) ) ),
 			'freshness'   => array_values( array_map( 'sanitize_key', (array) ( $result['freshness'] ?? [] ) ) ),
 			'coverage'    => self::normalize_coverage( $result['coverage'] ?? [] ),

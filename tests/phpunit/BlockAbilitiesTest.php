@@ -627,7 +627,7 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 	}
 
-	public function test_recommend_block_fails_closed_when_docs_grounding_is_unavailable(): void {
+	public function test_recommend_block_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_text_generation_connector();
 		WordPressTestState::$transients                     = [];
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
@@ -635,7 +635,7 @@ final class BlockAbilitiesTest extends TestCase {
 				'settings'    => [],
 				'styles'      => [],
 				'block'       => [],
-				'explanation' => 'Would have called the model without the grounding gate.',
+				'explanation' => 'Proceeds without the grounding gate.',
 			]
 		);
 
@@ -650,11 +650,11 @@ final class BlockAbilitiesTest extends TestCase {
 			]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
+		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt, 'model must be called' );
 	}
 
 	public function test_recommend_block_resolve_signature_only_includes_docs_grounding_fingerprint(): void {

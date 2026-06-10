@@ -136,10 +136,6 @@ final class StyleAbilities {
 			];
 		}
 
-		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
-			return DocsGuidanceResult::unavailable_error( $docs_result );
-		}
-
 		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system_prompt = StylePrompt::build_system();
 		$user_prompt   = StylePrompt::build_user(

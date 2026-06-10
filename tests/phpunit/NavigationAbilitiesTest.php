@@ -87,7 +87,7 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_navigation_fails_closed_when_docs_grounding_is_unavailable(): void {
+	public function test_recommend_navigation_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_text_generation_connector();
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
@@ -117,11 +117,11 @@ final class NavigationAbilitiesTest extends TestCase {
 			]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
+		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt, 'model must be called' );
 	}
 
 	public function test_recommend_navigation_review_signature_is_stable_between_recommendation_and_signature_modes(): void {

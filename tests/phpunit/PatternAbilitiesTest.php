@@ -1632,7 +1632,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'parse_error', $result->get_error_code() );
 	}
 
-	public function test_recommend_patterns_fails_closed_when_docs_grounding_is_unavailable(): void {
+	public function test_recommend_patterns_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_backends();
 		WordPressTestState::$transients = [];
 		$this->prime_current_docs_source_coverage();
@@ -1668,14 +1668,14 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'theme/hero' ]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertArrayHasKey( 'recommendations', $result );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
 	}
 
-	public function test_recommend_patterns_fails_closed_when_docs_grounding_is_unavailable_even_without_candidates(): void {
+	public function test_recommend_patterns_proceeds_when_docs_grounding_is_empty_even_without_candidates(): void {
 		$this->configure_backends();
 		WordPressTestState::$transients = [];
 		$this->prime_current_docs_source_coverage();
@@ -1694,11 +1694,11 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'theme/hero' ]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertArrayHasKey( 'recommendations', $result );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
 	}
 
 	public function test_recommend_patterns_includes_cached_wordpress_docs_guidance_in_ranking_input(): void {

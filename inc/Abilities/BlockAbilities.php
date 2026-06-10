@@ -100,10 +100,6 @@ final class BlockAbilities {
 			return $payload;
 		}
 
-		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
-			return DocsGuidanceResult::unavailable_error( $docs_result );
-		}
-
 		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system_prompt = Prompt::build_system();
 		$user_prompt   = Prompt::build_user(

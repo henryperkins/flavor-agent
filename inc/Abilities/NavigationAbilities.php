@@ -80,10 +80,6 @@ final class NavigationAbilities {
 			];
 		}
 
-		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
-			return DocsGuidanceResult::unavailable_error( $docs_result );
-		}
-
 		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system        = NavigationPrompt::build_system();
 		$user          = NavigationPrompt::build_user(

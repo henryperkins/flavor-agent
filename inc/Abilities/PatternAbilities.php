@@ -562,10 +562,6 @@ final class PatternAbilities {
 		$diagnostics['pipelineTrace']['candidatePool']    = count( $candidates );
 		$diagnostics['pipelineTrace']['diversityDropped'] = max( 0, $pre_diversity_count - count( $candidates ) );
 
-		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
-			return DocsGuidanceResult::unavailable_error( $docs_result );
-		}
-
 		if ( empty( $candidates ) ) {
 			return self::pattern_recommendation_response(
 				[],
