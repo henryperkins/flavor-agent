@@ -861,6 +861,28 @@ final class StyleAbilities {
 	}
 
 	/**
+	 * Public seam exposing the per-block supported style paths for server-side
+	 * apply validation.
+	 *
+	 * @param array<string, mixed> $block_manifest
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function supported_style_paths_for_block( array $block_manifest ): array {
+		return self::supported_block_style_paths_from_manifest( $block_manifest );
+	}
+
+	/**
+	 * Public seam exposing the canonical style scope key for external applies.
+	 */
+	public static function canonical_scope_key_for( string $surface, string $global_styles_id, string $block_name = '' ): string {
+		return self::canonical_scope_key(
+			self::SURFACE_STYLE_BOOK === $surface ? self::SURFACE_STYLE_BOOK : self::SURFACE_GLOBAL_STYLES,
+			$global_styles_id,
+			$block_name
+		);
+	}
+
+	/**
 	 * @param array<string, mixed> $block_manifest
 	 * @return array<int, array<string, mixed>>
 	 */

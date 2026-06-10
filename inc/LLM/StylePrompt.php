@@ -1271,6 +1271,18 @@ EXAMPLE
 	}
 
 	/**
+	 * Public seam for server-side apply paths (external applies). Same
+	 * contract as the private generation-time validator.
+	 *
+	 * @param array<int, mixed>    $operations Raw operations to validate.
+	 * @param array<string, mixed> $context    Style validation context.
+	 * @return array{operations: array<int, array<string, mixed>>, reasons: array<int, array{code: string, severity: string, message?: string}>}
+	 */
+	public static function validate_operations_for_apply( array $operations, array $context ): array {
+		return self::validate_operations( $operations, $context );
+	}
+
+	/**
 	 * Test seam exposing the private generation-time operation validator so the
 	 * per-branch reason-code coverage suite can assert one specific code per
 	 * rejection branch without driving the full parse_response pipeline.

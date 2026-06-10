@@ -104,6 +104,9 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<int, object> */
 		public static array $posts = [];
 
+		/** @var array<int, array<string, mixed>> */
+		public static array $updated_posts = [];
+
 		/** @var array<string, array<string, mixed>> */
 		public static array $registered_post_types = [];
 
@@ -355,6 +358,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$option_autoload              = [];
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
+			self::$updated_posts               = [];
 			self::$registered_post_types       = [];
 			self::$registered_taxonomies       = [];
 			self::$get_posts_calls             = [];
@@ -3075,6 +3079,27 @@ namespace {
 			$id = (int) (is_object($post_id) ? ($post_id->ID ?? 0) : $post_id);
 
 			return WordPressTestState::$posts[$id] ?? null;
+		}
+	}
+
+	if (! function_exists('wp_update_post')) {
+		function wp_update_post(array $postarr)
+		{
+			$id = (int) ($postarr['ID'] ?? 0);
+
+			if ($id <= 0 || ! isset(WordPressTestState::$posts[$id])) {
+				return 0;
+			}
+
+			foreach ($postarr as $key => $value) {
+				if ('ID' !== $key && property_exists(WordPressTestState::$posts[$id], $key)) {
+					WordPressTestState::$posts[$id]->{$key} = $value;
+				}
+			}
+
+			WordPressTestState::$updated_posts[] = $postarr;
+
+			return $id;
 		}
 	}
 
