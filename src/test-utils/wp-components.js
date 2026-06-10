@@ -15,6 +15,8 @@ function mockWpComponents( overrides = {} ) {
 		className,
 		disabled,
 		href,
+		isBusy,
+		isDestructive,
 		isPressed,
 		label,
 		onClick,
@@ -23,6 +25,8 @@ function mockWpComponents( overrides = {} ) {
 		variant,
 		...props
 	} ) {
+		void isBusy;
+		void isDestructive;
 		void size;
 		void variant;
 
@@ -148,6 +152,26 @@ function mockWpComponents( overrides = {} ) {
 				},
 				children
 			),
+		Flex: ( {
+			children,
+			className = '',
+			align,
+			justify,
+			gap,
+			direction,
+			expanded,
+			wrap,
+			...props
+		} ) => {
+			void align;
+			void justify;
+			void gap;
+			void direction;
+			void expanded;
+			void wrap;
+
+			return createElement( 'div', { className, ...props }, children );
+		},
 		Icon: ( { icon, ...props } ) => {
 			void icon;
 

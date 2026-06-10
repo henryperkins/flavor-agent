@@ -1194,9 +1194,16 @@ function getActivityStatus( entry, allEntries = [] ) {
 		typeof entry?.status === 'string' ? entry.status.trim() : '';
 
 	if (
-		[ 'applied', 'review', 'undone', 'blocked', 'failed' ].includes(
-			explicitStatus
-		)
+		[
+			'applied',
+			'review',
+			'undone',
+			'blocked',
+			'failed',
+			'pending',
+			'rejected',
+			'expired',
+		].includes( explicitStatus )
 	) {
 		return explicitStatus;
 	}
@@ -1204,9 +1211,16 @@ function getActivityStatus( entry, allEntries = [] ) {
 	const adminStatus = getAdminString( entry, 'status' );
 
 	if (
-		[ 'applied', 'review', 'undone', 'blocked', 'failed' ].includes(
-			adminStatus
-		)
+		[
+			'applied',
+			'review',
+			'undone',
+			'blocked',
+			'failed',
+			'pending',
+			'rejected',
+			'expired',
+		].includes( adminStatus )
 	) {
 		return adminStatus;
 	}

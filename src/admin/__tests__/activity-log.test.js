@@ -210,6 +210,7 @@ const BOOT_DATA = {
 	settingsUrl:
 		'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 	timeZone: 'UTC',
+	canApproveStyleApplies: true,
 };
 const ACTIVITY_LOG_CSS = fs.readFileSync(
 	path.join( __dirname, '../activity-log.css' ),
@@ -279,7 +280,7 @@ async function flushEffects() {
 	} );
 }
 
-async function renderApp( response ) {
+async function renderApp( response, { bootData } = {} ) {
 	if ( response !== undefined ) {
 		apiFetch.mockResolvedValue(
 			Array.isArray( response ) ? buildResponse( response ) : response
@@ -287,7 +288,9 @@ async function renderApp( response ) {
 	}
 
 	await act( async () => {
-		getRoot().render( <ActivityLogApp bootData={ BOOT_DATA } /> );
+		getRoot().render(
+			<ActivityLogApp bootData={ { ...BOOT_DATA, ...bootData } } />
+		);
 	} );
 
 	await flushEffects();
@@ -1472,5 +1475,96 @@ describe( 'ActivityLogApp', () => {
 			'Activity log unavailable'
 		);
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	test( 'renders a pending-approval summary card', async () => {
+		await renderApp(
+			buildResponse( [ createEntry( { id: 'activity-1' } ) ], {
+				summary: { pending: 1 },
+			} )
+		);
+
+		expect( document.body.textContent.includes( 'Pending approval' ) ).toBe(
+			true
+		);
+	} );
+
+	test( 'shows approve and reject actions for pending external applies and posts the decision', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-9'
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-9',
+				surface: 'global-styles',
+				status: 'pending',
+				statusLabel: 'Pending approval',
+				apply: {
+					status: 'pending',
+					requestedBy: 7,
+					expiresAt: '2026-06-11T01:00:00+00:00',
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'var:preset|color|accent',
+						},
+					],
+				},
+			} ),
+		] );
+
+		const approveButton = Array.from(
+			document.querySelectorAll( 'button' )
+		).find( ( button ) =>
+			button.textContent.includes( 'Approve and apply' )
+		);
+		expect( approveButton ).toBeTruthy();
+
+		apiFetch.mockResolvedValueOnce( { entry: { id: 'activity-9' } } );
+
+		await act( async () => {
+			approveButton.click();
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				url: expect.stringContaining(
+					'flavor-agent/v1/activity/activity-9/decision'
+				),
+				data: expect.objectContaining( { decision: 'approve' } ),
+			} )
+		);
+	} );
+
+	test( 'hides decision actions when the user cannot approve style applies', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-9'
+		);
+
+		await renderApp(
+			[
+				createEntry( {
+					id: 'activity-9',
+					surface: 'global-styles',
+					status: 'pending',
+					apply: { status: 'pending', operations: [] },
+				} ),
+			],
+			{ bootData: { canApproveStyleApplies: false } }
+		);
+
+		const approveButton = Array.from(
+			document.querySelectorAll( 'button' )
+		).find( ( button ) =>
+			button.textContent.includes( 'Approve and apply' )
+		);
+		expect( approveButton ).toBeFalsy();
 	} );
 } );
