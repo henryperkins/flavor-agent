@@ -17,6 +17,10 @@ use FlavorAgent\AI\Abilities\RecommendPatternsAbility;
 use FlavorAgent\AI\Abilities\RecommendStyleAbility;
 use FlavorAgent\AI\Abilities\RecommendTemplateAbility;
 use FlavorAgent\AI\Abilities\RecommendTemplatePartAbility;
+use FlavorAgent\AI\Abilities\GetActivityAbility;
+use FlavorAgent\AI\Abilities\ListActivityAbility;
+use FlavorAgent\AI\Abilities\RequestStyleApplyAbility;
+use FlavorAgent\AI\Abilities\UndoActivityAbility;
 use FlavorAgent\Context\BlockOperationValidator;
 
 final class Registration {
@@ -175,6 +179,245 @@ final class Registration {
 				'ability_class' => RecommendTemplatePartAbility::class,
 			],
 		];
+	}
+
+	/**
+	 * External-apply abilities: the governed apply/read/undo loop for agents.
+	 * Approval itself is deliberately NOT an ability — it is an admin REST action.
+	 *
+	 * @return array<string, array{label: string, description: string, ability_class: class-string}>
+	 */
+	public static function external_apply_ability_classes(): array {
+		return [
+			'flavor-agent/request-style-apply' => [
+				'label'         => __( 'Request a governed style apply', 'flavor-agent' ),
+				'description'   => __( 'Queue a reviewed Global Styles or Style Book apply from a recommend-style result. Validates operations and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved.', 'flavor-agent' ),
+				'ability_class' => RequestStyleApplyAbility::class,
+			],
+			'flavor-agent/get-activity'        => [
+				'label'         => __( 'Get one AI activity entry', 'flavor-agent' ),
+				'description'   => __( 'Return a single Flavor Agent activity entry by id, including external-apply lifecycle status, decision provenance, and undo state. The polling read for agents awaiting an approval decision.', 'flavor-agent' ),
+				'ability_class' => GetActivityAbility::class,
+			],
+			'flavor-agent/list-activity'       => [
+				'label'         => __( 'List scoped AI activity', 'flavor-agent' ),
+				'description'   => __( 'Return Flavor Agent activity entries for one scope key with optional surface and status filters. Admin-global reads stay on the REST activity route.', 'flavor-agent' ),
+				'ability_class' => ListActivityAbility::class,
+			],
+			'flavor-agent/undo-activity'       => [
+				'label'         => __( 'Undo an applied AI activity entry', 'flavor-agent' ),
+				'description'   => __( 'Server-side undo of an executed Global Styles or Style Book activity row: enforces ordered undo, verifies the recorded after-state still matches the live entity, restores the before snapshot, and persists the one-way undone/failed transition.', 'flavor-agent' ),
+				'ability_class' => UndoActivityAbility::class,
+			],
+		];
+	}
+
+	public static function register_external_apply_abilities(): void {
+		if ( ! FeatureBootstrap::canonical_contracts_available() ) {
+			return;
+		}
+
+		foreach ( self::external_apply_ability_classes() as $ability_id => $definition ) {
+			wp_register_ability(
+				$ability_id,
+				[
+					'label'         => $definition['label'],
+					'description'   => $definition['description'],
+					'category'      => 'flavor-agent',
+					'ability_class' => $definition['ability_class'],
+				]
+			);
+		}
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public static function external_apply_meta( string $ability_id ): array {
+		$annotations = match ( $ability_id ) {
+			'flavor-agent/request-style-apply' => [
+				'destructive' => false,
+				'idempotent'  => false,
+			],
+			'flavor-agent/undo-activity' => [
+				'destructive' => true,
+				'idempotent'  => false,
+			],
+			default => [
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			],
+		};
+
+		$meta = [
+			'show_in_rest' => true,
+			'annotations'  => $annotations,
+		];
+
+		if ( ! empty( $annotations['readonly'] ) ) {
+			$meta['readonly'] = true;
+		}
+
+		return $meta;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function style_operation_schema(): array {
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'type'           => [ 'type' => 'string' ],
+				'blockName'      => [ 'type' => 'string' ],
+				'path'           => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'value'          => [ 'type' => [ 'string', 'number', 'boolean', 'object', 'array', 'null' ] ],
+				'valueType'      => [ 'type' => 'string' ],
+				'presetType'     => [ 'type' => 'string' ],
+				'presetSlug'     => [ 'type' => 'string' ],
+				'cssVar'         => [ 'type' => 'string' ],
+				'variationIndex' => [ 'type' => 'integer' ],
+				'variationTitle' => [ 'type' => 'string' ],
+			],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public static function external_apply_input_schema( string $ability_id ): array {
+		return match ( $ability_id ) {
+			'flavor-agent/request-style-apply' => [
+				'type'       => 'object',
+				'properties' => [
+					'scope'            => self::open_object_schema(
+						[
+							'surface'        => [ 'type' => 'string' ],
+							'globalStylesId' => [ 'type' => 'string' ],
+							'blockName'      => [ 'type' => 'string' ],
+							'blockTitle'     => [ 'type' => 'string' ],
+						],
+						'Style surface scope: the same scope shape sent to recommend-style.'
+					),
+					'styleContext'     => self::open_object_schema(
+						[
+							'currentConfig'       => self::open_object_schema(),
+							'mergedConfig'        => self::open_object_schema(),
+							'availableVariations' => [
+								'type'  => 'array',
+								'items' => self::open_object_schema(),
+							],
+							'styleBookTarget'     => self::open_object_schema(),
+						],
+						'The same styleContext sent to recommend-style; used to recompute the freshness signatures.'
+					),
+					'prompt'           => [
+						'type'        => 'string',
+						'description' => 'The prompt sent to recommend-style, byte-identical, so the resolved signature recomputes.',
+					],
+					'operations'       => [
+						'type'  => 'array',
+						'items' => self::style_operation_schema(),
+					],
+					'signatures'       => [
+						'type'       => 'object',
+						'properties' => [
+							'resolvedContextSignature' => [ 'type' => 'string' ],
+							'reviewContextSignature'   => [ 'type' => 'string' ],
+						],
+						'required'   => [ 'resolvedContextSignature', 'reviewContextSignature' ],
+					],
+					'suggestion'       => self::open_object_schema(
+						[
+							'label'       => [ 'type' => 'string' ],
+							'description' => [ 'type' => 'string' ],
+						],
+						'Human-readable label shown to the approver.'
+					),
+					'requestReference' => [
+						'type'        => 'string',
+						'description' => 'Optional opaque agent-side reference echoed back on reads.',
+					],
+				],
+				'required'   => [ 'scope', 'styleContext', 'operations', 'signatures' ],
+			],
+			'flavor-agent/get-activity' => [
+				'type'       => 'object',
+				'properties' => [
+					'activityId' => [ 'type' => 'string' ],
+				],
+				'required'   => [ 'activityId' ],
+			],
+			'flavor-agent/list-activity' => [
+				'type'       => 'object',
+				'properties' => [
+					'scopeKey' => [
+						'type'        => 'string',
+						'description' => 'Required activity scope key, e.g. global_styles:17.',
+					],
+					'surface'  => [ 'type' => 'string' ],
+					'status'   => [
+						'type' => 'string',
+						'enum' => [ 'pending', 'applied', 'rejected', 'expired', 'failed', 'undone' ],
+					],
+					'limit'    => [ 'type' => 'integer' ],
+				],
+				'required'   => [ 'scopeKey' ],
+			],
+			'flavor-agent/undo-activity' => [
+				'type'       => 'object',
+				'properties' => [
+					'activityId' => [ 'type' => 'string' ],
+				],
+				'required'   => [ 'activityId' ],
+			],
+			default => self::open_object_schema(),
+		};
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public static function external_apply_output_schema( string $ability_id ): array {
+		return match ( $ability_id ) {
+			'flavor-agent/request-style-apply' => [
+				'type'       => 'object',
+				'properties' => [
+					'activityId'       => [ 'type' => 'string' ],
+					'status'           => [ 'type' => 'string' ],
+					'expiresAt'        => [ 'type' => 'string' ],
+					'requestReference' => [ 'type' => 'string' ],
+				],
+			],
+			'flavor-agent/get-activity' => [
+				'type'       => 'object',
+				'properties' => [
+					'entry' => self::open_object_schema(),
+				],
+			],
+			'flavor-agent/list-activity' => [
+				'type'       => 'object',
+				'properties' => [
+					'entries' => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(),
+					],
+				],
+			],
+			'flavor-agent/undo-activity' => [
+				'type'       => 'object',
+				'properties' => [
+					'entry'  => self::open_object_schema(),
+					'result' => [ 'type' => 'string' ],
+					'error'  => [ 'type' => [ 'string', 'null' ] ],
+				],
+			],
+			default => self::open_object_schema(),
+		};
 	}
 
 	private static function register_block_abilities(): void {
@@ -2194,24 +2437,7 @@ final class Registration {
 								'tone'              => [ 'type' => 'string' ],
 								'operations'        => [
 									'type'  => 'array',
-									'items' => [
-										'type'       => 'object',
-										'properties' => [
-											'type'       => [ 'type' => 'string' ],
-											'blockName'  => [ 'type' => 'string' ],
-											'path'       => [
-												'type'  => 'array',
-												'items' => [ 'type' => 'string' ],
-											],
-											'value'      => [ 'type' => [ 'string', 'number', 'boolean', 'object', 'array', 'null' ] ],
-											'valueType'  => [ 'type' => 'string' ],
-											'presetType' => [ 'type' => 'string' ],
-											'presetSlug' => [ 'type' => 'string' ],
-											'cssVar'     => [ 'type' => 'string' ],
-											'variationIndex' => [ 'type' => 'integer' ],
-											'variationTitle' => [ 'type' => 'string' ],
-										],
-									],
+									'items' => self::style_operation_schema(),
 								],
 								'ranking'           => self::ranking_contract_schema(),
 								'validationReasons' => self::validation_reasons_schema(),

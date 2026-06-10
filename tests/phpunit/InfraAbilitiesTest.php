@@ -654,4 +654,22 @@ final class InfraAbilitiesTest extends TestCase {
 			)
 		);
 	}
+
+	public function test_check_status_advertises_external_apply_abilities_to_theme_capability_users(): void {
+		WordPressTestState::$options      = [
+			'wpai_features_enabled'             => true,
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+			'edit_posts'         => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertContains( 'flavor-agent/request-style-apply', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/undo-activity', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/get-activity', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/list-activity', $status['availableAbilities'] );
+	}
 }

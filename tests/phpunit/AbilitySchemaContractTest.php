@@ -34,6 +34,13 @@ final class AbilitySchemaContractTest extends TestCase {
 		'flavor-agent/recommend-template-part',
 	];
 
+	private const EXTERNAL_APPLY_ABILITIES = [
+		'flavor-agent/request-style-apply',
+		'flavor-agent/get-activity',
+		'flavor-agent/list-activity',
+		'flavor-agent/undo-activity',
+	];
+
 	/**
 	 * JSON Schema draft-04 vocabulary — the keyword set ajv-draft-04 recognizes.
 	 * Deliberately excludes draft-06+ and OpenAPI keywords (`example`, `examples`,
@@ -102,6 +109,32 @@ final class AbilitySchemaContractTest extends TestCase {
 			$violations,
 			"Ability schemas must only use JSON Schema draft-04 keywords so the\n"
 				. "Gutenberg ajv-draft-04 strict validator can compile them. Offending\n"
+				. "keyword positions:\n  " . implode( "\n  ", $violations )
+		);
+	}
+
+	public function test_external_apply_input_and_output_schemas_use_only_draft04_keywords(): void {
+		$violations = [];
+
+		foreach ( self::EXTERNAL_APPLY_ABILITIES as $ability ) {
+			$this->collect_unknown_keywords(
+				Registration::external_apply_input_schema( $ability ),
+				false,
+				"{$ability}.input_schema",
+				$violations
+			);
+			$this->collect_unknown_keywords(
+				Registration::external_apply_output_schema( $ability ),
+				false,
+				"{$ability}.output_schema",
+				$violations
+			);
+		}
+
+		$this->assertSame(
+			[],
+			$violations,
+			"External-apply ability schemas must only use JSON Schema draft-04 keywords. Offending\n"
 				. "keyword positions:\n  " . implode( "\n  ", $violations )
 		);
 	}

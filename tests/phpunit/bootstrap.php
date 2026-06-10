@@ -104,6 +104,9 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<int, object> */
 		public static array $posts = [];
 
+		/** @var array<int, array<string, mixed>> */
+		public static array $updated_posts = [];
+
 		/** @var array<string, array<string, mixed>> */
 		public static array $registered_post_types = [];
 
@@ -355,6 +358,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$option_autoload              = [];
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
+			self::$updated_posts               = [];
 			self::$registered_post_types       = [];
 			self::$registered_taxonomies       = [];
 			self::$get_posts_calls             = [];
@@ -1366,6 +1370,16 @@ namespace {
 								)
 							);
 						}
+
+						if (preg_match("/execution_result\s*=\s*'([^']*)'/i", $query, $matches)) {
+							$execution_result = stripslashes((string) ($matches[1] ?? ''));
+							$rows             = array_values(
+								array_filter(
+									$rows,
+									static fn(array $row): bool => (string) ($row['execution_result'] ?? '') === $execution_result
+								)
+							);
+						}
 					}
 
 					foreach (
@@ -1698,6 +1712,16 @@ namespace {
 				$is_review = 'request_diagnostic' === (string) ($row['activity_type'] ?? '')
 					|| 'review' === (string) ($row['execution_result'] ?? '');
 
+				$non_executed = in_array(
+					(string) ($row['execution_result'] ?? ''),
+					['pending', 'rejected', 'expired', 'failed'],
+					true
+				);
+
+				if ($non_executed) {
+					return (string) $row['execution_result'];
+				}
+
 				if ($is_review) {
 					return 'failed' === $undo_status ? 'failed' : 'review';
 				}
@@ -1731,7 +1755,12 @@ namespace {
 					$candidate_undo = json_decode((string) ($candidate['undo_state'] ?? ''), true);
 					$candidate_status = is_array($candidate_undo) ? (string) ($candidate_undo['status'] ?? 'available') : 'available';
 					$candidate_review = 'request_diagnostic' === (string) ($candidate['activity_type'] ?? '')
-						|| 'review' === (string) ($candidate['execution_result'] ?? '');
+						|| 'review' === (string) ($candidate['execution_result'] ?? '')
+						|| in_array(
+							(string) ($candidate['execution_result'] ?? ''),
+							['pending', 'rejected', 'expired', 'failed'],
+							true
+						);
 
 					if (! $candidate_review && 'undone' !== $candidate_status) {
 						return 'blocked';
@@ -3050,6 +3079,27 @@ namespace {
 			$id = (int) (is_object($post_id) ? ($post_id->ID ?? 0) : $post_id);
 
 			return WordPressTestState::$posts[$id] ?? null;
+		}
+	}
+
+	if (! function_exists('wp_update_post')) {
+		function wp_update_post(array $postarr)
+		{
+			$id = (int) ($postarr['ID'] ?? 0);
+
+			if ($id <= 0 || ! isset(WordPressTestState::$posts[$id])) {
+				return 0;
+			}
+
+			foreach ($postarr as $key => $value) {
+				if ('ID' !== $key && property_exists(WordPressTestState::$posts[$id], $key)) {
+					WordPressTestState::$posts[$id]->{$key} = $value;
+				}
+			}
+
+			WordPressTestState::$updated_posts[] = $postarr;
+
+			return $id;
 		}
 	}
 

@@ -1,12 +1,12 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-06-08
+> Last updated: 2026-06-10
 
 ## Working
 
 ### Abilities API (WordPress 7.0+)
 
-Flavor Agent defines 25 ability contracts. The 13 helper/search abilities register whenever the Abilities API is available; the five `preview-recommend-*` signature-only siblings register when the canonical WordPress AI contracts are available; the seven recommendation abilities register only when the WordPress AI plugin feature contracts are available and the Flavor Agent feature is enabled through the AI plugin feature toggles. Useful recommendation output still depends on the per-surface capability and backend gates documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md). The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) — lives there too.
+Flavor Agent defines 29 ability contracts. The 13 helper/search abilities register whenever the Abilities API is available; the five `preview-recommend-*` signature-only siblings register when the canonical WordPress AI contracts are available; the seven recommendation abilities plus four governed external-apply abilities register only when the WordPress AI plugin feature contracts are available and the Flavor Agent feature is enabled through the AI plugin feature toggles. Useful recommendation and external-apply output still depends on the per-surface capability and backend gates documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md). The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) — lives there too.
 
 - **Block**: `recommend-block`, `introspect-block`, `list-allowed-blocks`
 - **Content**: `recommend-content`
@@ -14,15 +14,16 @@ Flavor Agent defines 25 ability contracts. The 13 helper/search abilities regist
 - **Template**: `recommend-template`, `recommend-template-part`, `list-template-parts`
 - **Navigation**: `recommend-navigation`
 - **Style**: `recommend-style`
+- **Apply**: `request-style-apply`, `get-activity`, `list-activity`, `undo-activity`
 - **Preview**: `preview-recommend-block`, `preview-recommend-navigation`, `preview-recommend-style`, `preview-recommend-template`, `preview-recommend-template-part`
 - **Docs**: `search-wordpress-docs`
 - **Infra**: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, `get-theme-tokens`, `check-status`
 
 ### REST API
 
-All three REST route paths under `/flavor-agent/v1/` are working. Recommendation surfaces use the WordPress Abilities API instead. Permissions and handlers are documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
+All four REST route paths under `/flavor-agent/v1/` are working. Recommendation surfaces and external-agent style apply read/list/undo flows use the WordPress Abilities API instead. Permissions and handlers are documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
 
-- **2 activity route paths / 3 activity methods**: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`) and POST `activity/{id}/undo` (contextual)
+- **3 activity route paths / 4 activity methods**: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`), POST `activity/{id}/undo` (contextual), and POST `activity/{id}/decision` (`manage_options` plus the row's mutation capability)
 - **1 admin route path**: POST `sync-patterns` queues the sync job (`manage_options`); GET `sync-patterns` returns current sync state for polling (`manage_options`)
 
 ### Editor UI
@@ -32,7 +33,7 @@ All three REST route paths under `/flavor-agent/v1/` are working. Recommendation
 
 ### Admin UI
 
-- `Settings > AI Activity` is working as a read-only wp-admin audit/provenance page for recent server-backed activity and scoped diagnostics. Exact route permissions and audit behavior live in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md) and [`docs/features/activity-and-audit.md`](docs/features/activity-and-audit.md).
+- `Settings > AI Activity` is working as a wp-admin audit/provenance page for recent server-backed activity, scoped diagnostics, and governed external-apply approvals. Exact route permissions and audit behavior live in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md) and [`docs/features/activity-and-audit.md`](docs/features/activity-and-audit.md). The 2026-06-10 C1 pass verified `ExternalApplyLifecycleTest`, `StyleApplyExecutorTest`, `ApplyAbilitiesTest`, `AgentRoutesTest`, `MCPServerBootstrapTest`, and the admin app Jest suites; full real-backend approvals browser proof remains recorded below as a MySQL wp70-harness waiver.
 
 ## Known Issues
 
@@ -69,6 +70,8 @@ The consolidated current work queue now lives in [`docs/reference/current-open-w
 
 ## Recent Verification
 
+- 2026-06-10 — Governed external applies (C1): external agents can request review-gated Global Styles / Style Book applies via four new feature-gated abilities (29 total); site admins approve or reject in Settings > AI Activity; approved applies execute server-side with double freshness checks and are undoable via ability or editor. Verified: ExternalApplyLifecycleTest, StyleApplyExecutorTest, ApplyAbilitiesTest, AgentRoutesTest, MCPServerBootstrapTest, admin app Jest suites.
+- 2026-06-10 — Approvals browser coverage waived: tests/e2e/flavor-agent.approvals.spec.js (tagged @wp70-site-editor, real-backend) needs a MySQL full-stack harness. The Playground project runs SQLite and loads the plugin without activation, so the admin activity query returns the Activity log unavailable error state (confirmed by a live Playground run) — which is why the existing Playground activity specs route-mock it. The running Docker wp70 harness bind-mounts the main repo working tree (/home/dev/flavor-agent), not this feature worktree, so it serves stale plugin code, and build/ is gitignored; repointing the shared harness was avoided as a hard-to-reverse change. The spec lints clean and is ready to pass on a worktree-mounted wp70 MySQL harness or post-merge. PHPUnit (ExternalApplyLifecycleTest, StyleApplyExecutorTest, ApplyAbilitiesTest, AgentRoutesTest) covers approve/reject/fail-closed transitions; the Jest admin suites cover the approval UI.
 - 2026-06-10 governance-layer repositioning: live positioning docs now lead with the governance-layer thesis (plugin header, `readme.txt` short description and lead, `README.md`, `CLAUDE.md` + `.github/copilot-instructions.md` openings, `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md` intro, `docs/README.md` product direction, and the dedicated MCP server description string), and `docs/reference/governance-layer.md` is the new canonical governance contract map, registered in the doc-freshness guard with a per-file reference check. This pass changed docs plus one translatable PHP description string; `npm run check:docs`, `vendor/bin/phpunit --filter MCPServerBootstrapTest` (7 tests), and phpcs on the touched PHP file are green.
 - 2026-06-08 block multi-apply: Settings and Styles block suggestions now support panel-scoped multi-select, recommended-together bundle hints (`recommendedSets` plus per-item `groupId`), one combined undo entry, and post-apply re-baselining so self-applies stay fresh; executable Block-lane and structural Review-lane suggestions stay one-at-a-time. Targeted PHPUnit (`ResponseSchemaTest|RegistrationSchemaTest|PromptRulesTest`) and the full `npm run test:unit` run are green (`1437` passed, `105` suites); `node scripts/verify.js --skip-e2e` and `npm run check:docs` are the remaining non-browser gates.
 - 2026-06-06 pattern relevance branch: pattern design metadata now feeds embedding/search payloads, pattern recommendations expose component ranking hints, executable recommendation parsers emit deterministic design-quality signals and shared validation reason codes, and the offline recommendation evaluation harness now tracks contrast preservation, top-three relevance, stale false positives, and prompt token delta movement.

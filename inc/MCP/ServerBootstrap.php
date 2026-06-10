@@ -40,7 +40,10 @@ final class ServerBootstrap {
 			[ HttpTransport::class ],
 			ErrorLogMcpErrorHandler::class,
 			NullMcpObservabilityHandler::class,
-			\array_keys( Registration::recommendation_ability_classes() ),
+			\array_merge(
+				\array_keys( Registration::recommendation_ability_classes() ),
+				\array_keys( Registration::external_apply_ability_classes() )
+			),
 			[],
 			[],
 			[ self::class, 'can_access_transport' ]

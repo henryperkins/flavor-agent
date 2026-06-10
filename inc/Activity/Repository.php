@@ -657,6 +657,227 @@ final class Repository {
 		);
 	}
 
+	public static function can_perform_ordered_undo( string $activity_id ): bool {
+		$row = self::find_row( $activity_id );
+
+		return is_array( $row ) && self::is_ordered_undo_eligible( $row );
+	}
+
+	/**
+	 * One-way transition of an external-apply row out of the pending state.
+	 *
+	 * @param array<string, mixed> $changes {applyStatus, decidedBy?, decidedAt?, decisionNote?, failureCode?, failureMessage?, executedAt?, before?, after?, target?}
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function transition_external_apply( string $activity_id, array $changes ) {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_storage_unavailable',
+				'Flavor Agent activity storage is unavailable.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$row = self::find_row( $activity_id );
+
+		if ( ! is_array( $row ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_found',
+				'Flavor Agent could not find that activity entry.',
+				[ 'status' => 404 ]
+			);
+		}
+
+		$entry = Serializer::hydrate_row( $row );
+		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only transition out of the pending state.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$next_status = (string) ( $changes['applyStatus'] ?? '' );
+
+		if ( ! in_array( $next_status, [ 'available', 'rejected', 'expired', 'failed' ], true ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only accept available, rejected, expired, or failed transitions.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$timestamp       = gmdate( 'c' );
+		$apply['status'] = $next_status;
+
+		foreach ( [ 'decidedBy', 'decidedAt', 'decisionNote', 'failureCode', 'failureMessage', 'executedAt' ] as $field ) {
+			if ( array_key_exists( $field, $changes ) ) {
+				$apply[ $field ] = $changes[ $field ];
+			}
+		}
+
+		$request          = is_array( $entry['request'] ?? null ) ? $entry['request'] : [];
+		$request['apply'] = $apply;
+		$update           = [
+			'request_json'     => Serializer::encode_json( $request ),
+			'execution_result' => 'available' === $next_status ? 'applied' : $next_status,
+			'updated_at'       => Serializer::mysql_datetime_from_timestamp( $timestamp ),
+		];
+
+		if ( 'available' === $next_status ) {
+			$update['before_state'] = Serializer::encode_json( $changes['before'] ?? [] );
+			$update['after_state']  = Serializer::encode_json( $changes['after'] ?? [] );
+			$update['target_json']  = Serializer::encode_json( $changes['target'] ?? ( $entry['target'] ?? [] ) );
+			$update['undo_state']   = Serializer::encode_json(
+				Serializer::normalize_undo_for_storage( [ 'status' => 'available' ], $timestamp )
+			);
+		}
+
+		// Keep the pending guard at the write boundary so simultaneous decisions
+		// cannot overwrite an already-decided row after both readers saw pending.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
+		$updated = $wpdb->update(
+			self::table_name(),
+			$update,
+			[
+				'activity_id'      => $activity_id,
+				'execution_result' => 'pending',
+			]
+		);
+
+		if ( false === $updated ) {
+			return new \WP_Error(
+				'flavor_agent_activity_update_failed',
+				'Flavor Agent could not update the activity entry.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( 0 === (int) $updated ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only transition out of the pending state once.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$stored_row = self::find_row( $activity_id );
+
+		if ( is_array( $stored_row ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Refreshes derived admin projection columns for the transitioned row.
+			$wpdb->update(
+				self::table_name(),
+				self::build_admin_projection_from_row( $stored_row ),
+				[ 'activity_id' => $activity_id ]
+			);
+		}
+
+		$stored = self::find( $activity_id );
+
+		if ( is_array( $stored ) ) {
+			return $stored;
+		}
+
+		return new \WP_Error(
+			'flavor_agent_activity_not_found',
+			'Flavor Agent could not find that activity entry.',
+			[ 'status' => 404 ]
+		);
+	}
+
+	/**
+	 * Lazily expire a hydrated pending external apply that is past its expiresAt.
+	 *
+	 * @param array<string, mixed> $entry
+	 * @return array<string, mixed>
+	 */
+	public static function maybe_expire_pending_apply( array $entry ): array {
+		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return $entry;
+		}
+
+		$expires_at = strtotime( (string) ( $apply['expiresAt'] ?? '' ) );
+
+		if ( false === $expires_at || $expires_at > time() ) {
+			return $entry;
+		}
+
+		$expired = self::transition_external_apply(
+			(string) ( $entry['id'] ?? '' ),
+			[ 'applyStatus' => 'expired' ]
+		);
+
+		return is_array( $expired ) ? $expired : $entry;
+	}
+
+	/**
+	 * Sweep every overdue pending external apply to expired. Runs from prune().
+	 */
+	public static function expire_overdue_pending_applies(): int {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return 0;
+		}
+
+		$sql = $wpdb->prepare(
+			'SELECT * FROM %i WHERE execution_result = %s',
+			self::table_name(),
+			'pending'
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads pending external-apply rows from the plugin-owned activity table; prepared above.
+		$rows    = $wpdb->get_results( $sql, ARRAY_A );
+		$expired = 0;
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$entry   = Serializer::hydrate_row( $row );
+			$updated = self::maybe_expire_pending_apply( $entry );
+
+			if ( 'expired' === (string) ( $updated['apply']['status'] ?? '' ) ) {
+				++$expired;
+			}
+		}
+
+		return $expired;
+	}
+
+	/**
+	 * Count unexpired pending external applies requested by the given user.
+	 */
+	public static function count_active_pending_external_applies( int $user_id ): int {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) || $user_id <= 0 ) {
+			return 0;
+		}
+
+		$sql = $wpdb->prepare(
+			'SELECT * FROM %i WHERE execution_result = %s AND user_id = %d',
+			self::table_name(),
+			'pending',
+			$user_id
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Counts the requesting user's pending external applies; prepared above.
+		$rows  = $wpdb->get_results( $sql, ARRAY_A );
+		$count = 0;
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$entry = self::maybe_expire_pending_apply( Serializer::hydrate_row( $row ) );
+
+			if ( 'pending' === (string) ( $entry['apply']['status'] ?? '' ) ) {
+				++$count;
+			}
+		}
+
+		return $count;
+	}
+
 	/**
 	 * Delete activity entries created before the given ISO 8601 timestamp.
 	 *
@@ -689,6 +910,8 @@ final class Repository {
 	}
 
 	public static function prune(): int {
+		self::expire_overdue_pending_applies();
+
 		$retention_days = (int) get_option(
 			'flavor_agent_activity_retention_days',
 			self::DEFAULT_RETENTION_DAYS
@@ -936,6 +1159,29 @@ final class Repository {
 	 * @param array<string, mixed> $entry
 	 * @return array<string, mixed>
 	 */
+	/**
+	 * Pre-execution external-apply rows keep their proposed operations under
+	 * request.apply.operations; surface them to the admin operation-metadata
+	 * derivation that otherwise reads after.operations.
+	 *
+	 * @param array<string, mixed> $after
+	 * @param array<string, mixed> $request
+	 * @return array<string, mixed>
+	 */
+	private static function operation_metadata_after( array $after, array $request ): array {
+		if ( is_array( $after['operations'] ?? null ) && [] !== $after['operations'] ) {
+			return $after;
+		}
+
+		$apply_operations = $request['apply']['operations'] ?? null;
+
+		if ( is_array( $apply_operations ) && [] !== $apply_operations ) {
+			$after['operations'] = $apply_operations;
+		}
+
+		return $after;
+	}
+
 	private static function build_admin_projection_from_entry( array $entry ): array {
 		$target                 = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
 		$before                 = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
@@ -949,7 +1195,7 @@ final class Repository {
 		$activity_type          = trim( (string) ( $entry['type'] ?? '' ) );
 		$operation              = self::derive_admin_operation_metadata(
 			$before,
-			$after,
+			self::operation_metadata_after( $after, $request ),
 			$surface,
 			$activity_type
 		);
@@ -1127,7 +1373,7 @@ final class Repository {
 				isset( $rows[ $index ]['undo_state'] ) ? (string) $rows[ $index ]['undo_state'] : ''
 			);
 
-			if ( self::is_review_only_row( $rows[ $index ] ) ) {
+			if ( self::is_review_only_row( $rows[ $index ] ) || self::is_non_executed_apply_row( $rows[ $index ] ) ) {
 				continue;
 			}
 
@@ -1463,12 +1709,15 @@ final class Repository {
 		global $wpdb;
 
 		$summary = [
-			'total'   => 0,
-			'applied' => 0,
-			'undone'  => 0,
-			'review'  => 0,
-			'blocked' => 0,
-			'failed'  => 0,
+			'total'    => 0,
+			'applied'  => 0,
+			'undone'   => 0,
+			'review'   => 0,
+			'blocked'  => 0,
+			'failed'   => 0,
+			'pending'  => 0,
+			'rejected' => 0,
+			'expired'  => 0,
 		];
 
 		if ( ! is_object( $wpdb ) ) {
@@ -1899,6 +2148,10 @@ final class Repository {
 		$newer_active_condition = self::get_admin_sql_newer_active_exists();
 
 		return '(CASE'
+			. " WHEN t.execution_result IN ('pending') THEN 'pending'"
+			. " WHEN t.execution_result IN ('rejected') THEN 'rejected'"
+			. " WHEN t.execution_result IN ('expired') THEN 'expired'"
+			. " WHEN t.execution_result IN ('failed') THEN 'failed'"
 			. ' WHEN ' . $review_condition . ' THEN CASE WHEN ' . $failed_condition . " THEN 'failed' ELSE 'review' END"
 			. ' WHEN ' . $undone_condition . " THEN 'undone'"
 			. ' WHEN ' . $newer_active_condition . " THEN 'blocked'"
@@ -1914,6 +2167,7 @@ final class Repository {
 			. ' AND (newer.created_at > t.created_at OR (newer.created_at = t.created_at AND newer.id > t.id))'
 			. ' AND NOT ' . self::get_admin_sql_review_condition( 'newer' )
 			. ' AND NOT ' . self::get_admin_sql_undo_status_condition( 'newer.undo_state', 'undone' )
+			. " AND newer.execution_result NOT IN ('pending','rejected','expired','failed')"
 			. ')';
 	}
 
@@ -2173,6 +2427,12 @@ final class Repository {
 					: 'review';
 				$review_indexes[ $index ]   = true;
 			}
+
+			if ( self::is_non_executed_apply_row( $row ) ) {
+				$activity_id                = trim( (string) ( $row['activity_id'] ?? '' ) );
+				$status_map[ $activity_id ] = trim( (string) ( $row['execution_result'] ?? '' ) );
+				$review_indexes[ $index ]   = true;
+			}
 		}
 
 		foreach ( $entity_indexes as $indexes ) {
@@ -2232,9 +2492,13 @@ final class Repository {
 		foreach ( $rows as $row ) {
 			$activity_id = trim( (string) ( $row['activity_id'] ?? '' ) );
 			$status      = $status_map[ $activity_id ] ?? (
-				'failed' === self::get_admin_row_undo_status( $row ) && self::is_review_only_row( $row )
-					? 'failed'
-					: ( self::is_review_only_row( $row ) ? 'review' : 'applied' )
+				self::is_non_executed_apply_row( $row )
+					? trim( (string) ( $row['execution_result'] ?? '' ) )
+					: (
+						'failed' === self::get_admin_row_undo_status( $row ) && self::is_review_only_row( $row )
+							? 'failed'
+							: ( self::is_review_only_row( $row ) ? 'review' : 'applied' )
+					)
 			);
 			$records[]   = self::build_admin_record_from_row(
 				$row,
@@ -2255,35 +2519,39 @@ final class Repository {
 		string $resolved_status,
 		\DateTimeZone $timezone
 	): array {
-		$target                 = Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' );
-		$document               = Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' );
-		$before                 = Serializer::decode_json( isset( $row['before_state'] ) ? (string) $row['before_state'] : '' );
-		$after                  = Serializer::decode_json( isset( $row['after_state'] ) ? (string) $row['after_state'] : '' );
-		$request                = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
-		$undo                   = Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' );
-		$post_type              = self::get_admin_post_type( $row, $document );
-		$entity_id              = self::get_admin_entity_id( $row, $document );
-		$operation              = self::derive_admin_operation_metadata(
+		$target          = Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' );
+		$document        = Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' );
+		$before          = Serializer::decode_json( isset( $row['before_state'] ) ? (string) $row['before_state'] : '' );
+		$after           = Serializer::decode_json( isset( $row['after_state'] ) ? (string) $row['after_state'] : '' );
+		$request         = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
+		$undo            = Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' );
+		$post_type       = self::get_admin_post_type( $row, $document );
+		$entity_id       = self::get_admin_entity_id( $row, $document );
+		$operation       = self::derive_admin_operation_metadata(
 			$before,
-			$after,
+			self::operation_metadata_after( $after, $request ),
 			trim( (string) ( $row['surface'] ?? '' ) ),
 			trim( (string) ( $row['activity_type'] ?? '' ) ),
 			$row
 		);
-		$operation_type         = $operation['value'];
-		$operation_label        = $operation['label'];
-		$request_meta           = self::get_admin_request_meta( $request, $row );
-		$timestamp_data         = self::get_timestamp_data(
+		$operation_type  = $operation['value'];
+		$operation_label = $operation['label'];
+		$request_meta    = self::get_admin_request_meta( $request, $row );
+		$timestamp_data  = self::get_timestamp_data(
 			self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
 			$timezone
 		);
-		$user_id                = (int) ( $row['user_id'] ?? 0 );
-		$user_label             = self::resolve_admin_user_label( $user_id );
-		$surface                = trim( (string) ( $row['surface'] ?? '' ) );
-		$surface_label          = self::format_surface_label( $surface );
-		$status_label           = 'failed' === $resolved_status && self::is_review_only_row( $row )
-			? 'Request failed'
-			: self::format_status_label( $resolved_status );
+		$user_id         = (int) ( $row['user_id'] ?? 0 );
+		$user_label      = self::resolve_admin_user_label( $user_id );
+		$surface         = trim( (string) ( $row['surface'] ?? '' ) );
+		$surface_label   = self::format_surface_label( $surface );
+
+		if ( 'failed' === $resolved_status && self::is_review_only_row( $row ) ) {
+			$status_label = 'Request failed';
+		} else {
+			$status_label = self::format_status_label( $resolved_status );
+		}
+
 		$block_path             = trim( (string) ( $row['admin_block_path'] ?? '' ) );
 		$block_path             = '' !== $block_path ? $block_path : self::format_block_path( $target );
 		$request_prompt         = trim( (string) ( $row['admin_request_prompt'] ?? ( $request['prompt'] ?? '' ) ) );
@@ -2452,12 +2720,15 @@ final class Repository {
 	 */
 	private static function build_admin_summary( array $records ): array {
 		$summary = [
-			'total'   => count( $records ),
-			'applied' => 0,
-			'undone'  => 0,
-			'review'  => 0,
-			'blocked' => 0,
-			'failed'  => 0,
+			'total'    => count( $records ),
+			'applied'  => 0,
+			'undone'   => 0,
+			'review'   => 0,
+			'blocked'  => 0,
+			'failed'   => 0,
+			'pending'  => 0,
+			'rejected' => 0,
+			'expired'  => 0,
 		];
 
 		foreach ( $records as $record ) {
@@ -2485,6 +2756,21 @@ final class Repository {
 
 			if ( 'failed' === $status ) {
 				++$summary['failed'];
+				continue;
+			}
+
+			if ( 'pending' === $status ) {
+				++$summary['pending'];
+				continue;
+			}
+
+			if ( 'rejected' === $status ) {
+				++$summary['rejected'];
+				continue;
+			}
+
+			if ( 'expired' === $status ) {
+				++$summary['expired'];
 			}
 		}
 
@@ -2557,6 +2843,10 @@ final class Repository {
 		$entry['admin']  = self::get_public_admin_entry_meta(
 			is_array( $record['meta'] ?? null ) ? $record['meta'] : []
 		);
+
+		if ( 'failed' === $entry['status'] && is_array( $entry['apply'] ?? null ) ) {
+			$entry['admin']['statusLabel'] = 'Apply failed';
+		}
 
 		return $entry;
 	}
@@ -3085,6 +3375,17 @@ final class Repository {
 		return 'request_diagnostic' === $activity_type
 			|| RecommendationOutcome::TYPE === $activity_type
 			|| in_array( $execution_result, [ 'review', 'diagnostic' ], true );
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 */
+	private static function is_non_executed_apply_row( array $row ): bool {
+		return in_array(
+			trim( (string) ( $row['execution_result'] ?? '' ) ),
+			[ 'pending', 'rejected', 'expired', 'failed' ],
+			true
+		);
 	}
 
 	/**
@@ -3873,11 +4174,14 @@ final class Repository {
 
 	private static function format_status_label( string $status ): string {
 		return match ( $status ) {
-			'review'  => 'Review',
-			'undone'  => 'Undone',
-			'blocked' => 'Undo blocked',
-			'failed'  => 'Undo unavailable',
-			default   => 'Applied',
+			'review'   => 'Review',
+			'undone'   => 'Undone',
+			'blocked'  => 'Undo blocked',
+			'failed'   => 'Undo unavailable',
+			'pending'  => 'Pending approval',
+			'rejected' => 'Rejected',
+			'expired'  => 'Expired',
+			default    => 'Applied',
 		};
 	}
 

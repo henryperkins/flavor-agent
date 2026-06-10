@@ -1194,9 +1194,16 @@ function getActivityStatus( entry, allEntries = [] ) {
 		typeof entry?.status === 'string' ? entry.status.trim() : '';
 
 	if (
-		[ 'applied', 'review', 'undone', 'blocked', 'failed' ].includes(
-			explicitStatus
-		)
+		[
+			'applied',
+			'review',
+			'undone',
+			'blocked',
+			'failed',
+			'pending',
+			'rejected',
+			'expired',
+		].includes( explicitStatus )
 	) {
 		return explicitStatus;
 	}
@@ -1204,9 +1211,16 @@ function getActivityStatus( entry, allEntries = [] ) {
 	const adminStatus = getAdminString( entry, 'status' );
 
 	if (
-		[ 'applied', 'review', 'undone', 'blocked', 'failed' ].includes(
-			adminStatus
-		)
+		[
+			'applied',
+			'review',
+			'undone',
+			'blocked',
+			'failed',
+			'pending',
+			'rejected',
+			'expired',
+		].includes( adminStatus )
 	) {
 		return adminStatus;
 	}
@@ -1237,37 +1251,114 @@ function getActivityStatus( entry, allEntries = [] ) {
 	}
 }
 
-function getActivityStatusLabel( entry, allEntries = [] ) {
+export function getActivityStatusLabel( entry, allEntries = [] ) {
 	const status =
 		typeof entry === 'string'
 			? entry
 			: getActivityStatus( entry, allEntries );
 	const adminStatusLabel =
 		typeof entry === 'object' ? getAdminString( entry, 'statusLabel' ) : '';
-
-	if ( adminStatusLabel ) {
-		return adminStatusLabel;
-	}
-
 	const isFailedRequestDiagnostic =
 		typeof entry === 'object' &&
 		entry?.type === 'request_diagnostic' &&
 		status === 'failed';
+	const isFailedExternalApply =
+		typeof entry === 'object' &&
+		status === 'failed' &&
+		Boolean( entry?.apply );
+
+	if (
+		adminStatusLabel &&
+		! isFailedRequestDiagnostic &&
+		! isFailedExternalApply
+	) {
+		return adminStatusLabel;
+	}
 
 	switch ( status ) {
 		case 'review':
 			return __( 'Review', 'flavor-agent' );
 		case 'failed':
-			return isFailedRequestDiagnostic
-				? __( 'Request failed', 'flavor-agent' )
-				: __( 'Undo unavailable', 'flavor-agent' );
+			if ( isFailedRequestDiagnostic ) {
+				return __( 'Request failed', 'flavor-agent' );
+			}
+
+			if ( isFailedExternalApply ) {
+				return __( 'Apply failed', 'flavor-agent' );
+			}
+
+			return __( 'Undo unavailable', 'flavor-agent' );
 		case 'undone':
 			return __( 'Undone', 'flavor-agent' );
 		case 'blocked':
 			return __( 'Undo blocked', 'flavor-agent' );
+		case 'pending':
+			return __( 'Pending approval', 'flavor-agent' );
+		case 'rejected':
+			return __( 'Rejected', 'flavor-agent' );
+		case 'expired':
+			return __( 'Expired', 'flavor-agent' );
 		default:
 			return __( 'Applied', 'flavor-agent' );
 	}
+}
+
+export function isPendingExternalApply( entry ) {
+	return (
+		entry?.status === 'pending' &&
+		Boolean( entry?.apply ) &&
+		typeof entry.apply === 'object'
+	);
+}
+
+export function getExternalApplyDetails( entry ) {
+	const apply =
+		entry?.apply && typeof entry.apply === 'object' ? entry.apply : {};
+
+	return {
+		status: typeof apply.status === 'string' ? apply.status : '',
+		requestedBy: Number.isFinite( Number( apply.requestedBy ) )
+			? Number( apply.requestedBy )
+			: 0,
+		requestedAt:
+			typeof apply.requestedAt === 'string' ? apply.requestedAt : '',
+		expiresAt: typeof apply.expiresAt === 'string' ? apply.expiresAt : '',
+		decidedBy: Number.isFinite( Number( apply.decidedBy ) )
+			? Number( apply.decidedBy )
+			: 0,
+		decidedAt: typeof apply.decidedAt === 'string' ? apply.decidedAt : '',
+		decisionNote:
+			typeof apply.decisionNote === 'string' ? apply.decisionNote : '',
+		failureCode:
+			typeof apply.failureCode === 'string' ? apply.failureCode : '',
+		failureMessage:
+			typeof apply.failureMessage === 'string'
+				? apply.failureMessage
+				: '',
+		executedAt:
+			typeof apply.executedAt === 'string' ? apply.executedAt : '',
+		operations: Array.isArray( apply.operations ) ? apply.operations : [],
+		requestReference:
+			typeof apply.requestReference === 'string'
+				? apply.requestReference
+				: '',
+	};
+}
+
+export function buildDecisionRequest( bootData, activityId, decision, note ) {
+	return {
+		url: `${
+			bootData?.restUrl || ''
+		}flavor-agent/v1/activity/${ encodeURIComponent(
+			activityId
+		) }/decision`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': bootData?.nonce || '' },
+		data: {
+			decision,
+			note: typeof note === 'string' ? note : '',
+		},
+	};
 }
 
 export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
@@ -1667,6 +1758,10 @@ function normalizeActivityEntry(
 		timestampDisplay,
 		status,
 		statusLabel: getActivityStatusLabel( entry, allEntries ),
+		apply:
+			entry?.apply && typeof entry.apply === 'object'
+				? entry.apply
+				: null,
 		surface:
 			getAdminString( entry, 'surface' ) ||
 			String( entry?.surface || '' ),

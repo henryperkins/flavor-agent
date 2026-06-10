@@ -1,9 +1,13 @@
 import {
+	buildDecisionRequest,
 	clampActivityViewPage,
 	DEFAULT_ACTIVITY_VIEW,
 	areActivityViewsEqual,
 	buildActivityTargetLink,
 	formatActivityTimestamp,
+	getActivityStatusLabel,
+	getExternalApplyDetails,
+	isPendingExternalApply,
 	normalizeActivityEntries,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
@@ -857,5 +861,104 @@ describe( 'activity log utils', () => {
 				page: 4,
 			} ).page
 		).toBe( 4 );
+	} );
+} );
+
+describe( 'external apply helpers', () => {
+	test( 'isPendingExternalApply requires pending status and an apply payload', () => {
+		expect(
+			isPendingExternalApply( {
+				status: 'pending',
+				apply: { status: 'pending' },
+			} )
+		).toBe( true );
+		expect( isPendingExternalApply( { status: 'applied' } ) ).toBe( false );
+		expect( isPendingExternalApply( { status: 'pending' } ) ).toBe( false );
+		expect( isPendingExternalApply( null ) ).toBe( false );
+	} );
+
+	test( 'getExternalApplyDetails normalizes the lifecycle payload', () => {
+		const details = getExternalApplyDetails( {
+			apply: {
+				status: 'pending',
+				requestedBy: 7,
+				requestedAt: '2026-06-10T01:00:00+00:00',
+				expiresAt: '2026-06-11T01:00:00+00:00',
+				operations: [
+					{ type: 'set_styles', path: [ 'color', 'text' ] },
+				],
+				requestReference: 'agent-req-1',
+				decisionNote: 'note',
+				failureCode: '',
+			},
+		} );
+
+		expect( details.status ).toBe( 'pending' );
+		expect( details.requestedBy ).toBe( 7 );
+		expect( details.operations ).toHaveLength( 1 );
+		expect( details.requestReference ).toBe( 'agent-req-1' );
+		expect( getExternalApplyDetails( {} ).operations ).toEqual( [] );
+	} );
+
+	test( 'buildDecisionRequest shapes the REST call for apiFetch', () => {
+		const request = buildDecisionRequest(
+			{ restUrl: 'https://example.test/wp-json/', nonce: 'abc123' },
+			'activity-9',
+			'approve',
+			'Looks safe'
+		);
+
+		expect( request.url ).toBe(
+			'https://example.test/wp-json/flavor-agent/v1/activity/activity-9/decision'
+		);
+		expect( request.method ).toBe( 'POST' );
+		expect( request.headers[ 'X-WP-Nonce' ] ).toBe( 'abc123' );
+		expect( request.data ).toEqual( {
+			decision: 'approve',
+			note: 'Looks safe',
+		} );
+	} );
+
+	test( 'status labels cover the external-apply lifecycle', () => {
+		expect( getActivityStatusLabel( 'pending' ) ).toBe(
+			'Pending approval'
+		);
+		expect( getActivityStatusLabel( 'rejected' ) ).toBe( 'Rejected' );
+		expect( getActivityStatusLabel( 'expired' ) ).toBe( 'Expired' );
+	} );
+
+	test( 'status labels distinguish failed external applies from undo failures', () => {
+		expect(
+			getActivityStatusLabel( {
+				type: 'apply_global_styles_suggestion',
+				status: 'failed',
+				statusLabel: 'Undo unavailable',
+				executionResult: 'failed',
+				apply: {
+					status: 'failed',
+					failureCode: 'flavor_agent_apply_stale',
+				},
+			} )
+		).toBe( 'Apply failed' );
+	} );
+
+	test( 'normalizeActivityEntries passes the apply payload through', () => {
+		const [ normalized ] = normalizeActivityEntries(
+			[
+				{
+					id: 'activity-9',
+					surface: 'global-styles',
+					status: 'pending',
+					timestamp: '2026-06-10T01:00:00+00:00',
+					apply: { status: 'pending', operations: [] },
+				},
+			],
+			{}
+		);
+
+		expect( normalized.apply ).toEqual( {
+			status: 'pending',
+			operations: [],
+		} );
 	} );
 } );

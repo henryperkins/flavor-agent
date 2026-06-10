@@ -484,12 +484,15 @@ final class AgentControllerTest extends TestCase {
 		$this->assertSame( 1, $data['paginationInfo']['totalPages'] ?? null );
 		$this->assertSame(
 			[
-				'total'   => 2,
-				'applied' => 2,
-				'undone'  => 0,
-				'review'  => 0,
-				'blocked' => 0,
-				'failed'  => 0,
+				'total'    => 2,
+				'applied'  => 2,
+				'undone'   => 0,
+				'review'   => 0,
+				'blocked'  => 0,
+				'failed'   => 0,
+				'pending'  => 0,
+				'rejected' => 0,
+				'expired'  => 0,
 			],
 			$data['summary'] ?? null
 		);

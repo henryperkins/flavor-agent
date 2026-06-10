@@ -539,6 +539,7 @@ final class RegistrationTest extends TestCase {
 		Registration::register_category();
 		Registration::register_abilities();
 		Registration::register_recommendation_abilities();
+		Registration::register_external_apply_abilities();
 
 		$expected = [
 			'flavor-agent/recommend-block',
@@ -566,6 +567,10 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/preview-recommend-style',
 			'flavor-agent/preview-recommend-template',
 			'flavor-agent/preview-recommend-template-part',
+			'flavor-agent/request-style-apply',
+			'flavor-agent/get-activity',
+			'flavor-agent/list-activity',
+			'flavor-agent/undo-activity',
 		];
 
 		$actual = array_keys( WordPressTestState::$registered_abilities );
@@ -578,6 +583,77 @@ final class RegistrationTest extends TestCase {
 			$annotations = WordPressTestState::$registered_abilities[ $ability_id ]['meta']['annotations'] ?? null;
 
 			$this->assertIsArray( $annotations, "{$ability_id} should declare meta.annotations." );
+		}
+	}
+
+	public function test_external_apply_abilities_register_behind_the_feature_gate(): void {
+		WordPressTestState::$options = [
+			'wpai_features_enabled'             => true,
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
+
+		\FlavorAgent\AI\FeatureBootstrap::register_global_helper_abilities();
+
+		foreach ( [
+			'flavor-agent/request-style-apply',
+			'flavor-agent/get-activity',
+			'flavor-agent/list-activity',
+			'flavor-agent/undo-activity',
+		] as $ability_id ) {
+			$this->assertArrayHasKey(
+				$ability_id,
+				WordPressTestState::$registered_abilities,
+				"{$ability_id} should register when the Flavor Agent feature is enabled."
+			);
+		}
+	}
+
+	public function test_external_apply_abilities_do_not_register_without_the_feature_gate(): void {
+		WordPressTestState::$options = [];
+
+		\FlavorAgent\AI\FeatureBootstrap::register_global_helper_abilities();
+
+		$this->assertArrayNotHasKey(
+			'flavor-agent/request-style-apply',
+			WordPressTestState::$registered_abilities
+		);
+	}
+
+	public function test_external_apply_abilities_are_never_mcp_public_and_declare_expected_annotations(): void {
+		$expectations = [
+			'flavor-agent/request-style-apply' => [
+				'destructive' => false,
+				'idempotent'  => false,
+			],
+			'flavor-agent/get-activity'        => [
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			],
+			'flavor-agent/list-activity'       => [
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			],
+			'flavor-agent/undo-activity'       => [
+				'destructive' => true,
+				'idempotent'  => false,
+			],
+		];
+
+		foreach ( $expectations as $ability_id => $annotations ) {
+			$meta = Registration::external_apply_meta( $ability_id );
+
+			$this->assertTrue( $meta['show_in_rest'] );
+			$this->assertArrayNotHasKey(
+				'mcp',
+				$meta,
+				"{$ability_id} must stay off the universal MCP server — activity rows can carry prompts."
+			);
+
+			foreach ( $annotations as $key => $value ) {
+				$this->assertSame( $value, $meta['annotations'][ $key ], "{$ability_id} annotation {$key}" );
+			}
 		}
 	}
 

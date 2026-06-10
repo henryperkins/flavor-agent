@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\REST;
 
 use FlavorAgent\Activity\Permissions as ActivityPermissions;
+use FlavorAgent\Apply\PendingApplyDecision;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Activity\Serializer;
 use FlavorAgent\Patterns\PatternIndex;
@@ -334,6 +335,34 @@ final class Agent_Controller {
 				],
 			]
 		);
+
+		\register_rest_route(
+			self::NAMESPACE,
+			'/activity/(?P<id>[A-Za-z0-9._:-]+)/decision',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ __CLASS__, 'handle_activity_decision' ],
+				'permission_callback' => [ ActivityPermissions::class, 'can_decide_activity_request' ],
+				'args'                => [
+					'id'       => [
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'decision' => [
+						'required'          => true,
+						'type'              => 'string',
+						'enum'              => [ 'approve', 'reject' ],
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'note'     => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_textarea_field',
+					],
+				],
+			]
+		);
 	}
 
 	public static function validate_structured_value( mixed $value ): bool {
@@ -653,5 +682,23 @@ final class Agent_Controller {
 			],
 			200
 		);
+	}
+
+	public static function handle_activity_decision( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( ! ActivityPermissions::can_decide_activity_request( $request ) ) {
+			return ActivityPermissions::forbidden_error();
+		}
+
+		$result = PendingApplyDecision::decide(
+			(string) $request->get_param( 'id' ),
+			(string) $request->get_param( 'decision' ),
+			(string) ( $request->get_param( 'note' ) ?? '' )
+		);
+
+		if ( \is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response( [ 'entry' => $result ], 200 );
 	}
 }

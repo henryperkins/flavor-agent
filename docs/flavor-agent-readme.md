@@ -250,7 +250,7 @@ Implemented abilities:
 - `flavor-agent/preview-recommend-template`
 - `flavor-agent/preview-recommend-template-part`
 
-All 25 ability contracts in the tree are implemented. The 13 helper/search abilities register whenever the Abilities API exists; the five preview siblings register when the canonical WordPress AI contracts are available and force signature-only execution; the seven recommendation abilities register only when the WordPress AI plugin contracts are available and Flavor Agent is enabled. On WordPress 7.0 admin screens, core now enqueues `@wordpress/core-abilities`, so registered server-side abilities are also hydrated into the client-side `core/abilities` store automatically. Flavor Agent's first-party editor UI uses the `flavor-agent` data store with an abilities bridge so prompt scoping, preview/apply, and undo stay tightly bounded.
+All 29 ability contracts in the tree are implemented. The 13 helper/search abilities register whenever the Abilities API exists; the five preview siblings register when the canonical WordPress AI contracts are available and force signature-only execution; the seven recommendation abilities and the four external-apply abilities register only when the WordPress AI plugin contracts are available and Flavor Agent is enabled. On WordPress 7.0 admin screens, core now enqueues `@wordpress/core-abilities`, so registered server-side abilities are also hydrated into the client-side `core/abilities` store automatically. Flavor Agent's first-party editor UI uses the `flavor-agent` data store with an abilities bridge so prompt scoping, preview/apply, and undo stay tightly bounded.
 
 ## Pattern Index Lifecycle
 

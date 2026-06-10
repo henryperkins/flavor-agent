@@ -4,8 +4,11 @@ import {
 	Card,
 	CardBody,
 	CardHeader,
+	Flex,
 	Icon,
+	Notice,
 	Spinner,
+	TextareaControl,
 } from '@wordpress/components';
 import {
 	createRoot,
@@ -25,12 +28,16 @@ import './brand.css';
 import './activity-log.css';
 import {
 	areActivityViewsEqual,
+	buildDecisionRequest,
 	clampActivityViewPage,
+	getExternalApplyDetails,
+	isPendingExternalApply,
 	normalizeActivityEntries,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
 } from './activity-log-utils';
+import { StyleOperationList } from '../style-surfaces/presentation';
 
 const ROOT_ID = 'flavor-agent-activity-log-root';
 const NOT_RECORDED = 'Not recorded';
@@ -114,6 +121,12 @@ function getSummaryCards( entries ) {
 			id: 'review',
 			label: __( 'Review-only', 'flavor-agent' ),
 			value: summary?.review || 0,
+			description: '',
+		},
+		{
+			id: 'pending',
+			label: __( 'Pending approval', 'flavor-agent' ),
+			value: summary?.pending || 0,
 			description: '',
 		},
 		{
@@ -900,6 +913,148 @@ function AiRequestLogPanel( { entry, bootData } ) {
 	);
 }
 
+function PendingApplyDecisionSection( { entry, bootData, onDecided } ) {
+	const [ note, setNote ] = useState( '' );
+	const [ isSubmitting, setIsSubmitting ] = useState( false );
+	const [ decisionError, setDecisionError ] = useState( '' );
+
+	if (
+		! isPendingExternalApply( entry ) ||
+		! bootData?.canApproveStyleApplies
+	) {
+		return null;
+	}
+
+	const details = getExternalApplyDetails( entry );
+
+	const submitDecision = async ( decision ) => {
+		setIsSubmitting( true );
+		setDecisionError( '' );
+
+		try {
+			await apiFetch(
+				buildDecisionRequest( bootData, entry.id, decision, note )
+			);
+			onDecided?.();
+		} catch ( error ) {
+			setDecisionError(
+				error?.message ||
+					__( 'The decision could not be recorded.', 'flavor-agent' )
+			);
+		} finally {
+			setIsSubmitting( false );
+		}
+	};
+
+	return (
+		<section className="flavor-agent-activity-log__decision">
+			<h3>{ __( 'Approval required', 'flavor-agent' ) }</h3>
+			<p>
+				{ sprintf(
+					/* translators: %s: expiry timestamp. */
+					__(
+						'An external agent requested this style apply. It expires %s.',
+						'flavor-agent'
+					),
+					details.expiresAt
+				) }
+			</p>
+			<StyleOperationList operations={ details.operations } />
+			<TextareaControl
+				__nextHasNoMarginBottom
+				label={ __( 'Decision note (optional)', 'flavor-agent' ) }
+				value={ note }
+				onChange={ setNote }
+			/>
+			{ decisionError && (
+				<Notice status="error" isDismissible={ false }>
+					{ decisionError }
+				</Notice>
+			) }
+			<Flex justify="flex-start" gap={ 2 }>
+				<Button
+					variant="primary"
+					isBusy={ isSubmitting }
+					disabled={ isSubmitting }
+					onClick={ () => submitDecision( 'approve' ) }
+				>
+					{ __( 'Approve and apply', 'flavor-agent' ) }
+				</Button>
+				<Button
+					variant="secondary"
+					isDestructive
+					disabled={ isSubmitting }
+					onClick={ () => submitDecision( 'reject' ) }
+				>
+					{ __( 'Reject', 'flavor-agent' ) }
+				</Button>
+			</Flex>
+		</section>
+	);
+}
+
+function ExternalApplyProvenanceSection( { entry } ) {
+	if ( ! entry?.apply ) {
+		return null;
+	}
+
+	const details = getExternalApplyDetails( entry );
+	const rows = [
+		details.requestedBy
+			? [
+					__( 'Requested by', 'flavor-agent' ),
+					sprintf(
+						/* translators: %s: user ID. */
+						__( 'User #%s', 'flavor-agent' ),
+						details.requestedBy
+					),
+			  ]
+			: null,
+		details.decidedBy
+			? [
+					__( 'Decided by', 'flavor-agent' ),
+					sprintf(
+						/* translators: %s: user ID. */
+						__( 'User #%s', 'flavor-agent' ),
+						details.decidedBy
+					),
+			  ]
+			: null,
+		details.decisionNote
+			? [ __( 'Decision note', 'flavor-agent' ), details.decisionNote ]
+			: null,
+		details.failureMessage || details.failureCode
+			? [
+					__( 'Failure reason', 'flavor-agent' ),
+					details.failureMessage || details.failureCode,
+			  ]
+			: null,
+	].filter( Boolean );
+
+	if ( rows.length === 0 ) {
+		return null;
+	}
+
+	return (
+		<details className="flavor-agent-activity-log__detail-section" open>
+			<summary className="flavor-agent-activity-log__detail-summary">
+				<span className="flavor-agent-activity-log__detail-summary-label">
+					{ __( 'External apply', 'flavor-agent' ) }
+				</span>
+			</summary>
+			<dl className="flavor-agent-activity-log__detail-grid">
+				{ rows.map( ( [ label, value ] ) => (
+					<ActivityDetailRow
+						key={ label }
+						label={ label }
+						value={ value }
+					/>
+				) ) }
+			</dl>
+		</details>
+	);
+}
+
 function ActivityEntryDetails( { entry, bootData } ) {
 	if ( ! entry ) {
 		return (
@@ -955,6 +1110,7 @@ function ActivityEntryDetails( { entry, bootData } ) {
 				<CardBody>
 					<AiRequestLogPanel entry={ entry } bootData={ bootData } />
 					<div className="flavor-agent-activity-log__detail-sections">
+						<ExternalApplyProvenanceSection entry={ entry } />
 						{ DETAIL_SECTIONS.map( ( section ) => (
 							<ActivityDetailSection
 								key={ section.id }
@@ -998,6 +1154,7 @@ export function ActivityLogApp( { bootData } ) {
 			applied: 0,
 			undone: 0,
 			review: 0,
+			pending: 0,
 			blocked: 0,
 			failed: 0,
 		},
@@ -1072,6 +1229,7 @@ export function ActivityLogApp( { bootData } ) {
 					applied: 0,
 					undone: 0,
 					review: 0,
+					pending: 0,
 					blocked: 0,
 					failed: 0,
 				},
@@ -1130,6 +1288,7 @@ export function ActivityLogApp( { bootData } ) {
 						applied: response?.summary?.applied || 0,
 						undone: response?.summary?.undone || 0,
 						review: response?.summary?.review || 0,
+						pending: response?.summary?.pending || 0,
 						blocked: response?.summary?.blocked || 0,
 						failed: response?.summary?.failed || 0,
 					},
@@ -1153,6 +1312,7 @@ export function ActivityLogApp( { bootData } ) {
 						applied: 0,
 						undone: 0,
 						review: 0,
+						pending: 0,
 						blocked: 0,
 						failed: 0,
 					},
@@ -1330,6 +1490,18 @@ export function ActivityLogApp( { bootData } ) {
 					{
 						value: 'applied',
 						label: __( 'Applied', 'flavor-agent' ),
+					},
+					{
+						value: 'pending',
+						label: __( 'Pending approval', 'flavor-agent' ),
+					},
+					{
+						value: 'rejected',
+						label: __( 'Rejected', 'flavor-agent' ),
+					},
+					{
+						value: 'expired',
+						label: __( 'Expired', 'flavor-agent' ),
 					},
 					{ value: 'review', label: __( 'Review', 'flavor-agent' ) },
 					{ value: 'undone', label: __( 'Undone', 'flavor-agent' ) },
@@ -1716,6 +1888,13 @@ export function ActivityLogApp( { bootData } ) {
 						</div>
 					</div>
 					<div className="flavor-agent-activity-log__sidebar">
+						<PendingApplyDecisionSection
+							entry={ selectedEntry }
+							bootData={ bootData }
+							onDecided={ () =>
+								setReloadToken( ( value ) => value + 1 )
+							}
+						/>
 						<ActivityEntryDetails
 							entry={ selectedEntry }
 							bootData={ bootData }

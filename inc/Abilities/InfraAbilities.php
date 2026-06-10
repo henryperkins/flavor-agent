@@ -146,6 +146,11 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template-part', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-navigation', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-style', 'edit_theme_options', $chat_configured );
+		$external_applies_available = FeatureBootstrap::recommendation_feature_enabled();
+		self::maybe_add_ability( $abilities, 'flavor-agent/request-style-apply', 'edit_theme_options', $external_applies_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/get-activity', 'edit_posts', $external_applies_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/list-activity', 'edit_posts', $external_applies_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/undo-activity', 'edit_theme_options', $external_applies_available );
 		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-block', 'edit_posts', $preview_recommendations_available );
 		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-navigation', 'edit_theme_options', $preview_recommendations_available );
 		self::maybe_add_ability( $abilities, 'flavor-agent/preview-recommend-style', 'edit_theme_options', $preview_recommendations_available );
