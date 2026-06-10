@@ -250,6 +250,50 @@ function createEntry( overrides = {} ) {
 	};
 }
 
+function createExternalApplyEntry( overrides = {} ) {
+	return createEntry( {
+		id: 'activity-external-apply',
+		type: 'apply_global_styles_suggestion',
+		suggestion: 'External: use the accent text preset',
+		status: 'pending',
+		statusLabel: 'Pending approval',
+		surface: 'global-styles',
+		target: {
+			globalStylesId: '17',
+		},
+		document: {
+			scopeKey: 'global_styles:17',
+			postType: 'global_styles',
+			entityId: '17',
+		},
+		undo: {
+			status: 'not_applicable',
+			canUndo: false,
+		},
+		apply: {
+			status: 'pending',
+			requestedBy: 7,
+			requestedAt: '2026-06-10T01:00:00+00:00',
+			expiresAt: '2026-06-11T01:00:00+00:00',
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'color', 'text' ],
+					value: 'var:preset|color|accent',
+					presetSlug: 'accent',
+				},
+			],
+			signatures: {
+				resolvedContextSignature: 'r'.repeat( 64 ),
+				reviewContextSignature: 'v'.repeat( 64 ),
+				baselineConfigHash: 'b'.repeat( 64 ),
+			},
+			requestReference: 'agent-req-1',
+		},
+		...overrides,
+	} );
+}
+
 function buildResponse( entries, overrides = {} ) {
 	return {
 		entries,
@@ -1499,23 +1543,8 @@ describe( 'ActivityLogApp', () => {
 		);
 
 		await renderApp( [
-			createEntry( {
+			createExternalApplyEntry( {
 				id: 'activity-9',
-				surface: 'global-styles',
-				status: 'pending',
-				statusLabel: 'Pending approval',
-				apply: {
-					status: 'pending',
-					requestedBy: 7,
-					expiresAt: '2026-06-11T01:00:00+00:00',
-					operations: [
-						{
-							type: 'set_styles',
-							path: [ 'color', 'text' ],
-							value: 'var:preset|color|accent',
-						},
-					],
-				},
 			} ),
 		] );
 
@@ -1543,6 +1572,239 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'renders governance evidence for pending, rejected, failed, and executed external applies', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-pending'
+		);
+
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-pending',
+			} ),
+			createExternalApplyEntry( {
+				id: 'activity-rejected',
+				status: 'rejected',
+				apply: {
+					status: 'rejected',
+					decidedBy: 4,
+					decidedAt: '2026-06-10T03:00:00+00:00',
+					decisionNote: 'Rejected from governance review.',
+					operations: [],
+				},
+			} ),
+			createExternalApplyEntry( {
+				id: 'activity-failed',
+				status: 'failed',
+				apply: {
+					status: 'failed',
+					failureCode: 'flavor_agent_apply_stale',
+					failureMessage: 'The style baseline changed.',
+					operations: [],
+				},
+			} ),
+			createExternalApplyEntry( {
+				id: 'activity-executed',
+				status: 'applied',
+				undo: {
+					status: 'available',
+					canUndo: true,
+				},
+				before: {
+					userConfig: {
+						styles: { color: { text: 'old' } },
+					},
+				},
+				after: {
+					userConfig: {
+						styles: { color: { text: 'new' } },
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'new',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					executedAt: '2026-06-10T03:05:00+00:00',
+					operations: [],
+				},
+			} ),
+		] );
+
+		expect( getContainer().textContent ).toContain( 'Governance evidence' );
+		expect( getContainer().textContent ).toContain( 'Approval required' );
+		expect( getContainer().textContent ).toContain( 'color.text' );
+		expect( getContainer().textContent ).toContain( 'agent-req-1' );
+		expect( getContainer().textContent ).toContain(
+			'Baseline unavailable'
+		);
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onClickItem( {
+				id: 'activity-rejected',
+			} );
+		} );
+		expect( getContainer().textContent ).toContain(
+			'Rejected from governance review.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Approve and apply'
+		);
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onClickItem( {
+				id: 'activity-failed',
+			} );
+		} );
+		expect( getContainer().textContent ).toContain( 'Apply failed' );
+		expect( getContainer().textContent ).toContain(
+			'The style baseline changed.'
+		);
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onClickItem( {
+				id: 'activity-executed',
+			} );
+		} );
+		expect( getContainer().textContent ).toContain( 'Applied' );
+		expect( getContainer().textContent ).toContain( 'old' );
+		expect( getContainer().textContent ).toContain( 'new' );
+	} );
+
+	test( 'disables repeated decisions while pending and preserves failed notes', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-9'
+		);
+
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-9',
+			} ),
+		] );
+		apiFetch.mockRejectedValueOnce( new Error( 'Decision route failed.' ) );
+
+		const noteField = getContainer().querySelector( 'textarea' );
+		expect( noteField ).not.toBeNull();
+
+		await act( async () => {
+			noteField.value = 'Needs another look';
+			noteField.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+
+		const approveButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) =>
+			button.textContent.includes( 'Approve and apply' )
+		);
+
+		await act( async () => {
+			approveButton.click();
+			approveButton.click();
+		} );
+		await flushEffects();
+
+		const decisionCalls = apiFetch.mock.calls.filter( ( [ request ] ) =>
+			String( request?.url || '' ).includes( '/decision' )
+		);
+		expect( decisionCalls ).toHaveLength( 1 );
+		expect( getContainer().textContent ).toContain(
+			'Decision route failed.'
+		);
+		expect( getContainer().querySelector( 'textarea' ).value ).toBe(
+			'Needs another look'
+		);
+	} );
+
+	test( 'keeps the selected row open after a successful reject refresh', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-9'
+		);
+
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-9',
+			} ),
+		] );
+
+		apiFetch
+			.mockResolvedValueOnce( { entry: { id: 'activity-9' } } )
+			.mockResolvedValueOnce(
+				buildResponse( [
+					createExternalApplyEntry( {
+						id: 'activity-9',
+						status: 'rejected',
+						apply: {
+							status: 'rejected',
+							decidedBy: 1,
+							decidedAt: '2026-06-10T03:00:00+00:00',
+							decisionNote: 'Not this release.',
+							operations: [],
+						},
+					} ),
+				] )
+			);
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.includes( 'Reject' ) );
+
+		await act( async () => {
+			rejectButton.click();
+		} );
+		await flushEffects();
+
+		expect( getSidebarTitle().textContent ).toBe(
+			'External: use the accent text preset'
+		);
+		expect( getContainer().textContent ).toContain( 'Rejected' );
+		expect( getContainer().textContent ).toContain( 'Not this release.' );
+		expect( apiFetch.mock.calls.length ).toBeGreaterThanOrEqual( 3 );
+	} );
+
+	test( 'adds an approvals quick filter that maps to pending status without changing all activity', async () => {
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-pending',
+			} ),
+			createEntry( {
+				id: 'activity-applied',
+				suggestion: 'Already applied',
+			} ),
+		] );
+
+		expect( getVisibleTitles() ).toEqual( [
+			'External: use the accent text preset',
+			'Already applied',
+		] );
+
+		const approvalsButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Approvals' );
+
+		expect( approvalsButton ).toBeDefined();
+
+		await act( async () => {
+			approvalsButton.click();
+		} );
+		await flushEffects();
+
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'status=pending'
+		);
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'statusOperator=is'
+		);
+	} );
+
 	test( 'hides decision actions when the user cannot approve style applies', async () => {
 		window.history.replaceState(
 			null,
@@ -1552,11 +1814,8 @@ describe( 'ActivityLogApp', () => {
 
 		await renderApp(
 			[
-				createEntry( {
+				createExternalApplyEntry( {
 					id: 'activity-9',
-					surface: 'global-styles',
-					status: 'pending',
-					apply: { status: 'pending', operations: [] },
 				} ),
 			],
 			{ bootData: { canApproveStyleApplies: false } }

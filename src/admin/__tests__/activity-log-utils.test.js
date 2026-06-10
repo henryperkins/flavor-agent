@@ -7,6 +7,8 @@ import {
 	formatActivityTimestamp,
 	getActivityStatusLabel,
 	getExternalApplyDetails,
+	getGovernanceDetails,
+	getStyleComparisonRows,
 	isPendingExternalApply,
 	normalizeActivityEntries,
 	normalizeStoredActivityView,
@@ -865,6 +867,49 @@ describe( 'activity log utils', () => {
 } );
 
 describe( 'external apply helpers', () => {
+	function createStyleApplyEntry( overrides = {} ) {
+		return createEntry( {
+			id: 'activity-style-apply',
+			type: 'apply_global_styles_suggestion',
+			surface: 'global-styles',
+			status: 'pending',
+			suggestion: 'External: use the accent text preset',
+			target: {
+				globalStylesId: '17',
+			},
+			document: {
+				scopeKey: 'global_styles:17',
+				postType: 'global_styles',
+				entityId: '17',
+			},
+			undo: {
+				status: 'not_applicable',
+				canUndo: false,
+			},
+			apply: {
+				status: 'pending',
+				requestedBy: 7,
+				requestedAt: '2026-06-10T01:00:00+00:00',
+				expiresAt: '2026-06-11T01:00:00+00:00',
+				operations: [
+					{
+						type: 'set_styles',
+						path: [ 'color', 'text' ],
+						value: 'var:preset|color|accent',
+						presetSlug: 'accent',
+					},
+				],
+				signatures: {
+					resolvedContextSignature: 'r'.repeat( 64 ),
+					reviewContextSignature: 'v'.repeat( 64 ),
+					baselineConfigHash: 'b'.repeat( 64 ),
+				},
+				requestReference: 'agent-req-1',
+			},
+			...overrides,
+		} );
+	}
+
 	test( 'isPendingExternalApply requires pending status and an apply payload', () => {
 		expect(
 			isPendingExternalApply( {
@@ -959,6 +1004,262 @@ describe( 'external apply helpers', () => {
 		expect( normalized.apply ).toEqual( {
 			status: 'pending',
 			operations: [],
+		} );
+	} );
+
+	test( 'getGovernanceDetails normalizes pending style apply review evidence', () => {
+		const details = getGovernanceDetails( createStyleApplyEntry() );
+
+		expect( details ).toMatchObject( {
+			status: 'pending',
+			statusLabel: 'Pending approval',
+			lifecycleLabel: 'Approval required',
+			targetLabel: 'Global Styles 17',
+			requestedByLabel: 'User #7',
+			requestReference: 'agent-req-1',
+			activityId: 'activity-style-apply',
+			hasResolvedSignature: true,
+			hasReviewSignature: true,
+			hasBaselineHash: true,
+			undoStatus: 'not_applicable',
+			canUndo: false,
+		} );
+		expect( details.proposedOperations ).toEqual( [
+			'color.text → accent',
+		] );
+		expect( details.diagnosticText ).toContain(
+			'activityId: activity-style-apply'
+		);
+		expect( details.diagnosticText ).toContain( 'baselineConfigHash:' );
+	} );
+
+	test( 'getGovernanceDetails covers rejected, failed, executed, undone, and blocked rows', () => {
+		const rejected = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'rejected',
+				apply: {
+					status: 'rejected',
+					decidedBy: 2,
+					decidedAt: '2026-06-10T02:00:00+00:00',
+					decisionNote: 'Too risky for release.',
+					operations: [],
+				},
+			} )
+		);
+		const failed = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'failed',
+				apply: {
+					status: 'failed',
+					failureCode: 'flavor_agent_apply_stale',
+					failureMessage: 'The style baseline changed.',
+					operations: [],
+				},
+			} )
+		);
+		const executed = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'applied',
+				after: {
+					operations: [ { type: 'set_styles', path: [ 'color' ] } ],
+				},
+				undo: {
+					status: 'available',
+					canUndo: true,
+				},
+				apply: {
+					status: 'available',
+					executedAt: '2026-06-10T02:10:00+00:00',
+					operations: [],
+				},
+			} )
+		);
+		const undone = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'undone',
+				undo: {
+					status: 'undone',
+					canUndo: false,
+				},
+				apply: { status: 'available', operations: [] },
+			} )
+		);
+		const blocked = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'blocked',
+				undo: {
+					status: 'blocked',
+					canUndo: false,
+					error: 'Undo blocked by newer AI actions.',
+				},
+				apply: { status: 'available', operations: [] },
+			} )
+		);
+
+		expect( rejected ).toMatchObject( {
+			lifecycleLabel: 'Rejected',
+			decidedByLabel: 'User #2',
+			decisionNote: 'Too risky for release.',
+		} );
+		expect( failed ).toMatchObject( {
+			lifecycleLabel: 'Apply failed',
+			failureCode: 'flavor_agent_apply_stale',
+			failureMessage: 'The style baseline changed.',
+		} );
+		expect( executed ).toMatchObject( {
+			lifecycleLabel: 'Applied',
+			executedAt: '2026-06-10T02:10:00+00:00',
+			canUndo: true,
+		} );
+		expect( executed.executedOperations ).toEqual( [ 'color → ' ] );
+		expect( undone.lifecycleLabel ).toBe( 'Undone' );
+		expect( blocked ).toMatchObject( {
+			lifecycleLabel: 'Undo blocked',
+			undoReason: 'Undo blocked by newer AI actions.',
+		} );
+	} );
+
+	test( 'getStyleComparisonRows summarizes set_styles before proposed and after values', () => {
+		const rows = getStyleComparisonRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'var:preset|color|contrast',
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'var:preset|color|accent',
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
+						},
+					],
+				},
+			} )
+		);
+
+		expect( rows ).toEqual( [
+			{
+				label: 'color.text',
+				before: 'var:preset|color|contrast',
+				proposed: 'accent',
+				after: 'var:preset|color|accent',
+				status: 'changed',
+			},
+		] );
+	} );
+
+	test( 'getStyleComparisonRows summarizes set_block_styles against Style Book branch snapshots', () => {
+		const rows = getStyleComparisonRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				surface: 'style-book',
+				target: {
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+				},
+				before: {
+					userConfig: {
+						styles: {
+							blocks: {
+								'core/paragraph': {
+									color: {
+										text: 'old',
+									},
+								},
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							blocks: {
+								'core/paragraph': {
+									color: {
+										text: 'new',
+									},
+								},
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_block_styles',
+							blockName: 'core/paragraph',
+							path: [ 'color', 'text' ],
+							value: 'new',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} )
+		);
+
+		expect( rows[ 0 ] ).toMatchObject( {
+			label: 'Paragraph color.text',
+			before: 'old',
+			proposed: 'new',
+			after: 'new',
+		} );
+	} );
+
+	test( 'getStyleComparisonRows handles theme variations, unknown operations, and empty pending snapshots', () => {
+		const variationRows = getStyleComparisonRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				after: {
+					operations: [
+						{
+							type: 'set_theme_variation',
+							variationTitle: 'High Contrast',
+						},
+					],
+				},
+				apply: { status: 'available', operations: [] },
+			} )
+		);
+		const unknownRows = getStyleComparisonRows(
+			createStyleApplyEntry( {
+				apply: {
+					status: 'pending',
+					operations: [ { type: 'custom_unknown', value: 'raw' } ],
+				},
+			} )
+		);
+		const pendingRows = getStyleComparisonRows( createStyleApplyEntry() );
+
+		expect( variationRows[ 0 ] ).toMatchObject( {
+			label: 'Theme variation',
+			proposed: 'High Contrast',
+		} );
+		expect( unknownRows[ 0 ] ).toMatchObject( {
+			label: 'Custom Unknown',
+			proposed: '{"type":"custom_unknown","value":"raw"}',
+			status: 'unsupported',
+		} );
+		expect( pendingRows[ 0 ] ).toMatchObject( {
+			before: 'Baseline unavailable',
+			proposed: 'accent',
+			after: 'Not applied',
 		} );
 	} );
 } );

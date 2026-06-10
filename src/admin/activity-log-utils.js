@@ -464,6 +464,80 @@ function summarizeOperation( operation = {} ) {
 	return typeLabel;
 }
 
+function getPresetSlugFromOperation( operation = {} ) {
+	if ( typeof operation?.presetSlug === 'string' && operation.presetSlug ) {
+		return operation.presetSlug;
+	}
+
+	if ( typeof operation?.value === 'string' ) {
+		const match = operation.value.match(
+			/^var:preset\|[a-z0-9-]+\|([a-z0-9_-]+)$/i
+		);
+
+		if ( match?.[ 1 ] ) {
+			return match[ 1 ];
+		}
+	}
+
+	return '';
+}
+
+function formatStylePath( path = [] ) {
+	return Array.isArray( path ) && path.length
+		? path.map( String ).join( '.' )
+		: __( 'style value', 'flavor-agent' );
+}
+
+function formatStyleValue( value ) {
+	if ( value === undefined ) {
+		return '';
+	}
+
+	if ( value === null ) {
+		return 'null';
+	}
+
+	if ( typeof value === 'string' ) {
+		return value;
+	}
+
+	if ( typeof value === 'number' || typeof value === 'boolean' ) {
+		return String( value );
+	}
+
+	try {
+		return JSON.stringify( value );
+	} catch {
+		return EMPTY_VALUE;
+	}
+}
+
+function formatStyleOperationSummary( operation = {} ) {
+	if ( operation?.type === 'set_theme_variation' ) {
+		return sprintf(
+			/* translators: %s: theme variation title. */
+			__( 'Theme variation → %s', 'flavor-agent' ),
+			operation.variationTitle ||
+				operation.variation ||
+				operation.slug ||
+				''
+		);
+	}
+
+	if (
+		operation?.type === 'set_styles' ||
+		operation?.type === 'set_block_styles'
+	) {
+		const proposedValue =
+			getPresetSlugFromOperation( operation ) ||
+			formatStyleValue( operation.value );
+
+		return `${ formatStylePath( operation.path ) } → ${ proposedValue }`;
+	}
+
+	return summarizeOperation( operation );
+}
+
 function flattenStateEntries( value, prefix = '' ) {
 	if ( Array.isArray( value ) ) {
 		if ( prefix.endsWith( 'operations' ) ) {
@@ -1047,6 +1121,21 @@ function getAiRequestLogMetadata(
 }
 
 function getUndoReason( status, resolvedUndo = null, entry = null ) {
+	if (
+		entry?.apply &&
+		[ 'pending', 'rejected', 'expired' ].includes( status )
+	) {
+		return __( 'No mutation has been applied.', 'flavor-agent' );
+	}
+
+	if ( entry?.apply && status === 'failed' ) {
+		return (
+			entry.apply.failureMessage ||
+			entry.apply.failureCode ||
+			__( 'The apply did not mutate the site.', 'flavor-agent' )
+		);
+	}
+
 	if ( status === 'applied' && resolvedUndo?.status === 'available' ) {
 		return __(
 			'This is the newest still-applied AI action for this entity.',
@@ -1074,6 +1163,21 @@ function getUndoReason( status, resolvedUndo = null, entry = null ) {
 	}
 
 	return EMPTY_VALUE;
+}
+
+function getUndoStatusLabel( status, resolvedUndo = null, entry = null ) {
+	if (
+		entry?.apply &&
+		[ 'pending', 'rejected', 'expired', 'failed' ].includes( status )
+	) {
+		return __( 'Undo not applicable', 'flavor-agent' );
+	}
+
+	if ( status === 'applied' && resolvedUndo?.status === 'available' ) {
+		return __( 'Undo available', 'flavor-agent' );
+	}
+
+	return getActivityStatusLabel( status );
 }
 
 function getActivityTitle( entry ) {
@@ -1342,6 +1446,385 @@ export function getExternalApplyDetails( entry ) {
 			typeof apply.requestReference === 'string'
 				? apply.requestReference
 				: '',
+		signatures: isPlainObject( apply.signatures ) ? apply.signatures : {},
+	};
+}
+
+function getGovernanceLifecycleStatus( entry, details ) {
+	const entryStatus = typeof entry?.status === 'string' ? entry.status : '';
+	const applyStatus =
+		typeof details?.status === 'string' ? details.status : '';
+
+	if (
+		[ 'pending', 'rejected', 'expired', 'failed' ].includes( entryStatus )
+	) {
+		return entryStatus;
+	}
+
+	if ( entryStatus === 'undone' || entry?.undo?.status === 'undone' ) {
+		return 'undone';
+	}
+
+	if ( entryStatus === 'blocked' || entry?.undo?.status === 'blocked' ) {
+		return 'blocked';
+	}
+
+	if ( applyStatus === 'available' || entryStatus === 'applied' ) {
+		return 'available';
+	}
+
+	return applyStatus || entryStatus || '';
+}
+
+function getGovernanceLifecycleLabel( status ) {
+	switch ( status ) {
+		case 'pending':
+			return __( 'Approval required', 'flavor-agent' );
+		case 'rejected':
+			return __( 'Rejected', 'flavor-agent' );
+		case 'expired':
+			return __( 'Expired', 'flavor-agent' );
+		case 'failed':
+			return __( 'Apply failed', 'flavor-agent' );
+		case 'undone':
+			return __( 'Undone', 'flavor-agent' );
+		case 'blocked':
+			return __( 'Undo blocked', 'flavor-agent' );
+		case 'available':
+			return __( 'Applied', 'flavor-agent' );
+		default:
+			return __( 'External apply', 'flavor-agent' );
+	}
+}
+
+function formatUserIdLabel( userId ) {
+	return userId
+		? sprintf(
+				/* translators: %s: user ID. */
+				__( 'User #%s', 'flavor-agent' ),
+				userId
+		  )
+		: EMPTY_VALUE;
+}
+
+function getStyleConfigSnapshot( state = {} ) {
+	if ( isPlainObject( state?.userConfig ) ) {
+		return state.userConfig;
+	}
+
+	if ( isPlainObject( state?.currentConfig ) ) {
+		return state.currentConfig;
+	}
+
+	if ( isPlainObject( state?.styleContext?.currentConfig ) ) {
+		return state.styleContext.currentConfig;
+	}
+
+	if ( isPlainObject( state?.baselineConfig ) ) {
+		return state.baselineConfig;
+	}
+
+	if ( isPlainObject( state ) ) {
+		return state;
+	}
+
+	return {};
+}
+
+function getStyleRootForOperation( state = {}, operation = {}, entry = {} ) {
+	const config = getStyleConfigSnapshot( state );
+	const styles = isPlainObject( config.styles ) ? config.styles : config;
+
+	if ( operation?.type !== 'set_block_styles' ) {
+		return styles;
+	}
+
+	const blockName =
+		typeof operation?.blockName === 'string' && operation.blockName
+			? operation.blockName
+			: entry?.target?.blockName || '';
+	const blocks = isPlainObject( styles.blocks ) ? styles.blocks : {};
+
+	return isPlainObject( blocks[ blockName ] ) ? blocks[ blockName ] : {};
+}
+
+function getPendingBaselineState( entry = {} ) {
+	if (
+		isPlainObject( entry?.before ) &&
+		Object.keys( entry.before ).length
+	) {
+		return entry.before;
+	}
+
+	if ( isPlainObject( entry?.apply?.baselineConfig ) ) {
+		return { userConfig: entry.apply.baselineConfig };
+	}
+
+	if ( isPlainObject( entry?.request?.apply?.baselineConfig ) ) {
+		return { userConfig: entry.request.apply.baselineConfig };
+	}
+
+	return {};
+}
+
+function getOperationsForGovernance( entry = {} ) {
+	const applyOperations = Array.isArray( entry?.apply?.operations )
+		? entry.apply.operations
+		: [];
+
+	if ( applyOperations.length ) {
+		return applyOperations;
+	}
+
+	return Array.isArray( entry?.after?.operations )
+		? entry.after.operations
+		: [];
+}
+
+function getOperationProposedValue( operation = {} ) {
+	if ( operation?.type === 'set_theme_variation' ) {
+		return (
+			operation.variationTitle ||
+			operation.variation ||
+			operation.slug ||
+			EMPTY_VALUE
+		);
+	}
+
+	return (
+		getPresetSlugFromOperation( operation ) ||
+		formatStyleValue( operation.value ) ||
+		EMPTY_VALUE
+	);
+}
+
+function getUnknownOperationSummary( operation = {} ) {
+	try {
+		return JSON.stringify( operation );
+	} catch {
+		return summarizeOperation( operation );
+	}
+}
+
+function getComparisonStatus( lifecycleStatus, before, after ) {
+	if (
+		[ 'pending', 'rejected', 'expired', 'failed' ].includes(
+			lifecycleStatus
+		)
+	) {
+		return 'proposed';
+	}
+
+	return before === after ? 'unchanged' : 'changed';
+}
+
+export function getStyleComparisonRows( entry = {} ) {
+	if (
+		! [ 'global-styles', 'style-book' ].includes( entry?.surface ) &&
+		! [
+			'apply_global_styles_suggestion',
+			'apply_style_book_suggestion',
+		].includes( entry?.type )
+	) {
+		return [];
+	}
+
+	const details = getExternalApplyDetails( entry );
+	const lifecycleStatus = getGovernanceLifecycleStatus( entry, details );
+	const operations = getOperationsForGovernance( entry );
+	const hasExecutedMutation = ! [
+		'pending',
+		'rejected',
+		'expired',
+		'failed',
+	].includes( lifecycleStatus );
+	const beforeState =
+		lifecycleStatus === 'pending'
+			? getPendingBaselineState( entry )
+			: entry?.before || {};
+	const afterState = hasExecutedMutation ? entry?.after || {} : {};
+
+	return operations.map( ( operation ) => {
+		if (
+			operation?.type !== 'set_styles' &&
+			operation?.type !== 'set_block_styles' &&
+			operation?.type !== 'set_theme_variation'
+		) {
+			return {
+				label: humanizeValueLabel( operation?.type || 'operation' ),
+				before: EMPTY_VALUE,
+				proposed: getUnknownOperationSummary( operation ),
+				after: hasExecutedMutation
+					? EMPTY_VALUE
+					: __( 'Not applied', 'flavor-agent' ),
+				status: 'unsupported',
+			};
+		}
+
+		if ( operation.type === 'set_theme_variation' ) {
+			return {
+				label: __( 'Theme variation', 'flavor-agent' ),
+				before: EMPTY_VALUE,
+				proposed: getOperationProposedValue( operation ),
+				after: hasExecutedMutation
+					? getOperationProposedValue( operation )
+					: __( 'Not applied', 'flavor-agent' ),
+				status: getComparisonStatus(
+					lifecycleStatus,
+					EMPTY_VALUE,
+					getOperationProposedValue( operation )
+				),
+			};
+		}
+
+		const beforeRoot = getStyleRootForOperation(
+			beforeState,
+			operation,
+			entry
+		);
+		const afterRoot = getStyleRootForOperation(
+			afterState,
+			operation,
+			entry
+		);
+		const beforeValue = readPath( beforeRoot, operation.path || [] );
+		const afterValue = hasExecutedMutation
+			? readPath( afterRoot, operation.path || [] )
+			: undefined;
+		let after;
+
+		if ( afterValue !== undefined ) {
+			after = formatStyleValue( afterValue );
+		} else if ( hasExecutedMutation ) {
+			after = __( 'After unavailable', 'flavor-agent' );
+		} else {
+			after = __( 'Not applied', 'flavor-agent' );
+		}
+
+		const blockTitle =
+			operation.type === 'set_block_styles'
+				? entry?.target?.blockTitle ||
+				  formatBlockName( entry?.target?.blockName )
+				: '';
+		const label = [ blockTitle, formatStylePath( operation.path ) ]
+			.filter( Boolean )
+			.join( ' ' );
+
+		return {
+			label,
+			before:
+				beforeValue === undefined
+					? __( 'Baseline unavailable', 'flavor-agent' )
+					: formatStyleValue( beforeValue ),
+			proposed: getOperationProposedValue( operation ),
+			after,
+			status: getComparisonStatus(
+				lifecycleStatus,
+				formatStyleValue( beforeValue ),
+				formatStyleValue( afterValue )
+			),
+		};
+	} );
+}
+
+function getGovernanceTargetLabel( entry ) {
+	if ( entry?.surface === 'style-book' ) {
+		const blockTitle =
+			entry?.target?.blockTitle ||
+			formatBlockName( entry?.target?.blockName );
+		const globalStylesId =
+			entry?.target?.globalStylesId ||
+			getDocumentContext( entry ).entityId;
+
+		return blockTitle
+			? sprintf(
+					/* translators: 1: block title, 2: global styles ID. */
+					__(
+						'Style Book %1$s · Global Styles %2$s',
+						'flavor-agent'
+					),
+					blockTitle,
+					globalStylesId || EMPTY_VALUE
+			  )
+			: __( 'Style Book', 'flavor-agent' );
+	}
+
+	const globalStylesId =
+		entry?.target?.globalStylesId || getDocumentContext( entry ).entityId;
+
+	return sprintf(
+		/* translators: %s: Global Styles ID. */
+		__( 'Global Styles %s', 'flavor-agent' ),
+		globalStylesId || EMPTY_VALUE
+	);
+}
+
+function getGovernanceDiagnosticText( entry, details ) {
+	const signatures = details.signatures || {};
+	const rows = [
+		[ 'activityId', entry?.id || '' ],
+		[ 'requestReference', details.requestReference ],
+		[ 'resolvedContextSignature', signatures.resolvedContextSignature ],
+		[ 'reviewContextSignature', signatures.reviewContextSignature ],
+		[ 'baselineConfigHash', signatures.baselineConfigHash ],
+	].filter( ( [ , value ] ) => value );
+
+	return rows
+		.map( ( [ label, value ] ) => `${ label }: ${ value }` )
+		.join( '\n' );
+}
+
+export function getGovernanceDetails( entry = {} ) {
+	if ( ! entry?.apply ) {
+		return null;
+	}
+
+	const details = getExternalApplyDetails( entry );
+	const lifecycleStatus = getGovernanceLifecycleStatus( entry, details );
+	const signatures = details.signatures || {};
+	const comparisonRows = getStyleComparisonRows( entry );
+	const proposedOperations = details.operations.map(
+		formatStyleOperationSummary
+	);
+	const executedOperations = Array.isArray( entry?.after?.operations )
+		? entry.after.operations.map( formatStyleOperationSummary )
+		: [];
+	const undoStatus =
+		typeof entry?.undo?.status === 'string' ? entry.undo.status : '';
+	const undoReason =
+		typeof entry?.undo?.error === 'string' && entry.undo.error.trim()
+			? entry.undo.error.trim()
+			: getUndoReason( getActivityStatus( entry ), null, entry );
+
+	return {
+		status: lifecycleStatus,
+		statusLabel: getActivityStatusLabel( entry ),
+		lifecycleLabel: getGovernanceLifecycleLabel( lifecycleStatus ),
+		activityId: entry?.id || '',
+		targetLabel: getGovernanceTargetLabel( entry ),
+		surfaceLabel: formatSurfaceLabel( entry?.surface ),
+		requestedBy: details.requestedBy,
+		requestedByLabel: formatUserIdLabel( details.requestedBy ),
+		requestedAt: details.requestedAt,
+		expiresAt: details.expiresAt,
+		requestReference: details.requestReference,
+		decidedBy: details.decidedBy,
+		decidedByLabel: formatUserIdLabel( details.decidedBy ),
+		decidedAt: details.decidedAt,
+		decisionNote: details.decisionNote,
+		executedAt: details.executedAt,
+		failureCode: details.failureCode,
+		failureMessage: details.failureMessage,
+		hasResolvedSignature: Boolean( signatures.resolvedContextSignature ),
+		hasReviewSignature: Boolean( signatures.reviewContextSignature ),
+		hasBaselineHash: Boolean( signatures.baselineConfigHash ),
+		proposedOperations,
+		executedOperations,
+		comparisonRows,
+		undoStatus,
+		canUndo: Boolean( entry?.undo?.canUndo ),
+		undoReason,
+		diagnosticText: getGovernanceDiagnosticText( entry, details ),
 	};
 }
 
@@ -1744,6 +2227,10 @@ function normalizeActivityEntry(
 		getAdminString( entry, 'requestReference' ) ||
 		requestReferenceValue ||
 		EMPTY_VALUE;
+	const governanceDetails =
+		entry?.apply && typeof entry.apply === 'object'
+			? getGovernanceDetails( entry )
+			: null;
 
 	return {
 		...entry,
@@ -1762,6 +2249,7 @@ function normalizeActivityEntry(
 			entry?.apply && typeof entry.apply === 'object'
 				? entry.apply
 				: null,
+		governanceDetails,
 		surface:
 			getAdminString( entry, 'surface' ) ||
 			String( entry?.surface || '' ),
@@ -1803,10 +2291,7 @@ function normalizeActivityEntry(
 		beforeSummary: summarizeActivityState( entry?.before ),
 		afterSummary: summarizeActivityState( entry?.after ),
 		stateDiff: buildStructuredStateDiff( entry?.before, entry?.after ),
-		undoStatusLabel:
-			status === 'applied' && resolvedUndo?.status === 'available'
-				? __( 'Undo available', 'flavor-agent' )
-				: getActivityStatusLabel( status ),
+		undoStatusLabel: getUndoStatusLabel( status, resolvedUndo, entry ),
 		undoError,
 		undoReason: getUndoReason( status, resolvedUndo, entry ),
 		provider: diagnostics.provider,

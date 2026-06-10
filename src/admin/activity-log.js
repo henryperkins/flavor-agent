@@ -16,6 +16,7 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from '@wordpress/element';
 import { DataViews } from '@wordpress/dataviews/wp';
@@ -30,14 +31,13 @@ import {
 	areActivityViewsEqual,
 	buildDecisionRequest,
 	clampActivityViewPage,
-	getExternalApplyDetails,
+	getGovernanceDetails,
 	isPendingExternalApply,
 	normalizeActivityEntries,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
 } from './activity-log-utils';
-import { StyleOperationList } from '../style-surfaces/presentation';
 
 const ROOT_ID = 'flavor-agent-activity-log-root';
 const NOT_RECORDED = 'Not recorded';
@@ -224,6 +224,39 @@ function getViewFilter( view, field ) {
 	return Array.isArray( view?.filters )
 		? view.filters.find( ( filter ) => filter?.field === field ) || null
 		: null;
+}
+
+function isPendingApprovalView( view ) {
+	const statusFilter = getViewFilter( view, 'status' );
+	const value = Array.isArray( statusFilter?.value )
+		? statusFilter.value[ 0 ]
+		: statusFilter?.value;
+
+	return statusFilter?.operator === 'is' && value === 'pending';
+}
+
+function withPendingApprovalFilter( view, options ) {
+	const normalizedView = normalizeStoredActivityView( view, options );
+	const filters = normalizedView.filters.filter(
+		( filter ) => filter?.field !== 'status'
+	);
+
+	if ( isPendingApprovalView( normalizedView ) ) {
+		return {
+			...normalizedView,
+			page: 1,
+			filters,
+		};
+	}
+
+	return {
+		...normalizedView,
+		page: 1,
+		filters: [
+			...filters,
+			{ field: 'status', operator: 'is', value: 'pending' },
+		],
+	};
 }
 
 function appendExplicitFilter( params, fieldName, filter ) {
@@ -913,21 +946,162 @@ function AiRequestLogPanel( { entry, bootData } ) {
 	);
 }
 
-function PendingApplyDecisionSection( { entry, bootData, onDecided } ) {
-	const [ note, setNote ] = useState( '' );
-	const [ isSubmitting, setIsSubmitting ] = useState( false );
-	const [ decisionError, setDecisionError ] = useState( '' );
+function getGovernanceDetailsForEntry( entry ) {
+	return entry?.governanceDetails || getGovernanceDetails( entry );
+}
 
-	if (
-		! isPendingExternalApply( entry ) ||
-		! bootData?.canApproveStyleApplies
-	) {
+function GovernanceOperationList( { title, operations = [] } ) {
+	if ( ! operations.length ) {
 		return null;
 	}
 
-	const details = getExternalApplyDetails( entry );
+	return (
+		<div className="flavor-agent-activity-log__governance-subsection">
+			<h4 className="flavor-agent-activity-log__governance-subtitle">
+				{ title }
+			</h4>
+			<ul className="flavor-agent-activity-log__governance-list">
+				{ operations.map( ( operation, index ) => (
+					<li key={ `${ title }-${ index }` }>{ operation }</li>
+				) ) }
+			</ul>
+		</div>
+	);
+}
+
+function GovernanceComparisonTable( { rows = [] } ) {
+	if ( ! rows.length ) {
+		return null;
+	}
+
+	return (
+		<div className="flavor-agent-activity-log__governance-subsection">
+			<h4 className="flavor-agent-activity-log__governance-subtitle">
+				{ __( 'Style comparison', 'flavor-agent' ) }
+			</h4>
+			<div className="flavor-agent-activity-log__comparison" role="table">
+				<div
+					className="flavor-agent-activity-log__comparison-row flavor-agent-activity-log__comparison-row--header"
+					role="row"
+				>
+					<span role="columnheader">
+						{ __( 'Value', 'flavor-agent' ) }
+					</span>
+					<span role="columnheader">
+						{ __( 'Before', 'flavor-agent' ) }
+					</span>
+					<span role="columnheader">
+						{ __( 'Proposed', 'flavor-agent' ) }
+					</span>
+					<span role="columnheader">
+						{ __( 'After', 'flavor-agent' ) }
+					</span>
+				</div>
+				{ rows.map( ( row, index ) => (
+					<div
+						key={ `${ row.label }-${ index }` }
+						className={ `flavor-agent-activity-log__comparison-row is-${ row.status }` }
+						role="row"
+					>
+						<span role="cell">{ row.label }</span>
+						<span role="cell">{ row.before }</span>
+						<span role="cell">{ row.proposed }</span>
+						<span role="cell">{ row.after }</span>
+					</div>
+				) ) }
+			</div>
+		</div>
+	);
+}
+
+function GovernanceDetailRows( { rows = [] } ) {
+	const visibleRows = rows.filter(
+		( [ , value ] ) =>
+			value !== undefined &&
+			value !== null &&
+			value !== '' &&
+			value !== NOT_RECORDED
+	);
+
+	if ( ! visibleRows.length ) {
+		return null;
+	}
+
+	return (
+		<dl className="flavor-agent-activity-log__detail-grid">
+			{ visibleRows.map( ( [ label, value ] ) => (
+				<ActivityDetailRow
+					key={ label }
+					label={ label }
+					value={ value }
+				/>
+			) ) }
+		</dl>
+	);
+}
+
+function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
+	const details = getGovernanceDetailsForEntry( entry );
+	const [ note, setNote ] = useState( '' );
+	const [ isSubmitting, setIsSubmitting ] = useState( false );
+	const [ decisionError, setDecisionError ] = useState( '' );
+	const isSubmittingRef = useRef( false );
+
+	useEffect( () => {
+		setNote( '' );
+		setDecisionError( '' );
+		isSubmittingRef.current = false;
+		setIsSubmitting( false );
+	}, [ entry?.id ] );
+
+	if ( ! details ) {
+		return null;
+	}
+
+	const canDecide =
+		isPendingExternalApply( entry ) && bootData?.canApproveStyleApplies;
+	const provenanceRows = [
+		[ __( 'Target', 'flavor-agent' ), details.targetLabel ],
+		[ __( 'Requested by', 'flavor-agent' ), details.requestedByLabel ],
+		[ __( 'Requested', 'flavor-agent' ), details.requestedAt ],
+		[ __( 'Expires', 'flavor-agent' ), details.expiresAt ],
+		[ __( 'Request reference', 'flavor-agent' ), details.requestReference ],
+		[ __( 'Decided by', 'flavor-agent' ), details.decidedByLabel ],
+		[ __( 'Decided', 'flavor-agent' ), details.decidedAt ],
+		[ __( 'Executed', 'flavor-agent' ), details.executedAt ],
+		[ __( 'Decision note', 'flavor-agent' ), details.decisionNote ],
+	];
+	const freshnessRows = [
+		[
+			__( 'Resolved signature', 'flavor-agent' ),
+			details.hasResolvedSignature
+				? __( 'Recorded', 'flavor-agent' )
+				: __( 'Not recorded', 'flavor-agent' ),
+		],
+		[
+			__( 'Review signature', 'flavor-agent' ),
+			details.hasReviewSignature
+				? __( 'Recorded', 'flavor-agent' )
+				: __( 'Not recorded', 'flavor-agent' ),
+		],
+		[
+			__( 'Baseline hash', 'flavor-agent' ),
+			details.hasBaselineHash
+				? __( 'Recorded', 'flavor-agent' )
+				: __( 'Not recorded', 'flavor-agent' ),
+		],
+		[ __( 'Failure code', 'flavor-agent' ), details.failureCode ],
+		[ __( 'Failure reason', 'flavor-agent' ), details.failureMessage ],
+		[ __( 'Undo state', 'flavor-agent' ), details.undoStatus ],
+		[ __( 'Undo reason', 'flavor-agent' ), details.undoReason ],
+	];
 
 	const submitDecision = async ( decision ) => {
+		if ( isSubmittingRef.current ) {
+			return;
+		}
+
+		isSubmittingRef.current = true;
 		setIsSubmitting( true );
 		setDecisionError( '' );
 
@@ -942,120 +1116,105 @@ function PendingApplyDecisionSection( { entry, bootData, onDecided } ) {
 					__( 'The decision could not be recorded.', 'flavor-agent' )
 			);
 		} finally {
+			isSubmittingRef.current = false;
 			setIsSubmitting( false );
 		}
 	};
 
 	return (
-		<section className="flavor-agent-activity-log__decision">
-			<h3>{ __( 'Approval required', 'flavor-agent' ) }</h3>
-			<p>
-				{ sprintf(
-					/* translators: %s: expiry timestamp. */
-					__(
-						'An external agent requested this style apply. It expires %s.',
-						'flavor-agent'
-					),
-					details.expiresAt
-				) }
-			</p>
-			<StyleOperationList operations={ details.operations } />
-			<TextareaControl
-				__nextHasNoMarginBottom
-				label={ __( 'Decision note (optional)', 'flavor-agent' ) }
-				value={ note }
-				onChange={ setNote }
+		<section className="flavor-agent-activity-log__governance">
+			<div
+				className={ `flavor-agent-activity-log__governance-banner is-${ details.status }` }
+			>
+				<span className="flavor-agent-activity-log__governance-kicker">
+					{ __( 'Governance evidence', 'flavor-agent' ) }
+				</span>
+				<h3>{ details.lifecycleLabel }</h3>
+				<p>
+					{ details.status === 'pending'
+						? __(
+								'An external agent requested this bounded style apply. Review the operation, provenance, and freshness evidence before deciding.',
+								'flavor-agent'
+						  )
+						: __(
+								'This external style apply row is retained for approval, provenance, freshness, and undo review.',
+								'flavor-agent'
+						  ) }
+				</p>
+			</div>
+			<GovernanceOperationList
+				title={ __( 'Requested operations', 'flavor-agent' ) }
+				operations={ details.proposedOperations }
 			/>
-			{ decisionError && (
-				<Notice status="error" isDismissible={ false }>
-					{ decisionError }
-				</Notice>
+			<GovernanceOperationList
+				title={ __( 'Executed operations', 'flavor-agent' ) }
+				operations={ details.executedOperations }
+			/>
+			<GovernanceComparisonTable rows={ details.comparisonRows } />
+			<div className="flavor-agent-activity-log__governance-subsection">
+				<h4 className="flavor-agent-activity-log__governance-subtitle">
+					{ __( 'Target and provenance', 'flavor-agent' ) }
+				</h4>
+				<GovernanceDetailRows rows={ provenanceRows } />
+			</div>
+			<div className="flavor-agent-activity-log__governance-subsection">
+				<h4 className="flavor-agent-activity-log__governance-subtitle">
+					{ __( 'Freshness and undo evidence', 'flavor-agent' ) }
+				</h4>
+				<GovernanceDetailRows rows={ freshnessRows } />
+			</div>
+			{ details.diagnosticText && (
+				<details className="flavor-agent-activity-log__governance-diagnostics">
+					<summary>
+						{ __( 'Raw governance diagnostics', 'flavor-agent' ) }
+					</summary>
+					<pre className="flavor-agent-activity-log__code">
+						{ details.diagnosticText }
+					</pre>
+				</details>
 			) }
-			<Flex justify="flex-start" gap={ 2 }>
-				<Button
-					variant="primary"
-					isBusy={ isSubmitting }
-					disabled={ isSubmitting }
-					onClick={ () => submitDecision( 'approve' ) }
-				>
-					{ __( 'Approve and apply', 'flavor-agent' ) }
-				</Button>
-				<Button
-					variant="secondary"
-					isDestructive
-					disabled={ isSubmitting }
-					onClick={ () => submitDecision( 'reject' ) }
-				>
-					{ __( 'Reject', 'flavor-agent' ) }
-				</Button>
-			</Flex>
+			{ canDecide && (
+				<div className="flavor-agent-activity-log__decision">
+					<TextareaControl
+						__nextHasNoMarginBottom
+						label={ __(
+							'Decision note (optional)',
+							'flavor-agent'
+						) }
+						value={ note }
+						onChange={ setNote }
+						disabled={ isSubmitting }
+					/>
+					{ decisionError && (
+						<Notice status="error" isDismissible={ false }>
+							{ decisionError }
+						</Notice>
+					) }
+					<Flex justify="flex-start" gap={ 2 }>
+						<Button
+							variant="primary"
+							isBusy={ isSubmitting }
+							disabled={ isSubmitting }
+							onClick={ () => submitDecision( 'approve' ) }
+						>
+							{ __( 'Approve and apply', 'flavor-agent' ) }
+						</Button>
+						<Button
+							variant="secondary"
+							isDestructive
+							disabled={ isSubmitting }
+							onClick={ () => submitDecision( 'reject' ) }
+						>
+							{ __( 'Reject', 'flavor-agent' ) }
+						</Button>
+					</Flex>
+				</div>
+			) }
 		</section>
 	);
 }
 
-function ExternalApplyProvenanceSection( { entry } ) {
-	if ( ! entry?.apply ) {
-		return null;
-	}
-
-	const details = getExternalApplyDetails( entry );
-	const rows = [
-		details.requestedBy
-			? [
-					__( 'Requested by', 'flavor-agent' ),
-					sprintf(
-						/* translators: %s: user ID. */
-						__( 'User #%s', 'flavor-agent' ),
-						details.requestedBy
-					),
-			  ]
-			: null,
-		details.decidedBy
-			? [
-					__( 'Decided by', 'flavor-agent' ),
-					sprintf(
-						/* translators: %s: user ID. */
-						__( 'User #%s', 'flavor-agent' ),
-						details.decidedBy
-					),
-			  ]
-			: null,
-		details.decisionNote
-			? [ __( 'Decision note', 'flavor-agent' ), details.decisionNote ]
-			: null,
-		details.failureMessage || details.failureCode
-			? [
-					__( 'Failure reason', 'flavor-agent' ),
-					details.failureMessage || details.failureCode,
-			  ]
-			: null,
-	].filter( Boolean );
-
-	if ( rows.length === 0 ) {
-		return null;
-	}
-
-	return (
-		<details className="flavor-agent-activity-log__detail-section" open>
-			<summary className="flavor-agent-activity-log__detail-summary">
-				<span className="flavor-agent-activity-log__detail-summary-label">
-					{ __( 'External apply', 'flavor-agent' ) }
-				</span>
-			</summary>
-			<dl className="flavor-agent-activity-log__detail-grid">
-				{ rows.map( ( [ label, value ] ) => (
-					<ActivityDetailRow
-						key={ label }
-						label={ label }
-						value={ value }
-					/>
-				) ) }
-			</dl>
-		</details>
-	);
-}
-
-function ActivityEntryDetails( { entry, bootData } ) {
+function ActivityEntryDetails( { entry, bootData, onDecided } ) {
 	if ( ! entry ) {
 		return (
 			<Card className="flavor-agent-activity-log__sidebar-card">
@@ -1109,8 +1268,12 @@ function ActivityEntryDetails( { entry, bootData } ) {
 				</CardHeader>
 				<CardBody>
 					<AiRequestLogPanel entry={ entry } bootData={ bootData } />
+					<GovernanceEvidenceSection
+						entry={ entry }
+						bootData={ bootData }
+						onDecided={ onDecided }
+					/>
 					<div className="flavor-agent-activity-log__detail-sections">
-						<ExternalApplyProvenanceSection entry={ entry } />
 						{ DETAIL_SECTIONS.map( ( section ) => (
 							<ActivityDetailSection
 								key={ section.id }
@@ -1401,6 +1564,10 @@ export function ActivityLogApp( { bootData } ) {
 						id={ `flavor-agent-activity-log-entry-title-${ item.id }` }
 						className={ `flavor-agent-activity-log__entry-title${
 							item.id === selectedEntryId ? ' is-current' : ''
+						}${
+							item.governanceDetails?.status === 'pending'
+								? ' is-pending-governance'
+								: ''
 						}` }
 						aria-current={
 							item.id === selectedEntryId ? 'true' : undefined
@@ -1412,6 +1579,18 @@ export function ActivityLogApp( { bootData } ) {
 						}
 					>
 						{ item.title }
+						{ item.governanceDetails?.status === 'pending' && (
+							<span className="flavor-agent-activity-log__entry-badge">
+								{ __( 'Pending approval', 'flavor-agent' ) }
+								{ item.governanceDetails.expiresAt
+									? ` · ${ sprintf(
+											/* translators: %s: expiry timestamp. */
+											__( 'Expires %s', 'flavor-agent' ),
+											item.governanceDetails.expiresAt
+									  ) }`
+									: '' }
+							</span>
+						) }
 					</span>
 				),
 			},
@@ -1707,6 +1886,16 @@ export function ActivityLogApp( { bootData } ) {
 		defaultView,
 		viewOptions
 	);
+	const approvalsFilterActive = isPendingApprovalView( effectiveView );
+	const toggleApprovalsFilter = useCallback( () => {
+		if ( requestActivityId ) {
+			setRequestActivityId( '' );
+		}
+
+		setView( ( currentView ) =>
+			withPendingApprovalFilter( currentView, viewOptions )
+		);
+	}, [ requestActivityId, viewOptions ] );
 	const emptyState = error ? (
 		<ErrorState
 			error={ error }
@@ -1842,6 +2031,13 @@ export function ActivityLogApp( { bootData } ) {
 								) }
 							</div>
 							<div className="flavor-agent-activity-log__controls-actions">
+								<Button
+									variant="secondary"
+									isPressed={ approvalsFilterActive }
+									onClick={ toggleApprovalsFilter }
+								>
+									{ __( 'Approvals', 'flavor-agent' ) }
+								</Button>
 								<span className="flavor-agent-activity-log__toolbar-control">
 									<DataViews.FiltersToggle />
 									<span
@@ -1888,16 +2084,12 @@ export function ActivityLogApp( { bootData } ) {
 						</div>
 					</div>
 					<div className="flavor-agent-activity-log__sidebar">
-						<PendingApplyDecisionSection
+						<ActivityEntryDetails
 							entry={ selectedEntry }
 							bootData={ bootData }
 							onDecided={ () =>
 								setReloadToken( ( value ) => value + 1 )
 							}
-						/>
-						<ActivityEntryDetails
-							entry={ selectedEntry }
-							bootData={ bootData }
 						/>
 					</div>
 				</div>

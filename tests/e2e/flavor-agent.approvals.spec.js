@@ -69,6 +69,16 @@ $GLOBALS['wpdb']->query( "TRUNCATE TABLE {$table_name}" );
 	] );
 }
 
+async function openSeededExternalApply( page ) {
+	await page
+		.locator( '.flavor-agent-activity-log__feed' )
+		.getByText( 'External: use the accent text preset' )
+		.first()
+		.click();
+
+	return page.locator( '.flavor-agent-activity-log__sidebar' );
+}
+
 test.describe( 'external apply approvals', () => {
 	test( '@wp70-site-editor pending external applies appear and can be rejected with a note', async ( {
 		page,
@@ -83,13 +93,25 @@ test.describe( 'external apply approvals', () => {
 			page.locator( '#flavor-agent-activity-log-root' )
 		).toBeVisible( { timeout: 30_000 } );
 
-		await page
-			.locator( '.flavor-agent-activity-log__feed' )
-			.getByText( 'External: use the accent text preset' )
-			.first()
-			.click();
+		let sidebar = await openSeededExternalApply( page );
 
-		await expect( page.getByText( 'Approval required' ) ).toBeVisible();
+		await expect( sidebar.getByText( 'Governance evidence' ) ).toBeVisible();
+		await expect( sidebar.getByText( 'Approval required' ) ).toBeVisible();
+		await expect( sidebar.getByText( 'Requested operations' ) ).toBeVisible();
+		await expect(
+			sidebar.getByRole( 'cell', { name: 'color.text' } )
+		).toBeVisible();
+		await expect(
+			sidebar.getByRole( 'cell', { name: 'Baseline unavailable' } )
+		).toBeVisible();
+		await expect(
+			sidebar.getByRole( 'cell', { name: 'Not applied' } )
+		).toBeVisible();
+		await expect( sidebar.getByText( 'Target and provenance' ) ).toBeVisible();
+		await expect( sidebar.getByText( 'User #1' ) ).toBeVisible();
+		await expect(
+			sidebar.getByText( 'e2e-req-1', { exact: true } ).first()
+		).toBeVisible();
 		await page
 			.getByLabel( 'Decision note (optional)' )
 			.fill( 'Rejected from the browser spec' );
@@ -101,6 +123,18 @@ test.describe( 'external apply approvals', () => {
 				.getByText( 'Rejected' )
 				.first()
 		).toBeVisible( { timeout: 30_000 } );
+		await expect(
+			sidebar.getByText( 'Rejected from the browser spec' )
+		).toBeVisible();
+
+		await page.reload( { waitUntil: 'domcontentloaded' } );
+		await waitForWordPressReady( page );
+		sidebar = await openSeededExternalApply( page );
+
+		await expect( sidebar.getByText( 'Rejected' ).first() ).toBeVisible();
+		await expect(
+			sidebar.getByText( 'Rejected from the browser spec' )
+		).toBeVisible();
 	} );
 
 	test( '@wp70-site-editor approving a drifted request fails closed instead of mutating', async ( {
@@ -119,11 +153,7 @@ test.describe( 'external apply approvals', () => {
 			page.locator( '#flavor-agent-activity-log-root' )
 		).toBeVisible( { timeout: 30_000 } );
 
-		await page
-			.locator( '.flavor-agent-activity-log__feed' )
-			.getByText( 'External: use the accent text preset' )
-			.first()
-			.click();
+		const sidebar = await openSeededExternalApply( page );
 		await page.getByRole( 'button', { name: 'Approve and apply' } ).click();
 
 		// The summary card label "Failed or unavailable" is always present, so
@@ -134,5 +164,15 @@ test.describe( 'external apply approvals', () => {
 				.getByText( 'Apply failed' )
 				.first()
 		).toBeVisible( { timeout: 30_000 } );
+		await expect(
+			sidebar.getByText( 'flavor_agent_apply_resolve_failed' )
+		).toBeVisible();
+		await expect(
+			sidebar
+				.getByText(
+					'The requested Global Styles entity is not available on this site.'
+				)
+				.first()
+		).toBeVisible();
 	} );
 } );
