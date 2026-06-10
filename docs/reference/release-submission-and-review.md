@@ -68,7 +68,7 @@ Header constraints specific to this plugin:
 Description requirements specific to this plugin:
 
 - An explicit "uses external services" disclosure block listing OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, and GitHub; what data is sent to each; when (only after the user configures or explicitly enables the corresponding backend); and a link to each provider's terms of service and privacy policy.
-- A clear "AI-assisted recommendation plugin" framing that does not over-claim accuracy, safety, accessibility, design quality, or compliance.
+- A clear governance-layer framing: AI proposes, WordPress approves, operations are bounded, applies are recorded server-side, and undo is drift-safe. Do not over-claim accuracy, safety, accessibility, design quality, or compliance.
 - Setup steps that make the external dependencies obvious before installation, not buried in an Installation section the reviewer has to dig for.
 
 ### Slug
@@ -88,7 +88,7 @@ Live in `assets/` in SVN, not in the plugin zip. These are required for a polish
 
 Live in `assets/` in SVN as `screenshot-1.png`, `screenshot-2.png`, etc. Captions should be added to `readme.txt` under `== Screenshots ==` only when the matching local screenshot files exist. Do not add screenshot captions without corresponding local `assets/screenshot-N.png` files.
 
-The minimum set should cover the surfaces the surface scope review keeps for release: a block recommendation in the Inspector, a pattern recommendation in the inserter, a content recommendation in the post editor, a template recommendation in the Site Editor, a Global Styles review/apply panel, the AI Activity admin audit page, and the Settings page. Screenshots that show review-first flows should show the review state, not the applied state, to match the product framing.
+The minimum set should start with the governance proof: `Settings > AI Activity` showing a pending external Global Styles / Style Book apply with the detail panel open. The remaining release screenshots should cover a block recommendation in the Inspector, a Global Styles or Style Book review/apply panel, a template recommendation in the Site Editor, a pattern recommendation in the inserter, a content recommendation in the post editor, and the Settings page. Screenshots that show review-first flows should show the review state, not the applied state, to match the product framing. Local demo staging currently has `docs/screenshots/activity-audit.png`; the WordPress.org SVN `assets/screenshot-N.png` files do not exist yet.
 
 ## Plugin Check Baseline
 

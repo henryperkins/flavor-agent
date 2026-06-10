@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: Flavor Agent
- * Description: AI recommendations for Gutenberg and wp-admin behind one governance layer: schema-validated operations, review-gated structural changes, server-side attribution, and reversible applies.
+ * Description: Governed AI changes for WordPress: bounded operations, review-gated structural changes, server-side attribution, and drift-safe undo.
  * Version: 0.1.0
  * Author: Lakefront Digital
  * Text Domain: flavor-agent

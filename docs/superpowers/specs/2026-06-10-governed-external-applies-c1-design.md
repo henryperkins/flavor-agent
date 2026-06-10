@@ -1,7 +1,7 @@
 # Governed External Applies (C1) — Design
 
 > Date: 2026-06-10
-> Status: approved design, pending implementation plan
+> Status: Implemented; historical design context. The shipped implementation plan is archived at `docs/superpowers/plans/archive/2026-06-10-governed-external-applies-c1.md`, and current behavior is documented in `docs/reference/governance-layer.md`, `docs/reference/abilities-and-routes.md`, and `docs/features/activity-and-audit.md`.
 > Decisions locked: site-side approval queue · style surfaces first · built on master
 > Predecessor: `2026-06-10-governance-layer-repositioning-design.md` (Approach B, shipped)
 

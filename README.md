@@ -10,19 +10,26 @@ I built it to prove AI can be practical product infrastructure, not a chatbot pa
 
 ## See it
 
-The repository does not yet include committed screenshots. Before publishing the GitHub release, add still images under `docs/screenshots/` and replace this placeholder with the strongest Inspector-panel screenshot:
+The first governance screenshot is available at `docs/screenshots/activity-audit.png`: a WP70 `Settings > AI Activity` row seeded with a pending external style apply and opened in the approval/audit detail panel. That is the primary release proof point: an external agent proposes a bounded Global Styles / Style Book operation, WordPress holds it for a human decision, and the resulting activity row carries attribution, freshness, and undo state.
 
-- `docs/screenshots/inspector-recommendation.png` — selected block with a contextual recommendation visible in the Inspector.
+Before publishing the GitHub release, add the remaining stills and replace this placeholder section with a short demo sequence:
+
+- `docs/screenshots/activity-audit.png` — existing `Settings > AI Activity` external-apply approval/audit detail.
+- `docs/screenshots/inspector-recommendation.png` — selected block recommendation in the native Inspector.
+- `docs/screenshots/global-styles-review.png` — Global Styles or Style Book operation in review-first mode.
 - `docs/screenshots/template-review.png` — Site Editor template recommendation in review-first mode.
-- `docs/screenshots/activity-audit.png` — `Settings > AI Activity` audit detail view.
+- `docs/screenshots/pattern-inserter.png` — ranked patterns in the native inserter shelf.
+- `docs/screenshots/content-recommendation.png` — editorial-only content recommendation in the post editor.
+- `docs/screenshots/settings-readiness.png` — Connectors/plugin-owned backend readiness in wp-admin.
 
-That first screenshot is the repo’s handshake. Ship the code without a GIF if necessary, but do not ship the public release without at least one still screenshot.
+Ship the code without a GIF if necessary, but do not ship the public release without the governance-console proof plus at least one strong native editor still.
 
 ## What it does
 
-- Adds contextual AI recommendations to native WordPress editor surfaces: selected blocks, post/page content, the pattern inserter, Site Editor templates and template parts, navigation blocks, Global Styles, and Style Book.
-- Keeps risky changes review-first: structural template, template-part, Global Styles, and Style Book suggestions are previewed, validated, recorded, and undoable where Flavor Agent owns the apply path.
-- Gives administrators a server-backed `Settings > AI Activity` audit page for recent Flavor Agent actions, provider-path details, undo state, and affected-entity links.
+- Mediates AI work through one governed loop: bounded operation schemas, freshness checks, review gates for structural/theme changes, server-side attribution, and drift-safe undo.
+- Gives administrators `Settings > AI Activity` as the human approval and audit surface for governed external style applies, recent Flavor Agent actions, provider-path details, undo state, and affected-entity links.
+- Lets external agents use the same WordPress Abilities API / MCP contracts to request recommendations, validation, diagnostics, and review-gated Global Styles / Style Book applies.
+- Demonstrates the governance layer through native WordPress surfaces: selected blocks, post/page content, the pattern inserter, Site Editor templates and template parts, navigation blocks, Global Styles, and Style Book.
 
 ## What it does not do
 
@@ -64,9 +71,9 @@ Re-run the verification gates on the exact commit you tag.
 
 ## Architecture at a glance
 
-Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin apps under `src/`, and compiled assets in `build/`. The runtime defines 25 WordPress Ability contracts across recommendation, helper/read, docs-search, preview, style, pattern, template, navigation, and infrastructure categories; helper/read abilities and the five signature-only `preview-recommend-*` siblings register whenever their core contracts are available, while recommendation abilities also require the WordPress AI feature gate. The remaining plugin REST API stays intentionally thin for activity persistence, undo, and pattern sync.
+Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin apps under `src/`, and compiled assets in `build/`. The runtime defines 29 WordPress Ability contracts across recommendation, helper/read, docs-search, preview, external-apply, style, pattern, template, navigation, and infrastructure categories; helper/read abilities and the five signature-only `preview-recommend-*` siblings register whenever their core contracts are available, while recommendation and external-apply abilities also require the WordPress AI feature gate. The remaining plugin REST API stays intentionally thin for activity persistence, external-apply decisions, undo, and pattern sync.
 
-The editor app mounts first-party UI into native Gutenberg and Site Editor locations: block Inspector panels, post/page document panels, the pattern inserter, template and template-part panels, Global Styles, Style Book, and navigation-block advisory sections. Activity records are written server-side and reused by inline editor history plus the wp-admin audit page.
+The editor app mounts first-party UI into native Gutenberg and Site Editor locations: block Inspector panels, post/page document panels, the pattern inserter, template and template-part panels, Global Styles, Style Book, and navigation-block advisory sections. Activity records are written server-side and reused by inline editor history plus the wp-admin approval/audit page.
 
 Provider ownership is explicit: text generation flows through the WordPress AI Client and `Settings > Connectors`; plugin-owned settings cover embeddings, Qdrant, private Cloudflare AI Search pattern retrieval, built-in public WordPress docs grounding limits/diagnostics, guidelines, and pattern sync.
 
@@ -82,7 +89,7 @@ Provider ownership is explicit: text generation flows through the WordPress AI C
 
 See the external-service disclosure in [`readme.txt`](readme.txt) and [`docs/reference/external-service-disclosure.md`](docs/reference/external-service-disclosure.md) for service-specific data and trigger details.
 
-## Recommendation surfaces
+## Surface Boundaries
 
 | Surface        | Interaction model                                            | Notes                                                                              |
 | -------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
@@ -94,7 +101,7 @@ See the external-service disclosure in [`readme.txt`](readme.txt) and [`docs/ref
 | Navigation     | Advisory-only                                                | Guidance for selected `core/navigation` blocks; no apply contract in `0.1.0`.      |
 | Global Styles  | Review-first apply/undo                                      | Validated `theme.json` operations only; no raw CSS or `customCSS`.                 |
 | Style Book     | Review-first apply/undo                                      | Block-example scoped style recommendations.                                        |
-| AI Activity    | Read-only admin audit                                        | Server-backed activity feed and detail panel, not a general observability product. |
+| AI Activity    | Admin approval and audit                                     | Pending external style-apply decisions, server-backed activity feed, detail panel, and undo state; not a general observability product. |
 
 ## Develop and verify
 

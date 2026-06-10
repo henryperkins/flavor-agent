@@ -1,7 +1,7 @@
 {
 	"name": "flavor-agent",
 	"version": "0.1.0",
-	"description": "LLM-powered Inspector suggestions for Gutenberg blocks",
+	"description": "Governance layer for AI-mediated WordPress changes",
 	"engines": {
 		"node": "^20.0.0 || ^24.0.0",
 		"npm": "^10.0.0 || ^11.0.0"

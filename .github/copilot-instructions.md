@@ -74,7 +74,7 @@ For any change that touches more than one recommendation surface or any shared s
 
 **Pattern indexing** is its own subsystem. `inc/Patterns/PatternIndex.php` keeps runtime state in the `flavor_agent_pattern_index_state` option, computes fingerprints, and uses a lock plus cooldown around sync work. Syncs trigger on activation, theme/plugin changes, backend-setting changes, cron (`flavor_agent_reindex_patterns`), or the admin sync button.
 
-**Activity history** writes structured entries through the server-backed `Activity\Repository`; the editor hydrates by scope, keeps `sessionStorage` only as a cache/fallback, and validates live state before undo. The admin audit UI at `Settings > AI Activity` reads the same data.
+**Activity history** writes structured entries through the server-backed `Activity\Repository`; the editor hydrates by scope, keeps `sessionStorage` only as a cache/fallback, and validates live state before undo. The admin approval/audit UI at `Settings > AI Activity` reads the same data and approves or rejects pending external style applies.
 
 ### Abilities API integration
 

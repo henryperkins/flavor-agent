@@ -8,23 +8,24 @@ Companion: [`release-submission-and-review.md`](./release-submission-and-review.
 
 ## Core Identity
 
-Flavor Agent is a WordPress-native recommendation and review layer for editing surfaces.
+Flavor Agent is the WordPress-native governance layer for AI-mediated site changes.
 
 The product promise is:
 
-> Context-aware recommendations plus bounded review/apply/undo inside native editing surfaces.
+> AI proposes through bounded WordPress contracts; WordPress approves through native editor and wp-admin review; Flavor Agent records and reverses owned changes without clobbering later edits.
 
-Flavor Agent should help a user make better block, content, pattern, template, navigation, and style decisions without becoming the general system that owns the site, providers, logs, pattern insertion, or arbitrary mutations.
+Flavor Agent should let humans and external agents use the same bounded recommendation, validation, freshness, approval, attribution, and undo contracts without becoming the general system that owns the site, providers, logs, pattern insertion, or arbitrary mutations. The recommendation surfaces are the demonstration; the governance layer is the product.
 
 ## Product Boundaries
 
 Flavor Agent owns:
 
-- Context gathering for the active WordPress editing surface.
-- Recommendation quality and explanation.
+- Context gathering for the active WordPress editing surface or external ability request.
+- Recommendation quality and explanation as proof surfaces for the governance layer.
 - Deterministic validation of executable suggestions.
-- Native Gutenberg, Site Editor, inserter, settings, and admin affordances.
+- Native Gutenberg, Site Editor, inserter, settings, and admin approval/audit affordances.
 - Bounded apply paths only where the plugin can review, validate, record, and undo.
+- External-agent style applies only through `request-style-apply` followed by administrator approval in `Settings > AI Activity`.
 - Clear setup and degraded-state messaging when providers, embeddings, Qdrant, capabilities, or WordPress surface support are missing.
 
 Flavor Agent does not own:
@@ -36,15 +37,16 @@ Flavor Agent does not own:
 - Gutenberg pattern inserter ownership.
 - A general-purpose mutation framework.
 - Free-form execution of model output.
+- Template, template-part, block, content, navigation, or pattern external applies in the current release.
 
-If a feature makes Flavor Agent broader than context-aware recommendations plus bounded native review/apply/undo, it should stop.
+If a feature makes Flavor Agent broader than bounded native governance, review/apply/undo, and proof-surface recommendations, it should stop.
 
 ## Release Rule
 
 A surface merits release presence only if it passes all of these checks:
 
 1. It appears in a native WordPress surface where the user already makes the relevant decision.
-2. It improves that decision with context-aware recommendation, review, explanation, or setup feedback.
+2. It improves that decision with context-aware recommendation, review, explanation, setup feedback, or external-agent governance proof.
 3. Any mutation is bounded by deterministic validation, freshness checks, recorded activity, and undo where Flavor Agent owns the apply.
 4. It degrades clearly when the surface, capability, provider, or backend is unavailable.
 5. It does not create a second product inside Flavor Agent.
@@ -85,7 +87,7 @@ This document is the surface-specific release planning source of truth. Canonica
 | Template-part recommendations | Keep, strongest structural Site Editor surface | Header/footer/sidebar parts are focused enough for bounded review/apply/undo. | Improve operation yield without broadening operation vocabulary prematurely. |
 | Global Styles | Keep, guarded | Theme-level choices merit native review-first assistance. | `theme.json`-safe operations only; add contrast validation before stronger claims. |
 | Style Book | Keep, narrower than Global Styles | Block-example style review fits native style inspection. | Block-example scoped changes only; no general visual design generator. |
-| AI Activity | Keep as support surface | Users need provenance and undo state. | Read-only admin audit; no observability console. |
+| AI Activity | Keep as governance proof surface | Users need approval, provenance, freshness/failure evidence, and undo state. | Admin approval only for pending external style applies; no general observability console. |
 | Settings and sync | Keep as support surface | Setup must be understandable for recommendations to work. | No provider router; only plugin-owned backend setup and connector readiness messaging. |
 | Helper abilities and REST | Keep as infrastructure | The plugin needs structured capabilities for native surfaces and integrations. | Mark release-supported vs internal; do not expose a general tool catalog. |
 
@@ -362,13 +364,13 @@ Do not add:
 
 ### Current Fit
 
-Activity belongs because review/apply/undo needs provenance. The inline activity sections and admin audit page support trust and recovery.
+Activity belongs because review/apply/undo needs provenance, and external-agent applies need a human approval point. The inline activity sections and admin approval/audit page support trust, recovery, and the governed external style-apply loop.
 
 ### Release Quality Assessment
 
 Good enough to merit release presence: yes.
 
-Release-quality as-is: yes as support infrastructure. It should not be marketed or expanded as observability.
+Release-quality as-is: yes as governance support infrastructure. It should be framed as approval/audit/provenance, not marketed or expanded as observability.
 
 ### Stop Line
 
@@ -376,7 +378,8 @@ Stop at:
 
 - Inline recent actions for executable editor scopes.
 - Ordered newest-valid-tail undo.
-- Read-only admin audit.
+- Admin approval/rejection for pending external style applies.
+- Inspection-only admin audit for non-pending rows.
 - Search/filter/details for diagnostics and provenance.
 
 Do not add:
@@ -384,7 +387,7 @@ Do not add:
 - A general observability product.
 - Metrics dashboards.
 - Provider latency/cost analytics.
-- Admin row-action undo.
+- Admin row-action undo beyond the existing external style-apply decision path.
 - Cross-user activity intervention.
 
 Per-entry token usage and latency may remain in read-only details when they
@@ -397,7 +400,7 @@ reports, provider rankings, or observability workflows.
 - [x] Confirm malformed filters fail closed.
 - [x] Confirm operation filters dedupe by effective value while row labels remain specific.
 - [x] Confirm retention/pruning expectations are documented or intentionally deferred.
-- [x] Keep admin activity copy framed as audit/provenance, not monitoring.
+- [x] Keep admin activity copy framed as approval/audit/provenance, not monitoring.
 - [x] Re-run activity PHPUnit, admin JS, and Playwright coverage after changes.
 
 Release evidence recorded 2026-05-02:
@@ -497,7 +500,7 @@ Do not add:
 - [ ] Content recommendations editorial-only.
 - [ ] Navigation recommendations advisory-only.
 - [ ] Template, template-part, Global Styles, and Style Book review-first only.
-- [ ] AI Activity read-only in admin.
+- [ ] AI Activity limited to approval/audit/provenance in admin; only pending external style applies expose decision controls.
 - [ ] Settings limited to setup, sync, and diagnostics.
 - [ ] Helper abilities limited to recommendation support and read-only diagnostics unless backed by a first-party apply contract.
 

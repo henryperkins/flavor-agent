@@ -1,6 +1,6 @@
 # Flavor Agent
 
-Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the native Gutenberg editor and wp-admin surfaces.
+Flavor Agent is a WordPress plugin that lets AI work on a live site through one governance layer: bounded schemas, freshness checks, review-gated structural/theme changes, server-side attribution, and drift-safe undo. Native Gutenberg and wp-admin surfaces are how humans use that layer; the Abilities API and MCP are how external agents use the same contracts.
 
 This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`. For exact surface-by-surface conditions, use `docs/FEATURE_SURFACE_MATRIX.md` and the deep dives in `docs/features/`. For the current shared-surface taxonomy and intentional exceptions, use `docs/reference/recommendation-ui-consistency.md`. For release evidence when a change crosses surfaces or shared subsystems, use `docs/reference/cross-surface-validation-gates.md`.
 
@@ -15,9 +15,9 @@ It currently has eight primary editor experiences:
 - Global Styles recommendations in the Site Editor Styles sidebar, bounded to validated `theme.json` paths and theme-backed values.
 - Style Book recommendations in the Site Editor Styles sidebar, scoped to per-block style paths and theme-backed values.
 
-It also ships the AI Activity admin audit surface in wp-admin.
+It also ships the AI Activity admin approval/audit surface in wp-admin. C1 external-agent applies are limited to Global Styles and Style Book: an agent can request a style apply, but `Settings > AI Activity` is the human decision point before the server executes it.
 
-There is no separate approval sidebar in the current codebase. The eight surfaces intentionally split into four interaction models: direct apply for safe local block updates, review-before-apply for template/template-part/Global Styles/Style Book, editorial draft/edit/critique for content, and ranking/browse-only for patterns. Navigation is an advisory-only nested subsection inside block recommendations, and delegated block Inspector sub-panels now act only as passive mirrors of the main block result rather than standalone request/apply surfaces. Block, template, template-part, Global Styles, and Style Book applies write activity entries with inline undo; content, pattern, and navigation requests can persist read-only diagnostics when document scope is available. The current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data.
+There is no separate approval sidebar in the current codebase. The eight surfaces intentionally split into four interaction models: direct apply for safe local block updates, review-before-apply for template/template-part/Global Styles/Style Book, editorial draft/edit/critique for content, and ranking/browse-only for patterns. Navigation is an advisory-only nested subsection inside block recommendations, and delegated block Inspector sub-panels now act only as passive mirrors of the main block result rather than standalone request/apply surfaces. Block, template, template-part, Global Styles, and Style Book applies write activity entries with inline undo; content, pattern, and navigation requests can persist read-only diagnostics when document scope is available. The current first-party editor UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data and adds the approval gate for pending external style applies.
 
 ## Current Architecture
 
@@ -77,6 +77,18 @@ flavor-agent/
 │
 └── docs/                         # Specs, references, local dev notes, plans, and repo guides
 ```
+
+## Governance Flow
+
+The product loop is consistent even when a surface stops early by design:
+
+1. AI proposes through a typed recommendation or external-apply ability.
+2. WordPress validates the output against bounded schemas, operation catalogs, current permissions, and freshness signatures.
+3. Structural and theme-level changes are reviewed before apply; external style applies are reviewed in `Settings > AI Activity`.
+4. Applies the plugin owns are recorded server-side with request/provider attribution.
+5. Undo is available only when the live target still matches the recorded post-apply state.
+
+Pattern insertions remain native Gutenberg insertions, not Flavor Agent-owned apply/undo. Content remains editorial-only. Navigation remains advisory-only. Template, template-part, and block external applies are future C2+ work, not part of the current C1 external-agent contract.
 
 ## Editor Flows
 
@@ -184,6 +196,8 @@ This surface is explicitly theme-safe: raw CSS, `customCSS`, unsupported style p
 
 Applied block, template, template-part, Global Styles, and Style Book suggestions write structured activity records through the server-backed activity repository, keyed to the current post, template, template-part, Global Styles, or Style Book scope. The editor hydrates that log on load and keeps `sessionStorage` only as a fast cache/fallback. Undo remains inline and editor-scoped: the newest valid tail of AI actions can be undone when the live state still matches the recorded post-apply snapshot, while older entries are blocked until newer AI actions are undone.
 
+`Settings > AI Activity` is also the governance console for external style applies. Pending `request-style-apply` rows show the requested Global Styles / Style Book operation and let administrators approve or reject. Approval executes on the server with fresh operation/context validation; rejection records the decision without mutating the site.
+
 ## Settings
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
@@ -249,6 +263,10 @@ Implemented abilities:
 - `flavor-agent/preview-recommend-style`
 - `flavor-agent/preview-recommend-template`
 - `flavor-agent/preview-recommend-template-part`
+- `flavor-agent/request-style-apply`
+- `flavor-agent/get-activity`
+- `flavor-agent/list-activity`
+- `flavor-agent/undo-activity`
 
 All 29 ability contracts in the tree are implemented. The 13 helper/search abilities register whenever the Abilities API exists; the five preview siblings register when the canonical WordPress AI contracts are available and force signature-only execution; the seven recommendation abilities and the four external-apply abilities register only when the WordPress AI plugin contracts are available and Flavor Agent is enabled. On WordPress 7.0 admin screens, core now enqueues `@wordpress/core-abilities`, so registered server-side abilities are also hydrated into the client-side `core/abilities` store automatically. Flavor Agent's first-party editor UI uses the `flavor-agent` data store with an abilities bridge so prompt scoping, preview/apply, and undo stay tightly bounded.
 

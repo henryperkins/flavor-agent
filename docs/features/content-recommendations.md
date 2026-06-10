@@ -70,7 +70,7 @@ Output:
 - Invalid model JSON returns a `parse_error`.
 - The first-party UI is editorial-only. There is no preview/apply/undo flow tied to this surface, and copy-to-clipboard does not mutate editor content.
 - Stored result signatures are compared against the live mode, prompt, and post context. Stale results remain readable with a refresh banner, but generated content copy is disabled until refreshed.
-- Scoped content requests are persisted as read-only activity diagnostics when possible. They can appear in the inline request history when the content panel is supported/configured and in the admin audit page, but they are not undoable.
+- Scoped content requests are persisted as read-only activity diagnostics when possible. They can appear in the inline request history when the content panel is supported/configured and in the admin approval/audit page, but they are not undoable.
 
 ## 6. Primary Functions And Abilities
 

@@ -23,7 +23,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - The first returned suggestion is promoted as the recommended next navigation change; remaining ideas are grouped by category (`Structure`, `Overlay`, `Accessibility`)
 - There is no preview or apply path here; the user reviews the grouped changes and edits navigation manually
 - When the current navigation context drifts, the subsection keeps the previous result visible as stale reference material and exposes a refresh action instead of silently clearing it
-- Because navigation remains advisory-only through v1.0, it does not create executable apply/undo activity entries and does not participate in inline undo. Scoped request diagnostics may still be persisted for the admin audit page when document scope is available; see `docs/features/activity-and-audit.md`.
+- Because navigation remains advisory-only through v1.0, it does not create executable apply/undo activity entries and does not participate in inline undo. Scoped request diagnostics may still be persisted for the admin approval/audit page when document scope is available; see `docs/features/activity-and-audit.md`.
 
 ## End-To-End Flow
 

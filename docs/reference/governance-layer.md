@@ -13,6 +13,8 @@ Use it when you need to answer:
 
 Flavor Agent lets AI work on a live WordPress site without unchecked control. Every AI action it mediates runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, every recorded change reversible with drift detection so an undo never clobbers later human edits. Humans get this through native Gutenberg and Site Editor surfaces; external agents get the same recommendation, validation, and freshness contracts through the Abilities API and MCP. Built on the WordPress 7.0 AI stack. The recommendation surfaces are the demonstration; the governance layer is the product.
 
+Public shorthand: AI proposes. WordPress approves. Operations are bounded, structural/theme changes are reviewed, applies are recorded server-side, and undo is drift-safe.
+
 ## The Governed Loop
 
 Every executable recommendation runs one loop:

@@ -32,7 +32,7 @@ These docs should stay feature-facing. Keep exact request/response payloads, rou
 - `docs/features/template-recommendations.md` - Site Editor template composition suggestions and validated apply flow
 - `docs/features/template-part-recommendations.md` - Site Editor template-part suggestions, focus links, and bounded operations
 - `docs/features/style-and-theme-intelligence.md` - Site Editor Global Styles and Style Book recommendations, guarded operations, and scoped undo
-- `docs/features/activity-and-audit.md` - inline activity history, ordered undo rules, scoped audit rows, and the admin audit page
+- `docs/features/activity-and-audit.md` - inline activity history, ordered undo rules, scoped audit rows, and the admin approval/audit page
 - `docs/features/settings-backends-and-sync.md` - settings screen, backend gating, validation behavior, and pattern sync
 
 ## Programmatic And Shared-Contract Features

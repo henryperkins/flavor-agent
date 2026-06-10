@@ -1,5 +1,7 @@
 # Governed External Applies (C1) Implementation Plan
 
+> Status: Archived 2026-06-10. Shipped in the current 29-ability governance contract; retained only as historical execution context. Targeted WP70 approval browser proof passed on 2026-06-10 via `npm run test:e2e:wp70 -- tests/e2e/flavor-agent.approvals.spec.js` (`3 passed`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let an external agent that received a `recommend-style` result request a style apply through four new feature-gated Abilities; a `manage_options` + `edit_theme_options` human approves it in `Settings > AI Activity`; the server executes it with double freshness revalidation, records it as a normal attributed/undoable activity row, and supports server-side undo.
@@ -5336,4 +5338,3 @@ Run: `git log --oneline master..HEAD` (or the task-branch equivalent) and confir
 ## Out of scope (do not build)
 
 Template/template-part/block executors, editor-side pending-apply visibility, inline-safe direct-apply fast path, approval notifications (all C2+). No new cron events — expiry rides `flavor_agent_prune_activity`.
-

@@ -13,7 +13,7 @@ Use it when you need to answer:
 1. User applies a suggestion in the editor
 2. Client creates an activity entry via `POST /flavor-agent/v1/activity` with `undo.status: "available"`
 3. Entry is stored in the `{prefix}_flavor_agent_activity` database table
-4. The entry appears in inline activity history and the admin audit page
+4. The entry appears in inline activity history and the admin approval/audit page
 5. User may undo the entry, transitioning through the state machine below
 
 Activity history is also maintained as a scoped client session. `loadActivitySession()` hydrates the current scope, merges any pending local entries, and then refreshes from the server-backed activity repository for that same scope.

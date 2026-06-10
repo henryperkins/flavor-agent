@@ -86,7 +86,7 @@ Impact:
 
 The plugin's `Settings > AI Activity` admin screen is already built on the same WordPress-native data-view stack that 7.0 keeps evolving.
 
-- `src/admin/activity-log.js` imports `DataViews` from `@wordpress/dataviews/wp` and renders custom read-only detail sections beside the feed.
+- `src/admin/activity-log.js` imports `DataViews` from `@wordpress/dataviews/wp` and renders pending external style-apply controls plus custom detail sections beside the feed.
 
 Impact:
 

@@ -8,13 +8,15 @@ Stable tag: 0.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-AI for the WordPress editor without unchecked control: schema-validated, review-gated, server-recorded, reversible recommendations.
+Governed AI for WordPress: bounded operations, review-gated structural changes, server-side audit, and drift-safe undo.
 
 == Description ==
 
 Flavor Agent lets AI work on a WordPress site without unchecked control. Every AI action it mediates runs through one governance layer: operations are validated against bounded schemas, structural changes are gated behind review, every apply the plugin owns is attributed and recorded server-side, and recorded changes are reversible with freshness checks so an undo never overwrites later edits.
 
-That governance layer is demonstrated through contextual recommendations across the editor and admin — blocks, patterns, content, templates, template parts, navigation, Global Styles, and Style Book — while keeping setup inside standard WordPress admin screens. External integrations get the same recommendation, validation, and freshness contracts through the WordPress Abilities API.
+The primary proof point is `Settings > AI Activity`: external agents can request bounded Global Styles / Style Book applies, WordPress holds those requests for administrator approval, and approved applies execute server-side with freshness and operation revalidation. Every resulting row is attributed, auditable, and reversible only while the live site still matches the recorded post-apply state.
+
+That same governance layer is demonstrated through contextual recommendations across the editor and admin — blocks, patterns, content, templates, template parts, navigation, Global Styles, and Style Book — while keeping setup inside standard WordPress admin screens. External integrations get the same recommendation, validation, freshness, and governed style-apply contracts through the WordPress Abilities API and MCP.
 
 Results are recommendations, generated text, or review-first suggestions. Flavor Agent does not publish content, contact visitors, or automatically rewrite posts on activation. Content recommendations are editorial-only: copy any generated text into the editor yourself. Structural, style, and template changes remain review-first where supported.
 
@@ -64,9 +66,9 @@ No. Content recommendations are generated text and editorial guidance only. Revi
 
 Use `Settings > Connectors` for text-generation providers. Use `Settings > Flavor Agent` for one embedding model, pattern storage, developer-doc limits, guidelines, and experimental features such as block structural actions.
 
-= How do external integrations call recommendation surfaces? =
+= How do external integrations call Flavor Agent? =
 
-Use the WordPress Abilities API. Recommendation integrations call `POST /wp-json/wp-abilities/v1/abilities/flavor-agent/recommend-*/run` with the Flavor Agent payload wrapped in `{ "input": { ... } }`; browser clients can use the equivalent site-local apiFetch path `/wp-abilities/v1/abilities/{ability}/run`.
+Use the WordPress Abilities API. Recommendation integrations call `POST /wp-json/wp-abilities/v1/abilities/flavor-agent/recommend-*/run` with the Flavor Agent payload wrapped in `{ "input": { ... } }`; browser clients can use the equivalent site-local apiFetch path `/wp-abilities/v1/abilities/{ability}/run`. External style applies use `request-style-apply`, then an administrator approves or rejects the pending row in `Settings > AI Activity`; template, block, content, navigation, and pattern external applies are not exposed in this release.
 
 = What data is sent to AI providers? =
 
