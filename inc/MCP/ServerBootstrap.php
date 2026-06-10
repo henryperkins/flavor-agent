@@ -35,7 +35,7 @@ final class ServerBootstrap {
 			'mcp',
 			'flavor-agent',
 			__( 'Flavor Agent', 'flavor-agent' ),
-			__( 'Governed AI recommendations for WordPress: schema-validated operations with freshness signatures; structural changes are review-gated, and applies are recorded server-side and reversible in the editor. Tools cover blocks, content, navigation, patterns, styles, templates, and template parts.', 'flavor-agent' ),
+			__( 'Governed AI changes for WordPress: schema-validated operations with freshness signatures, review-gated structural changes, server-side attribution, and drift-checked undo. Tools cover block, content, navigation, pattern, style, template, and template-part recommendations plus the governed style-apply loop (request a pending apply, read its decision state, undo executed rows). Approval stays with site administrators in Settings > AI Activity.', 'flavor-agent' ),
 			self::plugin_version(),
 			[ HttpTransport::class ],
 			ErrorLogMcpErrorHandler::class,

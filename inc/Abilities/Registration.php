@@ -36,7 +36,7 @@ final class Registration {
 			'flavor-agent',
 			[
 				'label'       => __( 'Flavor Agent', 'flavor-agent' ),
-				'description' => __( 'LLM-assisted editing, pattern, template, and diagnostic abilities for the WordPress editor.', 'flavor-agent' ),
+				'description' => __( 'Governed AI abilities for WordPress: schema-bounded recommendations, read-only context and preview helpers, and review-gated external style applies with server-side attribution and drift-safe undo. AI proposes; WordPress approves.', 'flavor-agent' ),
 			]
 		);
 	}
@@ -145,37 +145,37 @@ final class Registration {
 		return [
 			'flavor-agent/recommend-block'         => [
 				'label'         => __( 'Get block recommendations', 'flavor-agent' ),
-				'description'   => __( 'Suggest attribute and style changes for a block using theme design tokens.', 'flavor-agent' ),
+				'description'   => __( 'Suggest attribute and style changes for a block using theme design tokens. Responses are bounded by the block operation schema and execution contract, classified for inline or review-gated apply, and carry freshness signatures so a stale editing context cannot apply.', 'flavor-agent' ),
 				'ability_class' => RecommendBlockAbility::class,
 			],
 			'flavor-agent/recommend-content'       => [
 				'label'         => __( 'Recommend editorial content', 'flavor-agent' ),
-				'description'   => __( 'Draft, edit, or critique blog posts, essays, and site copy in Henry Perkins\'s voice.', 'flavor-agent' ),
+				'description'   => __( 'Draft, edit, or critique blog posts, essays, and site copy in Henry Perkins\'s voice. Editorial-only by contract: schema-bounded text output with no apply path, so it never mutates site content.', 'flavor-agent' ),
 				'ability_class' => RecommendContentAbility::class,
 			],
 			'flavor-agent/recommend-patterns'      => [
 				'label'         => __( 'Recommend patterns', 'flavor-agent' ),
-				'description'   => __( 'Rank registered and synced block patterns for the current editing context using LLM.', 'flavor-agent' ),
+				'description'   => __( 'Rank registered and synced block patterns for the current editing context. Read-only ranking with explained reasons: pattern insertion stays native Gutenberg behavior, and Flavor Agent owns no pattern apply or undo.', 'flavor-agent' ),
 				'ability_class' => RecommendPatternsAbility::class,
 			],
 			'flavor-agent/recommend-navigation'    => [
 				'label'         => __( 'Recommend navigation structure', 'flavor-agent' ),
-				'description'   => __( 'Suggest navigation menu structure, overlay behavior, and organization.', 'flavor-agent' ),
+				'description'   => __( 'Suggest navigation menu structure, overlay behavior, and organization. Advisory-only by contract: schema-bounded guidance with review-context signatures and no navigation apply path in this release.', 'flavor-agent' ),
 				'ability_class' => RecommendNavigationAbility::class,
 			],
 			'flavor-agent/recommend-style'         => [
 				'label'         => __( 'Recommend site styles', 'flavor-agent' ),
-				'description'   => __( 'Suggest theme-safe style changes and theme style variations for supported Site Editor style surfaces.', 'flavor-agent' ),
+				'description'   => __( 'Suggest theme-safe style changes and theme style variations for supported Site Editor style surfaces. Operations are bounded to validated theme.json paths with WCAG AA contrast checks, reviewed before apply, and recorded server-side with drift-checked undo.', 'flavor-agent' ),
 				'ability_class' => RecommendStyleAbility::class,
 			],
 			'flavor-agent/recommend-template'      => [
 				'label'         => __( 'Recommend template structure', 'flavor-agent' ),
-				'description'   => __( 'Suggest template-part arrangements and patterns for a template type.', 'flavor-agent' ),
+				'description'   => __( 'Suggest template-part arrangements and patterns for a template type. Operations come from a bounded template-operation vocabulary, are previewed and reviewed before deterministic apply, and recorded server-side with drift-checked undo.', 'flavor-agent' ),
 				'ability_class' => RecommendTemplateAbility::class,
 			],
 			'flavor-agent/recommend-template-part' => [
 				'label'         => __( 'Recommend template-part structure', 'flavor-agent' ),
-				'description'   => __( 'Suggest focused structural improvements and patterns for a single template part.', 'flavor-agent' ),
+				'description'   => __( 'Suggest focused structural improvements and patterns for a single template part. Operations come from a bounded template-part operation vocabulary, are previewed and reviewed before deterministic apply, and recorded server-side with drift-checked undo.', 'flavor-agent' ),
 				'ability_class' => RecommendTemplatePartAbility::class,
 			],
 		];
@@ -425,7 +425,7 @@ final class Registration {
 			'flavor-agent/introspect-block',
 			[
 				'label'               => __( 'Introspect block type', 'flavor-agent' ),
-				'description'         => __( 'Return a block type\'s capabilities: supports, Inspector panels, attributes, styles, and variations.', 'flavor-agent' ),
+				'description'         => __( 'Return a block type\'s capabilities: supports, Inspector panels, attributes, styles, and variations. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ BlockAbilities::class, 'introspect_block' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -451,7 +451,7 @@ final class Registration {
 			'flavor-agent/list-allowed-blocks',
 			[
 				'label'               => __( 'List allowed blocks', 'flavor-agent' ),
-				'description'         => __( 'Return block types registered on the current site, with optional search, pagination, and variation payload controls.', 'flavor-agent' ),
+				'description'         => __( 'Return block types registered on the current site, with optional search, pagination, and variation payload controls. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ BlockAbilities::class, 'list_allowed_blocks' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -508,7 +508,7 @@ final class Registration {
 			'flavor-agent/list-patterns',
 			[
 				'label'               => __( 'List block patterns', 'flavor-agent' ),
-				'description'         => __( 'Return registered block patterns, optionally filtered by category, block type, template type, search, and payload size controls.', 'flavor-agent' ),
+				'description'         => __( 'Return registered block patterns, optionally filtered by category, block type, template type, search, and payload size controls. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ PatternAbilities::class, 'list_patterns' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -567,7 +567,7 @@ final class Registration {
 			'flavor-agent/get-pattern',
 			[
 				'label'               => __( 'Get block pattern', 'flavor-agent' ),
-				'description'         => __( 'Return a single registered block pattern by name.', 'flavor-agent' ),
+				'description'         => __( 'Return a single registered block pattern by name. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ PatternAbilities::class, 'get_pattern' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -593,7 +593,7 @@ final class Registration {
 			'flavor-agent/list-synced-patterns',
 			[
 				'label'               => __( 'List synced patterns', 'flavor-agent' ),
-				'description'         => __( 'Return wp_block pattern entities available on the site, optionally filtered by sync status, search, and payload size controls.', 'flavor-agent' ),
+				'description'         => __( 'Return wp_block pattern entities available on the site, optionally filtered by sync status, search, and payload size controls. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ PatternAbilities::class, 'list_synced_patterns' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -646,7 +646,7 @@ final class Registration {
 			'flavor-agent/get-synced-pattern',
 			[
 				'label'               => __( 'Get synced pattern', 'flavor-agent' ),
-				'description'         => __( 'Return a single wp_block pattern entity by numeric post ID.', 'flavor-agent' ),
+				'description'         => __( 'Return a single wp_block pattern entity by numeric post ID. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ PatternAbilities::class, 'get_synced_pattern' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -675,7 +675,7 @@ final class Registration {
 			'flavor-agent/list-template-parts',
 			[
 				'label'               => __( 'List template parts', 'flavor-agent' ),
-				'description'         => __( 'Return registered template-part metadata for editors, with optional content only for users who can edit themes.', 'flavor-agent' ),
+				'description'         => __( 'Return registered template-part metadata for editors, with optional content only for users who can edit themes. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ TemplateAbilities::class, 'list_template_parts' ],
 				'permission_callback' => [ self::class, 'can_list_template_parts' ],
@@ -720,7 +720,7 @@ final class Registration {
 			'flavor-agent/search-wordpress-docs',
 			[
 				'label'               => __( 'Search WordPress developer docs', 'flavor-agent' ),
-				'description'         => __( 'Query Flavor Agent\'s trusted WordPress developer docs search backend.', 'flavor-agent' ),
+				'description'         => __( 'Query Flavor Agent\'s trusted WordPress developer docs search backend. Read-only; results follow the plugin\'s trusted-source and currentness policy.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ WordPressDocsAbilities::class, 'search_wordpress_docs' ],
 				'permission_callback' => [ WordPressDocsAbilities::class, 'can_search_wordpress_docs' ],
@@ -846,7 +846,7 @@ final class Registration {
 			'flavor-agent/get-active-theme',
 			[
 				'label'               => __( 'Get active theme', 'flavor-agent' ),
-				'description'         => __( 'Return the active theme name, stylesheet, template, and version.', 'flavor-agent' ),
+				'description'         => __( 'Return the active theme name, stylesheet, template, and version. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ InfraAbilities::class, 'get_active_theme' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -866,7 +866,7 @@ final class Registration {
 			'flavor-agent/get-theme-presets',
 			[
 				'label'               => __( 'Get theme presets', 'flavor-agent' ),
-				'description'         => __( 'Return the active theme design presets from global settings, including colors, typography, spacing, shadows, gradients, and duotone presets.', 'flavor-agent' ),
+				'description'         => __( 'Return the active theme design presets from global settings, including colors, typography, spacing, shadows, gradients, and duotone presets. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_presets' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -886,7 +886,7 @@ final class Registration {
 			'flavor-agent/get-theme-styles',
 			[
 				'label'               => __( 'Get theme styles', 'flavor-agent' ),
-				'description'         => __( 'Return the applied global theme styles plus extracted element and block pseudo-state styles.', 'flavor-agent' ),
+				'description'         => __( 'Return the applied global theme styles plus extracted element and block pseudo-state styles. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_styles' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -906,7 +906,7 @@ final class Registration {
 			'flavor-agent/get-theme-tokens',
 			[
 				'label'               => __( 'Get theme design tokens', 'flavor-agent' ),
-				'description'         => __( 'Return the current theme\'s color palette, font sizes, font families, spacing, shadows, and layout constraints.', 'flavor-agent' ),
+				'description'         => __( 'Return the current theme\'s color palette, font sizes, font families, spacing, shadows, and layout constraints. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_tokens' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -937,7 +937,7 @@ final class Registration {
 			'flavor-agent/check-status',
 			[
 				'label'               => __( 'Check Flavor Agent status', 'flavor-agent' ),
-				'description'         => __( 'Report configured Flavor Agent backends, active models, and abilities currently available to the current user.', 'flavor-agent' ),
+				'description'         => __( 'Report configured Flavor Agent backends, active models, and abilities currently available to the current user. Read-only diagnostic.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ InfraAbilities::class, 'check_status' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
