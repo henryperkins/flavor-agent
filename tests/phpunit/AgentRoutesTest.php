@@ -26,6 +26,7 @@ final class AgentRoutesTest extends TestCase {
 		$this->assertSame(
 			[
 				'/flavor-agent/v1/activity',
+				'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/decision',
 				'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/undo',
 				'/flavor-agent/v1/sync-patterns',
 			],
@@ -35,6 +36,7 @@ final class AgentRoutesTest extends TestCase {
 		$this->assertRouteMethods( '/flavor-agent/v1/sync-patterns', [ 'GET', 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/activity', [ 'GET', 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/undo', [ 'POST' ] );
+		$this->assertRouteMethods( '/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/decision', [ 'POST' ] );
 	}
 
 	public function test_recommendation_routes_are_not_registered_as_active_rest_routes(): void {
@@ -295,5 +297,32 @@ final class AgentRoutesTest extends TestCase {
 	private function assertRestErrorCode( string $code, mixed $response ): void {
 		$this->assertInstanceOf( \WP_Error::class, $response );
 		$this->assertSame( $code, $response->get_error_code() );
+	}
+
+	public function test_decision_route_requires_manage_options_and_the_row_capability(): void {
+		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
+		$this->assertForbidden(
+			$this->dispatch_route(
+				'POST',
+				'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/decision',
+				[
+					'id'       => 'any-row',
+					'decision' => 'reject',
+				]
+			)
+		);
+
+		WordPressTestState::$capabilities = [ 'manage_options' => true ];
+		$response                         = $this->dispatch_route(
+			'POST',
+			'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/decision',
+			[
+				'id'       => 'missing-row',
+				'decision' => 'reject',
+			]
+		);
+		$this->assertNotForbidden( $response );
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'flavor_agent_activity_not_found', $response->get_error_code() );
 	}
 }

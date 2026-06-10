@@ -69,6 +69,27 @@ final class Permissions {
 	}
 
 	/**
+	 * Decision route gate: page-level manage_options AND the row's own
+	 * contextual mutation capability (edit_theme_options for style rows).
+	 */
+	public static function can_decide_activity_request( \WP_REST_Request $request ): bool {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return false;
+		}
+
+		$activity_id = trim( (string) $request->get_param( 'id' ) );
+
+		if ( '' === $activity_id ) {
+			return false;
+		}
+
+		$entry = Repository::find( $activity_id );
+
+		// Missing rows pass the capability gate so the handler returns its 404.
+		return ! is_array( $entry ) || self::can_access_entry( $entry );
+	}
+
+	/**
 	 * @param array<string, mixed> $entry
 	 */
 	public static function can_access_entry( array $entry ): bool {

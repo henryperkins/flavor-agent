@@ -493,4 +493,105 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( 'undone', $result['result'] );
 	}
+
+	public function test_decision_approve_executes_and_transitions_to_available(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+
+		$entry = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['activityId'],
+			'approve',
+			'Reviewed and safe'
+		);
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( 'available', $entry['apply']['status'] );
+		$this->assertSame( 'applied', $entry['executionResult'] );
+		$this->assertSame( 'available', $entry['undo']['status'] );
+		$this->assertSame( 'Reviewed and safe', $entry['apply']['decisionNote'] );
+		$this->assertSame( 7, $entry['apply']['decidedBy'] );
+		$this->assertNotSame( '', (string) $entry['apply']['executedAt'] );
+		$this->assertSame(
+			'var:preset|color|accent',
+			$entry['after']['userConfig']['styles']['color']['text']
+		);
+
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( 'var:preset|color|accent', $written['styles']['color']['text'] );
+	}
+
+	public function test_decision_approve_fails_closed_when_the_entity_drifted_after_the_request(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+
+		// Simulate a Site Editor session changing Global Styles before approval.
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => '#abcdef' ] ],
+			]
+		);
+
+		$entry = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['activityId'],
+			'approve'
+		);
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( 'failed', $entry['apply']['status'] );
+		$this->assertSame( 'failed', $entry['executionResult'] );
+		$this->assertSame( 'flavor_agent_apply_stale', $entry['apply']['failureCode'] );
+		$this->assertSame( 'not_applicable', $entry['undo']['status'] );
+	}
+
+	public function test_decision_reject_records_provenance_without_executing(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+
+		$entry = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['activityId'],
+			'reject',
+			'Not aligned with brand'
+		);
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( 'rejected', $entry['apply']['status'] );
+		$this->assertSame( 'Not aligned with brand', $entry['apply']['decisionNote'] );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'Reject must not write the entity.' );
+	}
+
+	public function test_decision_rejects_non_pending_rows_and_expired_rows(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+		\FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['activityId'], 'reject' );
+
+		$again = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['activityId'], 'approve' );
+		$this->assertInstanceOf( \WP_Error::class, $again );
+		$this->assertSame( 'flavor_agent_apply_not_pending', $again->get_error_code() );
+
+		$expired = ApplyAbilities::request_style_apply(
+			$this->agent_request_input( [ 'requestReference' => 'agent-req-3' ] )
+		);
+		$this->assertIsArray( $expired );
+		\FlavorAgent\Activity\Repository::transition_external_apply(
+			(string) $expired['activityId'],
+			[ 'applyStatus' => 'expired' ]
+		);
+		$late = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $expired['activityId'], 'approve' );
+		$this->assertInstanceOf( \WP_Error::class, $late );
+		$this->assertSame( 'flavor_agent_apply_expired', $late->get_error_code() );
+	}
+
+	public function test_decision_validates_the_decision_value(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+
+		$result = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['activityId'], 'maybe' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_invalid_decision', $result->get_error_code() );
+	}
 }
