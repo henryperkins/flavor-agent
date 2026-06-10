@@ -115,7 +115,7 @@ final class FeatureBootstrap {
 
 		echo '<div class="notice notice-warning"><p>';
 		echo \esc_html__(
-			'Flavor Agent recommendations require the WordPress AI plugin Feature framework and the Abilities API. Recommendation UI is unavailable until those canonical AI contracts are active.',
+			'Flavor Agent\'s governed AI surfaces require the WordPress AI plugin Feature framework and the Abilities API. Recommendation UI and governed external applies stay unavailable until those canonical AI contracts are active.',
 			'flavor-agent'
 		);
 		echo '</p></div>';

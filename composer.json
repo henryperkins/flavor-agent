@@ -1,6 +1,6 @@
 {
 	"name": "flavor-agent/flavor-agent",
-	"description": "AI-assisted recommendations across native Gutenberg and wp-admin surfaces.",
+	"description": "Governance layer for AI-mediated WordPress changes, demonstrated through native Gutenberg and wp-admin surfaces.",
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",
 	"require-dev": {

@@ -37,6 +37,7 @@ final class Help {
 				'content'  => implode(
 					'',
 					[
+						'<p>' . esc_html__( 'Flavor Agent mediates AI changes through one governed loop: AI proposes; WordPress approves. This page configures the plugin-owned backends behind that loop.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Use Connectors for text generation. Flavor Agent shows the active chat path here.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback.', 'flavor-agent' ) . '</p>',

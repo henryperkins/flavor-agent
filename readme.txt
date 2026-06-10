@@ -16,7 +16,7 @@ Flavor Agent lets AI work on a WordPress site without unchecked control. Every A
 
 The primary proof point is `Settings > AI Activity`: external agents can request bounded Global Styles / Style Book applies, WordPress holds those requests for administrator approval, and approved applies execute server-side with freshness and operation revalidation. Every resulting row is attributed, auditable, and reversible only while the live site still matches the recorded post-apply state.
 
-That same governance layer is demonstrated through contextual recommendations across the editor and admin — blocks, patterns, content, templates, template parts, navigation, Global Styles, and Style Book — while keeping setup inside standard WordPress admin screens. External integrations get the same recommendation, validation, freshness, and governed style-apply contracts through the WordPress Abilities API and MCP.
+That same governance layer is demonstrated through contextual recommendations across the editor and admin — blocks, patterns, content, templates, template parts, navigation, Global Styles, and Style Book — while keeping setup inside standard WordPress admin screens. External integrations get the same recommendation, validation, freshness, and governed style-apply contracts through the WordPress Abilities API, and through MCP when the WordPress MCP Adapter plugin is installed.
 
 Results are recommendations, generated text, or review-first suggestions. Flavor Agent does not publish content, contact visitors, or automatically rewrite posts on activation. Content recommendations are editorial-only: copy any generated text into the editor yourself. Structural, style, and template changes remain review-first where supported.
 

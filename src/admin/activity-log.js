@@ -1928,7 +1928,7 @@ export function ActivityLogApp( { bootData } ) {
 					</div>
 					<p className="flavor-agent-activity-log__copy">
 						{ __(
-							'Review recent AI actions across editor, Site Editor, and admin surfaces.',
+							'Decide pending external applies and review recent AI actions across editor, Site Editor, and admin surfaces. AI proposes; WordPress approves.',
 							'flavor-agent'
 						) }
 					</p>
