@@ -15,14 +15,16 @@ This file defines:
 
 ## Product Direction
 
+The product is the governance layer: AI acts on a live site only through bounded, validated, review-gated, attributed, and reversible paths, for humans in the editor and for external agents through the Abilities API and MCP. The recommendation surfaces demonstrate that layer; the canonical contract map is `docs/reference/governance-layer.md`.
+
 Flavor Agent should feel like Gutenberg and wp-admin became smarter, not like a second AI application was bolted onto WordPress.
 
 That means:
 
-1. native editor and admin surfaces first
-2. Gutenberg nouns and constraints first
-3. `theme.json`, presets, patterns, template parts, navigation, and core entities before custom abstractions
-4. bounded, validated, undoable actions before broad automation
+1. bounded, validated, undoable actions before broad automation
+2. native editor and admin surfaces first
+3. Gutenberg nouns and constraints first
+4. `theme.json`, presets, patterns, template parts, navigation, and core entities before custom abstractions
 5. Connectors and core AI building blocks first when they cover the capability
 
 It does **not** mean:
@@ -59,6 +61,7 @@ Read these documents in this order:
    - `shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers.
    - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
    - `cross-surface-validation-gates.md` — additive hard-stop validation rules and release evidence for multi-surface or shared-subsystem changes.
+   - `governance-layer.md` — the governance-layer contract map: pillars, enforcing code paths, surface loop coverage, and external-agent parity boundaries.
    - `release-surface-scope-review.md` — release stopping points per surface, scope-freeze checklist, and product-coherence rubric for what merits release presence.
    - `surfaces/release-stop-lines.md` — canonical release stop-line catalog used by the release scope review.
    - `release-submission-and-review.md` — WordPress.org submission artifacts, guideline audit, reviewer-cycle discipline, and KPIs from pre-submission through approval.
@@ -109,6 +112,7 @@ Each top-level doc has one job:
    - `shared-internals.md` — Which cross-cutting store utilities, shared UI components, and context helpers do the surfaces share?
    - `recommendation-ui-consistency.md` — Which interaction model does each surface use, and which differences are intentional exceptions?
    - `cross-surface-validation-gates.md` — Which release gates does a multi-surface or shared-subsystem change trigger, and what evidence is required before sign-off?
+   - `governance-layer.md` — Which control bounds, reviews, attributes, or reverses an AI change, and where is it enforced and tested?
    - `release-surface-scope-review.md` — Which surfaces merit release presence? Which surfaces should stop, harden, or remain advisory before release?
    - `surfaces/release-stop-lines.md` — Which stop line applies to each release surface?
    - `release-submission-and-review.md` — Which artifacts and audits does WordPress.org require? Which signals indicate progress toward approval?
@@ -152,7 +156,7 @@ Right now the intended doc stack is:
 3. Current work queue: `docs/reference/current-open-work.md`
 4. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
 5. Per-surface deep dives: `docs/features/README.md`
-6. Programmatic and UI contract docs: `docs/reference/` (current-open-work, abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, developer-docs-public-corpus-runbook, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
+6. Programmatic and UI contract docs: `docs/reference/` (current-open-work, abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, governance-layer, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, developer-docs-public-corpus-runbook, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
 7. Architecture companion: `docs/flavor-agent-readme.md`
 8. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
 

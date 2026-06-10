@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-06-05
+> Last updated: 2026-06-10
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.2+
 
@@ -10,7 +10,7 @@ See `docs/README.md` for the documentation backbone, reading order, ownership, a
 
 ## What This Plugin Is
 
-Flavor Agent is a WordPress plugin that adds AI-assisted recommendations and editorial scaffolding across the native Gutenberg editor and relevant wp-admin screens. It should feel like Gutenberg and wp-admin became smarter, not like a separate AI application was bolted on. It does not insert or mutate content automatically without a bounded UI path -- it recommends, the user reviews where needed, and the user decides.
+Flavor Agent is a WordPress plugin that lets AI work on a live site without unchecked control. Every AI action runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, and recorded changes reversible with freshness/drift checks. The recommendation surfaces are the demonstration; the governance layer is the product (canonical contract map: `docs/reference/governance-layer.md`). It should still feel like Gutenberg and wp-admin became smarter, not like a separate AI application was bolted on. It does not insert or mutate content automatically without a bounded UI path -- it recommends, the user reviews where needed, and the user decides.
 
 Applied AI changes are now tracked through the shared activity system and can be reversed from the UI when the live document still matches the recorded post-apply state. Activity persistence now uses server-backed storage, with editor-scoped hydration and `sessionStorage` retained only as a cache/fallback for the current editing surface.
 
@@ -31,7 +31,7 @@ Eight first-party recommendation surfaces exist today:
 
 The plugin also ships one first-party admin audit surface at `Settings > AI Activity`.
 
-A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor.
+A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor. External agents get the same recommendation, validation, and freshness contracts as the first-party editor; applies and undo remain editor-owned and activity persistence is REST-only today (see `docs/reference/governance-layer.md`).
 
 ## Repository Layout
 

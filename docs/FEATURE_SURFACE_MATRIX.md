@@ -2,6 +2,8 @@
 
 This is the fast-scan map for first-party UI surfaces. Keep exact flows in `docs/features/` and exact request/response contracts in `docs/reference/abilities-and-routes.md`.
 
+Every executable surface runs the same governed loop — generate, validate, review, apply and record, reverse — and the advisory, editorial, and browse-only surfaces stop earlier on that loop by design. Read the Apply / undo column as the demonstration of the governance layer (`docs/reference/governance-layer.md`): it shows where each surface sits on the loop.
+
 For every chat-backed surface, the WordPress AI plugin Connector Approval experiment can gate the request even when the selected connector is configured. Flavor Agent treats that as a request-time setup notice with connector/caller details, not as an unavailable bootstrap capability.
 
 ## First-Party Editor And Admin Surfaces

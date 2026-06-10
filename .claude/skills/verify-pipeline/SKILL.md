@@ -24,8 +24,9 @@ The final stdout line is `VERIFY_RESULT={...}`: one-line JSON with `status`, `su
 | Run only a subset | `npm run verify -- --only=build,unit` |
 | Run optional docs check through verifier | `npm run verify:strict -- --only=check-docs` |
 | Preview plan as JSON | `npm run verify -- --dry-run` |
-| Stop at first failure | `npm run verify -- --bail` |
+| Stop at first non-pass (failure or missing-tool skip) | `npm run verify -- --bail` |
 | Suppress per-step streaming | `npm run verify -- --json` |
+| Write logs + summary to another directory | `npm run verify -- --output=path/dir` |
 | Single PHP suite | `vendor/bin/phpunit --filter NameTest` |
 
 ## Choosing the mode
@@ -70,9 +71,10 @@ The final stdout line is `VERIFY_RESULT={...}`: one-line JSON with `status`, `su
 - **`lint-plugin`** needs `bash` plus one Plugin Check context:
   - Host path: `wp` (WP-CLI) and a resolvable WordPress root via `WP_PLUGIN_CHECK_PATH` or the repo-relative fallback.
   - Docker path: `PLUGIN_CHECK_USE_DOCKER=1` or `true`, `docker`, and the `wordpress` compose container running. This path does not need host `wp`.
+  - `verify.js` auto-loads `.env` from the repo root at startup (already-exported variables win), so `WP_PLUGIN_CHECK_PATH` and `PLUGIN_CHECK_USE_DOCKER` can live in `.env` instead of being exported per shell.
 - When Plugin Check is intentionally out of scope for a local loop, pass `--skip=lint-plugin`. Treat that as an explicit coverage reduction, not a full local release signal.
 - When Plugin Check is in scope but prerequisites are missing, leave `lint-plugin` included so `summary.json` records `status: "incomplete"` and the missing-prerequisite reason.
-- **`e2e-wp70`** needs Docker. Run `npm run wp:start` or `npm run wp:e2e:wp70:bootstrap` first. Without Docker, use `--skip-e2e` for local iteration and record a waiver when browser proof is required.
+- **`e2e-wp70`** needs Docker. Run `npm run wp:start` or `npm run wp:e2e:wp70:bootstrap` first. Unlike `lint-plugin`, the verifier does not probe for Docker on this step — without Docker it runs and exits non-zero, so `summary.json` shows `status: "fail"`, not an `incomplete` skip. Without Docker, use `--skip-e2e` for local iteration and record a waiver when browser proof is required.
 - **`e2e-playground`** runs in a Playground browser harness. It usually works without Docker, but still requires Playwright browsers installed.
 - **`lint-php` / `test-php`** need `composer install` to have run for the PSR-4 autoloader, PHPCS, and PHPUnit.
 - **`check-docs`** needs `rg` (ripgrep). It is optional and only included in `--strict` / `verify:strict`; when included and `rg` is missing, the run is `incomplete`.

@@ -8,11 +8,13 @@ Stable tag: 0.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-AI-assisted Gutenberg and wp-admin recommendations for blocks, patterns, content, templates, navigation, styles, and activity.
+AI for the WordPress editor without unchecked control: schema-validated, review-gated, server-recorded, reversible recommendations.
 
 == Description ==
 
-Flavor Agent integrates AI-assisted editorial and design guidance directly into the WordPress editor and admin. It can surface contextual recommendations for blocks, patterns, content, templates, template parts, navigation, Global Styles, and Style Book while keeping setup inside standard WordPress admin screens.
+Flavor Agent lets AI work on a WordPress site without unchecked control. Every AI action runs through one governance layer: operations are validated against bounded schemas, structural changes are gated behind review, every apply the plugin owns is attributed and recorded server-side, and recorded changes are reversible with freshness checks so an undo never overwrites later edits.
+
+That governance layer is demonstrated through contextual recommendations across the editor and admin — blocks, patterns, content, templates, template parts, navigation, Global Styles, and Style Book — while keeping setup inside standard WordPress admin screens. External integrations get the same recommendation, validation, and freshness contracts through the WordPress Abilities API.
 
 Results are recommendations, generated text, or review-first suggestions. Flavor Agent does not publish content, contact visitors, or automatically rewrite posts on activation. Content recommendations are editorial-only: copy any generated text into the editor yourself. Structural, style, and template changes remain review-first where supported.
 

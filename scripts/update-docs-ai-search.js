@@ -66,7 +66,10 @@ Options:
   --no-delete            Force stale deletion off (overrides --delete-stale).
   --full                 Re-fetch every discovered URL even if unchanged since the
                          last ingest (bypasses the sitemap-lastmod incremental skip).
-  --skip-configure       Do not update the instance metadata schema.
+  --configure            Update the instance metadata/search configuration. This can
+                         trigger an instance-wide Cloudflare resync; leave off for
+                         normal corpus updates.
+  --skip-configure       Compatibility no-op; configuration is skipped by default.
   --poll-seconds=<n>     Poll uploaded items before validation. Default: 180.
   --output=<dir>         Write summary artifacts here.
   --help, -h             Show this message.
@@ -88,7 +91,7 @@ function parseArgs( argv ) {
 		makeCoreMaxAgeDays: MAKE_CORE_DEFAULT_MAX_AGE_DAYS,
 		dryRun: false,
 		deleteStale: false,
-		configureInstance: true,
+		configureInstance: false,
 		pollSeconds: 180,
 		fullRefetch: false,
 		outputDir: DEFAULT_OUTPUT_DIR,
@@ -117,6 +120,10 @@ function parseArgs( argv ) {
 		}
 		if ( arg === '--skip-configure' ) {
 			options.configureInstance = false;
+			continue;
+		}
+		if ( arg === '--configure' ) {
+			options.configureInstance = true;
 			continue;
 		}
 
@@ -488,8 +495,55 @@ async function fetchWithTimeout( url, init = {}, timeoutMs = REQUEST_TIMEOUT_MS 
 	}
 }
 
-async function fetchJson( url, requestOptions = {} ) {
-	const response = await fetchWithTimeout( url, requestOptions );
+async function fetchJson( url, requestOptions = {}, retryOptions = {} ) {
+	const configuredRetries = Number.isInteger( retryOptions.retries )
+		? retryOptions.retries
+		: requestOptions.retries;
+	const maxAttempts = Math.max(
+		1,
+		( Number.isInteger( configuredRetries ) && configuredRetries >= 0
+			? configuredRetries
+			: FETCH_RETRIES ) + 1
+	);
+	const configuredRetryDelayMs = Number.isFinite( retryOptions.retryDelayMs )
+		? retryOptions.retryDelayMs
+		: requestOptions.retryDelayMs;
+	const retryDelayMs = Number.isFinite( configuredRetryDelayMs )
+		? Math.max( 0, configuredRetryDelayMs )
+		: null;
+	const fetchOptions = { ...requestOptions };
+	delete fetchOptions.retries;
+	delete fetchOptions.retryDelayMs;
+
+	let lastError;
+	for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
+		try {
+			return await fetchJsonOnce( url, fetchOptions );
+		} catch ( error ) {
+			lastError = error;
+			if ( ! error || error.retryable !== true || attempt === maxAttempts ) {
+				throw error;
+			}
+			await delay(
+				retryDelayMs !== null
+					? retryDelayMs
+					: error.retryAfterMs || FETCH_RETRY_BASE_MS * 2 ** ( attempt - 1 )
+			);
+		}
+	}
+	throw lastError;
+}
+
+async function fetchJsonOnce( url, requestOptions = {} ) {
+	let response;
+	try {
+		response = await fetchWithTimeout( url, requestOptions );
+	} catch ( error ) {
+		if ( error && typeof error === 'object' ) {
+			error.retryable = true;
+		}
+		throw error;
+	}
 	const text = await response.text();
 	let data;
 	try {
@@ -498,9 +552,28 @@ async function fetchJson( url, requestOptions = {} ) {
 		throw new Error( `Could not parse JSON from ${ url }: ${ error.message }` );
 	}
 	if ( ! response.ok ) {
-		throw new Error( `Cloudflare API returned HTTP ${ response.status } for ${ url }: ${ extractRemoteMessage( data ) }` );
+		const error = new Error( `Cloudflare API returned HTTP ${ response.status } for ${ url }: ${ extractRemoteMessage( data ) }` );
+		error.status = response.status;
+		error.retryable = RETRYABLE_STATUS.has( response.status );
+		error.retryAfterMs = retryAfterMs( response.headers?.get?.( 'retry-after' ) || '' );
+		throw error;
 	}
 	return data;
+}
+
+function retryAfterMs( value ) {
+	const raw = String( value || '' ).trim();
+	if ( ! raw ) {
+		return 0;
+	}
+	if ( /^\d+(?:\.\d+)?$/.test( raw ) ) {
+		return Math.max( 0, Math.ceil( Number( raw ) * 1000 ) );
+	}
+	const timestamp = Date.parse( raw );
+	if ( Number.isNaN( timestamp ) ) {
+		return 0;
+	}
+	return Math.max( 0, timestamp - Date.now() );
 }
 
 function extractRemoteMessage( data ) {
@@ -1115,6 +1188,7 @@ async function configureInstance( options, auth ) {
 			retrieval_options: {
 				keyword_match_mode: 'or',
 			},
+			rewrite_query: false,
 		} ),
 	} );
 
@@ -1141,7 +1215,14 @@ async function listBuiltinItems( options, auth ) {
 		const result = Array.isArray( data.result ) ? data.result : [];
 		items.push( ...result.filter( ( item ) => item && typeof item === 'object' ) );
 
-		const info = data.result_info || {};
+		const info = data.result_info && typeof data.result_info === 'object' ? data.result_info : null;
+		if ( ! info ) {
+			if ( result.length === 0 || result.length < 50 ) {
+				break;
+			}
+			page += 1;
+			continue;
+		}
 		const count = Number( info.count ?? result.length );
 		const perPage = Number( info.per_page ?? 50 );
 		const total = Number( info.total_count ?? items.length );
@@ -1152,6 +1233,33 @@ async function listBuiltinItems( options, auth ) {
 	}
 
 	return items;
+}
+
+async function getInstanceStats( options, auth ) {
+	const data = await fetchJson(
+		cloudflareUrl( auth.accountId, `instances/${ encodeURIComponent( options.instance ) }/stats` ),
+		{
+			headers: {
+				'Authorization': `Bearer ${ auth.apiToken }`,
+				'User-Agent': USER_AGENT,
+			},
+		}
+	);
+
+	const result = data?.result && typeof data.result === 'object' ? data.result : data;
+	return {
+		completed: normalizeCount( result.completed ),
+		queued: normalizeCount( result.queued ),
+		running: normalizeCount( result.running ),
+		outdated: normalizeCount( result.outdated ),
+		error: normalizeCount( result.error ),
+		skipped: normalizeCount( result.skipped ),
+	};
+}
+
+function normalizeCount( value ) {
+	const count = Number( value );
+	return Number.isFinite( count ) && count > 0 ? count : 0;
 }
 
 async function uploadEntry( entry, options, auth ) {
@@ -1333,6 +1441,25 @@ function isManagedDocsKey( key, instance ) {
 		key.startsWith( LEGACY_ITEM_KEY_PREFIX );
 }
 
+function managedCompletedSourceUrlCount( items, instance ) {
+	const urls = new Set();
+	for ( const item of Array.isArray( items ) ? items : [] ) {
+		if ( ! item || typeof item !== 'object' ) {
+			continue;
+		}
+		const key = String( item.key || '' );
+		if ( ! isManagedDocsKey( key, instance ) || String( item.status || '' ) !== 'completed' ) {
+			continue;
+		}
+		const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+		const normalized = normalizeTrustedUrl( metadata.source_url || metadata.sourceUrl || '' );
+		if ( normalized ) {
+			urls.add( normalized );
+		}
+	}
+	return urls.size;
+}
+
 // Stale deletion is the one destructive step, so it runs only for a full, demonstrably
 // healthy run. Targeted runs (explicit --source-url/--source-file), an out-of-ratio build
 // failure, and any upload, poll, or validation problem disable it so a degraded
@@ -1422,9 +1549,15 @@ async function pollUntilSettled( desiredKeys, options, auth ) {
 	}
 
 	const deadline = Date.now() + options.pollSeconds * 1000;
-	let latest = [];
+	let lastStats = null;
 	while ( Date.now() < deadline ) {
-		latest = await listBuiltinItems( options, auth );
+		lastStats = await getInstanceStats( options, auth );
+		if ( statsActiveCount( lastStats ) !== 0 ) {
+			await delay( 5000 );
+			continue;
+		}
+
+		const latest = await listBuiltinItems( options, auth );
 		const settlement = evaluateSettlement( latest, desiredKeys );
 
 		// Keys that never appear (dropped write / eventual-consistency lag) are not
@@ -1434,15 +1567,28 @@ async function pollUntilSettled( desiredKeys, options, auth ) {
 			return { skipped: false, pending: 0, errors: settlement.errors };
 		}
 
-		await delay( 5000 );
+		return {
+			skipped: false,
+			pending: settlement.missing.length + settlement.pending.length,
+			errors: settlement.errors,
+			stats: lastStats,
+		};
 	}
 
+	const latest = await listBuiltinItems( options, auth );
 	const { missing, pending, errors } = evaluateSettlement( latest, desiredKeys );
 	return {
 		skipped: false,
 		pending: missing.length + pending.length,
 		errors,
+		stats: lastStats,
 	};
+}
+
+function statsActiveCount( stats ) {
+	return normalizeCount( stats?.queued ) +
+		normalizeCount( stats?.running ) +
+		normalizeCount( stats?.outdated );
 }
 
 function delay( ms ) {
@@ -1625,11 +1771,22 @@ function manifestEntryFromExisting( item, url ) {
 		key: String( item.key || '' ),
 		url: metadata.source_url || url,
 		title: metadata.title || '',
-		retrievedAt: metadata.retrieved_at || '',
-		publishedAt: metadata.published_at || '',
+		retrievedAt: manifestTimestamp( metadata.retrieved_at || metadata.retrievedAt || '' ),
+		publishedAt: manifestTimestamp( metadata.published_at || metadata.publishedAt || '' ),
 		contentHash: metadata.content_hash || '',
 		bodyBytes: 0,
 	};
+}
+
+function manifestTimestamp( value ) {
+	if ( value === '' || value === null || typeof value === 'undefined' ) {
+		return '';
+	}
+	const timestamp = parseTimestampMs( value );
+	if ( ! Number.isNaN( timestamp ) ) {
+		return new Date( timestamp ).toISOString();
+	}
+	return typeof value === 'string' ? value : '';
 }
 
 async function writeSummary( options, summary, manifest ) {
@@ -1703,7 +1860,9 @@ async function main() {
 	const pollPending = poll.pending || 0;
 	const pollErrorCount = Array.isArray( poll.errors ) ? poll.errors.length : 0;
 
-	const previousManifestCount = await readPreviousManifestCount( options );
+	const cachedManifestCount = await readPreviousManifestCount( options );
+	const remoteBaselineCount = managedCompletedSourceUrlCount( existingItems, options.instance );
+	const previousManifestCount = Math.max( cachedManifestCount, remoteBaselineCount );
 	const deletion = resolveStaleDeletion( {
 		dryRun: options.dryRun,
 		deleteStale: options.deleteStale,
@@ -1753,6 +1912,11 @@ async function main() {
 		publicUrl: options.publicUrl,
 		sourceUrls: urls.length,
 		preparedDocuments: processed.prepared,
+		regressionBaseline: {
+			cachedManifestCount,
+			remoteCompletedSourceUrls: remoteBaselineCount,
+			appliedCount: previousManifestCount,
+		},
 		configureResult,
 		staleDeletion: { performed: deletion.delete, reason: deletion.reason },
 		counts: {
@@ -1788,20 +1952,26 @@ if ( require.main === module ) {
 
 module.exports = {
 	contentHashForEntry,
+	configureInstance,
 	discoverSourceUrls,
 	existingItemsByUrl,
+	fetchJson,
 	isFreshByLastmod,
 	evaluateSettlement,
 	isSettlementComplete,
+	listBuiltinItems,
 	resolveStaleDeletion,
 	resolveSummaryStatus,
 	extractTitle,
 	fetchText,
 	htmlToMarkdown,
 	makeCorePostDate,
+	managedCompletedSourceUrlCount,
 	manifestEntry,
+	manifestEntryFromExisting,
 	cleanText,
 	flattenString,
+	pollUntilSettled,
 	buildMarkdownDocument,
 	buildItemKey,
 	boundedSlug,

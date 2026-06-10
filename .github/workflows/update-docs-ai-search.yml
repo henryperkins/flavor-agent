@@ -28,6 +28,11 @@ on:
         type: boolean
         required: false
         default: false
+      configure_instance:
+        description: 'Update AI Search instance config before ingesting (triggers Cloudflare resync)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -45,8 +50,9 @@ jobs:
       INPUT_RELEASE: ${{ github.event.inputs.release || '7-0' }}
       INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
       INPUT_LIMIT: ${{ github.event.inputs.limit || '' }}
-      INPUT_DELETE_STALE: ${{ github.event.inputs.delete_stale || 'false' }}
+      INPUT_DELETE_STALE: ${{ github.event_name == 'schedule' && 'true' || github.event.inputs.delete_stale || 'false' }}
       INPUT_FULL: ${{ github.event.inputs.full || 'false' }}
+      INPUT_CONFIGURE_INSTANCE: ${{ github.event.inputs.configure_instance || 'false' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -87,6 +93,9 @@ jobs:
           fi
           if [[ "${INPUT_FULL}" == "true" ]]; then
             args+=( "--full" )
+          fi
+          if [[ "${INPUT_CONFIGURE_INSTANCE}" == "true" ]]; then
+            args+=( "--configure" )
           fi
           node scripts/update-docs-ai-search.js "${args[@]}"
 

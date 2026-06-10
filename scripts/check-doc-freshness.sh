@@ -24,6 +24,7 @@ live_docs=(
 	"${repo_root}/docs/features/settings-backends-and-sync.md"
 	"${repo_root}/docs/reference/abilities-and-routes.md"
 	"${repo_root}/docs/reference/cross-surface-validation-gates.md"
+	"${repo_root}/docs/reference/governance-layer.md"
 )
 
 missing_live_docs=()
@@ -250,6 +251,16 @@ check_present_fixed \
 	"${repo_root}/AGENTS.md" \
 	"${repo_root}/CLAUDE.md" \
 	"${repo_root}/.github/copilot-instructions.md"
+
+check_present_in_each_fixed \
+	'governance-layer contract doc is no longer referenced from the positioning docs' \
+	'governance-layer.md' \
+	"${repo_root}/docs/README.md" \
+	"${repo_root}/CLAUDE.md" \
+	"${repo_root}/.github/copilot-instructions.md" \
+	"${repo_root}/docs/SOURCE_OF_TRUTH.md" \
+	"${repo_root}/docs/FEATURE_SURFACE_MATRIX.md" \
+	"${repo_root}/README.md"
 
 # Parity guards: shared facts that must stay byte-identical across contributor
 # runbooks (CLAUDE.md for Claude Code, copilot-instructions.md for Copilot).

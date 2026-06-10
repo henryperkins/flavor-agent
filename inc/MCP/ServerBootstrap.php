@@ -35,7 +35,7 @@ final class ServerBootstrap {
 			'mcp',
 			'flavor-agent',
 			__( 'Flavor Agent', 'flavor-agent' ),
-			__( 'AI-assisted WordPress recommendations across blocks, content, navigation, patterns, styles, templates, and template parts.', 'flavor-agent' ),
+			__( 'Governed AI recommendations for WordPress: schema-validated operations with freshness signatures; structural changes are review-gated, and applies are recorded server-side and reversible in the editor. Tools cover blocks, content, navigation, patterns, styles, templates, and template parts.', 'flavor-agent' ),
 			self::plugin_version(),
 			[ HttpTransport::class ],
 			ErrorLogMcpErrorHandler::class,

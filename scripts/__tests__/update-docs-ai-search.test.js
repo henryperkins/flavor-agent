@@ -1,20 +1,28 @@
 'use strict';
 
 const crypto = require( 'node:crypto' );
+const fs = require( 'node:fs' );
+const path = require( 'node:path' );
 
 const {
+	configureInstance,
 	contentHashForEntry,
 	discoverSourceUrls,
 	evaluateSettlement,
 	existingItemsByUrl,
+	fetchJson,
 	buildMarkdownDocument,
 	isFreshByLastmod,
 	fetchText,
 	htmlToMarkdown,
 	isSettlementComplete,
+	listBuiltinItems,
 	makeCorePostDate,
+	managedCompletedSourceUrlCount,
+	manifestEntryFromExisting,
 	normalizeTrustedUrl,
 	parseArgs,
+	pollUntilSettled,
 	readSitemap,
 	resolveStaleDeletion,
 	resolveSummaryStatus,
@@ -32,6 +40,18 @@ function mockTextResponse( text, url, contentType = 'application/xml' ) {
 		text: () => Promise.resolve( text ),
 		headers: {
 			get: ( key ) => ( key.toLowerCase() === 'content-type' ? contentType : '' ),
+		},
+	} );
+}
+
+function mockJsonResponse( data, url, status = 200, headers = {} ) {
+	return Promise.resolve( {
+		ok: status >= 200 && status < 300,
+		status,
+		url,
+		text: () => Promise.resolve( JSON.stringify( data ) ),
+		headers: {
+			get: ( key ) => headers[ key.toLowerCase() ] || '',
 		},
 	} );
 }
@@ -623,6 +643,138 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( parseArgs( [ '--delete-stale', '--no-delete' ] ).deleteStale ).toBe( false );
 	} );
 
+	test( 'parseArgs skips Cloudflare instance configuration unless explicitly requested', () => {
+		expect( parseArgs( [] ).configureInstance ).toBe( false );
+		expect( parseArgs( [ '--configure' ] ).configureInstance ).toBe( true );
+		expect( parseArgs( [ '--configure', '--skip-configure' ] ).configureInstance ).toBe( false );
+	} );
+
+	test( 'workflow enables stale deletion for scheduled runs while manual dispatch stays opt-in', () => {
+		const workflow = fs.readFileSync(
+			path.resolve( __dirname, '../../.github/workflows/update-docs-ai-search.yml' ),
+			'utf8'
+		);
+
+		expect( workflow ).toContain(
+			"INPUT_DELETE_STALE: ${{ github.event_name == 'schedule' && 'true' || github.event.inputs.delete_stale || 'false' }}"
+		);
+		expect( workflow ).toMatch( /delete_stale:[\s\S]*?default: false/ );
+	} );
+
+	test( 'workflow requires explicit opt-in before updating Cloudflare instance config', () => {
+		const workflow = fs.readFileSync(
+			path.resolve( __dirname, '../../.github/workflows/update-docs-ai-search.yml' ),
+			'utf8'
+		);
+
+		expect( workflow ).toMatch( /configure_instance:[\s\S]*?default: false/ );
+		expect( workflow ).toContain(
+			"INPUT_CONFIGURE_INSTANCE: ${{ github.event.inputs.configure_instance || 'false' }}"
+		);
+		expect( workflow ).toContain( 'args+=( "--configure" )' );
+		expect( workflow ).not.toContain( 'args+=( "--skip-configure" )' );
+	} );
+
+	test( 'configureInstance disables Cloudflare query rewriting for exact developer symbols', async () => {
+		global.fetch = jest.fn( ( url, init ) =>
+			mockJsonResponse( { result: { id: 'wp-dev' } }, String( url ) ).then( ( response ) => {
+				response.requestBody = init.body;
+				return response;
+			} )
+		);
+
+		await configureInstance(
+			{ dryRun: false, configureInstance: true, instance: 'wp-dev' },
+			{ accountId: 'account', apiToken: 'token' }
+		);
+
+		const body = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
+		expect( body.rewrite_query ).toBe( false );
+	} );
+
+	test( 'fetchJson retries transient Cloudflare API failures', async () => {
+		global.fetch = jest
+			.fn()
+			.mockImplementationOnce( ( url ) =>
+				mockJsonResponse(
+					{ errors: [ { message: 'rate limited' } ] },
+					String( url ),
+					429,
+					{ 'retry-after': '0' }
+				)
+			)
+			.mockImplementationOnce( ( url ) =>
+				mockJsonResponse( { result: { ok: true } }, String( url ) )
+			);
+
+		await expect(
+			fetchJson( 'https://api.cloudflare.com/client/v4/accounts/a/ai-search/instances/wp-dev', {}, {
+				retries: 1,
+				retryDelayMs: 0,
+			} )
+		).resolves.toEqual( { result: { ok: true } } );
+		expect( global.fetch ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	test( 'listBuiltinItems continues page scans when result_info is absent on a full page', async () => {
+		const firstPage = Array.from( { length: 50 }, ( _, index ) => ( {
+			id: `item-${ index }`,
+			key: `key-${ index }`,
+		} ) );
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			const page = new URL( href ).searchParams.get( 'page' );
+			if ( page === '1' ) {
+				return mockJsonResponse( { result: firstPage }, href );
+			}
+			if ( page === '2' ) {
+				return mockJsonResponse( { result: [ { id: 'item-50', key: 'key-50' } ] }, href );
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const items = await listBuiltinItems(
+			{ instance: 'wp-dev' },
+			{ accountId: 'account', apiToken: 'token' }
+		);
+
+		expect( items ).toHaveLength( 51 );
+	} );
+
+	test( 'pollUntilSettled polls instance stats before doing one final key-level sweep', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href.endsWith( '/stats' ) ) {
+				return mockJsonResponse(
+					{ result: { queued: 0, running: 0, outdated: 0, error: 0 } },
+					href
+				);
+			}
+			if ( href.includes( '/items?' ) ) {
+				return mockJsonResponse(
+					{
+						result: [ { id: 'item-1', key: 'desired-key', status: 'completed' } ],
+						result_info: { count: 1, per_page: 50, total_count: 1 },
+					},
+					href
+				);
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const result = await pollUntilSettled(
+			new Set( [ 'desired-key' ] ),
+			{ dryRun: false, pollSeconds: 30, instance: 'wp-dev' },
+			{ accountId: 'account', apiToken: 'token' }
+		);
+
+		expect( result ).toEqual( { skipped: false, pending: 0, errors: [] } );
+		expect( global.fetch.mock.calls[ 0 ][ 0 ] ).toContain( '/stats' );
+		expect(
+			global.fetch.mock.calls.filter( ( [ url ] ) => String( url ).includes( '/items?' ) )
+		).toHaveLength( 1 );
+	} );
+
 	test( 'urlMatchesRoots matches roots regardless of trailing slash', () => {
 		const roots = [ 'https://developer.wordpress.org/reference/' ];
 		expect( urlMatchesRoots( 'https://developer.wordpress.org/reference', roots ) ).toBe( true );
@@ -757,6 +909,54 @@ describe( 'update-docs-ai-search helpers', () => {
 
 		expect( map.size ).toBe( 1 );
 		expect( map.get( base ).key ).toBe( 'new-generation' );
+	} );
+
+	test( 'managedCompletedSourceUrlCount uses distinct completed managed source URLs as a regression baseline', () => {
+		const base = 'https://developer.wordpress.org/reference/functions/current_user_can/';
+		const second = 'https://developer.wordpress.org/reference/functions/wp_register_ability/';
+		const items = [
+			{
+				key: 'ai-search/wp-dev/developer.wordpress.org/current-user-can/old/part-0001.md',
+				status: 'completed',
+				metadata: { source_url: base },
+			},
+			{
+				key: 'ai-search/wp-dev/developer.wordpress.org/current-user-can/new/part-0001.md',
+				status: 'completed',
+				metadata: { source_url: `${ base }?utm=1#frag` },
+			},
+			{
+				key: 'ai-search/wp-dev/developer.wordpress.org/wp-register-ability/new/part-0001.md',
+				status: 'queued',
+				metadata: { source_url: second },
+			},
+			{
+				key: 'unmanaged/key.md',
+				status: 'completed',
+				metadata: { source_url: second },
+			},
+		];
+
+		expect( managedCompletedSourceUrlCount( items, 'wp-dev' ) ).toBe( 1 );
+	} );
+
+	test( 'manifestEntryFromExisting normalizes Cloudflare epoch-ms timestamps to ISO strings', () => {
+		const entry = manifestEntryFromExisting(
+			{
+				key: 'new-generation',
+				metadata: {
+					source_url: 'https://developer.wordpress.org/reference/functions/current_user_can/',
+					title: 'current_user_can()',
+					retrieved_at: Date.parse( '2026-06-09T22:10:00Z' ),
+					published_at: Date.parse( '2026-05-20T00:00:00Z' ),
+					content_hash: 'abc123',
+				},
+			},
+			'https://developer.wordpress.org/reference/functions/current_user_can/'
+		);
+
+		expect( entry.retrievedAt ).toBe( '2026-06-09T22:10:00.000Z' );
+		expect( entry.publishedAt ).toBe( '2026-05-20T00:00:00.000Z' );
 	} );
 
 	test( 'contentHashForEntry folds the document layout version into the hash', () => {

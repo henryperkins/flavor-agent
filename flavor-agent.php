@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: Flavor Agent
- * Description: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including blocks, patterns, templates, template parts, navigation, Global Styles, Style Book, and AI Activity.
+ * Description: AI recommendations for Gutenberg and wp-admin behind one governance layer: schema-validated operations, review-gated structural changes, server-side attribution, and reversible applies.
  * Version: 0.1.0
  * Author: Lakefront Digital
  * Text Domain: flavor-agent

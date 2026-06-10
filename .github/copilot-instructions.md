@@ -1,6 +1,6 @@
 # Flavor Agent Copilot Instructions
 
-WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, post/page content drafting and critique, indexed pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
+WordPress plugin: a governance layer for AI changes to a live site — schema-bounded operations, review-gated structural changes, server-side attribution and audit, reversible applies with freshness/drift checks (see `docs/reference/governance-layer.md`) — demonstrated through AI-assisted recommendations across native Gutenberg and wp-admin surfaces: block Inspector guidance, post/page content drafting and critique, indexed pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.2+
 
@@ -118,6 +118,7 @@ Inspector sub-panel suggestion chips rely on the existing ToolsPanel grid layout
 
 - `docs/SOURCE_OF_TRUTH.md` — definitive project reference
 - `docs/FEATURE_SURFACE_MATRIX.md` — fastest map of every shipped surface, gate, and apply/undo path
+- `docs/reference/governance-layer.md` — canonical governance-layer contract map: pillars, enforcing code, surface loop coverage, and external-agent parity boundaries
 - `docs/reference/cross-surface-validation-gates.md` — additive release gates and required evidence for multi-surface or shared-subsystem changes
 - `docs/reference/abilities-and-routes.md` — canonical REST and Abilities contract map
 - `STATUS.md` — working feature inventory and verification log

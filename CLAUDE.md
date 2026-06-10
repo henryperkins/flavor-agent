@@ -1,6 +1,6 @@
 # CLAUDE.md — Flavor Agent
 
-WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, post/page content drafting and critique, indexed pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
+WordPress plugin: a governance layer for AI changes to a live site — schema-bounded operations, review-gated structural changes, server-side attribution and audit, reversible applies with freshness/drift checks (see `docs/reference/governance-layer.md`) — demonstrated through AI-assisted recommendations across native Gutenberg and wp-admin surfaces: block Inspector guidance, post/page content drafting and critique, indexed pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.2+
 
@@ -53,7 +53,7 @@ The representative runtime is WordPress nightly/trunk with these companion plugi
 
 Artifacts under `output/verify/` (gitignored): `summary.json` (structured run report with `schemaVersion`, `status` of `pass`/`fail`/`incomplete`, `counts`, per-step `{status, exitCode, durationMs, startedAt, finishedAt, stdoutPath, stderrPath}`, environment) and `<step>.stdout.log` / `<step>.stderr.log`. Final stdout is `VERIFY_RESULT={...}` (one-line JSON with `status`, `summaryPath`, `counts`).
 
-Exit codes: `0` pass, `1` any failure or required-tool-missing skip (status flips to `incomplete`), `2` argument error. `--only` / `--skip` / `--skip-e2e` skips never fail the run. `lint-plugin` requires `bash`, `wp`, and a resolvable `WP_PLUGIN_CHECK_PATH` — use `--skip=lint-plugin` when those are absent.
+Exit codes: `0` pass, `1` any failure or required-tool-missing skip (status flips to `incomplete`), `2` argument error. `--only` / `--skip` / `--skip-e2e` skips never fail the run. `lint-plugin` requires `bash` plus either host WP-CLI (`wp` + a resolvable `WP_PLUGIN_CHECK_PATH`) or the Docker path (`PLUGIN_CHECK_USE_DOCKER=1` with the compose `wordpress` container running; no host `wp` needed) — use `--skip=lint-plugin` when neither is available.
 
 ### Cross-surface validation gates
 
@@ -235,6 +235,7 @@ Each recommendation surface disables independently when its required backend is 
 - `docs/README.md` — documentation backbone: reading order, ownership, and update contract
 - `docs/SOURCE_OF_TRUTH.md` — definitive project reference: scope, architecture, inventory, roadmap, definition of done
 - `docs/FEATURE_SURFACE_MATRIX.md` — fastest map of every shipped surface, gate, and apply/undo path
+- `docs/reference/governance-layer.md` — canonical governance-layer contract map: pillars, enforcing code, surface loop coverage, and external-agent parity boundaries
 - `docs/reference/cross-surface-validation-gates.md` — additive release gates and required evidence for multi-surface or shared-subsystem changes
 - `docs/reference/wordpress-ai-roadmap-tracking.md` — active conflicts between WordPress org project 240 (the AI Planning & Roadmap board) and Flavor Agent surfaces, with a refresh procedure
 - `docs/features/README.md` — entry point for detailed per-surface docs
