@@ -1737,16 +1737,14 @@ final class Registration {
 	}
 
 	public static function recommendation_meta(): array {
-		return self::public_recommendation_meta();
-	}
-
-	private static function public_recommendation_meta(): array {
 		return [
 			'show_in_rest' => true,
-			'mcp'          => [
-				'public' => true,
-				'type'   => 'tool',
-			],
+			// No mcp key: write-side recommend-* are curated onto the dedicated
+			// flavor-agent MCP server (ServerBootstrap's explicit tool list) and
+			// the Abilities API, deliberately NOT the universal default server —
+			// whose recommend surface is the read-only preview siblings. Mirrors
+			// external_apply_meta(); request_diagnostic rows can carry prompts, so
+			// generic discover/execute exposure stays curated.
 			'annotations'  => [
 				'destructive' => false,
 				'idempotent'  => false,

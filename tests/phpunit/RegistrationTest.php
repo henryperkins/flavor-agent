@@ -147,7 +147,7 @@ final class RegistrationTest extends TestCase {
 		);
 	}
 
-	public function test_register_abilities_marks_ai_recommendations_public_for_mcp(): void {
+	public function test_register_abilities_curates_ai_recommendations_off_universal_mcp(): void {
 		Registration::register_category();
 		Registration::register_abilities();
 		Registration::register_recommendation_abilities();
@@ -165,8 +165,15 @@ final class RegistrationTest extends TestCase {
 
 			$this->assertIsArray( $ability, "Expected registered ability {$ability_id}." );
 			$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ), "{$ability_id} should remain REST-visible." );
-			$this->assertTrue( (bool) ( $ability['meta']['mcp']['public'] ?? false ), "{$ability_id} should opt into the default MCP server." );
-			$this->assertSame( 'tool', $ability['meta']['mcp']['type'] ?? null, "{$ability_id} should declare MCP tool semantics." );
+			// Write-side recommend-* are curated onto the dedicated flavor-agent
+			// MCP server + the Abilities API, never the universal default server
+			// (whose recommend surface is the read-only preview siblings). Mirrors
+			// the external-apply abilities: no mcp key at all.
+			$this->assertArrayNotHasKey(
+				'mcp',
+				$ability['meta'],
+				"{$ability_id} must stay off the universal MCP server."
+			);
 		}
 
 		$this->assertFalse(
@@ -700,7 +707,7 @@ final class RegistrationTest extends TestCase {
 
 		$this->assertIsArray( $ability );
 		$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
-		$this->assertTrue( (bool) ( $ability['meta']['mcp']['public'] ?? false ) );
+		$this->assertArrayNotHasKey( 'mcp', $ability['meta'] );
 		$this->assertSame(
 			'Recommend editorial content',
 			$ability['label'] ?? null
