@@ -36,7 +36,7 @@ final class UndoActivityAbility extends Abstract_Ability {
 			return Permissions::can_access_entry( $entry );
 		}
 
-		return \current_user_can( 'edit_posts' ) || \current_user_can( 'edit_theme_options' );
+		return false;
 	}
 
 	public function meta(): array {

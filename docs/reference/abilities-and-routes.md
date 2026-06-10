@@ -12,7 +12,7 @@ Use it when you need to answer:
 
 - The shipped Gutenberg editor UI uses the `flavor-agent` data store and executes recommendation abilities through the WordPress Abilities API
 - The Abilities API is the sole active contract for the seven `recommend-*` surfaces when the WordPress AI plugin contracts are available and the Flavor Agent AI feature is enabled
-- Activity persistence and manual pattern sync are REST-only today; they do not have matching registered abilities
+- Activity creation, admin decisions, and manual pattern sync remain REST routes. Activity read/list/undo for external style applies are exposed as abilities via `get-activity`, `list-activity`, and `undo-activity`
 - Pattern, template, and template-part first-party surfaces also read the shared post-type entity contract from `src/utils/editor-entity-contracts.js`, which normalizes built-in field metadata and safe fallbacks when no live WordPress view config is exposed, so panel visibility, title-field expectations, template-part area labels, and the patched pattern category stay aligned with the current entity contract
 
 ## Registered Abilities
@@ -93,7 +93,7 @@ Use it when you need to answer:
 
 ## Activity Route Notes
 
-- Activity persistence is REST-only today. There is no matching registered ability for create/read/undo.
+- Activity creation and admin decisions remain REST routes. Activity read/list/undo for governed external style applies are exposed as abilities via `get-activity`, `list-activity`, and `undo-activity`.
 - `POST /flavor-agent/v1/activity` persists the request provenance that the UI shows later: backend/provider label, model, provider path, configuration owner, credential source, selected provider, fallback usage, route, ability, prompt, reference, token usage, and latency when the originating client includes them.
 - The repository projects the admin-audit fields it needs for filtering into schema-versioned table columns (`admin_post_type`, `admin_operation_type`, `admin_provider`, `admin_provider_path`, `admin_configuration_owner`, `admin_credential_source`, `admin_selected_provider`, `admin_request_ability`, `admin_request_route`, `admin_request_reference`, `admin_request_prompt`, and related identifiers) so `Settings > AI Activity` does not need to decode every historical `request_json` payload to filter by provenance.
 - `GET /flavor-agent/v1/activity` exposes the wp-admin audit feed when `global=true` or when `scopeKey` is omitted/empty; global reads still require `manage_options`. It rejects malformed active admin date filters with `400` instead of broadening the query; the wp-admin UI also blocks incomplete or inverted persisted date filters until the filter is completed or reset. Its `filterOptions.operationType` values include effective action groups such as `insert` and `replace` plus read-only diagnostics such as `request-diagnostic`. It is still intentionally a first audit slice rather than a full observability console: the response includes timeline entries, summary counts, pagination, filter options, and before/after state payloads that the admin UI renders as structured diff summaries, but not a rich visual diff viewer or broader operator workflows.

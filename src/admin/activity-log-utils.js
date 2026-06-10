@@ -1258,23 +1258,36 @@ export function getActivityStatusLabel( entry, allEntries = [] ) {
 			: getActivityStatus( entry, allEntries );
 	const adminStatusLabel =
 		typeof entry === 'object' ? getAdminString( entry, 'statusLabel' ) : '';
-
-	if ( adminStatusLabel ) {
-		return adminStatusLabel;
-	}
-
 	const isFailedRequestDiagnostic =
 		typeof entry === 'object' &&
 		entry?.type === 'request_diagnostic' &&
 		status === 'failed';
+	const isFailedExternalApply =
+		typeof entry === 'object' &&
+		status === 'failed' &&
+		Boolean( entry?.apply );
+
+	if (
+		adminStatusLabel &&
+		! isFailedRequestDiagnostic &&
+		! isFailedExternalApply
+	) {
+		return adminStatusLabel;
+	}
 
 	switch ( status ) {
 		case 'review':
 			return __( 'Review', 'flavor-agent' );
 		case 'failed':
-			return isFailedRequestDiagnostic
-				? __( 'Request failed', 'flavor-agent' )
-				: __( 'Undo unavailable', 'flavor-agent' );
+			if ( isFailedRequestDiagnostic ) {
+				return __( 'Request failed', 'flavor-agent' );
+			}
+
+			if ( isFailedExternalApply ) {
+				return __( 'Apply failed', 'flavor-agent' );
+			}
+
+			return __( 'Undo unavailable', 'flavor-agent' );
 		case 'undone':
 			return __( 'Undone', 'flavor-agent' );
 		case 'blocked':

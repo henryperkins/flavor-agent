@@ -24,7 +24,7 @@ final class StyleApplyExecutor {
 	public const SURFACE_STYLE_BOOK    = 'style-book';
 
 	/**
-	 * @return array{postId: int, config: array{settings: array<string, mixed>, styles: array<string, mixed>}, raw: array<string, mixed>}|\WP_Error
+	 * @return array{postId: int, config: array{settings: array<string, mixed>, styles: array<string, mixed>}, raw: array<string, mixed>, fingerprint: string}|\WP_Error
 	 */
 	public static function resolve_user_global_styles( string $global_styles_id ): array|\WP_Error {
 		$post_id = (int) $global_styles_id;
@@ -38,16 +38,35 @@ final class StyleApplyExecutor {
 			);
 		}
 
-		$decoded = json_decode( (string) ( $post->post_content ?? '' ), true );
-		$raw     = is_array( $decoded ) ? $decoded : [];
+		$content = (string) ( $post->post_content ?? '' );
+
+		if ( '' === trim( $content ) ) {
+			$raw = [];
+		} else {
+			$decoded = json_decode( $content, true );
+
+			if ( ! is_array( $decoded ) || JSON_ERROR_NONE !== json_last_error() ) {
+				return new \WP_Error(
+					'flavor_agent_apply_target_invalid',
+					'The requested Global Styles entity is unreadable and cannot be mutated safely.',
+					[
+						'status'    => 409,
+						'jsonError' => JSON_ERROR_NONE !== json_last_error() ? json_last_error_msg() : '',
+					]
+				);
+			}
+
+			$raw = $decoded;
+		}
 
 		return [
-			'postId' => $post_id,
-			'config' => [
+			'postId'      => $post_id,
+			'config'      => [
 				'settings' => is_array( $raw['settings'] ?? null ) ? $raw['settings'] : [],
 				'styles'   => is_array( $raw['styles'] ?? null ) ? $raw['styles'] : [],
 			],
-			'raw'    => $raw,
+			'raw'         => $raw,
+			'fingerprint' => hash( 'sha256', $content ),
 		];
 	}
 
@@ -187,7 +206,7 @@ final class StyleApplyExecutor {
 				: $path;
 			$applied[]   = array_merge(
 				$operation,
-				[ 'beforeValue' => self::read_path( $before_config['styles'], $config_path ) ]
+				[ 'beforeValue' => self::read_path( $after_config['styles'], $config_path ) ]
 			);
 
 			$after_config['styles'] = self::write_path( $after_config['styles'], $config_path, $operation['value'] ?? null );
@@ -211,6 +230,15 @@ final class StyleApplyExecutor {
 				(string) ( $contrast['reason'] ?? 'The proposed style changes fail the WCAG AA contrast requirement.' ),
 				[ 'status' => 409 ]
 			);
+		}
+
+		$unchanged = self::assert_global_styles_entity_unchanged(
+			$global_styles_id,
+			(string) $resolved['fingerprint']
+		);
+
+		if ( is_wp_error( $unchanged ) ) {
+			return $unchanged;
 		}
 
 		$write = self::write_user_global_styles( $resolved['postId'], $resolved['raw'], $after_config );
@@ -306,6 +334,15 @@ final class StyleApplyExecutor {
 			);
 		}
 
+		$unchanged = self::assert_global_styles_entity_unchanged(
+			$global_styles_id,
+			(string) $resolved['fingerprint']
+		);
+
+		if ( is_wp_error( $unchanged ) ) {
+			return $unchanged;
+		}
+
 		$write = self::write_user_global_styles(
 			$resolved['postId'],
 			$resolved['raw'],
@@ -365,7 +402,16 @@ final class StyleApplyExecutor {
 		$next_styles     = null === $previous_branch
 			? self::remove_path( $live_styles, $branch_path )
 			: self::write_path( $live_styles, $branch_path, $previous_branch );
-		$write           = self::write_user_global_styles(
+		$unchanged       = self::assert_global_styles_entity_unchanged(
+			(string) ( $target['globalStylesId'] ?? '' ),
+			(string) $resolved['fingerprint']
+		);
+
+		if ( is_wp_error( $unchanged ) ) {
+			return $unchanged;
+		}
+
+		$write = self::write_user_global_styles(
 			$resolved['postId'],
 			$resolved['raw'],
 			[
@@ -416,16 +462,24 @@ final class StyleApplyExecutor {
 		);
 
 		if ( ! isset( $content['version'] ) ) {
-			$content['version'] = class_exists( '\WP_Theme_JSON' ) && defined( '\WP_Theme_JSON::LATEST_SCHEMA' )
-				? \WP_Theme_JSON::LATEST_SCHEMA
-				: 3;
+			$content['version'] = self::latest_theme_json_schema_version();
+		}
+
+		$encoded = wp_json_encode( $content );
+
+		if ( false === $encoded || ! is_string( $encoded ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_write_failed',
+				'Flavor Agent could not encode the Global Styles payload.',
+				[ 'status' => 500 ]
+			);
 		}
 
 		$updated = function_exists( 'wp_update_post' )
 			? wp_update_post(
 				[
 					'ID'           => $post_id,
-					'post_content' => (string) wp_json_encode( $content ),
+					'post_content' => $encoded,
 				]
 			)
 			: 0;
@@ -582,7 +636,7 @@ final class StyleApplyExecutor {
 			return [];
 		}
 
-		if ( array_is_list( $value ) ) {
+		if ( self::is_list( $value ) ) {
 			return array_map( [ self::class, 'sort_keys_deep' ], $value );
 		}
 
@@ -604,11 +658,73 @@ final class StyleApplyExecutor {
 	 */
 	private static function merge_deep( array $base, array $override ): array {
 		foreach ( $override as $key => $value ) {
-			$base[ $key ] = is_array( $value ) && is_array( $base[ $key ] ?? null ) && ! array_is_list( $value )
+			$base[ $key ] = is_array( $value ) && is_array( $base[ $key ] ?? null ) && ! self::is_list( $value )
 				? self::merge_deep( $base[ $key ], $value )
 				: $value;
 		}
 
 		return $base;
+	}
+
+	/**
+	 * @return true|\WP_Error
+	 */
+	private static function assert_global_styles_entity_unchanged( string $global_styles_id, string $expected_fingerprint ): true|\WP_Error {
+		$current = self::resolve_user_global_styles( $global_styles_id );
+
+		if ( is_wp_error( $current ) ) {
+			return $current;
+		}
+
+		if ( ! hash_equals( (string) $current['fingerprint'], $expected_fingerprint ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_target_changed',
+				'Global Styles changed before Flavor Agent could persist this operation. Regenerate the request and try again.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return true;
+	}
+
+	private static function latest_theme_json_schema_version(): int {
+		if ( ! class_exists( '\WP_Theme_JSON' ) ) {
+			return 3;
+		}
+
+		try {
+			$reflector = new \ReflectionClass( '\WP_Theme_JSON' );
+		} catch ( \ReflectionException ) {
+			return 3;
+		}
+
+		if ( ! $reflector->hasConstant( 'LATEST_SCHEMA' ) ) {
+			return 3;
+		}
+
+		$version = $reflector->getConstant( 'LATEST_SCHEMA' );
+
+		return is_numeric( $version ) ? (int) $version : 3;
+	}
+
+	/**
+	 * @param array<mixed> $value
+	 */
+	private static function is_list( array $value ): bool {
+		if ( function_exists( 'array_is_list' ) ) {
+			return array_is_list( $value );
+		}
+
+		$index = 0;
+
+		foreach ( array_keys( $value ) as $key ) {
+			if ( $key !== $index ) {
+				return false;
+			}
+
+			++$index;
+		}
+
+		return true;
 	}
 }

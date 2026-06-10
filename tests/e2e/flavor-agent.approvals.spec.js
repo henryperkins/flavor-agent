@@ -126,15 +126,12 @@ test.describe( 'external apply approvals', () => {
 			.click();
 		await page.getByRole( 'button', { name: 'Approve and apply' } ).click();
 
-		// The failed-apply row renders with the shared "Undo unavailable"
-		// status label (server `format_status_label('failed')` and client
-		// `getActivityStatusLabel('failed')` agree on this string). The summary
-		// card label "Failed or unavailable" is always present, so this asserts
-		// the row/sidebar status specifically.
+		// The summary card label "Failed or unavailable" is always present, so
+		// this asserts the row/sidebar failed external-apply status specifically.
 		await expect(
 			page
 				.locator( '.flavor-agent-activity-log__sidebar' )
-				.getByText( 'Undo unavailable' )
+				.getByText( 'Apply failed' )
 				.first()
 		).toBeVisible( { timeout: 30_000 } );
 	} );

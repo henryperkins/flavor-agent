@@ -82,13 +82,14 @@ final class PendingApplyDecision {
 		// baseline recorded at request time. Drift fails closed.
 		$resolved     = StyleApplyExecutor::resolve_user_global_styles( $global_styles_id );
 		$stale_reason = '';
+		$failure_code = 'flavor_agent_apply_stale';
 
 		if ( is_wp_error( $resolved ) ) {
 			$stale_reason = $resolved->get_error_message();
-		} elseif (
-			'' === $baseline
-			|| ! hash_equals( StyleApplyExecutor::comparable_config_hash( $resolved['config'] ), $baseline )
-		) {
+			$failure_code = 'flavor_agent_apply_resolve_failed';
+		} elseif ( '' === $baseline ) {
+			$stale_reason = 'The baseline configuration hash is missing from this external apply request.';
+		} elseif ( ! hash_equals( StyleApplyExecutor::comparable_config_hash( $resolved['config'] ), $baseline ) ) {
 			$stale_reason = 'The Global Styles entity changed after this apply was requested.';
 		}
 
@@ -100,7 +101,7 @@ final class PendingApplyDecision {
 					'decidedBy'      => $decided_by,
 					'decidedAt'      => $decided_at,
 					'decisionNote'   => $note,
-					'failureCode'    => 'flavor_agent_apply_stale',
+					'failureCode'    => $failure_code,
 					'failureMessage' => $stale_reason,
 				]
 			);

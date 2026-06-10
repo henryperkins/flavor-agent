@@ -547,6 +547,53 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertSame( 'not_applicable', $entry['undo']['status'] );
 	}
 
+	public function test_decision_approve_fails_closed_when_the_baseline_hash_is_missing(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+
+		$table = Repository::table_name();
+
+		foreach ( WordPressTestState::$db_tables[ $table ] as $index => $row ) {
+			if ( (string) ( $row['activity_id'] ?? '' ) !== (string) $pending['activityId'] ) {
+				continue;
+			}
+
+			$request = json_decode( (string) ( $row['request_json'] ?? '{}' ), true );
+			unset( $request['apply']['signatures']['baselineConfigHash'] );
+			WordPressTestState::$db_tables[ $table ][ $index ]['request_json'] = (string) wp_json_encode( $request );
+			break;
+		}
+
+		$entry = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['activityId'],
+			'approve'
+		);
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( 'failed', $entry['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_stale', $entry['apply']['failureCode'] );
+		$this->assertSame(
+			'The baseline configuration hash is missing from this external apply request.',
+			$entry['apply']['failureMessage']
+		);
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_decision_approve_records_resolve_failures_separately_from_stale_hashes(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+		unset( WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ] );
+
+		$entry = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['activityId'],
+			'approve'
+		);
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( 'failed', $entry['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_resolve_failed', $entry['apply']['failureCode'] );
+	}
+
 	public function test_decision_reject_records_provenance_without_executing(): void {
 		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
 		$this->assertIsArray( $pending );
@@ -624,6 +671,20 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
 		$this->assertTrue( $ability->permission_callback( $input ) );
+	}
+
+	public function test_undo_activity_ability_fails_closed_for_missing_rows(): void {
+		$ability = new \FlavorAgent\AI\Abilities\UndoActivityAbility(
+			\FlavorAgent\AI\Abilities\UndoActivityAbility::ABILITY_NAME,
+			[]
+		);
+
+		WordPressTestState::$capabilities = [ 'edit_posts' => true ];
+
+		$this->assertFalse(
+			$ability->permission_callback( [ 'activityId' => 'missing-row' ] ),
+			'Missing rows should not fall back to broad editor capabilities.'
+		);
 	}
 
 	public function test_list_activity_ability_gates_on_the_scope_context(): void {

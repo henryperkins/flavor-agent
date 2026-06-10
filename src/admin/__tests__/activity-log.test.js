@@ -452,6 +452,7 @@ describe( 'ActivityLogApp', () => {
 						applied: 3,
 						undone: 4,
 						review: 2,
+						pending: 5,
 						blocked: 1,
 						failed: 2,
 					},
@@ -463,6 +464,7 @@ describe( 'ActivityLogApp', () => {
 		expect( getSummaryCardValue( 'Still applied' ) ).toBe( '3' );
 		expect( getSummaryCardValue( 'Undone' ) ).toBe( '4' );
 		expect( getSummaryCardValue( 'Review-only' ) ).toBe( '2' );
+		expect( getSummaryCardValue( 'Pending approval' ) ).toBe( '5' );
 		expect( getSummaryCardValue( 'Undo blocked' ) ).toBe( '1' );
 		expect( getSummaryCardValue( 'Failed or unavailable' ) ).toBe( '2' );
 	} );
@@ -1484,9 +1486,9 @@ describe( 'ActivityLogApp', () => {
 			} )
 		);
 
-		expect( document.body.textContent.includes( 'Pending approval' ) ).toBe(
-			true
-		);
+		expect(
+			getContainer().textContent.includes( 'Pending approval' )
+		).toBe( true );
 	} );
 
 	test( 'shows approve and reject actions for pending external applies and posts the decision', async () => {
@@ -1518,7 +1520,7 @@ describe( 'ActivityLogApp', () => {
 		] );
 
 		const approveButton = Array.from(
-			document.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find( ( button ) =>
 			button.textContent.includes( 'Approve and apply' )
 		);
@@ -1561,7 +1563,7 @@ describe( 'ActivityLogApp', () => {
 		);
 
 		const approveButton = Array.from(
-			document.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find( ( button ) =>
 			button.textContent.includes( 'Approve and apply' )
 		);

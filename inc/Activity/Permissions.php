@@ -107,6 +107,10 @@ final class Permissions {
 		string $post_type = '',
 		string $entity_id = ''
 	): bool {
+		if ( '' === trim( $scope_key ) ) {
+			return current_user_can( 'manage_options' );
+		}
+
 		$context = self::resolve_canonical_context(
 			$scope_key,
 			$surface,

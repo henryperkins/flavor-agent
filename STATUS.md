@@ -1,12 +1,12 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-06-08
+> Last updated: 2026-06-10
 
 ## Working
 
 ### Abilities API (WordPress 7.0+)
 
-Flavor Agent defines 25 ability contracts. The 13 helper/search abilities register whenever the Abilities API is available; the five `preview-recommend-*` signature-only siblings register when the canonical WordPress AI contracts are available; the seven recommendation abilities register only when the WordPress AI plugin feature contracts are available and the Flavor Agent feature is enabled through the AI plugin feature toggles. Useful recommendation output still depends on the per-surface capability and backend gates documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md). The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) — lives there too.
+Flavor Agent defines 29 ability contracts. The 13 helper/search abilities register whenever the Abilities API is available; the five `preview-recommend-*` signature-only siblings register when the canonical WordPress AI contracts are available; the seven recommendation abilities plus four governed external-apply abilities register only when the WordPress AI plugin feature contracts are available and the Flavor Agent feature is enabled through the AI plugin feature toggles. Useful recommendation and external-apply output still depends on the per-surface capability and backend gates documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md). The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) — lives there too.
 
 - **Block**: `recommend-block`, `introspect-block`, `list-allowed-blocks`
 - **Content**: `recommend-content`
@@ -14,15 +14,16 @@ Flavor Agent defines 25 ability contracts. The 13 helper/search abilities regist
 - **Template**: `recommend-template`, `recommend-template-part`, `list-template-parts`
 - **Navigation**: `recommend-navigation`
 - **Style**: `recommend-style`
+- **Apply**: `request-style-apply`, `get-activity`, `list-activity`, `undo-activity`
 - **Preview**: `preview-recommend-block`, `preview-recommend-navigation`, `preview-recommend-style`, `preview-recommend-template`, `preview-recommend-template-part`
 - **Docs**: `search-wordpress-docs`
 - **Infra**: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, `get-theme-tokens`, `check-status`
 
 ### REST API
 
-All three REST route paths under `/flavor-agent/v1/` are working. Recommendation surfaces use the WordPress Abilities API instead. Permissions and handlers are documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
+All four REST route paths under `/flavor-agent/v1/` are working. Recommendation surfaces and external-agent style apply read/list/undo flows use the WordPress Abilities API instead. Permissions and handlers are documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
 
-- **2 activity route paths / 3 activity methods**: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`) and POST `activity/{id}/undo` (contextual)
+- **3 activity route paths / 4 activity methods**: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`), POST `activity/{id}/undo` (contextual), and POST `activity/{id}/decision` (`manage_options` plus the row's mutation capability)
 - **1 admin route path**: POST `sync-patterns` queues the sync job (`manage_options`); GET `sync-patterns` returns current sync state for polling (`manage_options`)
 
 ### Editor UI
@@ -32,7 +33,7 @@ All three REST route paths under `/flavor-agent/v1/` are working. Recommendation
 
 ### Admin UI
 
-- `Settings > AI Activity` is working as a read-only wp-admin audit/provenance page for recent server-backed activity and scoped diagnostics. Exact route permissions and audit behavior live in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md) and [`docs/features/activity-and-audit.md`](docs/features/activity-and-audit.md).
+- `Settings > AI Activity` is working as a wp-admin audit/provenance page for recent server-backed activity, scoped diagnostics, and governed external-apply approvals. Exact route permissions and audit behavior live in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md) and [`docs/features/activity-and-audit.md`](docs/features/activity-and-audit.md). The 2026-06-10 C1 pass verified `ExternalApplyLifecycleTest`, `StyleApplyExecutorTest`, `ApplyAbilitiesTest`, `AgentRoutesTest`, `MCPServerBootstrapTest`, and the admin app Jest suites; full real-backend approvals browser proof remains recorded below as a MySQL wp70-harness waiver.
 
 ## Known Issues
 

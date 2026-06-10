@@ -343,4 +343,17 @@ final class ActivityPermissionsTest extends TestCase {
 			ActivityPermissions::can_access_context_values( 'style_book:17:core/paragraph', 'style-book' )
 		);
 	}
+
+	public function test_can_access_context_values_requires_manage_options_for_global_queries(): void {
+		WordPressTestState::$capabilities = [ 'edit_posts' => true ];
+
+		$this->assertFalse(
+			ActivityPermissions::can_access_context_values( '' ),
+			'Empty scope values represent a global activity query, not an editor-scoped query.'
+		);
+
+		WordPressTestState::$capabilities = [ 'manage_options' => true ];
+
+		$this->assertTrue( ActivityPermissions::can_access_context_values( '' ) );
+	}
 }

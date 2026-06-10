@@ -179,6 +179,43 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'flavor_agent_apply_invalid_transition', $second->get_error_code() );
 	}
 
+	public function test_transition_requires_the_persisted_execution_result_to_still_be_pending(): void {
+		$created = $this->create_pending_entry();
+		$table   = Repository::table_name();
+
+		foreach ( WordPressTestState::$db_tables[ $table ] as $index => $row ) {
+			if ( (string) ( $row['activity_id'] ?? '' ) !== (string) $created['id'] ) {
+				continue;
+			}
+
+			WordPressTestState::$db_tables[ $table ][ $index ]['execution_result'] = 'rejected';
+			break;
+		}
+
+		$result = Repository::transition_external_apply(
+			(string) $created['id'],
+			[
+				'applyStatus' => 'available',
+				'before'      => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'after'       => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'target'      => [ 'globalStylesId' => '17' ],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_invalid_transition', $result->get_error_code() );
+	}
+
 	public function test_transition_rejects_unknown_target_status(): void {
 		$created = $this->create_pending_entry();
 
@@ -380,6 +417,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 
 		$this->assertIsArray( $entry );
 		$this->assertSame( 'failed', $entry['status'] );
+		$this->assertSame( 'Apply failed', $entry['admin']['statusLabel'] );
 	}
 
 	public function test_pending_rows_project_operation_metadata_from_the_apply_payload(): void {

@@ -118,6 +118,48 @@ final class StyleApplyExecutorTest extends TestCase {
 		$this->assertTrue( $written['isGlobalStylesUserThemeJSON'] );
 	}
 
+	public function test_apply_records_before_value_from_the_accumulating_config(): void {
+		WordPressTestState::$global_settings['color']['palette']['theme'][] = [
+			'slug'  => 'ink',
+			'name'  => 'Ink',
+			'color' => '#222222',
+		];
+
+		WordPressTestState::$global_styles = [
+			'color' => [ 'background' => 'var:preset|color|base' ],
+		];
+
+		$result = StyleApplyExecutor::apply(
+			'global-styles',
+			self::GLOBAL_STYLES_ID,
+			[
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'text' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'text' ],
+					'value'      => 'var:preset|color|ink',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'ink',
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			'var:preset|color|accent',
+			$result['after']['operations'][1]['beforeValue'],
+			'Sequential operations must snapshot the value immediately before each individual write.'
+		);
+	}
+
 	public function test_apply_rejects_operations_that_fail_the_live_execution_contract(): void {
 		$result = StyleApplyExecutor::apply(
 			'global-styles',
@@ -280,6 +322,84 @@ final class StyleApplyExecutorTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_apply_target_unavailable', $result->get_error_code() );
+	}
+
+	public function test_resolve_user_global_styles_fails_closed_for_unreadable_json(): void {
+		WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ] = new \WP_Post(
+			[
+				'ID'           => (int) self::GLOBAL_STYLES_ID,
+				'post_type'    => 'wp_global_styles',
+				'post_content' => '{"version":3,',
+			]
+		);
+
+		$result = StyleApplyExecutor::resolve_user_global_styles( self::GLOBAL_STYLES_ID );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_invalid', $result->get_error_code() );
+	}
+
+	public function test_apply_fails_closed_when_the_entity_changes_before_the_write(): void {
+		WordPressTestState::$global_styles = [
+			'color' => [ 'background' => 'var:preset|color|base' ],
+		];
+		add_filter(
+			'flavor_agent_external_apply_theme_variations',
+			function ( array $variations ): array {
+				$this->seed_global_styles_post(
+					[
+						'settings' => [],
+						'styles'   => [ 'color' => [ 'background' => '#123456' ] ],
+					]
+				);
+
+				return $variations;
+			}
+		);
+
+		$result = StyleApplyExecutor::apply(
+			'global-styles',
+			self::GLOBAL_STYLES_ID,
+			[
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'text' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_write_user_global_styles_rejects_unencodable_payloads(): void {
+		$handle = fopen( 'php://temp', 'rb' );
+		$this->assertIsResource( $handle );
+		$method = new \ReflectionMethod( StyleApplyExecutor::class, 'write_user_global_styles' );
+		$method->setAccessible( true );
+
+		try {
+			$result = $method->invoke(
+				null,
+				(int) self::GLOBAL_STYLES_ID,
+				[ 'unencodable' => $handle ],
+				[
+					'settings' => [],
+					'styles'   => [],
+				]
+			);
+		} finally {
+			fclose( $handle );
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_write_failed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
 	}
 
 	/**

@@ -737,20 +737,31 @@ final class Repository {
 			);
 		}
 
-		// The pending-status guard above is a read-check-write and is not atomic
-		// against a second simultaneous decision on the same row. That window is
-		// benign: the decision route is manage_options + edit_theme_options only,
-		// the style apply is deterministic (the same resolved config is written
-		// either way), and any realistic non-simultaneous retry is already
-		// rejected by the pending check above before reaching the executor.
+		// Keep the pending guard at the write boundary so simultaneous decisions
+		// cannot overwrite an already-decided row after both readers saw pending.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
-		$updated = $wpdb->update( self::table_name(), $update, [ 'activity_id' => $activity_id ] );
+		$updated = $wpdb->update(
+			self::table_name(),
+			$update,
+			[
+				'activity_id'      => $activity_id,
+				'execution_result' => 'pending',
+			]
+		);
 
 		if ( false === $updated ) {
 			return new \WP_Error(
 				'flavor_agent_activity_update_failed',
 				'Flavor Agent could not update the activity entry.',
 				[ 'status' => 500 ]
+			);
+		}
+
+		if ( 0 === (int) $updated ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only transition out of the pending state once.',
+				[ 'status' => 409 ]
 			);
 		}
 
@@ -2508,35 +2519,39 @@ final class Repository {
 		string $resolved_status,
 		\DateTimeZone $timezone
 	): array {
-		$target                 = Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' );
-		$document               = Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' );
-		$before                 = Serializer::decode_json( isset( $row['before_state'] ) ? (string) $row['before_state'] : '' );
-		$after                  = Serializer::decode_json( isset( $row['after_state'] ) ? (string) $row['after_state'] : '' );
-		$request                = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
-		$undo                   = Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' );
-		$post_type              = self::get_admin_post_type( $row, $document );
-		$entity_id              = self::get_admin_entity_id( $row, $document );
-		$operation              = self::derive_admin_operation_metadata(
+		$target          = Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' );
+		$document        = Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' );
+		$before          = Serializer::decode_json( isset( $row['before_state'] ) ? (string) $row['before_state'] : '' );
+		$after           = Serializer::decode_json( isset( $row['after_state'] ) ? (string) $row['after_state'] : '' );
+		$request         = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
+		$undo            = Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' );
+		$post_type       = self::get_admin_post_type( $row, $document );
+		$entity_id       = self::get_admin_entity_id( $row, $document );
+		$operation       = self::derive_admin_operation_metadata(
 			$before,
 			self::operation_metadata_after( $after, $request ),
 			trim( (string) ( $row['surface'] ?? '' ) ),
 			trim( (string) ( $row['activity_type'] ?? '' ) ),
 			$row
 		);
-		$operation_type         = $operation['value'];
-		$operation_label        = $operation['label'];
-		$request_meta           = self::get_admin_request_meta( $request, $row );
-		$timestamp_data         = self::get_timestamp_data(
+		$operation_type  = $operation['value'];
+		$operation_label = $operation['label'];
+		$request_meta    = self::get_admin_request_meta( $request, $row );
+		$timestamp_data  = self::get_timestamp_data(
 			self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
 			$timezone
 		);
-		$user_id                = (int) ( $row['user_id'] ?? 0 );
-		$user_label             = self::resolve_admin_user_label( $user_id );
-		$surface                = trim( (string) ( $row['surface'] ?? '' ) );
-		$surface_label          = self::format_surface_label( $surface );
-		$status_label           = 'failed' === $resolved_status && self::is_review_only_row( $row )
-			? 'Request failed'
-			: self::format_status_label( $resolved_status );
+		$user_id         = (int) ( $row['user_id'] ?? 0 );
+		$user_label      = self::resolve_admin_user_label( $user_id );
+		$surface         = trim( (string) ( $row['surface'] ?? '' ) );
+		$surface_label   = self::format_surface_label( $surface );
+
+		if ( 'failed' === $resolved_status && self::is_review_only_row( $row ) ) {
+			$status_label = 'Request failed';
+		} else {
+			$status_label = self::format_status_label( $resolved_status );
+		}
+
 		$block_path             = trim( (string) ( $row['admin_block_path'] ?? '' ) );
 		$block_path             = '' !== $block_path ? $block_path : self::format_block_path( $target );
 		$request_prompt         = trim( (string) ( $row['admin_request_prompt'] ?? ( $request['prompt'] ?? '' ) ) );
@@ -2828,6 +2843,10 @@ final class Repository {
 		$entry['admin']  = self::get_public_admin_entry_meta(
 			is_array( $record['meta'] ?? null ) ? $record['meta'] : []
 		);
+
+		if ( 'failed' === $entry['status'] && is_array( $entry['apply'] ?? null ) ) {
+			$entry['admin']['statusLabel'] = 'Apply failed';
+		}
 
 		return $entry;
 	}

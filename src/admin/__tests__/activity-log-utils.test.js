@@ -927,6 +927,21 @@ describe( 'external apply helpers', () => {
 		expect( getActivityStatusLabel( 'expired' ) ).toBe( 'Expired' );
 	} );
 
+	test( 'status labels distinguish failed external applies from undo failures', () => {
+		expect(
+			getActivityStatusLabel( {
+				type: 'apply_global_styles_suggestion',
+				status: 'failed',
+				statusLabel: 'Undo unavailable',
+				executionResult: 'failed',
+				apply: {
+					status: 'failed',
+					failureCode: 'flavor_agent_apply_stale',
+				},
+			} )
+		).toBe( 'Apply failed' );
+	} );
+
 	test( 'normalizeActivityEntries passes the apply payload through', () => {
 		const [ normalized ] = normalizeActivityEntries(
 			[
