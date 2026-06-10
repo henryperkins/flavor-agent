@@ -324,5 +324,36 @@ final class AgentRoutesTest extends TestCase {
 		$this->assertNotForbidden( $response );
 		$this->assertInstanceOf( \WP_Error::class, $response );
 		$this->assertSame( 'flavor_agent_activity_not_found', $response->get_error_code() );
+
+		// manage_options WITHOUT the row's mutation capability is denied on an
+		// existing style row — the precise reason the decision route requires
+		// manage_options AND the row's contextual capability (not either alone).
+		ActivityRepository::install();
+		$style_row = ActivityRepository::create(
+			[
+				'type'            => 'apply_global_styles_suggestion',
+				'surface'         => 'global-styles',
+				'target'          => [ 'globalStylesId' => '7' ],
+				'before'          => [],
+				'after'           => [],
+				'executionResult' => 'pending',
+				'undo'            => [ 'status' => 'not_applicable' ],
+				'request'         => [ 'apply' => [ 'status' => 'pending' ] ],
+				'document'        => [ 'scopeKey' => 'global_styles:7' ],
+			]
+		);
+		$this->assertIsArray( $style_row );
+
+		WordPressTestState::$capabilities = [ 'manage_options' => true ];
+		$this->assertForbidden(
+			$this->dispatch_route(
+				'POST',
+				'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/decision',
+				[
+					'id'       => (string) $style_row['id'],
+					'decision' => 'reject',
+				]
+			)
+		);
 	}
 }

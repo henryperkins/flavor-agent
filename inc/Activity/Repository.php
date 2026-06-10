@@ -737,6 +737,12 @@ final class Repository {
 			);
 		}
 
+		// The pending-status guard above is a read-check-write and is not atomic
+		// against a second simultaneous decision on the same row. That window is
+		// benign: the decision route is manage_options + edit_theme_options only,
+		// the style apply is deterministic (the same resolved config is written
+		// either way), and any realistic non-simultaneous retry is already
+		// rejected by the pending check above before reaching the executor.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
 		$updated = $wpdb->update( self::table_name(), $update, [ 'activity_id' => $activity_id ] );
 
