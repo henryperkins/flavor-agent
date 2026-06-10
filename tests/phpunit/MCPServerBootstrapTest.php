@@ -42,7 +42,11 @@ final class MCPServerBootstrapTest extends TestCase {
 		$this->assertContains( 'flavor-agent/recommend-block', $call[9] );
 		$this->assertContains( 'flavor-agent/recommend-template', $call[9] );
 		$this->assertContains( 'flavor-agent/recommend-style', $call[9] );
-		$this->assertCount( 7, $call[9] );
+		$this->assertContains( 'flavor-agent/request-style-apply', $call[9] );
+		$this->assertContains( 'flavor-agent/get-activity', $call[9] );
+		$this->assertContains( 'flavor-agent/list-activity', $call[9] );
+		$this->assertContains( 'flavor-agent/undo-activity', $call[9] );
+		$this->assertCount( 11, $call[9] );
 		$this->assertSame( [], $call[10] );
 		$this->assertSame( [], $call[11] );
 		$this->assertIsCallable( $call[12] );
