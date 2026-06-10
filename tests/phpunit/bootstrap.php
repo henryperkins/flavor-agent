@@ -1708,6 +1708,16 @@ namespace {
 				$is_review = 'request_diagnostic' === (string) ($row['activity_type'] ?? '')
 					|| 'review' === (string) ($row['execution_result'] ?? '');
 
+				$non_executed = in_array(
+					(string) ($row['execution_result'] ?? ''),
+					['pending', 'rejected', 'expired', 'failed'],
+					true
+				);
+
+				if ($non_executed) {
+					return (string) $row['execution_result'];
+				}
+
 				if ($is_review) {
 					return 'failed' === $undo_status ? 'failed' : 'review';
 				}
@@ -1741,7 +1751,12 @@ namespace {
 					$candidate_undo = json_decode((string) ($candidate['undo_state'] ?? ''), true);
 					$candidate_status = is_array($candidate_undo) ? (string) ($candidate_undo['status'] ?? 'available') : 'available';
 					$candidate_review = 'request_diagnostic' === (string) ($candidate['activity_type'] ?? '')
-						|| 'review' === (string) ($candidate['execution_result'] ?? '');
+						|| 'review' === (string) ($candidate['execution_result'] ?? '')
+						|| in_array(
+							(string) ($candidate['execution_result'] ?? ''),
+							['pending', 'rejected', 'expired', 'failed'],
+							true
+						);
 
 					if (! $candidate_review && 'undone' !== $candidate_status) {
 						return 'blocked';

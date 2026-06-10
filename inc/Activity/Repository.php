@@ -657,6 +657,12 @@ final class Repository {
 		);
 	}
 
+	public static function can_perform_ordered_undo( string $activity_id ): bool {
+		$row = self::find_row( $activity_id );
+
+		return is_array( $row ) && self::is_ordered_undo_eligible( $row );
+	}
+
 	/**
 	 * One-way transition of an external-apply row out of the pending state.
 	 *
@@ -1136,6 +1142,29 @@ final class Repository {
 	 * @param array<string, mixed> $entry
 	 * @return array<string, mixed>
 	 */
+	/**
+	 * Pre-execution external-apply rows keep their proposed operations under
+	 * request.apply.operations; surface them to the admin operation-metadata
+	 * derivation that otherwise reads after.operations.
+	 *
+	 * @param array<string, mixed> $after
+	 * @param array<string, mixed> $request
+	 * @return array<string, mixed>
+	 */
+	private static function operation_metadata_after( array $after, array $request ): array {
+		if ( is_array( $after['operations'] ?? null ) && [] !== $after['operations'] ) {
+			return $after;
+		}
+
+		$apply_operations = $request['apply']['operations'] ?? null;
+
+		if ( is_array( $apply_operations ) && [] !== $apply_operations ) {
+			$after['operations'] = $apply_operations;
+		}
+
+		return $after;
+	}
+
 	private static function build_admin_projection_from_entry( array $entry ): array {
 		$target                 = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
 		$before                 = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
@@ -1149,7 +1178,7 @@ final class Repository {
 		$activity_type          = trim( (string) ( $entry['type'] ?? '' ) );
 		$operation              = self::derive_admin_operation_metadata(
 			$before,
-			$after,
+			self::operation_metadata_after( $after, $request ),
 			$surface,
 			$activity_type
 		);
@@ -1327,7 +1356,7 @@ final class Repository {
 				isset( $rows[ $index ]['undo_state'] ) ? (string) $rows[ $index ]['undo_state'] : ''
 			);
 
-			if ( self::is_review_only_row( $rows[ $index ] ) ) {
+			if ( self::is_review_only_row( $rows[ $index ] ) || self::is_non_executed_apply_row( $rows[ $index ] ) ) {
 				continue;
 			}
 
@@ -1663,12 +1692,15 @@ final class Repository {
 		global $wpdb;
 
 		$summary = [
-			'total'   => 0,
-			'applied' => 0,
-			'undone'  => 0,
-			'review'  => 0,
-			'blocked' => 0,
-			'failed'  => 0,
+			'total'    => 0,
+			'applied'  => 0,
+			'undone'   => 0,
+			'review'   => 0,
+			'blocked'  => 0,
+			'failed'   => 0,
+			'pending'  => 0,
+			'rejected' => 0,
+			'expired'  => 0,
 		];
 
 		if ( ! is_object( $wpdb ) ) {
@@ -2099,6 +2131,10 @@ final class Repository {
 		$newer_active_condition = self::get_admin_sql_newer_active_exists();
 
 		return '(CASE'
+			. " WHEN t.execution_result IN ('pending') THEN 'pending'"
+			. " WHEN t.execution_result IN ('rejected') THEN 'rejected'"
+			. " WHEN t.execution_result IN ('expired') THEN 'expired'"
+			. " WHEN t.execution_result IN ('failed') THEN 'failed'"
 			. ' WHEN ' . $review_condition . ' THEN CASE WHEN ' . $failed_condition . " THEN 'failed' ELSE 'review' END"
 			. ' WHEN ' . $undone_condition . " THEN 'undone'"
 			. ' WHEN ' . $newer_active_condition . " THEN 'blocked'"
@@ -2114,6 +2150,7 @@ final class Repository {
 			. ' AND (newer.created_at > t.created_at OR (newer.created_at = t.created_at AND newer.id > t.id))'
 			. ' AND NOT ' . self::get_admin_sql_review_condition( 'newer' )
 			. ' AND NOT ' . self::get_admin_sql_undo_status_condition( 'newer.undo_state', 'undone' )
+			. " AND newer.execution_result NOT IN ('pending','rejected','expired','failed')"
 			. ')';
 	}
 
@@ -2373,6 +2410,12 @@ final class Repository {
 					: 'review';
 				$review_indexes[ $index ]   = true;
 			}
+
+			if ( self::is_non_executed_apply_row( $row ) ) {
+				$activity_id                = trim( (string) ( $row['activity_id'] ?? '' ) );
+				$status_map[ $activity_id ] = trim( (string) ( $row['execution_result'] ?? '' ) );
+				$review_indexes[ $index ]   = true;
+			}
 		}
 
 		foreach ( $entity_indexes as $indexes ) {
@@ -2432,9 +2475,13 @@ final class Repository {
 		foreach ( $rows as $row ) {
 			$activity_id = trim( (string) ( $row['activity_id'] ?? '' ) );
 			$status      = $status_map[ $activity_id ] ?? (
-				'failed' === self::get_admin_row_undo_status( $row ) && self::is_review_only_row( $row )
-					? 'failed'
-					: ( self::is_review_only_row( $row ) ? 'review' : 'applied' )
+				self::is_non_executed_apply_row( $row )
+					? trim( (string) ( $row['execution_result'] ?? '' ) )
+					: (
+						'failed' === self::get_admin_row_undo_status( $row ) && self::is_review_only_row( $row )
+							? 'failed'
+							: ( self::is_review_only_row( $row ) ? 'review' : 'applied' )
+					)
 			);
 			$records[]   = self::build_admin_record_from_row(
 				$row,
@@ -2465,7 +2512,7 @@ final class Repository {
 		$entity_id              = self::get_admin_entity_id( $row, $document );
 		$operation              = self::derive_admin_operation_metadata(
 			$before,
-			$after,
+			self::operation_metadata_after( $after, $request ),
 			trim( (string) ( $row['surface'] ?? '' ) ),
 			trim( (string) ( $row['activity_type'] ?? '' ) ),
 			$row
@@ -2652,12 +2699,15 @@ final class Repository {
 	 */
 	private static function build_admin_summary( array $records ): array {
 		$summary = [
-			'total'   => count( $records ),
-			'applied' => 0,
-			'undone'  => 0,
-			'review'  => 0,
-			'blocked' => 0,
-			'failed'  => 0,
+			'total'    => count( $records ),
+			'applied'  => 0,
+			'undone'   => 0,
+			'review'   => 0,
+			'blocked'  => 0,
+			'failed'   => 0,
+			'pending'  => 0,
+			'rejected' => 0,
+			'expired'  => 0,
 		];
 
 		foreach ( $records as $record ) {
@@ -2685,6 +2735,21 @@ final class Repository {
 
 			if ( 'failed' === $status ) {
 				++$summary['failed'];
+				continue;
+			}
+
+			if ( 'pending' === $status ) {
+				++$summary['pending'];
+				continue;
+			}
+
+			if ( 'rejected' === $status ) {
+				++$summary['rejected'];
+				continue;
+			}
+
+			if ( 'expired' === $status ) {
+				++$summary['expired'];
 			}
 		}
 
@@ -3285,6 +3350,17 @@ final class Repository {
 		return 'request_diagnostic' === $activity_type
 			|| RecommendationOutcome::TYPE === $activity_type
 			|| in_array( $execution_result, [ 'review', 'diagnostic' ], true );
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 */
+	private static function is_non_executed_apply_row( array $row ): bool {
+		return in_array(
+			trim( (string) ( $row['execution_result'] ?? '' ) ),
+			[ 'pending', 'rejected', 'expired', 'failed' ],
+			true
+		);
 	}
 
 	/**
@@ -4073,11 +4149,14 @@ final class Repository {
 
 	private static function format_status_label( string $status ): string {
 		return match ( $status ) {
-			'review'  => 'Review',
-			'undone'  => 'Undone',
-			'blocked' => 'Undo blocked',
-			'failed'  => 'Undo unavailable',
-			default   => 'Applied',
+			'review'   => 'Review',
+			'undone'   => 'Undone',
+			'blocked'  => 'Undo blocked',
+			'failed'   => 'Undo unavailable',
+			'pending'  => 'Pending approval',
+			'rejected' => 'Rejected',
+			'expired'  => 'Expired',
+			default    => 'Applied',
 		};
 	}
 

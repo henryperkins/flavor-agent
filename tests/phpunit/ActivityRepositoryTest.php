@@ -488,12 +488,15 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertCount( 2, $result['entries'] ?? [] );
 		$this->assertSame(
 			[
-				'total'   => 5,
-				'applied' => 1,
-				'undone'  => 1,
-				'review'  => 0,
-				'blocked' => 2,
-				'failed'  => 1,
+				'total'    => 5,
+				'applied'  => 1,
+				'undone'   => 1,
+				'review'   => 0,
+				'blocked'  => 2,
+				'failed'   => 1,
+				'pending'  => 0,
+				'rejected' => 0,
+				'expired'  => 0,
 			],
 			$result['summary'] ?? []
 		);
