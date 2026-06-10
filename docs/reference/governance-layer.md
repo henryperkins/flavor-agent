@@ -15,6 +15,17 @@ Flavor Agent lets AI work on a live WordPress site without unchecked control. Ev
 
 Public shorthand: AI proposes. WordPress approves. Operations are bounded, structural/theme changes are reviewed, applies are recorded server-side, and undo is drift-safe.
 
+## Vocabulary Map
+
+The thesis uses positioning vocabulary; the code uses freshness/signature vocabulary. The two map onto each other — positioning language never renames code symbols, options, abilities, hooks, or DB fields.
+
+| Thesis term | Code meaning | Enforcing identifiers |
+| --- | --- | --- |
+| Drift detection / drift-safe undo | Resolved-context signature revalidation at apply, undo, and decision time; the code says "freshness", "resolved signature", and "stale" | `inc/Support/RecommendationResolvedSignature.php`; live-state revalidation in `src/store/activity-undo.js`; the second freshness check in `inc/Apply/StyleApplyExecutor.php` + `inc/Apply/PendingApplyDecision.php`; `stale_blocked` outcomes |
+| Review gate | Review-context signature plus the review-before-apply UI plus the pending-decision path for external applies | `inc/Support/RecommendationReviewSignature.php`; `src/components/AIReviewSection.js` + `src/inspector/block-review-state.js`; `POST /flavor-agent/v1/activity/{id}/decision` |
+| Bounded schemas / bounded operations | Strict response schemas plus operation validators plus execution contracts | `inc/LLM/ResponseSchema.php`; `inc/Context/BlockOperationValidator.php` + `inc/Context/BlockRecommendationExecutionContract.php`; template/template-part and style operation vocabularies |
+| Attribution | Server-side activity rows plus request tracing | `inc/Activity/Repository.php` and the `request_diagnostic` rows emitted by `inc/Abilities/RecommendationAbilityExecution.php`; `inc/Support/RequestTrace.php` |
+
 ## The Governed Loop
 
 Every executable recommendation runs one loop:
@@ -67,7 +78,7 @@ Enforced by:
 - `inc/Abilities/RecommendationAbilityExecution.php` — centralized `request_diagnostic` emission for every recommendation execution, regardless of caller
 - `inc/Activity/Repository.php` / `Permissions.php` / `Serializer.php` — server-backed storage, contextual capability checks, provenance projection columns for audit filtering
 - `POST /flavor-agent/v1/activity` — persists apply rows and scoped diagnostics with provider path, model, prompt, reference, token usage, and latency
-- `inc/Admin/ActivityPage` + `src/admin/activity-log.js` — the read-only `Settings > AI Activity` audit surface
+- `inc/Admin/ActivityPage` + `src/admin/activity-log.js` — the `Settings > AI Activity` approval/audit surface (decision controls for pending external applies; non-pending rows stay inspection-only)
 
 Tested by: `tests/phpunit/RecommendationAbilityExecutionTest.php`, `ActivityRepositoryTest.php`, `ActivityPermissionsTest.php`, `ActivitySerializerTest.php`, `ActivityPageTest.php`.
 
