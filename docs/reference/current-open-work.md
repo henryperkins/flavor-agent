@@ -66,7 +66,7 @@ These can turn into implementation work only after the upstream contract changes
 
 | Watch item | Flavor Agent impact |
 | --- | --- |
-| Ability consolidation, filtering, and surface controls (`WordPress/ai#21`, `WordPress/ai#354`, `WordPress/abilities-api#38`) | Current contract is 25 abilities: seven recommendation, twelve helper/read, one docs search, and five preview siblings. Future work may consolidate them behind a smaller router or discovery layer. |
+| Ability consolidation, filtering, and surface controls (`WordPress/ai#21`, `WordPress/ai#354`, `WordPress/abilities-api#38`) | Current contract is 29 abilities: seven recommendation, twelve helper/read, one docs search, five preview siblings, and four external-apply abilities. Future work may consolidate them behind a smaller router or discovery layer. |
 | Ability input-schema sanitization (`WordPress/ai#481`) | Re-check Flavor Agent ability input schemas and normalization once upstream callback execution lands; avoid divergent REST and Abilities sanitization paths. |
 | REST-as-ability and execution lifecycle filters (`WordPress/abilities-api#75`, `WordPress/abilities-api#149`) | If accepted, decide whether activity persistence, undo-status updates, and manual pattern sync need ability equivalents or lifecycle-filter instrumentation. |
 | Connector Approvals caller attribution (`WordPress/ai#595`) | Local request-time denial handling exists; final post-approval runtime success remains a smoke gate. |
