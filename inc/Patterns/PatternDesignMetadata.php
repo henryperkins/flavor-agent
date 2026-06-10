@@ -227,6 +227,7 @@ final class PatternDesignMetadata {
 
 	private static function content_specificity( string $content ): string {
 		$text = function_exists( 'strip_shortcodes' ) ? \strip_shortcodes( $content ) : $content;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- Fallback only when wp_strip_all_tags() is unavailable outside WordPress (offline evaluation harness).
 		$text = function_exists( 'wp_strip_all_tags' ) ? \wp_strip_all_tags( $text ) : strip_tags( $text );
 
 		return preg_match( '/\b(pricing|testimonial|portfolio|contact|team|event|menu|product)\b/i', $text ) ? 'topic-specific' : 'generic';
