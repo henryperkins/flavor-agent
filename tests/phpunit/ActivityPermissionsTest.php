@@ -326,4 +326,21 @@ final class ActivityPermissionsTest extends TestCase {
 			'timestamp'  => '2026-03-24T10:00:00Z',
 		];
 	}
+
+	public function test_can_access_context_values_requires_theme_capability_for_style_scopes(): void {
+		WordPressTestState::$capabilities = [ 'edit_posts' => true ];
+
+		$this->assertFalse(
+			ActivityPermissions::can_access_context_values( 'global_styles:17', 'global-styles' )
+		);
+
+		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
+
+		$this->assertTrue(
+			ActivityPermissions::can_access_context_values( 'global_styles:17', 'global-styles' )
+		);
+		$this->assertTrue(
+			ActivityPermissions::can_access_context_values( 'style_book:17:core/paragraph', 'style-book' )
+		);
+	}
 }

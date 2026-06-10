@@ -241,4 +241,92 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'invalid_style_scope', $result->get_error_code() );
 	}
+
+	public function test_get_activity_returns_the_entry_and_lazily_expires_overdue_pending_rows(): void {
+		$result = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $result );
+
+		$fetched = ApplyAbilities::get_activity( [ 'activityId' => (string) $result['activityId'] ] );
+		$this->assertIsArray( $fetched );
+		$this->assertSame( 'pending', $fetched['entry']['apply']['status'] );
+
+		// An overdue pending row (seeded directly, past its expiresAt) must
+		// lazily expire on read — the agent observes 'expired', persisted.
+		$overdue = Repository::create(
+			[
+				'type'            => 'apply_global_styles_suggestion',
+				'surface'         => 'global-styles',
+				'target'          => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
+				'suggestion'      => 'Overdue request',
+				'before'          => [],
+				'after'           => [],
+				'executionResult' => 'pending',
+				'undo'            => [ 'status' => 'not_applicable' ],
+				'request'         => [
+					'apply' => [
+						'status'    => 'pending',
+						'expiresAt' => gmdate( 'c', time() - 60 ),
+					],
+				],
+				'document'        => [ 'scopeKey' => 'global_styles:17' ],
+			]
+		);
+		$this->assertIsArray( $overdue );
+
+		$expired = ApplyAbilities::get_activity( [ 'activityId' => (string) $overdue['id'] ] );
+		$this->assertSame( 'expired', $expired['entry']['apply']['status'] );
+		$this->assertSame(
+			'expired',
+			Repository::find( (string) $overdue['id'] )['apply']['status'],
+			'Lazy expiry must persist.'
+		);
+	}
+
+	public function test_get_activity_returns_not_found_for_unknown_ids(): void {
+		$result = ApplyAbilities::get_activity( [ 'activityId' => 'missing' ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_activity_not_found', $result->get_error_code() );
+	}
+
+	public function test_list_activity_requires_a_scope_key(): void {
+		$result = ApplyAbilities::list_activity( [] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_activity_invalid_entry', $result->get_error_code() );
+	}
+
+	public function test_list_activity_filters_by_scope_and_status(): void {
+		$first = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $first );
+		$second = ApplyAbilities::request_style_apply(
+			$this->agent_request_input( [ 'requestReference' => 'agent-req-2' ] )
+		);
+		$this->assertIsArray( $second );
+		\FlavorAgent\Activity\Repository::transition_external_apply(
+			(string) $second['activityId'],
+			[ 'applyStatus' => 'rejected' ]
+		);
+
+		$pending = ApplyAbilities::list_activity(
+			[
+				'scopeKey' => 'global_styles:17',
+				'status'   => 'pending',
+			]
+		);
+		$this->assertIsArray( $pending );
+		$this->assertCount( 1, $pending['entries'] );
+		$this->assertSame( (string) $first['activityId'], $pending['entries'][0]['id'] );
+
+		$rejected = ApplyAbilities::list_activity(
+			[
+				'scopeKey' => 'global_styles:17',
+				'status'   => 'rejected',
+			]
+		);
+		$this->assertCount( 1, $rejected['entries'] );
+
+		$all = ApplyAbilities::list_activity( [ 'scopeKey' => 'global_styles:17' ] );
+		$this->assertCount( 2, $all['entries'] );
+	}
 }

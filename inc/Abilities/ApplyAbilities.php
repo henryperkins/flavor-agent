@@ -210,6 +210,81 @@ final class ApplyAbilities {
 		];
 	}
 
+	public static function get_activity( mixed $input ): array|\WP_Error {
+		$input       = self::normalize_map( $input );
+		$activity_id = sanitize_text_field( (string) ( $input['activityId'] ?? '' ) );
+
+		if ( '' === $activity_id ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_entry',
+				'getActivity requires an activityId.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$entry = ActivityRepository::find( $activity_id );
+
+		if ( ! is_array( $entry ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_found',
+				'Flavor Agent could not find that activity entry.',
+				[ 'status' => 404 ]
+			);
+		}
+
+		return [ 'entry' => ActivityRepository::maybe_expire_pending_apply( $entry ) ];
+	}
+
+	public static function list_activity( mixed $input ): array|\WP_Error {
+		$input     = self::normalize_map( $input );
+		$scope_key = sanitize_text_field( (string) ( $input['scopeKey'] ?? '' ) );
+
+		if ( '' === $scope_key ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_entry',
+				'listActivity requires a scopeKey; admin-global reads stay on the REST activity route.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$status  = sanitize_key( (string) ( $input['status'] ?? '' ) );
+		$entries = ActivityRepository::query(
+			[
+				'scopeKey' => $scope_key,
+				'surface'  => sanitize_key( (string) ( $input['surface'] ?? '' ) ),
+				'limit'    => $input['limit'] ?? ActivityRepository::DEFAULT_PER_PAGE,
+			]
+		);
+		$entries = array_map( [ ActivityRepository::class, 'maybe_expire_pending_apply' ], $entries );
+
+		if ( '' !== $status ) {
+			$entries = array_values(
+				array_filter(
+					$entries,
+					static fn ( array $entry ): bool => self::entry_matches_status( $entry, $status )
+				)
+			);
+		}
+
+		return [ 'entries' => $entries ];
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 */
+	private static function entry_matches_status( array $entry, string $status ): bool {
+		$execution_result = (string) ( $entry['executionResult'] ?? '' );
+		$undo_status      = (string) ( $entry['undo']['status'] ?? '' );
+
+		return match ( $status ) {
+			'pending', 'rejected', 'expired' => $status === $execution_result,
+			'failed' => 'failed' === $execution_result || 'failed' === $undo_status,
+			'undone' => 'undone' === $undo_status,
+			'applied' => 'applied' === $execution_result && ! in_array( $undo_status, [ 'undone', 'failed' ], true ),
+			default => true,
+		};
+	}
+
 	private static function stale_error(): \WP_Error {
 		return new \WP_Error(
 			'flavor_agent_apply_stale',

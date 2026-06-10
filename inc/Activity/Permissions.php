@@ -75,6 +75,37 @@ final class Permissions {
 		return self::can_access_context( self::resolve_entry_context( $entry ) );
 	}
 
+	/**
+	 * Contextual capability check from raw scope values, for ability callers
+	 * that have no WP_REST_Request to hand.
+	 */
+	public static function can_access_context_values(
+		string $scope_key,
+		string $surface = '',
+		string $entity_type = '',
+		string $post_type = '',
+		string $entity_id = ''
+	): bool {
+		$context = self::resolve_canonical_context(
+			$scope_key,
+			$surface,
+			$entity_type,
+			$post_type,
+			$entity_id
+		);
+
+		return self::can_access_context(
+			[
+				'scopeKey'     => $scope_key,
+				'surface'      => $surface,
+				'entityType'   => $entity_type,
+				'postType'     => $context['postType'],
+				'entityId'     => $context['entityId'],
+				'contextValid' => $context['contextValid'],
+			]
+		);
+	}
+
 	public static function forbidden_error(): \WP_Error {
 		return new \WP_Error(
 			'flavor_agent_activity_forbidden',
