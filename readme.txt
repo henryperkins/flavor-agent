@@ -12,7 +12,7 @@ AI for the WordPress editor without unchecked control: schema-validated, review-
 
 == Description ==
 
-Flavor Agent lets AI work on a WordPress site without unchecked control. Every AI action runs through one governance layer: operations are validated against bounded schemas, structural changes are gated behind review, every apply the plugin owns is attributed and recorded server-side, and recorded changes are reversible with freshness checks so an undo never overwrites later edits.
+Flavor Agent lets AI work on a WordPress site without unchecked control. Every AI action it mediates runs through one governance layer: operations are validated against bounded schemas, structural changes are gated behind review, every apply the plugin owns is attributed and recorded server-side, and recorded changes are reversible with freshness checks so an undo never overwrites later edits.
 
 That governance layer is demonstrated through contextual recommendations across the editor and admin — blocks, patterns, content, templates, template parts, navigation, Global Styles, and Style Book — while keeping setup inside standard WordPress admin screens. External integrations get the same recommendation, validation, and freshness contracts through the WordPress Abilities API.
 

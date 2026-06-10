@@ -9,7 +9,8 @@ Act as a senior WordPress/Gutenberg UI reviewer for the Flavor Agent plugin. Pro
 
 When run inside the plugin repo, treat these two docs as authoritative long-form sources:
 
-- `docs/reference/flavor-agent-ui-theme-style-review-prompt-gpt-55.md` — the full prompt.
+- `docs/reference/flavor-agent-ui-theme-style-review-prompt-fable-5.md` — the current canonical full prompt.
+- `docs/reference/flavor-agent-ui-theme-style-review-prompt-gpt-55.md` — legacy runner variant kept aligned for shared scope.
 - `docs/reference/review-response-protocol.md` — the required output/scope contract.
 
 **Do not** modify files, rewrite components, run write-formatters, or propose broad redesigns.
@@ -32,7 +33,7 @@ When run inside the plugin repo, treat these two docs as authoritative long-form
 | Editor recommendation surfaces | `src/inspector/*`, `src/patterns/*`, `src/content/*`, `src/templates/*`, `src/template-parts/*`, `src/global-styles/*`, `src/style-book/*`, `src/style-surfaces/*` |
 | Shared UI / toasts / undo / stale-state / capability gating | `src/components/*`, `src/store/*`, `src/utils/*`, `src/context/*` |
 | Tokens & styles | `src/tokens.css`, `src/editor.css`, `src/admin/{settings,brand,activity-log,wpds-runtime,dataviews-runtime}.css` |
-| Admin (Settings + AI Activity, DataViews) | `inc/Admin/Settings/*`, `inc/Admin/ActivityPage.php`, `inc/Activity/*` (REST contract via `inc/Activity/Repository.php`) |
+| Admin (Settings + AI Activity, DataViews, Core AI Request Logs) | `inc/Admin/Settings/*`, `inc/Admin/ActivityPage.php`, `inc/Activity/*` (REST contract via `inc/Activity/Repository.php`; dual logging via `inc/Activity/RequestLoggingBridge.php`) |
 | Style validation / theming server side | `inc/Context/*`, `inc/LLM/{StylePrompt,StyleContrastValidator,ThemeTokenFormatter}.php` |
 
 ## Review focus — report confirmed issues for
@@ -47,6 +48,7 @@ When run inside the plugin repo, treat these two docs as authoritative long-form
 - Capability gating that prefers legacy `canRecommend*` flags over `flavorAgentData.capabilities.surfaces`.
 - Abilities-bridge drift: readiness handling, REST fallback, signal handling, result payload normalization.
 - DataViews contract drift (don't claim DataForm is in AI Activity runtime unless opened code proves it); Settings validation errors hidden in collapsed details/accordion.
+- Core AI Request Logs / dual logging drift: `AiRequestLogPanel`, `ai/v1/logs/{id}` fetches, token-only unavailable states, Tools > AI Request Logs links, and Settings copy should match current core-logging and dual-logging behavior.
 - PHP admin escaping (confirm context-specific escaping); duplicated runtime logic with concrete drift risk; dead exports / orphaned CSS **only** after confirming runtime entry/import paths.
 - Direct `__experimental*` usage **outside** the compat/wrapper boundary: `src/patterns/pattern-settings.js`, `src/patterns/compat.js`, `src/context/theme-settings.js`, `src/context/theme-tokens.js`, `src/context/block-inspector.js`, `src/global-styles/selectors.js`.
 
@@ -73,9 +75,11 @@ This review reads code; it does not require a build. When confirming a finding b
 
 - `npm run build` — only if a finding depends on bundled output behavior.
 - `npm run lint:js` / `composer lint:php` — for style/escaping findings.
-- `npm run test:unit -- --runInBand <nearest suite>` / `vendor/bin/phpunit --filter <NameTest>` — for contract/stale-state/contrast findings.
-- `node scripts/verify.js --skip-e2e` then inspect `output/verify/summary.json` — for shared-subsystem confidence.
-- Playwright (`npm run test:e2e:playground` / `:wp70`) — only for user-visible regressions; record if not run.
+- `npm run test:unit -- --runInBand <nearest suite>` / `composer test:php -- --filter <NameTest>` — for contract/stale-state/contrast findings.
+- `npm run check:docs` — when prompt, contract, surfacing, operator, or contributor-facing docs changed.
+- `npm run verify -- --skip-e2e` then inspect `output/verify/summary.json` — for shared-subsystem confidence.
+- `npm run verify:strict` — when the docs-inclusive verifier should record optional docs checks.
+- Playwright (`npm run test:e2e:playground` / `npm run test:e2e:wp70`) — only for user-visible regressions; record if not run.
 
 State explicitly which of these were run versus skipped in `## Verification Reviewed`.
 

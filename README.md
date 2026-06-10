@@ -1,10 +1,12 @@
 # Flavor Agent
 
-Flavor Agent lets AI work on a live WordPress site without unchecked control. Every AI action runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, every recorded change reversible with drift detection so an undo never clobbers later human edits. Humans get this through native Gutenberg and Site Editor surfaces — blocks, content, patterns, templates, template parts, navigation, Global Styles, and Style Book; external agents get the same recommendation, validation, and freshness contracts through the WordPress Abilities API and MCP. Built on the WordPress 7.0 AI stack. The recommendation surfaces are the demonstration; the governance layer is the product — its contract map lives in [`docs/reference/governance-layer.md`](docs/reference/governance-layer.md).
+Flavor Agent lets AI work on a live WordPress site without unchecked control. Every AI action it mediates runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, every recorded change reversible with drift detection so an undo never clobbers later human edits. Humans get this through native Gutenberg and Site Editor surfaces — blocks, content, patterns, templates, template parts, navigation, Global Styles, and Style Book; external agents get the same recommendation, validation, and freshness contracts through the WordPress Abilities API and MCP. Built on the WordPress 7.0 AI stack. The recommendation surfaces are the demonstration; the governance layer is the product — its contract map lives in [`docs/reference/governance-layer.md`](docs/reference/governance-layer.md).
 
 I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
 
 > **Release status:** `0.1.0` is release-candidate ready in this repository. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
+
+1.0 when the core Abilities/AI Client surfaces stabilize.
 
 ## See it
 
