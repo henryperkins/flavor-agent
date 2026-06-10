@@ -249,6 +249,139 @@ final class StyleApplyExecutor {
 	}
 
 	/**
+	 * Server-side undo with the exact equality semantics the client uses:
+	 * live == before → already undone; live != after → drift failure; else
+	 * restore before (full config for Global Styles, block branch for Style Book).
+	 *
+	 * @param array<string, mixed> $entry Hydrated activity entry.
+	 * @return array{result: string}|\WP_Error
+	 */
+	public static function undo( array $entry ): array|\WP_Error {
+		$surface          = (string) ( $entry['surface'] ?? '' );
+		$target           = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$global_styles_id = trim( (string) ( $target['globalStylesId'] ?? '' ) );
+
+		if ( '' === $global_styles_id ) {
+			return new \WP_Error(
+				'flavor_agent_undo_snapshot_unsupported',
+				'This activity row does not record a Global Styles target and cannot be undone server-side.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$before = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
+		$after  = is_array( $entry['after'] ?? null ) ? $entry['after'] : [];
+
+		if ( ! array_key_exists( 'userConfig', $before ) || ! array_key_exists( 'userConfig', $after ) ) {
+			return new \WP_Error(
+				'flavor_agent_undo_snapshot_unsupported',
+				'This activity row does not record the before/after Global Styles snapshots needed for a server-side undo.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$before_config = is_array( $before['userConfig'] ?? null ) ? $before['userConfig'] : [];
+		$after_config  = is_array( $after['userConfig'] ?? null ) ? $after['userConfig'] : [];
+		$resolved      = self::resolve_user_global_styles( $global_styles_id );
+
+		if ( is_wp_error( $resolved ) ) {
+			return $resolved;
+		}
+
+		$live = $resolved['config'];
+
+		if ( self::SURFACE_STYLE_BOOK === $surface ) {
+			return self::undo_style_book_branch( $resolved, $live, $before_config, $after_config, $target );
+		}
+
+		if ( self::comparable_config( $live ) === self::comparable_config( $before_config ) ) {
+			return [ 'result' => 'already_undone' ];
+		}
+
+		if ( self::comparable_config( $live ) !== self::comparable_config( $after_config ) ) {
+			return new \WP_Error(
+				'flavor_agent_undo_drift',
+				'Global Styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$write = self::write_user_global_styles(
+			$resolved['postId'],
+			$resolved['raw'],
+			[
+				'settings' => is_array( $before_config['settings'] ?? null ) ? $before_config['settings'] : [],
+				'styles'   => is_array( $before_config['styles'] ?? null ) ? $before_config['styles'] : [],
+			]
+		);
+
+		if ( is_wp_error( $write ) ) {
+			return $write;
+		}
+
+		return [ 'result' => 'undone' ];
+	}
+
+	/**
+	 * @param array{postId: int, config: array<string, mixed>, raw: array<string, mixed>} $resolved
+	 * @param array<string, mixed> $live
+	 * @param array<string, mixed> $before_config
+	 * @param array<string, mixed> $after_config
+	 * @param array<string, mixed> $target
+	 * @return array{result: string}|\WP_Error
+	 */
+	private static function undo_style_book_branch( array $resolved, array $live, array $before_config, array $after_config, array $target ): array|\WP_Error {
+		$block_name = trim( (string) ( $target['blockName'] ?? '' ) );
+
+		if ( '' === $block_name ) {
+			return new \WP_Error(
+				'flavor_agent_undo_snapshot_unsupported',
+				'The Style Book target block for this AI action is missing.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$branch_path   = [ 'blocks', $block_name ];
+		$live_styles   = is_array( $live['styles'] ?? null ) ? $live['styles'] : [];
+		$before_styles = is_array( $before_config['styles'] ?? null ) ? $before_config['styles'] : [];
+		$after_styles  = is_array( $after_config['styles'] ?? null ) ? $after_config['styles'] : [];
+		$live_branch   = self::sort_keys_deep( self::read_path( $live_styles, $branch_path ) );
+		$before_branch = self::sort_keys_deep( self::read_path( $before_styles, $branch_path ) );
+		$after_branch  = self::sort_keys_deep( self::read_path( $after_styles, $branch_path ) );
+
+		if ( $live_branch === $before_branch ) {
+			return [ 'result' => 'already_undone' ];
+		}
+
+		if ( $live_branch !== $after_branch ) {
+			return new \WP_Error(
+				'flavor_agent_undo_drift',
+				'Style Book target styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$previous_branch = self::read_path( $before_styles, $branch_path );
+		$next_styles     = null === $previous_branch
+			? self::remove_path( $live_styles, $branch_path )
+			: self::write_path( $live_styles, $branch_path, $previous_branch );
+		$write           = self::write_user_global_styles(
+			$resolved['postId'],
+			$resolved['raw'],
+			[
+				'settings' => is_array( $live['settings'] ?? null ) ? $live['settings'] : [],
+				'styles'   => is_array( $next_styles ) ? $next_styles : [],
+			]
+		);
+
+		if ( is_wp_error( $write ) ) {
+			return $write;
+		}
+
+		return [ 'result' => 'undone' ];
+	}
+
+	/**
 	 * The live merged config already contains the current user layer, and the
 	 * set-operation vocabulary never deletes keys, so overlaying the post-apply
 	 * user config over the current merged data yields the same complements the

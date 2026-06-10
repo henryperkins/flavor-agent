@@ -281,4 +281,191 @@ final class StyleApplyExecutorTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_apply_target_unavailable', $result->get_error_code() );
 	}
+
+	/**
+	 * @param array<string, mixed> $overrides
+	 * @return array<string, mixed>
+	 */
+	private function global_styles_entry( array $overrides = [] ): array {
+		return array_replace_recursive(
+			[
+				'surface' => 'global-styles',
+				'target'  => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
+				'before'  => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'after'   => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+					],
+				],
+			],
+			$overrides
+		);
+	}
+
+	public function test_undo_restores_the_full_before_config_for_global_styles(): void {
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+
+		$result = StyleApplyExecutor::undo( $this->global_styles_entry() );
+
+		$this->assertSame( [ 'result' => 'undone' ], $result );
+
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( [], $written['styles'] );
+	}
+
+	public function test_undo_reports_already_undone_when_live_config_matches_before(): void {
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [],
+			]
+		);
+
+		$result = StyleApplyExecutor::undo( $this->global_styles_entry() );
+
+		$this->assertSame( [ 'result' => 'already_undone' ], $result );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'Already-undone must not write.' );
+	}
+
+	public function test_undo_fails_closed_on_drift_when_live_config_matches_neither_snapshot(): void {
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => '#333333' ] ],
+			]
+		);
+
+		$result = StyleApplyExecutor::undo( $this->global_styles_entry() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_drift', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_undo_restores_only_the_block_branch_for_style_book_rows(): void {
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [
+					'color'  => [ 'text' => '#222222' ],
+					'blocks' => [
+						'core/paragraph' => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+					],
+				],
+			]
+		);
+
+		$result = StyleApplyExecutor::undo(
+			[
+				'surface' => 'style-book',
+				'target'  => [
+					'globalStylesId' => self::GLOBAL_STYLES_ID,
+					'blockName'      => 'core/paragraph',
+				],
+				'before'  => [ 'userConfig' => [] ],
+				'after'   => [
+					'userConfig' => [
+						'styles' => [
+							'blocks' => [
+								'core/paragraph' => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [ 'result' => 'undone' ], $result );
+
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertArrayNotHasKey( 'blocks', $written['styles'], 'The branch is removed when before had none.' );
+		$this->assertSame( '#222222', $written['styles']['color']['text'], 'Untargeted styles stay untouched.' );
+	}
+
+	public function test_style_book_undo_supports_legacy_full_config_snapshots(): void {
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [
+					'blocks' => [
+						'core/paragraph' => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+					],
+				],
+			]
+		);
+
+		// Legacy style-book rows stored the FULL user config; readers route
+		// through the branch path so both shapes undo identically.
+		$result = StyleApplyExecutor::undo(
+			[
+				'surface' => 'style-book',
+				'target'  => [
+					'globalStylesId' => self::GLOBAL_STYLES_ID,
+					'blockName'      => 'core/paragraph',
+				],
+				'before'  => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [
+							'blocks' => [
+								'core/paragraph' => [ 'color' => [ 'text' => '#000000' ] ],
+							],
+						],
+					],
+				],
+				'after'   => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [
+							'blocks' => [
+								'core/paragraph' => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [ 'result' => 'undone' ], $result );
+
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame(
+			'#000000',
+			$written['styles']['blocks']['core/paragraph']['color']['text']
+		);
+	}
+
+	public function test_undo_rejects_rows_without_recorded_snapshots(): void {
+		$result = StyleApplyExecutor::undo(
+			[
+				'surface' => 'global-styles',
+				'target'  => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
+				'before'  => [],
+				'after'   => [],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_snapshot_unsupported', $result->get_error_code() );
+	}
 }
