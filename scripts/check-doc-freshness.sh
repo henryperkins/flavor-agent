@@ -211,8 +211,8 @@ check_absent \
 	"${live_docs[@]}"
 
 check_present_fixed \
-	'ability reference should still declare twenty-five ability contracts and feature gating' \
-	'`inc/Abilities/Registration.php` defines 25 ability contracts' \
+	'ability reference should still declare twenty-nine ability contracts and feature gating' \
+	'`inc/Abilities/Registration.php` defines 29 ability contracts' \
 	"${repo_root}/docs/reference/abilities-and-routes.md"
 
 check_present_fixed \
@@ -274,7 +274,7 @@ check_present_in_each_fixed \
 
 check_present_in_each_fixed \
 	'ability count or category list drifted between CLAUDE.md and copilot-instructions.md' \
-	'25 abilities across block, pattern, template, navigation, docs, infra, content, and style categories' \
+	'29 abilities across block, pattern, template, navigation, docs, infra, content, style, and apply categories' \
 	"${repo_root}/CLAUDE.md" \
 	"${repo_root}/.github/copilot-instructions.md"
 

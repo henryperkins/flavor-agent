@@ -20,6 +20,19 @@ Activity history is also maintained as a scoped client session. `loadActivitySes
 
 When server hydration requests `groupBySurface=true`, the repository returns the latest bounded window for each surface independently. A noisy read-only surface such as pattern request diagnostics must not evict executable history from template, block, style, or other surfaces in the same scope.
 
+## External Apply Lifecycle (pre-apply)
+
+External agents can request style applies through `flavor-agent/request-style-apply`. That creates a **pending** row in the same activity table; the post-apply undo machine below is unchanged and only begins once the row is executed.
+
+`apply.status`: `pending → available (approved + executed) | rejected | expired | failed`
+
+- One row throughout: the pending row carries the proposed operations, requester provenance (`apply.requestedBy`, `apply.requestReference`), and freshness signatures under `request.apply`, hydrated as top-level `entry.apply`. On approval (`POST /flavor-agent/v1/activity/{id}/decision`, `manage_options` + the row's mutation capability) the server re-validates freshness and operations, executes through `FlavorAgent\Apply\StyleApplyExecutor`, records execution-time `before`/`after` snapshots, sets `decidedBy`/`decidedAt`, and the row becomes a normal undoable apply row (`apply.status: available`, `undo.status: available`, ordered undo applies).
+- `execution_result` mirrors the lifecycle for SQL filtering: `pending`, `rejected`, `expired`, `failed` before execution; `applied` once executed.
+- Freshness is checked twice: at request (signature recompute plus claimed-config equality against the live entity) and again at approval (live config must still match the `baselineConfigHash` recorded at request). Drift at approval transitions the row to `failed` with a stale reason the agent observes via `flavor-agent/get-activity`.
+- Expiry: default 24 h (`flavor_agent_external_apply_pending_ttl` filter), enforced lazily on reads and swept by the existing `flavor_agent_prune_activity` cron. A per-user pending cap (default 10, `flavor_agent_external_apply_pending_cap` filter) bounds queue abuse.
+- Pending, rejected, expired, and approval-failed rows use `undo.status: not_applicable`, keep `before`/`after` empty, never participate in ordered undo, and never block undo of older executed rows. Executed rows with `undo.status: failed` keep the existing blocking semantics because the mutation may still be live.
+- Operator guidance: an open Site Editor session editing Global Styles will make approvals fail closed (the live entity no longer matches the request-time baseline) — re-request the apply after the editing session saves. The Site Editor also does not live-refresh when an external apply lands; the new row appears on the next activity hydration.
+
 ## Undo States
 
 | State | Meaning |
@@ -31,7 +44,7 @@ When server hydration requests `groupBySurface=true`, the repository returns the
 | `failed` | The undo attempt failed (error message stored in `undo.error`) |
 | `not_applicable` | The row is diagnostic only and does not represent an undoable user action |
 
-`review` is not an executable undo state for apply actions. It is only used by scoped read-only `request_diagnostic` audit rows, which the admin page renders as review-only or failed request records instead of as undoable activity. `not_applicable` is used by `recommendation_outcome` diagnostics, which are hidden from normal inline feeds by default and never participate in undo.
+`review` is not an executable undo state for apply actions. It is only used by scoped read-only `request_diagnostic` audit rows, which the admin page renders as review-only or failed request records instead of as undoable activity. `not_applicable` is used by `recommendation_outcome` diagnostics, which are hidden from normal inline feeds by default and never participate in undo. Pending/rejected/expired/approval-failed external-apply rows also use `not_applicable` — they never executed.
 
 ## Valid Transitions
 

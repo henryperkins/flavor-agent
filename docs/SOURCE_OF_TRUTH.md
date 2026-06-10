@@ -31,7 +31,7 @@ Eight first-party recommendation surfaces exist today:
 
 The plugin also ships one first-party admin audit surface at `Settings > AI Activity`.
 
-A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor. External agents get the same recommendation, validation, and freshness contracts as the first-party editor; applies and undo remain editor-owned and activity persistence is REST-only today (see `docs/reference/governance-layer.md`).
+A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor. External agents get the same recommendation, validation, and freshness contracts as the first-party editor; they can also request review-gated style applies, read their attribution, and undo executed style rows through feature-gated abilities, but approval stays admin-only (the `activity/{id}/decision` route) and admin-global activity reads remain REST-only (see `docs/reference/governance-layer.md`).
 
 ## Repository Layout
 
@@ -42,9 +42,10 @@ flavor-agent/
   flavor-agent.php          Bootstrap, lifecycle hooks, REST + Abilities registration, editor/admin asset enqueue
   uninstall.php             Cleanup for legacy/provider/vector/docs options, sync lock, and cron hooks
   inc/                      PHP backend (PSR-4 namespace FlavorAgent\)
-    Abilities/              Surface, infra, and helper abilities + registration
+    Abilities/              Surface, infra, helper, and external-apply abilities + registration
     Activity/               Server-backed activity persistence, permissions, serialization
     Admin/                  Settings page + AI Activity admin app registration
+    Apply/                  Governed external applies: server-side style apply/undo executor + admin approval decision service
    AzureOpenAI/            Legacy chat Responses facade for Connectors-owned text generation
    Embeddings/             Workers AI embedding client, embedding signatures, shared HTTP helpers, and Qdrant vector DB
     Cloudflare/             AI Search docs grounding, Workers AI, private pattern AI Search
@@ -151,7 +152,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 
-The code defines 25 abilities with full JSON Schema input/output definitions: seven recommendation abilities, twelve helper/read abilities, the docs-search ability, and five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+The code defines 29 abilities with full JSON Schema input/output definitions: seven recommendation abilities, twelve helper/read abilities, the docs-search ability, five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and four feature-gated external-apply abilities (`request-style-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style apply, read activity, and undo executed style rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 #### Developer Docs
 
@@ -159,9 +160,9 @@ The code defines 25 abilities with full JSON Schema input/output definitions: se
 
 #### REST API
 
-Three REST routes live under `/flavor-agent/v1/`. Recommendation surfaces use WordPress Abilities API contracts instead. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+Four REST routes live under `/flavor-agent/v1/`. Recommendation surfaces use WordPress Abilities API contracts instead. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
-- **3 activity route methods** adapt the activity repository: GET `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`), POST `activity` (contextual), and POST `activity/{id}/undo` (contextual)
+- **4 activity route methods** adapt the activity repository: GET `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`), POST `activity` (contextual), POST `activity/{id}/undo` (contextual), and POST `activity/{id}/decision` (`manage_options` plus the row's mutation capability; approves or rejects a pending external apply)
 - **1 admin route path**: POST `sync-patterns` (`manage_options`) queues the manual pattern reindex; GET `sync-patterns` (`manage_options`) returns current sync state for polling
 
 #### Admin Settings

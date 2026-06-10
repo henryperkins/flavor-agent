@@ -16,7 +16,7 @@ For every chat-backed surface, the WordPress AI plugin Connector Approval experi
 | Navigation recommendations | Embedded section for selected `core/navigation` blocks inside block recommendations | Selected navigation block, theme capability, text-generation provider, menu ID or serialized markup | Review advisory navigation structure, overlay, and accessibility ideas | No apply or inline undo; scoped request diagnostics only | `docs/features/navigation-recommendations.md` |
 | Template recommendations | Site Editor `AI Template Recommendations` panel | Current `wp_template` entity contract and text-generation provider | Preview and apply bounded template operations | Deterministic apply after preview; newest valid activity can undo | `docs/features/template-recommendations.md` |
 | Template-part recommendations | Site Editor `AI Template Part Recommendations` panel | Current `wp_template_part` entity contract and text-generation provider | Preview bounded template-part operations, focus blocks, and browse patterns | Deterministic apply after preview; newest valid activity can undo | `docs/features/template-part-recommendations.md` |
-| Style and theme intelligence | Site Editor Styles sidebar for Global Styles and Style Book | Native Styles sidebar scope, theme capability, text-generation provider, valid Style Book target when needed | Review `theme.json`-safe Global Styles and Style Book changes | Deterministic apply after review; newest valid style-surface activity can undo | `docs/features/style-and-theme-intelligence.md` |
+| Style and theme intelligence | Site Editor Styles sidebar for Global Styles and Style Book | Native Styles sidebar scope, theme capability, text-generation provider, valid Style Book target when needed | Review `theme.json`-safe Global Styles and Style Book changes | Deterministic apply after review; newest valid style-surface activity can undo. External agents: external apply via `request-style-apply` → admin approval → server execute; server-side undo via `undo-activity` | `docs/features/style-and-theme-intelligence.md` |
 | AI activity and undo | Inline recent activity groups for block, template, template-part, Global Styles, and Style Book plus `Settings > AI Activity` | Scoped entries for inline panels; `manage_options` for admin audit | Review activity, request diagnostics, provenance, and undo state | Inline undo for executable rows; admin audit is read-only | `docs/features/activity-and-audit.md` |
 | Settings and pattern sync | `Settings > Flavor Agent` | `manage_options` | Configure plugin-owned embedding/storage settings, view diagnostics, run pattern sync | Settings save and sync only | `docs/features/settings-backends-and-sync.md` |
 
@@ -26,9 +26,9 @@ Content request diagnostics render inline only when the supported post/page cont
 
 | Surface | Where it lives | What it provides | Canonical detail |
 | --- | --- | --- | --- |
-| WordPress Abilities API | Server-registered abilities under the `flavor-agent` category | Recommendation, content, helper, diagnostics, docs-grounding, theme, and backend status contracts | `docs/reference/abilities-and-routes.md` |
+| WordPress Abilities API | Server-registered abilities under the `flavor-agent` category | Recommendation, content, helper, diagnostics, docs-grounding, theme, backend status, and feature-gated external-apply (`request-style-apply`, `get-activity`, `list-activity`, `undo-activity`) contracts | `docs/reference/abilities-and-routes.md` |
 | Helper abilities and diagnostics | Server helper abilities plus settings readiness/status contracts | Block, pattern, synced-pattern, template-part, theme, token, backend, and docs search helpers | `docs/features/helper-abilities.md` |
-| Flavor Agent REST API | Routes under `flavor-agent/v1` | Activity read/write/undo and manual pattern sync | `docs/reference/abilities-and-routes.md#rest-routes` |
+| Flavor Agent REST API | Routes under `flavor-agent/v1` | Activity read/write/undo, external-apply decision, and manual pattern sync | `docs/reference/abilities-and-routes.md#rest-routes` |
 
 ## Quick Mapping
 
@@ -41,6 +41,8 @@ Content request diagnostics render inline only when the supported post/page cont
 - Global Styles / Style Book panel -> `flavor-agent/recommend-style`
 - Activity read/write -> `GET/POST /flavor-agent/v1/activity`
 - Activity undo -> `POST /flavor-agent/v1/activity/{id}/undo`
+- External-apply approval -> `POST /flavor-agent/v1/activity/{id}/decision`
+- External agent style apply -> `flavor-agent/request-style-apply`; status/attribution reads -> `flavor-agent/get-activity` and `flavor-agent/list-activity`; server-side undo -> `flavor-agent/undo-activity`
 - Pattern sync -> `POST /flavor-agent/v1/sync-patterns`; status polling -> `GET /flavor-agent/v1/sync-patterns`
 
 Recommendation surfaces are available through the WordPress Abilities API. The old `flavor-agent/v1/recommend-*` REST paths were removed before public release.

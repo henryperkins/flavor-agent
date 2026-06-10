@@ -109,6 +109,8 @@ Tested by: `tests/phpunit/RecommendationSignatureTest.php`, `SignatureBoundaryTe
 
 Every surface — including the advisory, editorial, and browse-only ones — is attributed at the request level: each suggestion request writes a `request_diagnostic` activity row.
 
+For the Global Styles and Style Book entries, the full loop now also runs **server-side for external agents**: request (`request-style-apply`) → human approval (`POST /flavor-agent/v1/activity/{id}/decision`) → server execute with freshness/operation re-validation → attributed activity row → server-side undo (`undo-activity`). An open Site Editor session does not live-refresh when an external apply lands; activity hydration shows it on the next load.
+
 ## External-Agent Parity
 
 External agents reach the layer through the same permission callbacks as the first-party editor (`edit_posts` / `edit_theme_options`, escalating to `edit_post` when a post ID is resolvable):
@@ -116,10 +118,11 @@ External agents reach the layer through the same permission callbacks as the fir
 - the seven `recommend-*` abilities (feature-gated) — exposed as first-class MCP tools on the dedicated server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`)
 - the five `preview-recommend-*` siblings — side-effect-free signature dry-runs, registered before the feature gate is enabled so operators can verify wiring
 - nine public read helpers on the universal MCP default server (`meta.mcp.public = true`)
+- the four external-apply abilities (feature-gated, dedicated server only): `request-style-apply` queues a review-gated style apply, `get-activity`/`list-activity` are the agent's attribution and status reads, and `undo-activity` is the server-side reverse path with ordered-undo and drift checks
 
 Generation-side governance is caller-independent: external recommendation calls flow through the same executor, schemas, validators, freshness signatures, and request-diagnostic attribution as the editor.
 
-The boundary, stated plainly: there are no apply, undo, or activity abilities. Applies and undo are editor-owned, and activity persistence is REST-only (`docs/reference/abilities-and-routes.md`). An external agent that acts on a recommendation does so through general WordPress APIs, outside this layer's apply/record/reverse loop.
+The boundary, stated plainly: external agents can now request style applies, read their attribution, and undo executed style rows — but approval is never exposed to agents. Every external style apply is review-gated through `POST /flavor-agent/v1/activity/{id}/decision` (`manage_options` plus the row's mutation capability) in `Settings > AI Activity`, with freshness re-verified at request and again at approval. AI proposes; WordPress approves. Template, template-part, and block applies remain editor-owned (C2+), and admin-global activity reads stay REST-only.
 
 ## Foundation
 
