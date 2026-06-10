@@ -1366,6 +1366,16 @@ namespace {
 								)
 							);
 						}
+
+						if (preg_match("/execution_result\s*=\s*'([^']*)'/i", $query, $matches)) {
+							$execution_result = stripslashes((string) ($matches[1] ?? ''));
+							$rows             = array_values(
+								array_filter(
+									$rows,
+									static fn(array $row): bool => (string) ($row['execution_result'] ?? '') === $execution_result
+								)
+							);
+						}
 					}
 
 					foreach (

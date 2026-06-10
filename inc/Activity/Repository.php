@@ -658,6 +658,204 @@ final class Repository {
 	}
 
 	/**
+	 * One-way transition of an external-apply row out of the pending state.
+	 *
+	 * @param array<string, mixed> $changes {applyStatus, decidedBy?, decidedAt?, decisionNote?, failureCode?, failureMessage?, executedAt?, before?, after?, target?}
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function transition_external_apply( string $activity_id, array $changes ) {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_storage_unavailable',
+				'Flavor Agent activity storage is unavailable.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$row = self::find_row( $activity_id );
+
+		if ( ! is_array( $row ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_found',
+				'Flavor Agent could not find that activity entry.',
+				[ 'status' => 404 ]
+			);
+		}
+
+		$entry = Serializer::hydrate_row( $row );
+		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only transition out of the pending state.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$next_status = (string) ( $changes['applyStatus'] ?? '' );
+
+		if ( ! in_array( $next_status, [ 'available', 'rejected', 'expired', 'failed' ], true ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only accept available, rejected, expired, or failed transitions.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$timestamp       = gmdate( 'c' );
+		$apply['status'] = $next_status;
+
+		foreach ( [ 'decidedBy', 'decidedAt', 'decisionNote', 'failureCode', 'failureMessage', 'executedAt' ] as $field ) {
+			if ( array_key_exists( $field, $changes ) ) {
+				$apply[ $field ] = $changes[ $field ];
+			}
+		}
+
+		$request          = is_array( $entry['request'] ?? null ) ? $entry['request'] : [];
+		$request['apply'] = $apply;
+		$update           = [
+			'request_json'     => Serializer::encode_json( $request ),
+			'execution_result' => 'available' === $next_status ? 'applied' : $next_status,
+			'updated_at'       => Serializer::mysql_datetime_from_timestamp( $timestamp ),
+		];
+
+		if ( 'available' === $next_status ) {
+			$update['before_state'] = Serializer::encode_json( $changes['before'] ?? [] );
+			$update['after_state']  = Serializer::encode_json( $changes['after'] ?? [] );
+			$update['target_json']  = Serializer::encode_json( $changes['target'] ?? ( $entry['target'] ?? [] ) );
+			$update['undo_state']   = Serializer::encode_json(
+				Serializer::normalize_undo_for_storage( [ 'status' => 'available' ], $timestamp )
+			);
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
+		$updated = $wpdb->update( self::table_name(), $update, [ 'activity_id' => $activity_id ] );
+
+		if ( false === $updated ) {
+			return new \WP_Error(
+				'flavor_agent_activity_update_failed',
+				'Flavor Agent could not update the activity entry.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$stored_row = self::find_row( $activity_id );
+
+		if ( is_array( $stored_row ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Refreshes derived admin projection columns for the transitioned row.
+			$wpdb->update(
+				self::table_name(),
+				self::build_admin_projection_from_row( $stored_row ),
+				[ 'activity_id' => $activity_id ]
+			);
+		}
+
+		$stored = self::find( $activity_id );
+
+		if ( is_array( $stored ) ) {
+			return $stored;
+		}
+
+		return new \WP_Error(
+			'flavor_agent_activity_not_found',
+			'Flavor Agent could not find that activity entry.',
+			[ 'status' => 404 ]
+		);
+	}
+
+	/**
+	 * Lazily expire a hydrated pending external apply that is past its expiresAt.
+	 *
+	 * @param array<string, mixed> $entry
+	 * @return array<string, mixed>
+	 */
+	public static function maybe_expire_pending_apply( array $entry ): array {
+		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return $entry;
+		}
+
+		$expires_at = strtotime( (string) ( $apply['expiresAt'] ?? '' ) );
+
+		if ( false === $expires_at || $expires_at > time() ) {
+			return $entry;
+		}
+
+		$expired = self::transition_external_apply(
+			(string) ( $entry['id'] ?? '' ),
+			[ 'applyStatus' => 'expired' ]
+		);
+
+		return is_array( $expired ) ? $expired : $entry;
+	}
+
+	/**
+	 * Sweep every overdue pending external apply to expired. Runs from prune().
+	 */
+	public static function expire_overdue_pending_applies(): int {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return 0;
+		}
+
+		$sql = $wpdb->prepare(
+			'SELECT * FROM %i WHERE execution_result = %s',
+			self::table_name(),
+			'pending'
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads pending external-apply rows from the plugin-owned activity table; prepared above.
+		$rows    = $wpdb->get_results( $sql, ARRAY_A );
+		$expired = 0;
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$entry   = Serializer::hydrate_row( $row );
+			$updated = self::maybe_expire_pending_apply( $entry );
+
+			if ( 'expired' === (string) ( $updated['apply']['status'] ?? '' ) ) {
+				++$expired;
+			}
+		}
+
+		return $expired;
+	}
+
+	/**
+	 * Count unexpired pending external applies requested by the given user.
+	 */
+	public static function count_active_pending_external_applies( int $user_id ): int {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) || $user_id <= 0 ) {
+			return 0;
+		}
+
+		$sql = $wpdb->prepare(
+			'SELECT * FROM %i WHERE execution_result = %s AND user_id = %d',
+			self::table_name(),
+			'pending',
+			$user_id
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Counts the requesting user's pending external applies; prepared above.
+		$rows  = $wpdb->get_results( $sql, ARRAY_A );
+		$count = 0;
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$entry = self::maybe_expire_pending_apply( Serializer::hydrate_row( $row ) );
+
+			if ( 'pending' === (string) ( $entry['apply']['status'] ?? '' ) ) {
+				++$count;
+			}
+		}
+
+		return $count;
+	}
+
+	/**
 	 * Delete activity entries created before the given ISO 8601 timestamp.
 	 *
 	 * @return int Number of deleted rows, or 0 on failure.
@@ -689,6 +887,8 @@ final class Repository {
 	}
 
 	public static function prune(): int {
+		self::expire_overdue_pending_applies();
+
 		$retention_days = (int) get_option(
 			'flavor_agent_activity_retention_days',
 			self::DEFAULT_RETENTION_DAYS
