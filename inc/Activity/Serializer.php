@@ -239,6 +239,14 @@ final class Serializer {
 			],
 		];
 
+		$request_apply = is_array( $hydrated['request']['apply'] ?? null )
+			? $hydrated['request']['apply']
+			: [];
+
+		if ( [] !== $request_apply ) {
+			$hydrated['apply'] = $request_apply;
+		}
+
 		if (
 			'recommendation_outcome' === $hydrated['type']
 			|| (

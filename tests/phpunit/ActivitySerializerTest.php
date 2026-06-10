@@ -292,4 +292,59 @@ final class ActivitySerializerTest extends TestCase {
 			$entry['undo']
 		);
 	}
+
+	public function test_hydrate_row_exposes_request_apply_as_top_level_apply(): void {
+		$apply = [
+			'status'           => 'pending',
+			'requestedBy'      => 7,
+			'requestedAt'      => '2026-06-10T01:00:00+00:00',
+			'expiresAt'        => '2026-06-11T01:00:00+00:00',
+			'operations'       => [
+				[
+					'type'  => 'set_styles',
+					'path'  => [ 'color', 'text' ],
+					'value' => 'var:preset|color|accent',
+				],
+			],
+			'signatures'       => [
+				'resolvedContextSignature' => str_repeat( 'a', 64 ),
+				'reviewContextSignature'   => str_repeat( 'b', 64 ),
+				'baselineConfigHash'       => str_repeat( 'c', 64 ),
+			],
+			'requestReference' => 'agent-req-1',
+		];
+		$row   = [
+			'activity_id'      => 'apply-row-1',
+			'surface'          => 'global-styles',
+			'activity_type'    => 'apply_global_styles_suggestion',
+			'request_json'     => (string) wp_json_encode(
+				[
+					'prompt' => 'darker',
+					'apply'  => $apply,
+				]
+			),
+			'execution_result' => 'pending',
+			'undo_state'       => (string) wp_json_encode( [ 'status' => 'not_applicable' ] ),
+			'created_at'       => '2026-06-10 01:00:00',
+		];
+
+		$entry = Serializer::hydrate_row( $row );
+
+		$this->assertSame( $apply, $entry['apply'] );
+		$this->assertSame( 'pending', $entry['executionResult'] );
+		$this->assertSame( 'not_applicable', $entry['undo']['status'] );
+	}
+
+	public function test_hydrate_row_omits_apply_when_request_has_none(): void {
+		$entry = Serializer::hydrate_row(
+			[
+				'activity_id'  => 'plain-row-1',
+				'surface'      => 'global-styles',
+				'request_json' => (string) wp_json_encode( [ 'prompt' => 'darker' ] ),
+				'created_at'   => '2026-06-10 01:00:00',
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'apply', $entry );
+	}
 }
