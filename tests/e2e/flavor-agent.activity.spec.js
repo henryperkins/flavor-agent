@@ -153,7 +153,7 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 	).toBeVisible( { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__summary-item' )
-	).toHaveCount( 6, { timeout: 30_000 } );
+	).toHaveCount( 7, { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__feed' )
 	).toContainText( 'Refresh template hierarchy' );
@@ -409,7 +409,7 @@ foreach ( $entries as $entry ) {
 	).toBeVisible( { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__summary-item' )
-	).toHaveCount( 6, { timeout: 30_000 } );
+	).toHaveCount( 7, { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__feed' )
 	).toContainText( 'Full-stack template insert' );
