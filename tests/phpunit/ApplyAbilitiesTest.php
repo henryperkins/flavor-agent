@@ -594,4 +594,53 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_apply_invalid_decision', $result->get_error_code() );
 	}
+
+	public function test_request_style_apply_ability_requires_edit_theme_options(): void {
+		$ability = new \FlavorAgent\AI\Abilities\RequestStyleApplyAbility(
+			\FlavorAgent\AI\Abilities\RequestStyleApplyAbility::ABILITY_NAME,
+			[]
+		);
+
+		WordPressTestState::$capabilities = [ 'edit_posts' => true ];
+		$this->assertFalse( $ability->permission_callback( [] ) );
+
+		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
+		$this->assertTrue( $ability->permission_callback( [] ) );
+	}
+
+	public function test_undo_activity_ability_enforces_the_row_capability_contextually(): void {
+		$row     = $this->create_executed_style_row();
+		$ability = new \FlavorAgent\AI\Abilities\UndoActivityAbility(
+			\FlavorAgent\AI\Abilities\UndoActivityAbility::ABILITY_NAME,
+			[]
+		);
+		$input   = [ 'activityId' => (string) $row['id'] ];
+
+		WordPressTestState::$capabilities = [ 'edit_posts' => true ];
+		$this->assertFalse(
+			$ability->permission_callback( $input ),
+			'Style rows resolve to edit_theme_options through the contextual check.'
+		);
+
+		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
+		$this->assertTrue( $ability->permission_callback( $input ) );
+	}
+
+	public function test_list_activity_ability_gates_on_the_scope_context(): void {
+		$ability = new \FlavorAgent\AI\Abilities\ListActivityAbility(
+			\FlavorAgent\AI\Abilities\ListActivityAbility::ABILITY_NAME,
+			[]
+		);
+
+		WordPressTestState::$capabilities = [ 'edit_posts' => true ];
+		$this->assertFalse(
+			$ability->permission_callback( [ 'scopeKey' => 'global_styles:17' ] )
+		);
+		$this->assertFalse( $ability->permission_callback( [] ), 'A scopeKey is required.' );
+
+		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
+		$this->assertTrue(
+			$ability->permission_callback( [ 'scopeKey' => 'global_styles:17' ] )
+		);
+	}
 }

@@ -100,6 +100,7 @@ final class FeatureBootstrap {
 
 		if ( self::canonical_contracts_available() && self::recommendation_feature_enabled() ) {
 			Registration::register_recommendation_abilities();
+			Registration::register_external_apply_abilities();
 		}
 	}
 
