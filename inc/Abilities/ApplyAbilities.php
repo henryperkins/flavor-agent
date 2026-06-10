@@ -269,6 +269,117 @@ final class ApplyAbilities {
 		return [ 'entries' => $entries ];
 	}
 
+	public static function undo_activity( mixed $input ): array|\WP_Error {
+		$input       = self::normalize_map( $input );
+		$activity_id = sanitize_text_field( (string) ( $input['activityId'] ?? '' ) );
+
+		if ( '' === $activity_id ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_entry',
+				'undoActivity requires an activityId.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$entry = ActivityRepository::find( $activity_id );
+
+		if ( ! is_array( $entry ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_found',
+				'Flavor Agent could not find that activity entry.',
+				[ 'status' => 404 ]
+			);
+		}
+
+		$entry   = ActivityRepository::maybe_expire_pending_apply( $entry );
+		$surface = (string) ( $entry['surface'] ?? '' );
+
+		if ( ! in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+			return new \WP_Error(
+				'flavor_agent_undo_surface_unsupported',
+				'External undo currently supports Global Styles and Style Book activity rows.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( self::is_non_executed_apply_entry( $entry ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_undoable',
+				'Pending, rejected, expired, and approval-failed external applies never executed and cannot be undone.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$undo_status = (string) ( $entry['undo']['status'] ?? '' );
+
+		if ( 'undone' === $undo_status ) {
+			// Idempotent success report without rewriting the terminal row.
+			return [
+				'entry'  => $entry,
+				'result' => 'already_undone',
+				'error'  => null,
+			];
+		}
+
+		if ( 'available' !== $undo_status ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_undo_transition',
+				'Flavor Agent only allows undo status changes from the available state.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		if ( ! ActivityRepository::can_perform_ordered_undo( $activity_id ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_undo_blocked',
+				'Undo blocked by newer AI actions.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$result = StyleApplyExecutor::undo( $entry );
+
+		if ( is_wp_error( $result ) ) {
+			if ( 'flavor_agent_undo_drift' === $result->get_error_code() ) {
+				$failed = ActivityRepository::update_undo_status( $activity_id, 'failed', $result->get_error_message() );
+
+				return [
+					'entry'  => is_array( $failed ) ? $failed : $entry,
+					'result' => 'failed',
+					'error'  => $result->get_error_message(),
+				];
+			}
+
+			return $result;
+		}
+
+		$updated = ActivityRepository::update_undo_status( $activity_id, 'undone' );
+
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
+		}
+
+		return [
+			'entry'  => $updated,
+			'result' => 'already_undone' === (string) ( $result['result'] ?? '' ) ? 'already_undone' : 'undone',
+			'error'  => null,
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 */
+	private static function is_non_executed_apply_entry( array $entry ): bool {
+		$execution_result = (string) ( $entry['executionResult'] ?? '' );
+
+		if ( in_array( $execution_result, [ 'pending', 'rejected', 'expired' ], true ) ) {
+			return true;
+		}
+
+		return 'failed' === $execution_result
+			&& '' === (string) ( $entry['apply']['executedAt'] ?? '' );
+	}
+
 	/**
 	 * @param array<string, mixed> $entry
 	 */

@@ -329,4 +329,168 @@ final class ApplyAbilitiesTest extends TestCase {
 		$all = ApplyAbilities::list_activity( [ 'scopeKey' => 'global_styles:17' ] );
 		$this->assertCount( 2, $all['entries'] );
 	}
+
+	/**
+	 * Persist an executed editor-shaped Global Styles row whose snapshots
+	 * match the seeded entity state.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function create_executed_style_row(): array {
+		$created = \FlavorAgent\Activity\Repository::create(
+			[
+				'type'       => 'apply_global_styles_suggestion',
+				'surface'    => 'global-styles',
+				'target'     => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
+				'suggestion' => 'Accent text',
+				'before'     => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'after'      => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+					],
+					'operations' => [],
+				],
+				'undo'       => [ 'status' => 'available' ],
+				'document'   => [ 'scopeKey' => 'global_styles:17' ],
+			]
+		);
+		$this->assertIsArray( $created );
+
+		return $created;
+	}
+
+	public function test_undo_activity_restores_the_entity_and_persists_undone(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( 'undone', $result['entry']['undo']['status'] );
+
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( [], $written['styles'] );
+	}
+
+	public function test_undo_activity_persists_failed_on_drift(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => '#999999' ] ],
+			]
+		);
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'failed', $result['result'] );
+		$this->assertSame( 'failed', $result['entry']['undo']['status'] );
+		$this->assertNotSame( '', (string) $result['entry']['undo']['error'] );
+	}
+
+	public function test_undo_activity_reports_persisted_undone_rows_idempotently_without_rewrite(): void {
+		$row = $this->create_executed_style_row();
+		\FlavorAgent\Activity\Repository::update_undo_status( (string) $row['id'], 'undone' );
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'already_undone', $result['result'] );
+		$this->assertSame( 'undone', $result['entry']['undo']['status'] );
+	}
+
+	public function test_undo_activity_rejects_non_executed_rows(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $pending['activityId'] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_activity_not_undoable', $result->get_error_code() );
+	}
+
+	public function test_undo_activity_enforces_the_ordered_undo_rule(): void {
+		$older = $this->create_executed_style_row();
+		$newer = $this->create_executed_style_row();
+		$this->assertNotSame( $older['id'], $newer['id'] );
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $older['id'] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_activity_undo_blocked', $result->get_error_code() );
+	}
+
+	public function test_undo_activity_rejects_unsupported_surfaces(): void {
+		$created = \FlavorAgent\Activity\Repository::create(
+			[
+				'type'       => 'apply_suggestion',
+				'surface'    => 'block',
+				'target'     => [ 'blockName' => 'core/paragraph' ],
+				'suggestion' => 'Block apply',
+				'before'     => [ 'attributes' => [] ],
+				'after'      => [ 'attributes' => [] ],
+				'undo'       => [ 'status' => 'available' ],
+				'document'   => [ 'scopeKey' => 'post:5' ],
+			]
+		);
+		$this->assertIsArray( $created );
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $created['id'] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_surface_unsupported', $result->get_error_code() );
+	}
+
+	public function test_undo_activity_works_for_approved_external_rows(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+		\FlavorAgent\Activity\Repository::transition_external_apply(
+			(string) $pending['activityId'],
+			[
+				'applyStatus' => 'available',
+				'executedAt'  => gmdate( 'c' ),
+				'before'      => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'after'       => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+					],
+					'operations' => [],
+				],
+				'target'      => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
+			]
+		);
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $pending['activityId'] ] );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+	}
 }
