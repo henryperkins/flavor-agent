@@ -236,7 +236,7 @@ test( '@wp70-site-editor settings page keeps compact help-first IA without chang
 		);
 } );
 
-test( '@wp70-site-editor settings page shows Developer Docs runtime diagnostics', async ( {
+test( '@wp70-site-editor settings page shows the unreachable Developer Docs runtime signal', async ( {
 	page,
 } ) => {
 	runWpCli( wp70Harness, [
@@ -245,22 +245,9 @@ test( '@wp70-site-editor settings page shows Developer Docs runtime diagnostics'
 update_option(
 	'flavor_agent_docs_runtime_state',
 	array(
-		'status' => 'degraded',
-		'lastSearchAt' => '2026-05-11 00:00:00',
-		'lastSearchMode' => 'async',
+		'status' => 'unreachable',
+		'lastSearchAt' => '2026-06-11 00:00:00',
 		'lastResultCount' => 0,
-		'lastTrustedSuccessAt' => '2026-04-08 09:45:00',
-		'lastTrustedSuccessMode' => 'foreground',
-		'lastServedAt' => '2026-04-08 09:50:00',
-		'lastServedMode' => 'cache',
-		'lastFallbackType' => 'generic',
-		'lastSourceTypes' => array( 'developer-docs' ),
-		'lastFreshness' => array( 'stale' ),
-		'lastGroundingFingerprint' => 'abc123',
-		'lastErrorAt' => '2026-05-11 00:00:00',
-		'lastErrorMode' => 'async',
-		'lastErrorCode' => 'http_request_failed',
-		'lastErrorMessage' => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
 	),
 	false
 );
@@ -284,16 +271,13 @@ update_option(
 	await expect( docsSection ).toContainText(
 		'Built-in developer.wordpress.org grounding is active.'
 	);
+	await expect( docsSection ).toContainText( 'temporarily unavailable' );
 	await expect( docsSection ).toContainText(
-		'Developer Docs grounding is degraded.'
+		'Recommendations still run without it.'
 	);
-	await expect( docsSection ).toContainText( 'developer-docs' );
-	await expect( docsSection ).toContainText( 'stale' );
-	await expect( docsSection ).toContainText(
-		'Developer Docs grounding is missing current WordPress release-cycle sources.'
-	);
+	await expect( docsSection ).toContainText( 'Last search: 2026-06-11 00:00:00.' );
+	await expect( docsSection ).not.toContainText( 'degraded' );
 	await expect( docsSection ).not.toContainText( 'Fingerprint:' );
-	await expect( docsSection ).not.toContainText( 'abc123' );
 
 	runWpCli(
 		wp70Harness,
