@@ -689,7 +689,7 @@ final class BlockAbilitiesTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['resolvedContextSignature'] ?? '' )
 		);
-		$this->assertSame( 'unavailable', $baseline['docsGrounding']['status'] ?? null );
+		$this->assertFalse( $baseline['docsGrounding']['available'] ?? true );
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['docsGroundingFingerprint'] ?? '' )
@@ -735,7 +735,7 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 
 		$this->assertIsArray( $with_docs );
-		$this->assertSame( 'grounded', $with_docs['docsGrounding']['status'] ?? null );
+		$this->assertTrue( $with_docs['docsGrounding']['available'] ?? false );
 		$this->assertNotSame(
 			$baseline['resolvedContextSignature'] ?? null,
 			$with_docs['resolvedContextSignature'] ?? null
@@ -845,8 +845,8 @@ final class BlockAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $recommendation );
 		$this->assertIsArray( $signature );
-		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
-		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertTrue( $recommendation['docsGrounding']['available'] ?? false );
+		$this->assertTrue( $signature['docsGrounding']['available'] ?? false );
 		$this->assertSame(
 			$recommendation['resolvedContextSignature'] ?? null,
 			$signature['resolvedContextSignature'] ?? null
@@ -855,95 +855,6 @@ final class BlockAbilitiesTest extends TestCase {
 			$recommendation['docsGroundingFingerprint'] ?? null,
 			$signature['docsGroundingFingerprint'] ?? null
 		);
-	}
-
-	public function test_recommend_block_warns_on_missing_release_cycle_coverage_by_default(): void {
-		$this->markTestSkipped( 'Coverage diagnostics are removed by the docs-grounding relaxation (deleted in Task 4/5).' );
-		$this->configure_text_generation_connector();
-		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
-			'status'                 => 'missing-current-release-cycle',
-			'hasDeveloperDocs'       => true,
-			'hasCurrentReleaseCycle' => false,
-			'sourceTypes'            => [ 'developer-docs' ],
-			'freshness'              => [ 'current' ],
-			'checkedAt'              => '2026-05-11 00:00:00',
-			'errorCode'              => 'missing_current_release_cycle',
-			'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-		];
-		WordPressTestState::$ai_client_generate_text_result                     = wp_json_encode(
-			[
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => [],
-				'explanation' => 'Model still runs when coverage is only diagnostic.',
-			]
-		);
-
-		$result = BlockAbilities::recommend_block(
-			[
-				'selectedBlock' => [
-					'blockName'  => 'core/paragraph',
-					'attributes' => [
-						'content' => 'Hello world',
-					],
-				],
-			]
-		);
-
-		$this->assertIsArray( $result );
-		$this->assertSame(
-			'missing-current-release-cycle',
-			$result['docsGrounding']['coverage']['status'] ?? null
-		);
-		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt );
-	}
-
-	public function test_recommend_block_warns_on_missing_release_cycle_coverage_even_when_release_gate_is_enabled(): void {
-		$this->markTestSkipped( 'Coverage diagnostics are removed by the docs-grounding relaxation (deleted in Task 4/5).' );
-		$this->configure_text_generation_connector();
-		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
-			'status'                 => 'missing-current-release-cycle',
-			'hasDeveloperDocs'       => true,
-			'hasCurrentReleaseCycle' => false,
-			'sourceTypes'            => [ 'developer-docs' ],
-			'freshness'              => [ 'current' ],
-			'checkedAt'              => '2026-05-11 00:00:00',
-			'errorCode'              => 'missing_current_release_cycle',
-			'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-		];
-		WordPressTestState::$ai_client_generate_text_result                     = wp_json_encode(
-			[
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => [],
-				'explanation' => 'Model still runs: release-cycle currency is now advisory, not a block.',
-			]
-		);
-
-		add_filter( 'flavor_agent_docs_grounding_require_current_coverage', '__return_true' );
-
-		try {
-			$result = BlockAbilities::recommend_block(
-				[
-					'selectedBlock' => [
-						'blockName'  => 'core/paragraph',
-						'attributes' => [
-							'content' => 'Hello world',
-						],
-					],
-				]
-			);
-		} finally {
-			remove_filter( 'flavor_agent_docs_grounding_require_current_coverage', '__return_true' );
-		}
-
-		$this->assertIsArray( $result );
-		$this->assertSame(
-			'missing-current-release-cycle',
-			$result['docsGrounding']['coverage']['status'] ?? null
-		);
-		// The model runs even with the release gate enabled.
-		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt );
 	}
 
 	public function test_list_allowed_blocks_returns_registered_block_manifests(): void {

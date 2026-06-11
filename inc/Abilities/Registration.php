@@ -787,41 +787,14 @@ final class Registration {
 
 	private static function docs_grounding_output_schema(): array {
 		return [
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'properties'           => [
-				'status'      => [ 'type' => 'string' ],
-				'mode'        => [ 'type' => 'string' ],
-				'transport'   => [ 'type' => 'string' ],
+			'type'       => 'object',
+			'properties' => [
+				'available'   => [ 'type' => 'boolean' ],
 				'sourceTypes' => [
 					'type'  => 'array',
 					'items' => [ 'type' => 'string' ],
 				],
-				'freshness'   => [
-					'type'  => 'array',
-					'items' => [ 'type' => 'string' ],
-				],
-				'coverage'    => [
-					'type'                 => 'object',
-					'additionalProperties' => false,
-					'properties'           => [
-						'status'                 => [ 'type' => 'string' ],
-						'hasDeveloperDocs'       => [ 'type' => 'boolean' ],
-						'hasCurrentReleaseCycle' => [ 'type' => 'boolean' ],
-						'sourceTypes'            => [
-							'type'  => 'array',
-							'items' => [ 'type' => 'string' ],
-						],
-						'freshness'              => [
-							'type'  => 'array',
-							'items' => [ 'type' => 'string' ],
-						],
-						'checkedAt'              => [ 'type' => 'string' ],
-						'errorCode'              => [ 'type' => 'string' ],
-						'errorMessage'           => [ 'type' => 'string' ],
-					],
-				],
-				'fingerprint' => [ 'type' => 'string' ],
+				'count'       => [ 'type' => 'integer' ],
 			],
 		];
 	}

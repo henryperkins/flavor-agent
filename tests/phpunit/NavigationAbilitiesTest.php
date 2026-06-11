@@ -79,7 +79,7 @@ final class NavigationAbilitiesTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['reviewContextSignature'] ?? '' )
 		);
-		$this->assertSame( 'unavailable', $result['docsGrounding']['status'] ?? null );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['docsGroundingFingerprint'] ?? '' )
@@ -173,8 +173,8 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $recommendation );
 		$this->assertIsArray( $signature );
-		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
-		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertTrue( $recommendation['docsGrounding']['available'] ?? false );
+		$this->assertTrue( $signature['docsGrounding']['available'] ?? false );
 		$this->assertSame(
 			$recommendation['reviewContextSignature'] ?? null,
 			$signature['reviewContextSignature'] ?? null

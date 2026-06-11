@@ -356,7 +356,7 @@ final class StyleAbilitiesTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['resolvedContextSignature'] ?? '' )
 		);
-		$this->assertSame( 'unavailable', $baseline['docsGrounding']['status'] ?? null );
+		$this->assertFalse( $baseline['docsGrounding']['available'] ?? true );
 		$this->assertIsArray( $changed );
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
@@ -529,8 +529,8 @@ final class StyleAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $recommendation );
 		$this->assertIsArray( $signature );
-		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
-		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertTrue( $recommendation['docsGrounding']['available'] ?? false );
+		$this->assertTrue( $signature['docsGrounding']['available'] ?? false );
 		$this->assertSame(
 			$recommendation['reviewContextSignature'] ?? null,
 			$signature['reviewContextSignature'] ?? null
