@@ -33,6 +33,28 @@ final class TemplateRepository {
 		return $result;
 	}
 
+	public function for_templates( bool $include_content = true ): array {
+		$templates = get_block_templates( [], 'wp_template' );
+		$result    = [];
+
+		foreach ( $templates as $template ) {
+			$entry = [
+				'id'          => $template->id ?? '',
+				'slug'        => $template->slug ?? '',
+				'title'       => $template->title ?? '',
+				'description' => $template->description ?? '',
+			];
+
+			if ( $include_content ) {
+				$entry['content'] = $template->content ?? '';
+			}
+
+			$result[] = $entry;
+		}
+
+		return $result;
+	}
+
 	/**
 	 * @return array<string, string>
 	 */

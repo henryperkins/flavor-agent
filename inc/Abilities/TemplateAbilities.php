@@ -39,6 +39,19 @@ final class TemplateAbilities {
 		];
 	}
 
+	public static function list_templates( mixed $input ): array {
+		$input           = self::normalize_input( $input );
+		$can_edit_theme  = current_user_can( 'edit_theme_options' );
+		$include_content = $can_edit_theme && filter_var(
+			$input['includeContent'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
+
+		return [
+			'templates' => ServerCollector::for_templates( $include_content ),
+		];
+	}
+
 	/**
 	 * Recommend template-part composition and patterns for a template.
 	 *

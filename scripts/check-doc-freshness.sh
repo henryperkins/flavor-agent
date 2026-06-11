@@ -211,13 +211,13 @@ check_absent \
 	"${live_docs[@]}"
 
 check_present_fixed \
-	'ability reference should still declare twenty-nine ability contracts and feature gating' \
-	'`inc/Abilities/Registration.php` defines 29 ability contracts' \
+	'ability reference should still declare thirty ability contracts and feature gating' \
+	'`inc/Abilities/Registration.php` defines 30 ability contracts' \
 	"${repo_root}/docs/reference/abilities-and-routes.md"
 
 check_present_fixed \
 	'Abilities Explorer docs should distinguish always-on preflight abilities from feature-gated recommendation abilities' \
-	'Before enabling the Flavor Agent AI feature, the Explorer should list the 18 always-on helper and preflight abilities' \
+	'Before enabling the Flavor Agent AI feature, the Explorer should list the 19 always-on helper and preflight abilities' \
 	"${repo_root}/docs/reference/local-environment-setup.md"
 
 check_present_fixed \
@@ -274,7 +274,7 @@ check_present_in_each_fixed \
 
 check_present_in_each_fixed \
 	'ability count or category list drifted between CLAUDE.md and copilot-instructions.md' \
-	'29 abilities across block, pattern, template, navigation, docs, infra, content, style, and apply categories' \
+	'30 abilities across block, pattern, template, navigation, docs, infra, content, style, and apply categories' \
 	"${repo_root}/CLAUDE.md" \
 	"${repo_root}/.github/copilot-instructions.md"
 

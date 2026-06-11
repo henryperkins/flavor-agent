@@ -209,6 +209,10 @@ final class ServerCollector {
 		return self::template_repository()->for_template_parts( $area, $include_content );
 	}
 
+	public static function for_templates( bool $include_content = true ): array {
+		return self::template_repository()->for_templates( $include_content );
+	}
+
 	/**
 	 * @return array<string, string>
 	 */

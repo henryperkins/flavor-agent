@@ -120,6 +120,47 @@ final class TemplateAbilitiesTest extends TestCase {
 		$this->assertArrayNotHasKey( 'content', $result['templateParts'][0] );
 	}
 
+	public function test_list_templates_can_omit_or_include_content_for_theme_editors(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+		];
+
+		$metadata_only = TemplateAbilities::list_templates( [] );
+		$with_content  = TemplateAbilities::list_templates(
+			[
+				'includeContent' => true,
+			]
+		);
+
+		$this->assertCount( 1, $metadata_only['templates'] );
+		$this->assertArrayNotHasKey( 'content', $metadata_only['templates'][0] );
+		// The id is the templateRef recommend-template accepts, closing the
+		// external-agent template discovery loop (list-template-parts parallel).
+		$this->assertSame( 'theme//home', $metadata_only['templates'][0]['id'] );
+		$this->assertSame( 'home', $metadata_only['templates'][0]['slug'] );
+		$this->assertSame( 'Home', $metadata_only['templates'][0]['title'] );
+		$this->assertSame(
+			'<!-- wp:group {"tagName":"main"} --><div>Main</div><!-- /wp:group -->',
+			$with_content['templates'][0]['content']
+		);
+	}
+
+	public function test_list_templates_coerces_include_content_to_metadata_for_editors_without_theme_access(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+
+		$result = TemplateAbilities::list_templates(
+			[
+				'includeContent' => true,
+			]
+		);
+
+		$this->assertCount( 1, $result['templates'] );
+		$this->assertSame( 'theme//home', $result['templates'][0]['id'] );
+		$this->assertArrayNotHasKey( 'content', $result['templates'][0] );
+	}
+
 	public function test_recommend_template_resolve_signature_only_returns_review_and_resolved_signatures(): void {
 		$result = TemplateAbilities::recommend_template(
 			[
