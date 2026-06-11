@@ -12,6 +12,7 @@ const {
 	existingItemsByUrl,
 	fetchJson,
 	buildMarkdownDocument,
+	isCorpusDocumentUrl,
 	isFreshByLastmod,
 	fetchText,
 	htmlToMarkdown,
@@ -329,9 +330,20 @@ describe( 'update-docs-ai-search helpers', () => {
 		);
 
 		expect( urls ).toEqual( [
-			'https://make.wordpress.org/core/',
 			'https://make.wordpress.org/core/2026/06/03/dev-chat-agenda-june-03-2026/',
 		] );
+	} );
+
+	test( 'isCorpusDocumentUrl drops release-cycle index and archive pages', () => {
+		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/news/2026/05/01/post/' ) ).toBe( true );
+		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/core/2026/05/14/wordpress-7-0-field-guide/' ) ).toBe( true );
+		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/block-editor/' ) ).toBe( true );
+
+		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/news/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/news/all-posts/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/news/tag/block-editor/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/core/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/core/tag/dev-notes-7-0/' ) ).toBe( false );
 	} );
 
 	test( 'discoverSourceUrls keeps explicitly supplied Make/Core URLs regardless of age', async () => {
