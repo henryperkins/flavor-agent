@@ -2139,7 +2139,7 @@ final class SettingsTest extends TestCase {
 	public function test_determine_default_open_group_prioritizes_docs_for_runtime_failures(): void {
 		$state                           = $this->build_default_open_group_state();
 		$state['docs_configured']        = true;
-		$state['runtime_docs_grounding'] = [ 'status' => 'retrying' ];
+		$state['runtime_docs_grounding'] = [ 'status' => 'unreachable' ];
 
 		$this->assertSame(
 			'docs',
@@ -2454,47 +2454,44 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_get_docs_overview_status_reports_retrying_from_runtime_grounding_state(): void {
+	public function test_get_docs_overview_status_reports_needs_attention_when_unreachable(): void {
 		$result = State::get_docs_overview_status(
 			[
 				'docs_configured'        => true,
-				'prewarm_state'          => [
-					'status' => 'ok',
-				],
 				'runtime_docs_grounding' => [
-					'status' => 'retrying',
+					'status' => 'unreachable',
 				],
 			]
 		);
 
 		$this->assertSame(
 			[
-				'label' => 'Retrying',
+				'label' => 'Needs attention',
 				'tone'  => 'warning',
 			],
 			$result
 		);
+
+		$this->assertSame(
+			[
+				'label' => 'Ready',
+				'tone'  => 'success',
+			],
+			State::get_docs_overview_status(
+				[
+					'docs_configured'        => true,
+					'runtime_docs_grounding' => [ 'status' => 'ok' ],
+				]
+			)
+		);
 	}
 
-	public function test_render_page_shows_runtime_grounding_diagnostics_in_developer_docs_group(): void {
+	public function test_render_page_shows_single_unreachable_warning_in_developer_docs_group(): void {
 		WordPressTestState::$options = [
-			'flavor_agent_docs_runtime_state' => [
-				'status'                   => 'degraded',
-				'lastSearchAt'             => '2026-05-11 00:00:00',
-				'lastSearchMode'           => 'async',
-				'lastResultCount'          => 0,
-				'lastTrustedSuccessAt'     => '2026-04-08 09:45:00',
-				'lastTrustedSuccessMode'   => 'foreground',
-				'lastServedAt'             => '2026-04-08 09:50:00',
-				'lastServedMode'           => 'cache',
-				'lastFallbackType'         => 'generic',
-				'lastSourceTypes'          => [ 'developer-docs' ],
-				'lastFreshness'            => [ 'stale' ],
-				'lastGroundingFingerprint' => 'abc123',
-				'lastErrorAt'              => '2026-05-11 00:00:00',
-				'lastErrorMode'            => 'async',
-				'lastErrorCode'            => 'http_request_failed',
-				'lastErrorMessage'         => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
+			AISearchClient::RUNTIME_STATE_OPTION => [
+				'status'          => 'unreachable',
+				'lastSearchAt'    => '2026-06-11 00:00:00',
+				'lastResultCount' => 0,
 			],
 		];
 
@@ -2503,12 +2500,29 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
-		$this->assertStringContainsString( 'Developer Docs grounding is degraded.', $output );
-		$this->assertStringContainsString( 'developer-docs', $output );
-		$this->assertStringContainsString( 'stale', $output );
-		$this->assertStringContainsString( 'Developer Docs grounding is missing current WordPress release-cycle sources.', $output );
-		$this->assertStringNotContainsString( 'Fingerprint:', $output );
-		$this->assertStringNotContainsString( 'abc123', $output );
+		$this->assertSame(
+			1,
+			substr_count( $output, 'temporarily unavailable' ),
+			'unreachable backend yields exactly one docs warning'
+		);
+		$this->assertStringContainsString( 'Recommendations still run without it.', $output );
+	}
+
+	public function test_render_page_shows_no_docs_warning_when_runtime_state_is_ok(): void {
+		WordPressTestState::$options = [
+			AISearchClient::RUNTIME_STATE_OPTION => [
+				'status'          => 'ok',
+				'lastSearchAt'    => '2026-06-11 00:00:00',
+				'lastResultCount' => 4,
+			],
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
+		$this->assertStringNotContainsString( 'temporarily unavailable', $output );
 	}
 
 	/**

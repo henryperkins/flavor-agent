@@ -214,13 +214,13 @@ final class PluginLifecycleTest extends TestCase {
 
 	public function test_deactivation_clears_all_plugin_cron_hooks_and_pattern_lock(): void {
 		WordPressTestState::$scheduled_events                     = [
-			PatternIndex::CRON_HOOK                => [ 'hook' => PatternIndex::CRON_HOOK ],
-			ActivityRepository::PRUNE_CRON_HOOK    => [ 'hook' => ActivityRepository::PRUNE_CRON_HOOK ],
+			PatternIndex::CRON_HOOK             => [ 'hook' => PatternIndex::CRON_HOOK ],
+			ActivityRepository::PRUNE_CRON_HOOK => [ 'hook' => ActivityRepository::PRUNE_CRON_HOOK ],
 			ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK => [ 'hook' => ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK ],
-			AISearchClient::PREWARM_CRON_HOOK      => [ 'hook' => AISearchClient::PREWARM_CRON_HOOK ],
-			AISearchClient::CONTEXT_WARM_CRON_HOOK => [ 'hook' => AISearchClient::CONTEXT_WARM_CRON_HOOK ],
+			'flavor_agent_prewarm_docs'         => [ 'hook' => 'flavor_agent_prewarm_docs' ],
+			'flavor_agent_warm_docs_context'    => [ 'hook' => 'flavor_agent_warm_docs_context' ],
 			PatternSearchInstanceManager::PROVISION_CRON_HOOK => [ 'hook' => PatternSearchInstanceManager::PROVISION_CRON_HOOK ],
-			CoreRoadmapGuidance::WARM_CRON_HOOK    => [ 'hook' => CoreRoadmapGuidance::WARM_CRON_HOOK ],
+			CoreRoadmapGuidance::WARM_CRON_HOOK => [ 'hook' => CoreRoadmapGuidance::WARM_CRON_HOOK ],
 		];
 		WordPressTestState::$transients['flavor_agent_sync_lock'] = time();
 
@@ -231,8 +231,9 @@ final class PluginLifecycleTest extends TestCase {
 				PatternIndex::CRON_HOOK,
 				ActivityRepository::PRUNE_CRON_HOOK,
 				ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK,
-				AISearchClient::PREWARM_CRON_HOOK,
-				AISearchClient::CONTEXT_WARM_CRON_HOOK,
+				// Legacy docs warm crons stay cleared by literal name on deactivation.
+				'flavor_agent_prewarm_docs',
+				'flavor_agent_warm_docs_context',
 				PatternSearchInstanceManager::PROVISION_CRON_HOOK,
 				CoreRoadmapGuidance::WARM_CRON_HOOK,
 			],

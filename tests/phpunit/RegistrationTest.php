@@ -1544,7 +1544,7 @@ final class RegistrationTest extends TestCase {
 		}
 	}
 
-	public function test_register_abilities_exposes_wordpress_docs_entity_key_schema(): void {
+	public function test_register_abilities_wordpress_docs_schema_drops_entity_key(): void {
 		Registration::register_category();
 		Registration::register_abilities();
 		Registration::register_recommendation_abilities();
@@ -1553,27 +1553,14 @@ final class RegistrationTest extends TestCase {
 
 		$this->assertIsArray( $ability );
 		$this->assertSame( [ 'query' ], $ability['input_schema']['required'] ?? null );
-		$this->assertSame(
-			'string',
-			$ability['input_schema']['properties']['entityKey']['type'] ?? null
-		);
-		$this->assertStringContainsString(
-			'namespace/block-name',
-			(string) ( $ability['input_schema']['properties']['entityKey']['description'] ?? '' )
-		);
-		$this->assertStringContainsString(
-			'template:404',
-			(string) ( $ability['input_schema']['properties']['entityKey']['description'] ?? '' )
+		$this->assertArrayNotHasKey(
+			'entityKey',
+			$ability['input_schema']['properties'] ?? []
 		);
 		$this->assertSame(
 			'object',
 			$ability['output_schema']['properties']['docsGrounding']['type'] ?? null
 		);
-		$wordpress_docs_coverage_properties =
-			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties'] ?? [];
-		$this->assertArrayNotHasKey( 'withinGrace', $wordpress_docs_coverage_properties );
-		$this->assertArrayNotHasKey( 'graceLastKnownCurrentAt', $wordpress_docs_coverage_properties );
-		$this->assertArrayNotHasKey( 'graceExpiresAt', $wordpress_docs_coverage_properties );
 		$this->assertSame(
 			'string',
 			$ability['output_schema']['properties']['docsGroundingFingerprint']['type'] ?? null

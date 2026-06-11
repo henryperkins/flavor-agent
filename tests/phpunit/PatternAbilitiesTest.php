@@ -1819,7 +1819,7 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 		$this->assertCount( 1, $docs_calls, 'cache miss performs exactly one best-effort docs search' );
 		$this->assertCount( 4, WordPressTestState::$remote_post_calls );
-		$this->assertArrayNotHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertArrayNotHasKey( 'flavor_agent_warm_docs_context', WordPressTestState::$scheduled_events );
 
 		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
 		$this->assertStringContainsString( 'Block Editor Handbook', (string) ( $ranking_request['input'] ?? '' ) );

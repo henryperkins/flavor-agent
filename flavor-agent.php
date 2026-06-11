@@ -38,7 +38,6 @@ register_activation_hook(
 		add_option( 'flavor_agent_qdrant_key', '', '', false );
 		FlavorAgent\Activity\Repository::ensure_prune_schedule();
 		FlavorAgent\Patterns\PatternIndex::activate();
-		FlavorAgent\Cloudflare\AISearchClient::schedule_prewarm();
 		FlavorAgent\Support\CoreRoadmapGuidance::schedule_warm();
 	}
 );
@@ -48,8 +47,10 @@ register_deactivation_hook(
 		FlavorAgent\Patterns\PatternIndex::deactivate();
 		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::PRUNE_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK );
-		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::PREWARM_CRON_HOOK );
-		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK );
+		// Legacy docs-grounding warm crons; cleared by literal name so sites
+		// upgrading from the prewarm/context-warm era don't strand schedules.
+		wp_clear_scheduled_hook( 'flavor_agent_prewarm_docs' );
+		wp_clear_scheduled_hook( 'flavor_agent_warm_docs_context' );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\PatternSearchInstanceManager::PROVISION_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Support\CoreRoadmapGuidance::WARM_CRON_HOOK );
 	}
@@ -70,7 +71,6 @@ add_filter(
 	}
 );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );
-add_action( 'init', [ FlavorAgent\Cloudflare\AISearchClient::class, 'schedule_prewarm' ], 7 );
 // Roadmap warm only needs to be scheduled in admin/REST/cron contexts;
 // front-end page loads don't consume this guidance. Function/constant
 // guards keep this safe to load from test bootstraps that don't define
@@ -128,15 +128,6 @@ foreach (
 	);
 }
 
-// Docs grounding prewarm cron hook.
-add_action(
-	FlavorAgent\Cloudflare\AISearchClient::PREWARM_CRON_HOOK,
-	[ FlavorAgent\Cloudflare\AISearchClient::class, 'prewarm' ]
-);
-add_action(
-	FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK,
-	[ FlavorAgent\Cloudflare\AISearchClient::class, 'process_context_warm_queue' ]
-);
 add_action(
 	FlavorAgent\Support\CoreRoadmapGuidance::WARM_CRON_HOOK,
 	[ FlavorAgent\Support\CoreRoadmapGuidance::class, 'warm' ],
