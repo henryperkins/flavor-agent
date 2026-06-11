@@ -1,6 +1,6 @@
 import { executeFlavorAgentAbility } from './abilities-client';
 import { buildClientRequestIdentity } from './client-request-identity';
-import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
+import { deriveDocsGroundingWarning } from '../utils/docs-grounding-warning';
 import { normalizeRequestErrorDetails } from './request-error-details';
 
 function normalizeRequestInput( requestInput ) {
@@ -302,26 +302,6 @@ function createExecutableSurfaceReviewFreshnessAction( {
 				const reviewContextSignature = normalizeStringMessage(
 					getReviewContextSignatureFromResponse( result )
 				);
-				const docsGroundingStatus =
-					typeof result?.docsGrounding?.status === 'string'
-						? result.docsGrounding.status
-						: '';
-
-				if ( docsGroundingStatus === 'unavailable' ) {
-					localDispatch(
-						setReviewState( 'stale', {
-							requestToken,
-							staleReason: 'docs-grounding-unavailable',
-						} )
-					);
-
-					return {
-						ok: false,
-						staleReason: 'docs-grounding-unavailable',
-						surface,
-						docsGrounding: result.docsGrounding,
-					};
-				}
 
 				if (
 					! reviewContextSignature ||
@@ -341,7 +321,7 @@ function createExecutableSurfaceReviewFreshnessAction( {
 					};
 				}
 
-				const docsGroundingWarning = normalizeDocsGroundingWarning(
+				const docsGroundingWarning = deriveDocsGroundingWarning(
 					result?.docsGrounding
 				);
 

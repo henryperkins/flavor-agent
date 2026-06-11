@@ -19,23 +19,24 @@ describe( 'DocsGroundingNotice', () => {
 		expect( getContainer().textContent ).toBe( '' );
 	} );
 
-	test( 'renders a non-dismissible warning notice from normalized metadata', () => {
+	test( 'renders a non-dismissible info notice from the derived warning', () => {
 		act( () => {
 			getRoot().render(
 				<DocsGroundingNotice
 					warning={ {
-						status: 'grounded',
-						coverageStatus: 'missing-current-release-cycle',
+						tone: 'info',
+						message:
+							'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.',
 					} }
 				/>
 			);
 		} );
 
 		expect( getContainer().textContent ).toContain(
-			'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.'
+			'running without developer-docs grounding'
 		);
 		expect(
-			getContainer().querySelector( '[data-status="warning"]' )
+			getContainer().querySelector( '[data-status="info"]' )
 		).not.toBeNull();
 		expect(
 			getContainer().querySelector( '[data-dismiss="true"]' )

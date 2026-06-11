@@ -38,12 +38,12 @@ describe( 'getExecutableSurfaceEffectiveStaleReason', () => {
 		).toBe( 'server-review' );
 	} );
 
-	test( 'falls back to docs grounding unavailable when only the review signal is set', () => {
+	test( 'ignores docs grounding review signals — grounding never stales a result', () => {
 		expect(
 			getExecutableSurfaceEffectiveStaleReason( {
 				reviewStaleReason: 'docs-grounding-unavailable',
 			} )
-		).toBe( 'docs-grounding-unavailable' );
+		).toBeNull();
 	} );
 
 	test( 'ignores review stale reasons that are not "server-review"', () => {
@@ -67,17 +67,7 @@ describe( 'getExecutableSurfaceEffectiveStaleReason', () => {
 		).toBe( 'server-apply' );
 	} );
 
-	test( 'preserves stored docs grounding and missing signature apply reasons', () => {
-		expect(
-			getExecutableSurfaceEffectiveStaleReason( {
-				storedStaleReason: 'docs-grounding-unavailable',
-			} )
-		).toBe( 'docs-grounding-unavailable' );
-		expect(
-			getExecutableSurfaceEffectiveStaleReason( {
-				storedStaleReason: 'docs-grounding-changed',
-			} )
-		).toBe( 'docs-grounding-changed' );
+	test( 'preserves the stored missing signature apply reason', () => {
 		expect(
 			getExecutableSurfaceEffectiveStaleReason( {
 				storedStaleReason: 'missing-resolved-signature',
@@ -133,30 +123,6 @@ describe( 'getExecutableSurfaceStaleMessage', () => {
 			} )
 		).toBe(
 			'This Style Book result no longer matches the current server-resolved apply context. Refresh before reviewing or applying anything from the previous result.'
-		);
-	} );
-
-	test( 'produces docs grounding unavailable messaging tied to the surface label', () => {
-		expect(
-			getExecutableSurfaceStaleMessage( {
-				surfaceLabel: 'Template',
-				staleReasonType: 'docs-grounding-unavailable',
-				liveContextLabel: 'the current template',
-			} )
-		).toBe(
-			'This Template result no longer has trusted WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.'
-		);
-	} );
-
-	test( 'produces docs grounding changed messaging tied to the surface label', () => {
-		expect(
-			getExecutableSurfaceStaleMessage( {
-				surfaceLabel: 'Template',
-				staleReasonType: 'docs-grounding-changed',
-				liveContextLabel: 'the current template',
-			} )
-		).toBe(
-			'This Template result no longer matches the current WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.'
 		);
 	} );
 
