@@ -629,7 +629,8 @@ final class BlockAbilitiesTest extends TestCase {
 
 	public function test_recommend_block_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_text_generation_connector();
-		WordPressTestState::$transients                     = [];
+		WordPressTestState::$transients = [];
+		$this->route_docs_grounding_search( [] );
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
 				'settings'    => [],
@@ -857,6 +858,7 @@ final class BlockAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_block_warns_on_missing_release_cycle_coverage_by_default(): void {
+		$this->markTestSkipped( 'Coverage diagnostics are removed by the docs-grounding relaxation (deleted in Task 4/5).' );
 		$this->configure_text_generation_connector();
 		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
 			'status'                 => 'missing-current-release-cycle',
@@ -897,6 +899,7 @@ final class BlockAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_block_warns_on_missing_release_cycle_coverage_even_when_release_gate_is_enabled(): void {
+		$this->markTestSkipped( 'Coverage diagnostics are removed by the docs-grounding relaxation (deleted in Task 4/5).' );
 		$this->configure_text_generation_connector();
 		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
 			'status'                 => 'missing-current-release-cycle',
@@ -1199,24 +1202,50 @@ final class BlockAbilitiesTest extends TestCase {
 
 	private function prime_default_docs_grounding(): void {
 		$this->prime_current_docs_source_coverage();
-		\FlavorAgent\Cloudflare\AISearchClient::cache_entity_guidance(
-			'core/paragraph',
+		$this->route_docs_grounding_search(
 			[
-				[
-					'id'          => 'paragraph-default-doc',
-					'title'       => 'Paragraph block reference',
-					'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
-					'excerpt'     => 'Use supported paragraph block controls for typography and spacing recommendations.',
-					'score'       => 0.91,
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'publishedAt' => '',
-					'contentHash' => 'paragraph-default-doc',
-					'freshness'   => 'current',
-				],
+				$this->docs_grounding_chunk(
+					'Paragraph block reference',
+					'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+					'Use supported paragraph block controls for typography and spacing recommendations.'
+				),
 			]
 		);
+	}
+
+	/**
+	 * Serve the docs-grounding public search endpoint by URL so the best-effort
+	 * search resolves deterministically without consuming queued responses.
+	 *
+	 * @param array<int, array<string, mixed>> $chunks
+	 */
+	private function route_docs_grounding_search( array $chunks ): void {
+		WordPressTestState::$remote_post_url_responses['.search.ai.cloudflare.com'] = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => $chunks,
+					],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function docs_grounding_chunk( string $title, string $url, string $excerpt ): array {
+		$frontmatter = "---\nsource_url: \"{$url}\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: " . md5( $title . $url );
+
+		return [
+			'id'   => md5( $title . $url ),
+			'item' => [
+				'key'      => $url,
+				'metadata' => [ 'title' => $title ],
+			],
+			'text' => $frontmatter . "\n---\n{$excerpt}",
+		];
 	}
 
 	private function prime_current_docs_source_coverage(): void {

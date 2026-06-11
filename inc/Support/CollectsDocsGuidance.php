@@ -11,43 +11,27 @@ final class CollectsDocsGuidance {
 	private const MAX_ROADMAP_CHUNKS_BEFORE_DOCS = 1;
 
 	/**
+	 * Build one query and run a single cached best-effort search (recommendation mode)
+	 * or a cache-only read (signature mode), then merge with roadmap guidance. Grounding
+	 * is best-effort: an empty or unreachable backend yields no docs chunks and never
+	 * raises an error into the recommendation flow.
+	 *
 	 * @param callable(array<string, mixed>, string): string $build_query
-	 * @param callable(array<string, mixed>, string): string $build_entity_key
-	 * @param callable(array<string, mixed>, string, string): array<string, mixed> $build_family_context
 	 * @param array<string, mixed> $context
 	 * @return array<int, array<string, mixed>>
 	 */
-	public static function collect(
-		callable $build_query,
-		callable $build_entity_key,
-		callable $build_family_context,
-		array $context,
-		string $prompt,
-		array $options = []
-	): array {
-		$query                 = $build_query( $context, $prompt );
-		$entity_key            = $build_entity_key( $context, $query );
-		$family_context        = $build_family_context( $context, $prompt, $entity_key );
-		$allow_foreground_warm = array_key_exists( 'allowForegroundWarm', $options )
-			? (bool) $options['allowForegroundWarm']
-			: true;
-		$side_effects          = array_key_exists( 'sideEffects', $options )
-			? (bool) $options['sideEffects']
-			: true;
-		$docs_guidance         = AISearchClient::maybe_search_with_cache_fallbacks(
-			$query,
-			$entity_key,
-			$family_context,
-			null,
-			$allow_foreground_warm,
-			$side_effects
-		);
-		$roadmap_guidance      = CoreRoadmapGuidance::collect(
-			$context,
-			[
-				'sideEffects' => $side_effects,
-			]
-		);
+	public static function collect( callable $build_query, array $context, string $prompt, array $options = [] ): array {
+		$query = (string) $build_query( $context, $prompt );
+
+		if ( '' === $query ) {
+			$docs_guidance = [];
+		} elseif ( 'signature' === (string) ( $options['mode'] ?? 'recommendation' ) ) {
+			$docs_guidance = AISearchClient::maybe_search( $query );
+		} else {
+			$docs_guidance = AISearchClient::maybe_search_best_effort( $query );
+		}
+
+		$roadmap_guidance = CoreRoadmapGuidance::collect( $context, [ 'sideEffects' => false ] );
 
 		if ( [] === $roadmap_guidance ) {
 			return $docs_guidance;
@@ -62,49 +46,16 @@ final class CollectsDocsGuidance {
 
 	/**
 	 * @param callable(array<string, mixed>, string): string $build_query
-	 * @param callable(array<string, mixed>, string): string $build_entity_key
-	 * @param callable(array<string, mixed>, string, string): array<string, mixed> $build_family_context
 	 * @param array<string, mixed> $context
 	 * @return array<string, mixed>
 	 */
-	public static function collect_result(
-		callable $build_query,
-		callable $build_entity_key,
-		callable $build_family_context,
-		array $context,
-		string $prompt,
-		array $options = []
-	): array {
-		$guidance = self::collect(
-			$build_query,
-			$build_entity_key,
-			$build_family_context,
-			$context,
-			$prompt,
-			$options
-		);
-
-		$allow_foreground_warm = array_key_exists( 'allowForegroundWarm', $options )
-			? (bool) $options['allowForegroundWarm']
-			: true;
-		$include_coverage      = array_key_exists( 'includeCurrentSourceCoverage', $options )
-			? (bool) $options['includeCurrentSourceCoverage']
-			: true;
-		$require_coverage      = array_key_exists( 'requireCurrentSourceCoverage', $options )
-			? (bool) $options['requireCurrentSourceCoverage']
-			: AISearchClient::requires_current_source_coverage();
-		$source_coverage       = $include_coverage
-			? AISearchClient::get_current_source_coverage( $allow_foreground_warm )
-			: [];
+	public static function collect_result( callable $build_query, array $context, string $prompt, array $options = [] ): array {
+		$guidance = self::collect( $build_query, $context, $prompt, $options );
 
 		return DocsGuidanceResult::from_guidance(
 			$guidance,
-			(string) ( $options['mode'] ?? 'runtime' ),
-			$allow_foreground_warm ? 'foreground-allowed' : 'cache-only',
-			[
-				'requireCurrentSourceCoverage' => $require_coverage,
-				'sourceCoverage'               => $source_coverage,
-			]
+			(string) ( $options['mode'] ?? 'recommendation' ),
+			'best-effort'
 		);
 	}
 

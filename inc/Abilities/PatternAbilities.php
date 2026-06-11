@@ -6,7 +6,6 @@ namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
-use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Context\SyncedPatternRepository;
@@ -2379,15 +2378,9 @@ SYSTEM;
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
 		return CollectsDocsGuidance::collect_result(
 			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
-			static fn( array $request_context, string $request_prompt, string $entity_key ): array => self::build_wordpress_docs_family_context( $request_context, $entity_key ),
 			$context,
 			$prompt,
-			[
-				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
-				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
-				'sideEffects'         => empty( $options['signatureOnly'] ),
-			]
+			[ 'mode' => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature' ]
 		);
 	}
 
@@ -2477,114 +2470,6 @@ SYSTEM;
 		);
 	}
 
-	private static function build_wordpress_docs_entity_key( array $context ): string {
-		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
-			? sanitize_key( $context['templateType'] )
-			: '';
-		$block_context = self::normalize_input( $context['blockContext'] ?? [] );
-		$block_name    = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
-			? sanitize_text_field( $block_context['blockName'] )
-			: '';
-
-		if ( $block_name !== '' ) {
-			$entity_key = AISearchClient::resolve_entity_key( $block_name );
-
-			if ( $entity_key !== '' ) {
-				return $entity_key;
-			}
-
-			if ( str_starts_with( $block_name, 'core/template-part/' ) ) {
-				return 'core/template-part';
-			}
-		}
-
-		if ( $template_type !== '' ) {
-			return AISearchClient::resolve_entity_key( 'template:' . $template_type );
-		}
-
-		return AISearchClient::resolve_entity_key( 'guidance:block-editor' );
-	}
-
-	/**
-	 * @param string $entity_key Normalized AI Search entity key.
-	 * @return array<string, mixed>
-	 */
-	private static function build_wordpress_docs_family_context( array $context, string $entity_key ): array {
-		$post_type             = isset( $context['postType'] ) && is_string( $context['postType'] )
-			? sanitize_key( $context['postType'] )
-			: 'post';
-		$template_type         = isset( $context['templateType'] ) && is_string( $context['templateType'] )
-			? sanitize_key( $context['templateType'] )
-			: '';
-		$block_context         = self::normalize_input( $context['blockContext'] ?? [] );
-		$insertion_context     = self::normalize_input( $context['insertionContext'] ?? [] );
-		$block_name            = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
-			? sanitize_text_field( $block_context['blockName'] )
-			: '';
-		$root_block            = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
-			? sanitize_text_field( $insertion_context['rootBlock'] )
-			: '';
-		$template_part_area    = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
-			? sanitize_key( $insertion_context['templatePartArea'] )
-			: '';
-		$container_layout      = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
-			? sanitize_key( $insertion_context['containerLayout'] )
-			: '';
-		$ancestors             = array_slice( StringArray::sanitize( $insertion_context['ancestors'] ?? [] ), 0, 4 );
-		$nearby_siblings       = array_slice( StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] ), 0, 4 );
-		$visible_pattern_names = array_slice( StringArray::sanitize( $context['visiblePatternNames'] ?? [] ), 0, 6 );
-		$surface               = 'block';
-
-		if ( $entity_key === 'core/template-part' || str_starts_with( $block_name, 'core/template-part/' ) ) {
-			$surface = 'template-part';
-		} elseif ( str_starts_with( $entity_key, 'template:' ) || ( $template_type !== '' && $block_name === '' ) ) {
-			$surface = 'template';
-		}
-
-		$family_context = [
-			'surface'   => $surface,
-			'entityKey' => $entity_key,
-			'postType'  => $post_type,
-		];
-
-		if ( $template_type !== '' ) {
-			$family_context['templateType'] = $template_type;
-		}
-
-		if ( $block_name !== '' ) {
-			$family_context['nearBlock'] = $block_name;
-		}
-
-		if ( $root_block !== '' ) {
-			$family_context['insertionRoot'] = $root_block;
-		}
-
-		if ( $template_part_area !== '' ) {
-			$family_context['templatePartArea'] = $template_part_area;
-		}
-
-		if ( $container_layout !== '' ) {
-			$family_context['containerLayout'] = $container_layout;
-		}
-
-		if ( ! empty( $ancestors ) ) {
-			$family_context['ancestorBlocks'] = $ancestors;
-		}
-
-		if ( ! empty( $nearby_siblings ) ) {
-			$family_context['nearbyBlocks'] = $nearby_siblings;
-		}
-
-		if ( ! empty( $visible_pattern_names ) ) {
-			$family_context['visiblePatterns'] = $visible_pattern_names;
-		}
-
-		return $family_context;
-	}
-
-	/**
-	 * @param array<int, array<string, mixed>> $docs_guidance
-	 */
 	private static function build_wordpress_docs_guidance_section( array $docs_guidance ): string {
 		if ( empty( $docs_guidance ) ) {
 			return '';

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\AzureOpenAI\ResponsesClient;
-use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\TemplatePrompt;
@@ -1765,15 +1764,9 @@ final class TemplateAbilities {
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
 		return CollectsDocsGuidance::collect_result(
 			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
-			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
 			$context,
 			$prompt,
-			[
-				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
-				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
-				'sideEffects'         => empty( $options['signatureOnly'] ),
-			]
+			[ 'mode' => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature' ]
 		);
 	}
 
@@ -1783,25 +1776,9 @@ final class TemplateAbilities {
 	private static function collect_template_part_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
 		return CollectsDocsGuidance::collect_result(
 			static fn( array $request_context, string $request_prompt ): string => self::build_template_part_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context, string $query ): string => AISearchClient::resolve_entity_key( 'core/template-part', $query ),
-			static fn( array $request_context ): array => self::build_template_part_wordpress_docs_family_context( $request_context ),
 			$context,
 			$prompt,
-			[
-				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
-				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
-				'sideEffects'         => empty( $options['signatureOnly'] ),
-			]
-		);
-	}
-
-	private static function build_wordpress_docs_entity_key( array $context ): string {
-		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
-			? sanitize_key( $context['templateType'] )
-			: '';
-
-		return AISearchClient::resolve_entity_key(
-			$template_type !== '' ? 'template:' . $template_type : ''
+			[ 'mode' => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature' ]
 		);
 	}
 
@@ -2092,175 +2069,4 @@ final class TemplateAbilities {
 	/**
 	 * @return array<string, mixed>
 	 */
-	private static function build_wordpress_docs_family_context( array $context ): array {
-		$entity_key    = self::build_wordpress_docs_entity_key( $context );
-		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
-			? sanitize_key( $context['templateType'] )
-			: '';
-
-		if ( $entity_key === '' || $template_type === '' ) {
-			return [];
-		}
-
-		$allowed_areas         = StringArray::sanitize( $context['allowedAreas'] ?? [] );
-		$empty_areas           = StringArray::sanitize( $context['emptyAreas'] ?? [] );
-		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $context )
-			? StringArray::sanitize( $context['visiblePatternNames'] ?? [] )
-			: null;
-		$assigned_areas        = [];
-
-		foreach ( is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [] as $part ) {
-			if ( ! is_array( $part ) ) {
-				continue;
-			}
-
-			$area = sanitize_key( (string) ( $part['area'] ?? '' ) );
-
-			if ( $area !== '' ) {
-				$assigned_areas[] = $area;
-			}
-		}
-
-		$assigned_areas = array_values( array_unique( $assigned_areas ) );
-		sort( $allowed_areas );
-		sort( $empty_areas );
-		sort( $assigned_areas );
-
-		$family_context = [
-			'surface'      => 'template',
-			'entityKey'    => $entity_key,
-			'templateType' => $template_type,
-		];
-
-		if ( ! empty( $allowed_areas ) ) {
-			$family_context['allowedAreas'] = $allowed_areas;
-		}
-
-		if ( ! empty( $empty_areas ) ) {
-			$family_context['emptyAreas'] = $empty_areas;
-		}
-
-		if ( ! empty( $assigned_areas ) ) {
-			$family_context['assignedAreas'] = $assigned_areas;
-		}
-
-		if ( is_array( $visible_pattern_names ) ) {
-			$family_context['hasVisiblePatternScope'] = true;
-			$family_context['visiblePatternCount']    = count( $visible_pattern_names );
-		}
-
-		$top_level_block_names       = array_values(
-			array_filter(
-				array_map(
-					static fn( mixed $node ): string => is_array( $node ) && is_string( $node['name'] ?? null )
-						? sanitize_text_field( $node['name'] )
-						: '',
-					array_slice(
-						is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [],
-						0,
-						6
-					)
-				)
-			)
-		);
-		$structure_stats             = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
-		$current_pattern_overrides   = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
-		$current_viewport_visibility = is_array( $context['currentViewportVisibility'] ?? null ) ? $context['currentViewportVisibility'] : [];
-
-		if ( ! empty( $top_level_block_names ) ) {
-			$family_context['topLevelBlocks'] = $top_level_block_names;
-		}
-
-		if ( isset( $structure_stats['blockCount'] ) ) {
-			$family_context['blockCount'] = (int) $structure_stats['blockCount'];
-		}
-
-		if ( isset( $structure_stats['maxDepth'] ) ) {
-			$family_context['maxDepth'] = (int) $structure_stats['maxDepth'];
-		}
-
-		if ( ! empty( $current_pattern_overrides['blockCount'] ) ) {
-			$family_context['patternOverrideCount'] = (int) $current_pattern_overrides['blockCount'];
-		}
-
-		if ( ! empty( $current_viewport_visibility['blockCount'] ) ) {
-			$family_context['visibilityConstraintCount'] = (int) $current_viewport_visibility['blockCount'];
-		}
-
-		return $family_context;
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private static function build_template_part_wordpress_docs_family_context( array $context ): array {
-		$area = isset( $context['area'] ) && is_string( $context['area'] )
-			? sanitize_key( $context['area'] )
-			: '';
-		$slug = isset( $context['slug'] ) && is_string( $context['slug'] )
-			? sanitize_key( $context['slug'] )
-			: '';
-
-		$family_context = [
-			'surface'   => 'template-part',
-			'entityKey' => 'core/template-part',
-		];
-
-		if ( $area !== '' ) {
-			$family_context['area'] = $area;
-		}
-
-		if ( $slug !== '' ) {
-			$family_context['slug'] = $slug;
-		}
-
-		$operation_targets         = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
-		$insertion_anchors         = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
-		$structural_constraints    = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
-		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
-		$target_names              = array_values(
-			array_filter(
-				array_map(
-					static fn( mixed $target ): string => is_array( $target ) && is_string( $target['name'] ?? null )
-						? sanitize_text_field( $target['name'] )
-						: '',
-					array_slice( $operation_targets, 0, 4 )
-				)
-			)
-		);
-		$anchor_placements         = array_values(
-			array_filter(
-				array_map(
-					static fn( mixed $anchor ): string => is_array( $anchor ) && is_string( $anchor['placement'] ?? null )
-						? sanitize_key( $anchor['placement'] )
-						: '',
-					array_slice( $insertion_anchors, 0, 4 )
-				)
-			)
-		);
-
-		if ( ! empty( $target_names ) ) {
-			$family_context['targetBlocks'] = $target_names;
-		}
-
-		if ( ! empty( $anchor_placements ) ) {
-			$family_context['anchorPlacements'] = $anchor_placements;
-		}
-
-		if ( array_key_exists( 'currentPatternOverrides', $context ) ) {
-			$family_context['hasPatternOverrides']  = ! empty( $current_pattern_overrides['hasOverrides'] )
-				|| ! empty( $current_pattern_overrides['blockCount'] );
-			$family_context['patternOverrideCount'] = (int) ( $current_pattern_overrides['blockCount'] ?? 0 );
-		}
-
-		if ( ! empty( $structural_constraints['hasContentOnly'] ) ) {
-			$family_context['hasContentOnly'] = true;
-		}
-
-		if ( ! empty( $structural_constraints['hasLockedBlocks'] ) ) {
-			$family_context['hasLockedBlocks'] = true;
-		}
-
-		return $family_context;
-	}
 }

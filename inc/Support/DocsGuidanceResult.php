@@ -23,6 +23,8 @@ final class DocsGuidanceResult {
 			'mode'        => sanitize_key( $mode ),
 			'transport'   => sanitize_key( $transport ),
 			'guidance'    => $normalized_guidance,
+			'available'   => [] !== $normalized_guidance,
+			'count'       => count( $normalized_guidance ),
 			'sourceTypes' => $source_types,
 			'freshness'   => $freshness_values,
 			'coverage'    => $coverage,

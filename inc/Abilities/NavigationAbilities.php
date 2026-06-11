@@ -385,15 +385,9 @@ final class NavigationAbilities {
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
 		return CollectsDocsGuidance::collect_result(
 			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn(): string => 'core/navigation',
-			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
 			$context,
 			$prompt,
-			[
-				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
-				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
-				'sideEffects'         => empty( $options['signatureOnly'] ),
-			]
+			[ 'mode' => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature' ]
 		);
 	}
 
@@ -434,31 +428,6 @@ final class NavigationAbilities {
 
 	/**
 	 * @return array<string, mixed>
-	 */
-	private static function build_wordpress_docs_family_context( array $context ): array {
-		$location       = sanitize_key( (string) ( $context['location'] ?? '' ) );
-		$has_overlay    = ! empty( $context['overlayTemplateParts'] );
-		$overlay_attr   = $context['attributes']['overlayMenu'] ?? '';
-		$uses_overlay   = $has_overlay || ( is_string( $overlay_attr ) && $overlay_attr !== 'never' );
-		$family_context = [
-			'surface'   => 'navigation',
-			'entityKey' => 'core/navigation',
-		];
-
-		if ( $location !== '' && $location !== 'unknown' ) {
-			$family_context['location'] = $location;
-		}
-
-		if ( $uses_overlay ) {
-			$family_context['overlay'] = true;
-		}
-
-		return $family_context;
-	}
-
-	/**
-	 * @param array<int, array<string, mixed>> $overlay_parts
-	 * @return array<int, array<string, string>>
 	 */
 	private static function normalize_overlay_template_parts( array $overlay_parts ): array {
 		$normalized = [];

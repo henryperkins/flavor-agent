@@ -264,6 +264,36 @@ final class AISearchClient {
 		return $guidance;
 	}
 
+	/**
+	 * Best-effort live search for prompt grounding. Reads the result cache first, then
+	 * runs a single live search; transport failures and empty results both resolve to
+	 * "no guidance attached." Never blocks a recommendation.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function maybe_search_best_effort( string $query, ?int $max_results = null ): array {
+		$query = sanitize_textarea_field( $query );
+
+		if ( $query === '' || ! self::is_configured() ) {
+			return [];
+		}
+
+		$limit  = self::normalize_max_results( $max_results );
+		$cached = self::read_cached_guidance( $query, $limit );
+
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$result = self::search_live( $query, $limit );
+
+		if ( is_wp_error( $result ) ) {
+			return [];
+		}
+
+		return $result['guidance'];
+	}
+
 	public static function get_current_source_coverage( bool $allow_probe = false ): array {
 		$cached = get_transient( self::SOURCE_COVERAGE_CACHE_KEY );
 

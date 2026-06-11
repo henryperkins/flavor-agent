@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
-use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\BlockRecommendationExecutionContract;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
@@ -823,15 +822,9 @@ final class BlockAbilities {
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
 		return CollectsDocsGuidance::collect_result(
 			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
-			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
 			$context,
 			$prompt,
-			[
-				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
-				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
-				'sideEffects'         => empty( $options['signatureOnly'] ),
-			]
+			[ 'mode' => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature' ]
 		);
 	}
 
@@ -1054,13 +1047,6 @@ final class BlockAbilities {
 		);
 	}
 
-	private static function build_wordpress_docs_entity_key( array $context ): string {
-		$block      = self::normalize_map( $context['block'] ?? [] );
-		$block_name = is_string( $block['name'] ?? null ) ? sanitize_text_field( (string) $block['name'] ) : '';
-
-		return AISearchClient::resolve_entity_key( $block_name );
-	}
-
 	private static function build_wordpress_docs_query( array $context, string $prompt ): string {
 		$block         = self::normalize_map( $context['block'] ?? [] );
 		$block_name    = is_string( $block['name'] ?? null ) ? sanitize_text_field( $block['name'] ) : '';
@@ -1160,77 +1146,6 @@ final class BlockAbilities {
 				)
 			)
 		);
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private static function build_wordpress_docs_family_context( array $context ): array {
-		$entity_key = self::build_wordpress_docs_entity_key( $context );
-
-		if ( $entity_key === '' ) {
-			return [];
-		}
-
-		$block         = self::normalize_map( $context['block'] ?? [] );
-		$scope_summary = self::build_block_docs_scope_summary( $context );
-		$panel_keys    = array_keys( self::normalize_map( $block['inspectorPanels'] ?? [] ) );
-		$panel_summary = array_values(
-			array_filter(
-				array_map(
-					static fn( $panel ): string => sanitize_key( (string) $panel ),
-					$panel_keys
-				)
-			)
-		);
-		sort( $panel_summary );
-		$editing_mode   = self::normalize_editing_mode( $block['editingMode'] ?? 'default' );
-		$family_context = [
-			'surface'   => 'block',
-			'entityKey' => $entity_key,
-		];
-
-		if ( ! empty( $panel_summary ) ) {
-			$family_context['inspectorPanels'] = $panel_summary;
-		}
-
-		if ( ! empty( $scope_summary['structuralRole'] ) ) {
-			$family_context['structuralRole'] = $scope_summary['structuralRole'];
-		}
-
-		if ( ! empty( $scope_summary['location'] ) ) {
-			$family_context['location'] = $scope_summary['location'];
-		}
-
-		if ( ! empty( $scope_summary['templateArea'] ) ) {
-			$family_context['templateArea'] = $scope_summary['templateArea'];
-		}
-
-		foreach ( [ 'parentRole', 'parentTag', 'parentLayout', 'parentBackgroundTone' ] as $scope_key ) {
-			if ( ! empty( $scope_summary[ $scope_key ] ) ) {
-				$family_context[ $scope_key ] = $scope_summary[ $scope_key ];
-			}
-		}
-
-		foreach ( [ 'siblingRoles', 'siblingAlignments', 'ancestorScopes' ] as $scope_key ) {
-			if ( ! empty( $scope_summary[ $scope_key ] ) ) {
-				$family_context[ $scope_key ] = $scope_summary[ $scope_key ];
-			}
-		}
-
-		if ( ! empty( $scope_summary['parentHasOverlay'] ) ) {
-			$family_context['parentHasOverlay'] = true;
-		}
-
-		if ( ! empty( $block['isInsideContentOnly'] ) || $editing_mode === 'contentOnly' ) {
-			$family_context['contentOnly'] = true;
-		}
-
-		if ( $editing_mode !== 'default' ) {
-			$family_context['editingMode'] = $editing_mode;
-		}
-
-		return $family_context;
 	}
 
 	private static function get_value_from_path( array $source, array $path ): mixed {
