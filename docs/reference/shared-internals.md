@@ -230,16 +230,16 @@ Renders the shared recent-actions list for executable surfaces, including ordere
 
 ### `src/components/DocsGroundingNotice.js` and `src/utils/docs-grounding-warning.js`
 
-`DocsGroundingNotice` renders a non-dismissible warning notice when the recommendation result carries a stale, degraded, or missing-current-release-cycle docs-grounding signal. It delegates message resolution to `getDocsGroundingWarningMessage(warning)` from the paired util.
+`DocsGroundingNotice` renders a single non-dismissible info notice when a recommendation ran without developer-docs grounding (`docsGrounding.available === false`, i.e. the search backend was unreachable or returned nothing). Grounding is best-effort prompt context and never stales or blocks a result; trust and currency of the corpus are owned by `scripts/update-docs-ai-search.js`. Message resolution delegates to `getDocsGroundingWarningMessage(warning)` from the paired util.
 
 `utils/docs-grounding-warning.js` exposes:
 
 | Export                                       | Role                                                                                                                                                                                                            |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `normalizeDocsGroundingWarning(docsGrounding)` | Returns `null` when grounding is `unavailable`, `current`, or otherwise clean; otherwise returns `{ status, message, coverageStatus, coverageMessage, source, checkedAt }`                                       |
-| `getDocsGroundingWarningMessage(warning)`     | Resolves the user-facing copy for `stale`, `degraded`, and `missing-current-release-cycle` coverage warnings; non-recognized states fall back to the generic "Developer Docs grounding is incomplete." message |
+| `deriveDocsGroundingWarning(docsGrounding)`  | Returns `null` unless `available === false`; then returns the single `{ tone: 'info', message }` soft-notice descriptor                                                                                          |
+| `getDocsGroundingWarningMessage(warning)`     | Returns the descriptor's message verbatim, or an empty string for `null`/malformed input                                                                                                                       |
 
-`coverageStatus === 'missing-current-release-cycle'` is the warning fired by the public docs corpus runbook when trusted Make/Core release-cycle posts cannot be confirmed for the active WP version.
+The corpus runbook (`docs/reference/developer-docs-public-corpus-runbook.md`) owns source eligibility and refresh cadence; the runtime no longer classifies coverage or freshness.
 
 **Consumers:** Block Inspector, Content, Template, Template-Part, Navigation, Global Styles, Style Book (any surface that consumes recommendation results carrying `docsGrounding`)
 

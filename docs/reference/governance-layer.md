@@ -30,7 +30,7 @@ The thesis uses positioning vocabulary; the code uses freshness/signature vocabu
 
 Every executable recommendation runs one loop:
 
-1. **Generate** — the surface ability executes through the shared executor (`inc/Abilities/RecommendationAbilityExecution.php`), which injects guidelines, routes the provider, enforces the docs-grounding fail-closed rules, and writes a `request_diagnostic` activity row for every request — including advisory-only and externally invoked ones.
+1. **Generate** — the surface ability executes through the shared executor (`inc/Abilities/RecommendationAbilityExecution.php`), which injects guidelines, routes the provider, attaches best-effort developer-docs grounding when the search backend is reachable (grounding never blocks a recommendation; trust and currency are owned by `scripts/update-docs-ai-search.js`), and writes a `request_diagnostic` activity row for every request — including advisory-only and externally invoked ones.
 2. **Validate** — model output is parsed against strict response schemas and bounded operation catalogs. Rejected proposals are preserved as diagnostics (`rejectedOperations`, `validationReasons`), never silently dropped, and the client revalidates server-approved operations and fails closed on identity mismatch.
 3. **Review** — structural and theme-level changes require an explicit review step before apply; inline-safe changes are limited to bounded attribute updates classified by the actionability tiers.
 4. **Apply + record** — applies the plugin owns execute deterministically and write server-backed activity rows with provenance (provider path, model, prompt, route, token usage).

@@ -34,7 +34,7 @@ Snapshot of work that must stay true before the plugin can credibly enter the re
 - `readme.txt` now includes the maintained source-code/build-tooling location required when the release zip ships compiled JS assets without the full `src/` tree.
 - `lint-plugin` must run against a representative WordPress 7.0 environment for release evidence. Any skipped Plugin Check run is a recorded blocker or waiver, not a green release signal.
 - The external-service disclosure inventory lives at `docs/reference/external-service-disclosure.md`. It enumerates outbound call sites (OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, GitHub) with trigger, data sent, and setup/explicit-action gates, and must stay 1:1 with the disclosure block in `readme.txt`.
-- Cron-driven outbound calls (`flavor_agent_reindex_patterns`, `flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`, `flavor_agent_warm_core_roadmap_guidance`) are audited in `docs/reference/external-service-disclosure.md`. Keep tests and docs aligned so none can phone home on activation before the corresponding backend is configured or explicitly enabled.
+- Cron-driven outbound calls (`flavor_agent_reindex_patterns`, `flavor_agent_warm_core_roadmap_guidance`) are audited in `docs/reference/external-service-disclosure.md`. The legacy docs warm crons (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) are no longer registered — docs grounding is a per-request best-effort search — and deactivation clears them by name for upgrading sites. Keep tests and docs aligned so nothing can phone home on activation before the corresponding backend is configured or explicitly enabled.
 - No banner, icon, or screenshot assets exist yet for the WordPress.org listing. They are not required in the first review zip; after approval they should be committed to the WordPress.org SVN `assets/` directory before the public listing is polished.
 
 Treat the first four items as release stops in the same sense as the cross-surface validation gates: they are additive to product-coherence work, not part of it. Treat listing assets as post-approval polish unless the submission strategy changes to include screenshots before first review.
@@ -135,9 +135,9 @@ Audit procedure:
 Cron events are functionally indistinguishable from "the plugin phones home periodically" if they fire before user setup. Specific events to audit:
 
 - `flavor_agent_reindex_patterns` (calls Qdrant)
-- `flavor_agent_prewarm_docs` (calls Cloudflare AI Search)
-- `flavor_agent_warm_docs_context` (calls Cloudflare AI Search)
 - `flavor_agent_warm_core_roadmap_guidance` (calls GitHub when explicitly enabled)
+
+The legacy docs warm crons (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) are no longer registered; docs grounding runs one best-effort search per recommendation instead. Deactivation still clears the legacy hook names so upgrading sites do not strand schedules.
 
 Each must be:
 
