@@ -77,10 +77,7 @@ final class AISearchClientTest extends TestCase {
 				'url'         => 'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
 				'excerpt'     => 'Where the template part is intended for use (header, footer, etc).',
 				'score'       => 0.91,
-				'retrievedAt' => '',
-				'publishedAt' => '',
 				'contentHash' => '',
-				'freshness'   => 'unknown',
 			],
 			$result['guidance'][0]
 		);
@@ -282,7 +279,7 @@ final class AISearchClientTest extends TestCase {
 		$this->assertStringContainsString( 'Private APIs', $result['guidance'][0]['excerpt'] );
 	}
 
-	public function test_search_rejects_non_managed_source_key_even_with_trusted_metadata_url(): void {
+	public function test_search_keeps_chunk_with_url_regardless_of_source_key_namespace(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'default/green-sun',
@@ -315,10 +312,15 @@ final class AISearchClientTest extends TestCase {
 		$result = AISearchClient::search( 'private apis' );
 
 		$this->assertIsArray( $result );
-		$this->assertCount( 0, $result['guidance'] );
+		$this->assertCount( 1, $result['guidance'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/block-editor/reference-guides/packages/packages-private-apis/',
+			$result['guidance'][0]['url']
+		);
+		$this->assertSame( 'developer-docs', $result['guidance'][0]['sourceType'] );
 	}
 
-	public function test_search_rejects_bounded_source_key_with_forged_instance_segment(): void {
+	public function test_search_drops_chunk_when_no_url_is_derivable(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'default/green-sun',
@@ -337,12 +339,12 @@ final class AISearchClientTest extends TestCase {
 							'score' => 0.9,
 							'type'  => 'text',
 							'item'  => [
-								// Forged instance segment: the host segment matches the trusted
-								// metadata URL, but "attacker" is not a managed docs instance.
+								// Unmanaged instance segment and no URL anywhere: nothing
+								// usable to attach, so the chunk drops for lack of a URL.
 								'key'       => 'ai-search/attacker/developer.wordpress.org/block-editor-reference-guides-packages-packages-private-a/8d704f871324191e/part-0001.md',
 								'timestamp' => 1775925540000,
 							],
-							'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/packages/packages-private-apis/\"\n---\nForged chunk body.",
+							'text'  => 'Chunk body with no frontmatter URL.',
 						],
 					],
 				]
@@ -401,7 +403,7 @@ final class AISearchClientTest extends TestCase {
 		$this->assertStringNotContainsString( 'source_url', $result['guidance'][0]['excerpt'] );
 	}
 
-	public function test_search_preserves_frontmatter_provenance_and_freshness_metadata(): void {
+	public function test_search_keeps_content_hash_and_drops_provenance_dates(): void {
 		$chunk_text = "---\nsource_url: \"https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/\"\noriginal_url: \"https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\npublished_at: \"2026-03-24T21:40:44Z\"\ncontent_hash: abc123\n---\nWordPress 7.0 provides client-side abilities through @wordpress/abilities.";
 
 		WordPressTestState::$remote_post_response = [
@@ -435,10 +437,10 @@ final class AISearchClientTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertCount( 1, $result['guidance'] );
 		$this->assertSame( 'make-core', $result['guidance'][0]['sourceType'] );
-		$this->assertSame( '2026-05-08T14:00:00Z', $result['guidance'][0]['retrievedAt'] );
-		$this->assertSame( '2026-03-24T21:40:44Z', $result['guidance'][0]['publishedAt'] );
 		$this->assertSame( 'abc123', $result['guidance'][0]['contentHash'] );
-		$this->assertSame( 'stale', $result['guidance'][0]['freshness'] );
+		$this->assertArrayNotHasKey( 'retrievedAt', $result['guidance'][0] );
+		$this->assertArrayNotHasKey( 'publishedAt', $result['guidance'][0] );
+		$this->assertArrayNotHasKey( 'freshness', $result['guidance'][0] );
 	}
 
 	public function test_search_accepts_trusted_ai_search_source_key_when_url_metadata_is_missing(): void {
@@ -701,7 +703,7 @@ final class AISearchClientTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'cloudflare_ai_search_validation_untrusted_source', $result->get_error_code() );
 		$this->assertSame(
-			'Cloudflare AI Search validation could not confirm trusted developer.wordpress.org content from the built-in public Developer Docs endpoint.',
+			'Cloudflare AI Search validation could not confirm developer.wordpress.org content from the built-in public Developer Docs endpoint.',
 			$result->get_error_message()
 		);
 		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
@@ -867,7 +869,7 @@ final class AISearchClientTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/^flavor_agent_ai_search_[a-f0-9]{32}$/', $cache_key );
 	}
 
-	public function test_search_filters_chunks_to_official_wordpress_docs_sources(): void {
+	public function test_search_keeps_untrusted_chunks_with_neutral_source_labels(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -908,15 +910,22 @@ final class AISearchClientTest extends TestCase {
 		$result = AISearchClient::search( 'block supports guidance' );
 
 		$this->assertIsArray( $result );
-		$this->assertCount( 1, $result['guidance'] );
+		$this->assertCount( 2, $result['guidance'], 'runtime keeps whatever the ingestion script indexed' );
 		$this->assertSame( 'allowed-chunk', $result['guidance'][0]['id'] );
 		$this->assertSame(
 			'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
 			$result['guidance'][0]['url']
 		);
+		$this->assertSame( 'developer-docs', $result['guidance'][0]['sourceType'] );
+		$this->assertSame( 'private-chunk', $result['guidance'][1]['id'] );
+		$this->assertSame(
+			'https://intranet.example.com/wiki/theme-roadmap',
+			$result['guidance'][1]['url']
+		);
+		$this->assertSame( 'developer-docs', $result['guidance'][1]['sourceType'], 'non-WordPress hosts get the neutral label' );
 	}
 
-	public function test_search_rejects_untrusted_and_conflicting_guidance_urls(): void {
+	public function test_search_sanitizes_chunk_urls_without_dropping_chunks(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -985,11 +994,31 @@ final class AISearchClientTest extends TestCase {
 		$result = AISearchClient::search( 'template part guidance' );
 
 		$this->assertIsArray( $result );
-		$this->assertCount( 1, $result['guidance'] );
+		$this->assertCount( 5, $result['guidance'], 'URL hygiene picks a usable URL instead of dropping the chunk' );
 		$this->assertSame( 'valid-chunk', $result['guidance'][0]['id'] );
 		$this->assertSame(
 			'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
 			$result['guidance'][0]['url']
+		);
+		// javascript: and http: candidates are never selected; the source-key
+		// derivation supplies the fallback URL for both chunks.
+		$this->assertSame( 'javascript-host-bypass', $result['guidance'][1]['id'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
+			$result['guidance'][1]['url']
+		);
+		$this->assertSame( 'http-docs-url', $result['guidance'][2]['id'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
+			$result['guidance'][2]['url']
+		);
+		// The first structurally valid candidate wins; conflicts no longer drop.
+		$this->assertSame( 'metadata-frontmatter-conflict', $result['guidance'][3]['id'] );
+		$this->assertSame( 'https://wordpress.org/news/', $result['guidance'][3]['url'] );
+		$this->assertSame( 'source-key-url-mismatch', $result['guidance'][4]['id'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
+			$result['guidance'][4]['url']
 		);
 	}
 

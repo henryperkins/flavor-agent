@@ -534,12 +534,28 @@ final class AISearchClient {
 			$config['instanceId']
 		);
 
-		if ( [] === $guidance ) {
-				return new \WP_Error(
-					'cloudflare_ai_search_validation_untrusted_source',
-					'Cloudflare AI Search validation could not confirm trusted developer.wordpress.org content from the built-in public Developer Docs endpoint.',
-					[ 'status' => 400 ]
-				);
+		// Settings-side sanity probe only: the built-in endpoint must actually
+		// serve WordPress developer docs. Recommendation flows never gate on this.
+		$has_wordpress_docs = false;
+
+		foreach ( $guidance as $chunk ) {
+			$host = wp_parse_url( (string) ( $chunk['url'] ?? '' ), PHP_URL_HOST );
+
+			if (
+				is_string( $host ) &&
+				in_array( strtolower( $host ), [ 'developer.wordpress.org', 'make.wordpress.org' ], true )
+			) {
+				$has_wordpress_docs = true;
+				break;
+			}
+		}
+
+		if ( ! $has_wordpress_docs ) {
+			return new \WP_Error(
+				'cloudflare_ai_search_validation_untrusted_source',
+				'Cloudflare AI Search validation could not confirm developer.wordpress.org content from the built-in public Developer Docs endpoint.',
+				[ 'status' => 400 ]
+			);
 		}
 
 		return $guidance;
@@ -636,58 +652,23 @@ final class AISearchClient {
 			return null;
 		}
 
-		$source_key = sanitize_text_field( (string) ( $item['sourceKey'] ?? '' ) );
-		$url        = self::normalize_trusted_guidance_url( $item['url'] ?? null );
-		$excerpt    = self::sanitize_excerpt( (string) ( $item['excerpt'] ?? '' ) );
+		$url     = self::normalize_guidance_url_candidate( $item['url'] ?? null );
+		$excerpt = self::sanitize_excerpt( (string) ( $item['excerpt'] ?? '' ) );
 
-		if ( $url === '' || $excerpt === '' || ! self::is_allowed_guidance_source( $source_key, $url ) ) {
+		if ( $url === '' || $excerpt === '' ) {
 			return null;
 		}
 
-		$normalized = [
-			'id'        => sanitize_text_field( (string) ( $item['id'] ?? '' ) ),
-			'title'     => sanitize_text_field( (string) ( $item['title'] ?? '' ) ),
-			'sourceKey' => $source_key,
-			'url'       => $url,
-			'excerpt'   => $excerpt,
-			'score'     => isset( $item['score'] ) ? max( 0.0, min( 1.0, (float) $item['score'] ) ) : 0.0,
+		return [
+			'id'          => sanitize_text_field( (string) ( $item['id'] ?? '' ) ),
+			'title'       => sanitize_text_field( (string) ( $item['title'] ?? '' ) ),
+			'sourceKey'   => sanitize_text_field( (string) ( $item['sourceKey'] ?? '' ) ),
+			'sourceType'  => DocsGroundingSourcePolicy::label_for_url( $url ),
+			'url'         => $url,
+			'excerpt'     => $excerpt,
+			'score'       => isset( $item['score'] ) ? max( 0.0, min( 1.0, (float) $item['score'] ) ) : 0.0,
+			'contentHash' => sanitize_text_field( (string) ( $item['contentHash'] ?? '' ) ),
 		];
-
-		if (
-			array_key_exists( 'sourceType', $item ) ||
-			array_key_exists( 'retrievedAt', $item ) ||
-			array_key_exists( 'publishedAt', $item ) ||
-			array_key_exists( 'contentHash', $item ) ||
-			array_key_exists( 'freshness', $item )
-		) {
-			$source_type  = sanitize_key( (string) ( $item['sourceType'] ?? DocsGroundingSourcePolicy::classify_url( $url ) ) );
-			$retrieved_at = sanitize_text_field( (string) ( $item['retrievedAt'] ?? '' ) );
-			$published_at = sanitize_text_field( (string) ( $item['publishedAt'] ?? '' ) );
-
-			return [
-				'id'          => sanitize_text_field( (string) ( $item['id'] ?? '' ) ),
-				'title'       => sanitize_text_field( (string) ( $item['title'] ?? '' ) ),
-				'sourceKey'   => $source_key,
-				'sourceType'  => $source_type,
-				'url'         => $url,
-				'excerpt'     => $excerpt,
-				'score'       => isset( $item['score'] ) ? max( 0.0, min( 1.0, (float) $item['score'] ) ) : 0.0,
-				'retrievedAt' => $retrieved_at,
-				'publishedAt' => $published_at,
-				'contentHash' => sanitize_text_field( (string) ( $item['contentHash'] ?? '' ) ),
-				'freshness'   => sanitize_key(
-					(string) (
-						$item['freshness'] ?? DocsGroundingSourcePolicy::freshness_status(
-							$source_type,
-							$retrieved_at,
-							$published_at
-						)
-					)
-				),
-			];
-		}
-
-		return $normalized;
 	}
 
 	/**
@@ -717,31 +698,21 @@ final class AISearchClient {
 			);
 			$text          = self::sanitize_excerpt( $parsed_chunk['excerpt'] );
 
-			if ( $text === '' || $url === '' || ! self::is_allowed_guidance_source( $source_key, $url, $instance_id ) ) {
+			if ( $text === '' || $url === '' ) {
 				continue;
 			}
 
-			$source_type  = DocsGroundingSourcePolicy::classify_url( $url );
-			$metadata     = is_array( $parsed_chunk['metadata'] ?? null ) ? $parsed_chunk['metadata'] : [];
-			$retrieved_at = sanitize_text_field( (string) ( $metadata['retrieved_at'] ?? '' ) );
-			$published_at = sanitize_text_field( (string) ( $metadata['published_at'] ?? '' ) );
+			$metadata = is_array( $parsed_chunk['metadata'] ?? null ) ? $parsed_chunk['metadata'] : [];
 
 			$guidance[] = [
 				'id'          => sanitize_text_field( (string) ( $chunk['id'] ?? '' ) ),
 				'title'       => sanitize_text_field( (string) ( $item_metadata['title'] ?? '' ) ),
 				'sourceKey'   => $source_key,
-				'sourceType'  => $source_type,
+				'sourceType'  => DocsGroundingSourcePolicy::label_for_url( $url ),
 				'url'         => $url,
 				'excerpt'     => $text,
 				'score'       => isset( $chunk['score'] ) ? max( 0.0, min( 1.0, (float) $chunk['score'] ) ) : 0.0,
-				'retrievedAt' => $retrieved_at,
-				'publishedAt' => $published_at,
 				'contentHash' => sanitize_text_field( (string) ( $metadata['content_hash'] ?? '' ) ),
-				'freshness'   => DocsGroundingSourcePolicy::freshness_status(
-					$source_type,
-					$retrieved_at,
-					$published_at
-				),
 			];
 		}
 
@@ -769,10 +740,6 @@ final class AISearchClient {
 			$candidates[] = $frontmatter_url;
 		}
 
-		if ( '' !== self::normalize_trusted_guidance_url( $source_key ) ) {
-			$candidates[] = $source_key;
-		}
-
 		$source_key_url = self::normalize_guidance_url_from_source_key( $source_key, $instance_id );
 
 		if ( '' !== $source_key_url ) {
@@ -783,143 +750,69 @@ final class AISearchClient {
 	}
 
 	/**
+	 * First structurally usable https URL wins; candidates are ordered
+	 * metadata, frontmatter, then source-key derivation.
+	 *
 	 * @param array<int, string> $url_candidates
 	 */
 	private static function normalize_guidance_url( array $url_candidates ): string {
-		$normalized_url = '';
-
 		foreach ( $url_candidates as $url_candidate ) {
-			if ( ! is_string( $url_candidate ) || '' === trim( $url_candidate ) ) {
-				continue;
+			$normalized_candidate = self::normalize_guidance_url_candidate( $url_candidate );
+
+			if ( '' !== $normalized_candidate ) {
+				return $normalized_candidate;
 			}
-
-			$normalized_candidate = self::normalize_trusted_guidance_url( $url_candidate );
-
-			if ( '' === $normalized_candidate ) {
-				return '';
-			}
-
-			if (
-				'' !== $normalized_url &&
-				! self::guidance_urls_match( $normalized_url, $normalized_candidate )
-			) {
-				return '';
-			}
-
-			$normalized_url = $normalized_candidate;
 		}
 
-		return $normalized_url;
-	}
-
-	private static function normalize_trusted_guidance_url( mixed $value ): string {
-		return is_string( $value ) ? DocsGroundingSourcePolicy::normalize_trusted_url( $value ) : '';
-	}
-
-	private static function is_allowed_guidance_source( string $source_key, string $url, ?string $instance_id = null ): bool {
-		$url_identity = self::normalize_guidance_identity( $url );
-
-		if ( $url_identity === '' ) {
-			return false;
-		}
-
-		if ( $source_key === '' ) {
-			return true;
-		}
-
-		$key_identity = self::normalize_source_key_identity( $source_key, $instance_id );
-
-		if ( $key_identity !== '' ) {
-			return $key_identity === $url_identity;
-		}
-
-		// Cloudflare AI Search caps item filenames at 128 bytes, so deep developer
-		// docs URLs cannot embed their full path in the item key (see
-		// scripts/update-docs-ai-search.js buildItemKey). Those managed keys carry
-		// only a bounded slug plus a short hash, so they do not reconstruct a URL
-		// above. Accept them when the key is in our managed namespace and its host
-		// segment matches the already trust-scoped URL; forged or traversing keys
-		// (wrong namespace, "..", encoded delimiters) still fail this check.
-		return self::source_key_matches_trusted_host( $source_key, $url, $instance_id );
-	}
-
-	private static function source_key_matches_trusted_host( string $source_key, string $url, ?string $instance_id = null ): bool {
-		$key = strtolower( trim( $source_key ) );
-
-		if ( strncmp( $key, 'ai-search/', 10 ) !== 0 ) {
-			return false;
-		}
-
-		if ( self::path_contains_untrusted_segments( $key ) ) {
-			return false;
-		}
-
-		$segments = array_values(
-			array_filter(
-				explode( '/', $key ),
-				static fn ( string $segment ): bool => $segment !== ''
-			)
-		);
-
-		// ai-search / {instance} / {host} / {at least one bounded path or hash segment}
-		if ( count( $segments ) < 4 ) {
-			return false;
-		}
-
-		// Only accept keys minted for one of our managed docs instances. Without
-		// this, a forged key such as ai-search/attacker/developer.wordpress.org/...
-		// would pass on the host segment alone and borrow the trust of an
-		// (independently trust-scoped) URL. Mirrors the instance allowlist used by
-		// parse_trusted_source_key_url().
-		if ( ! in_array( $segments[1], self::managed_source_key_instances( $instance_id ), true ) ) {
-			return false;
-		}
-
-		$url_host = wp_parse_url( $url, PHP_URL_HOST );
-
-		if ( ! is_string( $url_host ) || '' === $url_host ) {
-			return false;
-		}
-
-		return $segments[2] === strtolower( $url_host );
+		return '';
 	}
 
 	/**
-	 * Managed docs AI Search instance aliases that may legitimately appear as the
-	 * instance segment of a bounded item key.
-	 *
-	 * @return array<int, string>
+	 * Structural URL hygiene only — https, a real host, no embedded credentials,
+	 * no traversal segments. Host allowlisting is the ingestion script's job.
 	 */
-	private static function managed_source_key_instances( ?string $instance_id = null ): array {
-		return array_values(
-			array_unique(
-				array_filter(
-					[
-						'wp-dev',
-						'wp-dev-docs',
-						self::normalize_source_key_instance_id( $instance_id ),
-					]
-				)
-			)
-		);
-	}
-
-	private static function normalize_source_key_identity( string $source_key, ?string $instance_id = null ): string {
-		$url = self::normalize_guidance_url_from_source_key( $source_key, $instance_id );
-
-		if ( $url === '' ) {
+	private static function normalize_guidance_url_candidate( mixed $value ): string {
+		if ( ! is_string( $value ) || '' === trim( $value ) ) {
 			return '';
 		}
 
-		return self::normalize_guidance_identity( $url );
+		$parts = wp_parse_url( trim( $value ) );
+
+		if ( ! is_array( $parts ) ) {
+			return '';
+		}
+
+		$scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+		$host   = strtolower( (string) ( $parts['host'] ?? '' ) );
+		$path   = (string) ( $parts['path'] ?? '' );
+
+		if (
+			'https' !== $scheme ||
+			'' === $host ||
+			'' === $path ||
+			isset( $parts['user'] ) ||
+			isset( $parts['pass'] ) ||
+			( isset( $parts['port'] ) && 443 !== (int) $parts['port'] ) ||
+			self::path_contains_untrusted_segments( $path )
+		) {
+			return '';
+		}
+
+		$normalized_path = preg_replace( '#/+#', '/', $path );
+
+		if ( ! is_string( $normalized_path ) || '' === $normalized_path ) {
+			return '';
+		}
+
+		return 'https://' . $host . '/' . ltrim( $normalized_path, '/' );
 	}
 
 	private static function normalize_guidance_url_from_source_key( string $source_key, ?string $instance_id = null ): string {
-		$source_key  = trim( $source_key );
-		$trusted_url = self::normalize_trusted_guidance_url( $source_key );
+		$source_key = trim( $source_key );
+		$direct_url = self::normalize_guidance_url_candidate( $source_key );
 
-		if ( '' !== $trusted_url ) {
-			return $trusted_url;
+		if ( '' !== $direct_url ) {
+			return $direct_url;
 		}
 
 		$normalized = strtolower( $source_key );
@@ -928,7 +821,7 @@ final class AISearchClient {
 			return '';
 		}
 
-		$source_key_url = self::parse_trusted_source_key_url( $normalized, $instance_id );
+		$source_key_url = self::parse_source_key_url( $normalized, $instance_id );
 
 		if ( '' === $source_key_url ) {
 			return '';
@@ -974,7 +867,7 @@ final class AISearchClient {
 			return '';
 		}
 
-		return self::normalize_trusted_guidance_url(
+		return self::normalize_guidance_url_candidate(
 			'https://' . $host . '/' . implode( '/', $segments ) . '/'
 		);
 	}
@@ -995,7 +888,7 @@ final class AISearchClient {
 		return strtolower( sanitize_text_field( $resolved ) );
 	}
 
-	private static function parse_trusted_source_key_url( string $source_key, ?string $instance_id = null ): string {
+	private static function parse_source_key_url( string $source_key, ?string $instance_id = null ): string {
 		$hosts               = strtolower( 'developer\.WordPress\.org|make\.WordPress\.org' );
 		$normalized_instance = self::normalize_source_key_instance_id( $instance_id );
 		$instance_pattern    = 'wp-dev-docs';
@@ -1005,13 +898,13 @@ final class AISearchClient {
 		}
 
 		if ( preg_match( '/^(' . $hosts . ')\/(.+)$/', $source_key, $matches ) ) {
-			return self::normalize_trusted_guidance_url(
+			return self::normalize_guidance_url_candidate(
 				'https://' . (string) $matches[1] . '/' . (string) $matches[2]
 			);
 		}
 
 		if ( preg_match( '/^ai-search\/(?:' . $instance_pattern . ')\/(' . $hosts . ')\/(.+)$/', $source_key, $matches ) ) {
-			return self::normalize_trusted_guidance_url(
+			return self::normalize_guidance_url_candidate(
 				'https://' . (string) $matches[1] . '/' . (string) $matches[2]
 			);
 		}
@@ -1041,38 +934,6 @@ final class AISearchClient {
 		}
 
 		return false;
-	}
-
-	private static function normalize_guidance_identity( string $url ): string {
-		$normalized = self::normalize_trusted_guidance_url( $url );
-
-		if ( $normalized === '' ) {
-			return '';
-		}
-
-		$path = wp_parse_url( $normalized, PHP_URL_PATH );
-
-		if ( ! is_string( $path ) ) {
-			return '';
-		}
-
-		$host = wp_parse_url( $normalized, PHP_URL_HOST );
-
-		if ( ! is_string( $host ) || '' === $host ) {
-			return '';
-		}
-
-		$normalized_path = rtrim( $path, '/' );
-
-		if ( $normalized_path === '' ) {
-			$normalized_path = '/';
-		}
-
-		return 'https://' . strtolower( $host ) . $normalized_path;
-	}
-
-	private static function guidance_urls_match( string $left, string $right ): bool {
-		return self::normalize_guidance_identity( $left ) === self::normalize_guidance_identity( $right );
 	}
 
 	/**

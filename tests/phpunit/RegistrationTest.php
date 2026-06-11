@@ -1567,7 +1567,11 @@ final class RegistrationTest extends TestCase {
 		);
 		$this->assertSame(
 			'string',
-			$ability['output_schema']['properties']['guidance']['items']['properties']['retrievedAt']['type'] ?? null
+			$ability['output_schema']['properties']['guidance']['items']['properties']['contentHash']['type'] ?? null
+		);
+		$this->assertArrayNotHasKey(
+			'retrievedAt',
+			$ability['output_schema']['properties']['guidance']['items']['properties'] ?? []
 		);
 	}
 
