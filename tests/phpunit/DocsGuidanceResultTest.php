@@ -16,264 +16,151 @@ final class DocsGuidanceResultTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
-	public function test_current_guidance_returns_grounded_status_and_stable_fingerprint(): void {
+	public function test_from_guidance_reports_available_with_labels_and_fingerprint(): void {
 		$guidance = [
 			[
-				'url'         => 'https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/',
-				'sourceType'  => 'make-core',
-				'contentHash' => 'abc123',
-				'freshness'   => 'current',
-			],
-		];
-
-		$result = DocsGuidanceResult::from_guidance( $guidance, 'fresh', 'foreground' );
-
-		$this->assertSame( 'grounded', $result['status'] );
-		$this->assertSame( [ 'make-core' ], $result['sourceTypes'] );
-		$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', $result['fingerprint'] );
-	}
-
-	public function test_empty_guidance_returns_unavailable_status(): void {
-		$result = DocsGuidanceResult::from_guidance( [], 'none', 'cache' );
-
-		$this->assertSame( 'unavailable', $result['status'] );
-		$this->assertSame( [], $result['guidance'] );
-	}
-
-	public function test_fingerprint_is_stable_across_recommendation_and_signature_modes(): void {
-		$guidance = [
-			[
-				'id'          => 'block-supports',
-				'title'       => 'Block supports',
-				'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+				'url'         => 'https://developer.wordpress.org/block-editor/',
 				'sourceType'  => 'developer-docs',
-				'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/',
-				'excerpt'     => 'Use block supports to expose design tools.',
-				'score'       => 0.9,
-				'retrievedAt' => '2026-05-08T14:00:00Z',
-				'publishedAt' => '',
-				'contentHash' => 'block-supports-current',
-				'freshness'   => 'current',
+				'excerpt'     => 'x',
+				'contentHash' => 'a',
+			],
+			[
+				'url'         => 'https://make.wordpress.org/core/2026/05/07/x/',
+				'sourceType'  => 'make-core',
+				'excerpt'     => 'y',
+				'contentHash' => 'b',
+			],
+		];
+		$result   = DocsGuidanceResult::from_guidance( $guidance, 'recommendation', 'best-effort' );
+
+		$this->assertTrue( $result['available'] );
+		$this->assertSame( 2, $result['count'] );
+		$this->assertEqualsCanonicalizing( [ 'developer-docs', 'make-core' ], $result['sourceTypes'] );
+		$this->assertNotSame( '', $result['fingerprint'] );
+		$this->assertSame( 'recommendation', $result['mode'] );
+		$this->assertSame( 'best-effort', $result['transport'] );
+
+		$summary = DocsGuidanceResult::public_summary( $result );
+		$this->assertSame( [ 'available', 'sourceTypes', 'count' ], array_keys( $summary ) );
+		$this->assertTrue( $summary['available'] );
+		$this->assertSame( 2, $summary['count'] );
+	}
+
+	public function test_from_guidance_empty_is_unavailable_with_stable_fingerprint(): void {
+		$a = DocsGuidanceResult::from_guidance( [], 'recommendation', 'best-effort' );
+		$b = DocsGuidanceResult::from_guidance( [], 'recommendation', 'best-effort' );
+
+		$this->assertFalse( $a['available'] );
+		$this->assertSame( 0, $a['count'] );
+		$this->assertSame( $a['fingerprint'], $b['fingerprint'] );
+
+		$summary = DocsGuidanceResult::public_summary( $a );
+		$this->assertFalse( $summary['available'] );
+		$this->assertSame( 0, $summary['count'] );
+		$this->assertSame( [], $summary['sourceTypes'] );
+	}
+
+	public function test_fingerprint_changes_when_guidance_content_changes(): void {
+		$base    = [
+			[
+				'url'         => 'https://developer.wordpress.org/block-editor/',
+				'sourceType'  => 'developer-docs',
+				'excerpt'     => 'x',
+				'contentHash' => 'a',
+			],
+		];
+		$changed = [
+			[
+				'url'         => 'https://developer.wordpress.org/block-editor/',
+				'sourceType'  => 'developer-docs',
+				'excerpt'     => 'x',
+				'contentHash' => 'b',
 			],
 		];
 
-		$recommendation = DocsGuidanceResult::from_guidance( $guidance, 'recommendation', 'foreground-allowed' );
-		$signature      = DocsGuidanceResult::from_guidance( $guidance, 'signature', 'cache-only' );
-
-		$this->assertSame( $recommendation['fingerprint'], $signature['fingerprint'] );
-		$this->assertSame( 'recommendation', $recommendation['mode'] );
-		$this->assertSame( 'signature', $signature['mode'] );
-	}
-
-	public function test_roadmap_only_guidance_is_unavailable_not_actionable(): void {
-		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'id'         => 'roadmap-summary',
-					'title'      => 'WordPress AI roadmap status',
-					'sourceKey'  => 'github.com/wordpress/project-240',
-					'sourceType' => 'roadmap',
-					'url'        => 'https://github.com/orgs/WordPress/projects/240/views/7',
-					'excerpt'    => 'Open roadmap milestones: 0.9.0.',
-					'score'      => 0.9,
-				],
-			],
-			'recommendation',
-			'cache-only'
-		);
-
-		$this->assertSame( 'unavailable', $result['status'] );
-		$this->assertFalse( DocsGuidanceResult::is_actionable( $result ) );
-		$this->assertSame( [ 'roadmap' ], $result['sourceTypes'] );
-	}
-
-	public function test_actionable_statuses_allow_trusted_guidance_states(): void {
-		foreach ( [ 'grounded', 'degraded', 'stale' ] as $status ) {
-			$this->assertTrue(
-				DocsGuidanceResult::is_actionable(
-					[
-						'status' => $status,
-					]
-				)
-			);
-		}
-
-		$this->assertFalse(
-			DocsGuidanceResult::is_actionable(
-				[
-					'status' => 'unavailable',
-				]
-			)
+		$this->assertNotSame(
+			DocsGuidanceResult::from_guidance( $base, 'recommendation', 'best-effort' )['fingerprint'],
+			DocsGuidanceResult::from_guidance( $changed, 'recommendation', 'best-effort' )['fingerprint']
 		);
 	}
 
-	public function test_unavailable_error_includes_public_grounding_summary(): void {
-		$result = DocsGuidanceResult::from_guidance( [], 'signature', 'cache-only' );
-		$error  = DocsGuidanceResult::unavailable_error( $result );
-
-		$this->assertInstanceOf( \WP_Error::class, $error );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $error->get_error_code() );
-		$this->assertSame( 503, $error->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $error->get_error_data()['docsGrounding']['status'] ?? null );
-	}
-
-	public function test_required_source_coverage_degrades_to_warn_for_missing_release_cycle(): void {
-		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/',
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'freshness'   => 'current',
-				],
-			],
-			'recommendation',
-			'foreground-allowed',
-			[
-				'requireCurrentSourceCoverage' => true,
-				'sourceCoverage'               => [
-					'status'                 => 'missing-current-release-cycle',
-					'hasDeveloperDocs'       => true,
-					'hasCurrentReleaseCycle' => false,
-					'sourceTypes'            => [ 'developer-docs' ],
-					'freshness'              => [ 'current' ],
-					'checkedAt'              => '2026-05-11 00:00:00',
-					'errorCode'              => 'missing_current_release_cycle',
-					'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-				],
-			]
-		);
-
-		$this->assertSame( 'grounded', $result['status'] );
-		$this->assertTrue( DocsGuidanceResult::is_actionable( $result ) );
-		// The coverage warning still rides along for the UI.
-		$this->assertSame( 'missing-current-release-cycle', $result['coverage']['status'] ?? null );
-	}
-
-	public function test_required_coverage_still_blocks_when_developer_docs_missing(): void {
-		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'sourceType'  => 'make-core',
-					'url'         => 'https://make.wordpress.org/core/2026/05/05/example/',
-					'publishedAt' => '2026-05-05T14:00:00Z',
-					'freshness'   => 'current',
-				],
-			],
-			'recommendation',
-			'foreground-allowed',
-			[
-				'requireCurrentSourceCoverage' => true,
-				'sourceCoverage'               => [
-					'status'           => 'missing-developer-docs',
-					'hasDeveloperDocs' => false,
-					'errorCode'        => 'missing_developer_docs',
-					'errorMessage'     => 'Developer Docs grounding did not return a trusted stable Developer Docs source.',
-				],
-			]
-		);
-
-		$this->assertSame( 'unavailable', $result['status'] );
-		$this->assertFalse( DocsGuidanceResult::is_actionable( $result ) );
-	}
-
-	public function test_required_coverage_still_blocks_on_transport_unavailable(): void {
-		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/',
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'freshness'   => 'current',
-				],
-			],
-			'recommendation',
-			'foreground-allowed',
-			[
-				'requireCurrentSourceCoverage' => true,
-				'sourceCoverage'               => [
-					'status'       => 'unavailable',
-					'errorCode'    => 'cloudflare_ai_search_coverage_failed',
-					'errorMessage' => 'Developer Docs coverage probe failed.',
-				],
-			]
-		);
-
-		$this->assertSame( 'unavailable', $result['status'] );
-		$this->assertFalse( DocsGuidanceResult::is_actionable( $result ) );
-	}
-
-	public function test_non_required_source_coverage_warns_without_blocking_stable_guidance(): void {
-		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/',
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'freshness'   => 'current',
-				],
-			],
-			'recommendation',
-			'foreground-allowed',
-			[
-				'requireCurrentSourceCoverage' => false,
-				'sourceCoverage'               => [
-					'status'                 => 'missing-current-release-cycle',
-					'hasDeveloperDocs'       => true,
-					'hasCurrentReleaseCycle' => false,
-					'sourceTypes'            => [ 'developer-docs' ],
-					'freshness'              => [ 'current' ],
-					'checkedAt'              => '2026-05-11 00:00:00',
-					'errorCode'              => 'missing_current_release_cycle',
-					'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-				],
-			]
-		);
-
-		$this->assertSame( 'grounded', $result['status'] );
-		$this->assertSame( 'missing-current-release-cycle', $result['coverage']['status'] ?? null );
-		$this->assertTrue( DocsGuidanceResult::is_actionable( $result ) );
-	}
-
-	public function test_unavailable_error_fires_detection_action(): void {
-		$result = DocsGuidanceResult::from_guidance( [], 'recommendation', 'foreground-allowed' );
-
-		DocsGuidanceResult::unavailable_error( $result );
+	public function test_fingerprint_is_stable_across_chunk_order(): void {
+		$first  = [
+			'url'         => 'https://developer.wordpress.org/block-editor/',
+			'sourceType'  => 'developer-docs',
+			'excerpt'     => 'x',
+			'contentHash' => 'a',
+		];
+		$second = [
+			'url'         => 'https://make.wordpress.org/core/2026/05/07/x/',
+			'sourceType'  => 'make-core',
+			'excerpt'     => 'y',
+			'contentHash' => 'b',
+		];
 
 		$this->assertSame(
-			1,
-			WordPressTestState::$do_action_counts['flavor_agent_docs_grounding_unavailable'] ?? 0
+			DocsGuidanceResult::from_guidance( [ $first, $second ], 'recommendation', 'best-effort' )['fingerprint'],
+			DocsGuidanceResult::from_guidance( [ $second, $first ], 'recommendation', 'best-effort' )['fingerprint']
 		);
 	}
 
-	public function test_current_source_coverage_allows_stable_guidance_to_proceed(): void {
+	public function test_prompt_guidance_does_not_affect_summary_fields(): void {
+		$docs_chunk    = [
+			'url'         => 'https://developer.wordpress.org/block-editor/',
+			'sourceType'  => 'developer-docs',
+			'excerpt'     => 'x',
+			'contentHash' => 'a',
+		];
+		$roadmap_chunk = [
+			'url'        => 'https://github.com/orgs/WordPress/projects/240',
+			'sourceType' => 'roadmap',
+			'excerpt'    => 'roadmap milestones',
+		];
+
 		$result = DocsGuidanceResult::from_guidance(
-			[
-				[
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/',
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'freshness'   => 'current',
-				],
-			],
+			[ $docs_chunk ],
 			'recommendation',
-			'foreground-allowed',
-			[
-				'requireCurrentSourceCoverage' => true,
-				'sourceCoverage'               => [
-					'status'                 => 'current',
-					'hasDeveloperDocs'       => true,
-					'hasCurrentReleaseCycle' => true,
-					'sourceTypes'            => [ 'developer-docs', 'make-core' ],
-					'freshness'              => [ 'current' ],
-					'checkedAt'              => '2026-05-11 00:00:00',
-					'errorCode'              => '',
-					'errorMessage'           => '',
-				],
-			]
+			'best-effort',
+			[ $roadmap_chunk, $docs_chunk ]
 		);
 
-		$this->assertSame( 'grounded', $result['status'] );
-		$this->assertTrue( DocsGuidanceResult::is_actionable( $result ) );
+		$this->assertTrue( $result['available'] );
+		$this->assertSame( 1, $result['count'] );
+		$this->assertSame( [ 'developer-docs' ], $result['sourceTypes'] );
+		$this->assertCount( 2, DocsGuidanceResult::guidance( $result ) );
+		$this->assertSame(
+			DocsGuidanceResult::from_guidance( [ $docs_chunk ], 'recommendation', 'best-effort' )['fingerprint'],
+			$result['fingerprint'],
+			'fingerprint must cover docs chunks only'
+		);
+
+		$roadmap_only = DocsGuidanceResult::from_guidance(
+			[],
+			'recommendation',
+			'best-effort',
+			[ $roadmap_chunk ]
+		);
+
+		$this->assertFalse( $roadmap_only['available'] );
+		$this->assertSame( 0, $roadmap_only['count'] );
+		$this->assertSame( [], $roadmap_only['sourceTypes'] );
+		$this->assertCount( 1, DocsGuidanceResult::guidance( $roadmap_only ) );
+		$this->assertFalse( DocsGuidanceResult::public_summary( $roadmap_only )['available'] );
+	}
+
+	public function test_guidance_accessor_returns_normalized_chunks(): void {
+		$guidance = [
+			[
+				'url'        => 'https://developer.wordpress.org/block-editor/',
+				'sourceType' => 'developer-docs',
+				'excerpt'    => 'x',
+			],
+			'not-a-chunk',
+		];
+
+		$result = DocsGuidanceResult::from_guidance( $guidance, 'recommendation', 'best-effort' );
+
+		$this->assertCount( 1, DocsGuidanceResult::guidance( $result ) );
+		$this->assertSame( [], DocsGuidanceResult::guidance( [] ) );
 	}
 }

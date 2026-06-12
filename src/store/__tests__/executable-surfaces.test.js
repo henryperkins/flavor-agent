@@ -116,20 +116,15 @@ import {
 } from '../executable-surface-runtime';
 
 const DOCS_GROUNDING_WARNING = {
-	status: 'grounded',
-	message: '',
-	coverageStatus: 'missing-current-release-cycle',
-	coverageMessage: 'Current release-cycle docs were not confirmed.',
-	source: '',
-	checkedAt: '',
+	tone: 'info',
+	message:
+		'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.',
 };
 
 const DOCS_GROUNDING_PAYLOAD = {
-	status: 'grounded',
-	coverage: {
-		status: 'missing-current-release-cycle',
-		message: 'Current release-cycle docs were not confirmed.',
-	},
+	available: false,
+	sourceTypes: [],
+	count: 0,
 };
 
 function buildSurfaceFixture( def ) {

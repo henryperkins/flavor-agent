@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\AzureOpenAI\ResponsesClient;
-use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\StylePrompt;
@@ -134,10 +133,6 @@ final class StyleAbilities {
 				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
 				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
 			];
-		}
-
-		if ( ! DocsGuidanceResult::is_actionable( $docs_result ) ) {
-			return DocsGuidanceResult::unavailable_error( $docs_result );
 		}
 
 		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
@@ -491,15 +486,9 @@ final class StyleAbilities {
 	private static function collect_wordpress_docs_guidance_result( array $context, string $prompt, array $options = [] ): array {
 		return CollectsDocsGuidance::collect_result(
 			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
-			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
-			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
 			$context,
 			$prompt,
-			[
-				'allowForegroundWarm' => empty( $options['signatureOnly'] ),
-				'mode'                => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature',
-				'sideEffects'         => empty( $options['signatureOnly'] ),
-			]
+			[ 'mode' => empty( $options['signatureOnly'] ) ? 'recommendation' : 'signature' ]
 		);
 	}
 
@@ -610,111 +599,6 @@ final class StyleAbilities {
 				)
 			)
 		);
-	}
-
-	private static function build_wordpress_docs_entity_key( array $context ): string {
-		$scope             = self::normalize_map( $context['scope'] ?? [] );
-		$style_context     = self::normalize_map( $context['styleContext'] ?? [] );
-		$style_book_target = self::normalize_map( $style_context['styleBookTarget'] ?? [] );
-		$surface           = self::normalize_style_surface( (string) ( $scope['surface'] ?? self::SURFACE_GLOBAL_STYLES ) );
-		$style_book_name   = sanitize_text_field(
-			(string) ( $scope['blockName'] ?? ( $style_book_target['blockName'] ?? '' ) )
-		);
-
-		if ( self::SURFACE_STYLE_BOOK === $surface && $style_book_name !== '' ) {
-			return AISearchClient::resolve_entity_key( $style_book_name );
-		}
-
-		if ( self::SURFACE_STYLE_BOOK === $surface ) {
-			return AISearchClient::resolve_entity_key( 'guidance:style-book' );
-		}
-
-		return AISearchClient::resolve_entity_key( 'guidance:global-styles' );
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private static function build_wordpress_docs_family_context( array $context ): array {
-		$scope               = self::normalize_map( $context['scope'] ?? [] );
-		$style_context       = self::normalize_map( $context['styleContext'] ?? [] );
-		$style_book_target   = self::normalize_map( $style_context['styleBookTarget'] ?? [] );
-		$surface             = self::normalize_style_surface( (string) ( $scope['surface'] ?? self::SURFACE_GLOBAL_STYLES ) );
-		$template_structure  = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
-		$template_visibility = self::normalize_map( $style_context['templateVisibility'] ?? [] );
-		$design_semantics    = self::normalize_map( $style_context['designSemantics'] ?? [] );
-		$family_context      = [
-			'surface'   => $surface !== '' ? $surface : self::SURFACE_GLOBAL_STYLES,
-			'entityKey' => self::build_wordpress_docs_entity_key( $context ),
-		];
-		$supported_families  = array_values(
-			array_unique(
-				array_filter(
-					array_map(
-						static fn( mixed $path_entry ): string => is_array( $path_entry ) && is_string( $path_entry['valueSource'] ?? null )
-							? sanitize_key( $path_entry['valueSource'] )
-							: '',
-						self::normalize_list( $style_context['supportedStylePaths'] ?? [] )
-					)
-				)
-			)
-		);
-
-		if ( [] !== $supported_families ) {
-			sort( $supported_families );
-			$family_context['supportedPathFamilies'] = $supported_families;
-		}
-
-		if ( self::SURFACE_STYLE_BOOK === $surface ) {
-			$block_name = sanitize_text_field(
-				(string) ( $scope['blockName'] ?? ( $style_book_target['blockName'] ?? '' ) )
-			);
-
-			if ( $block_name !== '' ) {
-				$family_context['blockName'] = $block_name;
-			}
-		}
-
-		$template_type = sanitize_key( (string) ( $scope['templateType'] ?? '' ) );
-		if ( '' !== $template_type ) {
-			$family_context['templateType'] = $template_type;
-		}
-
-		$top_level_blocks = array_values(
-			array_filter(
-				array_map(
-					static fn( mixed $node ): string => is_array( $node ) && is_string( $node['name'] ?? null )
-						? sanitize_text_field( $node['name'] )
-						: '',
-					array_slice( $template_structure, 0, 6 )
-				)
-			)
-		);
-		if ( ! empty( $top_level_blocks ) ) {
-			$family_context['topLevelBlocks'] = $top_level_blocks;
-		}
-
-		if ( ! empty( $template_visibility['blockCount'] ) ) {
-			$family_context['visibilityConstraintCount'] = (int) $template_visibility['blockCount'];
-		}
-
-		if ( ! empty( $design_semantics['overallDensityHint'] ) && is_string( $design_semantics['overallDensityHint'] ) ) {
-			$family_context['overallDensityHint'] = sanitize_text_field( $design_semantics['overallDensityHint'] );
-		}
-
-		if ( ! empty( $design_semantics['dominantLocation'] ) && is_string( $design_semantics['dominantLocation'] ) ) {
-			$family_context['dominantLocation'] = sanitize_text_field( $design_semantics['dominantLocation'] );
-		}
-
-		if ( ! empty( $design_semantics['dominantRole'] ) && is_string( $design_semantics['dominantRole'] ) ) {
-			$family_context['dominantRole'] = sanitize_text_field( $design_semantics['dominantRole'] );
-		}
-
-		if ( isset( $design_semantics['occurrenceCount'] ) && is_numeric( $design_semantics['occurrenceCount'] ) ) {
-			$family_context['occurrenceCount'] = max( 0, (int) $design_semantics['occurrenceCount'] );
-		}
-
-		return $family_context;
 	}
 
 	private static function count_template_structure_nodes( array $nodes ): int {

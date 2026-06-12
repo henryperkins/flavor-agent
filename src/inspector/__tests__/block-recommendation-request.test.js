@@ -70,7 +70,7 @@ describe( 'block recommendation request freshness', () => {
 		expect( freshness.isStaleResult ).toBe( true );
 	} );
 
-	test( 'treats docs grounding outages as hard server staleness', () => {
+	test( 'ignores legacy docs grounding stale reasons — grounding never stales a result', () => {
 		const storedContextSignature = 'stored-context';
 		const freshness = getBlockRecommendationFreshness( {
 			clientId: 'block-1',
@@ -86,34 +86,9 @@ describe( 'block recommendation request freshness', () => {
 		} );
 
 		expect( freshness.clientStaleReason ).toBeNull();
-		expect( freshness.effectiveStaleReason ).toBe(
-			'docs-grounding-unavailable'
-		);
-		expect( freshness.hasFreshResult ).toBe( false );
-		expect( freshness.isStaleResult ).toBe( true );
-	} );
-
-	test( 'treats docs grounding fingerprint drift as hard server staleness', () => {
-		const storedContextSignature = 'stored-context';
-		const freshness = getBlockRecommendationFreshness( {
-			clientId: 'block-1',
-			recommendations: {
-				prompt: 'Tighten the copy.',
-				block: [ { label: 'Shorten paragraph' } ],
-			},
-			status: 'ready',
-			storedContextSignature,
-			storedStaleReason: 'docs-grounding-changed',
-			liveContextSignature: storedContextSignature,
-			prompt: 'Tighten the copy.',
-		} );
-
-		expect( freshness.clientStaleReason ).toBeNull();
-		expect( freshness.effectiveStaleReason ).toBe(
-			'docs-grounding-changed'
-		);
-		expect( freshness.hasFreshResult ).toBe( false );
-		expect( freshness.isStaleResult ).toBe( true );
+		expect( freshness.effectiveStaleReason ).toBeNull();
+		expect( freshness.hasFreshResult ).toBe( true );
+		expect( freshness.isStaleResult ).toBe( false );
 	} );
 
 	test( 'treats missing resolved apply signatures as hard staleness', () => {

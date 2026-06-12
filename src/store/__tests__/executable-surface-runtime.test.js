@@ -47,10 +47,10 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 		return { setReviewState, thunk };
 	}
 
-	test( 'marks matching reviews stale when docs grounding becomes unavailable', async () => {
+	test( 'keeps matching reviews fresh during a docs grounding outage and attaches the soft warning', async () => {
 		const { setReviewState, thunk } = buildReviewThunk( {
 			reviewContextSignature: 'review-stored',
-			docsGrounding: { status: 'unavailable' },
+			docsGrounding: { available: false, sourceTypes: [], count: 0 },
 		} );
 		const dispatch = jest.fn();
 
@@ -64,18 +64,6 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 			status: 'checking',
 			payload: { requestToken: 3 },
 		} );
-		expect( dispatch ).toHaveBeenNthCalledWith( 2, {
-			type: 'REVIEW_STATE',
-			status: 'stale',
-			payload: {
-				requestToken: 3,
-				staleReason: 'docs-grounding-unavailable',
-			},
-		} );
-		expect( setReviewState ).toHaveBeenCalledWith( 'stale', {
-			requestToken: 3,
-			staleReason: 'docs-grounding-unavailable',
-		} );
 		expect( executeFlavorAgentAbility ).toHaveBeenCalledWith(
 			'test/review',
 			expect.objectContaining( {
@@ -87,21 +75,23 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 			} ),
 			{ forceRest: true }
 		);
-		expect( result ).toEqual( {
-			ok: false,
-			staleReason: 'docs-grounding-unavailable',
-			surface: 'template',
-			docsGrounding: { status: 'unavailable' },
+		expect( setReviewState ).toHaveBeenLastCalledWith( 'fresh', {
+			requestToken: 3,
+			docsGroundingWarning: expect.objectContaining( {
+				tone: 'info',
+			} ),
 		} );
+		expect( result.ok ).toBe( true );
+		expect( result.reviewContextSignature ).toBe( 'review-stored' );
+		expect( result.docsGroundingWarning.message ).toContain(
+			'running without developer-docs grounding'
+		);
 	} );
 
-	test( 'prefers docs grounding unavailable over review signature drift', async () => {
+	test( 'review signature drift stales the result even during a docs grounding outage', async () => {
 		const { setReviewState, thunk } = buildReviewThunk( {
 			reviewContextSignature: 'review-changed-by-docs-fingerprint',
-			docsGrounding: {
-				status: 'unavailable',
-				message: 'Developer Docs grounding is unavailable.',
-			},
+			docsGrounding: { available: false, sourceTypes: [], count: 0 },
 		} );
 		const dispatch = jest.fn();
 
@@ -112,28 +102,23 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 
 		expect( setReviewState ).toHaveBeenLastCalledWith( 'stale', {
 			requestToken: 3,
-			staleReason: 'docs-grounding-unavailable',
+			staleReason: 'server-review',
 		} );
 		expect( result ).toEqual( {
 			ok: false,
-			staleReason: 'docs-grounding-unavailable',
+			staleReason: 'server-review',
 			surface: 'template',
-			docsGrounding: {
-				status: 'unavailable',
-				message: 'Developer Docs grounding is unavailable.',
-			},
 		} );
 	} );
 
-	test( 'dispatches normalized docs grounding warnings without marking matching reviews stale', async () => {
-		const docsGrounding = {
-			status: 'degraded',
-			message: 'Docs grounding is partial.',
-			coverage: { status: 'current' },
-		};
+	test( 'keeps matching grounded reviews fresh without attaching a warning', async () => {
 		const { setReviewState, thunk } = buildReviewThunk( {
 			reviewContextSignature: 'review-stored',
-			docsGrounding,
+			docsGrounding: {
+				available: true,
+				sourceTypes: [ 'developer-docs' ],
+				count: 2,
+			},
 		} );
 		const dispatch = jest.fn();
 
@@ -144,66 +129,12 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 
 		expect( setReviewState ).toHaveBeenLastCalledWith( 'fresh', {
 			requestToken: 3,
-			docsGroundingWarning: {
-				status: 'degraded',
-				message: 'Docs grounding is partial.',
-				coverageStatus: 'current',
-				coverageMessage: '',
-				source: '',
-				checkedAt: '',
-			},
+			docsGroundingWarning: null,
 		} );
 		expect( result ).toEqual( {
 			ok: true,
 			reviewContextSignature: 'review-stored',
 			surface: 'template',
-			docsGroundingWarning: {
-				status: 'degraded',
-				message: 'Docs grounding is partial.',
-				coverageStatus: 'current',
-				coverageMessage: '',
-				source: '',
-				checkedAt: '',
-			},
-		} );
-	} );
-
-	test( 'captures coverage-only docs grounding warnings from grounded freshness responses', async () => {
-		const { setReviewState, thunk } = buildReviewThunk( {
-			reviewContextSignature: 'review-stored',
-			docsGrounding: {
-				status: 'grounded',
-				coverage: {
-					status: 'missing-current-release-cycle',
-					message: 'Current release-cycle docs were not confirmed.',
-				},
-			},
-		} );
-		const dispatch = jest.fn();
-
-		const result = await thunk( {
-			dispatch,
-			select: {},
-		} );
-
-		const docsGroundingWarning = {
-			status: 'grounded',
-			message: '',
-			coverageStatus: 'missing-current-release-cycle',
-			coverageMessage: 'Current release-cycle docs were not confirmed.',
-			source: '',
-			checkedAt: '',
-		};
-
-		expect( setReviewState ).toHaveBeenLastCalledWith( 'fresh', {
-			requestToken: 3,
-			docsGroundingWarning,
-		} );
-		expect( result ).toEqual( {
-			ok: true,
-			reviewContextSignature: 'review-stored',
-			surface: 'template',
-			docsGroundingWarning,
 		} );
 	} );
 } );

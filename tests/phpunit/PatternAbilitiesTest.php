@@ -23,6 +23,7 @@ final class PatternAbilitiesTest extends TestCase {
 
 		WordPressTestState::reset();
 		$this->prime_current_docs_source_coverage();
+		$this->route_docs_grounding_search( [] );
 	}
 
 	public function test_list_patterns_normalizes_object_input_and_applies_filters(): void {
@@ -1632,14 +1633,14 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'parse_error', $result->get_error_code() );
 	}
 
-	public function test_recommend_patterns_fails_closed_when_docs_grounding_is_unavailable(): void {
+	public function test_recommend_patterns_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_backends();
 		WordPressTestState::$transients = [];
 		$this->prime_current_docs_source_coverage();
+		$this->route_docs_grounding_search( [] );
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->cloudflare_ai_search_chunks_response( [] ),
 			$this->embedding_response( [ 0.12, 0.34 ] ),
 			$this->qdrant_points_response(
 				[
@@ -1668,21 +1669,21 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'theme/hero' ]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertArrayHasKey( 'recommendations', $result );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
 	}
 
-	public function test_recommend_patterns_fails_closed_when_docs_grounding_is_unavailable_even_without_candidates(): void {
+	public function test_recommend_patterns_proceeds_when_docs_grounding_is_empty_even_without_candidates(): void {
 		$this->configure_backends();
 		WordPressTestState::$transients = [];
 		$this->prime_current_docs_source_coverage();
+		$this->route_docs_grounding_search( [] );
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->cloudflare_ai_search_chunks_response( [] ),
 			$this->embedding_response( [ 0.12, 0.34 ] ),
 			$this->qdrant_points_response( [] ),
 		];
@@ -1694,34 +1695,25 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'theme/hero' ]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertArrayHasKey( 'recommendations', $result );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
 	}
 
-	public function test_recommend_patterns_includes_cached_wordpress_docs_guidance_in_ranking_input(): void {
+	public function test_recommend_patterns_includes_wordpress_docs_guidance_in_ranking_input(): void {
 		$this->configure_backends();
 		$this->configure_docs_grounding();
 		$this->save_index_state();
 
-		AISearchClient::cache_entity_guidance(
-			'core/cover',
+		$this->route_docs_grounding_search(
 			[
-				[
-					'id'          => 'cover-doc',
-					'title'       => 'Cover block reference',
-					'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/cover',
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/cover/',
-					'excerpt'     => 'Cover blocks support focal point, overlay styling, and inner content layout controls.',
-					'score'       => 0.91,
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'publishedAt' => '',
-					'contentHash' => 'cover-doc-current',
-					'freshness'   => 'current',
-				],
+				$this->docs_grounding_chunk(
+					'Cover block reference',
+					'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/cover/',
+					'Cover blocks support focal point, overlay styling, and inner content layout controls.'
+				),
 			]
 		);
 
@@ -1772,28 +1764,20 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'overlay styling, and inner content layout controls', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
-	public function test_recommend_patterns_docs_grounding_does_not_perform_foreground_ai_search_on_cache_miss(): void {
+	public function test_recommend_patterns_docs_grounding_performs_single_best_effort_search_on_cache_miss(): void {
 		$this->configure_backends();
 		$this->configure_docs_grounding();
 		$this->save_index_state();
 
-		$generic_guidance = [
+		$this->route_docs_grounding_search(
 			[
-				'id'          => 'generic-block-editor-doc',
-				'title'       => 'Block Editor Handbook',
-				'sourceKey'   => 'developer.wordpress.org/block-editor',
-				'sourceType'  => 'developer-docs',
-				'url'         => 'https://developer.wordpress.org/block-editor/',
-				'excerpt'     => 'Use patterns that fit the inserter context.',
-				'score'       => 0.82,
-				'retrievedAt' => '2026-05-08T14:00:00Z',
-				'publishedAt' => '',
-				'contentHash' => 'generic-block-editor-doc-current',
-				'freshness'   => 'current',
-			],
-		];
-
-		AISearchClient::cache_entity_guidance( 'guidance:block-editor', $generic_guidance );
+				$this->docs_grounding_chunk(
+					'Block Editor Handbook',
+					'https://developer.wordpress.org/block-editor/',
+					'Use patterns that fit the inserter context.'
+				),
+			]
+		);
 
 		WordPressTestState::$remote_post_responses = [
 			$this->embedding_response( [ 0.12, 0.34 ] ),
@@ -1817,21 +1801,27 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = $this->recommend_patterns(
+		$result = PatternAbilities::recommend_patterns(
 			[
 				'postType'            => 'page',
 				'visiblePatternNames' => [ 'theme/hero' ],
-			],
-			[ 'theme/hero' ]
+			]
 		);
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
-		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
-		$this->assertStringNotContainsString( '/ai-search/', wp_json_encode( WordPressTestState::$remote_post_calls ) );
-		$this->assertStringNotContainsString( '.search.ai.cloudflare.com', wp_json_encode( WordPressTestState::$remote_post_calls ) );
-		$this->assertArrayHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertTrue( $result['docsGrounding']['available'] ?? false );
 
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$docs_calls = array_values(
+			array_filter(
+				WordPressTestState::$remote_post_calls,
+				static fn ( array $call ): bool => str_contains( (string) ( $call['url'] ?? '' ), '.search.ai.cloudflare.com' )
+			)
+		);
+		$this->assertCount( 1, $docs_calls, 'cache miss performs exactly one best-effort docs search' );
+		$this->assertCount( 4, WordPressTestState::$remote_post_calls );
+		$this->assertArrayNotHasKey( 'flavor_agent_warm_docs_context', WordPressTestState::$scheduled_events );
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
 		$this->assertStringContainsString( 'Block Editor Handbook', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
@@ -3303,26 +3293,55 @@ final class PatternAbilitiesTest extends TestCase {
 
 	private function prime_default_docs_grounding(): void {
 		$this->prime_current_docs_source_coverage();
-		foreach ( [ 'guidance:block-editor', 'guidance:template', 'template:home', 'core/template-part', 'core/cover', 'core/image', 'plugin/card' ] as $entity_key ) {
-			AISearchClient::cache_entity_guidance(
-				$entity_key,
-				[
-					[
-						'id'          => $entity_key . '-default-doc',
-						'title'       => 'Block Editor Handbook',
-						'sourceKey'   => 'developer.wordpress.org/block-editor/',
-						'sourceType'  => 'developer-docs',
-						'url'         => 'https://developer.wordpress.org/block-editor/',
-						'excerpt'     => 'Use documented block editor and pattern guidance for recommendation ranking.',
-						'score'       => 0.91,
-						'retrievedAt' => '2026-05-08T14:00:00Z',
-						'publishedAt' => '',
-						'contentHash' => $entity_key . '-default-doc',
-						'freshness'   => 'current',
-					],
-				]
-			);
-		}
+		$this->route_docs_grounding_search(
+			[
+				$this->docs_grounding_chunk(
+					'Block Editor Handbook',
+					'https://developer.wordpress.org/block-editor/',
+					'Use documented block editor and pattern guidance for recommendation ranking.'
+				),
+			]
+		);
+	}
+
+	/**
+	 * Serve the docs-grounding public search endpoint by URL so its single
+	 * best-effort call never consumes the queued pattern-backend responses.
+	 *
+	 * @param array<int, array<string, mixed>> $chunks
+	 */
+	private function route_docs_grounding_search( array $chunks ): void {
+		WordPressTestState::$remote_post_url_responses['.search.ai.cloudflare.com'] = $this->cloudflare_ai_search_chunks_response( $chunks );
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function docs_grounding_chunk( string $title, string $url, string $excerpt ): array {
+		$frontmatter = "---\nsource_url: \"{$url}\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: " . md5( $title . $url );
+
+		return [
+			'id'   => md5( $title . $url ),
+			'item' => [
+				'key'      => $url,
+				'metadata' => [ 'title' => $title ],
+			],
+			'text' => $frontmatter . "\n---\n{$excerpt}",
+		];
+	}
+
+	/**
+	 * Docs grounding performs one best-effort search per recommendation; it is
+	 * covered by its own tests, so backend sequence/count assertions here look
+	 * only at pattern-pipeline calls.
+	 */
+	private function strip_docs_grounding_calls(): void {
+		WordPressTestState::$remote_post_calls = array_values(
+			array_filter(
+				WordPressTestState::$remote_post_calls,
+				static fn ( array $call ): bool => ! str_contains( (string) ( $call['url'] ?? '' ), '.search.ai.cloudflare.com' )
+			)
+		);
 	}
 
 	private function prime_current_docs_source_coverage(): void {
@@ -3340,7 +3359,10 @@ final class PatternAbilitiesTest extends TestCase {
 
 	private function recommend_patterns( array $input, array $visible_pattern_names ): array|\WP_Error {
 		$input['visiblePatternNames'] = $visible_pattern_names;
-		return PatternAbilities::recommend_patterns( $input );
+		$result                       = PatternAbilities::recommend_patterns( $input );
+		$this->strip_docs_grounding_calls();
+
+		return $result;
 	}
 
 	private function save_index_state( array $overrides = [] ): void {

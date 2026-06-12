@@ -627,15 +627,16 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 	}
 
-	public function test_recommend_block_fails_closed_when_docs_grounding_is_unavailable(): void {
+	public function test_recommend_block_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_text_generation_connector();
-		WordPressTestState::$transients                     = [];
+		WordPressTestState::$transients = [];
+		$this->route_docs_grounding_search( [] );
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
 				'settings'    => [],
 				'styles'      => [],
 				'block'       => [],
-				'explanation' => 'Would have called the model without the grounding gate.',
+				'explanation' => 'Proceeds without the grounding gate.',
 			]
 		);
 
@@ -650,11 +651,11 @@ final class BlockAbilitiesTest extends TestCase {
 			]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
+		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt, 'model must be called' );
 	}
 
 	public function test_recommend_block_resolve_signature_only_includes_docs_grounding_fingerprint(): void {
@@ -688,7 +689,7 @@ final class BlockAbilitiesTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['resolvedContextSignature'] ?? '' )
 		);
-		$this->assertSame( 'unavailable', $baseline['docsGrounding']['status'] ?? null );
+		$this->assertFalse( $baseline['docsGrounding']['available'] ?? true );
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['docsGroundingFingerprint'] ?? '' )
@@ -734,7 +735,7 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 
 		$this->assertIsArray( $with_docs );
-		$this->assertSame( 'grounded', $with_docs['docsGrounding']['status'] ?? null );
+		$this->assertTrue( $with_docs['docsGrounding']['available'] ?? false );
 		$this->assertNotSame(
 			$baseline['resolvedContextSignature'] ?? null,
 			$with_docs['resolvedContextSignature'] ?? null
@@ -844,8 +845,8 @@ final class BlockAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $recommendation );
 		$this->assertIsArray( $signature );
-		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
-		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertTrue( $recommendation['docsGrounding']['available'] ?? false );
+		$this->assertTrue( $signature['docsGrounding']['available'] ?? false );
 		$this->assertSame(
 			$recommendation['resolvedContextSignature'] ?? null,
 			$signature['resolvedContextSignature'] ?? null
@@ -854,93 +855,6 @@ final class BlockAbilitiesTest extends TestCase {
 			$recommendation['docsGroundingFingerprint'] ?? null,
 			$signature['docsGroundingFingerprint'] ?? null
 		);
-	}
-
-	public function test_recommend_block_warns_on_missing_release_cycle_coverage_by_default(): void {
-		$this->configure_text_generation_connector();
-		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
-			'status'                 => 'missing-current-release-cycle',
-			'hasDeveloperDocs'       => true,
-			'hasCurrentReleaseCycle' => false,
-			'sourceTypes'            => [ 'developer-docs' ],
-			'freshness'              => [ 'current' ],
-			'checkedAt'              => '2026-05-11 00:00:00',
-			'errorCode'              => 'missing_current_release_cycle',
-			'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-		];
-		WordPressTestState::$ai_client_generate_text_result                     = wp_json_encode(
-			[
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => [],
-				'explanation' => 'Model still runs when coverage is only diagnostic.',
-			]
-		);
-
-		$result = BlockAbilities::recommend_block(
-			[
-				'selectedBlock' => [
-					'blockName'  => 'core/paragraph',
-					'attributes' => [
-						'content' => 'Hello world',
-					],
-				],
-			]
-		);
-
-		$this->assertIsArray( $result );
-		$this->assertSame(
-			'missing-current-release-cycle',
-			$result['docsGrounding']['coverage']['status'] ?? null
-		);
-		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt );
-	}
-
-	public function test_recommend_block_warns_on_missing_release_cycle_coverage_even_when_release_gate_is_enabled(): void {
-		$this->configure_text_generation_connector();
-		WordPressTestState::$transients['flavor_agent_docs_source_coverage_v2'] = [
-			'status'                 => 'missing-current-release-cycle',
-			'hasDeveloperDocs'       => true,
-			'hasCurrentReleaseCycle' => false,
-			'sourceTypes'            => [ 'developer-docs' ],
-			'freshness'              => [ 'current' ],
-			'checkedAt'              => '2026-05-11 00:00:00',
-			'errorCode'              => 'missing_current_release_cycle',
-			'errorMessage'           => 'Developer Docs grounding is missing current WordPress release-cycle sources.',
-		];
-		WordPressTestState::$ai_client_generate_text_result                     = wp_json_encode(
-			[
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => [],
-				'explanation' => 'Model still runs: release-cycle currency is now advisory, not a block.',
-			]
-		);
-
-		add_filter( 'flavor_agent_docs_grounding_require_current_coverage', '__return_true' );
-
-		try {
-			$result = BlockAbilities::recommend_block(
-				[
-					'selectedBlock' => [
-						'blockName'  => 'core/paragraph',
-						'attributes' => [
-							'content' => 'Hello world',
-						],
-					],
-				]
-			);
-		} finally {
-			remove_filter( 'flavor_agent_docs_grounding_require_current_coverage', '__return_true' );
-		}
-
-		$this->assertIsArray( $result );
-		$this->assertSame(
-			'missing-current-release-cycle',
-			$result['docsGrounding']['coverage']['status'] ?? null
-		);
-		// The model runs even with the release gate enabled.
-		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt );
 	}
 
 	public function test_list_allowed_blocks_returns_registered_block_manifests(): void {
@@ -1199,24 +1113,50 @@ final class BlockAbilitiesTest extends TestCase {
 
 	private function prime_default_docs_grounding(): void {
 		$this->prime_current_docs_source_coverage();
-		\FlavorAgent\Cloudflare\AISearchClient::cache_entity_guidance(
-			'core/paragraph',
+		$this->route_docs_grounding_search(
 			[
-				[
-					'id'          => 'paragraph-default-doc',
-					'title'       => 'Paragraph block reference',
-					'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
-					'excerpt'     => 'Use supported paragraph block controls for typography and spacing recommendations.',
-					'score'       => 0.91,
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'publishedAt' => '',
-					'contentHash' => 'paragraph-default-doc',
-					'freshness'   => 'current',
-				],
+				$this->docs_grounding_chunk(
+					'Paragraph block reference',
+					'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+					'Use supported paragraph block controls for typography and spacing recommendations.'
+				),
 			]
 		);
+	}
+
+	/**
+	 * Serve the docs-grounding public search endpoint by URL so the best-effort
+	 * search resolves deterministically without consuming queued responses.
+	 *
+	 * @param array<int, array<string, mixed>> $chunks
+	 */
+	private function route_docs_grounding_search( array $chunks ): void {
+		WordPressTestState::$remote_post_url_responses['.search.ai.cloudflare.com'] = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => $chunks,
+					],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function docs_grounding_chunk( string $title, string $url, string $excerpt ): array {
+		$frontmatter = "---\nsource_url: \"{$url}\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: " . md5( $title . $url );
+
+		return [
+			'id'   => md5( $title . $url ),
+			'item' => [
+				'key'      => $url,
+				'metadata' => [ 'title' => $title ],
+			],
+			'text' => $frontmatter . "\n---\n{$excerpt}",
+		];
 	}
 
 	private function prime_current_docs_source_coverage(): void {

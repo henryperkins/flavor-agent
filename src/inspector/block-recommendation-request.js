@@ -3,8 +3,6 @@ import { buildBlockRecommendationRequestSignature } from '../utils/recommendatio
 const STORED_SERVER_STALE_REASONS = new Set( [
 	'server',
 	'server-apply',
-	'docs-grounding-unavailable',
-	'docs-grounding-changed',
 	'missing-resolved-signature',
 ] );
 

@@ -11,7 +11,7 @@ export default function DocsGroundingNotice( { warning = null } ) {
 
 	return (
 		<Notice
-			status="warning"
+			status="info"
 			isDismissible={ false }
 			className="flavor-agent-docs-grounding-notice"
 		>

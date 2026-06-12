@@ -79,7 +79,7 @@ final class NavigationAbilitiesTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['reviewContextSignature'] ?? '' )
 		);
-		$this->assertSame( 'unavailable', $result['docsGrounding']['status'] ?? null );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['docsGroundingFingerprint'] ?? '' )
@@ -87,7 +87,7 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_navigation_fails_closed_when_docs_grounding_is_unavailable(): void {
+	public function test_recommend_navigation_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_text_generation_connector();
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
@@ -117,31 +117,22 @@ final class NavigationAbilitiesTest extends TestCase {
 			]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
+		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt, 'model must be called' );
 	}
 
 	public function test_recommend_navigation_review_signature_is_stable_between_recommendation_and_signature_modes(): void {
 		$this->configure_text_generation_connector();
-		AISearchClient::cache_entity_guidance(
-			'core/navigation',
+		$this->route_docs_grounding_search(
 			[
-				[
-					'id'          => 'navigation-current-doc',
-					'title'       => 'Navigation block reference',
-					'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
-					'sourceType'  => 'developer-docs',
-					'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
-					'excerpt'     => 'Use supported navigation block controls for responsive menu recommendations.',
-					'score'       => 0.91,
-					'retrievedAt' => '2026-05-08T14:00:00Z',
-					'publishedAt' => '',
-					'contentHash' => 'navigation-current-doc',
-					'freshness'   => 'current',
-				],
+				$this->docs_grounding_chunk(
+					'Navigation block reference',
+					'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+					'Use supported navigation block controls for responsive menu recommendations.'
+				),
 			]
 		);
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
@@ -182,8 +173,8 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $recommendation );
 		$this->assertIsArray( $signature );
-		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
-		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertTrue( $recommendation['docsGrounding']['available'] ?? false );
+		$this->assertTrue( $signature['docsGrounding']['available'] ?? false );
 		$this->assertSame(
 			$recommendation['reviewContextSignature'] ?? null,
 			$signature['reviewContextSignature'] ?? null
@@ -1214,6 +1205,41 @@ final class NavigationAbilitiesTest extends TestCase {
 			'checkedAt'              => '2026-05-11 00:00:00',
 			'errorCode'              => '',
 			'errorMessage'           => '',
+		];
+	}
+
+	/**
+	 * Serve the docs-grounding public search endpoint by URL so the best-effort
+	 * search resolves deterministically without consuming queued responses.
+	 *
+	 * @param array<int, array<string, mixed>> $chunks
+	 */
+	private function route_docs_grounding_search( array $chunks ): void {
+		WordPressTestState::$remote_post_url_responses['.search.ai.cloudflare.com'] = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => $chunks,
+					],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function docs_grounding_chunk( string $title, string $url, string $excerpt ): array {
+		$frontmatter = "---\nsource_url: \"{$url}\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: " . md5( $title . $url );
+
+		return [
+			'id'   => md5( $title . $url ),
+			'item' => [
+				'key'      => $url,
+				'metadata' => [ 'title' => $title ],
+			],
+			'text' => $frontmatter . "\n---\n{$excerpt}",
 		];
 	}
 

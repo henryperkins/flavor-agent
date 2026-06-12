@@ -1,91 +1,52 @@
 import {
 	getDocsGroundingWarningMessage,
-	normalizeDocsGroundingWarning,
+	deriveDocsGroundingWarning,
 } from '../docs-grounding-warning';
 
-describe( 'normalizeDocsGroundingWarning', () => {
-	test( 'returns null when grounding is absent or unavailable', () => {
-		expect( normalizeDocsGroundingWarning( null ) ).toBeNull();
+describe( 'deriveDocsGroundingWarning', () => {
+	test( 'returns null when grounding is available', () => {
 		expect(
-			normalizeDocsGroundingWarning( { status: 'unavailable' } )
-		).toBeNull();
-	} );
-
-	test( 'returns null for current or unknown coverage on grounded responses', () => {
-		expect(
-			normalizeDocsGroundingWarning( {
-				status: 'grounded',
-				coverage: { status: 'current' },
-			} )
-		).toBeNull();
-		expect(
-			normalizeDocsGroundingWarning( {
-				status: 'grounded',
-				coverage: { status: 'unknown' },
+			deriveDocsGroundingWarning( {
+				available: true,
+				sourceTypes: [ 'developer-docs' ],
+				count: 2,
 			} )
 		).toBeNull();
 	} );
 
-	test( 'normalizes coverage-only warnings from grounded responses', () => {
-		expect(
-			normalizeDocsGroundingWarning( {
-				status: 'grounded',
-				message: 'Grounded with coverage caveats.',
-				source: 'developer-docs',
-				checkedAt: '2026-05-12T10:00:00Z',
-				coverage: {
-					status: 'missing-current-release-cycle',
-					message: 'Current release-cycle docs were not confirmed.',
-				},
-			} )
-		).toEqual( {
-			status: 'grounded',
-			message: 'Grounded with coverage caveats.',
-			coverageStatus: 'missing-current-release-cycle',
-			coverageMessage: 'Current release-cycle docs were not confirmed.',
-			source: 'developer-docs',
-			checkedAt: '2026-05-12T10:00:00Z',
-		} );
+	test( 'returns null when grounding is absent from the payload', () => {
+		expect( deriveDocsGroundingWarning( null ) ).toBeNull();
+		expect( deriveDocsGroundingWarning( undefined ) ).toBeNull();
+		expect( deriveDocsGroundingWarning( {} ) ).toBeNull();
 	} );
 
-	test( 'normalizes stale and degraded top-level warnings', () => {
-		expect(
-			normalizeDocsGroundingWarning( {
-				status: 'stale',
-				message: 'Cached docs are stale.',
-				coverage: { status: 'current' },
-			} )
-		).toMatchObject( {
-			status: 'stale',
-			message: 'Cached docs are stale.',
-			coverageStatus: 'current',
+	test( 'returns a single soft notice when grounding is unavailable', () => {
+		const warning = deriveDocsGroundingWarning( {
+			available: false,
+			sourceTypes: [],
+			count: 0,
 		} );
-		expect(
-			normalizeDocsGroundingWarning( { status: 'degraded' } )
-		).toMatchObject( {
-			status: 'degraded',
-		} );
+
+		expect( warning ).not.toBeNull();
+		expect( warning.tone ).toBe( 'info' );
+		expect( warning.message ).toContain(
+			'running without developer-docs grounding'
+		);
 	} );
 } );
 
 describe( 'getDocsGroundingWarningMessage', () => {
-	test( 'prefers current-release-cycle coverage copy', () => {
-		expect(
-			getDocsGroundingWarningMessage( {
-				status: 'grounded',
-				coverageStatus: 'missing-current-release-cycle',
-			} )
-		).toBe(
-			'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.'
+	test( 'returns the warning message verbatim', () => {
+		const warning = deriveDocsGroundingWarning( { available: false } );
+
+		expect( getDocsGroundingWarningMessage( warning ) ).toBe(
+			warning.message
 		);
 	} );
 
-	test( 'falls back to concise stale and degraded copy', () => {
-		expect( getDocsGroundingWarningMessage( { status: 'stale' } ) ).toBe(
-			'Developer Docs grounding is stale. Review current WordPress docs before applying.'
-		);
-		expect( getDocsGroundingWarningMessage( { status: 'degraded' } ) ).toBe(
-			'Developer Docs grounding is incomplete. Review current WordPress docs before applying.'
-		);
+	test( 'returns an empty string for null or malformed warnings', () => {
+		expect( getDocsGroundingWarningMessage( null ) ).toBe( '' );
+		expect( getDocsGroundingWarningMessage( 'nope' ) ).toBe( '' );
+		expect( getDocsGroundingWarningMessage( {} ) ).toBe( '' );
 	} );
 } );

@@ -1,61 +1,35 @@
-const COVERAGE_WARNING_STATUSES = new Set( [
-	'missing-current-release-cycle',
-] );
+import { __ } from '@wordpress/i18n';
 
-function getString( value ) {
-	return typeof value === 'string' ? value : '';
-}
-
-export function normalizeDocsGroundingWarning( docsGrounding ) {
-	if (
-		! docsGrounding ||
-		typeof docsGrounding !== 'object' ||
-		docsGrounding.status === 'unavailable'
-	) {
-		return null;
-	}
-
-	const status = getString( docsGrounding.status );
-	const coverageStatus = getString( docsGrounding.coverage?.status );
-	const hasStatusWarning = status === 'stale' || status === 'degraded';
-	const hasCoverageWarning =
-		Boolean( coverageStatus ) &&
-		! [ 'current', 'unknown' ].includes( coverageStatus );
-
-	if ( ! hasStatusWarning && ! hasCoverageWarning ) {
+/**
+ * Docs grounding is best-effort prompt context: the only signal worth
+ * surfacing is "this result ran without grounding." Trust and currency of
+ * the corpus are owned by scripts/update-docs-ai-search.js at ingestion.
+ *
+ * @param {Object|null} docsGrounding `docsGrounding` summary from an ability response.
+ * @return {Object|null} A single soft notice descriptor, or null when grounded.
+ */
+export function deriveDocsGroundingWarning( docsGrounding ) {
+	if ( ! docsGrounding || docsGrounding.available !== false ) {
 		return null;
 	}
 
 	return {
-		status,
-		message: getString( docsGrounding.message ),
-		coverageStatus,
-		coverageMessage:
-			getString( docsGrounding.coverage?.message ) ||
-			getString( docsGrounding.coverage?.errorMessage ),
-		source: getString( docsGrounding.source ),
-		checkedAt:
-			getString( docsGrounding.checkedAt ) ||
-			getString( docsGrounding.coverage?.checkedAt ),
+		tone: 'info',
+		message: __(
+			'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.',
+			'flavor-agent'
+		),
 	};
 }
 
+/**
+ * @param {Object|null} warning Result of deriveDocsGroundingWarning.
+ * @return {string} User-facing message, or '' when there is nothing to show.
+ */
 export function getDocsGroundingWarningMessage( warning ) {
 	if ( ! warning || typeof warning !== 'object' ) {
 		return '';
 	}
 
-	if ( COVERAGE_WARNING_STATUSES.has( warning.coverageStatus ) ) {
-		return 'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
-	}
-
-	if ( warning.status === 'stale' ) {
-		return 'Developer Docs grounding is stale. Review current WordPress docs before applying.';
-	}
-
-	if ( warning.status === 'degraded' ) {
-		return 'Developer Docs grounding is incomplete. Review current WordPress docs before applying.';
-	}
-
-	return 'Developer Docs grounding is incomplete. Review current WordPress docs before applying.';
+	return typeof warning.message === 'string' ? warning.message : '';
 }

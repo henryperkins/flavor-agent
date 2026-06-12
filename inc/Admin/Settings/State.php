@@ -33,7 +33,6 @@ final class State {
 		$pattern_state            = PatternIndex::get_runtime_state();
 		$patterns_ready_for_sync  = PatternIndex::recommendation_backends_configured();
 		$docs_configured          = AISearchClient::is_configured();
-		$prewarm_state            = AISearchClient::get_prewarm_state();
 		$runtime_docs_grounding   = AISearchClient::get_runtime_state();
 		$guidelines_enabled       = Guidelines::has_any();
 		$guidelines_storage       = Guidelines::storage_status();
@@ -55,7 +54,6 @@ final class State {
 			'pattern_state'                             => $pattern_state,
 			'patterns_ready'                            => $patterns_ready_for_sync,
 			'docs_configured'                           => $docs_configured,
-			'prewarm_state'                             => $prewarm_state,
 			'runtime_docs_grounding'                    => $runtime_docs_grounding,
 			'guidelines_enabled'                        => $guidelines_enabled,
 			'guidelines_storage'                        => $guidelines_storage,
@@ -106,14 +104,7 @@ final class State {
 
 		if (
 			! empty( $state['docs_configured'] ) &&
-			(
-				in_array( (string) ( $state['prewarm_state']['status'] ?? '' ), [ 'failed', 'partial' ], true ) ||
-				in_array(
-					(string) ( $state['runtime_docs_grounding']['status'] ?? '' ),
-					[ 'degraded', 'error', 'retrying', 'stale', 'unavailable' ],
-					true
-				)
-			)
+			'unreachable' === (string) ( $state['runtime_docs_grounding']['status'] ?? '' )
 		) {
 			return Config::GROUP_DOCS;
 		}
@@ -285,21 +276,7 @@ final class State {
 			return self::make_badge( __( 'Unavailable', 'flavor-agent' ), 'warning' );
 		}
 
-		$prewarm_status = (string) ( $state['prewarm_state']['status'] ?? 'never' );
-		$runtime_status = (string) ( $state['runtime_docs_grounding']['status'] ?? 'idle' );
-
-		if ( 'retrying' === $runtime_status ) {
-			return self::make_badge( __( 'Retrying', 'flavor-agent' ), 'warning' );
-		}
-
-		if ( 'warming' === $runtime_status ) {
-			return self::make_badge( __( 'Warming', 'flavor-agent' ), 'accent' );
-		}
-
-		if (
-			in_array( $runtime_status, [ 'degraded', 'error', 'stale', 'unavailable' ], true ) ||
-			in_array( $prewarm_status, [ 'failed', 'partial' ], true )
-		) {
+		if ( 'unreachable' === (string) ( $state['runtime_docs_grounding']['status'] ?? 'ok' ) ) {
 			return self::make_badge( __( 'Needs attention', 'flavor-agent' ), 'warning' );
 		}
 
@@ -412,54 +389,13 @@ final class State {
 
 		if (
 			Config::GROUP_DOCS === $group &&
-			! empty( $state['docs_configured'] )
+			! empty( $state['docs_configured'] ) &&
+			'unreachable' === (string) ( $state['runtime_docs_grounding']['status'] ?? 'ok' )
 		) {
-			$runtime_status = (string) ( $state['runtime_docs_grounding']['status'] ?? 'idle' );
-
-			if ( 'retrying' === $runtime_status ) {
-				$status_blocks[] = [
-					'tone'    => 'warning',
-					'message' => __( 'Developer Docs grounding is retrying after a runtime search failure.', 'flavor-agent' ),
-				];
-			} elseif ( 'warming' === $runtime_status ) {
-				$status_blocks[] = [
-					'tone'    => 'warning',
-					'message' => __( 'Developer Docs grounding is warming in the background.', 'flavor-agent' ),
-				];
-			} elseif ( in_array( $runtime_status, [ 'degraded', 'error', 'stale', 'unavailable' ], true ) ) {
-				$freshness = implode(
-					', ',
-					array_map(
-						'sanitize_key',
-						(array) ( $state['runtime_docs_grounding']['lastFreshness'] ?? [] )
-					)
-				);
-				$freshness = '' !== $freshness ? $freshness : __( 'unknown', 'flavor-agent' );
-
-				$status_blocks[] = [
-					'tone'    => 'warning',
-					'message' => sprintf(
-						/* translators: 1: docs grounding status, 2: freshness labels. */
-						__( 'Developer Docs grounding is %1$s. Current freshness: %2$s.', 'flavor-agent' ),
-						$runtime_status,
-						$freshness
-					),
-				];
-
-				if ( '' !== (string) ( $state['runtime_docs_grounding']['lastErrorMessage'] ?? '' ) ) {
-					$status_blocks[] = [
-						'tone'    => 'warning',
-						'message' => (string) ( $state['runtime_docs_grounding']['lastErrorMessage'] ?? '' ),
-					];
-				}
-			}
-
-			if ( in_array( (string) ( $state['prewarm_state']['status'] ?? '' ), [ 'failed', 'partial' ], true ) ) {
-				$status_blocks[] = [
-					'tone'    => 'warning',
-					'message' => __( 'Docs prewarm did not finish cleanly. Check Activity Log for the latest run.', 'flavor-agent' ),
-				];
-			}
+			$status_blocks[] = [
+				'tone'    => 'warning',
+				'message' => __( 'Developer Docs grounding is temporarily unavailable (search backend unreachable). Recommendations still run without it.', 'flavor-agent' ),
+			];
 		}
 
 		return $status_blocks;
