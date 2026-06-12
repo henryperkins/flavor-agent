@@ -843,6 +843,25 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 'unreachable', AISearchClient::get_runtime_state()['status'] );
 	}
 
+	public function test_maybe_search_best_effort_uses_short_timeout_so_outages_cannot_stall_recommendations(): void {
+		WordPressTestState::$transients           = [];
+		WordPressTestState::$remote_post_response = new \WP_Error( 'http_request_failed', 'down' );
+
+		AISearchClient::maybe_search_best_effort( 'block editor typography' );
+
+		$this->assertSame( 5, WordPressTestState::$last_remote_post['args']['timeout'] ?? null );
+
+		WordPressTestState::$last_remote_post = [];
+
+		AISearchClient::search( 'block editor typography' );
+
+		$this->assertSame(
+			20,
+			WordPressTestState::$last_remote_post['args']['timeout'] ?? null,
+			'explicit docs searches keep the default transport timeout'
+		);
+	}
+
 	public function test_cache_keys_ignore_removed_legacy_developer_docs_credentials(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',

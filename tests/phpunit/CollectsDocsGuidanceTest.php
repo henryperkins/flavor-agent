@@ -72,6 +72,80 @@ final class CollectsDocsGuidanceTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post, 'signature mode must not hit the search backend' );
 	}
 
+	public function test_collect_result_roadmap_only_guidance_stays_unavailable(): void {
+		$roadmap_filter = static fn(): bool => true;
+		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', $roadmap_filter );
+
+		WordPressTestState::$transients           = [
+			'flavor_agent_core_roadmap_guidance_v1' => [
+				[
+					'title'      => 'WordPress AI roadmap',
+					'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
+					'sourceType' => 'roadmap',
+					'url'        => 'https://github.com/orgs/WordPress/projects/240',
+					'excerpt'    => 'Open roadmap milestones: Core Improvements.',
+				],
+			],
+		];
+		WordPressTestState::$remote_post_response = new \WP_Error( 'http_request_failed', 'down' );
+
+		$result = CollectsDocsGuidance::collect_result(
+			static fn( array $c, string $p ): string => 'paragraph typography',
+			[ 'block' => [ 'name' => 'core/paragraph' ] ],
+			'make it punchier',
+			[ 'mode' => 'recommendation' ]
+		);
+
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', $roadmap_filter );
+
+		$this->assertFalse( $result['available'], 'roadmap-only guidance must not mask an ungrounded run' );
+		$this->assertSame( 0, $result['count'] );
+		$this->assertSame( [], $result['sourceTypes'] );
+		$this->assertCount( 1, $result['guidance'], 'roadmap chunks still ride along for prompt assembly' );
+		$this->assertSame( 'roadmap', $result['guidance'][0]['sourceType'] );
+	}
+
+	public function test_collect_result_summary_counts_docs_chunks_only(): void {
+		$roadmap_filter = static fn(): bool => true;
+		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', $roadmap_filter );
+
+		WordPressTestState::$transients           = [
+			'flavor_agent_core_roadmap_guidance_v1' => [
+				[
+					'title'      => 'WordPress AI roadmap',
+					'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
+					'sourceType' => 'roadmap',
+					'url'        => 'https://github.com/orgs/WordPress/projects/240',
+					'excerpt'    => 'Open roadmap milestones: Core Improvements.',
+				],
+			],
+		];
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+					'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+					'Paragraph typography guidance.',
+					'2026-05-08T14:00:00Z'
+				),
+			]
+		);
+
+		$result = CollectsDocsGuidance::collect_result(
+			static fn( array $c, string $p ): string => 'paragraph typography',
+			[ 'block' => [ 'name' => 'core/paragraph' ] ],
+			'make it punchier',
+			[ 'mode' => 'recommendation' ]
+		);
+
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', $roadmap_filter );
+
+		$this->assertTrue( $result['available'] );
+		$this->assertSame( 1, $result['count'], 'count covers docs chunks only' );
+		$this->assertSame( [ 'developer-docs' ], $result['sourceTypes'] );
+		$this->assertCount( 2, $result['guidance'], 'merged guidance keeps roadmap + docs chunks' );
+	}
+
 	/**
 	 * @param array<int, array<string, mixed>> $chunks
 	 * @return array<string, mixed>

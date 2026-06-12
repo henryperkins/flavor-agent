@@ -210,6 +210,10 @@ final class PluginLifecycleTest extends TestCase {
 		);
 		$this->assertArrayHasKey( ActivityRepository::PRUNE_CRON_HOOK, WordPressTestState::$scheduled_events );
 		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		// Legacy docs warm crons are cleared by literal name on activation so
+		// upgrades from the prewarm/context-warm era don't strand schedules.
+		$this->assertContains( 'flavor_agent_prewarm_docs', WordPressTestState::$cleared_cron_hooks );
+		$this->assertContains( 'flavor_agent_warm_docs_context', WordPressTestState::$cleared_cron_hooks );
 	}
 
 	public function test_deactivation_clears_all_plugin_cron_hooks_and_pattern_lock(): void {

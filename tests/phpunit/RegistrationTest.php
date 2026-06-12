@@ -1940,6 +1940,20 @@ final class RegistrationTest extends TestCase {
 			'string',
 			$status_ability['output_schema']['properties']['surfaces']['properties']['template']['properties']['message']['type'] ?? null
 		);
+		// The docs runtime signal returned by InfraAbilities::check_status() must
+		// stay declared so schema-driven clients see the full payload contract.
+		$this->assertSame(
+			'object',
+			$status_ability['output_schema']['properties']['backends']['properties']['cloudflare_ai_search']['properties']['runtime']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$status_ability['output_schema']['properties']['backends']['properties']['cloudflare_ai_search']['properties']['runtime']['properties']['status']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$status_ability['output_schema']['properties']['backends']['properties']['cloudflare_ai_search']['properties']['runtime']['properties']['lastResultCount']['type'] ?? null
+		);
 
 		$this->assertIsArray( $tokens_ability );
 		$this->assertSame(

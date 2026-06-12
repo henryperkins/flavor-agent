@@ -33,6 +33,11 @@ add_action( 'mcp_adapter_init', [ FlavorAgent\MCP\ServerBootstrap::class, 'regis
 register_activation_hook(
 	FLAVOR_AGENT_FILE,
 	function () {
+		// Legacy docs-grounding warm crons; cleared by literal name so sites
+		// upgrading from the prewarm/context-warm era don't strand schedules
+		// even when the old version was never deactivated.
+		wp_clear_scheduled_hook( 'flavor_agent_prewarm_docs' );
+		wp_clear_scheduled_hook( 'flavor_agent_warm_docs_context' );
 		FlavorAgent\Activity\Repository::install();
 		add_option( 'flavor_agent_cloudflare_workers_ai_api_token', '', '', false );
 		add_option( 'flavor_agent_qdrant_key', '', '', false );

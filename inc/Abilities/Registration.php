@@ -955,6 +955,14 @@ final class Registration {
 									'properties' => [
 										'configured' => [ 'type' => 'boolean' ],
 										'instanceId' => [ 'type' => [ 'string', 'null' ] ],
+										'runtime'    => [
+											'type'       => 'object',
+											'properties' => [
+												'status' => [ 'type' => 'string' ],
+												'lastSearchAt' => [ 'type' => 'string' ],
+												'lastResultCount' => [ 'type' => 'integer' ],
+											],
+										],
 									],
 								],
 							],

@@ -254,36 +254,42 @@ update_option(
 `,
 	] );
 
-	await page.goto( '/wp-admin/options-general.php?page=flavor-agent', {
-		waitUntil: 'domcontentloaded',
-	} );
-	await waitForWordPressReady( page );
+	try {
+		await page.goto( '/wp-admin/options-general.php?page=flavor-agent', {
+			waitUntil: 'domcontentloaded',
+		} );
+		await waitForWordPressReady( page );
 
-	const docsSection = page.locator( '[data-flavor-agent-section="docs"]' );
-	const summary = docsSection.locator(
-		':scope > .flavor-agent-settings-section__summary'
-	);
+		const docsSection = page.locator(
+			'[data-flavor-agent-section="docs"]'
+		);
+		const summary = docsSection.locator(
+			':scope > .flavor-agent-settings-section__summary'
+		);
 
-	if ( ! ( await docsSection.evaluate( ( section ) => section.open ) ) ) {
-		await summary.click();
+		if ( ! ( await docsSection.evaluate( ( section ) => section.open ) ) ) {
+			await summary.click();
+		}
+
+		await expect( docsSection ).toContainText(
+			'Built-in developer.wordpress.org grounding is active.'
+		);
+		await expect( docsSection ).toContainText( 'temporarily unavailable' );
+		await expect( docsSection ).toContainText(
+			'Recommendations still run without it.'
+		);
+		await expect( docsSection ).toContainText(
+			'Last search: 2026-06-11 00:00:00.'
+		);
+		await expect( docsSection ).not.toContainText( 'degraded' );
+		await expect( docsSection ).not.toContainText( 'Fingerprint:' );
+	} finally {
+		runWpCli(
+			wp70Harness,
+			[ 'option', 'delete', 'flavor_agent_docs_runtime_state' ],
+			{ allowFailure: true }
+		);
 	}
-
-	await expect( docsSection ).toContainText(
-		'Built-in developer.wordpress.org grounding is active.'
-	);
-	await expect( docsSection ).toContainText( 'temporarily unavailable' );
-	await expect( docsSection ).toContainText(
-		'Recommendations still run without it.'
-	);
-	await expect( docsSection ).toContainText( 'Last search: 2026-06-11 00:00:00.' );
-	await expect( docsSection ).not.toContainText( 'degraded' );
-	await expect( docsSection ).not.toContainText( 'Fingerprint:' );
-
-	runWpCli(
-		wp70Harness,
-		[ 'option', 'delete', 'flavor_agent_docs_runtime_state' ],
-		{ allowFailure: true }
-	);
 } );
 
 test( '@wp70-site-editor settings page saves, validates, and persists safe fields', async ( {

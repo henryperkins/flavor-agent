@@ -13,6 +13,7 @@ final class AISearchClient {
 	private const CACHE_KEY_PREFIX          = 'flavor_agent_ai_search_';
 	private const CACHE_SCHEMA_VERSION      = 3;
 	private const CACHE_TTL                 = 21600;
+	private const BEST_EFFORT_TIMEOUT       = 5;
 	private const VALIDATION_PROBE_QUERY    = 'block editor';
 	private const VALIDATION_PROBE_RESULTS  = 3;
 	private const DEFAULT_PUBLIC_SEARCH_URL = 'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search';
@@ -89,7 +90,7 @@ final class AISearchClient {
 	 *
 	 * @return array{query: string, guidance: array<int, array<string, mixed>>}|\WP_Error
 	 */
-	private static function search_live( string $query, ?int $max_results = null ): array|\WP_Error {
+	private static function search_live( string $query, ?int $max_results = null, ?int $timeout = null ): array|\WP_Error {
 		$query = sanitize_textarea_field( $query );
 
 		if ( $query === '' ) {
@@ -112,7 +113,8 @@ final class AISearchClient {
 			$result_limit,
 			'cloudflare_ai_search_error',
 			'cloudflare_ai_search_parse_error',
-			502
+			502,
+			$timeout
 		);
 
 		if ( is_wp_error( $data ) ) {
@@ -158,7 +160,8 @@ final class AISearchClient {
 
 	/**
 	 * Best-effort live search for prompt grounding. Reads the result cache first, then
-	 * runs a single live search; transport failures and empty results both resolve to
+	 * runs a single live search with a short timeout so a hung backend can't stall the
+	 * recommendation; transport failures and empty results both resolve to
 	 * "no guidance attached." Never blocks a recommendation.
 	 *
 	 * @return array<int, array<string, mixed>>
@@ -177,7 +180,7 @@ final class AISearchClient {
 			return $cached;
 		}
 
-		$result = self::search_live( $query, $limit );
+		$result = self::search_live( $query, $limit, self::BEST_EFFORT_TIMEOUT );
 
 		if ( is_wp_error( $result ) ) {
 			self::write_runtime_signal( 'unreachable', 0 );

@@ -7,17 +7,24 @@ namespace FlavorAgent\Support;
 final class DocsGuidanceResult {
 
 	/**
-	 * @param array<int, array<string, mixed>> $guidance
+	 * The summary fields (`available`, `count`, `sourceTypes`, `fingerprint`) always
+	 * describe `$guidance` — the developer-docs chunks. When `$prompt_guidance` is
+	 * provided (docs merged with advisory roadmap chunks), it replaces only the
+	 * `guidance` payload used for prompt assembly, so advisory-only chunks can't
+	 * mask a "running without docs grounding" state.
+	 *
+	 * @param array<int, array<string, mixed>>      $guidance
+	 * @param array<int, array<string, mixed>>|null $prompt_guidance
 	 * @return array<string, mixed>
 	 */
-	public static function from_guidance( array $guidance, string $mode, string $transport ): array {
+	public static function from_guidance( array $guidance, string $mode, string $transport, ?array $prompt_guidance = null ): array {
 		$normalized   = self::normalize_guidance( $guidance );
 		$source_types = self::extract_source_types( $normalized );
 
 		return [
 			'mode'        => sanitize_key( $mode ),
 			'transport'   => sanitize_key( $transport ),
-			'guidance'    => $normalized,
+			'guidance'    => null === $prompt_guidance ? $normalized : self::normalize_guidance( $prompt_guidance ),
 			'sourceTypes' => $source_types,
 			'count'       => count( $normalized ),
 			'available'   => [] !== $normalized,
@@ -48,6 +55,8 @@ final class DocsGuidanceResult {
 	/**
 	 * Content fingerprint over the attached guidance; feeds the resolved-signature
 	 * freshness checks so applies re-validate when grounding content changes.
+	 * Chunks are sorted before hashing so a backend returning the same documents
+	 * in a different order doesn't read as a content change.
 	 *
 	 * @param array<int, array<string, mixed>> $guidance
 	 */
@@ -59,6 +68,14 @@ final class DocsGuidanceResult {
 				'contentHash' => (string) ( $chunk['contentHash'] ?? '' ),
 			],
 			$guidance
+		);
+
+		usort(
+			$payload,
+			static fn ( array $left, array $right ): int => strcmp(
+				implode( '|', $left ),
+				implode( '|', $right )
+			)
 		);
 
 		$encoded = wp_json_encode( $payload );

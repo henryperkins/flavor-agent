@@ -84,6 +84,70 @@ final class DocsGuidanceResultTest extends TestCase {
 		);
 	}
 
+	public function test_fingerprint_is_stable_across_chunk_order(): void {
+		$first  = [
+			'url'         => 'https://developer.wordpress.org/block-editor/',
+			'sourceType'  => 'developer-docs',
+			'excerpt'     => 'x',
+			'contentHash' => 'a',
+		];
+		$second = [
+			'url'         => 'https://make.wordpress.org/core/2026/05/07/x/',
+			'sourceType'  => 'make-core',
+			'excerpt'     => 'y',
+			'contentHash' => 'b',
+		];
+
+		$this->assertSame(
+			DocsGuidanceResult::from_guidance( [ $first, $second ], 'recommendation', 'best-effort' )['fingerprint'],
+			DocsGuidanceResult::from_guidance( [ $second, $first ], 'recommendation', 'best-effort' )['fingerprint']
+		);
+	}
+
+	public function test_prompt_guidance_does_not_affect_summary_fields(): void {
+		$docs_chunk    = [
+			'url'         => 'https://developer.wordpress.org/block-editor/',
+			'sourceType'  => 'developer-docs',
+			'excerpt'     => 'x',
+			'contentHash' => 'a',
+		];
+		$roadmap_chunk = [
+			'url'        => 'https://github.com/orgs/WordPress/projects/240',
+			'sourceType' => 'roadmap',
+			'excerpt'    => 'roadmap milestones',
+		];
+
+		$result = DocsGuidanceResult::from_guidance(
+			[ $docs_chunk ],
+			'recommendation',
+			'best-effort',
+			[ $roadmap_chunk, $docs_chunk ]
+		);
+
+		$this->assertTrue( $result['available'] );
+		$this->assertSame( 1, $result['count'] );
+		$this->assertSame( [ 'developer-docs' ], $result['sourceTypes'] );
+		$this->assertCount( 2, DocsGuidanceResult::guidance( $result ) );
+		$this->assertSame(
+			DocsGuidanceResult::from_guidance( [ $docs_chunk ], 'recommendation', 'best-effort' )['fingerprint'],
+			$result['fingerprint'],
+			'fingerprint must cover docs chunks only'
+		);
+
+		$roadmap_only = DocsGuidanceResult::from_guidance(
+			[],
+			'recommendation',
+			'best-effort',
+			[ $roadmap_chunk ]
+		);
+
+		$this->assertFalse( $roadmap_only['available'] );
+		$this->assertSame( 0, $roadmap_only['count'] );
+		$this->assertSame( [], $roadmap_only['sourceTypes'] );
+		$this->assertCount( 1, DocsGuidanceResult::guidance( $roadmap_only ) );
+		$this->assertFalse( DocsGuidanceResult::public_summary( $roadmap_only )['available'] );
+	}
+
 	public function test_guidance_accessor_returns_normalized_chunks(): void {
 		$guidance = [
 			[

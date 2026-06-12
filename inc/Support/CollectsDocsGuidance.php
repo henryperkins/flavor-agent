@@ -21,6 +21,37 @@ final class CollectsDocsGuidance {
 	 * @return array<int, array<string, mixed>>
 	 */
 	public static function collect( callable $build_query, array $context, string $prompt, array $options = [] ): array {
+		$parts = self::collect_parts( $build_query, $context, $prompt, $options );
+
+		return self::merge_parts( $parts['docs'], $parts['roadmap'] );
+	}
+
+	/**
+	 * The result summary (`available`, `count`, `sourceTypes`, `fingerprint`) is
+	 * computed from the AI Search docs chunks only; advisory roadmap chunks ride
+	 * along in `guidance` for prompt assembly but can't mask an ungrounded run.
+	 *
+	 * @param callable(array<string, mixed>, string): string $build_query
+	 * @param array<string, mixed> $context
+	 * @return array<string, mixed>
+	 */
+	public static function collect_result( callable $build_query, array $context, string $prompt, array $options = [] ): array {
+		$parts = self::collect_parts( $build_query, $context, $prompt, $options );
+
+		return DocsGuidanceResult::from_guidance(
+			$parts['docs'],
+			(string) ( $options['mode'] ?? 'recommendation' ),
+			'best-effort',
+			self::merge_parts( $parts['docs'], $parts['roadmap'] )
+		);
+	}
+
+	/**
+	 * @param callable(array<string, mixed>, string): string $build_query
+	 * @param array<string, mixed> $context
+	 * @return array{docs: array<int, array<string, mixed>>, roadmap: array<int, array<string, mixed>>}
+	 */
+	private static function collect_parts( callable $build_query, array $context, string $prompt, array $options ): array {
 		$query = (string) $build_query( $context, $prompt );
 
 		if ( '' === $query ) {
@@ -31,8 +62,18 @@ final class CollectsDocsGuidance {
 			$docs_guidance = AISearchClient::maybe_search_best_effort( $query );
 		}
 
-		$roadmap_guidance = CoreRoadmapGuidance::collect( $context, [ 'sideEffects' => false ] );
+		return [
+			'docs'    => $docs_guidance,
+			'roadmap' => CoreRoadmapGuidance::collect( $context, [ 'sideEffects' => false ] ),
+		];
+	}
 
+	/**
+	 * @param array<int, array<string, mixed>> $docs_guidance
+	 * @param array<int, array<string, mixed>> $roadmap_guidance
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function merge_parts( array $docs_guidance, array $roadmap_guidance ): array {
 		if ( [] === $roadmap_guidance ) {
 			return $docs_guidance;
 		}
@@ -42,21 +83,6 @@ final class CollectsDocsGuidance {
 		}
 
 		return self::merge_guidance_chunks( $docs_guidance, $roadmap_guidance );
-	}
-
-	/**
-	 * @param callable(array<string, mixed>, string): string $build_query
-	 * @param array<string, mixed> $context
-	 * @return array<string, mixed>
-	 */
-	public static function collect_result( callable $build_query, array $context, string $prompt, array $options = [] ): array {
-		$guidance = self::collect( $build_query, $context, $prompt, $options );
-
-		return DocsGuidanceResult::from_guidance(
-			$guidance,
-			(string) ( $options['mode'] ?? 'recommendation' ),
-			'best-effort'
-		);
 	}
 
 	/**
