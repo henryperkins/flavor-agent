@@ -59,7 +59,7 @@ final class RecommendationAbilityExecution {
 				self::persist_request_diagnostic_failure_activity(
 					self::resolve_activity_surface( $surface, $request_input ),
 					$result,
-					self::sanitize_activity_document( $request_input['document'] ?? null ),
+					self::resolve_request_diagnostic_document( $request_input['document'] ?? null, $ability_name ),
 					self::build_request_diagnostic_target( $surface, $request_input ),
 					$execution_input
 				);
@@ -79,7 +79,7 @@ final class RecommendationAbilityExecution {
 			self::persist_request_diagnostic_activity(
 				self::resolve_activity_surface( $surface, $request_input ),
 				$payload,
-				self::sanitize_activity_document( $request_input['document'] ?? null ),
+				self::resolve_request_diagnostic_document( $request_input['document'] ?? null, $ability_name ),
 				self::build_request_diagnostic_target( $surface, $request_input ),
 				$execution_input
 			);
@@ -497,6 +497,79 @@ final class RecommendationAbilityExecution {
 	}
 
 	/**
+	 * Resolve the activity document for request-diagnostic persistence,
+	 * synthesizing an external-origin scope when the caller supplied no usable
+	 * scopeKey. Editor surfaces always send document.scopeKey; scope-less callers
+	 * (Abilities Explorer click-runs, external MCP agents) would otherwise write
+	 * no audit row at all, silently evading the server-side attribution the
+	 * recommend abilities promise to that exact audience.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function resolve_request_diagnostic_document( mixed $raw_document, string $ability_name ): array {
+		$document = self::sanitize_activity_document( $raw_document );
+
+		if ( \is_array( $document ) ) {
+			return $document;
+		}
+
+		$fields = self::sanitize_structured_value( $raw_document );
+
+		return [
+			'scopeKey'   => self::external_fallback_scope_key( $ability_name ),
+			'postType'   => \trim( (string) ( $fields['postType'] ?? '' ) ),
+			'entityId'   => \trim( (string) ( $fields['entityId'] ?? '' ) ),
+			'entityKind' => \trim( (string) ( $fields['entityKind'] ?? '' ) ),
+			'entityName' => \trim( (string) ( $fields['entityName'] ?? '' ) ),
+			'stylesheet' => \trim( (string) ( $fields['stylesheet'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * Build the synthesized scope key for a scope-less external recommend call,
+	 * e.g. external:recommend-content. Grouping by the short ability name keeps
+	 * the (indexed) document_scope_key attributable and parses cleanly through
+	 * the admin projection's first-colon scope-key split.
+	 */
+	private static function external_fallback_scope_key( string $ability_name ): string {
+		$position = \strrpos( $ability_name, '/' );
+		$short    = false !== $position ? \substr( $ability_name, $position + 1 ) : $ability_name;
+		$short    = \sanitize_key( $short );
+
+		return 'external:' . ( '' !== $short ? $short : 'recommendation' );
+	}
+
+	/**
+	 * Persist an activity entry, surfacing an otherwise-swallowed persistence
+	 * failure rather than dropping the audit row silently.
+	 *
+	 * @param array<string, mixed> $entry
+	 */
+	private static function persist_activity_entry( string $surface, array $entry ): void {
+		$created = ActivityRepository::create( $entry );
+
+		if ( \is_wp_error( $created ) ) {
+			self::log_request_diagnostic_persist_failure( $surface, $created );
+		}
+	}
+
+	private static function log_request_diagnostic_persist_failure( string $surface, \WP_Error $error ): void {
+		if ( ! \function_exists( 'error_log' ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Surfaces an otherwise-swallowed request-diagnostic persistence failure.
+		\error_log(
+			\sprintf(
+				'flavor_agent_request_diagnostic_persist_failed: surface=%s code=%s message=%s',
+				$surface,
+				$error->get_error_code(),
+				$error->get_error_message()
+			)
+		);
+	}
+
+	/**
 	 * @param array<string, mixed> $input
 	 */
 	private static function resolve_activity_surface( string $surface, array $input ): string {
@@ -658,7 +731,8 @@ final class RecommendationAbilityExecution {
 			$after['validationReasons'] = $validation_aggregate;
 		}
 
-		ActivityRepository::create(
+		self::persist_activity_entry(
+			$surface,
 			[
 				'type'            => 'request_diagnostic',
 				'surface'         => $surface,
@@ -755,7 +829,8 @@ final class RecommendationAbilityExecution {
 		$error_data = $error->get_error_data();
 		$error_data = \is_array( $error_data ) ? $error_data : [];
 
-		ActivityRepository::create(
+		self::persist_activity_entry(
+			$surface,
 			[
 				'id'              => '',
 				'type'            => 'request_diagnostic',

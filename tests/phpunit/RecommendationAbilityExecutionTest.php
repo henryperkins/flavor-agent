@@ -679,6 +679,86 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		$this->assertArrayNotHasKey( 'clientRequest', $seen_input );
 	}
 
+	public function test_execute_persists_request_diagnostic_for_scopeless_external_call(): void {
+		// Abilities Explorer click-runs and external MCP agents may omit the
+		// optional document.scopeKey. The audit row must still persist under a
+		// synthesized external-origin scope; otherwise server-side attribution
+		// silently fails for exactly the external audience these abilities serve.
+		$result = RecommendationAbilityExecution::execute(
+			'content',
+			'flavor-agent/recommend-content',
+			[
+				'prompt' => 'Draft an intro.',
+			],
+			static fn(): array => [
+				'content'     => 'Drafted intro.',
+				'requestMeta' => [],
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'request_diagnostic', $entries[0]['activity_type'] ?? null );
+		$this->assertSame( 'content', $entries[0]['surface'] ?? null );
+		$this->assertSame( 'external:recommend-content', $entries[0]['document_scope_key'] ?? null );
+	}
+
+	public function test_execute_persists_failed_request_diagnostic_for_scopeless_external_call(): void {
+		// The external-origin audit guarantee must also hold when the recommend
+		// call fails, so scope-less external agents leave a server-side trace of
+		// failed attempts too.
+		$result = RecommendationAbilityExecution::execute(
+			'template',
+			'flavor-agent/recommend-template',
+			[
+				'templateRef' => 'theme//home',
+			],
+			static fn(): \WP_Error => new \WP_Error( 'timeout', 'Request timed out.' )
+		);
+
+		$this->assertTrue( \is_wp_error( $result ) );
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'request_diagnostic', $entries[0]['activity_type'] ?? null );
+		$this->assertSame( 'template', $entries[0]['surface'] ?? null );
+		$this->assertSame( 'external:recommend-template', $entries[0]['document_scope_key'] ?? null );
+		$this->assertSame( 'Template request failed', $entries[0]['suggestion'] ?? null );
+	}
+
+	public function test_execute_preserves_caller_document_fields_when_synthesizing_external_scope(): void {
+		// A caller can send document metadata (postType/entityId) without a
+		// scopeKey. The synthesized fallback must keep those fields so the audit
+		// row and its admin projection stay attributable.
+		RecommendationAbilityExecution::execute(
+			'content',
+			'flavor-agent/recommend-content',
+			[
+				'prompt'   => 'Draft an intro.',
+				'document' => [
+					'postType' => 'page',
+					'entityId' => '99',
+				],
+			],
+			static fn(): array => [
+				'content' => 'Drafted intro.',
+			]
+		);
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'external:recommend-content', $entries[0]['document_scope_key'] ?? null );
+
+		$document = json_decode( (string) ( $entries[0]['document_json'] ?? '' ), true );
+		$this->assertSame( 'page', $document['postType'] ?? null );
+		$this->assertSame( '99', $document['entityId'] ?? null );
+	}
+
 	public function test_execute_skips_stale_request_diagnostic_activity(): void {
 		$document = [
 			'scopeKey' => 'wp_template:theme//home',
