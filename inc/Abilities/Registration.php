@@ -704,7 +704,53 @@ final class Registration {
 									'slug'    => [ 'type' => 'string' ],
 									'title'   => [ 'type' => 'string' ],
 									'area'    => [ 'type' => 'string' ],
-									'content' => [ 'type' => 'string' ],
+									'content' => [
+										'type'        => 'string',
+										'description' => 'Template-part markup. Present only when includeContent is true and the caller has the edit_theme_options capability; omitted otherwise.',
+									],
+								],
+							],
+						],
+					],
+				],
+				'meta'                => self::mcp_public_readonly_rest_meta(),
+			]
+		);
+
+		wp_register_ability(
+			'flavor-agent/list-templates',
+			[
+				'label'               => __( 'List templates', 'flavor-agent' ),
+				'description'         => __( 'Return registered block-template metadata (id, slug, title, description) for the active theme, with optional content only for users who can edit themes. Read-only. The id is the templateRef accepted by recommend-template.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ TemplateAbilities::class, 'list_templates' ],
+				'permission_callback' => [ self::class, 'can_list_templates' ],
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [
+						'includeContent' => [
+							'type'        => 'boolean',
+							'description' => 'When true, request template markup. Callers without the edit_theme_options capability receive metadata-only results.',
+						],
+					],
+					'default'    => [],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => [
+						'templates' => [
+							'type'  => 'array',
+							'items' => [
+								'type'       => 'object',
+								'properties' => [
+									'id'          => [ 'type' => 'string' ],
+									'slug'        => [ 'type' => 'string' ],
+									'title'       => [ 'type' => 'string' ],
+									'description' => [ 'type' => 'string' ],
+									'content'     => [
+										'type'        => 'string',
+										'description' => 'Template markup. Present only when includeContent is true and the caller has the edit_theme_options capability; omitted otherwise.',
+									],
 								],
 							],
 						],
@@ -975,6 +1021,10 @@ final class Registration {
 	}
 
 	public static function can_list_template_parts( mixed $_input = null ): bool {
+		return current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' );
+	}
+
+	public static function can_list_templates( mixed $_input = null ): bool {
 		return current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' );
 	}
 
@@ -1711,16 +1761,14 @@ final class Registration {
 	}
 
 	public static function recommendation_meta(): array {
-		return self::public_recommendation_meta();
-	}
-
-	private static function public_recommendation_meta(): array {
 		return [
 			'show_in_rest' => true,
-			'mcp'          => [
-				'public' => true,
-				'type'   => 'tool',
-			],
+			// No mcp key: write-side recommend-* are curated onto the dedicated
+			// flavor-agent MCP server (ServerBootstrap's explicit tool list) and
+			// the Abilities API, deliberately NOT the universal default server —
+			// whose recommend surface is the read-only preview siblings. Mirrors
+			// external_apply_meta(); request_diagnostic rows can carry prompts, so
+			// generic discover/execute exposure stays curated.
 			'annotations'  => [
 				'destructive' => false,
 				'idempotent'  => false,

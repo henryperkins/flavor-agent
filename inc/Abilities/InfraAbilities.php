@@ -130,6 +130,7 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-synced-pattern', 'edit_posts' );
 		if ( current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' ) ) {
 			$abilities[] = 'flavor-agent/list-template-parts';
+			$abilities[] = 'flavor-agent/list-templates';
 		}
 		self::maybe_add_ability( $abilities, 'flavor-agent/list-allowed-blocks', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-active-theme', 'edit_posts' );

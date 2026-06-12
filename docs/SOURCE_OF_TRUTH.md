@@ -152,7 +152,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 
-The code defines 29 abilities with full JSON Schema input/output definitions: seven recommendation abilities, twelve helper/read abilities, the docs-search ability, five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and four feature-gated external-apply abilities (`request-style-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style apply, read activity, and undo executed style rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+The code defines 30 abilities with full JSON Schema input/output definitions: seven recommendation abilities, thirteen helper/read abilities, the docs-search ability, five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and four feature-gated external-apply abilities (`request-style-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style apply, read activity, and undo executed style rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 #### Developer Docs
 

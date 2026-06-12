@@ -18,13 +18,35 @@ final class TemplateRepository {
 
 		foreach ( $parts as $part ) {
 			$entry = [
-				'slug'  => $part->slug ?? '',
-				'title' => $part->title ?? '',
-				'area'  => $part->area ?? '',
+				'slug'  => (string) ( $part->slug ?? '' ),
+				'title' => (string) ( $part->title ?? '' ),
+				'area'  => (string) ( $part->area ?? '' ),
 			];
 
 			if ( $include_content ) {
-				$entry['content'] = $part->content ?? '';
+				$entry['content'] = (string) ( $part->content ?? '' );
+			}
+
+			$result[] = $entry;
+		}
+
+		return $result;
+	}
+
+	public function for_templates( bool $include_content = true ): array {
+		$templates = get_block_templates( [], 'wp_template' );
+		$result    = [];
+
+		foreach ( $templates as $template ) {
+			$entry = [
+				'id'          => (string) ( $template->id ?? '' ),
+				'slug'        => (string) ( $template->slug ?? '' ),
+				'title'       => (string) ( $template->title ?? '' ),
+				'description' => (string) ( $template->description ?? '' ),
+			];
+
+			if ( $include_content ) {
+				$entry['content'] = (string) ( $template->content ?? '' );
 			}
 
 			$result[] = $entry;
