@@ -147,8 +147,9 @@ final class StyleAbilitiesTest extends TestCase {
 		);
 	}
 
-	public function test_recommend_style_fails_closed_when_docs_grounding_is_unavailable(): void {
-		WordPressTestState::$transients                     = [];
+	public function test_recommend_style_proceeds_when_docs_grounding_is_empty(): void {
+		WordPressTestState::$transients = [];
+		$this->route_docs_grounding_search( [] );
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
 				'suggestions' => [
@@ -194,11 +195,11 @@ final class StyleAbilitiesTest extends TestCase {
 			]
 		);
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_docs_grounding_unavailable', $result->get_error_code() );
-		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
-		$this->assertSame( 'unavailable', $result->get_error_data()['docsGrounding']['status'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertIsArray( $result );
+		$this->assertFalse( is_wp_error( $result ), 'grounding must never block a recommendation' );
+		$this->assertFalse( $result['docsGrounding']['available'] ?? true );
+		$this->assertSame( 0, $result['docsGrounding']['count'] ?? -1 );
+		$this->assertNotSame( [], WordPressTestState::$last_ai_client_prompt, 'model must be called' );
 	}
 
 	public function test_recommend_style_canonicalizes_scope_key_server_side(): void {
@@ -355,7 +356,7 @@ final class StyleAbilitiesTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $baseline['resolvedContextSignature'] ?? '' )
 		);
-		$this->assertSame( 'unavailable', $baseline['docsGrounding']['status'] ?? null );
+		$this->assertFalse( $baseline['docsGrounding']['available'] ?? true );
 		$this->assertIsArray( $changed );
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
@@ -528,8 +529,8 @@ final class StyleAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $recommendation );
 		$this->assertIsArray( $signature );
-		$this->assertSame( 'grounded', $recommendation['docsGrounding']['status'] ?? null );
-		$this->assertSame( 'grounded', $signature['docsGrounding']['status'] ?? null );
+		$this->assertTrue( $recommendation['docsGrounding']['available'] ?? false );
+		$this->assertTrue( $signature['docsGrounding']['available'] ?? false );
 		$this->assertSame(
 			$recommendation['reviewContextSignature'] ?? null,
 			$signature['reviewContextSignature'] ?? null
@@ -1097,7 +1098,7 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'Overall density hint: balanced', (string) ( $request_body['input'] ?? '' ) );
 	}
 
-	public function test_style_docs_query_and_family_context_include_live_structure_visibility_and_semantics(): void {
+	public function test_style_docs_query_includes_live_structure_visibility_and_semantics(): void {
 		$context = [
 			'scope'        => [
 				'surface'        => 'global-styles',
@@ -1145,21 +1146,12 @@ final class StyleAbilitiesTest extends TestCase {
 			'build_wordpress_docs_query',
 			[ $context, 'Keep the palette restrained.' ]
 		);
-		$family  = $this->invoke_private_array_method(
-			StyleAbilities::class,
-			'build_wordpress_docs_family_context',
-			[ $context ]
-		);
 
 		$this->assertStringContainsString( 'template structure core/template-part, core/group', $query );
 		$this->assertStringContainsString( 'live template block count 3', $query );
 		$this->assertStringContainsString( 'viewport-constrained blocks 1', $query );
 		$this->assertStringContainsString( 'overall density balanced', $query );
 		$this->assertStringContainsString( 'template locations header x1', $query );
-		$this->assertSame( 'home', $family['templateType'] ?? null );
-		$this->assertSame( [ 'core/template-part', 'core/group' ], $family['topLevelBlocks'] ?? null );
-		$this->assertSame( 1, $family['visibilityConstraintCount'] ?? null );
-		$this->assertSame( 'balanced', $family['overallDensityHint'] ?? null );
 	}
 
 	public function test_supported_block_style_paths_follow_block_support_manifest(): void {
@@ -1284,42 +1276,6 @@ final class StyleAbilitiesTest extends TestCase {
 		);
 	}
 
-	public function test_build_wordpress_docs_entity_key_uses_global_styles_guidance_for_global_styles_surface(): void {
-		$entity_key = $this->invoke_private_string_method(
-			StyleAbilities::class,
-			'build_wordpress_docs_entity_key',
-			[
-				[
-					'scope' => [
-						'surface'        => 'global-styles',
-						'scopeKey'       => 'global_styles:17',
-						'globalStylesId' => '17',
-					],
-				],
-			]
-		);
-
-		$this->assertSame( 'guidance:global-styles', $entity_key );
-	}
-
-	public function test_build_wordpress_docs_entity_key_falls_back_to_style_book_guidance_without_block_name(): void {
-		$entity_key = $this->invoke_private_string_method(
-			StyleAbilities::class,
-			'build_wordpress_docs_entity_key',
-			[
-				[
-					'scope' => [
-						'surface'        => 'style-book',
-						'scopeKey'       => 'style_book:17',
-						'globalStylesId' => '17',
-					],
-				],
-			]
-		);
-
-		$this->assertSame( 'guidance:style-book', $entity_key );
-	}
-
 	private function build_cache_key( string $query, int $max_results ): string {
 		$method = new ReflectionMethod( AISearchClient::class, 'build_cache_key' );
 		$method->setAccessible( true );
@@ -1354,26 +1310,50 @@ final class StyleAbilitiesTest extends TestCase {
 
 	private function prime_default_docs_grounding(): void {
 		$this->prime_current_docs_source_coverage();
-		foreach ( [ 'guidance:global-styles', 'guidance:style-book' ] as $entity_key ) {
-			AISearchClient::cache_entity_guidance(
-				$entity_key,
+		$this->route_docs_grounding_search(
+			[
+				$this->docs_grounding_chunk(
+					'Global Styles developer guidance',
+					'https://developer.wordpress.org/themes/global-settings-and-styles/',
+					'Use supported theme.json and Global Styles controls for style recommendations.'
+				),
+			]
+		);
+	}
+
+	/**
+	 * Serve the docs-grounding public search endpoint by URL so the best-effort
+	 * search resolves deterministically without consuming queued responses.
+	 *
+	 * @param array<int, array<string, mixed>> $chunks
+	 */
+	private function route_docs_grounding_search( array $chunks ): void {
+		WordPressTestState::$remote_post_url_responses['.search.ai.cloudflare.com'] = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
 				[
-					[
-						'id'          => $entity_key . '-default-doc',
-						'title'       => 'Global Styles developer guidance',
-						'sourceKey'   => 'developer.wordpress.org/themes/global-settings-and-styles/',
-						'sourceType'  => 'developer-docs',
-						'url'         => 'https://developer.wordpress.org/themes/global-settings-and-styles/',
-						'excerpt'     => 'Use supported theme.json and Global Styles controls for style recommendations.',
-						'score'       => 0.91,
-						'retrievedAt' => '2026-05-08T14:00:00Z',
-						'publishedAt' => '',
-						'contentHash' => $entity_key . '-default-doc',
-						'freshness'   => 'current',
+					'result' => [
+						'chunks' => $chunks,
 					],
 				]
-			);
-		}
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function docs_grounding_chunk( string $title, string $url, string $excerpt ): array {
+		$frontmatter = "---\nsource_url: \"{$url}\"\nretrieved_at: \"2026-05-08T14:00:00Z\"\ncontent_hash: " . md5( $title . $url );
+
+		return [
+			'id'   => md5( $title . $url ),
+			'item' => [
+				'key'      => $url,
+				'metadata' => [ 'title' => $title ],
+			],
+			'text' => $frontmatter . "\n---\n{$excerpt}",
+		];
 	}
 
 	private function prime_current_docs_source_coverage(): void {

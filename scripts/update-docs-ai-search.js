@@ -353,6 +353,27 @@ function withinMakeCoreWindow( url, cutoffMs ) {
 	return published !== null && published >= cutoffMs;
 }
 
+function isCorpusDocumentUrl( value ) {
+	let url;
+	try {
+		url = new URL( value );
+	} catch {
+		return false;
+	}
+
+	const host = url.hostname.toLowerCase();
+	const pathName = url.pathname.replace( /\/+$/, '' ) || '/';
+	if ( host === 'developer.wordpress.org' && ( pathName === '/news' || pathName.startsWith( '/news/' ) ) ) {
+		return /^\/news\/\d{4}\/\d{2}\/(?:\d{2}\/)?[a-z0-9][^/]*$/.test( pathName );
+	}
+
+	if ( host === 'make.wordpress.org' && ( pathName === '/core' || pathName.startsWith( '/core/' ) ) ) {
+		return /^\/core\/\d{4}\/\d{2}\/\d{2}\/[a-z0-9][^/]*$/.test( pathName );
+	}
+
+	return true;
+}
+
 // Only fetch sitemaps that live on one of the trusted roots' origins. Sitemap
 // references come from robots.txt and nested <loc> entries, i.e. remote-controlled
 // input fetched by a secret-bearing workflow runner — constraining them to the
@@ -634,7 +655,7 @@ async function discoverSourceUrls( roots, options ) {
 		}
 	}
 
-	const discovered = new Set( roots );
+	const discovered = new Set( roots.filter( isCorpusDocumentUrl ) );
 	const lastmods = new Map();
 	const makeCoreCutoff = makeCoreRecencyCutoff( options );
 	const discoveryErrors = [];
@@ -673,6 +694,7 @@ async function discoverSourceUrls( roots, options ) {
 				if (
 					normalized &&
 					urlMatchesRoots( normalized, roots ) &&
+					isCorpusDocumentUrl( normalized ) &&
 					withinMakeCoreWindow( normalized, makeCoreCutoff )
 				) {
 					discovered.add( normalized );
@@ -1957,6 +1979,7 @@ module.exports = {
 	existingItemsByUrl,
 	fetchJson,
 	isFreshByLastmod,
+	isCorpusDocumentUrl,
 	evaluateSettlement,
 	isSettlementComplete,
 	listBuiltinItems,

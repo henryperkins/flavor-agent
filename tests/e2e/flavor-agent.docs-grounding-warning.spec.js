@@ -2,7 +2,7 @@ const { test, expect } = require( '@playwright/test' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 
 const DOCS_WARNING_TEXT =
-	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+	'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.';
 
 function recommendationAbilityRoute( abilitySlug ) {
 	return new RegExp( `${ abilitySlug }(?:/|\\?|$)` );
@@ -130,7 +130,7 @@ async function seedParagraphBlock( page ) {
 	} );
 }
 
-test( 'pattern inserter shows docs grounding warning for stale currentness coverage', async ( {
+test( 'pattern inserter shows the soft notice when a result ran without docs grounding', async ( {
 	page,
 } ) => {
 	await page.route(
@@ -145,12 +145,9 @@ test( 'pattern inserter shows docs grounding warning for stale currentness cover
 					recommendations: [],
 					diagnostics: {},
 					docsGrounding: {
-						status: 'grounded',
-						coverage: {
-							status: 'missing-current-release-cycle',
-							message:
-								'Current release-cycle sources are missing.',
-						},
+						available: false,
+						sourceTypes: [],
+						count: 0,
 					},
 				} ),
 			} );

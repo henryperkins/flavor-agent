@@ -34,6 +34,9 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $remote_post_responses = [];
 
+		/** @var array<string, mixed> URL-substring → response, served before the queued/singular stubs. */
+		public static array $remote_post_url_responses = [];
+
 		public static array $remote_get_responses = [];
 
 		public static array $last_ai_client_prompt = [];
@@ -330,6 +333,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$remote_post_calls           = [];
 			self::$remote_get_calls            = [];
 			self::$remote_post_responses       = [];
+			self::$remote_post_url_responses   = [];
 			self::$remote_get_responses        = [];
 			self::$last_ai_client_prompt       = [];
 			self::$ai_service_calls            = [];
@@ -2831,6 +2835,12 @@ namespace {
 				'args' => $args,
 			];
 			WordPressTestState::$remote_post_calls[] = WordPressTestState::$last_remote_post;
+
+			foreach (WordPressTestState::$remote_post_url_responses as $needle => $url_response) {
+				if ('' !== $needle && str_contains($url, (string) $needle)) {
+					return $url_response;
+				}
+			}
 
 			if ([] !== WordPressTestState::$remote_post_responses) {
 				return array_shift(WordPressTestState::$remote_post_responses);

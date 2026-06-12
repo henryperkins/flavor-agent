@@ -731,10 +731,6 @@ final class Registration {
 							'type'        => 'string',
 							'description' => 'Search query for WordPress developer documentation.',
 						],
-						'entityKey'  => [
-							'type'        => 'string',
-							'description' => 'Optional normalized entity cache key to warm alongside the exact query cache. Use namespace/block-name for blocks or template:single, template:404, etc. for templates.',
-						],
 						'maxResults' => [
 							'type'        => 'integer',
 							'description' => 'Optional result cap between 1 and 8.',
@@ -758,10 +754,7 @@ final class Registration {
 									'url'         => [ 'type' => 'string' ],
 									'excerpt'     => [ 'type' => 'string' ],
 									'score'       => [ 'type' => 'number' ],
-									'retrievedAt' => [ 'type' => 'string' ],
-									'publishedAt' => [ 'type' => 'string' ],
 									'contentHash' => [ 'type' => 'string' ],
-									'freshness'   => [ 'type' => 'string' ],
 								],
 							],
 						],
@@ -791,41 +784,14 @@ final class Registration {
 
 	private static function docs_grounding_output_schema(): array {
 		return [
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'properties'           => [
-				'status'      => [ 'type' => 'string' ],
-				'mode'        => [ 'type' => 'string' ],
-				'transport'   => [ 'type' => 'string' ],
+			'type'       => 'object',
+			'properties' => [
+				'available'   => [ 'type' => 'boolean' ],
 				'sourceTypes' => [
 					'type'  => 'array',
 					'items' => [ 'type' => 'string' ],
 				],
-				'freshness'   => [
-					'type'  => 'array',
-					'items' => [ 'type' => 'string' ],
-				],
-				'coverage'    => [
-					'type'                 => 'object',
-					'additionalProperties' => false,
-					'properties'           => [
-						'status'                 => [ 'type' => 'string' ],
-						'hasDeveloperDocs'       => [ 'type' => 'boolean' ],
-						'hasCurrentReleaseCycle' => [ 'type' => 'boolean' ],
-						'sourceTypes'            => [
-							'type'  => 'array',
-							'items' => [ 'type' => 'string' ],
-						],
-						'freshness'              => [
-							'type'  => 'array',
-							'items' => [ 'type' => 'string' ],
-						],
-						'checkedAt'              => [ 'type' => 'string' ],
-						'errorCode'              => [ 'type' => 'string' ],
-						'errorMessage'           => [ 'type' => 'string' ],
-					],
-				],
-				'fingerprint' => [ 'type' => 'string' ],
+				'count'       => [ 'type' => 'integer' ],
 			],
 		];
 	}
@@ -989,6 +955,14 @@ final class Registration {
 									'properties' => [
 										'configured' => [ 'type' => 'boolean' ],
 										'instanceId' => [ 'type' => [ 'string', 'null' ] ],
+										'runtime'    => [
+											'type'       => 'object',
+											'properties' => [
+												'status' => [ 'type' => 'string' ],
+												'lastSearchAt' => [ 'type' => 'string' ],
+												'lastResultCount' => [ 'type' => 'integer' ],
+											],
+										],
 									],
 								],
 							],

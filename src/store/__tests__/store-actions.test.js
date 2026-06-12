@@ -132,19 +132,14 @@ const ABILITY_RUN_PATHS_BY_NAME = Object.fromEntries(
 );
 const APPLY_RESOLVED_FRESHNESS_TIMEOUT_MS = 15000;
 const DOCS_GROUNDING_PAYLOAD = {
-	status: 'grounded',
-	coverage: {
-		status: 'missing-current-release-cycle',
-		message: 'Current release-cycle docs were not confirmed.',
-	},
+	available: false,
+	sourceTypes: [],
+	count: 0,
 };
 const DOCS_GROUNDING_WARNING = {
-	status: 'grounded',
-	message: '',
-	coverageStatus: 'missing-current-release-cycle',
-	coverageMessage: 'Current release-cycle docs were not confirmed.',
-	source: '',
-	checkedAt: '',
+	tone: 'info',
+	message:
+		'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.',
 };
 
 function expectAbilityRunRequest( abilityKey, input ) {
@@ -6350,13 +6345,10 @@ describe( 'store action thunks', () => {
 		} );
 	} );
 
-	test( 'applyTemplateSuggestion classifies apply-time docs grounding outages before signature drift', async () => {
+	test( 'applyTemplateSuggestion treats docs grounding outages as generic signature drift', async () => {
 		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-template-drifted',
-			docsGrounding: {
-				status: 'unavailable',
-				message: 'Developer Docs grounding is unavailable.',
-			},
+			docsGrounding: { available: false, sourceTypes: [], count: 0 },
 		} );
 
 		const dispatch = jest.fn();
@@ -6406,29 +6398,27 @@ describe( 'store action thunks', () => {
 		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplateApplyState(
 				'error',
-				'This template result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
+				'This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
 				null,
 				[],
-				'docs-grounding-unavailable'
+				'server-apply'
 			)
 		);
 		expect( result ).toEqual( {
 			ok: false,
-			error: 'This template result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-			staleReason: 'docs-grounding-unavailable',
+			error: 'This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+			staleReason: 'server-apply',
 		} );
 	} );
 
-	test( 'applyTemplateSuggestion classifies apply-time docs grounding coverage drift before generic server drift', async () => {
+	test( 'applyTemplateSuggestion proceeds during a docs grounding outage when signatures match', async () => {
 		apiFetch.mockResolvedValue( {
-			resolvedContextSignature: 'resolved-template-drifted',
-			docsGrounding: {
-				status: 'grounded',
-				coverage: {
-					status: 'missing-current-release-cycle',
-					message: 'Current release-cycle docs were not confirmed.',
-				},
-			},
+			resolvedContextSignature: 'resolved-template-stored',
+			docsGrounding: { available: false, sourceTypes: [], count: 0 },
+		} );
+		applyTemplateSuggestionOperations.mockReturnValue( {
+			ok: true,
+			operations: [],
 		} );
 
 		const dispatch = jest.fn();
@@ -6474,21 +6464,8 @@ describe( 'store action thunks', () => {
 			select,
 		} );
 
-		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
-		expect( dispatch ).toHaveBeenCalledWith(
-			actions.setTemplateApplyState(
-				'error',
-				'This template result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				null,
-				[],
-				'docs-grounding-changed'
-			)
-		);
-		expect( result ).toEqual( {
-			ok: false,
-			error: 'This template result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-			staleReason: 'docs-grounding-changed',
-		} );
+		expect( applyTemplateSuggestionOperations ).toHaveBeenCalled();
+		expect( result.ok ).toBe( true );
 	} );
 
 	test( 'applyTemplateSuggestion aborts hung apply-time revalidation', async () => {
@@ -8680,7 +8657,7 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
-	test( 'pending rebaseline does not adopt docs grounding changed in apply guard', async () => {
+	test( 'pending rebaseline adopts the resolved signature even during a docs grounding outage', async () => {
 		const setApplyState = jest.fn(
 			( status, error, staleReason = null ) => ( {
 				type: 'APPLY_STATE',
@@ -8689,6 +8666,10 @@ describe( 'store action thunks', () => {
 				staleReason,
 			} )
 		);
+		const adoptResolvedContextSignature = jest.fn( ( signature ) => ( {
+			type: 'ADOPT_RESOLVED',
+			signature,
+		} ) );
 		const localDispatch = jest.fn();
 		apiFetch.mockResolvedValueOnce( {
 			result: {
@@ -8706,16 +8687,16 @@ describe( 'store action thunks', () => {
 			},
 			storedResolvedContextSignature: 'old-server-sig',
 			rebaselinePending: true,
+			adoptResolvedContextSignature,
 			localDispatch,
 			setApplyState,
 		} );
 
-		expect( result.ok ).toBe( false );
-		expect( result.staleReason ).toBe( 'docs-grounding-changed' );
-		expect( localDispatch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				staleReason: 'docs-grounding-changed',
-			} )
+		expect( result.ok ).toBe( true );
+		expect( result.adopted ).toBe( true );
+		expect( result.resolvedContextSignature ).toBe( 'new-server-sig' );
+		expect( adoptResolvedContextSignature ).toHaveBeenCalledWith(
+			'new-server-sig'
 		);
 	} );
 

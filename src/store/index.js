@@ -74,7 +74,7 @@ import {
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
 import { isPlainObject } from '../utils/type-guards';
-import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
+import { deriveDocsGroundingWarning } from '../utils/docs-grounding-warning';
 import {
 	getAllowedPatterns,
 	getBlockPatterns,
@@ -665,66 +665,6 @@ function buildMissingResolvedSignatureApplyErrorMessage( surface ) {
 	}
 }
 
-function buildDocsGroundingUnavailableApplyErrorMessage( surface ) {
-	switch ( surface ) {
-		case 'template':
-			return __(
-				'This template result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-		case 'template-part':
-			return __(
-				'This template-part result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-		case 'global-styles':
-			return __(
-				'This Global Styles result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-		case 'style-book':
-			return __(
-				'This Style Book result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-		default:
-			return __(
-				'This result no longer has trusted WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-	}
-}
-
-function buildDocsGroundingChangedApplyErrorMessage( surface ) {
-	switch ( surface ) {
-		case 'template':
-			return __(
-				'This template result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-		case 'template-part':
-			return __(
-				'This template-part result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-		case 'global-styles':
-			return __(
-				'This Global Styles result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-		case 'style-book':
-			return __(
-				'This Style Book result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-		default:
-			return __(
-				'This result no longer matches the current WordPress Developer Docs grounding. Refresh recommendations before applying it.',
-				'flavor-agent'
-			);
-	}
-}
-
 function buildServerRevalidationErrorMessage( surface ) {
 	switch ( surface ) {
 		case 'template':
@@ -797,28 +737,6 @@ function getPatternRuntimeSignatureFromResponse( result = null ) {
 		result?.payload?.patternRuntimeSignature ||
 			result?.patternRuntimeSignature
 	);
-}
-
-function getDocsGroundingFromResponse( result = null ) {
-	return result?.payload?.docsGrounding || result?.docsGrounding || null;
-}
-
-function getDocsGroundingStatusFromResponse( result = null ) {
-	const docsGrounding = getDocsGroundingFromResponse( result );
-
-	return normalizeStringMessage( docsGrounding?.status );
-}
-
-function getApplyDocsGroundingStaleReason( result = null ) {
-	if ( getDocsGroundingStatusFromResponse( result ) === 'unavailable' ) {
-		return 'docs-grounding-unavailable';
-	}
-
-	return normalizeDocsGroundingWarning(
-		getDocsGroundingFromResponse( result )
-	)
-		? 'docs-grounding-changed'
-		: '';
 }
 
 function getReviewContextSignatureFromResponse( result = null ) {
@@ -950,32 +868,9 @@ async function guardSurfaceApplyResolvedFreshness( {
 			};
 		}
 
-		const docsGroundingStaleReason =
-			getApplyDocsGroundingStaleReason( result );
-
-		// Docs-grounding drift blocks the apply even when a rebaseline is pending:
-		// the resolved signature folds in the docs fingerprint, but the response
-		// also carries an independent docsGrounding summary, so adoption never masks
-		// it (review fix #5).
-		if (
-			docsGroundingStaleReason === 'docs-grounding-unavailable' ||
-			docsGroundingStaleReason === 'docs-grounding-changed'
-		) {
-			const staleReason = docsGroundingStaleReason;
-			const error =
-				staleReason === 'docs-grounding-unavailable'
-					? buildDocsGroundingUnavailableApplyErrorMessage( surface )
-					: buildDocsGroundingChangedApplyErrorMessage( surface );
-
-			localDispatch( setApplyState( 'error', error, staleReason ) );
-
-			return {
-				ok: false,
-				error,
-				staleReason,
-			};
-		}
-
+		// Docs grounding is best-effort context: drift in grounding content is
+		// caught by the resolved-signature comparison below (the signature folds
+		// in the docs fingerprint); an outage never blocks an apply by itself.
 		const resolvedContextSignature =
 			getResolvedContextSignatureFromResponse( result );
 
@@ -3194,9 +3089,7 @@ const actions = {
 							requestSignature,
 							result.diagnostics || null,
 							insertionTargetSignature,
-							normalizeDocsGroundingWarning(
-								result.docsGrounding
-							),
+							deriveDocsGroundingWarning( result.docsGrounding ),
 							getResolvedContextSignatureFromResponse( result ) ||
 								'',
 							getPatternRuntimeSignatureFromResponse( result )
@@ -3228,7 +3121,7 @@ const actions = {
 										result
 									) || '',
 								docsGroundingWarning:
-									normalizeDocsGroundingWarning(
+									deriveDocsGroundingWarning(
 										result.docsGrounding
 									),
 								patternRuntimeSignature:
@@ -3510,11 +3403,7 @@ const actions = {
 
 				const serverSig =
 					getResolvedContextSignatureFromResponse( response ) || '';
-				const docsGroundingStatus =
-					typeof response?.docsGrounding?.status === 'string'
-						? response.docsGrounding.status
-						: '';
-				const docsGroundingWarning = normalizeDocsGroundingWarning(
+				const docsGroundingWarning = deriveDocsGroundingWarning(
 					response?.docsGrounding
 				);
 				const currentDocsGroundingWarning =
@@ -3538,33 +3427,14 @@ const actions = {
 				}
 
 				// A pending self-apply re-baseline adopts the freshly resolved
-				// server signature instead of staling the result — but still honors
-				// docs-grounding-unavailable and surfaces a docs-grounding-changed
-				// warning, exactly as the non-pending path does.
+				// server signature instead of staling the result. Docs grounding
+				// is best-effort: an outage only surfaces the soft warning, and
+				// content drift is folded into the resolved signature.
 				const rebaselinePending =
 					select.isBlockResolvedRebaselinePending?.( clientId ) ===
 					true;
 
 				if ( rebaselinePending ) {
-					if ( docsGroundingStatus === 'unavailable' ) {
-						dispatch(
-							actions.setBlockApplyState(
-								clientId,
-								'idle',
-								null,
-								null,
-								'docs-grounding-unavailable'
-							)
-						);
-						dispatch(
-							actions.setBlockDocsGroundingWarning(
-								clientId,
-								null
-							)
-						);
-						return;
-					}
-
 					if ( docsGroundingWarning || currentDocsGroundingWarning ) {
 						dispatch(
 							actions.setBlockDocsGroundingWarning(
@@ -3585,20 +3455,7 @@ const actions = {
 					return;
 				}
 
-				if ( docsGroundingStatus === 'unavailable' ) {
-					dispatch(
-						actions.setBlockApplyState(
-							clientId,
-							'idle',
-							null,
-							null,
-							'docs-grounding-unavailable'
-						)
-					);
-					dispatch(
-						actions.setBlockDocsGroundingWarning( clientId, null )
-					);
-				} else if (
+				if (
 					serverSig &&
 					currentResolvedSig &&
 					serverSig !== currentResolvedSig
@@ -3795,7 +3652,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						lastAppliedSuggestionKey: null,
 						staleReason: null,
 						resolvedRebaselinePending: false,
-						docsGroundingWarning: normalizeDocsGroundingWarning(
+						docsGroundingWarning: deriveDocsGroundingWarning(
 							action.recommendations?.docsGrounding
 						),
 					},
@@ -4322,7 +4179,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationError: null,
 				navigationErrorDetails: null,
 				navigationReviewStaleReason: null,
-				navigationDocsGroundingWarning: normalizeDocsGroundingWarning(
+				navigationDocsGroundingWarning: deriveDocsGroundingWarning(
 					action.payload?.docsGrounding
 				),
 			};

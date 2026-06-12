@@ -210,17 +210,21 @@ final class PluginLifecycleTest extends TestCase {
 		);
 		$this->assertArrayHasKey( ActivityRepository::PRUNE_CRON_HOOK, WordPressTestState::$scheduled_events );
 		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		// Legacy docs warm crons are cleared by literal name on activation so
+		// upgrades from the prewarm/context-warm era don't strand schedules.
+		$this->assertContains( 'flavor_agent_prewarm_docs', WordPressTestState::$cleared_cron_hooks );
+		$this->assertContains( 'flavor_agent_warm_docs_context', WordPressTestState::$cleared_cron_hooks );
 	}
 
 	public function test_deactivation_clears_all_plugin_cron_hooks_and_pattern_lock(): void {
 		WordPressTestState::$scheduled_events                     = [
-			PatternIndex::CRON_HOOK                => [ 'hook' => PatternIndex::CRON_HOOK ],
-			ActivityRepository::PRUNE_CRON_HOOK    => [ 'hook' => ActivityRepository::PRUNE_CRON_HOOK ],
+			PatternIndex::CRON_HOOK             => [ 'hook' => PatternIndex::CRON_HOOK ],
+			ActivityRepository::PRUNE_CRON_HOOK => [ 'hook' => ActivityRepository::PRUNE_CRON_HOOK ],
 			ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK => [ 'hook' => ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK ],
-			AISearchClient::PREWARM_CRON_HOOK      => [ 'hook' => AISearchClient::PREWARM_CRON_HOOK ],
-			AISearchClient::CONTEXT_WARM_CRON_HOOK => [ 'hook' => AISearchClient::CONTEXT_WARM_CRON_HOOK ],
+			'flavor_agent_prewarm_docs'         => [ 'hook' => 'flavor_agent_prewarm_docs' ],
+			'flavor_agent_warm_docs_context'    => [ 'hook' => 'flavor_agent_warm_docs_context' ],
 			PatternSearchInstanceManager::PROVISION_CRON_HOOK => [ 'hook' => PatternSearchInstanceManager::PROVISION_CRON_HOOK ],
-			CoreRoadmapGuidance::WARM_CRON_HOOK    => [ 'hook' => CoreRoadmapGuidance::WARM_CRON_HOOK ],
+			CoreRoadmapGuidance::WARM_CRON_HOOK => [ 'hook' => CoreRoadmapGuidance::WARM_CRON_HOOK ],
 		];
 		WordPressTestState::$transients['flavor_agent_sync_lock'] = time();
 
@@ -231,8 +235,9 @@ final class PluginLifecycleTest extends TestCase {
 				PatternIndex::CRON_HOOK,
 				ActivityRepository::PRUNE_CRON_HOOK,
 				ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK,
-				AISearchClient::PREWARM_CRON_HOOK,
-				AISearchClient::CONTEXT_WARM_CRON_HOOK,
+				// Legacy docs warm crons stay cleared by literal name on deactivation.
+				'flavor_agent_prewarm_docs',
+				'flavor_agent_warm_docs_context',
 				PatternSearchInstanceManager::PROVISION_CRON_HOOK,
 				CoreRoadmapGuidance::WARM_CRON_HOOK,
 			],

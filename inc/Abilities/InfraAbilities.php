@@ -102,12 +102,9 @@ final class InfraAbilities {
 					'configured' => $qdrant_configured,
 				],
 				'cloudflare_ai_search'  => [
-					'configured'               => $cloudflare_configured,
-					'instanceId'               => $cloudflare_configured ? $cloudflare_ai_search_id : null,
-					'runtime'                  => $cloudflare_runtime_state,
-					'lastSourceTypes'          => (array) ( $cloudflare_runtime_state['lastSourceTypes'] ?? [] ),
-					'lastFreshness'            => (array) ( $cloudflare_runtime_state['lastFreshness'] ?? [] ),
-					'lastGroundingFingerprint' => (string) ( $cloudflare_runtime_state['lastGroundingFingerprint'] ?? '' ),
+					'configured' => $cloudflare_configured,
+					'instanceId' => $cloudflare_configured ? $cloudflare_ai_search_id : null,
+					'runtime'    => $cloudflare_runtime_state,
 				],
 			],
 		];

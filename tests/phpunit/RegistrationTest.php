@@ -1544,7 +1544,7 @@ final class RegistrationTest extends TestCase {
 		}
 	}
 
-	public function test_register_abilities_exposes_wordpress_docs_entity_key_schema(): void {
+	public function test_register_abilities_wordpress_docs_schema_drops_entity_key(): void {
 		Registration::register_category();
 		Registration::register_abilities();
 		Registration::register_recommendation_abilities();
@@ -1553,34 +1553,25 @@ final class RegistrationTest extends TestCase {
 
 		$this->assertIsArray( $ability );
 		$this->assertSame( [ 'query' ], $ability['input_schema']['required'] ?? null );
-		$this->assertSame(
-			'string',
-			$ability['input_schema']['properties']['entityKey']['type'] ?? null
-		);
-		$this->assertStringContainsString(
-			'namespace/block-name',
-			(string) ( $ability['input_schema']['properties']['entityKey']['description'] ?? '' )
-		);
-		$this->assertStringContainsString(
-			'template:404',
-			(string) ( $ability['input_schema']['properties']['entityKey']['description'] ?? '' )
+		$this->assertArrayNotHasKey(
+			'entityKey',
+			$ability['input_schema']['properties'] ?? []
 		);
 		$this->assertSame(
 			'object',
 			$ability['output_schema']['properties']['docsGrounding']['type'] ?? null
 		);
-		$wordpress_docs_coverage_properties =
-			$ability['output_schema']['properties']['docsGrounding']['properties']['coverage']['properties'] ?? [];
-		$this->assertArrayNotHasKey( 'withinGrace', $wordpress_docs_coverage_properties );
-		$this->assertArrayNotHasKey( 'graceLastKnownCurrentAt', $wordpress_docs_coverage_properties );
-		$this->assertArrayNotHasKey( 'graceExpiresAt', $wordpress_docs_coverage_properties );
 		$this->assertSame(
 			'string',
 			$ability['output_schema']['properties']['docsGroundingFingerprint']['type'] ?? null
 		);
 		$this->assertSame(
 			'string',
-			$ability['output_schema']['properties']['guidance']['items']['properties']['retrievedAt']['type'] ?? null
+			$ability['output_schema']['properties']['guidance']['items']['properties']['contentHash']['type'] ?? null
+		);
+		$this->assertArrayNotHasKey(
+			'retrievedAt',
+			$ability['output_schema']['properties']['guidance']['items']['properties'] ?? []
 		);
 	}
 
@@ -1605,15 +1596,16 @@ final class RegistrationTest extends TestCase {
 				: [];
 
 			$docs_grounding_properties = $properties['docsGrounding']['properties'] ?? [];
-			$coverage_properties       = $docs_grounding_properties['coverage']['properties'] ?? [];
 
 			$this->assertSame( 'object', $properties['docsGrounding']['type'] ?? null, $ability_id );
+			$this->assertSame(
+				[ 'available', 'sourceTypes', 'count' ],
+				array_keys( $docs_grounding_properties ),
+				$ability_id
+			);
+			$this->assertSame( 'boolean', $docs_grounding_properties['available']['type'] ?? null, $ability_id );
 			$this->assertSame( 'array', $docs_grounding_properties['sourceTypes']['type'] ?? null, $ability_id );
-			$this->assertSame( 'object', $docs_grounding_properties['coverage']['type'] ?? null, $ability_id );
-			$this->assertSame( 'boolean', $coverage_properties['hasCurrentReleaseCycle']['type'] ?? null, $ability_id );
-			$this->assertArrayNotHasKey( 'withinGrace', $coverage_properties, $ability_id );
-			$this->assertArrayNotHasKey( 'graceLastKnownCurrentAt', $coverage_properties, $ability_id );
-			$this->assertArrayNotHasKey( 'graceExpiresAt', $coverage_properties, $ability_id );
+			$this->assertSame( 'integer', $docs_grounding_properties['count']['type'] ?? null, $ability_id );
 			$this->assertSame( 'string', $properties['docsGroundingFingerprint']['type'] ?? null, $ability_id );
 		}
 	}
@@ -1947,6 +1939,20 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'string',
 			$status_ability['output_schema']['properties']['surfaces']['properties']['template']['properties']['message']['type'] ?? null
+		);
+		// The docs runtime signal returned by InfraAbilities::check_status() must
+		// stay declared so schema-driven clients see the full payload contract.
+		$this->assertSame(
+			'object',
+			$status_ability['output_schema']['properties']['backends']['properties']['cloudflare_ai_search']['properties']['runtime']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$status_ability['output_schema']['properties']['backends']['properties']['cloudflare_ai_search']['properties']['runtime']['properties']['status']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$status_ability['output_schema']['properties']['backends']['properties']['cloudflare_ai_search']['properties']['runtime']['properties']['lastResultCount']['type'] ?? null
 		);
 
 		$this->assertIsArray( $tokens_ability );

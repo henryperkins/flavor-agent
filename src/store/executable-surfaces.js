@@ -24,7 +24,7 @@ import {
 	createExecutableSurfaceFetchConfig,
 	createExecutableSurfaceReviewFreshnessConfig,
 } from './executable-surface-runtime';
-import { normalizeDocsGroundingWarning } from '../utils/docs-grounding-warning';
+import { deriveDocsGroundingWarning } from '../utils/docs-grounding-warning';
 import {
 	buildRecommendationSetId,
 	decorateRecommendationPayload,
@@ -816,7 +816,7 @@ function reduceExecutableSurface( state, action, def ) {
 			[ def.lastAppliedOperationsKey ]: [],
 			[ def.reviewStaleReasonKey ]: null,
 			[ def.staleReasonKey ]: null,
-			[ def.docsGroundingWarningKey ]: normalizeDocsGroundingWarning(
+			[ def.docsGroundingWarningKey ]: deriveDocsGroundingWarning(
 				action.payload?.docsGrounding
 			),
 			...def.mapResultState( action[ def.inputKey ] ),

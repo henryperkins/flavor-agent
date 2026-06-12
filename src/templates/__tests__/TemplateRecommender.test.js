@@ -77,10 +77,10 @@ const { getContainer, getRoot } = setupReactTest();
 const TEMPLATE_REF = 'theme//home';
 const NEXT_TEMPLATE_REF = 'theme//single';
 const DOCS_WARNING_TEXT =
-	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+	'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.';
 const DOCS_GROUNDING_WARNING = {
-	status: 'grounded',
-	coverageStatus: 'missing-current-release-cycle',
+	tone: 'info',
+	message: DOCS_WARNING_TEXT,
 };
 const SUGGESTION = {
 	label: 'Add hero intro',

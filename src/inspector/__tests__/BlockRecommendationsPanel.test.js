@@ -161,10 +161,10 @@ const { getContainer, getRoot } = setupReactTest();
 
 let currentState = null;
 const DOCS_WARNING_TEXT =
-	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+	'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.';
 const DOCS_GROUNDING_WARNING = {
-	status: 'grounded',
-	coverageStatus: 'missing-current-release-cycle',
+	tone: 'info',
+	message: DOCS_WARNING_TEXT,
 };
 
 function getState() {
@@ -2141,7 +2141,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( reviewButton.disabled ).toBe( true );
 	} );
 
-	test( 'disables block review and apply controls when docs grounding becomes unavailable', () => {
+	test( 'keeps block review controls active when a legacy docs grounding stale reason is stored', () => {
 		const liveContext = {
 			block: {
 				name: 'core/group',
@@ -2238,25 +2238,18 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderContent();
 
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Developer Docs grounding is unavailable'
 		);
+
 		const reviewButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
-		).find( ( element ) => element.textContent === 'Refresh to review' );
-
-		expect( reviewButton ).toBeDefined();
-		expect( reviewButton.disabled ).toBe( true );
-
-		const applyButton = Array.from(
-			getContainer().querySelectorAll( 'button' )
-		).find(
-			( element ) => element.textContent === 'Apply reviewed structure'
+		).find( ( element ) =>
+			element.textContent.toLowerCase().includes( 'review' )
 		);
 
-		expect( applyButton ).toBeUndefined();
-
-		expect( mockApplyBlockStructuralSuggestion ).not.toHaveBeenCalled();
+		expect( reviewButton ).toBeDefined();
+		expect( reviewButton.disabled ).toBe( false );
 	} );
 
 	test( 'keeps rejected structural proposals visible as advisory remainder when local attributes can apply', () => {

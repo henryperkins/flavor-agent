@@ -13,15 +13,7 @@ export function getExecutableSurfaceEffectiveStaleReason( {
 		return 'server-review';
 	}
 
-	if ( reviewStaleReason === 'docs-grounding-unavailable' ) {
-		return 'docs-grounding-unavailable';
-	}
-
-	if (
-		storedStaleReason === 'docs-grounding-unavailable' ||
-		storedStaleReason === 'docs-grounding-changed' ||
-		storedStaleReason === 'missing-resolved-signature'
-	) {
+	if ( storedStaleReason === 'missing-resolved-signature' ) {
 		return storedStaleReason;
 	}
 
@@ -60,28 +52,6 @@ export function getExecutableSurfaceStaleMessage( {
 			/* translators: %s: recommendation surface label. */
 			__(
 				'This %s result no longer matches the current server-resolved apply context. Refresh before reviewing or applying anything from the previous result.',
-				'flavor-agent'
-			),
-			surfaceLabel
-		);
-	}
-
-	if ( staleReasonType === 'docs-grounding-unavailable' ) {
-		return sprintf(
-			/* translators: %s: recommendation surface label. */
-			__(
-				'This %s result no longer has trusted WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.',
-				'flavor-agent'
-			),
-			surfaceLabel
-		);
-	}
-
-	if ( staleReasonType === 'docs-grounding-changed' ) {
-		return sprintf(
-			/* translators: %s: recommendation surface label. */
-			__(
-				'This %s result no longer matches the current WordPress Developer Docs grounding. Refresh before reviewing or applying anything from the previous result.',
 				'flavor-agent'
 			),
 			surfaceLabel

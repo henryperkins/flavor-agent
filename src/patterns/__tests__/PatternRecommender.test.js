@@ -129,10 +129,10 @@ const { getRoot } = setupReactTest();
 let state = null;
 let originalMutationObserver = null;
 const DOCS_WARNING_TEXT =
-	'Developer Docs grounding is trusted, but current release-cycle sources have not been confirmed. Review current WordPress docs before applying.';
+	'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.';
 const DOCS_GROUNDING_WARNING = {
-	status: 'grounded',
-	coverageStatus: 'missing-current-release-cycle',
+	tone: 'info',
+	message: DOCS_WARNING_TEXT,
 };
 
 function createSelectMap() {

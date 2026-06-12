@@ -86,8 +86,6 @@ const HIDDEN_ADVISORY_BLOCKER_REASONS = new Set( [
 	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
 ] );
 const BLOCK_REVIEW_REVALIDATION_DEBOUNCE_MS = 300;
-const DOCS_GROUNDING_UNAVAILABLE_STALE_REASON =
-	'Developer Docs grounding is unavailable. Refresh before applying the previous result.';
 
 function getBlockPathFromEditor( blockEditor, clientId ) {
 	if ( ! clientId || ! blockEditor?.getBlock?.( clientId ) ) {
@@ -1021,12 +1019,7 @@ export function BlockRecommendationsContent( {
 	let staleScopeReason = '';
 
 	if ( isStaleResult ) {
-		if ( effectiveStaleReason === 'docs-grounding-unavailable' ) {
-			staleScopeReason = DOCS_GROUNDING_UNAVAILABLE_STALE_REASON;
-		} else if ( effectiveStaleReason === 'docs-grounding-changed' ) {
-			staleScopeReason =
-				'Developer Docs grounding changed. Refresh before applying the previous result.';
-		} else if ( effectiveStaleReason === 'missing-resolved-signature' ) {
+		if ( effectiveStaleReason === 'missing-resolved-signature' ) {
 			staleScopeReason =
 				'Server apply context is missing. Refresh before applying the previous result.';
 		} else if ( effectiveStaleReason === 'server-apply' ) {

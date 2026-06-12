@@ -711,31 +711,18 @@ final class Page {
 		</p>
 		<?php
 		$runtime_state = is_array( $state['runtime_docs_grounding'] ?? null ) ? $state['runtime_docs_grounding'] : [];
-		$source_types  = array_values( array_filter( array_map( 'sanitize_key', (array) ( $runtime_state['lastSourceTypes'] ?? [] ) ) ) );
-		$freshness     = array_values( array_filter( array_map( 'sanitize_key', (array) ( $runtime_state['lastFreshness'] ?? [] ) ) ) );
 		$diagnostics   = [];
-
-		if ( [] !== $source_types ) {
-			$diagnostics[] = sprintf(
-				/* translators: %s: docs source type list. */
-				__( 'Sources: %s.', 'flavor-agent' ),
-				implode( ', ', $source_types )
-			);
-		}
-
-		if ( [] !== $freshness ) {
-			$diagnostics[] = sprintf(
-				/* translators: %s: docs freshness list. */
-				__( 'Freshness: %s.', 'flavor-agent' ),
-				implode( ', ', $freshness )
-			);
-		}
 
 		if ( '' !== (string) ( $runtime_state['lastSearchAt'] ?? '' ) ) {
 			$diagnostics[] = sprintf(
 				/* translators: %s: last docs search timestamp. */
 				__( 'Last search: %s.', 'flavor-agent' ),
 				(string) ( $runtime_state['lastSearchAt'] ?? '' )
+			);
+			$diagnostics[] = sprintf(
+				/* translators: %d: number of guidance chunks returned by the last docs search. */
+				__( 'Last result count: %d.', 'flavor-agent' ),
+				(int) ( $runtime_state['lastResultCount'] ?? 0 )
 			);
 		}
 
