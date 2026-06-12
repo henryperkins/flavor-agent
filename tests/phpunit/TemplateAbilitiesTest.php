@@ -161,6 +161,53 @@ final class TemplateAbilitiesTest extends TestCase {
 		$this->assertArrayNotHasKey( 'content', $result['templates'][0] );
 	}
 
+	public function test_list_templates_casts_non_string_fields_to_strings(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+		];
+		// get_block_templates() output is filterable, so fields are not
+		// guaranteed to be strings.
+		WordPressTestState::$block_templates['wp_template'] = [
+			(object) [
+				'id'          => 42,
+				'slug'        => 7,
+				'title'       => 99,
+				'description' => null,
+				'content'     => 123,
+			],
+		];
+
+		$result = TemplateAbilities::list_templates( [ 'includeContent' => true ] );
+
+		$this->assertSame( '42', $result['templates'][0]['id'] );
+		$this->assertSame( '7', $result['templates'][0]['slug'] );
+		$this->assertSame( '99', $result['templates'][0]['title'] );
+		$this->assertSame( '', $result['templates'][0]['description'] );
+		$this->assertSame( '123', $result['templates'][0]['content'] );
+	}
+
+	public function test_list_template_parts_casts_non_string_fields_to_strings(): void {
+		WordPressTestState::$capabilities                        = [
+			'edit_theme_options' => true,
+		];
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => 'theme//header',
+				'slug'    => 8,
+				'title'   => 100,
+				'area'    => 'header',
+				'content' => 456,
+			],
+		];
+
+		$result = TemplateAbilities::list_template_parts( [ 'includeContent' => true ] );
+
+		$this->assertSame( '8', $result['templateParts'][0]['slug'] );
+		$this->assertSame( '100', $result['templateParts'][0]['title'] );
+		$this->assertSame( 'header', $result['templateParts'][0]['area'] );
+		$this->assertSame( '456', $result['templateParts'][0]['content'] );
+	}
+
 	public function test_recommend_template_resolve_signature_only_returns_review_and_resolved_signatures(): void {
 		$result = TemplateAbilities::recommend_template(
 			[

@@ -18,13 +18,13 @@ final class TemplateRepository {
 
 		foreach ( $parts as $part ) {
 			$entry = [
-				'slug'  => $part->slug ?? '',
-				'title' => $part->title ?? '',
-				'area'  => $part->area ?? '',
+				'slug'  => (string) ( $part->slug ?? '' ),
+				'title' => (string) ( $part->title ?? '' ),
+				'area'  => (string) ( $part->area ?? '' ),
 			];
 
 			if ( $include_content ) {
-				$entry['content'] = $part->content ?? '';
+				$entry['content'] = (string) ( $part->content ?? '' );
 			}
 
 			$result[] = $entry;
@@ -39,14 +39,14 @@ final class TemplateRepository {
 
 		foreach ( $templates as $template ) {
 			$entry = [
-				'id'          => $template->id ?? '',
-				'slug'        => $template->slug ?? '',
-				'title'       => $template->title ?? '',
-				'description' => $template->description ?? '',
+				'id'          => (string) ( $template->id ?? '' ),
+				'slug'        => (string) ( $template->slug ?? '' ),
+				'title'       => (string) ( $template->title ?? '' ),
+				'description' => (string) ( $template->description ?? '' ),
 			];
 
 			if ( $include_content ) {
-				$entry['content'] = $template->content ?? '';
+				$entry['content'] = (string) ( $template->content ?? '' );
 			}
 
 			$result[] = $entry;

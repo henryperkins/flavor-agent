@@ -704,7 +704,10 @@ final class Registration {
 									'slug'    => [ 'type' => 'string' ],
 									'title'   => [ 'type' => 'string' ],
 									'area'    => [ 'type' => 'string' ],
-									'content' => [ 'type' => 'string' ],
+									'content' => [
+										'type'        => 'string',
+										'description' => 'Template-part markup. Present only when includeContent is true and the caller has the edit_theme_options capability; omitted otherwise.',
+									],
 								],
 							],
 						],
@@ -744,7 +747,10 @@ final class Registration {
 									'slug'        => [ 'type' => 'string' ],
 									'title'       => [ 'type' => 'string' ],
 									'description' => [ 'type' => 'string' ],
-									'content'     => [ 'type' => 'string' ],
+									'content'     => [
+										'type'        => 'string',
+										'description' => 'Template markup. Present only when includeContent is true and the caller has the edit_theme_options capability; omitted otherwise.',
+									],
 								],
 							],
 						],
