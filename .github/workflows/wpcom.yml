@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      WPCOM_ARTIFACT_DIR: ${{ runner.temp }}/wpcom-artifact
+      WPCOM_ARTIFACT_DIR: /tmp/wpcom-artifact
 
     steps:
       - name: Checkout
