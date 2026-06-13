@@ -1,25 +1,63 @@
-name: Publish Website
+name: Publish Plugin
 
 on:
   push:
     branches:
       - master
   workflow_dispatch:
+
 jobs:
-  Publish-Website:
-    name: Publish-Website
+  Publish-Plugin:
+    name: Publish Plugin
     runs-on: ubuntu-latest
+
+    env:
+      WPCOM_ARTIFACT_DIR: ${{ runner.temp }}/wpcom-artifact
+
     steps:
-      - uses: actions/checkout@master
-      - name: Install PHP dependencies
-        uses: php-actions/composer@v6
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          dev: no
+          node-version: "20"
+          cache: npm
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Build editor and admin assets
+        run: npm run build
+
+      - name: Prepare WordPress.com plugin artifact
+        run: bash scripts/prepare-release.sh "$WPCOM_ARTIFACT_DIR"
+
+      - name: Validate WordPress.com plugin artifact
+        run: |
+          test -f "$WPCOM_ARTIFACT_DIR/flavor-agent.php"
+          test -f "$WPCOM_ARTIFACT_DIR/vendor/autoload.php"
+          test -f "$WPCOM_ARTIFACT_DIR/build/index.js"
+          test -f "$WPCOM_ARTIFACT_DIR/build/index.asset.php"
+          test -f "$WPCOM_ARTIFACT_DIR/build/admin.js"
+          test -f "$WPCOM_ARTIFACT_DIR/build/admin.asset.php"
+          test -f "$WPCOM_ARTIFACT_DIR/build/activity-log.js"
+          test -f "$WPCOM_ARTIFACT_DIR/build/activity-log.asset.php"
+          test ! -d "$WPCOM_ARTIFACT_DIR/node_modules"
+          test ! -d "$WPCOM_ARTIFACT_DIR/src"
+          test ! -d "$WPCOM_ARTIFACT_DIR/tests"
+          test ! -d "$WPCOM_ARTIFACT_DIR/.github"
+
       - name: Upload the artifact
         uses: actions/upload-artifact@v4
         with:
           name: wpcom
-          path: |
-            .
-            !.git*
+          path: ${{ env.WPCOM_ARTIFACT_DIR }}
           retention-days: 1

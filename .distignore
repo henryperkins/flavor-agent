@@ -28,6 +28,7 @@ docs
 .env.example
 flavor-agent-*-php-*.md
 jsconfig.json
+jest.config.js
 node_modules
 output
 package-lock.json
