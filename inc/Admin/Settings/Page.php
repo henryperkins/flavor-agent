@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\Activity\RequestLoggingBridge;
+use FlavorAgent\AI\FeatureBootstrap;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Embeddings\QdrantClient;
@@ -280,6 +281,27 @@ final class Page {
 		<?php
 	}
 
+	/**
+	 * Describe which AI runtime is currently serving text generation.
+	 *
+	 * On WordPress.com managed hosting the WordPress AI Client ("ai") feature
+	 * plugin cannot be installed, and Flavor Agent falls back to Jetpack AI.
+	 * This surfaces that distinction at a glance.
+	 *
+	 * @return array{label: string, tone: string}
+	 */
+	private static function get_ai_runtime_overview_status(): array {
+		if ( FeatureBootstrap::jetpack_ai_runtime_active() ) {
+			return State::make_badge( __( 'Jetpack AI', 'flavor-agent' ), 'success' );
+		}
+
+		if ( FeatureBootstrap::canonical_contracts_available() ) {
+			return State::make_badge( __( 'WordPress AI Client', 'flavor-agent' ), 'success' );
+		}
+
+		return State::make_badge( __( 'Not available', 'flavor-agent' ), 'warning' );
+	}
+
 	private static function render_setup_status_cards( array $state ): void {
 		$chat_status        = ! empty( $state['runtime_chat']['configured'] )
 			? State::make_badge( __( 'Ready', 'flavor-agent' ), 'success' )
@@ -289,9 +311,16 @@ final class Page {
 		$docs_status        = State::get_docs_overview_status( $state );
 		$guidelines_status  = State::get_guidelines_overview_status( $state );
 		$experiments_status = State::get_experiments_overview_status( $state );
+		$runtime_status     = self::get_ai_runtime_overview_status();
 		?>
 		<div class="flavor-agent-settings__glance">
 			<?php
+			self::render_setup_status_card(
+				__( 'AI Runtime', 'flavor-agent' ),
+				$runtime_status['label'],
+				$runtime_status['tone'],
+				'#' . State::get_section_dom_id( Config::GROUP_CHAT )
+			);
 			self::render_setup_status_card(
 				__( 'AI Model', 'flavor-agent' ),
 				$chat_status['label'],

@@ -5,22 +5,18 @@ This document is the contract reference for the built-in public Developer Docs g
 Use it when you need to answer:
 
 - Who owns the public Cloudflare AI Search corpus used for Developer Docs grounding?
-- Which source scopes and refresh cadence are required before the current-release coverage gate can ship?
-- Which validation evidence must be recorded before enabling the current-release-cycle coverage gate?
+- Which source scopes and refresh cadence are required for the managed corpus?
+- Which validation evidence must be recorded when the corpus is refreshed?
 
 Endpoint: `https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search`
 
 Owner: Flavor Agent release maintainer for the built-in public Developer Docs grounding endpoint.
 
-Execution stop line: do not enable the current-release coverage gate until the person or team with Cloudflare AI Search corpus access has explicitly accepted this ownership and refresh cadence in the release notes or this runbook. The gate surfaces a trusted-but-degraded warning (it does not block recommendations on the release-cycle dimension), and it stays disabled by default.
+Execution stop line: corpus refreshes (and especially stale deletion) require that the person or team with Cloudflare AI Search corpus access has explicitly accepted this ownership and refresh cadence in the release notes or this runbook.
 
-Current release decision: for the `v0.1.0` target release environment, corpus ownership and the refresh cadence below are accepted as of the 2026-05-19 validation pass. Enable the current-release coverage gate (which surfaces the trusted-but-degraded warning) in the target release environment with:
+Current release decision: for the `v0.1.0` target release environment, corpus ownership and the refresh cadence below are accepted as of the 2026-05-19 validation pass. There is no runtime coverage gate or grounding constant to configure: grounding is best-effort (`AISearchClient::maybe_search_best_effort`), never blocks a recommendation, and at runtime applies only structural URL hygiene plus non-gating source labels. Trust and currency of the corpus are owned by `scripts/update-docs-ai-search.js` at ingestion time.
 
-```php
-define( 'FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE', true );
-```
-
-Alternatively, a target environment may return `true` from the `flavor_agent_docs_grounding_require_current_coverage` filter. Keep Cloudflare AI Search reranking disabled for the built-in public Developer Docs endpoint until a dedicated reranking evaluation fixture exists and duplicate/provenance-poor chunks have been cleaned up or proven harmless under `DocsGroundingSourcePolicy`.
+Keep Cloudflare AI Search reranking disabled for the built-in public Developer Docs endpoint until a dedicated reranking evaluation fixture exists and duplicate/provenance-poor chunks have been cleaned up or proven harmless.
 
 Required source scopes:
 - `https://developer.wordpress.org/block-editor/`
@@ -67,9 +63,9 @@ Use this workflow whenever the active WordPress release cycle changes, a Field G
    - Make/Core release candidate, schedule, and release party posts that change developer-facing expectations
    - Make/Core Gutenberg release posts that are inside the active core cycle or are needed as cutting-edge compatibility context
    - WordPress Developer Blog monthly "What's new for developers?" posts and focused developer articles that document active-cycle APIs, block editor changes, theme.json behavior, build tooling, or connector/runtime expectations
-4. Keep supporting sources such as Make/Test, Make/Playground, Make/AI, and Gutenberg GitHub releases in separate research snapshots unless the runtime policy is expanded. They can help humans decide what to ingest, but they do not currently satisfy Flavor Agent's trusted-source coverage gate.
+4. Keep supporting sources such as Make/Test, Make/Playground, Make/AI, and Gutenberg GitHub releases in separate research snapshots. They can help humans decide what to ingest, but they are not part of the ingestion allowlist (`TRUSTED_ROOTS` in `scripts/update-docs-ai-search.js`).
 5. Remove or deprioritize superseded release-cycle source entries when their `published_at` date can no longer pass the freshness windows or WordPress 7.0 release-date rule below. Retaining them as historical search context is acceptable only if current release-cycle sources still rank for the validation query.
-6. After ingestion, run both an MCP search smoke check and the public endpoint validation query. Do not enable or keep the current-release coverage gate unless both the source mix and the freshness metadata match this runbook.
+6. After ingestion, run both an MCP search smoke check and the public endpoint validation query. Confirm both the source mix and the freshness metadata match this runbook before trusting the refreshed corpus.
 
 ## Source Eligibility
 
@@ -85,9 +81,9 @@ Current release-cycle and cutting-edge developer update sources qualify only whe
 - `developer.wordpress.org/news/`
 - `make.wordpress.org/core/`
 
-For current-release coverage, `make-core` chunks qualify when they are published within 21 days of validation, and `developer-blog` chunks qualify when they are published within 45 days. For WordPress 7.0, a `make-core` or `developer-blog` chunk also qualifies when its `published_at` is on or after the May 20, 2026 public release date. Recrawling an older release post does not make it current. Stable `developer-docs` chunks may use crawl freshness and are current for 90 days.
+For corpus-currency validation, `make-core` chunks count as current when they are published within 21 days of validation, and `developer-blog` chunks within 45 days. For WordPress 7.0, a `make-core` or `developer-blog` chunk also counts when its `published_at` is on or after the May 20, 2026 public release date. Recrawling an older release post does not make it current. Stable `developer-docs` chunks may use crawl freshness and count as current for 90 days.
 
-The corpus may include additional official WordPress project sources for agent research, but Flavor Agent's recommendation grounding must still filter by `inc/Support/DocsGroundingSourcePolicy.php`. Do not treat sources outside the trusted scopes as satisfying the release gate unless the policy, tests, and this runbook are updated together.
+The corpus may include additional official WordPress project sources for agent research, but keeping the desired corpus inside the scopes above is the ingestion script's job (`TRUSTED_ROOTS` in `scripts/update-docs-ai-search.js`); at runtime `inc/Support/DocsGroundingSourcePolicy.php` only labels chunks for display and prompts. Do not widen the ingestion allowlist unless the updater, its tests, and this runbook are updated together.
 
 ## Chunk Metadata
 
@@ -100,14 +96,14 @@ Every ingested item or chunk should preserve enough provenance for `inc/Cloudfla
 - a stable title
 - a source key that is either reconstructable to the canonical URL (`<host>/<path>` or `ai-search/<instanceId>/<host>/<path>/<hash>/part-0001.md`), or a bounded managed key `ai-search/<instanceId>/<host>/<slug>/<short-hash>/part-0001.md` whose `<host>` segment matches the canonical URL host. Deep developer-docs URLs exceed Cloudflare's 128-byte item-filename limit, so their keys carry a truncated slug plus short hash and rely on the metadata `source_url` for provenance.
 
-Source URLs must be HTTPS, must not include credentials, must not use a non-443 port, and must not contain encoded path delimiters or `.` / `..` path segments. If the source key cannot be reconciled with the canonical URL — it reconstructs to a different URL, sits outside the managed `ai-search/<instanceId>/` namespace, mismatches the URL host, or contains path traversal — Flavor Agent discards the chunk.
+Source URLs must be HTTPS, must not include credentials, must not use a non-443 port, and must not contain encoded path delimiters or `.` / `..` path segments. Source keys are only a URL-derivation fallback for chunks with no explicit metadata/frontmatter URL: Flavor Agent derives URLs solely from keys inside the managed `ai-search/<instanceId>/` namespace, and a chunk that resolves no structurally valid URL at all is dropped. A chunk that carries a valid explicit URL is kept regardless of its source-key namespace.
 
 Refresh cadence:
 - Weekly during active WordPress major-release cycles.
 - Within 48 hours of a Make/Core Field Guide, dev note batch, RC post, or Gutenberg release post.
 - Monthly outside active major-release cycles.
 
-Release gate:
+Corpus validation:
 - Run the validation query: `WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes`.
 - Replace `WordPress 7.0` in the validation query with the active major-release label whenever the release cycle changes.
 - In an agent session with the MCP server available, run the same query through `wordpress-docs-ai-search` and confirm the returned chunks include the stable docs plus current-cycle sources expected below.
@@ -115,13 +111,12 @@ Release gate:
 - Confirm at least one `developer-docs` chunk and at least one `make-core` or `developer-blog` chunk.
 - Confirm release-cycle chunks from `make.wordpress.org/core` or the Developer Blog include a qualifying `published_at`: within the rolling freshness window, or on/after May 20, 2026 for WordPress 7.0. A recent `retrieved_at` crawl timestamp does not make an older release-cycle post current. Stable handbook/reference chunks from `developer.wordpress.org` may use `retrieved_at` for crawl freshness because those pages represent maintained reference material rather than dated release-cycle posts.
 - Record the observed `retrieved_at`, `published_at`, source URLs, and result count in the release notes or verification log.
-- Record the validation evidence under `docs/validation/` and make this runbook the final release decision point for enabling `FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE`.
-- Enabling the gate surfaces a warning; it does not fail-close recommendations on the release-cycle dimension. With `FLAVOR_AGENT_DOCS_GROUNDING_REQUIRE_CURRENT_COVERAGE` (or the `flavor_agent_docs_grounding_require_current_coverage` filter) on, the coverage probe runs and a missing current release-cycle source attaches a trusted-but-degraded warning to recommendations instead of blocking them. Record the validation evidence before enabling so operators know when the warning is expected.
+- Record the validation evidence under `docs/validation/`; this runbook is the decision record for corpus refreshes.
 
-Coverage behavior:
-- `missing-current-release-cycle` (trusted stable Developer Docs present, but no current `make-core`/`developer-blog` source) degrades-to-warn: `DocsGuidanceResult::resolve_status()` resolves `grounded`/`degraded`/`stale` and the coverage summary carries the warning, so recommendations proceed. There is no coverage grace window, last-known-current snapshot, or gate-block Settings warning — make-core publishing is bursty, so blocking on currency would dead-end recommendations during normal between-release lulls.
-- Hard-blocks (`unavailable` status, HTTP 503 via `DocsGuidanceResult::unavailable_error()`, which still fires the `flavor_agent_docs_grounding_unavailable` action) remain for three cases only: no trusted official guidance at all, `missing-developer-docs` (make-core/developer-blog present but no stable Developer Docs backbone), and a coverage-probe transport failure. These are genuine outages, not a release-cycle gap.
-- Validation paths (`AISearchClient::validate_configuration()` and the Settings page) see the raw probe result so admins can act on corpus drift.
+Runtime behavior:
+- Grounding is best-effort: each recommendation runs one cached corpus search (`AISearchClient::maybe_search_best_effort`, 6-hour query cache, bounded timeout). A transport failure attaches no guidance, records an `ok`/`unreachable` signal in `flavor_agent_docs_runtime_state`, and never blocks the recommendation; the editor shows a soft "running without docs grounding" notice.
+- There is no coverage probe, release-cycle gate, grace window, or 503 path at request time. Corpus currency is validated by the workflow above at ingestion/refresh time, not per request.
+- Validation paths (`AISearchClient::validate_configuration()` and the Settings page) still query the endpoint directly so admins can act on corpus drift.
 
 ## MCP search endpoint behavior
 
@@ -133,5 +128,5 @@ The `wordpress-docs-ai-search` MCP server points agents at the same corpus throu
 
 Consequences:
 
-- Agents consuming the MCP server must apply the trusted-source and currency rules in `inc/Support/DocsGroundingSourcePolicy.php` themselves and must not rely on server-side bounding or filtering.
-- The plugin's recommendation grounding is unaffected: it queries `/search` with `ai_search_options.retrieval.*` and enforces trust, freshness, and source classification in PHP (`DocsGroundingSourcePolicy` + `AISearchClient::normalize_chunks()`), independent of any Cloudflare-side filtering. De-duplication is intentionally not applied in `normalize_chunks()` because distinct chunks of the same current item usually carry different excerpts, and `source_coverage_summary()` already collapses duplicate source types via `array_unique`, so the coverage gate is not skewed by repeated chunks. Cross-generation duplicate items are corpus hygiene issues: clear them with a healthy full `delete_stale` updater run rather than client-side chunk filtering inside the plugin.
+- Agents consuming the MCP server should weigh source scope and `published_at`/`retrieved_at` currency themselves and must not rely on server-side bounding or filtering; the corpus allowlist lives in `scripts/update-docs-ai-search.js`, and the plugin's runtime policy only labels sources.
+- The plugin's recommendation grounding is unaffected: it queries `/search` with `ai_search_options.retrieval.*` and applies structural URL hygiene plus non-gating source labels in PHP (`DocsGroundingSourcePolicy` + `AISearchClient::normalize_chunks()`), independent of any Cloudflare-side filtering. De-duplication is intentionally not applied in `normalize_chunks()` because distinct chunks of the same current item usually carry different excerpts. Cross-generation duplicate items are corpus hygiene issues: clear them with a healthy full `delete_stale` updater run rather than client-side chunk filtering inside the plugin.

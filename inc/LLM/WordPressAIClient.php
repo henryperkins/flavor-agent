@@ -28,7 +28,33 @@ final class WordPressAIClient {
 	private const SCHEMA_UNION_LIMIT               = 16;
 	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
 
+	/**
+	 * Whether the WordPress AI Client runtime (the "ai" feature plugin / SDK)
+	 * is present. When it is absent we may still operate via Jetpack AI.
+	 */
+	private static function wordpress_ai_client_runtime_available(): bool {
+		return function_exists( 'WordPress\\AI\\get_ai_service' )
+			|| function_exists( 'wp_ai_client_prompt' );
+	}
+
+	/**
+	 * Whether requests should be routed through Jetpack AI instead of the
+	 * WordPress AI Client. True only when the AI Client runtime is unavailable
+	 * (e.g. WordPress.com managed hosting) but Jetpack AI is reachable.
+	 */
+	private static function should_use_jetpack_ai(): bool {
+		if ( self::wordpress_ai_client_runtime_available() ) {
+			return false;
+		}
+
+		return JetpackAIProvider::is_available();
+	}
+
 	public static function is_supported( ?string $provider = null ): bool {
+		if ( self::should_use_jetpack_ai() ) {
+			return true;
+		}
+
 		$prompt = self::make_prompt( 'Flavor Agent availability check.' );
 
 		if ( is_wp_error( $prompt ) ) {
@@ -58,6 +84,22 @@ final class WordPressAIClient {
 		Provider::record_runtime_chat_configuration( null );
 		Provider::record_runtime_chat_metrics( null );
 		Provider::record_runtime_chat_diagnostics( null );
+
+		// On sites without the WordPress AI Client runtime (e.g. WordPress.com
+		// managed hosting, where the "ai" feature plugin cannot be installed)
+		// route text generation through Jetpack AI over the existing Jetpack
+		// connection. The AI Client prompt-builder pipeline below is skipped
+		// entirely because its builder objects do not exist in this mode.
+		if ( self::should_use_jetpack_ai() ) {
+			return self::chat_via_jetpack_ai(
+				$system_prompt,
+				$user_prompt,
+				$reasoning_effort,
+				$schema,
+				$ability_name
+			);
+		}
+
 		$selection         = self::resolve_provider_model_selection( $provider );
 		$resolved_provider = $selection['provider'];
 		$model_options     = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
@@ -275,6 +317,61 @@ final class WordPressAIClient {
 		}
 
 		return $parsed['text'];
+	}
+
+	/**
+	 * Route a chat request through Jetpack AI.
+	 *
+	 * Mirrors the diagnostics/metrics recording of the AI Client path so the
+	 * Settings > AI Activity log and editor surfaces behave consistently, then
+	 * delegates the transport to JetpackAIProvider.
+	 *
+	 * @param array<string, mixed>|null $schema
+	 */
+	private static function chat_via_jetpack_ai(
+		string $system_prompt,
+		string $user_prompt,
+		?string $reasoning_effort,
+		?array $schema,
+		string $ability_name
+	): string|\WP_Error {
+		$system_prompt = WordPressAIPolicy::system_instruction(
+			$system_prompt,
+			$ability_name,
+			[
+				'provider'        => JetpackAIProvider::PROVIDER_SLUG,
+				'reasoningEffort' => self::normalize_reasoning_effort_value( $reasoning_effort ),
+				'hasSchema'       => is_array( $schema ) && [] !== $schema,
+			]
+		);
+
+		$schema = self::prepare_output_schema( $schema );
+
+		$timeout_seconds = self::request_timeout_seconds(
+			JetpackAIProvider::PROVIDER_SLUG,
+			$reasoning_effort,
+			$schema
+		);
+
+		Provider::record_runtime_chat_configuration(
+			[
+				'provider' => JetpackAIProvider::PROVIDER_SLUG,
+				'model'    => '',
+			]
+		);
+
+		$started_at = microtime( true );
+		$result     = JetpackAIProvider::chat(
+			$system_prompt,
+			$user_prompt,
+			$schema,
+			$timeout_seconds
+		);
+		$elapsed_ms = max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) );
+
+		Provider::record_runtime_chat_metrics( [ 'latencyMs' => $elapsed_ms ] );
+
+		return $result;
 	}
 
 	public static function get_setup_message(): string {

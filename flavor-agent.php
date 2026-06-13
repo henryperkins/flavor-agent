@@ -10,8 +10,13 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 7.0
  * Requires PHP: 8.2
- * Requires Plugins: ai
  */
+
+// Note: the WordPress AI Client ("ai") feature plugin is an optional, preferred
+// runtime. When it is absent -- e.g. on WordPress.com managed hosting where it
+// cannot be installed -- Flavor Agent falls back to Jetpack AI via
+// FlavorAgent\LLM\JetpackAIProvider. The hard "Requires Plugins: ai" header was
+// therefore removed so the plugin can activate in Jetpack-AI mode.
 
 declare(strict_types=1);
 

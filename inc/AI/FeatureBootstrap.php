@@ -104,12 +104,29 @@ final class FeatureBootstrap {
 		}
 	}
 
+	/**
+	 * Whether Jetpack AI is serving requests in place of the WordPress AI
+	 * Client runtime (e.g. on WordPress.com managed hosting).
+	 */
+	public static function jetpack_ai_runtime_active(): bool {
+		return ! self::ai_feature_contracts_available()
+			&& \class_exists( '\\FlavorAgent\\LLM\\JetpackAIProvider' )
+			&& \FlavorAgent\LLM\JetpackAIProvider::is_available();
+	}
+
 	public static function render_missing_contract_notice(): void {
 		if ( self::canonical_contracts_available() ) {
 			return;
 		}
 
 		if ( ! \function_exists( 'current_user_can' ) || ! \current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		// In Jetpack-AI mode the canonical AI Client contracts are intentionally
+		// absent and text generation runs through Jetpack AI. Suppress the
+		// "missing contract" warning so it does not nag on every admin page.
+		if ( self::jetpack_ai_runtime_active() ) {
 			return;
 		}
 
