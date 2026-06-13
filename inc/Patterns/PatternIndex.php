@@ -1440,19 +1440,49 @@ final class PatternIndex {
 	private static function cloudflare_ai_search_processing_error( array $processing_status ): \WP_Error {
 		$errors    = array_keys( $processing_status['errors'] );
 		$retryable = [] !== $errors && [] === array_diff( $errors, self::CLOUDFLARE_AI_SEARCH_RETRYABLE_ITEM_ERRORS );
+		$failed    = max( 1, (int) $processing_status['failed'] );
 
 		return new \WP_Error(
 			'cloudflare_pattern_ai_search_item_processing_error',
-			sprintf(
-				'Cloudflare AI Search could not process %d pattern item(s).',
-				max( 1, (int) $processing_status['failed'] )
-			),
+			self::cloudflare_ai_search_processing_error_message( $failed, $processing_status['errors'], $retryable ),
 			[
 				'status'      => $retryable ? 503 : 502,
 				'retryable'   => $retryable,
 				'retry_after' => $retryable ? self::CLOUDFLARE_AI_SEARCH_PROCESSING_RETRY_AFTER : null,
 				'errors'      => $processing_status['errors'],
 			]
+		);
+	}
+
+	/**
+	 * Build a user-facing message that names the specific Cloudflare AI Search
+	 * item error code(s) and counts, plus a retry hint. Without the code the
+	 * "could not process N item(s)" summary gives no path to a fix.
+	 *
+	 * @param array<string, int> $errors
+	 */
+	private static function cloudflare_ai_search_processing_error_message( int $failed, array $errors, bool $retryable ): string {
+		$parts = [];
+
+		foreach ( $errors as $code => $count ) {
+			$code    = sanitize_key( (string) $code );
+			$code    = '' !== $code ? $code : 'unknown';
+			$parts[] = sprintf( '%s (%d)', $code, max( 1, (int) $count ) );
+		}
+
+		$detail = [] !== $parts
+			? sprintf( ' Reported error(s): %s.', implode( ', ', $parts ) )
+			: '';
+
+		$hint = $retryable
+			? ' This is usually transient; the sync will retry automatically.'
+			: ' This will not retry automatically. Edit or remove the affected pattern (for example an empty pattern or one that exceeds the indexing size limit) and sync again.';
+
+		return sprintf(
+			'Cloudflare AI Search could not process %d pattern item(s).%s%s',
+			$failed,
+			$detail,
+			$hint
 		);
 	}
 
