@@ -141,6 +141,16 @@ The boundary, stated plainly: external agents can now request style applies, rea
 
 The layer is built on the WordPress 7.0 AI stack: the WordPress AI plugin (feature registration and Guidelines), the AI Client + `Settings > Connectors` (all text generation), the Abilities API (all recommendation transport), and the MCP Adapter (external exposure). See `docs/reference/abilities-and-routes.md` for exact contracts and `docs/FEATURE_SURFACE_MATRIX.md` for the per-surface demonstration map.
 
+## Upstream Governance Context
+
+The WordPress AI roadmap is moving toward shared governance primitives in Core and the canonical AI plugin: global provider discovery, AI Request Logs, Connector Approvals, ability exposure controls, model/provider routing, usage safeguards, and a proposed unified AI Management layer.
+
+Flavor Agent should treat those as the **outer policy plane**. When those upstream contracts stabilize, Flavor Agent should plug into them for site-wide permission, metering, routing, request-log, and ability-exposure decisions rather than duplicating them.
+
+This document owns the **inner mutation-governance contract**: for changes Flavor Agent mediates, the plugin still has to bound the operation, gather the right context, expose a review gate when the operation is structural or theme-level, attribute the request and apply, verify freshness before execution, and block unsafe undo after drift. Core can decide whether a plugin may use AI; Flavor Agent still decides whether a proposed block/template/style mutation is safe to apply to the current document.
+
+That split is intentional product positioning. The upstream Site Agent / AI Workspace direction validates the external-agent path, but it does not make approval an agent capability. AI can propose actions through abilities and MCP; WordPress holds the human approval decision in `Settings > AI Activity` for Flavor Agent-owned external applies.
+
 ## Update Triggers
 
 Update this document when any of these change: response schemas or operation catalogs, the validation-reasons vocabulary, actionability tiers or review gating, the activity contract or audit projections, the undo lifecycle, freshness-signature composition, or the set of abilities and MCP tools exposed externally. Per `docs/README.md`, also update `docs/FEATURE_SURFACE_MATRIX.md` when loop coverage changes for a surface.

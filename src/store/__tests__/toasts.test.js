@@ -297,6 +297,37 @@ describe( 'buildToastForActivity', () => {
 		expect( result.title ).toBe( 'Update applied' );
 	} );
 
+	it( 'template-part detail resolves for the camelCase surface alias', () => {
+		const result = buildToastForActivity( {
+			surface: 'templatePart',
+			persistedEntry: { id: 'a' },
+			suggestion: { area: 'footer' },
+			extras: { operations: [ {} ] },
+		} );
+
+		expect( result.detail ).toBe( 'footer · 1 ops' );
+	} );
+
+	it( 'global-styles detail resolves for the camelCase surface alias', () => {
+		const result = buildToastForActivity( {
+			surface: 'globalStyles',
+			persistedEntry: { id: 'a' },
+			suggestion: { stylePath: 'color.text', value: '#111' },
+		} );
+
+		expect( result.detail ).toBe( 'color.text · #111' );
+	} );
+
+	it( 'style-book detail resolves for the camelCase surface alias', () => {
+		const result = buildToastForActivity( {
+			surface: 'styleBook',
+			persistedEntry: { id: 'a' },
+			suggestion: { blockName: 'core/button', styleVariation: 'outline' },
+		} );
+
+		expect( result.detail ).toBe( 'core/button · outline' );
+	} );
+
 	it( 'template detail includes slug and operation count', () => {
 		const result = buildToastForActivity( {
 			surface: 'template',

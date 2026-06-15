@@ -55,11 +55,16 @@ function generateToastId() {
 	return `flavor-agent-toast-${ Date.now() }-${ nextLocalToastId }`;
 }
 
+function normalizeSurfaceKey( surface ) {
+	if ( typeof surface !== 'string' ) {
+		return '';
+	}
+
+	return SURFACE_TITLE_ALIASES[ surface ] || surface;
+}
+
 function getSurfaceTitle( surface ) {
-	const surfaceKey =
-		typeof surface === 'string'
-			? SURFACE_TITLE_ALIASES[ surface ] || surface
-			: '';
+	const surfaceKey = normalizeSurfaceKey( surface );
 
 	if ( surfaceKey && SURFACE_TITLE_BY_KEY[ surfaceKey ] ) {
 		return SURFACE_TITLE_BY_KEY[ surfaceKey ];
@@ -185,18 +190,15 @@ function formatStyleBookDetail( suggestion ) {
 }
 
 function buildToastDetail( surface, suggestion, extras ) {
-	switch ( surface ) {
+	switch ( normalizeSurfaceKey( surface ) ) {
 		case 'block':
 			return formatBlockDetail( suggestion, extras );
 		case 'template':
 			return formatTemplateDetail( suggestion, extras );
-		case 'templatePart':
 		case 'template-part':
 			return formatTemplatePartDetail( suggestion, extras );
-		case 'globalStyles':
 		case 'global-styles':
 			return formatStyleDetail( suggestion );
-		case 'styleBook':
 		case 'style-book':
 			return formatStyleBookDetail( suggestion );
 		default:

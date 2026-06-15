@@ -12,12 +12,27 @@ Use it when you need to answer:
 
 - Project: `https://github.com/orgs/WordPress/projects/240` (WordPress AI Planning & Roadmap)
 - Public board: yes (read-only access requires `gh auth refresh -s read:project`)
-- Snapshot date: 2026-05-09 for the full project-board counts; partial release-train refresh: 2026-05-21
-- Snapshot shape: 304 items total, 230 Done, 73 active across Triage, Backlog, In discussion / Needs decision, To do, In progress, and Needs review.
-- AI plugin release overlay refreshed: 2026-05-21. `WordPress/ai` release `1.0.0` was published on 2026-05-19, and the 2026-05-21 Make AI release post confirms Request Logging, Connector Approvals, provider/onboarding error improvements, and media-editor AI work as shipped `1.0.0` scope. `WordPress/ai#595` is open against milestone `1.1.0` and remains the post-`1.0.0` Connector Approval compatibility watch item. Media issues `#325` and `#238` are open, Future Release items on the planning board; keep them out of Flavor Agent scope unless they start sharing editor recommendation infrastructure.
-- Release-cycle grounding refreshed: 2026-05-21. The WordPress 7.0 Field Guide confirms the AI Client, Client-Side Abilities API, Connectors screen, and Connectors API as WordPress 7.0 developer-facing features. Treat those as release-cycle facts while keeping this document's project-board counts as the older 2026-05-09 snapshot until the board is explicitly refreshed.
-- Active items live almost entirely in `WordPress/ai` (the core AI plugin / AI Experiments showcase repository); `WordPress/wp-ai-client`, `WordPress/abilities-api`, and `WordPress/php-ai-client` have no active items on this board as of the snapshot date.
-- Teams visible on the board: `LLM Integrations`, `Abilities API`, `Integration Bridges`, `Showcase Plugin`. Showcase Plugin owns 294 of 304 items.
+- Snapshot date: 2026-06-15 for the full project-board counts, using the three-file workspace snapshot at `/home/dev/wordpress-ai-roadmap.md`, `/home/dev/wordpress-ai-open-issues.md`, and `/home/dev/wordpress-ai-planned-work.md`.
+- Snapshot shape: 245 items total: 176 Done plus 69 not-Done items (58 open issues and 11 open PRs). Status distribution is Triage 3, Backlog 11, In discussion / Needs decision 20, To do 6, In progress 23, Needs review 6, Done 176.
+- AI plugin release overlay refreshed: 2026-06-15. `WordPress/ai` release `1.0.1` is the latest shipped release, `1.1.0` is active and due about 2026-06-25, and `1.2.0` is the next dated milestone. `WordPress/ai#595` ("Better connector approval matching") merged into `1.0.1` on 2026-05-26, so Flavor Agent's remaining Connector Approval work is post-ship smoke validation, not waiting for the upstream PR.
+- Release-cycle grounding: WordPress 7.0 is the current AI-stack floor for Flavor Agent. The relevant platform facts are the AI Client, Client-Side Abilities API, Connectors screen, Connectors API, DataViews/DataForms, and MCP/Abilities integration path.
+- Board ownership: the board is operationally the `WordPress/ai` showcase-plugin development tracker. The full board has 243 of 245 items in `WordPress/ai`, plus one `WordPress/abilities-api` item (`#84`) and one Google provider item (`WordPress/ai-provider-for-google#23`).
+
+## 2026-06-15 Governance Read
+
+The upstream WordPress AI program is no longer just proving that individual AI helpers can run in wp-admin. Its roadmap is converging on a platform split:
+
+- **Core and the AI plugin own shared AI infrastructure**: Connectors, provider discovery, AI Request Logs, model/provider routing, ability registration, MCP exposure, and any eventual AI Management layer for permissions, metering, budgets, and routing.
+- **Feature experiments own task UX**: title/excerpt/alt text, content classification/resizing/summarization, editorial updates, Type Ahead, C2PA/provenance, content generation, media experiments, and early site-agent concepts.
+- **Governance remains unsettled upstream**: `WordPress/ai#348` (AI Management), `#354` (Abilities exposure controls), `#21` (scaling thousands of abilities), and `#40` (core ability set) are still design questions, not settled runtime contracts.
+
+For Flavor Agent, that strengthens rather than weakens the positioning:
+
+- The recommendation surfaces are the demonstration; the governance layer is the product.
+- Flavor Agent should not rebuild broad provider settings, global usage metering, model routing, or site-wide AI permissions once those belong to Core / the AI plugin.
+- Flavor Agent should keep owning the mutation lifecycle it can prove today: bounded proposals, human review for structural/theme changes, server-side attribution, freshness checks, and drift-safe undo.
+- When upstream AI Management or surface-level ability controls ship, treat them as an outer policy plane. Flavor Agent's inner contract remains the per-surface apply/review/undo journal for WordPress changes it mediates.
+- Site Agent / AI Workspace roadmap items validate the need for this layer: external or conversational agents can propose actions, but Flavor Agent's shipped governance stance is that approval stays in WordPress and never becomes an agent ability.
 
 To refresh this snapshot:
 
@@ -47,6 +62,10 @@ gh api repos/WordPress/ai/milestones/7
 gh api 'repos/WordPress/ai/issues?milestone=7&state=all&per_page=100'
 gh api repos/WordPress/ai/milestones/18
 gh api 'repos/WordPress/ai/issues?milestone=18&state=all&per_page=100'
+gh api repos/WordPress/ai/milestones/20
+gh api 'repos/WordPress/ai/issues?milestone=20&state=all&per_page=100'
+gh api repos/WordPress/ai/milestones/19
+gh api 'repos/WordPress/ai/issues?milestone=19&state=all&per_page=100'
 ```
 
 Then update the **Snapshot date**, the **AI Plugin Release Milestone Overlay**, the **Release-Train Items To Watch First** section if any new PR has appeared, and the **Active Items By Collision Area** tables. Move shipped items to **Out Of Scope** or delete them. When a board item ships and a Flavor Agent integration step closes, strike it through in **Action Implications**.
@@ -57,42 +76,63 @@ When this doc is updated, run `npm run check:docs` if any other live contributor
 
 | Status                         | Count |
 | ------------------------------ | ----- |
-| Triage                         | 0     |
-| Backlog                        | 20    |
-| In discussion / Needs decision | 24    |
-| To do                          | 10    |
-| In progress                    | 12    |
-| Needs review                   | 7     |
-| Done                           | 230   |
-| (untagged)                     | 1     |
+| Triage                         | 3     |
+| Backlog                        | 11    |
+| In discussion / Needs decision | 20    |
+| To do                          | 6     |
+| In progress                    | 23    |
+| Needs review                   | 6     |
+| Done                           | 176   |
 
-| Team                                                                   | Active items |
-| ---------------------------------------------------------------------- | ------------ |
-| Showcase Plugin (`WordPress/ai`)                                       | 70           |
-| LLM Integrations (`WordPress/wp-ai-client`, `WordPress/php-ai-client`) | 2            |
-| Abilities API (`WordPress/abilities-api`)                              | 0            |
-| Integration Bridges                                                    | 0            |
-| (untagged)                                                             | 1            |
+| Dimension | Count / read |
+| --- | --- |
+| Total items | 245 = 172 PRs + 73 issues |
+| Open work | 69 = 58 open issues + 11 open PRs |
+| By repo | `WordPress/ai` 243, `WordPress/abilities-api` 1, `WordPress/ai-provider-for-google` 1 |
+| Latest shipped | `WordPress/ai` `1.0.1` |
+| Active release | `1.1.0`, due about 2026-06-25 |
+| Next release | `1.2.0` |
+| Real roadmap backlog | `Future Release`: 35 issues + 6 PRs |
 
-The headline strategic read: WordPress core's AI direction is being prototyped almost entirely inside the core AI plugin, while the WordPress 7.0 Field Guide now confirms the core AI Client, Client-Side Abilities API, Connectors screen, and Connectors API as 7.0 release-cycle facts. Treat the `WordPress/ai` release milestones as the source of truth for what the plugin is targeting next, and the project board as the broader pressure map for editor, admin, provider, and ability surfaces.
+The headline strategic read: WordPress core's AI direction is being prototyped almost entirely inside the core AI plugin. Treat the `WordPress/ai` release milestones as the source of truth for what the plugin is targeting next, and the project board as the broader pressure map for editor, admin, provider, governance, and ability surfaces.
 
 ## AI Plugin Release Milestone Overlay
 
-This overlay is separate from the project-board status tables above. It records the AI plugin release train plus any partial currentness checks made after the broader 2026-05-09 project-board snapshot.
+This overlay is separate from the project-board status tables above. It records the AI plugin release train plus any targeted currentness checks made after the broader 2026-06-15 project-board snapshot.
 
 AI plugin `0.9.0` was verified in the local test container on 2026-05-09. Flavor Agent now treats the AI plugin Developer Tools per-feature option `wpai_feature_flavor-agent_field_developer` as the canonical feature-level provider/model preference when present, while explicit per-call provider arguments keep highest precedence.
 
 AI plugin `0.9.0` also shipped adjacent experiments and surfaces including Comment Moderation, Content Resizing, WP-CLI alt-text plumbing, and settings UI work. The only required Flavor Agent code integration from this release is honoring the per-feature developer provider/model setting; the other shipped surfaces remain watch items because Flavor Agent does not call those experiments directly.
 
-AI plugin `1.0.0` shipped on 2026-05-19 and is available as a normal release. It introduced Request Logging in `WordPress/ai#437` and Connector Approvals in `WordPress/ai#467`, plus no-provider and missing-provider handling that points users toward configuring an AI Connector. Flavor Agent now handles request-time Connector Approval denials by preserving the AI plugin's connector/caller metadata and showing an approval notice in the editor. Runtime verification still depends on the caller-attribution behavior from `WordPress/ai#595` (approved by maintainer 2026-05-23, CI green, awaiting second reviewer; targets `1.1.0`) or an equivalent upstream build so pending approvals are recorded for `flavor-agent/flavor-agent.php` instead of the AI plugin or provider connector.
+AI plugin `1.0.0` shipped on 2026-05-19 and introduced Request Logging in `WordPress/ai#437` and Connector Approvals in `WordPress/ai#467`, plus no-provider and missing-provider handling that points users toward configuring an AI Connector. AI plugin `1.0.1` shipped the Connector Approval caller-matching fix in `WordPress/ai#595`. Flavor Agent now handles request-time Connector Approval denials by preserving the AI plugin's connector/caller metadata and showing an approval notice in the editor. Runtime verification is now a local smoke gate against `1.0.1+` behavior: pending approvals should record `flavor-agent/flavor-agent.php` rather than `ai/ai.php` or the provider connector.
 
 AI plugin `1.0.0` also integrated Alt Text generation into Gutenberg's experimental Media Editor. That keeps the media-editor watch warm, but it does not create new Flavor Agent product work because this plugin does not own media editing, image generation, focal-point selection, or crop metadata surfaces. Open issues `WordPress/ai#325` and `WordPress/ai#238` remain Future Release/In progress media work, not a Flavor Agent collision.
 
 | Milestone URL                | Plugin version | State                         | Read for Flavor Agent                                                                                                                                                                                                                                     |
 | ---------------------------- | -------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `WordPress/ai` milestone #17 | `0.9.0`        | Verified locally 2026-05-09   | Developer provider/model preference, Comment Moderation, Content Resizing, settings UI, and early provider-model work became baseline context.                                                                                                            |
-| `WordPress/ai` milestone #7  | `1.0.0`        | Released 2026-05-19           | Request Logging and Connector Approvals are shipped, provider/onboarding errors are more explicit, and client-side Abilities API usage is now part of the AI plugin baseline.                                                                              |
-| `WordPress/ai` milestone #18 | `1.1.0`        | Due 2026-06-04; partial check | `WordPress/ai#595` (Connector Approval caller attribution) is approved 2026-05-23 with CI green and waiting on a second reviewer — expected to land before the 1.1.0 cut. The Make AI post also names Media Editor/focus-aware crop work as 1.1.0-or-future exploration, but those remain out of scope unless they intersect Flavor Agent recommendation surfaces. |
+| `WordPress/ai` milestone #17 | `0.9.0`        | Verified locally 2026-05-09 | Developer provider/model preference, Comment Moderation, Content Resizing, settings UI, and early provider-model work became baseline context. |
+| `WordPress/ai` milestone #7  | `1.0.0`        | Released 2026-05-19 | Request Logging and Connector Approvals shipped; provider/onboarding errors became more explicit; client-side Abilities API usage became part of the AI plugin baseline. |
+| `WordPress/ai` milestone #18 | `1.0.1`        | Released 2026-05-26 | Connector Approval caller matching (`#595`) shipped. Flavor Agent should validate post-approval behavior against this shipped baseline when a representative provider stack is available. |
+| `WordPress/ai` milestone #20 | `1.1.0`        | Active; due about 2026-06-25 | Stabilization wave: Request Log translations/copy/retention, CJK character-count fixes, empty-state bugs, Content Classification relevance, Editorial Updates/Visual Revisions, settings/provider gating, Type Ahead, C2PA Monitor, Stylelint, and alt-text URL matching. |
+| `WordPress/ai` milestone #19 | `1.2.0`        | Next dated release | Connector Approval error copy, button sizing, C2PA manifest detection, Google provider image-generation bug, and agentic Refine / collaborative editorial planning. |
+
+## Planned But Not Shipped Work To Track
+
+The June 15 planned-work snapshot splits not-Done items into three tiers:
+
+| Tier | Items | Flavor Agent read |
+| --- | --- | --- |
+| Dated releases (`1.1.0`, `1.2.0`) | 21 not-Done items | Mostly stabilization and review work. Track for compatibility, not new Flavor Agent product scope. |
+| Planned backlog (`Future Release`, `Later`) | 42 not-Done items | This is where the strategic overlap lives: Abilities/MCP scale, AI Management, provider discovery, prompt/template extension points, Site Agent, AI Workspace, and content-generation experiments. |
+| Unmilestoned / stragglers | 6 not-Done items | Tactical watch items: connector deactivation, Editorial Updates reload matching, Request Log DataViews translations, log cleanup, and a WP 7.0 blank-screen triage report. |
+
+Contribution and local-planning priority:
+
+1. **Review and smoke test near-release PRs before building parallel local features.** Examples: locale-aware word/character counting, DataViews translations, connector enable/disable, uninstall cleanup, Type Ahead, C2PA Monitor, and alt-text URL matching.
+2. **Treat C2PA/provenance as a standards and audit-story watch item.** It does not create Flavor Agent product work unless upstream provenance rows or verification semantics become a shared activity/audit convention.
+3. **Treat WebMCP and Service Accounts as external-agent pressure, not stable API input.** They validate Flavor Agent's external-agent parity boundary, but WebMCP remains speculative and Service Accounts remain exploratory.
+4. **Keep ability sanitization on the watch list.** If `WordPress/ai#481` or an Abilities API execution filter lands, re-check Flavor Agent ability schemas and the `Support\NormalizesInput` / REST-normalization split.
+5. **Do not preempt core's AI Management layer.** `#348`, `#354`, and `#21` are the governance handoff points. Flavor Agent should be ready to plug into them, not ship a competing global permissions/metering/routing plane.
 
 Flavor Agent-relevant `0.9.0` items:
 
@@ -118,7 +158,7 @@ Flavor Agent-relevant `1.0.0` items:
 
 | Upstream artifact                                                                                  | Flavor Agent counterpart                                                   | Implication                                                                                                                     |
 | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `WordPress/ai#21` — How to best support hundreds or thousands of abilities                         | `inc/Abilities/Registration.php` defines 30 abilities (7 recommendation + 13 helper + 1 docs search + 5 preview siblings + 4 external-apply) | Ability consolidation or per-surface registration becomes a `1.0.0` release-train concern.                                      |
+| `WordPress/ai#21` — How to best support hundreds or thousands of abilities                         | `inc/Abilities/Registration.php` defines 30 abilities (7 recommendation + 13 helper + 1 docs search + 5 preview siblings + 4 external-apply) | Ability consolidation or per-surface registration is now a Future Release governance concern, not a 1.0-era release blocker.                                      |
 | `WordPress/ai#27` — Developer support for pre-configured AI providers                              | Provider precedence and settings docs                                      | Flavor Agent should keep plugin-owned chat/provider UX fallback-only and defer to core AI plugin configuration where available. |
 | `WordPress/ai#33` — Advanced configuration tools for power users                                   | Settings page and provider diagnostics                                     | Avoid building parallel advanced-provider configuration that will be superseded by AI-plugin settings.                          |
 | `WordPress/ai#182` — Graceful degradation when no AI provider is configured                        | `CapabilityNotice`, surface capability flags                               | Align disabled-state and remediation copy with core AI plugin behavior.                                                         |
@@ -127,21 +167,21 @@ Flavor Agent-relevant `1.0.0` items:
 | `WordPress/ai#324` — Refine collaborative and agentic editorial workflows                          | Content and Inspector recommendation panels                                | Watch for editor-native collaboration/agent workflows that could absorb parts of the content recommendation surface.            |
 | `WordPress/ai#342`, `#343` — plugin access permissions for connected providers                     | `inc/Abilities/SurfaceCapabilities.php`, provider readiness, admin notices | Permission controls become a `1.0.0` target; Flavor Agent must not assume connector availability implies plugin authorization.  |
 | `WordPress/ai#437` — Request Logging                                                              | `inc/Activity/Repository.php`, `inc/Activity/Serializer.php`, `src/admin/activity-log.js` | Core AI request logging now exists. Coexistence (not consolidation): enrich `wpai_request_logs.context` via the `wpai_request_log_context` filter, dual-log `request_diagnostic` rows alongside core by default (opt-out via AI Activity Dual Logging), keep apply/undo rows local — see `docs/reference/activity-log-request-logging-coexistence.md`. |
-| `WordPress/ai#467` — Connector Approvals                                                          | `inc/LLM/WordPressAIClient.php`, request-error details, per-surface notices | Shipped and integrated locally (`wpai_connector_not_approved` detection, structured `connectorApproval` error data, admin-only `Open approvals page` action). **Post-#595 follow-up:** once AI plugin `1.1.0` ships with `#595` merged, re-run the end-to-end smoke with a configured text-generation provider and Connector Approval enabled; verify the pending option records `flavor-agent/flavor-agent.php` (not `ai/ai.php` or the provider connector). Capture outcome in `docs/validation/2026-05-21-connector-approvals-smoke.md`. |
+| `WordPress/ai#467` — Connector Approvals                                                          | `inc/LLM/WordPressAIClient.php`, request-error details, per-surface notices | Shipped and integrated locally (`wpai_connector_not_approved` detection, structured `connectorApproval` error data, admin-only `Open approvals page` action). **Post-1.0.1 follow-up:** with a configured text-generation provider and Connector Approval enabled, re-run the end-to-end smoke against AI plugin `1.0.1+`; verify the pending option records `flavor-agent/flavor-agent.php` (not `ai/ai.php` or the provider connector). Capture outcome in `docs/validation/2026-05-21-connector-approvals-smoke.md`. |
 | `WordPress/ai#452` — Content Classification relevance                                              | `inc/Abilities/ContentAbilities.php`, content panel taxonomy suggestions   | Content classification relevance work may become the canonical taxonomy/classification layer.                                   |
 | `WordPress/ai#482` — client-side Abilities API                                                     | Editor-side ability access and hydration assumptions                       | Merged in `1.0.0`; keep Flavor Agent's abilities bridge aligned with core hydration instead of adding parallel REST execution paths. |
 | `WordPress/ai#486` — developer settings mode for desired provider/model per feature                | Provider/model diagnostics and settings                                    | Merged in `0.9.0` and already honored by `WordPressAIClient::chat()`; do not create a competing Flavor Agent model pinning UI.  |
 
 ## Release-Train Items To Watch First
 
-AI plugin `1.0.0` is now shipped. For Flavor Agent, the urgent release-train items are no longer "wait for 1.0.0"; they are the follow-through decisions created by shipped Request Logging and Connector Approvals, plus the still-open Ability input-schema sanitization work in `WordPress/ai#481`. `WordPress/ai#595` is the next Connector Approval compatibility watch item (approved 2026-05-23, CI green, awaiting second reviewer), and `WordPress/ai#419` remains a Future Release strategic architecture preview rather than a current editor-surface migration.
+AI plugin `1.0.1` is now shipped. For Flavor Agent, the urgent release-train items are no longer "wait for 1.0.0"; they are the follow-through decisions created by shipped Request Logging and Connector Approvals, the post-`1.0.1` caller-attribution smoke, and the still-open Ability input-schema sanitization work in `WordPress/ai#481`. The larger architecture items are Future Release governance and agentic-workflow pressure, not current editor-surface migration requirements.
 
 Direct collisions with Flavor Agent:
 
 | Upstream artifact or item                                                 | Flavor Agent counterpart                                                                                                                              | Implication                                                                                                                                                                                                                                                                                     |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WordPress/ai#437` — AI Request Logging (merged in `1.0.0`)               | `inc/Activity/Repository.php`, `inc/Activity/Serializer.php`, `src/admin/activity-log.js`, `Settings > AI Activity`                                   | Sits at the AI Client HTTP transporter layer; Flavor Agent's repository sits at the editor-apply layer. Coexistence implementation at `docs/reference/activity-log-request-logging-coexistence.md`: subscribe to the `wpai_request_log_context` filter to enrich `wpai_request_logs` with Flavor Agent surface/scope/document, dual-log `request_diagnostic` writes alongside core by default (opt-out via AI Activity Dual Logging), keep apply/undo rows and the editor-inline `AIActivitySection` history local. |
-| `WordPress/ai#467` / `#595` — Connector Approvals and caller attribution  | `inc/LLM/WordPressAIClient.php`, `src/store/request-error-details.js`, per-surface `CapabilityNotice` rendering                                       | Local request-time denial handling exists; final runtime approval success remains a provider-state and caller-attribution smoke item. Do not couple editor bootstrap to AI plugin approval-store internals.                                                                                    |
+| `WordPress/ai#467` / `#595` — Connector Approvals and caller attribution  | `inc/LLM/WordPressAIClient.php`, `src/store/request-error-details.js`, per-surface `CapabilityNotice` rendering                                       | Local request-time denial handling exists and `#595` is merged in AI plugin `1.0.1`; final runtime approval success remains a provider-state smoke item. Do not couple editor bootstrap to AI plugin approval-store internals.                                                                                    |
 | `WordPress/ai#345` — usage safeguards (closed in `1.0.0`)                 | `inc/Activity/*`, `Support\MetricsNormalizer`, admin audit summaries                                                                                  | Align cost/limit/visibility concepts with core AI plugin safeguards instead of inventing a parallel metering vocabulary.                                                                                                                                                                        |
 | `WordPress/ai#481` — Ability schema sanitization                          | `inc/Abilities/*`, `Support\NormalizesInput`, REST argument normalization                                                                             | Re-check ability input schemas once upstream callback execution lands; avoid duplicate or divergent sanitization paths between REST and Abilities execution.                                                                                                                                    |
 | `WordPress/ai#155` — Comment Moderation experiment (merged in `0.9.0`)    | `inc/Abilities/ContentAbilities.php`, `inc/LLM/WritingPrompt.php`, content recommendation panel                                                       | Adjacent surface, not a direct UI collision. Use it as the canonical Experiment + Ability pattern for content-classification workflows.                                                                                                                                                         |
@@ -184,13 +224,15 @@ Compete with `inc/OpenAI/Provider.php`, `inc/Embeddings/ConfigurationValidator.p
 | `WordPress/ai#262` | Provider-Level Model Bucketing for Model Selection                                                       | In discussion    |
 | `WordPress/ai#343` | Implement plugin permissions management system                                                           | Closed           |
 | `WordPress/ai#467` | Connector Approval experiment                                                                            | Merged; `1.0.0` with caller-attribution caveat |
-| `WordPress/ai#595` | Deepest originating extension caller attribution for Connector Approval                                  | Open PR; `1.1.0` |
+| `WordPress/ai#595` | Deepest originating extension caller attribution for Connector Approval                                  | Merged; `1.0.1` |
+| `WordPress/ai#660` | Clearer error copy when a provider is blocked by Connector Approvals                                     | In progress; `1.2.0` |
 | `WordPress/ai#486` | Add developer settings mode with the ability to set desired provider and model per feature               | Merged; `0.9.0` |
 | `WordPress/ai#342` | Add permission controls for plugins to use a connected provider                                          | In discussion    |
 | `WordPress/ai#441` | Require explicit admin approval for plugin access to Connectors plus improve connector secret protection | In discussion    |
 | `WordPress/ai#211` | Add Service Account experiment                                                                           | In discussion    |
 | `WordPress/ai#191` | Add import/export support for AI settings and provider configuration                                     | Backlog          |
 | `WordPress/ai#27`  | Add developer support for pre-configured AI providers (also High priority above)                         | In discussion    |
+| `WordPress/ai#502` | Provider plugin discovery, curation, and labeling (parent of #27)                                        | In discussion    |
 
 ### Abilities Exposure And Surface Controls
 
@@ -296,7 +338,7 @@ These are not currently on project 240, but they are tracked in upstream repos a
 
 Active board items below have no Flavor Agent collision and are listed only so refresh runs can confirm scope did not drift.
 
-- Image and media: `#270`, `#288`, `#294`, `#302`, `#325`, `#388`, `#402`, `#421`, `#435`, `#238`
+- Image and media: `#270`, `#288`, `#294`, `#302`, `#325`, `#388`, `#402`, `#421` (C2PA Monitor read PR `#459`), `#435`, `#238` (focus-aware crop PR `#494`)
 - Connector debugging or environment bugs: `#339`, `#387`, `#420`
 - Experiment polish or documentation that does not touch shared subsystems: `#90`, `#145`, `#180`, `#181`, `#190`, `#203`, `#221`, `#225`, `#257`, `#270`, `#390`, `#391`, `#397`, `#425`
 - Marketing or release: `#47`
@@ -310,15 +352,16 @@ The 2026-05-21 AI `1.0.0` release post names `#325` and `#238` as 1.1.0-or-futur
 Each bullet is keyed to the board item that drives it. Strike through completed work when the corresponding upstream item ships.
 
 1. ~~**`#437`, `#419`** — Request Logging shipped in AI `1.0.0`; subscribe and mirror future Site Agent review. The design is **coexistence, not consolidation**: core's Request Logging captures every AI Client HTTP call transparently via the SDK HTTP transporter decorator, so Flavor Agent should enrich `wpai_request_logs.context` with surface/scope/document/ability data via the `wpai_request_log_context` filter, stop persisting `request_diagnostic` rows when core logging is enabled, and keep the apply/undo journal plus the editor-inline `AIActivitySection` history in `inc/Activity/Repository.php`. Full design at `docs/reference/activity-log-request-logging-coexistence.md`.~~ **Done 2026-05-25 via Request Logging bridge, revised 2026-06-03 for dual logging: `RequestLoggingBridge` injects context, captures `wpai_request_logged` IDs, keeps Flavor Agent diagnostics by default, and the Activity admin can inspect the matching core row inline.** Suppression is now the AI Activity Dual Logging opt-out.
-2. **`#21`, `#354`** — Plan ability consolidation. Decide whether the 30 defined abilities under `flavor-agent/` collapse into a smaller router surface, or remain individual with helper/read and preview abilities always available and recommendation/external-apply abilities registered against per-surface gates once `#354` defines them. **Not yet covered by an existing workstream.**
-3. ~~**`#37`, `#262`, `#27`, `#348`** — Stop investing in independent provider routing UX. Treat `inc/OpenAI/Provider.php` and the provider selector in `src/admin/settings-page-controller.js` as fallback-only once core ships unified routing or model bucketing.~~ **Done 2026-04-28 via Workstream C (Provider Ownership Migration). Direct chat fields removed; chat is fully Connectors-owned. Plugin retains direct embedding credentials only.**
-4. ~~**`#345`, `#437`, `#419`** — Define the activity story now that Request Logging and usage-safeguards work shipped in the AI plugin. The decision lands on coexistence (see implication 1 above and `docs/reference/activity-log-request-logging-coexistence.md`): core Request Logging owns provider/model/tokens/cost observability; Flavor Agent's Activity Repository owns apply/undo state; the admin audit page cross-links into `Tools → AI Request Logs` rather than duplicating or retiring it. Cost and limit metering vocabulary should align with core's safeguards rather than inventing a parallel metering layer.~~ **Done 2026-05-25 via Request Logging bridge Phase 1-4; cost stays in core Request Logs while Flavor Agent shows linked request details and local apply/undo state.**
-5. **`#192`** — Hold on bespoke prompt-template extension points. The canonical hook will land here; resist building Flavor Agent-specific extension points in the meantime. **Not yet covered by an existing workstream.**
-6. **`WordPress/abilities-api#75`** — Watch for REST-as-ability unification. If accepted, decide whether the remaining activity persistence, undo-status, and manual pattern-sync REST adapters should gain ability equivalents. Recommendation consumers already use the Abilities API rather than parallel plugin REST endpoints.
-7. **`WordPress/abilities-api#149`** — Once execution lifecycle filters land, move `inc/Activity/Repository.php` instrumentation onto them to avoid double-logging when callers hit core's filter set in addition to the Flavor Agent wrapper. **Not yet covered by an existing workstream.**
-8. **WordPress 7.1 Guidelines API (`wp_register_guideline()`)** — Source guidelines into prompt assembly under `inc/LLM/` (`Prompt.php`, `TemplatePrompt.php`, `TemplatePartPrompt.php`, `NavigationPrompt.php`, `StylePrompt.php`, `WritingPrompt.php`) so Flavor Agent recommendations respect site-wide guidelines as soon as core's API ships. **Bridge implemented 2026-04-28 via Workstream D: Flavor Agent now has a core-first repository bridge, prompt formatter, and settings migration framing. Keep watching for the public `wp_register_guideline()` API and core's final write/defaults model before adding write migration.**
-9. **`#467`, `#595`** — Connector Approval request-time handling is implemented locally, but final post-approval runtime success remains a smoke gate. Keep the validation artifact honest when provider configuration returns `missing_text_generation_provider`, and re-run the manual approval path when the local stack has representative text-generation provider state.
-10. **WP 7.1 native streaming (`WordPress/php-ai-client#100`, AI plugin 7.1 cycle)** — The [2026-05-20 AI contributor summary](https://make.wordpress.org/ai/2026/05/21/ai-contributor-weekly-summary-20-may-2026/) named native streaming the critical priority for the 7.1 cycle. The php-ai-client tracking issue is milestoned for `1.4.0` and prior scaffolding was deliberately removed in `php-ai-client#170` so a clean interface can emerge. Flavor Agent surface adoption matrix, transport options (chunked HTTP vs polling), schema/review-signature reconciliation, and the "Hold posture until 1.4.0 RC + AI plugin streaming Experiment lands in trunk" trigger condition all live in `docs/reference/streaming-recommendations-design.md`. Do not add `is_streaming_supported()` stubs or streaming endpoints to the codebase until the upstream primitives stabilize. **Not yet covered by an existing workstream.**
+2. **`#21`, `#354`** — Plan ability consolidation. Decide whether the 30 defined abilities under `flavor-agent/` collapse into a smaller router surface, or remain individual with helper/read and preview abilities always available and recommendation/external-apply abilities registered against per-surface gates once `#354` defines them. **Tracked as an upstream watch item in `docs/reference/current-open-work.md`; not yet an implementation plan.**
+3. **`#348`, `#354`** — Keep the governance split explicit. If core gains a unified AI Management layer, treat it as the outer policy plane for plugin permission, usage metering, budgets, and provider routing. Flavor Agent should keep its inner mutation-governance contract: bounded proposals, human approval for structural/theme changes, server-side attribution, freshness checks, and drift-safe undo for changes the plugin mediates. **Not yet covered by an implementation workstream.**
+4. ~~**`#37`, `#262`, `#27`, `#348`** — Stop investing in independent provider routing UX. Treat `inc/OpenAI/Provider.php` and the provider selector in `src/admin/settings-page-controller.js` as fallback-only once core ships unified routing or model bucketing.~~ **Done 2026-04-28 via Workstream C (Provider Ownership Migration). Direct chat fields removed; chat is fully Connectors-owned. Plugin retains direct embedding credentials only.**
+5. ~~**`#345`, `#437`, `#419`** — Define the activity story now that Request Logging and usage-safeguards work shipped in the AI plugin. The decision lands on coexistence (see implication 1 above and `docs/reference/activity-log-request-logging-coexistence.md`): core Request Logging owns provider/model/tokens/cost observability; Flavor Agent's Activity Repository owns apply/undo state; the admin audit page cross-links into `Tools → AI Request Logs` rather than duplicating or retiring it. Cost and limit metering vocabulary should align with core's safeguards rather than inventing a parallel metering layer.~~ **Done 2026-05-25 via Request Logging bridge Phase 1-4; cost stays in core Request Logs while Flavor Agent shows linked request details and local apply/undo state.**
+6. **`#192`** — Hold on bespoke prompt-template extension points. The canonical hook will land here; resist building Flavor Agent-specific extension points in the meantime. **Not yet covered by an existing workstream.**
+7. **`WordPress/abilities-api#75`** — Watch for REST-as-ability unification. If accepted, decide whether the remaining activity persistence, undo-status, and manual pattern-sync REST adapters should gain ability equivalents. Recommendation consumers already use the Abilities API rather than parallel plugin REST endpoints.
+8. **`WordPress/abilities-api#149`** — Once execution lifecycle filters land, move `inc/Activity/Repository.php` instrumentation onto them to avoid double-logging when callers hit core's filter set in addition to the Flavor Agent wrapper. **Not yet covered by an existing workstream.**
+9. **WordPress 7.1 Guidelines API (`wp_register_guideline()`)** — Source guidelines into prompt assembly under `inc/LLM/` (`Prompt.php`, `TemplatePrompt.php`, `TemplatePartPrompt.php`, `NavigationPrompt.php`, `StylePrompt.php`, `WritingPrompt.php`) so Flavor Agent recommendations respect site-wide guidelines as soon as core's API ships. **Bridge implemented 2026-04-28 via Workstream D: Flavor Agent now has a core-first repository bridge, prompt formatter, and settings migration framing. Keep watching for the public `wp_register_guideline()` API and core's final write/defaults model before adding write migration.**
+10. **`#467`, `#595`** — Connector Approval request-time handling is implemented locally and upstream caller matching shipped in AI plugin `1.0.1`, but final post-approval runtime success remains a smoke gate. Keep the validation artifact honest when provider configuration returns `missing_text_generation_provider`, and re-run the manual approval path when the local stack has representative text-generation provider state.
+11. **WP 7.1 native streaming (`WordPress/php-ai-client#100`, AI plugin 7.1 cycle)** — The [2026-05-20 AI contributor summary](https://make.wordpress.org/ai/2026/05/21/ai-contributor-weekly-summary-20-may-2026/) named native streaming the critical priority for the 7.1 cycle. The php-ai-client tracking issue is milestoned for `1.4.0` and prior scaffolding was deliberately removed in `php-ai-client#170` so a clean interface can emerge. Flavor Agent surface adoption matrix, transport options (chunked HTTP vs polling), schema/review-signature reconciliation, and the "Hold posture until 1.4.0 RC + AI plugin streaming Experiment lands in trunk" trigger condition all live in `docs/reference/streaming-recommendations-design.md`. Do not add `is_streaming_supported()` stubs or streaming endpoints to the codebase until the upstream primitives stabilize. **Not yet covered by an existing workstream.**
 
 ### Workstream History
 
@@ -332,7 +375,7 @@ The earlier overlap-remediation plan tracked these workstreams; results have bee
 | D (Guidelines Bridge and Migration) | Read bridge implemented 2026-04-28; write/public API migration pending | WordPress 7.1 Guidelines API (Trac, not on this board); bridge reads `wp_guideline` / `wp_guideline_type` now and defers write migration until the public API settles |
 | E (Settings Screen Modernization)   | Pending                                                                | `WordPress/ai#197`, `#451`, `#472`, `#428`, `#323` (these are core's own settings UX, but they pressure Flavor Agent's settings to align)                             |
 
-Action implications 1, 2, 4, 5, and 7 above describe upstream pressures with no corresponding workstream yet. When any of them moves from "watch" to "act", record the workstream in `docs/SOURCE_OF_TRUTH.md` or the relevant feature doc rather than tracking implementation details here.
+Open action implications above are upstream pressures, validation chores, or watch items, not active implementation plans. When any of them moves from "watch" to "act", record the workstream in `docs/SOURCE_OF_TRUTH.md` or the relevant feature doc rather than tracking implementation details here.
 
 ## Related References
 

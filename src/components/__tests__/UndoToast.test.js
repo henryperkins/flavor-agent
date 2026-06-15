@@ -12,15 +12,22 @@ jest.mock( '@wordpress/i18n', () => ( {
 	__: ( text ) => text,
 } ) );
 
+jest.mock( '@wordpress/compose', () => ( {
+	useReducedMotion: jest.fn( () => false ),
+} ) );
+
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
+const { useReducedMotion } = require( '@wordpress/compose' );
 
 import UndoToast from '../UndoToast';
+import { TOAST_DEFAULTS } from '../../store/toasts';
 
 const { getContainer, getRoot } = setupReactTest();
 
 function setReducedMotion( matches ) {
+	useReducedMotion.mockReturnValue( matches );
 	window.matchMedia = jest.fn().mockImplementation( ( query ) => ( {
 		matches: query === '(prefers-reduced-motion: reduce)' && matches,
 		media: query,
@@ -70,6 +77,10 @@ function getUndoButton() {
 function getCloseButton() {
 	return getContainer().querySelector( '.flavor-agent-toast__close' );
 }
+
+beforeEach( () => {
+	setReducedMotion( false );
+} );
 
 describe( 'UndoToast — rendering', () => {
 	beforeEach( () => {
@@ -378,6 +389,20 @@ describe( 'UndoToast — auto-dismiss timer', () => {
 		} );
 
 		expect( props.onDismiss ).not.toHaveBeenCalled();
+	} );
+
+	test( 'defaults the auto-dismiss duration to TOAST_DEFAULTS.successMs', () => {
+		const props = renderToast( { autoDismissMs: undefined } );
+
+		act( () => {
+			jest.advanceTimersByTime( TOAST_DEFAULTS.successMs - 1 );
+		} );
+		expect( props.onDismiss ).not.toHaveBeenCalled();
+
+		act( () => {
+			jest.advanceTimersByTime( 1 );
+		} );
+		expect( props.onDismiss ).toHaveBeenCalledWith( 'toast-1' );
 	} );
 
 	test( 'variant changes reset the remaining auto-dismiss duration', () => {

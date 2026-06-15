@@ -2705,7 +2705,7 @@
   height: 28px;
   padding: 0 10px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   color: #fff;
   font-family: inherit;
   font-size: 12.5px;
@@ -2792,6 +2792,8 @@
   height: 2px;
   background: var(--flavor-agent-color-accent);
   transform-origin: left center;
+  /* Fallback only; the runtime value is set inline from TOAST_DEFAULTS.successMs
+     (src/store/toasts.js) via UndoToast's progressStyle. Keep the two in sync. */
   animation: flavor-agent-toast-progress var(--flavor-agent-toast-auto-dismiss-ms, 6000ms) linear forwards;
 }
 

@@ -16,27 +16,18 @@
 
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { Button } from '@wordpress/components';
+import { useReducedMotion } from '@wordpress/compose';
 import { check, closeSmall, undo } from '@wordpress/icons';
 import { __ } from '@wordpress/i18n';
 
 import { joinClassNames } from '../utils/format-count';
+import { TOAST_DEFAULTS } from '../store/toasts';
 
 const VARIANT_ICONS = {
 	success: check,
 	error: closeSmall,
 	warning: undo,
 };
-
-function getReducedMotionPreference() {
-	if (
-		typeof window === 'undefined' ||
-		typeof window.matchMedia !== 'function'
-	) {
-		return false;
-	}
-
-	return window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
-}
 
 export default function UndoToast( {
 	id,
@@ -45,7 +36,7 @@ export default function UndoToast( {
 	detail = '',
 	errorHint = '',
 	undoLabel = __( 'Undo', 'flavor-agent' ),
-	autoDismissMs = 6000,
+	autoDismissMs = TOAST_DEFAULTS.successMs,
 	onUndo,
 	onDismiss,
 	undoDisabled = false,
@@ -54,9 +45,7 @@ export default function UndoToast( {
 	const [ isHovered, setIsHovered ] = useState( false );
 	const [ isFocusWithin, setIsFocusWithin ] = useState( false );
 	const isPaused = isHovered || isFocusWithin;
-	const [ reducedMotion, setReducedMotion ] = useState(
-		getReducedMotionPreference()
-	);
+	const reducedMotion = useReducedMotion();
 	const remainingRef = useRef( autoDismissMs );
 	const startedAtRef = useRef( 0 );
 	const onDismissRef = useRef( onDismiss );
@@ -65,31 +54,6 @@ export default function UndoToast( {
 	useEffect( () => {
 		onDismissRef.current = onDismiss;
 	}, [ onDismiss ] );
-
-	// Track reduced-motion preference changes so a mid-session toggle takes
-	// effect on subsequent toasts.
-	useEffect( () => {
-		if (
-			typeof window === 'undefined' ||
-			typeof window.matchMedia !== 'function'
-		) {
-			return undefined;
-		}
-
-		const mq = window.matchMedia( '(prefers-reduced-motion: reduce)' );
-		const handler = ( event ) => setReducedMotion( event.matches );
-
-		if ( typeof mq.addEventListener === 'function' ) {
-			mq.addEventListener( 'change', handler );
-
-			return () => mq.removeEventListener( 'change', handler );
-		}
-
-		// Older browsers.
-		mq.addListener( handler );
-
-		return () => mq.removeListener( handler );
-	}, [] );
 
 	// Schedule / clear / pause / resume the auto-dismiss timer.
 	//
