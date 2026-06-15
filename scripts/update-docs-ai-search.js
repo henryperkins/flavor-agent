@@ -1211,6 +1211,10 @@ async function configureInstance( options, auth ) {
 				keyword_match_mode: 'or',
 			},
 			rewrite_query: false,
+			reranking: true,
+			reranking_model: '@cf/baai/bge-reranker-base',
+			cache_threshold: 'super_strict_match',
+			cache_ttl: 3600,
 		} ),
 	} );
 
@@ -1484,8 +1488,10 @@ function managedCompletedSourceUrlCount( items, instance ) {
 
 // Stale deletion is the one destructive step, so it runs only for a full, demonstrably
 // healthy run. Targeted runs (explicit --source-url/--source-file), an out-of-ratio build
-// failure, and any upload, poll, or validation problem disable it so a degraded
-// discovery cannot wipe the corpus.
+// failure, and any upload or poll problem disable it so a degraded discovery cannot
+// wipe the corpus. Public endpoint validation still marks the run as needing attention,
+// but it must not block stale deletion because stale generations can be the reason
+// validation is noisy in the first place.
 function resolveStaleDeletion( run ) {
 	if ( run.dryRun ) {
 		return { delete: false, reason: 'dry-run' };
@@ -1529,9 +1535,6 @@ function resolveStaleDeletion( run ) {
 	if ( run.pollErrors > 0 ) {
 		return { delete: false, reason: 'item-errors' };
 	}
-	if ( run.validationOk !== true ) {
-		return { delete: false, reason: 'validation-failed' };
-	}
 	// Guard against a discovery that quietly under-counted: if a prior manifest existed and
 	// this run prepared far fewer docs, refuse to prune rather than gut the corpus.
 	if (
@@ -1539,6 +1542,9 @@ function resolveStaleDeletion( run ) {
 		run.prepared < run.previousManifestCount * PREPARED_REGRESSION_RATIO
 	) {
 		return { delete: false, reason: 'prepared-count-regression' };
+	}
+	if ( run.validationOk !== true ) {
+		return { delete: true, reason: 'validation-warning' };
 	}
 	return { delete: true, reason: 'healthy' };
 }

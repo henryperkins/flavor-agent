@@ -523,7 +523,7 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( isSettlementComplete( { missing: [], pending: [], errors: [ {} ] } ) ).toBe( false );
 	} );
 
-	test( 'resolveStaleDeletion only deletes on a fully healthy full-corpus run', () => {
+	test( 'resolveStaleDeletion only deletes after destructive full-corpus safety checks pass', () => {
 		const healthy = {
 			dryRun: false,
 			deleteStale: true,
@@ -546,7 +546,10 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( resolveStaleDeletion( { ...healthy, uploadErrors: 1 } ).delete ).toBe( false );
 		expect( resolveStaleDeletion( { ...healthy, pollPending: 2 } ).delete ).toBe( false );
 		expect( resolveStaleDeletion( { ...healthy, pollErrors: 1 } ).delete ).toBe( false );
-		expect( resolveStaleDeletion( { ...healthy, validationOk: false } ).delete ).toBe( false );
+		expect( resolveStaleDeletion( { ...healthy, validationOk: false } ) ).toEqual( {
+			delete: true,
+			reason: 'validation-warning',
+		} );
 	} );
 
 	test( 'resolveSummaryStatus flags poll, upload, validation, and total-build failures', () => {
@@ -624,6 +627,31 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( resolveStaleDeletion( { ...healthy, discovered: 0, buildErrors: 3 } ).reason ).toBe( 'build-errors' );
 	} );
 
+	test( 'resolveStaleDeletion allows pruning when only public endpoint validation fails', () => {
+		const run = {
+			dryRun: false,
+			deleteStale: true,
+			explicitSources: false,
+			limit: 0,
+			discoveryErrors: 0,
+			pollSkipped: false,
+			discovered: 13314,
+			prepared: 13212,
+			buildErrors: 102,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: false,
+			previousManifestCount: 13000,
+		};
+
+		expect( resolveSummaryStatus( run ) ).toBe( 'needs-attention' );
+		expect( resolveStaleDeletion( run ) ).toEqual( {
+			delete: true,
+			reason: 'validation-warning',
+		} );
+	} );
+
 	test( 'resolveSummaryStatus flags discovery errors and a high build-error ratio', () => {
 		const clean = {
 			dryRun: false,
@@ -687,7 +715,7 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( workflow ).not.toContain( 'args+=( "--skip-configure" )' );
 	} );
 
-	test( 'configureInstance disables Cloudflare query rewriting for exact developer symbols', async () => {
+	test( 'configureInstance enforces the exact-symbol search baseline', async () => {
 		global.fetch = jest.fn( ( url, init ) =>
 			mockJsonResponse( { result: { id: 'wp-dev' } }, String( url ) ).then( ( response ) => {
 				response.requestBody = init.body;
@@ -702,6 +730,10 @@ describe( 'update-docs-ai-search helpers', () => {
 
 		const body = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
 		expect( body.rewrite_query ).toBe( false );
+		expect( body.reranking ).toBe( true );
+		expect( body.reranking_model ).toBe( '@cf/baai/bge-reranker-base' );
+		expect( body.cache_threshold ).toBe( 'super_strict_match' );
+		expect( body.cache_ttl ).toBe( 3600 );
 	} );
 
 	test( 'fetchJson retries transient Cloudflare API failures', async () => {
