@@ -24,10 +24,13 @@ const {
 	normalizeTrustedUrl,
 	parseArgs,
 	pollUntilSettled,
+	processEntries,
 	readSitemap,
 	resolveStaleDeletion,
 	resolveSummaryStatus,
+	findSupersededSourceItems,
 	sitemapUrlWithinOrigins,
+	sourcePartIdentityForUrl,
 	sourceRootsForRelease,
 	truncateUtf8ToBytes,
 	urlMatchesRoots,
@@ -55,6 +58,19 @@ function mockJsonResponse( data, url, status = 200, headers = {} ) {
 			get: ( key ) => headers[ key.toLowerCase() ] || '',
 		},
 	} );
+}
+
+function docsHtml( { canonical, title = 'WordPress Docs Page', body = '' } ) {
+	const content = body || 'This page contains enough developer documentation text for the updater to build a Markdown document. '.repeat( 4 );
+	return [
+		'<!doctype html><html><head>',
+		`<title>${ title }</title>`,
+		`<link rel="canonical" href="${ canonical }">`,
+		'</head><body><main>',
+		`<h1>${ title }</h1>`,
+		`<p>${ content }</p>`,
+		'</main></body></html>',
+	].join( '' );
 }
 
 describe( 'update-docs-ai-search helpers', () => {
@@ -817,6 +833,113 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect(
 			global.fetch.mock.calls.filter( ( [ url ] ) => String( url ).includes( '/items?' ) )
 		).toHaveLength( 1 );
+	} );
+
+	test( 'processEntries dedupes canonical source identities before upload', async () => {
+		const canonical = 'https://developer.wordpress.org/reference/functions/wp_insert_post/';
+		const sourceUrls = [
+			'https://developer.wordpress.org/reference/functions/wp_insert_post/?utm_source=one',
+			'https://developer.wordpress.org/reference/functions/wp_insert_post/?utm_source=two',
+		];
+
+		global.fetch = jest.fn( ( url, init = {} ) => {
+			const href = String( url );
+			if ( href.startsWith( 'https://developer.wordpress.org/' ) ) {
+				return mockTextResponse(
+					docsHtml( { canonical, title: 'wp_insert_post()' } ),
+					href,
+					'text/html'
+				);
+			}
+			if ( href.includes( '/ai-search/instances/wp-dev/items' ) && init.method === 'POST' ) {
+				return mockJsonResponse(
+					{ result: { id: 'uploaded-item', key: 'uploaded-key', status: 'queued' } },
+					href
+				);
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const processed = await processEntries(
+			sourceUrls,
+			[ 'https://developer.wordpress.org/reference/' ],
+			{ dryRun: false, fullRefetch: true, instance: 'wp-dev' },
+			{ accountId: 'account', apiToken: 'token' },
+			new Map(),
+			{},
+			new Map()
+		);
+
+		expect( processed.prepared ).toBe( 1 );
+		expect( processed.desiredKeys.size ).toBe( 1 );
+		expect( processed.desiredSourceIdentities ).toEqual(
+			new Set( [ sourcePartIdentityForUrl( canonical ) ] )
+		);
+		expect( processed.duplicateSources ).toEqual( [
+			expect.objectContaining( {
+				url: sourceUrls[ 1 ],
+				canonical,
+				identity: sourcePartIdentityForUrl( canonical ),
+				reason: 'duplicate-source-url',
+			} ),
+		] );
+		expect( processed.skipped ).toEqual( [
+			expect.objectContaining( {
+				url: sourceUrls[ 1 ],
+				reason: 'duplicate-source-url',
+			} ),
+		] );
+		expect( processed.uploaded ).toHaveLength( 1 );
+		expect(
+			global.fetch.mock.calls.filter(
+				( [ url, init ] ) =>
+					String( url ).includes( '/ai-search/instances/wp-dev/items' ) &&
+					init?.method === 'POST'
+			)
+		).toHaveLength( 1 );
+	} );
+
+	test( 'findSupersededSourceItems selects older same-source generations only for desired identities', () => {
+		const sourceUrl = 'https://developer.wordpress.org/reference/functions/wp_register_ability/';
+		const desiredKey = 'ai-search/wp-dev/developer.wordpress.org/reference-functions-wp-register-ability/newhash/part-0001.md';
+		const oldKey = 'ai-search/wp-dev/developer.wordpress.org/reference-functions-wp-register-ability/oldhash/part-0001.md';
+		const unrelatedKey = 'ai-search/wp-dev/developer.wordpress.org/reference-functions-wp_has_ability/oldhash/part-0001.md';
+
+		const superseded = findSupersededSourceItems(
+			[
+				{
+					id: 'desired',
+					key: desiredKey,
+					status: 'completed',
+					metadata: { source_url: sourceUrl },
+				},
+				{
+					id: 'old',
+					key: oldKey,
+					status: 'completed',
+					metadata: { source_url: sourceUrl },
+				},
+				{
+					id: 'unrelated',
+					key: unrelatedKey,
+					status: 'completed',
+					metadata: { source_url: 'https://developer.wordpress.org/reference/functions/wp_has_ability/' },
+				},
+				{
+					id: 'foreign',
+					key: 'manual-upload.md',
+					status: 'completed',
+					metadata: { source_url: sourceUrl },
+				},
+			],
+			new Set( [ desiredKey ] ),
+			new Set( [ sourcePartIdentityForUrl( sourceUrl ) ] ),
+			'wp-dev'
+		);
+
+		expect( superseded ).toEqual( [
+			expect.objectContaining( { id: 'old', key: oldKey } ),
+		] );
 	} );
 
 	test( 'urlMatchesRoots matches roots regardless of trailing slash', () => {

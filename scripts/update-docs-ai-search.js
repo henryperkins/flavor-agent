@@ -26,10 +26,9 @@ const PREPARED_REGRESSION_RATIO = 0.8;
 const BUILD_ERROR_ATTENTION_RATIO = 0.02;
 // Bump whenever buildMarkdownDocument's stored layout changes (v2: dropped the
 // standalone `# title` H1 that produced title-only first chunks). The version is
-// folded into the content hash, so every item mints a new key and re-uploads on
-// the next `--full` run — shouldUpload() skips on a matching content_hash and
-// --full alone only re-fetches, so a layout change cannot propagate without this.
-// Prune the superseded generation afterwards with a delete-stale run.
+// folded into the content hash, so every changed item mints a new key and
+// re-uploads on the next `--full` run. Superseded same-source generations are
+// pruned after the replacement key settles.
 const DOC_LAYOUT_VERSION = 2;
 const VALIDATION_QUERY = 'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes';
 
@@ -1467,6 +1466,34 @@ function isManagedDocsKey( key, instance ) {
 		key.startsWith( LEGACY_ITEM_KEY_PREFIX );
 }
 
+function sourcePartIdentityForUrl( url, partIndex = 1 ) {
+	const normalized = normalizeTrustedUrl( url );
+	if ( ! normalized ) {
+		return '';
+	}
+	const numericPart = Number( partIndex );
+	const safePart = Number.isFinite( numericPart ) && numericPart > 0 ? Math.floor( numericPart ) : 1;
+	return `${ normalized }#part-${ String( safePart ).padStart( 4, '0' ) }`;
+}
+
+function sourcePartIdentityForItem( item ) {
+	if ( ! item || typeof item !== 'object' ) {
+		return '';
+	}
+	const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+	const sourceUrl = metadata.source_url || metadata.sourceUrl || '';
+	return sourcePartIdentityForUrl( sourceUrl, partIndexFromItemKey( item.key ) );
+}
+
+function partIndexFromItemKey( key ) {
+	const match = String( key || '' ).match( /\/part-(\d+)\.md$/ );
+	if ( ! match ) {
+		return 1;
+	}
+	const value = Number( match[ 1 ] );
+	return Number.isFinite( value ) && value > 0 ? value : 1;
+}
+
 function managedCompletedSourceUrlCount( items, instance ) {
 	const urls = new Set();
 	for ( const item of Array.isArray( items ) ? items : [] ) {
@@ -1484,6 +1511,82 @@ function managedCompletedSourceUrlCount( items, instance ) {
 		}
 	}
 	return urls.size;
+}
+
+function assertUniquePreparedIdentities( preparedItems ) {
+	const seen = new Map();
+	for ( const item of Array.isArray( preparedItems ) ? preparedItems : [] ) {
+		const identity = String( item.identity || '' );
+		if ( ! identity ) {
+			throw new Error( `Prepared docs item is missing source identity: ${ item.url || item.key || '<unknown>' }` );
+		}
+		if ( seen.has( identity ) ) {
+			const previous = seen.get( identity );
+			throw new Error(
+				`Duplicate prepared docs source identity ${ identity }: ${ previous.url || previous.key || '<unknown>' } and ${ item.url || item.key || '<unknown>' }`
+			);
+		}
+		seen.set( identity, item );
+	}
+}
+
+function dedupePreparedItems( preparedItems ) {
+	const groups = new Map();
+	for ( const item of Array.isArray( preparedItems ) ? preparedItems : [] ) {
+		const identity = String( item.identity || '' );
+		if ( ! identity ) {
+			throw new Error( `Prepared docs item is missing source identity: ${ item.url || item.key || '<unknown>' }` );
+		}
+		if ( ! groups.has( identity ) ) {
+			groups.set( identity, [] );
+		}
+		groups.get( identity ).push( item );
+	}
+
+	const deduped = [];
+	const duplicates = [];
+	for ( const [ identity, items ] of groups ) {
+		const winner = items.find( ( item ) => item.kind === 'entry' ) || items[ 0 ];
+		deduped.push( winner );
+		for ( const item of items ) {
+			if ( item === winner ) {
+				continue;
+			}
+			duplicates.push( {
+				url: item.url || '',
+				canonical: item.canonical || '',
+				identity,
+				key: item.key || '',
+				keptKey: winner.key || '',
+				keptUrl: winner.url || '',
+				reason: 'duplicate-source-url',
+			} );
+		}
+	}
+
+	deduped.sort( ( a, b ) => a.index - b.index );
+	duplicates.sort( ( a, b ) => String( a.url ).localeCompare( String( b.url ) ) );
+	assertUniquePreparedIdentities( deduped );
+	return { items: deduped, duplicates };
+}
+
+function findSupersededSourceItems( items, desiredKeys, desiredSourceIdentities, instance ) {
+	const desiredKeySet = desiredKeys instanceof Set ? desiredKeys : new Set();
+	const desiredIdentitySet = desiredSourceIdentities instanceof Set ? desiredSourceIdentities : new Set();
+	return ( Array.isArray( items ) ? items : [] ).filter( ( item ) => {
+		if ( ! item || typeof item !== 'object' ) {
+			return false;
+		}
+		const key = String( item.key || '' );
+		if ( ! isManagedDocsKey( key, instance ) || desiredKeySet.has( key ) ) {
+			return false;
+		}
+		if ( String( item.status || '' ) !== 'completed' ) {
+			return false;
+		}
+		const identity = sourcePartIdentityForItem( item );
+		return identity && desiredIdentitySet.has( identity );
+	} );
 }
 
 // Stale deletion is the one destructive step, so it runs only for a full, demonstrably
@@ -1707,13 +1810,16 @@ function classifySourceUrl( value ) {
 
 async function processEntries( urls, roots, options, auth, existingByKey, lastmods = {}, existingByUrl = new Map() ) {
 	const desiredKeys = new Set();
+	const desiredSourceIdentities = new Set();
 	const manifest = [];
 	const uploaded = [];
 	const skipped = [];
+	const duplicateSources = [];
 	const uploadErrors = [];
 	const buildErrors = [];
 	let prepared = 0;
 	let reused = 0;
+	const preparedItems = new Array( urls.length );
 
 	let index = 0;
 	async function worker() {
@@ -1729,11 +1835,17 @@ async function processEntries( urls, roots, options, auth, existingByKey, lastmo
 				if ( isFreshByLastmod( lastmods[ url ], existingByUrlItem ) ) {
 					const reusedKey = String( existingByUrlItem.key || '' );
 					if ( reusedKey ) {
-						++prepared;
-						++reused;
-						desiredKeys.add( reusedKey );
-						manifest.push( manifestEntryFromExisting( existingByUrlItem, url ) );
-						skipped.push( { key: reusedKey, reason: 'fresh-lastmod' } );
+						const metadata = existingByUrlItem.metadata && typeof existingByUrlItem.metadata === 'object' ? existingByUrlItem.metadata : {};
+						const canonical = normalizeTrustedUrl( metadata.source_url || metadata.sourceUrl || url );
+						preparedItems[ current ] = {
+							kind: 'reuse',
+							index: current,
+							url,
+							canonical,
+							identity: sourcePartIdentityForItem( existingByUrlItem ),
+							key: reusedKey,
+							item: existingByUrlItem,
+						};
 						continue;
 					}
 				}
@@ -1748,15 +1860,58 @@ async function processEntries( urls, roots, options, auth, existingByKey, lastmo
 				continue;
 			}
 
-			++prepared;
-			desiredKeys.add( entry.key );
-			manifest.push( manifestEntry( entry ) );
+			preparedItems[ current ] = {
+				kind: 'entry',
+				index: current,
+				url,
+				canonical: entry.url,
+				identity: sourcePartIdentityForUrl( entry.url ),
+				key: entry.key,
+				entry,
+			};
+		}
+	}
 
-			const existing = existingByKey.get( entry.key );
-			if ( ! shouldUpload( entry, existing ) ) {
-				skipped.push( { key: entry.key, reason: 'unchanged' } );
-				continue;
-			}
+	await Promise.all( Array.from( { length: Math.min( PAGE_CONCURRENCY, urls.length ) }, worker ) );
+
+	const { items: uploadPlan, duplicates } = dedupePreparedItems( preparedItems.filter( Boolean ) );
+	duplicateSources.push( ...duplicates );
+	for ( const duplicate of duplicates ) {
+		skipped.push( duplicate );
+	}
+
+	const entriesToUpload = [];
+	for ( const item of uploadPlan ) {
+		++prepared;
+		desiredKeys.add( item.key );
+		if ( item.identity ) {
+			desiredSourceIdentities.add( item.identity );
+		}
+
+		if ( item.kind === 'reuse' ) {
+			++reused;
+			manifest.push( manifestEntryFromExisting( item.item, item.url ) );
+			skipped.push( { key: item.key, url: item.url, reason: 'fresh-lastmod' } );
+			continue;
+		}
+
+		const entry = item.entry;
+		manifest.push( manifestEntry( entry ) );
+
+		const existing = existingByKey.get( entry.key );
+		if ( ! shouldUpload( entry, existing ) ) {
+			skipped.push( { key: entry.key, url: entry.url, reason: 'unchanged' } );
+			continue;
+		}
+
+		entriesToUpload.push( entry );
+	}
+
+	let uploadIndex = 0;
+	async function uploadWorker() {
+		while ( uploadIndex < entriesToUpload.length ) {
+			const current = uploadIndex++;
+			const entry = entriesToUpload[ current ];
 
 			try {
 				uploaded.push( await uploadEntry( entry, options, auth ) );
@@ -1767,13 +1922,15 @@ async function processEntries( urls, roots, options, auth, existingByKey, lastmo
 		}
 	}
 
-	await Promise.all( Array.from( { length: Math.min( PAGE_CONCURRENCY, urls.length ) }, worker ) );
+	await Promise.all( Array.from( { length: Math.min( PAGE_CONCURRENCY, entriesToUpload.length ) }, uploadWorker ) );
 
 	return {
 		desiredKeys,
+		desiredSourceIdentities,
 		manifest,
 		uploaded,
 		skipped,
+		duplicateSources,
 		uploadErrors,
 		buildErrors,
 		prepared,
@@ -1854,6 +2011,7 @@ async function main() {
 	let configureResult = { skipped: true };
 	let existingItems = [];
 	let deleted = [];
+	let sameSourceDeleted = [];
 	let poll = { skipped: true, pending: 0, errors: [] };
 	let validation = { skipped: options.dryRun };
 
@@ -1887,6 +2045,29 @@ async function main() {
 	const buildErrorCount = processed.buildErrors.length;
 	const pollPending = poll.pending || 0;
 	const pollErrorCount = Array.isArray( poll.errors ) ? poll.errors.length : 0;
+	const settledReplacementKeys = ! options.dryRun &&
+		poll.skipped !== true &&
+		uploadErrorCount === 0 &&
+		pollPending === 0 &&
+		pollErrorCount === 0;
+	const deletedItemIds = new Set();
+
+	if ( auth && settledReplacementKeys ) {
+		const superseded = findSupersededSourceItems(
+			existingItems,
+			processed.desiredKeys,
+			processed.desiredSourceIdentities,
+			options.instance
+		);
+		for ( const item of superseded ) {
+			const result = await deleteItem( item, options, auth );
+			sameSourceDeleted.push( result );
+			const id = String( item.id || result.id || '' );
+			if ( id ) {
+				deletedItemIds.add( id );
+			}
+		}
+	}
 
 	const cachedManifestCount = await readPreviousManifestCount( options );
 	const remoteBaselineCount = managedCompletedSourceUrlCount( existingItems, options.instance );
@@ -1911,7 +2092,10 @@ async function main() {
 	if ( deletion.delete ) {
 		const stale = existingItems.filter( ( item ) => {
 			const key = String( item.key || '' );
-			return isManagedDocsKey( key, options.instance ) && ! processed.desiredKeys.has( key );
+			const id = String( item.id || '' );
+			return isManagedDocsKey( key, options.instance ) &&
+				! processed.desiredKeys.has( key ) &&
+				! deletedItemIds.has( id );
 		} );
 		for ( const item of stale ) {
 			deleted.push( await deleteItem( item, options, auth ) );
@@ -1946,11 +2130,18 @@ async function main() {
 			appliedCount: previousManifestCount,
 		},
 		configureResult,
+		sameSourceDeletion: {
+			performed: sameSourceDeleted.length > 0,
+			deleted: sameSourceDeleted.length,
+			reason: settledReplacementKeys ? 'settled-current-sources' : 'replacement-not-settled',
+		},
 		staleDeletion: { performed: deletion.delete, reason: deletion.reason },
 		counts: {
 			uploaded: processed.uploaded.length,
 			skipped: processed.skipped.length,
-			deleted: deleted.length,
+			deleted: deleted.length + sameSourceDeleted.length,
+			sameSourceDeleted: sameSourceDeleted.length,
+			duplicateSources: processed.duplicateSources.length,
 			discoveryErrors: discoveryErrorCount,
 			buildErrors: buildErrorCount,
 			uploadErrors: uploadErrorCount,
@@ -1958,6 +2149,7 @@ async function main() {
 			errors: pollErrorCount,
 		},
 		discoveryErrors: discovery.errors.slice( 0, 10 ),
+		duplicateSources: processed.duplicateSources.slice( 0, 10 ),
 		buildErrors: processed.buildErrors.slice( 0, 10 ),
 		uploadErrors: processed.uploadErrors.slice( 0, 10 ),
 		validation,
@@ -1982,6 +2174,7 @@ module.exports = {
 	contentHashForEntry,
 	configureInstance,
 	discoverSourceUrls,
+	findSupersededSourceItems,
 	existingItemsByUrl,
 	fetchJson,
 	isFreshByLastmod,
@@ -1998,6 +2191,7 @@ module.exports = {
 	managedCompletedSourceUrlCount,
 	manifestEntry,
 	manifestEntryFromExisting,
+	processEntries,
 	cleanText,
 	flattenString,
 	pollUntilSettled,
@@ -2005,6 +2199,7 @@ module.exports = {
 	buildItemKey,
 	boundedSlug,
 	normalizeTrustedUrl,
+	sourcePartIdentityForUrl,
 	parseArgs,
 	readSitemap,
 	sitemapUrlWithinOrigins,
