@@ -16,7 +16,7 @@ final class AISearchClient {
 	private const BEST_EFFORT_TIMEOUT       = 5;
 	private const VALIDATION_PROBE_QUERY    = 'block editor';
 	private const VALIDATION_PROBE_RESULTS  = 3;
-	private const DEFAULT_PUBLIC_SEARCH_URL = 'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search';
+	private const DEFAULT_PUBLIC_SEARCH_URL = 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search';
 	private const PUBLIC_HOST_SUFFIX        = '.search.ai.cloudflare.com';
 
 	public const RUNTIME_STATE_OPTION = 'flavor_agent_docs_runtime_state';

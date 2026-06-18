@@ -39,14 +39,14 @@ permissions:
 
 jobs:
   update-docs-ai-search:
-    name: Update wp-dev corpus
+    name: Update wp-dev-docs corpus
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_AI_SEARCH_API_TOKEN: ${{ secrets.CLOUDFLARE_AI_SEARCH_API_TOKEN }}
-      CLOUDFLARE_AI_SEARCH_INSTANCE: ${{ vars.CLOUDFLARE_AI_SEARCH_INSTANCE || 'wp-dev' }}
-      CLOUDFLARE_AI_SEARCH_PUBLIC_URL: ${{ vars.CLOUDFLARE_AI_SEARCH_PUBLIC_URL || 'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search' }}
+      CLOUDFLARE_AI_SEARCH_INSTANCE: ${{ vars.CLOUDFLARE_AI_SEARCH_INSTANCE || 'wp-dev-docs' }}
+      CLOUDFLARE_AI_SEARCH_PUBLIC_URL: ${{ vars.CLOUDFLARE_AI_SEARCH_PUBLIC_URL || 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search' }}
       INPUT_RELEASE: ${{ github.event.inputs.release || '7-0' }}
       INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
       INPUT_LIMIT: ${{ github.event.inputs.limit || '' }}

@@ -40,7 +40,7 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/search-wordpress-docs', $status['availableAbilities'] );
 		$this->assertTrue( $status['backends']['cloudflare_ai_search']['configured'] );
 		$this->assertSame(
-			'ba566764-a507-4cd0-8cc8-cffbbde72ac3',
+			'101d836c-480b-4b39-b14e-505a6aa58f47',
 			$status['backends']['cloudflare_ai_search']['instanceId']
 		);
 		$this->assertSame(

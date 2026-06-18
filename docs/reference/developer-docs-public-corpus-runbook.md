@@ -8,13 +8,15 @@ Use it when you need to answer:
 - Which source scopes and refresh cadence are required for the managed corpus?
 - Which validation evidence must be recorded when the corpus is refreshed?
 
-Endpoint: `https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search`
+Endpoint: `https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search`
 
 Owner: Flavor Agent release maintainer for the built-in public Developer Docs grounding endpoint.
 
 Execution stop line: corpus refreshes (and especially stale deletion) require that the person or team with Cloudflare AI Search corpus access has explicitly accepted this ownership and refresh cadence in the release notes or this runbook.
 
 Current release decision: for the `v0.1.0` target release environment, corpus ownership and the refresh cadence below are accepted as of the 2026-05-19 validation pass. There is no runtime coverage gate or grounding constant to configure: grounding is best-effort (`AISearchClient::maybe_search_best_effort`), never blocks a recommendation, and at runtime applies only structural URL hygiene plus non-gating source labels. Trust and currency of the corpus are owned by `scripts/update-docs-ai-search.js` at ingestion time.
+
+2026-06-17 endpoint alignment: the built-in public endpoint and the updater defaults now target the `wp-dev-docs` Cloudflare AI Search corpus (`101d836c-480b-4b39-b14e-505a6aa58f47`). The GitHub Actions workflow fallback values, local script defaults, this runbook, and `AISearchClient::DEFAULT_PUBLIC_SEARCH_URL` must stay aligned. If the validation query returns zero chunks after an endpoint change, dispatch a full corpus run against `wp-dev-docs` before treating the endpoint as release-ready.
 
 Keep Cloudflare AI Search query rewriting disabled for the built-in public Developer Docs endpoint so exact WordPress identifiers such as `wp_register_ability`, `block.json`, and `theme.json` survive retrieval unchanged. Keep reranking enabled with `@cf/baai/bge-reranker-base`; the 2026-06-15 smoke evaluation showed exact-symbol queries regressed when reranking was disabled.
 
@@ -32,14 +34,14 @@ The updater discovers Make/Core posts from the `make.wordpress.org/core/` subsit
 
 The `wordpress-docs-ai-search` MCP server and Flavor Agent's built-in Developer Docs grounding path both depend on the public Cloudflare AI Search corpus. Updating MCP source coverage means updating that corpus, not changing the Codex or Claude MCP registration. Client MCP config only points agents at the search endpoint.
 
-The preferred updater is the scheduled/manual GitHub Actions workflow at `.github/workflows/update-docs-ai-search.yml`. It restores the prior `output/docs-ai-search/manifest.json` from the Actions cache, runs `npm run docs:ai-search:update -- --release=7-0`, discovers trusted source URLs, filters release-cycle listing/archive URLs out of the desired corpus, uploads changed Markdown items into the `wp-dev` AI Search built-in storage using bounded source keys shaped like `ai-search/wp-dev/{host}/{path-slug}/{short-hash}/part-0001.md` (capped at 128 bytes to satisfy Cloudflare's item-filename limit; the full canonical URL and content hash travel in item metadata, not the key), polls the instance `/stats` endpoint until queued/running/outdated counts settle, does one item-level sweep to verify desired keys, validates the public endpoint, and — only when stale deletion is enabled, the destructive full-run safety checks pass (no discovery/upload/poll problems, build errors remain within the 2% tolerance below, it is not a targeted run, and the prepared count has not regressed against the restored manifest or the live completed-corpus baseline) — removes stale managed docs items. Public endpoint validation failures still mark the run as needing attention, but they do not block stale deletion because stale generations can be the reason validation is noisy. Scheduled runs pass `--delete-stale` by default; manual dispatch remains opt-in through the `delete_stale` input. Instance configuration is skipped by default because Cloudflare treats config updates as an instance-wide resync; use the workflow's `configure_instance` input or the script's `--configure` flag only for deliberate metadata/search-config changes. Configure these repository secrets before enabling scheduled writes:
+The preferred updater is the scheduled/manual GitHub Actions workflow at `.github/workflows/update-docs-ai-search.yml`. It restores the prior `output/docs-ai-search/manifest.json` from the Actions cache, runs `npm run docs:ai-search:update -- --release=7-0`, discovers trusted source URLs, filters release-cycle listing/archive URLs out of the desired corpus, uploads changed Markdown items into the public Cloudflare AI Search corpus on `wp-dev-docs` using bounded source keys shaped like `ai-search/wp-dev-docs/{host}/{path-slug}/{short-hash}/part-0001.md` (capped at 128 bytes to satisfy Cloudflare's item-filename limit; the full canonical URL and content hash travel in item metadata, not the key), polls the instance `/stats` endpoint until queued/running/outdated counts settle, does one item-level sweep to verify desired keys, validates the public endpoint, and — only when stale deletion is enabled, the destructive full-run safety checks pass (no discovery/upload/poll problems, build errors remain within the 2% tolerance below, it is not a targeted run, and the prepared count has not regressed against the restored manifest or the live completed-corpus baseline) — removes stale managed docs items. Public endpoint validation failures still mark the run as needing attention, but they do not block stale deletion because stale generations can be the reason validation is noisy. Scheduled runs pass `--delete-stale` by default; manual dispatch remains opt-in through the `delete_stale` input. Instance configuration is skipped by default because Cloudflare treats config updates as an instance-wide resync; use the workflow's `configure_instance` input or the script's `--configure` flag only for deliberate metadata/search-config changes. Configure these repository secrets before enabling scheduled writes:
 
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_AI_SEARCH_API_TOKEN` with Account > AI Search:Edit and Account > AI Search:Run
 
 Optional repository variables override the defaults:
 
-- `CLOUDFLARE_AI_SEARCH_INSTANCE` (default `wp-dev`)
+- `CLOUDFLARE_AI_SEARCH_INSTANCE` (default `wp-dev-docs`)
 - `CLOUDFLARE_AI_SEARCH_PUBLIC_URL` (default the endpoint above)
 
 For a local smoke test that does not write to Cloudflare:
@@ -120,7 +122,7 @@ Runtime behavior:
 
 ## MCP search endpoint behavior
 
-The `wordpress-docs-ai-search` MCP server points agents at the same corpus through the `/mcp` endpoint (sibling to the plugin's `/search` endpoint on instance `ba566764`). That endpoint behaves differently from the `/search` request the plugin builds, and agents must account for it (verified 2026-06-08):
+The `wordpress-docs-ai-search` MCP server points agents at the same corpus through the `/mcp` endpoint (sibling to the plugin's `/search` endpoint on instance `wp-dev-docs` / `https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/mcp`). That endpoint behaves differently from the `/search` request the plugin builds, and agents must account for it (verified 2026-06-08):
 
 - **`max_num_results` is ignored.** Requests at both `ai_search_options.max_num_results` and the Cloudflare-documented `ai_search_options.retrieval.max_num_results` returned the default (~10) chunk count regardless of the requested cap.
 - **`filters` are ignored.** An impossible `source_url` equality filter returned the full unfiltered result set instead of zero matches.

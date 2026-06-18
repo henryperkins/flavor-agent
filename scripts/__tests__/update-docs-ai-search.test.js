@@ -717,6 +717,44 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( workflow ).toMatch( /delete_stale:[\s\S]*?default: false/ );
 	} );
 
+	test( 'workflow fallback corpus matches updater defaults', () => {
+		const workflow = fs.readFileSync(
+			path.resolve( __dirname, '../../.github/workflows/update-docs-ai-search.yml' ),
+			'utf8'
+		);
+		const defaults = parseArgs( [] );
+
+		expect( workflow ).toContain(
+			`CLOUDFLARE_AI_SEARCH_INSTANCE: \${{ vars.CLOUDFLARE_AI_SEARCH_INSTANCE || '${ defaults.instance }' }}`
+		);
+		expect( workflow ).toContain(
+			`CLOUDFLARE_AI_SEARCH_PUBLIC_URL: \${{ vars.CLOUDFLARE_AI_SEARCH_PUBLIC_URL || '${ defaults.publicUrl }' }}`
+		);
+		expect( workflow ).toContain( `name: Update ${ defaults.instance } corpus` );
+	} );
+
+	test( 'corpus runbook documents the updater defaults', () => {
+		const runbook = fs.readFileSync(
+			path.resolve( __dirname, '../../docs/reference/developer-docs-public-corpus-runbook.md' ),
+			'utf8'
+		);
+		const defaults = parseArgs( [] );
+
+		expect( runbook ).toContain( `Endpoint: \`${ defaults.publicUrl }\`` );
+		expect( runbook ).toContain(
+			`CLOUDFLARE_AI_SEARCH_INSTANCE\` (default \`${ defaults.instance }\`)`
+		);
+		expect( runbook ).toContain(
+			`public Cloudflare AI Search corpus on \`${ defaults.instance }\``
+		);
+		expect( runbook ).toContain(
+			`instance \`${ defaults.instance }\` / \`${ defaults.publicUrl.replace(
+				'/search',
+				'/mcp'
+			) }\``
+		);
+	} );
+
 	test( 'workflow requires explicit opt-in before updating Cloudflare instance config', () => {
 		const workflow = fs.readFileSync(
 			path.resolve( __dirname, '../../.github/workflows/update-docs-ai-search.yml' ),

@@ -5,8 +5,8 @@ const crypto = require( 'node:crypto' );
 const fsp = require( 'node:fs/promises' );
 const path = require( 'node:path' );
 
-const DEFAULT_INSTANCE = 'wp-dev';
-const DEFAULT_PUBLIC_SEARCH_URL = 'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search';
+const DEFAULT_INSTANCE = 'wp-dev-docs';
+const DEFAULT_PUBLIC_SEARCH_URL = 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search';
 const DEFAULT_RELEASE = '7-0';
 const DEFAULT_OUTPUT_DIR = path.resolve( __dirname, '..', 'output', 'docs-ai-search' );
 const LEGACY_ITEM_KEY_PREFIX = 'wp-dev-docs-';
@@ -41,14 +41,14 @@ const METADATA_SCHEMA = [
 ];
 
 function usage() {
-	return `Update the wp-dev Cloudflare AI Search Developer Docs corpus.
+	return `Update the wp-dev-docs Cloudflare AI Search Developer Docs corpus.
 
 Usage:
   node scripts/update-docs-ai-search.js [options]
 
 Options:
   --release=<slug>       Active WordPress major release slug, e.g. 7-0.
-  --instance=<id>        AI Search instance ID. Defaults to env or wp-dev.
+  --instance=<id>        AI Search instance ID. Defaults to env or wp-dev-docs.
   --public-url=<url>     Public /search endpoint used for validation.
   --source-url=<url>     Restrict the run to specific trusted URLs (replaces sitemap
                          discovery). May be repeated. Targeted runs never delete stale items.
