@@ -9,4 +9,16 @@ final class PreviewRecommendTemplatePartAbility extends PreviewRecommendationAbi
 	protected const PARENT_CLASS   = RecommendTemplatePartAbility::class;
 	protected const PARENT_ABILITY = 'flavor-agent/recommend-template-part';
 	protected const SIGNATURE_KEYS = [ 'reviewContextSignature', 'resolvedContextSignature' ];
+
+	/**
+	 * Prefill the Abilities Explorer with a template-part ref that resolves on
+	 * the active theme, omitting the default when none does.
+	 *
+	 * @return array<string, mixed>
+	 */
+	protected function prefill_defaults(): array {
+		$ref = $this->resolvable_template_ref( 'wp_template_part', 'header' );
+
+		return '' !== $ref ? [ 'templatePartRef' => $ref ] : [];
+	}
 }

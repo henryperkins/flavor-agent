@@ -1936,6 +1936,15 @@ namespace {
 		}
 	}
 
+	if (! function_exists('get_stylesheet')) {
+		function get_stylesheet(): string
+		{
+			$stylesheet = WordPressTestState::$active_theme['stylesheet'] ?? '';
+
+			return '' !== $stylesheet ? (string) $stylesheet : 'test-theme';
+		}
+	}
+
 	if (! function_exists('post_type_exists')) {
 		function post_type_exists(string $post_type): bool
 		{

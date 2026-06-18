@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Abilities\Registration;
 use FlavorAgent\AI\Abilities\PreviewRecommendationAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendBlockAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendNavigationAbility;
@@ -163,6 +164,80 @@ final class PreviewRecommendationAbilityTest extends TestCase {
 			$this->assertArrayNotHasKey( 'resolveSignatureOnly', $properties, "{$name} input schema must strip resolveSignatureOnly." );
 			$this->assertArrayNotHasKey( 'clientRequest', $properties, "{$name} input schema must strip clientRequest." );
 		}
+	}
+
+	/**
+	 * @param array<int, string> $templates Template refs the theme exposes.
+	 * @param array<int, string> $parts     Template-part refs the theme exposes.
+	 */
+	private function seedTheme( string $stylesheet, array $templates, array $parts ): void {
+		WordPressTestState::$active_theme                        = [ 'stylesheet' => $stylesheet ];
+		WordPressTestState::$block_templates['wp_template']      = array_map( static fn( string $id ): object => (object) [ 'id' => $id ], $templates );
+		WordPressTestState::$block_templates['wp_template_part'] = array_map( static fn( string $id ): object => (object) [ 'id' => $id ], $parts );
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function previewTemplateRefProperty(): array {
+		return ( new PreviewRecommendTemplateAbility( 'flavor-agent/preview-recommend-template', [] ) )
+			->input_schema()['properties']['templateRef'] ?? [];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function previewTemplatePartRefProperty(): array {
+		return ( new PreviewRecommendTemplatePartAbility( 'flavor-agent/preview-recommend-template-part', [] ) )
+			->input_schema()['properties']['templatePartRef'] ?? [];
+	}
+
+	/**
+	 * Prefill the conventional ref ({stylesheet}//index, //header) when the
+	 * active theme actually provides it — and keep the default preview-scoped:
+	 * the LLM recommend-* parents must NOT inherit it (a click there would bill
+	 * the AI Connector).
+	 */
+	public function test_template_preview_prefills_resolvable_ref_preferring_conventional_slug(): void {
+		$this->seedTheme( 'tt5', [ 'tt5//home', 'tt5//index' ], [ 'tt5//footer', 'tt5//header' ] );
+
+		$this->assertSame( 'tt5//index', $this->previewTemplateRefProperty()['default'] ?? null );
+		$this->assertSame( 'tt5//header', $this->previewTemplatePartRefProperty()['default'] ?? null );
+
+		$this->assertArrayNotHasKey(
+			'default',
+			Registration::recommendation_input_schema( 'flavor-agent/recommend-template' )['properties']['templateRef'],
+			'recommend-template (LLM) must not gain a prefill default.'
+		);
+		$this->assertArrayNotHasKey(
+			'default',
+			Registration::recommendation_input_schema( 'flavor-agent/recommend-template-part' )['properties']['templatePartRef'],
+			'recommend-template-part (LLM) must not gain a prefill default.'
+		);
+	}
+
+	/**
+	 * When the conventional slug is absent, fall back to a ref the theme actually
+	 * exposes rather than seeding {stylesheet}//index, which would fail template
+	 * resolution (template_not_found) on the first Explorer invoke.
+	 */
+	public function test_template_preview_falls_back_to_first_available_when_conventional_ref_absent(): void {
+		// A theme that provides home/footer but no index/header.
+		$this->seedTheme( 'customtheme', [ 'customtheme//home' ], [ 'customtheme//footer' ] );
+
+		$this->assertSame( 'customtheme//home', $this->previewTemplateRefProperty()['default'] ?? null );
+		$this->assertSame( 'customtheme//footer', $this->previewTemplatePartRefProperty()['default'] ?? null );
+	}
+
+	/**
+	 * With no resolvable templates/parts (e.g. a classic theme), omit the default
+	 * entirely so the textarea prefills empty instead of a ref that cannot resolve.
+	 */
+	public function test_template_preview_omits_default_when_no_templates_resolve(): void {
+		$this->seedTheme( 'classictheme', [], [] );
+
+		$this->assertArrayNotHasKey( 'default', $this->previewTemplateRefProperty() );
+		$this->assertArrayNotHasKey( 'default', $this->previewTemplatePartRefProperty() );
 	}
 
 	public function test_meta_declares_readonly_mcp_public_tool(): void {

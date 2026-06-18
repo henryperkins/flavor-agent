@@ -435,6 +435,9 @@ final class Registration {
 						'blockName' => [
 							'type'        => 'string',
 							'description' => 'Block type name (e.g. core/group)',
+							// Working example prefilled by the Abilities Explorer's
+							// "Input Data" textarea (draft-04 `default`; never `example`).
+							'default'     => 'core/paragraph',
 						],
 					],
 					'required'   => [ 'blockName' ],
@@ -576,7 +579,10 @@ final class Registration {
 					'properties' => [
 						'patternId' => [
 							'type'        => 'string',
-							'description' => 'Registered pattern name, for example theme/hero.',
+							'description' => 'Registered pattern name, for example core/query-standard-posts.',
+							// Working example prefilled by the Abilities Explorer's
+							// "Input Data" textarea (draft-04 `default`; never `example`).
+							'default'     => 'core/query-standard-posts',
 						],
 					],
 					'required'   => [ 'patternId' ],
@@ -776,6 +782,9 @@ final class Registration {
 						'query'      => [
 							'type'        => 'string',
 							'description' => 'Search query for WordPress developer documentation.',
+							// Working example prefilled by the Abilities Explorer's
+							// "Input Data" textarea (draft-04 `default`; never `example`).
+							'default'     => 'block supports',
 						],
 						'maxResults' => [
 							'type'        => 'integer',
