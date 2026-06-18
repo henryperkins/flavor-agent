@@ -325,6 +325,68 @@ final class RecommendationOutcomeTest extends TestCase {
 		$this->assertSame( 'validation-reasons-v1', $out['after']['outcome']['validationVocabularyVersion'] );
 	}
 
+	public function test_learning_attribution_preserves_join_fields_without_private_payloads(): void {
+		$entry = $this->outcomeEntry(
+			'selected_for_review',
+			[
+				'reason'              => 'review_opened',
+				'learningAttribution' => [
+					'generationId'                => 'recgen:block:11111111-1111-4111-8111-111111111111',
+					'recommendationSetId'         => 'set-1',
+					'sourceRequestSignature'      => 'hash_source',
+					'guidelineVersion'            => 'gv1:abc123',
+					'docsContentFingerprint'      => 'docs-content:v1',
+					'docsRuntimeFingerprint'      => 'docs-runtime:v1',
+					'provider'                    => 'anthropic',
+					'model'                       => 'claude-sonnet-4-6',
+					'rankingVersion'              => 'contextual-ranking-v1',
+					'validationVocabularyVersion' => 'validation-reasons-v1',
+					'rawPrompt'                   => 'Use secret launch copy.',
+				],
+			]
+		);
+		$out   = RecommendationOutcome::normalize_entry( $entry );
+
+		$expected = [
+			'generationId'                => 'recgen:block:11111111-1111-4111-8111-111111111111',
+			'recommendationSetId'         => 'set-1',
+			'sourceRequestSignature'      => 'hash_source',
+			'guidelineVersion'            => 'gv1:abc123',
+			'docsContentFingerprint'      => 'docs-content:v1',
+			'docsRuntimeFingerprint'      => 'docs-runtime:v1',
+			'provider'                    => 'anthropic',
+			'model'                       => 'claude-sonnet-4-6',
+			'rankingVersion'              => 'contextual-ranking-v1',
+			'validationVocabularyVersion' => 'validation-reasons-v1',
+		];
+
+		$this->assertArrayHasKey( 'learningAttribution', $out['after']['outcome'] );
+		$this->assertArrayHasKey( 'learningAttribution', $out['request']['recommendation'] );
+		$this->assertSame( $expected, $out['after']['outcome']['learningAttribution'] );
+		$this->assertSame( $expected, $out['request']['recommendation']['learningAttribution'] );
+		$this->assertStringNotContainsString( 'secret', wp_json_encode( $out['after']['outcome']['learningAttribution'] ) );
+		$this->assertStringNotContainsString( 'launch', wp_json_encode( $out['after']['outcome']['learningAttribution'] ) );
+		$this->assertStringNotContainsString( 'copy', wp_json_encode( $out['after']['outcome']['learningAttribution'] ) );
+	}
+
+	public function test_learning_attribution_without_generation_id_is_dropped(): void {
+		$entry = $this->outcomeEntry(
+			'selected_for_review',
+			[
+				'reason'              => 'review_opened',
+				'learningAttribution' => [
+					'recommendationSetId' => 'set-1',
+					'provider'            => 'anthropic',
+					'model'               => 'claude-sonnet-4-6',
+				],
+			]
+		);
+		$out   = RecommendationOutcome::normalize_entry( $entry );
+
+		$this->assertArrayNotHasKey( 'learningAttribution', $out['after']['outcome'] );
+		$this->assertArrayNotHasKey( 'learningAttribution', $out['request']['recommendation'] );
+	}
+
 	/**
 	 * @param array<string, mixed> $outcome
 	 * @return array<string, mixed>

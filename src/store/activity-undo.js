@@ -191,6 +191,7 @@ export function buildBlockBatchActivityEntry( {
 	blockContext,
 	blockPath = null,
 	clientId,
+	learningAttribution = null,
 	memberSuggestionKeys = [],
 	recommendationSetId = '',
 	requestPrompt = '',
@@ -217,6 +218,7 @@ export function buildBlockBatchActivityEntry( {
 			recommendationSetId,
 			suggestionKey,
 			members,
+			...( learningAttribution ? { learningAttribution } : {} ),
 		},
 	};
 

@@ -1156,6 +1156,12 @@ export default function PatternRecommender() {
 				resultCount:
 					patternOutcomeSummary?.resultCount ??
 					recommendedPatterns.length,
+				...( patternOutcomeSummary?.learningAttribution
+					? {
+							learningAttribution:
+								patternOutcomeSummary.learningAttribution,
+					  }
+					: {} ),
 				topSuggestionKeys,
 				...( event === 'shown' &&
 				Array.isArray( patternOutcomeSummary?.rankingSet ) &&

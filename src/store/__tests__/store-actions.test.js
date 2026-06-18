@@ -1332,6 +1332,43 @@ describe( 'store action thunks', () => {
 		expect( state.patternDiagnostics.modelRequest ).toBeUndefined();
 	} );
 
+	test( 'setPatternRecommendations decorates recommendations with learning attribution', () => {
+		const action = actions.setPatternRecommendations(
+			[ { name: 'theme/hero' } ],
+			1,
+			'request-signature',
+			null,
+			'target-signature',
+			null,
+			'resolved-signature',
+			'runtime-signature',
+			{
+				learningAttribution: {
+					generationId:
+						'recgen:pattern:99999999-9999-4999-8999-999999999999',
+					provider: 'openai',
+					model: 'gpt-5',
+					rawPrompt: 'Private pattern prompt',
+				},
+			}
+		);
+
+		expect(
+			action.recommendations[ 0 ].recommendationOutcome
+				.learningAttribution
+		).toEqual(
+			expect.objectContaining( {
+				generationId:
+					'recgen:pattern:99999999-9999-4999-8999-999999999999',
+				provider: 'openai',
+				model: 'gpt-5',
+			} )
+		);
+		expect(
+			JSON.stringify( action.recommendations[ 0 ].recommendationOutcome )
+		).not.toContain( 'Private pattern prompt' );
+	} );
+
 	test( 'hydratePatternRecommendationsFromCache uses a fresh token and aborts in-flight pattern requests', () => {
 		const abort = jest.fn();
 		actions._patternAbort = { abort };

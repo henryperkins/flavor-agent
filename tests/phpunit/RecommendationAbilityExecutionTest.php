@@ -281,6 +281,58 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		$this->assertSame( 'model', $request['ai']['requestSummary']['modelResolutionStatus'] ?? null );
 	}
 
+	public function test_execute_returns_and_persists_learning_attribution_join_metadata(): void {
+		$result = RecommendationAbilityExecution::execute(
+			'template',
+			'flavor-agent/recommend-template',
+			[
+				'templateRef' => 'theme//home',
+				'prompt'      => 'Tighten the structure.',
+				'document'    => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+			],
+			static fn(): array => [
+				'suggestions'   => [
+					[
+						'label' => 'Clarify header hierarchy',
+					],
+				],
+				'explanation'   => 'Use fewer competing sections.',
+				'docsGrounding' => [
+					'contentFingerprint' => 'docs-content:v1',
+					'runtimeFingerprint' => 'docs-runtime:v1',
+				],
+				'requestMeta'   => [
+					'provider' => 'anthropic',
+					'model'    => 'claude-sonnet-4-6',
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$attribution = $result['requestMeta']['learningAttribution'] ?? null;
+		$this->assertIsArray( $attribution );
+		$this->assertMatchesRegularExpression( '/^recgen:template:[a-f0-9-]{36}$/', (string) ( $attribution['generationId'] ?? '' ) );
+		$this->assertSame( \FlavorAgent\Guidelines::version_id(), $attribution['guidelineVersion'] ?? null );
+		$this->assertSame( 'docs-content:v1', $attribution['docsContentFingerprint'] ?? null );
+		$this->assertSame( 'docs-runtime:v1', $attribution['docsRuntimeFingerprint'] ?? null );
+		$this->assertSame( 'anthropic', $attribution['provider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $attribution['model'] ?? null );
+		$this->assertSame( 'contextual-ranking-v1', $attribution['rankingVersion'] ?? null );
+		$this->assertSame( 'validation-reasons-v1', $attribution['validationVocabularyVersion'] ?? null );
+
+		$entries = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+		$this->assertCount( 1, $entries );
+
+		$request = json_decode( (string) ( $entries[0]['request_json'] ?? '' ), true );
+		$this->assertSame( $attribution, $request['learningAttribution'] ?? null );
+		$this->assertSame( $attribution, $request['ai']['learningAttribution'] ?? null );
+	}
+
 	public function test_execute_stamps_guideline_version_in_request_diagnostic_activity(): void {
 		WordPressTestState::$options = [
 			\FlavorAgent\Guidelines::OPTION_SITE => 'Calm, precise brand voice.',

@@ -164,6 +164,20 @@ describe( 'recommendation outcomes', () => {
 		} );
 		const payload = decorateRecommendationPayload(
 			{
+				requestMeta: {
+					learningAttribution: {
+						generationId:
+							'recgen:template:11111111-1111-4111-8111-111111111111',
+						guidelineVersion: 'guidelines:v8',
+						docsContentFingerprint: 'docs-content:abc',
+						docsRuntimeFingerprint: 'docs-runtime:def',
+						provider: 'openai',
+						model: 'gpt-5',
+						rankingVersion: 'contextual-ranking-v1',
+						validationVocabularyVersion: 'validation-reasons-v1',
+						rawPrompt: 'Private launch copy',
+					},
+				},
 				suggestions: [
 					{ label: 'Insert hero', suggestionKey: 'hero' },
 					{ label: 'Tighten footer' },
@@ -192,6 +206,167 @@ describe( 'recommendation outcomes', () => {
 				rank: 1,
 			} )
 		);
+		expect( payload.recommendationOutcome.learningAttribution ).toEqual(
+			expect.objectContaining( {
+				generationId:
+					'recgen:template:11111111-1111-4111-8111-111111111111',
+				recommendationSetId,
+				sourceRequestSignature: expect.stringMatching( /^hash_/ ),
+				guidelineVersion: 'guidelines:v8',
+				docsContentFingerprint: 'docs-content:abc',
+				docsRuntimeFingerprint: 'docs-runtime:def',
+				provider: 'openai',
+				model: 'gpt-5',
+				rankingVersion: 'contextual-ranking-v1',
+				validationVocabularyVersion: 'validation-reasons-v1',
+			} )
+		);
+		expect(
+			payload.suggestions[ 0 ].recommendationOutcome.learningAttribution
+		).toEqual( payload.recommendationOutcome.learningAttribution );
+		expect(
+			getRecommendationIdentityForApply( payload.suggestions[ 0 ] )
+				.learningAttribution
+		).toEqual( payload.recommendationOutcome.learningAttribution );
+		expect( JSON.stringify( payload.recommendationOutcome ) ).not.toContain(
+			'Private launch copy'
+		);
+	} );
+
+	test( 'carries learning attribution from summary into shown outcome rows', () => {
+		const payload = decorateRecommendationPayload(
+			{
+				requestMeta: {
+					learningAttribution: {
+						generationId:
+							'recgen:block:22222222-2222-4222-8222-222222222222',
+						guidelineVersion: 'guidelines:v8',
+						provider: 'anthropic',
+						rawPrompt: 'Secret campaign notes',
+					},
+				},
+				suggestions: [ { label: 'Use concise copy' } ],
+			},
+			{
+				surface: 'block',
+				recommendationSetId: 'block:2:set',
+				sourceRequestSignature: 'signature',
+			}
+		);
+
+		const summary = getRecommendationOutcomeSummaryFromPayload( payload );
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
+			event: 'shown',
+			surface: 'block',
+			recommendationSetId: summary.recommendationSetId,
+			sourceRequestSignature: summary.sourceRequestSignature,
+			topSuggestionKeys: summary.topSuggestionKeys,
+			resultCount: summary.resultCount,
+			learningAttribution: summary.learningAttribution,
+		} );
+
+		expect( summary.learningAttribution ).toEqual(
+			expect.objectContaining( {
+				generationId:
+					'recgen:block:22222222-2222-4222-8222-222222222222',
+				recommendationSetId: 'block:2:set',
+				sourceRequestSignature: expect.stringMatching( /^hash_/ ),
+				guidelineVersion: 'guidelines:v8',
+				provider: 'anthropic',
+			} )
+		);
+		expect( entry.after.outcome.learningAttribution ).toEqual(
+			summary.learningAttribution
+		);
+		expect( entry.request.recommendation.learningAttribution ).toEqual(
+			summary.learningAttribution
+		);
+		expect( JSON.stringify( entry ) ).not.toContain( 'Secret' );
+		expect( JSON.stringify( entry ) ).not.toContain( 'campaign' );
+	} );
+
+	test( 'decorates pattern recommendations with learning attribution for outcome summaries', () => {
+		const payload = decorateRecommendationPayload(
+			{
+				requestMeta: {
+					learningAttribution: {
+						generationId:
+							'recgen:pattern:77777777-7777-4777-8777-777777777777',
+						guidelineVersion: 'guidelines:v8',
+						provider: 'openai',
+						model: 'gpt-5',
+						rawPrompt: 'Private pattern launch copy',
+					},
+				},
+				recommendations: [
+					{
+						name: 'theme/hero',
+						ranking: {
+							contextScore: 0.91,
+							blendedScore: 0.88,
+							rankingVersion: 'contextual-ranking-v1',
+						},
+					},
+				],
+			},
+			{
+				surface: 'pattern',
+				recommendationSetId: 'pattern:2:set',
+				sourceRequestSignature: 'pattern-signature',
+			}
+		);
+		const summary = getRecommendationOutcomeSummaryFromPayload( payload );
+
+		expect(
+			payload.recommendations[ 0 ].recommendationOutcome
+				.learningAttribution
+		).toEqual(
+			expect.objectContaining( {
+				generationId:
+					'recgen:pattern:77777777-7777-4777-8777-777777777777',
+				recommendationSetId: 'pattern:2:set',
+				sourceRequestSignature: expect.stringMatching( /^hash_/ ),
+				guidelineVersion: 'guidelines:v8',
+				provider: 'openai',
+				model: 'gpt-5',
+			} )
+		);
+		expect( summary.learningAttribution ).toEqual(
+			payload.recommendations[ 0 ].recommendationOutcome
+				.learningAttribution
+		);
+		expect( JSON.stringify( summary ) ).not.toContain( 'Private pattern' );
+	} );
+
+	test( 'drops learning attribution without a generation id', () => {
+		const payload = decorateRecommendationPayload(
+			{
+				requestMeta: {
+					learningAttribution: {
+						provider: 'openai',
+						model: 'gpt-5',
+					},
+				},
+				suggestions: [ { label: 'Insert hero' } ],
+			},
+			{
+				surface: 'template',
+				recommendationSetId: 'template:2:set',
+				sourceRequestSignature: 'signature',
+			}
+		);
+
+		expect( payload.recommendationOutcome ).not.toHaveProperty(
+			'learningAttribution'
+		);
+		expect(
+			payload.suggestions[ 0 ].recommendationOutcome
+		).not.toHaveProperty( 'learningAttribution' );
 	} );
 
 	test( 'summarizes decorated payloads with lane-unique fallback keys', () => {

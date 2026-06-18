@@ -56,7 +56,7 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 | Scope bootstrap | `ActivitySessionBootstrap()` in `src/components/ActivitySessionBootstrap.js` | Re-hydrates activity whenever the edited entity changes |
 | Inline UI | `AIActivitySection` in `src/components/AIActivitySection.js` | Renders recent entries and inline undo buttons |
 | Store hydration | `loadActivitySession()` in `src/store/index.js` | Merges local and server-backed activity for the active scope |
-| Store undo | `undoActivity()` in `src/store/index.js` | Runs safe undo and persists the undo-status transition |
+| Store undo | `undoActivity()` (implemented in `src/store/activity-undo.js`, exposed via the store) | Runs safe undo and persists the undo-status transition |
 | Global Styles undo helpers | `getGlobalStylesActivityUndoState()` and `undoGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validate and restore the current Global Styles entity |
 | Admin page registration | `ActivityPage` in `inc/Admin/ActivityPage.php` | Registers `Settings > AI Activity` and localizes admin approval/audit boot data |
 | Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, summary cards, external-apply decision controls, and custom detail sections |

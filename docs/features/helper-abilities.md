@@ -27,7 +27,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 3. The ability delegates to a server collector, registry helper, or diagnostics helper
 4. `flavor-agent/check-status` calls `FlavorAgent\Abilities\SurfaceCapabilities::build()` and returns backend inventory plus readiness data
 5. Theme, pattern, template-part, and block-introspection helpers read current WordPress registry/entity state through the server collectors
-6. `flavor-agent/search-wordpress-docs` sanitizes the query, resolves an optional entity key, and then searches or warms trusted WordPress docs guidance through Cloudflare AI Search
+6. `flavor-agent/search-wordpress-docs` sanitizes the query and searches trusted WordPress docs guidance through the plugin's public Cloudflare AI Search endpoint (with internal query caching)
 
 ## What This Surface Can Do
 
@@ -35,8 +35,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - List registered patterns with optional search, pagination, and `includeContent` control, fetch one by name via the `patternId` or `name` alias, and inspect caller-readable synced `wp_block` patterns separately from registry-backed block patterns
 - Return the active theme plus current theme presets, applied theme styles, and the broader theme token snapshot for style and layout reasoning
 - List template parts with either editor or theme capability, while returning markup only to theme-capable callers
+- List templates with either editor or theme capability, while returning markup only to theme-capable callers
 - Return backend and surface-readiness diagnostics for editor and admin tooling
-- Search trusted WordPress developer docs for grounded guidance, with cache warming for repeated queries
+- Search trusted WordPress developer docs for grounded guidance (served from a shared query cache when available)
 
 ## Guardrails And Failure Modes
 
@@ -61,14 +62,15 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Synced pattern listing | `PatternAbilities::list_synced_patterns()` | Returns caller-readable `wp_block` patterns filtered by sync status |
 | Synced pattern lookup | `PatternAbilities::get_synced_pattern()` | Returns one caller-readable `wp_block` pattern by numeric post ID |
 | Template-part listing | `TemplateAbilities::list_template_parts()` | Returns registered template parts with optional area filtering and optional content for theme-capable callers |
+| Template listing | `TemplateAbilities::list_templates()` | Returns registered templates (id/slug/title/description) with optional content for theme-capable callers |
 | Active theme | `InfraAbilities::get_active_theme()` | Returns the active theme name, stylesheet, template, and version |
 | Theme presets | `InfraAbilities::get_theme_presets()` | Returns palette, typography, spacing, shadow, gradient, and duotone presets |
 | Theme styles | `InfraAbilities::get_theme_styles()` | Returns applied global styles plus extracted element and pseudo-state summaries |
 | Theme tokens | `InfraAbilities::get_theme_tokens()` | Returns the current theme token snapshot |
 | Diagnostics | `InfraAbilities::check_status()` | Returns backend inventory, available ability IDs, and per-surface readiness |
-| Docs search | `WordPressDocsAbilities::search_wordpress_docs()` | Searches or warms trusted WordPress docs guidance |
+| Docs search | `WordPressDocsAbilities::search_wordpress_docs()` | Searches trusted WordPress developer docs via the public AI Search endpoint |
 | Readiness contract | `SurfaceCapabilities::build()` | Builds the per-surface availability and action-link payload |
-| Docs search backend | `AISearchClient::search()` / `warm_entity()` / `maybe_search_with_cache_fallbacks()` | Handles trusted docs search, cache fallback, and async warm behavior |
+| Docs search backend | `AISearchClient::search()` / `maybe_search()` / `maybe_search_best_effort()` | Handles docs search with shared query caching and best-effort behavior for recommendations |
 
 ## Related Routes And Abilities
 

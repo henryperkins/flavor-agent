@@ -104,7 +104,7 @@ final class RecommendationOutcome {
 			$target['suggestionKey'] = $suggestion_key;
 		}
 
-		$normalized_outcome = [
+		$normalized_outcome   = [
 			'event'                  => $event,
 			'visibility'             => 'diagnostic',
 			'recommendationSetId'    => $set_id,
@@ -116,6 +116,13 @@ final class RecommendationOutcome {
 			),
 			'resultCount'            => self::normalize_non_negative_int( $outcome['resultCount'] ?? 0 ),
 		];
+		$learning_attribution = self::normalize_learning_attribution(
+			$outcome['learningAttribution'] ?? $entry['learningAttribution'] ?? null
+		);
+		if ( [] !== $learning_attribution ) {
+			$normalized_outcome['learningAttribution'] = $learning_attribution;
+		}
+
 		if ( 'shown' === $event ) {
 			$ranking_set = self::normalize_ranking_set( $outcome['rankingSet'] ?? [] );
 			if ( [] !== $ranking_set ) {
@@ -157,6 +164,10 @@ final class RecommendationOutcome {
 
 		if ( isset( $normalized_outcome['rankingSet'] ) ) {
 			$request_recommendation['rankingSet'] = $normalized_outcome['rankingSet'];
+		}
+
+		if ( isset( $normalized_outcome['learningAttribution'] ) ) {
+			$request_recommendation['learningAttribution'] = $normalized_outcome['learningAttribution'];
 		}
 
 		return [
@@ -213,6 +224,45 @@ final class RecommendationOutcome {
 		}
 
 		return $ranking;
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function normalize_learning_attribution( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$generation_id = self::bounded_string( $value['generationId'] ?? '' );
+		if ( '' === $generation_id ) {
+			return [];
+		}
+
+		$normalized = [
+			'generationId' => $generation_id,
+		];
+
+		foreach (
+			[
+				'recommendationSetId',
+				'sourceRequestSignature',
+				'guidelineVersion',
+				'docsContentFingerprint',
+				'docsRuntimeFingerprint',
+				'provider',
+				'model',
+				'rankingVersion',
+				'validationVocabularyVersion',
+			] as $key
+		) {
+			$field = self::bounded_string( $value[ $key ] ?? '' );
+			if ( '' !== $field ) {
+				$normalized[ $key ] = $field;
+			}
+		}
+
+		return $normalized;
 	}
 
 	/**

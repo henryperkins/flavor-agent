@@ -13,6 +13,7 @@ use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
 use FlavorAgent\Support\FlavorAgentRequestTag;
 use FlavorAgent\Support\JsonSchemaObjectCoercion;
+use FlavorAgent\Support\RankingContract;
 use FlavorAgent\Support\StringArray;
 use FlavorAgent\Support\ValidationReason;
 
@@ -389,7 +390,13 @@ final class RecommendationAbilityExecution {
 			$request_meta = self::append_pattern_request_meta( $request_meta );
 		}
 
-		$request_meta = self::append_request_log_meta( $request_meta, $request_tag );
+		$request_meta                        = self::append_request_log_meta( $request_meta, $request_tag );
+		$request_meta['learningAttribution'] = self::build_learning_attribution(
+			$request_tag->surface(),
+			$payload,
+			$request_meta,
+			$request_tag
+		);
 
 		$payload['requestMeta'] = $request_meta;
 
@@ -414,7 +421,13 @@ final class RecommendationAbilityExecution {
 			$request_meta = self::append_pattern_request_meta( $request_meta );
 		}
 
-		$request_meta = self::append_request_log_meta( $request_meta, $request_tag );
+		$request_meta                        = self::append_request_log_meta( $request_meta, $request_tag );
+		$request_meta['learningAttribution'] = self::build_learning_attribution(
+			$request_tag->surface(),
+			$data,
+			$request_meta,
+			$request_tag
+		);
 
 		$data['requestMeta'] = $request_meta;
 
@@ -436,6 +449,88 @@ final class RecommendationAbilityExecution {
 		$request_meta['requestLogId'] = RequestLoggingBridge::consume_log_id( $request_token ) ?? '';
 
 		return $request_meta;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @param array<string, mixed> $request_meta
+	 * @return array<string, string>
+	 */
+	private static function build_learning_attribution(
+		string $surface,
+		array $payload,
+		array $request_meta,
+		FlavorAgentRequestTag $request_tag
+	): array {
+		$docs_grounding = \is_array( $payload['docsGrounding'] ?? null ) ? $payload['docsGrounding'] : [];
+		$provider       = self::first_attribution_value(
+			$request_meta,
+			[
+				'provider',
+				'providerLabel',
+				'backendLabel',
+			]
+		);
+		$model          = self::bounded_attribution_value( $request_meta['model'] ?? '' );
+
+		$attribution = [
+			'generationId'                => self::generate_generation_id( $surface, $request_tag ),
+			'sourceRequestSignature'      => self::first_attribution_value(
+				$payload,
+				[
+					'sourceRequestSignature',
+					'resolvedContextSignature',
+					'reviewContextSignature',
+				]
+			),
+			'guidelineVersion'            => Guidelines::version_id(),
+			'docsContentFingerprint'      => self::bounded_attribution_value(
+				$docs_grounding['contentFingerprint']
+					?? $payload['docsGroundingFingerprint']
+					?? ''
+			),
+			'docsRuntimeFingerprint'      => self::bounded_attribution_value(
+				$docs_grounding['runtimeFingerprint'] ?? ''
+			),
+			'provider'                    => $provider,
+			'model'                       => $model,
+			'rankingVersion'              => RankingContract::CONTEXTUAL_RANKING_VERSION,
+			'validationVocabularyVersion' => ValidationReason::VERSION,
+		];
+
+		return \array_filter(
+			$attribution,
+			static fn ( string $value ): bool => '' !== $value
+		);
+	}
+
+	private static function generate_generation_id( string $surface, FlavorAgentRequestTag $request_tag ): string {
+		$surface = \sanitize_key( $surface );
+
+		return 'recgen:' . ( '' !== $surface ? $surface : 'recommendation' ) . ':' . $request_tag->request_token();
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @param array<int, string> $keys
+	 */
+	private static function first_attribution_value( array $payload, array $keys ): string {
+		foreach ( $keys as $key ) {
+			$value = self::bounded_attribution_value( $payload[ $key ] ?? '' );
+			if ( '' !== $value ) {
+				return $value;
+			}
+		}
+
+		return '';
+	}
+
+	private static function bounded_attribution_value( mixed $value ): string {
+		if ( ! \is_scalar( $value ) && null !== $value ) {
+			return '';
+		}
+
+		return \substr( \sanitize_text_field( (string) $value ), 0, 191 );
 	}
 
 	/**
@@ -743,10 +838,13 @@ final class RecommendationAbilityExecution {
 				],
 				'after'           => $after,
 				'request'         => [
-					'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'reference'        => $reference,
-					'ai'               => \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [],
-					'guidelineVersion' => Guidelines::version_id(),
+					'prompt'              => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'reference'           => $reference,
+					'ai'                  => \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [],
+					'guidelineVersion'    => Guidelines::version_id(),
+					'learningAttribution' => \is_array( $payload['requestMeta']['learningAttribution'] ?? null )
+						? $payload['requestMeta']['learningAttribution']
+						: [],
 				],
 				'document'        => $document,
 				'executionResult' => 'review',
@@ -846,11 +944,14 @@ final class RecommendationAbilityExecution {
 					'requestContext' => $request_context,
 				],
 				'request'         => [
-					'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'reference'        => $reference,
-					'ai'               => \is_array( $error_data['requestMeta'] ?? null ) ? $error_data['requestMeta'] : [],
-					'guidelineVersion' => Guidelines::version_id(),
-					'error'            => [
+					'prompt'              => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'reference'           => $reference,
+					'ai'                  => \is_array( $error_data['requestMeta'] ?? null ) ? $error_data['requestMeta'] : [],
+					'guidelineVersion'    => Guidelines::version_id(),
+					'learningAttribution' => \is_array( $error_data['requestMeta']['learningAttribution'] ?? null )
+						? $error_data['requestMeta']['learningAttribution']
+						: [],
+					'error'               => [
 						'code'    => \trim( (string) $error->get_error_code() ),
 						'message' => $message,
 						'data'    => $error_data,

@@ -102,6 +102,64 @@ final class ActivitySerializerTest extends TestCase {
 		);
 	}
 
+	public function test_apply_row_request_recommendation_learning_attribution_round_trips(): void {
+		$attribution = [
+			'generationId'                => 'recgen:template:55555555-5555-4555-8555-555555555555',
+			'recommendationSetId'         => 'template:0:hash_x',
+			'sourceRequestSignature'      => 'hash_source',
+			'guidelineVersion'            => 'guidelines:v8',
+			'docsContentFingerprint'      => 'docs-content:abc',
+			'docsRuntimeFingerprint'      => 'docs-runtime:def',
+			'provider'                    => 'openai',
+			'model'                       => 'gpt-5',
+			'rankingVersion'              => 'contextual-ranking-v1',
+			'validationVocabularyVersion' => 'validation-reasons-v1',
+		];
+		$normalized  = Serializer::normalize_entry(
+			[
+				'id'      => 'activity-1',
+				'type'    => 'apply_template_suggestion',
+				'surface' => 'template',
+				'request' => [
+					'recommendation' => [
+						'recommendationSetId' => 'template:0:hash_x',
+						'suggestionKey'       => 'suggestion:1',
+						'learningAttribution' => $attribution,
+					],
+				],
+			]
+		);
+
+		$hydrated = Serializer::hydrate_row(
+			[
+				'activity_id'      => 'activity-1',
+				'schema_version'   => '1',
+				'activity_type'    => 'apply_template_suggestion',
+				'surface'          => 'template',
+				'target_json'      => '{"templateRef":"theme//home"}',
+				'suggestion'       => 'Clarify hierarchy',
+				'suggestion_key'   => 'suggestion:1',
+				'before_state'     => '{}',
+				'after_state'      => '{}',
+				'request_json'     => Serializer::encode_json( $normalized['request'] ),
+				'document_json'    => '{"scopeKey":"wp_template:theme//home"}',
+				'execution_result' => 'applied',
+				'undo_state'       => '{"status":"available"}',
+				'user_id'          => '7',
+				'created_at'       => '2026-03-24 10:00:00',
+			]
+		);
+
+		$this->assertSame(
+			$attribution,
+			$normalized['request']['recommendation']['learningAttribution'] ?? null
+		);
+		$this->assertSame(
+			$attribution,
+			$hydrated['request']['recommendation']['learningAttribution'] ?? null
+		);
+	}
+
 	public function test_derive_entity_uses_surface_specific_refs(): void {
 		$this->assertSame(
 			[

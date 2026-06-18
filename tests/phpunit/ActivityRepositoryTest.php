@@ -1541,6 +1541,40 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'undone', $older['undo']['status'] ?? null );
 	}
 
+	public function test_update_undo_status_preserves_request_learning_attribution(): void {
+		Repository::install();
+
+		$entry                              = $this->build_template_entry( 'activity-1', '2026-03-24T10:00:00Z' );
+		$entry['request']['recommendation'] = [
+			'recommendationSetId' => 'template:1:set',
+			'suggestionKey'       => 'theme/hero',
+			'learningAttribution' => [
+				'generationId'                => 'recgen:template:44444444-4444-4444-8444-444444444444',
+				'recommendationSetId'         => 'template:1:set',
+				'sourceRequestSignature'      => 'hash_source',
+				'guidelineVersion'            => 'guidelines:v8',
+				'docsContentFingerprint'      => 'docs-content:abc',
+				'docsRuntimeFingerprint'      => 'docs-runtime:def',
+				'provider'                    => 'openai',
+				'model'                       => 'gpt-5',
+				'rankingVersion'              => 'contextual-ranking-v1',
+				'validationVocabularyVersion' => 'validation-reasons-v1',
+			],
+		];
+		$expected_attribution               = $entry['request']['recommendation']['learningAttribution'];
+
+		Repository::create( $entry );
+
+		$updated = Repository::update_undo_status( 'activity-1', 'undone' );
+
+		$this->assertIsArray( $updated );
+		$this->assertSame( 'undone', $updated['undo']['status'] ?? null );
+		$this->assertSame(
+			$expected_attribution,
+			$updated['request']['recommendation']['learningAttribution'] ?? null
+		);
+	}
+
 	public function test_update_undo_status_ignores_newer_review_only_rows_for_ordered_tail(): void {
 		Repository::install();
 

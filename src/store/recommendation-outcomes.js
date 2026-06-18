@@ -55,6 +55,16 @@ const RANKING_PENALTY_KEYS = new Set( [
 	'validation_risk',
 ] );
 
+const LEARNING_ATTRIBUTION_KEYS = [
+	'guidelineVersion',
+	'docsContentFingerprint',
+	'docsRuntimeFingerprint',
+	'provider',
+	'model',
+	'rankingVersion',
+	'validationVocabularyVersion',
+];
+
 function cleanString( value, maxLength = MAX_STRING_LENGTH ) {
 	if ( value === null || value === undefined ) {
 		return '';
@@ -245,6 +255,55 @@ function normalizeRankingSnapshot( ranking = null ) {
 	return Object.keys( snapshot ).length ? snapshot : null;
 }
 
+function normalizeLearningAttribution( value = null, overrides = {} ) {
+	if ( ! value || typeof value !== 'object' || Array.isArray( value ) ) {
+		return null;
+	}
+
+	const generationId = cleanString( value.generationId );
+
+	if ( ! generationId ) {
+		return null;
+	}
+
+	const recommendationSetId =
+		cleanString( overrides.recommendationSetId ) ||
+		cleanString( value.recommendationSetId );
+	const sourceRequestSignature = normalizeSourceRequestSignature(
+		overrides.sourceRequestSignature || value.sourceRequestSignature
+	);
+	const attribution = {
+		generationId,
+		...( recommendationSetId ? { recommendationSetId } : {} ),
+		...( sourceRequestSignature ? { sourceRequestSignature } : {} ),
+	};
+
+	for ( const key of LEARNING_ATTRIBUTION_KEYS ) {
+		const normalized = cleanString( value[ key ] );
+
+		if ( normalized ) {
+			attribution[ key ] = normalized;
+		}
+	}
+
+	return attribution;
+}
+
+function firstLearningAttribution( candidates = [], overrides = {} ) {
+	for ( const candidate of candidates ) {
+		const attribution = normalizeLearningAttribution(
+			candidate,
+			overrides
+		);
+
+		if ( attribution ) {
+			return attribution;
+		}
+	}
+
+	return null;
+}
+
 function isStableRankingSetSuggestionKey( value ) {
 	const key = cleanString( value );
 
@@ -337,13 +396,30 @@ export function decorateRecommendationPayload(
 		return payload;
 	}
 
-	const keys = [ 'settings', 'styles', 'block', 'suggestions' ];
+	const keys = [
+		'settings',
+		'styles',
+		'block',
+		'suggestions',
+		'recommendations',
+	];
 	const sourceSignature = normalizeSourceRequestSignature(
 		sourceRequestSignature
 	);
 	const setId =
 		cleanString( recommendationSetId ) ||
 		buildRecommendationSetId( { surface, sourceRequestSignature } );
+	const learningAttribution = firstLearningAttribution(
+		[
+			payload?.requestMeta?.learningAttribution,
+			payload?.recommendationOutcome?.learningAttribution,
+			payload?.learningAttribution,
+		],
+		{
+			recommendationSetId: setId,
+			sourceRequestSignature: sourceSignature,
+		}
+	);
 	const decorateList = ( list = [], listKey = 'suggestions' ) =>
 		Array.isArray( list )
 			? list.map( ( suggestion, index ) => {
@@ -358,6 +434,18 @@ export function decorateRecommendationPayload(
 						suggestion,
 						fallbackKey
 					);
+					const suggestionLearningAttribution =
+						firstLearningAttribution(
+							[
+								suggestion?.recommendationOutcome
+									?.learningAttribution,
+								learningAttribution,
+							],
+							{
+								recommendationSetId: setId,
+								sourceRequestSignature: sourceSignature,
+							}
+						);
 
 					return {
 						...suggestion,
@@ -391,6 +479,12 @@ export function decorateRecommendationPayload(
 										),
 								  }
 								: {} ),
+							...( suggestionLearningAttribution
+								? {
+										learningAttribution:
+											suggestionLearningAttribution,
+								  }
+								: {} ),
 						},
 					};
 			  } )
@@ -409,6 +503,7 @@ export function decorateRecommendationPayload(
 			recommendationOutcome: {
 				recommendationSetId: setId,
 				sourceRequestSignature: sourceSignature,
+				...( learningAttribution ? { learningAttribution } : {} ),
 			},
 		}
 	);
@@ -448,12 +543,26 @@ export function getRecommendationOutcomeSummaryFromPayload( payload = {} ) {
 		return null;
 	}
 
+	const sourceRequestSignature = normalizeSourceRequestSignature(
+		rootOutcome.sourceRequestSignature ||
+			firstOutcome.sourceRequestSignature
+	);
+	const learningAttribution = firstLearningAttribution(
+		[
+			rootOutcome.learningAttribution,
+			firstOutcome.learningAttribution,
+			payload?.requestMeta?.learningAttribution,
+			payload?.learningAttribution,
+		],
+		{
+			recommendationSetId,
+			sourceRequestSignature,
+		}
+	);
+
 	return {
 		recommendationSetId,
-		sourceRequestSignature: normalizeSourceRequestSignature(
-			rootOutcome.sourceRequestSignature ||
-				firstOutcome.sourceRequestSignature
-		),
+		sourceRequestSignature,
 		topSuggestionKeys: normalizeTopSuggestionKeys(
 			suggestions.map( ( suggestion, index ) =>
 				getStableRankingSetSuggestionKey(
@@ -465,6 +574,7 @@ export function getRecommendationOutcomeSummaryFromPayload( payload = {} ) {
 		),
 		resultCount: suggestions.length,
 		rankingSet: buildRankingSetFromSuggestions( suggestions ),
+		...( learningAttribution ? { learningAttribution } : {} ),
 	};
 }
 
@@ -566,22 +676,37 @@ export function buildRecommendationIdentityFromSuggestion(
 		members = outcome.members;
 	}
 
+	const recommendationSetId = cleanString(
+		overrides.recommendationSetId || outcome.recommendationSetId
+	);
+	const sourceRequestSignature = normalizeSourceRequestSignature(
+		overrides.sourceRequestSignature || outcome.sourceRequestSignature
+	);
+	const learningAttribution = firstLearningAttribution(
+		[
+			overrides.learningAttribution,
+			outcome.learningAttribution,
+			suggestion?.learningAttribution,
+		],
+		{
+			recommendationSetId,
+			sourceRequestSignature,
+		}
+	);
+
 	return {
-		recommendationSetId: cleanString(
-			overrides.recommendationSetId || outcome.recommendationSetId
-		),
+		recommendationSetId,
 		suggestionKey: cleanString(
 			overrides.suggestionKey ||
 				outcome.suggestionKey ||
 				suggestion?.suggestionKey
 		),
-		sourceRequestSignature: normalizeSourceRequestSignature(
-			overrides.sourceRequestSignature || outcome.sourceRequestSignature
-		),
+		sourceRequestSignature,
 		rank,
 		topSuggestionKeys,
 		resultCount,
 		members: normalizeTopSuggestionKeys( members ),
+		...( learningAttribution ? { learningAttribution } : {} ),
 	};
 }
 
@@ -600,6 +725,7 @@ export function buildRecommendationOutcomeEntry( {
 	patternKey = '',
 	rank = null,
 	rankingSet = [],
+	learningAttribution = null,
 } = {} ) {
 	const safeEvent = cleanCode( event );
 	const safeSurface = cleanCode( surface );
@@ -623,6 +749,7 @@ export function buildRecommendationOutcomeEntry( {
 		topSuggestionKeys,
 		resultCount,
 		rank,
+		learningAttribution,
 	} );
 	const setId =
 		identity.recommendationSetId ||
@@ -646,6 +773,13 @@ export function buildRecommendationOutcomeEntry( {
 
 	const rankingSnapshot = normalizeRankingSnapshot( suggestion?.ranking );
 	const normalizedRankingSet = buildRankingSetFromSuggestions( rankingSet );
+	const normalizedLearningAttribution = normalizeLearningAttribution(
+		identity.learningAttribution,
+		{
+			recommendationSetId: setId,
+			sourceRequestSignature: identity.sourceRequestSignature,
+		}
+	);
 	let outcomeRanking = {};
 
 	if ( safeEvent === 'shown' && normalizedRankingSet.length ) {
@@ -713,6 +847,9 @@ export function buildRecommendationOutcomeEntry( {
 								VALIDATION_REASONS_VERSION,
 					  }
 					: {} ),
+				...( normalizedLearningAttribution
+					? { learningAttribution: normalizedLearningAttribution }
+					: {} ),
 			},
 		},
 		document: safeDocument,
@@ -741,6 +878,9 @@ export function buildRecommendationOutcomeEntry( {
 					? { members: identity.members }
 					: {} ),
 				...outcomeRanking,
+				...( normalizedLearningAttribution
+					? { learningAttribution: normalizedLearningAttribution }
+					: {} ),
 			},
 		},
 	};
@@ -762,6 +902,9 @@ export function getRecommendationIdentityForApply( suggestion = {} ) {
 		sourceRequestSignature: identity.sourceRequestSignature,
 		rank: identity.rank,
 		members: Array.isArray( identity.members ) ? identity.members : [],
+		...( identity.learningAttribution
+			? { learningAttribution: identity.learningAttribution }
+			: {} ),
 		...( primary ? { validationReason: primary.code } : {} ),
 	};
 }

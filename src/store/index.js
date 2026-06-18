@@ -395,6 +395,7 @@ function normalizePatternCacheEntry( entry = null ) {
 			: [],
 		diagnostics: entry.diagnostics || null,
 		docsGroundingWarning: entry.docsGroundingWarning || null,
+		requestMeta: normalizeRequestMeta( entry.requestMeta ),
 		requestSignature,
 		insertionTargetSignature,
 		resolvedContextSignature,
@@ -2289,6 +2290,16 @@ const actions = {
 			const memberSuggestionKeys = orderedSuggestions
 				.map( ( suggestion ) => suggestion?.suggestionKey || '' )
 				.filter( Boolean );
+			const batchAttributionSource = orderedSuggestions.find(
+				( suggestion ) =>
+					suggestion?.recommendationOutcome?.learningAttribution ||
+					suggestion?.learningAttribution
+			);
+			const batchLearningAttribution =
+				batchAttributionSource?.recommendationOutcome
+					?.learningAttribution ||
+				batchAttributionSource?.learningAttribution ||
+				null;
 			const recommendationSetId =
 				orderedSuggestions[ 0 ]?.recommendationOutcome
 					?.recommendationSetId ||
@@ -2335,7 +2346,15 @@ const actions = {
 						suggestion: {
 							suggestionKey: batchSuggestionKey,
 							members: memberSuggestionKeys,
-							recommendationOutcome: { recommendationSetId },
+							recommendationOutcome: {
+								recommendationSetId,
+								...( batchLearningAttribution
+									? {
+											learningAttribution:
+												batchLearningAttribution,
+									  }
+									: {} ),
+							},
 						},
 						reason: staleApplyResult.staleReason || 'client',
 						target: { clientId, members: memberSuggestionKeys },
@@ -2395,7 +2414,15 @@ const actions = {
 							suggestion: {
 								suggestionKey: batchSuggestionKey,
 								members: memberSuggestionKeys,
-								recommendationOutcome: { recommendationSetId },
+								recommendationOutcome: {
+									recommendationSetId,
+									...( batchLearningAttribution
+										? {
+												learningAttribution:
+													batchLearningAttribution,
+										  }
+										: {} ),
+								},
 							},
 							reason:
 								resolvedFreshness.staleReason ||
@@ -2466,7 +2493,15 @@ const actions = {
 							suggestion: {
 								suggestionKey: batchSuggestionKey,
 								members: memberSuggestionKeys,
-								recommendationOutcome: { recommendationSetId },
+								recommendationOutcome: {
+									recommendationSetId,
+									...( batchLearningAttribution
+										? {
+												learningAttribution:
+													batchLearningAttribution,
+										  }
+										: {} ),
+								},
 							},
 							reason: 'operation_validation_failed',
 							target: { clientId, members: memberSuggestionKeys },
@@ -2509,6 +2544,7 @@ const actions = {
 						clientId
 					),
 					clientId,
+					learningAttribution: batchLearningAttribution,
 					memberSuggestionKeys,
 					recommendationSetId,
 					requestPrompt: storedRecommendations.prompt || '',
@@ -2836,11 +2872,34 @@ const actions = {
 		insertionTargetSignature = '',
 		docsGroundingWarning = null,
 		resolvedContextSignature = '',
-		patternRuntimeSignature = ''
+		patternRuntimeSignature = '',
+		requestMeta = null
 	) {
+		const sourceRequestSignature =
+			requestSignature || insertionTargetSignature || '';
+		const decoratedPayload = decorateRecommendationPayload(
+			{
+				recommendations: Array.isArray( recommendations )
+					? recommendations
+					: [],
+				requestMeta: normalizeRequestMeta( requestMeta ),
+			},
+			{
+				surface: 'pattern',
+				recommendationSetId: buildRecommendationSetId( {
+					surface: 'pattern',
+					requestToken:
+						requestSignature || insertionTargetSignature || null,
+					sourceRequestSignature,
+					resultRef: insertionTargetSignature,
+				} ),
+				sourceRequestSignature,
+			}
+		);
+
 		return {
 			type: 'SET_PATTERN_RECS',
-			recommendations,
+			recommendations: decoratedPayload.recommendations,
 			requestToken,
 			requestSignature,
 			diagnostics,
@@ -2883,7 +2942,8 @@ const actions = {
 					normalized.insertionTargetSignature,
 					normalized.docsGroundingWarning,
 					normalized.resolvedContextSignature,
-					normalized.patternRuntimeSignature
+					normalized.patternRuntimeSignature,
+					normalized.requestMeta
 				)
 			);
 			dispatch(
@@ -3092,7 +3152,8 @@ const actions = {
 							deriveDocsGroundingWarning( result.docsGrounding ),
 							getResolvedContextSignatureFromResponse( result ) ||
 								'',
-							getPatternRuntimeSignatureFromResponse( result )
+							getPatternRuntimeSignatureFromResponse( result ),
+							result.requestMeta || null
 						)
 					);
 					localDispatch(
@@ -3124,6 +3185,7 @@ const actions = {
 									deriveDocsGroundingWarning(
 										result.docsGrounding
 									),
+								requestMeta: result.requestMeta || null,
 								patternRuntimeSignature:
 									getPatternRuntimeSignatureFromResponse(
 										result

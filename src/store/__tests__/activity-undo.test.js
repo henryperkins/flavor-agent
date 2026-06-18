@@ -20,6 +20,7 @@ jest.mock( '../../utils/block-structural-actions', () => ( {
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 import {
+	buildBlockActivityEntry,
 	buildBlockBatchActivityEntry,
 	buildGlobalStylesActivityEntry,
 	buildStyleBookActivityEntry,
@@ -174,6 +175,90 @@ describe( 'buildStyleBookActivityEntry', () => {
 
 		expect( entry.before.userConfig ).toEqual( {} );
 		expect( entry.after.userConfig ).toEqual( {} );
+	} );
+} );
+
+describe( 'buildBlockActivityEntry', () => {
+	test( 'preserves learning attribution on apply activity requests', () => {
+		const entry = buildBlockActivityEntry( {
+			afterAttributes: { align: 'wide' },
+			beforeAttributes: {},
+			blockContext: { name: 'core/group' },
+			clientId: 'block-1',
+			requestToken: 7,
+			scope: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
+			suggestion: {
+				label: 'Make hero wide',
+				suggestionKey: 'block:suggestions:1',
+				recommendationOutcome: {
+					recommendationSetId: 'block:1:set',
+					sourceRequestSignature: 'signature',
+					learningAttribution: {
+						generationId:
+							'recgen:block:33333333-3333-4333-8333-333333333333',
+						provider: 'openai',
+						model: 'gpt-5',
+						rawPrompt: 'Private launch copy',
+					},
+				},
+			},
+		} );
+
+		expect( entry.request.recommendation.learningAttribution ).toEqual(
+			expect.objectContaining( {
+				generationId:
+					'recgen:block:33333333-3333-4333-8333-333333333333',
+				recommendationSetId: 'block:1:set',
+				sourceRequestSignature: expect.stringMatching( /^hash_/ ),
+				provider: 'openai',
+				model: 'gpt-5',
+			} )
+		);
+		expect( JSON.stringify( entry.request.recommendation ) ).not.toContain(
+			'Private launch copy'
+		);
+	} );
+
+	test( 'preserves learning attribution on batch apply activity requests', () => {
+		const entry = buildBlockBatchActivityEntry( {
+			afterAttributes: { align: 'wide', backgroundColor: 'accent' },
+			beforeAttributes: {},
+			blockContext: { name: 'core/group' },
+			clientId: 'block-1',
+			memberSuggestionKeys: [ 'block:settings:1', 'block:styles:1' ],
+			recommendationSetId: 'block:batch:set',
+			requestToken: 7,
+			scope: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
+			suggestionKey: 'block:batch:set:members',
+			learningAttribution: {
+				generationId:
+					'recgen:block:44444444-4444-4444-8444-444444444444',
+				provider: 'anthropic',
+				model: 'claude-sonnet-4-6',
+				rawPrompt: 'Private launch copy',
+			},
+		} );
+
+		expect( entry.request.recommendation.learningAttribution ).toEqual(
+			expect.objectContaining( {
+				generationId:
+					'recgen:block:44444444-4444-4444-8444-444444444444',
+				recommendationSetId: 'block:batch:set',
+				provider: 'anthropic',
+				model: 'claude-sonnet-4-6',
+			} )
+		);
+		expect( JSON.stringify( entry.request.recommendation ) ).not.toContain(
+			'Private launch copy'
+		);
 	} );
 } );
 

@@ -506,14 +506,27 @@ This checklist was advanced on 2026-06-18, but not completed.
 
 ### Scope Freeze
 
-- [ ] Block structural apply is default-on (2026-06-03) and graduated; the experimental opt-out toggle and `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant were removed, so the only opt-out is the `flavor_agent_enable_block_structural_actions` filter.
-- [ ] Pattern recommendations browse/rank-only.
-- [ ] Content recommendations editorial-only.
-- [ ] Navigation recommendations advisory-only.
-- [ ] Template, template-part, Global Styles, and Style Book review-first only.
-- [ ] AI Activity limited to approval/audit/provenance in admin; only pending external style applies expose decision controls.
-- [ ] Settings limited to setup, sync, and diagnostics.
-- [ ] Helper abilities limited to recommendation support and read-only diagnostics unless backed by a first-party apply contract.
+- [x] Block structural apply is default-on (2026-06-03) and graduated; the experimental opt-out toggle and `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant were removed, so the only opt-out is the `flavor_agent_enable_block_structural_actions` filter.
+- [x] Pattern recommendations browse/rank-only.
+- [x] Content recommendations editorial-only.
+- [x] Navigation recommendations advisory-only.
+- [x] Template, template-part, Global Styles, and Style Book review-first only.
+- [x] AI Activity limited to approval/audit/provenance in admin; only pending external style applies expose decision controls.
+- [x] Settings limited to setup, sync, and diagnostics.
+- [x] Helper abilities limited to recommendation support and read-only diagnostics unless backed by a first-party apply contract.
+
+2026-06-18 static scope-freeze audit evidence:
+
+- Block structural apply defaults through `flavor_agent_block_structural_actions_enabled()` and the `flavor_agent_enable_block_structural_actions` filter; `SettingsRegistrarTest` confirms the removed admin setting is not registered.
+- Pattern recommendations are described as read-only ranking in the ability metadata, with insertion delegated to native Gutenberg behavior and no Flavor Agent-owned pattern apply or undo contract.
+- Content recommendations remain editorial-only with a manual copy/paste handoff and no preview/apply/undo flow.
+- Navigation recommendations remain advisory-only, with no validated apply contract or executable apply/undo activity entries.
+- Template, template-part, Global Styles, and Style Book surfaces still route executable suggestions through the shared review-before-apply shell and deterministic apply actions.
+- AI Activity remains the admin approval/audit/provenance surface; external-agent mutation is limited to pending Global Styles / Style Book apply decisions.
+- Settings remains scoped to plugin-owned embeddings, pattern storage, developer-doc grounding limits, Guidelines, manual pattern sync, connector readiness links, and AI Activity logging controls.
+- `docs/reference/abilities-and-routes.md` keeps helper/read abilities, preview abilities, recommendation abilities, and the four governed external-apply abilities separated by capability, annotation, and exposure contract.
+
+This closes the scope-freeze sub-checklist only. It does not override the incomplete 2026-06-18 sign-off attempt above, the missing release screenshots, or the remaining Validation and Worktree Hygiene checklists below.
 
 ### Worktree Hygiene
 
