@@ -196,6 +196,31 @@ final class NavigationParserTest extends TestCase {
 		$this->assertSame( 'Start', $items[0]['label'] );
 	}
 
+	public function test_extract_menu_items_labels_loginout_inside_submenu(): void {
+		$items = $this->parser->extract_menu_items(
+			[
+				[
+					'blockName'   => 'core/navigation-submenu',
+					'attrs'       => [
+						'label' => 'Account',
+						'url'   => '/account',
+					],
+					'innerBlocks' => [
+						[
+							'blockName' => 'core/loginout',
+							'attrs'     => [],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( 'loginout', $items[0]['children'][0]['type'] );
+		$this->assertSame( 'Log in/out', $items[0]['children'][0]['label'] );
+		$this->assertSame( [ 0, 0 ], $items[0]['children'][0]['path'] );
+		$this->assertSame( 1, $items[0]['children'][0]['depth'] );
+	}
+
 	public function test_extract_menu_items_skips_blocks_without_a_name(): void {
 		$items = $this->parser->extract_menu_items(
 			[
@@ -416,6 +441,19 @@ final class NavigationParserTest extends TestCase {
 		);
 
 		$this->assertSame( [ 'social-link', 'spacer' ], $summary['nonLinkTypes'] );
+	}
+
+	public function test_collect_navigation_structure_summary_treats_loginout_as_supported_navigation_item(): void {
+		$summary = $this->parser->collect_navigation_structure_summary(
+			[
+				[
+					'type'  => 'loginout',
+					'label' => 'Log in/out',
+				],
+			]
+		);
+
+		$this->assertSame( [], $summary['nonLinkTypes'] );
 	}
 
 	public function test_blocks_reference_navigation_matches_top_level_ref(): void {

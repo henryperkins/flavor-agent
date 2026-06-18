@@ -105,6 +105,8 @@ final class NavigationParser {
 				$item['label'] = 'Page List (auto-generated)';
 			} elseif ( 'core/home-link' === $name ) {
 				$item['label'] = $this->extract_string_attr( $attrs, 'label', 'Home' );
+			} elseif ( 'core/loginout' === $name ) {
+				$item['label'] = 'Log in/out';
 			} else {
 				$item['label'] = '';
 			}
@@ -314,7 +316,7 @@ final class NavigationParser {
 			$summary['hasPageList'] = true;
 		}
 
-		if ( '' !== $type && ! in_array( $type, [ 'navigation-link', 'navigation-submenu', 'home-link', 'page-list' ], true ) ) {
+		if ( '' !== $type && ! in_array( $type, [ 'navigation-link', 'navigation-submenu', 'home-link', 'page-list', 'loginout' ], true ) ) {
 			$summary['nonLinkTypes'][] = $type;
 		}
 

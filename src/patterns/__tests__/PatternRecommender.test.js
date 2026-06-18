@@ -815,7 +815,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 
 		expect( document.body.textContent ).toContain(
-			"This spot doesn't accept block patterns."
+			"This spot doesn't accept patterns."
 		);
 		expect( document.body.textContent ).not.toContain(
 			'Flavor Agent did not find a strong pattern match'
@@ -836,7 +836,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 
 		expect( document.body.textContent ).not.toContain(
-			"This spot doesn't accept block patterns."
+			"This spot doesn't accept patterns."
 		);
 	} );
 
@@ -1220,7 +1220,7 @@ describe( 'PatternRecommender', () => {
 			true
 		);
 		expect( mockCreateSuccessNotice ).toHaveBeenCalledWith(
-			'Block pattern "Hero" inserted.',
+			'Pattern "Hero" inserted.',
 			{
 				type: 'snackbar',
 				id: 'inserter-notice',
@@ -2839,7 +2839,7 @@ describe( 'PatternRecommender', () => {
 
 		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
 		expect( document.body.textContent ).toContain(
-			"This spot doesn't accept block patterns."
+			"This spot doesn't accept patterns."
 		);
 	} );
 

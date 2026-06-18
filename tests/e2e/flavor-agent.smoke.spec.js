@@ -3530,7 +3530,7 @@ test( 'pattern surface inserts a recommended pattern at the top-level root and r
 	// the moment the surface regresses to passing null.
 	await expectSnackbarMessage(
 		page,
-		`Block pattern "${ patternTitle }" inserted.`
+		`Pattern "${ patternTitle }" inserted.`
 	);
 	await expect(
 		page.locator( '.components-snackbar__content' )

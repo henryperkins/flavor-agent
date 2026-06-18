@@ -693,7 +693,7 @@ function PatternInserterNotice( {
 		);
 	} else if ( status === 'no-patterns' ) {
 		resolvedMessage = __(
-			"This spot doesn't accept block patterns. Click into the page body (or a container that allows patterns) to get recommendations.",
+			"This spot doesn't accept patterns. Click into the page body (or a container that allows patterns) to get recommendations.",
 			'flavor-agent'
 		);
 	}
@@ -1598,8 +1598,8 @@ export default function PatternRecommender() {
 			} );
 			createSuccessNotice(
 				sprintf(
-					/* translators: %s: block pattern title. */
-					__( 'Block pattern "%s" inserted.', 'flavor-agent' ),
+					/* translators: %s: pattern title. */
+					__( 'Pattern "%s" inserted.', 'flavor-agent' ),
 					getPatternTitle( pattern )
 				),
 				{
