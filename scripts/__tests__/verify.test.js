@@ -736,6 +736,9 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 				fs.existsSync( path.join( stagedPluginDirForFs, '.agents' ) )
 			).toBe( false );
 			expect(
+				fs.existsSync( path.join( stagedPluginDirForFs, '.venv' ) )
+			).toBe( false );
+			expect(
 				fs.existsSync(
 					path.join( stagedPluginDirForFs, '.node-version' )
 				)

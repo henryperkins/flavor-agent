@@ -16,6 +16,7 @@ eslint.config.js
 .nvmrc
 .node-version
 .playwright-mcp
+.venv
 .remember
 CLAUDE.md
 blueprint.json

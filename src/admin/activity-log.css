@@ -1179,6 +1179,7 @@ body.settings_page_flavor-agent-activity {
 }
 
 @media (forced-colors: active) {
+  .flavor-agent-activity-log__search input:focus,
   .flavor-agent-activity-log
     .dataviews-filters__summary-chip-container
     button:focus-visible,

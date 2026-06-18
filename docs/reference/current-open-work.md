@@ -11,9 +11,9 @@ Use it when you need to answer:
 
 ## Status
 
-Updated: 2026-06-15.
+Updated: 2026-06-16.
 
-Source basis: all repository/workspace doc-like files enumerated on 2026-06-05 (77 files: 69 under `docs/`, 8 root docs including the then-present untracked `ConfirmedFindings.txt`; dependency/generated directories excluded). Open-work signals were compared across `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `improving-levers.md`, `docs/features/`, `docs/reference/`, `docs/wp7-migration-opportunities.md`, release docs, root docs, and the Gutenberg 23.3 validation records.
+Initial source basis: all repository/workspace doc-like files enumerated on 2026-06-05 (77 files: 69 under `docs/`, 8 root docs including the now-deleted untracked local review artifact `ConfirmedFindings.txt`; dependency/generated directories excluded). Open-work signals were compared across `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `improving-levers.md`, `docs/features/`, `docs/reference/`, `docs/wp7-migration-opportunities.md`, release docs, root docs, and the Gutenberg 23.3 validation records. Current active rows must cite tracked source files; deleted local artifacts are historical context only.
 
 2026-06-06 branch refresh: the pattern relevance / design-validator / expanded-evaluation cluster is no longer active open work on this checkout. The current implementation adds pattern design metadata to index/search payloads, component ranking hints, parser-emitted design quality signals, new shared validation reason codes, and offline metrics for contrast preservation, top-three relevance, stale false positives, and prompt token deltas.
 
@@ -23,7 +23,7 @@ Source basis: all repository/workspace doc-like files enumerated on 2026-06-05 (
 
 2026-06-15 toast cleanup: the "Toast accessibility and timing cleanup" candidate is resolved. Two of the four original findings (landmark role on the portal root, disabled-Undo `aria-describedby` explanation) were already implemented and test-covered; the sweep single-sourced the success auto-dismiss duration, normalized surface-casing through one helper, adopted `@wordpress/compose` `useReducedMotion()`, and raised the Undo button's resting-border contrast to ≥ 3:1. The `aria-keyshortcuts`, `speak()` announcer, and focus-return ideas were deferred to a future a11y-enhancement spec (they add behavior rather than remove duplication). The historical design/plan live at `docs/superpowers/specs/2026-06-15-toast-a11y-timing-cleanup-design.md` and `docs/superpowers/plans/archive/2026-06-15-toast-a11y-timing-cleanup.md`.
 
-2026-06-15 deleted review artifact cleanup: `ConfirmedFindings.txt` is no longer present in this checkout and is not an active source. The remaining settings-validation and ability-client/runtime review-note rows that depended on it were removed from Current Implementation Candidates. Re-open either item only after revalidating the current code and writing the finding into a tracked source doc, issue, or implementation plan.
+2026-06-16 deleted findings-source cleanup: `ConfirmedFindings.txt` is not present in this checkout and is not a current source. Its two remaining implementation-candidate rows were rechecked against tracked source before removal. Settings nested-panel disclosure is now handled by `inc/Admin/Settings/Page.php` and covered by `tests/phpunit/SettingsTest.php::test_render_page_opens_nested_panels_with_request_scoped_validation_errors`. Ability client/runtime normalization is centralized in `assets/ability-execution-utils.js` and `src/store/client-request-identity.js`, with coverage in `src/store/__tests__/abilities-client.test.js`, `src/store/__tests__/store-actions.test.js`, and `src/store/__tests__/executable-surface-runtime.test.js`. Reintroduce either item only from fresh tracked evidence and a new source-grounded plan.
 
 Archived files under `docs/superpowers/plans/archive/` and implemented design specs under `docs/superpowers/specs/` are historical context only. Do not treat them as active implementation plans. Any item below needs a fresh source-grounded plan before code changes unless the change is a narrow docs or verification update.
 
