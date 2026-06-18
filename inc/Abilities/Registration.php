@@ -841,12 +841,14 @@ final class Registration {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'available'   => [ 'type' => 'boolean' ],
-				'sourceTypes' => [
+				'available'          => [ 'type' => 'boolean' ],
+				'sourceTypes'        => [
 					'type'  => 'array',
 					'items' => [ 'type' => 'string' ],
 				],
-				'count'       => [ 'type' => 'integer' ],
+				'count'              => [ 'type' => 'integer' ],
+				'contentFingerprint' => [ 'type' => 'string' ],
+				'runtimeFingerprint' => [ 'type' => 'string' ],
 			],
 		];
 	}

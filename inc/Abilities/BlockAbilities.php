@@ -56,23 +56,24 @@ final class BlockAbilities {
 			return $prepared;
 		}
 
-		$context            = $prepared['context'];
-		$prompt             = $prepared['prompt'];
-		$execution_contract = BlockRecommendationExecutionContract::from_context( $context );
-		$docs_result        = self::collect_wordpress_docs_guidance_result(
+		$context                    = $prepared['context'];
+		$prompt                     = $prepared['prompt'];
+		$execution_contract         = BlockRecommendationExecutionContract::from_context( $context );
+		$docs_result                = self::collect_wordpress_docs_guidance_result(
 			$context,
 			$prompt,
 			[
 				'signatureOnly' => $resolve_signature_only,
 			]
 		);
+		$docs_grounding_fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			'block',
 			[
 				'context'                  => $context,
 				'prompt'                   => $prompt,
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			]
 		);
 
@@ -80,7 +81,7 @@ final class BlockAbilities {
 			return [
 				'resolvedContextSignature' => $resolved_context_signature,
 				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			];
 		}
 
@@ -94,7 +95,7 @@ final class BlockAbilities {
 			$payload['executionContract']        = $execution_contract;
 			$payload['resolvedContextSignature'] = $resolved_context_signature;
 			$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
-			$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
+			$payload['docsGroundingFingerprint'] = $docs_grounding_fingerprint;
 
 			return $payload;
 		}
@@ -155,7 +156,7 @@ final class BlockAbilities {
 		$payload['executionContract']        = $execution_contract;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
-		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
+		$payload['docsGroundingFingerprint'] = $docs_grounding_fingerprint;
 
 		return $payload;
 	}

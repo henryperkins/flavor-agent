@@ -1610,13 +1610,15 @@ final class RegistrationTest extends TestCase {
 
 			$this->assertSame( 'object', $properties['docsGrounding']['type'] ?? null, $ability_id );
 			$this->assertSame(
-				[ 'available', 'sourceTypes', 'count' ],
+				[ 'available', 'sourceTypes', 'count', 'contentFingerprint', 'runtimeFingerprint' ],
 				array_keys( $docs_grounding_properties ),
 				$ability_id
 			);
 			$this->assertSame( 'boolean', $docs_grounding_properties['available']['type'] ?? null, $ability_id );
 			$this->assertSame( 'array', $docs_grounding_properties['sourceTypes']['type'] ?? null, $ability_id );
 			$this->assertSame( 'integer', $docs_grounding_properties['count']['type'] ?? null, $ability_id );
+			$this->assertSame( 'string', $docs_grounding_properties['contentFingerprint']['type'] ?? null, $ability_id );
+			$this->assertSame( 'string', $docs_grounding_properties['runtimeFingerprint']['type'] ?? null, $ability_id );
 			$this->assertSame( 'string', $properties['docsGroundingFingerprint']['type'] ?? null, $ability_id );
 		}
 	}

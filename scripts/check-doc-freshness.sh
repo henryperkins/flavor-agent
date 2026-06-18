@@ -216,6 +216,11 @@ check_present_fixed \
 	"${repo_root}/docs/reference/abilities-and-routes.md"
 
 check_present_fixed \
+	'ability reference should describe split docs-grounding fingerprints' \
+	'`docsGrounding` (`{ available, sourceTypes, count, contentFingerprint, runtimeFingerprint }`) and `docsGroundingFingerprint` (the content/applicability fingerprint alias)' \
+	"${repo_root}/docs/reference/abilities-and-routes.md"
+
+check_present_fixed \
 	'Abilities Explorer docs should distinguish always-on preflight abilities from feature-gated recommendation abilities' \
 	'Before enabling the Flavor Agent AI feature, the Explorer should list the 19 always-on helper and preflight abilities' \
 	"${repo_root}/docs/reference/local-environment-setup.md"

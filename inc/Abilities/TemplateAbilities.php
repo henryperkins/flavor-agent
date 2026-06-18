@@ -71,29 +71,30 @@ final class TemplateAbilities {
 			return $prepared;
 		}
 
-		$context        = $prepared['context'];
-		$review_context = $prepared['reviewContext'];
-		$prompt         = $prepared['prompt'];
-		$docs_result    = self::collect_wordpress_docs_guidance_result(
+		$context                    = $prepared['context'];
+		$review_context             = $prepared['reviewContext'];
+		$prompt                     = $prepared['prompt'];
+		$docs_result                = self::collect_wordpress_docs_guidance_result(
 			$context,
 			$prompt,
 			[
 				'signatureOnly' => $resolve_signature_only,
 			]
 		);
+		$docs_grounding_fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			'template',
 			[
 				'context'                  => $context,
 				'prompt'                   => $prompt,
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			]
 		);
 
 		$review_context_signature = self::build_template_review_context_signature(
 			$review_context,
-			(string) ( $docs_result['fingerprint'] ?? '' )
+			$docs_grounding_fingerprint
 		);
 
 		if ( $resolve_signature_only ) {
@@ -101,7 +102,7 @@ final class TemplateAbilities {
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
 				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			];
 		}
 
@@ -143,7 +144,7 @@ final class TemplateAbilities {
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
-		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
+		$payload['docsGroundingFingerprint'] = $docs_grounding_fingerprint;
 
 		return $payload;
 	}
@@ -201,26 +202,27 @@ final class TemplateAbilities {
 			$context['designSemantics']        = $design_semantics;
 			$review_context['designSemantics'] = $design_semantics;
 		}
-		$docs_result = self::collect_template_part_wordpress_docs_guidance_result(
+		$docs_result                = self::collect_template_part_wordpress_docs_guidance_result(
 			$context,
 			$prompt,
 			[
 				'signatureOnly' => $resolve_signature_only,
 			]
 		);
+		$docs_grounding_fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			'template-part',
 			[
 				'context'                  => $context,
 				'prompt'                   => $prompt,
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			]
 		);
 
 		$review_context_signature = self::build_template_part_review_context_signature(
 			$review_context,
-			(string) ( $docs_result['fingerprint'] ?? '' )
+			$docs_grounding_fingerprint
 		);
 
 		if ( $resolve_signature_only ) {
@@ -228,7 +230,7 @@ final class TemplateAbilities {
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
 				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			];
 		}
 
@@ -270,7 +272,7 @@ final class TemplateAbilities {
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
-		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
+		$payload['docsGroundingFingerprint'] = $docs_grounding_fingerprint;
 
 		return $payload;
 	}
@@ -1553,7 +1555,7 @@ final class TemplateAbilities {
 			[ 'signatureOnly' => true ]
 		);
 
-		$fingerprint = (string) ( $docs_result['fingerprint'] ?? '' );
+		$fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 
 		return [
 			'resolved' => [

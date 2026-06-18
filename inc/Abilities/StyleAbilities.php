@@ -103,27 +103,28 @@ final class StyleAbilities {
 			return $context;
 		}
 
-		$docs_result = self::collect_wordpress_docs_guidance_result(
+		$docs_result                = self::collect_wordpress_docs_guidance_result(
 			$context,
 			$prompt,
 			[
 				'signatureOnly' => $resolve_signature_only,
 			]
 		);
+		$docs_grounding_fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			$scope_surface,
 			[
 				'context'                  => $context,
 				'prompt'                   => $prompt,
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			]
 		);
 
 		$review_context_signature = self::build_review_context_signature(
 			$scope_surface,
 			$context,
-			(string) ( $docs_result['fingerprint'] ?? '' )
+			$docs_grounding_fingerprint
 		);
 
 		if ( $resolve_signature_only ) {
@@ -131,7 +132,7 @@ final class StyleAbilities {
 				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
 				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			];
 		}
 
@@ -173,7 +174,7 @@ final class StyleAbilities {
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
-		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
+		$payload['docsGroundingFingerprint'] = $docs_grounding_fingerprint;
 
 		return $payload;
 	}
@@ -409,7 +410,7 @@ final class StyleAbilities {
 			[ 'signatureOnly' => true ]
 		);
 
-		$fingerprint = (string) ( $docs_result['fingerprint'] ?? '' );
+		$fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 
 		return [
 			'resolved' => [

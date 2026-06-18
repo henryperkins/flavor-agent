@@ -9,7 +9,7 @@
 As of 2026-06-06, this file is a roadmap and execution plan, not an achieved contract document.
 
 - Shipped in this codebase: Phases 0, 1, 2, and 3, plus Contextual Ranking V1 and the Phase 4 request-diagnostic guideline attribution id.
-- Remaining unshipped work: engaged outcome attribution for the future learning loop, docs freshness split (Phase 5), pattern metadata and component-score ranking (Phase 6), expanded validators (Priority 4), and the larger Phase 7+ measurement / learning loop.
+- Remaining unshipped work: engaged outcome attribution for the future learning loop, pattern metadata and component-score ranking (Phase 6), expanded validators (Priority 4), and the larger Phase 7+ measurement / learning loop.
 - Priority 5 remains scoped to attribution metadata rather than a production stale gate, consistent with current guidance in this file and recent implementation evidence.
 - Adapted pattern preview is a related product-surface outline, not an implemented part of this roadmap. If pursued, it should build on the unshipped pattern relevance work here and the shared deterministic mutation engine described in `docs/features/pattern-recommendations-adapted-preview.md`.
 
@@ -41,7 +41,7 @@ The repo already has useful rails:
 - `inc/Support/RankingContract.php` already normalizes recommendation ranking metadata to a consistent shape.
 - Ability output schemas in `inc/Abilities/Registration.php` expose `ranking` metadata to external consumers.
 - Phases 0, 1, and 2 plus Contextual Ranking V1 are shipped: `tests/phpunit/RecommendationEvaluationTest.php` plus `tests/phpunit/fixtures/recommendation-evaluation-*` provide the fixture-backed metrics stub, strict LLM schemas in `inc/LLM/ResponseSchema.php` accept nullable `ranking` objects, `inc/Support/DesignSemantics.php` normalizes shared semantic context for block/template/template-part prompts, block/style/template/template-part/navigation parsers blend model, deterministic, and `RecommendationContextScorer` context scores through `RankingContract::blend_score()`, and pattern recommendations emit `contextual_ranking_v1` source-signals via plugin-generated defaults.
-- `inc/Support/DocsGuidanceResult.php` fingerprints docs guidance with policy, status, coverage, URLs, source types, content hashes, retrieved timestamps, published dates, and freshness labels.
+- `inc/Support/DocsGuidanceResult.php` separates docs content/applicability fingerprints from runtime/diagnostics fingerprints so cache refresh metadata can be reported without unnecessarily staling recommendations.
 - `inc/Abilities/RecommendationAbilityExecution.php` injects formatted site guidelines into the recommendation system instruction.
 
 ## Priority 0: Add A Fixture-Backed Measurement Stub
@@ -368,20 +368,22 @@ Keep compatibility with existing `site`, `copy`, `images`, `additional`, and blo
 
 **Goal:** Avoid unnecessary stale states when docs guidance is merely refreshed without content changing.
 
-### Current Gap
+**Status:** Shipped 2026-06-18. `DocsGuidanceResult` now returns `contentFingerprint` and `runtimeFingerprint`, keeps `fingerprint` as a content-fingerprint compatibility alias, and recommendation abilities use `DocsGuidanceResult::content_fingerprint()` for review/apply signatures and top-level `docsGroundingFingerprint`.
 
-`DocsGuidanceResult::fingerprint()` includes `retrievedAt`. That is useful for diagnostics and source-health tracking, but it can make recommendation freshness sensitive to cache refresh timing even when the actual docs content and policy are unchanged.
+### Historical Gap
 
-### Proposed Split
+The original gap was that docs applicability signatures did not make a clear contract distinction between content-owned currentness and runtime retrieval metadata. If a retrieval timestamp or cache signal entered the applicability hash, recommendations could stale even when the attached docs content was unchanged.
+
+### Implemented Split
 
 Use two fingerprints:
 
-- `docsContentFingerprint`: policy, status, coverage, source URL, source type, content hash, published date, and freshness label.
+- `docsContentFingerprint`: policy plus source URL, source type, content hash, and any emitted published date, freshness label, status, or coverage metadata.
 - `docsRuntimeFingerprint`: everything in the content fingerprint plus retrieved time, transport, cache/runtime status, and coverage check timestamps.
 
-Use content fingerprint for recommendation applicability. Use runtime fingerprint for diagnostics and support screens.
+Use content fingerprints for recommendation applicability. Use runtime fingerprints for diagnostics and public docs-grounding summaries.
 
-Rollout note: existing cached applicability signatures that mixed content and runtime fields will become non-comparable once. Treat that one-time invalidation as expected migration behavior.
+Rollout note: existing cached applicability signatures are non-comparable once because the content fingerprint payload shape changed from the legacy URL/source/content-hash hash to the explicit content/currentness schema. Treat that one-time invalidation as expected migration behavior.
 
 ### Acceptance Criteria
 
@@ -667,11 +669,11 @@ git diff --check
 
 ### Phase 5: Docs Fingerprint Split
 
-- [ ] Add content and runtime fingerprint helpers to `DocsGuidanceResult`.
-- [ ] Use content fingerprints in recommendation applicability signatures.
-- [ ] Keep runtime fingerprints in diagnostics and public docs-grounding summaries.
-- [ ] Add tests proving identical content with different `retrievedAt` does not stale applicability.
-- [ ] Treat the first rollout as a one-time invalidation of old mixed content/runtime applicability signatures.
+- [x] Add content and runtime fingerprint helpers to `DocsGuidanceResult`.
+- [x] Use content fingerprints in recommendation applicability signatures.
+- [x] Keep runtime fingerprints in diagnostics and public docs-grounding summaries.
+- [x] Add tests proving identical content with different runtime metadata does not stale applicability.
+- [x] Treat the first rollout as a one-time invalidation of old applicability signatures: the prior live hash already omitted `retrievedAt`, but the content fingerprint payload/schema changed, so pre-split recommendations refresh once before apply.
 
 **Verification:**
 
@@ -828,4 +830,4 @@ The first useful milestone through Phase 3 is complete when:
 - targeted PHP and JS tests cover those contracts;
 - each phase can report at least one metric movement or preservation target.
 
-After that, design validators, docs fingerprint splitting, pattern metadata enrichment, the site-local learning layer, and expanded evaluation metrics remain the next strategic improvements.
+After that, design validators, pattern metadata enrichment, the site-local learning layer, and expanded evaluation metrics remain the next strategic improvements.

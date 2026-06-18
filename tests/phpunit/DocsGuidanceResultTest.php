@@ -41,9 +41,14 @@ final class DocsGuidanceResultTest extends TestCase {
 		$this->assertSame( 'best-effort', $result['transport'] );
 
 		$summary = DocsGuidanceResult::public_summary( $result );
-		$this->assertSame( [ 'available', 'sourceTypes', 'count' ], array_keys( $summary ) );
+		$this->assertSame(
+			[ 'available', 'sourceTypes', 'count', 'contentFingerprint', 'runtimeFingerprint' ],
+			array_keys( $summary )
+		);
 		$this->assertTrue( $summary['available'] );
 		$this->assertSame( 2, $summary['count'] );
+		$this->assertSame( $result['contentFingerprint'], $summary['contentFingerprint'] );
+		$this->assertSame( $result['runtimeFingerprint'], $summary['runtimeFingerprint'] );
 	}
 
 	public function test_from_guidance_empty_is_unavailable_with_stable_fingerprint(): void {
@@ -81,6 +86,65 @@ final class DocsGuidanceResultTest extends TestCase {
 		$this->assertNotSame(
 			DocsGuidanceResult::from_guidance( $base, 'recommendation', 'best-effort' )['fingerprint'],
 			DocsGuidanceResult::from_guidance( $changed, 'recommendation', 'best-effort' )['fingerprint']
+		);
+	}
+
+	public function test_content_fingerprint_ignores_runtime_fields_and_runtime_fingerprint_tracks_them(): void {
+		$base            = [
+			[
+				'url'         => 'https://developer.wordpress.org/block-editor/',
+				'sourceType'  => 'developer-docs',
+				'excerpt'     => 'Block editor guidance.',
+				'contentHash' => 'docs-content-a',
+				'publishedAt' => '2026-05-01T00:00:00Z',
+				'freshness'   => 'current',
+				'retrievedAt' => '2026-05-08T14:00:00Z',
+				'score'       => 0.91,
+			],
+		];
+		$runtime_changed = [
+			array_merge(
+				$base[0],
+				[
+					'retrievedAt' => '2026-05-09T14:00:00Z',
+					'score'       => 0.42,
+				]
+			),
+		];
+
+		$first  = DocsGuidanceResult::from_guidance( $base, 'recommendation', 'best-effort' );
+		$second = DocsGuidanceResult::from_guidance( $runtime_changed, 'recommendation', 'best-effort' );
+
+		$this->assertSame( $first['contentFingerprint'], $second['contentFingerprint'] );
+		$this->assertSame( $first['fingerprint'], $first['contentFingerprint'] );
+		$this->assertSame( $first['contentFingerprint'], DocsGuidanceResult::content_fingerprint( $first ) );
+		$this->assertNotSame( $first['runtimeFingerprint'], $second['runtimeFingerprint'] );
+		$this->assertSame( $second['runtimeFingerprint'], DocsGuidanceResult::runtime_fingerprint( $second ) );
+	}
+
+	public function test_content_fingerprint_changes_when_docs_currentness_fields_change(): void {
+		$base    = [
+			[
+				'url'         => 'https://developer.wordpress.org/block-editor/',
+				'sourceType'  => 'developer-docs',
+				'excerpt'     => 'Block editor guidance.',
+				'contentHash' => 'docs-content-a',
+				'publishedAt' => '2026-05-01T00:00:00Z',
+				'freshness'   => 'current',
+			],
+		];
+		$changed = [
+			array_merge(
+				$base[0],
+				[
+					'freshness' => 'stale',
+				]
+			),
+		];
+
+		$this->assertNotSame(
+			DocsGuidanceResult::from_guidance( $base, 'recommendation', 'best-effort' )['contentFingerprint'],
+			DocsGuidanceResult::from_guidance( $changed, 'recommendation', 'best-effort' )['contentFingerprint']
 		);
 	}
 

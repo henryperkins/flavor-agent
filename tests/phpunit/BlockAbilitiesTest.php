@@ -748,6 +748,91 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_recommend_block_signature_ignores_docs_runtime_fingerprint_drift(): void {
+		WordPressTestState::$transients = [];
+
+		$input    = [
+			'prompt'        => 'Keep the paragraph tighter and clearer.',
+			'selectedBlock' => [
+				'blockName'  => 'core/paragraph',
+				'attributes' => [
+					'content' => 'Hello world',
+				],
+			],
+		];
+		$prepared = $this->invoke_prepare_recommend_block_input( $input );
+		$query    = $this->invoke_private_string_method(
+			BlockAbilities::class,
+			'build_wordpress_docs_query',
+			[
+				$prepared['context'],
+				$prepared['prompt'],
+			]
+		);
+
+		$cache_key = $this->build_cache_key( $query, 4 );
+		$chunk     = [
+			'id'          => 'chunk-1',
+			'title'       => 'Paragraph block guidance',
+			'sourceKey'   => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+			'sourceType'  => 'developer-docs',
+			'url'         => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+			'excerpt'     => 'Paragraph guidance should keep typography and spacing inside supported editor controls.',
+			'score'       => 0.91,
+			'contentHash' => 'paragraph-guidance',
+		];
+
+		WordPressTestState::$transients[ $cache_key ] = [ $chunk ];
+
+		$first = BlockAbilities::recommend_block(
+			array_merge(
+				$input,
+				[
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		WordPressTestState::$transients[ $cache_key ] = [
+			array_merge(
+				$chunk,
+				[
+					'score' => 0.42,
+				]
+			),
+		];
+
+		$second = BlockAbilities::recommend_block(
+			array_merge(
+				$input,
+				[
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $first );
+		$this->assertIsArray( $second );
+		$this->assertTrue( $first['docsGrounding']['available'] ?? false );
+		$this->assertTrue( $second['docsGrounding']['available'] ?? false );
+		$this->assertSame(
+			$first['resolvedContextSignature'] ?? null,
+			$second['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame(
+			$first['docsGroundingFingerprint'] ?? null,
+			$second['docsGroundingFingerprint'] ?? null
+		);
+		$this->assertSame(
+			$first['docsGrounding']['contentFingerprint'] ?? null,
+			$second['docsGrounding']['contentFingerprint'] ?? null
+		);
+		$this->assertNotSame(
+			$first['docsGrounding']['runtimeFingerprint'] ?? null,
+			$second['docsGrounding']['runtimeFingerprint'] ?? null
+		);
+	}
+
 	public function test_recommend_block_resolved_signature_includes_design_semantics(): void {
 		$input = [
 			'prompt'               => 'Keep the paragraph tighter and clearer.',

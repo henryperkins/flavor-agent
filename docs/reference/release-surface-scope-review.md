@@ -493,6 +493,17 @@ Do not add:
 
 ## Release Readiness Checklist
 
+### 2026-06-18 Sign-Off Attempt
+
+This checklist was advanced on 2026-06-18, but not completed.
+
+- `node scripts/verify.js --skip-e2e` ran and wrote `output/verify/summary.json` with `status: fail` and counts `{ total: 9, passed: 5, failed: 1, skipped: 3 }`.
+- Passing steps: `build`, `lint-js`, `unit` (`105` suites / `1502` tests), `lint-php`, and `test-php` (`1551` tests / `7135` assertions).
+- Blocking step: `lint-plugin` failed before Plugin Check could scan the staged release because the configured WordPress environment returned `Error establishing a database connection.`
+- Skipped by mode: `e2e-playground` and `e2e-wp70`; `check-docs` was not included because the run was not strict.
+- Release screenshots remain incomplete: `docs/screenshots/activity-audit.png` exists, while the Inspector, Global Styles or Style Book, template, pattern inserter, content, and settings readiness stills listed in `docs/releases/v0.1.0.md` are still absent.
+- The worktree was not release-clean during this attempt; existing docs-grounding fingerprint changes and an untracked archived plan were present before the sign-off run. Do not treat this attempt as tagged-release evidence.
+
 ### Scope Freeze
 
 - [ ] Block structural apply is default-on (2026-06-03) and graduated; the experimental opt-out toggle and `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant were removed, so the only opt-out is the `flavor_agent_enable_block_structural_actions` filter.

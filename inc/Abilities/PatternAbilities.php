@@ -246,7 +246,7 @@ final class PatternAbilities {
 		$pattern_runtime_signature = self::pattern_runtime_signature_from_state( $state );
 
 		if ( $resolve_signature_only ) {
-			$docs_result = self::collect_wordpress_docs_guidance_result(
+			$docs_result                = self::collect_wordpress_docs_guidance_result(
 				[
 					'postType'            => $post_type,
 					'templateType'        => $template_type,
@@ -259,12 +259,13 @@ final class PatternAbilities {
 					'signatureOnly' => true,
 				]
 			);
+			$docs_grounding_fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 
 			$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 				'patterns',
 				[
 					'context'                  => $signature_context,
-					'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+					'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 				]
 			);
 			$review_context_signature   = RecommendationReviewSignature::from_payload(
@@ -274,7 +275,7 @@ final class PatternAbilities {
 						$signature_context,
 						$visible_pattern_names ?? []
 					),
-					'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+					'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 				]
 			);
 
@@ -379,11 +380,12 @@ final class PatternAbilities {
 			],
 			$prompt
 		);
+		$docs_grounding_fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			'patterns',
 			[
 				'context'                  => $signature_context,
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			]
 		);
 		$review_context_signature   = RecommendationReviewSignature::from_payload(
@@ -393,7 +395,7 @@ final class PatternAbilities {
 					$signature_context,
 					$visible_pattern_names
 				),
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			]
 		);
 		$docs_guidance              = DocsGuidanceResult::guidance( $docs_result );
@@ -1027,7 +1029,7 @@ final class PatternAbilities {
 		$response = [
 			'recommendations'          => $recommendations,
 			'docsGrounding'            => [] !== $docs_result ? DocsGuidanceResult::public_summary( $docs_result ) : null,
-			'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+			'docsGroundingFingerprint' => DocsGuidanceResult::content_fingerprint( $docs_result ),
 			'reviewContextSignature'   => $review_context_signature,
 			'resolvedContextSignature' => $resolved_context_signature,
 			'diagnostics'              => [

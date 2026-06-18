@@ -58,25 +58,26 @@ final class NavigationAbilities {
 			return $context;
 		}
 
-		$docs_result = self::collect_wordpress_docs_guidance_result(
+		$docs_result                = self::collect_wordpress_docs_guidance_result(
 			$context,
 			$prompt,
 			[
 				'signatureOnly' => $resolve_signature_only,
 			]
 		);
+		$docs_grounding_fingerprint = DocsGuidanceResult::content_fingerprint( $docs_result );
 
 		$review_context_signature = self::build_review_context_signature(
 			'navigation',
 			$context,
-			(string) ( $docs_result['fingerprint'] ?? '' )
+			$docs_grounding_fingerprint
 		);
 
 		if ( $resolve_signature_only ) {
 			return [
 				'reviewContextSignature'   => $review_context_signature,
 				'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_result ),
-				'docsGroundingFingerprint' => (string) ( $docs_result['fingerprint'] ?? '' ),
+				'docsGroundingFingerprint' => $docs_grounding_fingerprint,
 			];
 		}
 
@@ -115,7 +116,7 @@ final class NavigationAbilities {
 
 		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
-		$payload['docsGroundingFingerprint'] = (string) ( $docs_result['fingerprint'] ?? '' );
+		$payload['docsGroundingFingerprint'] = $docs_grounding_fingerprint;
 
 		return $payload;
 	}

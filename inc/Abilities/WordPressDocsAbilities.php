@@ -50,7 +50,7 @@ final class WordPressDocsAbilities {
 			'query'                    => (string) ( $result['query'] ?? $query ),
 			'guidance'                 => DocsGuidanceResult::guidance( $docs_grounding ),
 			'docsGrounding'            => DocsGuidanceResult::public_summary( $docs_grounding ),
-			'docsGroundingFingerprint' => (string) ( $docs_grounding['fingerprint'] ?? '' ),
+			'docsGroundingFingerprint' => DocsGuidanceResult::content_fingerprint( $docs_grounding ),
 		];
 	}
 }
