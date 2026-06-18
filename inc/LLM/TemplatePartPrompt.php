@@ -36,14 +36,14 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
       "blockHints": [
         {
           "path": [0, 1],
-          "label": "Navigation block",
+          "label": "Navigation block", "blockName": "core/navigation",
           "reason": "Why this block is the right place to focus"
         }
       ],
       "patternSuggestions": ["pattern/name-from-patterns-list"],
       "operations": [
         {
-          "type": "insert_pattern",
+          "type": "insert_pattern", "expectedBlockName": null,
           "patternName": "pattern/name-from-patterns-list",
           "placement": "before_block_path",
           "targetPath": [0, 1]
@@ -310,7 +310,7 @@ SYSTEM;
 		$instruction = trim( $prompt ) !== ''
 			? trim( $prompt )
 			: 'Suggest improvements for this template part.';
-		$budget->add_section( 'user_instruction', "## User Instruction\n{$instruction}", 95 );
+		$budget->add_section( 'user_instruction', "## User Instruction\n{$instruction}", 95, true );
 
 		foreach ( self::get_few_shot_examples() as $index => $example ) {
 			$budget->add_section( 'few_shot_' . $index, $example, 10 );
@@ -331,7 +331,7 @@ Input context:
 - Insert anchors include `before_block_path` for the navigation block
 
 Expected response:
-{"suggestions":[{"label":"Add a utility row before navigation","description":"Insert the utility pattern ahead of the menu cluster to separate branding from utility links.","blockHints":[{"path":[0,1],"label":"Navigation block","reason":"This is the busiest structural target in the header."}],"patternSuggestions":["example/header-utility-row"],"operations":[{"type":"insert_pattern","patternName":"example/header-utility-row","placement":"before_block_path","targetPath":[0,1]}]}],"explanation":"Use a small pre-navigation utility row instead of overloading the main menu."}
+{"suggestions":[{"label":"Add a utility row before navigation","description":"Insert the utility pattern ahead of the menu cluster to separate branding from utility links.","blockHints":[{"path":[0,1],"label":"Navigation block","blockName":"core/navigation","reason":"This is the busiest structural target in the header."}],"patternSuggestions":["example/header-utility-row"],"operations":[{"type":"insert_pattern","patternName":"example/header-utility-row","placement":"before_block_path","targetPath":[0,1],"expectedBlockName":null}],"confidence":0.8,"ranking":null}],"explanation":"Use a small pre-navigation utility row instead of overloading the main menu."}
 EXAMPLE
 			,
 		];

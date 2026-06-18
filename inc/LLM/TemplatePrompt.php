@@ -41,18 +41,18 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
       "description": "Why this improves the template",
       "operations": [
         {
-          "type": "assign_template_part",
+          "type": "assign_template_part", "currentSlug": null, "patternName": null, "placement": null, "targetPath": null,
           "slug": "part-slug-from-availableParts",
           "area": "target-area"
         },
         {
-          "type": "replace_template_part",
+          "type": "replace_template_part", "patternName": null, "placement": null, "targetPath": null,
           "currentSlug": "currently-assigned-part-slug",
           "slug": "replacement-part-slug-from-availableParts",
           "area": "target-area"
         },
         {
-          "type": "insert_pattern",
+          "type": "insert_pattern", "slug": null, "area": null, "currentSlug": null,
           "patternName": "pattern/name-from-patterns-list",
           "placement": "before_block_path",
           "targetPath": [1]
@@ -319,7 +319,7 @@ SYSTEM;
 		$instruction = trim( $prompt ) !== ''
 			? trim( $prompt )
 			: 'Suggest improvements for this template.';
-		$budget->add_section( 'user_instruction', "## User Instruction\n{$instruction}", 95 );
+		$budget->add_section( 'user_instruction', "## User Instruction\n{$instruction}", 95, true );
 
 		foreach ( self::get_few_shot_examples() as $index => $example ) {
 			$budget->add_section( 'few_shot_' . $index, $example, 10 );
@@ -341,7 +341,7 @@ Input context:
 - Available patterns: `example/home-feature`
 
 Expected response:
-{"suggestions":[{"label":"Fill the footer slot","description":"Assign the available footer part before layering new patterns.","operations":[{"type":"assign_template_part","slug":"footer-minimal","area":"footer"}],"templateParts":[{"slug":"footer-minimal","area":"footer","reason":"Completes the explicit footer area with a registered part."}],"patternSuggestions":[]}],"explanation":"Resolve empty structural slots first, then add optional pattern accents."}
+{"suggestions":[{"label":"Fill the footer slot","description":"Assign the available footer part before layering new patterns.","operations":[{"type":"assign_template_part","slug":"footer-minimal","area":"footer","currentSlug":null,"patternName":null,"placement":null,"targetPath":null}],"templateParts":[{"slug":"footer-minimal","area":"footer","reason":"Completes the explicit footer area with a registered part."}],"patternSuggestions":[],"confidence":0.8,"ranking":null}],"explanation":"Resolve empty structural slots first, then add optional pattern accents."}
 EXAMPLE
 			,
 		];

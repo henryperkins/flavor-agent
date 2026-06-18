@@ -9,6 +9,7 @@ use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Context\SyncedPatternRepository;
+use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternComponentScorer;
 use FlavorAgent\Patterns\PatternIndex;
@@ -601,7 +602,7 @@ final class PatternAbilities {
 			self::ranking_system_prompt(),
 			$llm_input,
 			null,
-			null,
+			ResponseSchema::get( 'pattern' ),
 			'flavor_agent_pattern'
 		);
 		if ( is_wp_error( $ranked ) ) {

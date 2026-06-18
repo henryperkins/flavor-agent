@@ -38,7 +38,7 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
           "detail": "Specific recommendation"
         },
         {
-          "type": "set-attribute",
+          "type": "set-attribute", "targetPath": null,
           "target": "overlayMenu",
           "detail": "Specific recommendation"
         }
@@ -80,7 +80,8 @@ SYSTEM;
 	 * @param array  $docs_guidance WordPress docs grounding chunks.
 	 */
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
-		$budget = new PromptBudget();
+		$max_tokens = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'navigation' );
+		$budget     = new PromptBudget( $max_tokens );
 
 		// ── Priority 100: Navigation identity (always kept) ──
 		$identity_lines   = [];
@@ -249,9 +250,9 @@ SYSTEM;
 			}
 		}
 
-		// ── Priority 95: User prompt (near-critical) ──
+		// ── Priority 95: User prompt (near-critical, required so budget pressure never drops the operator's directive) ──
 		if ( $prompt !== '' ) {
-			$budget->add_section( 'user_prompt', "## User Instruction\n{$prompt}", 95 );
+			$budget->add_section( 'user_prompt', "## User Instruction\n{$prompt}", 95, true );
 		}
 
 		return $budget->assemble();

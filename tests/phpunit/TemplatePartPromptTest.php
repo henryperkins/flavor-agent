@@ -17,6 +17,27 @@ final class TemplatePartPromptTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
+	public function test_build_user_keeps_user_instruction_under_extreme_budget_pressure(): void {
+		$filter = static fn (): int => 2000;
+		add_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+
+		try {
+			$prompt = TemplatePartPrompt::build_user(
+				[
+					'templatePartRef' => 'twentytwentyfive//header',
+					'slug'            => 'header',
+					'title'           => str_repeat( 'H', 12000 ),
+					'area'            => 'header',
+				],
+				'FLAVOR_AGENT_TEMPLATE_PART_INSTRUCTION_MARKER'
+			);
+		} finally {
+			remove_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+		}
+
+		$this->assertStringContainsString( 'FLAVOR_AGENT_TEMPLATE_PART_INSTRUCTION_MARKER', $prompt );
+	}
+
 	/**
 	 * @param array<int, array<string, mixed>> $entries
 	 * @return array<int, array<string, mixed>>

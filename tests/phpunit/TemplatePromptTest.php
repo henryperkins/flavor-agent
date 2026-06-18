@@ -54,6 +54,25 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertStringNotContainsString( 'Keep accessibility requirements visible.', $prompt );
 	}
 
+	public function test_build_user_keeps_user_instruction_under_extreme_budget_pressure(): void {
+		$filter = static fn (): int => 2000;
+		add_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+
+		try {
+			$prompt = TemplatePrompt::build_user(
+				[
+					'templateType' => 'home',
+					'title'        => str_repeat( 'T', 12000 ),
+				],
+				'FLAVOR_AGENT_TEMPLATE_INSTRUCTION_MARKER'
+			);
+		} finally {
+			remove_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+		}
+
+		$this->assertStringContainsString( 'FLAVOR_AGENT_TEMPLATE_INSTRUCTION_MARKER', $prompt );
+	}
+
 	public function test_build_user_includes_structure_summary(): void {
 		$prompt = TemplatePrompt::build_user(
 			[

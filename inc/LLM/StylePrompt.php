@@ -36,12 +36,12 @@ Return ONLY a JSON object with this exact shape:
 	      "tone": "executable|advisory",
 	      "operations": [
 	        {
-	          "type": "set_theme_variation",
+	          "type": "set_theme_variation", "blockName": null, "path": null, "value": null, "valueType": null, "presetType": null, "presetSlug": null, "cssVar": null,
 	          "variationIndex": 1,
 	          "variationTitle": "Midnight"
 	        },
 	        {
-	          "type": "set_styles",
+	          "type": "set_styles", "blockName": null, "variationIndex": null, "variationTitle": null,
 	          "path": ["color", "background"],
 	          "value": "var:preset|color|accent",
 	          "valueType": "preset",
@@ -50,7 +50,7 @@ Return ONLY a JSON object with this exact shape:
 	          "cssVar": "var(--wp--preset--color--accent)"
 	        },
 	        {
-	          "type": "set_block_styles",
+	          "type": "set_block_styles", "variationIndex": null, "variationTitle": null,
 	          "blockName": "core/paragraph",
 	          "path": ["typography", "fontSize"],
 	          "value": "var:preset|font-size|body",
@@ -362,7 +362,7 @@ Input context:
 - Theme variation `Midnight` is available
 
 Expected response:
-{"suggestions":[{"label":"Use the Midnight variation","description":"Switch to the darker preset variation before adding custom overrides.","category":"variation","tone":"executable","operations":[{"type":"set_theme_variation","variationIndex":1,"variationTitle":"Midnight"}]}],"explanation":"Prefer a theme-provided variation when it already matches the requested mood."}
+{"suggestions":[{"label":"Use the Midnight variation","description":"Switch to the darker preset variation before adding custom overrides.","category":"variation","tone":"executable","operations":[{"type":"set_theme_variation","blockName":null,"path":null,"value":null,"valueType":null,"presetType":null,"presetSlug":null,"cssVar":null,"variationIndex":1,"variationTitle":"Midnight"}],"confidence":0.8,"ranking":null}],"explanation":"Prefer a theme-provided variation when it already matches the requested mood."}
 EXAMPLE
 			,
 			<<<'EXAMPLE'
@@ -375,7 +375,7 @@ Input context:
 - Theme palette includes `accent`
 
 Expected response:
-{"suggestions":[{"label":"Use the accent text preset","description":"Apply the theme accent color to the paragraph text for a stronger emphasis cue.","category":"color","tone":"executable","operations":[{"type":"set_block_styles","blockName":"core/paragraph","path":["color","text"],"value":"var:preset|color|accent","valueType":"preset","presetType":"color","presetSlug":"accent","cssVar":"var(--wp--preset--color--accent)"}]}],"explanation":"Keep the change inside supported block style paths and theme presets."}
+{"suggestions":[{"label":"Use the accent text preset","description":"Apply the theme accent color to the paragraph text for a stronger emphasis cue.","category":"color","tone":"executable","operations":[{"type":"set_block_styles","blockName":"core/paragraph","path":["color","text"],"value":"var:preset|color|accent","valueType":"preset","presetType":"color","presetSlug":"accent","cssVar":"var(--wp--preset--color--accent)","variationIndex":null,"variationTitle":null}],"confidence":0.8,"ranking":null}],"explanation":"Keep the change inside supported block style paths and theme presets."}
 EXAMPLE
 			,
 		];

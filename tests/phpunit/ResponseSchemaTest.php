@@ -9,6 +9,26 @@ use PHPUnit\Framework\TestCase;
 
 final class ResponseSchemaTest extends TestCase {
 
+	public function test_pattern_schema_constrains_ranking_recommendations(): void {
+		$schema = ResponseSchema::get( 'pattern' );
+
+		$this->assertIsArray( $schema, 'Pattern ranking schema should exist so the ranking call gets the same structured-output guard as the other surfaces.' );
+		$this->assertSame( false, $schema['additionalProperties'] ?? null );
+		$this->assertContains( 'recommendations', $schema['required'] ?? [] );
+
+		$item = $schema['properties']['recommendations']['items'] ?? null;
+		$this->assertIsArray( $item, 'recommendations items should be an object schema.' );
+		$this->assertSame(
+			[ 'name', 'score', 'reason' ],
+			$item['required'] ?? null,
+			'Each recommendation must require exactly the fields the parser reads (name, score, reason).'
+		);
+		$this->assertSame( false, $item['additionalProperties'] ?? null );
+		$this->assertSame( 'string', $item['properties']['name']['type'] ?? null );
+		$this->assertSame( 'number', $item['properties']['score']['type'] ?? null );
+		$this->assertSame( 'string', $item['properties']['reason']['type'] ?? null );
+	}
+
 	/**
 	 * The LLM strict schemas must accept a nullable `confidence` so the model can express
 	 * per-suggestion ranking signals. Without this the parser's RankingContract path would

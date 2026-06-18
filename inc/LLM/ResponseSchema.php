@@ -30,6 +30,7 @@ final class ResponseSchema {
 			'style' => self::style_schema(),
 			'navigation' => self::navigation_schema(),
 			'content' => self::content_schema(),
+			'pattern' => self::pattern_schema(),
 			default => null,
 		};
 	}
@@ -354,6 +355,33 @@ final class ResponseSchema {
 				'position'       => [
 					'type' => 'string',
 					'enum' => [ 'insert_before', 'insert_after', '' ],
+				],
+			]
+		);
+	}
+
+	/**
+	 * Pattern ranking constrains the model to the exact shape PatternAbilities
+	 * parses ({recommendations:[{name, score, reason}]}), giving the pattern
+	 * surface the same structured-output guard the other model-backed surfaces
+	 * already use instead of relying on free-form JSON + manual fence stripping.
+	 */
+	private static function pattern_schema(): array {
+		return self::strict_object(
+			[
+				'recommendations' => [
+					'type'  => 'array',
+					'items' => self::strict_object(
+						[
+							'name'   => [ 'type' => 'string' ],
+							'score'  => [
+								'type'    => 'number',
+								'minimum' => 0,
+								'maximum' => 1,
+							],
+							'reason' => [ 'type' => 'string' ],
+						]
+					),
 				],
 			]
 		);

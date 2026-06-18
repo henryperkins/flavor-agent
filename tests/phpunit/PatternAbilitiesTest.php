@@ -10,6 +10,7 @@ use FlavorAgent\Embeddings\EmbeddingClient;
 use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
+use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Patterns\Retrieval\QdrantPatternRetrievalBackend;
@@ -805,6 +806,72 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertIsArray( $ranking['rankingHint']['componentScores'] ?? null );
 		$this->assertGreaterThan( 0.0, $ranking['rankingHint']['componentScores']['design'] ?? 0.0 );
 		$this->assertContains( 'component_ranking_v1', $ranking['sourceSignals'] ?? [] );
+	}
+
+	public function test_recommend_patterns_constrains_ranking_with_pattern_response_schema(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'recommendations' => [
+					[
+						'name'   => 'theme/header-fit',
+						'score'  => 0.82,
+						'reason' => 'Matches the header insertion point.',
+					],
+				],
+			]
+		);
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/header-fit',
+						0.72,
+						[
+							'traits'         => [ 'simple', 'navigation' ],
+							'designMetadata' => [
+								'sectionRole'          => 'header',
+								'layoutShape'          => 'single-column',
+								'visualDensity'        => 'sparse',
+								'colorMood'            => 'unknown',
+								'typographyRole'       => 'navigation',
+								'interactionRole'      => 'navigation',
+								'templateAreaAffinity' => 'header',
+								'styleTokenUsage'      => [],
+								'blockComplexity'      => 'low',
+								'contentSpecificity'   => 'generic',
+							],
+						]
+					),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[ 'postType' => 'page' ],
+			[ 'theme/header-fit' ]
+		);
+
+		$this->assertNotInstanceOf(
+			\WP_Error::class,
+			$result,
+			$result instanceof \WP_Error ? $result->get_error_code() . ': ' . $result->get_error_message() : ''
+		);
+
+		$sent_schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray(
+			$sent_schema,
+			'Pattern ranking must request structured output instead of free-form JSON.'
+		);
+		$this->assertSame(
+			[ 'name', 'score', 'reason' ],
+			$sent_schema['properties']['recommendations']['items']['required'] ?? null,
+			'The ranking call must carry the pattern response schema.'
+		);
 	}
 
 	public function test_recommend_patterns_cloudflare_ai_search_keeps_registered_uuid_metadata_in_registered_lane(): void {
