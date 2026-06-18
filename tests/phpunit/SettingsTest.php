@@ -2250,7 +2250,7 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
 		$this->assertStringNotContainsString( 'Developer Docs Source', $output );
 		$this->assertStringNotContainsString( 'Built-in public Cloudflare AI Search endpoint', $output );
-		$this->assertStringNotContainsString( 'ba566764-a507-4cd0-8cc8-cffbbde72ac3', $output );
+		$this->assertStringNotContainsString( '101d836c-480b-4b39-b14e-505a6aa58f47', $output );
 		$this->assertStringNotContainsString( 'Instance:', $output );
 		$this->assertStringNotContainsString( 'Runtime Grounding', $output );
 		$this->assertStringNotContainsString( 'Developer Docs Prewarm', $output );
@@ -2349,20 +2349,37 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Export JSON', $output );
 	}
 
-	public function test_render_page_outputs_parseable_guidelines_block_options_json(): void {
+	public function test_render_page_does_not_output_raw_guidelines_block_options_script(): void {
 		ob_start();
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
-		$this->assertSame(
-			1,
-			preg_match(
-				'/<script type="application\/json" data-guidelines-block-options>(.*?)<\/script>/s',
-				$output,
-				$matches
-			)
+		$this->assertStringNotContainsString( '<script', $output );
+		$this->assertStringNotContainsString( 'data-guidelines-block-options', $output );
+	}
+
+	public function test_admin_localized_data_includes_guidelines_block_options(): void {
+		register_block_type(
+			'core/paragraph',
+			[
+				'title'      => 'Paragraph',
+				'attributes' => [
+					'content' => [
+						'role' => 'content',
+					],
+				],
+			]
 		);
-		$this->assertIsArray( json_decode( $matches[1], true ) );
+
+		$this->assertSame(
+			[
+				[
+					'value' => 'core/paragraph',
+					'label' => 'Paragraph',
+				],
+			],
+			Assets::get_localized_data()['guidelinesBlockOptions'] ?? null
+		);
 	}
 
 	public function test_sanitize_guideline_copy_marks_guidelines_feedback_and_sanitizes_text(): void {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Admin\Settings;
 
+use FlavorAgent\Guidelines;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -103,11 +105,19 @@ final class Assets {
 		wp_localize_script(
 			'flavor-agent-admin',
 			'flavorAgentAdmin',
-			[
-				'restUrl' => rest_url(),
-				'nonce'   => wp_create_nonce( 'wp_rest' ),
-			]
+			self::get_localized_data()
 		);
+	}
+
+	/**
+	 * @return array{restUrl: string, nonce: string, guidelinesBlockOptions: array<int, array{value: string, label: string}>}
+	 */
+	public static function get_localized_data(): array {
+		return [
+			'restUrl'                => rest_url(),
+			'nonce'                  => wp_create_nonce( 'wp_rest' ),
+			'guidelinesBlockOptions' => Guidelines::get_content_block_options(),
+		];
 	}
 
 	/**

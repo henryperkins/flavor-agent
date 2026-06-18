@@ -823,9 +823,7 @@ final class Page {
 
 	private static function render_guidelines_blocks_panel( bool $has_feedback_error = false ): void {
 		$block_guidelines = Guidelines::get_block_guidelines();
-		$block_options    = Guidelines::get_content_block_options();
 		$guidelines_json  = Utils::encode_json_payload( $block_guidelines );
-		$options_json     = Utils::encode_json_payload( $block_options, '[]', JSON_HEX_TAG );
 		$panel_attributes = [
 			'class'                          => 'flavor-agent-settings-subpanel flavor-agent-guidelines__blocks-panel',
 			'data-flavor-agent-nested-panel' => 'block-guidelines',
@@ -851,7 +849,6 @@ final class Page {
 					data-guidelines-block-input
 					hidden
 				><?php echo esc_textarea( $guidelines_json ); ?></textarea>
-				<script type="application/json" data-guidelines-block-options><?php echo $options_json; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON_HEX_TAG keeps the inline JSON script inert while preserving parseable JSON. ?></script>
 				<div class="flavor-agent-guidelines__block-list" data-guidelines-block-list></div>
 				<div class="flavor-agent-guidelines__block-editor">
 					<div class="flavor-agent-guidelines__block-editor-grid">

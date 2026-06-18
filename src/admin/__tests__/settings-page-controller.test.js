@@ -223,6 +223,11 @@ function renderGuidelinesSettingsPage( {
 		},
 	],
 } = {} ) {
+	window.flavorAgentAdmin = {
+		...( window.flavorAgentAdmin || {} ),
+		guidelinesBlockOptions: blockOptions,
+	};
+
 	document.body.innerHTML = `
 		<div
 			class="flavor-agent-settings"
@@ -245,9 +250,6 @@ function renderGuidelinesSettingsPage( {
 					<textarea data-guidelines-block-input hidden>${ JSON.stringify(
 						blockGuidelines
 					) }</textarea>
-					<script type="application/json" data-guidelines-block-options>${ JSON.stringify(
-						blockOptions
-					) }</script>
 					<select data-guidelines-block-select></select>
 					<textarea data-guidelines-block-text></textarea>
 					<button type="button" data-guidelines-block-cancel hidden>Cancel</button>

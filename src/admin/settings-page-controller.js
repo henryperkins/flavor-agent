@@ -576,9 +576,6 @@ function initializeGuidelinesManager( root ) {
 	const hiddenInput = guidelinesRoot.querySelector(
 		'[data-guidelines-block-input]'
 	);
-	const optionsNode = guidelinesRoot.querySelector(
-		'[data-guidelines-block-options]'
-	);
 	const listRoot = guidelinesRoot.querySelector(
 		'[data-guidelines-block-list]'
 	);
@@ -605,7 +602,6 @@ function initializeGuidelinesManager( root ) {
 	);
 	if (
 		! hiddenInput ||
-		! optionsNode ||
 		! listRoot ||
 		! blockSelect ||
 		! blockText ||
@@ -624,8 +620,10 @@ function initializeGuidelinesManager( root ) {
 	const blocksPanel = guidelinesRoot.querySelector(
 		'.flavor-agent-guidelines__blocks-panel'
 	);
+	const config =
+		typeof window !== 'undefined' ? window.flavorAgentAdmin || null : null;
 
-	const parsedOptions = parseJsonValue( optionsNode.textContent, [] );
+	const parsedOptions = config?.guidelinesBlockOptions;
 	const blockOptions = Array.isArray( parsedOptions )
 		? parsedOptions
 				.map( ( option ) => ( {
