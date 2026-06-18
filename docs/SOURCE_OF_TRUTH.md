@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-06-10
+> Last updated: 2026-06-18
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.2+
 
@@ -132,7 +132,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### Content Recommendations
 
-- Post/page document-panel drafting, editing, and critique recommendations. This surface is editorial-only and exposes no Flavor Agent apply/undo path. Exact flow: [`features/content-recommendations.md`](features/content-recommendations.md). Exact contract: [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+- Post/page document-panel drafting, editing, and critique recommendations. This surface is editorial-only, exposes no Flavor Agent apply/undo path, and trims oversized existing-draft prompt context before assembly so the content lane stays within the active prompt budget. Exact flow: [`features/content-recommendations.md`](features/content-recommendations.md). Exact contract: [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 #### Shared Inline Review Model
 
@@ -238,7 +238,7 @@ This section is intentionally representative rather than a line-by-line manifest
 | Docs grounding                            | `AISearchClientTest`, `CollectsDocsGuidanceTest`, `DocsGuidanceResultTest`                                                       | Best-effort search, query cache, URL hygiene, source labels, and the ok/unreachable runtime signal                                   |
 | Shared context collectors                 | `ServerCollectorTest`                                                                                                            | Template/template-part metadata, visible-pattern filtering, and token diagnostics                                                    |
 | Guidelines storage and formatting         | `GuidelinesTest`, `CoreRoadmapGuidanceTest`                                                                                      | Editorial guidelines retrieval, migration status, prompt context formatting, and core roadmap signal caching                         |
-| Support utilities                         | `MetricsNormalizerTest`, `RankingContractTest`, `ThemeTokenFormatterTest`, `PromptBudgetTest`, `PromptFormattingTest`            | Metrics normalization, ranking contracts, theme token formatting, prompt budget enforcement, and prompt formatting helpers           |
+| Support utilities                         | `MetricsNormalizerTest`, `RankingContractTest`, `ThemeTokenFormatterTest`, `PromptBudgetTest`, `PromptFormattingTest`            | Metrics normalization, ranking contracts, theme token formatting, prompt budget enforcement including content draft caps, and prompt formatting helpers |
 | Admin pages                               | `ActivityPageTest`, `SupportToPanelSyncTest`                                                                                     | Settings page panel sync, activity admin page rendering                                                                              |
 
 ### JS (Jest)

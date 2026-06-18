@@ -7,6 +7,13 @@ namespace FlavorAgent\LLM;
 use FlavorAgent\Support\WordPressAIPolicy;
 
 final class WritingPrompt {
+	private const EXISTING_DRAFT_BUDGET_RATIO = 0.6;
+
+	private const EXISTING_DRAFT_MIN_TOKENS = 800;
+
+	private const EXISTING_DRAFT_MAX_TOKENS = 8000;
+
+	private const EXISTING_DRAFT_TRUNCATION_MARKER = "\n\n[... draft truncated for prompt budget ...]\n\n";
 
 	public static function build_system(): string {
 		return <<<'SYSTEM'
@@ -221,7 +228,10 @@ SYSTEM;
 		if ( ! empty( $post_context['content'] ) ) {
 			$budget->add_section(
 				'existing_draft',
-				"## Existing draft\n" . (string) $post_context['content'],
+				"## Existing draft\n" . self::trim_existing_draft(
+					(string) $post_context['content'],
+					$budget
+				),
 				90,
 				true
 			);
@@ -243,6 +253,17 @@ SYSTEM;
 		);
 
 		return $budget->assemble();
+	}
+
+	private static function trim_existing_draft( string $content, PromptBudget $budget ): string {
+		$cap = (int) floor( $budget->get_max_tokens() * self::EXISTING_DRAFT_BUDGET_RATIO );
+		$cap = max( self::EXISTING_DRAFT_MIN_TOKENS, min( self::EXISTING_DRAFT_MAX_TOKENS, $cap ) );
+
+		return PromptBudget::trim_to_tokens(
+			$content,
+			$cap,
+			self::EXISTING_DRAFT_TRUNCATION_MARKER
+		);
 	}
 
 	private static function format_voice_samples_section( mixed $samples ): string {

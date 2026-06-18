@@ -11,7 +11,7 @@ Use it when you need to answer:
 
 ## Status
 
-Updated: 2026-06-16.
+Updated: 2026-06-18.
 
 Initial source basis: all repository/workspace doc-like files enumerated on 2026-06-05 (77 files: 69 under `docs/`, 8 root docs including the now-deleted untracked local review artifact `ConfirmedFindings.txt`; dependency/generated directories excluded). Open-work signals were compared across `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `improving-levers.md`, `docs/features/`, `docs/reference/`, `docs/wp7-migration-opportunities.md`, release docs, root docs, and the Gutenberg 23.3 validation records. Current active rows must cite tracked source files; deleted local artifacts are historical context only.
 
@@ -25,6 +25,8 @@ Initial source basis: all repository/workspace doc-like files enumerated on 2026
 
 2026-06-16 deleted findings-source cleanup: `ConfirmedFindings.txt` is not present in this checkout and is not a current source. Its two remaining implementation-candidate rows were rechecked against tracked source before removal. Settings nested-panel disclosure is now handled by `inc/Admin/Settings/Page.php` and covered by `tests/phpunit/SettingsTest.php::test_render_page_opens_nested_panels_with_request_scoped_validation_errors`. Ability client/runtime normalization is centralized in `assets/ability-execution-utils.js` and `src/store/client-request-identity.js`, with coverage in `src/store/__tests__/abilities-client.test.js`, `src/store/__tests__/store-actions.test.js`, and `src/store/__tests__/executable-surface-runtime.test.js`. Reintroduce either item only from fresh tracked evidence and a new source-grounded plan.
 
+2026-06-18 content prompt-budget hardening: the content recommendation prompt now trims oversized existing-draft context to a bounded share of the active content prompt budget while preserving head/tail context and the required instruction section. The shared helper lives in `inc/LLM/PromptBudget.php`, the content-specific cap is in `inc/LLM/WritingPrompt.php`, and coverage lives in `tests/phpunit/PromptBudgetTest.php` plus `tests/phpunit/WritingPromptTest.php`. The historical design/plan live at `docs/superpowers/specs/2026-06-18-content-prompt-budget-hardening-design.md` and `docs/superpowers/plans/archive/2026-06-18-content-prompt-budget-hardening.md`.
+
 Archived files under `docs/superpowers/plans/archive/` and implemented design specs under `docs/superpowers/specs/` are historical context only. Do not treat them as active implementation plans. Any item below needs a fresh source-grounded plan before code changes unless the change is a narrow docs or verification update.
 
 ## Current Implementation Candidates
@@ -37,7 +39,6 @@ These items are not blocked by a known upstream API prerequisite. They still nee
 | Learning attribution join contract | Request diagnostics have partial attribution, but the future learning loop still needs a server-side generation id and bounded join metadata propagated through shown, review, apply/insert, undo, stale-blocked, validation-blocked, and insert-failed rows. | `improving-levers.md` Phase 8 and Phase 4 future-learning note; `inc/Activity/*`; `src/store/recommendation-outcomes.js` | Treat as a shared activity/recommendation contract change. |
 | Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, and an Approvals quick filter, but editor-side pending-apply visibility, approval notifications, a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, and aggregate reports remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | Each follow-up needs its own bounded plan; leave learning reports until after a learning-attribution join contract exists. |
 | Pattern adapted preview | The pattern surface currently inserts ranked patterns as Gutenberg exposes them. A forward-looking design exists for previewing and inserting a cosmetically adapted clone, with explicit open decisions around default action, content adaptation, synced-pattern detachment, local-versus-model planning, and original/adapted comparison. | `docs/features/pattern-recommendations-adapted-preview.md`; `docs/reference/block-operation-pipeline-extension-notes.md`; `docs/features/pattern-recommendations.md` | Do not implement from the outline alone. Write a fresh plan that shares the deterministic sub-block mutation engine with any block-operation expansion. |
-| Content prompt-budget hardening | Content recommendations cap extracted attributes, but rendered visible text is not yet capped before broader Layer 2/3 context expansion. | `docs/features/content-recommendations.md`; `tests/phpunit/PromptBudgetTest.php` | Scope as prompt-budget work before expanding content context depth. |
 
 ## Sequenced Later
 

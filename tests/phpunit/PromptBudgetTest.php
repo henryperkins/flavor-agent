@@ -78,6 +78,27 @@ final class PromptBudgetTest extends TestCase {
 		$this->assertSame( 0, PromptBudget::estimate_tokens( '' ) );
 	}
 
+	public function test_trim_to_tokens_preserves_in_budget_text(): void {
+		$text = 'Short draft context.';
+
+		$this->assertSame( $text, PromptBudget::trim_to_tokens( $text, 100 ) );
+	}
+
+	public function test_trim_to_tokens_caps_long_text_and_preserves_head_and_tail(): void {
+		$text   = 'Opening context. ' . str_repeat( 'Middle context. ', 1200 ) . 'Final context.';
+		$result = PromptBudget::trim_to_tokens(
+			$text,
+			200,
+			"\n\n[... draft truncated for prompt budget ...]\n\n"
+		);
+
+		$this->assertLessThanOrEqual( 200, PromptBudget::estimate_tokens( $result ) );
+		$this->assertStringContainsString( 'Opening context.', $result );
+		$this->assertStringContainsString( '[... draft truncated for prompt budget ...]', $result );
+		$this->assertStringContainsString( 'Final context.', $result );
+		$this->assertNotSame( $text, $result );
+	}
+
 	public function test_design_semantic_formatter_caps_prompt_body_tokens(): void {
 		$lines = DesignSemantics::format_prompt_lines(
 			[

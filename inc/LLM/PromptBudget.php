@@ -52,6 +52,13 @@ final class PromptBudget {
 	}
 
 	/**
+	 * Get the normalized maximum token budget for this instance.
+	 */
+	public function get_max_tokens(): int {
+		return $this->max_tokens;
+	}
+
+	/**
 	 * Add a named prompt section with a priority.
 	 *
 	 * Higher priority sections are kept when budget is tight.
@@ -89,11 +96,44 @@ final class PromptBudget {
 			return 0;
 		}
 
-		$length = function_exists( 'mb_strlen' )
-			? mb_strlen( $text, 'UTF-8' )
-			: strlen( $text );
+		return (int) ceil( self::string_length( $text ) / self::CHARS_PER_TOKEN );
+	}
 
-		return (int) ceil( $length / self::CHARS_PER_TOKEN );
+	/**
+	 * Trim text to an estimated token cap while preserving beginning and end context.
+	 *
+	 * @param string $text            Input text.
+	 * @param int    $max_tokens      Maximum estimated tokens to keep.
+	 * @param string $omission_marker Marker inserted between preserved head/tail text.
+	 */
+	public static function trim_to_tokens(
+		string $text,
+		int $max_tokens,
+		string $omission_marker = "\n\n[... truncated for prompt budget ...]\n\n"
+	): string {
+		if ( '' === $text || $max_tokens <= 0 ) {
+			return '';
+		}
+
+		if ( self::estimate_tokens( $text ) <= $max_tokens ) {
+			return $text;
+		}
+
+		$max_chars     = max( 1, $max_tokens * self::CHARS_PER_TOKEN );
+		$marker_length = self::string_length( $omission_marker );
+
+		if ( $max_chars <= $marker_length + 2 ) {
+			return self::substring( $text, 0, $max_chars );
+		}
+
+		$available_chars = $max_chars - $marker_length;
+		$head_chars      = max( 1, (int) floor( $available_chars * 0.65 ) );
+		$tail_chars      = max( 1, $available_chars - $head_chars );
+
+		$head = rtrim( self::substring( $text, 0, $head_chars ) );
+		$tail = ltrim( self::substring( $text, -$tail_chars ) );
+
+		return $head . $omission_marker . $tail;
 	}
 
 	/**
@@ -177,5 +217,23 @@ final class PromptBudget {
 		}
 
 		return $lowest_index;
+	}
+
+	private static function string_length( string $text ): int {
+		return function_exists( 'mb_strlen' )
+			? mb_strlen( $text, 'UTF-8' )
+			: strlen( $text );
+	}
+
+	private static function substring( string $text, int $start, ?int $length = null ): string {
+		if ( function_exists( 'mb_substr' ) ) {
+			return null === $length
+				? mb_substr( $text, $start, null, 'UTF-8' )
+				: mb_substr( $text, $start, $length, 'UTF-8' );
+		}
+
+		return null === $length
+			? substr( $text, $start )
+			: substr( $text, $start, $length );
 	}
 }

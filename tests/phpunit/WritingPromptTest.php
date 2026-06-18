@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\LLM\PromptBudget;
 use FlavorAgent\LLM\WritingPrompt;
 use PHPUnit\Framework\TestCase;
 
@@ -174,6 +175,36 @@ JSON
 		}
 
 		$this->assertContains( 'content', $captured );
+	}
+
+	public function test_build_user_caps_existing_draft_under_content_prompt_budget(): void {
+		$middle = str_repeat( 'Middle context. ', 3000 );
+		$filter = static fn (): int => 2000;
+
+		add_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+
+		try {
+			$prompt = WritingPrompt::build_user(
+				[
+					'mode'        => 'edit',
+					'postContext' => [
+						'postType' => 'post',
+						'content'  => "Opening context.\n\n{$middle}\n\nFinal context.",
+					],
+				],
+				'Tighten without changing facts.'
+			);
+		} finally {
+			remove_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+		}
+
+		$this->assertLessThanOrEqual( 2000, PromptBudget::estimate_tokens( $prompt ) );
+		$this->assertStringContainsString( '## Existing draft', $prompt );
+		$this->assertStringContainsString( 'Opening context.', $prompt );
+		$this->assertStringContainsString( '[... draft truncated for prompt budget ...]', $prompt );
+		$this->assertStringContainsString( 'Final context.', $prompt );
+		$this->assertStringContainsString( '## User instruction', $prompt );
+		$this->assertStringNotContainsString( str_repeat( 'Middle context. ', 500 ), $prompt );
 	}
 
 	public function test_build_user_drops_voice_samples_first_under_budget_pressure(): void {

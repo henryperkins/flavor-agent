@@ -24,7 +24,7 @@ The Abilities contract remains available so external agents or admin tools can u
 2. The store action `fetchContentRecommendations()` executes the `flavor-agent/recommend-content` ability with `mode`, optional `prompt`, and `postContext`
 3. `RecommendationAbilityExecution` forwards that payload to `ContentAbilities::recommend_content()`
 4. `ContentAbilities` normalizes the request, validates per-post edit access when `postContext.postId > 0`, and passes draft content through `PostContentRenderer`; positive post IDs enable server-side block rendering, while missing or `0` post IDs use the fallback text path
-5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt via `PromptBudget`. The user prompt includes the rendered current-post text under `Existing draft` and, when the author has eligible same-author published posts in the same post type, a `## Site voice samples` section with up to three openings (~1500 chars each, paragraph-snapped) drawn through `PostVoiceSampleCollector`. Voice samples is the only section the budget will drop under pressure. When rendered HTML exposes useful attribute-borne text that would otherwise be stripped from the current post, `PostContentRenderer` appends it as an `[Attribute references]` bullet list.
+5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt via `PromptBudget`. The user prompt includes the rendered current-post text under `Existing draft`; oversized drafts are trimmed to a bounded share of the active content prompt budget while preserving opening and closing context. When the author has eligible same-author published posts in the same post type, a `## Site voice samples` section with up to three openings (~1500 chars each, paragraph-snapped) is drawn through `PostVoiceSampleCollector`. Voice samples remain optional and are dropped before required task, metadata, existing-draft, or instruction sections under pressure. When rendered HTML exposes useful attribute-borne text that would otherwise be stripped from the current post, `PostContentRenderer` appends it as an `[Attribute references]` bullet list.
 6. `WritingPrompt::parse_response()` validates the returned JSON payload
 7. The panel renders as a Latest Recommendation Workspace. Before any usable output, the full composer is visible. After a usable response, the generated title, summary, and `content` become the primary result, while the mode/prompt composer collapses behind `Refine request`.
 8. `notes[]` and `issues[]` render as collapsed `Editorial Notes` support material, with overflow hidden behind `Show more`; critique mode still treats `content` as the primary recommendation text.
@@ -41,7 +41,7 @@ Input:
 
 Model-facing draft context:
 
-- Rendered visible text is emitted first.
+- Rendered visible text is emitted first and may be trimmed in the prompt section when it exceeds the content prompt-budget cap.
 - Attribute-borne strings from `alt`, `title`, `aria-label`, and allowed `href` values are appended as `[Attribute references]` when they are not already present in the visible text.
 - Top-level `core/post-title`, `core/post-excerpt`, and `core/post-content` self-references are intercepted so staged editor values are used and recursive post-content rendering is avoided.
 
@@ -63,7 +63,7 @@ Output:
 - A positive `postContext.postId` without `edit_post` access returns `rest_forbidden_context`.
 - Current-post block rendering is postId-gated. Unsaved posts and external callers that omit `postId` keep the fallback text path and do not execute block render callbacks.
 - Self-reference substitution is top-level only. If a `core/post-title` or `core/post-excerpt` block is nested inside another block, WordPress may render the saved value rather than the staged editor value.
-- Attribute extraction is capped by count and per-value length. Layer 1 does not yet cap rendered visible text; the deferred `PromptBudget` follow-up should own that before broader Layer 2/3 context expansion.
+- Attribute extraction is capped by count and per-value length. Oversized existing-draft context is also capped by `WritingPrompt` before prompt assembly, using the active content prompt budget so broader Layer 2/3 context can be added later without the rendered draft consuming the full budget.
 - Voice samples are same-author, publish-only, password-protected-excluded, and `read_post`-gated per candidate. Render failures for an individual sample drop only that sample, never the parent recommendation.
 - The `## Site voice samples` section is omitted entirely when no candidates qualify: new authors, unsupported post types, all candidates filtered out, or all renders failed.
 - Sites can tune the prompt token budget via the `flavor_agent_prompt_budget_max_tokens` filter, scope `content`.
