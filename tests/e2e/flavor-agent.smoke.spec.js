@@ -221,6 +221,17 @@ async function dismissWelcomeGuide( page ) {
 			hasText:
 				/Welcome to the editor|Welcome to the Site Editor|Welcome to styles|Page 1 of 4/i,
 		} );
+	const welcomeDialogs = page.getByRole( 'dialog', {
+		name: /Welcome to the editor|Welcome to the Site Editor|Welcome to styles/i,
+	} );
+	const welcomeDialog = welcomeDialogs.first();
+	const isWelcomeGuideVisible = async () =>
+		( await welcomeOverlay.isVisible().catch( () => false ) ) ||
+		( await welcomeDialog.isVisible().catch( () => false ) );
+	const getWelcomeGuideSurface = async () =>
+		( await welcomeOverlay.isVisible().catch( () => false ) )
+			? welcomeOverlay
+			: welcomeDialog;
 
 	const disableWelcomeGuidePreferences = () => {
 		const preferences = window.wp?.data?.dispatch( 'core/preferences' );
@@ -280,7 +291,7 @@ async function dismissWelcomeGuide( page ) {
 	await page.evaluate( disableWelcomeGuidePreferences ).catch( () => {} );
 
 	for ( let attempt = 0; attempt < 4; attempt++ ) {
-		if ( await welcomeOverlay.isVisible().catch( () => false ) ) {
+		if ( await isWelcomeGuideVisible() ) {
 			break;
 		}
 
@@ -288,19 +299,20 @@ async function dismissWelcomeGuide( page ) {
 	}
 
 	for ( let attempt = 0; attempt < 10; attempt++ ) {
-		const isVisible = await welcomeOverlay.isVisible().catch( () => false );
+		const isVisible = await isWelcomeGuideVisible();
 
 		if ( ! isVisible ) {
 			return;
 		}
 
-		const closeButton = welcomeOverlay
+		const welcomeSurface = await getWelcomeGuideSurface();
+		const closeButton = welcomeSurface
 			.getByRole( 'button', { name: 'Close' } )
 			.first();
-		const getStartedButton = welcomeOverlay
+		const getStartedButton = welcomeSurface
 			.getByRole( 'button', { name: 'Get started' } )
 			.first();
-		const nextButton = welcomeOverlay
+		const nextButton = welcomeSurface
 			.getByRole( 'button', { name: /Next|Continue/i } )
 			.first();
 
@@ -356,6 +368,7 @@ async function dismissWelcomeGuide( page ) {
 		.catch( () => {} );
 
 	await expect( welcomeOverlay ).toHaveCount( 0, { timeout: 10000 } );
+	await expect( welcomeDialogs ).toHaveCount( 0, { timeout: 10000 } );
 	await page.waitForTimeout( 250 );
 	await page.evaluate( forceRemoveWelcomeGuideOverlays ).catch( () => {} );
 }

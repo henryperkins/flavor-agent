@@ -113,13 +113,19 @@ Follow the canonical stop lines in [surfaces/release-stop-lines.md#block-recomme
 
 ### Release Actions
 
-- [ ] Block Structural Actions is unconditionally on; the only opt-out is the `flavor_agent_enable_block_structural_actions` filter (the admin setting and `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant were removed at graduation). Confirm the filter still force-disables for an emergency opt-out.
-- [ ] If structural apply ships, add release notes that it is review-first and limited to validated selected-block pattern insert/replace.
-- [ ] Confirm stale selected-block results remain visible, marked stale, and non-executable.
-- [ ] Confirm locked, content-only, missing, moved, or changed targets fail closed.
-- [ ] Keep delegated settings/style subpanels passive and route refresh/apply back to the main block panel.
-- [ ] Re-run targeted JS tests for block operation catalog, recommendation actionability, store actions, and block panel behavior.
+- [x] Block Structural Actions is unconditionally on; the only opt-out is the `flavor_agent_enable_block_structural_actions` filter (the admin setting and `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` constant were removed at graduation). Confirm the filter still force-disables for an emergency opt-out.
+- [x] If structural apply ships, add release notes that it is review-first and limited to validated selected-block pattern insert/replace.
+- [x] Confirm stale selected-block results remain visible, marked stale, and non-executable.
+- [x] Confirm locked, content-only, missing, moved, or changed targets fail closed.
+- [x] Keep delegated settings/style subpanels passive and route refresh/apply back to the main block panel.
+- [x] Re-run targeted JS tests for block operation catalog, recommendation actionability, store actions, and block panel behavior.
 - [ ] Re-run Playground and WP 7.0 browser coverage if structural apply is enabled for any release channel.
+
+2026-06-19 block recommendation release-action evidence:
+
+- The block structural flag path is covered by `BlockStructuralActionsFlagTest`, `SettingsRegistrarTest`, `PromptValidationReasonsTest`, `BlockOperationContextTest`, and `BlockOperationValidatorTest`; the focused run passed with `42` tests and `152` assertions.
+- The block release-action JS run covered `collector`, `block-operation-catalog`, `block-structural-actions`, `block-request-state`, `BlockRecommendationsPanel`, and `store-actions`; the focused run passed with `6` suites and `233` tests.
+- `docs/features/block-recommendations.md` and `docs/releases/v0.1.0.md` carry the review-first selected-block structural scope, stale-result behavior, delegated passive subpanel boundary, fail-closed structural guards, and release-note language. This closes the static/unit release-action rows above only; the Playground and WP 7.0 browser rerun remains open.
 
 ## Pattern Recommendations
 
@@ -190,10 +196,16 @@ Do not add:
 ### Release Actions
 
 - [x] Tighten copy so the user understands the result is editorial guidance or generated text, not an automatic patch.
-- [ ] Add or verify a clear manual handoff path for draft/edit output.
-- [ ] Keep unsupported post types hidden or clearly unavailable.
-- [ ] Confirm provider unavailability points to Connectors setup rather than plugin-owned provider routing.
-- [ ] Re-run content panel unit/browser smoke coverage after copy or mode changes.
+- [x] Add or verify a clear manual handoff path for draft/edit output.
+- [x] Keep unsupported post types hidden or clearly unavailable.
+- [x] Confirm provider unavailability points to Connectors setup rather than plugin-owned provider routing.
+- [x] Re-run content panel unit/browser smoke coverage after copy or mode changes.
+
+2026-06-19 content recommendation release-action evidence:
+
+- `ContentRecommender.test.js` covers the manual copy handoff, provider-unavailable `Settings > Connectors` notice, unsupported editor-entity hiding, stale-result copy disablement, and collapsed request history; the focused JS run covering `ContentRecommender`, store actions, and capability flags passed with `3` suites and `149` tests.
+- `ContentAbilitiesTest`, `EditorSurfaceCapabilitiesTest`, and `WordPressAIClientTest` cover post/page capability gates, unsupported post-type voice-sample omission, and Connectors-owned missing-provider behavior; the focused PHP run passed with `62` tests and `314` assertions.
+- Browser evidence passed for `content panel renders for a brand-new unsaved post` in the Playground harness and for the WP 7.0 `content recommendation surface drafts, edits, critiques, and reports REST errors` flow. This closes the content release-action rows above only; it does not replace full release verification or the remaining screenshot/sign-off chores.
 
 ## Navigation Recommendations
 
