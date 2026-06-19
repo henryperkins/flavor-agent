@@ -32,7 +32,10 @@ test( '@wp70-site-editor settings page keeps compact help-first IA without chang
 	);
 	await expect(
 		page.locator( '.flavor-agent-settings__glance-item' )
-	).toHaveCount( 6 );
+	).toHaveCount( 7 );
+	await expect(
+		page.locator( '.flavor-agent-settings__glance' )
+	).toContainText( 'Experimental Features' );
 	await expect( page.locator( '.flavor-agent-settings' ) ).not.toContainText(
 		'Recent Activity'
 	);
