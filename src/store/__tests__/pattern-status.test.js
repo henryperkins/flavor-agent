@@ -144,13 +144,21 @@ describe( 'pattern status store contract', () => {
 			)
 		);
 
-		expect( staleStatusState.patternRecommendations ).toEqual( [
-			{
+		expect( staleStatusState.patternRecommendations ).toHaveLength( 1 );
+		expect( staleStatusState.patternRecommendations[ 0 ] ).toEqual(
+			expect.objectContaining( {
 				name: 'theme/fresh',
 				reason: 'Fresh result.',
 				score: 0.98,
-			},
-		] );
+				suggestionKey: 'theme/fresh',
+				recommendationOutcome: expect.objectContaining( {
+					rank: 1,
+					resultCount: 1,
+					suggestionKey: 'theme/fresh',
+					topSuggestionKeys: [ 'theme/fresh' ],
+				} ),
+			} )
+		);
 		expect( staleStatusState.patternStatus ).toBe( 'ready' );
 		expect( staleStatusState.patternError ).toBeNull();
 		expect( staleStatusState.patternRequestToken ).toBe( 2 );
@@ -207,13 +215,21 @@ describe( 'pattern status store contract', () => {
 			)
 		);
 
-		expect( staleStatusState.patternRecommendations ).toEqual( [
-			{
+		expect( staleStatusState.patternRecommendations ).toHaveLength( 1 );
+		expect( staleStatusState.patternRecommendations[ 0 ] ).toEqual(
+			expect.objectContaining( {
 				name: 'theme/current',
 				reason: 'Current result.',
 				score: 0.98,
-			},
-		] );
+				suggestionKey: 'theme/current',
+				recommendationOutcome: expect.objectContaining( {
+					rank: 1,
+					resultCount: 1,
+					suggestionKey: 'theme/current',
+					topSuggestionKeys: [ 'theme/current' ],
+				} ),
+			} )
+		);
 		expect( staleStatusState.patternStatus ).toBe( 'ready' );
 		expect( staleStatusState.patternError ).toBeNull();
 		expect( staleStatusState.patternRequestToken ).toBe( 5 );

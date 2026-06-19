@@ -11,7 +11,7 @@ Use it when you need to answer:
 
 ## Status
 
-Updated: 2026-06-18.
+Updated: 2026-06-19.
 
 Initial source basis: all repository/workspace doc-like files enumerated on 2026-06-05 (77 files: 69 under `docs/`, 8 root docs including the now-deleted untracked local review artifact `ConfirmedFindings.txt`; dependency/generated directories excluded). Open-work signals were compared across `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `improving-levers.md`, `docs/features/`, `docs/reference/`, `docs/wp7-migration-opportunities.md`, release docs, root docs, and the Gutenberg 23.3 validation records. Current active rows must cite tracked source files; deleted local artifacts are historical context only.
 
@@ -31,6 +31,8 @@ Initial source basis: all repository/workspace doc-like files enumerated on 2026
 
 2026-06-18 learning attribution join contract: Phase 8 shipped a server-minted `generationId` and bounded `learningAttribution` metadata across request diagnostics, recommendation outcomes, apply activity rows, and undo transition preservation. The contract carries recommendation/generation ids, source request signatures, guideline version, docs content/runtime fingerprints, provider/model, ranking version, and validation vocabulary version without storing raw prompt, provider payload, or block-tree context in outcome rows. This does not ship Phase 9 learning reports, fixture harvest, or learned ranking feedback; the historical implementation plan lives at `docs/superpowers/plans/archive/2026-06-18-learning-attribution-join-contract.md`.
 
+2026-06-19 pattern adapted preview v1: the non-synced pattern shelf now ships `Preview adapted`, `Insert adapted`, and `Insert original` with a deterministic cosmetic rule set, `BlockPreview` rendering, local adaptation-signature stale checks, and the same guarded insert/rollback path as original insertion. Synced/user `core/block` references remain unchanged references. Content adaptation, synced detachment, model-assisted plans, and original/adapted comparison remain explicit follow-up decisions in `docs/features/pattern-recommendations-adapted-preview.md`. The historical implementation plan lives at `docs/superpowers/plans/archive/2026-06-19-pattern-adapted-preview.md`.
+
 Archived files under `docs/superpowers/plans/archive/` and implemented design specs under `docs/superpowers/specs/` are historical context only. Do not treat them as active implementation plans. Any item below needs a fresh source-grounded plan before code changes unless the change is a narrow docs or verification update.
 
 ## Current Implementation Candidates
@@ -40,7 +42,6 @@ These items are not blocked by a known upstream API prerequisite. They still nee
 | Workstream | Why it is open | Current source | Next move |
 | --- | --- | --- | --- |
 | Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, and an Approvals quick filter, but editor-side pending-apply visibility, approval notifications, a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, and aggregate reports remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | Each follow-up needs its own bounded plan; learning reports can now build on the shipped Phase 8 join contract. |
-| Pattern adapted preview | The pattern surface currently inserts ranked patterns as Gutenberg exposes them. A forward-looking design exists for previewing and inserting a cosmetically adapted clone, with explicit open decisions around default action, content adaptation, synced-pattern detachment, local-versus-model planning, and original/adapted comparison. | `docs/features/pattern-recommendations-adapted-preview.md`; `docs/reference/block-operation-pipeline-extension-notes.md`; `docs/features/pattern-recommendations.md` | Do not implement from the outline alone. Write a fresh plan that shares the deterministic sub-block mutation engine with any block-operation expansion. |
 
 ## Sequenced Later
 
@@ -104,6 +105,6 @@ These can turn into implementation work only after the upstream contract changes
 ## Suggested Next Planning Order
 
 1. Editor-side pending external-apply visibility, approval notifications, or template/template-part external-apply executors if the priority is extending the governance loop beyond the shipped C1.1 console; each needs its own bounded plan.
-2. Pattern adapted preview or block-operation expansion if the priority is a new product surface; plan the shared sub-block mutation engine once, not separately per surface.
+2. Block-operation expansion or a follow-up adapted-preview v2 if the priority is a new product surface; reuse or deliberately extract the shipped deterministic pattern adaptation module instead of planning a second sub-block mutation engine.
 3. Admin activity reports if the priority is the future learning loop; use the shipped Phase 8 attribution join contract as the input contract.
 4. Release-validation chores before any v0.1.0 release decision or upstream compatibility claim.

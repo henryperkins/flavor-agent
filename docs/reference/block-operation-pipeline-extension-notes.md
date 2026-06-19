@@ -149,4 +149,6 @@ First add a section-scoped operation plan surface that borrows the template-part
 
 `docs/features/pattern-recommendations-adapted-preview.md` reaches the same "adapt a pattern instead of inserting it verbatim" idea from the inserter shelf. Its cosmetic adaptation is the counterpart to this doc's "Make Patterns Smarter And Parameterized" section, and it already specifies the sub-block addressing primitive that `parameters` needs here: `changes[].path` into a detached clone, drift-free precisely because the tree is not yet in the editor.
 
+As of 2026-06-19, the inserter-shelf v1 implements its cosmetic clone mutation in `src/patterns/pattern-adaptation.js`. That module is intentionally scoped to detached non-synced pattern clones and does not solve content parameterization, outgoing-block diffing, or `preserve` transplants. Future block-operation work should either reuse/extract the generic path-addressed validation pieces from that module or explicitly document why a separate executor is required.
+
 The validated, sub-block-addressed mutation engine — "the executor, not the model" — should be shared between the two surfaces rather than built twice. One boundary differs: the inserter-shelf surface inserts a fresh clone, so it has no outgoing block and no analog to `preserve`. Content transplant on replace (`preserve`) stays unique to this surface.

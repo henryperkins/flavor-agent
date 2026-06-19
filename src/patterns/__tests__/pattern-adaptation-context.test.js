@@ -39,7 +39,11 @@ describe( 'buildPatternAdaptationContext', () => {
 		};
 		const ctx = buildPatternAdaptationContext(
 			makeEditor( blocks, { root: [] } ),
-			{ inserterRootClientId: 'root', insertionIndex: 0, siblingOrder: [] }
+			{
+				inserterRootClientId: 'root',
+				insertionIndex: 0,
+				siblingOrder: [],
+			}
 		);
 
 		expect( ctx.rootAlign ).toBe( 'full' );

@@ -8,8 +8,9 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - Primary surface: a Flavor Agent-owned recommendation shelf prepended inside the native block inserter
 - Secondary surface: the inserter-toggle badge rendered by `src/patterns/InserterBadge.js`
 - Unavailable state: when Pattern Storage or the Embedding Model is missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
-- There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains ranking/browse-only instead of participating in the lane/review/apply/undo model
-- Pattern recommendations return `reviewContextSignature` and `resolvedContextSignature`; the direct Insert button revalidates the server-resolved apply context through `resolveSignatureOnly` before dispatching core insertion, while the surface still avoids a separate Flavor Agent review/apply panel
+- There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains an inserter ranking and guarded insertion assist instead of participating in the lane/review/apply/undo model
+- Pattern recommendations return `reviewContextSignature` and `resolvedContextSignature`; both `Insert original` and `Insert adapted` revalidate the server-resolved apply context through `resolveSignatureOnly` before dispatching core insertion, while the surface still avoids a separate Flavor Agent review/apply panel
+- Non-synced recommended patterns expose `Preview adapted` and `Insert original`; synced/user `core/block` reference patterns keep a single unchanged `Insert` action and are not detached
 
 ## Surfacing Conditions
 
@@ -31,6 +32,26 @@ Completed base inserter-open rankings are cached per insertion target. The cache
 
 When a real inserter-intent request ends before a model call, diagnostics carry `diagnostics.modelRequest.attempted === false` with an allow-listed reason such as `no_rankable_candidates` or `missing_visible_patterns`. Activity renders that as a no-model diagnostic instead of implying a missing core AI request log.
 
+## Adapted Preview
+
+For non-synced recommended patterns, the shelf offers `Preview adapted` beside `Insert original`. Preview builds a detached clone of the resolved pattern blocks, applies only deterministic cosmetic mutations, renders that exact clone with Gutenberg `BlockPreview`, and keeps `Insert adapted`, `Insert original`, and `Close` in the inserter panel.
+
+The v1 mutation allowlist is intentionally narrow:
+
+- heading levels can be adjusted to follow the nearby heading hierarchy,
+- supported `align` values can be matched to the insertion container or sibling context,
+- supported text/background color preset slugs can be remapped to theme palette roles,
+- supported spacing preset values can be remapped to the nearest available theme spacing preset,
+- `core/button` can receive a registered non-default style variation when it does not already have one.
+
+The preview reads a client-only `adaptationContext` from the live editor at preview time: nearby heading levels, preceding heading level, root alignment, and sibling alignments around the current insertion point. That context is not sent to ranking and is not part of the server `resolvedContextSignature`; instead the preview records a local `adaptationSignature` over the source pattern, insertion target, server-resolved signature, adaptation context, and applied changes.
+
+`Insert adapted` rechecks that local adaptation signature immediately before insertion. If the insertion point or nearby adaptation context has drifted, Flavor Agent records `stale_blocked` with reason `adapted_preview_stale`, marks the panel stale, and refreshes recommendations instead of dispatching the old clone. If the deterministic rules cannot build a safe adapted clone, Flavor Agent records `adaptation_blocked` and leaves `Insert original` available when the original remains safe.
+
+The adapted and original paths share the same apply-time safety gates: target-signature check, `resolveSignatureOnly` server revalidation, live allowed-block checks, awaited `insertBlocks()`, post-dispatch target verification, and wrong-target rollback. Original insertion is unchanged; synced/user `core/block` references are not adapted or detached in v1.
+
+Recommendation outcome events added for this path are `adapted_preview_shown`, `adapted_inserted_from_preview`, `adaptation_blocked`, and `adapted_insert_failed`.
+
 ## End-To-End Flow
 
 1. `PatternRecommender()` in `src/patterns/PatternRecommender.js` builds a base input from post type, template type, and the current visible pattern set
@@ -45,7 +66,8 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 10. The store saves the recommendations plus the server `resolvedContextSignature`, and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
 11. If Pattern Storage or the Embedding Model is unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
 12. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
-13. The user inserts a recommended pattern directly from the Flavor Agent shelf. Before dispatching core block insertion, the click handler checks the client insertion-target signature, reruns `flavor-agent/recommend-patterns` with `resolveSignatureOnly: true`, and blocks insertion if the server `resolvedContextSignature` no longer matches. After dispatch, it verifies that Gutenberg reported the cloned blocks at the requested target; if Gutenberg inserts them elsewhere, Flavor Agent removes those cloned blocks and records a diagnostic failure instead of logging a successful insert.
+13. For non-synced patterns, the shelf offers `Preview adapted` and `Insert original`. `Preview adapted` resolves and clones the pattern blocks, reads a client-only nearby heading/alignment context, applies deterministic cosmetic mutations, and renders the adapted clone in `PatternAdaptationPreview`.
+14. The user inserts either the original blocks or the previewed adapted clone from the Flavor Agent shelf. Before dispatching core block insertion, the click handler checks the client insertion-target signature, reruns `flavor-agent/recommend-patterns` with `resolveSignatureOnly: true`, and blocks insertion if the server `resolvedContextSignature` no longer matches. Adapted insertion also rechecks the local `adaptationSignature` so nearby heading/alignment drift cannot insert a stale preview. After dispatch, it verifies that Gutenberg reported the cloned blocks at the requested target; if Gutenberg inserts them elsewhere, Flavor Agent removes those cloned blocks and records a diagnostic failure instead of logging a successful insert.
 
 ## Contract Pointers
 
@@ -58,6 +80,7 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 - Surface ranked patterns in a local inserter shelf without rewriting Gutenberg's pattern registry
 - Rank both registered patterns and synced/user patterns that Gutenberg exposes to the current insertion root
 - Insert matched allowed patterns directly from that shelf while still respecting the current allowed insertion root
+- Preview a safely adapted clone for non-synced patterns before insertion
 - Revalidate the current server apply context before direct insertion, so docs-grounding or pattern-catalog drift cannot apply an old ranked result
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
@@ -75,7 +98,10 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 - If the backend returns ranked names that Gutenberg is not currently exposing through the allowed-pattern selector, the inserter keeps the result local and explanatory instead of patching registry metadata
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
 - If a stored recommendation lacks a server `resolvedContextSignature`, or the current `resolveSignatureOnly` response does not match the stored signature, the Insert action is blocked and the shelf refreshes recommendations for the current target
-- If Gutenberg rejects insertion, silently no-ops, or inserts cloned blocks outside the requested target, Flavor Agent records an `insert_failed` recommendation outcome. Wrong-target inserts are rolled back with `removeBlocks()` when the cloned client IDs are visible after dispatch.
+- If an adapted preview's client-only insertion context changes before `Insert adapted`, the adapted insert is blocked with `adapted_preview_stale` and the shelf refreshes recommendations for the current target
+- If a pattern is a synced/user `core/block` reference, Flavor Agent keeps the unchanged reference path and does not show `Preview adapted`
+- If adapted blocks cannot be safely built, the adapted path records `adaptation_blocked` and leaves original insertion available when the original remains safe
+- If Gutenberg rejects insertion, silently no-ops, or inserts cloned blocks outside the requested target, Flavor Agent records `insert_failed` for original insertion or `adapted_insert_failed` for adapted insertion. Wrong-target inserts are rolled back with `removeBlocks()` when the cloned client IDs are visible after dispatch.
 - Cloudflare AI Search sync uploads only public-safe current pattern content. It preserves owner-marker items and unknown remote items, and deletes only stale item IDs that were recorded in the previous Flavor Agent pattern fingerprint state. If a synced pattern later becomes private, draft, trashed, or unreadable before the next sync, request-time rehydration drops it before ranking or response output.
 - WordPress docs grounding uses the shared cache/fallback collector and may perform one bounded foreground warm before reranking. If trusted grounding remains unavailable after candidate retrieval, pattern recommendations return `flavor_agent_docs_grounding_unavailable` instead of calling the reranker; stale or degraded trusted grounding proceeds with warning metadata.
 - The badge fails closed when the inserter DOM anchor cannot be found and only counts recommendations that the current allowed-pattern selector can render
@@ -89,6 +115,9 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 | UI shell | `PatternRecommender()` in `src/patterns/PatternRecommender.js` | Watches editor state, search input, and visible pattern context |
 | Unavailable notice | `PatternRecommender()` + `CapabilityNotice` | Mount shared why-unavailable messaging into the native inserter when backends are missing |
 | Inserter shelf | `PatternRecommender()` in `src/patterns/PatternRecommender.js` | Renders the local recommendation shelf and dispatches core block insertion for matched allowed patterns |
+| Adaptation context | `buildPatternAdaptationContext()` in `src/patterns/pattern-adaptation-context.js` | Reads nearby heading and alignment context from the live editor at preview time |
+| Adaptation engine | `buildPatternAdaptationPreview()` in `src/patterns/pattern-adaptation.js` | Clones non-synced pattern blocks, applies deterministic cosmetic rules, and emits the local adaptation signature |
+| Adapted preview UI | `PatternAdaptationPreview()` in `src/patterns/PatternAdaptationPreview.js` | Renders the adapted clone with Gutenberg `BlockPreview` and exposes adapted/original insert actions |
 | Badge UI | `InserterBadge()` and `getInserterBadgeState()` | Render count/loading/error state next to the inserter toggle, counting only renderable allowed-pattern matches |
 | Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state, including the stored server apply signature |
 | Store revalidation | `resolvePatternRecommendationSignature()` in `src/store/index.js` | Reposts the current pattern input with `resolveSignatureOnly` before direct shelf insertion |
@@ -112,7 +141,10 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 ## Key Implementation Files
 
 - `src/patterns/PatternRecommender.js`
+- `src/patterns/PatternAdaptationPreview.js`
 - `src/patterns/InserterBadge.js`
+- `src/patterns/pattern-adaptation.js`
+- `src/patterns/pattern-adaptation-context.js`
 - `src/patterns/inserter-badge-state.js` — badge state machine; see `docs/reference/shared-internals.md`
 - `src/patterns/recommendation-utils.js` — renderable recommendation matching and badge reason extraction; see `docs/reference/shared-internals.md`
 - `src/patterns/compat.js` — re-export facade for pattern settings and inserter DOM; see `docs/reference/shared-internals.md`

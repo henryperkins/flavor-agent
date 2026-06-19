@@ -3950,6 +3950,7 @@ test( 'pattern badge attaches to the block inserter button, not document overvie
 		Boolean( window.flavorAgentData?.canRecommendPatterns )
 	);
 	await seedParagraphBlock( page );
+	await waitForPatternCatalogHydration( page );
 	await dismissWelcomeGuide( page );
 
 	const inserter = page

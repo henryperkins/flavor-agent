@@ -1,17 +1,23 @@
 # Adapted Pattern Recommendation Preview
 
-This is a forward-looking feature outline for extending the existing Pattern Recommendations surface. It builds on `docs/features/pattern-recommendations.md`, where Flavor Agent currently ranks patterns, displays them in the native Gutenberg inserter, and inserts the selected pattern as Gutenberg exposes it.
+This records the shipped v1 adapted-preview slice for the existing Pattern Recommendations surface, plus the remaining follow-up decisions. It builds on `docs/features/pattern-recommendations.md`, where Flavor Agent ranks patterns, displays them in the native Gutenberg inserter, and inserts the selected pattern as Gutenberg exposes it.
 
 ## Current Implementation State
 
-As of 2026-06-06, adapted pattern preview is not implemented. The live pattern surface is still the direct-insert contract:
+As of 2026-06-19, adapted pattern preview v1 is implemented for non-synced recommended patterns. The live pattern surface remains an inserter ranking assist surface, but non-synced shelf items now expose `Preview adapted` plus `Insert original`; synced/user `core/block` references keep a single unchanged `Insert` action and are not detached.
 
-- `src/patterns/PatternRecommender.js` resolves the matched Gutenberg pattern, validates freshness and insertability, dispatches `insertBlocks()`, and verifies the result at the requested target.
-- `src/patterns/pattern-insertability.js` owns the reusable block-resolution and allowed-block checks through `resolvePatternBlocks()` and `getRejectedPatternBlockNames()`.
-- `src/store/recommendation-outcomes.js` only allows the existing pattern events (`shown`, `pattern_inserted_from_shelf`, `validation_blocked`, `stale_blocked`, and `insert_failed`); adapted preview and adapted insert events are not registered yet.
-- No `BlockPreview`-based adapted preview component, `pattern-adaptation.js` module, or `adaptationPlan` runtime contract exists in `src/patterns/`.
+The shipped v1 seams are:
 
-The WordPress 7.0 Pattern Overrides premise in this outline remains current for custom blocks: attributes that opt into Block Bindings can participate in overrides, but that is still a per-instance content override path rather than an arbitrary cosmetic mutation path for a synced `core/block` reference.
+- `src/patterns/PatternRecommender.js` owns the shelf action split, the preview state, the adaptation-signature recheck, and the shared guarded insert path for both original and adapted insertion.
+- `src/patterns/pattern-insertability.js` owns reusable block resolution and resolved-block insertability helpers through `resolvePatternBlocks()`, `getRejectedResolvedBlockNames()`, and `isSyncedPatternReference()`.
+- `src/patterns/pattern-adaptation-context.js` reads the client-only nearby heading and alignment context from the live editor at preview time.
+- `src/patterns/pattern-adaptation.js` clones non-synced pattern blocks, applies the deterministic cosmetic rules, emits `pattern-adaptation-v1` plan changes, and returns a client-side `adaptationSignature`.
+- `src/patterns/PatternAdaptationPreview.js` renders the adapted clone with Gutenberg `BlockPreview` and exposes `Insert adapted`, `Insert original`, and `Close`.
+- `src/store/recommendation-outcomes.js` and `inc/Activity/RecommendationOutcome.php` allow the adapted outcome vocabulary: `adapted_preview_shown`, `adapted_inserted_from_preview`, `adaptation_blocked`, and `adapted_insert_failed`.
+
+The implemented rule set is intentionally cosmetic and deterministic: nearby heading-level alignment, supported alignment matching, theme color preset remapping, theme spacing preset remapping, and registered `core/button` style variation selection. The implementation does not change block names, add/remove top-level blocks, rewrite arbitrary HTML, generate content text, detach synced patterns, or use the model to author an adaptation plan.
+
+The WordPress 7.0 Pattern Overrides premise remains current for custom blocks: attributes that opt into Block Bindings can participate in overrides, but that is still a per-instance content override path rather than an arbitrary cosmetic mutation path for a synced `core/block` reference.
 
 ## Goal
 
@@ -35,11 +41,13 @@ The core principle is:
 
 ## User Experience
 
-The existing inserter shelf remains the entry point. Each recommended pattern can expose an adaptation-aware action set:
+The existing inserter shelf remains the entry point. Each non-synced recommended pattern exposes an adaptation-aware action set:
 
-- `Preview` opens a visual preview of the adapted result.
+- `Preview adapted` opens a visual preview of the adapted result.
 - `Insert adapted` inserts the adapted block clone.
-- `Insert original` remains available when useful for trust and comparison.
+- `Insert original` remains available for trust and comparison.
+
+Synced/user `core/block` references keep a single unchanged `Insert` action in v1.
 
 The preview should make the adaptation explicit without making the surface feel like a separate workflow. A compact note can list the kinds of changes applied, such as "Adjusted spacing, heading level, button style, and color presets."
 
@@ -79,18 +87,18 @@ The extension should preserve these guardrails and add adaptation between block 
 
 ## Adaptation Scope
 
-Adaptation should start with cosmetic changes that are low-risk and easy to validate:
+Adaptation starts with cosmetic changes that are low-risk and easy to validate:
 
-- Heading levels that follow nearby heading hierarchy.
-- Alignment values when supported by the block and suitable for the insertion root.
-- Theme color preset slugs for text, background, links, and buttons.
-- Typography preset slugs or size values only when supported and theme-compatible.
-- Spacing preset slugs for padding, margin, and block gaps.
-- Button style variations that are registered for `core/button`.
-- Image aspect ratio or size slug when the image block supports the attribute.
-- Placeholder text only when the feature explicitly includes content adaptation.
+- Shipped in v1: heading levels that follow nearby heading hierarchy.
+- Shipped in v1: alignment values when supported by the block and suitable for the insertion root.
+- Shipped in v1: theme color preset slugs for supported text/background paths.
+- Shipped in v1: spacing preset slugs for supported padding, margin, and block-gap paths.
+- Shipped in v1: button style variations that are registered for `core/button`.
+- Deferred: typography preset slugs or size values.
+- Deferred: image aspect ratio or size slug.
+- Deferred: placeholder or content text adaptation.
 
-The first version should avoid:
+V1 avoids:
 
 - Changing block names or structural layout.
 - Adding or removing top-level blocks.
@@ -139,7 +147,7 @@ Supported modes should be explicit:
 - Insert an adapted detached copy, clearly labeled as no longer synced.
 - Use supported Pattern Overrides or bindings where WordPress exposes a safe per-instance customization path.
 
-The first implementation should prefer unchanged synced references unless the user explicitly chooses an adapted detached copy or the platform exposes a reliable per-instance override contract.
+V1 keeps synced references unchanged. A future version should detach only when the user explicitly chooses an adapted detached copy or the platform exposes a reliable per-instance override contract.
 
 Because `resolvePatternBlocks()` returns a single `core/block` reference for a synced pattern, there is no cloned tree to cosmetically adapt without detaching. In v1 the `Preview adapted` and `Insert adapted` actions are therefore hidden or disabled for synced references, so the surface never offers an adapted action that silently equals the original — only `Insert original` (the unchanged reference) is shown.
 
@@ -187,14 +195,14 @@ Any validation failure should block adapted insertion and leave the original rec
 
 ## Telemetry And Diagnostics
 
-Recommendation outcome diagnostics should distinguish adapted interactions from current direct insertion:
+Recommendation outcome diagnostics distinguish adapted interactions from current direct insertion:
 
 - `adapted_preview_shown`
 - `adapted_inserted_from_preview`
 - `adaptation_blocked`
 - `adapted_insert_failed`
 
-These event names must be added to the frozen `OUTCOME_EVENTS` allowlist and the `OUTCOME_LABELS` map in `src/store/recommendation-outcomes.js`. The outcome builder hard-gates on `OUTCOME_EVENT_SET`, so an unregistered event is silently dropped by `recordRecommendationOutcome` rather than logged. They extend the existing surface vocabulary (`shown`, `pattern_inserted_from_shelf`, `validation_blocked`, `stale_blocked`, `insert_failed`) and, like those, surface in `Settings > AI Activity` as diagnostic-visibility rows.
+These event names are in the frozen `OUTCOME_EVENTS` allowlist and the `OUTCOME_LABELS` map in `src/store/recommendation-outcomes.js`, and in the PHP-side activity allowlist in `inc/Activity/RecommendationOutcome.php`. The outcome builder hard-gates on `OUTCOME_EVENT_SET`, so future adapted events still need explicit registration before `recordRecommendationOutcome` can log them. They extend the existing surface vocabulary (`shown`, `pattern_inserted_from_shelf`, `validation_blocked`, `stale_blocked`, `insert_failed`) and, like those, surface in `Settings > AI Activity` as diagnostic-visibility rows.
 
 Useful reason codes:
 
@@ -210,20 +218,22 @@ Diagnostics should avoid storing full block content unless the existing Activity
 
 ## Implementation Seams
 
-Likely source seams:
+Shipped source seams:
 
 - `src/patterns/PatternRecommender.js` for preview actions, stale checks, and insertion dispatch.
 - `src/patterns/pattern-insertability.js` for shared block resolution and insertability checks.
-- New `src/patterns/pattern-adaptation.js` for plan creation, block-tree mutation, and validation.
-- New `src/patterns/PatternAdaptationPreview.js` for the preview UI around `BlockPreview`.
+- `src/patterns/pattern-adaptation-context.js` for the client-only adaptation signal.
+- `src/patterns/pattern-adaptation.js` for plan creation, block-tree mutation, and validation.
+- `src/patterns/PatternAdaptationPreview.js` for the preview UI around `BlockPreview`.
 - `src/store/recommendation-outcomes.js` for adapted preview and insertion events.
-- `inc/Abilities/PatternAbilities.php` only if adaptation metadata needs server participation in the recommendation payload.
+- `inc/Activity/RecommendationOutcome.php` for server-side activity event normalization.
+- `inc/Abilities/PatternAbilities.php` remains unchanged unless future adaptation metadata needs server participation in the recommendation payload.
 
-The first version should keep adaptation client-side unless server-owned context is required. Server signatures already guard the apply context before insertion.
+V1 keeps adaptation client-side because the shipped rule set only needs live editor context, theme tokens, block supports, and registered block styles. Server signatures already guard the apply context before insertion.
 
 ## Testing Strategy
 
-Unit tests should cover:
+Unit tests cover:
 
 - plan creation from insertion context and theme tokens,
 - recursive block-tree adaptation,
@@ -232,7 +242,7 @@ Unit tests should cover:
 - stale preview invalidation,
 - insert handler using the exact previewed adapted blocks.
 
-Integration or component tests should cover:
+Integration or component tests cover:
 
 - preview opens from the inserter shelf,
 - `BlockPreview` receives adapted blocks,
@@ -240,25 +250,25 @@ Integration or component tests should cover:
 - `Insert original` dispatches untouched blocks,
 - wrong-target rollback still works with adapted blocks.
 
-E2E coverage should prove:
+E2E coverage now proves:
 
 - the user can preview an adapted recommendation before insertion,
 - the inserted result matches the previewed adaptation,
-- stale insertion target changes block adapted insertion and refresh recommendations.
+- wrong-target rollback still removes adapted clones when Gutenberg inserts outside the requested target.
 
-The E2E suite should extend the existing pattern-insert failure harness — `consumeE2EPatternInsertFailureMode` and the `window.flavorAgentData.e2ePatternInsertFailureHarness` hook (with `window.__flavorAgentPatternInsertFailures`) in `PatternRecommender.js` — to cover the adapted path across its forced exception, no-op, and wrong-target modes, rather than introducing a second harness.
+The E2E suite extends the existing pattern-insert failure harness — `consumeE2EPatternInsertFailureMode` and the `window.flavorAgentData.e2ePatternInsertFailureHarness` hook (with `window.__flavorAgentPatternInsertFailures`) in `PatternRecommender.js` — for the adapted path instead of introducing a second harness. Unit coverage carries the stale-preview and disallowed-block branches; broader forced exception/no-op browser coverage can be added if those modes regress independently.
 
 ## Open Decisions
 
-- Whether adapted insertion should be the default action or a secondary action behind `Preview`.
-- Whether content text adaptation belongs in the first version or should remain cosmetic-only.
-- Whether synced patterns can be detached in v1, and what confirmation copy is required.
+- Whether adapted insertion should ever become the default action instead of staying behind `Preview adapted`.
+- Whether content text adaptation belongs in a future version or should remain cosmetic-only.
+- Whether synced patterns can be detached in a future version, and what confirmation copy is required.
 - Whether adaptation plans should be generated by local heuristics only or assisted by the recommendation model.
 - Whether original/adapted comparison is necessary in v1 or can wait until users ask for it.
 
 ## Recommended First Slice
 
-Build the smallest trustworthy version:
+The shipped v1 is the smallest trustworthy version:
 
 1. Add local cosmetic adaptation for a short allow-list: heading level, alignment, color preset, spacing preset, and button style.
 2. Add a preview panel using `BlockPreview`.
