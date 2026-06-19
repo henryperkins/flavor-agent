@@ -12,6 +12,8 @@ jest.mock( '@wordpress/blocks', () => ( {
 import {
 	filterInsertableRecommendedPatterns,
 	getRejectedPatternBlockNames,
+	getRejectedResolvedBlockNames,
+	isSyncedPatternReference,
 	resolvePatternBlocks,
 } from '../pattern-insertability';
 
@@ -91,6 +93,56 @@ describe( 'getRejectedPatternBlockNames', () => {
 			'core/template-part',
 			'root-a'
 		);
+	} );
+} );
+
+describe( 'getRejectedResolvedBlockNames', () => {
+	test( 'returns top-level block names not insertable at the root', () => {
+		const blockEditor = {
+			canInsertBlockType: jest.fn(
+				( name ) => name !== 'core/template-part'
+			),
+		};
+		const blocks = [
+			{ name: 'core/template-part', attributes: {} },
+			{ name: 'core/group', attributes: {} },
+		];
+
+		expect(
+			getRejectedResolvedBlockNames( blocks, 'root-a', blockEditor )
+		).toEqual( [ 'core/template-part' ] );
+		expect( blockEditor.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/group',
+			'root-a'
+		);
+	} );
+} );
+
+describe( 'isSyncedPatternReference', () => {
+	test( 'is true for a user pattern by type/id/syncStatus', () => {
+		expect(
+			isSyncedPatternReference( {
+				type: 'user',
+				syncStatus: 'fully',
+				id: 7,
+			} )
+		).toBe( true );
+	} );
+
+	test( 'is true for a resolved single core/block reference', () => {
+		expect(
+			isSyncedPatternReference( { name: 'theme/ref' }, [
+				{ name: 'core/block', attributes: { ref: 7 } },
+			] )
+		).toBe( true );
+	} );
+
+	test( 'is false for a normal multi-block pattern', () => {
+		expect(
+			isSyncedPatternReference( { name: 'theme/hero' }, [
+				{ name: 'core/heading', attributes: {} },
+			] )
+		).toBe( false );
 	} );
 } );
 

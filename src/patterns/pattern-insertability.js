@@ -33,13 +33,28 @@ export function getRejectedPatternBlockNames(
 	rootClientId,
 	blockEditor
 ) {
-	if ( typeof blockEditor?.canInsertBlockType !== 'function' ) {
+	return getRejectedResolvedBlockNames(
+		resolvePatternBlocks( pattern ),
+		rootClientId,
+		blockEditor
+	);
+}
+
+export function getRejectedResolvedBlockNames(
+	blocks,
+	rootClientId,
+	blockEditor
+) {
+	if (
+		typeof blockEditor?.canInsertBlockType !== 'function' ||
+		! Array.isArray( blocks )
+	) {
 		return [];
 	}
 
 	const rejected = [];
 
-	for ( const block of resolvePatternBlocks( pattern ) ) {
+	for ( const block of blocks ) {
 		if ( ! block?.name ) {
 			continue;
 		}
@@ -52,6 +67,28 @@ export function getRejectedPatternBlockNames(
 	}
 
 	return rejected;
+}
+
+// Single source of truth for "this recommendation is a synced/user reference".
+// Mirrors resolvePatternBlocks: a user pattern by type/id, or a pattern whose
+// resolved blocks are a single core/block reference.
+export function isSyncedPatternReference(
+	pattern,
+	sourceBlocks = resolvePatternBlocks( pattern )
+) {
+	if (
+		pattern?.type === 'user' &&
+		pattern?.syncStatus !== 'unsynced' &&
+		pattern?.id
+	) {
+		return true;
+	}
+
+	return (
+		Array.isArray( sourceBlocks ) &&
+		sourceBlocks.length === 1 &&
+		sourceBlocks[ 0 ]?.name === 'core/block'
+	);
 }
 
 function getRegisteredBlockBindingsSources() {
