@@ -25,11 +25,7 @@ const THEME_TOKENS = {
 		textEnabled: true,
 	},
 	spacing: {
-		spacingSizes: [
-			{ slug: '20' },
-			{ slug: '40' },
-			{ slug: '60' },
-		],
+		spacingSizes: [ { slug: '20' }, { slug: '40' }, { slug: '60' } ],
 	},
 };
 
@@ -76,9 +72,7 @@ describe( 'buildPatternAdaptationPreview scaffold', () => {
 	test( 'refuses synced/user pattern references', () => {
 		const result = run( {
 			pattern: { name: 'core/block/12', type: 'user', id: 12 },
-			sourceBlocks: [
-				{ name: 'core/block', attributes: { ref: 12 } },
-			],
+			sourceBlocks: [ { name: 'core/block', attributes: { ref: 12 } } ],
 		} );
 
 		expect( result.status ).toBe( 'blocked' );
@@ -129,7 +123,9 @@ describe( 'buildPatternAdaptationPreview scaffold', () => {
 describe( 'heading level + alignment rules', () => {
 	test( 'sets heading level to nearest preceding heading + 1', () => {
 		const result = run( {
-			sourceBlocks: [ { name: 'core/heading', attributes: { level: 4 } } ],
+			sourceBlocks: [
+				{ name: 'core/heading', attributes: { level: 4 } },
+			],
 			adaptationContext: { ...BASE_CTX, precedingHeadingLevel: 2 },
 		} );
 
@@ -147,13 +143,17 @@ describe( 'heading level + alignment rules', () => {
 
 	test( 'clamps heading level to 6 and skips when already aligned', () => {
 		const aligned = run( {
-			sourceBlocks: [ { name: 'core/heading', attributes: { level: 3 } } ],
+			sourceBlocks: [
+				{ name: 'core/heading', attributes: { level: 3 } },
+			],
 			adaptationContext: { ...BASE_CTX, precedingHeadingLevel: 2 },
 		} );
 		expect( aligned.status ).toBe( 'blocked' );
 
 		const clamped = run( {
-			sourceBlocks: [ { name: 'core/heading', attributes: { level: 2 } } ],
+			sourceBlocks: [
+				{ name: 'core/heading', attributes: { level: 2 } },
+			],
 			adaptationContext: { ...BASE_CTX, precedingHeadingLevel: 6 },
 		} );
 		expect( clamped.blocks[ 0 ].attributes.level ).toBe( 6 );
@@ -211,5 +211,86 @@ describe( 'heading level + alignment rules', () => {
 
 		expect( result.status ).toBe( 'ready' );
 		expect( result.blocks[ 0 ].attributes.align ).toBe( 'wide' );
+	} );
+} );
+
+describe( 'color + spacing remap rules', () => {
+	test( 'remaps an off-theme background slug to a same-role theme slug', () => {
+		REGISTRY.getBlockType.mockReturnValue( {
+			supports: { color: { background: true, text: true } },
+		} );
+
+		const result = run( {
+			sourceBlocks: [
+				{
+					name: 'core/group',
+					attributes: { backgroundColor: 'accent' },
+				},
+			],
+		} );
+
+		expect( result.status ).toBe( 'ready' );
+		expect( result.blocks[ 0 ].attributes.backgroundColor ).toBe(
+			'primary'
+		);
+		expect( result.plan.changes ).toContainEqual(
+			expect.objectContaining( {
+				attribute: 'backgroundColor',
+				from: 'accent',
+				to: 'primary',
+				reason: 'theme_color_alignment',
+			} )
+		);
+	} );
+
+	test( 'keeps an in-theme color slug unchanged', () => {
+		REGISTRY.getBlockType.mockReturnValue( {
+			supports: { color: { background: true } },
+		} );
+
+		const result = run( {
+			sourceBlocks: [
+				{
+					name: 'core/group',
+					attributes: { backgroundColor: 'primary' },
+				},
+			],
+		} );
+
+		expect( result.status ).toBe( 'blocked' );
+	} );
+
+	test( 'remaps a numeric off-theme spacing slug to the nearest theme slug', () => {
+		REGISTRY.getBlockType.mockReturnValue( {
+			supports: { spacing: { padding: true } },
+		} );
+
+		const result = run( {
+			sourceBlocks: [
+				{
+					name: 'core/group',
+					attributes: {
+						style: {
+							spacing: {
+								padding: {
+									top: 'var:preset|spacing|50',
+								},
+							},
+						},
+					},
+				},
+			],
+		} );
+
+		expect( result.status ).toBe( 'ready' );
+		expect( result.blocks[ 0 ].attributes.style.spacing.padding.top ).toBe(
+			'var:preset|spacing|40'
+		);
+		expect( result.plan.changes ).toContainEqual(
+			expect.objectContaining( {
+				attribute: 'style',
+				reason: 'theme_spacing_alignment',
+			} )
+		);
 	} );
 } );

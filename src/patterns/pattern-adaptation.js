@@ -8,6 +8,7 @@
  */
 import { cloneBlock } from '@wordpress/blocks';
 
+import { getBlockStyleSupportedStylePathsFromTokens } from '../context/theme-tokens';
 import { buildContextSignature } from '../utils/context-signature';
 import { isSyncedPatternReference } from './pattern-insertability';
 
@@ -82,7 +83,9 @@ function alignmentRule( block, { adaptationContext, blockRegistry } ) {
 		return null;
 	}
 
-	if ( ! supportedAlignments( blockRegistry, block.name ).includes( target ) ) {
+	if (
+		! supportedAlignments( blockRegistry, block.name ).includes( target )
+	) {
 		return null;
 	}
 
@@ -98,7 +101,229 @@ function alignmentRule( block, { adaptationContext, blockRegistry } ) {
 		  };
 }
 
-const ADAPTATION_RULES = [ headingLevelRule, alignmentRule ];
+const COLOR_ROLE_SYNONYMS = {
+	background: [ 'background', 'base', 'base-2', 'white', 'light' ],
+	foreground: [
+		'foreground',
+		'contrast',
+		'contrast-2',
+		'text',
+		'dark',
+		'black',
+	],
+	primary: [ 'primary', 'accent', 'accent-1', 'brand' ],
+	secondary: [ 'secondary', 'accent-2', 'accent-3', 'tertiary' ],
+};
+
+function roleForColorSlug( slug ) {
+	for ( const [ role, slugs ] of Object.entries( COLOR_ROLE_SYNONYMS ) ) {
+		if ( slugs.includes( slug ) ) {
+			return role;
+		}
+	}
+
+	return '';
+}
+
+function themeColorSlugs( themeTokens ) {
+	const palette = themeTokens?.color?.palette;
+
+	return Array.isArray( palette )
+		? palette.map( ( entry ) => entry?.slug ).filter( Boolean )
+		: [];
+}
+
+function remapColorSlug( slug, themeTokens ) {
+	const slugs = themeColorSlugs( themeTokens );
+
+	if ( slugs.includes( slug ) ) {
+		return '';
+	}
+
+	const role = roleForColorSlug( slug );
+
+	if ( ! role ) {
+		return '';
+	}
+
+	return (
+		slugs.find( ( candidate ) => roleForColorSlug( candidate ) === role ) ||
+		''
+	);
+}
+
+function supportsStylePath( themeTokens, blockSupports, path ) {
+	return getBlockStyleSupportedStylePathsFromTokens(
+		themeTokens,
+		blockSupports || {}
+	).some(
+		( entry ) =>
+			entry.path.length === path.length &&
+			entry.path.every( ( segment, index ) => segment === path[ index ] )
+	);
+}
+
+function colorRule( attribute, path ) {
+	return ( block, { themeTokens, blockRegistry } ) => {
+		const blockSupports = blockRegistry?.getBlockType?.(
+			block?.name
+		)?.supports;
+
+		if ( ! supportsStylePath( themeTokens, blockSupports, path ) ) {
+			return null;
+		}
+
+		const from = block?.attributes?.[ attribute ];
+
+		if ( typeof from !== 'string' || ! from ) {
+			return null;
+		}
+
+		const to = remapColorSlug( from, themeTokens );
+
+		return to
+			? { attribute, from, to, reason: 'theme_color_alignment' }
+			: null;
+	};
+}
+
+function themeSpacingSlugs( themeTokens ) {
+	const sizes = themeTokens?.spacing?.spacingSizes;
+
+	return Array.isArray( sizes )
+		? sizes.map( ( entry ) => entry?.slug ).filter( Boolean )
+		: [];
+}
+
+function nearestNumericSlug( slug, themeSlugs ) {
+	const source = Number( slug );
+	const numeric = themeSlugs
+		.map( ( candidate ) => ( {
+			slug: candidate,
+			value: Number( candidate ),
+		} ) )
+		.filter( ( entry ) => Number.isFinite( entry.value ) );
+
+	if ( ! Number.isFinite( source ) || numeric.length === 0 ) {
+		return '';
+	}
+
+	numeric.sort(
+		( a, b ) =>
+			Math.abs( a.value - source ) - Math.abs( b.value - source ) ||
+			a.value - b.value
+	);
+
+	return numeric[ 0 ].slug;
+}
+
+const SPACING_PRESET_RE = /^var:preset\|spacing\|(.+)$/;
+
+function remapSpacingValue( value, themeTokens ) {
+	if ( typeof value !== 'string' ) {
+		return value;
+	}
+
+	const match = value.match( SPACING_PRESET_RE );
+
+	if ( ! match ) {
+		return value;
+	}
+
+	const slug = match[ 1 ];
+	const themeSlugs = themeSpacingSlugs( themeTokens );
+
+	if ( themeSlugs.includes( slug ) ) {
+		return value;
+	}
+
+	const replacement = nearestNumericSlug( slug, themeSlugs );
+
+	return replacement ? `var:preset|spacing|${ replacement }` : value;
+}
+
+function remapSpacingTree( node, themeTokens, state ) {
+	if ( Array.isArray( node ) ) {
+		return node.map( ( item ) =>
+			remapSpacingTree( item, themeTokens, state )
+		);
+	}
+
+	if ( node && typeof node === 'object' ) {
+		return Object.fromEntries(
+			Object.entries( node ).map( ( [ key, value ] ) => [
+				key,
+				remapSpacingTree( value, themeTokens, state ),
+			] )
+		);
+	}
+
+	const next = remapSpacingValue( node, themeTokens );
+
+	if ( next !== node ) {
+		state.changed = true;
+	}
+
+	return next;
+}
+
+function spacingFacetSupported( blockSupports, facet ) {
+	const value = blockSupports?.spacing?.[ facet ];
+
+	if ( value === true ) {
+		return true;
+	}
+
+	return Array.isArray( value ) && value.length > 0;
+}
+
+function spacingRule( block, { themeTokens, blockRegistry } ) {
+	const blockSupports = blockRegistry?.getBlockType?.(
+		block?.name
+	)?.supports;
+	const spacing = block?.attributes?.style?.spacing;
+
+	if ( ! spacing || typeof spacing !== 'object' ) {
+		return null;
+	}
+
+	const state = { changed: false };
+	const nextSpacing = { ...spacing };
+
+	for ( const facet of [ 'padding', 'margin', 'blockGap' ] ) {
+		if (
+			spacing[ facet ] === undefined ||
+			! spacingFacetSupported( blockSupports, facet )
+		) {
+			continue;
+		}
+
+		nextSpacing[ facet ] = remapSpacingTree(
+			spacing[ facet ],
+			themeTokens,
+			state
+		);
+	}
+
+	if ( ! state.changed ) {
+		return null;
+	}
+
+	return {
+		attribute: 'style',
+		from: block.attributes.style,
+		to: { ...block.attributes.style, spacing: nextSpacing },
+		reason: 'theme_spacing_alignment',
+	};
+}
+
+const ADAPTATION_RULES = [
+	headingLevelRule,
+	alignmentRule,
+	colorRule( 'backgroundColor', [ 'color', 'background' ] ),
+	colorRule( 'textColor', [ 'color', 'text' ] ),
+	spacingRule,
+];
 
 function themeHasAnyPreset( themeTokens ) {
 	const palette = themeTokens?.color?.palette;
