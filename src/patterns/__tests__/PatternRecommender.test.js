@@ -191,6 +191,15 @@ function createSelectMap() {
 			} ),
 			canInsertBlockType: ( ...args ) =>
 				mockCanInsertBlockType( ...args ),
+			getSettings: jest.fn( () => state.blockEditor.settings || {} ),
+		},
+		'core/blocks': {
+			getBlockType: jest.fn(
+				( name ) => state.blockRegistry.blockTypes?.[ name ] || {}
+			),
+			getBlockStyles: jest.fn(
+				( name ) => state.blockRegistry.blockStyles?.[ name ] || []
+			),
 		},
 		'flavor-agent': {
 			getPatternError: jest.fn( () => state.store.patternError ),
@@ -234,6 +243,61 @@ function renderComponent() {
 	} );
 }
 
+function findShelfInsertButton( container ) {
+	return Array.from( container.querySelectorAll( 'button' ) ).find(
+		( button ) =>
+			[
+				'Insert original',
+				'Insert',
+				'Translated Insert original',
+				'Translated Insert',
+			].includes( button.textContent )
+	);
+}
+
+function findButtonByText( container, label ) {
+	return Array.from( container.querySelectorAll( 'button' ) ).find(
+		( button ) => button.textContent === label
+	);
+}
+
+function setPrecedingHeadingContext( level = 2 ) {
+	state.blockEditor.insertionPoint = {
+		rootClientId: 'root-a',
+		index: 1,
+	};
+	state.blockEditor.blockOrder = { 'root-a': [ 'heading-before' ] };
+	state.blockEditor.blockNames = {
+		'root-a': 'core/group',
+		'heading-before': 'core/heading',
+	};
+	state.blockEditor.blockAttributes = {
+		'heading-before': { level },
+	};
+}
+
+function renderReadyPatternShelf( {
+	pattern,
+	recommendation = {
+		name: pattern.name,
+		score: 0.94,
+		reason: 'Recommended pattern.',
+	},
+} ) {
+	const inserterContainer = document.createElement( 'div' );
+
+	inserterContainer.className = 'block-editor-inserter__panel-content';
+	document.body.appendChild( inserterContainer );
+	state.store.patternStatus = 'ready';
+	state.store.patternRecommendations = [ recommendation ];
+	state.allowedPatterns = [ pattern ];
+	mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+	renderComponent();
+
+	return inserterContainer;
+}
+
 describe( 'PatternRecommender', () => {
 	beforeEach( () => {
 		jest.useFakeTimers();
@@ -257,7 +321,12 @@ describe( 'PatternRecommender', () => {
 				blockOrder: { 'root-a': [] },
 				blockRoots: { 'root-a': null },
 				blockAttributes: {},
+				settings: {},
 				blocks: { 'root-a': [] },
+			},
+			blockRegistry: {
+				blockTypes: {},
+				blockStyles: {},
 			},
 			store: {
 				patternError: '',
@@ -1184,22 +1253,23 @@ describe( 'PatternRecommender', () => {
 				.querySelector( '[role="status"]' )
 				?.querySelector( 'button' )
 		).toBeNull();
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		expect( insertButton?.getAttribute( 'aria-label' ) ).toBe(
-			'Insert Hero'
+			'Insert original Hero'
 		);
 		expect( mockTranslate ).toHaveBeenCalledWith(
-			'Insert',
+			'Insert original',
 			'flavor-agent'
 		);
 		expect( mockTranslate ).toHaveBeenCalledWith(
-			'Insert %s',
+			'Insert original %s',
 			'flavor-agent'
 		);
-		expect( mockSprintf ).toHaveBeenCalledWith( 'Insert %s', 'Hero' );
+		expect( mockSprintf ).toHaveBeenCalledWith(
+			'Insert original %s',
+			'Hero'
+		);
 
 		await act( async () => {
 			insertButton.click();
@@ -1237,11 +1307,11 @@ describe( 'PatternRecommender', () => {
 		};
 
 		mockTranslate.mockImplementation( ( value ) => {
-			if ( value === 'Insert' ) {
-				return 'Translated Insert';
+			if ( value === 'Insert original' ) {
+				return 'Translated Insert original';
 			}
-			if ( value === 'Insert %s' ) {
-				return 'Translated Insert %s';
+			if ( value === 'Insert original %s' ) {
+				return 'Translated Insert original %s';
 			}
 			return value;
 		} );
@@ -1259,14 +1329,235 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Translated Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		expect( insertButton ).toBeTruthy();
 		expect( insertButton?.getAttribute( 'aria-label' ) ).toBe(
-			'Translated Insert Hero'
+			'Translated Insert original Hero'
 		);
+	} );
+
+	test( 'offers Preview adapted and Insert original for non-synced patterns', () => {
+		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [ { name: 'core/heading', attributes: { level: 2 } } ],
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [ allowedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		const labels = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).map( ( button ) => button.textContent );
+		expect( labels ).toContain( 'Preview adapted' );
+		expect( labels ).toContain( 'Insert original' );
+	} );
+
+	test( 'records adapted preview shown and renders the preview panel', () => {
+		setPrecedingHeadingContext( 2 );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [ { name: 'core/heading', attributes: { level: 5 } } ],
+		};
+		const recommendation = {
+			name: 'theme/hero',
+			score: 0.94,
+			reason: 'Recommended hero pattern.',
+		};
+		const inserterContainer = renderReadyPatternShelf( {
+			pattern,
+			recommendation,
+		} );
+
+		act( () => {
+			findButtonByText( inserterContainer, 'Preview adapted' ).click();
+		} );
+
+		expect( inserterContainer.textContent ).toContain( 'Adapted preview' );
+		expect( inserterContainer.textContent ).toContain(
+			'Heading level matched to nearby headings'
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'adapted_preview_shown',
+				surface: 'pattern',
+				reason: 'adapted_preview_ready',
+				patternKey: 'theme/hero',
+			} )
+		);
+	} );
+
+	test( 'inserts adapted preview blocks through the shared server freshness gate', async () => {
+		setPrecedingHeadingContext( 2 );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [ { name: 'core/heading', attributes: { level: 5 } } ],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+
+		act( () => {
+			findButtonByText( inserterContainer, 'Preview adapted' ).click();
+		} );
+
+		await act( async () => {
+			findButtonByText( inserterContainer, 'Insert adapted' ).click();
+		} );
+
+		expect( mockResolvePatternRecommendationSignature ).toHaveBeenCalled();
+		expect( mockInsertBlocks ).toHaveBeenCalledWith(
+			[
+				expect.objectContaining( {
+					name: 'core/heading',
+					attributes: expect.objectContaining( { level: 3 } ),
+					cloned: true,
+				} ),
+			],
+			1,
+			'root-a',
+			true
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'adapted_inserted_from_preview',
+				surface: 'pattern',
+				reason: 'insert_blocks_success',
+				patternKey: 'theme/hero',
+			} )
+		);
+	} );
+
+	test( 'blocks adapted insert when the server-resolved context drifts', async () => {
+		setPrecedingHeadingContext( 2 );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [ { name: 'core/heading', attributes: { level: 5 } } ],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+
+		act( () => {
+			findButtonByText( inserterContainer, 'Preview adapted' ).click();
+		} );
+		mockResolvePatternRecommendationSignature.mockResolvedValue( {
+			resolvedContextSignature: 'resolved-pattern-context-new',
+		} );
+
+		await act( async () => {
+			findButtonByText( inserterContainer, 'Insert adapted' ).click();
+		} );
+
+		expect( mockResolvePatternRecommendationSignature ).toHaveBeenCalled();
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'stale_blocked',
+				surface: 'pattern',
+				reason: 'resolved_context_changed',
+				patternKey: 'theme/hero',
+			} )
+		);
+	} );
+
+	test( 'blocks adapted insert when nearby heading context changes after preview', async () => {
+		setPrecedingHeadingContext( 2 );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [ { name: 'core/heading', attributes: { level: 5 } } ],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+
+		act( () => {
+			findButtonByText( inserterContainer, 'Preview adapted' ).click();
+		} );
+		state.blockEditor.blockAttributes = {
+			'heading-before': { level: 3 },
+		};
+
+		await act( async () => {
+			findButtonByText( inserterContainer, 'Insert adapted' ).click();
+		} );
+
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'stale_blocked',
+				surface: 'pattern',
+				reason: 'adapted_preview_stale',
+				patternKey: 'theme/hero',
+			} )
+		);
+	} );
+
+	test( 'shows the shared disallowed-block notice for adapted inserts', async () => {
+		setPrecedingHeadingContext( 2 );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [ { name: 'core/heading', attributes: { level: 5 } } ],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+
+		act( () => {
+			findButtonByText( inserterContainer, 'Preview adapted' ).click();
+		} );
+		mockCanInsertBlockType.mockReturnValue( false );
+
+		await act( async () => {
+			findButtonByText( inserterContainer, 'Insert adapted' ).click();
+		} );
+
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockCreateErrorNotice ).toHaveBeenCalledWith(
+			'Cannot insert pattern "Hero" here. The following blocks are not allowed at this insertion point: core/heading.',
+			{ type: 'snackbar', id: 'inserter-notice' }
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'validation_blocked',
+				surface: 'pattern',
+				reason: 'disallowed_block_types',
+				patternKey: 'theme/hero',
+			} )
+		);
+	} );
+
+	test( 'does not offer adapted preview for resolved core/block references', () => {
+		const inserterContainer = renderReadyPatternShelf( {
+			pattern: {
+				name: 'theme/ref',
+				title: 'Reusable hero',
+				blocks: [ { name: 'core/block', attributes: { ref: 7 } } ],
+			},
+			recommendation: {
+				name: 'theme/ref',
+				score: 0.94,
+				reason: 'Reusable match.',
+			},
+		} );
+
+		const labels = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).map( ( button ) => button.textContent );
+		expect( labels ).not.toContain( 'Preview adapted' );
+		expect( labels ).not.toContain( 'Insert original' );
+		expect( labels ).toContain( 'Insert' );
 	} );
 
 	test( 'blocks insert and refetches when the live insertion context drifts from the ranked context', () => {
@@ -1320,9 +1611,7 @@ describe( 'PatternRecommender', () => {
 		// drift-triggered refetch in isolation.
 		mockFetchPatternRecommendations.mockClear();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		act( () => {
 			insertButton.click();
@@ -1404,9 +1693,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 		mockFetchPatternRecommendations.mockClear();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		act( () => {
 			insertButton.click();
@@ -1485,9 +1772,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 		mockFetchPatternRecommendations.mockClear();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -1616,9 +1901,7 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -1678,9 +1961,7 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -1755,9 +2036,7 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -1840,9 +2119,7 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -1951,9 +2228,7 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -2049,9 +2324,7 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -2175,9 +2448,7 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -2262,9 +2533,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 		mockFetchPatternRecommendations.mockClear();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -2363,9 +2632,7 @@ describe( 'PatternRecommender', () => {
 		renderComponent();
 		mockFetchPatternRecommendations.mockClear();
 
-		const insertButton = Array.from(
-			inserterContainer.querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Insert' );
+		const insertButton = findShelfInsertButton( inserterContainer );
 
 		await act( async () => {
 			insertButton.click();
@@ -2448,10 +2715,15 @@ describe( 'PatternRecommender', () => {
 
 		renderComponent();
 
+		const labels = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).map( ( button ) => button.textContent );
+		expect( labels ).not.toContain( 'Preview adapted' );
+		expect( labels ).not.toContain( 'Insert original' );
+		expect( labels ).toContain( 'Insert' );
+
 		await act( async () => {
-			Array.from( inserterContainer.querySelectorAll( 'button' ) )
-				.find( ( button ) => button.textContent === 'Insert' )
-				.click();
+			findShelfInsertButton( inserterContainer ).click();
 		} );
 
 		expect( mockCreateBlock ).toHaveBeenCalledWith( 'core/block', {
@@ -2517,9 +2789,7 @@ describe( 'PatternRecommender', () => {
 		expect( document.body.textContent ).not.toContain( 'Photo blog page' );
 
 		await act( async () => {
-			Array.from( inserterContainer.querySelectorAll( 'button' ) )
-				.find( ( button ) => button.textContent === 'Insert' )
-				.click();
+			findShelfInsertButton( inserterContainer ).click();
 		} );
 
 		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
@@ -2682,9 +2952,7 @@ describe( 'PatternRecommender', () => {
 		expect( document.body.textContent ).toContain( 'Photo blog page' );
 
 		act( () => {
-			Array.from( inserterContainer.querySelectorAll( 'button' ) )
-				.find( ( button ) => button.textContent === 'Insert' )
-				.click();
+			findShelfInsertButton( inserterContainer ).click();
 		} );
 
 		expect( mockInsertBlocks ).not.toHaveBeenCalled();
@@ -2756,9 +3024,7 @@ describe( 'PatternRecommender', () => {
 			renderComponent();
 
 			act( () => {
-				Array.from( inserterContainer.querySelectorAll( 'button' ) )
-					.find( ( button ) => button.textContent === 'Insert' )
-					.click();
+				findShelfInsertButton( inserterContainer ).click();
 			} );
 
 			expect( globalSelect ).not.toHaveBeenCalled();

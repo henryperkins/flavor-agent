@@ -33,6 +33,7 @@ import { store as noticesStore } from '@wordpress/notices';
 
 import CapabilityNotice from '../components/CapabilityNotice';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
+import { collectThemeTokensFromSettings } from '../context/theme-tokens';
 import { getResolvedContextSignatureFromResponse, STORE_NAME } from '../store';
 import {
 	buildPatternInsertionTargetSignature,
@@ -63,8 +64,12 @@ import {
 	getRejectedPatternBlockNames,
 	getRejectedResolvedBlockNames,
 	getUnsafePatternBindingSourceNames,
+	isSyncedPatternReference,
 	resolvePatternBlocks,
 } from './pattern-insertability';
+import { buildPatternAdaptationPreview } from './pattern-adaptation';
+import { buildPatternAdaptationContext } from './pattern-adaptation-context';
+import PatternAdaptationPreview from './PatternAdaptationPreview';
 import {
 	buildRecommendedPatterns,
 	getPatternRecommendationInsights,
@@ -582,7 +587,7 @@ function getPatternEmptyMessage(
 		: '';
 }
 
-function PatternShelf( { items, onInsert, diagnostics } ) {
+function PatternShelf( { items, onInsert, onPreviewAdapted, diagnostics } ) {
 	return (
 		<div className="flavor-agent-pattern-summary flavor-agent-pattern-shelf">
 			<div
@@ -611,6 +616,18 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 						pattern,
 						recommendation
 					);
+					const synced = isSyncedPatternReference( pattern );
+					const insertAriaLabel = synced
+						? sprintf(
+								/* translators: %s: block pattern title. */
+								__( 'Insert %s', 'flavor-agent' ),
+								patternTitle
+						  )
+						: sprintf(
+								/* translators: %s: block pattern title. */
+								__( 'Insert original %s', 'flavor-agent' ),
+								patternTitle
+						  );
 
 					return (
 						<div
@@ -639,21 +656,44 @@ function PatternShelf( { items, onInsert, diagnostics } ) {
 									</ul>
 								) }
 							</div>
-							<Button
-								variant="secondary"
-								size="small"
-								onClick={ () =>
-									onInsert( pattern, recommendation )
-								}
-								className="flavor-agent-card__apply"
-								aria-label={ sprintf(
-									/* translators: %s: block pattern title. */
-									__( 'Insert %s', 'flavor-agent' ),
-									patternTitle
+							<div className="flavor-agent-pattern-shelf__actions">
+								{ ! synced && (
+									<Button
+										variant="secondary"
+										size="small"
+										onClick={ () =>
+											onPreviewAdapted(
+												pattern,
+												recommendation
+											)
+										}
+										className="flavor-agent-card__apply"
+									>
+										{ __(
+											'Preview adapted',
+											'flavor-agent'
+										) }
+									</Button>
 								) }
-							>
-								{ __( 'Insert', 'flavor-agent' ) }
-							</Button>
+								<Button
+									variant={
+										synced ? 'secondary' : 'tertiary'
+									}
+									size="small"
+									onClick={ () =>
+										onInsert( pattern, recommendation )
+									}
+									className="flavor-agent-card__apply"
+									aria-label={ insertAriaLabel }
+								>
+									{ synced
+										? __( 'Insert', 'flavor-agent' )
+										: __(
+												'Insert original',
+												'flavor-agent'
+										  ) }
+								</Button>
+							</div>
 						</div>
 					);
 				} ) }
@@ -797,6 +837,14 @@ export default function PatternRecommender() {
 		() => registry.select( blockEditorStore ),
 		[ registry ]
 	);
+	const blockRegistry = useMemo(
+		() => registry.select( 'core/blocks' ),
+		[ registry ]
+	);
+	const blockEditorSettings = useSelect(
+		( select ) => select( blockEditorStore ).getSettings?.() || {},
+		[]
+	);
 	const insertionBlockTree = useSelect(
 		( select ) =>
 			select( blockEditorStore ).getBlocks?.() || EMPTY_BLOCK_TREE,
@@ -899,6 +947,7 @@ export default function PatternRecommender() {
 	const debounceRef = useRef( null );
 	const shownRecommendationSetRef = useRef( '' );
 	const droppedRecommendationOutcomeRef = useRef( new Set() );
+	const [ adaptedPreview, setAdaptedPreview ] = useState( null );
 
 	const shouldRenderInserterAffordance =
 		isInserterOpen &&
@@ -1199,6 +1248,72 @@ export default function PatternRecommender() {
 			);
 		},
 		[ buildPatternOutcomePayload, recordRecommendationOutcome ]
+	);
+
+	const buildCurrentAdaptation = useCallback(
+		( pattern ) => {
+			const sourceBlocks = resolvePatternBlocks( pattern );
+			const liveEditor = registry?.select?.( blockEditorStore );
+			const adaptationContext = buildPatternAdaptationContext(
+				liveEditor,
+				{
+					inserterRootClientId,
+					insertionIndex,
+					siblingOrder: insertionSiblingOrder,
+				}
+			);
+
+			return buildPatternAdaptationPreview( {
+				pattern,
+				sourceBlocks,
+				adaptationContext,
+				insertionTargetSignature: currentInsertionTargetSignature,
+				resolvedContextSignature: patternResolvedContextSignature,
+				themeTokens:
+					collectThemeTokensFromSettings( blockEditorSettings ),
+				blockRegistry,
+			} );
+		},
+		[
+			blockEditorSettings,
+			blockRegistry,
+			currentInsertionTargetSignature,
+			insertionIndex,
+			inserterRootClientId,
+			insertionSiblingOrder,
+			patternResolvedContextSignature,
+			registry,
+		]
+	);
+
+	const handlePreviewAdapted = useCallback(
+		( pattern, recommendation = null ) => {
+			const result = buildCurrentAdaptation( pattern );
+
+			if ( result.status === 'blocked' ) {
+				recordPatternOutcome( 'adaptation_blocked', {
+					pattern,
+					recommendation,
+					reason: result.reason,
+				} );
+			} else {
+				recordPatternOutcome( 'adapted_preview_shown', {
+					pattern,
+					recommendation,
+					reason: 'adapted_preview_ready',
+				} );
+			}
+
+			setAdaptedPreview( {
+				pattern,
+				recommendation,
+				status: result.status,
+				blocks: result.blocks,
+				changes: result.plan?.changes || [],
+				adaptationSignature: result.adaptationSignature,
+			} );
+		},
+		[ buildCurrentAdaptation, recordPatternOutcome ]
 	);
 
 	useEffect( () => {
@@ -1668,6 +1783,61 @@ export default function PatternRecommender() {
 		]
 	);
 
+	const handleInsertAdapted = useCallback( async () => {
+		if ( ! adaptedPreview || adaptedPreview.status !== 'ready' ) {
+			return;
+		}
+
+		const { pattern, recommendation, blocks } = adaptedPreview;
+		const fresh = buildCurrentAdaptation( pattern );
+
+		if (
+			fresh.status !== 'ready' ||
+			fresh.adaptationSignature !== adaptedPreview.adaptationSignature
+		) {
+			recordPatternOutcome( 'stale_blocked', {
+				pattern,
+				recommendation,
+				reason: 'adapted_preview_stale',
+			} );
+			setAdaptedPreview( { ...adaptedPreview, status: 'stale' } );
+			fetchPatternRecommendationsForCurrentTarget( buildBaseInput() );
+			return;
+		}
+
+		if (
+			! ( await runPatternFreshnessGate( {
+				pattern,
+				recommendation,
+				blocks,
+				liveInput: buildBaseInput(),
+			} ) )
+		) {
+			return;
+		}
+
+		const inserted = await runGuardedInsert( {
+			pattern,
+			recommendation,
+			blocks,
+			e2eFailureMode: consumeE2EPatternInsertFailureMode( pattern ),
+			successEvent: 'adapted_inserted_from_preview',
+			failureEvent: 'adapted_insert_failed',
+		} );
+
+		if ( inserted ) {
+			setAdaptedPreview( null );
+		}
+	}, [
+		adaptedPreview,
+		buildBaseInput,
+		buildCurrentAdaptation,
+		fetchPatternRecommendationsForCurrentTarget,
+		recordPatternOutcome,
+		runGuardedInsert,
+		runPatternFreshnessGate,
+	] );
+
 	const recordShownPatternOutcome = useCallback( () => {
 		if ( ! shouldShowPatternShelf ) {
 			return;
@@ -1856,6 +2026,7 @@ export default function PatternRecommender() {
 				<PatternShelf
 					items={ recommendedPatterns }
 					onInsert={ handleInsertPattern }
+					onPreviewAdapted={ handlePreviewAdapted }
 					diagnostics={ patternDiagnostics }
 				/>
 			);
@@ -1896,6 +2067,24 @@ export default function PatternRecommender() {
 			<PatternInserterPortal onAttached={ recordShownPatternOutcome }>
 				{ docsGroundingNotice }
 				{ notice }
+				{ adaptedPreview && (
+					<PatternAdaptationPreview
+						title={ getPatternTitle( adaptedPreview.pattern ) }
+						status={ adaptedPreview.status }
+						changes={ adaptedPreview.changes }
+						blocks={ adaptedPreview.blocks }
+						isStale={ adaptedPreview.status === 'stale' }
+						onInsertAdapted={ handleInsertAdapted }
+						onInsertOriginal={ () => {
+							handleInsertPattern(
+								adaptedPreview.pattern,
+								adaptedPreview.recommendation
+							);
+							setAdaptedPreview( null );
+						} }
+						onClose={ () => setAdaptedPreview( null ) }
+					/>
+				) }
 			</PatternInserterPortal>
 		);
 	}
