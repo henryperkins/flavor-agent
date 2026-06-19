@@ -57,6 +57,11 @@ const TEMPLATE_PART_INSERTED_CONTENT =
 const TEMPLATE_PART_PATTERN_NAME = 'flavor-agent/header-utility-row';
 const TEMPLATE_PART_PATTERN_TITLE = 'Header Utility Row';
 const TEMPLATE_PART_SUGGESTION_LABEL = 'Add utility row';
+const ADAPTED_PATTERN_NAME = 'flavor-agent/adapted-heading-preview';
+const ADAPTED_PATTERN_TITLE = 'Adapted Heading Preview';
+const ADAPTED_PATTERN_HEADING_CONTENT = 'Adapted E2E Heading';
+const ADAPTED_PATTERN_CONTEXT_HEADING_CONTENT = 'Existing Section';
+const ADAPTED_PATTERN_CONTENT = `<!-- wp:heading {"level":5} --><h5>${ ADAPTED_PATTERN_HEADING_CONTENT }</h5><!-- /wp:heading -->`;
 const TEMPLATE_PART_STALE_NOTICE =
 	'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.';
 const GLOBAL_STYLES_PROMPT =
@@ -946,6 +951,56 @@ async function seedParagraphBlock(
 	} );
 }
 
+async function seedHeadingAdaptationContext( page ) {
+	await waitForBlockEditorApis( page );
+
+	await page.evaluate(
+		( { content } ) => {
+			const { createBlock } = window.wp.blocks;
+			const heading = createBlock( 'core/heading', {
+				content,
+				level: 2,
+			} );
+			const blockEditor =
+				window.wp?.data?.dispatch( 'core/block-editor' );
+
+			window.wp?.data?.dispatch( 'core/editor' )?.editPost( {
+				title: 'Adapted Pattern Smoke',
+			} );
+			blockEditor?.resetBlocks?.( [ heading ] );
+			blockEditor?.selectBlock?.( heading.clientId );
+			blockEditor?.showInsertionPoint?.( '', 1 );
+		},
+		{ content: ADAPTED_PATTERN_CONTEXT_HEADING_CONTENT }
+	);
+	await dismissWelcomeGuide( page );
+	await expect
+		.poll( () =>
+			page.evaluate( () => {
+				const blockEditor =
+					window.wp?.data?.select( 'core/block-editor' );
+				const point = blockEditor?.getBlockInsertionPoint?.();
+				const blocks = blockEditor?.getBlocks?.() || [];
+				const heading = blocks.find(
+					( block ) => block?.name === 'core/heading'
+				);
+
+				return {
+					content: heading?.attributes?.content || '',
+					level: heading?.attributes?.level || 2,
+					insertionIndex: point?.index,
+					rootClientId: point?.rootClientId || '',
+				};
+			} )
+		)
+		.toEqual( {
+			content: ADAPTED_PATTERN_CONTEXT_HEADING_CONTENT,
+			level: 2,
+			insertionIndex: 1,
+			rootClientId: '',
+		} );
+}
+
 async function seedNavigationBlock( page ) {
 	await waitForBlockEditorApis( page );
 	await enableMockedRecommendationSurfaces( page, [ 'navigation' ] );
@@ -1497,13 +1552,14 @@ async function openTemplatePartRecommendationsPanel( page ) {
 
 async function registerTemplatePattern(
 	page,
-	{ insertedContent, patternName, patternTitle }
+	{ insertedContent, patternName, patternTitle, patternContent = '' }
 ) {
 	await page.evaluate(
 		( {
 			insertedContent: nextInsertedContent,
 			patternName: nextPatternName,
 			patternTitle: nextPatternTitle,
+			patternContent: nextPatternContent,
 		} ) => {
 			const blockEditorDispatch =
 				window.wp.data.dispatch( 'core/block-editor' );
@@ -1521,7 +1577,9 @@ async function registerTemplatePattern(
 			const newEntry = {
 				name: nextPatternName,
 				title: nextPatternTitle,
-				content: `<!-- wp:paragraph --><p>${ nextInsertedContent }</p><!-- /wp:paragraph -->`,
+				content:
+					nextPatternContent ||
+					`<!-- wp:paragraph --><p>${ nextInsertedContent }</p><!-- /wp:paragraph -->`,
 			};
 			const existingStablePatterns = Array.isArray(
 				settings.blockPatterns
@@ -1551,8 +1609,158 @@ async function registerTemplatePattern(
 			insertedContent,
 			patternName,
 			patternTitle,
+			patternContent,
 		}
 	);
+}
+
+async function waitForAllowedPattern( page, patternName ) {
+	await expect
+		.poll( () =>
+			page.evaluate( ( nextPatternName ) => {
+				const blockEditor =
+					window.wp?.data?.select( 'core/block-editor' );
+				const roots = [ '', null ];
+				const allowed = roots.flatMap(
+					( rootClientId ) =>
+						blockEditor?.getAllowedPatterns?.( rootClientId ) ||
+						blockEditor?.__experimentalGetAllowedPatterns?.(
+							rootClientId
+						) ||
+						[]
+				);
+
+				return allowed.some(
+					( pattern ) => pattern?.name === nextPatternName
+				);
+			}, patternName )
+		)
+		.toBe( true );
+}
+
+async function waitForPatternCatalogHydration( page ) {
+	await expect
+		.poll(
+			() =>
+				page.evaluate( () => {
+					const blockEditor =
+						window.wp?.data?.select( 'core/block-editor' );
+					const allowed =
+						blockEditor?.getAllowedPatterns?.( '' ) ||
+						blockEditor?.__experimentalGetAllowedPatterns?.( '' ) ||
+						[];
+
+					return allowed.filter( ( pattern ) => pattern?.name )
+						.length;
+				} ),
+			{ timeout: 30_000 }
+		)
+		.toBeGreaterThan( 10 );
+}
+
+async function mockAdaptedPatternRecommendations( page, patternRequests ) {
+	await page.route(
+		recommendationAbilityRoute( 'recommend-patterns' ),
+		async ( route ) => {
+			const requestData = getAbilityRequestInput(
+				route.request().postDataJSON()
+			);
+			const visiblePatternNames = Array.isArray(
+				requestData.visiblePatternNames
+			)
+				? requestData.visiblePatternNames
+				: [];
+
+			patternRequests.push( {
+				...requestData,
+				mockedRecommendationNames: [ ADAPTED_PATTERN_NAME ],
+			} );
+
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature: 'pattern-resolved-context',
+					recommendations: [
+						{
+							name: ADAPTED_PATTERN_NAME,
+							score: 0.98,
+							reason: PATTERN_REASON,
+							categories: [ 'heading' ],
+							ranking: {
+								sourceSignals: [ 'llm_ranker' ],
+								rankingHint: {
+									matchesNearbyBlock:
+										visiblePatternNames.includes(
+											ADAPTED_PATTERN_NAME
+										),
+								},
+							},
+						},
+					],
+					diagnostics: {
+						filteredCandidates: { unreadableSyncedPatterns: 0 },
+					},
+				} ),
+			} );
+		}
+	);
+}
+
+async function openAdaptedPatternRecommendation( page, patternRequests ) {
+	await enableMockedRecommendationSurfaces( page, [ 'pattern' ] );
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+
+	await page.waitForFunction( () =>
+		Boolean( window.flavorAgentData?.canRecommendPatterns )
+	);
+	await waitForPatternCatalogHydration( page );
+	await seedHeadingAdaptationContext( page );
+	await registerTemplatePattern( page, {
+		patternName: ADAPTED_PATTERN_NAME,
+		patternTitle: ADAPTED_PATTERN_TITLE,
+		patternContent: ADAPTED_PATTERN_CONTENT,
+	} );
+	await waitForAllowedPattern( page, ADAPTED_PATTERN_NAME );
+
+	await dismissWelcomeGuide( page );
+	const inserter = page
+		.getByRole( 'button', { name: 'Block Inserter', exact: true } )
+		.first();
+	await expect( inserter ).toBeVisible();
+	await inserter.click();
+	await page.evaluate( () => {
+		window.wp?.data
+			?.dispatch( 'core/block-editor' )
+			?.showInsertionPoint?.( '', 1 );
+	} );
+	await dismissWelcomeGuide( page );
+
+	await expect
+		.poll(
+			() =>
+				patternRequests.findLast( ( request ) =>
+					request?.visiblePatternNames?.includes(
+						ADAPTED_PATTERN_NAME
+					)
+				) || null,
+			{ timeout: 10000 }
+		)
+		.not.toBeNull();
+
+	const patternItem = page
+		.locator( '.flavor-agent-pattern-shelf__item' )
+		.filter( { hasText: ADAPTED_PATTERN_TITLE } )
+		.first();
+
+	await expect( patternItem ).toBeVisible( { timeout: 15_000 } );
+
+	return patternItem;
 }
 
 async function insertRootParagraphBlock( page, content ) {
@@ -3550,6 +3758,149 @@ test( 'pattern surface inserts a recommended pattern at the top-level root and r
 			)
 		)
 		.toBeGreaterThan( topLevelOrderBefore );
+} );
+
+test( 'pattern surface adapted preview inserts adapted blocks', async ( {
+	page,
+} ) => {
+	const patternRequests = [];
+
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const patternItem = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests
+	);
+
+	await expect(
+		patternItem.getByRole( 'button', { name: 'Preview adapted' } )
+	).toBeVisible();
+	await expect(
+		patternItem.getByRole( 'button', { name: /^Insert original\b/ } )
+	).toBeVisible();
+
+	await patternItem
+		.getByRole( 'button', { name: 'Preview adapted' } )
+		.click();
+
+	const previewPanel = page
+		.locator( '.flavor-agent-pattern-adaptation' )
+		.first();
+	await expect( previewPanel ).toBeVisible();
+	await expect(
+		previewPanel.getByText( 'Heading level matched to nearby headings' )
+	).toBeVisible();
+	await expect(
+		previewPanel.locator( '.flavor-agent-pattern-adaptation__preview' )
+	).toBeVisible();
+
+	const topLevelOrderBefore = await page.evaluate(
+		() =>
+			(
+				window.wp.data
+					.select( 'core/block-editor' )
+					.getBlockOrder( '' ) || []
+			).length
+	);
+
+	await previewPanel
+		.getByRole( 'button', { name: /^Insert adapted\b/ } )
+		.click();
+
+	await expectSnackbarMessage(
+		page,
+		`Pattern "${ ADAPTED_PATTERN_TITLE }" inserted.`
+	);
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( { insertedContent } ) => {
+					const blocks =
+						window.wp?.data
+							?.select( 'core/block-editor' )
+							?.getBlocks?.() || [];
+
+					return blocks
+						.filter(
+							( block ) =>
+								block?.name === 'core/heading' &&
+								String(
+									block?.attributes?.content || ''
+								).includes( insertedContent )
+						)
+						.map( ( block ) => block?.attributes?.level || 2 );
+				},
+				{ insertedContent: ADAPTED_PATTERN_HEADING_CONTENT }
+			)
+		)
+		.toContain( 3 );
+	await expect
+		.poll( () =>
+			page.evaluate(
+				() =>
+					(
+						window.wp.data
+							.select( 'core/block-editor' )
+							.getBlockOrder( '' ) || []
+					).length
+			)
+		)
+		.toBeGreaterThan( topLevelOrderBefore );
+} );
+
+test( 'pattern surface adapted insertion rolls back wrong-target inserts', async ( {
+	page,
+} ) => {
+	const patternRequests = [];
+
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const patternItem = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests
+	);
+
+	await patternItem
+		.getByRole( 'button', { name: 'Preview adapted' } )
+		.click();
+
+	const previewPanel = page
+		.locator( '.flavor-agent-pattern-adaptation' )
+		.first();
+	await expect( previewPanel ).toBeVisible();
+
+	await forceNextPatternInsertFailure(
+		page,
+		ADAPTED_PATTERN_NAME,
+		'insert_blocks_wrong_target'
+	);
+	await previewPanel
+		.getByRole( 'button', { name: /^Insert adapted\b/ } )
+		.click();
+
+	await expectSnackbarMessage(
+		page,
+		`Cannot insert pattern "${ ADAPTED_PATTERN_TITLE }" at the requested location. Gutenberg inserted it somewhere else, so Flavor Agent removed those blocks.`
+	);
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( { insertedContent } ) => {
+					const blocks =
+						window.wp?.data
+							?.select( 'core/block-editor' )
+							?.getBlocks?.() || [];
+
+					return blocks.filter(
+						( block ) =>
+							block?.name === 'core/heading' &&
+							String( block?.attributes?.content || '' ).includes(
+								insertedContent
+							)
+					).length;
+				},
+				{ insertedContent: ADAPTED_PATTERN_HEADING_CONTENT }
+			)
+		)
+		.toBe( 0 );
 } );
 
 test( 'pattern badge attaches to the block inserter button, not document overview', async ( {
