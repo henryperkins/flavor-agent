@@ -77,6 +77,41 @@ final class RecommendationOutcomeTest extends TestCase {
 		);
 	}
 
+	/**
+	 * @dataProvider provide_adapted_events
+	 */
+	public function test_accepts_adapted_outcome_event( string $event, string $label ): void {
+		$entry = RecommendationOutcome::normalize_entry(
+			[
+				'type'    => 'recommendation_outcome',
+				'surface' => 'pattern',
+				'after'   => [
+					'outcome' => [
+						'event'  => $event,
+						'reason' => 'adapted preview stale',
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( $event, $entry['after']['outcome']['event'] );
+		$this->assertSame( $label, $entry['suggestion'] );
+		$this->assertSame( 'adapted_preview_stale', $entry['after']['outcome']['reason'] );
+	}
+
+	/**
+	 * @return array<int, array{0: string, 1: string}>
+	 */
+	public static function provide_adapted_events(): array {
+		return [
+			[ 'adapted_preview_shown', 'Adapted pattern preview shown' ],
+			[ 'adapted_inserted_from_preview', 'Adapted pattern inserted from preview' ],
+			[ 'adaptation_blocked', 'Pattern adaptation blocked' ],
+			[ 'adapted_insert_failed', 'Adapted pattern insertion failed' ],
+		];
+	}
+
 	public function test_normalizes_insert_failure_outcome(): void {
 		$result = RecommendationOutcome::normalize_entry(
 			[

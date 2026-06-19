@@ -100,6 +100,29 @@ describe( 'recommendation outcomes', () => {
 		).toBeNull();
 	} );
 
+	test.each( [
+		[ 'adapted_preview_shown', 'Adapted pattern preview shown' ],
+		[
+			'adapted_inserted_from_preview',
+			'Adapted pattern inserted from preview',
+		],
+		[ 'adaptation_blocked', 'Pattern adaptation blocked' ],
+		[ 'adapted_insert_failed', 'Adapted pattern insertion failed' ],
+	] )( 'accepts adapted outcome event %s', ( event, label ) => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: { scopeKey: 'post:42', postType: 'post', entityId: '42' },
+			event,
+			surface: 'pattern',
+			recommendationSetId: 'pattern:1:set',
+			suggestionKey: 'theme/hero',
+			reason: 'adapted_preview_stale',
+		} );
+
+		expect( entry ).not.toBeNull();
+		expect( entry.after.outcome.event ).toBe( event );
+		expect( entry.suggestion ).toBe( label );
+	} );
+
 	test( 'builds privacy-safe insert failure outcomes', () => {
 		const entry = buildRecommendationOutcomeEntry( {
 			document: {

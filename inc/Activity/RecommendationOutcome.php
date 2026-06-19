@@ -22,6 +22,10 @@ final class RecommendationOutcome {
 		'validation_blocked',
 		'pattern_inserted_from_shelf',
 		'insert_failed',
+		'adapted_preview_shown',
+		'adapted_inserted_from_preview',
+		'adaptation_blocked',
+		'adapted_insert_failed',
 	];
 
 	private const SURFACES = [
@@ -36,12 +40,16 @@ final class RecommendationOutcome {
 	];
 
 	private const EVENT_LABELS = [
-		'shown'                       => 'Recommendations shown',
-		'selected_for_review'         => 'Recommendation selected for review',
-		'stale_blocked'               => 'Recommendation blocked by stale context',
-		'validation_blocked'          => 'Recommendation blocked by validation',
-		'pattern_inserted_from_shelf' => 'Pattern inserted from recommendation shelf',
-		'insert_failed'               => 'Pattern insertion failed',
+		'shown'                         => 'Recommendations shown',
+		'selected_for_review'           => 'Recommendation selected for review',
+		'stale_blocked'                 => 'Recommendation blocked by stale context',
+		'validation_blocked'            => 'Recommendation blocked by validation',
+		'pattern_inserted_from_shelf'   => 'Pattern inserted from recommendation shelf',
+		'insert_failed'                 => 'Pattern insertion failed',
+		'adapted_preview_shown'         => 'Adapted pattern preview shown',
+		'adapted_inserted_from_preview' => 'Adapted pattern inserted from preview',
+		'adaptation_blocked'            => 'Pattern adaptation blocked',
+		'adapted_insert_failed'         => 'Adapted pattern insertion failed',
 	];
 
 	/**

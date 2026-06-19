@@ -14,6 +14,10 @@ export const OUTCOME_EVENTS = Object.freeze( [
 	'validation_blocked',
 	'insert_failed',
 	'pattern_inserted_from_shelf',
+	'adapted_preview_shown',
+	'adapted_inserted_from_preview',
+	'adaptation_blocked',
+	'adapted_insert_failed',
 ] );
 
 const OUTCOME_EVENT_SET = new Set( OUTCOME_EVENTS );
@@ -32,6 +36,10 @@ const OUTCOME_LABELS = Object.freeze( {
 	validation_blocked: 'Recommendation blocked by validation',
 	insert_failed: 'Pattern insertion failed',
 	pattern_inserted_from_shelf: 'Pattern inserted from recommendation shelf',
+	adapted_preview_shown: 'Adapted pattern preview shown',
+	adapted_inserted_from_preview: 'Adapted pattern inserted from preview',
+	adaptation_blocked: 'Pattern adaptation blocked',
+	adapted_insert_failed: 'Adapted pattern insertion failed',
 } );
 
 const RANKING_EVIDENCE_KEYS = new Set( [
