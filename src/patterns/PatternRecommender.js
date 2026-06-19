@@ -954,6 +954,15 @@ export default function PatternRecommender() {
 	const droppedRecommendationOutcomeRef = useRef( new Set() );
 	const [ adaptedPreview, setAdaptedPreview ] = useState( null );
 
+	// The adapted preview is scoped to one open-inserter session and insertion
+	// point. Clear it when the inserter closes so reopening never resurfaces a
+	// stale panel built for a previous session/target.
+	useEffect( () => {
+		if ( ! isInserterOpen ) {
+			setAdaptedPreview( null );
+		}
+	}, [ isInserterOpen ] );
+
 	const shouldRenderInserterAffordance =
 		isInserterOpen &&
 		( ! canRecommend ||

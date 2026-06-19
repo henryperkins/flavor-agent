@@ -58,4 +58,32 @@ describe( 'buildPatternAdaptationContext', () => {
 			siblingAligns: [],
 		} );
 	} );
+
+	test( 'clamps an out-of-range insertionIndex into a valid scan window', () => {
+		const blocks = {
+			h1: { name: 'core/heading', attributes: { level: 2 } },
+			p1: { name: 'core/paragraph', attributes: {} },
+		};
+		const order = { '': [ 'h1', 'p1' ] };
+		const editor = makeEditor( blocks, order );
+
+		// An index well past the end must not skip every sibling.
+		const past = buildPatternAdaptationContext( editor, {
+			inserterRootClientId: null,
+			insertionIndex: 999,
+			siblingOrder: order[ '' ],
+		} );
+		expect( past.precedingHeadingLevel ).toBe( 2 );
+		expect( past.nearbyHeadingLevels ).toEqual( [ 2 ] );
+
+		// A negative index clamps to the start: the heading is nearby but nothing
+		// precedes the insertion point.
+		const negative = buildPatternAdaptationContext( editor, {
+			inserterRootClientId: null,
+			insertionIndex: -5,
+			siblingOrder: order[ '' ],
+		} );
+		expect( negative.precedingHeadingLevel ).toBeNull();
+		expect( negative.nearbyHeadingLevels ).toEqual( [ 2 ] );
+	} );
 } );

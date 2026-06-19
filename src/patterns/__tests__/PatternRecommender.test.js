@@ -195,7 +195,7 @@ function createSelectMap() {
 		},
 		'core/blocks': {
 			getBlockType: jest.fn(
-				( name ) => state.blockRegistry.blockTypes?.[ name ] || {}
+				( name ) => state.blockRegistry.blockTypes?.[ name ]
 			),
 			getBlockStyles: jest.fn(
 				( name ) => state.blockRegistry.blockStyles?.[ name ] || []
@@ -1400,6 +1400,49 @@ describe( 'PatternRecommender', () => {
 				patternKey: 'theme/hero',
 			} )
 		);
+	} );
+
+	test( 'records adaptation_blocked and renders the blocked preview state', () => {
+		// A plain paragraph with no preceding heading, no sibling/root align,
+		// and no theme presets triggers no adaptation rule, so the engine
+		// returns a blocked result.
+		const pattern = {
+			name: 'theme/plain',
+			title: 'Plain',
+			blocks: [ { name: 'core/paragraph', attributes: {} } ],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+
+		act( () => {
+			findButtonByText( inserterContainer, 'Preview adapted' ).click();
+		} );
+
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'adaptation_blocked',
+				surface: 'pattern',
+				reason: 'missing_theme_tokens',
+				patternKey: 'theme/plain',
+			} )
+		);
+		expect( inserterContainer.textContent ).toContain(
+			'Flavor Agent could not build a safe adaptation for this pattern.'
+		);
+
+		// Blocked UX: the adapted action stays present but disabled; original
+		// and close remain available.
+		const adaptedButton = findButtonByText(
+			inserterContainer,
+			'Insert adapted'
+		);
+		expect( adaptedButton ).toBeTruthy();
+		expect( adaptedButton.disabled ).toBe( true );
+
+		const labels = Array.from(
+			inserterContainer.querySelectorAll( 'button' )
+		).map( ( button ) => button.textContent );
+		expect( labels ).toContain( 'Insert original' );
+		expect( labels ).toContain( 'Close' );
 	} );
 
 	test( 'inserts adapted preview blocks through the shared server freshness gate', async () => {

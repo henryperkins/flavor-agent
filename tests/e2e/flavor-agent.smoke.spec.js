@@ -1655,7 +1655,9 @@ async function waitForPatternCatalogHydration( page ) {
 				} ),
 			{ timeout: 30_000 }
 		)
-		.toBeGreaterThan( 10 );
+		// A theme-agnostic floor: confirm the catalog hydrated with at least one
+		// named pattern without depending on a specific theme's pattern count.
+		.toBeGreaterThan( 0 );
 }
 
 async function mockAdaptedPatternRecommendations( page, patternRequests ) {

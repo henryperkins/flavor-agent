@@ -116,6 +116,35 @@ describe( 'getRejectedResolvedBlockNames', () => {
 			'root-a'
 		);
 	} );
+
+	test( 'returns an empty list for null, undefined, or empty block input', () => {
+		const blockEditor = { canInsertBlockType: jest.fn() };
+
+		expect(
+			getRejectedResolvedBlockNames( null, 'root-a', blockEditor )
+		).toEqual( [] );
+		expect(
+			getRejectedResolvedBlockNames( undefined, 'root-a', blockEditor )
+		).toEqual( [] );
+		expect(
+			getRejectedResolvedBlockNames( [], 'root-a', blockEditor )
+		).toEqual( [] );
+		expect( blockEditor.canInsertBlockType ).not.toHaveBeenCalled();
+	} );
+
+	test( 'returns an empty list when canInsertBlockType is unavailable', () => {
+		const blocks = [
+			{ name: 'core/template-part', attributes: {} },
+			{ name: 'core/group', attributes: {} },
+		];
+
+		expect( getRejectedResolvedBlockNames( blocks, 'root-a', {} ) ).toEqual(
+			[]
+		);
+		expect(
+			getRejectedResolvedBlockNames( blocks, 'root-a', undefined )
+		).toEqual( [] );
+	} );
 } );
 
 describe( 'isSyncedPatternReference', () => {

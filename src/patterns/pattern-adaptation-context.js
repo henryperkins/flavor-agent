@@ -43,8 +43,11 @@ export function buildPatternAdaptationContext(
 	const order = Array.isArray( siblingOrder )
 		? siblingOrder
 		: editor.getBlockOrder?.( inserterRootClientId ) || [];
+	// Clamp into [0, order.length] so out-of-range inputs (e.g. -1 or a value
+	// past the end) still produce a valid scan window instead of one that skips
+	// every sibling and drops all nearby context.
 	const insertIndex = Number.isInteger( insertionIndex )
-		? insertionIndex
+		? Math.min( order.length, Math.max( 0, insertionIndex ) )
 		: order.length;
 	const start = Math.max( 0, insertIndex - NEARBY_RANGE );
 	const end = Math.min( order.length, insertIndex + NEARBY_RANGE );

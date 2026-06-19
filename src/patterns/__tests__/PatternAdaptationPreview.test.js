@@ -62,6 +62,17 @@ describe( 'PatternAdaptationPreview', () => {
 		expect( getContainer().textContent ).toContain( 'Insert original' );
 	} );
 
+	test( 'sets an i18n aria-label on the adapted insert button', () => {
+		render();
+		const adaptedButton = [
+			...getContainer().querySelectorAll( 'button' ),
+		].find( ( node ) => node.textContent === 'Insert adapted' );
+
+		expect( adaptedButton.getAttribute( 'aria-label' ) ).toBe(
+			'Insert adapted Hero'
+		);
+	} );
+
 	test( 'invokes onInsertAdapted from the adapted button', () => {
 		const onInsertAdapted = jest.fn();
 		render( { onInsertAdapted } );
