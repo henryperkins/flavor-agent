@@ -61,6 +61,7 @@ import {
 import {
 	filterInsertableRecommendedPatterns,
 	getRejectedPatternBlockNames,
+	getRejectedResolvedBlockNames,
 	getUnsafePatternBindingSourceNames,
 	resolvePatternBlocks,
 } from './pattern-insertability';
@@ -1244,21 +1245,163 @@ export default function PatternRecommender() {
 		recordPatternOutcome,
 	] );
 
-	const handleInsertPattern = useCallback(
-		async ( pattern, recommendation = null ) => {
-			const blocks = resolvePatternBlocks( pattern );
+	const finalizeGuardedInsert = useCallback(
+		( {
+			pattern,
+			recommendation,
+			insertionVerified,
+			insertedClientIds,
+			successEvent,
+			failureEvent,
+		} ) => {
+			if ( ! insertionVerified ) {
+				const insertedOutsideTarget = insertedClientIds.length > 0;
+				if (
+					insertedOutsideTarget &&
+					typeof removeBlocks === 'function'
+				) {
+					removeBlocks( insertedClientIds, false );
+				}
+				const failureMessage = insertedOutsideTarget
+					? sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot insert pattern "%s" at the requested location. Gutenberg inserted it somewhere else, so Flavor Agent removed those blocks.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
+					  )
+					: sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot confirm pattern "%s" was inserted. Gutenberg did not report the inserted blocks at the target location.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
+					  );
 
-			if ( blocks.length === 0 ) {
-				recordPatternOutcome( 'validation_blocked', {
+				recordPatternOutcome( failureEvent, {
 					pattern,
 					recommendation,
-					reason: 'empty_pattern_blocks',
+					reason: insertedOutsideTarget
+						? 'insert_blocks_wrong_target'
+						: 'insert_blocks_noop',
+				} );
+				createErrorNotice( failureMessage, {
+					type: 'snackbar',
+					id: 'inserter-notice',
+				} );
+				return false;
+			}
+
+			recordPatternOutcome( successEvent, {
+				pattern,
+				recommendation,
+				reason: 'insert_blocks_success',
+			} );
+			createSuccessNotice(
+				sprintf(
+					/* translators: %s: pattern title. */
+					__( 'Pattern "%s" inserted.', 'flavor-agent' ),
+					getPatternTitle( pattern )
+				),
+				{
+					type: 'snackbar',
+					id: 'inserter-notice',
+				}
+			);
+			return true;
+		},
+		[
+			createErrorNotice,
+			createSuccessNotice,
+			recordPatternOutcome,
+			removeBlocks,
+		]
+	);
+
+	const runGuardedInsert = useCallback(
+		async ( {
+			pattern,
+			recommendation = null,
+			blocks,
+			e2eFailureMode = '',
+			successEvent,
+			failureEvent,
+		} ) => {
+			let insertionVerified = false;
+			let insertedClientIds = [];
+
+			try {
+				if ( e2eFailureMode === 'insert_blocks_exception' ) {
+					throw new Error( 'E2E forced insertBlocks exception' );
+				}
+
+				const beforeBlockEditor =
+					registry?.select?.( blockEditorStore );
+				const beforeInsertSnapshot = getBlockListSnapshot(
+					beforeBlockEditor,
+					inserterRootClientId
+				);
+				const beforeBlockPresence = getBlockPresenceSnapshot(
+					beforeBlockEditor,
+					blocks
+				);
+
+				if ( e2eFailureMode !== 'insert_blocks_noop' ) {
+					let dispatchInsertionIndex = insertionIndex;
+					const insertRootClientId = inserterRootClientId ?? '';
+
+					if ( e2eFailureMode === 'insert_blocks_wrong_target' ) {
+						dispatchInsertionIndex =
+							insertionIndex === 0 ? Number.MAX_SAFE_INTEGER : 0;
+					}
+
+					await insertBlocks(
+						blocks,
+						dispatchInsertionIndex,
+						insertRootClientId,
+						true
+					);
+
+					const afterBlockEditor =
+						registry?.select?.( blockEditorStore );
+					const afterInsertSnapshot = getBlockListSnapshot(
+						afterBlockEditor,
+						inserterRootClientId
+					);
+					const afterBlockPresence = getBlockPresenceSnapshot(
+						afterBlockEditor,
+						blocks
+					);
+
+					insertionVerified = didInsertBlocksAtTarget(
+						beforeInsertSnapshot,
+						afterInsertSnapshot,
+						blocks,
+						insertionIndex
+					);
+					if ( ! insertionVerified ) {
+						insertedClientIds = getInsertedBlockClientIds(
+							beforeBlockPresence,
+							afterBlockPresence,
+							beforeInsertSnapshot,
+							afterInsertSnapshot,
+							blocks
+						);
+					}
+				}
+			} catch {
+				recordPatternOutcome( failureEvent, {
+					pattern,
+					recommendation,
+					reason: 'insert_blocks_exception',
 				} );
 				createErrorNotice(
 					sprintf(
 						/* translators: %s: block pattern title. */
 						__(
-							'Cannot insert pattern "%s" because Gutenberg did not provide insertable block content for it.',
+							'Cannot insert pattern "%s" because Gutenberg rejected the insertion request.',
 							'flavor-agent'
 						),
 						getPatternTitle( pattern )
@@ -1268,58 +1411,66 @@ export default function PatternRecommender() {
 						id: 'inserter-notice',
 					}
 				);
-				return;
+				return false;
 			}
 
-			const liveInput = buildBaseInput();
+			return finalizeGuardedInsert( {
+				pattern,
+				recommendation,
+				insertionVerified,
+				insertedClientIds,
+				successEvent,
+				failureEvent,
+			} );
+		},
+		[
+			createErrorNotice,
+			finalizeGuardedInsert,
+			insertBlocks,
+			insertionIndex,
+			inserterRootClientId,
+			recordPatternOutcome,
+			registry,
+		]
+	);
 
-			// Freshness guard: the inserter root/index can move after the
-			// recommendation was ranked. Compare only the insertion-target
-			// signature captured at fetch time so ranking inputs such as the
-			// visible pattern set do not cause false stale-target rejections.
+	const runPatternFreshnessGate = useCallback(
+		async ( { pattern, recommendation = null, blocks, liveInput } ) => {
 			if (
 				patternInsertionTargetSignature &&
 				currentInsertionTargetSignature &&
-				effectivePostType
-			) {
-				if (
-					currentInsertionTargetSignature !==
+				effectivePostType &&
+				currentInsertionTargetSignature !==
 					patternInsertionTargetSignature
-				) {
-					recordPatternOutcome( 'stale_blocked', {
-						pattern,
-						recommendation,
-						reason: 'insertion_target_changed',
-					} );
-					createErrorNotice(
-						sprintf(
-							/* translators: %s: block pattern title. */
-							__(
-								'Cannot insert pattern "%s" because the insertion point has changed since these recommendations were ranked. Refreshing now — try again in a moment.',
-								'flavor-agent'
-							),
-							getPatternTitle( pattern )
+			) {
+				recordPatternOutcome( 'stale_blocked', {
+					pattern,
+					recommendation,
+					reason: 'insertion_target_changed',
+				} );
+				createErrorNotice(
+					sprintf(
+						/* translators: %s: block pattern title. */
+						__(
+							'Cannot insert pattern "%s" because the insertion point has changed since these recommendations were ranked. Refreshing now — try again in a moment.',
+							'flavor-agent'
 						),
-						{
-							type: 'snackbar',
-							id: 'inserter-notice',
-						}
-					);
-					fetchPatternRecommendationsForCurrentTarget( liveInput );
-					return;
-				}
+						getPatternTitle( pattern )
+					),
+					{
+						type: 'snackbar',
+						id: 'inserter-notice',
+					}
+				);
+				fetchPatternRecommendationsForCurrentTarget( liveInput );
+				return false;
 			}
 
-			// Both this pre-flight check and the post-revalidation re-check below
-			// reject a pattern whose top-level blocks are not insertable at the
-			// captured root, with the same notice and outcome. Core's insertBlocks
-			// silently drops disallowed blocks, so a stale pass would surface as a
-			// destructive "inserted somewhere else" partial insert.
-			const rejectIfBlocksDisallowed = ( liveEditor ) => {
-				const rejected = getRejectedPatternBlockNames(
-					pattern,
+			const rejectIfBlocksDisallowed = () => {
+				const rejected = getRejectedResolvedBlockNames(
+					blocks,
 					inserterRootClientId,
-					liveEditor
+					registry?.select?.( blockEditorStore )
 				);
 
 				if ( rejected.length === 0 ) {
@@ -1350,12 +1501,8 @@ export default function PatternRecommender() {
 				return true;
 			};
 
-			if (
-				rejectIfBlocksDisallowed(
-					registry?.select?.( blockEditorStore )
-				)
-			) {
-				return;
+			if ( rejectIfBlocksDisallowed() ) {
+				return false;
 			}
 
 			if (
@@ -1382,7 +1529,7 @@ export default function PatternRecommender() {
 					}
 				);
 				fetchPatternRecommendationsForCurrentTarget( liveInput );
-				return;
+				return false;
 			}
 
 			try {
@@ -1416,7 +1563,7 @@ export default function PatternRecommender() {
 						}
 					);
 					fetchPatternRecommendationsForCurrentTarget( liveInput );
-					return;
+					return false;
 				}
 			} catch {
 				recordPatternOutcome( 'stale_blocked', {
@@ -1438,113 +1585,44 @@ export default function PatternRecommender() {
 						id: 'inserter-notice',
 					}
 				);
-				return;
+				return false;
 			}
 
-			// The pre-check above ran *before* the awaited server revalidation.
-			// Editor state can drift during that round-trip (a container gains a
-			// templateLock, its block editing mode changes, the captured root is
-			// mutated). Re-validate against the live editor here, with no await
-			// before the dispatch, so core's own canInsertBlockType filter sees
-			// the same state we just checked — otherwise a now-disallowed block is
-			// silently dropped into a partial insert that reads as "inserted
-			// somewhere else" and tears out the blocks that validly inserted.
-			if (
-				rejectIfBlocksDisallowed(
-					registry?.select?.( blockEditorStore )
-				)
-			) {
-				return;
+			if ( rejectIfBlocksDisallowed() ) {
+				return false;
 			}
 
-			let insertionVerified = false;
-			let insertedClientIds = [];
-			const e2eFailureMode =
-				consumeE2EPatternInsertFailureMode( pattern );
+			return true;
+		},
+		[
+			createErrorNotice,
+			currentInsertionTargetSignature,
+			effectivePostType,
+			fetchPatternRecommendationsForCurrentTarget,
+			inserterRootClientId,
+			patternInsertionTargetSignature,
+			patternResolvedContextSignature,
+			recordPatternOutcome,
+			registry,
+			resolvePatternRecommendationSignature,
+		]
+	);
 
-			try {
-				if ( e2eFailureMode === 'insert_blocks_exception' ) {
-					throw new Error( 'E2E forced insertBlocks exception' );
-				}
+	const handleInsertPattern = useCallback(
+		async ( pattern, recommendation = null ) => {
+			const blocks = resolvePatternBlocks( pattern );
 
-				const clonedBlocks = blocks.map( ( block ) =>
-					cloneBlock( block )
-				);
-				const beforeBlockEditor =
-					registry?.select?.( blockEditorStore );
-				const beforeInsertSnapshot = getBlockListSnapshot(
-					beforeBlockEditor,
-					inserterRootClientId
-				);
-				const beforeBlockPresence = getBlockPresenceSnapshot(
-					beforeBlockEditor,
-					clonedBlocks
-				);
-
-				if ( e2eFailureMode !== 'insert_blocks_noop' ) {
-					let dispatchInsertionIndex = insertionIndex;
-
-					// Core keys the (controlled) top-level block list by '', and
-					// its insertBlocks reducer does not normalize a null root to
-					// it. Dispatching with null records the blocks in byClientId
-					// without adding them to the root order, so they never render
-					// and post-insert verification tears them back out as
-					// "inserted somewhere else". getBlockInsertionPoint() reports
-					// undefined for a top-level point (captured here as null), so
-					// normalize it to '' before dispatching. Nested string roots
-					// are left unchanged.
-					const insertRootClientId = inserterRootClientId ?? '';
-
-					if ( e2eFailureMode === 'insert_blocks_wrong_target' ) {
-						dispatchInsertionIndex =
-							insertionIndex === 0 ? Number.MAX_SAFE_INTEGER : 0;
-					}
-
-					await insertBlocks(
-						clonedBlocks,
-						dispatchInsertionIndex,
-						insertRootClientId,
-						true
-					);
-
-					const afterBlockEditor =
-						registry?.select?.( blockEditorStore );
-					const afterInsertSnapshot = getBlockListSnapshot(
-						afterBlockEditor,
-						inserterRootClientId
-					);
-					const afterBlockPresence = getBlockPresenceSnapshot(
-						afterBlockEditor,
-						clonedBlocks
-					);
-
-					insertionVerified = didInsertBlocksAtTarget(
-						beforeInsertSnapshot,
-						afterInsertSnapshot,
-						clonedBlocks,
-						insertionIndex
-					);
-					if ( ! insertionVerified ) {
-						insertedClientIds = getInsertedBlockClientIds(
-							beforeBlockPresence,
-							afterBlockPresence,
-							beforeInsertSnapshot,
-							afterInsertSnapshot,
-							clonedBlocks
-						);
-					}
-				}
-			} catch {
-				recordPatternOutcome( 'insert_failed', {
+			if ( blocks.length === 0 ) {
+				recordPatternOutcome( 'validation_blocked', {
 					pattern,
 					recommendation,
-					reason: 'insert_blocks_exception',
+					reason: 'empty_pattern_blocks',
 				} );
 				createErrorNotice(
 					sprintf(
 						/* translators: %s: block pattern title. */
 						__(
-							'Cannot insert pattern "%s" because Gutenberg rejected the insertion request.',
+							'Cannot insert pattern "%s" because Gutenberg did not provide insertable block content for it.',
 							'flavor-agent'
 						),
 						getPatternTitle( pattern )
@@ -1557,79 +1635,36 @@ export default function PatternRecommender() {
 				return;
 			}
 
-			if ( ! insertionVerified ) {
-				const insertedOutsideTarget = insertedClientIds.length > 0;
-				if (
-					insertedOutsideTarget &&
-					typeof removeBlocks === 'function'
-				) {
-					removeBlocks( insertedClientIds, false );
-				}
-				const failureMessage = insertedOutsideTarget
-					? sprintf(
-							/* translators: %s: block pattern title. */
-							__(
-								'Cannot insert pattern "%s" at the requested location. Gutenberg inserted it somewhere else, so Flavor Agent removed those blocks.',
-								'flavor-agent'
-							),
-							getPatternTitle( pattern )
-					  )
-					: sprintf(
-							/* translators: %s: block pattern title. */
-							__(
-								'Cannot confirm pattern "%s" was inserted. Gutenberg did not report the inserted blocks at the target location.',
-								'flavor-agent'
-							),
-							getPatternTitle( pattern )
-					  );
+			const liveInput = buildBaseInput();
 
-				recordPatternOutcome( 'insert_failed', {
+			if (
+				! ( await runPatternFreshnessGate( {
 					pattern,
 					recommendation,
-					reason: insertedOutsideTarget
-						? 'insert_blocks_wrong_target'
-						: 'insert_blocks_noop',
-				} );
-				createErrorNotice( failureMessage, {
-					type: 'snackbar',
-					id: 'inserter-notice',
-				} );
+					blocks,
+					liveInput,
+				} ) )
+			) {
 				return;
 			}
 
-			recordPatternOutcome( 'pattern_inserted_from_shelf', {
+			const clonedBlocks = blocks.map( ( block ) => cloneBlock( block ) );
+
+			await runGuardedInsert( {
 				pattern,
 				recommendation,
-				reason: 'insert_blocks_success',
+				blocks: clonedBlocks,
+				e2eFailureMode: consumeE2EPatternInsertFailureMode( pattern ),
+				successEvent: 'pattern_inserted_from_shelf',
+				failureEvent: 'insert_failed',
 			} );
-			createSuccessNotice(
-				sprintf(
-					/* translators: %s: pattern title. */
-					__( 'Pattern "%s" inserted.', 'flavor-agent' ),
-					getPatternTitle( pattern )
-				),
-				{
-					type: 'snackbar',
-					id: 'inserter-notice',
-				}
-			);
 		},
 		[
 			buildBaseInput,
 			createErrorNotice,
-			createSuccessNotice,
-			effectivePostType,
-			fetchPatternRecommendationsForCurrentTarget,
-			insertBlocks,
-			removeBlocks,
-			insertionIndex,
-			inserterRootClientId,
-			currentInsertionTargetSignature,
-			patternInsertionTargetSignature,
-			patternResolvedContextSignature,
 			recordPatternOutcome,
-			registry,
-			resolvePatternRecommendationSignature,
+			runGuardedInsert,
+			runPatternFreshnessGate,
 		]
 	);
 
