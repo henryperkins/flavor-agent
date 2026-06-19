@@ -13,8 +13,92 @@ import { isSyncedPatternReference } from './pattern-insertability';
 
 export const ADAPTATION_PLAN_VERSION = 'pattern-adaptation-v1';
 
-// Mutation rules are registered in later tasks.
-const ADAPTATION_RULES = [];
+const ALL_ALIGNMENTS = [ 'left', 'center', 'right', 'wide', 'full' ];
+
+function clampLevel( level ) {
+	return Math.max( 1, Math.min( 6, level ) );
+}
+
+function supportedAlignments( blockRegistry, blockName ) {
+	const align = blockRegistry?.getBlockType?.( blockName )?.supports?.align;
+
+	if ( align === true ) {
+		return ALL_ALIGNMENTS;
+	}
+
+	return Array.isArray( align ) ? align : [];
+}
+
+function headingLevelRule( block, { adaptationContext } ) {
+	if ( block?.name !== 'core/heading' ) {
+		return null;
+	}
+
+	const preceding = adaptationContext?.precedingHeadingLevel;
+
+	if ( ! Number.isInteger( preceding ) ) {
+		return null;
+	}
+
+	const from = Number.isInteger( block?.attributes?.level )
+		? block.attributes.level
+		: 2;
+	const to = clampLevel( preceding + 1 );
+
+	return to === from
+		? null
+		: { attribute: 'level', from, to, reason: 'nearby_heading_hierarchy' };
+}
+
+function mostFrequentAlign( aligns ) {
+	if ( ! Array.isArray( aligns ) || aligns.length === 0 ) {
+		return '';
+	}
+
+	const counts = new Map();
+	for ( const align of aligns ) {
+		counts.set( align, ( counts.get( align ) || 0 ) + 1 );
+	}
+
+	let best = '';
+	let bestCount = 0;
+	for ( const align of aligns ) {
+		const count = counts.get( align );
+		if ( count > bestCount ) {
+			best = align;
+			bestCount = count;
+		}
+	}
+
+	return best;
+}
+
+function alignmentRule( block, { adaptationContext, blockRegistry } ) {
+	const target =
+		adaptationContext?.rootAlign ||
+		mostFrequentAlign( adaptationContext?.siblingAligns );
+
+	if ( ! target || ! block?.name ) {
+		return null;
+	}
+
+	if ( ! supportedAlignments( blockRegistry, block.name ).includes( target ) ) {
+		return null;
+	}
+
+	const from = block?.attributes?.align ?? null;
+
+	return from === target
+		? null
+		: {
+				attribute: 'align',
+				from,
+				to: target,
+				reason: 'match_container_alignment',
+		  };
+}
+
+const ADAPTATION_RULES = [ headingLevelRule, alignmentRule ];
 
 function themeHasAnyPreset( themeTokens ) {
 	const palette = themeTokens?.color?.palette;
