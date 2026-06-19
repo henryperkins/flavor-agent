@@ -77,6 +77,7 @@ import {
 
 const SEARCH_DEBOUNCE_MS = 400;
 const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
+const EMPTY_BLOCK_EDITOR_SETTINGS = {};
 const EMPTY_BLOCK_TREE = [];
 const EMPTY_SIBLING_ORDER = [];
 
@@ -841,9 +842,13 @@ export default function PatternRecommender() {
 		() => registry.select( 'core/blocks' ),
 		[ registry ]
 	);
-	const blockEditorSettings = useSelect(
-		( select ) => select( blockEditorStore ).getSettings?.() || {},
+	const selectedBlockEditorSettings = useSelect(
+		( select ) => select( blockEditorStore ).getSettings?.(),
 		[]
+	);
+	const blockEditorSettings = useMemo(
+		() => selectedBlockEditorSettings || EMPTY_BLOCK_EDITOR_SETTINGS,
+		[ selectedBlockEditorSettings ]
 	);
 	const insertionBlockTree = useSelect(
 		( select ) =>
@@ -1816,10 +1821,12 @@ export default function PatternRecommender() {
 			return;
 		}
 
+		const clonedBlocks = blocks.map( ( block ) => cloneBlock( block ) );
+
 		const inserted = await runGuardedInsert( {
 			pattern,
 			recommendation,
-			blocks,
+			blocks: clonedBlocks,
 			e2eFailureMode: consumeE2EPatternInsertFailureMode( pattern ),
 			successEvent: 'adapted_inserted_from_preview',
 			failureEvent: 'adapted_insert_failed',

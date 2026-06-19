@@ -29,7 +29,7 @@ The core principle is:
 2. Clone the pattern's blocks.
 3. Apply safe cosmetic adaptation to the clone.
 4. Preview the adapted clone.
-5. Insert the same adapted clone only after user confirmation.
+5. Re-clone the previewed adapted block tree immediately before confirmed insertion.
 
 ## Non-Goals
 
@@ -82,7 +82,7 @@ The extension should preserve these guardrails and add adaptation between block 
 7. The user confirms insertion.
 8. The insert handler revalidates the current insertion target and server-resolved context.
 9. Flavor Agent re-checks that the adapted blocks remain insertable at the target.
-10. `insertBlocks()` receives the same adapted block array shown in preview.
+10. `insertBlocks()` receives a fresh clone of the adapted block array shown in preview.
 11. Existing post-dispatch verification records success, no-op, rejected insertion, or wrong-target rollback.
 
 ## Adaptation Scope
@@ -122,7 +122,7 @@ This rule keeps the current `visiblePatternNames` and allowed-pattern selector c
 
 The preview must satisfy these rules:
 
-- It renders the exact adapted block instances that `insertBlocks()` will receive, not a re-cloned copy. The adapted clone is built once, memoized on the source pattern, adaptation plan, and target signature, rendered in `BlockPreview`, and inserted as that same array — so the previewed clientIds flow into the existing post-dispatch verification and `BlockPreview` does not remount on every render. The current direct-insert path re-clones with `cloneBlock()` immediately before dispatch; the adapted path must instead hold its single clone in state.
+- It renders the exact adapted block tree that insertion will use, but `Insert adapted` re-clones that tree immediately before dispatch so Gutenberg receives fresh block instances and the preview state is never mutated by insertion.
 - It is keyed to the current insertion target signature and server `resolvedContextSignature`.
 - It invalidates when the insertion root, insertion index, server-resolved context, theme tokens, or source pattern changes.
 - It clearly distinguishes adapted output from original pattern output.

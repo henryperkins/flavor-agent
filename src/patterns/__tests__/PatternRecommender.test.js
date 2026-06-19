@@ -1415,11 +1415,20 @@ describe( 'PatternRecommender', () => {
 			findButtonByText( inserterContainer, 'Preview adapted' ).click();
 		} );
 
+		mockCloneBlock.mockClear();
+
 		await act( async () => {
 			findButtonByText( inserterContainer, 'Insert adapted' ).click();
 		} );
 
 		expect( mockResolvePatternRecommendationSignature ).toHaveBeenCalled();
+		expect( mockCloneBlock ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				name: 'core/heading',
+				attributes: expect.objectContaining( { level: 3 } ),
+				cloned: true,
+			} )
+		);
 		expect( mockInsertBlocks ).toHaveBeenCalledWith(
 			[
 				expect.objectContaining( {

@@ -26,7 +26,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/referen
 
 ## Shared Interaction Model
 
-- Learned-once sequence: intro -> scope/freshness -> prompt -> status -> explanation -> grouped lanes -> embedded navigation when present -> undo and history. `RecommendationHero` is reserved for stale refresh in the compact block shell.
+- Learned-once sequence: intro -> scope/freshness -> prompt -> status -> explanation -> grouped lanes -> embedded navigation when present -> undo and history. Block surfaces indicate scope and staleness via `SurfaceScopeBar` (with explicit Refresh when stale) in both the main Inspector panel and the last-selected fallback document panel; `RecommendationHero` and `StaleResultBanner` are used on other surfaces for their result containers.
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Block recommendations normally move `idle -> loading -> advisory-ready`; safe local attribute updates can then move directly to `success` because only the selected block's local attributes are mutated
 - Fresh results render explanation text before the grouped `Apply now`, `Review first`, `Settings suggestions`, `Style suggestions`, and `Manual ideas` lanes; stale results surface a refresh hero before the grouped lanes
