@@ -317,12 +317,53 @@ function spacingRule( block, { themeTokens, blockRegistry } ) {
 	};
 }
 
+function hasStyleVariation( className ) {
+	return /(^|\s)is-style-[\w-]+/.test(
+		typeof className === 'string' ? className : ''
+	);
+}
+
+function buttonStyleRule( block, { blockRegistry } ) {
+	if ( block?.name !== 'core/button' ) {
+		return null;
+	}
+
+	const className = block?.attributes?.className || '';
+
+	if ( hasStyleVariation( className ) ) {
+		return null;
+	}
+
+	const styles = blockRegistry?.getBlockStyles?.( 'core/button' );
+
+	if ( ! Array.isArray( styles ) ) {
+		return null;
+	}
+
+	const variation = styles.find( ( style ) => style && ! style.isDefault );
+
+	if ( ! variation?.name ) {
+		return null;
+	}
+
+	const token = `is-style-${ variation.name }`;
+	const to = className ? `${ className } ${ token }`.trim() : token;
+
+	return {
+		attribute: 'className',
+		from: className || null,
+		to,
+		reason: 'theme_button_style',
+	};
+}
+
 const ADAPTATION_RULES = [
 	headingLevelRule,
 	alignmentRule,
 	colorRule( 'backgroundColor', [ 'color', 'background' ] ),
 	colorRule( 'textColor', [ 'color', 'text' ] ),
 	spacingRule,
+	buttonStyleRule,
 ];
 
 function themeHasAnyPreset( themeTokens ) {

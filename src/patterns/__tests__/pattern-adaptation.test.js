@@ -294,3 +294,47 @@ describe( 'color + spacing remap rules', () => {
 		);
 	} );
 } );
+
+describe( 'button style rule', () => {
+	test( 'applies the first registered non-default button style', () => {
+		REGISTRY.getBlockStyles.mockImplementation( ( name ) =>
+			name === 'core/button'
+				? [ { name: 'fill', isDefault: true }, { name: 'outline' } ]
+				: []
+		);
+
+		const result = run( {
+			sourceBlocks: [ { name: 'core/button', attributes: {} } ],
+		} );
+
+		expect( result.status ).toBe( 'ready' );
+		expect( result.blocks[ 0 ].attributes.className ).toBe(
+			'is-style-outline'
+		);
+		expect( result.plan.changes ).toContainEqual(
+			expect.objectContaining( {
+				attribute: 'className',
+				to: 'is-style-outline',
+				reason: 'theme_button_style',
+			} )
+		);
+	} );
+
+	test( 'leaves a button that already has an explicit style', () => {
+		REGISTRY.getBlockStyles.mockReturnValue( [
+			{ name: 'fill', isDefault: true },
+			{ name: 'outline' },
+		] );
+
+		const result = run( {
+			sourceBlocks: [
+				{
+					name: 'core/button',
+					attributes: { className: 'is-style-squared' },
+				},
+			],
+		} );
+
+		expect( result.status ).toBe( 'blocked' );
+	} );
+} );
