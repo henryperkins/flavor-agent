@@ -740,12 +740,12 @@ git diff --check
 
 ### Phase 9: Learning Reports
 
-Status (2026-06-20): A backend/API report slice now adds optional `learningReport` data to global admin activity reads via `includeReports=1`. It uses a bounded newest-first sample, reuses existing outcome-rate denominators, adds undo and insert-failure rates, and groups sanitized data by the persisted dimensions available in activity rows. Admin UI rendering and durable pattern-trait capture remain open.
+Status (2026-06-20): A backend/API and admin UI report slice now adds optional `learningReport` data to global admin activity reads via `includeReports=1` and renders the bounded aggregates in `Settings > AI Activity`. It uses a bounded newest-first sample, reuses existing outcome-rate denominators, adds undo and insert-failure rates, and groups sanitized data by the persisted dimensions available in activity rows. Durable pattern-trait capture remains open.
 
 - [ ] Add read-only aggregate queries for outcome rates by surface, operation type, validation reason, ranking signal, guideline version, provider/model, and pattern trait.
   - [x] Backend/API report builder and global admin REST response for the currently persisted dimensions.
   - [ ] Durable client/server pattern-trait persistence for new pattern outcome rows.
-- [ ] Surface those aggregates in the admin activity UI behind `manage_options`.
+- [x] Surface those aggregates in the admin activity UI behind `manage_options`.
 - [x] Treat `shown` as exposure only; avoid deriving ignored-after-shown negatives until replacement/time-window semantics are defined and tested.
 - [x] Keep reports bounded and sanitized; link to representative activity rows instead of embedding raw prompts or full context payloads.
 

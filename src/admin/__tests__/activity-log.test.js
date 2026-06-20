@@ -314,6 +314,7 @@ function buildResponse( entries, overrides = {} ) {
 			failed: 0,
 			...( overrides.summary || {} ),
 		},
+		learningReport: overrides.learningReport || null,
 	};
 }
 
@@ -405,7 +406,7 @@ describe( 'ActivityLogApp', () => {
 				headers: {
 					'X-WP-Nonce': BOOT_DATA.nonce,
 				},
-				url: `${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&sortField=timestamp&sortDirection=desc`,
+				url: `${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&includeReports=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&sortField=timestamp&sortDirection=desc`,
 			} )
 		);
 		expect( getVisibleTitles() ).toEqual( [ 'First activity entry' ] );
@@ -511,6 +512,112 @@ describe( 'ActivityLogApp', () => {
 		expect( getSummaryCardValue( 'Pending approval' ) ).toBe( '5' );
 		expect( getSummaryCardValue( 'Undo blocked' ) ).toBe( '1' );
 		expect( getSummaryCardValue( 'Failed or unavailable' ) ).toBe( '2' );
+	} );
+
+	test( 'requests and renders the governance learning report', async () => {
+		await renderApp(
+			buildResponse(
+				[
+					createEntry( {
+						id: 'activity-1',
+						suggestion: 'Representative activity entry',
+					} ),
+				],
+				{
+					learningReport: {
+						version: 'governance-learning-report-v1',
+						generatedAt: '2026-06-20T00:00:00+00:00',
+						sampleSize: 125,
+						rowLimit: 500,
+						truncated: true,
+						summary: {
+							shownCount: 12,
+							reviewSelectionRate: 0.25,
+							applyConversionRate: 0.1667,
+							undoRate: 0.08,
+							validationBlockedRate: 0.1,
+							insertFailedRate: 0.03,
+						},
+						groups: {
+							surfaces: [
+								{
+									key: 'block',
+									label: 'Block',
+									sampleSize: 8,
+									shownCount: 5,
+									selectedForReviewCount: 2,
+									appliedCount: 1,
+									undoneCount: 0,
+									validationBlockedCount: 1,
+									insertFailedCount: 0,
+									reviewSelectionRate: 0.4,
+									applyConversionRate: 0.2,
+									undoRate: 0,
+									validationBlockedRate: 0.2,
+									insertFailedRate: 0,
+									representativeActivityId: 'activity-1',
+								},
+							],
+							operationTypes: [],
+							providerModels: [
+								{
+									key: 'openai/gpt-5-mini',
+									label: 'Openai Gpt 5 Mini',
+									sampleSize: 6,
+									shownCount: 3,
+									selectedForReviewCount: 1,
+									appliedCount: 1,
+									undoneCount: 0,
+									validationBlockedCount: 0,
+									insertFailedCount: 0,
+									reviewSelectionRate: 0.3333,
+									applyConversionRate: 0.1667,
+									undoRate: 0,
+									validationBlockedRate: 0,
+									insertFailedRate: 0,
+									representativeActivityId: 'activity-1',
+								},
+							],
+							validationReasons: [],
+							guidelineVersions: [],
+							rankingSignals: [],
+							patternTraits: [],
+						},
+					},
+				}
+			)
+		);
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].url ).toContain(
+			'includeReports=1'
+		);
+
+		const report = getContainer().querySelector(
+			'.flavor-agent-activity-log__learning-report'
+		);
+		expect( report ).not.toBeNull();
+		expect( report.textContent ).toContain( 'Governance learning report' );
+		expect( report.textContent ).toContain(
+			'Recent sample: 125 of 500 rows'
+		);
+		expect( report.textContent ).toContain(
+			'Truncated to newest matching rows'
+		);
+		expect( report.textContent ).toContain( 'Review selection25%' );
+		expect( report.textContent ).toContain( 'Apply conversion16.7%' );
+		expect( report.textContent ).toContain( 'Undo rate8%' );
+		expect( report.textContent ).toContain( 'Validation blocked10%' );
+		expect( report.textContent ).toContain( 'Insert failed3%' );
+		expect( report.textContent ).toContain( 'Surfaces' );
+		expect( report.textContent ).toContain( 'Block' );
+		expect( report.textContent ).toContain( 'Provider and model' );
+		expect( report.textContent ).toContain( 'Openai Gpt 5 Mini' );
+
+		expect(
+			report.querySelector(
+				'a[href="https://example.test/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-1"]'
+			)
+		).not.toBeNull();
 	} );
 
 	test( 'styles summary metrics as an auto-fit frosted card grid', () => {
@@ -753,7 +860,7 @@ describe( 'ActivityLogApp', () => {
 		expect( getSidebarTitle().textContent ).toBe( 'Alpha entry' );
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toBe(
-			`${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&search=Alpha&sortField=timestamp&sortDirection=desc`
+			`${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&includeReports=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&search=Alpha&sortField=timestamp&sortDirection=desc`
 		);
 	} );
 
