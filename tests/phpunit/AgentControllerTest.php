@@ -511,6 +511,58 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_get_activity_returns_learning_report_for_global_admin_request_only(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['manage_options']     = true;
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		WordPressTestState::$capabilities['edit_post:42']       = true;
+
+		ActivityRepository::create(
+			$this->build_outcome_activity_entry(
+				'outcome-shown',
+				'shown',
+				'block',
+				'set-1',
+				'',
+				'',
+				'2026-03-24T10:00:00Z'
+			)
+		);
+		ActivityRepository::create(
+			$this->build_outcome_activity_entry(
+				'outcome-selected',
+				'selected_for_review',
+				'block',
+				'set-1',
+				'suggestion:1',
+				'review_opened',
+				'2026-03-24T10:00:01Z'
+			)
+		);
+
+		$global_request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$global_request->set_param( 'global', true );
+		$global_request->set_param( 'includeReports', true );
+
+		$global_response = Agent_Controller::handle_get_activity( $global_request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $global_response );
+		$this->assertArrayHasKey( 'learningReport', $global_response->get_data() );
+		$this->assertSame(
+			1.0,
+			$global_response->get_data()['learningReport']['summary']['reviewSelectionRate'] ?? null
+		);
+
+		$scoped_request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$scoped_request->set_param( 'scopeKey', 'post:42' );
+		$scoped_request->set_param( 'includeReports', true );
+
+		$scoped_response = Agent_Controller::handle_get_activity( $scoped_request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $scoped_response );
+		$this->assertArrayNotHasKey( 'learningReport', $scoped_response->get_data() );
+	}
+
 	public function test_handle_get_activity_rejects_malformed_global_admin_date_filters(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['manage_options'] = true;
@@ -973,6 +1025,54 @@ final class AgentControllerTest extends TestCase {
 				'entityId' => $entity_id,
 			],
 			'timestamp'  => $timestamp,
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_outcome_activity_entry(
+		string $id,
+		string $event,
+		string $surface,
+		string $set_id,
+		string $suggestion_key,
+		string $reason,
+		string $timestamp
+	): array {
+		return [
+			'id'            => $id,
+			'type'          => 'recommendation_outcome',
+			'surface'       => $surface,
+			'target'        => [
+				'recommendationSetId' => $set_id,
+				'suggestionKey'       => $suggestion_key,
+			],
+			'suggestionKey' => '' !== $suggestion_key ? $suggestion_key : null,
+			'after'         => [
+				'outcome' => [
+					'event'                  => $event,
+					'recommendationSetId'    => $set_id,
+					'suggestionKey'          => $suggestion_key,
+					'sourceRequestSignature' => 'sig-' . $set_id,
+					'reason'                 => $reason,
+					'rankingSet'             => [
+						[
+							'suggestionKey' => 'suggestion:1',
+							'ranking'       => [
+								'contextScore' => 0.7,
+								'blendedScore' => 0.8,
+							],
+						],
+					],
+				],
+			],
+			'document'      => [
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			],
+			'timestamp'     => $timestamp,
 		];
 	}
 }

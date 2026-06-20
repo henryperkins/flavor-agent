@@ -40,10 +40,11 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provenance, diagnostics, undo-reason details, and structured state snapshots
 - Let admins approve or reject pending external Global Styles / Style Book applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
+- Let global admin activity reads request a bounded, sanitized governance learning report with outcome rates and aggregate groups by surface, operation type, validation reason, ranking signal, guideline version, and provider/model.
 - Filter audit entries by absolute or relative time without silently broadening malformed date filters; malformed active filters are blocked in the UI or rejected by REST, and `inThePast` and `over` use true timestamp windows, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
-This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, structured diff and before/after summaries, but not a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, or aggregate diagnostics reports.
+This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, structured diff and before/after summaries, plus a backend/API aggregate report contract, but not a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, or rendered aggregate-report UI.
 
 ## Ordered Undo Rules
 
@@ -62,6 +63,7 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 | Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, summary cards, external-apply decision controls, and custom detail sections |
 | REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()` | Serve activity query, persistence, undo-status updates, and admin approval/rejection decisions |
 | Permissions | `FlavorAgent\Activity\Permissions` | Applies contextual capability rules for scoped and global activity access |
+| Learning report | `FlavorAgent\Activity\GovernanceLearningReport` | Builds the optional bounded `learningReport` payload for global admin activity reads |
 
 ## Related Routes And Abilities
 

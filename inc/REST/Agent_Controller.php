@@ -284,6 +284,12 @@ final class Agent_Controller {
 							'default'           => false,
 							'sanitize_callback' => 'rest_sanitize_boolean',
 						],
+						'includeReports'             => [
+							'required'          => false,
+							'type'              => 'boolean',
+							'default'           => false,
+							'sanitize_callback' => 'rest_sanitize_boolean',
+						],
 						'surfaceLimit'               => [
 							'required'          => false,
 							'type'              => 'integer',
@@ -506,6 +512,7 @@ final class Agent_Controller {
 					'dayRelativeValue'           => $request->get_param( 'dayRelativeValue' ),
 					'dayRelativeUnit'            => $request->get_param( 'dayRelativeUnit' ),
 					'activity'                   => $request->get_param( 'activity' ),
+					'includeReports'             => true === $request->get_param( 'includeReports' ),
 				]
 			);
 

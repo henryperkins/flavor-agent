@@ -502,6 +502,156 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	public function test_query_admin_can_include_bounded_learning_report(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_outcome_entry(
+				'outcome-shown',
+				'shown',
+				'block',
+				'set-1',
+				'',
+				'',
+				'2026-03-24T10:00:00Z',
+				[
+					'learningAttribution' => [
+						'generationId'     => 'gen-1',
+						'guidelineVersion' => 'guidelines-v2',
+						'provider'         => 'openai',
+						'model'            => 'gpt-5-mini',
+						'rankingVersion'   => 'contextual-ranking-v1',
+					],
+				]
+			)
+		);
+		Repository::create(
+			$this->build_outcome_entry(
+				'outcome-selected',
+				'selected_for_review',
+				'block',
+				'set-1',
+				'suggestion:1',
+				'review_opened',
+				'2026-03-24T10:00:01Z',
+				[
+					'learningAttribution' => [
+						'generationId'     => 'gen-1',
+						'guidelineVersion' => 'guidelines-v2',
+						'provider'         => 'openai',
+						'model'            => 'gpt-5-mini',
+						'rankingVersion'   => 'contextual-ranking-v1',
+					],
+					'ranking'             => [
+						'contextEvidence'  => [
+							'prompt_match' => 0.8,
+						],
+						'contextPenalties' => [
+							'stale_docs' => 0.2,
+						],
+						'rankingVersion'   => 'contextual-ranking-v1',
+					],
+				]
+			)
+		);
+		Repository::create(
+			$this->build_block_entry(
+				'activity-applied',
+				'2026-03-24T10:00:02Z'
+			)
+		);
+		Repository::create(
+			$this->build_block_entry(
+				'activity-undone',
+				'2026-03-24T10:00:03Z',
+				'43'
+			)
+		);
+		Repository::update_undo_status( 'activity-undone', 'undone' );
+		Repository::create(
+			$this->build_outcome_entry(
+				'outcome-validation',
+				'validation_blocked',
+				'template',
+				'set-2',
+				'suggestion:2',
+				'disallowed_operation',
+				'2026-03-24T10:00:04Z',
+				[
+					'learningAttribution' => [
+						'generationId'     => 'gen-2',
+						'guidelineVersion' => 'guidelines-v3',
+						'provider'         => 'anthropic',
+						'model'            => 'claude-4-sonnet',
+					],
+				]
+			)
+		);
+		Repository::create(
+			$this->build_outcome_entry(
+				'outcome-insert-failed',
+				'insert_failed',
+				'pattern',
+				'set-3',
+				'theme/hero',
+				'insert_blocks_failed',
+				'2026-03-24T10:00:05Z'
+			)
+		);
+		Repository::create(
+			$this->build_outcome_entry(
+				'outcome-inserted',
+				'pattern_inserted_from_shelf',
+				'pattern',
+				'set-3',
+				'theme/hero',
+				'insert_blocks_success',
+				'2026-03-24T10:00:06Z'
+			)
+		);
+
+		$result = Repository::query_admin(
+			[
+				'includeReports' => true,
+				'page'           => 1,
+				'perPage'        => 2,
+			]
+		);
+
+		$this->assertArrayHasKey( 'learningReport', $result );
+		$report = $result['learningReport'];
+
+		$this->assertSame( 'governance-learning-report-v1', $report['version'] ?? null );
+		$this->assertSame( 7, $report['sampleSize'] ?? null );
+		$this->assertSame( 500, $report['rowLimit'] ?? null );
+		$this->assertFalse( $report['truncated'] ?? null );
+		$this->assertSame( 7, $result['summary']['total'] ?? null );
+		$this->assertCount( 2, $result['entries'] ?? [] );
+		$this->assertSame(
+			[
+				'shownCount'            => 1,
+				'reviewSelectionRate'   => 1.0,
+				'applyConversionRate'   => 0.0,
+				'undoRate'              => 0.5,
+				'validationBlockedRate' => 0.3333,
+				'insertFailedRate'      => 0.5,
+			],
+			$report['summary'] ?? null
+		);
+		$this->assertSame(
+			'openai/gpt-5-mini',
+			$report['groups']['providerModels'][0]['key'] ?? null
+		);
+		$this->assertContains(
+			'prompt_match',
+			array_column( $report['groups']['rankingSignals'] ?? [], 'key' )
+		);
+		$this->assertSame(
+			'disallowed_operation',
+			$report['groups']['validationReasons'][0]['key'] ?? null
+		);
+	}
+
 	public function test_query_admin_marks_blocked_rows_when_the_blocking_row_is_on_page_one(): void {
 		Repository::install();
 
@@ -1884,6 +2034,61 @@ final class ActivityRepositoryTest extends TestCase {
 				'entityId' => $entity_id,
 			],
 			'timestamp'  => $timestamp,
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $extra_outcome
+	 * @return array<string, mixed>
+	 */
+	private function build_outcome_entry(
+		string $id,
+		string $event,
+		string $surface,
+		string $set_id,
+		string $suggestion_key,
+		string $reason,
+		string $timestamp,
+		array $extra_outcome = []
+	): array {
+		return [
+			'id'            => $id,
+			'type'          => 'recommendation_outcome',
+			'surface'       => $surface,
+			'target'        => [
+				'recommendationSetId' => $set_id,
+				'suggestionKey'       => $suggestion_key,
+				'requestRef'          => $surface . ':' . $set_id,
+			],
+			'suggestionKey' => '' !== $suggestion_key ? $suggestion_key : null,
+			'after'         => [
+				'outcome' => array_merge(
+					[
+						'event'                  => $event,
+						'recommendationSetId'    => $set_id,
+						'suggestionKey'          => $suggestion_key,
+						'sourceRequestSignature' => 'sig-' . $set_id,
+						'reason'                 => $reason,
+						'rankingSet'             => [
+							[
+								'suggestionKey' => 'suggestion:1',
+								'ranking'       => [
+									'contextScore'   => 0.7,
+									'blendedScore'   => 0.8,
+									'rankingVersion' => 'contextual-ranking-v1',
+								],
+							],
+						],
+					],
+					$extra_outcome
+				),
+			],
+			'document'      => [
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			],
+			'timestamp'     => $timestamp,
 		];
 	}
 

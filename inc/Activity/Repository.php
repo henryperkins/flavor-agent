@@ -18,6 +18,8 @@ final class Repository {
 	public const MAX_KNOWN_SURFACES                  = 8;
 
 	private const TABLE_SUFFIX                            = 'flavor_agent_activity';
+	private const DEFAULT_REPORT_ROW_LIMIT                = 500;
+	private const MAX_REPORT_ROW_LIMIT                    = 1000;
 	private const ADMIN_PROJECTION_BACKFILL_SIZE          = 250;
 	private const ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION = 'flavor_agent_activity_admin_projection_backfill_cursor';
 	private const ADMIN_HISTORY_QUERY_ENTITY_BATCH_SIZE   = 50;
@@ -386,6 +388,8 @@ final class Repository {
 	public static function query_admin( array $filters ): array {
 		$page               = self::normalize_page( $filters['page'] ?? 1 );
 		$per_page           = self::normalize_per_page( $filters['perPage'] ?? self::DEFAULT_PER_PAGE );
+		$include_reports    = true === ( $filters['includeReports'] ?? false );
+		$report_row_limit   = self::normalize_report_row_limit( $filters['reportRowLimit'] ?? self::DEFAULT_REPORT_ROW_LIMIT );
 		$sort_field         = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
 		$sort_direction     = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
 		$timezone           = self::resolve_activity_timezone();
@@ -407,7 +411,7 @@ final class Repository {
 		}
 
 		if ( ! self::admin_projection_backfill_pending() ) {
-			return self::query_admin_projected(
+			$result = self::query_admin_projected(
 				$filters,
 				$page,
 				$per_page,
@@ -415,6 +419,18 @@ final class Repository {
 				$sort_direction,
 				$timezone
 			);
+
+			if ( $include_reports ) {
+				$filter_context = self::build_admin_filter_context( $filters, $timezone );
+				$where          = self::build_admin_sql_filter_clauses( $filter_context );
+				$result         = self::append_admin_learning_report(
+					$result,
+					self::query_admin_sql_report_rows( $where, $report_row_limit + 1 ),
+					$report_row_limit
+				);
+			}
+
+			return $result;
 		}
 
 		$candidate_rows    = self::query_candidate_rows( $filters );
@@ -459,8 +475,7 @@ final class Repository {
 		$offset       = ( $page - 1 ) * $per_page;
 		$page_records = array_slice( $filtered_records, $offset, $per_page );
 		$page_entries = self::load_admin_page_entries( $page_records );
-
-		return [
+		$result       = [
 			'entries'        => array_values( $page_entries ),
 			'paginationInfo' => [
 				'page'       => $page,
@@ -474,6 +489,26 @@ final class Repository {
 				$filter_context
 			),
 		];
+
+		if ( $include_reports ) {
+			$report_records = $filtered_records;
+			self::sort_admin_records(
+				$report_records,
+				'timestamp',
+				'desc'
+			);
+			$report_rows = array_map(
+				static fn ( array $record ): array => $record['row'],
+				array_slice( $report_records, 0, $report_row_limit + 1 )
+			);
+			$result      = self::append_admin_learning_report(
+				$result,
+				$report_rows,
+				$report_row_limit
+			);
+		}
+
+		return $result;
 	}
 
 	/**
@@ -1423,6 +1458,16 @@ final class Repository {
 		return min( self::MAX_SURFACE_LIMIT, $normalized );
 	}
 
+	private static function normalize_report_row_limit( mixed $limit ): int {
+		$normalized = (int) $limit;
+
+		if ( $normalized <= 0 ) {
+			return self::DEFAULT_REPORT_ROW_LIMIT;
+		}
+
+		return min( self::MAX_REPORT_ROW_LIMIT, $normalized );
+	}
+
 	/**
 	 * @return array<int, string>
 	 */
@@ -1699,6 +1744,52 @@ final class Repository {
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		return array_values( is_array( $rows ) ? $rows : [] );
+	}
+
+	/**
+	 * @param array{clauses: array<int, string>, args: array<int, mixed>} $where
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function query_admin_sql_report_rows( array $where, int $limit ): array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return [];
+		}
+
+		$sql  = 'SELECT * FROM ' . self::table_name() . ' AS t';
+		$sql  = self::append_admin_sql_where_clause( $sql, $where['clauses'] );
+		$sql .= ' ORDER BY t.created_at DESC, t.id DESC LIMIT %d';
+		$args = array_merge( $where['args'], [ $limit ] );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql uses fixed clauses with placeholders.
+		$sql = $wpdb->prepare( $sql, $args );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Reads a bounded report sample from the plugin-owned activity table; $sql is prepared above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		return array_values( is_array( $rows ) ? $rows : [] );
+	}
+
+	/**
+	 * @param array<string, mixed>              $result
+	 * @param array<int, array<string, mixed>> $rows
+	 * @return array<string, mixed>
+	 */
+	private static function append_admin_learning_report( array $result, array $rows, int $row_limit ): array {
+		$truncated = count( $rows ) > $row_limit;
+		$rows      = $truncated ? array_slice( $rows, 0, $row_limit ) : $rows;
+		$entries   = array_map(
+			static fn ( array $row ): array => Serializer::hydrate_row( $row ),
+			$rows
+		);
+
+		$result['learningReport'] = GovernanceLearningReport::build(
+			array_values( $entries ),
+			$row_limit,
+			$truncated
+		);
+
+		return $result;
 	}
 
 	/**

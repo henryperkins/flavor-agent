@@ -33,6 +33,8 @@ Initial source basis: all repository/workspace doc-like files enumerated on 2026
 
 2026-06-19 pattern adapted preview v1: the non-synced pattern shelf now ships `Preview adapted`, `Insert adapted`, and `Insert original` with a deterministic cosmetic rule set, `BlockPreview` rendering, local adaptation-signature stale checks, and the same guarded insert/rollback path as original insertion. Synced/user `core/block` references remain unchanged references. Content adaptation, synced detachment, model-assisted plans, and original/adapted comparison remain explicit follow-up decisions in `docs/features/pattern-recommendations-adapted-preview.md`; current behavior is summarized in `docs/features/pattern-recommendations.md`.
 
+2026-06-20 governance learning report backend/API slice: global admin activity reads can now pass `includeReports=1` to receive a bounded `learningReport` payload with outcome rates, undo/insert-failure rates, aggregate groups for currently persisted dimensions, truncation metadata, and representative activity ids. This does not render the report in `Settings > AI Activity`, add durable pattern-trait capture for new outcome rows, ship fixture harvest, or change ranking feedback.
+
 Archived files under `docs/superpowers/plans/archive/` and implemented design specs under `docs/superpowers/specs/` are historical context only. Do not treat them as active implementation plans. Any item below needs a fresh source-grounded plan before code changes unless the change is a narrow docs or verification update.
 
 ## Current Implementation Candidates
@@ -41,7 +43,7 @@ These items are not blocked by a known upstream API prerequisite. They still nee
 
 | Workstream | Why it is open | Current source | Next move |
 | --- | --- | --- | --- |
-| Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, and an Approvals quick filter, but editor-side pending-apply visibility, approval notifications, a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, and aggregate reports remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | Each follow-up needs its own bounded plan; learning reports can now build on the shipped Phase 8 join contract. |
+| Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, and an Approvals quick filter. A backend/API `learningReport` slice now exists behind global `includeReports=1`, but editor-side pending-apply visibility, approval notifications, a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, report UI rendering, and durable pattern-trait capture remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | Next learning-report move: render the existing backend report in the admin UI and add pattern-trait capture if trait reporting is promoted for v1. |
 
 ## Sequenced Later
 

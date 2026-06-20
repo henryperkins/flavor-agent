@@ -77,6 +77,7 @@ Enforced by:
 
 - `inc/Abilities/RecommendationAbilityExecution.php` — centralized `request_diagnostic` emission for every recommendation execution, regardless of caller
 - `inc/Activity/Repository.php` / `Permissions.php` / `Serializer.php` — server-backed storage, contextual capability checks, provenance projection columns for audit filtering
+- `inc/Activity/GovernanceLearningReport.php` — optional bounded aggregate `learningReport` payload for global admin activity reads, with sanitized outcome rates and representative activity ids only
 - `POST /flavor-agent/v1/activity` — persists apply rows and scoped diagnostics with provider path, model, prompt, reference, token usage, and latency
 - `inc/Admin/ActivityPage` + `src/admin/activity-log.js` — the `Settings > AI Activity` approval/audit surface (decision controls for pending external applies; non-pending rows stay inspection-only)
 
