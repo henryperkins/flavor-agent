@@ -23,6 +23,7 @@ export const OUTCOME_EVENTS = Object.freeze( [
 const OUTCOME_EVENT_SET = new Set( OUTCOME_EVENTS );
 const TOP_SUGGESTION_CAP = 3;
 const RANKING_SET_CAP = 3;
+const PATTERN_TRAIT_CAP = 8;
 const MAX_STRING_LENGTH = 191;
 const MAX_LABEL_LENGTH = 96;
 const UINT32_MODULO = 4294967296;
@@ -188,6 +189,20 @@ function normalizeTopSuggestionKeys( keys = [] ) {
 	).slice( 0, TOP_SUGGESTION_CAP );
 }
 
+function normalizePatternTraits( traits = [] ) {
+	if ( ! Array.isArray( traits ) ) {
+		return [];
+	}
+
+	return Array.from(
+		new Set(
+			traits
+				.map( ( trait ) => cleanString( trait, 64 ).toLowerCase() )
+				.filter( ( trait ) => /^[a-z0-9][a-z0-9_-]*$/.test( trait ) )
+		)
+	).slice( 0, PATTERN_TRAIT_CAP );
+}
+
 function clampScore( value ) {
 	const number = Number( value );
 
@@ -347,7 +362,10 @@ function getStableRankingSetSuggestionKey(
 	return fallbackKey;
 }
 
-export function buildRankingSetFromSuggestions( suggestions = [] ) {
+export function buildRankingSetFromSuggestions(
+	suggestions = [],
+	{ includePatternTraits = true } = {}
+) {
 	if ( ! Array.isArray( suggestions ) ) {
 		return [];
 	}
@@ -373,6 +391,13 @@ export function buildRankingSetFromSuggestions( suggestions = [] ) {
 			const validationVocabularyVersion = primary
 				? VALIDATION_REASONS_VERSION
 				: cleanString( suggestion?.validationVocabularyVersion );
+			const patternTraits = includePatternTraits
+				? normalizePatternTraits(
+						suggestion?.recommendationOutcome?.patternTraits ||
+							suggestion?.patternTraits ||
+							suggestion?.traits
+				  )
+				: [];
 
 			return {
 				suggestionKey,
@@ -385,6 +410,7 @@ export function buildRankingSetFromSuggestions( suggestions = [] ) {
 								: {} ),
 					  }
 					: {} ),
+				...( patternTraits.length ? { patternTraits } : {} ),
 			};
 		} )
 		.filter( Boolean )
@@ -414,6 +440,7 @@ export function decorateRecommendationPayload(
 	const sourceSignature = normalizeSourceRequestSignature(
 		sourceRequestSignature
 	);
+	const includesPatternTraits = cleanCode( surface ) === 'pattern';
 	const setId =
 		cleanString( recommendationSetId ) ||
 		buildRecommendationSetId( { surface, sourceRequestSignature } );
@@ -454,6 +481,14 @@ export function decorateRecommendationPayload(
 								sourceRequestSignature: sourceSignature,
 							}
 						);
+					const patternTraits = includesPatternTraits
+						? normalizePatternTraits(
+								suggestion?.recommendationOutcome
+									?.patternTraits ||
+									suggestion?.patternTraits ||
+									suggestion?.traits
+						  )
+						: [];
 
 					return {
 						...suggestion,
@@ -492,6 +527,9 @@ export function decorateRecommendationPayload(
 										learningAttribution:
 											suggestionLearningAttribution,
 								  }
+								: {} ),
+							...( patternTraits.length
+								? { patternTraits }
 								: {} ),
 						},
 					};
@@ -676,12 +714,25 @@ export function buildRecommendationIdentityFromSuggestion(
 	}
 
 	let members = [];
+	let patternTraits = [];
 	if ( Array.isArray( overrides.members ) ) {
 		members = overrides.members;
 	} else if ( Array.isArray( suggestion?.members ) ) {
 		members = suggestion.members;
 	} else if ( Array.isArray( outcome.members ) ) {
 		members = outcome.members;
+	}
+	if (
+		Array.isArray( overrides.patternTraits ) &&
+		overrides.patternTraits.length
+	) {
+		patternTraits = overrides.patternTraits;
+	} else if ( Array.isArray( outcome.patternTraits ) ) {
+		patternTraits = outcome.patternTraits;
+	} else if ( Array.isArray( suggestion?.patternTraits ) ) {
+		patternTraits = suggestion.patternTraits;
+	} else if ( Array.isArray( suggestion?.traits ) ) {
+		patternTraits = suggestion.traits;
 	}
 
 	const recommendationSetId = cleanString(
@@ -714,6 +765,7 @@ export function buildRecommendationIdentityFromSuggestion(
 		topSuggestionKeys,
 		resultCount,
 		members: normalizeTopSuggestionKeys( members ),
+		patternTraits: normalizePatternTraits( patternTraits ),
 		...( learningAttribution ? { learningAttribution } : {} ),
 	};
 }
@@ -734,6 +786,7 @@ export function buildRecommendationOutcomeEntry( {
 	rank = null,
 	rankingSet = [],
 	learningAttribution = null,
+	patternTraits = [],
 } = {} ) {
 	const safeEvent = cleanCode( event );
 	const safeSurface = cleanCode( surface );
@@ -758,6 +811,7 @@ export function buildRecommendationOutcomeEntry( {
 		resultCount,
 		rank,
 		learningAttribution,
+		patternTraits,
 	} );
 	const setId =
 		identity.recommendationSetId ||
@@ -780,7 +834,9 @@ export function buildRecommendationOutcomeEntry( {
 	}
 
 	const rankingSnapshot = normalizeRankingSnapshot( suggestion?.ranking );
-	const normalizedRankingSet = buildRankingSetFromSuggestions( rankingSet );
+	const normalizedRankingSet = buildRankingSetFromSuggestions( rankingSet, {
+		includePatternTraits: safeSurface === 'pattern',
+	} );
 	const normalizedLearningAttribution = normalizeLearningAttribution(
 		identity.learningAttribution,
 		{
@@ -788,6 +844,10 @@ export function buildRecommendationOutcomeEntry( {
 			sourceRequestSignature: identity.sourceRequestSignature,
 		}
 	);
+	const normalizedPatternTraits =
+		safeSurface === 'pattern'
+			? normalizePatternTraits( identity.patternTraits )
+			: [];
 	let outcomeRanking = {};
 
 	if ( safeEvent === 'shown' && normalizedRankingSet.length ) {
@@ -858,6 +918,9 @@ export function buildRecommendationOutcomeEntry( {
 				...( normalizedLearningAttribution
 					? { learningAttribution: normalizedLearningAttribution }
 					: {} ),
+				...( safeEvent !== 'shown' && normalizedPatternTraits.length
+					? { patternTraits: normalizedPatternTraits }
+					: {} ),
 			},
 		},
 		document: safeDocument,
@@ -888,6 +951,9 @@ export function buildRecommendationOutcomeEntry( {
 				...outcomeRanking,
 				...( normalizedLearningAttribution
 					? { learningAttribution: normalizedLearningAttribution }
+					: {} ),
+				...( safeEvent !== 'shown' && normalizedPatternTraits.length
+					? { patternTraits: normalizedPatternTraits }
 					: {} ),
 			},
 		},

@@ -14,6 +14,7 @@ final class RecommendationOutcome {
 	private const MAX_STRING_LENGTH  = 191;
 	private const TOP_SUGGESTION_CAP = 3;
 	private const RANKING_SET_CAP    = 3;
+	private const PATTERN_TRAIT_CAP  = 8;
 
 	private const EVENTS = [
 		'shown',
@@ -132,7 +133,10 @@ final class RecommendationOutcome {
 		}
 
 		if ( 'shown' === $event ) {
-			$ranking_set = self::normalize_ranking_set( $outcome['rankingSet'] ?? [] );
+			$ranking_set = self::normalize_ranking_set(
+				$outcome['rankingSet'] ?? [],
+				'pattern' === $surface
+			);
 			if ( [] !== $ranking_set ) {
 				$normalized_outcome['rankingSet'] = $ranking_set;
 			}
@@ -140,6 +144,15 @@ final class RecommendationOutcome {
 			$ranking = self::normalize_ranking_snapshot( $outcome['ranking'] ?? $entry['ranking'] ?? null );
 			if ( [] !== $ranking ) {
 				$normalized_outcome['ranking'] = $ranking;
+			}
+
+			if ( 'pattern' === $surface ) {
+				$pattern_traits = self::normalize_pattern_traits(
+					$outcome['patternTraits'] ?? $entry['patternTraits'] ?? []
+				);
+				if ( [] !== $pattern_traits ) {
+					$normalized_outcome['patternTraits'] = $pattern_traits;
+				}
 			}
 		}
 
@@ -176,6 +189,10 @@ final class RecommendationOutcome {
 
 		if ( isset( $normalized_outcome['learningAttribution'] ) ) {
 			$request_recommendation['learningAttribution'] = $normalized_outcome['learningAttribution'];
+		}
+
+		if ( isset( $normalized_outcome['patternTraits'] ) ) {
+			$request_recommendation['patternTraits'] = $normalized_outcome['patternTraits'];
 		}
 
 		return [
@@ -276,7 +293,10 @@ final class RecommendationOutcome {
 	/**
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function normalize_ranking_set( mixed $value ): array {
+	private static function normalize_ranking_set(
+		mixed $value,
+		bool $include_pattern_traits = false
+	): array {
 		if ( ! is_array( $value ) ) {
 			return [];
 		}
@@ -310,6 +330,15 @@ final class RecommendationOutcome {
 			$vocab_version = sanitize_text_field( (string) ( $item['validationVocabularyVersion'] ?? '' ) );
 			if ( '' !== $vocab_version ) {
 				$item_out['validationVocabularyVersion'] = substr( $vocab_version, 0, 64 );
+			}
+
+			if ( $include_pattern_traits ) {
+				$pattern_traits = self::normalize_pattern_traits(
+					$item['patternTraits'] ?? []
+				);
+				if ( [] !== $pattern_traits ) {
+					$item_out['patternTraits'] = $pattern_traits;
+				}
 			}
 
 			$items[] = $item_out;
@@ -389,6 +418,34 @@ final class RecommendationOutcome {
 		}
 
 		return array_slice( array_values( $items ), 0, $cap );
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function normalize_pattern_traits( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$items = [];
+		foreach ( $value as $item ) {
+			if ( ! is_scalar( $item ) && null !== $item ) {
+				continue;
+			}
+
+			$trait = strtolower( trim( (string) $item ) );
+			if ( 1 !== preg_match( '/^[a-z0-9][a-z0-9_-]{0,63}$/', $trait ) ) {
+				continue;
+			}
+
+			$items[ $trait ] = $trait;
+			if ( count( $items ) >= self::PATTERN_TRAIT_CAP ) {
+				break;
+			}
+		}
+
+		return array_values( $items );
 	}
 
 	/**

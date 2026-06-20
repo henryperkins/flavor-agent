@@ -595,7 +595,10 @@ final class ActivityRepositoryTest extends TestCase {
 				'set-3',
 				'theme/hero',
 				'insert_blocks_failed',
-				'2026-03-24T10:00:05Z'
+				'2026-03-24T10:00:05Z',
+				[
+					'patternTraits' => [ 'hero-banner', 'Private Launch Copy' ],
+				]
 			)
 		);
 		Repository::create(
@@ -606,7 +609,10 @@ final class ActivityRepositoryTest extends TestCase {
 				'set-3',
 				'theme/hero',
 				'insert_blocks_success',
-				'2026-03-24T10:00:06Z'
+				'2026-03-24T10:00:06Z',
+				[
+					'patternTraits' => [ 'hero-banner', 'media-rich' ],
+				]
 			)
 		);
 
@@ -649,6 +655,18 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame(
 			'disallowed_operation',
 			$report['groups']['validationReasons'][0]['key'] ?? null
+		);
+		$this->assertContains(
+			'hero-banner',
+			array_column( $report['groups']['patternTraits'] ?? [], 'key' )
+		);
+		$this->assertContains(
+			'media-rich',
+			array_column( $report['groups']['patternTraits'] ?? [], 'key' )
+		);
+		$this->assertNotContains(
+			'privatelaunchcopy',
+			array_column( $report['groups']['patternTraits'] ?? [], 'key' )
 		);
 	}
 

@@ -438,6 +438,18 @@ describe( 'recommendation outcomes', () => {
 			recommendations: [
 				{
 					name: 'theme/hero',
+					traits: [
+						'hero-banner',
+						'Hero-Banner',
+						'call-to-action',
+						'media-rich',
+						'text-focused',
+						'showcase',
+						'pricing',
+						'contact',
+						'navigation',
+						'Private Launch Copy',
+					],
 					ranking: {
 						contextScore: 0.91,
 						blendedScore: 0.88,
@@ -457,8 +469,64 @@ describe( 'recommendation outcomes', () => {
 					blendedScore: 0.88,
 					rankingVersion: 'contextual-ranking-v1',
 				} ),
+				patternTraits: [
+					'hero-banner',
+					'call-to-action',
+					'media-rich',
+					'text-focused',
+					'showcase',
+					'pricing',
+					'contact',
+					'navigation',
+				],
 			} ),
 		] );
+		expect( JSON.stringify( summary ) ).not.toContain( 'Private Launch' );
+	} );
+
+	test( 'persists sanitized pattern traits on engaged pattern outcomes', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+			},
+			event: 'adapted_preview_shown',
+			surface: 'pattern',
+			recommendationSetId: 'pattern:ranking:set',
+			suggestion: {
+				name: 'theme/hero',
+				traits: [
+					'hero-banner',
+					'Hero-Banner',
+					'call-to-action',
+					'media-rich',
+					'text-focused',
+					'showcase',
+					'pricing',
+					'contact',
+					'navigation',
+					'Private Launch Copy',
+				],
+				ranking: {
+					contextScore: 0.91,
+					blendedScore: 0.88,
+				},
+			},
+		} );
+
+		expect( entry.after.outcome.patternTraits ).toEqual( [
+			'hero-banner',
+			'call-to-action',
+			'media-rich',
+			'text-focused',
+			'showcase',
+			'pricing',
+			'contact',
+			'navigation',
+		] );
+		expect( entry.request.recommendation.patternTraits ).toEqual(
+			entry.after.outcome.patternTraits
+		);
+		expect( JSON.stringify( entry ) ).not.toContain( 'Private Launch' );
 	} );
 
 	test( 'includes compact ranking snapshots without label-derived aggregate keys', () => {

@@ -1039,6 +1039,7 @@ describe( 'PatternRecommender', () => {
 			{
 				name: 'theme/hero',
 				reason: 'Matches this insertion point.',
+				traits: [ 'hero-banner', 'call-to-action' ],
 				ranking: {
 					contextScore: 0.91,
 					blendedScore: 0.88,
@@ -1072,6 +1073,7 @@ describe( 'PatternRecommender', () => {
 							contextScore: 0.91,
 							blendedScore: 0.88,
 						} ),
+						patternTraits: [ 'hero-banner', 'call-to-action' ],
 					} ),
 				],
 			} )

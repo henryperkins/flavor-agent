@@ -740,11 +740,11 @@ git diff --check
 
 ### Phase 9: Learning Reports
 
-Status (2026-06-20): A backend/API and admin UI report slice now adds optional `learningReport` data to global admin activity reads via `includeReports=1` and renders the bounded aggregates in `Settings > AI Activity`. It uses a bounded newest-first sample, reuses existing outcome-rate denominators, adds undo and insert-failure rates, and groups sanitized data by the persisted dimensions available in activity rows. Durable pattern-trait capture remains open.
+Status (2026-06-20): A backend/API and admin UI report slice now adds optional `learningReport` data to global admin activity reads via `includeReports=1` and renders the bounded aggregates in `Settings > AI Activity`. It uses a bounded newest-first sample, reuses existing outcome-rate denominators, adds undo and insert-failure rates, and groups sanitized data by the persisted dimensions available in activity rows. New pattern recommendation outcome rows now persist sanitized pattern traits for shown ranking-set items and engaged pattern outcomes, so `groups.patternTraits` can populate from durable activity data. Fixture harvest and ranking feedback remain later phases.
 
-- [ ] Add read-only aggregate queries for outcome rates by surface, operation type, validation reason, ranking signal, guideline version, provider/model, and pattern trait.
+- [x] Add read-only aggregate queries for outcome rates by surface, operation type, validation reason, ranking signal, guideline version, provider/model, and pattern trait.
   - [x] Backend/API report builder and global admin REST response for the currently persisted dimensions.
-  - [ ] Durable client/server pattern-trait persistence for new pattern outcome rows.
+  - [x] Durable client/server pattern-trait persistence for new pattern outcome rows.
 - [x] Surface those aggregates in the admin activity UI behind `manage_options`.
 - [x] Treat `shown` as exposure only; avoid deriving ignored-after-shown negatives until replacement/time-window semantics are defined and tested.
 - [x] Keep reports bounded and sanitized; link to representative activity rows instead of embedding raw prompts or full context payloads.
@@ -752,8 +752,8 @@ Status (2026-06-20): A backend/API and admin UI report slice now adds optional `
 **Verification:**
 
 ```bash
-composer run test:php -- --filter 'RecommendationOutcomeMetrics|ActivityRepository|AgentControllerTest'
-npm run test:unit -- --runInBand src/admin/__tests__/activity-log-utils.test.js
+composer run test:php -- --filter 'RecommendationOutcomeMetrics|RecommendationOutcomeTest|ActivityRepository|AgentControllerTest'
+npm run test:unit -- --runInBand src/store/__tests__/recommendation-outcomes.test.js src/patterns/__tests__/PatternRecommender.test.js src/admin/__tests__/activity-log-utils.test.js
 npm run check:docs
 git diff --check
 ```
