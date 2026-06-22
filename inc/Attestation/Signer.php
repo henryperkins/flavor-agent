@@ -19,7 +19,7 @@ final class Signer {
 		KeyManager::ensure_registered();
 
 		return [
-			'statement'  => $canonical_statement,
+			'statement' => $canonical_statement,
 			'signature' => sodium_crypto_sign_detached( $canonical_statement, $sk ),
 			'keyId'     => (string) KeyManager::key_id(),
 		];

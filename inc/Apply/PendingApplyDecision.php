@@ -164,7 +164,7 @@ final class PendingApplyDecision {
 			return '';
 		}
 
-		$user = get_userdata( $user_id );
+		$user  = get_userdata( $user_id );
 		$roles = is_object( $user ) && is_array( $user->roles ?? null ) ? $user->roles : [];
 
 		return isset( $roles[0] ) ? sanitize_key( (string) $roles[0] ) : '';

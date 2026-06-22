@@ -30,8 +30,18 @@ final class AttestationStatementBuilderTest extends TestCase {
 
 	public function test_canonical_json_is_key_order_stable(): void {
 		$this->assertSame(
-			StatementBuilder::canonical_json( [ 'b' => 1, 'a' => 2 ] ),
-			StatementBuilder::canonical_json( [ 'a' => 2, 'b' => 1 ] )
+			StatementBuilder::canonical_json(
+				[
+					'b' => 1,
+					'a' => 2,
+				]
+			),
+			StatementBuilder::canonical_json(
+				[
+					'a' => 2,
+					'b' => 1,
+				]
+			)
 		);
 	}
 

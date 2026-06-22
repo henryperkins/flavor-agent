@@ -20,11 +20,11 @@ final class Verifier {
 		?string $live_subject_bytes,
 		?string $reverted_by_id
 	): array {
-		$outcomes = [];
-		$statement = json_decode( $statement_bytes, true );
-		$key_id    = is_array( $statement ) ? (string) ( $statement['predicate']['site']['keyId'] ?? '' ) : '';
-		$public    = self::public_key_for( $jwks, $key_id );
-		$valid     = null !== $public && Signer::verify( $statement_bytes, $signature_raw, $public );
+		$outcomes   = [];
+		$statement  = json_decode( $statement_bytes, true );
+		$key_id     = is_array( $statement ) ? (string) ( $statement['predicate']['site']['keyId'] ?? '' ) : '';
+		$public     = self::public_key_for( $jwks, $key_id );
+		$valid      = null !== $public && Signer::verify( $statement_bytes, $signature_raw, $public );
 		$outcomes[] = $valid ? 'signature_valid' : 'record_tampered';
 
 		if ( null !== $live_subject_bytes && is_array( $statement ) ) {
