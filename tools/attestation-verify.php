@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 // Usage: php tools/attestation-verify.php https://site.example att_xxx
-[ , $base, $id ] = $argv + [ null, null, null ];
+[, $base, $id] = $argv + [ null, null, null ];
 
 if ( ! is_string( $base ) || '' === $base || ! is_string( $id ) || '' === $id ) {
 	fwrite( STDERR, "usage: attestation-verify.php <baseUrl> <attestationId>\n" );

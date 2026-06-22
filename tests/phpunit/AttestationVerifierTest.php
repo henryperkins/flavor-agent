@@ -161,6 +161,6 @@ final class AttestationVerifierTest extends TestCase {
 
 	private function configure_key(): void {
 		$sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
-		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $sk );
+		add_filter( 'flavor_agent_attest_private_key', static fn(): string => $sk );
 	}
 }
