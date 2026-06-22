@@ -19,6 +19,8 @@
 - Verification is **byte-exact** over the base64url-decoded statement; REST transports statement and signature as base64url strings, never as nested JSON re-serialized by REST.
 - Honesty caveat (design §3/§6.2) ships in the class docblocks of `AttestationService` and `AttestationController`: self-signed site-key attestation; the live-match read is site-served.
 - Run tests with `vendor/bin/phpunit`; keep `composer lint:php` (WPCS) clean.
+- **Test key seam:** `KeyManager` reads the private key through the `flavor_agent_attest_private_key` filter (default = the constant). Tests generate `$sk = base64_encode(sodium_crypto_sign_secretkey(sodium_crypto_sign_keypair()))` **once**, then `add_filter('flavor_agent_attest_private_key', static fn() => $sk)` (a stable captured key — never mint a fresh key inside the closure), and force the no-key case with `static fn() => ''` — **never** `define()` the constant (it can't be undone, making tests order-sensitive). Because each closure ignores the incoming value and returns a constant, the most-recently-added filter is authoritative, so no cross-test reset is required.
+- **Uninstall (Task 5):** the attestations table and its two options are removed on uninstall — "retention-independent" means not pruned by the activity cron, not surviving a deliberate uninstall (keeps Plugin Check clean).
 
 ---
 
@@ -192,14 +194,13 @@ use PHPUnit\Framework\TestCase;
 final class AttestationKeyManagerTest extends TestCase {
     protected function setUp(): void { WordPressTestState::$options = []; }
 
-    public function test_unconfigured_when_constant_absent(): void {
+    public function test_unconfigured_when_no_key_source(): void {
+        add_filter( 'flavor_agent_attest_private_key', static fn() => '' );
         $this->assertFalse( KeyManager::configured() );
     }
     public function test_registers_active_public_key_and_exports_jwks(): void {
-        $kp = sodium_crypto_sign_keypair();
-        if ( ! defined( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' ) ) {
-            define( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY', base64_encode( sodium_crypto_sign_secretkey( $kp ) ) );
-        }
+        $sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+        add_filter( 'flavor_agent_attest_private_key', static fn() => $sk );
         $this->assertTrue( KeyManager::configured() );
         KeyManager::ensure_registered();
         $jwks = KeyManager::jwks();
@@ -226,10 +227,13 @@ final class KeyManager {
     private const REGISTRY_OPTION = 'flavor_agent_attestation_public_keys';
 
     public static function private_key(): ?string {
-        if ( ! \defined( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' ) ) {
+        $configured = \defined( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' ) ? (string) \constant( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' ) : '';
+        // Filterable so tests can inject a key without defining the (un-undefinable) constant.
+        $raw = (string) \apply_filters( 'flavor_agent_attest_private_key', $configured );
+        if ( '' === $raw ) {
             return null;
         }
-        $decoded = base64_decode( (string) \constant( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' ), true );
+        $decoded = base64_decode( $raw, true );
         return ( false !== $decoded && SODIUM_CRYPTO_SIGN_SECRETKEYBYTES === strlen( $decoded ) ) ? $decoded : null;
     }
 
@@ -321,9 +325,8 @@ final class AttestationSignerTest extends TestCase {
     protected function setUp(): void { WordPressTestState::$options = []; }
 
     public function test_sign_then_verify_round_trips(): void {
-        if ( ! defined( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' ) ) {
-            define( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY', base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) ) );
-        }
+        $sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+        add_filter( 'flavor_agent_attest_private_key', static fn() => $sk );
         $bytes  = '{"hello":"world"}';
         $signed = Signer::sign( $bytes );
         $this->assertNotNull( $signed );
@@ -682,6 +685,23 @@ After the activity `maybe_install` hook (~:69) add:
 add_action( 'init', [ FlavorAgent\Attestation\Repository::class, 'maybe_install' ], 5 );
 ```
 
+- [ ] **Step 4b: Wire uninstall cleanup (P2.2)**
+
+In `uninstall.php`, after the existing activity-table `DROP TABLE` block, add the attestations table (mirror the existing phpcs-ignore comment):
+
+```php
+$flavor_agent_attestation_table = $wpdb->prefix . 'flavor_agent_attestations';
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Plugin-owned attestation table is intentionally removed during uninstall.
+$wpdb->query( "DROP TABLE IF EXISTS {$flavor_agent_attestation_table}" );
+```
+
+In `inc/UninstallOptions.php` add to the `names()` array:
+
+```php
+'flavor_agent_attestation_schema_version',
+'flavor_agent_attestation_public_keys',
+```
+
 - [ ] **Step 5: Run it, verify it passes**
 
 Run: `vendor/bin/phpunit --filter AttestationRepositoryTest`
@@ -711,9 +731,8 @@ git commit -m "feat(attestation): add append-only, retention-independent Reposit
 
 ```php
 public function test_record_apply_persists_a_verifiable_attestation(): void {
-    if ( ! defined( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' ) ) {
-        define( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY', base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) ) );
-    }
+    $sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+    add_filter( 'flavor_agent_attest_private_key', static fn() => $sk );
     \FlavorAgent\Attestation\Repository::install();
     $id = AttestationService::record_apply( [
         'surface' => 'global-styles', 'globalStylesId' => '81', 'blockName' => '',
@@ -732,12 +751,15 @@ public function test_record_apply_persists_a_verifiable_attestation(): void {
     ) );
 }
 public function test_record_apply_returns_null_without_key(): void {
-    // when FLAVOR_AGENT_ATTEST_PRIVATE_KEY is absent KeyManager::configured() is false
-    $this->assertTrue( true ); // see note: run this case in a separate process where the constant is undefined
+    add_filter( 'flavor_agent_attest_private_key', static fn() => '' );
+    $this->assertNull( AttestationService::record_apply( [
+        'surface' => 'global-styles', 'globalStylesId' => '81', 'operations' => [],
+        'before' => [ 'userConfig' => [] ], 'after' => [ 'userConfig' => [] ],
+    ] ) );
 }
 ```
 
-> Constant note: because PHP constants can't be undefined within a run, keep the "no key" assertion in its own test file/process (mirror the `@runInSeparateProcess` pattern documented for plugin-helper tests) or assert on `KeyManager::configured()` directly.
+> No-key handling is exercised via the `flavor_agent_attest_private_key` filter returning `''` (Global Constraints → Test key seam), so it runs in-process — no `@runInSeparateProcess` needed.
 
 - [ ] **Step 2: Run it, verify it fails**
 
@@ -831,7 +853,7 @@ try {
         'surface'            => $surface,
         'globalStylesId'     => $global_styles_id,
         'blockName'          => $block_name,
-        'operations'         => $operations,
+        'operations'         => $result['after']['operations'] ?? [], // the APPLIED/validated ops (StyleApplyExecutor.php:264/272), not the requested ones
         'before'             => $result['before'],
         'after'              => $result['after'],
         'freshnessSignature' => $baseline,
@@ -846,6 +868,22 @@ try {
 ```
 
 Add a small private helper `actor_role(int $user_id): string` returning the user's primary role (`administrator` etc.) via `get_userdata`, defaulting to `''`.
+
+- [ ] **Step 4b: Surface the attestation id via get-activity (P1.2)**
+
+`record_apply()` is best-effort and its return is not threaded through the apply write path; discovery is by lookup. In `inc/Abilities/ApplyAbilities.php` `get_activity()`, before returning, attach an `attestation` block when one exists:
+
+```php
+$att = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
+if ( null !== $att ) {
+    $response['attestation'] = [
+        'id'        => (string) $att['attestation_id'],
+        'verifyUrl' => \rest_url( 'flavor-agent/v1/attestations/' . $att['attestation_id'] ),
+    ];
+}
+```
+
+(`$response` = the array `get_activity()` already returns; adapt to its actual variable name.) This is how get-activity, the admin AI Activity screen, and the manual verification step obtain `<id>` (design §249 / §9). Rendering it in the admin DataViews row is a small follow-on in `src/admin/activity-log*.js`.
 
 - [ ] **Step 5: Run it, verify it passes**
 
@@ -922,17 +960,19 @@ final class AttestationController {
 
     public static function register_routes(): void {
         $self = new self();
-        \register_rest_route( self::NAMESPACE, '/attestations/(?P<id>[\w-]+)', [
-            'methods'             => 'GET',
-            'permission_callback' => '__return_true',
-            'callback'            => [ $self, 'get_attestation' ],
-        ] );
+        // Register the literal /keys route BEFORE the {id} route, and constrain ids to the
+        // att_ prefix, so "keys" can never be captured as an id (P2.1).
         \register_rest_route( self::NAMESPACE, '/attestations/keys', [
             'methods'             => 'GET',
             'permission_callback' => '__return_true',
             'callback'            => [ $self, 'get_keys' ],
         ] );
-        \register_rest_route( self::NAMESPACE, '/attestations/(?P<id>[\w-]+)/subject-state', [
+        \register_rest_route( self::NAMESPACE, '/attestations/(?P<id>att_[A-Za-z0-9]+)', [
+            'methods'             => 'GET',
+            'permission_callback' => '__return_true',
+            'callback'            => [ $self, 'get_attestation' ],
+        ] );
+        \register_rest_route( self::NAMESPACE, '/attestations/(?P<id>att_[A-Za-z0-9]+)/subject-state', [
             'methods'             => 'GET',
             'permission_callback' => '__return_true',
             'callback'            => [ $self, 'get_subject_state' ],
@@ -944,7 +984,7 @@ final class AttestationController {
     }
 
     public function get_attestation( \WP_REST_Request $request ): \WP_REST_Response {
-        $row = Repository::find( (string) $request['id'] );
+        $row = Repository::find( (string) $request->get_param( 'id' ) );
         if ( null === $row ) {
             return new \WP_REST_Response( [ 'error' => 'not_found' ], 404 );
         }
@@ -959,7 +999,7 @@ final class AttestationController {
     }
 
     public function get_subject_state( \WP_REST_Request $request ): \WP_REST_Response {
-        $row = Repository::find( (string) $request['id'] );
+        $row = Repository::find( (string) $request->get_param( 'id' ) );
         if ( null === $row ) {
             return new \WP_REST_Response( [ 'error' => 'not_found' ], 404 );
         }
@@ -1018,12 +1058,11 @@ git commit -m "feat(attestation): public REST envelope, JWKS, and subject-state 
 
 ```php
 public function test_intact_change_yields_signature_valid_and_live_match(): void {
-    if ( ! defined( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' ) ) {
-        define( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY', base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) ) );
-    }
+    $sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+    add_filter( 'flavor_agent_attest_private_key', static fn() => $sk );
     $config    = [ 'settings' => [], 'styles' => [ 'color' => [ 'background' => 'var:preset|color|parchment-100' ] ] ];
     $after_dig = \FlavorAgent\Attestation\Canonicalizer::digest( $config );
-    $bytes     = \FlavorAgent\Attestation\StatementBuilder::build( [ 'attestationId'=>'att_1','surface'=>'global-styles','scope'=>'global-styles','subjectName'=>'wp_global_styles:81','operations'=>[],'beforeDigest'=>'b','afterDigest'=>$after_dig,'freshnessSignature'=>'f','actorRole'=>'administrator','proposerVia'=>'mcp/flavor-agent','decision'=>'approve','requestedAt'=>'t','decidedAt'=>'t','siteUrl'=>'https://e.com','keyId'=>'k' ] );
+    $bytes     = \FlavorAgent\Attestation\StatementBuilder::build( [ 'attestationId'=>'att_1','surface'=>'global-styles','scope'=>'global-styles','subjectName'=>'wp_global_styles:81','operations'=>[],'beforeDigest'=>'b','afterDigest'=>$after_dig,'freshnessSignature'=>'f','actorRole'=>'administrator','proposerVia'=>'mcp/flavor-agent','decision'=>'approve','requestedAt'=>'t','decidedAt'=>'t','siteUrl'=>'https://e.com','keyId'=>(string) \FlavorAgent\Attestation\KeyManager::key_id() ] );
     $signed    = \FlavorAgent\Attestation\Signer::sign( $bytes );
     $live      = \FlavorAgent\Attestation\Canonicalizer::canonical_bytes( $config );
     $out = \FlavorAgent\Attestation\Verifier::evaluate( $bytes, $signed['signature'], \FlavorAgent\Attestation\KeyManager::jwks(), $live, null );
@@ -1213,8 +1252,8 @@ if ( null !== $prior ) {
             'globalStylesId'    => (string) ( $entry['target']['globalStylesId'] ?? '' ),
             'blockName'         => (string) ( $entry['target']['blockName'] ?? '' ),
             'operations'        => [],
-            'before'            => $result['after'] ?? [],   // pre-undo state
-            'after'             => $result['before'] ?? [],  // restored (post-undo) state == attested subject
+            'before'            => $entry['after'] ?? [],   // pre-undo state (activity snapshot; undo() returns only ['result'])
+            'after'             => $entry['before'] ?? [],  // restored post-undo state == attested subject
             'freshnessSignature'=> '',
             'actorRole'         => self::actor_role_for_undo(),
             'requestedAt'       => '',
@@ -1248,10 +1287,11 @@ git commit -m "feat(attestation): emit a chained revert attestation on undo"
 - [ ] Run the full suite: `vendor/bin/phpunit` — expected: OK.
 - [ ] Lint: `composer lint:php` — expected: no errors in `inc/Attestation/`, `inc/REST/AttestationController.php`.
 - [ ] Aggregate gate: `node scripts/verify.js --skip-e2e` then inspect `output/verify/summary.json` (`status: pass`).
-- [ ] Manual end-to-end (local site, `FLAVOR_AGENT_ATTEST_PRIVATE_KEY` set): run a `request-style-apply` → approve → `php tools/attestation-verify.php <baseUrl> <id>` shows `signature_valid` + `live_matches_subject`; then `undo-activity` → re-run verifier shows `reverted_by_attestation`.
+- [ ] Manual end-to-end (local site, `FLAVOR_AGENT_ATTEST_PRIVATE_KEY` set): run a `request-style-apply` → approve → read the approved row's `attestation.id` from get-activity as `<id>` → `php tools/attestation-verify.php <baseUrl> <id>` shows `signature_valid` + `live_matches_subject`; then `undo-activity` → re-run verifier shows `reverted_by_attestation`.
 
 ## Self-review notes
 
 - **Spec coverage:** §4 statement → Task 4; §4.1 branch scope → Tasks 1/6; §4.2 allowlist → Task 4 (`public_safe_predicate` + test); §5 table → Task 5; §6 components → Tasks 1–8; §6.1 envelope → Task 7 (`statement_b64`/`signature_b64`); §6.2 subject-state → Task 7; §7 keys → Task 2; §8 lifecycle → Tasks 6 & 10; §9 outcomes → Task 8; §11 tests → each task; §12/§13/§15 are non-code.
 - **Deferred (noted, not silently dropped):** the WP-CLI verifier wrapper (spec §6) — standalone script ships instead; transparency-log + C2PA + rendered-CSS digest remain §12 forward levels.
 - **Type consistency:** `subject_digest(config, scope, blockName)`, `record_apply($ctx)`/`record_revert($priorId,$ctx)`, envelope keys `statement_b64`/`signature_b64`/`reverted_by_attestation_id`, and the §9 outcome strings are used identically across tasks.
+- **Review-2 fixes (applied):** attest the *applied* ops (`$result['after']['operations']`, P1.1); surface the id via `get_activity` + `find_by_related_activity` (P1.2); undo uses `$entry['before']/['after']` since `undo()` returns only `['result']` (P1.3); REST registers `/keys` before the `att_`-constrained `{id}` and uses `get_param('id')` (P2.1); uninstall drops the table + options (P2.2); the `flavor_agent_attest_private_key` filter seam removes test order-sensitivity and fixes the verifier `keyId` lookup (P2.3).

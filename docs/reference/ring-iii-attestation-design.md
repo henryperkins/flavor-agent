@@ -162,7 +162,9 @@ Properties:
 - **Retention-independent.** The activity prune cron
   (`inc/Activity/Repository.php` `PRUNE_CRON_HOOK = 'flavor_agent_prune_activity'`,
   `DEFAULT_RETENTION_DAYS = 90`) **never** touches this table. A proof with a 90-day TTL is
-  "publicly inspectable activity evidence," not Ring III.
+  "publicly inspectable activity evidence," not Ring III. (Retention-independence is about the
+  *prune cron*, not uninstall: a deliberate uninstall removes this table and its options like any
+  plugin data — see plan Task 5 — so it stays Plugin-Check clean.)
 - **Self-contained.** Each row carries the full signed statement bytes; nothing it needs to be
   verified lives in `request_json`. The public route reads from this table, so
   `GET /attestations/{id}` resolves long after the activity row is gone.
