@@ -3709,6 +3709,16 @@ test( 'pattern surface inserts a recommended pattern at the top-level root and r
 		.click();
 	await dismissWelcomeGuide( page );
 
+	await expect
+		.poll(
+			() =>
+				patternRequests.some(
+					( request ) => request?.visiblePatternNames?.length > 0
+				),
+			{ timeout: 15000 }
+		)
+		.toBe( true );
+
 	const searchInput = await getVisibleSearchInput( page );
 	await expect( searchInput ).toBeVisible();
 	await searchInput.click();
@@ -3718,19 +3728,23 @@ test( 'pattern surface inserts a recommended pattern at the top-level root and r
 	await expect
 		.poll(
 			() =>
-				patternRequests.findLast(
-					( request ) => request?.prompt === 'hero'
-				) || null,
-			{ timeout: 10000 }
+				Boolean(
+					patternRequests.findLast(
+						( request ) =>
+							request?.prompt === 'hero' &&
+							request?.mockedRecommendationNames?.length > 0
+					)
+				),
+			{ timeout: 15000 }
 		)
-		.not.toBeNull();
+		.toBe( true );
 
 	const firstItem = page
 		.locator( '.flavor-agent-pattern-shelf' )
 		.first()
 		.locator( '.flavor-agent-pattern-shelf__item' )
 		.first();
-	await expect( firstItem ).toBeVisible();
+	await expect( firstItem ).toBeVisible( { timeout: 15000 } );
 	const patternTitle = await firstItem
 		.locator( '.flavor-agent-pattern-shelf__title' )
 		.innerText();

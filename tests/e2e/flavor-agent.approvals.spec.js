@@ -108,7 +108,9 @@ test.describe( 'external apply approvals', () => {
 			sidebar.getByRole( 'cell', { name: 'Not applied' } )
 		).toBeVisible();
 		await expect( sidebar.getByText( 'Target and provenance' ) ).toBeVisible();
-		await expect( sidebar.getByText( 'User #1' ) ).toBeVisible();
+		await expect(
+			sidebar.getByText( 'User #1', { exact: true } )
+		).toBeVisible();
 		await expect(
 			sidebar.getByText( 'e2e-req-1', { exact: true } ).first()
 		).toBeVisible();
