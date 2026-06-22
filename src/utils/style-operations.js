@@ -1006,10 +1006,51 @@ function getGlobalStylesExecutionContract( registry ) {
 	};
 }
 
+// Mirror of PHP StyleApplyExecutor::canonicalize_style_value(): map a resolved
+// CSS custom property (var(--wp--preset--color--x)) back to its theme.json
+// reference form (var:preset|color|x). WordPress core normalizes the stored user
+// Global Styles to the resolved form on save, so undo comparison must treat the
+// two serializations as equal. Non-preset strings pass through unchanged.
+//
+// Applied ONLY to undo comparisons — never to getComparableGlobalStylesConfig,
+// which feeds recommendation context signatures that must stay byte-identical to
+// the server's signature computation.
+function canonicalizeStyleValue( value ) {
+	if ( typeof value !== 'string' ) {
+		return value;
+	}
+
+	const match = value.match( /^var\(\s*--wp--(.+?)\s*\)$/ );
+
+	return match ? `var:${ match[ 1 ].replace( /--/g, '|' ) }` : value;
+}
+
+function canonicalizePresetRefsDeep( value ) {
+	if ( typeof value === 'string' ) {
+		return canonicalizeStyleValue( value );
+	}
+
+	if ( Array.isArray( value ) ) {
+		return value.map( canonicalizePresetRefsDeep );
+	}
+
+	if ( value && typeof value === 'object' ) {
+		const result = {};
+
+		for ( const key of Object.keys( value ) ) {
+			result[ key ] = canonicalizePresetRefsDeep( value[ key ] );
+		}
+
+		return result;
+	}
+
+	return value;
+}
+
 function configsMatch( left, right ) {
 	return deepStructuralEqual(
-		getComparableGlobalStylesConfig( left ),
-		getComparableGlobalStylesConfig( right )
+		canonicalizePresetRefsDeep( getComparableGlobalStylesConfig( left ) ),
+		canonicalizePresetRefsDeep( getComparableGlobalStylesConfig( right ) )
 	);
 }
 
@@ -1023,7 +1064,9 @@ function getStyleBookBranchPath( activity = {} ) {
 }
 
 function getComparableConfigBranchAtPath( config = {}, path = [] ) {
-	return normalizeComparableConfigBranch( readPath( config, path ) );
+	return canonicalizePresetRefsDeep(
+		normalizeComparableConfigBranch( readPath( config, path ) )
+	);
 }
 
 function validatePresetStyleOperation(

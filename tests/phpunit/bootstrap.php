@@ -1449,7 +1449,7 @@ namespace {
 					}
 				}
 
-				if (preg_match("/activity_id\s*=\s*'([^']*)'/i", $query, $matches)) {
+				if (preg_match("/\bactivity_id\b\s*=\s*'([^']*)'/i", $query, $matches)) {
 					$activity_id = stripslashes((string) ($matches[1] ?? ''));
 					$rows        = array_values(
 						array_filter(
@@ -1457,6 +1457,27 @@ namespace {
 							static fn(array $row): bool => (string) ($row['activity_id'] ?? '') === $activity_id
 						)
 					);
+				}
+
+				foreach (['attestation_id', 'reverts_attestation_id', 'related_activity_id'] as $column) {
+					if (preg_match("/\b{$column}\b\s*=\s*'([^']*)'/i", $query, $matches)) {
+						$value = stripslashes((string) ($matches[1] ?? ''));
+						$rows  = array_values(
+							array_filter(
+								$rows,
+								static fn(array $row): bool => (string) ($row[$column] ?? '') === $value
+							)
+						);
+					}
+
+					if (preg_match("/\b{$column}\b\s+IS\s+NULL/i", $query)) {
+						$rows = array_values(
+							array_filter(
+								$rows,
+								static fn(array $row): bool => null === ($row[$column] ?? null)
+							)
+						);
+					}
 				}
 
 				if (preg_match_all("/(?:\\w+\\.)?created_at\\s*(>=|<=|<|>)\\s*'([^']+)'/i", $query, $matches, PREG_SET_ORDER)) {

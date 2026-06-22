@@ -232,7 +232,17 @@ final class ApplyAbilities {
 			);
 		}
 
-		return [ 'entry' => ActivityRepository::maybe_expire_pending_apply( $entry ) ];
+		$response = [ 'entry' => ActivityRepository::maybe_expire_pending_apply( $entry ) ];
+		$att      = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
+
+		if ( null !== $att ) {
+			$response['attestation'] = [
+				'id'        => (string) $att['attestation_id'],
+				'verifyUrl' => \rest_url( 'flavor-agent/v1/attestations/' . $att['attestation_id'] ),
+			];
+		}
+
+		return $response;
 	}
 
 	public static function list_activity( mixed $input ): array|\WP_Error {
@@ -359,6 +369,38 @@ final class ApplyAbilities {
 			return $updated;
 		}
 
+		$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
+
+		if ( null !== $prior ) {
+			try {
+				\FlavorAgent\Attestation\AttestationService::record_revert(
+					(string) $prior['attestation_id'],
+					[
+						'surface'            => (string) ( $entry['surface'] ?? '' ),
+						'globalStylesId'     => (string) ( $entry['target']['globalStylesId'] ?? '' ),
+						'blockName'          => (string) ( $entry['target']['blockName'] ?? '' ),
+						'operations'         => [],
+						'before'             => $entry['after'] ?? [],
+						'after'              => $entry['before'] ?? [],
+						'freshnessSignature' => '',
+						'actorRole'          => self::actor_role_for_undo(),
+						'requestedAt'        => '',
+						'decidedAt'          => gmdate( 'c' ),
+						'relatedActivityId'  => $activity_id,
+					]
+				);
+			} catch ( \Throwable $e ) {
+				\FlavorAgent\Attestation\AttestationService::record_failure(
+					$e,
+					[
+						'operation'            => 'revert',
+						'activityId'           => $activity_id,
+						'revertsAttestationId' => (string) $prior['attestation_id'],
+					]
+				);
+			}
+		}
+
 		return [
 			'entry'  => $updated,
 			'result' => 'already_undone' === (string) ( $result['result'] ?? '' ) ? 'already_undone' : 'undone',
@@ -402,6 +444,19 @@ final class ApplyAbilities {
 			'The style recommendation context is stale. Re-run flavor-agent/recommend-style and request the apply again with fresh signatures.',
 			[ 'status' => 409 ]
 		);
+	}
+
+	private static function actor_role_for_undo(): string {
+		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+
+		if ( $user_id <= 0 || ! function_exists( 'get_userdata' ) ) {
+			return '';
+		}
+
+		$user  = get_userdata( $user_id );
+		$roles = is_object( $user ) && is_array( $user->roles ?? null ) ? $user->roles : [];
+
+		return isset( $roles[0] ) ? sanitize_key( (string) $roles[0] ) : '';
 	}
 
 	private static function persist_stale_blocked_outcome( string $surface, string $global_styles_id, string $block_name, string $source_signature, string $reason ): void {

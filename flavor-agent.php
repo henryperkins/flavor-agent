@@ -44,6 +44,7 @@ register_activation_hook(
 		wp_clear_scheduled_hook( 'flavor_agent_prewarm_docs' );
 		wp_clear_scheduled_hook( 'flavor_agent_warm_docs_context' );
 		FlavorAgent\Activity\Repository::install();
+		FlavorAgent\Attestation\Repository::install();
 		add_option( 'flavor_agent_cloudflare_workers_ai_api_token', '', '', false );
 		add_option( 'flavor_agent_qdrant_key', '', '', false );
 		FlavorAgent\Activity\Repository::ensure_prune_schedule();
@@ -67,6 +68,7 @@ register_deactivation_hook(
 );
 
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
+add_action( 'init', [ FlavorAgent\Attestation\Repository::class, 'maybe_install' ], 5 );
 add_action( 'init', [ FlavorAgent\Activity\RequestLoggingBridge::class, 'register' ], 5 );
 // When the WordPress AI plugin's "AI Request Logging" experiment is enabled the
 // bridge defaults to deferring to core logging. The "AI Activity Dual Logging"
@@ -95,6 +97,7 @@ if (
 }
 // Helper abilities and audit/sync routes are infra, not AI-feature-gated.
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
+add_action( 'rest_api_init', [ FlavorAgent\REST\AttestationController::class, 'register_routes' ] );
 add_action( 'admin_enqueue_scripts', [ FlavorAgent\Settings::class, 'maybe_enqueue_admin_assets' ] );
 add_action( 'admin_menu', [ FlavorAgent\Admin\ActivityPage::class, 'add_menu' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );

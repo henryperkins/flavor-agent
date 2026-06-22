@@ -282,6 +282,35 @@ final class ApplyAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_get_activity_includes_attestation_reference_when_available(): void {
+		$result = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $result );
+
+		\FlavorAgent\Attestation\Repository::install();
+		\FlavorAgent\Attestation\Repository::insert(
+			[
+				'attestation_id'      => 'att_activity',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:' . self::GLOBAL_STYLES_ID,
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => str_repeat( 'a', 64 ),
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'sig',
+				'key_id'              => 'kid',
+				'related_activity_id' => (string) $result['activityId'],
+			]
+		);
+
+		$fetched = ApplyAbilities::get_activity( [ 'activityId' => (string) $result['activityId'] ] );
+
+		$this->assertIsArray( $fetched );
+		$this->assertSame( 'att_activity', $fetched['attestation']['id'] );
+		$this->assertSame(
+			'https://example.test/wp-json/flavor-agent/v1/attestations/att_activity',
+			$fetched['attestation']['verifyUrl']
+		);
+	}
+
 	public function test_get_activity_returns_not_found_for_unknown_ids(): void {
 		$result = ApplyAbilities::get_activity( [ 'activityId' => 'missing' ] );
 
@@ -487,11 +516,27 @@ final class ApplyAbilitiesTest extends TestCase {
 				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
 			]
 		);
+		$this->configure_attestation_key();
+		\FlavorAgent\Attestation\Repository::install();
+		\FlavorAgent\Attestation\Repository::insert(
+			[
+				'attestation_id'      => 'att_prior_apply',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:' . self::GLOBAL_STYLES_ID,
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => str_repeat( 'a', 64 ),
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'sig',
+				'key_id'              => 'kid',
+				'related_activity_id' => (string) $pending['activityId'],
+			]
+		);
 
 		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $pending['activityId'] ] );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'undone', $result['result'] );
+		$this->assertIsArray( \FlavorAgent\Attestation\Repository::find_by_reverts( 'att_prior_apply' ) );
 	}
 
 	public function test_decision_approve_executes_and_transitions_to_available(): void {
@@ -521,6 +566,63 @@ final class ApplyAbilitiesTest extends TestCase {
 			true
 		);
 		$this->assertSame( 'var:preset|color|accent', $written['styles']['color']['text'] );
+	}
+
+	public function test_decision_approve_surfaces_attestation_recording_failures(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+
+		$failure_filter  = static function (): string {
+			throw new \RuntimeException( 'attestation signing unavailable' );
+		};
+		$captured_event  = null;
+		$captured_error  = null;
+		$log_file        = \tempnam( \sys_get_temp_dir(), 'flavor-agent-attestation-log-' );
+		$previous_log    = \ini_get( 'error_log' );
+		$previous_errors = \ini_get( 'log_errors' );
+
+		\add_filter( 'flavor_agent_attest_private_key', $failure_filter );
+		\add_action(
+			'flavor_agent_attestation_record_failed',
+			static function ( array $event, \Throwable $error ) use ( &$captured_event, &$captured_error ): void {
+				$captured_event = $event;
+				$captured_error = $error;
+			},
+			10,
+			2
+		);
+		\ini_set( 'log_errors', '1' );
+		\ini_set( 'error_log', $log_file );
+
+		try {
+			$entry = \FlavorAgent\Apply\PendingApplyDecision::decide(
+				(string) $pending['activityId'],
+				'approve'
+			);
+		} finally {
+			\remove_filter( 'flavor_agent_attest_private_key', $failure_filter );
+			\ini_set( 'error_log', false === $previous_log ? '' : (string) $previous_log );
+			\ini_set( 'log_errors', false === $previous_errors ? '' : (string) $previous_errors );
+		}
+
+		$contents = \is_string( $log_file ) && \file_exists( $log_file )
+			? (string) \file_get_contents( $log_file )
+			: '';
+
+		if ( \is_string( $log_file ) && \file_exists( $log_file ) ) {
+			\unlink( $log_file );
+		}
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( 'available', $entry['apply']['status'] );
+		$this->assertIsArray( $captured_event );
+		$this->assertSame( 'apply', $captured_event['operation'] );
+		$this->assertSame( (string) $pending['activityId'], $captured_event['activityId'] );
+		$this->assertSame( \RuntimeException::class, $captured_event['exceptionClass'] );
+		$this->assertSame( 'attestation signing unavailable', $captured_event['message'] );
+		$this->assertInstanceOf( \RuntimeException::class, $captured_error );
+		$this->assertStringContainsString( '[flavor-agent] Attestation recording failed during apply', $contents );
+		$this->assertStringContainsString( 'attestation signing unavailable', $contents );
 	}
 
 	public function test_decision_approve_fails_closed_when_the_entity_drifted_after_the_request(): void {
@@ -671,6 +773,11 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
 		$this->assertTrue( $ability->permission_callback( $input ) );
+	}
+
+	private function configure_attestation_key(): void {
+		$sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $sk );
 	}
 
 	public function test_undo_activity_ability_fails_closed_for_missing_rows(): void {

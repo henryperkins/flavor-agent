@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Apply;
 
 use FlavorAgent\Abilities\StyleAbilities;
+use FlavorAgent\Attestation\Canonicalizer;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\StyleContrastValidator;
 use FlavorAgent\LLM\StylePrompt;
@@ -78,17 +79,14 @@ final class StyleApplyExecutor {
 	 * @return array{settings: mixed, styles: mixed}
 	 */
 	public static function comparable_config( array $config ): array {
-		return [
-			'settings' => self::sort_keys_deep( is_array( $config['settings'] ?? null ) ? $config['settings'] : [] ),
-			'styles'   => self::sort_keys_deep( is_array( $config['styles'] ?? null ) ? $config['styles'] : [] ),
-		];
+		return Canonicalizer::comparable_config( $config );
 	}
 
 	/**
 	 * @param array<string, mixed> $config
 	 */
 	public static function comparable_config_hash( array $config ): string {
-		return hash( 'sha256', (string) wp_json_encode( self::comparable_config( $config ) ) );
+		return Canonicalizer::digest( $config );
 	}
 
 	/**
@@ -382,9 +380,9 @@ final class StyleApplyExecutor {
 		$live_styles   = is_array( $live['styles'] ?? null ) ? $live['styles'] : [];
 		$before_styles = is_array( $before_config['styles'] ?? null ) ? $before_config['styles'] : [];
 		$after_styles  = is_array( $after_config['styles'] ?? null ) ? $after_config['styles'] : [];
-		$live_branch   = self::sort_keys_deep( self::read_path( $live_styles, $branch_path ) );
-		$before_branch = self::sort_keys_deep( self::read_path( $before_styles, $branch_path ) );
-		$after_branch  = self::sort_keys_deep( self::read_path( $after_styles, $branch_path ) );
+		$live_branch   = Canonicalizer::canonicalize_values_deep( Canonicalizer::sort_keys_deep( self::read_path( $live_styles, $branch_path ) ) );
+		$before_branch = Canonicalizer::canonicalize_values_deep( Canonicalizer::sort_keys_deep( self::read_path( $before_styles, $branch_path ) ) );
+		$after_branch  = Canonicalizer::canonicalize_values_deep( Canonicalizer::sort_keys_deep( self::read_path( $after_styles, $branch_path ) ) );
 
 		if ( $live_branch === $before_branch ) {
 			return [ 'result' => 'already_undone' ];
@@ -548,22 +546,7 @@ final class StyleApplyExecutor {
 	 * @return array<string, mixed>
 	 */
 	private static function trim_config_to_block_branch( array $config, string $block_name ): array {
-		$branch = self::read_path(
-			is_array( $config['styles'] ?? null ) ? $config['styles'] : [],
-			[ 'blocks', $block_name ]
-		);
-
-		if ( null === $branch ) {
-			return [];
-		}
-
-		return [
-			'styles' => [
-				'blocks' => [
-					$block_name => $branch,
-				],
-			],
-		];
+		return Canonicalizer::block_branch( $config, $block_name );
 	}
 
 	/**
@@ -625,30 +608,6 @@ final class StyleApplyExecutor {
 		}
 
 		return $value;
-	}
-
-	private static function sort_keys_deep( mixed $value ): mixed {
-		if ( ! is_array( $value ) ) {
-			return $value;
-		}
-
-		if ( [] === $value ) {
-			return [];
-		}
-
-		if ( self::is_list( $value ) ) {
-			return array_map( [ self::class, 'sort_keys_deep' ], $value );
-		}
-
-		ksort( $value );
-
-		$sorted = [];
-
-		foreach ( $value as $key => $entry ) {
-			$sorted[ $key ] = self::sort_keys_deep( $entry );
-		}
-
-		return $sorted;
 	}
 
 	/**

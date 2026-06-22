@@ -17,3 +17,6 @@ tmp/
 .claude/*.lock
 .claude/agent-memory/
 .playwright-mcp/
+ExposeGovernAttest.pptx
+ImladrisDesignSystem.zip
+.mcp.json

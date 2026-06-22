@@ -144,13 +144,13 @@ The layer is built on the WordPress 7.0 AI stack: the WordPress AI plugin (featu
 
 ## Upstream Governance Context
 
-The WordPress AI roadmap is moving toward shared governance primitives in Core and the canonical AI plugin: global provider discovery, AI Request Logs, Connector Approvals, ability exposure controls, model/provider routing, usage safeguards, and a proposed unified AI Management layer.
+The WordPress AI roadmap is moving toward shared governance primitives in Core and the canonical AI plugin: global provider discovery, AI Request Logs, Connector Approvals, ability exposure controls, model/provider routing, usage safeguards, and a proposed unified AI Management layer. The public `Automattic/agents-api` package adds a concrete agent-runtime substrate to watch above AI Client and Abilities API: agent registration, conversation loops, tool mediation, principals, memory/transcripts/sessions, channels, workflows, and pending-action envelopes.
 
 Flavor Agent should treat those as the **outer policy plane**. When those upstream contracts stabilize, Flavor Agent should plug into them for site-wide permission, metering, routing, request-log, and ability-exposure decisions rather than duplicating them.
 
 This document owns the **inner mutation-governance contract**: for changes Flavor Agent mediates, the plugin still has to bound the operation, gather the right context, expose a review gate when the operation is structural or theme-level, attribute the request and apply, verify freshness before execution, and block unsafe undo after drift. Core can decide whether a plugin may use AI; Flavor Agent still decides whether a proposed block/template/style mutation is safe to apply to the current document.
 
-That split is intentional product positioning. The upstream Site Agent / AI Workspace direction validates the external-agent path, but it does not make approval an agent capability. AI can propose actions through abilities and MCP; WordPress holds the human approval decision in `Settings > AI Activity` for Flavor Agent-owned external applies.
+That split is intentional product positioning. The upstream Site Agent / AI Workspace direction, now with Agents API as a named substrate candidate, validates the external-agent path, but it does not make approval an agent capability. AI can propose actions through abilities and MCP; WordPress holds the human approval decision in `Settings > AI Activity` for Flavor Agent-owned external applies. If Flavor Agent later integrates with Agents API, it should feature-detect `wp_register_agent()` / `wp_agents_api_init` and keep product UX plus mutation apply/approve/undo policy local.
 
 ## Update Triggers
 
