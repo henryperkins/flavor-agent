@@ -29,6 +29,10 @@ if ( is_object( $wpdb ) && isset( $wpdb->prefix ) ) {
 	$flavor_agent_table_name = $wpdb->prefix . 'flavor_agent_activity';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Plugin-owned activity table is intentionally removed during uninstall.
 	$wpdb->query( "DROP TABLE IF EXISTS {$flavor_agent_table_name}" );
+
+	$flavor_agent_attestation_table = $wpdb->prefix . 'flavor_agent_attestations';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Plugin-owned attestation table is intentionally removed during uninstall.
+	$wpdb->query( "DROP TABLE IF EXISTS {$flavor_agent_attestation_table}" );
 }
 
 foreach ( \FlavorAgent\UninstallOptions::names() as $flavor_agent_option_name ) {
