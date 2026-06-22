@@ -516,11 +516,27 @@ final class ApplyAbilitiesTest extends TestCase {
 				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
 			]
 		);
+		$this->configure_attestation_key();
+		\FlavorAgent\Attestation\Repository::install();
+		\FlavorAgent\Attestation\Repository::insert(
+			[
+				'attestation_id'      => 'att_prior_apply',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:' . self::GLOBAL_STYLES_ID,
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => str_repeat( 'a', 64 ),
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'sig',
+				'key_id'              => 'kid',
+				'related_activity_id' => (string) $pending['activityId'],
+			]
+		);
 
 		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $pending['activityId'] ] );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'undone', $result['result'] );
+		$this->assertIsArray( \FlavorAgent\Attestation\Repository::find_by_reverts( 'att_prior_apply' ) );
 	}
 
 	public function test_decision_approve_executes_and_transitions_to_available(): void {
@@ -700,6 +716,11 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
 		$this->assertTrue( $ability->permission_callback( $input ) );
+	}
+
+	private function configure_attestation_key(): void {
+		$sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $sk );
 	}
 
 	public function test_undo_activity_ability_fails_closed_for_missing_rows(): void {

@@ -55,6 +55,30 @@ final class AttestationServiceTest extends TestCase {
 		);
 	}
 
+	public function test_revert_is_chained_to_prior_and_findable(): void {
+		$this->configure_key();
+		Repository::install();
+
+		$apply_id = AttestationService::record_apply( $this->apply_context() );
+		$this->assertNotNull( $apply_id );
+
+		$revert_context               = $this->apply_context();
+		$revert_context['before']     = $revert_context['after'];
+		$revert_context['after']      = [
+			'userConfig' => [
+				'settings' => [],
+				'styles'   => [],
+			],
+		];
+		$revert_context['decidedAt']  = '2026-06-22T00:02:00+00:00';
+		$revert_context['operations'] = [];
+
+		$revert_id = AttestationService::record_revert( $apply_id, $revert_context );
+
+		$this->assertNotNull( $revert_id );
+		$this->assertSame( $revert_id, Repository::find_by_reverts( $apply_id )['attestation_id'] );
+	}
+
 	/**
 	 * @return array<string, mixed>
 	 */

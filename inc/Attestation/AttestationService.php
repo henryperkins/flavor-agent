@@ -84,5 +84,15 @@ final class AttestationService {
 		return $ok ? $attestation_id : null;
 	}
 
+	/**
+	 * @param array<string, mixed> $ctx
+	 */
+	public static function record_revert( string $prior_attestation_id, array $ctx ): ?string {
+		$ctx['revertsAttestationId'] = $prior_attestation_id;
+		$ctx['decision']             = 'revert';
+
+		return self::record_apply( $ctx );
+	}
+
 	private function __construct() {}
 }
