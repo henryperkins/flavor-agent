@@ -317,15 +317,20 @@ The `keyId` + statement shape make all of these purely additive:
    statement for image/text outputs. This is Approach B, reached without being blocked on it.
 3. **Broader surfaces** — extend beyond the style-apply loop only where a real artifact digest
    and an approval moment both exist.
+4. **Public rendered-CSS digest** — add a deterministic public CSS projection as a
+   non-authoritative cross-check, then optionally sign both the config and CSS digests so
+   verifiers can choose their trust level. Removes the present-state server-trust of §6.2 once the
+   projection is stable.
 
 ## 13. Talk-facing framing (maps to slide 7)
 
 > FA's Ring III: at approval, the governed change is **signed** and bound to a **digest of the
 > state it produced**, in a **durable** record anyone can fetch and check against the live site —
 > *signed post text* (the signed statement), *durable credentials* (retention-independent,
-> transparency-log-ready), *C2PA detection* (the additive emission layer). Honestly: this is
-> tamper-evident **site-key self-attestation**, not third-party identity — and naming that is part
-> of the model, not a footnote to it.
+> transparency-log-ready), *C2PA detection* (the additive emission layer). The signed past
+> verifies independently; the live-present check is site-served and cross-checkable against
+> rendered CSS. Honestly: this is tamper-evident **site-key self-attestation**, not third-party
+> identity — and naming that is part of the model, not a footnote to it.
 
 ## 14. Decisions on record
 
@@ -349,6 +354,9 @@ The `keyId` + statement shape make all of these purely additive:
     decoded statement (§6.1). — *review*
 12. Public keys live in a **durable registry** (§7), not just the env key; retired keys are
     kept. — *review*
+13. Present-state verification: **subject-state route for v1**; public rendered-CSS digest and
+    dual-signing are §12 forward levels (CSS canonicalization is too fragile to be
+    foundational). — *user*
 
 ## 15. Out of scope (v1)
 
