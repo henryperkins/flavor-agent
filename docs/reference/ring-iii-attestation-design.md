@@ -1,6 +1,6 @@
 # Ring III Attestation — design
 
-**Status:** design / future-work (not yet implemented)
+**Status:** v1 implemented (external Global Styles / Style Book apply loop)
 **Date:** 2026-06-22
 **Owner:** Henry Perkins
 **Scope of v1:** the external Global Styles / Style Book apply loop only
