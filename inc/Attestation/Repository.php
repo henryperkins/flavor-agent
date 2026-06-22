@@ -69,7 +69,11 @@ final class Repository {
 			\dbDelta( $sql );
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.SchemaChange,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Plugin-owned schema creation for migration and activation paths.
-			$wpdb->query( $sql );
+			$result = $wpdb->query( $sql );
+
+			if ( false === $result ) {
+				return;
+			}
 		}
 
 		\update_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
@@ -161,8 +165,9 @@ final class Repository {
 		}
 
 		$table = self::table_name();
+		$like  = method_exists( $wpdb, 'esc_like' ) ? $wpdb->esc_like( $table ) : $table;
 
-		return (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
+		return (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ) === $table;
 	}
 
 	private function __construct() {}

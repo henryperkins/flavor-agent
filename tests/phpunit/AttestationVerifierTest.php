@@ -89,6 +89,54 @@ final class AttestationVerifierTest extends TestCase {
 		$this->assertNotContains( 'live_changed_since_attestation', $outcomes );
 	}
 
+	public function test_malformed_statement_with_scalar_nesting_is_handled_safely(): void {
+		$signed = Signer::sign( '{}' );
+		$this->assertNotNull( $signed );
+
+		// Intermediate levels are scalars instead of arrays; access must not fatal.
+		$bytes = '{"predicate":"scalar","subject":"scalar"}';
+
+		$outcomes = Verifier::evaluate(
+			$bytes,
+			$signed['signature'],
+			KeyManager::jwks(),
+			Canonicalizer::canonical_bytes(
+				[
+					'settings' => [],
+					'styles'   => [],
+				]
+			),
+			null
+		);
+
+		$this->assertContains( 'record_tampered', $outcomes );
+		$this->assertContains( 'live_changed_since_attestation', $outcomes );
+	}
+
+	public function test_malformed_jwks_entries_are_skipped_safely(): void {
+		$config = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => '#111111' ] ],
+		];
+		$bytes  = $this->statement_bytes( 'att_1', Canonicalizer::digest( $config ) );
+		$signed = Signer::sign( $bytes );
+		$this->assertNotNull( $signed );
+
+		$jwks = KeyManager::jwks();
+		array_unshift( $jwks['keys'], 'not-an-array' );
+
+		$outcomes = Verifier::evaluate(
+			$bytes,
+			$signed['signature'],
+			$jwks,
+			Canonicalizer::canonical_bytes( $config ),
+			null
+		);
+
+		$this->assertContains( 'signature_valid', $outcomes );
+		$this->assertContains( 'live_matches_subject', $outcomes );
+	}
+
 	private function statement_bytes( string $attestation_id, string $after_digest ): string {
 		return StatementBuilder::build(
 			[

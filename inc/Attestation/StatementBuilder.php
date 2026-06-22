@@ -70,7 +70,13 @@ final class StatementBuilder {
 	public static function canonical_json( array $data ): string {
 		self::ksort_deep( $data );
 
-		return (string) wp_json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$json = wp_json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
+		if ( false === $json ) {
+			throw new \RuntimeException( 'Failed to encode canonical attestation JSON.' );
+		}
+
+		return $json;
 	}
 
 	/**

@@ -22,13 +22,18 @@ final class Verifier {
 	): array {
 		$outcomes   = [];
 		$statement  = json_decode( $statement_bytes, true );
-		$key_id     = is_array( $statement ) ? (string) ( $statement['predicate']['site']['keyId'] ?? '' ) : '';
+		$statement  = is_array( $statement ) ? $statement : [];
+		$predicate  = is_array( $statement['predicate'] ?? null ) ? $statement['predicate'] : [];
+		$site       = is_array( $predicate['site'] ?? null ) ? $predicate['site'] : [];
+		$key_id     = (string) ( $site['keyId'] ?? '' );
 		$public     = self::public_key_for( $jwks, $key_id );
 		$valid      = null !== $public && Signer::verify( $statement_bytes, $signature_raw, $public );
 		$outcomes[] = $valid ? 'signature_valid' : 'record_tampered';
 
-		if ( null !== $live_subject_bytes && is_array( $statement ) ) {
-			$subject_digest = (string) ( $statement['subject'][0]['digest']['sha256'] ?? '' );
+		if ( null !== $live_subject_bytes && [] !== $statement ) {
+			$subject_item   = is_array( $statement['subject'][0] ?? null ) ? $statement['subject'][0] : [];
+			$digest_map     = is_array( $subject_item['digest'] ?? null ) ? $subject_item['digest'] : [];
+			$subject_digest = (string) ( $digest_map['sha256'] ?? '' );
 
 			if ( hash( 'sha256', $live_subject_bytes ) === $subject_digest ) {
 				$outcomes[] = 'live_matches_subject';
@@ -47,6 +52,10 @@ final class Verifier {
 	 */
 	private static function public_key_for( array $jwks, string $key_id ): ?string {
 		foreach ( $jwks['keys'] ?? [] as $jwk ) {
+			if ( ! is_array( $jwk ) ) {
+				continue;
+			}
+
 			if (
 				( $jwk['kid'] ?? '' ) === $key_id
 				&& 'OKP' === ( $jwk['kty'] ?? '' )

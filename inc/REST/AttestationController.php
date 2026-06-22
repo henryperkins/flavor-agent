@@ -96,9 +96,10 @@ final class AttestationController {
 			return new \WP_REST_Response( [ 'error' => 'subject_unavailable' ], 409 );
 		}
 
+		$config = is_array( $resolved['config'] ?? null ) ? $resolved['config'] : [];
 		$target = ( 'style-book-branch' === $scope && '' !== $block_name )
-			? Canonicalizer::block_branch( $resolved['config'], $block_name )
-			: $resolved['config'];
+			? Canonicalizer::block_branch( $config, $block_name )
+			: $config;
 
 		return new \WP_REST_Response(
 			[

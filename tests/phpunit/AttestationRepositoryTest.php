@@ -69,4 +69,38 @@ final class AttestationRepositoryTest extends TestCase {
 		$this->assertFalse( method_exists( Repository::class, 'update' ) );
 		$this->assertFalse( method_exists( Repository::class, 'delete' ) );
 	}
+
+	public function test_find_by_related_activity_excludes_revert_rows(): void {
+		Repository::install();
+
+		Repository::insert(
+			[
+				'attestation_id'      => 'att_apply',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:81',
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => 'a',
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'sig',
+				'key_id'              => 'k1',
+				'related_activity_id' => 'act_9',
+			]
+		);
+		Repository::insert(
+			[
+				'attestation_id'         => 'att_revert',
+				'surface'                => 'global-styles',
+				'subject_name'           => 'wp_global_styles:81',
+				'subject_scope'          => 'global-styles',
+				'after_digest'           => 'b',
+				'statement_bytes'        => '{}',
+				'signature_b64'          => 'sig',
+				'key_id'                 => 'k1',
+				'related_activity_id'    => 'act_9',
+				'reverts_attestation_id' => 'att_apply',
+			]
+		);
+
+		$this->assertSame( 'att_apply', Repository::find_by_related_activity( 'act_9' )['attestation_id'] );
+	}
 }

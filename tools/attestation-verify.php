@@ -13,9 +13,36 @@ if ( ! is_string( $base ) || '' === $base || ! is_string( $id ) || '' === $id ) 
 $base = rtrim( $base, '/' );
 
 $get = static function ( string $url ): array {
-	$raw = file_get_contents( $url );
+	$context = stream_context_create(
+		[
+			'http' => [
+				'timeout'       => 15,
+				'ignore_errors' => true,
+			],
+		]
+	);
+	$raw     = @file_get_contents( $url, false, $context );
 
-	return false === $raw ? [] : (array) json_decode( $raw, true );
+	if ( false === $raw ) {
+		fwrite( STDERR, "error: request_failed: {$url}\n" );
+		exit( 3 );
+	}
+
+	$status_line = $http_response_header[0] ?? '';
+
+	if ( '' !== $status_line && ! preg_match( '#\s2\d\d\s#', $status_line ) ) {
+		fwrite( STDERR, "error: http_error: {$status_line}\n" );
+		exit( 3 );
+	}
+
+	$data = json_decode( $raw, true );
+
+	if ( ! is_array( $data ) ) {
+		fwrite( STDERR, "error: invalid_json: {$url}\n" );
+		exit( 3 );
+	}
+
+	return $data;
 };
 
 $b64url_decode = static function ( string $value ): string {
