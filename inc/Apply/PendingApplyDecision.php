@@ -124,6 +124,26 @@ final class PendingApplyDecision {
 			);
 		}
 
+		try {
+			\FlavorAgent\Attestation\AttestationService::record_apply(
+				[
+					'surface'            => $surface,
+					'globalStylesId'     => $global_styles_id,
+					'blockName'          => $block_name,
+					'operations'         => is_array( $result['after']['operations'] ?? null ) ? $result['after']['operations'] : [],
+					'before'             => $result['before'],
+					'after'              => $result['after'],
+					'freshnessSignature' => $baseline,
+					'actorRole'          => self::actor_role( $decided_by ),
+					'requestedAt'        => (string) ( $apply['requestedAt'] ?? '' ),
+					'decidedAt'          => $decided_at,
+					'relatedActivityId'  => $activity_id,
+				]
+			);
+		} catch ( \Throwable $e ) {
+			unset( $e ); // Attestation is best-effort; the governed apply is the contract.
+		}
+
 		return ActivityRepository::transition_external_apply(
 			$activity_id,
 			[
@@ -137,5 +157,16 @@ final class PendingApplyDecision {
 				'target'       => $result['target'],
 			]
 		);
+	}
+
+	private static function actor_role( int $user_id ): string {
+		if ( $user_id <= 0 || ! function_exists( 'get_userdata' ) ) {
+			return '';
+		}
+
+		$user = get_userdata( $user_id );
+		$roles = is_object( $user ) && is_array( $user->roles ?? null ) ? $user->roles : [];
+
+		return isset( $roles[0] ) ? sanitize_key( (string) $roles[0] ) : '';
 	}
 }

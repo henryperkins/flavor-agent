@@ -282,6 +282,35 @@ final class ApplyAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_get_activity_includes_attestation_reference_when_available(): void {
+		$result = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $result );
+
+		\FlavorAgent\Attestation\Repository::install();
+		\FlavorAgent\Attestation\Repository::insert(
+			[
+				'attestation_id'      => 'att_activity',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:' . self::GLOBAL_STYLES_ID,
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => str_repeat( 'a', 64 ),
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'sig',
+				'key_id'              => 'kid',
+				'related_activity_id' => (string) $result['activityId'],
+			]
+		);
+
+		$fetched = ApplyAbilities::get_activity( [ 'activityId' => (string) $result['activityId'] ] );
+
+		$this->assertIsArray( $fetched );
+		$this->assertSame( 'att_activity', $fetched['attestation']['id'] );
+		$this->assertSame(
+			'https://example.test/wp-json/flavor-agent/v1/attestations/att_activity',
+			$fetched['attestation']['verifyUrl']
+		);
+	}
+
 	public function test_get_activity_returns_not_found_for_unknown_ids(): void {
 		$result = ApplyAbilities::get_activity( [ 'activityId' => 'missing' ] );
 

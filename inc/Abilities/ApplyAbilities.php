@@ -232,7 +232,17 @@ final class ApplyAbilities {
 			);
 		}
 
-		return [ 'entry' => ActivityRepository::maybe_expire_pending_apply( $entry ) ];
+		$response = [ 'entry' => ActivityRepository::maybe_expire_pending_apply( $entry ) ];
+		$att      = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
+
+		if ( null !== $att ) {
+			$response['attestation'] = [
+				'id'        => (string) $att['attestation_id'],
+				'verifyUrl' => \rest_url( 'flavor-agent/v1/attestations/' . $att['attestation_id'] ),
+			];
+		}
+
+		return $response;
 	}
 
 	public static function list_activity( mixed $input ): array|\WP_Error {
