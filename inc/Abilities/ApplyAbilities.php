@@ -232,14 +232,11 @@ final class ApplyAbilities {
 			);
 		}
 
-		$response = [ 'entry' => ActivityRepository::maybe_expire_pending_apply( $entry ) ];
-		$att      = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
+		$entry    = ActivityRepository::maybe_expire_pending_apply( $entry );
+		$response = [ 'entry' => $entry ];
 
-		if ( null !== $att ) {
-			$response['attestation'] = [
-				'id'        => (string) $att['attestation_id'],
-				'verifyUrl' => \rest_url( 'flavor-agent/v1/attestations/' . $att['attestation_id'] ),
-			];
+		if ( is_array( $entry['attestation'] ?? null ) ) {
+			$response['attestation'] = $entry['attestation'];
 		}
 
 		return $response;

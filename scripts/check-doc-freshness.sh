@@ -267,6 +267,46 @@ check_present_in_each_fixed \
 	"${repo_root}/docs/FEATURE_SURFACE_MATRIX.md" \
 	"${repo_root}/README.md"
 
+check_absent \
+	'agent execution runbooks should not reference the removed demo script filename' \
+	'flavor-agent-demo-script.md' \
+	"${repo_root}/docs/agentrunbook.md" \
+	"${repo_root}/docs/reference/agentexecutionrunbook.md"
+
+check_absent \
+	'agent execution runbooks should not reference the removed demo evidence filename' \
+	'flavor-agent-demo-evidence-agent-side.md' \
+	"${repo_root}/docs/agentrunbook.md" \
+	"${repo_root}/docs/reference/agentexecutionrunbook.md"
+
+check_present_in_each_fixed \
+	'agent execution runbooks should point at the portfolio companion doc' \
+	'docs/flavoragentportfoliopackage.md' \
+	"${repo_root}/docs/agentrunbook.md" \
+	"${repo_root}/docs/reference/agentexecutionrunbook.md"
+
+check_present_in_each_fixed \
+	'agent execution runbooks should point at the attestation design companion doc' \
+	'docs/reference/ring-iii-attestation-design.md' \
+	"${repo_root}/docs/agentrunbook.md" \
+	"${repo_root}/docs/reference/agentexecutionrunbook.md"
+
+check_present_in_each_fixed \
+	'agent execution runbooks should point at the undo drift bug companion doc' \
+	'docs/reference/bug-undo-drift-serialization-2026-06-21.md' \
+	"${repo_root}/docs/agentrunbook.md" \
+	"${repo_root}/docs/reference/agentexecutionrunbook.md"
+
+check_absent \
+	'portfolio package should not preserve the old attestation test count' \
+	'29 tests' \
+	"${repo_root}/docs/flavoragentportfoliopackage.md"
+
+check_absent \
+	'portfolio package should not preserve the old attestation assertion count' \
+	'82 assertions' \
+	"${repo_root}/docs/flavoragentportfoliopackage.md"
+
 # Parity guards: shared facts that must stay byte-identical across contributor
 # runbooks (CLAUDE.md for Claude Code, copilot-instructions.md for Copilot).
 # If one file is updated but the other isn't, the drifted copy no longer

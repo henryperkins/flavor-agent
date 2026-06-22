@@ -134,6 +134,12 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<string, int> */
 		public static array $do_action_counts = [];
 
+		/** @var array<string, mixed> */
+		public static array $wp_cli_commands = [];
+
+		/** @var array<int, array{type: string, message: string}> */
+		public static array $wp_cli_messages = [];
+
 		public static int $db_insert_id = 0;
 
 		public static int $current_user_id = 0;
@@ -371,6 +377,8 @@ namespace FlavorAgent\Tests\Support {
 			self::$db_queries                  = [];
 			self::$filters                     = [];
 			self::$do_action_counts            = [];
+			self::$wp_cli_commands             = [];
+			self::$wp_cli_messages             = [];
 			self::$db_insert_id                = 0;
 			self::$current_user_id             = 0;
 			self::$current_screen              = null;
@@ -1074,6 +1082,50 @@ namespace {
 		}
 	}
 
+	if (! class_exists('WP_CLI')) {
+		class WP_CLI
+		{
+
+			public static function add_command(string $name, $callable, array $args = []): bool
+			{
+				WordPressTestState::$wp_cli_commands[$name] = [
+					'callable' => $callable,
+					'args'     => $args,
+				];
+
+				return true;
+			}
+
+			public static function line(string $message = ''): void
+			{
+				WordPressTestState::$wp_cli_messages[] = [
+					'type'    => 'line',
+					'message' => $message,
+				];
+			}
+
+			public static function success(string $message): void
+			{
+				WordPressTestState::$wp_cli_messages[] = [
+					'type'    => 'success',
+					'message' => $message,
+				];
+			}
+
+			public static function error(string $message, bool $exit = true): void
+			{
+				WordPressTestState::$wp_cli_messages[] = [
+					'type'    => 'error',
+					'message' => $message,
+				];
+
+				if ($exit) {
+					throw new \RuntimeException($message);
+				}
+			}
+		}
+	}
+
 	if (! defined('OBJECT')) {
 		define('OBJECT', 'OBJECT');
 	}
@@ -1460,6 +1512,24 @@ namespace {
 				}
 
 				foreach (['attestation_id', 'reverts_attestation_id', 'related_activity_id'] as $column) {
+					if (preg_match("/\b{$column}\b\s+IN\s*\(([^)]*)\)/i", $query, $matches)) {
+						$values = [];
+
+						if (preg_match_all("/'([^']*)'/", (string) ($matches[1] ?? ''), $value_matches)) {
+							$values = array_map(
+								static fn(string $value): string => stripslashes($value),
+								$value_matches[1] ?? []
+							);
+						}
+
+						$rows = array_values(
+							array_filter(
+								$rows,
+								static fn(array $row): bool => in_array((string) ($row[$column] ?? ''), $values, true)
+							)
+						);
+					}
+
 					if (preg_match("/\b{$column}\b\s*=\s*'([^']*)'/i", $query, $matches)) {
 						$value = stripslashes((string) ($matches[1] ?? ''));
 						$rows  = array_values(
@@ -1536,7 +1606,7 @@ namespace {
 					);
 				}
 
-				if (preg_match("/activity_id\s+IN\s*\\(([^\\)]+)\\)/i", $query, $matches)) {
+				if (preg_match("/\bactivity_id\b\s+IN\s*\\(([^\\)]+)\\)/i", $query, $matches)) {
 					$activity_ids = array_values(
 						array_filter(
 							array_map(

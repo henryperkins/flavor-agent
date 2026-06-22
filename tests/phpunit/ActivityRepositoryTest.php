@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository;
+use FlavorAgent\Attestation\Repository as AttestationRepository;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -413,6 +414,60 @@ final class ActivityRepositoryTest extends TestCase {
 
 		$this->assertNotEmpty( $bounded_page_queries );
 		$this->assertSame( [], $unbounded_candidate_queries );
+	}
+
+	public function test_query_admin_with_reports_batches_attestation_projection_for_page_entries_only(): void {
+		Repository::install();
+		AttestationRepository::install();
+
+		for ( $index = 1; $index <= 5; ++$index ) {
+			Repository::create(
+				$this->build_block_entry(
+					'activity-' . $index,
+					sprintf( '2026-03-24T10:00:%02dZ', $index )
+				)
+			);
+		}
+
+		AttestationRepository::insert(
+			[
+				'attestation_id'      => 'att_admin_page',
+				'surface'             => 'block',
+				'subject_name'        => 'post:42',
+				'subject_scope'       => 'block',
+				'after_digest'        => str_repeat( 'a', 64 ),
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'sig',
+				'key_id'              => 'kid',
+				'related_activity_id' => 'activity-5',
+			]
+		);
+
+		WordPressTestState::$db_queries = [];
+
+		$result = Repository::query_admin(
+			[
+				'includeReports' => true,
+				'perPage'        => 2,
+				'reportRowLimit' => 5,
+			]
+		);
+
+		$this->assertSame( 'att_admin_page', $result['entries'][0]['attestation']['id'] ?? null );
+		$this->assertArrayHasKey( 'learningReport', $result );
+
+		$attestation_queries = array_values(
+			array_filter(
+				WordPressTestState::$db_queries,
+				static fn ( string $query ): bool => str_contains( $query, AttestationRepository::table_name() )
+			)
+		);
+
+		$this->assertSame(
+			2,
+			count( $attestation_queries ),
+			implode( "\n", $attestation_queries )
+		);
 	}
 
 	public function test_query_admin_summary_counts_the_full_filtered_result_set(): void {

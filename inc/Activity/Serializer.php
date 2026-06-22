@@ -260,6 +260,66 @@ final class Serializer {
 		return $hydrated;
 	}
 
+	/**
+	 * @param array<string, mixed> $row
+	 * @param array<string, mixed>|null $attestation_row
+	 * @return array<string, mixed>
+	 */
+	public static function hydrate_row_with_attestation( array $row, ?array $attestation_row ): array {
+		$hydrated = self::hydrate_row( $row );
+
+		if ( null === $attestation_row ) {
+			return $hydrated;
+		}
+
+		$attestation = self::normalize_attestation_artifact( $attestation_row );
+
+		if ( null !== $attestation ) {
+			$hydrated['attestation'] = $attestation;
+		}
+
+		return $hydrated;
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	public static function normalize_attestation_artifact( array $row ): ?array {
+		$attestation_id = self::normalize_string( $row['attestation_id'] ?? '' );
+
+		if ( '' === $attestation_id ) {
+			return null;
+		}
+
+		$verify_url       = function_exists( 'rest_url' )
+			? \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $attestation_id ) )
+			: '';
+		$subject_url      = function_exists( 'rest_url' )
+			? \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $attestation_id ) . '/subject-state' )
+			: '';
+		$reverted_by      = self::normalize_nullable_string( $row['reverted_by_attestation_id'] ?? null );
+		$reverted_by_url  = null;
+		$created_at_value = self::normalize_string( $row['created_at'] ?? '' );
+
+		if ( null !== $reverted_by && function_exists( 'rest_url' ) ) {
+			$reverted_by_url = \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $reverted_by ) );
+		}
+
+		return [
+			'id'                      => $attestation_id,
+			'type'                    => null !== self::normalize_nullable_string( $row['reverts_attestation_id'] ?? null ) ? 'revert' : 'apply',
+			'surface'                 => self::normalize_string( $row['surface'] ?? '' ),
+			'subjectName'             => self::normalize_string( $row['subject_name'] ?? '' ),
+			'subjectScope'            => self::normalize_string( $row['subject_scope'] ?? '' ),
+			'keyId'                   => self::normalize_string( $row['key_id'] ?? '' ),
+			'createdAt'               => '' !== $created_at_value ? self::normalize_timestamp( $created_at_value ) : '',
+			'verifyUrl'               => $verify_url,
+			'subjectStateUrl'         => $subject_url,
+			'revertedByAttestationId' => $reverted_by,
+			'revertedByVerifyUrl'     => $reverted_by_url,
+		];
+	}
+
 	public static function normalize_timestamp( $value ): string {
 		if ( is_string( $value ) && '' !== $value ) {
 			$timestamp = strtotime( $value );

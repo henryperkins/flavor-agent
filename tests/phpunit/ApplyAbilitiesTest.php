@@ -304,10 +304,15 @@ final class ApplyAbilitiesTest extends TestCase {
 		$fetched = ApplyAbilities::get_activity( [ 'activityId' => (string) $result['activityId'] ] );
 
 		$this->assertIsArray( $fetched );
-		$this->assertSame( 'att_activity', $fetched['attestation']['id'] );
+		$this->assertSame( 'att_activity', $fetched['entry']['attestation']['id'] );
+		$this->assertSame( $fetched['entry']['attestation'], $fetched['attestation'] );
 		$this->assertSame(
 			'https://example.test/wp-json/flavor-agent/v1/attestations/att_activity',
-			$fetched['attestation']['verifyUrl']
+			$fetched['entry']['attestation']['verifyUrl']
+		);
+		$this->assertSame(
+			'https://example.test/wp-json/flavor-agent/v1/attestations/att_activity/subject-state',
+			$fetched['entry']['attestation']['subjectStateUrl']
 		);
 	}
 

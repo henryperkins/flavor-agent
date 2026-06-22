@@ -690,6 +690,12 @@ body.settings_page_flavor-agent-activity {
   line-height: 1.5;
 }
 
+.flavor-agent-activity-log__attestation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .flavor-agent-activity-log__comparison {
   display: grid;
   overflow: auto;

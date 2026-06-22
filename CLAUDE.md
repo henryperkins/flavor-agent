@@ -39,6 +39,8 @@ composer install       # install PHP deps (PSR-4 autoloader)
 composer lint:php      # WPCS via phpcs
 composer test:php      # PHPUnit tests
 vendor/bin/phpunit     # PHPUnit tests (direct)
+wp flavor-agent attestation verify att_xxx  # verify a stored Ring III attestation from the site runtime
+php tools/attestation-verify.php https://site.example att_xxx  # verify the public REST/JWKS envelope externally
 ```
 
 PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.g. `src/store/update-helpers.test.js`) or in `__tests__/` directories.
@@ -71,6 +73,8 @@ For any change touching more than one recommendation surface or any shared subsy
 
 - `REST\Agent_Controller` — REST routes under `flavor-agent/v1/` (`activity`, `activity/{id}/undo`, `activity/{id}/decision`, `sync-patterns`). The seven recommendation surfaces are Abilities at `/wp-abilities/v1/abilities/{ability}/run` — see **Key Integration Points** for the capability matrix.
 - `Activity\` (`Repository` / `Permissions` / `Serializer`) — server-backed activity storage, contextual capability checks, ordered undo-state updates. `Admin\ActivityPage` registers the `Settings > AI Activity` audit screen.
+- `Attestation\` (`Canonicalizer` / `StatementBuilder` / `Signer` / `Repository` / `Verifier`) — Ring III self-signed provenance for governed Global Styles / Style Book applies. Approved applies write append-only detached Ed25519 in-toto statements in a retention-independent table; undos write chained revert attestations. Public REST routes expose the signed envelope, JWKS, and live subject-state slice; `Activity\Serializer` surfaces the artifact on related activity rows so `get-activity`, `list-activity`, and `Settings > AI Activity` can link to verification.
+- `CLI\AttestationCommand` — `wp flavor-agent attestation verify <attestationId>` evaluates the stored statement/signature against the registered JWKS and the same subject-state semantics as the public verifier.
 - `LLM\` — per-surface prompts (`Prompt`, `TemplatePrompt`, `TemplatePartPrompt`, `NavigationPrompt`, `StylePrompt`, `WritingPrompt`), token-budget assembly (`PromptBudget`), strict JSON `ResponseSchema`, WCAG AA `StyleContrastValidator` (4.5), `ThemeTokenFormatter`, `WordPressAIClient` / `ChatClient` wrappers around `wp_ai_client_prompt()` + `Settings > Connectors`.
 - `Context\` — server-side context collection: block introspection (`BlockTypeIntrospector`; `shared/support-to-panel.json` asserted in sync with `src/context/block-inspector.js`), theme tokens (`ThemeTokenCollector`, content-hash invalidated), template/template-part/navigation analyzers, pattern catalog + override analyzer + candidate selector (cap 30 via `TEMPLATE_PATTERN_CANDIDATE_CAP`), `PostContentRenderer` + `PostVoiceSampleCollector`, viewport visibility, and operation validators (`BlockOperationValidator`, `BlockRecommendationExecutionContract`).
 - `OpenAI\Provider`, `Embeddings\` (Qdrant utilities), `AzureOpenAI\ResponsesClient` (chat compat facade), `Cloudflare\` Workers AI / AI Search clients — chat routing, Workers AI embeddings (plugin-owned, only first-party embedding backend), Qdrant vector storage, AI Search docs grounding, private pattern search, embedding signature cache invalidation.
@@ -197,6 +201,7 @@ For any change touching more than one recommendation surface or any shared subsy
   - `RecommendBlockAbility`, `RecommendContentAbility`, `RecommendPatternsAbility` → `edit_posts`
   - `RecommendNavigationAbility`, `RecommendStyleAbility`, `RecommendTemplateAbility`, `RecommendTemplatePartAbility` → `edit_theme_options`
 - **REST API**: Remaining REST routes live under `flavor-agent/v1/`, registered in `Agent_Controller::register_routes()`. `activity` (GET/POST) and `activity/{id}/undo` (POST) use contextual `Activity\Permissions::can_access_activity_request()`; `activity/{id}/decision` (POST, external-apply approval) uses `manage_options` plus the row's mutation capability via `Activity\Permissions::can_decide_activity_request()`; `sync-patterns` (POST) uses `manage_options`.
+- **Ring III attestation**: Attestation REST routes live under `flavor-agent/v1/attestations`: `attestations/{id}` returns the byte-exact signed envelope, `attestations/keys` returns the JWKS, and `attestations/{id}/subject-state` returns the live canonical subject slice. Verification must trust the signed statement bytes, not the decoded convenience view or route-reported digest.
 - **Pattern index lifecycle**: Auto-reindexes on theme switch, plugin activation/deactivation, upgrades, and relevant option changes. Uses WP cron event `flavor_agent_reindex_patterns`.
 - **Docs grounding lifecycle**: Best-effort only — each recommendation runs one cached corpus search (`AISearchClient::maybe_search_best_effort`, 6h query cache); a transport failure attaches no guidance and records an `ok`/`unreachable` signal in `flavor_agent_docs_runtime_state`. Grounding never blocks a recommendation; there are no warm/prewarm crons (activation and deactivation both clear the legacy `flavor_agent_prewarm_docs` / `flavor_agent_warm_docs_context` hooks by name for upgrading sites).
 - **Activity & admin approval/audit**: Block/template/template-part/Global Styles/Style Book applies write to the server-backed activity repository; editor hydrates by scope, keeps `sessionStorage` as cache/fallback, re-validates live state before undo. `Settings > AI Activity` (`src/admin/activity-log.js`) reads the same data and approves/rejects pending external style applies.
@@ -237,6 +242,7 @@ Each recommendation surface disables independently when its required backend is 
 - `docs/SOURCE_OF_TRUTH.md` — definitive project reference: scope, architecture, inventory, roadmap, definition of done
 - `docs/FEATURE_SURFACE_MATRIX.md` — fastest map of every shipped surface, gate, and apply/undo path
 - `docs/reference/governance-layer.md` — canonical governance-layer contract map: pillars, enforcing code, surface loop coverage, and external-agent parity boundaries
+- `docs/reference/ring-iii-attestation-design.md` — Ring III attestation design, trust boundary, public-safe predicate allowlist, verifier outcomes, and honesty statement
 - `docs/reference/cross-surface-validation-gates.md` — additive release gates and required evidence for multi-surface or shared-subsystem changes
 - `docs/reference/wordpress-ai-roadmap-tracking.md` — active conflicts between WordPress org project 240 (the AI Planning & Roadmap board) and Flavor Agent surfaces, with a refresh procedure
 - `docs/features/README.md` — entry point for detailed per-surface docs

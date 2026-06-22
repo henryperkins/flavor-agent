@@ -1391,6 +1391,88 @@ function GovernanceDetailRows( { rows = [] } ) {
 	);
 }
 
+function getAttestationString( artifact, key ) {
+	const value = artifact?.[ key ];
+
+	return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function getAttestationArtifact( entry ) {
+	const artifact = isPlainRecord( entry?.attestation )
+		? entry.attestation
+		: null;
+	const id = getAttestationString( artifact, 'id' );
+
+	if ( ! id ) {
+		return null;
+	}
+
+	return {
+		id,
+		verifyUrl: getAttestationString( artifact, 'verifyUrl' ),
+		subjectStateUrl: getAttestationString( artifact, 'subjectStateUrl' ),
+		keyId: getAttestationString( artifact, 'keyId' ),
+		subjectName: getAttestationString( artifact, 'subjectName' ),
+		subjectScope: getAttestationString( artifact, 'subjectScope' ),
+		createdAt: getAttestationString( artifact, 'createdAt' ),
+		revertedByAttestationId: getAttestationString(
+			artifact,
+			'revertedByAttestationId'
+		),
+	};
+}
+
+function AttestationEvidenceSection( { entry } ) {
+	const artifact = getAttestationArtifact( entry );
+
+	if ( ! artifact ) {
+		return null;
+	}
+
+	const rows = [
+		[ __( 'Attestation ID', 'flavor-agent' ), artifact.id ],
+		[ __( 'Key', 'flavor-agent' ), artifact.keyId ],
+		[ __( 'Subject', 'flavor-agent' ), artifact.subjectName ],
+		[ __( 'Scope', 'flavor-agent' ), artifact.subjectScope ],
+		[ __( 'Recorded', 'flavor-agent' ), artifact.createdAt ],
+		[
+			__( 'Reverted by', 'flavor-agent' ),
+			artifact.revertedByAttestationId,
+		],
+	];
+
+	return (
+		<section className="flavor-agent-activity-log__governance-subsection">
+			<h4 className="flavor-agent-activity-log__governance-subtitle">
+				{ __( 'Attestation', 'flavor-agent' ) }
+			</h4>
+			<GovernanceDetailRows rows={ rows } />
+			<div className="flavor-agent-activity-log__attestation-actions">
+				{ artifact.verifyUrl && (
+					<Button
+						href={ artifact.verifyUrl }
+						target="_blank"
+						rel="noreferrer"
+						variant="secondary"
+					>
+						{ __( 'Verify envelope', 'flavor-agent' ) }
+					</Button>
+				) }
+				{ artifact.subjectStateUrl && (
+					<Button
+						href={ artifact.subjectStateUrl }
+						target="_blank"
+						rel="noreferrer"
+						variant="secondary"
+					>
+						{ __( 'Check live subject', 'flavor-agent' ) }
+					</Button>
+				) }
+			</div>
+		</section>
+	);
+}
+
 function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 	const details = getGovernanceDetailsForEntry( entry );
 	const [ note, setNote ] = useState( '' );
@@ -1514,6 +1596,7 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 				</h4>
 				<GovernanceDetailRows rows={ freshnessRows } />
 			</div>
+			<AttestationEvidenceSection entry={ entry } />
 			{ details.diagnosticText && (
 				<details className="flavor-agent-activity-log__governance-diagnostics">
 					<summary>

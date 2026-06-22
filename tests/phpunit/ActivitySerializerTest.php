@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Serializer;
+use FlavorAgent\Attestation\Repository as AttestationRepository;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -391,6 +392,78 @@ final class ActivitySerializerTest extends TestCase {
 		$this->assertSame( $apply, $entry['apply'] );
 		$this->assertSame( 'pending', $entry['executionResult'] );
 		$this->assertSame( 'not_applicable', $entry['undo']['status'] );
+	}
+
+	public function test_hydrate_row_does_not_query_attestation_storage(): void {
+		AttestationRepository::install();
+		AttestationRepository::insert(
+			[
+				'attestation_id'      => 'att_apply',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:81',
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => str_repeat( 'a', 64 ),
+				'statement_bytes'     => '{"_type":"https://in-toto.io/Statement/v1"}',
+				'signature_b64'       => 'sig',
+				'key_id'              => 'site-key',
+				'related_activity_id' => 'activity-1',
+			]
+		);
+
+		WordPressTestState::$db_queries = [];
+		$entry                          = Serializer::hydrate_row(
+			[
+				'activity_id'      => 'activity-1',
+				'activity_type'    => 'apply_global_styles_suggestion',
+				'surface'          => 'global-styles',
+				'target_json'      => '{"globalStylesId":"81"}',
+				'execution_result' => 'applied',
+				'undo_state'       => '{"status":"undone"}',
+				'created_at'       => '2026-06-22 10:00:00',
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'attestation', $entry );
+		$this->assertSame(
+			[],
+			array_values(
+				array_filter(
+					WordPressTestState::$db_queries,
+					static fn ( string $query ): bool => str_contains( $query, AttestationRepository::table_name() )
+				)
+			)
+		);
+	}
+
+	public function test_normalize_attestation_artifact_exposes_reverted_apply_reference(): void {
+		$artifact = Serializer::normalize_attestation_artifact(
+			[
+				'attestation_id'             => 'att_apply',
+				'surface'                    => 'global-styles',
+				'subject_name'               => 'wp_global_styles:81',
+				'subject_scope'              => 'global-styles',
+				'key_id'                     => 'site-key',
+				'created_at'                 => '2026-06-22 10:00:00',
+				'reverted_by_attestation_id' => 'att_revert',
+			]
+		);
+
+		$this->assertSame(
+			[
+				'id'                      => 'att_apply',
+				'type'                    => 'apply',
+				'surface'                 => 'global-styles',
+				'subjectName'             => 'wp_global_styles:81',
+				'subjectScope'            => 'global-styles',
+				'keyId'                   => 'site-key',
+				'createdAt'               => '2026-06-22T10:00:00+00:00',
+				'verifyUrl'               => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_apply',
+				'subjectStateUrl'         => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_apply/subject-state',
+				'revertedByAttestationId' => 'att_revert',
+				'revertedByVerifyUrl'     => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_revert',
+			],
+			$artifact
+		);
 	}
 
 	public function test_hydrate_row_omits_apply_when_request_has_none(): void {

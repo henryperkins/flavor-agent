@@ -146,6 +146,37 @@ final class Repository {
 	}
 
 	/**
+	 * @param array<int, string> $ids
+	 * @return array<string, array<string, mixed>>
+	 */
+	public static function find_reverts_by_attestation_ids( array $ids ): array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return [];
+		}
+
+		$ids = self::normalize_id_list( $ids );
+
+		if ( [] === $ids ) {
+			return [];
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%s' ) );
+		$sql          = 'SELECT * FROM ' . self::table_name() . " WHERE reverts_attestation_id IN ({$placeholders}) ORDER BY created_at DESC";
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Placeholder list is generated from a bounded id list.
+		$sql = $wpdb->prepare( $sql, $ids );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Batch read from plugin-owned attestation table; $sql is prepared above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		return self::index_latest_rows(
+			is_array( $rows ) ? $rows : [],
+			'reverts_attestation_id'
+		);
+	}
+
+	/**
 	 * @return array<string, mixed>|null
 	 */
 	public static function find_by_related_activity( string $activity_id ): ?array {
@@ -159,6 +190,75 @@ final class Repository {
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table_name() . ' WHERE related_activity_id = %s AND reverts_attestation_id IS NULL ORDER BY created_at DESC', $activity_id ), ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
+	}
+
+	/**
+	 * @param array<int, string> $activity_ids
+	 * @return array<string, array<string, mixed>>
+	 */
+	public static function find_by_related_activities( array $activity_ids ): array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return [];
+		}
+
+		$activity_ids = self::normalize_id_list( $activity_ids );
+
+		if ( [] === $activity_ids ) {
+			return [];
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, count( $activity_ids ), '%s' ) );
+		$sql          = 'SELECT * FROM ' . self::table_name() . " WHERE related_activity_id IN ({$placeholders}) AND reverts_attestation_id IS NULL ORDER BY created_at DESC";
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Placeholder list is generated from a bounded id list.
+		$sql = $wpdb->prepare( $sql, $activity_ids );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Batch read from plugin-owned attestation table; $sql is prepared above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		return self::index_latest_rows(
+			is_array( $rows ) ? $rows : [],
+			'related_activity_id'
+		);
+	}
+
+	/**
+	 * @param array<int, string> $ids
+	 * @return array<int, string>
+	 */
+	private static function normalize_id_list( array $ids ): array {
+		return array_values(
+			array_unique(
+				array_filter(
+					array_map(
+						static fn ( string $id ): string => trim( $id ),
+						$ids
+					),
+					static fn ( string $id ): bool => '' !== $id
+				)
+			)
+		);
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $rows
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function index_latest_rows( array $rows, string $key ): array {
+		$indexed = [];
+
+		foreach ( $rows as $row ) {
+			$id = trim( (string) ( $row[ $key ] ?? '' ) );
+
+			if ( '' === $id || isset( $indexed[ $id ] ) ) {
+				continue;
+			}
+
+			$indexed[ $id ] = $row;
+		}
+
+		return $indexed;
 	}
 
 	private static function table_exists(): bool {

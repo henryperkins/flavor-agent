@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Activity;
 
+use FlavorAgent\Attestation\Repository as AttestationRepository;
+
 final class Repository {
 
 	public const SCHEMA_OPTION                       = 'flavor_agent_activity_schema_version';
@@ -232,7 +234,7 @@ final class Repository {
 			return $stored;
 		}
 
-		return Serializer::hydrate_row( $record );
+		return self::hydrate_activity_row( $record );
 	}
 
 	/**
@@ -297,10 +299,7 @@ final class Repository {
 		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
 		$rows = array_reverse( is_array( $rows ) ? $rows : [] );
 
-		return array_map(
-			static fn ( array $row ): array => Serializer::hydrate_row( $row ),
-			$rows
-		);
+		return self::hydrate_activity_rows( $rows );
 	}
 
 	/**
@@ -587,7 +586,111 @@ final class Repository {
 	public static function find( string $activity_id ): ?array {
 		$row = self::find_row( $activity_id );
 
-		return is_array( $row ) ? Serializer::hydrate_row( $row ) : null;
+		return is_array( $row ) ? self::hydrate_activity_row( $row ) : null;
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @return array<string, mixed>
+	 */
+	private static function hydrate_activity_row( array $row, bool $include_attestation = true ): array {
+		if ( ! $include_attestation ) {
+			return Serializer::hydrate_row( $row );
+		}
+
+		$activity_id = trim( (string) ( $row['activity_id'] ?? '' ) );
+		$attestation = self::attestations_for_activity_ids(
+			'' !== $activity_id ? [ $activity_id ] : []
+		);
+
+		return Serializer::hydrate_row_with_attestation(
+			$row,
+			$attestation[ $activity_id ] ?? null
+		);
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $rows
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function hydrate_activity_rows( array $rows, bool $include_attestations = true ): array {
+		if ( [] === $rows ) {
+			return [];
+		}
+
+		if ( ! $include_attestations ) {
+			return array_map(
+				static fn ( array $row ): array => Serializer::hydrate_row( $row ),
+				$rows
+			);
+		}
+
+		$activity_ids = array_map(
+			static fn ( array $row ): string => trim( (string) ( $row['activity_id'] ?? '' ) ),
+			$rows
+		);
+		$attestations = self::attestations_for_activity_ids( $activity_ids );
+
+		return array_map(
+			static function ( array $row ) use ( $attestations ): array {
+				$activity_id = trim( (string) ( $row['activity_id'] ?? '' ) );
+
+				return Serializer::hydrate_row_with_attestation(
+					$row,
+					$attestations[ $activity_id ] ?? null
+				);
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * @param array<int, string> $activity_ids
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function attestations_for_activity_ids( array $activity_ids ): array {
+		$activity_ids = array_values(
+			array_unique(
+				array_filter(
+					array_map(
+						static fn ( string $activity_id ): string => trim( $activity_id ),
+						$activity_ids
+					),
+					static fn ( string $activity_id ): bool => '' !== $activity_id
+				)
+			)
+		);
+
+		if ( [] === $activity_ids ) {
+			return [];
+		}
+
+		$attestations = AttestationRepository::find_by_related_activities( $activity_ids );
+
+		if ( [] === $attestations ) {
+			return [];
+		}
+
+		$reverts = AttestationRepository::find_reverts_by_attestation_ids(
+			array_values(
+				array_map(
+					static fn ( array $row ): string => (string) ( $row['attestation_id'] ?? '' ),
+					$attestations
+				)
+			)
+		);
+
+		foreach ( $attestations as $activity_id => $row ) {
+			$attestation_id = trim( (string) ( $row['attestation_id'] ?? '' ) );
+
+			if ( '' === $attestation_id || ! isset( $reverts[ $attestation_id ] ) ) {
+				continue;
+			}
+
+			$attestations[ $activity_id ]['reverted_by_attestation_id'] = $reverts[ $attestation_id ]['attestation_id'] ?? null;
+		}
+
+		return $attestations;
 	}
 
 	/**
@@ -1084,7 +1187,7 @@ final class Repository {
 	private static function merge_existing_entry( array $existing_row, array $normalized ) {
 		global $wpdb;
 
-		$existing_entry  = Serializer::hydrate_row( $existing_row );
+		$existing_entry  = self::hydrate_activity_row( $existing_row );
 		$existing_undo   = is_array( $existing_entry['undo'] ?? null ) ? $existing_entry['undo'] : [];
 		$incoming_undo   = is_array( $normalized['undo'] ?? null ) ? $normalized['undo'] : [];
 		$existing_status = (string) ( $existing_undo['status'] ?? '' );
@@ -1778,10 +1881,7 @@ final class Repository {
 	private static function append_admin_learning_report( array $result, array $rows, int $row_limit ): array {
 		$truncated = count( $rows ) > $row_limit;
 		$rows      = $truncated ? array_slice( $rows, 0, $row_limit ) : $rows;
-		$entries   = array_map(
-			static fn ( array $row ): array => Serializer::hydrate_row( $row ),
-			$rows
-		);
+		$entries   = self::hydrate_activity_rows( $rows, false );
 
 		$result['learningReport'] = GovernanceLearningReport::build(
 			array_values( $entries ),
@@ -2875,6 +2975,7 @@ final class Repository {
 	private static function load_admin_page_entries( array $records ): array {
 		$stored_rows           = [];
 		$activity_ids_to_fetch = [];
+		$page_activity_ids     = [];
 
 		foreach ( $records as $record ) {
 			$row         = is_array( $record['row'] ?? null ) ? $record['row'] : [];
@@ -2883,6 +2984,8 @@ final class Repository {
 			if ( '' === $activity_id ) {
 				continue;
 			}
+
+			$page_activity_ids[] = $activity_id;
 
 			if ( self::row_contains_full_activity_payload( $row ) ) {
 				$stored_rows[ $activity_id ] = $row;
@@ -2899,11 +3002,14 @@ final class Repository {
 			);
 		}
 
+		$attestations_by_activity_id = self::attestations_for_activity_ids( $page_activity_ids );
+
 		return array_values(
 			array_map(
 				static fn ( array $record ): array => self::hydrate_admin_page_entry(
 					$record,
-					$stored_rows
+					$stored_rows,
+					$attestations_by_activity_id
 				),
 				$records
 			)
@@ -2924,12 +3030,17 @@ final class Repository {
 	/**
 	 * @param array{row: array<string, mixed>, meta: array<string, mixed>} $record
 	 * @param array<string, array<string, mixed>> $stored_rows
+	 * @param array<string, array<string, mixed>> $attestations_by_activity_id
 	 */
-	private static function hydrate_admin_page_entry( array $record, array $stored_rows ): array {
+	private static function hydrate_admin_page_entry( array $record, array $stored_rows, array $attestations_by_activity_id ): array {
 		$row             = is_array( $record['row'] ?? null ) ? $record['row'] : [];
 		$activity_id     = trim( (string) ( $row['activity_id'] ?? '' ) );
 		$stored_row      = $stored_rows[ $activity_id ] ?? null;
-		$entry           = Serializer::hydrate_row( is_array( $stored_row ) ? $stored_row : $row );
+		$attestation_row = $attestations_by_activity_id[ $activity_id ] ?? null;
+		$entry           = Serializer::hydrate_row_with_attestation(
+			is_array( $stored_row ) ? $stored_row : $row,
+			is_array( $attestation_row ) ? $attestation_row : null
+		);
 		$entry['status'] = (string) ( $record['meta']['status'] ?? 'applied' );
 		$entry['admin']  = self::get_public_admin_entry_meta(
 			is_array( $record['meta'] ?? null ) ? $record['meta'] : []

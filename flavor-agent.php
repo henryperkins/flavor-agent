@@ -109,6 +109,10 @@ add_action(
 add_action( 'wp_abilities_api_categories_init', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_global_ability_category' ] );
 add_action( 'wp_abilities_api_init', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_global_helper_abilities' ] );
 
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	FlavorAgent\CLI\AttestationCommand::register();
+}
+
 // Pattern index lifecycle hooks.
 add_action( FlavorAgent\Patterns\PatternIndex::CRON_HOOK, [ FlavorAgent\Patterns\PatternIndex::class, 'sync' ] );
 add_action( FlavorAgent\Cloudflare\PatternSearchInstanceManager::PROVISION_CRON_HOOK, [ FlavorAgent\Cloudflare\PatternSearchInstanceManager::class, 'process_managed_instance_provisioning' ] );

@@ -60,9 +60,12 @@ $subj = $get( "{$base}/wp-json/flavor-agent/v1/attestations/{$id}/subject-state"
 
 $statement = $b64url_decode( (string) ( $env['statement_b64'] ?? '' ) );
 $signature = $b64url_decode( (string) ( $env['signature_b64'] ?? '' ) );
-$live      = isset( $subj['subject_canonical_b64'] )
-	? $b64url_decode( (string) $subj['subject_canonical_b64'] )
-	: null;
+if ( ! isset( $subj['subject_canonical_b64'] ) || '' === (string) $subj['subject_canonical_b64'] ) {
+	fwrite( STDERR, "error: invalid_subject_state\n" );
+	exit( 3 );
+}
+
+$live = $b64url_decode( (string) $subj['subject_canonical_b64'] );
 
 require __DIR__ . '/../inc/Attestation/Signer.php';
 require __DIR__ . '/../inc/Attestation/Verifier.php';

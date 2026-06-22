@@ -1783,6 +1783,58 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).toContain( 'new' );
 	} );
 
+	test( 'renders attestation verification affordances for executed external applies', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-executed'
+		);
+
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-executed',
+				status: 'applied',
+				undo: {
+					status: 'available',
+					canUndo: true,
+				},
+				apply: {
+					status: 'available',
+					executedAt: '2026-06-10T03:05:00+00:00',
+					operations: [],
+				},
+				attestation: {
+					id: 'att_abc123',
+					verifyUrl:
+						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123',
+					subjectStateUrl:
+						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state',
+					keyId: 'site-key',
+					subjectName: 'wp_global_styles:17',
+					subjectScope: 'global-styles',
+					createdAt: '2026-06-10T03:05:01+00:00',
+					revertedByAttestationId: 'att_revert456',
+				},
+			} ),
+		] );
+
+		expect( getContainer().textContent ).toContain( 'Attestation' );
+		expect( getContainer().textContent ).toContain( 'att_abc123' );
+		expect( getContainer().textContent ).toContain( 'site-key' );
+		expect( getContainer().textContent ).toContain( 'Reverted by' );
+		expect( getContainer().textContent ).toContain( 'att_revert456' );
+
+		const verifyLink = getContainer().querySelector(
+			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123"]'
+		);
+		const subjectStateLink = getContainer().querySelector(
+			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state"]'
+		);
+
+		expect( verifyLink?.textContent ).toBe( 'Verify envelope' );
+		expect( subjectStateLink?.textContent ).toBe( 'Check live subject' );
+	} );
+
 	test( 'disables repeated decisions while pending and preserves failed notes', async () => {
 		window.history.replaceState(
 			null,
