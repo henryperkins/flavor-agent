@@ -36,8 +36,9 @@ x509` across `inc/` returns nothing. Closing this gap means crossing exactly one
 in-toto-style **attestation statement** that binds the governance decision to a **digest of the
 artifact state it produced**, stores it in a durable companion table, and publishes the statement
 and the public key at unauthenticated endpoints. A stranger verifies the signature against the
-published key, then re-hashes the live entity to confirm whether the attested content has been
-altered since — without trusting FA's admin UI.
+published key (fully independent), then re-hashes the live subject — exposed via a public route,
+because core's config read is capability-gated (§6.2) — to confirm whether the attested content
+has been altered since.
 
 Chosen over the two alternatives:
 
@@ -53,8 +54,10 @@ This is **self-attestation**: tamper-evident and attributable to *this site's si
 trust root is the site itself. It is **not** third-party identity, and **not** a transparency
 log. An outsider can confirm "this statement was signed by the key published at this domain and
 the content has/has not changed since" — they cannot, in v1, confirm the site did not rewrite its
-own history. Removing that last assumption is the transparency-log level (§12), named as the next
-step, not claimed as done.
+own history. Live-content checks additionally read the present state through FA's own public route
+(§6.2), a present-state trust beyond the signing root. Removing the history-rewrite assumption is
+the transparency-log level (§12); the present state can be cross-checked against the site's public
+rendered CSS. Both are named next steps, not claimed as done.
 
 ## 4. The attestation statement
 
@@ -76,7 +79,7 @@ and reads as serious to a contributor audience.
     "attestationId": "att_…",                   // durable primary key (see §5)
     "schemaVersion": 1,
     "surface": "global-styles",                  // global-styles | style-book
-    "operations": [ /* the applied, schema-bounded operations */ ],
+    "operations": [ /* the applied, schema-bounded operations — public-safe, §4.3 */ ],
     "before": { "sha256": "<canonical BEFORE-state digest>" },
     "after":  { "sha256": "<canonical AFTER-state digest>" },  // == subject.digest
     "freshnessSignature": "<existing recommendation sha256>",
@@ -108,18 +111,29 @@ false positives from unrelated later edits elsewhere in the entity.
 ### 4.2 Public-safe statement — hard contract (allowlist, not denylist)
 
 The durable record **stores only**: canonical statement bytes, digests, signature, key ID,
-surface, subject, timestamps, and the optional **non-PII actor role**. It **must not** store:
+surface, subject, timestamps, the optional **non-PII actor role**, and the **bounded operation
+set** (§4.3). It **must not** store:
 
 - prompt text,
 - raw provider payloads,
 - user display names or other PII (default to `actor.role`; full identity is opt-in),
-- private style content beyond its digest,
+- raw or full config blobs / private content beyond the bounded operations and their digests,
 - anything copied **only** from prunable activity JSON.
 
 The last clause is the load-bearing one: the durable table must never become a back door that
 resurrects PII or content that the 90-day activity prune is meant to remove. Enforcement is a
 builder-level allowlist plus a test that asserts no field outside the allowlist is persisted
 (§11).
+
+### 4.3 Operations are public-safe (decided)
+
+The signed statement includes the applied **operations** (their theme.json paths and values), not
+only a digest. This is deliberate: FA's style operations are schema-bounded to validated
+theme.json paths and preset/validated values (the `recommend-style` contract + the WCAG AA
+contrast gate, `inc/LLM/StyleContrastValidator.php`), they are the *substance* of the provenance
+claim ("what was changed"), and they are semantically equivalent to the site's already-public
+rendered CSS. They are therefore explicitly allowlisted as public. The §4.2 prohibition targets
+raw config blobs, prompts, provider payloads, and PII — never the bounded operation set.
 
 ## 5. Data model — durable companion table
 
@@ -135,9 +149,9 @@ A new table, lifecycle-independent of AI Activity:
   after_digest       CHAR(64)                      -- sha256, == subject digest
   statement_bytes    LONGBLOB/LONGTEXT             -- exact canonical bytes that were signed
   signature          VARBINARY/TEXT                -- detached Ed25519 signature
-  key_id             VARCHAR
-  reverts_attestation_id     VARCHAR NULL          -- forward link (§8)
-  supersedes_attestation_id  VARCHAR NULL          -- forward link
+  key_id             VARCHAR                       -- resolves into the key registry (§7), not this table
+  reverts_attestation_id     VARCHAR NULL          -- back-reference to PRIOR attestation reverted (§8)
+  supersedes_attestation_id  VARCHAR NULL          -- back-reference to PRIOR attestation superseded
   related_activity_id        VARCHAR NULL          -- optional, prunable context
   created_at         DATETIME
   INDEX (subject_name), INDEX (reverts_attestation_id), INDEX (supersedes_attestation_id)
@@ -154,6 +168,8 @@ Properties:
   `GET /attestations/{id}` resolves long after the activity row is gone.
 - **Append-only / immutable.** No updates or deletes in normal operation — immutability *is* the
   proof. Supersession/reversion is expressed by **new** rows (§8), never by mutating prior ones.
+- **Keys live elsewhere.** Public keys are kept in a separate durable registry (§7); `key_id`
+  resolves into it, so historical rows stay verifiable across key rotation.
 
 ## 6. Components
 
@@ -164,12 +180,47 @@ Each unit has one purpose, a documented interface, and is independently testable
 | `Attestation\Canonicalizer` | **First-class public** deterministic serialize → sha256 of an artifact state, for Global Styles (full config) and Style Book (block branch). Single source of truth for *both* the executor's drift check and external attestation, so they can never diverge. Spec-documented for third-party reproduction. | Lift the now-private helpers `comparable_config` / `comparable_config_hash` / `canonicalize_values_deep` / `canonicalize_style_value` / `sort_keys_deep` / `trim_config_to_block_branch` out of `StyleApplyExecutor`. Its JS twin `getComparableGlobalStylesConfig` (referenced in `StyleApplyExecutor`) is part of the published canonicalization spec. |
 | `Attestation\StatementBuilder` | (activity row + resolved before/after) → canonical in-toto Statement **bytes**. Enforces the §4.2 public-safe allowlist. | `Canonicalizer`, `Activity\Serializer` |
 | `Attestation\Signer` | (canonical bytes) → detached Ed25519 signature. No key → no attestation (never a fake one). | `sodium_crypto_sign_detached` (bundled, PHP 8.2+); key source (§7) |
-| `Attestation\Repository` | Append-only persistence + forward-link writes + lookups (`by id`, `reverts={id}`, `supersedes={id}`). | the new table |
-| Public REST routes | `GET /wp-json/flavor-agent/v1/attestations/{id}` (serves statement bytes + signature + keyId verbatim) and `GET /wp-json/flavor-agent/v1/attestations/keys` (JWKS). Both `permission_callback => __return_true`. | `Repository`, key store |
-| Verifier (script + `wp flavor-agent attestation verify {id}`) | The proof that it is stranger-verifiable: verify signature against JWKS, re-canonicalize the live entity, compare to subject digest, resolve revert chain → emit the §9 outcome. | published endpoints only |
+| `Attestation\Repository` | Append-only persistence + back-reference writes + lookups (`by id`, `reverts={id}`, `supersedes={id}`). | the new table |
+| Public REST routes | (a) `GET /wp-json/flavor-agent/v1/attestations/{id}` — the signed envelope (§6.1); (b) `GET …/attestations/keys` — JWKS from the key registry (§7); (c) `GET …/attestations/{id}/subject-state` — the **current** canonical subject artifact computed live by `Canonicalizer`, so a credential-less stranger can recompute the live digest without core's gated read (§6.2). All `permission_callback => __return_true`. | `Repository`, key registry, `Canonicalizer` |
+| Verifier (script + `wp flavor-agent attestation verify {id}`) | The proof that it is stranger-verifiable: verify signature against JWKS, re-canonicalize the live subject, compare to subject digest, resolve revert chain → emit the §9 outcome. | published endpoints only |
 
 `.well-known/` publication is **deferred** — it needs rewrite/physical-file plumbing rather than
 a namespaced REST route, and the JWKS route covers v1.
+
+### 6.1 Wire envelope (verification is byte-exact)
+
+REST JSON reserializes nested objects (key order, whitespace, unicode escaping), so the signed
+statement is **never** transported as a nested JSON object. The `{id}` route returns:
+
+```jsonc
+{
+  "statement_b64": "<base64url of the EXACT canonical statement bytes that were signed>",
+  "signature_b64": "<base64url of the detached Ed25519 signature>",
+  "key_id": "…",
+  "statement_json": { /* decoded convenience view only — NOT the verification input */ }
+}
+```
+
+Verification is **always** performed over `base64url_decode(statement_b64)`; the decoded
+`statement_json` is non-authoritative. The `subject-state` route uses the same discipline
+(returns `subject_canonical_b64` + a convenience `subject_digest`), and the verifier hashes the
+decoded bytes itself rather than trusting any digest a route reports.
+
+### 6.2 Why a public subject-state route (and its honesty boundary)
+
+Core's Global Styles config is **not** anonymously readable —
+`WP_REST_Global_Styles_Controller::get_theme_item_permissions_check()` gates it behind
+`edit_theme_options`. A credential-less stranger therefore cannot fetch the live subject from core
+to recompute the digest, so FA exposes the minimal canonical slice itself via `subject-state`.
+Disclosure is bounded: the canonical style config is semantically equivalent to the rendered CSS
+the site already serves publicly (no prompts, payloads, or PII).
+
+Honesty boundary (code docs + slide): the **signature + provenance** half — who attested what,
+when, and that the record is unaltered — is fully independent (published bytes + JWKS, no FA
+trust). The **live-match** half reads the present state through FA's own route, so it carries a
+present-state server-trust component (FA cannot forge the signed past, only potentially misreport
+the live present); the site's public rendered CSS is a non-authoritative independent cross-check,
+and the transparency-log level (§12) addresses history-rewrite over time.
 
 ## 7. Key management (self-signed + published)
 
@@ -177,8 +228,12 @@ a namespaced REST route, and the JWKS route covers v1.
 - **Private key custody:** operator-set via a `FLAVOR_AGENT_ATTEST_PRIVATE_KEY` constant / env —
   **never auto-generated into `wp_options`** (DB-read forgery would gut the guarantee). Absence of
   a key disables attestation cleanly, the way FA's other optional backends disable.
-- **Public key:** published as JWKS (`kty: OKP`, `crv: Ed25519`, RFC 8037) at the keys route, with
-  a `keyId`. Rotation keeps prior public keys in the set so historical statements stay verifiable.
+- **Public key:** derived from the configured private key and recorded in a **durable public-key
+  registry** (`keyId → public JWK + status active|retired + createdAt`), separate from the single
+  active private key in env/constant. The keys route serves the whole registry as JWKS
+  (`kty: OKP`, `crv: Ed25519`, RFC 8037). On rotation the new key is registered `active` and the
+  prior marked `retired` but **kept**, so historical attestations stay verifiable; each
+  attestation row's `key_id` (and the statement's `site.keyId`) resolves into this registry.
 
 ## 8. Lifecycle & data flow
 
@@ -187,9 +242,10 @@ a namespaced REST route, and the JWKS route covers v1.
 1. `request-style-apply` → pending row (unchanged).
 2. Admin approves → `inc/Apply/PendingApplyDecision.php` second freshness check (`:81`,
    "Drift fails closed") → `StyleApplyExecutor` applies.
-3. On success: `StatementBuilder` builds canonical bytes (the `after` digest reuses
-   `StyleApplyExecutor::comparable_config_hash()` — the same function the apply path already uses
-   to derive its freshness `baselineConfigHash`) → `Signer` signs → `Repository` appends the row.
+3. On success: `StatementBuilder` builds the canonical statement bytes; the `after` digest is
+   computed by `Attestation\Canonicalizer` from the **post-apply** state (same canonicalization
+   rules as the apply path's *pre-apply* `baselineConfigHash` freshness check, but a different
+   input and moment) → `Signer` signs → `Repository` appends the row.
 4. `get-activity` / admin UI surface an "Attestation" artifact with a verify affordance.
 
 **Undo (chained, never mutating):**
@@ -211,9 +267,9 @@ reads as accountable, not as failure:
 
 | Outcome | Meaning |
 |---|---|
-| `signature_valid` | Detached signature verifies over the served statement bytes against the published key. |
+| `signature_valid` | Detached signature verifies over the decoded `statement_b64` bytes against the published key. |
 | `record_tampered` | Signature fails — the statement bytes do not match the signature. |
-| `live_matches_subject` | Re-canonicalized live entity digest == subject digest. The attested change is intact on the live site. |
+| `live_matches_subject` | Re-canonicalized live subject digest == subject digest. The attested change is intact on the live site. |
 | `live_changed_since_attestation` | Live digest != subject digest, and no superseding/reverting attestation explains it. |
 | `reverted_by_attestation` | Live digest != subject digest **and** a chained attestation (`revertsAttestationId` → this one) accounts for it. The change was legitimately undone. |
 
@@ -229,7 +285,7 @@ resolved — the record is intact, the live state differs, and there is signed p
   applied-but-unattested, surfaced honestly.
 - **Verifier drift** (`live_changed_since_attestation`) → a true verdict, not an error; that is
   the feature detecting alteration.
-- **Key rotation** → old public keys retained in JWKS.
+- **Key rotation** → old public keys retained in the registry / JWKS.
 
 ## 11. Testing strategy
 
@@ -237,6 +293,10 @@ resolved — the record is intact, the live state differs, and there is signed p
   canonicalization cases (the `var:preset|…` ↔ `var(--wp--…)` family that caused the 2026-06-21
   undo-drift bug).
 - **Signature round-trip** — sign → verify; tampered bytes → `record_tampered`.
+- **Wire-envelope determinism** — the signature still verifies over the served `statement_b64`
+  *after* a full REST round-trip (guards against JSON reserialization).
+- **Subject-state route** — its returned canonical bytes hash to the same digest a freshly-applied
+  attestation signed.
 - **Verifier outcome matrix** — intact / altered / reverted / superseded; the undo case must
   resolve to `reverted_by_attestation`.
 - **Public-safe contract** — a test asserting the persisted row contains *only* allowlisted
@@ -280,6 +340,15 @@ The `keyId` + statement shape make all of these purely additive:
 7. **Public-safe statement** is a hard allowlist contract (§4.2). — *user*
 8. Style Book subjects are **branch-scoped**; Canonicalizer is a public single-source unit. —
    *recommended, agreed*
+9. Operations are **public-safe** and signed in full (not digest-only); §4.2 prohibits raw
+   blobs/PII/prompts/payloads, not the bounded operation set. — *review*
+10. A public **`subject-state`** route exposes the live canonical subject (core's config read is
+    capability-gated); live-match therefore carries a present-state server-trust component
+    (§6.2). — *review*
+11. **Wire envelope** is base64url statement + signature; verification is byte-exact over the
+    decoded statement (§6.1). — *review*
+12. Public keys live in a **durable registry** (§7), not just the env key; retired keys are
+    kept. — *review*
 
 ## 15. Out of scope (v1)
 
