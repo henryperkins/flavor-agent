@@ -1017,6 +1017,49 @@ final class Repository {
 	}
 
 	/**
+	 * @return array{
+	 *   count: int,
+	 *   latest: array<string, mixed>|null
+	 * }
+	 */
+	public static function get_pending_external_apply_notification_snapshot(): array {
+		global $wpdb;
+
+		$snapshot = [
+			'count'  => 0,
+			'latest' => null,
+		];
+
+		if ( ! is_object( $wpdb ) ) {
+			return $snapshot;
+		}
+
+		$sql = $wpdb->prepare(
+			'SELECT * FROM %i WHERE execution_result = %s ORDER BY created_at DESC, id DESC',
+			self::table_name(),
+			'pending'
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads pending external-apply rows from the plugin-owned activity table for admin notice context; prepared above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$entry = self::maybe_expire_pending_apply( Serializer::hydrate_row( $row ) );
+
+			if ( ! self::is_pending_external_style_apply_entry( $entry ) ) {
+				continue;
+			}
+
+			++$snapshot['count'];
+
+			if ( null === $snapshot['latest'] ) {
+				$snapshot['latest'] = $entry;
+			}
+		}
+
+		return $snapshot;
+	}
+
+	/**
 	 * Delete activity entries created before the given ISO 8601 timestamp.
 	 *
 	 * @return int Number of deleted rows, or 0 on failure.
@@ -4684,6 +4727,20 @@ final class Repository {
 		);
 
 		return implode( ' ', $parts );
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 */
+	private static function is_pending_external_style_apply_entry( array $entry ): bool {
+		$surface = trim( (string) ( $entry['surface'] ?? '' ) );
+		$apply   = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return false;
+		}
+
+		return in_array( $surface, [ 'global-styles', 'style-book' ], true );
 	}
 
 	private static function table_exists(): bool {

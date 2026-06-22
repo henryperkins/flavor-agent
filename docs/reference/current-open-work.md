@@ -39,6 +39,8 @@ Initial source basis: all repository/workspace doc-like files enumerated on 2026
 
 2026-06-22 editor pending-apply visibility: the shared editor activity section now recognizes external-apply lifecycle rows before undo labeling, showing pending approval, rejected, expired, and apply-failed states with compact operator-facing context instead of implying those rows were already applied. The slice is covered by `src/components/__tests__/AIActivitySection.test.js`.
 
+2026-06-22 admin pending-apply approval notifications: eligible administrators now get a wp-admin notice when at least one pending external style apply exists, including requested target context, requester + request reference, expiry timestamp, and a direct link to `Settings > AI Activity`. Coverage lives in `tests/phpunit/ActivityPageTest.php` and `tests/phpunit/ExternalApplyLifecycleTest.php`.
+
 Archived files under `docs/superpowers/plans/archive/` and implemented design specs under `docs/superpowers/specs/` are historical context only. Do not treat them as active implementation plans. Any item below needs a fresh source-grounded plan before code changes unless the change is a narrow docs or verification update.
 
 ## Current Implementation Candidates
@@ -47,7 +49,7 @@ These items are not blocked by a known upstream API prerequisite. They still nee
 
 | Workstream | Why it is open | Current source | Next move |
 | --- | --- | --- | --- |
-| Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, an Approvals quick filter, a bounded rendered `learningReport` for global admin reads, durable pattern-trait capture for new pattern outcome rows, and editor-side recognition of pending/rejected/expired/failed external-apply lifecycle rows. Approval notifications, a rich visual diff viewer, broader row actions/discovery, and cross-operator workflows remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | No remaining Phase 9 pattern-trait item; choose a different bounded governance follow-up before implementation. |
+| Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, an Approvals quick filter, a bounded rendered `learningReport` for global admin reads, durable pattern-trait capture for new pattern outcome rows, editor-side recognition of pending/rejected/expired/failed external-apply lifecycle rows, and wp-admin approval notifications for pending external style applies. A rich visual diff viewer, broader row actions/discovery, and cross-operator workflows remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | No remaining Phase 9 pattern-trait item; choose a different bounded governance follow-up before implementation. |
 
 ## Sequenced Later
 
