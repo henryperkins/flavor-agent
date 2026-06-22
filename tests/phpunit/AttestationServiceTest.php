@@ -26,6 +26,7 @@ final class AttestationServiceTest extends TestCase {
 		$id = AttestationService::record_apply( $this->apply_context() );
 
 		$this->assertNotNull( $id );
+		$this->assertMatchesRegularExpression( '/^att_[a-f0-9]{32}$/', $id );
 
 		$row = Repository::find( $id );
 

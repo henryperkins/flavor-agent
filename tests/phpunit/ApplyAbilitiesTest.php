@@ -568,6 +568,63 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertSame( 'var:preset|color|accent', $written['styles']['color']['text'] );
 	}
 
+	public function test_decision_approve_surfaces_attestation_recording_failures(): void {
+		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $pending );
+
+		$failure_filter  = static function (): string {
+			throw new \RuntimeException( 'attestation signing unavailable' );
+		};
+		$captured_event  = null;
+		$captured_error  = null;
+		$log_file        = \tempnam( \sys_get_temp_dir(), 'flavor-agent-attestation-log-' );
+		$previous_log    = \ini_get( 'error_log' );
+		$previous_errors = \ini_get( 'log_errors' );
+
+		\add_filter( 'flavor_agent_attest_private_key', $failure_filter );
+		\add_action(
+			'flavor_agent_attestation_record_failed',
+			static function ( array $event, \Throwable $error ) use ( &$captured_event, &$captured_error ): void {
+				$captured_event = $event;
+				$captured_error = $error;
+			},
+			10,
+			2
+		);
+		\ini_set( 'log_errors', '1' );
+		\ini_set( 'error_log', $log_file );
+
+		try {
+			$entry = \FlavorAgent\Apply\PendingApplyDecision::decide(
+				(string) $pending['activityId'],
+				'approve'
+			);
+		} finally {
+			\remove_filter( 'flavor_agent_attest_private_key', $failure_filter );
+			\ini_set( 'error_log', false === $previous_log ? '' : (string) $previous_log );
+			\ini_set( 'log_errors', false === $previous_errors ? '' : (string) $previous_errors );
+		}
+
+		$contents = \is_string( $log_file ) && \file_exists( $log_file )
+			? (string) \file_get_contents( $log_file )
+			: '';
+
+		if ( \is_string( $log_file ) && \file_exists( $log_file ) ) {
+			\unlink( $log_file );
+		}
+
+		$this->assertIsArray( $entry );
+		$this->assertSame( 'available', $entry['apply']['status'] );
+		$this->assertIsArray( $captured_event );
+		$this->assertSame( 'apply', $captured_event['operation'] );
+		$this->assertSame( (string) $pending['activityId'], $captured_event['activityId'] );
+		$this->assertSame( \RuntimeException::class, $captured_event['exceptionClass'] );
+		$this->assertSame( 'attestation signing unavailable', $captured_event['message'] );
+		$this->assertInstanceOf( \RuntimeException::class, $captured_error );
+		$this->assertStringContainsString( '[flavor-agent] Attestation recording failed during apply', $contents );
+		$this->assertStringContainsString( 'attestation signing unavailable', $contents );
+	}
+
 	public function test_decision_approve_fails_closed_when_the_entity_drifted_after_the_request(): void {
 		$pending = ApplyAbilities::request_style_apply( $this->agent_request_input() );
 		$this->assertIsArray( $pending );

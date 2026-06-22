@@ -390,7 +390,14 @@ final class ApplyAbilities {
 					]
 				);
 			} catch ( \Throwable $e ) {
-				unset( $e ); // Attestation is best-effort; undo already succeeded.
+				\FlavorAgent\Attestation\AttestationService::record_failure(
+					$e,
+					[
+						'operation'            => 'revert',
+						'activityId'           => $activity_id,
+						'revertsAttestationId' => (string) $prior['attestation_id'],
+					]
+				);
 			}
 		}
 

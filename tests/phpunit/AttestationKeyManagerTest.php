@@ -27,6 +27,7 @@ final class AttestationKeyManagerTest extends TestCase {
 		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $sk );
 
 		$this->assertTrue( KeyManager::configured() );
+		$this->assertSame( 32, strlen( (string) KeyManager::key_id() ) );
 
 		KeyManager::ensure_registered();
 		$jwks = KeyManager::jwks();
@@ -34,5 +35,7 @@ final class AttestationKeyManagerTest extends TestCase {
 		$this->assertSame( 'OKP', $jwks['keys'][0]['kty'] );
 		$this->assertSame( 'Ed25519', $jwks['keys'][0]['crv'] );
 		$this->assertSame( KeyManager::key_id(), $jwks['keys'][0]['kid'] );
+		$this->assertSame( 'active', $jwks['keys'][0]['status'] );
+		$this->assertNotSame( '', (string) $jwks['keys'][0]['createdAt'] );
 	}
 }

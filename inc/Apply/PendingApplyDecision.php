@@ -141,7 +141,13 @@ final class PendingApplyDecision {
 				]
 			);
 		} catch ( \Throwable $e ) {
-			unset( $e ); // Attestation is best-effort; the governed apply is the contract.
+			\FlavorAgent\Attestation\AttestationService::record_failure(
+				$e,
+				[
+					'operation'  => 'apply',
+					'activityId' => $activity_id,
+				]
+			);
 		}
 
 		return ActivityRepository::transition_external_apply(

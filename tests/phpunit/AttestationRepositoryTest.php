@@ -23,6 +23,28 @@ final class AttestationRepositoryTest extends TestCase {
 		$this->assertSame( Repository::SCHEMA_VERSION, WordPressTestState::$options[ Repository::SCHEMA_OPTION ] ?? null );
 	}
 
+	public function test_install_does_not_mark_schema_when_table_is_missing_after_create(): void {
+		global $wpdb;
+
+		$previous_wpdb = $wpdb;
+		$wpdb          = new class() extends \wpdb {
+			public function query( string $query ) {
+				WordPressTestState::$db_queries[] = $query;
+
+				return 1;
+			}
+		};
+
+		try {
+			Repository::install();
+		} finally {
+			$wpdb = $previous_wpdb;
+		}
+
+		$this->assertArrayNotHasKey( Repository::table_name(), WordPressTestState::$db_tables );
+		$this->assertArrayNotHasKey( Repository::SCHEMA_OPTION, WordPressTestState::$options );
+	}
+
 	public function test_insert_then_find_round_trips(): void {
 		Repository::install();
 		Repository::insert(

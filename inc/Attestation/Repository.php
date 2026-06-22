@@ -76,6 +76,10 @@ final class Repository {
 			}
 		}
 
+		if ( ! self::table_exists() ) {
+			return;
+		}
+
 		\update_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
 	}
 

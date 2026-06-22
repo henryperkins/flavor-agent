@@ -38,7 +38,7 @@ final class KeyManager {
 	public static function key_id(): ?string {
 		$pk = self::public_key();
 
-		return null === $pk ? null : substr( hash( 'sha256', $pk ), 0, 16 );
+		return null === $pk ? null : substr( hash( 'sha256', $pk ), 0, 32 );
 	}
 
 	public static function ensure_registered(): void {
@@ -73,20 +73,26 @@ final class KeyManager {
 	}
 
 	/**
-	 * @return array{keys: list<array{kty: string, crv: string, x: string, kid: string, use: string, alg: string}>}
+	 * @return array{keys: list<array{kty: string, crv: string, x: string, kid: string, use: string, alg: string, status: string, createdAt: string}>}
 	 */
 	public static function jwks(): array {
 		$registry = \get_option( self::REGISTRY_OPTION, [] );
 		$keys     = [];
 
 		foreach ( is_array( $registry ) ? $registry : [] as $record ) {
+			if ( ! is_array( $record ) ) {
+				continue;
+			}
+
 			$keys[] = [
-				'kty' => 'OKP',
-				'crv' => 'Ed25519',
-				'x'   => (string) $record['x'],
-				'kid' => (string) $record['kid'],
-				'use' => 'sig',
-				'alg' => 'EdDSA',
+				'kty'       => 'OKP',
+				'crv'       => 'Ed25519',
+				'x'         => (string) $record['x'],
+				'kid'       => (string) $record['kid'],
+				'use'       => 'sig',
+				'alg'       => 'EdDSA',
+				'status'    => (string) ( $record['status'] ?? '' ),
+				'createdAt' => (string) ( $record['createdAt'] ?? '' ),
 			];
 		}
 

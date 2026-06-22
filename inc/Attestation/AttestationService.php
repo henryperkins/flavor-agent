@@ -36,7 +36,7 @@ final class AttestationService {
 		$before_dig = Canonicalizer::subject_digest( $before_cfg, $scope, $block_name );
 		$after_dig  = Canonicalizer::subject_digest( $after_cfg, $scope, $block_name );
 
-		$attestation_id = 'att_' . bin2hex( random_bytes( 12 ) );
+		$attestation_id = 'att_' . bin2hex( random_bytes( 16 ) );
 		$statement      = StatementBuilder::build(
 			[
 				'attestationId'           => $attestation_id,
@@ -92,6 +92,69 @@ final class AttestationService {
 		$ctx['decision']             = 'revert';
 
 		return self::record_apply( $ctx );
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 */
+	public static function record_failure( \Throwable $error, array $context = [] ): void {
+		$event = [
+			'operation'      => (string) ( $context['operation'] ?? 'record' ),
+			'activityId'     => (string) ( $context['activityId'] ?? '' ),
+			'exceptionClass' => get_class( $error ),
+			'message'        => $error->getMessage(),
+		];
+
+		if ( isset( $context['attestationId'] ) ) {
+			$event['attestationId'] = (string) $context['attestationId'];
+		}
+
+		if ( isset( $context['revertsAttestationId'] ) ) {
+			$event['revertsAttestationId'] = (string) $context['revertsAttestationId'];
+		}
+
+		if ( function_exists( 'do_action' ) ) {
+			try {
+				\do_action( 'flavor_agent_attestation_record_failed', $event, $error );
+			} catch ( \Throwable ) {
+				// Diagnostic observers must not change apply or undo behavior.
+			}
+		}
+
+		if ( ! function_exists( 'error_log' ) || ! self::should_log_failure( $event, $error ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Attestation failures are best-effort and otherwise invisible after a governed apply succeeds.
+		\error_log(
+			sprintf(
+				'[flavor-agent] Attestation recording failed during %s for activity %s: %s - %s',
+				$event['operation'],
+				'' !== $event['activityId'] ? $event['activityId'] : '(none)',
+				$event['exceptionClass'],
+				$event['message']
+			)
+		);
+	}
+
+	/**
+	 * @param array<string, string> $event
+	 */
+	private static function should_log_failure( array $event, \Throwable $error ): bool {
+		if ( ! function_exists( 'apply_filters' ) ) {
+			return true;
+		}
+
+		try {
+			return (bool) \apply_filters(
+				'flavor_agent_attestation_failure_logging_enabled',
+				true,
+				$event,
+				$error
+			);
+		} catch ( \Throwable ) {
+			return true;
+		}
 	}
 
 	private function __construct() {}
