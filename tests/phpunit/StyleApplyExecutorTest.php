@@ -476,6 +476,64 @@ final class StyleApplyExecutorTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$updated_posts );
 	}
 
+	public function test_comparable_config_treats_preset_ref_and_resolved_css_var_as_equal(): void {
+		$preset_ref       = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => 'var:preset|color|accent-1' ] ],
+		];
+		$resolved_css_var = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => 'var(--wp--preset--color--accent-1)' ] ],
+		];
+
+		$this->assertSame(
+			StyleApplyExecutor::comparable_config_hash( $preset_ref ),
+			StyleApplyExecutor::comparable_config_hash( $resolved_css_var ),
+			'A theme.json preset reference and its resolved CSS custom property are the same logical value and must compare equal.'
+		);
+	}
+
+	public function test_undo_succeeds_when_core_normalized_the_stored_preset_to_a_resolved_css_var(): void {
+		// WordPress persists the user Global Styles post with the resolved CSS
+		// custom property (var(--wp--preset--color--accent)), while Flavor Agent's
+		// recorded after-snapshot keeps the theme.json preset reference it wrote
+		// (var:preset|color|accent). Undo must treat them as the same value and
+		// restore the before snapshot, not fail closed as if the site drifted.
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'background' => 'var(--wp--preset--color--accent)' ] ],
+			]
+		);
+
+		$result = StyleApplyExecutor::undo(
+			[
+				'surface' => 'global-styles',
+				'target'  => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
+				'before'  => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'after'   => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [ 'color' => [ 'background' => 'var:preset|color|accent' ] ],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [ 'result' => 'undone' ], $result );
+
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( [], $written['styles'], 'Undo restores the empty before snapshot.' );
+	}
+
 	public function test_undo_restores_only_the_block_branch_for_style_book_rows(): void {
 		$this->seed_global_styles_post(
 			[
@@ -517,6 +575,50 @@ final class StyleApplyExecutorTest extends TestCase {
 		);
 		$this->assertArrayNotHasKey( 'blocks', $written['styles'], 'The branch is removed when before had none.' );
 		$this->assertSame( '#222222', $written['styles']['color']['text'], 'Untargeted styles stay untouched.' );
+	}
+
+	public function test_style_book_undo_succeeds_when_core_normalized_the_block_branch_preset(): void {
+		// Style Book parity with the Global Styles case: core stores the block
+		// branch preset as a resolved CSS custom property while the recorded
+		// after-snapshot keeps the theme.json reference. Undo must not read drift.
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [
+					'blocks' => [
+						'core/paragraph' => [ 'color' => [ 'text' => 'var(--wp--preset--color--accent)' ] ],
+					],
+				],
+			]
+		);
+
+		$result = StyleApplyExecutor::undo(
+			[
+				'surface' => 'style-book',
+				'target'  => [
+					'globalStylesId' => self::GLOBAL_STYLES_ID,
+					'blockName'      => 'core/paragraph',
+				],
+				'before'  => [ 'userConfig' => [] ],
+				'after'   => [
+					'userConfig' => [
+						'styles' => [
+							'blocks' => [
+								'core/paragraph' => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [ 'result' => 'undone' ], $result );
+
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertArrayNotHasKey( 'blocks', $written['styles'], 'Undo removes the block branch that had no before state.' );
 	}
 
 	public function test_style_book_undo_supports_legacy_full_config_snapshots(): void {

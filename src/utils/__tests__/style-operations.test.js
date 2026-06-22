@@ -28,6 +28,7 @@ const { store: blockEditorStore } = require( '@wordpress/block-editor' );
 const {
 	applyGlobalStyleSuggestionOperations,
 	buildGlobalStylesRecommendationContextSignature,
+	getComparableGlobalStylesConfig,
 	getGlobalStylesActivityUndoState,
 	getGlobalStylesUserConfig,
 	undoGlobalStyleSuggestionOperations,
@@ -1152,6 +1153,92 @@ describe( 'style-operations', () => {
 				canUndo: false,
 				status: 'failed',
 			} )
+		);
+	} );
+
+	test( 'undo treats a core-normalized resolved CSS var as equal to the recorded preset reference', () => {
+		const activity = {
+			target: { globalStylesId: '17' },
+			before: { userConfig: { settings: {}, styles: {} } },
+			after: {
+				userConfig: {
+					settings: {},
+					styles: {
+						color: { background: 'var:preset|color|accent' },
+					},
+				},
+			},
+		};
+
+		// WordPress core persisted the preset as a resolved CSS custom property
+		// while the recorded after-snapshot kept the theme.json reference.
+		currentRecord = {
+			settings: {},
+			styles: {
+				color: { background: 'var(--wp--preset--color--accent)' },
+			},
+		};
+
+		expect( getGlobalStylesActivityUndoState( activity ) ).toEqual( {
+			canUndo: true,
+			status: 'available',
+			error: null,
+		} );
+	} );
+
+	test( 'style book undo treats a core-normalized resolved CSS var as equal to the recorded preset reference', () => {
+		const activity = {
+			surface: 'style-book',
+			target: { globalStylesId: '17', blockName: 'core/paragraph' },
+			before: { userConfig: {} },
+			after: {
+				userConfig: {
+					styles: {
+						blocks: {
+							'core/paragraph': {
+								color: { text: 'var:preset|color|accent' },
+							},
+						},
+					},
+				},
+			},
+		};
+
+		currentRecord = {
+			settings: {},
+			styles: {
+				blocks: {
+					'core/paragraph': {
+						color: { text: 'var(--wp--preset--color--accent)' },
+					},
+				},
+			},
+		};
+
+		expect( getGlobalStylesActivityUndoState( activity ) ).toEqual( {
+			canUndo: true,
+			status: 'available',
+			error: null,
+		} );
+	} );
+
+	test( 'getComparableGlobalStylesConfig leaves preset serializations untouched so signatures stay byte-stable', () => {
+		// The undo comparison canonicalizes preset/resolved forms; the signature
+		// layer must NOT, or client and server recommendation signatures diverge.
+		const presetRef = getComparableGlobalStylesConfig( {
+			styles: { color: { background: 'var:preset|color|accent' } },
+		} );
+		const resolved = getComparableGlobalStylesConfig( {
+			styles: {
+				color: { background: 'var(--wp--preset--color--accent)' },
+			},
+		} );
+
+		expect( presetRef.styles.color.background ).toBe(
+			'var:preset|color|accent'
+		);
+		expect( resolved.styles.color.background ).toBe(
+			'var(--wp--preset--color--accent)'
 		);
 	} );
 

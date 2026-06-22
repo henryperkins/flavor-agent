@@ -79,8 +79,8 @@ final class StyleApplyExecutor {
 	 */
 	public static function comparable_config( array $config ): array {
 		return [
-			'settings' => self::sort_keys_deep( is_array( $config['settings'] ?? null ) ? $config['settings'] : [] ),
-			'styles'   => self::sort_keys_deep( is_array( $config['styles'] ?? null ) ? $config['styles'] : [] ),
+			'settings' => self::canonicalize_values_deep( self::sort_keys_deep( is_array( $config['settings'] ?? null ) ? $config['settings'] : [] ) ),
+			'styles'   => self::canonicalize_values_deep( self::sort_keys_deep( is_array( $config['styles'] ?? null ) ? $config['styles'] : [] ) ),
 		];
 	}
 
@@ -382,9 +382,9 @@ final class StyleApplyExecutor {
 		$live_styles   = is_array( $live['styles'] ?? null ) ? $live['styles'] : [];
 		$before_styles = is_array( $before_config['styles'] ?? null ) ? $before_config['styles'] : [];
 		$after_styles  = is_array( $after_config['styles'] ?? null ) ? $after_config['styles'] : [];
-		$live_branch   = self::sort_keys_deep( self::read_path( $live_styles, $branch_path ) );
-		$before_branch = self::sort_keys_deep( self::read_path( $before_styles, $branch_path ) );
-		$after_branch  = self::sort_keys_deep( self::read_path( $after_styles, $branch_path ) );
+		$live_branch   = self::canonicalize_values_deep( self::sort_keys_deep( self::read_path( $live_styles, $branch_path ) ) );
+		$before_branch = self::canonicalize_values_deep( self::sort_keys_deep( self::read_path( $before_styles, $branch_path ) ) );
+		$after_branch  = self::canonicalize_values_deep( self::sort_keys_deep( self::read_path( $after_styles, $branch_path ) ) );
 
 		if ( $live_branch === $before_branch ) {
 			return [ 'result' => 'already_undone' ];
@@ -649,6 +649,45 @@ final class StyleApplyExecutor {
 		}
 
 		return $sorted;
+	}
+
+	/**
+	 * Normalize preset/custom references so two serializations of the same value
+	 * compare equal. WordPress persists the user Global Styles post with the
+	 * resolved CSS custom property (var(--wp--preset--color--x)), while Flavor
+	 * Agent records the theme.json reference it wrote (var:preset|color|x).
+	 * Without this, drift-safe undo reads false drift on every preset-valued
+	 * apply because the live read-back never byte-matches the recorded snapshot.
+	 */
+	private static function canonicalize_values_deep( mixed $value ): mixed {
+		if ( is_string( $value ) ) {
+			return self::canonicalize_style_value( $value );
+		}
+
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+
+		$normalized = [];
+
+		foreach ( $value as $key => $entry ) {
+			$normalized[ $key ] = self::canonicalize_values_deep( $entry );
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * Map a resolved CSS custom property (var(--wp--preset--color--x)) back to
+	 * its theme.json reference form (var:preset|color|x). Non-preset strings pass
+	 * through unchanged so only logically-equivalent serializations collapse.
+	 */
+	private static function canonicalize_style_value( string $value ): string {
+		if ( 1 === preg_match( '/^var\(\s*--wp--(.+?)\s*\)$/', $value, $matches ) ) {
+			return 'var:' . str_replace( '--', '|', $matches[1] );
+		}
+
+		return $value;
 	}
 
 	/**
