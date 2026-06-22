@@ -97,6 +97,7 @@ if (
 }
 // Helper abilities and audit/sync routes are infra, not AI-feature-gated.
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
+add_action( 'rest_api_init', [ FlavorAgent\REST\AttestationController::class, 'register_routes' ] );
 add_action( 'admin_enqueue_scripts', [ FlavorAgent\Settings::class, 'maybe_enqueue_admin_assets' ] );
 add_action( 'admin_menu', [ FlavorAgent\Admin\ActivityPage::class, 'add_menu' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );
