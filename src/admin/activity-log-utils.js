@@ -1,4 +1,4 @@
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 import {
 	getResolvedActivityUndoState,
@@ -1826,6 +1826,193 @@ export function getGovernanceDetails( entry = {} ) {
 		undoReason,
 		diagnosticText: getGovernanceDiagnosticText( entry, details ),
 	};
+}
+
+/**
+ * Derives a short, plain-language "What happened" summary from governance
+ * details so a non-technical reviewer can read the outcome at a glance.
+ *
+ * This is a presentation-only derivation over fields already produced by
+ * getGovernanceDetails(); it reads no new data and changes no lifecycle.
+ *
+ * @param {Object}   details         Output of getGovernanceDetails().
+ * @param {Function} formatTimestamp Optional formatter for ISO timestamps.
+ * @return {Array<{label: string, value: string}>} Plain-language rows.
+ */
+export function getGovernancePlainSummary(
+	details,
+	formatTimestamp = ( value ) => value
+) {
+	if ( ! details ) {
+		return [];
+	}
+
+	const opsCount =
+		details.executedOperations.length ||
+		details.proposedOperations.length ||
+		details.comparisonRows.length ||
+		0;
+	const applied = details.executedOperations.length > 0;
+	const target = details.targetLabel;
+
+	let whatChanged;
+	if ( opsCount > 0 && applied ) {
+		whatChanged = target
+			? sprintf(
+					/* translators: 1: number of changes, 2: change target, e.g. "Global Styles 17". */
+					_n(
+						'%1$d change applied to %2$s',
+						'%1$d changes applied to %2$s',
+						opsCount,
+						'flavor-agent'
+					),
+					opsCount,
+					target
+			  )
+			: sprintf(
+					/* translators: %d: number of changes. */
+					_n(
+						'%d change applied',
+						'%d changes applied',
+						opsCount,
+						'flavor-agent'
+					),
+					opsCount
+			  );
+	} else if ( opsCount > 0 ) {
+		whatChanged = target
+			? sprintf(
+					/* translators: 1: number of changes, 2: change target, e.g. "Global Styles 17". */
+					_n(
+						'%1$d change proposed to %2$s',
+						'%1$d changes proposed to %2$s',
+						opsCount,
+						'flavor-agent'
+					),
+					opsCount,
+					target
+			  )
+			: sprintf(
+					/* translators: %d: number of changes. */
+					_n(
+						'%d change proposed',
+						'%d changes proposed',
+						opsCount,
+						'flavor-agent'
+					),
+					opsCount
+			  );
+	} else {
+		whatChanged = target || EMPTY_VALUE;
+	}
+
+	const requestedWho =
+		details.requestedByLabel && details.requestedByLabel !== EMPTY_VALUE
+			? details.requestedByLabel
+			: '';
+	const requestedWhen = details.requestedAt
+		? formatTimestamp( details.requestedAt )
+		: '';
+	const requestedParts = [ requestedWho, requestedWhen ].filter( Boolean );
+	const requested = requestedParts.length
+		? requestedParts.join( ' · ' )
+		: EMPTY_VALUE;
+
+	let currentWhenApplied;
+	switch ( details.status ) {
+		case 'available':
+			currentWhenApplied = __(
+				'Yes — confirmed current when applied',
+				'flavor-agent'
+			);
+			break;
+		case 'undone':
+			currentWhenApplied = __(
+				'Yes — was current when applied, later undone',
+				'flavor-agent'
+			);
+			break;
+		case 'blocked':
+			currentWhenApplied = __(
+				'Yes — was current when applied',
+				'flavor-agent'
+			);
+			break;
+		case 'pending':
+			currentWhenApplied = details.expiresAt
+				? sprintf(
+						/* translators: %s: expiry timestamp. */
+						__( 'Pending approval — expires %s', 'flavor-agent' ),
+						formatTimestamp( details.expiresAt )
+				  )
+				: __( 'Pending approval', 'flavor-agent' );
+			break;
+		case 'expired':
+			currentWhenApplied = __(
+				'No — the request lapsed before approval',
+				'flavor-agent'
+			);
+			break;
+		case 'rejected':
+			currentWhenApplied = __(
+				'Not applied — rejected before approval',
+				'flavor-agent'
+			);
+			break;
+		case 'failed':
+			currentWhenApplied = details.failureMessage
+				? sprintf(
+						/* translators: %s: failure reason. */
+						__( 'No — apply blocked: %s', 'flavor-agent' ),
+						details.failureMessage
+				  )
+				: __( 'No — apply did not complete', 'flavor-agent' );
+			break;
+		default:
+			currentWhenApplied = details.executedAt
+				? __( 'Yes — confirmed current when applied', 'flavor-agent' )
+				: EMPTY_VALUE;
+	}
+
+	let reversible;
+	if ( details.canUndo ) {
+		reversible = __( 'Yes — this apply can be undone', 'flavor-agent' );
+	} else if ( details.undoStatus === 'undone' ) {
+		reversible = __( 'Already undone', 'flavor-agent' );
+	} else if ( details.undoStatus === 'blocked' ) {
+		reversible = details.undoReason
+			? sprintf(
+					/* translators: %s: reason the undo is blocked. */
+					__( 'Undo blocked — %s', 'flavor-agent' ),
+					details.undoReason
+			  )
+			: __( 'Undo blocked', 'flavor-agent' );
+	} else if ( details.status === 'pending' ) {
+		reversible = __( 'Not yet — awaiting approval', 'flavor-agent' );
+	} else if (
+		details.status === 'rejected' ||
+		details.status === 'expired'
+	) {
+		reversible = __( 'Nothing to undo — never applied', 'flavor-agent' );
+	} else if ( details.status === 'failed' ) {
+		reversible = __(
+			'Nothing to undo — apply did not complete',
+			'flavor-agent'
+		);
+	} else {
+		reversible =
+			details.undoReason || __( 'Not reversible', 'flavor-agent' );
+	}
+
+	return [
+		{ label: __( 'What changed', 'flavor-agent' ), value: whatChanged },
+		{ label: __( 'Requested', 'flavor-agent' ), value: requested },
+		{
+			label: __( 'Current when applied', 'flavor-agent' ),
+			value: currentWhenApplied,
+		},
+		{ label: __( 'Reversible', 'flavor-agent' ), value: reversible },
+	];
 }
 
 export function buildDecisionRequest( bootData, activityId, decision, note ) {

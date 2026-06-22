@@ -28,6 +28,9 @@ docker-compose.yml
 docs
 .env.example
 flavor-agent-*-php-*.md
+*.ppt
+*.pptx
+*.zip
 jsconfig.json
 jest.config.js
 node_modules
@@ -48,5 +51,6 @@ scripts
 src
 STATUS.md
 tests
+tools
 tmp
 webpack.config.js

@@ -57,8 +57,8 @@ run_docker_plugin_check() {
 	docker compose exec -T wordpress bash -s -- "${plugin_slug}" "$@" <<'DOCKER_PLUGIN_CHECK'
 set -euo pipefail
 
-plugin_slug="$1"
-shift
+	plugin_slug="$1"
+	shift
 
 cd /var/www/html/wp-content/plugins/flavor-agent
 
@@ -73,9 +73,70 @@ cleanup() {
 	fi
 }
 
-trap cleanup EXIT
+	trap cleanup EXIT
 
-bash scripts/prepare-release.sh "${staged_plugin_dir}"
+	resolve_format_mode() {
+		local has_format=0
+		local format=''
+		local previous_format=0
+		local arg
+
+		for arg in "$@"; do
+			if [[ "${previous_format}" == "1" ]]; then
+				format="${arg}"
+				has_format=1
+				previous_format=0
+				continue
+			fi
+
+			if [[ "${arg}" == "--format" ]]; then
+				previous_format=1
+				continue
+			fi
+
+			if [[ "${arg}" == --format=* ]]; then
+				format="${arg#--format=}"
+				has_format=1
+			fi
+		done
+
+		if [[ "${has_format}" == "0" ]]; then
+			printf 'default\n'
+		elif [[ "${format}" == "strict-table" ]]; then
+			printf 'strict-table\n'
+		else
+			printf 'custom\n'
+		fi
+	}
+
+	run_plugin_check_command() {
+		local strict_table_output="$1"
+		local output=''
+		local status=0
+
+		shift
+
+		set +e
+		output="$(wp "$@" 2>&1)"
+		status=$?
+		set -e
+
+		if [[ -n "${output}" ]]; then
+			printf '%s\n' "${output}"
+		fi
+
+		if [[ "${status}" -ne 0 ]]; then
+			return "${status}"
+		fi
+
+		if [[ "${strict_table_output}" == "1" ]] \
+			&& printf '%s\n' "${output}" | awk -F '\t' 'NR > 1 && $3 == "ERROR" { found = 1 } END { exit found ? 0 : 1 }'; then
+			echo "Plugin Check reported errors; see output above." >&2
+			return 1
+		fi
+	}
+
+	bash scripts/prepare-release.sh "${staged_plugin_dir}"
 
 echo "Plugin Check staged release: ${staged_plugin_dir}" >&2
 echo "Plugin Check will scan these files:" >&2
@@ -94,9 +155,16 @@ args=(
 	"--slug=${plugin_slug}"
 )
 
-if [[ " $* " != *" --format="* ]]; then
-	args+=( "--format=strict-table" )
-fi
+	format_mode="$(resolve_format_mode "$@")"
+
+	if [[ "${format_mode}" == "default" ]]; then
+		args+=( "--format=strict-table" )
+		strict_table_output=1
+	elif [[ "${format_mode}" == "strict-table" ]]; then
+		strict_table_output=1
+	else
+		strict_table_output=0
+	fi
 
 if [[ -n "${PLUGIN_CHECK_KEEP_STAGE:-}" ]]; then
 	echo "Staged plugin for plugin-check at ${staged_plugin_dir}" >&2
@@ -104,7 +172,7 @@ fi
 
 args+=( "$@" )
 
-wp "${args[@]}" --allow-root
+	run_plugin_check_command "${strict_table_output}" "${args[@]}" --allow-root
 DOCKER_PLUGIN_CHECK
 }
 
@@ -158,6 +226,40 @@ prepare_stage_parent
 stage_plugin
 describe_stage
 
+resolve_format_mode() {
+	local has_format=0
+	local format=''
+	local previous_format=0
+	local arg
+
+	for arg in "$@"; do
+		if [[ "${previous_format}" == "1" ]]; then
+			format="${arg}"
+			has_format=1
+			previous_format=0
+			continue
+		fi
+
+		if [[ "${arg}" == "--format" ]]; then
+			previous_format=1
+			continue
+		fi
+
+		if [[ "${arg}" == --format=* ]]; then
+			format="${arg#--format=}"
+			has_format=1
+		fi
+	done
+
+	if [[ "${has_format}" == "0" ]]; then
+		printf 'default\n'
+	elif [[ "${format}" == "strict-table" ]]; then
+		printf 'strict-table\n'
+	else
+		printf 'custom\n'
+	fi
+}
+
 args=(
 	plugin
 	check
@@ -168,8 +270,15 @@ args=(
 	"--slug=${plugin_slug}"
 )
 
-if [[ " $* " != *" --format="* ]]; then
+format_mode="$(resolve_format_mode "$@")"
+
+if [[ "${format_mode}" == "default" ]]; then
 	args+=( "--format=strict-table" )
+	strict_table_output=1
+elif [[ "${format_mode}" == "strict-table" ]]; then
+	strict_table_output=1
+else
+	strict_table_output=0
 fi
 
 if [[ -n "${PLUGIN_CHECK_KEEP_STAGE:-}" ]]; then
@@ -178,4 +287,31 @@ fi
 
 args+=( "$@" )
 
-wp "${args[@]}"
+run_plugin_check_command() {
+	local strict_table_output="$1"
+	local output=''
+	local status=0
+
+	shift
+
+	set +e
+	output="$(wp "$@" 2>&1)"
+	status=$?
+	set -e
+
+	if [[ -n "${output}" ]]; then
+		printf '%s\n' "${output}"
+	fi
+
+	if [[ "${status}" -ne 0 ]]; then
+		return "${status}"
+	fi
+
+	if [[ "${strict_table_output}" == "1" ]] \
+		&& printf '%s\n' "${output}" | awk -F '\t' 'NR > 1 && $3 == "ERROR" { found = 1 } END { exit found ? 0 : 1 }'; then
+		echo "Plugin Check reported errors; see output above." >&2
+		return 1
+	fi
+}
+
+run_plugin_check_command "${strict_table_output}" "${args[@]}"

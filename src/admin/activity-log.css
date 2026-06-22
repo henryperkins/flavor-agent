@@ -661,6 +661,14 @@ body.settings_page_flavor-agent-activity {
   font-size: 13px;
   line-height: 1.5;
 }
+.flavor-agent-activity-log__governance-summary {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--flavor-agent-activity-log-border-soft);
+  border-radius: var(--wpds-border-radius-md, 4px);
+  background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
+}
 
 .flavor-agent-activity-log__governance-kicker,
 .flavor-agent-activity-log__governance-subtitle {
@@ -694,6 +702,27 @@ body.settings_page_flavor-agent-activity {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.flavor-agent-activity-log__attestation-raw-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.flavor-agent-activity-log__attestation-result {
+  margin: 2px 0 0;
+}
+
+.flavor-agent-activity-log__attestation-result p {
+  margin: 0;
+}
+
+.flavor-agent-activity-log__attestation-result ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
 }
 
 .flavor-agent-activity-log__comparison {
@@ -737,15 +766,37 @@ body.settings_page_flavor-agent-activity {
   text-transform: uppercase;
 }
 
-.flavor-agent-activity-log__governance-diagnostics summary {
+.flavor-agent-activity-log__record {
+  border: 1px solid var(--flavor-agent-activity-log-border-soft);
+  border-radius: var(--wpds-border-radius-md, 4px);
+  background: var(--wpds-color-bg-surface, #fff);
+}
+
+.flavor-agent-activity-log__record[open] {
+  padding-bottom: 12px;
+}
+
+.flavor-agent-activity-log__record-summary {
   cursor: pointer;
+  padding: 10px 12px;
   color: var(--flavor-agent-activity-log-accent-strong);
   font-size: 12px;
   font-weight: 600;
 }
 
-.flavor-agent-activity-log__governance-diagnostics .flavor-agent-activity-log__code {
-  margin-top: 8px;
+.flavor-agent-activity-log__record-summary:focus-visible {
+  outline: 2px solid var(--flavor-agent-activity-log-accent);
+  outline-offset: 2px;
+}
+
+.flavor-agent-activity-log__record-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px;
+}
+
+.flavor-agent-activity-log__record .flavor-agent-activity-log__code {
+  margin-top: 4px;
   max-height: 140px;
 }
 

@@ -31,7 +31,9 @@ import {
 	areActivityViewsEqual,
 	buildDecisionRequest,
 	clampActivityViewPage,
+	formatActivityTimestamp,
 	getGovernanceDetails,
+	getGovernancePlainSummary,
 	isPendingExternalApply,
 	normalizeActivityEntries,
 	normalizeStoredActivityView,
@@ -1422,54 +1424,326 @@ function getAttestationArtifact( entry ) {
 	};
 }
 
-function AttestationEvidenceSection( { entry } ) {
-	const artifact = getAttestationArtifact( entry );
+function getAttestationResultString( payload, key ) {
+	const value = isPlainRecord( payload ) ? payload[ key ] : '';
 
-	if ( ! artifact ) {
+	return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function getAttestationCheckDetails( type, payload ) {
+	if ( 'envelope' === type ) {
+		const keyId = getAttestationResultString( payload, 'key_id' );
+		const hasSignature = !! getAttestationResultString(
+			payload,
+			'signature_b64'
+		);
+		const hasStatement = !! getAttestationResultString(
+			payload,
+			'statement_b64'
+		);
+		const details = [];
+
+		if ( keyId ) {
+			details.push(
+				sprintf(
+					/* translators: %s: attestation signing key id. */
+					__( 'Key: %s', 'flavor-agent' ),
+					keyId
+				)
+			);
+		}
+
+		details.push(
+			hasSignature
+				? __( 'Signature: present', 'flavor-agent' )
+				: __( 'Signature: not present', 'flavor-agent' )
+		);
+		details.push(
+			hasStatement
+				? __( 'Statement: present', 'flavor-agent' )
+				: __( 'Statement: not present', 'flavor-agent' )
+		);
+
+		return {
+			message: __(
+				'Envelope loaded from the public endpoint.',
+				'flavor-agent'
+			),
+			details,
+		};
+	}
+
+	const digest = getAttestationResultString( payload, 'subject_digest' );
+	const scope = getAttestationResultString( payload, 'scope' );
+	const details = [];
+
+	if ( digest ) {
+		details.push(
+			sprintf(
+				/* translators: %s: canonical subject digest. */
+				__( 'Digest: %s', 'flavor-agent' ),
+				digest
+			)
+		);
+	}
+
+	if ( scope ) {
+		details.push(
+			sprintf(
+				/* translators: %s: attestation subject scope. */
+				__( 'Scope: %s', 'flavor-agent' ),
+				scope
+			)
+		);
+	}
+
+	return {
+		message: __(
+			'Live subject state loaded from the public endpoint.',
+			'flavor-agent'
+		),
+		details,
+	};
+}
+
+function GovernancePlainSummary( { rows = [] } ) {
+	if ( ! rows.length ) {
 		return null;
 	}
 
-	const rows = [
-		[ __( 'Attestation ID', 'flavor-agent' ), artifact.id ],
-		[ __( 'Key', 'flavor-agent' ), artifact.keyId ],
-		[ __( 'Subject', 'flavor-agent' ), artifact.subjectName ],
-		[ __( 'Scope', 'flavor-agent' ), artifact.subjectScope ],
-		[ __( 'Recorded', 'flavor-agent' ), artifact.createdAt ],
-		[
-			__( 'Reverted by', 'flavor-agent' ),
-			artifact.revertedByAttestationId,
-		],
-	];
+	return (
+		<section className="flavor-agent-activity-log__governance-summary">
+			<h4 className="flavor-agent-activity-log__governance-subtitle">
+				{ __( 'What happened', 'flavor-agent' ) }
+			</h4>
+			<dl className="flavor-agent-activity-log__detail-grid">
+				{ rows.map( ( { label, value } ) => (
+					<ActivityDetailRow
+						key={ label }
+						label={ label }
+						value={ value }
+					/>
+				) ) }
+			</dl>
+		</section>
+	);
+}
+
+function AttestationActions( { artifact } ) {
+	const verifyUrl = artifact?.verifyUrl || '';
+	const subjectStateUrl = artifact?.subjectStateUrl || '';
+	const [ activeCheck, setActiveCheck ] = useState( '' );
+	const [ checkResult, setCheckResult ] = useState( null );
+	const [ checkError, setCheckError ] = useState( '' );
+
+	useEffect( () => {
+		setActiveCheck( '' );
+		setCheckResult( null );
+		setCheckError( '' );
+	}, [ artifact?.id, verifyUrl, subjectStateUrl ] );
+
+	const runPublicCheck = useCallback( async ( type, url ) => {
+		if ( ! url ) {
+			return;
+		}
+
+		setActiveCheck( type );
+		setCheckResult( null );
+		setCheckError( '' );
+
+		try {
+			const payload = await apiFetch( { url } );
+
+			setCheckResult( {
+				type,
+				...getAttestationCheckDetails( type, payload ),
+			} );
+		} catch ( error ) {
+			setCheckError(
+				error?.message ||
+					__(
+						'The public verification endpoint could not be loaded.',
+						'flavor-agent'
+					)
+			);
+		} finally {
+			setActiveCheck( '' );
+		}
+	}, [] );
+
+	if ( ! verifyUrl && ! subjectStateUrl ) {
+		return null;
+	}
 
 	return (
 		<section className="flavor-agent-activity-log__governance-subsection">
 			<h4 className="flavor-agent-activity-log__governance-subtitle">
-				{ __( 'Attestation', 'flavor-agent' ) }
+				{ __( 'External verification', 'flavor-agent' ) }
 			</h4>
-			<GovernanceDetailRows rows={ rows } />
+			<p className="flavor-agent-activity-log__copy">
+				{ __(
+					'Anyone can verify this change independently — the signed envelope and the live subject state are public.',
+					'flavor-agent'
+				) }
+			</p>
 			<div className="flavor-agent-activity-log__attestation-actions">
-				{ artifact.verifyUrl && (
+				{ verifyUrl && (
 					<Button
-						href={ artifact.verifyUrl }
-						target="_blank"
-						rel="noreferrer"
+						disabled={ !! activeCheck }
+						isBusy={ 'envelope' === activeCheck }
+						onClick={ () =>
+							runPublicCheck( 'envelope', verifyUrl )
+						}
 						variant="secondary"
 					>
 						{ __( 'Verify envelope', 'flavor-agent' ) }
 					</Button>
 				) }
-				{ artifact.subjectStateUrl && (
+				{ subjectStateUrl && (
 					<Button
-						href={ artifact.subjectStateUrl }
-						target="_blank"
-						rel="noreferrer"
+						disabled={ !! activeCheck }
+						isBusy={ 'subject' === activeCheck }
+						onClick={ () =>
+							runPublicCheck( 'subject', subjectStateUrl )
+						}
 						variant="secondary"
 					>
 						{ __( 'Check live subject', 'flavor-agent' ) }
 					</Button>
 				) }
 			</div>
+			<div className="flavor-agent-activity-log__attestation-raw-links">
+				{ verifyUrl && (
+					<a href={ verifyUrl } target="_blank" rel="noreferrer">
+						{ __( 'Open envelope JSON', 'flavor-agent' ) }
+					</a>
+				) }
+				{ subjectStateUrl && (
+					<a
+						href={ subjectStateUrl }
+						target="_blank"
+						rel="noreferrer"
+					>
+						{ __( 'Open live subject JSON', 'flavor-agent' ) }
+					</a>
+				) }
+			</div>
+			{ checkResult && (
+				<Notice
+					className="flavor-agent-activity-log__attestation-result"
+					status="success"
+					isDismissible={ false }
+				>
+					<p>{ checkResult.message }</p>
+					{ checkResult.details.length > 0 && (
+						<ul>
+							{ checkResult.details.map( ( detail ) => (
+								<li key={ detail }>{ detail }</li>
+							) ) }
+						</ul>
+					) }
+				</Notice>
+			) }
+			{ checkError && (
+				<Notice
+					className="flavor-agent-activity-log__attestation-result"
+					status="error"
+					isDismissible={ false }
+				>
+					{ checkError }
+				</Notice>
+			) }
 		</section>
+	);
+}
+
+function CryptographicRecord( { details, artifact } ) {
+	const hasSignatureEvidence =
+		details.hasResolvedSignature ||
+		details.hasReviewSignature ||
+		details.hasBaselineHash;
+
+	if ( ! hasSignatureEvidence && ! artifact && ! details.diagnosticText ) {
+		return null;
+	}
+
+	const signatureRows = [
+		[
+			__( 'Resolved signature', 'flavor-agent' ),
+			details.hasResolvedSignature
+				? __( 'Recorded', 'flavor-agent' )
+				: __( 'Not recorded', 'flavor-agent' ),
+		],
+		[
+			__( 'Review signature', 'flavor-agent' ),
+			details.hasReviewSignature
+				? __( 'Recorded', 'flavor-agent' )
+				: __( 'Not recorded', 'flavor-agent' ),
+		],
+		[
+			__( 'Baseline hash', 'flavor-agent' ),
+			details.hasBaselineHash
+				? __( 'Recorded', 'flavor-agent' )
+				: __( 'Not recorded', 'flavor-agent' ),
+		],
+	];
+	const attestationRows = artifact
+		? [
+				[ __( 'Attestation ID', 'flavor-agent' ), artifact.id ],
+				[ __( 'Key', 'flavor-agent' ), artifact.keyId ],
+				[ __( 'Subject', 'flavor-agent' ), artifact.subjectName ],
+				[ __( 'Scope', 'flavor-agent' ), artifact.subjectScope ],
+				[ __( 'Recorded', 'flavor-agent' ), artifact.createdAt ],
+				[
+					__( 'Reverted by', 'flavor-agent' ),
+					artifact.revertedByAttestationId,
+				],
+		  ]
+		: [];
+
+	return (
+		<details
+			className="flavor-agent-activity-log__record"
+			aria-label={ __(
+				'Cryptographic record — freshness signatures, attestation, and raw diagnostics',
+				'flavor-agent'
+			) }
+		>
+			<summary className="flavor-agent-activity-log__record-summary">
+				{ __( 'Cryptographic record', 'flavor-agent' ) }
+			</summary>
+			<div className="flavor-agent-activity-log__record-body">
+				{ hasSignatureEvidence && (
+					<div className="flavor-agent-activity-log__governance-subsection">
+						<h4 className="flavor-agent-activity-log__governance-subtitle">
+							{ __( 'Freshness signatures', 'flavor-agent' ) }
+						</h4>
+						<GovernanceDetailRows rows={ signatureRows } />
+					</div>
+				) }
+				{ artifact && (
+					<div className="flavor-agent-activity-log__governance-subsection">
+						<h4 className="flavor-agent-activity-log__governance-subtitle">
+							{ __( 'Attestation', 'flavor-agent' ) }
+						</h4>
+						<GovernanceDetailRows rows={ attestationRows } />
+					</div>
+				) }
+				{ details.diagnosticText && (
+					<div className="flavor-agent-activity-log__governance-subsection">
+						<h4 className="flavor-agent-activity-log__governance-subtitle">
+							{ __(
+								'Raw governance diagnostics',
+								'flavor-agent'
+							) }
+						</h4>
+						<pre className="flavor-agent-activity-log__code">
+							{ details.diagnosticText }
+						</pre>
+					</div>
+				) }
+			</div>
+		</details>
 	);
 }
 
@@ -1493,6 +1767,15 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 
 	const canDecide =
 		isPendingExternalApply( entry ) && bootData?.canApproveStyleApplies;
+	const artifact = getAttestationArtifact( entry );
+	const summaryRows = getGovernancePlainSummary(
+		details,
+		( value ) =>
+			formatActivityTimestamp( value, {
+				locale: bootData?.locale,
+				timeZone: bootData?.timeZone,
+			} ).timestampDisplay
+	);
 	const provenanceRows = [
 		[ __( 'Target', 'flavor-agent' ), details.targetLabel ],
 		[ __( 'Requested by', 'flavor-agent' ), details.requestedByLabel ],
@@ -1504,25 +1787,7 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 		[ __( 'Executed', 'flavor-agent' ), details.executedAt ],
 		[ __( 'Decision note', 'flavor-agent' ), details.decisionNote ],
 	];
-	const freshnessRows = [
-		[
-			__( 'Resolved signature', 'flavor-agent' ),
-			details.hasResolvedSignature
-				? __( 'Recorded', 'flavor-agent' )
-				: __( 'Not recorded', 'flavor-agent' ),
-		],
-		[
-			__( 'Review signature', 'flavor-agent' ),
-			details.hasReviewSignature
-				? __( 'Recorded', 'flavor-agent' )
-				: __( 'Not recorded', 'flavor-agent' ),
-		],
-		[
-			__( 'Baseline hash', 'flavor-agent' ),
-			details.hasBaselineHash
-				? __( 'Recorded', 'flavor-agent' )
-				: __( 'Not recorded', 'flavor-agent' ),
-		],
+	const outcomeRows = [
 		[ __( 'Failure code', 'flavor-agent' ), details.failureCode ],
 		[ __( 'Failure reason', 'flavor-agent' ), details.failureMessage ],
 		[ __( 'Undo state', 'flavor-agent' ), details.undoStatus ],
@@ -1575,6 +1840,8 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 						  ) }
 				</p>
 			</div>
+			<GovernancePlainSummary rows={ summaryRows } />
+			<GovernanceComparisonTable rows={ details.comparisonRows } />
 			<GovernanceOperationList
 				title={ __( 'Requested operations', 'flavor-agent' ) }
 				operations={ details.proposedOperations }
@@ -1583,7 +1850,6 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 				title={ __( 'Executed operations', 'flavor-agent' ) }
 				operations={ details.executedOperations }
 			/>
-			<GovernanceComparisonTable rows={ details.comparisonRows } />
 			<div className="flavor-agent-activity-log__governance-subsection">
 				<h4 className="flavor-agent-activity-log__governance-subtitle">
 					{ __( 'Target and provenance', 'flavor-agent' ) }
@@ -1592,21 +1858,12 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 			</div>
 			<div className="flavor-agent-activity-log__governance-subsection">
 				<h4 className="flavor-agent-activity-log__governance-subtitle">
-					{ __( 'Freshness and undo evidence', 'flavor-agent' ) }
+					{ __( 'Undo and outcome', 'flavor-agent' ) }
 				</h4>
-				<GovernanceDetailRows rows={ freshnessRows } />
+				<GovernanceDetailRows rows={ outcomeRows } />
 			</div>
-			<AttestationEvidenceSection entry={ entry } />
-			{ details.diagnosticText && (
-				<details className="flavor-agent-activity-log__governance-diagnostics">
-					<summary>
-						{ __( 'Raw governance diagnostics', 'flavor-agent' ) }
-					</summary>
-					<pre className="flavor-agent-activity-log__code">
-						{ details.diagnosticText }
-					</pre>
-				</details>
-			) }
+			<AttestationActions artifact={ artifact } />
+			<CryptographicRecord details={ details } artifact={ artifact } />
 			{ canDecide && (
 				<div className="flavor-agent-activity-log__decision">
 					<TextareaControl

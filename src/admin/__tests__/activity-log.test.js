@@ -5,11 +5,16 @@ const path = require( 'path' );
 
 jest.mock( '@wordpress/i18n', () => ( {
 	__: jest.fn( ( value ) => value ),
+	_n: jest.fn( ( single, plural, count ) =>
+		count === 1 ? single : plural
+	),
 	sprintf: jest.fn( ( template, ...values ) =>
 		values.reduce( ( result, value, index ) => {
 			return result
 				.replaceAll( `%${ index + 1 }$s`, String( value ) )
-				.replace( '%s', String( value ) );
+				.replaceAll( `%${ index + 1 }$d`, String( value ) )
+				.replace( '%s', String( value ) )
+				.replace( '%d', String( value ) );
 		}, template )
 	),
 } ) );
@@ -1824,15 +1829,201 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).toContain( 'Reverted by' );
 		expect( getContainer().textContent ).toContain( 'att_revert456' );
 
-		const verifyLink = getContainer().querySelector(
+		const verifyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Verify envelope' );
+		const subjectStateButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Check live subject' );
+		const envelopeLink = getContainer().querySelector(
 			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123"]'
 		);
 		const subjectStateLink = getContainer().querySelector(
 			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state"]'
 		);
 
-		expect( verifyLink?.textContent ).toBe( 'Verify envelope' );
-		expect( subjectStateLink?.textContent ).toBe( 'Check live subject' );
+		expect( verifyButton ).toBeTruthy();
+		expect( subjectStateButton ).toBeTruthy();
+		expect( envelopeLink?.textContent ).toBe( 'Open envelope JSON' );
+		expect( subjectStateLink?.textContent ).toBe(
+			'Open live subject JSON'
+		);
+
+		apiFetch.mockResolvedValueOnce( {
+			statement_b64: 'eyJhdHRlc3RhdGlvbklkIjoiYXR0X2FiYzEyMyJ9',
+			signature_b64: 'signed-envelope',
+			key_id: 'site-key',
+		} );
+
+		await act( async () => {
+			verifyButton.click();
+		} );
+
+		expect(
+			apiFetch.mock.calls[ apiFetch.mock.calls.length - 1 ][ 0 ].url
+		).toBe(
+			'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Envelope loaded from the public endpoint.'
+		);
+		expect( getContainer().textContent ).toContain( 'Key: site-key' );
+
+		apiFetch.mockResolvedValueOnce( {
+			subject_digest: 'sha256:abc123',
+			scope: 'global-styles',
+		} );
+
+		await act( async () => {
+			subjectStateButton.click();
+		} );
+
+		expect(
+			apiFetch.mock.calls[ apiFetch.mock.calls.length - 1 ][ 0 ].url
+		).toBe(
+			'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Live subject state loaded from the public endpoint.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Digest: sha256:abc123'
+		);
+	} );
+
+	function findCryptographicRecord() {
+		return Array.from( getContainer().querySelectorAll( 'details' ) ).find(
+			( node ) =>
+				node.querySelector( 'summary' )?.textContent ===
+				'Cryptographic record'
+		);
+	}
+
+	test( 'leads with a plain-language summary and tiers cryptographic evidence into a collapsed record', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-executed'
+		);
+
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-executed',
+				status: 'applied',
+				undo: { status: 'available', canUndo: true },
+				after: {
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'new',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					requestedBy: 7,
+					requestedAt: '2026-06-10T01:00:00+00:00',
+					expiresAt: '2026-06-11T01:00:00+00:00',
+					executedAt: '2026-06-10T03:05:00+00:00',
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
+						},
+					],
+					signatures: {
+						resolvedContextSignature: 'r'.repeat( 64 ),
+						reviewContextSignature: 'v'.repeat( 64 ),
+						baselineConfigHash: 'b'.repeat( 64 ),
+					},
+					requestReference: 'agent-req-1',
+				},
+				attestation: {
+					id: 'att_abc123',
+					verifyUrl:
+						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123',
+					subjectStateUrl:
+						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state',
+					keyId: 'site-key',
+					subjectName: 'wp_global_styles:17',
+					subjectScope: 'global-styles',
+					createdAt: '2026-06-10T03:05:01+00:00',
+					revertedByAttestationId: 'att_revert456',
+				},
+			} ),
+		] );
+
+		// Plain-language tier leads the pane.
+		expect( getContainer().textContent ).toContain( 'What happened' );
+		expect( getContainer().textContent ).toContain( 'What changed' );
+		expect( getContainer().textContent ).toContain(
+			'Current when applied'
+		);
+		expect( getContainer().textContent ).toContain( 'Reversible' );
+
+		// One labeled, collapsed, ARIA-labeled disclosure.
+		const record = findCryptographicRecord();
+		expect( record ).toBeTruthy();
+		expect( record.tagName ).toBe( 'DETAILS' );
+		expect( record.open ).toBe( false );
+		expect( record.getAttribute( 'aria-label' ) ).toBeTruthy();
+
+		// Cryptographic evidence is inside the record (reachable, not removed).
+		expect( record.textContent ).toContain( 'att_abc123' );
+		expect( record.textContent ).toContain( 'site-key' );
+		expect( record.textContent ).toContain( 'Reverted by' );
+		expect( record.textContent ).toContain( 'att_revert456' );
+		expect( record.textContent ).toContain( 'Resolved signature' );
+		expect( record.textContent ).toContain( 'Baseline hash' );
+
+		// Verification actions stay top-level, outside the collapsed record.
+		const verifyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Verify envelope' );
+		const verifyRawLink = getContainer().querySelector(
+			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123"]'
+		);
+		const subjectStateLink = getContainer().querySelector(
+			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state"]'
+		);
+		expect( verifyButton?.textContent ).toBe( 'Verify envelope' );
+		expect( verifyRawLink?.textContent ).toBe( 'Open envelope JSON' );
+		expect( subjectStateLink?.textContent ).toBe(
+			'Open live subject JSON'
+		);
+		expect( record.contains( verifyButton ) ).toBe( false );
+		expect( record.contains( verifyRawLink ) ).toBe( false );
+		expect( record.contains( subjectStateLink ) ).toBe( false );
+	} );
+
+	test( 'tiers freshness signatures into the collapsed record for a pending row', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-pending'
+		);
+
+		await renderApp( [
+			createExternalApplyEntry( { id: 'activity-pending' } ),
+		] );
+
+		const record = findCryptographicRecord();
+		expect( record ).toBeTruthy();
+		expect( record.open ).toBe( false );
+		// Signatures recorded at request time stay reachable inside the record.
+		expect( record.textContent ).toContain( 'Resolved signature' );
+		expect( record.textContent ).toContain( 'Baseline hash' );
+
+		// They are not surfaced in the always-visible plain-language summary.
+		const summary = getContainer().querySelector(
+			'.flavor-agent-activity-log__governance-summary'
+		);
+		expect( summary ).toBeTruthy();
+		expect( summary.textContent ).toContain( 'What changed' );
+		expect( summary.textContent ).not.toContain( 'Resolved signature' );
 	} );
 
 	test( 'disables repeated decisions while pending and preserves failed notes', async () => {

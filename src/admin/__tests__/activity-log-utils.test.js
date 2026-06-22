@@ -8,6 +8,7 @@ import {
 	getActivityStatusLabel,
 	getExternalApplyDetails,
 	getGovernanceDetails,
+	getGovernancePlainSummary,
 	getStyleComparisonRows,
 	isPendingExternalApply,
 	normalizeActivityEntries,
@@ -1117,6 +1118,116 @@ describe( 'external apply helpers', () => {
 			lifecycleLabel: 'Undo blocked',
 			undoReason: 'Undo blocked by newer AI actions.',
 		} );
+	} );
+
+	function summaryMap( details, formatTimestamp ) {
+		return Object.fromEntries(
+			getGovernancePlainSummary( details, formatTimestamp ).map(
+				( { label, value } ) => [ label, value ]
+			)
+		);
+	}
+
+	test( 'getGovernancePlainSummary returns no rows without details', () => {
+		expect( getGovernancePlainSummary( null ) ).toEqual( [] );
+	} );
+
+	test( 'getGovernancePlainSummary summarizes a pending request in plain language', () => {
+		const rows = summaryMap(
+			getGovernanceDetails( createStyleApplyEntry() ),
+			() => 'Jun 11, 2026'
+		);
+
+		expect( rows[ 'What changed' ] ).toBe(
+			'1 change proposed to Global Styles 17'
+		);
+		expect( rows.Requested ).toBe( 'User #7 · Jun 11, 2026' );
+		expect( rows[ 'Current when applied' ] ).toBe(
+			'Pending approval — expires Jun 11, 2026'
+		);
+		expect( rows.Reversible ).toBe( 'Not yet — awaiting approval' );
+	} );
+
+	test( 'getGovernancePlainSummary reports an applied, reversible change', () => {
+		const rows = summaryMap(
+			getGovernanceDetails(
+				createStyleApplyEntry( {
+					status: 'applied',
+					after: {
+						operations: [
+							{ type: 'set_styles', path: [ 'color' ] },
+						],
+					},
+					undo: { status: 'available', canUndo: true },
+					apply: {
+						status: 'available',
+						executedAt: '2026-06-10T02:10:00+00:00',
+						operations: [],
+					},
+				} )
+			)
+		);
+
+		expect( rows[ 'What changed' ] ).toBe(
+			'1 change applied to Global Styles 17'
+		);
+		expect( rows[ 'Current when applied' ] ).toBe(
+			'Yes — confirmed current when applied'
+		);
+		expect( rows.Reversible ).toBe( 'Yes — this apply can be undone' );
+	} );
+
+	test( 'getGovernancePlainSummary explains a failed apply and its undo state', () => {
+		const rows = summaryMap(
+			getGovernanceDetails(
+				createStyleApplyEntry( {
+					status: 'failed',
+					apply: {
+						status: 'failed',
+						failureCode: 'flavor_agent_apply_stale',
+						failureMessage: 'The style baseline changed.',
+						operations: [],
+					},
+				} )
+			)
+		);
+
+		expect( rows[ 'Current when applied' ] ).toBe(
+			'No — apply blocked: The style baseline changed.'
+		);
+		expect( rows.Reversible ).toBe(
+			'Nothing to undo — apply did not complete'
+		);
+	} );
+
+	test( 'getGovernancePlainSummary reflects undone and blocked undo states', () => {
+		const undone = summaryMap(
+			getGovernanceDetails(
+				createStyleApplyEntry( {
+					status: 'undone',
+					undo: { status: 'undone', canUndo: false },
+					apply: { status: 'available', operations: [] },
+				} )
+			)
+		);
+		const blocked = summaryMap(
+			getGovernanceDetails(
+				createStyleApplyEntry( {
+					status: 'blocked',
+					undo: {
+						status: 'blocked',
+						canUndo: false,
+						error: 'Undo blocked by newer AI actions.',
+					},
+					apply: { status: 'available', operations: [] },
+				} )
+			)
+		);
+
+		expect( undone.Reversible ).toBe( 'Already undone' );
+		expect( blocked.Reversible ).toBe(
+			'Undo blocked — Undo blocked by newer AI actions.'
+		);
 	} );
 
 	test( 'getStyleComparisonRows summarizes set_styles before proposed and after values', () => {

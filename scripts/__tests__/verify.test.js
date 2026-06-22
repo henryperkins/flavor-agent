@@ -757,4 +757,118 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 			fs.rmSync( tempRoot, { recursive: true, force: true } );
 		}
 	} );
+
+	test( 'fails the default strict-table run when Plugin Check reports errors', () => {
+		const bash = probeBash();
+		if ( ! bash ) {
+			return;
+		}
+
+		const tempRoot = fs.mkdtempSync(
+			path.join( os.tmpdir(), 'verify-pc-sh-error-table-' )
+		);
+		const wpRoot = path.join( tempRoot, 'wp' );
+		const pluginsDir = path.join( wpRoot, 'wp-content', 'plugins' );
+		const stageDir = path.join( tempRoot, 'stage' );
+		const binDir = path.join( tempRoot, 'bin' );
+
+		try {
+			fs.mkdirSync( pluginsDir, { recursive: true } );
+			fs.mkdirSync( stageDir, { recursive: true } );
+			fs.mkdirSync( binDir, { recursive: true } );
+			fs.writeFileSync( path.join( wpRoot, 'wp-config.php' ), '<?php\n' );
+			fs.writeFileSync(
+				path.join( binDir, 'composer' ),
+				'#!/usr/bin/env bash\nexit 0\n'
+			);
+			fs.writeFileSync(
+				path.join( binDir, 'wp' ),
+				[
+					'#!/usr/bin/env bash',
+					'printf "line\\tcolumn\\ttype\\tcode\\tmessage\\tdocs\\n"',
+					'printf "0\\t0\\tERROR\\tcompressed_files\\tCompressed files are not permitted.\\t\\n"',
+				].join( '\n' )
+			);
+			fs.chmodSync( path.join( binDir, 'composer' ), 0o755 );
+			fs.chmodSync( path.join( binDir, 'wp' ), 0o755 );
+
+			const result = spawnSync( bash, [ scriptPath ], {
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					PATH: `${ binDir }${ path.delimiter }${ process.env.PATH }`,
+					PLUGIN_CHECK_USE_DOCKER: '',
+					PLUGIN_CHECK_STAGE_DIR: stageDir,
+					WP_PLUGIN_CHECK_PATH: wpRoot,
+				},
+			} );
+
+			expect( result.status ).toBe( 1 );
+			expect( result.stdout ).toContain( 'compressed_files' );
+			expect( result.stderr ).toContain(
+				'Plugin Check reported errors'
+			);
+		} finally {
+			fs.rmSync( tempRoot, { recursive: true, force: true } );
+		}
+	} );
+
+	test( 'fails an explicit strict-table run when Plugin Check reports errors', () => {
+		const bash = probeBash();
+		if ( ! bash ) {
+			return;
+		}
+
+		const tempRoot = fs.mkdtempSync(
+			path.join( os.tmpdir(), 'verify-pc-sh-explicit-error-table-' )
+		);
+		const wpRoot = path.join( tempRoot, 'wp' );
+		const pluginsDir = path.join( wpRoot, 'wp-content', 'plugins' );
+		const stageDir = path.join( tempRoot, 'stage' );
+		const binDir = path.join( tempRoot, 'bin' );
+
+		try {
+			fs.mkdirSync( pluginsDir, { recursive: true } );
+			fs.mkdirSync( stageDir, { recursive: true } );
+			fs.mkdirSync( binDir, { recursive: true } );
+			fs.writeFileSync( path.join( wpRoot, 'wp-config.php' ), '<?php\n' );
+			fs.writeFileSync(
+				path.join( binDir, 'composer' ),
+				'#!/usr/bin/env bash\nexit 0\n'
+			);
+			fs.writeFileSync(
+				path.join( binDir, 'wp' ),
+				[
+					'#!/usr/bin/env bash',
+					'printf "line\\tcolumn\\ttype\\tcode\\tmessage\\tdocs\\n"',
+					'printf "0\\t0\\tERROR\\tcompressed_files\\tCompressed files are not permitted.\\t\\n"',
+				].join( '\n' )
+			);
+			fs.chmodSync( path.join( binDir, 'composer' ), 0o755 );
+			fs.chmodSync( path.join( binDir, 'wp' ), 0o755 );
+
+			const result = spawnSync(
+				bash,
+				[ scriptPath, '--format=strict-table' ],
+				{
+					encoding: 'utf8',
+					env: {
+						...process.env,
+						PATH: `${ binDir }${ path.delimiter }${ process.env.PATH }`,
+						PLUGIN_CHECK_USE_DOCKER: '',
+						PLUGIN_CHECK_STAGE_DIR: stageDir,
+						WP_PLUGIN_CHECK_PATH: wpRoot,
+					},
+				}
+			);
+
+			expect( result.status ).toBe( 1 );
+			expect( result.stdout ).toContain( 'compressed_files' );
+			expect( result.stderr ).toContain(
+				'Plugin Check reported errors'
+			);
+		} finally {
+			fs.rmSync( tempRoot, { recursive: true, force: true } );
+		}
+	} );
 } );
