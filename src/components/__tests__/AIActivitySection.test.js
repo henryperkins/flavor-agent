@@ -322,10 +322,8 @@ describe( 'AIActivitySection', () => {
 							suggestion: 'Adjust the site palette',
 							surface: 'global-styles',
 							executionResult: 'pending',
-							request: {
-								apply: {
-									status: 'pending',
-								},
+							apply: {
+								status: 'pending',
 							},
 							undo: {
 								canUndo: false,
@@ -351,10 +349,8 @@ describe( 'AIActivitySection', () => {
 							suggestion: 'Refresh link color',
 							surface: 'global-styles',
 							executionResult: 'expired',
-							request: {
-								apply: {
-									status: 'expired',
-								},
+							apply: {
+								status: 'expired',
 							},
 							undo: {
 								canUndo: false,
