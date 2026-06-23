@@ -453,6 +453,8 @@ final class ActivitySerializerTest extends TestCase {
 				'id'                        => 'att_apply',
 				'type'                      => 'apply',
 				'surface'                   => 'global-styles',
+				'governanceClaim'           => 'governed-change',
+				'governanceLane'            => 'external-style-apply-v1',
 				'subjectName'               => 'wp_global_styles:81',
 				'subjectScope'              => 'global-styles',
 				'keyId'                     => 'site-key',

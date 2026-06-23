@@ -13,7 +13,7 @@ Use it when you need to answer:
 - The shipped Gutenberg editor UI uses the `flavor-agent` data store and executes recommendation abilities through the WordPress Abilities API
 - The Abilities API is the sole active contract for the seven `recommend-*` surfaces when the WordPress AI plugin contracts are available and the Flavor Agent AI feature is enabled
 - Activity creation, admin decisions, and manual pattern sync remain REST routes. Activity read/list/undo for external style applies are exposed as abilities via `get-activity`, `list-activity`, and `undo-activity`
-- Ring III governed-change attestations are public REST reads, not abilities: `attestations/{id}`, `attestations/{id}/verification`, `attestations/{id}/subject-state`, and `attestations/keys` let reviewers inspect a site-served verification summary and let external verifiers inspect the signed style-apply statements without wp-admin access
+- Ring III governed-change attestations are public REST reads, not abilities: `attestations/{id}`, `attestations/{id}/verification`, `attestations/{id}/subject-state`, and `attestations/keys` let reviewers inspect a site-served verification summary and let external verifiers inspect the signed statements for Flavor Agent's `external-style-apply-v1` lane without wp-admin access
 - Pattern, template, and template-part first-party surfaces also read the shared post-type entity contract from `src/utils/editor-entity-contracts.js`, which normalizes built-in field metadata and safe fallbacks when no live WordPress view config is exposed, so panel visibility, title-field expectations, template-part area labels, and the patched pattern category stay aligned with the current entity contract
 
 ## Registered Abilities

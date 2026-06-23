@@ -79,6 +79,12 @@ and reads as serious to a contributor audience.
     "attestationId": "att_…",                   // durable primary key (see §5)
     "schemaVersion": 1,
     "surface": "global-styles",                  // global-styles | style-book
+    "governance": {
+      "claim": "governed-change",
+      "lane": "external-style-apply-v1",         // FA's owned attestation boundary
+      "approvalSurface": "settings-ai-activity",
+      "executor": "bounded-server-style-apply"
+    },
     "operations": [ /* the applied, schema-bounded operations — public-safe, §4.3 */ ],
     "before": { "sha256": "<canonical BEFORE-state digest>" },
     "after":  { "sha256": "<canonical AFTER-state digest>" },  // == subject.digest
@@ -93,6 +99,13 @@ and reads as serious to a contributor audience.
   }
 }
 ```
+
+The `predicate.governance` block is intentionally narrow. It freezes the only
+attestation scope Flavor Agent owns today: `external-style-apply-v1`, meaning a
+WordPress-approved external Global Styles / Style Book mutation executed through
+FA's bounded server-side style executor. This prevents the signed statement from
+reading like a general AI-governance attestation for the site, the model, or
+all AI-assisted work.
 
 ### 4.1 Subject scoping (Style Book ≠ Global Styles)
 

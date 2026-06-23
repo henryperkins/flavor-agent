@@ -15,6 +15,20 @@ final class AttestationStatementBuilderTest extends TestCase {
 		$this->assertSame( $statement['subject'][0]['digest']['sha256'], $statement['predicate']['after']['sha256'] );
 	}
 
+	public function test_statement_freezes_the_owned_governance_lane(): void {
+		$statement = json_decode( StatementBuilder::build( $this->params() ), true );
+
+		$this->assertSame(
+			[
+				'approvalSurface' => 'settings-ai-activity',
+				'claim'           => 'governed-change',
+				'executor'        => 'bounded-server-style-apply',
+				'lane'            => 'external-style-apply-v1',
+			],
+			$statement['predicate']['governance']
+		);
+	}
+
 	public function test_excludes_non_allowlisted_fields(): void {
 		$params                    = $this->params();
 		$params['prompt']          = 'SECRET PROMPT';
@@ -54,6 +68,10 @@ final class AttestationStatementBuilderTest extends TestCase {
 			'surface'            => 'global-styles',
 			'scope'              => 'global-styles',
 			'subjectName'        => 'wp_global_styles:81',
+			'governanceClaim'    => 'governed-change',
+			'governanceLane'     => 'external-style-apply-v1',
+			'approvalSurface'    => 'settings-ai-activity',
+			'executor'           => 'bounded-server-style-apply',
 			'operations'         => [
 				[
 					'path'  => [ 'color', 'background' ],

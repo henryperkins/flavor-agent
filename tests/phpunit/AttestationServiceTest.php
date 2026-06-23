@@ -56,6 +56,30 @@ final class AttestationServiceTest extends TestCase {
 		);
 	}
 
+	public function test_record_apply_rejects_a_surface_outside_the_owned_lane(): void {
+		$this->configure_key();
+
+		$context            = $this->apply_context();
+		$context['surface'] = 'template';
+
+		$this->expectException( \InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Flavor Agent only attests the external Global Styles / Style Book apply lane.' );
+
+		AttestationService::record_apply( $context );
+	}
+
+	public function test_record_apply_requires_a_related_activity_for_the_owned_lane(): void {
+		$this->configure_key();
+
+		$context = $this->apply_context();
+		unset( $context['relatedActivityId'] );
+
+		$this->expectException( \InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Flavor Agent attestations require the related activity id from the governed external apply lane.' );
+
+		AttestationService::record_apply( $context );
+	}
+
 	public function test_revert_is_chained_to_prior_and_findable(): void {
 		$this->configure_key();
 		Repository::install();

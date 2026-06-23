@@ -5,15 +5,24 @@ declare(strict_types=1);
 namespace FlavorAgent\Attestation;
 
 /**
- * Records self-signed site-key attestations for governed applies.
+ * Records self-signed site-key attestations for Flavor Agent's owned
+ * external style-apply lane only.
  *
  * Self-signed site-key attestation; the live-match read is site-served.
  */
 final class AttestationService {
 
+	public const GOVERNANCE_CLAIM            = 'governed-change';
+	public const GOVERNANCE_LANE             = 'external-style-apply-v1';
+	public const GOVERNANCE_APPROVAL_SURFACE = 'settings-ai-activity';
+	public const GOVERNANCE_EXECUTOR         = 'bounded-server-style-apply';
+
+	private const ELIGIBLE_SURFACES  = [ 'global-styles', 'style-book' ];
+	private const ELIGIBLE_DECISIONS = [ 'approve', 'revert' ];
+
 	/**
-	 * Record a signed attestation for an approved apply. Returns the attestation
-	 * id, or null when no signing key is configured.
+	 * Record a signed attestation for the approved external style-apply lane.
+	 * Returns the attestation id, or null when no signing key is configured.
 	 *
 	 * @param array<string, mixed> $ctx
 	 */
@@ -21,6 +30,8 @@ final class AttestationService {
 		if ( ! KeyManager::configured() ) {
 			return null;
 		}
+
+		self::assert_owned_lane_context( $ctx );
 
 		$surface    = (string) $ctx['surface'];
 		$block_name = (string) ( $ctx['blockName'] ?? '' );
@@ -53,6 +64,10 @@ final class AttestationService {
 				'surface'                 => $surface,
 				'scope'                   => $scope,
 				'subjectName'             => $subject,
+				'governanceClaim'         => self::GOVERNANCE_CLAIM,
+				'governanceLane'          => self::GOVERNANCE_LANE,
+				'approvalSurface'         => self::GOVERNANCE_APPROVAL_SURFACE,
+				'executor'                => self::GOVERNANCE_EXECUTOR,
 				'operations'              => is_array( $ctx['operations'] ?? null ) ? $ctx['operations'] : [],
 				'beforeDigest'            => $before_dig,
 				'afterDigest'             => $after_dig,
@@ -164,6 +179,43 @@ final class AttestationService {
 			);
 		} catch ( \Throwable ) {
 			return true;
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $ctx
+	 */
+	private static function assert_owned_lane_context( array $ctx ): void {
+		$surface           = trim( (string) ( $ctx['surface'] ?? '' ) );
+		$global_styles_id  = trim( (string) ( $ctx['globalStylesId'] ?? '' ) );
+		$related_activity  = trim( (string) ( $ctx['relatedActivityId'] ?? '' ) );
+		$decision          = trim( (string) ( $ctx['decision'] ?? 'approve' ) );
+		$style_book_block  = trim( (string) ( $ctx['blockName'] ?? '' ) );
+		$before_userconfig = $ctx['before']['userConfig'] ?? null;
+		$after_userconfig  = $ctx['after']['userConfig'] ?? null;
+
+		if ( ! in_array( $surface, self::ELIGIBLE_SURFACES, true ) ) {
+			throw new \InvalidArgumentException( 'Flavor Agent only attests the external Global Styles / Style Book apply lane.' );
+		}
+
+		if ( '' === $global_styles_id ) {
+			throw new \InvalidArgumentException( 'Flavor Agent attestations require a Global Styles entity id.' );
+		}
+
+		if ( 'style-book' === $surface && '' === $style_book_block ) {
+			throw new \InvalidArgumentException( 'Style Book attestations require a block name.' );
+		}
+
+		if ( '' === $related_activity ) {
+			throw new \InvalidArgumentException( 'Flavor Agent attestations require the related activity id from the governed external apply lane.' );
+		}
+
+		if ( ! in_array( $decision, self::ELIGIBLE_DECISIONS, true ) ) {
+			throw new \InvalidArgumentException( 'Flavor Agent attestations only record approve or revert decisions.' );
+		}
+
+		if ( ! is_array( $before_userconfig ) || ! is_array( $after_userconfig ) ) {
+			throw new \InvalidArgumentException( 'Flavor Agent attestations require canonical before/after userConfig arrays.' );
 		}
 	}
 

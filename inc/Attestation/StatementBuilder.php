@@ -39,6 +39,12 @@ final class StatementBuilder {
 			'attestationId'           => (string) $params['attestationId'],
 			'schemaVersion'           => 1,
 			'surface'                 => (string) $params['surface'],
+			'governance'              => [
+				'claim'           => (string) ( $params['governanceClaim'] ?? '' ),
+				'lane'            => (string) ( $params['governanceLane'] ?? '' ),
+				'approvalSurface' => (string) ( $params['approvalSurface'] ?? '' ),
+				'executor'        => (string) ( $params['executor'] ?? '' ),
+			],
 			'operations'              => array_values( (array) ( $params['operations'] ?? [] ) ),
 			'before'                  => [ 'sha256' => (string) $params['beforeDigest'] ],
 			'after'                   => [ 'sha256' => (string) $params['afterDigest'] ],

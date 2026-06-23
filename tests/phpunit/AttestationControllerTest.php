@@ -38,6 +38,10 @@ final class AttestationControllerTest extends TestCase {
 
 		$this->assertTrue( Signer::verify( $statement, $signature, (string) KeyManager::public_key() ) );
 		$this->assertSame( json_decode( $statement, true ), $data['statement_json'] );
+		$this->assertSame(
+			'external-style-apply-v1',
+			$data['statement_json']['predicate']['governance']['lane'] ?? null
+		);
 	}
 
 	public function test_keys_route_returns_jwks(): void {

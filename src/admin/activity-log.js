@@ -1416,6 +1416,8 @@ function getAttestationArtifact( entry ) {
 		verifyUrl: getAttestationString( artifact, 'verifyUrl' ),
 		subjectStateUrl: getAttestationString( artifact, 'subjectStateUrl' ),
 		keyId: getAttestationString( artifact, 'keyId' ),
+		governanceClaim: getAttestationString( artifact, 'governanceClaim' ),
+		governanceLane: getAttestationString( artifact, 'governanceLane' ),
 		subjectName: getAttestationString( artifact, 'subjectName' ),
 		subjectScope: getAttestationString( artifact, 'subjectScope' ),
 		createdAt: getAttestationString( artifact, 'createdAt' ),
@@ -1432,6 +1434,26 @@ function getAttestationArtifact( entry ) {
 			'supersededByVerifyUrl'
 		),
 	};
+}
+
+function getAttestationClaimLabel( claim ) {
+	if ( claim === 'governed-change' ) {
+		return __( 'Governed change', 'flavor-agent' );
+	}
+
+	return claim;
+}
+
+function getAttestationLaneLabel( lane ) {
+	if ( lane === 'external-style-apply-v1' ) {
+		return sprintf(
+			/* translators: %s: attestation lane identifier. */
+			__( 'External style apply (%s)', 'flavor-agent' ),
+			lane
+		);
+	}
+
+	return lane;
 }
 
 function getAttestationResultString( payload, key ) {
@@ -1494,6 +1516,20 @@ function getAttestationCheckDetails( type, payload ) {
 			payload,
 			'statement_b64'
 		);
+		const statement = isPlainRecord( payload?.statement_json )
+			? payload.statement_json
+			: null;
+		const predicate = isPlainRecord( statement?.predicate )
+			? statement.predicate
+			: null;
+		const governance = isPlainRecord( predicate?.governance )
+			? predicate.governance
+			: null;
+		const governanceClaim = getAttestationResultString(
+			governance,
+			'claim'
+		);
+		const governanceLane = getAttestationResultString( governance, 'lane' );
 		const details = [];
 
 		if ( keyId ) {
@@ -1516,6 +1552,26 @@ function getAttestationCheckDetails( type, payload ) {
 				? __( 'Statement: present', 'flavor-agent' )
 				: __( 'Statement: not present', 'flavor-agent' )
 		);
+
+		if ( governanceClaim ) {
+			details.push(
+				sprintf(
+					/* translators: %s: attestation governance claim. */
+					__( 'Claim: %s', 'flavor-agent' ),
+					getAttestationClaimLabel( governanceClaim )
+				)
+			);
+		}
+
+		if ( governanceLane ) {
+			details.push(
+				sprintf(
+					/* translators: %s: attestation governance lane. */
+					__( 'Owned lane: %s', 'flavor-agent' ),
+					getAttestationLaneLabel( governanceLane )
+				)
+			);
+		}
 
 		return {
 			message: __(
@@ -1759,6 +1815,14 @@ function CryptographicRecord( { details, artifact } ) {
 	const attestationRows = artifact
 		? [
 				[ __( 'Attestation ID', 'flavor-agent' ), artifact.id ],
+				[
+					__( 'Claim', 'flavor-agent' ),
+					getAttestationClaimLabel( artifact.governanceClaim ),
+				],
+				[
+					__( 'Owned lane', 'flavor-agent' ),
+					getAttestationLaneLabel( artifact.governanceLane ),
+				],
 				[ __( 'Key', 'flavor-agent' ), artifact.keyId ],
 				[ __( 'Subject', 'flavor-agent' ), artifact.subjectName ],
 				[ __( 'Scope', 'flavor-agent' ), artifact.subjectScope ],

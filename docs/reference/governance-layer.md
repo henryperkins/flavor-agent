@@ -15,7 +15,7 @@ Flavor Agent lets AI work on a live WordPress site without unchecked control. Ev
 
 Public shorthand: AI proposes. WordPress approves. Operations are bounded, structural/theme changes are reviewed, applies are recorded server-side, and undo is drift-safe.
 
-Attest shorthand: WordPress is pursuing artifact provenance through C2PA; Flavor Agent owns **governed-change attestation** for the WordPress mutations it mediates. For attested external style applies, FA signs the approval, bounded operation set, resulting artifact digest, and later drift/revert/supersession status as a site-key self-attestation that a stranger can fetch and verify. That is deliberately narrower than general AI governance attestation and deliberately different from C2PA content credentials.
+Attest shorthand: WordPress is pursuing artifact provenance through C2PA; Flavor Agent owns **governed-change attestation** only for its `external-style-apply-v1` lane. That lane is the WordPress-approved external Global Styles / Style Book mutation path: a pending external style apply is approved in `Settings > AI Activity`, executed through Flavor Agent's bounded server-side style executor, and signed against the resulting style subject digest. That is deliberately narrower than general AI governance attestation and deliberately different from C2PA content credentials.
 
 ## Vocabulary Map
 
@@ -88,7 +88,20 @@ Tested by: `tests/phpunit/RecommendationAbilityExecutionTest.php`, `ActivityRepo
 
 ### Attested
 
-**Guarantee:** an attested external Global Styles / Style Book apply produces a durable, public-safe, site-key-signed governed-change statement that can be verified outside wp-admin. The statement binds the approval, bounded operations, before/after digests, public key id, and optional revert/supersede chain. This is tamper-evident self-attestation rooted in the site's published key, not C2PA emission, third-party identity, or a transparency log.
+**Guarantee:** an attested external Global Styles / Style Book apply produces a durable, public-safe, site-key-signed governed-change statement that can be verified outside wp-admin. The statement binds the approval, bounded operations, before/after digests, public key id, and optional revert/supersede chain. It also freezes Flavor Agent's owned attestation lane as `external-style-apply-v1` so the claim cannot blur into general AI governance. This is tamper-evident self-attestation rooted in the site's published key, not C2PA emission, third-party identity, or a transparency log.
+
+Owned claim, precisely:
+
+- WordPress approved a pending external Global Styles or Style Book apply in `Settings > AI Activity`.
+- Flavor Agent executed the bounded style operation set server-side for that request.
+- The resulting style subject hashed to the signed digest at attestation time.
+- Later verification can show that subject as intact, changed, reverted, or superseded.
+
+Not claimed by this attestation:
+
+- that all AI activity on the site complied with policy
+- that a provider, model, or agent was broadly safe or approved for every use
+- that upstream C2PA credentials were validated or that content is true, unbiased, or human-authored
 
 Enforced by:
 
@@ -172,7 +185,7 @@ Flavor Agent should treat those as the **outer policy plane**. When those upstre
 
 This document owns the **inner mutation-governance contract**: for changes Flavor Agent mediates, the plugin still has to bound the operation, gather the right context, expose a review gate when the operation is structural or theme-level, attribute the request and apply, verify freshness before execution, and block unsafe undo after drift. Core can decide whether a plugin may use AI; Flavor Agent still decides whether a proposed block/template/style mutation is safe to apply to the current document.
 
-The same split applies to Attest. Upstream C2PA text/image provenance work can attest artifact provenance facts such as publisher identity, creation/editing, and ingredient history. Request logs, service accounts, visual revisions, and Site Agent concepts provide evidence and identity primitives. They do not yet define a general AI-governance attestation workflow. Flavor Agent's attestation lane is therefore the governed-change assertion it can prove locally: a specific FA-mediated mutation was requested, reviewed by WordPress, applied through a bounded executor, signed against the resulting state, and later verified as intact, changed, reverted, or superseded. The wp-admin verification affordance is a convenience summary served by the site; independent verification remains the standalone HTTP verifier against the public envelope, keys, and subject-state endpoints.
+The same split applies to Attest. Upstream C2PA text/image provenance work can attest artifact provenance facts such as publisher identity, creation/editing, and ingredient history. Request logs, service accounts, visual revisions, and Site Agent concepts provide evidence and identity primitives. They do not yet define a general AI-governance attestation workflow. Flavor Agent's attestation lane is therefore the governed-change assertion it can prove locally: a specific FA-mediated mutation on the `external-style-apply-v1` lane was requested, reviewed by WordPress, applied through a bounded executor, signed against the resulting state, and later verified as intact, changed, reverted, or superseded. The wp-admin verification affordance is a convenience summary served by the site; independent verification remains the standalone HTTP verifier against the public envelope, keys, and subject-state endpoints.
 
 That split is intentional product positioning. The upstream Site Agent / AI Workspace direction, now with Agents API as a named substrate candidate, validates the external-agent path, but it does not make approval an agent capability. AI can propose actions through abilities and MCP; WordPress holds the human approval decision in `Settings > AI Activity` for Flavor Agent-owned external applies. If Flavor Agent later integrates with Agents API, it should feature-detect `wp_register_agent()` / `wp_agents_api_init` and keep product UX plus mutation apply/approve/undo policy local.
 

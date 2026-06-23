@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Activity;
 
+use FlavorAgent\Attestation\AttestationService;
+
 final class Serializer {
 
 	private const UNDO_STATUS_AVAILABLE      = 'available';
@@ -318,6 +320,8 @@ final class Serializer {
 			'id'                        => $attestation_id,
 			'type'                      => null !== self::normalize_nullable_string( $row['reverts_attestation_id'] ?? null ) ? 'revert' : 'apply',
 			'surface'                   => self::normalize_string( $row['surface'] ?? '' ),
+			'governanceClaim'           => AttestationService::GOVERNANCE_CLAIM,
+			'governanceLane'            => AttestationService::GOVERNANCE_LANE,
 			'subjectName'               => self::normalize_string( $row['subject_name'] ?? '' ),
 			'subjectScope'              => self::normalize_string( $row['subject_scope'] ?? '' ),
 			'keyId'                     => self::normalize_string( $row['key_id'] ?? '' ),

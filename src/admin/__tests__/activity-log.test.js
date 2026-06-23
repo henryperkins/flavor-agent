@@ -1817,6 +1817,8 @@ describe( 'ActivityLogApp', () => {
 					subjectStateUrl:
 						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state',
 					keyId: 'site-key',
+					governanceClaim: 'governed-change',
+					governanceLane: 'external-style-apply-v1',
 					subjectName: 'wp_global_styles:17',
 					subjectScope: 'global-styles',
 					createdAt: '2026-06-10T03:05:01+00:00',
@@ -1830,6 +1832,10 @@ describe( 'ActivityLogApp', () => {
 
 		expect( getContainer().textContent ).toContain( 'Attestation' );
 		expect( getContainer().textContent ).toContain( 'att_abc123' );
+		expect( getContainer().textContent ).toContain( 'Governed change' );
+		expect( getContainer().textContent ).toContain(
+			'External style apply (external-style-apply-v1)'
+		);
 		expect( getContainer().textContent ).toContain( 'site-key' );
 		expect( getContainer().textContent ).toContain( 'Reverted by' );
 		expect( getContainer().textContent ).toContain( 'att_revert456' );
@@ -1961,6 +1967,8 @@ describe( 'ActivityLogApp', () => {
 					subjectStateUrl:
 						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state',
 					keyId: 'site-key',
+					governanceClaim: 'governed-change',
+					governanceLane: 'external-style-apply-v1',
 					subjectName: 'wp_global_styles:17',
 					subjectScope: 'global-styles',
 					createdAt: '2026-06-10T03:05:01+00:00',
@@ -1988,6 +1996,10 @@ describe( 'ActivityLogApp', () => {
 
 		// Cryptographic evidence is inside the record (reachable, not removed).
 		expect( record.textContent ).toContain( 'att_abc123' );
+		expect( record.textContent ).toContain( 'Owned lane' );
+		expect( record.textContent ).toContain(
+			'External style apply (external-style-apply-v1)'
+		);
 		expect( record.textContent ).toContain( 'site-key' );
 		expect( record.textContent ).toContain( 'Reverted by' );
 		expect( record.textContent ).toContain( 'att_revert456' );
