@@ -329,112 +329,98 @@ final class RecommendationOutcomeTest extends TestCase {
 		$this->assertSame( 'validation-reasons-v1', $item['validationVocabularyVersion'] );
 	}
 
-	public function test_pattern_traits_persist_on_shown_ranking_set_items(): void {
-		$entry = [
-			'type'    => 'recommendation_outcome',
-			'surface' => 'pattern',
-			'target'  => [
-				'recommendationSetId' => 'set-1',
-			],
-			'after'   => [
-				'outcome' => [
-					'event'               => 'shown',
+	public function test_shown_pattern_ranking_set_items_carry_sanitized_pattern_traits(): void {
+		$result = RecommendationOutcome::normalize_entry(
+			[
+				'type'    => 'recommendation_outcome',
+				'surface' => 'pattern',
+				'target'  => [
 					'recommendationSetId' => 'set-1',
-					'rankingSet'          => [
-						[
-							'suggestionKey'  => 'theme/hero',
-							'ranking'        => [ 'blendedScore' => 0.5 ],
-							'patternTraits'  => [
-								'hero-banner',
-								'Hero-Banner',
-								'call-to-action',
-								'media-rich',
-								'text-focused',
-								'showcase',
-								'pricing',
-								'contact',
-								'navigation',
-								'Private Launch Copy',
+				],
+				'after'   => [
+					'outcome' => [
+						'event'               => 'shown',
+						'recommendationSetId' => 'set-1',
+						'rankingSet'          => [
+							[
+								'suggestionKey' => 'theme/hero',
+								'ranking'       => [
+									'blendedScore'   => 0.86,
+									'rankingVersion' => 'contextual-ranking-v1',
+								],
+								'patternTraits' => [
+									'hero-banner',
+									'complex',
+									'hero-banner',
+									'media-rich',
+									'Private launch copy',
+									'<!-- wp:paragraph -->',
+								],
+								'content'       => '<!-- wp:paragraph --><p>Private launch copy</p><!-- /wp:paragraph -->',
 							],
-							'patternContent' => '<!-- wp:paragraph -->Secret<!-- /wp:paragraph -->',
 						],
 					],
 				],
-			],
-		];
-
-		$out  = RecommendationOutcome::normalize_entry( $entry );
-		$item = $out['after']['outcome']['rankingSet'][0];
-
-		$expected = [
-			'hero-banner',
-			'call-to-action',
-			'media-rich',
-			'text-focused',
-			'showcase',
-			'pricing',
-			'contact',
-			'navigation',
-		];
-
-		$this->assertSame( $expected, $item['patternTraits'] );
-		$this->assertSame(
-			$expected,
-			$out['request']['recommendation']['rankingSet'][0]['patternTraits']
+			]
 		);
-		$this->assertStringNotContainsString( 'Private Launch', wp_json_encode( $out ) );
-		$this->assertStringNotContainsString( 'Secret', wp_json_encode( $out ) );
+
+		$this->assertIsArray( $result );
+		$expected_traits = [ 'hero-banner', 'complex', 'media-rich' ];
+		$this->assertSame( $expected_traits, $result['after']['outcome']['rankingSet'][0]['patternTraits'] );
+		$this->assertSame( $expected_traits, $result['request']['recommendation']['rankingSet'][0]['patternTraits'] );
+		$this->assertStringNotContainsString( 'Private', wp_json_encode( $result ) );
+		$this->assertStringNotContainsString( 'paragraph', wp_json_encode( $result['after']['outcome']['rankingSet'][0] ) );
 	}
 
-	public function test_pattern_traits_persist_on_engaged_pattern_outcomes(): void {
-		$entry = [
-			'type'    => 'recommendation_outcome',
-			'surface' => 'pattern',
-			'target'  => [
-				'recommendationSetId' => 'set-1',
-				'suggestionKey'       => 'theme/hero',
-			],
-			'after'   => [
-				'outcome' => [
-					'event'               => 'adapted_preview_shown',
+	public function test_engaged_pattern_outcomes_carry_capped_sanitized_pattern_traits(): void {
+		$result = RecommendationOutcome::normalize_entry(
+			[
+				'type'    => 'recommendation_outcome',
+				'surface' => 'pattern',
+				'target'  => [
 					'recommendationSetId' => 'set-1',
 					'suggestionKey'       => 'theme/hero',
-					'patternTraits'       => [
-						'hero-banner',
-						'Hero-Banner',
-						'call-to-action',
-						'media-rich',
-						'text-focused',
-						'showcase',
-						'pricing',
-						'contact',
-						'navigation',
-						'Private Launch Copy',
-					],
-					'patternContent'      => '<!-- wp:paragraph -->Secret<!-- /wp:paragraph -->',
 				],
-			],
-		];
-
-		$out      = RecommendationOutcome::normalize_entry( $entry );
-		$expected = [
-			'hero-banner',
-			'call-to-action',
-			'media-rich',
-			'text-focused',
-			'showcase',
-			'pricing',
-			'contact',
-			'navigation',
-		];
-
-		$this->assertSame( $expected, $out['after']['outcome']['patternTraits'] );
-		$this->assertSame(
-			$expected,
-			$out['request']['recommendation']['patternTraits']
+				'after'   => [
+					'outcome' => [
+						'event'               => 'pattern_inserted_from_shelf',
+						'recommendationSetId' => 'set-1',
+						'suggestionKey'       => 'theme/hero',
+						'patternTraits'       => [
+							'hero-banner',
+							'multi-column',
+							'gallery',
+							'call-to-action',
+							'query-loop',
+							'media-text',
+							'navigation',
+							'search',
+							'branding',
+							'Private launch copy',
+							'hero-banner',
+						],
+						'contentPreview'      => 'Private launch copy',
+					],
+				],
+			]
 		);
-		$this->assertStringNotContainsString( 'Private Launch', wp_json_encode( $out ) );
-		$this->assertStringNotContainsString( 'Secret', wp_json_encode( $out ) );
+
+		$expected_traits = [
+			'hero-banner',
+			'multi-column',
+			'gallery',
+			'call-to-action',
+			'query-loop',
+			'media-text',
+			'navigation',
+			'search',
+		];
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $expected_traits, $result['after']['outcome']['patternTraits'] );
+		$this->assertSame( $expected_traits, $result['request']['recommendation']['patternTraits'] );
+		$this->assertStringNotContainsString( 'Private', wp_json_encode( $result ) );
+		$this->assertStringNotContainsString( 'contentPreview', wp_json_encode( $result ) );
 	}
 
 	public function test_validation_blocked_keeps_primary_reason_and_version(): void {

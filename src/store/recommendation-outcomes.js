@@ -74,6 +74,31 @@ const LEARNING_ATTRIBUTION_KEYS = [
 	'validationVocabularyVersion',
 ];
 
+const PATTERN_TRAITS = new Set( [
+	'hero-banner',
+	'multi-column',
+	'gallery',
+	'call-to-action',
+	'query-loop',
+	'media-text',
+	'navigation',
+	'search',
+	'branding',
+	'social',
+	'simple',
+	'moderate-complexity',
+	'complex',
+	'media-rich',
+	'text-focused',
+	'mixed-content',
+	'site-chrome',
+	'testimonial',
+	'team-or-about',
+	'showcase',
+	'pricing',
+	'contact',
+] );
+
 function cleanString( value, maxLength = MAX_STRING_LENGTH ) {
 	if ( value === null || value === undefined ) {
 		return '';
@@ -96,6 +121,44 @@ function cleanCode( value ) {
 		.replace( /[^a-z0-9_-]+/g, '_' )
 		.replace( /^_+|_+$/g, '' )
 		.slice( 0, 64 );
+}
+
+function normalizePatternTraits( value ) {
+	if ( ! Array.isArray( value ) ) {
+		return [];
+	}
+
+	const traits = [];
+	for ( const item of value ) {
+		const trait = cleanCode( item );
+
+		if ( ! trait || ! PATTERN_TRAITS.has( trait ) ) {
+			continue;
+		}
+
+		if ( traits.includes( trait ) ) {
+			continue;
+		}
+
+		traits.push( trait );
+		if ( traits.length >= PATTERN_TRAIT_CAP ) {
+			break;
+		}
+	}
+
+	return traits;
+}
+
+function firstPatternTraits( candidates = [] ) {
+	for ( const candidate of candidates ) {
+		const traits = normalizePatternTraits( candidate );
+
+		if ( traits.length ) {
+			return traits;
+		}
+	}
+
+	return [];
 }
 
 function stableStringify( value ) {
@@ -187,20 +250,6 @@ function normalizeTopSuggestionKeys( keys = [] ) {
 	return Array.from(
 		new Set( keys.map( ( key ) => cleanString( key ) ).filter( Boolean ) )
 	).slice( 0, TOP_SUGGESTION_CAP );
-}
-
-function normalizePatternTraits( traits = [] ) {
-	if ( ! Array.isArray( traits ) ) {
-		return [];
-	}
-
-	return Array.from(
-		new Set(
-			traits
-				.map( ( trait ) => cleanString( trait, 64 ).toLowerCase() )
-				.filter( ( trait ) => /^[a-z0-9][a-z0-9_-]*$/.test( trait ) )
-		)
-	).slice( 0, PATTERN_TRAIT_CAP );
 }
 
 function clampScore( value ) {
@@ -362,10 +411,7 @@ function getStableRankingSetSuggestionKey(
 	return fallbackKey;
 }
 
-export function buildRankingSetFromSuggestions(
-	suggestions = [],
-	{ includePatternTraits = true } = {}
-) {
+export function buildRankingSetFromSuggestions( suggestions = [] ) {
 	if ( ! Array.isArray( suggestions ) ) {
 		return [];
 	}
@@ -391,17 +437,16 @@ export function buildRankingSetFromSuggestions(
 			const validationVocabularyVersion = primary
 				? VALIDATION_REASONS_VERSION
 				: cleanString( suggestion?.validationVocabularyVersion );
-			const patternTraits = includePatternTraits
-				? normalizePatternTraits(
-						suggestion?.recommendationOutcome?.patternTraits ||
-							suggestion?.patternTraits ||
-							suggestion?.traits
-				  )
-				: [];
+			const patternTraits = firstPatternTraits( [
+				suggestion?.patternTraits,
+				suggestion?.traits,
+				suggestion?.recommendationOutcome?.patternTraits,
+			] );
 
 			return {
 				suggestionKey,
 				ranking,
+				...( patternTraits.length ? { patternTraits } : {} ),
 				...( validationReason
 					? {
 							validationReason,
@@ -410,7 +455,6 @@ export function buildRankingSetFromSuggestions(
 								: {} ),
 					  }
 					: {} ),
-				...( patternTraits.length ? { patternTraits } : {} ),
 			};
 		} )
 		.filter( Boolean )
@@ -440,7 +484,6 @@ export function decorateRecommendationPayload(
 	const sourceSignature = normalizeSourceRequestSignature(
 		sourceRequestSignature
 	);
-	const includesPatternTraits = cleanCode( surface ) === 'pattern';
 	const setId =
 		cleanString( recommendationSetId ) ||
 		buildRecommendationSetId( { surface, sourceRequestSignature } );
@@ -481,14 +524,6 @@ export function decorateRecommendationPayload(
 								sourceRequestSignature: sourceSignature,
 							}
 						);
-					const patternTraits = includesPatternTraits
-						? normalizePatternTraits(
-								suggestion?.recommendationOutcome
-									?.patternTraits ||
-									suggestion?.patternTraits ||
-									suggestion?.traits
-						  )
-						: [];
 
 					return {
 						...suggestion,
@@ -527,9 +562,6 @@ export function decorateRecommendationPayload(
 										learningAttribution:
 											suggestionLearningAttribution,
 								  }
-								: {} ),
-							...( patternTraits.length
-								? { patternTraits }
 								: {} ),
 						},
 					};
@@ -714,25 +746,12 @@ export function buildRecommendationIdentityFromSuggestion(
 	}
 
 	let members = [];
-	let patternTraits = [];
 	if ( Array.isArray( overrides.members ) ) {
 		members = overrides.members;
 	} else if ( Array.isArray( suggestion?.members ) ) {
 		members = suggestion.members;
 	} else if ( Array.isArray( outcome.members ) ) {
 		members = outcome.members;
-	}
-	if (
-		Array.isArray( overrides.patternTraits ) &&
-		overrides.patternTraits.length
-	) {
-		patternTraits = overrides.patternTraits;
-	} else if ( Array.isArray( outcome.patternTraits ) ) {
-		patternTraits = outcome.patternTraits;
-	} else if ( Array.isArray( suggestion?.patternTraits ) ) {
-		patternTraits = suggestion.patternTraits;
-	} else if ( Array.isArray( suggestion?.traits ) ) {
-		patternTraits = suggestion.traits;
 	}
 
 	const recommendationSetId = cleanString(
@@ -752,6 +771,12 @@ export function buildRecommendationIdentityFromSuggestion(
 			sourceRequestSignature,
 		}
 	);
+	const patternTraits = firstPatternTraits( [
+		overrides.patternTraits,
+		outcome.patternTraits,
+		suggestion?.patternTraits,
+		suggestion?.traits,
+	] );
 
 	return {
 		recommendationSetId,
@@ -765,7 +790,7 @@ export function buildRecommendationIdentityFromSuggestion(
 		topSuggestionKeys,
 		resultCount,
 		members: normalizeTopSuggestionKeys( members ),
-		patternTraits: normalizePatternTraits( patternTraits ),
+		...( patternTraits.length ? { patternTraits } : {} ),
 		...( learningAttribution ? { learningAttribution } : {} ),
 	};
 }
@@ -834,9 +859,7 @@ export function buildRecommendationOutcomeEntry( {
 	}
 
 	const rankingSnapshot = normalizeRankingSnapshot( suggestion?.ranking );
-	const normalizedRankingSet = buildRankingSetFromSuggestions( rankingSet, {
-		includePatternTraits: safeSurface === 'pattern',
-	} );
+	const normalizedRankingSet = buildRankingSetFromSuggestions( rankingSet );
 	const normalizedLearningAttribution = normalizeLearningAttribution(
 		identity.learningAttribution,
 		{
@@ -844,10 +867,6 @@ export function buildRecommendationOutcomeEntry( {
 			sourceRequestSignature: identity.sourceRequestSignature,
 		}
 	);
-	const normalizedPatternTraits =
-		safeSurface === 'pattern'
-			? normalizePatternTraits( identity.patternTraits )
-			: [];
 	let outcomeRanking = {};
 
 	if ( safeEvent === 'shown' && normalizedRankingSet.length ) {
@@ -855,6 +874,11 @@ export function buildRecommendationOutcomeEntry( {
 	} else if ( safeEvent !== 'shown' && rankingSnapshot ) {
 		outcomeRanking = { ranking: rankingSnapshot };
 	}
+
+	const outcomePatternTraits =
+		safeSurface === 'pattern' && safeEvent !== 'shown'
+			? identity.patternTraits || []
+			: [];
 
 	const engagedPrimary =
 		safeEvent !== 'shown'
@@ -906,6 +930,9 @@ export function buildRecommendationOutcomeEntry( {
 					? Math.max( 0, identity.resultCount )
 					: 0,
 				...outcomeRanking,
+				...( outcomePatternTraits.length
+					? { patternTraits: outcomePatternTraits }
+					: {} ),
 				...( engagedPrimary
 					? { validationReason: engagedPrimary.code }
 					: {} ),
@@ -917,9 +944,6 @@ export function buildRecommendationOutcomeEntry( {
 					: {} ),
 				...( normalizedLearningAttribution
 					? { learningAttribution: normalizedLearningAttribution }
-					: {} ),
-				...( safeEvent !== 'shown' && normalizedPatternTraits.length
-					? { patternTraits: normalizedPatternTraits }
 					: {} ),
 			},
 		},
@@ -949,11 +973,11 @@ export function buildRecommendationOutcomeEntry( {
 					? { members: identity.members }
 					: {} ),
 				...outcomeRanking,
+				...( outcomePatternTraits.length
+					? { patternTraits: outcomePatternTraits }
+					: {} ),
 				...( normalizedLearningAttribution
 					? { learningAttribution: normalizedLearningAttribution }
-					: {} ),
-				...( safeEvent !== 'shown' && normalizedPatternTraits.length
-					? { patternTraits: normalizedPatternTraits }
 					: {} ),
 			},
 		},

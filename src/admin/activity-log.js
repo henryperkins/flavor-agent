@@ -36,6 +36,7 @@ import {
 	getGovernancePlainSummary,
 	isPendingExternalApply,
 	normalizeActivityEntries,
+	normalizeGovernanceLearningReport,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
@@ -2220,9 +2221,9 @@ export function ActivityLogApp( { bootData } ) {
 						blocked: response?.summary?.blocked || 0,
 						failed: response?.summary?.failed || 0,
 					},
-					learningReport: isPlainRecord( response?.learningReport )
-						? response.learningReport
-						: null,
+					learningReport: normalizeGovernanceLearningReport(
+						response?.learningReport
+					),
 				} );
 			} catch ( fetchError ) {
 				if ( ! isCurrent ) {

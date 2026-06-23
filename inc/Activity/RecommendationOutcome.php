@@ -16,6 +16,31 @@ final class RecommendationOutcome {
 	private const RANKING_SET_CAP    = 3;
 	private const PATTERN_TRAIT_CAP  = 8;
 
+	private const PATTERN_TRAITS = [
+		'hero-banner',
+		'multi-column',
+		'gallery',
+		'call-to-action',
+		'query-loop',
+		'media-text',
+		'navigation',
+		'search',
+		'branding',
+		'social',
+		'simple',
+		'moderate-complexity',
+		'complex',
+		'media-rich',
+		'text-focused',
+		'mixed-content',
+		'site-chrome',
+		'testimonial',
+		'team-or-about',
+		'showcase',
+		'pricing',
+		'contact',
+	];
+
 	private const EVENTS = [
 		'shown',
 		'selected_for_review',
@@ -133,10 +158,7 @@ final class RecommendationOutcome {
 		}
 
 		if ( 'shown' === $event ) {
-			$ranking_set = self::normalize_ranking_set(
-				$outcome['rankingSet'] ?? [],
-				'pattern' === $surface
-			);
+			$ranking_set = self::normalize_ranking_set( $outcome['rankingSet'] ?? [] );
 			if ( [] !== $ranking_set ) {
 				$normalized_outcome['rankingSet'] = $ranking_set;
 			}
@@ -187,12 +209,12 @@ final class RecommendationOutcome {
 			$request_recommendation['rankingSet'] = $normalized_outcome['rankingSet'];
 		}
 
-		if ( isset( $normalized_outcome['learningAttribution'] ) ) {
-			$request_recommendation['learningAttribution'] = $normalized_outcome['learningAttribution'];
-		}
-
 		if ( isset( $normalized_outcome['patternTraits'] ) ) {
 			$request_recommendation['patternTraits'] = $normalized_outcome['patternTraits'];
+		}
+
+		if ( isset( $normalized_outcome['learningAttribution'] ) ) {
+			$request_recommendation['learningAttribution'] = $normalized_outcome['learningAttribution'];
 		}
 
 		return [
@@ -293,10 +315,7 @@ final class RecommendationOutcome {
 	/**
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function normalize_ranking_set(
-		mixed $value,
-		bool $include_pattern_traits = false
-	): array {
+	private static function normalize_ranking_set( mixed $value ): array {
 		if ( ! is_array( $value ) ) {
 			return [];
 		}
@@ -332,13 +351,9 @@ final class RecommendationOutcome {
 				$item_out['validationVocabularyVersion'] = substr( $vocab_version, 0, 64 );
 			}
 
-			if ( $include_pattern_traits ) {
-				$pattern_traits = self::normalize_pattern_traits(
-					$item['patternTraits'] ?? []
-				);
-				if ( [] !== $pattern_traits ) {
-					$item_out['patternTraits'] = $pattern_traits;
-				}
+			$pattern_traits = self::normalize_pattern_traits( $item['patternTraits'] ?? [] );
+			if ( [] !== $pattern_traits ) {
+				$item_out['patternTraits'] = $pattern_traits;
 			}
 
 			$items[] = $item_out;
@@ -349,6 +364,38 @@ final class RecommendationOutcome {
 		}
 
 		return $items;
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function normalize_pattern_traits( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$traits = [];
+		foreach ( $value as $trait ) {
+			if ( ! is_scalar( $trait ) ) {
+				continue;
+			}
+
+			$normalized = sanitize_key( (string) $trait );
+			if ( '' === $normalized || ! in_array( $normalized, self::PATTERN_TRAITS, true ) ) {
+				continue;
+			}
+
+			if ( in_array( $normalized, $traits, true ) ) {
+				continue;
+			}
+
+			$traits[] = $normalized;
+			if ( count( $traits ) >= self::PATTERN_TRAIT_CAP ) {
+				break;
+			}
+		}
+
+		return $traits;
 	}
 
 	private static function normalize_stable_suggestion_key( mixed $value, int $index ): string {
@@ -418,34 +465,6 @@ final class RecommendationOutcome {
 		}
 
 		return array_slice( array_values( $items ), 0, $cap );
-	}
-
-	/**
-	 * @return array<int, string>
-	 */
-	private static function normalize_pattern_traits( mixed $value ): array {
-		if ( ! is_array( $value ) ) {
-			return [];
-		}
-
-		$items = [];
-		foreach ( $value as $item ) {
-			if ( ! is_scalar( $item ) && null !== $item ) {
-				continue;
-			}
-
-			$trait = strtolower( trim( (string) $item ) );
-			if ( 1 !== preg_match( '/^[a-z0-9][a-z0-9_-]{0,63}$/', $trait ) ) {
-				continue;
-			}
-
-			$items[ $trait ] = $trait;
-			if ( count( $items ) >= self::PATTERN_TRAIT_CAP ) {
-				break;
-			}
-		}
-
-		return array_values( $items );
 	}
 
 	/**

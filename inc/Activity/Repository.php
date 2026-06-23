@@ -2113,8 +2113,10 @@ final class Repository {
 
 		$result['learningReport'] = GovernanceLearningReport::build(
 			array_values( $entries ),
-			$row_limit,
-			$truncated
+			[
+				'rowLimit'  => $row_limit,
+				'truncated' => $truncated,
+			]
 		);
 
 		return $result;

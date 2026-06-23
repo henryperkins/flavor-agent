@@ -685,7 +685,13 @@ final class ActivityRepositoryTest extends TestCase {
 			)
 		);
 
-		$result = Repository::query_admin(
+		$default_result = Repository::query_admin(
+			[
+				'page'    => 1,
+				'perPage' => 2,
+			]
+		);
+		$result         = Repository::query_admin(
 			[
 				'includeReports' => true,
 				'page'           => 1,
@@ -714,7 +720,7 @@ final class ActivityRepositoryTest extends TestCase {
 			$report['summary'] ?? null
 		);
 		$this->assertSame(
-			'openai/gpt-5-mini',
+			'openai:gpt-5-mini',
 			$report['groups']['providerModels'][0]['key'] ?? null
 		);
 		$this->assertContains(
@@ -733,9 +739,60 @@ final class ActivityRepositoryTest extends TestCase {
 			'media-rich',
 			array_column( $report['groups']['patternTraits'] ?? [], 'key' )
 		);
+		$this->assertArrayNotHasKey( 'learningReport', $default_result );
 		$this->assertNotContains(
 			'privatelaunchcopy',
 			array_column( $report['groups']['patternTraits'] ?? [], 'key' )
+		);
+	}
+
+	public function test_query_admin_learning_report_matches_projected_and_fallback_paths(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_outcome_entry(
+				'outcome-shown',
+				'shown',
+				'block',
+				'set-1',
+				'',
+				'',
+				'2026-03-24T10:00:00Z'
+			)
+		);
+		Repository::create(
+			$this->build_outcome_entry(
+				'outcome-selected',
+				'selected_for_review',
+				'block',
+				'set-1',
+				'suggestion:1',
+				'review_opened',
+				'2026-03-24T10:00:01Z'
+			)
+		);
+
+		$filters          = [
+			'includeReports' => true,
+			'reportRowLimit' => 10,
+		];
+		$projected_result = Repository::query_admin( $filters );
+
+		WordPressTestState::$options['flavor_agent_activity_admin_projection_backfill_cursor'] = 0;
+
+		$fallback_result = Repository::query_admin( $filters );
+
+		$this->assertSame(
+			$projected_result['learningReport']['summary'] ?? null,
+			$fallback_result['learningReport']['summary'] ?? null
+		);
+		$this->assertSame(
+			array_column( $projected_result['learningReport']['groups']['surfaces'] ?? [], 'key' ),
+			array_column( $fallback_result['learningReport']['groups']['surfaces'] ?? [], 'key' )
+		);
+		$this->assertSame(
+			$projected_result['paginationInfo']['totalItems'] ?? null,
+			$fallback_result['paginationInfo']['totalItems'] ?? null
 		);
 	}
 

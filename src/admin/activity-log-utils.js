@@ -34,6 +34,50 @@ export const DEFAULT_ACTIVITY_VIEW = Object.freeze( {
 } );
 
 const EMPTY_VALUE = 'Not recorded';
+const LEARNING_REPORT_GROUP_ROW_CAP = 6;
+const LEARNING_REPORT_GROUPS = [
+	{ key: 'surfaces', label: __( 'Surfaces', 'flavor-agent' ) },
+	{
+		key: 'operationTypes',
+		label: __( 'Action types', 'flavor-agent' ),
+	},
+	{
+		key: 'providerModels',
+		label: __( 'Provider and model', 'flavor-agent' ),
+	},
+	{
+		key: 'validationReasons',
+		label: __( 'Validation reasons', 'flavor-agent' ),
+	},
+	{
+		key: 'guidelineVersions',
+		label: __( 'Guideline versions', 'flavor-agent' ),
+	},
+	{
+		key: 'rankingSignals',
+		label: __( 'Ranking signals', 'flavor-agent' ),
+	},
+	{
+		key: 'patternTraits',
+		label: __( 'Pattern traits', 'flavor-agent' ),
+	},
+];
+const LEARNING_REPORT_COUNT_FIELDS = [
+	'shownCount',
+	'selectedForReviewCount',
+	'appliedCount',
+	'undoneCount',
+	'staleBlockedCount',
+	'validationBlockedCount',
+	'insertFailedCount',
+];
+const LEARNING_REPORT_RATE_FIELDS = [
+	'reviewSelectionRate',
+	'applyConversionRate',
+	'undoRate',
+	'validationBlockedRate',
+	'insertFailedRate',
+];
 
 function normalizeLocale( locale = '' ) {
 	if ( typeof locale !== 'string' || ! locale.trim() ) {
@@ -164,6 +208,125 @@ function isPlainObject( value ) {
 		typeof value === 'object' &&
 		! Array.isArray( value )
 	);
+}
+
+function normalizeReportString( value, maxLength = 191 ) {
+	if ( ! [ 'string', 'number' ].includes( typeof value ) ) {
+		return '';
+	}
+
+	return String( value ).trim().slice( 0, maxLength );
+}
+
+function normalizeReportCount( value ) {
+	const number = Number( value );
+
+	if ( ! Number.isFinite( number ) || number <= 0 ) {
+		return 0;
+	}
+
+	return Math.trunc( number );
+}
+
+function normalizeReportRate( value ) {
+	const number = Number( value );
+
+	if ( ! Number.isFinite( number ) ) {
+		return 0;
+	}
+
+	return Math.min( 1, Math.max( 0, number ) );
+}
+
+function normalizeGovernanceLearningReportRow( row ) {
+	if ( ! isPlainObject( row ) ) {
+		return null;
+	}
+
+	const key = normalizeReportString( row.key );
+	const label = normalizeReportString( row.label );
+
+	if ( ! key || ! label ) {
+		return null;
+	}
+
+	const normalized = {
+		key,
+		label,
+		sampleSize: normalizeReportCount( row.sampleSize ),
+	};
+
+	for ( const field of LEARNING_REPORT_COUNT_FIELDS ) {
+		normalized[ field ] = normalizeReportCount( row[ field ] );
+	}
+
+	for ( const field of LEARNING_REPORT_RATE_FIELDS ) {
+		normalized[ field ] = normalizeReportRate( row[ field ] );
+	}
+
+	const representativeActivityId = normalizeReportString(
+		row.representativeActivityId
+	);
+
+	if ( representativeActivityId ) {
+		normalized.representativeActivityId = representativeActivityId;
+	}
+
+	return normalized;
+}
+
+export function normalizeGovernanceLearningReport( report ) {
+	if (
+		! isPlainObject( report ) ||
+		! isPlainObject( report.summary ) ||
+		! isPlainObject( report.groups )
+	) {
+		return null;
+	}
+
+	const version = normalizeReportString( report.version );
+
+	if ( ! version ) {
+		return null;
+	}
+
+	const summary = {
+		shownCount: normalizeReportCount( report.summary.shownCount ),
+	};
+
+	for ( const field of LEARNING_REPORT_RATE_FIELDS ) {
+		summary[ field ] = normalizeReportRate( report.summary[ field ] );
+	}
+
+	const groups = {};
+	const groupSections = LEARNING_REPORT_GROUPS.map( ( group ) => {
+		const rows = (
+			Array.isArray( report.groups[ group.key ] )
+				? report.groups[ group.key ]
+				: []
+		)
+			.map( normalizeGovernanceLearningReportRow )
+			.filter( Boolean )
+			.slice( 0, LEARNING_REPORT_GROUP_ROW_CAP );
+
+		groups[ group.key ] = rows;
+
+		return {
+			...group,
+			rows,
+		};
+	} );
+
+	return {
+		version,
+		generatedAt: normalizeReportString( report.generatedAt, 64 ),
+		sampleSize: normalizeReportCount( report.sampleSize ),
+		rowLimit: normalizeReportCount( report.rowLimit ),
+		truncated: true === report.truncated,
+		summary,
+		groups,
+		groupSections,
+	};
 }
 
 function getAdminMetadata( entry ) {

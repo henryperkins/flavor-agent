@@ -79,6 +79,12 @@ final class Agent_Controller {
 							'default'           => false,
 							'sanitize_callback' => static fn( mixed $value ): bool => \in_array( $value, [ true, 1, '1', 'true', 'yes' ], true ),
 						],
+						'includeReports'             => [
+							'required'          => false,
+							'type'              => 'boolean',
+							'default'           => false,
+							'sanitize_callback' => static fn( mixed $value ): bool => \in_array( $value, [ true, 1, '1', 'true', 'yes' ], true ),
+						],
 						'surface'                    => [
 							'required'          => false,
 							'type'              => 'string',
