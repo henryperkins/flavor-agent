@@ -27,6 +27,7 @@ final class Repository {
 	private const ADMIN_HISTORY_QUERY_ENTITY_BATCH_SIZE   = 50;
 	private const ADMIN_HISTORY_QUERY_KEY_SEPARATOR       = "\x1F";
 	private const ADMIN_PROJECTION_SELECT_SQL             = 'id, activity_id, user_id, surface, entity_type, entity_ref, document_scope_key, activity_type, suggestion, undo_state, execution_result, created_at, admin_post_type, admin_entity_id, admin_block_path, admin_operation_type, admin_operation_label, admin_provider, admin_model, admin_provider_path, admin_configuration_owner, admin_credential_source, admin_selected_provider, admin_request_ability, admin_request_route, admin_request_reference, admin_request_prompt, admin_search_text';
+	private const PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY = 'flavor_agent_pending_external_apply_notice_snapshot';
 	private const ADMIN_PROJECTION_VARCHAR_LIMITS         = [
 		'admin_post_type'           => 64,
 		'admin_entity_id'           => 191,
@@ -226,6 +227,10 @@ final class Repository {
 				'Flavor Agent could not persist the activity entry.',
 				[ 'status' => 500 ]
 			);
+		}
+
+		if ( self::is_pending_external_style_apply_entry( $normalized ) ) {
+			self::invalidate_pending_external_apply_notification_snapshot_cache();
 		}
 
 		$stored = self::find( $activity_id );
@@ -671,7 +676,15 @@ final class Repository {
 			return [];
 		}
 
-		$reverts = AttestationRepository::find_reverts_by_attestation_ids(
+		$reverts    = AttestationRepository::find_reverts_by_attestation_ids(
+			array_values(
+				array_map(
+					static fn ( array $row ): string => (string) ( $row['attestation_id'] ?? '' ),
+					$attestations
+				)
+			)
+		);
+		$supersedes = AttestationRepository::find_supersedes_by_attestation_ids(
 			array_values(
 				array_map(
 					static fn ( array $row ): string => (string) ( $row['attestation_id'] ?? '' ),
@@ -683,11 +696,17 @@ final class Repository {
 		foreach ( $attestations as $activity_id => $row ) {
 			$attestation_id = trim( (string) ( $row['attestation_id'] ?? '' ) );
 
-			if ( '' === $attestation_id || ! isset( $reverts[ $attestation_id ] ) ) {
+			if ( '' === $attestation_id ) {
 				continue;
 			}
 
-			$attestations[ $activity_id ]['reverted_by_attestation_id'] = $reverts[ $attestation_id ]['attestation_id'] ?? null;
+			if ( isset( $reverts[ $attestation_id ] ) ) {
+				$attestations[ $activity_id ]['reverted_by_attestation_id'] = $reverts[ $attestation_id ]['attestation_id'] ?? null;
+			}
+
+			if ( isset( $supersedes[ $attestation_id ] ) ) {
+				$attestations[ $activity_id ]['superseded_by_attestation_id'] = $supersedes[ $attestation_id ]['attestation_id'] ?? null;
+			}
 		}
 
 		return $attestations;
@@ -914,6 +933,8 @@ final class Repository {
 			);
 		}
 
+		self::invalidate_pending_external_apply_notification_snapshot_cache();
+
 		$stored = self::find( $activity_id );
 
 		if ( is_array( $stored ) ) {
@@ -1017,6 +1038,187 @@ final class Repository {
 	}
 
 	/**
+	 * @return array{
+	 *   count: int,
+	 *   latest: array<string, mixed>|null
+	 * }
+	 */
+	public static function get_pending_external_apply_notification_snapshot(): array {
+		$cached = self::get_cached_pending_external_apply_notification_snapshot();
+
+		if ( null === $cached ) {
+			$cached = self::build_pending_external_apply_notification_snapshot();
+			self::cache_pending_external_apply_notification_snapshot( $cached );
+		}
+
+		return [
+			'count'  => max( 0, (int) ( $cached['count'] ?? 0 ) ),
+			'latest' => is_array( $cached['latest'] ?? null ) ? $cached['latest'] : null,
+		];
+	}
+
+	/**
+	 * @return array{count: int, latest: array<string, mixed>|null, nextExpiryAt: string}|null
+	 */
+	private static function get_cached_pending_external_apply_notification_snapshot(): ?array {
+		if ( ! function_exists( 'get_transient' ) ) {
+			return null;
+		}
+
+		$cached = get_transient( self::PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY );
+
+		if ( ! is_array( $cached ) ) {
+			return null;
+		}
+
+		$count          = max( 0, (int) ( $cached['count'] ?? 0 ) );
+		$latest         = is_array( $cached['latest'] ?? null ) ? $cached['latest'] : null;
+		$next_expiry_at = trim( (string) ( $cached['nextExpiryAt'] ?? '' ) );
+
+		if ( 0 === $count ) {
+			return [
+				'count'        => 0,
+				'latest'       => null,
+				'nextExpiryAt' => '',
+			];
+		}
+
+		if ( null === $latest ) {
+			return null;
+		}
+
+		if ( '' !== $next_expiry_at ) {
+			$next_expiry = strtotime( $next_expiry_at );
+
+			if ( false === $next_expiry || $next_expiry <= time() ) {
+				return null;
+			}
+		}
+
+		return [
+			'count'        => $count,
+			'latest'       => $latest,
+			'nextExpiryAt' => $next_expiry_at,
+		];
+	}
+
+	/**
+	 * @return array{count: int, latest: array<string, mixed>|null, nextExpiryAt: string}
+	 */
+	private static function build_pending_external_apply_notification_snapshot(): array {
+		global $wpdb;
+
+		$snapshot = [
+			'count'        => 0,
+			'latest'       => null,
+			'nextExpiryAt' => '',
+		];
+
+		if ( ! is_object( $wpdb ) ) {
+			return $snapshot;
+		}
+
+		$sql = $wpdb->prepare(
+			'SELECT activity_id, user_id, surface, target_json, request_json, document_json, execution_result FROM %i WHERE execution_result = %s ORDER BY created_at DESC, id DESC',
+			self::table_name(),
+			'pending'
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Rebuilds the admin notice snapshot from the plugin-owned activity table only when the cache is invalid or stale.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$entry = self::maybe_expire_pending_apply(
+				self::hydrate_pending_external_apply_notice_entry( $row )
+			);
+
+			if ( ! self::is_pending_external_style_apply_entry( $entry ) ) {
+				continue;
+			}
+
+			++$snapshot['count'];
+
+			if ( null === $snapshot['latest'] ) {
+				$snapshot['latest'] = $entry;
+			}
+
+			self::track_pending_external_apply_notice_expiry( $snapshot, (string) ( $entry['apply']['expiresAt'] ?? '' ) );
+		}
+
+		if ( is_array( $snapshot['latest'] ) ) {
+			$snapshot['latest']['userLabel'] = self::resolve_admin_user_label( (int) ( $snapshot['latest']['userId'] ?? 0 ) );
+		}
+
+		return $snapshot;
+	}
+
+	/**
+	 * @param array{count: int, latest: array<string, mixed>|null, nextExpiryAt: string} $snapshot
+	 */
+	private static function cache_pending_external_apply_notification_snapshot( array $snapshot ): void {
+		if ( ! function_exists( 'set_transient' ) ) {
+			return;
+		}
+
+		$expiration = defined( 'DAY_IN_SECONDS' ) ? (int) DAY_IN_SECONDS : 86400;
+
+		set_transient(
+			self::PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY,
+			[
+				'count'        => max( 0, (int) ( $snapshot['count'] ?? 0 ) ),
+				'latest'       => is_array( $snapshot['latest'] ?? null ) ? $snapshot['latest'] : null,
+				'nextExpiryAt' => trim( (string) ( $snapshot['nextExpiryAt'] ?? '' ) ),
+			],
+			$expiration
+		);
+	}
+
+	private static function invalidate_pending_external_apply_notification_snapshot_cache(): void {
+		if ( function_exists( 'delete_transient' ) ) {
+			delete_transient( self::PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY );
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @return array<string, mixed>
+	 */
+	private static function hydrate_pending_external_apply_notice_entry( array $row ): array {
+		$request = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
+		$user_id = (int) ( $row['user_id'] ?? 0 );
+		$entry   = [
+			'id'              => trim( (string) ( $row['activity_id'] ?? '' ) ),
+			'surface'         => trim( (string) ( $row['surface'] ?? '' ) ),
+			'target'          => Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' ),
+			'document'        => Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' ),
+			'executionResult' => trim( (string) ( $row['execution_result'] ?? '' ) ),
+			'userId'          => $user_id,
+		];
+
+		if ( is_array( $request['apply'] ?? null ) ) {
+			$entry['apply'] = $request['apply'];
+		}
+
+		return $entry;
+	}
+
+	/**
+	 * @param array{count: int, latest: array<string, mixed>|null, nextExpiryAt: string} $snapshot
+	 */
+	private static function track_pending_external_apply_notice_expiry( array &$snapshot, string $expires_at ): void {
+		$timestamp = strtotime( $expires_at );
+
+		if ( false === $timestamp ) {
+			return;
+		}
+
+		$current = strtotime( $snapshot['nextExpiryAt'] );
+
+		if ( '' === $snapshot['nextExpiryAt'] || false === $current || $timestamp < $current ) {
+			$snapshot['nextExpiryAt'] = $expires_at;
+		}
+	}
+
+	/**
 	 * Delete activity entries created before the given ISO 8601 timestamp.
 	 *
 	 * @return int Number of deleted rows, or 0 on failure.
@@ -1043,6 +1245,10 @@ final class Repository {
 				gmdate( 'Y-m-d H:i:s', $unix_timestamp )
 			)
 		);
+
+		if ( is_int( $deleted ) && $deleted > 0 ) {
+			self::invalidate_pending_external_apply_notification_snapshot_cache();
+		}
 
 		return is_int( $deleted ) ? $deleted : 0;
 	}
@@ -4684,6 +4890,22 @@ final class Repository {
 		);
 
 		return implode( ' ', $parts );
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 */
+	private static function is_pending_external_style_apply_entry( array $entry ): bool {
+		$surface = trim( (string) ( $entry['surface'] ?? '' ) );
+		$apply   = is_array( $entry['apply'] ?? null )
+			? $entry['apply']
+			: ( is_array( $entry['request']['apply'] ?? null ) ? $entry['request']['apply'] : [] );
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return false;
+		}
+
+		return in_array( $surface, [ 'global-styles', 'style-book' ], true );
 	}
 
 	private static function table_exists(): bool {

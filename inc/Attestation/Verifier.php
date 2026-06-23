@@ -18,7 +18,8 @@ final class Verifier {
 		string $signature_raw,
 		array $jwks,
 		?string $live_subject_bytes,
-		?string $reverted_by_id
+		?string $reverted_by_id,
+		?string $superseded_by_id = null
 	): array {
 		$outcomes   = [];
 		$statement  = json_decode( $statement_bytes, true );
@@ -38,9 +39,13 @@ final class Verifier {
 			if ( hash( 'sha256', $live_subject_bytes ) === $subject_digest ) {
 				$outcomes[] = 'live_matches_subject';
 			} else {
-				$outcomes[] = null !== $reverted_by_id && '' !== $reverted_by_id
-					? 'reverted_by_attestation'
-					: 'live_changed_since_attestation';
+				if ( null !== $reverted_by_id && '' !== $reverted_by_id ) {
+					$outcomes[] = 'reverted_by_attestation';
+				} elseif ( null !== $superseded_by_id && '' !== $superseded_by_id ) {
+					$outcomes[] = 'superseded_by_attestation';
+				} else {
+					$outcomes[] = 'live_changed_since_attestation';
+				}
 			}
 		}
 

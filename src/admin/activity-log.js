@@ -1411,6 +1411,7 @@ function getAttestationArtifact( entry ) {
 
 	return {
 		id,
+		verificationUrl: getAttestationString( artifact, 'verificationUrl' ),
 		verifyUrl: getAttestationString( artifact, 'verifyUrl' ),
 		subjectStateUrl: getAttestationString( artifact, 'subjectStateUrl' ),
 		keyId: getAttestationString( artifact, 'keyId' ),
@@ -1421,6 +1422,14 @@ function getAttestationArtifact( entry ) {
 			artifact,
 			'revertedByAttestationId'
 		),
+		supersededByAttestationId: getAttestationString(
+			artifact,
+			'supersededByAttestationId'
+		),
+		supersededByVerifyUrl: getAttestationString(
+			artifact,
+			'supersededByVerifyUrl'
+		),
 	};
 }
 
@@ -1428,6 +1437,49 @@ function getAttestationResultString( payload, key ) {
 	const value = isPlainRecord( payload ) ? payload[ key ] : '';
 
 	return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+const ATTESTATION_OUTCOME_LABELS = {
+	signature_valid: __( 'Signature valid', 'flavor-agent' ),
+	record_tampered: __( 'Record tampered', 'flavor-agent' ),
+	live_matches_subject: __( 'Live subject matches', 'flavor-agent' ),
+	reverted_by_attestation: __( 'Reverted by attestation', 'flavor-agent' ),
+	superseded_by_attestation: __(
+		'Superseded by attestation',
+		'flavor-agent'
+	),
+	live_changed_since_attestation: __(
+		'Live subject changed since attestation',
+		'flavor-agent'
+	),
+	live_subject_unavailable: __( 'Live subject unavailable', 'flavor-agent' ),
+};
+
+function getVerificationCheckDetails( payload ) {
+	const outcomes = Array.isArray( payload?.outcomes ) ? payload.outcomes : [];
+	const details = outcomes.map(
+		( outcome ) => ATTESTATION_OUTCOME_LABELS[ outcome ] || outcome
+	);
+	const subjectError = getAttestationResultString( payload, 'subjectError' );
+
+	if ( subjectError ) {
+		details.push(
+			sprintf(
+				/* translators: %s: attestation subject-state error code. */
+				__( 'Subject error: %s', 'flavor-agent' ),
+				subjectError
+			)
+		);
+	}
+
+	return {
+		message: __(
+			'Verification completed using the public attestation endpoints.',
+			'flavor-agent'
+		),
+		status: outcomes.includes( 'record_tampered' ) ? 'error' : 'success',
+		details,
+	};
 }
 
 function getAttestationCheckDetails( type, payload ) {
@@ -1469,6 +1521,7 @@ function getAttestationCheckDetails( type, payload ) {
 				'Envelope loaded from the public endpoint.',
 				'flavor-agent'
 			),
+			status: 'success',
 			details,
 		};
 	}
@@ -1502,6 +1555,7 @@ function getAttestationCheckDetails( type, payload ) {
 			'Live subject state loaded from the public endpoint.',
 			'flavor-agent'
 		),
+		status: 'success',
 		details,
 	};
 }
@@ -1530,6 +1584,7 @@ function GovernancePlainSummary( { rows = [] } ) {
 }
 
 function AttestationActions( { artifact } ) {
+	const verificationUrl = artifact?.verificationUrl || '';
 	const verifyUrl = artifact?.verifyUrl || '';
 	const subjectStateUrl = artifact?.subjectStateUrl || '';
 	const [ activeCheck, setActiveCheck ] = useState( '' );
@@ -1540,7 +1595,7 @@ function AttestationActions( { artifact } ) {
 		setActiveCheck( '' );
 		setCheckResult( null );
 		setCheckError( '' );
-	}, [ artifact?.id, verifyUrl, subjectStateUrl ] );
+	}, [ artifact?.id, verificationUrl, verifyUrl, subjectStateUrl ] );
 
 	const runPublicCheck = useCallback( async ( type, url ) => {
 		if ( ! url ) {
@@ -1554,15 +1609,16 @@ function AttestationActions( { artifact } ) {
 		try {
 			const payload = await apiFetch( { url } );
 
-			setCheckResult( {
-				type,
-				...getAttestationCheckDetails( type, payload ),
-			} );
+			setCheckResult(
+				'verification' === type
+					? getVerificationCheckDetails( payload )
+					: getAttestationCheckDetails( type, payload )
+			);
 		} catch ( error ) {
 			setCheckError(
 				error?.message ||
 					__(
-						'The public verification endpoint could not be loaded.',
+						'The attestation verification data could not be loaded.',
 						'flavor-agent'
 					)
 			);
@@ -1571,7 +1627,7 @@ function AttestationActions( { artifact } ) {
 		}
 	}, [] );
 
-	if ( ! verifyUrl && ! subjectStateUrl ) {
+	if ( ! verificationUrl && ! verifyUrl && ! subjectStateUrl ) {
 		return null;
 	}
 
@@ -1582,11 +1638,23 @@ function AttestationActions( { artifact } ) {
 			</h4>
 			<p className="flavor-agent-activity-log__copy">
 				{ __(
-					'Anyone can verify this change independently — the signed envelope and the live subject state are public.',
+					'Run the site-served verification summary here, or open the public envelope and live subject endpoints for independent verification.',
 					'flavor-agent'
 				) }
 			</p>
 			<div className="flavor-agent-activity-log__attestation-actions">
+				{ verificationUrl && (
+					<Button
+						disabled={ !! activeCheck }
+						isBusy={ 'verification' === activeCheck }
+						onClick={ () =>
+							runPublicCheck( 'verification', verificationUrl )
+						}
+						variant="secondary"
+					>
+						{ __( 'Run verification', 'flavor-agent' ) }
+					</Button>
+				) }
 				{ verifyUrl && (
 					<Button
 						disabled={ !! activeCheck }
@@ -1596,7 +1664,7 @@ function AttestationActions( { artifact } ) {
 						}
 						variant="secondary"
 					>
-						{ __( 'Verify envelope', 'flavor-agent' ) }
+						{ __( 'Load envelope', 'flavor-agent' ) }
 					</Button>
 				) }
 				{ subjectStateUrl && (
@@ -1608,7 +1676,7 @@ function AttestationActions( { artifact } ) {
 						}
 						variant="secondary"
 					>
-						{ __( 'Check live subject', 'flavor-agent' ) }
+						{ __( 'Load live subject', 'flavor-agent' ) }
 					</Button>
 				) }
 			</div>
@@ -1631,7 +1699,7 @@ function AttestationActions( { artifact } ) {
 			{ checkResult && (
 				<Notice
 					className="flavor-agent-activity-log__attestation-result"
-					status="success"
+					status={ checkResult.status }
 					isDismissible={ false }
 				>
 					<p>{ checkResult.message }</p>
@@ -1697,6 +1765,10 @@ function CryptographicRecord( { details, artifact } ) {
 				[
 					__( 'Reverted by', 'flavor-agent' ),
 					artifact.revertedByAttestationId,
+				],
+				[
+					__( 'Superseded by', 'flavor-agent' ),
+					artifact.supersededByAttestationId,
 				],
 		  ]
 		: [];

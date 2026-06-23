@@ -76,6 +76,77 @@ final class AttestationCommandTest extends TestCase {
 		$this->assertSame( 'Attestation verified.', $this->last_cli_message( 'success' ) );
 	}
 
+	public function test_verify_reports_superseded_outcome_for_a_later_apply(): void {
+		$first_config  = [
+			'settings' => [],
+			'styles'   => [
+				'color' => [
+					'background' => '#111111',
+				],
+			],
+		];
+		$second_config = [
+			'settings' => [],
+			'styles'   => [
+				'color' => [
+					'background' => '#222222',
+				],
+			],
+		];
+
+		$this->seed_global_styles_post( $first_config );
+		$first_id = AttestationService::record_apply(
+			[
+				'surface'            => 'global-styles',
+				'globalStylesId'     => self::GLOBAL_STYLES_ID,
+				'blockName'          => '',
+				'operations'         => [],
+				'before'             => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'after'              => [ 'userConfig' => $first_config ],
+				'freshnessSignature' => 'f',
+				'actorRole'          => 'administrator',
+				'relatedActivityId'  => 'activity-1',
+				'requestedAt'        => '2026-06-22T00:00:00+00:00',
+				'decidedAt'          => '2026-06-22T00:01:00+00:00',
+			]
+		);
+
+		$this->assertIsString( $first_id );
+
+		$this->seed_global_styles_post( $second_config );
+		$second_id = AttestationService::record_apply(
+			[
+				'surface'            => 'global-styles',
+				'globalStylesId'     => self::GLOBAL_STYLES_ID,
+				'blockName'          => '',
+				'operations'         => [],
+				'before'             => [ 'userConfig' => $first_config ],
+				'after'              => [ 'userConfig' => $second_config ],
+				'freshnessSignature' => 'f',
+				'actorRole'          => 'administrator',
+				'relatedActivityId'  => 'activity-2',
+				'requestedAt'        => '2026-06-22T00:02:00+00:00',
+				'decidedAt'          => '2026-06-22T00:03:00+00:00',
+			]
+		);
+
+		$this->assertIsString( $second_id );
+
+		( new AttestationCommand() )->verify( [ $first_id ], [] );
+
+		$json = $this->last_cli_message( 'line' );
+		$data = json_decode( $json, true );
+
+		$this->assertSame( $first_id, $data['attestationId'] ?? null );
+		$this->assertContains( 'signature_valid', $data['outcomes'] ?? [] );
+		$this->assertContains( 'superseded_by_attestation', $data['outcomes'] ?? [] );
+	}
+
 	public function test_verify_fails_when_live_subject_cannot_be_resolved(): void {
 		$id = AttestationService::record_apply(
 			[

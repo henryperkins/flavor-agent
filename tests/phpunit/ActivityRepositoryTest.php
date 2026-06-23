@@ -442,6 +442,19 @@ final class ActivityRepositoryTest extends TestCase {
 				'related_activity_id' => 'activity-5',
 			]
 		);
+		AttestationRepository::insert(
+			[
+				'attestation_id'            => 'att_successor',
+				'surface'                   => 'block',
+				'subject_name'              => 'post:42',
+				'subject_scope'             => 'block',
+				'after_digest'              => str_repeat( 'b', 64 ),
+				'statement_bytes'           => '{}',
+				'signature_b64'             => 'sig',
+				'key_id'                    => 'kid',
+				'supersedes_attestation_id' => 'att_admin_page',
+			]
+		);
 
 		WordPressTestState::$db_queries = [];
 
@@ -454,6 +467,7 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 
 		$this->assertSame( 'att_admin_page', $result['entries'][0]['attestation']['id'] ?? null );
+		$this->assertSame( 'att_successor', $result['entries'][0]['attestation']['supersededByAttestationId'] ?? null );
 		$this->assertArrayHasKey( 'learningReport', $result );
 
 		$attestation_queries = array_values(
@@ -464,7 +478,7 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 
 		$this->assertSame(
-			2,
+			3,
 			count( $attestation_queries ),
 			implode( "\n", $attestation_queries )
 		);

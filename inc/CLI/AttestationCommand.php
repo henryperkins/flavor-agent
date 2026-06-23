@@ -75,7 +75,8 @@ final class AttestationCommand {
 			self::b64url_decode( (string) ( $envelope['data']['signature_b64'] ?? '' ) ),
 			$keys['data'],
 			$subject_bytes,
-			isset( $envelope['data']['reverted_by_attestation_id'] ) ? (string) $envelope['data']['reverted_by_attestation_id'] : null
+			isset( $envelope['data']['reverted_by_attestation_id'] ) ? (string) $envelope['data']['reverted_by_attestation_id'] : null,
+			isset( $envelope['data']['superseded_by_attestation_id'] ) ? (string) $envelope['data']['superseded_by_attestation_id'] : null
 		);
 
 		if ( null !== $subject_error ) {

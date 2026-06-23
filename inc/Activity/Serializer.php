@@ -291,32 +291,44 @@ final class Serializer {
 			return null;
 		}
 
-		$verify_url       = function_exists( 'rest_url' )
+		$verify_url        = function_exists( 'rest_url' )
 			? \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $attestation_id ) )
 			: '';
-		$subject_url      = function_exists( 'rest_url' )
+		$verification_url  = function_exists( 'rest_url' )
+			? \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $attestation_id ) . '/verification' )
+			: '';
+		$subject_url       = function_exists( 'rest_url' )
 			? \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $attestation_id ) . '/subject-state' )
 			: '';
-		$reverted_by      = self::normalize_nullable_string( $row['reverted_by_attestation_id'] ?? null );
-		$reverted_by_url  = null;
-		$created_at_value = self::normalize_string( $row['created_at'] ?? '' );
+		$reverted_by       = self::normalize_nullable_string( $row['reverted_by_attestation_id'] ?? null );
+		$reverted_by_url   = null;
+		$superseded_by     = self::normalize_nullable_string( $row['superseded_by_attestation_id'] ?? null );
+		$superseded_by_url = null;
+		$created_at_value  = self::normalize_string( $row['created_at'] ?? '' );
 
 		if ( null !== $reverted_by && function_exists( 'rest_url' ) ) {
 			$reverted_by_url = \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $reverted_by ) );
 		}
 
+		if ( null !== $superseded_by && function_exists( 'rest_url' ) ) {
+			$superseded_by_url = \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $superseded_by ) );
+		}
+
 		return [
-			'id'                      => $attestation_id,
-			'type'                    => null !== self::normalize_nullable_string( $row['reverts_attestation_id'] ?? null ) ? 'revert' : 'apply',
-			'surface'                 => self::normalize_string( $row['surface'] ?? '' ),
-			'subjectName'             => self::normalize_string( $row['subject_name'] ?? '' ),
-			'subjectScope'            => self::normalize_string( $row['subject_scope'] ?? '' ),
-			'keyId'                   => self::normalize_string( $row['key_id'] ?? '' ),
-			'createdAt'               => '' !== $created_at_value ? self::normalize_timestamp( $created_at_value ) : '',
-			'verifyUrl'               => $verify_url,
-			'subjectStateUrl'         => $subject_url,
-			'revertedByAttestationId' => $reverted_by,
-			'revertedByVerifyUrl'     => $reverted_by_url,
+			'id'                        => $attestation_id,
+			'type'                      => null !== self::normalize_nullable_string( $row['reverts_attestation_id'] ?? null ) ? 'revert' : 'apply',
+			'surface'                   => self::normalize_string( $row['surface'] ?? '' ),
+			'subjectName'               => self::normalize_string( $row['subject_name'] ?? '' ),
+			'subjectScope'              => self::normalize_string( $row['subject_scope'] ?? '' ),
+			'keyId'                     => self::normalize_string( $row['key_id'] ?? '' ),
+			'createdAt'                 => '' !== $created_at_value ? self::normalize_timestamp( $created_at_value ) : '',
+			'verificationUrl'           => $verification_url,
+			'verifyUrl'                 => $verify_url,
+			'subjectStateUrl'           => $subject_url,
+			'revertedByAttestationId'   => $reverted_by,
+			'revertedByVerifyUrl'       => $reverted_by_url,
+			'supersededByAttestationId' => $superseded_by,
+			'supersededByVerifyUrl'     => $superseded_by_url,
 		];
 	}
 

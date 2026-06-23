@@ -89,6 +89,33 @@ final class AttestationVerifierTest extends TestCase {
 		$this->assertNotContains( 'live_changed_since_attestation', $outcomes );
 	}
 
+	public function test_superseded_change_is_accountable_not_ordinary_drift(): void {
+		$original = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => '#111111' ] ],
+		];
+		$live     = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => '#222222' ] ],
+		];
+		$bytes    = $this->statement_bytes( 'att_1', Canonicalizer::digest( $original ) );
+		$signed   = Signer::sign( $bytes );
+		$this->assertNotNull( $signed );
+
+		$outcomes = Verifier::evaluate(
+			$bytes,
+			$signed['signature'],
+			KeyManager::jwks(),
+			Canonicalizer::canonical_bytes( $live ),
+			null,
+			'att_successor'
+		);
+
+		$this->assertContains( 'signature_valid', $outcomes );
+		$this->assertContains( 'superseded_by_attestation', $outcomes );
+		$this->assertNotContains( 'live_changed_since_attestation', $outcomes );
+	}
+
 	public function test_malformed_statement_with_scalar_nesting_is_handled_safely(): void {
 		$signed = Signer::sign( '{}' );
 		$this->assertNotNull( $signed );

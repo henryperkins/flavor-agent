@@ -1511,7 +1511,7 @@ namespace {
 					);
 				}
 
-				foreach (['attestation_id', 'reverts_attestation_id', 'related_activity_id'] as $column) {
+				foreach (['attestation_id', 'reverts_attestation_id', 'supersedes_attestation_id', 'related_activity_id'] as $column) {
 					if (preg_match("/\b{$column}\b\s+IN\s*\(([^)]*)\)/i", $query, $matches)) {
 						$values = [];
 
@@ -2618,6 +2618,21 @@ namespace {
 			$normalized = ltrim($path, '/');
 
 			return 'https://example.test/wp-admin/' . $normalized;
+		}
+	}
+
+	if (! function_exists('add_submenu_page')) {
+		function add_submenu_page(
+			string $parent_slug,
+			string $page_title,
+			string $menu_title,
+			string $capability,
+			string $menu_slug,
+			$callback = ''
+		): string {
+			unset($parent_slug, $page_title, $menu_title, $capability, $callback);
+
+			return 'settings_page_' . $menu_slug;
 		}
 	}
 

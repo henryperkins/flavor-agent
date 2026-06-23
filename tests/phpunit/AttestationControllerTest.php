@@ -71,6 +71,54 @@ final class AttestationControllerTest extends TestCase {
 		$this->assertSame( Canonicalizer::canonical_bytes( $config ), self::b64url_decode( (string) $data['subject_canonical_b64'] ) );
 	}
 
+	public function test_get_attestation_exposes_superseded_by_attestation_id(): void {
+		$id = $this->record_apply();
+		Repository::insert(
+			[
+				'attestation_id'            => 'att_successor',
+				'surface'                   => 'global-styles',
+				'subject_name'              => 'wp_global_styles:81',
+				'subject_scope'             => 'global-styles',
+				'after_digest'              => str_repeat( 'b', 64 ),
+				'statement_bytes'           => '{}',
+				'signature_b64'             => 'sig',
+				'key_id'                    => 'k1',
+				'supersedes_attestation_id' => $id,
+			]
+		);
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id );
+		$request->set_param( 'id', $id );
+
+		$data = ( new AttestationController() )->get_attestation( $request )->get_data();
+
+		$this->assertSame( 'att_successor', $data['superseded_by_attestation_id'] );
+	}
+
+	public function test_get_verification_returns_actual_outcomes(): void {
+		$config = [
+			'settings' => [],
+			'styles'   => [
+				'color' => [
+					'background' => 'var:preset|color|parchment-100',
+				],
+			],
+		];
+		$this->seed_global_styles_post( $config );
+		$id = $this->record_apply( $config );
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id . '/verification' );
+		$request->set_param( 'id', $id );
+
+		$response = ( new AttestationController() )->get_verification( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( $id, $data['attestationId'] );
+		$this->assertContains( 'signature_valid', $data['outcomes'] );
+		$this->assertContains( 'live_matches_subject', $data['outcomes'] );
+		$this->assertNull( $data['subjectError'] );
+	}
+
 	/**
 	 * @param array<string, mixed>|null $after_config
 	 */

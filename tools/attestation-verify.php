@@ -12,6 +12,16 @@ if ( ! is_string( $base ) || '' === $base || ! is_string( $id ) || '' === $id ) 
 
 $base = rtrim( $base, '/' );
 
+$autoload = __DIR__ . '/../vendor/autoload.php';
+
+if ( file_exists( $autoload ) ) {
+	require $autoload;
+} else {
+	require __DIR__ . '/../inc/Attestation/Signer.php';
+	require __DIR__ . '/../inc/Attestation/Verifier.php';
+	require __DIR__ . '/../inc/Attestation/RemoteVerifier.php';
+}
+
 $get = static function ( string $url ): array {
 	$context = stream_context_create(
 		[
@@ -45,46 +55,19 @@ $get = static function ( string $url ): array {
 	return $data;
 };
 
-$b64url_decode = static function ( string $value ): string {
-	$decoded = base64_decode(
-		strtr( $value, '-_', '+/' ) . str_repeat( '=', ( 4 - strlen( $value ) % 4 ) % 4 ),
-		true
-	);
+$result = \FlavorAgent\Attestation\RemoteVerifier::verify( $base, $id, $get );
 
-	return false === $decoded ? '' : $decoded;
-};
-
-$env  = $get( "{$base}/wp-json/flavor-agent/v1/attestations/{$id}" );
-$jwks = $get( "{$base}/wp-json/flavor-agent/v1/attestations/keys" );
-$subj = $get( "{$base}/wp-json/flavor-agent/v1/attestations/{$id}/subject-state" );
-
-$statement = $b64url_decode( (string) ( $env['statement_b64'] ?? '' ) );
-$signature = $b64url_decode( (string) ( $env['signature_b64'] ?? '' ) );
-if ( ! isset( $subj['subject_canonical_b64'] ) || '' === (string) $subj['subject_canonical_b64'] ) {
-	fwrite( STDERR, "error: invalid_subject_state\n" );
-	exit( 3 );
+if ( is_string( $result['error'] ?? null ) && '' !== $result['error'] ) {
+	fwrite( STDERR, 'error: ' . $result['error'] . "\n" );
 }
-
-$live = $b64url_decode( (string) $subj['subject_canonical_b64'] );
-
-require __DIR__ . '/../inc/Attestation/Signer.php';
-require __DIR__ . '/../inc/Attestation/Verifier.php';
-
-$outcomes = \FlavorAgent\Attestation\Verifier::evaluate(
-	$statement,
-	$signature,
-	$jwks,
-	$live,
-	$env['reverted_by_attestation_id'] ?? null
-);
 
 echo json_encode(
 	[
-		'attestationId' => $id,
-		'outcomes'      => $outcomes,
+		'attestationId' => $result['attestationId'],
+		'outcomes'      => $result['outcomes'],
 	],
 	JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
 ),
 "\n";
 
-exit( in_array( 'record_tampered', $outcomes, true ) ? 1 : 0 );
+exit( (int) $result['exitCode'] );

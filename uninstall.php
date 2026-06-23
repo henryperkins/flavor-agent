@@ -22,6 +22,7 @@ wp_clear_scheduled_hook( 'flavor_agent_warm_core_roadmap_guidance' );
 delete_transient( 'flavor_agent_sync_lock' );
 delete_transient( 'flavor_agent_core_roadmap_guidance_v1' );
 delete_transient( 'flavor_agent_core_roadmap_guidance_schedule_lock' );
+delete_transient( 'flavor_agent_pending_external_apply_notice_snapshot' );
 
 global $wpdb;
 
