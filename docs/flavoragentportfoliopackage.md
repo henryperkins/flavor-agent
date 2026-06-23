@@ -12,7 +12,7 @@
 
 Flavor Agent is a WordPress plugin that lets AI work on a live site without unchecked control. It routes AI-mediated work through a governed loop: generate, validate, review, apply, record and optionally attest, then reverse safely when the live document still matches the recorded post-apply state.
 
-The user experience stays inside WordPress instead of becoming a separate chatbot. Flavor Agent appears in native Gutenberg and Site Editor surfaces: Block Inspector recommendations, pattern inserter ranking, content recommendations, navigation guidance, template and template-part recommendations, Global Styles, Style Book, and `Settings > AI Activity`.
+The user experience stays inside WordPress instead of becoming a separate chatbot. Flavor Agent appears in native Gutenberg and wp-admin surfaces: Block Inspector recommendations, pattern inserter ranking, content recommendations, navigation guidance, template and template-part recommendations, Global Styles, Style Book, and `Settings > AI Activity`.
 
 The programmatic layer exposes the same governance model through the WordPress Abilities API and MCP. The registry defines **30 ability contracts**: seven recommendation abilities, five signature-only preview/preflight abilities, fourteen helper/search/infra abilities, and four governed external-apply abilities.
 
@@ -36,7 +36,7 @@ Of the fourteen helper/search/infra contracts, ten are public read helpers expos
 - **Governed external style applies:** agents can request Global Styles / Style Book changes, but only admins approve or reject them.
 - **Server-backed audit and undo:** activity rows store provenance, request metadata, before/after state, undo state, and admin projection fields.
 - **Self-signed attestation layer:** approved external style applies can emit tamper-evident site-key statements, public key material, live subject-state checks, and chained revert attestations when a signing key is configured.
-- **Verification evidence:** latest recorded successful non-browser run with Plugin Check green is 2026-06-12 (1,385 JS unit tests, 1,511 PHP tests); current local fast-loop artifact in this checkout, generated 2026-06-23, is `pass` for a non-browser run with Plugin Check and E2E intentionally skipped (`--skip=lint-plugin --skip-e2e`) and records 1,570 JS unit tests plus 1,628 PHP tests passing.
+- **Verification evidence:** latest recorded successful non-browser run with Plugin Check green is 2026-06-21 (`node scripts/verify.js --skip-e2e`, build, JS lint, Plugin Check, JS unit, PHP lint, and 1,567 PHP tests green); current local fast-loop artifact in this checkout, generated 2026-06-23, is `pass` for a non-browser run with Plugin Check and E2E intentionally skipped (`--skip=lint-plugin --skip-e2e`) and records 1,570 JS unit tests plus 1,628 PHP tests passing.
 
 **Ethics / governance note**
 
@@ -124,7 +124,7 @@ Outcome diagnostics track recommendation events such as `shown`, `selected_for_r
 
 The repo records meaningful engineering evidence rather than adoption metrics.
 
-Latest recorded successful non-browser evidence: `node scripts/verify.js --skip-e2e` passed on **2026-06-12**, with build, JS lint, Plugin Check, JS unit, PHP lint, and PHPUnit green. That run recorded **1,385 JS unit tests** and **1,511 PHP tests** passing.
+Latest recorded successful non-browser evidence: `node scripts/verify.js --skip-e2e` passed on **2026-06-21**, with build, JS lint, Plugin Check, JS unit, PHP lint, and PHPUnit green. That run recorded **1,567 PHP tests** passing.
 
 Current local non-browser artifact: `output/verify/summary.json` generated on **2026-06-23** is `pass` for a fast non-browser loop with Plugin Check and both E2E suites intentionally skipped (`--skip=lint-plugin --skip-e2e`). In that artifact, build, JS lint, JS unit, PHP lint, and PHPUnit passed; the recorded test counts are **1,570 JS unit tests** and **1,628 PHP tests** passing.
 
@@ -208,7 +208,7 @@ Editor / MCP client
 - Server-backed activity table.
 - Admin approval flow for external style applies.
 - Self-signed attestation layer for approved external style applies and attested reverts.
-- Latest fully recorded non-browser run with Plugin Check green (2026-06-12).
+- Latest fully recorded non-browser run with Plugin Check green (2026-06-21).
 - Current local fast-loop artifact (`output/verify/summary.json`) green (2026-06-23) with Plugin Check and E2E intentionally skipped (1,628 PHP tests).
 - Playground and WP 7.0 browser harness coverage.
 
@@ -227,7 +227,7 @@ Editor / MCP client
 - Broader audit/discovery actions.
 - Learning attribution and reports.
 - Bounded local ranking feedback.
-- Stable WordPress 7.0 harness image swap when available.
+- Swap the WordPress 7.0 harness onto the released "Armstrong" stable image.
 
 ---
 
@@ -261,7 +261,7 @@ The key design principle is: AI proposes; WordPress approves.
 
 ## Safety boundaries
 
-Flavor Agent does not auto-publish content, silently rewrite posts, contact site visitors, or own text-generation credentials. Text generation runs through WordPress Connectors / AI Client configuration. Plugin-owned settings cover embeddings, pattern retrieval, docs grounding, guidelines, and sync.
+Flavor Agent does not auto-publish content, silently rewrite posts, contact site visitors, or own text-generation credentials. Text generation runs through the WordPress AI Client and `Settings > Connectors`, and falls back to Jetpack AI over an existing Jetpack connection where the WordPress AI Client runtime is absent. Plugin-owned settings cover embeddings, pattern retrieval, docs grounding, guidelines, and sync.
 
 Attestation v1 is site-key self-attestation only: no C2PA, no third-party identity, no transparency log, and no prompts, provider payloads, or PII in signed statements.
 
