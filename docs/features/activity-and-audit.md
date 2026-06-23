@@ -4,9 +4,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Exact Surfaces
 
-- Inline editor activity: collapsed `Recent AI Actions` inside the block, template, and template-part recommendation panels; `Recent AI Style Actions` inside Global Styles; `Recent AI Style Book Actions` inside Style Book; and read-only `Recent Content Requests` inside the content panel only while the post/page content surface is supported and configured. Block request diagnostics can also appear inline in the block activity section when a request fails or returns no block-lane suggestions. Template and template-part sidebars show executable apply history only; their request diagnostics remain available through the admin approval/audit page.
+- Inline editor activity: collapsed `Recent AI Actions` inside the block, template, and template-part recommendation panels; `Recent AI Style Actions` inside Global Styles; `Recent AI Style Book Actions` inside Style Book; and read-only `Recent Content Requests` inside the content panel only while the post/page content surface is supported and configured. Block request diagnostics can also appear inline in the block activity section when a request fails or returns no block-lane suggestions. Template and template-part sidebars show executable apply history only; their request diagnostics remain available through the admin approval/audit/attestation-discovery page.
 - Inline success/error notices: shared status notices for immediate post-apply, post-undo, and request/apply/undo failures in those same panels
-- Admin approval/audit surface: `Settings > AI Activity`
+- Admin approval/audit/attestation-discovery surface: `Settings > AI Activity`
 
 Navigation, pattern, and content recommendations do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. Scoped recommendation requests and recommendation outcomes can still persist diagnostic audit rows when a document scope is available; inline hydration is intentionally limited to the surfaces that expose a matching current-scope panel. Exact diagnostic row shapes and route contracts are canonical in `docs/reference/abilities-and-routes.md`.
 
@@ -15,7 +15,7 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 ## Surfacing Conditions
 
 - Inline activity appears only when the current editor scope has recorded executable block, template, template-part, Global Styles, or Style Book AI actions, or read-only diagnostics that match the current inline panel filters for content, block, Global Styles, or Style Book requests
-- The admin approval/audit page appears only for users with `manage_options`
+- The admin approval/audit/attestation-discovery page appears only for users with `manage_options`
 - Sitewide activity queries are admin-only; scoped activity access follows contextual capability checks through `FlavorAgent\Activity\Permissions`
 
 ## End-To-End Flow
@@ -29,6 +29,7 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 6. `undoActivity()` validates the live editor state, performs the local undo, and persists the undo-status transition to `POST /flavor-agent/v1/activity/{id}/undo`
 7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` plus custom detail sections
 8. For a pending external style apply, an administrator approves or rejects through `POST /flavor-agent/v1/activity/{id}/decision`; approval revalidates and executes the style operation on the server, while rejection records the decision without mutating the site
+9. For an attested external style apply, the detail view exposes the attestation id, a site-run verification summary, raw signed-statement and subject-state URLs, and any revert/supersede chain context so a reviewer can move from wp-admin audit evidence to external verification without confusing endpoint loading for cryptographic verification
 
 ## What This Surface Can Do
 
@@ -40,11 +41,12 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provenance, diagnostics, undo-reason details, and structured state snapshots
 - Let admins approve or reject pending external Global Styles / Style Book applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
+- Let admins discover Ring III governed-change attestations for eligible external style applies, including a site-run verification summary plus public envelope and subject-state links without making attestation a general AI-governance claim
 - Let global admin activity reads request and render a bounded, sanitized governance learning report with outcome rates and aggregate groups by surface, operation type, validation reason, ranking signal, guideline version, and provider/model.
 - Filter audit entries by absolute or relative time without silently broadening malformed date filters; malformed active filters are blocked in the UI or rejected by REST, and `inThePast` and `over` use true timestamp windows, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
-This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, structured diff and before/after summaries, plus a rendered backend/API aggregate report contract, but not a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, or durable pattern-trait capture.
+This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, attestation discovery, structured diff and before/after summaries, plus a rendered backend/API aggregate report contract, but not a rich visual diff viewer, broader row actions/discovery, or cross-operator workflows.
 
 ## Ordered Undo Rules
 
@@ -59,9 +61,9 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 | Store hydration | `loadActivitySession()` in `src/store/index.js` | Merges local and server-backed activity for the active scope |
 | Store undo | `undoActivity()` (implemented in `src/store/activity-undo.js`, exposed via the store) | Runs safe undo and persists the undo-status transition |
 | Global Styles undo helpers | `getGlobalStylesActivityUndoState()` and `undoGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validate and restore the current Global Styles entity |
-| Admin page registration | `ActivityPage` in `inc/Admin/ActivityPage.php` | Registers `Settings > AI Activity` and localizes admin approval/audit boot data |
-| Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, summary cards, bounded learning-report aggregates, external-apply decision controls, and custom detail sections |
-| REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()` | Serve activity query, persistence, undo-status updates, and admin approval/rejection decisions |
+| Admin page registration | `ActivityPage` in `inc/Admin/ActivityPage.php` | Registers `Settings > AI Activity` and localizes admin approval/audit/attestation-discovery boot data |
+| Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, summary cards, bounded learning-report aggregates, external-apply decision controls, attestation affordances, and custom detail sections |
+| REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()`; `AttestationController` | Serve activity query, persistence, undo-status updates, admin approval/rejection decisions, and public attestation verification reads |
 | Permissions | `FlavorAgent\Activity\Permissions` | Applies contextual capability rules for scoped and global activity access |
 | Learning report | `FlavorAgent\Activity\GovernanceLearningReport` | Builds the optional bounded `learningReport` payload rendered for global admin activity reads |
 
@@ -71,6 +73,10 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 - REST: `POST /flavor-agent/v1/activity`
 - REST: `POST /flavor-agent/v1/activity/{id}/undo`
 - REST: `POST /flavor-agent/v1/activity/{id}/decision`
+- REST: `GET /flavor-agent/v1/attestations/{id}`
+- REST: `GET /flavor-agent/v1/attestations/{id}/verification`
+- REST: `GET /flavor-agent/v1/attestations/{id}/subject-state`
+- REST: `GET /flavor-agent/v1/attestations/keys`
 - Abilities: `flavor-agent/request-style-apply`, `flavor-agent/get-activity`, `flavor-agent/list-activity`, `flavor-agent/undo-activity`
 
 ## Key Implementation Files
@@ -84,6 +90,7 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 - `src/admin/activity-log.js`
 - `src/admin/activity-log-utils.js`
 - `inc/Admin/ActivityPage.php`
+- `inc/REST/AttestationController.php`
 - `inc/Activity/Permissions.php`
 - `inc/Activity/Repository.php`
 - `inc/Activity/Serializer.php`

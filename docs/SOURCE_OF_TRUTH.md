@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-06-18
+> Last updated: 2026-06-22
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.2+
 
@@ -10,11 +10,11 @@ See `docs/README.md` for the documentation backbone, reading order, ownership, a
 
 ## What This Plugin Is
 
-Flavor Agent is a WordPress plugin that lets AI work on a live site without unchecked control. Every AI action it mediates runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, and recorded changes reversible with freshness/drift checks. The recommendation surfaces are the demonstration; the governance layer is the product (canonical contract map: `docs/reference/governance-layer.md`). It should still feel like Gutenberg and wp-admin became smarter, not like a separate AI application was bolted on. It does not insert or mutate content automatically without a bounded UI path -- it recommends, the user reviews where needed, and the user decides.
+Flavor Agent is a WordPress plugin that lets AI work on a live site without unchecked control. Every AI action it mediates runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, and recorded changes reversible with freshness/drift checks. For the eligible external style-apply lane, that same governance layer can produce site-key governed-change attestations that bind the approval, bounded operation set, and resulting state digest. The recommendation surfaces are the demonstration; the governance layer is the product (canonical contract map: `docs/reference/governance-layer.md`). It should still feel like Gutenberg and wp-admin became smarter, not like a separate AI application was bolted on. It does not insert or mutate content automatically without a bounded UI path -- it recommends, the user reviews where needed, and the user decides.
 
 Applied AI changes are now tracked through the shared activity system and can be reversed from the UI when the live document still matches the recorded post-apply state. Activity persistence now uses server-backed storage, with editor-scoped hydration and `sessionStorage` retained only as a cache/fallback for the current editing surface.
 
-The activity system now also has a first dedicated wp-admin approval/audit page at `Settings > AI Activity`, built with WordPress-native `DataViews` plus custom detail sections rather than a plugin-only table shell. It is the human gate for pending external Global Styles / Style Book applies.
+The activity system now also has a first dedicated wp-admin approval/audit/attestation-discovery page at `Settings > AI Activity`, built with WordPress-native `DataViews` plus custom detail sections rather than a plugin-only table shell. It is the human gate for pending external Global Styles / Style Book applies and the admin discovery point for public attestation artifacts after eligible applies are signed.
 
 When a recommendation surface is in scope but unavailable, the native UI now stays visible long enough to explain whether the missing dependency belongs in core `Settings > Connectors` or plugin-owned `Settings > Flavor Agent`, including the inserter-backed pattern surface.
 
@@ -29,7 +29,7 @@ Eight first-party recommendation surfaces exist today:
 7. **Style Book Recommender** -- Per-block style suggestions in the Style Book panel, bounded to block-scoped style paths and theme-backed values.
 8. **Navigation Recommendations** -- Advisory navigation structure, overlay, and accessibility guidance nested inside block recommendations for selected `core/navigation` blocks.
 
-The plugin also ships one first-party admin approval/audit surface at `Settings > AI Activity`.
+The plugin also ships one first-party admin approval/audit/attestation-discovery surface at `Settings > AI Activity`.
 
 A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor. External agents get the same recommendation, validation, and freshness contracts as the first-party editor; they can also request review-gated style applies, read their attribution, and undo executed style rows through feature-gated abilities, but approval stays admin-only (the `activity/{id}/decision` route) and admin-global activity reads remain REST-only (see `docs/reference/governance-layer.md`).
 
@@ -43,6 +43,7 @@ flavor-agent/
   uninstall.php             Cleanup for legacy/provider/vector/docs options, sync lock, and cron hooks
   inc/                      PHP backend (PSR-4 namespace FlavorAgent\)
     Abilities/              Surface, infra, helper, and external-apply abilities + registration
+    Attestation/            Ring III governed-change statements, signing, key registry, verifier, and storage
     Activity/               Server-backed activity persistence, permissions, serialization
     Admin/                  Settings page + AI Activity admin app registration
     Apply/                  Governed external applies: server-side style apply/undo executor + admin approval decision service
@@ -55,7 +56,7 @@ flavor-agent/
     MCP/                    Dedicated MCP server bootstrap
     OpenAI/                 Provider selection and connector-aware credential resolution
     Patterns/               Pattern index, retrieval backends, sync, fingerprinting, cron
-    REST/                   Editor-facing REST routes (activity + sync-patterns)
+    REST/                   Activity, sync-pattern, and public attestation REST routes
     Support/                Cross-cutting helpers (signatures, normalizers, traces)
   src/                      Editor + admin JavaScript (built by @wordpress/scripts)
     admin/                  Settings page + AI Activity admin app
@@ -140,11 +141,11 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### AI Activity And Undo
 
-- Server-backed activity supports executable apply rows, scoped request diagnostics, recommendation outcome diagnostics, inline undo, and the admin approval/audit page. Exact surfaces and audit behavior live in [`features/activity-and-audit.md`](features/activity-and-audit.md); undo states and transition rules live in [`reference/activity-state-machine.md`](reference/activity-state-machine.md).
+- Server-backed activity supports executable apply rows, scoped request diagnostics, recommendation outcome diagnostics, inline undo, attestation discovery for eligible external style applies, and the admin approval/audit/attestation-discovery page. Exact surfaces and audit behavior live in [`features/activity-and-audit.md`](features/activity-and-audit.md); undo states and transition rules live in [`reference/activity-state-machine.md`](reference/activity-state-machine.md).
 
 #### Admin Activity Page
 
-- `Settings > AI Activity` is the first approval/audit/provenance surface for recent server-backed actions, scoped diagnostics, and pending external style applies. It is documented in [`features/activity-and-audit.md`](features/activity-and-audit.md).
+- `Settings > AI Activity` is the first approval/audit/attestation-discovery surface for recent server-backed actions, scoped diagnostics, pending external style applies, and public verify links for attested style applies. It is documented in [`features/activity-and-audit.md`](features/activity-and-audit.md).
 
 #### Pattern Index Lifecycle
 
@@ -160,10 +161,11 @@ The code defines 30 abilities with full JSON Schema input/output definitions: se
 
 #### REST API
 
-Four REST routes live under `/flavor-agent/v1/`. Recommendation surfaces use WordPress Abilities API contracts instead. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+Activity, sync-pattern, and public attestation routes live under `/flavor-agent/v1/`. Recommendation surfaces use WordPress Abilities API contracts instead. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 - **4 activity route methods** adapt the activity repository: GET `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`), POST `activity` (contextual), POST `activity/{id}/undo` (contextual), and POST `activity/{id}/decision` (`manage_options` plus the row's mutation capability; approves or rejects a pending external apply)
 - **1 admin route path**: POST `sync-patterns` (`manage_options`) queues the manual pattern reindex; GET `sync-patterns` (`manage_options`) returns current sync state for polling
+- **3 public attestation route methods**: GET `attestations/keys` returns the public key registry; GET `attestations/{id}` returns the signed statement envelope; GET `attestations/{id}/subject-state` returns the current canonical subject slice for live-state verification
 
 #### Admin Settings
 
@@ -190,7 +192,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 | Interactivity API scaffolding | Phase 4        | Not built             | Future-facing only; the current plugin has no front-end runtime surface that requires `viewScriptModule` or Interactivity API code                                                         |
 | Navigation overlay generation | Phase 4        | Not built             | Create mobile nav overlays as template parts                                                                                                                                               |
 | Approval pipeline UI          | Phase 1-3      | Not built             | Visual approve/reject flow with diff preview before insertion                                                                                                                              |
-| Audit/revision log UI         | Phase 5        | Initial slice shipped | `Settings > AI Activity` now provides a DataViews timeline with external style-apply decisions, custom detail sections, structured state summaries, and a bounded rendered `learningReport` for global admin reads; richer row actions/discovery and broader observability remain open |
+| Audit/revision log UI         | Phase 5        | Initial slice shipped | `Settings > AI Activity` now provides a DataViews timeline with external style-apply decisions, attestation discovery for attested applies, custom detail sections, structured state summaries, and a bounded rendered `learningReport` for global admin reads; richer row actions/discovery and broader observability remain open |
 | Dynamic block scaffolding     | Phase 4        | Not built             | Generate `render_callback` + dynamic block configs                                                                                                                                         |
 | Pattern-to-file promotion     | Phase 3        | Not built             | Export approved patterns to PHP files in `patterns/` directory                                                                                                                             |
 
@@ -202,7 +204,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 4. **Pattern settings compatibility is explicit and fail-closed**: `pattern-settings.js` probes future stable `blockPatterns` / `blockPatternCategories` / `getAllowedPatterns` paths when present, but current Gutenberg trunk still exposes `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the live baseline. The adapter returns an empty scoped result plus diagnostics instead of widening to an `all-patterns-fallback` result when contextual selectors are unavailable.
 5. **Theme-token source resolution is now merged rather than over-promoted**: `theme-settings.js` isolates raw settings reads and now uses stable sources when available while filling only missing branches from `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
 6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path because the current Playground 7.0 beta editor runtime breaks before plugin bootstrap, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. The harness pins a pre-release image via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the canonical tag and override instructions live in `docs/reference/local-environment-setup.md`.
-7. **Activity history is still only a first governance-console slice**: The new `Settings > AI Activity` page provides a recent DataViews timeline with external style-apply approval/rejection, request diagnostics, and structured before/after state summaries for privileged users, but there are still no broader row actions/discovery layer and no observability workflow beyond the stored timeline.
+7. **Activity history is still only a first governance-console slice**: The new `Settings > AI Activity` page provides a recent DataViews timeline with external style-apply approval/rejection, request diagnostics, attestation discovery for attested style applies, and structured before/after state summaries for privileged users, but there are still no broader row actions/discovery layer and no observability workflow beyond the stored timeline.
 8. **Uninstall cleanup is explicit and option-focused**: `uninstall.php` clears Flavor Agent cron hooks plus the static sync/core-roadmap transient keys, drops the plugin-owned activity table, and deletes registered plugin-owned provider, embedding, Qdrant, Cloudflare AI Search, docs runtime, pattern index, activity, guideline, and experiment options. Dynamic docs grounding cache transients are not bulk-deleted by the uninstall handler.
 9. **Provider-backed verification is still environment-dependent**: Live recommendation verification depends on whichever text-generation runtime is configured in `Settings > Connectors`, plus plugin-owned embedding credentials and the selected pattern storage backend, and should be rerun whenever those paths change.
 
