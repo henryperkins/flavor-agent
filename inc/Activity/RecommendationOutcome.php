@@ -14,6 +14,32 @@ final class RecommendationOutcome {
 	private const MAX_STRING_LENGTH  = 191;
 	private const TOP_SUGGESTION_CAP = 3;
 	private const RANKING_SET_CAP    = 3;
+	private const PATTERN_TRAIT_CAP  = 8;
+
+	private const PATTERN_TRAITS = [
+		'hero-banner',
+		'multi-column',
+		'gallery',
+		'call-to-action',
+		'query-loop',
+		'media-text',
+		'navigation',
+		'search',
+		'branding',
+		'social',
+		'simple',
+		'moderate-complexity',
+		'complex',
+		'media-rich',
+		'text-focused',
+		'mixed-content',
+		'site-chrome',
+		'testimonial',
+		'team-or-about',
+		'showcase',
+		'pricing',
+		'contact',
+	];
 
 	private const EVENTS = [
 		'shown',
@@ -141,6 +167,15 @@ final class RecommendationOutcome {
 			if ( [] !== $ranking ) {
 				$normalized_outcome['ranking'] = $ranking;
 			}
+
+			if ( 'pattern' === $surface ) {
+				$pattern_traits = self::normalize_pattern_traits(
+					$outcome['patternTraits'] ?? $entry['patternTraits'] ?? []
+				);
+				if ( [] !== $pattern_traits ) {
+					$normalized_outcome['patternTraits'] = $pattern_traits;
+				}
+			}
 		}
 
 		$vocab_version = sanitize_text_field( (string) ( $outcome['validationVocabularyVersion'] ?? '' ) );
@@ -172,6 +207,10 @@ final class RecommendationOutcome {
 
 		if ( isset( $normalized_outcome['rankingSet'] ) ) {
 			$request_recommendation['rankingSet'] = $normalized_outcome['rankingSet'];
+		}
+
+		if ( isset( $normalized_outcome['patternTraits'] ) ) {
+			$request_recommendation['patternTraits'] = $normalized_outcome['patternTraits'];
 		}
 
 		if ( isset( $normalized_outcome['learningAttribution'] ) ) {
@@ -312,6 +351,11 @@ final class RecommendationOutcome {
 				$item_out['validationVocabularyVersion'] = substr( $vocab_version, 0, 64 );
 			}
 
+			$pattern_traits = self::normalize_pattern_traits( $item['patternTraits'] ?? [] );
+			if ( [] !== $pattern_traits ) {
+				$item_out['patternTraits'] = $pattern_traits;
+			}
+
 			$items[] = $item_out;
 
 			if ( count( $items ) >= self::RANKING_SET_CAP ) {
@@ -320,6 +364,38 @@ final class RecommendationOutcome {
 		}
 
 		return $items;
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function normalize_pattern_traits( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$traits = [];
+		foreach ( $value as $trait ) {
+			if ( ! is_scalar( $trait ) ) {
+				continue;
+			}
+
+			$normalized = sanitize_key( (string) $trait );
+			if ( '' === $normalized || ! in_array( $normalized, self::PATTERN_TRAITS, true ) ) {
+				continue;
+			}
+
+			if ( in_array( $normalized, $traits, true ) ) {
+				continue;
+			}
+
+			$traits[] = $normalized;
+			if ( count( $traits ) >= self::PATTERN_TRAIT_CAP ) {
+				break;
+			}
+		}
+
+		return $traits;
 	}
 
 	private static function normalize_stable_suggestion_key( mixed $value, int $index ): string {

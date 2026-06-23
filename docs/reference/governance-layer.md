@@ -77,8 +77,9 @@ Enforced by:
 
 - `inc/Abilities/RecommendationAbilityExecution.php` — centralized `request_diagnostic` emission for every recommendation execution, regardless of caller
 - `inc/Activity/Repository.php` / `Permissions.php` / `Serializer.php` — server-backed storage, contextual capability checks, provenance projection columns for audit filtering
+- `inc/Activity/GovernanceLearningReport.php` — bounded read-only aggregate report builder for outcome rates by surface, operation type, provider/model, validation reason, guideline version, ranking signal, and pattern trait
 - `POST /flavor-agent/v1/activity` — persists apply rows and scoped diagnostics with provider path, model, prompt, reference, token usage, and latency
-- `inc/Admin/ActivityPage` + `src/admin/activity-log.js` — the `Settings > AI Activity` approval/audit surface (decision controls for pending external applies; non-pending rows stay inspection-only)
+- `inc/Admin/ActivityPage` + `src/admin/activity-log.js` — the `Settings > AI Activity` approval/audit surface (decision controls for pending external applies, inspection-only rows, and the read-only learning report)
 
 Tested by: `tests/phpunit/RecommendationAbilityExecutionTest.php`, `ActivityRepositoryTest.php`, `ActivityPermissionsTest.php`, `ActivitySerializerTest.php`, `ActivityPageTest.php`.
 
@@ -136,6 +137,12 @@ External agents reach the layer through the same permission callbacks as the fir
 Generation-side governance is caller-independent: external recommendation calls flow through the same executor, schemas, validators, freshness signatures, and request-diagnostic attribution as the editor.
 
 The boundary, stated plainly: external agents can now request style applies, read their attribution, and undo executed style rows — but approval is never exposed to agents. Every external style apply is review-gated through `POST /flavor-agent/v1/activity/{id}/decision` (`manage_options` plus the row's mutation capability) in `Settings > AI Activity`, with freshness re-verified at request and again at approval. AI proposes; WordPress approves. Template, template-part, and block applies remain editor-owned (C2+), and admin-global activity reads stay REST-only.
+
+## Learning Report Boundary
+
+The governance learning report is read-only evidence, not an automated tuning layer. It runs only on admin-global activity reads (`manage_options`), samples newest matching activity rows within a bounded limit, reuses the outcome-metrics denominators, and returns counts, rates, labels, and representative activity ids. It does not return raw prompts, provider payloads, generated text, full pattern content, content previews, or block-tree context.
+
+This first report layer can explain local outcome rates by the join metadata recorded in Phase 8. Fixture harvest, learned ranking feedback, editable preference summaries, notifications, richer diffs, and broader cross-operator workflows remain separate follow-up plans.
 
 ## Foundation
 

@@ -294,8 +294,73 @@ function createExternalApplyEntry( overrides = {} ) {
 	} );
 }
 
-function buildResponse( entries, overrides = {} ) {
+function createLearningReport( overrides = {} ) {
 	return {
+		version: 'governance-learning-report-v1',
+		generatedAt: '2026-06-19T00:00:00Z',
+		sampleSize: 4,
+		rowLimit: 500,
+		truncated: true,
+		summary: {
+			shownCount: 3,
+			reviewSelectionRate: 0.5,
+			applyConversionRate: 0.25,
+			undoRate: 0.125,
+			validationBlockedRate: 0,
+			insertFailedRate: 0.75,
+		},
+		groups: {
+			surfaces: [
+				{
+					key: 'pattern',
+					label: 'Pattern',
+					sampleSize: 4,
+					shownCount: 3,
+					selectedForReviewCount: 2,
+					appliedCount: 1,
+					undoneCount: 0,
+					staleBlockedCount: 0,
+					validationBlockedCount: 0,
+					insertFailedCount: 1,
+					reviewSelectionRate: 0.5,
+					applyConversionRate: 0.25,
+					undoRate: 0,
+					validationBlockedRate: 0,
+					insertFailedRate: 0.75,
+					representativeActivityId: 'activity-pattern',
+				},
+			],
+			operationTypes: [],
+			providerModels: [],
+			validationReasons: [],
+			guidelineVersions: [],
+			rankingSignals: [],
+			patternTraits: [
+				{
+					key: 'hero-banner',
+					label: 'Hero banner',
+					sampleSize: 2,
+					shownCount: 1,
+					selectedForReviewCount: 1,
+					appliedCount: 1,
+					undoneCount: 0,
+					staleBlockedCount: 0,
+					validationBlockedCount: 0,
+					insertFailedCount: 0,
+					reviewSelectionRate: 1,
+					applyConversionRate: 1,
+					undoRate: 0,
+					validationBlockedRate: 0,
+					insertFailedRate: 0,
+				},
+			],
+		},
+		...overrides,
+	};
+}
+
+function buildResponse( entries, overrides = {} ) {
+	const response = {
 		entries,
 		filterOptions: overrides.filterOptions || null,
 		paginationInfo: {
@@ -315,6 +380,12 @@ function buildResponse( entries, overrides = {} ) {
 			...( overrides.summary || {} ),
 		},
 	};
+
+	if ( Object.hasOwn( overrides, 'learningReport' ) ) {
+		response.learningReport = overrides.learningReport;
+	}
+
+	return response;
 }
 
 async function flushEffects() {
@@ -356,6 +427,12 @@ function getSummaryCardValue( label ) {
 	return summaryCard?.querySelector(
 		'.flavor-agent-activity-log__summary-value'
 	)?.textContent;
+}
+
+function getLearningReportSection() {
+	return getContainer().querySelector(
+		'.flavor-agent-activity-log__learning-report'
+	);
 }
 
 function getSidebarTitle() {
@@ -405,7 +482,7 @@ describe( 'ActivityLogApp', () => {
 				headers: {
 					'X-WP-Nonce': BOOT_DATA.nonce,
 				},
-				url: `${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&sortField=timestamp&sortDirection=desc`,
+				url: `${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&includeReports=1&sortField=timestamp&sortDirection=desc`,
 			} )
 		);
 		expect( getVisibleTitles() ).toEqual( [ 'First activity entry' ] );
@@ -511,6 +588,57 @@ describe( 'ActivityLogApp', () => {
 		expect( getSummaryCardValue( 'Pending approval' ) ).toBe( '5' );
 		expect( getSummaryCardValue( 'Undo blocked' ) ).toBe( '1' );
 		expect( getSummaryCardValue( 'Failed or unavailable' ) ).toBe( '2' );
+	} );
+
+	test( 'renders the governance learning report from the server response', async () => {
+		await renderApp(
+			buildResponse( [ createEntry() ], {
+				learningReport: createLearningReport(),
+			} )
+		);
+
+		const report = getLearningReportSection();
+		expect( report ).not.toBeNull();
+		expect( report.textContent ).toContain( 'Governance learning report' );
+		expect( report.textContent ).toContain(
+			'Rates reflect the bounded recent sample: 4 of 500 rows.'
+		);
+		expect( report.textContent ).toContain( 'Sample truncated.' );
+		expect( report.textContent ).toContain( 'Review selection' );
+		expect( report.textContent ).toContain( '50%' );
+		expect( report.textContent ).toContain( 'Insert failure' );
+		expect( report.textContent ).toContain( '75%' );
+		expect( report.textContent ).toContain( 'Surfaces' );
+		expect( report.textContent ).toContain( 'Pattern' );
+		expect( report.textContent ).toContain( '4 rows' );
+		expect( report.textContent ).toContain( 'Pattern traits' );
+		expect( report.textContent ).toContain( 'Hero banner' );
+
+		const representativeLink = Array.from(
+			report.querySelectorAll( 'a' )
+		).find( ( link ) => link.textContent === 'Open example' );
+
+		expect( representativeLink ).toBeDefined();
+		expect( representativeLink.getAttribute( 'href' ) ).toBe(
+			`${ BOOT_DATA.adminUrl }options-general.php?page=flavor-agent-activity&activity=activity-pattern`
+		);
+	} );
+
+	test( 'does not render a governance learning report for malformed payloads', async () => {
+		await renderApp(
+			buildResponse( [ createEntry() ], {
+				learningReport: {
+					version: 'governance-learning-report-v1',
+					summary: {},
+					groups: null,
+				},
+			} )
+		);
+
+		expect( getLearningReportSection() ).toBeNull();
+		expect( getContainer().textContent ).not.toContain(
+			'Governance learning report'
+		);
 	} );
 
 	test( 'styles summary metrics as an auto-fit frosted card grid', () => {
@@ -753,7 +881,7 @@ describe( 'ActivityLogApp', () => {
 		expect( getSidebarTitle().textContent ).toBe( 'Alpha entry' );
 		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toBe(
-			`${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&search=Alpha&sortField=timestamp&sortDirection=desc`
+			`${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&includeReports=1&search=Alpha&sortField=timestamp&sortDirection=desc`
 		);
 	} );
 

@@ -11,6 +11,7 @@ import {
 	getStyleComparisonRows,
 	isPendingExternalApply,
 	normalizeActivityEntries,
+	normalizeGovernanceLearningReport,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
@@ -61,6 +62,133 @@ function createStorage() {
 }
 
 describe( 'activity log utils', () => {
+	test( 'normalizeGovernanceLearningReport rejects missing or malformed reports', () => {
+		expect( normalizeGovernanceLearningReport() ).toBeNull();
+		expect( normalizeGovernanceLearningReport( {} ) ).toBeNull();
+		expect(
+			normalizeGovernanceLearningReport( {
+				version: 'governance-learning-report-v1',
+				summary: null,
+				groups: {},
+			} )
+		).toBeNull();
+		expect(
+			normalizeGovernanceLearningReport( {
+				version: 'governance-learning-report-v1',
+				summary: {},
+				groups: null,
+			} )
+		).toBeNull();
+	} );
+
+	test( 'normalizeGovernanceLearningReport shapes metadata, rates, and capped groups for rendering', () => {
+		const report = normalizeGovernanceLearningReport( {
+			version: 'governance-learning-report-v1',
+			generatedAt: '2026-06-19T00:00:00Z',
+			sampleSize: '12',
+			rowLimit: '10',
+			truncated: true,
+			summary: {
+				shownCount: '8',
+				reviewSelectionRate: '0.5',
+				applyConversionRate: 0.25,
+				undoRate: 'bad',
+				validationBlockedRate: 1.4,
+				insertFailedRate: -0.5,
+			},
+			groups: {
+				surfaces: [
+					{
+						key: 'pattern',
+						label: 'Pattern',
+						sampleSize: '6',
+						shownCount: '4',
+						selectedForReviewCount: '2',
+						appliedCount: '1',
+						undoneCount: '1',
+						staleBlockedCount: '1',
+						validationBlockedCount: '0',
+						insertFailedCount: '2',
+						reviewSelectionRate: '0.5',
+						applyConversionRate: '0.25',
+						undoRate: '0.5',
+						validationBlockedRate: '0',
+						insertFailedRate: '0.75',
+						representativeActivityId: ' activity-1 ',
+						prompt: 'raw prompt must not survive',
+					},
+					null,
+					{
+						key: '',
+						label: 'Missing key',
+					},
+				],
+				patternTraits: Array.from( { length: 9 }, ( _, index ) => ( {
+					key: `trait-${ index }`,
+					label: `Trait ${ index }`,
+					sampleSize: index + 1,
+				} ) ),
+			},
+		} );
+
+		expect( report ).toMatchObject( {
+			version: 'governance-learning-report-v1',
+			generatedAt: '2026-06-19T00:00:00Z',
+			sampleSize: 12,
+			rowLimit: 10,
+			truncated: true,
+			summary: {
+				shownCount: 8,
+				reviewSelectionRate: 0.5,
+				applyConversionRate: 0.25,
+				undoRate: 0,
+				validationBlockedRate: 1,
+				insertFailedRate: 0,
+			},
+		} );
+		expect( report.groups.surfaces ).toEqual( [
+			{
+				key: 'pattern',
+				label: 'Pattern',
+				sampleSize: 6,
+				shownCount: 4,
+				selectedForReviewCount: 2,
+				appliedCount: 1,
+				undoneCount: 1,
+				staleBlockedCount: 1,
+				validationBlockedCount: 0,
+				insertFailedCount: 2,
+				reviewSelectionRate: 0.5,
+				applyConversionRate: 0.25,
+				undoRate: 0.5,
+				validationBlockedRate: 0,
+				insertFailedRate: 0.75,
+				representativeActivityId: 'activity-1',
+			},
+		] );
+		expect( report.groups.patternTraits ).toHaveLength( 6 );
+		expect( report.groupSections ).toEqual(
+			expect.arrayContaining( [
+				expect.objectContaining( {
+					key: 'surfaces',
+					label: 'Surfaces',
+					rows: report.groups.surfaces,
+				} ),
+				expect.objectContaining( {
+					key: 'patternTraits',
+					label: 'Pattern traits',
+					rows: report.groups.patternTraits,
+				} ),
+			] )
+		);
+		expect( report.groups.surfaces[ 0 ] ).not.toHaveProperty( 'prompt' );
+		expect(
+			Object.values( report.summary ).every( ( value ) =>
+				Number.isFinite( value )
+			)
+		).toBe( true );
+	} );
+
 	test( 'normalizeActivityEntries preserves server-resolved blocked status for admin rows', () => {
 		const olderEntry = createEntry( {
 			id: 'activity-older',

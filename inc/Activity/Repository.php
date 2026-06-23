@@ -18,6 +18,8 @@ final class Repository {
 	public const MAX_KNOWN_SURFACES                  = 8;
 
 	private const TABLE_SUFFIX                            = 'flavor_agent_activity';
+	private const LEARNING_REPORT_DEFAULT_ROW_LIMIT       = 500;
+	private const LEARNING_REPORT_MAX_ROW_LIMIT           = 1000;
 	private const ADMIN_PROJECTION_BACKFILL_SIZE          = 250;
 	private const ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION = 'flavor_agent_activity_admin_projection_backfill_cursor';
 	private const ADMIN_HISTORY_QUERY_ENTITY_BATCH_SIZE   = 50;
@@ -407,7 +409,7 @@ final class Repository {
 		}
 
 		if ( ! self::admin_projection_backfill_pending() ) {
-			return self::query_admin_projected(
+			$result = self::query_admin_projected(
 				$filters,
 				$page,
 				$per_page,
@@ -415,6 +417,8 @@ final class Repository {
 				$sort_direction,
 				$timezone
 			);
+
+			return self::maybe_append_admin_learning_report( $result, $filters, $timezone );
 		}
 
 		$candidate_rows    = self::query_candidate_rows( $filters );
@@ -460,7 +464,7 @@ final class Repository {
 		$page_records = array_slice( $filtered_records, $offset, $per_page );
 		$page_entries = self::load_admin_page_entries( $page_records );
 
-		return [
+		$result = [
 			'entries'        => array_values( $page_entries ),
 			'paginationInfo' => [
 				'page'       => $page,
@@ -474,6 +478,132 @@ final class Repository {
 				$filter_context
 			),
 		];
+
+		return self::maybe_append_admin_learning_report( $result, $filters, $timezone );
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @param array<string, mixed> $filters
+	 * @return array<string, mixed>
+	 */
+	private static function maybe_append_admin_learning_report(
+		array $result,
+		array $filters,
+		\DateTimeZone $timezone
+	): array {
+		if ( ! self::should_include_admin_learning_report( $filters['includeReports'] ?? false ) ) {
+			return $result;
+		}
+
+		$result['learningReport'] = self::build_admin_learning_report( $filters, $timezone );
+
+		return $result;
+	}
+
+	private static function should_include_admin_learning_report( mixed $value ): bool {
+		return true === $value || 1 === $value || '1' === $value || 'true' === $value || 'yes' === $value;
+	}
+
+	private static function normalize_learning_report_row_limit( mixed $value ): int {
+		$limit = is_numeric( $value ) ? (int) $value : self::LEARNING_REPORT_DEFAULT_ROW_LIMIT;
+
+		if ( $limit <= 0 ) {
+			return self::LEARNING_REPORT_DEFAULT_ROW_LIMIT;
+		}
+
+		return min( self::LEARNING_REPORT_MAX_ROW_LIMIT, $limit );
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array<string, mixed>
+	 */
+	private static function build_admin_learning_report( array $filters, \DateTimeZone $timezone ): array {
+		$row_limit = self::normalize_learning_report_row_limit(
+			$filters['reportRowLimit'] ?? self::LEARNING_REPORT_DEFAULT_ROW_LIMIT
+		);
+		$records   = self::admin_projection_backfill_pending()
+			? self::query_admin_fallback_report_records( $filters, $timezone, $row_limit + 1 )
+			: self::query_admin_projected_report_records( $filters, $timezone, $row_limit + 1 );
+
+		$truncated      = count( $records ) > $row_limit;
+		$records        = array_slice( $records, 0, $row_limit );
+		$report_entries = self::load_admin_page_entries( $records );
+
+		return GovernanceLearningReport::build(
+			$report_entries,
+			[
+				'rowLimit'  => $row_limit,
+				'truncated' => $truncated,
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function query_admin_projected_report_records(
+		array $filters,
+		\DateTimeZone $timezone,
+		int $limit
+	): array {
+		$filter_context = self::build_admin_filter_context( $filters, $timezone );
+		$where          = self::build_admin_sql_filter_clauses( $filter_context );
+		$page_rows      = self::query_admin_sql_page_rows(
+			$where,
+			'timestamp',
+			'desc',
+			$limit,
+			0
+		);
+		$history_rows   = self::query_admin_history_rows( $page_rows );
+		$status_map     = self::resolve_admin_row_statuses( $history_rows );
+
+		return self::resolve_admin_records( $page_rows, $status_map, $timezone );
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function query_admin_fallback_report_records(
+		array $filters,
+		\DateTimeZone $timezone,
+		int $limit
+	): array {
+		$candidate_rows    = self::query_candidate_rows( $filters );
+		$history_rows      = self::requires_full_history_resolution( $filters )
+			? self::query_admin_history_rows( $candidate_rows )
+			: $candidate_rows;
+		$status_map        = self::resolve_admin_row_statuses( $history_rows );
+		$resolved_records  = self::resolve_admin_records(
+			$candidate_rows,
+			$status_map,
+			$timezone
+		);
+		$filter_context    = self::build_admin_filter_context( $filters, $timezone );
+		$evaluated_records = self::evaluate_admin_records(
+			$resolved_records,
+			$filter_context
+		);
+		$filtered_records  = array_values(
+			array_map(
+				static fn ( array $evaluated_record ): array => $evaluated_record['record'],
+				array_filter(
+					$evaluated_records,
+					static fn ( array $evaluated_record ): bool => self::record_matches_admin_filters(
+						$evaluated_record,
+						$filter_context['activeFilters']
+					)
+				)
+			)
+		);
+
+		self::sort_admin_records( $filtered_records, 'timestamp', 'desc' );
+
+		return array_slice( $filtered_records, 0, $limit );
 	}
 
 	/**

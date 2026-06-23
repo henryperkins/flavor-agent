@@ -511,6 +511,59 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_get_activity_returns_learning_report_only_for_global_admin_requests(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['manage_options']     = true;
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		ActivityRepository::create(
+			$this->build_recommendation_outcome_entry(
+				'outcome-1',
+				'shown',
+				'pattern',
+				'set-1',
+				[
+					'rankingSet' => [
+						[
+							'suggestionKey' => 'theme/hero',
+							'ranking'       => [ 'blendedScore' => 0.9 ],
+							'patternTraits' => [ 'hero-banner' ],
+						],
+					],
+				]
+			)
+		);
+
+		$default_request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$default_request->set_param( 'global', true );
+
+		$default_response = Agent_Controller::handle_get_activity( $default_request );
+		$default_data     = $default_response instanceof \WP_REST_Response ? $default_response->get_data() : [];
+
+		$report_request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$report_request->set_param( 'global', true );
+		$report_request->set_param( 'includeReports', true );
+
+		$report_response = Agent_Controller::handle_get_activity( $report_request );
+		$report_data     = $report_response instanceof \WP_REST_Response ? $report_response->get_data() : [];
+
+		$scoped_request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$scoped_request->set_param( 'scopeKey', 'wp_template:theme//home' );
+		$scoped_request->set_param( 'includeDiagnostics', true );
+		$scoped_request->set_param( 'includeReports', true );
+
+		$scoped_response = Agent_Controller::handle_get_activity( $scoped_request );
+		$scoped_data     = $scoped_response instanceof \WP_REST_Response ? $scoped_response->get_data() : [];
+
+		$this->assertArrayNotHasKey( 'learningReport', $default_data );
+		$this->assertSame( 1, $report_data['learningReport']['sampleSize'] ?? null );
+		$this->assertSame(
+			'hero-banner',
+			$report_data['learningReport']['groups']['patternTraits'][0]['key'] ?? null
+		);
+		$this->assertArrayNotHasKey( 'learningReport', $scoped_data );
+	}
+
 	public function test_handle_get_activity_rejects_malformed_global_admin_date_filters(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['manage_options'] = true;
@@ -973,6 +1026,51 @@ final class AgentControllerTest extends TestCase {
 				'entityId' => $entity_id,
 			],
 			'timestamp'  => $timestamp,
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $outcome
+	 * @return array<string, mixed>
+	 */
+	private function build_recommendation_outcome_entry(
+		string $id,
+		string $event,
+		string $surface,
+		string $set_id,
+		array $outcome = []
+	): array {
+		return [
+			'id'         => $id,
+			'type'       => 'recommendation_outcome',
+			'surface'    => $surface,
+			'suggestion' => 'Recommendation outcome',
+			'target'     => [
+				'recommendationSetId' => $set_id,
+				'patternKey'          => 'theme/hero',
+			],
+			'before'     => [],
+			'after'      => [
+				'outcome' => array_merge(
+					[
+						'event'               => $event,
+						'recommendationSetId' => $set_id,
+					],
+					$outcome
+				),
+			],
+			'request'    => [
+				'reference'      => 'outcome:' . $surface . ':' . $event . ':' . $set_id,
+				'recommendation' => [
+					'recommendationSetId' => $set_id,
+				],
+			],
+			'document'   => [
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			],
+			'timestamp'  => '2026-03-24T10:00:00Z',
 		];
 	}
 }

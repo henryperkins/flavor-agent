@@ -34,6 +34,7 @@ import {
 	getGovernanceDetails,
 	isPendingExternalApply,
 	normalizeActivityEntries,
+	normalizeGovernanceLearningReport,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
@@ -142,6 +143,226 @@ function getSummaryCards( entries ) {
 			description: '',
 		},
 	];
+}
+
+const LEARNING_REPORT_SUMMARY_METRICS = [
+	{
+		key: 'reviewSelectionRate',
+		label: __( 'Review selection', 'flavor-agent' ),
+	},
+	{
+		key: 'applyConversionRate',
+		label: __( 'Apply conversion', 'flavor-agent' ),
+	},
+	{
+		key: 'undoRate',
+		label: __( 'Undo', 'flavor-agent' ),
+	},
+	{
+		key: 'validationBlockedRate',
+		label: __( 'Validation blocked', 'flavor-agent' ),
+	},
+	{
+		key: 'insertFailedRate',
+		label: __( 'Insert failure', 'flavor-agent' ),
+	},
+];
+
+const LEARNING_REPORT_ROW_RATES = [
+	{
+		key: 'reviewSelectionRate',
+		label: __( 'Review', 'flavor-agent' ),
+	},
+	{
+		key: 'applyConversionRate',
+		label: __( 'Apply', 'flavor-agent' ),
+	},
+	{
+		key: 'insertFailedRate',
+		label: __( 'Insert failed', 'flavor-agent' ),
+	},
+];
+
+function formatLearningReportRate( value ) {
+	const number = Number( value );
+	const percent = Number.isFinite( number )
+		? Math.round( number * 1000 ) / 10
+		: 0;
+
+	return `${ Number.isInteger( percent ) ? percent : percent.toFixed( 1 ) }%`;
+}
+
+function formatLearningReportRows( value ) {
+	return sprintf(
+		/* translators: %s: number of rows in a bounded report sample. */
+		__( '%s rows', 'flavor-agent' ),
+		value || 0
+	);
+}
+
+function buildLearningReportActivityUrl( bootData, activityId ) {
+	const adminUrl =
+		typeof bootData?.adminUrl === 'string' ? bootData.adminUrl.trim() : '';
+	const normalizedActivityId =
+		typeof activityId === 'string' ? activityId.trim() : '';
+
+	if ( ! adminUrl || ! normalizedActivityId ) {
+		return '';
+	}
+
+	const base = adminUrl.endsWith( '/' ) ? adminUrl : `${ adminUrl }/`;
+	const params = new URLSearchParams( {
+		page: 'flavor-agent-activity',
+		activity: normalizedActivityId,
+	} );
+
+	return `${ base }options-general.php?${ params.toString() }`;
+}
+
+function GovernanceLearningReportSection( { report, bootData } ) {
+	if ( ! report ) {
+		return null;
+	}
+
+	const groupSections = report.groupSections.filter(
+		( group ) => group.rows.length > 0
+	);
+
+	return (
+		<section
+			className="flavor-agent-activity-log__learning-report"
+			aria-labelledby="flavor-agent-activity-log-learning-report-title"
+		>
+			<div className="flavor-agent-activity-log__learning-report-header">
+				<div>
+					<h2
+						id="flavor-agent-activity-log-learning-report-title"
+						className="flavor-agent-activity-log__section-title"
+					>
+						{ __( 'Governance learning report', 'flavor-agent' ) }
+					</h2>
+					<p className="flavor-agent-activity-log__copy">
+						{ sprintf(
+							/* translators: 1: bounded sample row count, 2: report row limit. */
+							__(
+								'Rates reflect the bounded recent sample: %1$s of %2$s rows.',
+								'flavor-agent'
+							),
+							report.sampleSize,
+							report.rowLimit
+						) }
+					</p>
+				</div>
+				{ report.truncated && (
+					<span className="flavor-agent-activity-log__learning-report-truncated">
+						{ __( 'Sample truncated.', 'flavor-agent' ) }
+					</span>
+				) }
+			</div>
+			<div className="flavor-agent-activity-log__learning-report-metrics">
+				{ LEARNING_REPORT_SUMMARY_METRICS.map( ( metric ) => (
+					<div
+						key={ metric.key }
+						className="flavor-agent-activity-log__learning-report-metric"
+					>
+						<span className="flavor-agent-activity-log__learning-report-label">
+							{ metric.label }
+						</span>
+						<span className="flavor-agent-activity-log__learning-report-value">
+							{ formatLearningReportRate(
+								report.summary[ metric.key ]
+							) }
+						</span>
+					</div>
+				) ) }
+			</div>
+			{ groupSections.length > 0 && (
+				<div className="flavor-agent-activity-log__learning-report-groups">
+					{ groupSections.map( ( group ) => (
+						<section
+							key={ group.key }
+							className="flavor-agent-activity-log__learning-report-group"
+						>
+							<h3 className="flavor-agent-activity-log__governance-subtitle">
+								{ group.label }
+							</h3>
+							<div className="flavor-agent-activity-log__learning-report-rows">
+								{ group.rows.map( ( row ) => {
+									const activityUrl =
+										buildLearningReportActivityUrl(
+											bootData,
+											row.representativeActivityId
+										);
+
+									return (
+										<div
+											key={ `${ group.key }:${ row.key }` }
+											className="flavor-agent-activity-log__learning-report-row"
+										>
+											<div className="flavor-agent-activity-log__learning-report-row-main">
+												<span className="flavor-agent-activity-log__learning-report-row-label">
+													{ row.label }
+												</span>
+												<span className="flavor-agent-activity-log__learning-report-row-meta">
+													{ formatLearningReportRows(
+														row.sampleSize
+													) }
+													{ ` · ${ sprintf(
+														/* translators: %s: shown recommendation count. */
+														__(
+															'%s shown',
+															'flavor-agent'
+														),
+														row.shownCount
+													) }` }
+													{ ` · ${ sprintf(
+														/* translators: %s: applied recommendation count. */
+														__(
+															'%s applied',
+															'flavor-agent'
+														),
+														row.appliedCount
+													) }` }
+												</span>
+											</div>
+											<div className="flavor-agent-activity-log__learning-report-row-rates">
+												{ LEARNING_REPORT_ROW_RATES.map(
+													( metric ) => (
+														<span
+															key={ metric.key }
+															className="flavor-agent-activity-log__learning-report-rate"
+														>
+															{ metric.label }:{ ' ' }
+															{ formatLearningReportRate(
+																row[
+																	metric.key
+																]
+															) }
+														</span>
+													)
+												) }
+												{ activityUrl && (
+													<a
+														className="flavor-agent-activity-log__learning-report-link"
+														href={ activityUrl }
+													>
+														{ __(
+															'Open example',
+															'flavor-agent'
+														) }
+													</a>
+												) }
+											</div>
+										</div>
+									);
+								} ) }
+							</div>
+						</section>
+					) ) }
+				</div>
+			) }
+		</section>
+	);
 }
 
 function buildSelectElements( entries, key, { labelKey = key } = {} ) {
@@ -387,6 +608,7 @@ function getActivityRequestUrl( bootData, view, linkedActivityId ) {
 		global: '1',
 		page: String( view.page || 1 ),
 		perPage: String( view.perPage || bootData.defaultPerPage ),
+		includeReports: '1',
 	} );
 
 	if ( view.search ) {
@@ -1321,6 +1543,7 @@ export function ActivityLogApp( { bootData } ) {
 			blocked: 0,
 			failed: 0,
 		},
+		learningReport: null,
 	} ) );
 	const [ error, setError ] = useState( '' );
 	const [ errorKind, setErrorKind ] = useState( '' );
@@ -1396,6 +1619,7 @@ export function ActivityLogApp( { bootData } ) {
 					blocked: 0,
 					failed: 0,
 				},
+				learningReport: null,
 			} );
 			setError( getInvalidDayFilterError() );
 			setErrorKind( ERROR_KIND_INVALID_DAY_FILTER );
@@ -1455,6 +1679,9 @@ export function ActivityLogApp( { bootData } ) {
 						blocked: response?.summary?.blocked || 0,
 						failed: response?.summary?.failed || 0,
 					},
+					learningReport: normalizeGovernanceLearningReport(
+						response?.learningReport
+					),
 				} );
 			} catch ( fetchError ) {
 				if ( ! isCurrent ) {
@@ -1479,6 +1706,7 @@ export function ActivityLogApp( { bootData } ) {
 						blocked: 0,
 						failed: 0,
 					},
+					learningReport: null,
 				} );
 				setError(
 					fetchError?.message ||
@@ -2005,6 +2233,10 @@ export function ActivityLogApp( { bootData } ) {
 							</div>
 						) ) }
 					</div>
+					<GovernanceLearningReportSection
+						report={ responseData.learningReport }
+						bootData={ bootData }
+					/>
 					<div className="flavor-agent-activity-log__toolbar">
 						<div className="flavor-agent-activity-log__controls">
 							<div className="flavor-agent-activity-log__controls-main">

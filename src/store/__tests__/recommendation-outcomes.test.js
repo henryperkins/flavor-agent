@@ -461,6 +461,114 @@ describe( 'recommendation outcomes', () => {
 		] );
 	} );
 
+	test( 'summarizes pattern traits on shown ranking-set items without raw content', () => {
+		const payload = {
+			recommendationOutcome: {
+				recommendationSetId: 'pattern:abc',
+				sourceRequestSignature: 'source:sig',
+			},
+			recommendations: [
+				{
+					name: 'theme/hero',
+					traits: [
+						'hero-banner',
+						'complex',
+						'hero-banner',
+						'media-rich',
+						'Private launch copy',
+					],
+					content:
+						'<!-- wp:paragraph --><p>Private launch copy</p><!-- /wp:paragraph -->',
+					ranking: {
+						contextScore: 0.91,
+						blendedScore: 0.88,
+						rankingVersion: 'contextual-ranking-v1',
+					},
+				},
+			],
+		};
+
+		const summary = getRecommendationOutcomeSummaryFromPayload( payload );
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+			},
+			event: 'shown',
+			surface: 'pattern',
+			recommendationSetId: summary.recommendationSetId,
+			sourceRequestSignature: summary.sourceRequestSignature,
+			topSuggestionKeys: summary.topSuggestionKeys,
+			resultCount: summary.resultCount,
+			rankingSet: summary.rankingSet,
+		} );
+
+		expect( summary.rankingSet[ 0 ].patternTraits ).toEqual( [
+			'hero-banner',
+			'complex',
+			'media-rich',
+		] );
+		expect( entry.after.outcome.rankingSet[ 0 ].patternTraits ).toEqual( [
+			'hero-banner',
+			'complex',
+			'media-rich',
+		] );
+		expect(
+			entry.request.recommendation.rankingSet[ 0 ].patternTraits
+		).toEqual( [ 'hero-banner', 'complex', 'media-rich' ] );
+		expect( JSON.stringify( entry ) ).not.toContain( 'Private' );
+		expect( JSON.stringify( entry ) ).not.toContain( 'paragraph' );
+	} );
+
+	test( 'persists capped pattern traits on engaged pattern outcomes', () => {
+		const entry = buildRecommendationOutcomeEntry( {
+			document: {
+				scopeKey: 'post:42',
+			},
+			event: 'pattern_inserted_from_shelf',
+			surface: 'pattern',
+			recommendationSetId: 'pattern:abc',
+			suggestion: {
+				name: 'theme/hero',
+				traits: [
+					'hero-banner',
+					'multi-column',
+					'gallery',
+					'call-to-action',
+					'query-loop',
+					'media-text',
+					'navigation',
+					'search',
+					'branding',
+					'Private launch copy',
+					'hero-banner',
+				],
+				content: 'Private launch copy',
+				ranking: {
+					blendedScore: 0.88,
+					rankingVersion: 'contextual-ranking-v1',
+				},
+			},
+		} );
+
+		const expectedTraits = [
+			'hero-banner',
+			'multi-column',
+			'gallery',
+			'call-to-action',
+			'query-loop',
+			'media-text',
+			'navigation',
+			'search',
+		];
+
+		expect( entry.after.outcome.patternTraits ).toEqual( expectedTraits );
+		expect( entry.request.recommendation.patternTraits ).toEqual(
+			expectedTraits
+		);
+		expect( JSON.stringify( entry ) ).not.toContain( 'Private' );
+		expect( JSON.stringify( entry ) ).not.toContain( 'content' );
+	} );
+
 	test( 'includes compact ranking snapshots without label-derived aggregate keys', () => {
 		const payload = decorateRecommendationPayload(
 			{

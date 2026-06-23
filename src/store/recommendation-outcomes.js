@@ -23,6 +23,7 @@ export const OUTCOME_EVENTS = Object.freeze( [
 const OUTCOME_EVENT_SET = new Set( OUTCOME_EVENTS );
 const TOP_SUGGESTION_CAP = 3;
 const RANKING_SET_CAP = 3;
+const PATTERN_TRAIT_CAP = 8;
 const MAX_STRING_LENGTH = 191;
 const MAX_LABEL_LENGTH = 96;
 const UINT32_MODULO = 4294967296;
@@ -73,6 +74,31 @@ const LEARNING_ATTRIBUTION_KEYS = [
 	'validationVocabularyVersion',
 ];
 
+const PATTERN_TRAITS = new Set( [
+	'hero-banner',
+	'multi-column',
+	'gallery',
+	'call-to-action',
+	'query-loop',
+	'media-text',
+	'navigation',
+	'search',
+	'branding',
+	'social',
+	'simple',
+	'moderate-complexity',
+	'complex',
+	'media-rich',
+	'text-focused',
+	'mixed-content',
+	'site-chrome',
+	'testimonial',
+	'team-or-about',
+	'showcase',
+	'pricing',
+	'contact',
+] );
+
 function cleanString( value, maxLength = MAX_STRING_LENGTH ) {
 	if ( value === null || value === undefined ) {
 		return '';
@@ -95,6 +121,44 @@ function cleanCode( value ) {
 		.replace( /[^a-z0-9_-]+/g, '_' )
 		.replace( /^_+|_+$/g, '' )
 		.slice( 0, 64 );
+}
+
+function normalizePatternTraits( value ) {
+	if ( ! Array.isArray( value ) ) {
+		return [];
+	}
+
+	const traits = [];
+	for ( const item of value ) {
+		const trait = cleanCode( item );
+
+		if ( ! trait || ! PATTERN_TRAITS.has( trait ) ) {
+			continue;
+		}
+
+		if ( traits.includes( trait ) ) {
+			continue;
+		}
+
+		traits.push( trait );
+		if ( traits.length >= PATTERN_TRAIT_CAP ) {
+			break;
+		}
+	}
+
+	return traits;
+}
+
+function firstPatternTraits( candidates = [] ) {
+	for ( const candidate of candidates ) {
+		const traits = normalizePatternTraits( candidate );
+
+		if ( traits.length ) {
+			return traits;
+		}
+	}
+
+	return [];
 }
 
 function stableStringify( value ) {
@@ -373,10 +437,16 @@ export function buildRankingSetFromSuggestions( suggestions = [] ) {
 			const validationVocabularyVersion = primary
 				? VALIDATION_REASONS_VERSION
 				: cleanString( suggestion?.validationVocabularyVersion );
+			const patternTraits = firstPatternTraits( [
+				suggestion?.patternTraits,
+				suggestion?.traits,
+				suggestion?.recommendationOutcome?.patternTraits,
+			] );
 
 			return {
 				suggestionKey,
 				ranking,
+				...( patternTraits.length ? { patternTraits } : {} ),
 				...( validationReason
 					? {
 							validationReason,
@@ -701,6 +771,12 @@ export function buildRecommendationIdentityFromSuggestion(
 			sourceRequestSignature,
 		}
 	);
+	const patternTraits = firstPatternTraits( [
+		overrides.patternTraits,
+		outcome.patternTraits,
+		suggestion?.patternTraits,
+		suggestion?.traits,
+	] );
 
 	return {
 		recommendationSetId,
@@ -714,6 +790,7 @@ export function buildRecommendationIdentityFromSuggestion(
 		topSuggestionKeys,
 		resultCount,
 		members: normalizeTopSuggestionKeys( members ),
+		...( patternTraits.length ? { patternTraits } : {} ),
 		...( learningAttribution ? { learningAttribution } : {} ),
 	};
 }
@@ -734,6 +811,7 @@ export function buildRecommendationOutcomeEntry( {
 	rank = null,
 	rankingSet = [],
 	learningAttribution = null,
+	patternTraits = [],
 } = {} ) {
 	const safeEvent = cleanCode( event );
 	const safeSurface = cleanCode( surface );
@@ -758,6 +836,7 @@ export function buildRecommendationOutcomeEntry( {
 		resultCount,
 		rank,
 		learningAttribution,
+		patternTraits,
 	} );
 	const setId =
 		identity.recommendationSetId ||
@@ -795,6 +874,11 @@ export function buildRecommendationOutcomeEntry( {
 	} else if ( safeEvent !== 'shown' && rankingSnapshot ) {
 		outcomeRanking = { ranking: rankingSnapshot };
 	}
+
+	const outcomePatternTraits =
+		safeSurface === 'pattern' && safeEvent !== 'shown'
+			? identity.patternTraits || []
+			: [];
 
 	const engagedPrimary =
 		safeEvent !== 'shown'
@@ -846,6 +930,9 @@ export function buildRecommendationOutcomeEntry( {
 					? Math.max( 0, identity.resultCount )
 					: 0,
 				...outcomeRanking,
+				...( outcomePatternTraits.length
+					? { patternTraits: outcomePatternTraits }
+					: {} ),
 				...( engagedPrimary
 					? { validationReason: engagedPrimary.code }
 					: {} ),
@@ -886,6 +973,9 @@ export function buildRecommendationOutcomeEntry( {
 					? { members: identity.members }
 					: {} ),
 				...outcomeRanking,
+				...( outcomePatternTraits.length
+					? { patternTraits: outcomePatternTraits }
+					: {} ),
 				...( normalizedLearningAttribution
 					? { learningAttribution: normalizedLearningAttribution }
 					: {} ),

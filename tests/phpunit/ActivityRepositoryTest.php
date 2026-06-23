@@ -502,6 +502,130 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	public function test_query_admin_learning_report_is_opt_in_and_bounded(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_recommendation_outcome_entry(
+				'outcome-old-pattern',
+				'shown',
+				'pattern',
+				'set-old',
+				'2026-03-24T10:00:00Z',
+				[
+					'rankingSet' => [
+						[
+							'suggestionKey' => 'theme/gallery',
+							'ranking'       => [ 'blendedScore' => 0.7 ],
+							'patternTraits' => [ 'gallery' ],
+						],
+					],
+				]
+			)
+		);
+		Repository::create(
+			$this->build_recommendation_outcome_entry(
+				'outcome-mid-pattern',
+				'shown',
+				'pattern',
+				'set-mid',
+				'2026-03-24T10:00:01Z',
+				[
+					'rankingSet' => [
+						[
+							'suggestionKey' => 'theme/hero',
+							'ranking'       => [ 'blendedScore' => 0.9 ],
+							'patternTraits' => [ 'hero-banner' ],
+						],
+					],
+				]
+			)
+		);
+		Repository::create(
+			$this->build_recommendation_outcome_entry(
+				'outcome-new-block',
+				'shown',
+				'block',
+				'set-new',
+				'2026-03-24T10:00:02Z'
+			)
+		);
+
+		$default_result = Repository::query_admin( [ 'perPage' => 1 ] );
+		$report_result  = Repository::query_admin(
+			[
+				'includeReports' => true,
+				'reportRowLimit' => 2,
+				'perPage'        => 1,
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'learningReport', $default_result );
+		$this->assertCount( 1, $report_result['entries'] ?? [] );
+		$this->assertSame( 3, $report_result['paginationInfo']['totalItems'] ?? null );
+		$this->assertSame( 3, $report_result['summary']['total'] ?? null );
+		$this->assertSame( 2, $report_result['learningReport']['sampleSize'] ?? null );
+		$this->assertSame( 2, $report_result['learningReport']['rowLimit'] ?? null );
+		$this->assertTrue( $report_result['learningReport']['truncated'] ?? false );
+		$this->assertSame(
+			'outcome-new-block',
+			$this->find_learning_report_group( $report_result, 'surfaces', 'block' )['representativeActivityId'] ?? null
+		);
+		$this->assertSame(
+			1,
+			$this->find_learning_report_group( $report_result, 'patternTraits', 'hero-banner' )['shownCount'] ?? null
+		);
+		$this->assertNull( $this->find_learning_report_group( $report_result, 'patternTraits', 'gallery', false ) );
+	}
+
+	public function test_query_admin_learning_report_matches_projected_and_fallback_paths(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_recommendation_outcome_entry(
+				'outcome-shown',
+				'shown',
+				'block',
+				'set-1',
+				'2026-03-24T10:00:00Z'
+			)
+		);
+		Repository::create(
+			$this->build_recommendation_outcome_entry(
+				'outcome-selected',
+				'selected_for_review',
+				'block',
+				'set-1',
+				'2026-03-24T10:00:01Z',
+				[ 'reason' => 'review_opened' ],
+				's1'
+			)
+		);
+
+		$filters          = [
+			'includeReports' => true,
+			'reportRowLimit' => 10,
+		];
+		$projected_result = Repository::query_admin( $filters );
+
+		WordPressTestState::$options['flavor_agent_activity_admin_projection_backfill_cursor'] = 0;
+
+		$fallback_result = Repository::query_admin( $filters );
+
+		$this->assertSame(
+			$projected_result['learningReport']['summary'] ?? null,
+			$fallback_result['learningReport']['summary'] ?? null
+		);
+		$this->assertSame(
+			array_column( $projected_result['learningReport']['groups']['surfaces'] ?? [], 'key' ),
+			array_column( $fallback_result['learningReport']['groups']['surfaces'] ?? [], 'key' )
+		);
+		$this->assertSame(
+			$projected_result['paginationInfo']['totalItems'] ?? null,
+			$fallback_result['paginationInfo']['totalItems'] ?? null
+		);
+	}
+
 	public function test_query_admin_marks_blocked_rows_when_the_blocking_row_is_on_page_one(): void {
 		Repository::install();
 
@@ -1901,6 +2025,72 @@ final class ActivityRepositoryTest extends TestCase {
 		$entry['request']['ai'] = $request_meta;
 
 		return $entry;
+	}
+
+	/**
+	 * @param array<string, mixed> $outcome
+	 * @return array<string, mixed>
+	 */
+	private function build_recommendation_outcome_entry(
+		string $id,
+		string $event,
+		string $surface,
+		string $set_id,
+		string $timestamp,
+		array $outcome = [],
+		string $suggestion_key = ''
+	): array {
+		return [
+			'id'            => $id,
+			'type'          => 'recommendation_outcome',
+			'surface'       => $surface,
+			'suggestion'    => 'Recommendation outcome',
+			'suggestionKey' => '' !== $suggestion_key ? $suggestion_key : null,
+			'target'        => [
+				'recommendationSetId' => $set_id,
+				'suggestionKey'       => $suggestion_key,
+			],
+			'before'        => [],
+			'after'         => [
+				'outcome' => array_merge(
+					[
+						'event'               => $event,
+						'recommendationSetId' => $set_id,
+					],
+					$outcome
+				),
+			],
+			'request'       => [
+				'reference'      => 'outcome:' . $surface . ':' . $event . ':' . $set_id,
+				'recommendation' => [
+					'recommendationSetId' => $set_id,
+					'suggestionKey'       => $suggestion_key,
+				],
+			],
+			'document'      => [
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			],
+			'timestamp'     => $timestamp,
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private function find_learning_report_group( array $result, string $group, string $key, bool $required = true ): ?array {
+		foreach ( $result['learningReport']['groups'][ $group ] ?? [] as $row ) {
+			if ( $key === ( $row['key'] ?? '' ) ) {
+				return $row;
+			}
+		}
+
+		if ( $required ) {
+			$this->fail( sprintf( 'Missing learning report %s group for %s.', $group, $key ) );
+		}
+
+		return null;
 	}
 
 	/**

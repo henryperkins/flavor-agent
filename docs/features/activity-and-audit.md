@@ -27,7 +27,7 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 4. The store hydrates the current scope from server entries, merges pending local entries, and keeps `sessionStorage` as a cache/fallback for the active surface
 5. `AIActivitySection` renders newest matching entries for the current scope and exposes inline undo only when an executable entry is still valid and tail-undoable
 6. `undoActivity()` validates the live editor state, performs the local undo, and persists the undo-status transition to `POST /flavor-agent/v1/activity/{id}/undo`
-7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` plus custom detail sections
+7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` plus custom detail sections; privileged global reads also request a bounded governance learning report derived from the same filtered activity history
 8. For a pending external style apply, an administrator approves or rejects through `POST /flavor-agent/v1/activity/{id}/decision`; approval revalidates and executes the style operation on the server, while rejection records the decision without mutating the site
 
 ## What This Surface Can Do
@@ -40,10 +40,11 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provenance, diagnostics, undo-reason details, and structured state snapshots
 - Let admins approve or reject pending external Global Styles / Style Book applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
+- Show admins a read-only governance learning report over a bounded recent sample, with aggregate rates by surface, operation type, provider/model, validation reason, guideline version, ranking signal, and pattern trait; the report links to representative activity rows instead of embedding prompts, provider payloads, full pattern content, or block-tree context
 - Filter audit entries by absolute or relative time without silently broadening malformed date filters; malformed active filters are blocked in the UI or rejected by REST, and `inThePast` and `over` use true timestamp windows, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
-This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, structured diff and before/after summaries, but not a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, or aggregate diagnostics reports.
+This is still a governance-console slice, not the final observability product. It includes external style-apply decisions, structured diff and before/after summaries, and a bounded aggregate learning report. It does not include a rich visual diff viewer, broader row actions/discovery, cross-operator workflows, fixture harvest/export, editable preference summaries, or learned ranking feedback.
 
 ## Ordered Undo Rules
 
@@ -60,6 +61,7 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 | Global Styles undo helpers | `getGlobalStylesActivityUndoState()` and `undoGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validate and restore the current Global Styles entity |
 | Admin page registration | `ActivityPage` in `inc/Admin/ActivityPage.php` | Registers `Settings > AI Activity` and localizes admin approval/audit boot data |
 | Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, summary cards, external-apply decision controls, and custom detail sections |
+| Learning report | `FlavorAgent\Activity\GovernanceLearningReport` | Builds bounded, sanitized aggregate outcome reports for the admin activity page |
 | REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()` | Serve activity query, persistence, undo-status updates, and admin approval/rejection decisions |
 | Permissions | `FlavorAgent\Activity\Permissions` | Applies contextual capability rules for scoped and global activity access |
 

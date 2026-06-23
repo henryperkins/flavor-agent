@@ -2,14 +2,14 @@
 
 **Scope:** Actionable exploration for making Flavor Agent recommendations more contextual, WordPress-native, design-minded, and freshness-aware.
 
-**Repo baseline checked:** June 6, 2026, against the live `/home/dev/flavor-agent` tree.
+**Repo baseline checked:** June 19, 2026, against the live `/home/dev/flavor-agent` tree.
 
 ## Current implementation state
 
-As of 2026-06-06, this file is a roadmap and execution plan, not an achieved contract document.
+As of 2026-06-19, this file is a roadmap and execution plan, not an achieved contract document.
 
-- Shipped in this codebase: Phases 0, 1, 2, and 3, plus Contextual Ranking V1, the Phase 4 request-diagnostic guideline attribution id, and the Phase 8 learning-attribution join contract.
-- Remaining unshipped work: pattern metadata and component-score ranking (Phase 6), expanded validators (Priority 4), Phase 7 expanded measurement, and the Phase 9+ reporting / learning-feedback loop.
+- Shipped in this codebase: Phases 0, 1, 2, and 3, plus Contextual Ranking V1, the Phase 4 request-diagnostic guideline attribution id, the Phase 8 learning-attribution join contract, and the Phase 9 read-only governance learning report.
+- Remaining unshipped work: pattern metadata and component-score ranking (Phase 6), expanded validators (Priority 4), Phase 7 expanded measurement, fixture harvest, bounded local ranking feedback, and editable site preference summaries.
 - Priority 5 remains scoped to attribution metadata rather than a production stale gate, consistent with current guidance in this file and recent implementation evidence.
 - Adapted pattern preview is a related product-surface outline, not an implemented part of this roadmap. If pursued, it should build on the unshipped pattern relevance work here and the shared deterministic mutation engine described in `docs/features/pattern-recommendations-adapted-preview.md`.
 
@@ -43,6 +43,7 @@ The repo already has useful rails:
 - Phases 0, 1, and 2 plus Contextual Ranking V1 are shipped: `tests/phpunit/RecommendationEvaluationTest.php` plus `tests/phpunit/fixtures/recommendation-evaluation-*` provide the fixture-backed metrics stub, strict LLM schemas in `inc/LLM/ResponseSchema.php` accept nullable `ranking` objects, `inc/Support/DesignSemantics.php` normalizes shared semantic context for block/template/template-part prompts, block/style/template/template-part/navigation parsers blend model, deterministic, and `RecommendationContextScorer` context scores through `RankingContract::blend_score()`, and pattern recommendations emit `contextual_ranking_v1` source-signals via plugin-generated defaults.
 - `inc/Support/DocsGuidanceResult.php` separates docs content/applicability fingerprints from runtime/diagnostics fingerprints so cache refresh metadata can be reported without unnecessarily staling recommendations.
 - `inc/Abilities/RecommendationAbilityExecution.php` injects formatted site guidelines into the recommendation system instruction.
+- `inc/Activity/GovernanceLearningReport.php` builds the first bounded, sanitized learning report for `Settings > AI Activity` from local activity and outcome rows.
 
 ## Priority 0: Add A Fixture-Backed Measurement Stub
 
@@ -546,7 +547,7 @@ Start with conservative, auditable weights:
 
 ### Learning Outputs
 
-The first useful outputs are operator/developer reports, not automatic behavior changes:
+The first useful outputs are operator/developer reports, not automatic behavior changes. The first admin report layer now ships as a bounded read-only section in `Settings > AI Activity`:
 
 - Surface health: exposure, review, apply, undo, and blocked rates by surface.
 - Operation health: apply/undo/block rates by operation type and validation reason.
@@ -575,7 +576,7 @@ The first useful outputs are operator/developer reports, not automatic behavior 
 
 ## Suggested Implementation Order
 
-Status note (updated 2026-06-18): Phases 0, 1, 2, and 3 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`); its implementation plan is archived at `docs/superpowers/plans/archive/2026-06-04-phase-3-validation-feedback.md`. Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phase 4's initial request-diagnostic attribution seam is shipped, and Phase 8's learning-attribution join contract now carries bounded generation metadata through request diagnostics, recommendation outcomes, apply rows, and undo transitions. Phases 5, 6, 7, and 9-12 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work - pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) - should come first.
+Status note (updated 2026-06-19): Phases 0, 1, 2, and 3 are shipped, along with Contextual Ranking V1 (filled Priority 2's `context` blend component, absorbed validation/no-op/stale-docs penalties, and seeded part of Phase 6 via pattern-surface contextual scoring). Phase 3 (Validation Feedback And Diagnostics) shipped 2026-06-04 via #29 (`c2a22f5`); its implementation plan is archived at `docs/superpowers/plans/archive/2026-06-04-phase-3-validation-feedback.md`. Archived plans live under `docs/reference/archive/` and `docs/superpowers/plans/archive/`. Phase 4's initial request-diagnostic attribution seam is shipped, Phase 8's learning-attribution join contract now carries bounded generation metadata through request diagnostics, recommendation outcomes, apply rows, and undo transitions, and Phase 9's read-only governance learning report now explains bounded aggregate outcome rates in `Settings > AI Activity`. Phases 5, 6, 7, and 10-12 remain unshipped. Re-sequenced 2026-06-04: Priority 5 / Phase 4 was re-scoped from "guideline freshness" to a small "guideline attribution id" seam (guideline-as-staleness dropped as a real-world non-issue) and demoted; the higher felt-value work - pattern relevance (Phase 6 / Priority 7) and the still-unshipped design validators (Priority 4) - should come first.
 
 ### Phase 0: Measurement Stub
 
@@ -721,7 +722,7 @@ git diff --check
 
 ### Phase 8: Learning Attribution Join Contract
 
-Status (2026-06-18): Shipped the bounded `learningAttribution` join contract across request diagnostics, recommendation outcomes, apply activity rows, and undo transition preservation. This does not ship Phase 9 reports, fixture harvest, or learned ranking feedback.
+Status (2026-06-18): Shipped the bounded `learningAttribution` join contract across request diagnostics, recommendation outcomes, apply activity rows, and undo transition preservation. This does not ship fixture harvest or learned ranking feedback.
 
 - [x] Mint a server-side `generationId` for each non-signature-only recommendation request.
 - [x] Carry `generationId`, `recommendationSetId`, `sourceRequestSignature`, `guidelineVersion`, docs content/runtime fingerprints, provider/model, ranking version, and validation vocabulary version through request-diagnostic metadata.
@@ -740,16 +741,18 @@ git diff --check
 
 ### Phase 9: Learning Reports
 
-- [ ] Add read-only aggregate queries for outcome rates by surface, operation type, validation reason, ranking signal, guideline version, provider/model, and pattern trait.
-- [ ] Surface those aggregates in the admin activity UI behind `manage_options`.
-- [ ] Treat `shown` as exposure only; avoid deriving ignored-after-shown negatives until replacement/time-window semantics are defined and tested.
-- [ ] Keep reports bounded and sanitized; link to representative activity rows instead of embedding raw prompts or full context payloads.
+Status (2026-06-19): Shipped the read-only governance learning report in `Settings > AI Activity`. The report is opt-in on the admin-global activity REST read, samples newest matching rows within a bounded limit, and returns counts, rates, labels, and representative activity ids only.
+
+- [x] Add read-only aggregate queries for outcome rates by surface, operation type, validation reason, ranking signal, guideline version, provider/model, and pattern trait.
+- [x] Surface those aggregates in the admin activity UI behind `manage_options`.
+- [x] Treat `shown` as exposure only; avoid deriving ignored-after-shown negatives until replacement/time-window semantics are defined and tested.
+- [x] Keep reports bounded and sanitized; link to representative activity rows instead of embedding raw prompts or full context payloads.
 
 **Verification:**
 
 ```bash
-composer run test:php -- --filter 'RecommendationOutcomeMetrics|ActivityRepository|AgentControllerTest'
-npm run test:unit -- --runInBand src/admin/__tests__/activity-log-utils.test.js
+composer run test:php -- --filter 'RecommendationOutcomeMetrics|GovernanceLearningReport|ActivityRepository|AgentControllerTest|RecommendationOutcomeTest'
+npm run test:unit -- --runInBand src/store/__tests__/recommendation-outcomes.test.js src/patterns/__tests__/PatternRecommender.test.js src/admin/__tests__/activity-log-utils.test.js src/admin/__tests__/activity-log.test.js
 npm run check:docs
 git diff --check
 ```
@@ -771,7 +774,7 @@ git diff --check
 
 ### Phase 11: Bounded Local Ranking Feedback
 
-- [ ] Apply site-local aggregate signals as small, capped ranking adjustments only after the report and fixture layers are in place.
+- [ ] Apply site-local aggregate signals as small, capped ranking adjustments only after the fixture layer is in place and the report layer proves useful signal clusters.
 - [ ] Version each adjustment family and expose it through `ranking.sourceSignals` or diagnostics.
 - [ ] Penalize operation/context pairs with repeated undo or validation blocks; do not globally suppress a surface from sparse data.
 - [ ] Boost only stable positives, such as repeated apply/review of preset-backed, validation-safe operations in similar contexts.
