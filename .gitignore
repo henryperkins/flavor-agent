@@ -20,3 +20,6 @@ tmp/
 ExposeGovernAttest.pptx
 ImladrisDesignSystem.zip
 .mcp.json
+.claude/skills/
+.codex/skills/
+deck/
