@@ -149,6 +149,14 @@ survive, but verify against the live DOM.
   the WordPress 7.0 compatibility runtime.
 - Confirm chat-backed Flavor Agent surfaces return live results through an
   approved Connector.
+- On the first editor load and again after connector approval changes, inspect
+  Network for Gutenberg core-data preload and id-less permission traffic. Confirm
+  the Flavor Agent capability notices and activity diagnostics come only from
+  `flavorAgentData.capabilities.surfaces` / `SurfaceCapabilities` and live
+  ability responses, not from duplicated or preloaded core `OPTIONS` / permission
+  requests. Sources: https://github.com/WordPress/gutenberg/pull/78262,
+  https://github.com/WordPress/gutenberg/pull/78508,
+  https://github.com/WordPress/gutenberg/pull/78565.
 - Revoke Connector approval.
 - Confirm affected surfaces degrade gracefully rather than crashing. With the
   connector fully revoked, FA preflight (`SurfaceCapabilities`) disables the

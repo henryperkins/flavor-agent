@@ -135,6 +135,18 @@ function getSummaryCards( entries ) {
 			description: '',
 		},
 		{
+			id: 'rejected',
+			label: __( 'Rejected', 'flavor-agent' ),
+			value: summary?.rejected || 0,
+			description: '',
+		},
+		{
+			id: 'expired',
+			label: __( 'Expired', 'flavor-agent' ),
+			value: summary?.expired || 0,
+			description: '',
+		},
+		{
 			id: 'blocked',
 			label: __( 'Undo blocked', 'flavor-agent' ),
 			value: summary?.blocked || 0,
@@ -1928,7 +1940,12 @@ function CryptographicRecord( { details, artifact } ) {
 	);
 }
 
-function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
+function GovernanceEvidenceSection( {
+	entry,
+	bootData,
+	onDecided,
+	isLocallyDecided = false,
+} ) {
 	const details = getGovernanceDetailsForEntry( entry );
 	const [ note, setNote ] = useState( '' );
 	const [ isSubmitting, setIsSubmitting ] = useState( false );
@@ -1956,7 +1973,9 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 	}
 
 	const canDecide =
-		isPendingExternalApply( entry ) && bootData?.canApproveStyleApplies;
+		! isLocallyDecided &&
+		isPendingExternalApply( entry ) &&
+		bootData?.canApproveStyleApplies;
 	const artifact = getAttestationArtifact( entry );
 	const summaryRows = getGovernancePlainSummary(
 		details,
@@ -1996,7 +2015,7 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 		setDecisionError( '' );
 
 		try {
-			await apiFetch(
+			const response = await apiFetch(
 				buildDecisionRequest( bootData, entry.id, decision, note )
 			);
 
@@ -2004,7 +2023,7 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 				return;
 			}
 
-			onDecided?.();
+			onDecided?.( entry.id, response?.entry );
 		} catch ( error ) {
 			if ( decisionRequestTokenRef.current !== requestToken ) {
 				return;
@@ -2108,7 +2127,12 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 	);
 }
 
-function ActivityEntryDetails( { entry, bootData, onDecided } ) {
+function ActivityEntryDetails( {
+	entry,
+	bootData,
+	onDecided,
+	isLocallyDecided = false,
+} ) {
 	if ( ! entry ) {
 		return (
 			<Card className="flavor-agent-activity-log__sidebar-card">
@@ -2166,6 +2190,7 @@ function ActivityEntryDetails( { entry, bootData, onDecided } ) {
 						entry={ entry }
 						bootData={ bootData }
 						onDecided={ onDecided }
+						isLocallyDecided={ isLocallyDecided }
 					/>
 					<div className="flavor-agent-activity-log__detail-sections">
 						{ DETAIL_SECTIONS.map( ( section ) => (
@@ -2218,6 +2243,8 @@ export function ActivityLogApp( { bootData } ) {
 			undone: 0,
 			review: 0,
 			pending: 0,
+			rejected: 0,
+			expired: 0,
 			blocked: 0,
 			failed: 0,
 		},
@@ -2227,6 +2254,9 @@ export function ActivityLogApp( { bootData } ) {
 	const [ errorKind, setErrorKind ] = useState( '' );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ reloadToken, setReloadToken ] = useState( 0 );
+	const [ locallyDecidedEntryIds, setLocallyDecidedEntryIds ] = useState(
+		() => new Set()
+	);
 	const [ requestActivityId, setRequestActivityId ] = useState(
 		linkedActivityEntryId
 	);
@@ -2279,6 +2309,66 @@ export function ActivityLogApp( { bootData } ) {
 			};
 		} );
 	}, [ viewOptions ] );
+	const normalizeAdminEntries = useCallback(
+		( entries ) =>
+			normalizeActivityEntries( entries, {
+				adminBaseUrl: bootData.adminUrl,
+				settingsUrl: bootData.settingsUrl,
+				connectorsUrl: bootData.connectorsUrl,
+				locale: bootData.locale,
+				timeZone: bootData.timeZone,
+			} ),
+		[
+			bootData.adminUrl,
+			bootData.connectorsUrl,
+			bootData.locale,
+			bootData.settingsUrl,
+			bootData.timeZone,
+		]
+	);
+	const handleEntryDecided = useCallback(
+		( activityId, decidedEntry ) => {
+			const decidedEntryId =
+				typeof activityId === 'string' ? activityId.trim() : '';
+
+			if ( decidedEntryId ) {
+				setLocallyDecidedEntryIds( ( current ) => {
+					if ( current.has( decidedEntryId ) ) {
+						return current;
+					}
+
+					const next = new Set( current );
+					next.add( decidedEntryId );
+
+					return next;
+				} );
+			}
+
+			if (
+				isPlainRecord( decidedEntry ) &&
+				( typeof decidedEntry.status === 'string' ||
+					isPlainRecord( decidedEntry.apply ) )
+			) {
+				const normalizedEntry = normalizeAdminEntries( [
+					decidedEntry,
+				] )[ 0 ];
+
+				if ( normalizedEntry?.id ) {
+					setResponseData( ( current ) => ( {
+						...current,
+						entries: current.entries.map( ( existingEntry ) =>
+							existingEntry.id === normalizedEntry.id
+								? normalizedEntry
+								: existingEntry
+						),
+					} ) );
+				}
+			}
+
+			setReloadToken( ( value ) => value + 1 );
+		},
+		[ normalizeAdminEntries ]
+	);
 
 	useEffect( () => {
 		let isCurrent = true;
@@ -2299,6 +2389,8 @@ export function ActivityLogApp( { bootData } ) {
 					undone: 0,
 					review: 0,
 					pending: 0,
+					rejected: 0,
+					expired: 0,
 					blocked: 0,
 					failed: 0,
 				},
@@ -2325,15 +2417,8 @@ export function ActivityLogApp( { bootData } ) {
 						'X-WP-Nonce': bootData.nonce,
 					},
 				} );
-				const normalizedEntries = normalizeActivityEntries(
-					response?.entries || [],
-					{
-						adminBaseUrl: bootData.adminUrl,
-						settingsUrl: bootData.settingsUrl,
-						connectorsUrl: bootData.connectorsUrl,
-						locale: bootData.locale,
-						timeZone: bootData.timeZone,
-					}
+				const normalizedEntries = normalizeAdminEntries(
+					response?.entries || []
 				);
 
 				if ( ! isCurrent ) {
@@ -2359,6 +2444,8 @@ export function ActivityLogApp( { bootData } ) {
 						undone: response?.summary?.undone || 0,
 						review: response?.summary?.review || 0,
 						pending: response?.summary?.pending || 0,
+						rejected: response?.summary?.rejected || 0,
+						expired: response?.summary?.expired || 0,
 						blocked: response?.summary?.blocked || 0,
 						failed: response?.summary?.failed || 0,
 					},
@@ -2386,6 +2473,8 @@ export function ActivityLogApp( { bootData } ) {
 						undone: 0,
 						review: 0,
 						pending: 0,
+						rejected: 0,
+						expired: 0,
 						blocked: 0,
 						failed: 0,
 					},
@@ -3000,9 +3089,10 @@ export function ActivityLogApp( { bootData } ) {
 						<ActivityEntryDetails
 							entry={ selectedEntry }
 							bootData={ bootData }
-							onDecided={ () =>
-								setReloadToken( ( value ) => value + 1 )
-							}
+							onDecided={ handleEntryDecided }
+							isLocallyDecided={ locallyDecidedEntryIds.has(
+								selectedEntry?.id
+							) }
 						/>
 					</div>
 				</div>

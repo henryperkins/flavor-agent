@@ -573,6 +573,8 @@ describe( 'ActivityLogApp', () => {
 						pending: 5,
 						blocked: 1,
 						failed: 2,
+						rejected: 6,
+						expired: 7,
 					},
 				}
 			)
@@ -585,6 +587,8 @@ describe( 'ActivityLogApp', () => {
 		expect( getSummaryCardValue( 'Pending approval' ) ).toBe( '5' );
 		expect( getSummaryCardValue( 'Undo blocked' ) ).toBe( '1' );
 		expect( getSummaryCardValue( 'Failed or unavailable' ) ).toBe( '2' );
+		expect( getSummaryCardValue( 'Rejected' ) ).toBe( '6' );
+		expect( getSummaryCardValue( 'Expired' ) ).toBe( '7' );
 	} );
 
 	test( 'requests and renders the governance learning report', async () => {
@@ -2397,6 +2401,73 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().querySelector( 'textarea' ).value ).toBe(
 			'Needs another look'
 		);
+	} );
+
+	test( 'removes decision controls immediately after a successful decision while refresh is pending', async () => {
+		const refresh = createDeferred();
+		const pendingEntry = createExternalApplyEntry( {
+			id: 'activity-9',
+		} );
+		const rejectedEntry = createExternalApplyEntry( {
+			id: 'activity-9',
+			status: 'rejected',
+			statusLabel: 'Rejected',
+			apply: {
+				status: 'rejected',
+				decidedBy: 1,
+				decidedAt: '2026-06-10T03:00:00+00:00',
+				decisionNote: 'Not this release.',
+				operations: [],
+			},
+		} );
+
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-9'
+		);
+		await renderApp( [ pendingEntry ] );
+
+		apiFetch
+			.mockResolvedValueOnce( { entry: rejectedEntry } )
+			.mockReturnValueOnce( refresh.promise );
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.includes( 'Reject' ) );
+
+		expect( rejectButton ).toBeDefined();
+
+		await act( async () => {
+			rejectButton.click();
+			await Promise.resolve();
+		} );
+		await flushEffects();
+
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
+				( button ) => button.textContent.includes( 'Approve and apply' )
+			)
+		).toBe( false );
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
+				( button ) => button.textContent.includes( 'Reject' )
+			)
+		).toBe( false );
+		expect(
+			apiFetch.mock.calls.filter( ( [ request ] ) =>
+				String( request?.url || '' ).includes( '/decision' )
+			)
+		).toHaveLength( 1 );
+
+		await act( async () => {
+			refresh.resolve( buildResponse( [ rejectedEntry ] ) );
+			await Promise.resolve();
+		} );
+		await flushEffects();
+
+		expect( getContainer().textContent ).toContain( 'Rejected' );
+		expect( getContainer().textContent ).toContain( 'Not this release.' );
 	} );
 
 	test( 'ignores stale decision failures after selecting another row', async () => {
