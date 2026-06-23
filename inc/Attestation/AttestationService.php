@@ -35,6 +35,16 @@ final class AttestationService {
 		$after_cfg  = is_array( $ctx['after']['userConfig'] ?? null ) ? $ctx['after']['userConfig'] : [];
 		$before_dig = Canonicalizer::subject_digest( $before_cfg, $scope, $block_name );
 		$after_dig  = Canonicalizer::subject_digest( $after_cfg, $scope, $block_name );
+		$decision   = (string) ( $ctx['decision'] ?? 'approve' );
+		$supersedes = isset( $ctx['supersedesAttestationId'] ) ? trim( (string) $ctx['supersedesAttestationId'] ) : '';
+
+		if ( '' === $supersedes && 'revert' !== $decision ) {
+			$prior = Repository::find_latest_by_subject( $subject );
+
+			if ( is_array( $prior ) ) {
+				$supersedes = trim( (string) ( $prior['attestation_id'] ?? '' ) );
+			}
+		}
 
 		$attestation_id = 'att_' . bin2hex( random_bytes( 16 ) );
 		$statement      = StatementBuilder::build(
@@ -49,14 +59,14 @@ final class AttestationService {
 				'freshnessSignature'      => (string) ( $ctx['freshnessSignature'] ?? '' ),
 				'actorRole'               => (string) ( $ctx['actorRole'] ?? '' ),
 				'proposerVia'             => 'mcp/flavor-agent',
-				'decision'                => (string) ( $ctx['decision'] ?? 'approve' ),
+				'decision'                => $decision,
 				'requestedAt'             => (string) ( $ctx['requestedAt'] ?? '' ),
 				'decidedAt'               => (string) ( $ctx['decidedAt'] ?? '' ),
 				'siteUrl'                 => (string) ( function_exists( 'home_url' ) ? home_url() : '' ),
 				'keyId'                   => (string) KeyManager::key_id(),
 				'relatedActivityId'       => isset( $ctx['relatedActivityId'] ) ? (string) $ctx['relatedActivityId'] : null,
 				'revertsAttestationId'    => isset( $ctx['revertsAttestationId'] ) ? (string) $ctx['revertsAttestationId'] : null,
-				'supersedesAttestationId' => isset( $ctx['supersedesAttestationId'] ) ? (string) $ctx['supersedesAttestationId'] : null,
+				'supersedesAttestationId' => '' !== $supersedes ? $supersedes : null,
 			]
 		);
 		$signed         = Signer::sign( $statement );
@@ -76,7 +86,7 @@ final class AttestationService {
 				'signature_b64'             => KeyManager::b64url( $signed['signature'] ),
 				'key_id'                    => $signed['keyId'],
 				'reverts_attestation_id'    => isset( $ctx['revertsAttestationId'] ) ? (string) $ctx['revertsAttestationId'] : null,
-				'supersedes_attestation_id' => isset( $ctx['supersedesAttestationId'] ) ? (string) $ctx['supersedesAttestationId'] : null,
+				'supersedes_attestation_id' => '' !== $supersedes ? $supersedes : null,
 				'related_activity_id'       => isset( $ctx['relatedActivityId'] ) ? (string) $ctx['relatedActivityId'] : null,
 			]
 		);

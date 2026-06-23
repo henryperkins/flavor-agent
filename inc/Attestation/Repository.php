@@ -12,7 +12,7 @@ namespace FlavorAgent\Attestation;
 final class Repository {
 
 	public const SCHEMA_OPTION  = 'flavor_agent_attestation_schema_version';
-	public const SCHEMA_VERSION = 1;
+	public const SCHEMA_VERSION = 2;
 
 	public static function table_name(): string {
 		global $wpdb;
@@ -54,6 +54,7 @@ final class Repository {
 			PRIMARY KEY  (attestation_id),
 			KEY subject_name (subject_name),
 			KEY reverts_attestation_id (reverts_attestation_id),
+			KEY supersedes_attestation_id (supersedes_attestation_id),
 			KEY related_activity_id (related_activity_id)
 		) {$charset}";
 
@@ -146,6 +147,22 @@ final class Repository {
 	}
 
 	/**
+	 * @return array<string, mixed>|null
+	 */
+	public static function find_by_supersedes( string $id ): ?array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return null;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read from plugin-owned attestation table with prepared id.
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table_name() . ' WHERE supersedes_attestation_id = %s ORDER BY created_at DESC', $id ), ARRAY_A );
+
+		return is_array( $row ) ? $row : null;
+	}
+
+	/**
 	 * @param array<int, string> $ids
 	 * @return array<string, array<string, mixed>>
 	 */
@@ -174,6 +191,53 @@ final class Repository {
 			is_array( $rows ) ? $rows : [],
 			'reverts_attestation_id'
 		);
+	}
+
+	/**
+	 * @param array<int, string> $ids
+	 * @return array<string, array<string, mixed>>
+	 */
+	public static function find_supersedes_by_attestation_ids( array $ids ): array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return [];
+		}
+
+		$ids = self::normalize_id_list( $ids );
+
+		if ( [] === $ids ) {
+			return [];
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%s' ) );
+		$sql          = 'SELECT * FROM ' . self::table_name() . " WHERE supersedes_attestation_id IN ({$placeholders}) ORDER BY created_at DESC";
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Placeholder list is generated from a bounded id list.
+		$sql = $wpdb->prepare( $sql, $ids );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Batch read from plugin-owned attestation table; $sql is prepared above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		return self::index_latest_rows(
+			is_array( $rows ) ? $rows : [],
+			'supersedes_attestation_id'
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	public static function find_latest_by_subject( string $subject_name ): ?array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return null;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read from plugin-owned attestation table with prepared subject name.
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table_name() . ' WHERE subject_name = %s ORDER BY created_at DESC', $subject_name ), ARRAY_A );
+
+		return is_array( $row ) ? $row : null;
 	}
 
 	/**

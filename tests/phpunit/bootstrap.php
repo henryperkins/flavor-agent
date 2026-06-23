@@ -1511,7 +1511,7 @@ namespace {
 					);
 				}
 
-				foreach (['attestation_id', 'reverts_attestation_id', 'related_activity_id'] as $column) {
+				foreach (['attestation_id', 'reverts_attestation_id', 'supersedes_attestation_id', 'related_activity_id'] as $column) {
 					if (preg_match("/\b{$column}\b\s+IN\s*\(([^)]*)\)/i", $query, $matches)) {
 						$values = [];
 

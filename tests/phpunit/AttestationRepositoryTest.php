@@ -87,6 +87,46 @@ final class AttestationRepositoryTest extends TestCase {
 		$this->assertSame( 'att_2', Repository::find_by_reverts( 'att_1' )['attestation_id'] );
 	}
 
+	public function test_find_by_supersedes_locates_chained_successor(): void {
+		Repository::install();
+		Repository::insert(
+			[
+				'attestation_id'            => 'att_2',
+				'surface'                   => 'global-styles',
+				'subject_name'              => 's',
+				'subject_scope'             => 'global-styles',
+				'after_digest'              => 'a2',
+				'statement_bytes'           => '{}',
+				'signature_b64'             => 'x',
+				'key_id'                    => 'k1',
+				'supersedes_attestation_id' => 'att_1',
+			]
+		);
+
+		$this->assertSame( 'att_2', Repository::find_by_supersedes( 'att_1' )['attestation_id'] );
+	}
+
+	public function test_find_supersedes_by_attestation_ids_indexes_latest_successor(): void {
+		Repository::install();
+		Repository::insert(
+			[
+				'attestation_id'            => 'att_successor',
+				'surface'                   => 'global-styles',
+				'subject_name'              => 'wp_global_styles:81',
+				'subject_scope'             => 'global-styles',
+				'after_digest'              => 'b',
+				'statement_bytes'           => '{}',
+				'signature_b64'             => 'sig',
+				'key_id'                    => 'k1',
+				'supersedes_attestation_id' => 'att_apply',
+			]
+		);
+
+		$rows = Repository::find_supersedes_by_attestation_ids( [ 'att_apply' ] );
+
+		$this->assertSame( 'att_successor', $rows['att_apply']['attestation_id'] );
+	}
+
 	public function test_repository_exposes_no_update_or_delete(): void {
 		$this->assertFalse( method_exists( Repository::class, 'update' ) );
 		$this->assertFalse( method_exists( Repository::class, 'delete' ) );

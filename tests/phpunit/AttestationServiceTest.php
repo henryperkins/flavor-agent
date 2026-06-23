@@ -80,6 +80,32 @@ final class AttestationServiceTest extends TestCase {
 		$this->assertSame( $revert_id, Repository::find_by_reverts( $apply_id )['attestation_id'] );
 	}
 
+	public function test_later_apply_supersedes_the_latest_prior_attestation_for_the_subject(): void {
+		$this->configure_key();
+		Repository::install();
+
+		$first_id = AttestationService::record_apply( $this->apply_context() );
+		$this->assertNotNull( $first_id );
+
+		$second_context              = $this->apply_context();
+		$second_context['after']     = [
+			'userConfig' => [
+				'settings' => [],
+				'styles'   => [
+					'color' => [
+						'background' => '#111111',
+					],
+				],
+			],
+		];
+		$second_context['decidedAt'] = '2026-06-22T00:02:00+00:00';
+
+		$second_id = AttestationService::record_apply( $second_context );
+		$this->assertNotNull( $second_id );
+
+		$this->assertSame( $second_id, Repository::find_by_supersedes( $first_id )['attestation_id'] );
+	}
+
 	/**
 	 * @return array<string, mixed>
 	 */
