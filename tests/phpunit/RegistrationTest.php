@@ -1167,6 +1167,26 @@ final class RegistrationTest extends TestCase {
 		);
 		$this->assertSame(
 			'object',
+			$styles_ability['output_schema']['properties']['scope']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$styles_ability['output_schema']['properties']['scope']['properties']['globalStylesId']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$styles_ability['output_schema']['properties']['styleContext']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$styles_ability['output_schema']['properties']['styleContext']['properties']['currentConfig']['type'] ?? null
+		);
+		$this->assertSame(
+			'array',
+			$styles_ability['output_schema']['properties']['styleContext']['properties']['availableVariations']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
 			$styles_ability['output_schema']['properties']['blockPseudoStyles']['type'] ?? null
 		);
 
@@ -1176,6 +1196,10 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'boolean',
 			$template_parts_ability['input_schema']['properties']['includeContent']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$template_parts_ability['output_schema']['properties']['templateParts']['items']['properties']['id']['type'] ?? null
 		);
 	}
 

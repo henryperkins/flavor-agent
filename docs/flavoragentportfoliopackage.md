@@ -36,7 +36,7 @@ Of the fourteen helper/search/infra contracts, ten are public read helpers expos
 - **Governed external style applies:** agents can request Global Styles / Style Book changes, but only admins approve or reject them.
 - **Server-backed audit and undo:** activity rows store provenance, request metadata, before/after state, undo state, and admin projection fields.
 - **Self-signed attestation layer:** approved external style applies can emit tamper-evident site-key statements, public key material, live subject-state checks, and chained revert attestations when a signing key is configured.
-- **Verification evidence:** latest recorded successful non-browser run green on 2026-06-12 (1,385 JS unit tests, 1,511 PHP tests); current 2026-06-22 artifact is blocked at Plugin Check by local database connectivity while build, lint, JS unit, and PHPUnit steps pass.
+- **Verification evidence:** latest recorded successful non-browser run with Plugin Check green is 2026-06-12 (1,385 JS unit tests, 1,511 PHP tests); current local fast-loop artifact in this checkout, generated 2026-06-23, is `pass` for a non-browser run with Plugin Check and E2E intentionally skipped (`--skip=lint-plugin --skip-e2e`) and records 1,570 JS unit tests plus 1,628 PHP tests passing.
 
 **Ethics / governance note**
 
@@ -126,7 +126,7 @@ The repo records meaningful engineering evidence rather than adoption metrics.
 
 Latest recorded successful non-browser evidence: `node scripts/verify.js --skip-e2e` passed on **2026-06-12**, with build, JS lint, Plugin Check, JS unit, PHP lint, and PHPUnit green. That run recorded **1,385 JS unit tests** and **1,511 PHP tests** passing.
 
-Current local non-browser artifact: `output/verify/summary.json` generated on **2026-06-22** is `fail` because Plugin Check could not connect to the local WordPress database. In that artifact, build, JS lint, JS unit, PHP lint, and PHPUnit passed; the recorded test counts are **1,555 JS unit tests** and **1,594 PHP tests** passing.
+Current local non-browser artifact: `output/verify/summary.json` generated on **2026-06-23** is `pass` for a fast non-browser loop with Plugin Check and both E2E suites intentionally skipped (`--skip=lint-plugin --skip-e2e`). In that artifact, build, JS lint, JS unit, PHP lint, and PHPUnit passed; the recorded test counts are **1,570 JS unit tests** and **1,628 PHP tests** passing.
 
 Latest targeted attestation evidence: `vendor/bin/phpunit --filter Attestation` passed on **2026-06-22**. The exact test/assertion totals are intentionally omitted here because the targeted suite changes as attestation coverage grows.
 
@@ -208,7 +208,8 @@ Editor / MCP client
 - Server-backed activity table.
 - Admin approval flow for external style applies.
 - Self-signed attestation layer for approved external style applies and attested reverts.
-- Non-browser verification green (2026-06-12); current local run blocked only at Plugin Check database connectivity.
+- Latest fully recorded non-browser run with Plugin Check green (2026-06-12).
+- Current local fast-loop artifact (`output/verify/summary.json`) green (2026-06-23) with Plugin Check and E2E intentionally skipped (1,628 PHP tests).
 - Playground and WP 7.0 browser harness coverage.
 
 **Boundaries**
@@ -266,22 +267,16 @@ Attestation v1 is site-key self-attestation only: no C2PA, no third-party identi
 
 ## Verify locally
 
+Representative local verification depends on the prepared nightly/trunk WordPress environment described in [reference/local-environment-setup.md](reference/local-environment-setup.md): Docker, companion plugins, `Settings > Connectors`, Playwright browsers, and the host-side Plugin Check prerequisites are all part of the contract. From that prepared environment, use:
+
 ```bash
-npm ci
-composer install
-
-npm run build
-npm run lint:js
-composer lint:php
-
-npm run test:unit -- --runInBand
-vendor/bin/phpunit
-
-npm run test:e2e:playground
-npm run test:e2e:wp70
-
-npm run verify
+npm run verify -- --skip-e2e      # fast non-browser loop
+npm run test:e2e:playground       # Playground smoke
+npm run test:e2e:wp70             # Docker-backed WP 7.0 harness
+npm run verify                    # full recorded pipeline when prerequisites are ready
 ```
+
+If Plugin Check prerequisites are unavailable locally, `npm run verify -- --skip=lint-plugin` is an explicit coverage waiver for iteration, not release-signoff evidence.
 
 ## Demo sequence
 
@@ -298,7 +293,7 @@ npm run verify
 
 The same governance model an outside agent sees — verified end-to-end against a live site.
 
-1. **Discover.** `discover-abilities` on the universal default server returns only the read/preview surface (16 public abilities); `get-ability-info` shows each contract's input/output schema. The seven `recommend-*` and four apply/activity tools live on the dedicated `flavor-agent` MCP server; neither server exposes an approve/decision tool — approval stays admin-only in wp-admin.
+1. **Discover.** `discover-abilities` on the universal default server returns the public MCP surface: ten read helpers, five signature-only `preview-recommend-*` dry runs, and the separate `search-wordpress-docs` tool (16 public abilities total). `get-ability-info` shows each contract's input/output schema. The seven `recommend-*` and four apply/activity tools live on the dedicated `flavor-agent` MCP server; neither server exposes an approve/decision tool — approval stays admin-only in wp-admin.
 2. **Read.** `execute-ability` on a read-only ability (e.g. `get-active-theme`, or a `preview-recommend-*` signature preflight) executes without invoking the AI Connector.
 3. **Propose.** `recommend-style` returns a bounded, preset-backed operation plus review/apply freshness signatures, and records a diagnostic activity row.
 4. **Request.** `request-style-apply` with the operation, the live `currentConfig`, and those signatures creates a pending row and mutates nothing. Freshness is enforced on two gates — recomputed signatures and `currentConfig` equal to the live entity; stale input is rejected as drift (re-derive with `preview-recommend-style`).

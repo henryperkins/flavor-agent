@@ -14,6 +14,9 @@ final class ServerCollectorTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		WordPressTestState::$active_theme = [
+			'stylesheet' => 'theme',
+		];
 
 		WordPressTestState::$block_templates = [
 			'wp_template'      => [
@@ -54,11 +57,13 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertSame(
 			[
 				[
+					'id'    => 'theme//header',
 					'slug'  => 'header',
 					'title' => 'Header',
 					'area'  => 'header',
 				],
 				[
+					'id'    => 'theme//footer',
 					'slug'  => 'footer',
 					'title' => 'Footer',
 					'area'  => 'footer',

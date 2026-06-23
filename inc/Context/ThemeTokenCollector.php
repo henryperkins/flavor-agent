@@ -269,13 +269,145 @@ final class ThemeTokenCollector {
 	public function for_styles(): array {
 		$tokens        = $this->for_tokens();
 		$global_styles = wp_get_global_styles();
+		$bootstrap     = $this->global_styles_request_bootstrap(
+			$tokens['diagnostics'] ?? [],
+			$global_styles
+		);
 
 		return [
 			'styles'            => $global_styles,
 			'elementStyles'     => $tokens['elementStyles'] ?? [],
 			'blockPseudoStyles' => $tokens['blockPseudoStyles'] ?? [],
 			'diagnostics'       => $tokens['diagnostics'] ?? [],
+			'scope'             => $bootstrap['scope'],
+			'styleContext'      => $bootstrap['styleContext'],
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $diagnostics
+	 * @param array<string, mixed> $global_styles
+	 * @return array{scope: array<string, string>, styleContext: array<string, mixed>}
+	 */
+	private function global_styles_request_bootstrap( array $diagnostics, array $global_styles ): array {
+		$active_theme      = $this->for_active_theme();
+		$stylesheet        = sanitize_key( (string) ( $active_theme['stylesheet'] ?? '' ) );
+		$current_post_data = $this->resolve_current_global_styles_post();
+		$global_styles_id  = sanitize_text_field( (string) ( $current_post_data['ID'] ?? '' ) );
+
+		return [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'scopeKey'       => '' !== $global_styles_id ? sprintf( 'global_styles:%s', $global_styles_id ) : '',
+				'globalStylesId' => $global_styles_id,
+				'postType'       => 'global_styles',
+				'entityId'       => $global_styles_id,
+				'entityKind'     => 'root',
+				'entityName'     => 'globalStyles',
+				'stylesheet'     => $stylesheet,
+			],
+			'styleContext' => [
+				'currentConfig'         => $this->decode_global_styles_config( $current_post_data ),
+				'mergedConfig'          => [
+					'settings' => wp_get_global_settings(),
+					'styles'   => $global_styles,
+				],
+				'availableVariations'   => $this->theme_style_variations(),
+				'themeTokenDiagnostics' => $diagnostics,
+			],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function resolve_current_global_styles_post(): array {
+		if ( class_exists( '\WP_Theme_JSON_Resolver' ) && method_exists( '\WP_Theme_JSON_Resolver', 'get_user_data_from_wp_global_styles' ) ) {
+			$theme = function_exists( 'wp_get_theme' ) ? wp_get_theme() : null;
+			// Only the published canonical global-styles post is exposed through this
+			// edit_posts helper; draft rows hold unpublished work that stays
+			// edit_theme_options-gated everywhere else (Site Editor, /wp/v2/global-styles).
+			$post = \WP_Theme_JSON_Resolver::get_user_data_from_wp_global_styles(
+				$theme,
+				false,
+				[ 'publish' ]
+			);
+
+			return is_array( $post ) ? $post : [];
+		}
+
+		if ( ! function_exists( 'get_posts' ) ) {
+			return [];
+		}
+
+		$posts = get_posts(
+			[
+				'posts_per_page'         => 1,
+				'orderby'                => 'date',
+				'order'                  => 'desc',
+				'post_type'              => 'wp_global_styles',
+				'post_status'            => [ 'publish' ],
+				'ignore_sticky_posts'    => true,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			]
+		);
+		$post  = $posts[0] ?? null;
+
+		return is_object( $post ) ? get_object_vars( $post ) : [];
+	}
+
+	/**
+	 * @param array<string, mixed> $post_data
+	 * @return array{settings: array<string, mixed>, styles: array<string, mixed>}
+	 */
+	private function decode_global_styles_config( array $post_data ): array {
+		$content = trim( (string) ( $post_data['post_content'] ?? '' ) );
+
+		if ( '' === $content ) {
+			return [
+				'settings' => [],
+				'styles'   => [],
+			];
+		}
+
+		$decoded = json_decode( $content, true );
+
+		if ( ! is_array( $decoded ) || JSON_ERROR_NONE !== json_last_error() ) {
+			return [
+				'settings' => [],
+				'styles'   => [],
+			];
+		}
+
+		return [
+			'settings' => is_array( $decoded['settings'] ?? null ) ? $decoded['settings'] : [],
+			'styles'   => is_array( $decoded['styles'] ?? null ) ? $decoded['styles'] : [],
+		];
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function theme_style_variations(): array {
+		$variations = class_exists( '\WP_Theme_JSON_Resolver' ) && method_exists( '\WP_Theme_JSON_Resolver', 'get_style_variations' )
+			? (array) \WP_Theme_JSON_Resolver::get_style_variations()
+			: [];
+
+		// Mirror the apply pipeline's variation universe (StyleApplyExecutor::theme_style_variations())
+		// so get-theme-styles never advertises a variation request-style-apply would reject.
+		$variations = (array) apply_filters( 'flavor_agent_external_apply_theme_variations', $variations );
+
+		return array_values(
+			array_filter(
+				array_map(
+					static fn( mixed $variation ): array => is_array( $variation ) ? $variation : [],
+					$variations
+				),
+				static fn( array $variation ): bool => [] !== $variation
+			)
+		);
 	}
 
 	private function merge_presets( array|string $feature ): array {

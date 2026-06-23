@@ -423,4 +423,139 @@ final class ThemeTokenCollectorTest extends TestCase {
 		$this->assertArrayHasKey( 'core/button', $styles['blockPseudoStyles'] );
 		$this->assertSame( 'server-global-settings', $styles['diagnostics']['reason'] );
 	}
+
+	public function test_for_styles_includes_global_styles_scope_and_request_context(): void {
+		WordPressTestState::$active_theme    = [
+			'stylesheet' => 'pattern-theme',
+		];
+		WordPressTestState::$global_settings = [
+			'color' => [
+				'palette' => [],
+			],
+		];
+		WordPressTestState::$global_styles   = [
+			'color' => [
+				'background' => '#fefefe',
+			],
+		];
+		WordPressTestState::$posts[17]       = new \WP_Post(
+			[
+				'ID'           => 17,
+				'post_type'    => 'wp_global_styles',
+				'post_status'  => 'publish',
+				'post_content' => (string) wp_json_encode(
+					[
+						'version'                     => 3,
+						'isGlobalStylesUserThemeJSON' => true,
+						'settings'                    => [
+							'color' => [
+								'palette' => [],
+							],
+						],
+						'styles'                      => [
+							'color' => [
+								'text' => '#111111',
+							],
+						],
+					]
+				),
+			]
+		);
+
+		$styles = ( new ThemeTokenCollector() )->for_styles();
+
+		$this->assertSame(
+			[
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+				'postType'       => 'global_styles',
+				'entityId'       => '17',
+				'entityKind'     => 'root',
+				'entityName'     => 'globalStyles',
+				'stylesheet'     => 'pattern-theme',
+			],
+			$styles['scope']
+		);
+		$this->assertSame(
+			[
+				'settings' => [
+					'color' => [
+						'palette' => [],
+					],
+				],
+				'styles'   => [
+					'color' => [
+						'text' => '#111111',
+					],
+				],
+			],
+			$styles['styleContext']['currentConfig']
+		);
+		$this->assertSame(
+			[
+				'settings' => WordPressTestState::$global_settings,
+				'styles'   => WordPressTestState::$global_styles,
+			],
+			$styles['styleContext']['mergedConfig']
+		);
+		$this->assertSame( [], $styles['styleContext']['availableVariations'] );
+		$this->assertSame(
+			$styles['diagnostics'],
+			$styles['styleContext']['themeTokenDiagnostics']
+		);
+	}
+
+	public function test_for_styles_omits_unpublished_draft_global_styles_from_request_context(): void {
+		WordPressTestState::$active_theme = [
+			'stylesheet' => 'pattern-theme',
+		];
+		// A draft wp_global_styles row holds unpublished design work. get-theme-styles
+		// is an edit_posts helper, so it must not surface draft config or its post id.
+		WordPressTestState::$posts[21] = new \WP_Post(
+			[
+				'ID'           => 21,
+				'post_type'    => 'wp_global_styles',
+				'post_status'  => 'draft',
+				'post_content' => (string) wp_json_encode(
+					[
+						'settings' => [ 'color' => [ 'palette' => [] ] ],
+						'styles'   => [ 'color' => [ 'text' => '#abcabc' ] ],
+					]
+				),
+			]
+		);
+
+		$styles = ( new ThemeTokenCollector() )->for_styles();
+
+		$this->assertSame(
+			[
+				'settings' => [],
+				'styles'   => [],
+			],
+			$styles['styleContext']['currentConfig']
+		);
+		$this->assertSame( '', $styles['scope']['globalStylesId'] );
+		$this->assertSame( '', $styles['scope']['scopeKey'] );
+		$this->assertSame( '', $styles['scope']['entityId'] );
+	}
+
+	public function test_for_styles_available_variations_honor_the_apply_contract_filter(): void {
+		// get-theme-styles feeds recommend-style / request-style-apply, so its
+		// availableVariations must match the apply pipeline's filtered universe
+		// (StyleApplyExecutor::theme_style_variations()).
+		$variation = [
+			'title'    => 'Midnight',
+			'settings' => [ 'custom' => [ 'mood' => 'dark' ] ],
+			'styles'   => [ 'color' => [ 'background' => '#101010' ] ],
+		];
+		add_filter(
+			'flavor_agent_external_apply_theme_variations',
+			static fn(): array => [ $variation ]
+		);
+
+		$styles = ( new ThemeTokenCollector() )->for_styles();
+
+		$this->assertSame( [ $variation ], $styles['styleContext']['availableVariations'] );
+	}
 }

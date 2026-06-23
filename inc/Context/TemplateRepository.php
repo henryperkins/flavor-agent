@@ -18,6 +18,7 @@ final class TemplateRepository {
 
 		foreach ( $parts as $part ) {
 			$entry = [
+				'id'    => $this->canonical_template_part_id( $part ),
 				'slug'  => (string) ( $part->slug ?? '' ),
 				'title' => (string) ( $part->title ?? '' ),
 				'area'  => (string) ( $part->area ?? '' ),
@@ -120,7 +121,7 @@ final class TemplateRepository {
 	}
 
 	public function resolve_template_part_ref( string $requested_ref, object $template_part ): string {
-		$resolved_id = (string) ( $template_part->id ?? '' );
+		$resolved_id = $this->canonical_template_part_id( $template_part );
 
 		if ( '' !== $resolved_id ) {
 			return $resolved_id;
@@ -185,6 +186,28 @@ final class TemplateRepository {
 		}
 
 		return is_object( $template ) ? $template : null;
+	}
+
+	private function canonical_template_part_id( object $template_part ): string {
+		$resolved_id = trim( (string) ( $template_part->id ?? '' ) );
+
+		if ( '' !== $resolved_id ) {
+			return $resolved_id;
+		}
+
+		$slug = sanitize_key( (string) ( $template_part->slug ?? '' ) );
+
+		if ( '' === $slug ) {
+			return '';
+		}
+
+		$stylesheet = function_exists( 'get_stylesheet' )
+			? sanitize_key( (string) get_stylesheet() )
+			: '';
+
+		return '' !== $stylesheet
+			? sprintf( '%s//%s', $stylesheet, $slug )
+			: $slug;
 	}
 
 	/**

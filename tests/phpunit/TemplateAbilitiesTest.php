@@ -97,6 +97,7 @@ final class TemplateAbilitiesTest extends TestCase {
 
 		$this->assertCount( 1, $metadata_only['templateParts'] );
 		$this->assertArrayNotHasKey( 'content', $metadata_only['templateParts'][0] );
+		$this->assertSame( 'theme//header', $metadata_only['templateParts'][0]['id'] );
 		$this->assertSame( 'header', $metadata_only['templateParts'][0]['slug'] );
 		$this->assertSame(
 			'<!-- wp:group {"tagName":"header"} --><div>Header</div><!-- /wp:group -->',

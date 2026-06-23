@@ -681,7 +681,7 @@ final class Registration {
 			'flavor-agent/list-template-parts',
 			[
 				'label'               => __( 'List template parts', 'flavor-agent' ),
-				'description'         => __( 'Return registered template-part metadata for editors, with optional content only for users who can edit themes. Read-only.', 'flavor-agent' ),
+				'description'         => __( 'Return registered template-part metadata (id, slug, title, area) for editors. The id is the templatePartRef accepted by recommend-template-part. Optional content is returned only for users who can edit themes. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ TemplateAbilities::class, 'list_template_parts' ],
 				'permission_callback' => [ self::class, 'can_list_template_parts' ],
@@ -707,6 +707,7 @@ final class Registration {
 							'items' => [
 								'type'       => 'object',
 								'properties' => [
+									'id'      => [ 'type' => 'string' ],
 									'slug'    => [ 'type' => 'string' ],
 									'title'   => [ 'type' => 'string' ],
 									'area'    => [ 'type' => 'string' ],
@@ -909,7 +910,7 @@ final class Registration {
 			'flavor-agent/get-theme-styles',
 			[
 				'label'               => __( 'Get theme styles', 'flavor-agent' ),
-				'description'         => __( 'Return the applied global theme styles plus extracted element and block pseudo-state styles. Read-only.', 'flavor-agent' ),
+				'description'         => __( 'Return the applied global theme styles plus extracted element and block pseudo-state styles, along with the live Global Styles scope and context needed to call recommend-style or request-style-apply. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_styles' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -1938,6 +1939,31 @@ final class Registration {
 			'elementStyles'     => [ 'type' => 'object' ],
 			'blockPseudoStyles' => [ 'type' => 'object' ],
 			'diagnostics'       => [ 'type' => 'object' ],
+			'scope'             => [
+				'type'       => 'object',
+				'properties' => [
+					'surface'        => [ 'type' => 'string' ],
+					'scopeKey'       => [ 'type' => 'string' ],
+					'globalStylesId' => [ 'type' => 'string' ],
+					'postType'       => [ 'type' => 'string' ],
+					'entityId'       => [ 'type' => 'string' ],
+					'entityKind'     => [ 'type' => 'string' ],
+					'entityName'     => [ 'type' => 'string' ],
+					'stylesheet'     => [ 'type' => 'string' ],
+				],
+			],
+			'styleContext'      => [
+				'type'       => 'object',
+				'properties' => [
+					'currentConfig'         => self::open_object_schema(),
+					'mergedConfig'          => self::open_object_schema(),
+					'availableVariations'   => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(),
+					],
+					'themeTokenDiagnostics' => self::open_object_schema(),
+				],
+			],
 		];
 	}
 

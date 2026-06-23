@@ -146,9 +146,9 @@ Returns `suggestions[].operations` plus `resolvedContextSignature` + `reviewCont
    match the **live entity** state. Passing a non-empty `styleContext` that doesn't reflect the live
    post → `resolvedContextSignature` recomputes differently → `request-style-apply` fails
    *"The style recommendation context is stale."* For an empty live post, pass empty `styleContext`.
-   **After a prior apply has changed the entity**, empty no longer matches the live config → re-derive
-   fresh signatures with `preview-recommend-style` (signature-only, free, no AI call) **and** pass the
-   live `currentConfig` (`StyleApplyExecutor::resolve_user_global_styles($id)['config']`).
+   **After a prior apply has changed the entity**, re-run `flavor-agent/get-theme-styles` and reuse
+   its returned `scope` + `styleContext` as the next request base, then re-derive fresh signatures
+   with `preview-recommend-style` (signature-only, free, no AI call).
 
 ### 4b. `request-style-apply` (Beat 3) — propose, don't mutate
 
