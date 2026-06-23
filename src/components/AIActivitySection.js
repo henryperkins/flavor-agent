@@ -31,6 +31,31 @@ function getExecutionSummary( entry ) {
 	return parts.join( ' · ' );
 }
 
+function getExternalApply( entry ) {
+	const apply = entry?.apply || entry?.request?.apply;
+
+	return apply && typeof apply === 'object' && ! Array.isArray( apply )
+		? apply
+		: null;
+}
+
+function getExternalApplyStatus( entry ) {
+	const applyStatus = getExternalApply( entry )?.status;
+
+	if ( typeof applyStatus === 'string' && applyStatus.trim() ) {
+		return applyStatus.trim();
+	}
+
+	const executionResult =
+		typeof entry?.executionResult === 'string'
+			? entry.executionResult.trim()
+			: '';
+
+	return [ 'pending', 'rejected', 'expired' ].includes( executionResult )
+		? executionResult
+		: '';
+}
+
 function getStatusLabel( entry ) {
 	if (
 		isDiagnosticActivityEntry( entry ) &&
@@ -44,6 +69,17 @@ function getStatusLabel( entry ) {
 		entry?.undo?.status === 'failed'
 	) {
 		return { label: 'Request failed', tone: 'error' };
+	}
+
+	switch ( getExternalApplyStatus( entry ) ) {
+		case 'pending':
+			return { label: 'Pending approval', tone: 'review' };
+		case 'rejected':
+			return { label: 'Rejected', tone: 'error' };
+		case 'expired':
+			return { label: 'Expired', tone: 'stale' };
+		case 'failed':
+			return { label: 'Apply failed', tone: 'error' };
 	}
 
 	if (
@@ -83,6 +119,31 @@ function getStatusLabel( entry ) {
 	}
 
 	return { label: 'Applied', tone: 'success' };
+}
+
+function getExternalApplyMessage( entry ) {
+	const status = getExternalApplyStatus( entry );
+
+	switch ( status ) {
+		case 'pending':
+			return 'External apply awaiting admin approval.';
+		case 'rejected': {
+			const decisionNote = getExternalApply( entry )?.decisionNote;
+
+			return decisionNote
+				? `External apply rejected: ${ decisionNote }`
+				: 'External apply request was rejected.';
+		}
+		case 'expired':
+			return 'External apply request expired before approval.';
+		case 'failed': {
+			const failureMessage = getExternalApply( entry )?.failureMessage;
+
+			return failureMessage || 'External apply request failed.';
+		}
+		default:
+			return '';
+	}
 }
 
 function describeActivity( entry ) {
@@ -263,6 +324,8 @@ export default function AIActivitySection( {
 				<div className="flavor-agent-panel__group-body">
 					{ visibleEntries.map( ( entry ) => {
 						const status = getStatusLabel( entry );
+						const externalApplyMessage =
+							getExternalApplyMessage( entry );
 						const canUndo =
 							entry?.undo?.status === 'available' &&
 							entry?.undo?.canUndo === true &&
@@ -297,6 +360,11 @@ export default function AIActivitySection( {
 									{ hasPendingUndoSync && (
 										<div className="flavor-agent-activity-row__meta">
 											Activity audit sync pending.
+										</div>
+									) }
+									{ externalApplyMessage && (
+										<div className="flavor-agent-activity-row__meta">
+											{ externalApplyMessage }
 										</div>
 									) }
 									{ ( entry?.undo?.status === 'failed' ||

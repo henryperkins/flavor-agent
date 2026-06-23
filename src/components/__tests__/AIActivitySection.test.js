@@ -311,6 +311,91 @@ describe( 'AIActivitySection', () => {
 		).toBeUndefined();
 	} );
 
+	test( 'renders external apply lifecycle rows without implying they were applied', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					maxVisible={ Number.POSITIVE_INFINITY }
+					entries={ [
+						{
+							id: 'activity-pending',
+							suggestion: 'Adjust the site palette',
+							surface: 'global-styles',
+							executionResult: 'pending',
+							apply: {
+								status: 'pending',
+							},
+							undo: {
+								canUndo: false,
+								status: 'not_applicable',
+							},
+						},
+						{
+							id: 'activity-rejected',
+							suggestion: 'Tighten button contrast',
+							surface: 'style-book',
+							executionResult: 'rejected',
+							apply: {
+								status: 'rejected',
+								decisionNote: 'Needs design review.',
+							},
+							undo: {
+								canUndo: false,
+								status: 'not_applicable',
+							},
+						},
+						{
+							id: 'activity-expired',
+							suggestion: 'Refresh link color',
+							surface: 'global-styles',
+							executionResult: 'expired',
+							apply: {
+								status: 'expired',
+							},
+							undo: {
+								canUndo: false,
+								status: 'not_applicable',
+							},
+						},
+						{
+							id: 'activity-failed',
+							suggestion: 'Apply paragraph spacing',
+							surface: 'style-book',
+							executionResult: 'failed',
+							apply: {
+								status: 'failed',
+								failureMessage:
+									'Global Styles changed before approval.',
+							},
+							undo: {
+								canUndo: false,
+								status: 'not_applicable',
+							},
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Pending approval' );
+		expect( getContainer().textContent ).toContain(
+			'External apply awaiting admin approval.'
+		);
+		expect( getContainer().textContent ).toContain( 'Rejected' );
+		expect( getContainer().textContent ).toContain(
+			'External apply rejected: Needs design review.'
+		);
+		expect( getContainer().textContent ).toContain( 'Expired' );
+		expect( getContainer().textContent ).toContain(
+			'External apply request expired before approval.'
+		);
+		expect( getContainer().textContent ).toContain( 'Apply failed' );
+		expect( getContainer().textContent ).toContain(
+			'Global Styles changed before approval.'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Applied' );
+	} );
+
 	test( 'renders compact rows with an activity-log link instead of inline request diagnostics', () => {
 		act( () => {
 			getRoot().render(

@@ -37,6 +37,8 @@ Initial source basis: all repository/workspace doc-like files enumerated on 2026
 
 2026-06-21 upstream AI roadmap refresh: re-synced `docs/reference/wordpress-ai-roadmap-tracking.md` to the 2026-06-20 board snapshot maintained in `/home/dev/roadmaptrac/`. Latest AI plugin release is now `1.0.2` (2026-06-16, a patch milestone carved from 1.1.0); the board is 245 items / 180 Done / 65 not-Done (54 open issues + 11 PR cards); 1.1.0 is 8 Done / 11 open; `WordPress/abilities-api#84` is open upstream but off Project #240. New Flavor-Agent-relevant board items folded into the tracking doc: native vector search/RAG (`WordPress/ai#683`, Future Release draft) as a new embeddings/retrieval collision, the Request-Log non-SDK-transport gap (`#732`), and per-feature access controls (`#736`). This was a docs reconciliation plus a read-only code-alignment audit: the live ability inventory (30 abilities), provider ownership (chat via Connectors, embeddings plugin-owned), and the Request Logging coexistence bridge all remain in line with core, so no code changed.
 
+2026-06-22 editor pending-apply visibility: the shared editor activity section now recognizes external-apply lifecycle rows before undo labeling, showing pending approval, rejected, expired, and apply-failed states with compact operator-facing context instead of implying those rows were already applied. The slice is covered by `src/components/__tests__/AIActivitySection.test.js`.
+
 Archived files under `docs/superpowers/plans/archive/` and implemented design specs under `docs/superpowers/specs/` are historical context only. Do not treat them as active implementation plans. Any item below needs a fresh source-grounded plan before code changes unless the change is a narrow docs or verification update.
 
 ## Current Implementation Candidates
@@ -45,7 +47,7 @@ These items are not blocked by a known upstream API prerequisite. They still nee
 
 | Workstream | Why it is open | Current source | Next move |
 | --- | --- | --- | --- |
-| Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, an Approvals quick filter, a bounded rendered `learningReport` for global admin reads, and durable pattern-trait capture for new pattern outcome rows. Editor-side pending-apply visibility, approval notifications, a rich visual diff viewer, broader row actions/discovery, and cross-operator workflows remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | No remaining Phase 9 pattern-trait item; choose a different bounded governance follow-up before implementation. |
+| Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, an Approvals quick filter, a bounded rendered `learningReport` for global admin reads, durable pattern-trait capture for new pattern outcome rows, and editor-side recognition of pending/rejected/expired/failed external-apply lifecycle rows. Approval notifications, a rich visual diff viewer, broader row actions/discovery, and cross-operator workflows remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | No remaining Phase 9 pattern-trait item; choose a different bounded governance follow-up before implementation. |
 
 ## Sequenced Later
 
@@ -109,7 +111,7 @@ These can turn into implementation work only after the upstream contract changes
 
 ## Suggested Next Planning Order
 
-1. Editor-side pending external-apply visibility, approval notifications, or template/template-part external-apply executors if the priority is extending the governance loop beyond the shipped C1.1 console; each needs its own bounded plan.
+1. Approval notifications or template/template-part external-apply executors if the priority is extending the governance loop beyond the shipped C1.1 console; each needs its own bounded plan.
 2. Block-operation expansion or a follow-up adapted-preview v2 if the priority is a new product surface; reuse or deliberately extract the shipped deterministic pattern adaptation module instead of planning a second sub-block mutation engine.
 3. Admin activity reports if the priority is the future learning loop; use the shipped Phase 8 attribution join contract as the input contract.
 4. Release-validation chores before any v0.1.0 release decision or upstream compatibility claim.
