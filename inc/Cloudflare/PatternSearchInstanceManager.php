@@ -47,7 +47,6 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			trim( sanitize_text_field( $account_id ) ),
 			wp_hash( trim( sanitize_text_field( $api_token ) ) ),
 			self::normalize_embedding_model_for_ai_search( $embedding_model ),
-			Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
 		];
 
 		return hash( 'sha256', implode( "\n", $payload ) );
@@ -225,7 +224,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			return $config;
 		}
 
-		$instances = self::list_instances_after_ensuring_namespace( $config['account_id'], $config['api_token'] );
+		$instances = self::list_instances( $config['account_id'], $config['api_token'] );
 
 		if ( is_wp_error( $instances ) ) {
 			return $instances;
@@ -393,18 +392,10 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		];
 	}
 
-	private static function namespaces_url( string $account_id ): string {
-		return sprintf(
-			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/namespaces',
-			rawurlencode( $account_id )
-		);
-	}
-
 	private static function instances_url( string $account_id ): string {
 		return sprintf(
-			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/namespaces/%s/instances',
-			rawurlencode( $account_id ),
-			rawurlencode( Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE )
+			'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/instances',
+			rawurlencode( $account_id )
 		);
 	}
 
@@ -417,25 +408,6 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	 */
 	private static function authorization_headers( string $api_token ): array {
 		return [ 'Authorization' => 'Bearer ' . $api_token ];
-	}
-
-	/**
-	 * @return array<int, array<string, mixed>>|\WP_Error
-	 */
-	private static function list_instances_after_ensuring_namespace( string $account_id, string $api_token ): array|\WP_Error {
-		$instances = self::list_instances( $account_id, $api_token );
-
-		if ( ! is_wp_error( $instances ) || ! self::is_namespace_not_found_error( $instances ) ) {
-			return $instances;
-		}
-
-		$namespace = self::create_namespace( $account_id, $api_token );
-
-		if ( is_wp_error( $namespace ) ) {
-			return $namespace;
-		}
-
-		return self::list_instances( $account_id, $api_token );
 	}
 
 	/**
@@ -491,35 +463,6 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		} while ( $page <= $total_pages && [] === $instances );
 
 		return $instances;
-	}
-
-	private static function create_namespace( string $account_id, string $api_token ): true|\WP_Error {
-		$response = self::post_json(
-			self::namespaces_url( $account_id ),
-			array_merge( self::authorization_headers( $api_token ), [ 'Content-Type' => 'application/json' ] ),
-			self::encode_json(
-				[
-					'name'        => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
-					'description' => 'Flavor Agent managed pattern storage.',
-				]
-			),
-			'Cloudflare AI Search namespace create',
-			self::REQUEST_TIMEOUT
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		if ( in_array( $response['status'], [ 200, 201, 409 ], true ) ) {
-			return true;
-		}
-
-		return new \WP_Error(
-			'cloudflare_pattern_ai_search_namespace_create_error',
-			self::remote_failure_message( 'Cloudflare AI Search managed pattern namespace could not be created.', $response ),
-			self::remote_failure_data( $response )
-		);
 	}
 
 	private static function create_instance( string $account_id, string $api_token, string $embedding_model ): true|\WP_Error {
@@ -876,19 +819,6 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 		];
 	}
 
-	private static function is_namespace_not_found_error( \WP_Error $error ): bool {
-		$data = $error->get_error_data();
-
-		if ( ! is_array( $data ) || 404 !== (int) ( $data['http_status'] ?? 0 ) ) {
-			return false;
-		}
-
-		$remote_message = strtolower( (string) ( $data['remote_error_message'] ?? '' ) );
-
-		return str_contains( $remote_message, 'namespace_not_found' )
-			|| str_contains( strtolower( $error->get_error_message() ), 'namespace_not_found' );
-	}
-
 	private static function extract_remote_error_message( mixed $data ): string {
 		if ( ! is_array( $data ) ) {
 			return '';
@@ -932,7 +862,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	 * @return array{instance_id: string, status: string}|\WP_Error
 	 */
 	private static function try_adopt_after_create_conflict( string $account_id, string $api_token, string $embedding_model ): array|\WP_Error {
-		$instances = self::list_instances_after_ensuring_namespace( $account_id, $api_token );
+		$instances = self::list_instances( $account_id, $api_token );
 
 		if ( is_wp_error( $instances ) ) {
 			return $instances;

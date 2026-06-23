@@ -12,6 +12,7 @@
 		"audit:screenshot": "node scripts/browser-run-screenshot.js",
 		"audit:visual": "node scripts/browser-run-visual-audit.js",
 		"dist": "bash scripts/build-dist.sh",
+		"docs:ai-search:update": "node scripts/update-docs-ai-search.js",
 		"ensure:local-env": "node scripts/ensure-local-env.js",
 		"install:codex-skills": "node scripts/install-codex-skills.js",
 		"start": "wp-scripts start",

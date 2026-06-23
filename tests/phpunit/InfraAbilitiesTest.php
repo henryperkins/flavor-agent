@@ -40,7 +40,7 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/search-wordpress-docs', $status['availableAbilities'] );
 		$this->assertTrue( $status['backends']['cloudflare_ai_search']['configured'] );
 		$this->assertSame(
-			'c5d54c4a-27df-4034-80da-ca6054684fcd',
+			'ba566764-a507-4cd0-8cc8-cffbbde72ac3',
 			$status['backends']['cloudflare_ai_search']['instanceId']
 		);
 		$this->assertIsArray( $status['backends']['cloudflare_ai_search']['runtime'] ?? null );
@@ -637,7 +637,7 @@ final class InfraAbilitiesTest extends TestCase {
 					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 					'qdrant_url'                     => '',
 					'qdrant_collection'              => '',
-					'cloudflare_ai_search_namespace' => Config::DEFAULT_CLOUDFLARE_PATTERN_AI_SEARCH_NAMESPACE,
+					'cloudflare_ai_search_namespace' => '',
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => PatternSearchInstanceManager::credential_signature(
 						(string) get_option( 'flavor_agent_cloudflare_workers_ai_account_id', '' ),

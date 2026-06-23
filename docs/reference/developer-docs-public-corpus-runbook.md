@@ -8,7 +8,7 @@ Use it when you need to answer:
 - Which source scopes and refresh cadence are required before the current-release coverage gate can ship?
 - Which validation evidence must be recorded before enabling the current-release-cycle coverage gate?
 
-Endpoint: `https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search`
+Endpoint: `https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search`
 
 Owner: Flavor Agent release maintainer for the built-in public Developer Docs grounding endpoint.
 
@@ -37,6 +37,22 @@ Replace the release-specific Make/Core entries whenever the active major-release
 ## Source Update Workflow
 
 The `wordpress-docs-ai-search` MCP server and Flavor Agent's built-in Developer Docs grounding path both depend on the public Cloudflare AI Search corpus. Updating MCP source coverage means updating that corpus, not changing the Codex or Claude MCP registration. Client MCP config only points agents at the search endpoint.
+
+The preferred updater is the scheduled/manual GitHub Actions workflow at `.github/workflows/update-docs-ai-search.yml`. It runs `npm run docs:ai-search:update -- --release=7-0`, discovers trusted source URLs, uploads changed Markdown items into the `wp-dev` AI Search built-in storage using bounded source keys shaped like `ai-search/wp-dev/{host}/{path-slug}/{short-hash}/part-0001.md` (capped at 128 bytes to satisfy Cloudflare's item-filename limit; the full canonical URL and content hash travel in item metadata, not the key), removes stale managed docs items, polls item status, and validates the public endpoint. Configure these repository secrets before enabling scheduled writes:
+
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_AI_SEARCH_API_TOKEN` with Account > AI Search:Edit and Account > AI Search:Run
+
+Optional repository variables override the defaults:
+
+- `CLOUDFLARE_AI_SEARCH_INSTANCE` (default `wp-dev`)
+- `CLOUDFLARE_AI_SEARCH_PUBLIC_URL` (default the endpoint above)
+
+For a local smoke test that does not write to Cloudflare:
+
+```bash
+npm run docs:ai-search:update -- --dry-run --source-url=https://developer.wordpress.org/block-editor/
+```
 
 Use this workflow whenever the active WordPress release cycle changes, a Field Guide or release candidate post lands, a dev-note batch is edited, a Gutenberg release materially changes editor APIs, or the validation query stops returning current release-cycle sources.
 
@@ -80,9 +96,9 @@ Every ingested item or chunk should preserve enough provenance for `inc/Cloudfla
 - `published_at` for Make/Core and Developer Blog posts
 - `content_hash` for change detection
 - a stable title
-- a source key that either matches the canonical host/path, or follows the accepted `ai-search/<instanceId>/<host>/<path>/<hash>/part-0001.md` style
+- a source key that is either reconstructable to the canonical URL (`<host>/<path>` or `ai-search/<instanceId>/<host>/<path>/<hash>/part-0001.md`), or a bounded managed key `ai-search/<instanceId>/<host>/<slug>/<short-hash>/part-0001.md` whose `<host>` segment matches the canonical URL host. Deep developer-docs URLs exceed Cloudflare's 128-byte item-filename limit, so their keys carry a truncated slug plus short hash and rely on the metadata `source_url` for provenance.
 
-Source URLs must be HTTPS, must not include credentials, must not use a non-443 port, and must not contain encoded path delimiters or `.` / `..` path segments. If the source key and canonical URL disagree, Flavor Agent discards the chunk.
+Source URLs must be HTTPS, must not include credentials, must not use a non-443 port, and must not contain encoded path delimiters or `.` / `..` path segments. If the source key cannot be reconciled with the canonical URL — it reconstructs to a different URL, sits outside the managed `ai-search/<instanceId>/` namespace, mismatches the URL host, or contains path traversal — Flavor Agent discards the chunk.
 
 Refresh cadence:
 - Weekly during active WordPress major-release cycles.

@@ -123,7 +123,7 @@ final class DocsPrewarmTest extends TestCase {
 			$this->assertSame( 0, $summary['failed'] );
 			$this->assertSame( 0, $summary['skipped'] );
 			$this->assertSame(
-				'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+				'https://ba566764-a507-4cd0-8cc8-cffbbde72ac3.search.ai.cloudflare.com/search',
 				WordPressTestState::$last_remote_post['url']
 			);
 			$this->assertArrayNotHasKey(

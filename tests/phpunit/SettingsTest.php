@@ -2250,7 +2250,7 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
 		$this->assertStringNotContainsString( 'Developer Docs Source', $output );
 		$this->assertStringNotContainsString( 'Built-in public Cloudflare AI Search endpoint', $output );
-		$this->assertStringNotContainsString( 'c5d54c4a-27df-4034-80da-ca6054684fcd', $output );
+		$this->assertStringNotContainsString( 'ba566764-a507-4cd0-8cc8-cffbbde72ac3', $output );
 		$this->assertStringNotContainsString( 'Instance:', $output );
 		$this->assertStringNotContainsString( 'Runtime Grounding', $output );
 		$this->assertStringNotContainsString( 'Developer Docs Prewarm', $output );
