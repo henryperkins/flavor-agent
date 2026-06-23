@@ -598,9 +598,12 @@ body.settings_page_flavor-agent-activity {
 
 .flavor-agent-activity-log__request-log-error {
   margin: 0;
-  color: var(--wpds-color-fg-content-error-weak, #cc1818);
   font-size: var(--wpds-font-size-sm, 12px);
   line-height: 1.5;
+}
+
+.flavor-agent-activity-log__request-log-error p {
+  margin: 0;
 }
 
 .flavor-agent-activity-log__request-log-details {

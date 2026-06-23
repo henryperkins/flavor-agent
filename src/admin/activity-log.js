@@ -1152,6 +1152,7 @@ function normalizeCoreRequestLogDetails( log ) {
 function AiRequestLogPanel( { entry, bootData } ) {
 	const requestLogId = entry?.aiRequestLogId || '';
 	const requestToken = entry?.aiRequestToken || '';
+	const requestLogLoadTokenRef = useRef( 0 );
 	const [ requestLogState, setRequestLogState ] = useState( {
 		id: requestLogId,
 		details: null,
@@ -1160,6 +1161,7 @@ function AiRequestLogPanel( { entry, bootData } ) {
 	} );
 
 	useEffect( () => {
+		requestLogLoadTokenRef.current += 1;
 		setRequestLogState( {
 			id: requestLogId,
 			details: null,
@@ -1167,6 +1169,13 @@ function AiRequestLogPanel( { entry, bootData } ) {
 			isLoading: false,
 		} );
 	}, [ requestLogId ] );
+
+	useEffect(
+		() => () => {
+			requestLogLoadTokenRef.current += 1;
+		},
+		[]
+	);
 
 	if ( entry?.modelRequest?.attempted === false ) {
 		return (
@@ -1199,6 +1208,8 @@ function AiRequestLogPanel( { entry, bootData } ) {
 	}
 
 	const loadRequestLog = async () => {
+		const loadToken = ++requestLogLoadTokenRef.current;
+
 		setRequestLogState( ( current ) => ( {
 			...current,
 			error: '',
@@ -1215,6 +1226,10 @@ function AiRequestLogPanel( { entry, bootData } ) {
 				},
 			} );
 
+			if ( requestLogLoadTokenRef.current !== loadToken ) {
+				return;
+			}
+
 			setRequestLogState( {
 				id: requestLogId,
 				details: normalizeCoreRequestLogDetails( response || {} ),
@@ -1222,6 +1237,10 @@ function AiRequestLogPanel( { entry, bootData } ) {
 				isLoading: false,
 			} );
 		} catch ( fetchError ) {
+			if ( requestLogLoadTokenRef.current !== loadToken ) {
+				return;
+			}
+
 			setRequestLogState( {
 				id: requestLogId,
 				details: null,
@@ -1269,9 +1288,13 @@ function AiRequestLogPanel( { entry, bootData } ) {
 				) }
 			</div>
 			{ requestLogState.error && (
-				<p className="flavor-agent-activity-log__request-log-error">
+				<Notice
+					className="flavor-agent-activity-log__request-log-error"
+					status="error"
+					isDismissible={ false }
+				>
 					{ requestLogState.error }
-				</p>
+				</Notice>
 			) }
 			{ details && (
 				<div className="flavor-agent-activity-log__request-log-details">
@@ -1644,20 +1667,31 @@ function AttestationActions( { artifact } ) {
 	const verificationUrl = artifact?.verificationUrl || '';
 	const verifyUrl = artifact?.verifyUrl || '';
 	const subjectStateUrl = artifact?.subjectStateUrl || '';
+	const publicCheckTokenRef = useRef( 0 );
 	const [ activeCheck, setActiveCheck ] = useState( '' );
 	const [ checkResult, setCheckResult ] = useState( null );
 	const [ checkError, setCheckError ] = useState( '' );
 
 	useEffect( () => {
+		publicCheckTokenRef.current += 1;
 		setActiveCheck( '' );
 		setCheckResult( null );
 		setCheckError( '' );
 	}, [ artifact?.id, verificationUrl, verifyUrl, subjectStateUrl ] );
 
+	useEffect(
+		() => () => {
+			publicCheckTokenRef.current += 1;
+		},
+		[]
+	);
+
 	const runPublicCheck = useCallback( async ( type, url ) => {
 		if ( ! url ) {
 			return;
 		}
+
+		const checkToken = ++publicCheckTokenRef.current;
 
 		setActiveCheck( type );
 		setCheckResult( null );
@@ -1666,12 +1700,20 @@ function AttestationActions( { artifact } ) {
 		try {
 			const payload = await apiFetch( { url } );
 
+			if ( publicCheckTokenRef.current !== checkToken ) {
+				return;
+			}
+
 			setCheckResult(
 				'verification' === type
 					? getVerificationCheckDetails( payload )
 					: getAttestationCheckDetails( type, payload )
 			);
 		} catch ( error ) {
+			if ( publicCheckTokenRef.current !== checkToken ) {
+				return;
+			}
+
 			setCheckError(
 				error?.message ||
 					__(
@@ -1680,7 +1722,9 @@ function AttestationActions( { artifact } ) {
 					)
 			);
 		} finally {
-			setActiveCheck( '' );
+			if ( publicCheckTokenRef.current === checkToken ) {
+				setActiveCheck( '' );
+			}
 		}
 	}, [] );
 
@@ -1889,14 +1933,23 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 	const [ note, setNote ] = useState( '' );
 	const [ isSubmitting, setIsSubmitting ] = useState( false );
 	const [ decisionError, setDecisionError ] = useState( '' );
+	const decisionRequestTokenRef = useRef( 0 );
 	const isSubmittingRef = useRef( false );
 
 	useEffect( () => {
+		decisionRequestTokenRef.current += 1;
 		setNote( '' );
 		setDecisionError( '' );
 		isSubmittingRef.current = false;
 		setIsSubmitting( false );
 	}, [ entry?.id ] );
+
+	useEffect(
+		() => () => {
+			decisionRequestTokenRef.current += 1;
+		},
+		[]
+	);
 
 	if ( ! details ) {
 		return null;
@@ -1936,6 +1989,8 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 			return;
 		}
 
+		const requestToken = ++decisionRequestTokenRef.current;
+
 		isSubmittingRef.current = true;
 		setIsSubmitting( true );
 		setDecisionError( '' );
@@ -1944,15 +1999,26 @@ function GovernanceEvidenceSection( { entry, bootData, onDecided } ) {
 			await apiFetch(
 				buildDecisionRequest( bootData, entry.id, decision, note )
 			);
+
+			if ( decisionRequestTokenRef.current !== requestToken ) {
+				return;
+			}
+
 			onDecided?.();
 		} catch ( error ) {
+			if ( decisionRequestTokenRef.current !== requestToken ) {
+				return;
+			}
+
 			setDecisionError(
 				error?.message ||
 					__( 'The decision could not be recorded.', 'flavor-agent' )
 			);
 		} finally {
-			isSubmittingRef.current = false;
-			setIsSubmitting( false );
+			if ( decisionRequestTokenRef.current === requestToken ) {
+				isSubmittingRef.current = false;
+				setIsSubmitting( false );
+			}
 		}
 	};
 
@@ -2124,12 +2190,18 @@ export function ActivityLogApp( { bootData } ) {
 		} ),
 		[ bootData.defaultPerPage, bootData.maxPerPage ]
 	);
+	const linkedActivityEntryId = useMemo( getLinkedActivityEntryId, [] );
 	const defaultView = useMemo(
 		() => normalizeStoredActivityView( undefined, viewOptions ),
 		[ viewOptions ]
 	);
+	const persistedView = useMemo(
+		() => readPersistedActivityView( undefined, viewOptions ),
+		[ viewOptions ]
+	);
+	const persistActivityViewRef = useRef( ! linkedActivityEntryId );
 	const [ view, setView ] = useState( () =>
-		readPersistedActivityView( undefined, viewOptions )
+		linkedActivityEntryId ? defaultView : persistedView
 	);
 	const [ responseData, setResponseData ] = useState( () => ( {
 		entries: [],
@@ -2155,13 +2227,18 @@ export function ActivityLogApp( { bootData } ) {
 	const [ errorKind, setErrorKind ] = useState( '' );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ reloadToken, setReloadToken ] = useState( 0 );
-	const linkedActivityEntryId = useMemo( getLinkedActivityEntryId, [] );
 	const [ requestActivityId, setRequestActivityId ] = useState(
 		linkedActivityEntryId
 	);
 	const [ selectedEntryId, setSelectedEntryId ] = useState(
 		linkedActivityEntryId
 	);
+	const exitLinkedActivityMode = useCallback( () => {
+		if ( requestActivityId ) {
+			persistActivityViewRef.current = true;
+			setRequestActivityId( '' );
+		}
+	}, [ requestActivityId ] );
 
 	const requestedView = useMemo(
 		() => normalizeStoredActivityView( view, viewOptions ),
@@ -2670,6 +2747,10 @@ export function ActivityLogApp( { bootData } ) {
 		) || null;
 
 	useEffect( () => {
+		if ( ! persistActivityViewRef.current ) {
+			return;
+		}
+
 		writePersistedActivityView( effectiveView, undefined, viewOptions );
 	}, [ effectiveView, viewOptions ] );
 
@@ -2722,14 +2803,12 @@ export function ActivityLogApp( { bootData } ) {
 	);
 	const approvalsFilterActive = isPendingApprovalView( effectiveView );
 	const toggleApprovalsFilter = useCallback( () => {
-		if ( requestActivityId ) {
-			setRequestActivityId( '' );
-		}
+		exitLinkedActivityMode();
 
 		setView( ( currentView ) =>
 			withPendingApprovalFilter( currentView, viewOptions )
 		);
-	}, [ requestActivityId, viewOptions ] );
+	}, [ exitLinkedActivityMode, viewOptions ] );
 	const emptyState = error ? (
 		<ErrorState
 			error={ error }
@@ -2791,9 +2870,7 @@ export function ActivityLogApp( { bootData } ) {
 				fields={ fields }
 				view={ effectiveView }
 				onChangeView={ ( nextView ) => {
-					if ( requestActivityId ) {
-						setRequestActivityId( '' );
-					}
+					exitLinkedActivityMode();
 
 					setView( nextView );
 				} }
@@ -2808,9 +2885,7 @@ export function ActivityLogApp( { bootData } ) {
 				} }
 				isItemClickable={ () => true }
 				onClickItem={ ( item ) => {
-					if ( requestActivityId ) {
-						setRequestActivityId( '' );
-					}
+					exitLinkedActivityMode();
 
 					setSelectedEntryId( item.id );
 				} }

@@ -323,6 +323,22 @@ function buildResponse( entries, overrides = {} ) {
 	};
 }
 
+function createDeferred() {
+	let resolvePromise;
+	let rejectPromise;
+
+	const promise = new Promise( ( resolve, reject ) => {
+		resolvePromise = resolve;
+		rejectPromise = reject;
+	} );
+
+	return {
+		promise,
+		resolve: resolvePromise,
+		reject: rejectPromise,
+	};
+}
+
 async function flushEffects() {
 	await act( async () => {
 		await Promise.resolve();
@@ -442,6 +458,58 @@ describe( 'ActivityLogApp', () => {
 		] );
 
 		expect( getSidebarTitle().textContent ).toBe( 'Linked activity entry' );
+	} );
+
+	test( 'bypasses the persisted saved view when loading a linked activity from the URL', async () => {
+		window.localStorage.setItem(
+			VIEW_STORAGE_KEY,
+			JSON.stringify( {
+				...DEFAULT_ACTIVITY_VIEW,
+				page: 3,
+				search: 'Alpha only',
+				filters: [
+					{
+						field: 'status',
+						operator: 'is',
+						value: 'pending',
+					},
+				],
+			} )
+		);
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-2'
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-1',
+				suggestion: 'Filtered entry',
+			} ),
+			createEntry( {
+				id: 'activity-2',
+				suggestion: 'Linked activity entry',
+			} ),
+		] );
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].url ).toBe(
+			`${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&includeReports=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&sortField=timestamp&sortDirection=desc&activity=activity-2`
+		);
+		expect( getSidebarTitle().textContent ).toBe( 'Linked activity entry' );
+		expect(
+			readPersistedActivityView( window.localStorage )
+		).toMatchObject( {
+			page: 3,
+			search: 'Alpha only',
+			filters: [
+				{
+					field: 'status',
+					operator: 'is',
+					value: 'pending',
+				},
+			],
+		} );
 	} );
 
 	test( 'exposes selected activity state and labels the details region', async () => {
@@ -1086,6 +1154,132 @@ describe( 'ActivityLogApp', () => {
 		expect( requestLogsLink.getAttribute( 'href' ) ).toBe(
 			`${ BOOT_DATA.adminUrl }tools.php?page=ai-request-logs`
 		);
+	} );
+
+	test( 'ignores stale core AI request log responses after selecting another row', async () => {
+		const staleRequestLog = createDeferred();
+
+		apiFetch.mockImplementation( ( request ) => {
+			const url = String( request?.url || '' );
+
+			if ( url.includes( 'flavor-agent/v1/activity?' ) ) {
+				return Promise.resolve(
+					buildResponse( [
+						createEntry( {
+							id: 'activity-request-1',
+							suggestion: 'First request row',
+							request: {
+								ai: {
+									requestLogId: 'log-1',
+									requestToken: 'token-1',
+								},
+							},
+						} ),
+						createEntry( {
+							id: 'activity-request-2',
+							suggestion: 'Second request row',
+							request: {
+								ai: {
+									requestLogId: 'log-2',
+									requestToken: 'token-2',
+								},
+							},
+						} ),
+					] )
+				);
+			}
+
+			if ( url.endsWith( '/ai/v1/logs/log-1' ) ) {
+				return staleRequestLog.promise;
+			}
+
+			if ( url.endsWith( '/ai/v1/logs/log-2' ) ) {
+				return Promise.resolve( {
+					provider: 'fresh-provider',
+					model: 'fresh-model',
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected request: ${ url }` )
+			);
+		} );
+
+		await renderApp();
+
+		const viewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'View AI request' );
+		const secondRowButton = Array.from(
+			getContainer().querySelectorAll( '.mock-dataviews-layout button' )
+		).find( ( button ) => button.textContent === 'Second request row' );
+
+		expect( viewButton ).toBeDefined();
+		expect( secondRowButton ).toBeDefined();
+
+		await act( async () => {
+			viewButton.click();
+		} );
+		await act( async () => {
+			secondRowButton.click();
+		} );
+
+		await act( async () => {
+			staleRequestLog.resolve( {
+				provider: 'stale-provider',
+				model: 'stale-model',
+			} );
+			await Promise.resolve();
+		} );
+		await flushEffects();
+
+		expect( getSidebarTitle().textContent ).toBe( 'Second request row' );
+		expect( getContainer().textContent ).not.toContain( 'stale-provider' );
+		expect( getContainer().textContent ).not.toContain( 'stale-model' );
+	} );
+
+	test( 'announces AI request log failures with an alert notice', async () => {
+		apiFetch
+			.mockResolvedValueOnce(
+				buildResponse( [
+					createEntry( {
+						id: 'activity-with-failing-core-log',
+						suggestion: 'Recommendation with failing core log',
+						request: {
+							ai: {
+								requestLogId: 'broken-log',
+								requestToken: 'broken-token',
+							},
+						},
+					} ),
+				] )
+			)
+			.mockRejectedValueOnce(
+				new Error( 'Flavor Agent could not load this AI request log.' )
+			);
+
+		await renderApp();
+
+		const viewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'View AI request' );
+
+		expect( viewButton ).toBeDefined();
+
+		await act( async () => {
+			viewButton.click();
+		} );
+		await flushEffects();
+
+		const alert = getContainer().querySelector(
+			'.flavor-agent-activity-log__request-log-error[role="alert"]'
+		);
+
+		expect( alert ).not.toBeNull();
+		expect( alert?.textContent ).toContain(
+			'Flavor Agent could not load this AI request log.'
+		);
+		expect( alert?.getAttribute( 'data-status' ) ).toBe( 'error' );
 	} );
 
 	test( 'renders unavailable AI request log copy when a token has no log id', async () => {
@@ -1908,6 +2102,112 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'ignores stale attestation verification results after selecting another row', async () => {
+		const staleVerification = createDeferred();
+
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-attestation-1'
+		);
+		apiFetch.mockImplementation( ( request ) => {
+			const url = String( request?.url || '' );
+
+			if ( url.includes( 'flavor-agent/v1/activity?' ) ) {
+				return Promise.resolve(
+					buildResponse( [
+						createExternalApplyEntry( {
+							id: 'activity-attestation-1',
+							suggestion: 'First attestation row',
+							status: 'applied',
+							undo: { status: 'available', canUndo: true },
+							apply: {
+								status: 'available',
+								executedAt: '2026-06-10T03:05:00+00:00',
+								operations: [],
+							},
+							attestation: {
+								id: 'att_first',
+								verificationUrl:
+									'https://example.test/wp-json/flavor-agent/v1/attestations/att_first/verification',
+								verifyUrl:
+									'https://example.test/wp-json/flavor-agent/v1/attestations/att_first',
+								subjectStateUrl:
+									'https://example.test/wp-json/flavor-agent/v1/attestations/att_first/subject-state',
+							},
+						} ),
+						createExternalApplyEntry( {
+							id: 'activity-attestation-2',
+							suggestion: 'Second attestation row',
+							status: 'applied',
+							undo: { status: 'available', canUndo: true },
+							apply: {
+								status: 'available',
+								executedAt: '2026-06-10T03:06:00+00:00',
+								operations: [],
+							},
+							attestation: {
+								id: 'att_second',
+								verificationUrl:
+									'https://example.test/wp-json/flavor-agent/v1/attestations/att_second/verification',
+								verifyUrl:
+									'https://example.test/wp-json/flavor-agent/v1/attestations/att_second',
+								subjectStateUrl:
+									'https://example.test/wp-json/flavor-agent/v1/attestations/att_second/subject-state',
+							},
+						} ),
+					] )
+				);
+			}
+
+			if (
+				url ===
+				'https://example.test/wp-json/flavor-agent/v1/attestations/att_first/verification'
+			) {
+				return staleVerification.promise;
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected request: ${ url }` )
+			);
+		} );
+
+		await renderApp();
+
+		const verifyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Run verification' );
+		const secondRowButton = Array.from(
+			getContainer().querySelectorAll( '.mock-dataviews-layout button' )
+		).find( ( button ) => button.textContent === 'Second attestation row' );
+
+		expect( verifyButton ).toBeDefined();
+		expect( secondRowButton ).toBeDefined();
+
+		await act( async () => {
+			verifyButton.click();
+		} );
+		await act( async () => {
+			secondRowButton.click();
+		} );
+
+		await act( async () => {
+			staleVerification.resolve( {
+				outcomes: [ 'signature_valid', 'live_matches_subject' ],
+			} );
+			await Promise.resolve();
+		} );
+		await flushEffects();
+
+		expect( getSidebarTitle().textContent ).toBe(
+			'Second attestation row'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Signature valid' );
+		expect( getContainer().textContent ).not.toContain(
+			'Live subject matches'
+		);
+	} );
+
 	function findCryptographicRecord() {
 		return Array.from( getContainer().querySelectorAll( 'details' ) ).find(
 			( node ) =>
@@ -2096,6 +2396,74 @@ describe( 'ActivityLogApp', () => {
 		);
 		expect( getContainer().querySelector( 'textarea' ).value ).toBe(
 			'Needs another look'
+		);
+	} );
+
+	test( 'ignores stale decision failures after selecting another row', async () => {
+		const staleDecision = createDeferred();
+
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-decision-1'
+		);
+		apiFetch.mockImplementation( ( request ) => {
+			const url = String( request?.url || '' );
+
+			if ( url.includes( 'flavor-agent/v1/activity?' ) ) {
+				return Promise.resolve(
+					buildResponse( [
+						createExternalApplyEntry( {
+							id: 'activity-decision-1',
+							suggestion: 'First decision row',
+						} ),
+						createExternalApplyEntry( {
+							id: 'activity-decision-2',
+							suggestion: 'Second decision row',
+						} ),
+					] )
+				);
+			}
+
+			if ( url.includes( '/decision' ) ) {
+				return staleDecision.promise;
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected request: ${ url }` )
+			);
+		} );
+
+		await renderApp();
+
+		const approveButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) =>
+			button.textContent.includes( 'Approve and apply' )
+		);
+		const secondRowButton = Array.from(
+			getContainer().querySelectorAll( '.mock-dataviews-layout button' )
+		).find( ( button ) => button.textContent === 'Second decision row' );
+
+		expect( approveButton ).toBeDefined();
+		expect( secondRowButton ).toBeDefined();
+
+		await act( async () => {
+			approveButton.click();
+		} );
+		await act( async () => {
+			secondRowButton.click();
+		} );
+
+		await act( async () => {
+			staleDecision.reject( new Error( 'Stale decision failure.' ) );
+			await Promise.resolve();
+		} );
+		await flushEffects();
+
+		expect( getSidebarTitle().textContent ).toBe( 'Second decision row' );
+		expect( getContainer().textContent ).not.toContain(
+			'Stale decision failure.'
 		);
 	} );
 
