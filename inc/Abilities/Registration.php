@@ -850,6 +850,9 @@ final class Registration {
 				'count'              => [ 'type' => 'integer' ],
 				'contentFingerprint' => [ 'type' => 'string' ],
 				'runtimeFingerprint' => [ 'type' => 'string' ],
+				'reason'             => [ 'type' => 'string' ],
+				'source'             => [ 'type' => 'string' ],
+				'errorCode'          => [ 'type' => 'string' ],
 			],
 		];
 	}
@@ -1019,6 +1022,9 @@ final class Registration {
 												'status' => [ 'type' => 'string' ],
 												'lastSearchAt' => [ 'type' => 'string' ],
 												'lastResultCount' => [ 'type' => 'integer' ],
+												'lastReason' => [ 'type' => 'string' ],
+												'lastErrorCode' => [ 'type' => 'string' ],
+												'lastErrorMessage' => [ 'type' => 'string' ],
 											],
 										],
 									],

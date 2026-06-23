@@ -47,7 +47,6 @@ const NOT_RECORDED = 'Not recorded';
 const ERROR_KIND_INVALID_DAY_FILTER = 'invalid-day-filter';
 const ERROR_KIND_FETCH = 'fetch';
 const LEARNING_REPORT_VERSION = 'governance-learning-report-v1';
-const LEARNING_REPORT_GROUP_ROW_LIMIT = 4;
 const RELATIVE_DAY_UNITS = new Set( [
 	'hours',
 	'days',
@@ -219,100 +218,21 @@ function getLearningReportActivityUrl( adminUrl, activityId ) {
 	return `${ normalizedBase }options-general.php?${ params.toString() }`;
 }
 
-function normalizeLearningReportRows( rows ) {
-	if ( ! Array.isArray( rows ) ) {
-		return [];
-	}
-
-	return rows
-		.map( ( row ) => {
-			if ( ! isPlainRecord( row ) ) {
-				return null;
-			}
-
-			const key =
-				typeof row.key === 'string' && row.key.trim()
-					? row.key.trim()
-					: '';
-			const label =
-				typeof row.label === 'string' && row.label.trim()
-					? row.label.trim()
-					: key;
-
-			if ( ! label ) {
-				return null;
-			}
-
-			return {
-				key: key || label,
-				label,
-				sampleSize: getLearningReportInteger( row.sampleSize ),
-				shownCount: getLearningReportInteger( row.shownCount ),
-				selectedForReviewCount: getLearningReportInteger(
-					row.selectedForReviewCount
-				),
-				appliedCount: getLearningReportInteger( row.appliedCount ),
-				validationBlockedCount: getLearningReportInteger(
-					row.validationBlockedCount
-				),
-				reviewSelectionRate: getLearningReportRate(
-					row.reviewSelectionRate
-				),
-				applyConversionRate: getLearningReportRate(
-					row.applyConversionRate
-				),
-				validationBlockedRate: getLearningReportRate(
-					row.validationBlockedRate
-				),
-				representativeActivityId:
-					typeof row.representativeActivityId === 'string'
-						? row.representativeActivityId.trim()
-						: '',
-			};
-		} )
-		.filter( Boolean )
-		.slice( 0, LEARNING_REPORT_GROUP_ROW_LIMIT );
-}
-
 function getLearningReportGroups( report ) {
-	const groups = isPlainRecord( report?.groups ) ? report.groups : {};
-	const definitions = [
-		{
-			id: 'surfaces',
-			label: __( 'Surfaces', 'flavor-agent' ),
-		},
-		{
-			id: 'operationTypes',
-			label: __( 'Operation types', 'flavor-agent' ),
-		},
-		{
-			id: 'providerModels',
-			label: __( 'Provider and model', 'flavor-agent' ),
-		},
-		{
-			id: 'validationReasons',
-			label: __( 'Validation reasons', 'flavor-agent' ),
-		},
-		{
-			id: 'guidelineVersions',
-			label: __( 'Guideline versions', 'flavor-agent' ),
-		},
-		{
-			id: 'rankingSignals',
-			label: __( 'Ranking signals', 'flavor-agent' ),
-		},
-		{
-			id: 'patternTraits',
-			label: __( 'Pattern traits', 'flavor-agent' ),
-		},
-	];
+	const groups = Array.isArray( report?.groupSections )
+		? report.groupSections
+		: [];
 
-	return definitions
-		.map( ( group ) => ( {
-			...group,
-			rows: normalizeLearningReportRows( groups[ group.id ] ),
-		} ) )
-		.filter( ( group ) => group.rows.length > 0 );
+	return groups.filter(
+		( group ) =>
+			isPlainRecord( group ) &&
+			typeof group.key === 'string' &&
+			!! group.key.trim() &&
+			typeof group.label === 'string' &&
+			!! group.label.trim() &&
+			Array.isArray( group.rows ) &&
+			group.rows.length > 0
+	);
 }
 
 function getLearningReportSummaryMetrics( report, locale ) {
@@ -481,12 +401,12 @@ function LearningReportSection( { bootData, report } ) {
 				<div className="flavor-agent-activity-log__learning-report-groups">
 					{ groups.map( ( group ) => (
 						<section
-							key={ group.id }
+							key={ group.key }
 							className="flavor-agent-activity-log__learning-report-group"
-							aria-labelledby={ `flavor-agent-activity-log-learning-report-${ group.id }` }
+							aria-labelledby={ `flavor-agent-activity-log-learning-report-${ group.key }` }
 						>
 							<h3
-								id={ `flavor-agent-activity-log-learning-report-${ group.id }` }
+								id={ `flavor-agent-activity-log-learning-report-${ group.key }` }
 								className="flavor-agent-activity-log__learning-report-group-title"
 							>
 								{ group.label }

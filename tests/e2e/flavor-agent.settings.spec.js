@@ -245,15 +245,17 @@ test( '@wp70-site-editor settings page shows the unreachable Developer Docs runt
 	runWpCli( wp70Harness, [
 		'eval',
 		`
-update_option(
-	'flavor_agent_docs_runtime_state',
-	array(
-		'status' => 'unreachable',
-		'lastSearchAt' => '2026-06-11 00:00:00',
-		'lastResultCount' => 0,
-	),
-	false
-);
+	update_option(
+		'flavor_agent_docs_runtime_state',
+		array(
+			'status' => 'unreachable',
+			'lastSearchAt' => '2026-06-11 00:00:00',
+			'lastResultCount' => 0,
+			'lastReason' => 'backend_unreachable',
+			'lastErrorCode' => 'http_request_failed',
+		),
+		false
+	);
 `,
 	] );
 
@@ -277,12 +279,17 @@ update_option(
 		await expect( docsSection ).toContainText(
 			'Built-in developer.wordpress.org grounding is active.'
 		);
-		await expect( docsSection ).toContainText( 'temporarily unavailable' );
+		await expect( docsSection ).toContainText(
+			'The last live Developer Docs grounding request failed to reach the search backend.'
+		);
 		await expect( docsSection ).toContainText(
 			'Recommendations still run without it.'
 		);
 		await expect( docsSection ).toContainText(
 			'Last search: 2026-06-11 00:00:00.'
+		);
+		await expect( docsSection ).toContainText(
+			'Last error code: http_request_failed.'
 		);
 		await expect( docsSection ).not.toContainText( 'degraded' );
 		await expect( docsSection ).not.toContainText( 'Fingerprint:' );

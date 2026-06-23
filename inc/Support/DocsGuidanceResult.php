@@ -15,15 +15,18 @@ final class DocsGuidanceResult {
 	 *
 	 * @param array<int, array<string, mixed>>      $guidance
 	 * @param array<int, array<string, mixed>>|null $prompt_guidance
+	 * @param array<string, mixed>                  $diagnostics
 	 * @return array<string, mixed>
 	 */
-	public static function from_guidance( array $guidance, string $mode, string $transport, ?array $prompt_guidance = null ): array {
+	public static function from_guidance( array $guidance, string $mode, string $transport, ?array $prompt_guidance = null, array $diagnostics = [] ): array {
 		$mode                = sanitize_key( $mode );
 		$transport           = sanitize_key( $transport );
 		$normalized          = self::normalize_guidance( $guidance );
 		$source_types        = self::extract_source_types( $normalized );
 		$content_fingerprint = self::build_content_fingerprint( $normalized );
 		$runtime_fingerprint = self::build_runtime_fingerprint( $normalized, $mode, $transport, $content_fingerprint );
+		$available           = [] !== $normalized;
+		$reason              = self::normalize_diagnostic_reason( (string) ( $diagnostics['reason'] ?? '' ), $available );
 
 		return [
 			'mode'               => $mode,
@@ -31,10 +34,13 @@ final class DocsGuidanceResult {
 			'guidance'           => null === $prompt_guidance ? $normalized : self::normalize_guidance( $prompt_guidance ),
 			'sourceTypes'        => $source_types,
 			'count'              => count( $normalized ),
-			'available'          => [] !== $normalized,
+			'available'          => $available,
 			'fingerprint'        => $content_fingerprint,
 			'contentFingerprint' => $content_fingerprint,
 			'runtimeFingerprint' => $runtime_fingerprint,
+			'reason'             => $reason,
+			'source'             => sanitize_key( (string) ( $diagnostics['source'] ?? '' ) ),
+			'errorCode'          => sanitize_key( (string) ( $diagnostics['errorCode'] ?? '' ) ),
 		];
 	}
 
@@ -48,7 +54,16 @@ final class DocsGuidanceResult {
 
 	/**
 	 * @param array<string, mixed> $result
-	 * @return array{available: bool, sourceTypes: array<int, string>, count: int}
+	 * @return array{
+	 *   available: bool,
+	 *   sourceTypes: array<int, string>,
+	 *   count: int,
+	 *   contentFingerprint: string,
+	 *   runtimeFingerprint: string,
+	 *   reason: string,
+	 *   source: string,
+	 *   errorCode: string
+	 * }
 	 */
 	public static function public_summary( array $result ): array {
 		return [
@@ -57,6 +72,9 @@ final class DocsGuidanceResult {
 			'count'              => (int) ( $result['count'] ?? 0 ),
 			'contentFingerprint' => self::content_fingerprint( $result ),
 			'runtimeFingerprint' => self::runtime_fingerprint( $result ),
+			'reason'             => sanitize_key( (string) ( $result['reason'] ?? '' ) ),
+			'source'             => sanitize_key( (string) ( $result['source'] ?? '' ) ),
+			'errorCode'          => sanitize_key( (string) ( $result['errorCode'] ?? '' ) ),
 		];
 	}
 
@@ -210,5 +228,15 @@ final class DocsGuidanceResult {
 				)
 			)
 		);
+	}
+
+	private static function normalize_diagnostic_reason( string $reason, bool $available ): string {
+		$reason = sanitize_key( $reason );
+
+		if ( '' !== $reason ) {
+			return $reason;
+		}
+
+		return $available ? 'grounded' : 'unavailable';
 	}
 }

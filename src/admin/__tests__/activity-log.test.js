@@ -697,6 +697,78 @@ describe( 'ActivityLogApp', () => {
 		).not.toBeNull();
 	} );
 
+	test( 'renders shared normalized governance learning report sections without local regrouping drift', async () => {
+		await renderApp(
+			buildResponse(
+				[
+					createEntry( {
+						id: 'activity-1',
+						suggestion: 'Representative activity entry',
+					} ),
+				],
+				{
+					learningReport: {
+						version: 'governance-learning-report-v1',
+						generatedAt: '2026-06-20T00:00:00+00:00',
+						sampleSize: 125,
+						rowLimit: 500,
+						truncated: false,
+						summary: {
+							shownCount: 12,
+							reviewSelectionRate: 0.25,
+							applyConversionRate: 0.1667,
+							undoRate: 0.08,
+							validationBlockedRate: 0.1,
+							insertFailedRate: 0.03,
+						},
+						groups: {
+							surfaces: [],
+							operationTypes: Array.from(
+								{ length: 7 },
+								( _, index ) => ( {
+									key: `operation-${ index + 1 }`,
+									label: `Operation ${ index + 1 }`,
+									sampleSize: index + 1,
+									shownCount: index + 1,
+									selectedForReviewCount: index,
+									appliedCount: index,
+									undoneCount: 0,
+									validationBlockedCount: 0,
+									insertFailedCount: 0,
+									reviewSelectionRate: 0.2,
+									applyConversionRate: 0.1,
+									undoRate: 0,
+									validationBlockedRate: 0,
+									insertFailedRate: 0,
+									representativeActivityId: 'activity-1',
+								} )
+							),
+							providerModels: [],
+							validationReasons: [],
+							guidelineVersions: [],
+							rankingSignals: [],
+							patternTraits: [],
+						},
+					},
+				}
+			)
+		);
+
+		const report = getContainer().querySelector(
+			'.flavor-agent-activity-log__learning-report'
+		);
+		expect( report ).not.toBeNull();
+		expect( report.textContent ).toContain( 'Action types' );
+		expect( report.textContent ).not.toContain( 'Operation types' );
+		expect( report.textContent ).toContain( 'Operation 6' );
+		expect( report.textContent ).not.toContain( 'Operation 7' );
+		expect(
+			report.querySelectorAll(
+				'.flavor-agent-activity-log__learning-report-row'
+			)
+		).toHaveLength( 6 );
+	} );
+
 	test( 'styles summary metrics as an auto-fit frosted card grid', () => {
 		expect( ACTIVITY_LOG_CSS ).toMatch(
 			/\.flavor-agent-activity-log__summary\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(\s*\d+px\s*,\s*1fr\)\)/s

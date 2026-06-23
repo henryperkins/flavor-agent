@@ -831,6 +831,7 @@ final class AISearchClientTest extends TestCase {
 		$this->assertCount( 2, $guidance );
 		$this->assertSame( 'ok', AISearchClient::get_runtime_state()['status'] );
 		$this->assertSame( 2, AISearchClient::get_runtime_state()['lastResultCount'] );
+		$this->assertSame( 'grounded', AISearchClient::get_runtime_state()['lastReason'] );
 	}
 
 	public function test_maybe_search_best_effort_returns_empty_and_marks_unreachable_on_transport_error(): void {
@@ -841,6 +842,8 @@ final class AISearchClientTest extends TestCase {
 
 		$this->assertSame( [], $guidance );
 		$this->assertSame( 'unreachable', AISearchClient::get_runtime_state()['status'] );
+		$this->assertSame( 'backend_unreachable', AISearchClient::get_runtime_state()['lastReason'] );
+		$this->assertSame( 'http_request_failed', AISearchClient::get_runtime_state()['lastErrorCode'] );
 	}
 
 	public function test_maybe_search_best_effort_uses_short_timeout_so_outages_cannot_stall_recommendations(): void {

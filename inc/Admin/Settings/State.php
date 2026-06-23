@@ -283,6 +283,25 @@ final class State {
 		return self::make_badge( __( 'Ready', 'flavor-agent' ), 'success' );
 	}
 
+	public static function get_docs_runtime_warning_message( array $runtime_state ): string {
+		$reason = sanitize_key( (string) ( $runtime_state['lastReason'] ?? '' ) );
+
+		if ( 'backend_unreachable' === $reason ) {
+			return __( 'The last live Developer Docs grounding request failed to reach the search backend. Recommendations still run without it.', 'flavor-agent' );
+		}
+
+		return __( 'The last live Developer Docs grounding request failed. Recommendations still run without it.', 'flavor-agent' );
+	}
+
+	public static function get_docs_runtime_reason_label( string $reason ): string {
+		return match ( sanitize_key( $reason ) ) {
+			'grounded' => __( 'Grounding attached successfully.', 'flavor-agent' ),
+			'live_no_results' => __( 'The last live docs request returned no trusted Developer Docs matches.', 'flavor-agent' ),
+			'backend_unreachable' => __( 'The last live docs request failed before any Developer Docs guidance could be attached.', 'flavor-agent' ),
+			default => $reason,
+		};
+	}
+
 	/**
 	 * @return array{label: string, tone: string}
 	 */
@@ -394,7 +413,9 @@ final class State {
 		) {
 			$status_blocks[] = [
 				'tone'    => 'warning',
-				'message' => __( 'Developer Docs grounding is temporarily unavailable (search backend unreachable). Recommendations still run without it.', 'flavor-agent' ),
+				'message' => self::get_docs_runtime_warning_message(
+					is_array( $state['runtime_docs_grounding'] ?? null ) ? $state['runtime_docs_grounding'] : []
+				),
 			];
 		}
 

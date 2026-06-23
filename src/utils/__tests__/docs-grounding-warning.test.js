@@ -33,6 +33,18 @@ describe( 'deriveDocsGroundingWarning', () => {
 			'running without developer-docs grounding'
 		);
 	} );
+
+	test( 'renders reason-specific copy for backend failures', () => {
+		const warning = deriveDocsGroundingWarning( {
+			available: false,
+			reason: 'backend_unreachable',
+			errorCode: 'http_request_failed',
+		} );
+
+		expect( warning.message ).toContain( 'docs search request failed' );
+		expect( warning.reason ).toBe( 'backend_unreachable' );
+		expect( warning.errorCode ).toBe( 'http_request_failed' );
+	} );
 } );
 
 describe( 'getDocsGroundingWarningMessage', () => {

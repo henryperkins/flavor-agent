@@ -797,14 +797,19 @@ final class RecommendationAbilityExecution {
 			return;
 		}
 
-		$reference = self::build_request_diagnostic_reference( $surface, $target, $document );
-		$after     = [
+		$reference      = self::build_request_diagnostic_reference( $surface, $target, $document );
+		$after          = [
 			'prompt'           => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
 			'resultCount'      => self::get_request_result_count( $surface, $payload ),
 			'explanation'      => \trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) ),
 			'diagnosticDetail' => self::build_request_diagnostic_detail( $surface, $payload ),
 			'requestContext'   => $request_context,
 		];
+		$docs_grounding = \is_array( $payload['docsGrounding'] ?? null ) ? $payload['docsGrounding'] : [];
+
+		if ( [] !== $docs_grounding ) {
+			$after['docsGrounding'] = $docs_grounding;
+		}
 
 		$pipeline_trace = self::build_request_diagnostic_pipeline_trace( $surface, $payload );
 		if ( [] !== $pipeline_trace ) {
@@ -841,6 +846,7 @@ final class RecommendationAbilityExecution {
 					'prompt'              => \trim( (string) ( $request_context['prompt'] ?? '' ) ),
 					'reference'           => $reference,
 					'ai'                  => \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [],
+					'docsGrounding'       => $docs_grounding,
 					'guidelineVersion'    => Guidelines::version_id(),
 					'learningAttribution' => \is_array( $payload['requestMeta']['learningAttribution'] ?? null )
 						? $payload['requestMeta']['learningAttribution']

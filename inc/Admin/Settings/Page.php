@@ -738,6 +738,9 @@ final class Page {
 		<p class="description">
 			<?php echo esc_html__( 'Built-in developer.wordpress.org grounding is active.', 'flavor-agent' ); ?>
 		</p>
+		<p class="description">
+			<?php echo esc_html__( 'This panel reports the last live recommendation-time docs request; it does not probe the backend when the page loads.', 'flavor-agent' ); ?>
+		</p>
 		<?php
 		$runtime_state = is_array( $state['runtime_docs_grounding'] ?? null ) ? $state['runtime_docs_grounding'] : [];
 		$diagnostics   = [];
@@ -752,6 +755,22 @@ final class Page {
 				/* translators: %d: number of guidance chunks returned by the last docs search. */
 				__( 'Last result count: %d.', 'flavor-agent' ),
 				(int) ( $runtime_state['lastResultCount'] ?? 0 )
+			);
+		}
+
+		if ( '' !== (string) ( $runtime_state['lastReason'] ?? '' ) ) {
+			$diagnostics[] = sprintf(
+				/* translators: %s: last docs search outcome label. */
+				__( 'Last outcome: %s', 'flavor-agent' ),
+				State::get_docs_runtime_reason_label( (string) ( $runtime_state['lastReason'] ?? '' ) )
+			);
+		}
+
+		if ( '' !== (string) ( $runtime_state['lastErrorCode'] ?? '' ) ) {
+			$diagnostics[] = sprintf(
+				/* translators: %s: last docs search error code. */
+				__( 'Last error code: %s.', 'flavor-agent' ),
+				(string) ( $runtime_state['lastErrorCode'] ?? '' )
 			);
 		}
 

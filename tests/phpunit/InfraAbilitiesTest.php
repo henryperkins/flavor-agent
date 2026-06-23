@@ -44,7 +44,7 @@ final class InfraAbilitiesTest extends TestCase {
 			$status['backends']['cloudflare_ai_search']['instanceId']
 		);
 		$this->assertSame(
-			[ 'status', 'lastSearchAt', 'lastResultCount' ],
+			[ 'status', 'lastSearchAt', 'lastResultCount', 'lastReason', 'lastErrorCode', 'lastErrorMessage' ],
 			array_keys( $status['backends']['cloudflare_ai_search']['runtime'] ?? [] )
 		);
 	}

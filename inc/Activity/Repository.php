@@ -4770,8 +4770,12 @@ final class Repository {
 		$values = [
 			self::get_first_string( $after, [ [ 'diagnosticDetail' ] ] ),
 			self::get_first_string( $after, [ [ 'explanation' ] ] ),
+			self::get_first_string( $after, [ [ 'docsGrounding', 'reason' ] ] ),
+			self::get_first_string( $after, [ [ 'docsGrounding', 'errorCode' ] ] ),
 			self::get_first_string( $request, [ [ 'error', 'code' ] ] ),
 			self::get_first_string( $request, [ [ 'error', 'message' ] ] ),
+			self::get_first_string( $request, [ [ 'docsGrounding', 'reason' ] ] ),
+			self::get_first_string( $request, [ [ 'docsGrounding', 'errorCode' ] ] ),
 			self::get_first_string( $request, [ [ 'ai', 'errorSummary', 'wrappedMessage' ] ] ),
 			self::get_first_string( $request, [ [ 'errorSummary', 'wrappedMessage' ] ] ),
 			self::get_first_string( $request, [ [ 'error', 'data', 'requestMeta', 'errorSummary', 'wrappedMessage' ] ] ),

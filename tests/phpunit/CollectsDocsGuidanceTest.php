@@ -45,6 +45,8 @@ final class CollectsDocsGuidanceTest extends TestCase {
 		$this->assertTrue( $result['available'] );
 		$this->assertSame( 2, $result['count'] );
 		$this->assertNotSame( '', $result['fingerprint'] );
+		$this->assertSame( 'grounded', $result['reason'] );
+		$this->assertSame( 'live', $result['source'] );
 	}
 
 	public function test_collect_result_signature_mode_is_cache_only(): void {
@@ -69,6 +71,8 @@ final class CollectsDocsGuidanceTest extends TestCase {
 
 		$this->assertFalse( $result['available'] );
 		$this->assertSame( 0, $result['count'] );
+		$this->assertSame( 'signature_cache_miss', $result['reason'] );
+		$this->assertSame( 'cache', $result['source'] );
 		$this->assertSame( [], WordPressTestState::$last_remote_post, 'signature mode must not hit the search backend' );
 	}
 
@@ -101,6 +105,9 @@ final class CollectsDocsGuidanceTest extends TestCase {
 		$this->assertFalse( $result['available'], 'roadmap-only guidance must not mask an ungrounded run' );
 		$this->assertSame( 0, $result['count'] );
 		$this->assertSame( [], $result['sourceTypes'] );
+		$this->assertSame( 'backend_unreachable', $result['reason'] );
+		$this->assertSame( 'live', $result['source'] );
+		$this->assertSame( 'http_request_failed', $result['errorCode'] );
 		$this->assertCount( 1, $result['guidance'], 'roadmap chunks still ride along for prompt assembly' );
 		$this->assertSame( 'roadmap', $result['guidance'][0]['sourceType'] );
 	}

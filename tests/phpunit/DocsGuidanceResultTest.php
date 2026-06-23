@@ -42,13 +42,14 @@ final class DocsGuidanceResultTest extends TestCase {
 
 		$summary = DocsGuidanceResult::public_summary( $result );
 		$this->assertSame(
-			[ 'available', 'sourceTypes', 'count', 'contentFingerprint', 'runtimeFingerprint' ],
+			[ 'available', 'sourceTypes', 'count', 'contentFingerprint', 'runtimeFingerprint', 'reason', 'source', 'errorCode' ],
 			array_keys( $summary )
 		);
 		$this->assertTrue( $summary['available'] );
 		$this->assertSame( 2, $summary['count'] );
 		$this->assertSame( $result['contentFingerprint'], $summary['contentFingerprint'] );
 		$this->assertSame( $result['runtimeFingerprint'], $summary['runtimeFingerprint'] );
+		$this->assertSame( 'grounded', $summary['reason'] );
 	}
 
 	public function test_from_guidance_empty_is_unavailable_with_stable_fingerprint(): void {
@@ -63,6 +64,7 @@ final class DocsGuidanceResultTest extends TestCase {
 		$this->assertFalse( $summary['available'] );
 		$this->assertSame( 0, $summary['count'] );
 		$this->assertSame( [], $summary['sourceTypes'] );
+		$this->assertSame( 'unavailable', $summary['reason'] );
 	}
 
 	public function test_fingerprint_changes_when_guidance_content_changes(): void {

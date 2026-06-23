@@ -8,16 +8,22 @@ use FlavorAgent\Support\DocsGroundingSourcePolicy;
 
 final class AISearchClient {
 
-	private const DEFAULT_MAX_RESULTS       = 4;
-	private const MAX_MAX_RESULTS           = 8;
-	private const CACHE_KEY_PREFIX          = 'flavor_agent_ai_search_';
-	private const CACHE_SCHEMA_VERSION      = 3;
-	private const CACHE_TTL                 = 21600;
-	private const BEST_EFFORT_TIMEOUT       = 5;
-	private const VALIDATION_PROBE_QUERY    = 'block editor';
-	private const VALIDATION_PROBE_RESULTS  = 3;
-	private const DEFAULT_PUBLIC_SEARCH_URL = 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search';
-	private const PUBLIC_HOST_SUFFIX        = '.search.ai.cloudflare.com';
+	private const DEFAULT_MAX_RESULTS        = 4;
+	private const MAX_MAX_RESULTS            = 8;
+	private const CACHE_KEY_PREFIX           = 'flavor_agent_ai_search_';
+	private const CACHE_SCHEMA_VERSION       = 3;
+	private const CACHE_TTL                  = 21600;
+	private const BEST_EFFORT_TIMEOUT        = 5;
+	private const VALIDATION_PROBE_QUERY     = 'block editor';
+	private const VALIDATION_PROBE_RESULTS   = 3;
+	private const DEFAULT_PUBLIC_SEARCH_URL  = 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search';
+	private const PUBLIC_HOST_SUFFIX         = '.search.ai.cloudflare.com';
+	private const REASON_GROUNDED            = 'grounded';
+	private const REASON_QUERY_EMPTY         = 'query_empty';
+	private const REASON_UNCONFIGURED        = 'unconfigured';
+	private const REASON_CACHED_NO_RESULTS   = 'cached_no_results';
+	private const REASON_LIVE_NO_RESULTS     = 'live_no_results';
+	private const REASON_BACKEND_UNREACHABLE = 'backend_unreachable';
 
 	public const RUNTIME_STATE_OPTION = 'flavor_agent_docs_runtime_state';
 
@@ -167,39 +173,118 @@ final class AISearchClient {
 	 * @return array<int, array<string, mixed>>
 	 */
 	public static function maybe_search_best_effort( string $query, ?int $max_results = null ): array {
+		$result = self::maybe_search_best_effort_result( $query, $max_results );
+
+		return $result['guidance'];
+	}
+
+	/**
+	 * Best-effort search plus diagnostics for recommendation-time docs grounding.
+	 *
+	 * @return array{
+	 *   guidance: array<int, array<string, mixed>>,
+	 *   diagnostics: array{reason: string, source: string, errorCode: string}
+	 * }
+	 */
+	public static function maybe_search_best_effort_result( string $query, ?int $max_results = null ): array {
 		$query = sanitize_textarea_field( $query );
 
-		if ( $query === '' || ! self::is_configured() ) {
-			return [];
+		if ( $query === '' ) {
+			return [
+				'guidance'    => [],
+				'diagnostics' => self::build_best_effort_diagnostics(
+					self::REASON_QUERY_EMPTY,
+					'request'
+				),
+			];
+		}
+
+		if ( ! self::is_configured() ) {
+			return [
+				'guidance'    => [],
+				'diagnostics' => self::build_best_effort_diagnostics(
+					self::REASON_UNCONFIGURED,
+					'config'
+				),
+			];
 		}
 
 		$limit  = self::normalize_max_results( $max_results );
 		$cached = self::read_cached_guidance( $query, $limit );
 
 		if ( is_array( $cached ) ) {
-			return $cached;
+			return [
+				'guidance'    => $cached,
+				'diagnostics' => self::build_best_effort_diagnostics(
+					[] === $cached ? self::REASON_CACHED_NO_RESULTS : self::REASON_GROUNDED,
+					'cache'
+				),
+			];
 		}
 
 		$result = self::search_live( $query, $limit, self::BEST_EFFORT_TIMEOUT );
 
 		if ( is_wp_error( $result ) ) {
-			self::write_runtime_signal( 'unreachable', 0 );
+			self::write_runtime_signal(
+				[
+					'status'           => 'unreachable',
+					'lastResultCount'  => 0,
+					'lastReason'       => self::REASON_BACKEND_UNREACHABLE,
+					'lastErrorCode'    => (string) $result->get_error_code(),
+					'lastErrorMessage' => (string) $result->get_error_message(),
+				]
+			);
 
-			return [];
+			return [
+				'guidance'    => [],
+				'diagnostics' => self::build_best_effort_diagnostics(
+					self::REASON_BACKEND_UNREACHABLE,
+					'live',
+					(string) $result->get_error_code()
+				),
+			];
 		}
 
-		self::write_runtime_signal( 'ok', count( $result['guidance'] ) );
+		$guidance = is_array( $result['guidance'] ?? null ) ? $result['guidance'] : [];
+		$reason   = [] === $guidance ? self::REASON_LIVE_NO_RESULTS : self::REASON_GROUNDED;
 
-		return $result['guidance'];
+		self::write_runtime_signal(
+			[
+				'status'           => 'ok',
+				'lastResultCount'  => count( $guidance ),
+				'lastReason'       => $reason,
+				'lastErrorCode'    => '',
+				'lastErrorMessage' => '',
+			]
+		);
+
+		return [
+			'guidance'    => $guidance,
+			'diagnostics' => self::build_best_effort_diagnostics( $reason, 'live' ),
+		];
 	}
 
-	private static function write_runtime_signal( string $status, int $count ): void {
+	/**
+	 * @param array{
+	 *   status: string,
+	 *   lastResultCount: int,
+	 *   lastReason?: string,
+	 *   lastErrorCode?: string,
+	 *   lastErrorMessage?: string
+	 * } $state
+	 */
+	private static function write_runtime_signal( array $state ): void {
 		update_option(
 			self::RUNTIME_STATE_OPTION,
 			[
-				'status'          => $status,
-				'lastSearchAt'    => gmdate( 'Y-m-d H:i:s' ),
-				'lastResultCount' => $count,
+				'status'           => in_array( (string) ( $state['status'] ?? '' ), [ 'ok', 'unreachable' ], true )
+					? (string) $state['status']
+					: 'ok',
+				'lastSearchAt'     => gmdate( 'Y-m-d H:i:s' ),
+				'lastResultCount'  => max( 0, (int) ( $state['lastResultCount'] ?? 0 ) ),
+				'lastReason'       => sanitize_key( (string) ( $state['lastReason'] ?? '' ) ),
+				'lastErrorCode'    => sanitize_key( (string) ( $state['lastErrorCode'] ?? '' ) ),
+				'lastErrorMessage' => sanitize_text_field( (string) ( $state['lastErrorMessage'] ?? '' ) ),
 			],
 			false
 		);
@@ -209,14 +294,24 @@ final class AISearchClient {
 	 * Minimal runtime signal for operators: the docs backend is reachable, was
 	 * unreachable on the last live search, or grounding is off (unconfigured).
 	 *
-	 * @return array{status: string, lastSearchAt: string, lastResultCount: int}
+	 * @return array{
+	 *   status: string,
+	 *   lastSearchAt: string,
+	 *   lastResultCount: int,
+	 *   lastReason: string,
+	 *   lastErrorCode: string,
+	 *   lastErrorMessage: string
+	 * }
 	 */
 	public static function get_runtime_state(): array {
 		if ( ! self::is_configured() ) {
 			return [
-				'status'          => 'off',
-				'lastSearchAt'    => '',
-				'lastResultCount' => 0,
+				'status'           => 'off',
+				'lastSearchAt'     => '',
+				'lastResultCount'  => 0,
+				'lastReason'       => '',
+				'lastErrorCode'    => '',
+				'lastErrorMessage' => '',
 			];
 		}
 
@@ -227,11 +322,25 @@ final class AISearchClient {
 		}
 
 		return [
-			'status'          => in_array( (string) ( $state['status'] ?? '' ), [ 'ok', 'unreachable' ], true )
+			'status'           => in_array( (string) ( $state['status'] ?? '' ), [ 'ok', 'unreachable' ], true )
 				? (string) $state['status']
 				: 'ok',
-			'lastSearchAt'    => sanitize_text_field( (string) ( $state['lastSearchAt'] ?? '' ) ),
-			'lastResultCount' => (int) ( $state['lastResultCount'] ?? 0 ),
+			'lastSearchAt'     => sanitize_text_field( (string) ( $state['lastSearchAt'] ?? '' ) ),
+			'lastResultCount'  => (int) ( $state['lastResultCount'] ?? 0 ),
+			'lastReason'       => sanitize_key( (string) ( $state['lastReason'] ?? '' ) ),
+			'lastErrorCode'    => sanitize_key( (string) ( $state['lastErrorCode'] ?? '' ) ),
+			'lastErrorMessage' => sanitize_text_field( (string) ( $state['lastErrorMessage'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * @return array{reason: string, source: string, errorCode: string}
+	 */
+	private static function build_best_effort_diagnostics( string $reason, string $source, string $error_code = '' ): array {
+		return [
+			'reason'    => sanitize_key( $reason ),
+			'source'    => sanitize_key( $source ),
+			'errorCode' => sanitize_key( $error_code ),
 		];
 	}
 

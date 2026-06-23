@@ -42,29 +42,47 @@ final class CollectsDocsGuidance {
 			$parts['docs'],
 			(string) ( $options['mode'] ?? 'recommendation' ),
 			'best-effort',
-			self::merge_parts( $parts['docs'], $parts['roadmap'] )
+			self::merge_parts( $parts['docs'], $parts['roadmap'] ),
+			$parts['docsDiagnostics']
 		);
 	}
 
 	/**
 	 * @param callable(array<string, mixed>, string): string $build_query
 	 * @param array<string, mixed> $context
-	 * @return array{docs: array<int, array<string, mixed>>, roadmap: array<int, array<string, mixed>>}
+	 * @return array{
+	 *   docs: array<int, array<string, mixed>>,
+	 *   docsDiagnostics: array<string, string>,
+	 *   roadmap: array<int, array<string, mixed>>
+	 * }
 	 */
 	private static function collect_parts( callable $build_query, array $context, string $prompt, array $options ): array {
 		$query = (string) $build_query( $context, $prompt );
 
 		if ( '' === $query ) {
-			$docs_guidance = [];
+			$docs_guidance    = [];
+			$docs_diagnostics = [
+				'reason'    => 'query_empty',
+				'source'    => 'request',
+				'errorCode' => '',
+			];
 		} elseif ( 'signature' === (string) ( $options['mode'] ?? 'recommendation' ) ) {
-			$docs_guidance = AISearchClient::maybe_search( $query );
+			$docs_guidance    = AISearchClient::maybe_search( $query );
+			$docs_diagnostics = [
+				'reason'    => [] === $docs_guidance ? 'signature_cache_miss' : 'grounded',
+				'source'    => 'cache',
+				'errorCode' => '',
+			];
 		} else {
-			$docs_guidance = AISearchClient::maybe_search_best_effort( $query );
+			$docs_result      = AISearchClient::maybe_search_best_effort_result( $query );
+			$docs_guidance    = is_array( $docs_result['guidance'] ?? null ) ? $docs_result['guidance'] : [];
+			$docs_diagnostics = is_array( $docs_result['diagnostics'] ?? null ) ? $docs_result['diagnostics'] : [];
 		}
 
 		return [
-			'docs'    => $docs_guidance,
-			'roadmap' => CoreRoadmapGuidance::collect( $context, [ 'sideEffects' => false ] ),
+			'docs'            => $docs_guidance,
+			'docsDiagnostics' => $docs_diagnostics,
+			'roadmap'         => CoreRoadmapGuidance::collect( $context, [ 'sideEffects' => false ] ),
 		];
 	}
 

@@ -2506,9 +2506,12 @@ final class SettingsTest extends TestCase {
 	public function test_render_page_shows_single_unreachable_warning_in_developer_docs_group(): void {
 		WordPressTestState::$options = [
 			AISearchClient::RUNTIME_STATE_OPTION => [
-				'status'          => 'unreachable',
-				'lastSearchAt'    => '2026-06-11 00:00:00',
-				'lastResultCount' => 0,
+				'status'           => 'unreachable',
+				'lastSearchAt'     => '2026-06-11 00:00:00',
+				'lastResultCount'  => 0,
+				'lastReason'       => 'backend_unreachable',
+				'lastErrorCode'    => 'http_request_failed',
+				'lastErrorMessage' => 'Connection timed out',
 			],
 		];
 
@@ -2517,12 +2520,11 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
-		$this->assertSame(
-			1,
-			substr_count( $output, 'temporarily unavailable' ),
-			'unreachable backend yields exactly one docs warning'
-		);
+		$this->assertStringContainsString( 'The last live Developer Docs grounding request failed to reach the search backend.', $output );
 		$this->assertStringContainsString( 'Recommendations still run without it.', $output );
+		$this->assertStringContainsString( 'it does not probe the backend when the page loads.', $output );
+		$this->assertStringContainsString( 'Last outcome: The last live docs request failed before any Developer Docs guidance could be attached.', $output );
+		$this->assertStringContainsString( 'Last error code: http_request_failed.', $output );
 	}
 
 	public function test_render_page_shows_no_docs_warning_when_runtime_state_is_ok(): void {

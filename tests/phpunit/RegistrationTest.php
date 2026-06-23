@@ -1634,7 +1634,7 @@ final class RegistrationTest extends TestCase {
 
 			$this->assertSame( 'object', $properties['docsGrounding']['type'] ?? null, $ability_id );
 			$this->assertSame(
-				[ 'available', 'sourceTypes', 'count', 'contentFingerprint', 'runtimeFingerprint' ],
+				[ 'available', 'sourceTypes', 'count', 'contentFingerprint', 'runtimeFingerprint', 'reason', 'source', 'errorCode' ],
 				array_keys( $docs_grounding_properties ),
 				$ability_id
 			);
@@ -1643,6 +1643,9 @@ final class RegistrationTest extends TestCase {
 			$this->assertSame( 'integer', $docs_grounding_properties['count']['type'] ?? null, $ability_id );
 			$this->assertSame( 'string', $docs_grounding_properties['contentFingerprint']['type'] ?? null, $ability_id );
 			$this->assertSame( 'string', $docs_grounding_properties['runtimeFingerprint']['type'] ?? null, $ability_id );
+			$this->assertSame( 'string', $docs_grounding_properties['reason']['type'] ?? null, $ability_id );
+			$this->assertSame( 'string', $docs_grounding_properties['source']['type'] ?? null, $ability_id );
+			$this->assertSame( 'string', $docs_grounding_properties['errorCode']['type'] ?? null, $ability_id );
 			$this->assertSame( 'string', $properties['docsGroundingFingerprint']['type'] ?? null, $ability_id );
 		}
 	}
@@ -1990,6 +1993,10 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'integer',
 			$status_ability['output_schema']['properties']['backends']['properties']['cloudflare_ai_search']['properties']['runtime']['properties']['lastResultCount']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$status_ability['output_schema']['properties']['backends']['properties']['cloudflare_ai_search']['properties']['runtime']['properties']['lastReason']['type'] ?? null
 		);
 
 		$this->assertIsArray( $tokens_ability );

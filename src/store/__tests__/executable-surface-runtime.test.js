@@ -50,7 +50,12 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 	test( 'keeps matching reviews fresh during a docs grounding outage and attaches the soft warning', async () => {
 		const { setReviewState, thunk } = buildReviewThunk( {
 			reviewContextSignature: 'review-stored',
-			docsGrounding: { available: false, sourceTypes: [], count: 0 },
+			docsGrounding: {
+				available: false,
+				sourceTypes: [],
+				count: 0,
+				reason: 'signature_cache_miss',
+			},
 		} );
 		const dispatch = jest.fn();
 
@@ -84,7 +89,7 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 		expect( result.ok ).toBe( true );
 		expect( result.reviewContextSignature ).toBe( 'review-stored' );
 		expect( result.docsGroundingWarning.message ).toContain(
-			'running without developer-docs grounding'
+			'cache-only and no docs result was cached'
 		);
 	} );
 

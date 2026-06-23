@@ -304,6 +304,9 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 				'docsGrounding' => [
 					'contentFingerprint' => 'docs-content:v1',
 					'runtimeFingerprint' => 'docs-runtime:v1',
+					'reason'             => 'cached_no_results',
+					'source'             => 'cache',
+					'errorCode'          => '',
 				],
 				'requestMeta'   => [
 					'provider' => 'anthropic',
@@ -331,6 +334,7 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		$request = json_decode( (string) ( $entries[0]['request_json'] ?? '' ), true );
 		$this->assertSame( $attribution, $request['learningAttribution'] ?? null );
 		$this->assertSame( $attribution, $request['ai']['learningAttribution'] ?? null );
+		$this->assertSame( 'cached_no_results', $request['docsGrounding']['reason'] ?? null );
 	}
 
 	public function test_execute_stamps_guideline_version_in_request_diagnostic_activity(): void {
