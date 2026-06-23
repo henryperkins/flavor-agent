@@ -277,6 +277,35 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'expired', $overdue['apply']['status'] );
 	}
 
+	public function test_pending_external_apply_notification_snapshot_returns_latest_active_pending_row(): void {
+		$this->create_pending_entry(
+			[
+				'id'        => 'pending-older',
+				'timestamp' => '2026-06-10T01:00:00+00:00',
+			]
+		);
+		$this->create_pending_entry(
+			[
+				'id'        => 'pending-newer',
+				'timestamp' => '2026-06-10T02:00:00+00:00',
+			]
+		);
+		$this->create_pending_entry(
+			[
+				'id'        => 'pending-overdue',
+				'timestamp' => '2026-06-10T03:00:00+00:00',
+				'request'   => [ 'apply' => [ 'expiresAt' => gmdate( 'c', time() - 60 ) ] ],
+			]
+		);
+
+		$snapshot = Repository::get_pending_external_apply_notification_snapshot();
+
+		$this->assertSame( 2, $snapshot['count'] );
+		$this->assertIsArray( $snapshot['latest'] );
+		$this->assertSame( 'pending-newer', $snapshot['latest']['id'] );
+		$this->assertSame( 'pending', $snapshot['latest']['apply']['status'] );
+	}
+
 	public function test_non_executed_rows_do_not_block_ordered_undo_of_older_executed_rows(): void {
 		$executed = Repository::create(
 			[
