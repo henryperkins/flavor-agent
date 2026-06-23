@@ -33,6 +33,7 @@ final class UninstallTest extends TestCase {
 			'flavor_agent_sync_lock'                => 1,
 			'flavor_agent_core_roadmap_guidance_v1' => [],
 			'flavor_agent_core_roadmap_guidance_schedule_lock' => 1,
+			'flavor_agent_pending_external_apply_notice_snapshot' => [],
 		];
 		WordPressTestState::$scheduled_events                              = [
 			'flavor_agent_reindex_patterns'            => [ 'hook' => 'flavor_agent_reindex_patterns' ],

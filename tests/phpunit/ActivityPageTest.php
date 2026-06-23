@@ -49,6 +49,23 @@ final class ActivityPageTest extends TestCase {
 		);
 	}
 
+	public function test_add_menu_registers_notice_and_known_page_load_hooks(): void {
+		ActivityPage::add_menu();
+
+		$this->assertSame(
+			10,
+			has_action( 'admin_notices', [ ActivityPage::class, 'render_pending_external_apply_notice' ] )
+		);
+		$this->assertSame(
+			10,
+			has_action( 'load-settings_page_flavor-agent-activity', [ ActivityPage::class, 'handle_page_load' ] )
+		);
+		$this->assertSame(
+			10,
+			has_action( 'load-admin_page_flavor-agent-activity', [ ActivityPage::class, 'handle_page_load' ] )
+		);
+	}
+
 	public function test_render_pending_external_apply_notice_includes_context_and_link_for_eligible_admins(): void {
 		$this->create_pending_entry(
 			[
@@ -91,11 +108,26 @@ final class ActivityPageTest extends TestCase {
 		$this->assertSame( '', trim( $output ) );
 	}
 
-	public function test_render_pending_external_apply_notice_skips_activity_page_to_avoid_redundancy(): void {
+	public function test_render_pending_external_apply_notice_skips_activity_page_get_requests(): void {
 		$this->create_pending_entry();
 		WordPressTestState::$capabilities['manage_options']     = true;
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
 		$_GET['page'] = 'flavor-agent-activity';
+
+		ob_start();
+		ActivityPage::render_pending_external_apply_notice();
+		$output = (string) ob_get_clean();
+
+		$this->assertSame( '', trim( $output ) );
+	}
+
+	public function test_render_pending_external_apply_notice_skips_activity_screen_requests(): void {
+		$this->create_pending_entry();
+		WordPressTestState::$capabilities['manage_options']     = true;
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		WordPressTestState::$current_screen                     = (object) [
+			'id' => 'settings_page_flavor-agent-activity',
+		];
 
 		ob_start();
 		ActivityPage::render_pending_external_apply_notice();
@@ -148,6 +180,7 @@ final class ActivityPageTest extends TestCase {
 			$overrides
 		);
 
-		Repository::create( $entry );
+		$created = Repository::create( $entry );
+		$this->assertIsArray( $created );
 	}
 }

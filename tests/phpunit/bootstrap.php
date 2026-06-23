@@ -2621,6 +2621,21 @@ namespace {
 		}
 	}
 
+	if (! function_exists('add_submenu_page')) {
+		function add_submenu_page(
+			string $parent_slug,
+			string $page_title,
+			string $menu_title,
+			string $capability,
+			string $menu_slug,
+			$callback = ''
+		): string {
+			unset($parent_slug, $page_title, $menu_title, $capability, $callback);
+
+			return 'settings_page_' . $menu_slug;
+		}
+	}
+
 	if (! function_exists('rest_url')) {
 		function rest_url(string $path = ''): string
 		{

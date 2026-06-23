@@ -27,6 +27,7 @@ final class Repository {
 	private const ADMIN_HISTORY_QUERY_ENTITY_BATCH_SIZE   = 50;
 	private const ADMIN_HISTORY_QUERY_KEY_SEPARATOR       = "\x1F";
 	private const ADMIN_PROJECTION_SELECT_SQL             = 'id, activity_id, user_id, surface, entity_type, entity_ref, document_scope_key, activity_type, suggestion, undo_state, execution_result, created_at, admin_post_type, admin_entity_id, admin_block_path, admin_operation_type, admin_operation_label, admin_provider, admin_model, admin_provider_path, admin_configuration_owner, admin_credential_source, admin_selected_provider, admin_request_ability, admin_request_route, admin_request_reference, admin_request_prompt, admin_search_text';
+	private const PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY = 'flavor_agent_pending_external_apply_notice_snapshot';
 	private const ADMIN_PROJECTION_VARCHAR_LIMITS         = [
 		'admin_post_type'           => 64,
 		'admin_entity_id'           => 191,
@@ -226,6 +227,10 @@ final class Repository {
 				'Flavor Agent could not persist the activity entry.',
 				[ 'status' => 500 ]
 			);
+		}
+
+		if ( self::is_pending_external_style_apply_entry( $normalized ) ) {
+			self::invalidate_pending_external_apply_notification_snapshot_cache();
 		}
 
 		$stored = self::find( $activity_id );
@@ -914,6 +919,8 @@ final class Repository {
 			);
 		}
 
+		self::invalidate_pending_external_apply_notification_snapshot_cache();
+
 		$stored = self::find( $activity_id );
 
 		if ( is_array( $stored ) ) {
@@ -1023,11 +1030,74 @@ final class Repository {
 	 * }
 	 */
 	public static function get_pending_external_apply_notification_snapshot(): array {
+		$cached = self::get_cached_pending_external_apply_notification_snapshot();
+
+		if ( null === $cached ) {
+			$cached = self::build_pending_external_apply_notification_snapshot();
+			self::cache_pending_external_apply_notification_snapshot( $cached );
+		}
+
+		return [
+			'count'  => max( 0, (int) ( $cached['count'] ?? 0 ) ),
+			'latest' => is_array( $cached['latest'] ?? null ) ? $cached['latest'] : null,
+		];
+	}
+
+	/**
+	 * @return array{count: int, latest: array<string, mixed>|null, nextExpiryAt: string}|null
+	 */
+	private static function get_cached_pending_external_apply_notification_snapshot(): ?array {
+		if ( ! function_exists( 'get_transient' ) ) {
+			return null;
+		}
+
+		$cached = get_transient( self::PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY );
+
+		if ( ! is_array( $cached ) ) {
+			return null;
+		}
+
+		$count          = max( 0, (int) ( $cached['count'] ?? 0 ) );
+		$latest         = is_array( $cached['latest'] ?? null ) ? $cached['latest'] : null;
+		$next_expiry_at = trim( (string) ( $cached['nextExpiryAt'] ?? '' ) );
+
+		if ( 0 === $count ) {
+			return [
+				'count'        => 0,
+				'latest'       => null,
+				'nextExpiryAt' => '',
+			];
+		}
+
+		if ( null === $latest ) {
+			return null;
+		}
+
+		if ( '' !== $next_expiry_at ) {
+			$next_expiry = strtotime( $next_expiry_at );
+
+			if ( false === $next_expiry || $next_expiry <= time() ) {
+				return null;
+			}
+		}
+
+		return [
+			'count'        => $count,
+			'latest'       => $latest,
+			'nextExpiryAt' => $next_expiry_at,
+		];
+	}
+
+	/**
+	 * @return array{count: int, latest: array<string, mixed>|null, nextExpiryAt: string}
+	 */
+	private static function build_pending_external_apply_notification_snapshot(): array {
 		global $wpdb;
 
 		$snapshot = [
-			'count'  => 0,
-			'latest' => null,
+			'count'        => 0,
+			'latest'       => null,
+			'nextExpiryAt' => '',
 		];
 
 		if ( ! is_object( $wpdb ) ) {
@@ -1035,15 +1105,17 @@ final class Repository {
 		}
 
 		$sql = $wpdb->prepare(
-			'SELECT * FROM %i WHERE execution_result = %s ORDER BY created_at DESC, id DESC',
+			'SELECT activity_id, user_id, surface, target_json, request_json, document_json, execution_result FROM %i WHERE execution_result = %s ORDER BY created_at DESC, id DESC',
 			self::table_name(),
 			'pending'
 		);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads pending external-apply rows from the plugin-owned activity table for admin notice context; prepared above.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Rebuilds the admin notice snapshot from the plugin-owned activity table only when the cache is invalid or stale.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
-			$entry = self::maybe_expire_pending_apply( Serializer::hydrate_row( $row ) );
+			$entry = self::maybe_expire_pending_external_apply_notice_entry(
+				self::hydrate_pending_external_apply_notice_entry( $row )
+			);
 
 			if ( ! self::is_pending_external_style_apply_entry( $entry ) ) {
 				continue;
@@ -1054,9 +1126,104 @@ final class Repository {
 			if ( null === $snapshot['latest'] ) {
 				$snapshot['latest'] = $entry;
 			}
+
+			self::track_pending_external_apply_notice_expiry( $snapshot, (string) ( $entry['apply']['expiresAt'] ?? '' ) );
 		}
 
 		return $snapshot;
+	}
+
+	/**
+	 * @param array{count: int, latest: array<string, mixed>|null, nextExpiryAt: string} $snapshot
+	 */
+	private static function cache_pending_external_apply_notification_snapshot( array $snapshot ): void {
+		if ( ! function_exists( 'set_transient' ) ) {
+			return;
+		}
+
+		$expiration = defined( 'DAY_IN_SECONDS' ) ? (int) DAY_IN_SECONDS : 86400;
+
+		set_transient(
+			self::PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY,
+			[
+				'count'        => max( 0, (int) ( $snapshot['count'] ?? 0 ) ),
+				'latest'       => is_array( $snapshot['latest'] ?? null ) ? $snapshot['latest'] : null,
+				'nextExpiryAt' => trim( (string) ( $snapshot['nextExpiryAt'] ?? '' ) ),
+			],
+			$expiration
+		);
+	}
+
+	private static function invalidate_pending_external_apply_notification_snapshot_cache(): void {
+		if ( function_exists( 'delete_transient' ) ) {
+			delete_transient( self::PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY );
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @return array<string, mixed>
+	 */
+	private static function hydrate_pending_external_apply_notice_entry( array $row ): array {
+		$request = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
+		$user_id = (int) ( $row['user_id'] ?? 0 );
+		$entry   = [
+			'id'              => trim( (string) ( $row['activity_id'] ?? '' ) ),
+			'surface'         => trim( (string) ( $row['surface'] ?? '' ) ),
+			'target'          => Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' ),
+			'document'        => Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' ),
+			'executionResult' => trim( (string) ( $row['execution_result'] ?? '' ) ),
+			'userId'          => $user_id,
+			'userLabel'       => self::resolve_admin_user_label( $user_id ),
+		];
+
+		if ( is_array( $request['apply'] ?? null ) ) {
+			$entry['apply'] = $request['apply'];
+		}
+
+		return $entry;
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 * @return array<string, mixed>
+	 */
+	private static function maybe_expire_pending_external_apply_notice_entry( array $entry ): array {
+		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return $entry;
+		}
+
+		$expires_at = strtotime( (string) ( $apply['expiresAt'] ?? '' ) );
+
+		if ( false === $expires_at || $expires_at > time() ) {
+			return $entry;
+		}
+
+		$expired = self::transition_external_apply(
+			(string) ( $entry['id'] ?? '' ),
+			[ 'applyStatus' => 'expired' ]
+		);
+
+		return is_array( $expired ) ? $expired : $entry;
+	}
+
+	/**
+	 * @param array{count: int, latest: array<string, mixed>|null, nextExpiryAt: string} $snapshot
+	 */
+	private static function track_pending_external_apply_notice_expiry( array &$snapshot, string $expires_at ): void {
+		$timestamp = strtotime( $expires_at );
+
+		if ( false === $timestamp ) {
+			return;
+		}
+
+		$current = strtotime( $snapshot['nextExpiryAt'] );
+
+		if ( '' === $snapshot['nextExpiryAt'] || false === $current || $timestamp < $current ) {
+			$snapshot['nextExpiryAt'] = $expires_at;
+		}
 	}
 
 	/**
@@ -1086,6 +1253,10 @@ final class Repository {
 				gmdate( 'Y-m-d H:i:s', $unix_timestamp )
 			)
 		);
+
+		if ( is_int( $deleted ) && $deleted > 0 ) {
+			self::invalidate_pending_external_apply_notification_snapshot_cache();
+		}
 
 		return is_int( $deleted ) ? $deleted : 0;
 	}
@@ -4734,7 +4905,9 @@ final class Repository {
 	 */
 	private static function is_pending_external_style_apply_entry( array $entry ): bool {
 		$surface = trim( (string) ( $entry['surface'] ?? '' ) );
-		$apply   = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+		$apply   = is_array( $entry['apply'] ?? null )
+			? $entry['apply']
+			: ( is_array( $entry['request']['apply'] ?? null ) ? $entry['request']['apply'] : [] );
 
 		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
 			return false;
