@@ -676,7 +676,15 @@ final class Repository {
 			return [];
 		}
 
-		$reverts = AttestationRepository::find_reverts_by_attestation_ids(
+		$reverts    = AttestationRepository::find_reverts_by_attestation_ids(
+			array_values(
+				array_map(
+					static fn ( array $row ): string => (string) ( $row['attestation_id'] ?? '' ),
+					$attestations
+				)
+			)
+		);
+		$supersedes = AttestationRepository::find_supersedes_by_attestation_ids(
 			array_values(
 				array_map(
 					static fn ( array $row ): string => (string) ( $row['attestation_id'] ?? '' ),
@@ -688,11 +696,17 @@ final class Repository {
 		foreach ( $attestations as $activity_id => $row ) {
 			$attestation_id = trim( (string) ( $row['attestation_id'] ?? '' ) );
 
-			if ( '' === $attestation_id || ! isset( $reverts[ $attestation_id ] ) ) {
+			if ( '' === $attestation_id ) {
 				continue;
 			}
 
-			$attestations[ $activity_id ]['reverted_by_attestation_id'] = $reverts[ $attestation_id ]['attestation_id'] ?? null;
+			if ( isset( $reverts[ $attestation_id ] ) ) {
+				$attestations[ $activity_id ]['reverted_by_attestation_id'] = $reverts[ $attestation_id ]['attestation_id'] ?? null;
+			}
+
+			if ( isset( $supersedes[ $attestation_id ] ) ) {
+				$attestations[ $activity_id ]['superseded_by_attestation_id'] = $supersedes[ $attestation_id ]['attestation_id'] ?? null;
+			}
 		}
 
 		return $attestations;

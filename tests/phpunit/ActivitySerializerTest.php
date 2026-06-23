@@ -450,20 +450,40 @@ final class ActivitySerializerTest extends TestCase {
 
 		$this->assertSame(
 			[
-				'id'                      => 'att_apply',
-				'type'                    => 'apply',
-				'surface'                 => 'global-styles',
-				'subjectName'             => 'wp_global_styles:81',
-				'subjectScope'            => 'global-styles',
-				'keyId'                   => 'site-key',
-				'createdAt'               => '2026-06-22T10:00:00+00:00',
-				'verifyUrl'               => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_apply',
-				'subjectStateUrl'         => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_apply/subject-state',
-				'revertedByAttestationId' => 'att_revert',
-				'revertedByVerifyUrl'     => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_revert',
+				'id'                        => 'att_apply',
+				'type'                      => 'apply',
+				'surface'                   => 'global-styles',
+				'subjectName'               => 'wp_global_styles:81',
+				'subjectScope'              => 'global-styles',
+				'keyId'                     => 'site-key',
+				'createdAt'                 => '2026-06-22T10:00:00+00:00',
+				'verificationUrl'           => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_apply/verification',
+				'verifyUrl'                 => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_apply',
+				'subjectStateUrl'           => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_apply/subject-state',
+				'revertedByAttestationId'   => 'att_revert',
+				'revertedByVerifyUrl'       => 'https://example.test/wp-json/flavor-agent/v1/attestations/att_revert',
+				'supersededByAttestationId' => null,
+				'supersededByVerifyUrl'     => null,
 			],
 			$artifact
 		);
+	}
+
+	public function test_normalize_attestation_artifact_exposes_superseded_apply_reference(): void {
+		$artifact = Serializer::normalize_attestation_artifact(
+			[
+				'attestation_id'               => 'att_apply',
+				'surface'                      => 'global-styles',
+				'subject_name'                 => 'wp_global_styles:81',
+				'subject_scope'                => 'global-styles',
+				'key_id'                       => 'key-1',
+				'created_at'                   => '2026-06-22 00:00:00',
+				'superseded_by_attestation_id' => 'att_successor',
+			]
+		);
+
+		$this->assertSame( 'att_successor', $artifact['supersededByAttestationId'] );
+		$this->assertSame( 'https://example.test/wp-json/flavor-agent/v1/attestations/att_successor', $artifact['supersededByVerifyUrl'] );
 	}
 
 	public function test_hydrate_row_omits_apply_when_request_has_none(): void {

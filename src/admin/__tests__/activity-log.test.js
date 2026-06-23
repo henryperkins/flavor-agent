@@ -1810,6 +1810,8 @@ describe( 'ActivityLogApp', () => {
 				},
 				attestation: {
 					id: 'att_abc123',
+					verificationUrl:
+						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/verification',
 					verifyUrl:
 						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123',
 					subjectStateUrl:
@@ -1819,6 +1821,9 @@ describe( 'ActivityLogApp', () => {
 					subjectScope: 'global-styles',
 					createdAt: '2026-06-10T03:05:01+00:00',
 					revertedByAttestationId: 'att_revert456',
+					supersededByAttestationId: 'att_successor789',
+					supersededByVerifyUrl:
+						'https://example.test/wp-json/flavor-agent/v1/attestations/att_successor789',
 				},
 			} ),
 		] );
@@ -1828,13 +1833,18 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).toContain( 'site-key' );
 		expect( getContainer().textContent ).toContain( 'Reverted by' );
 		expect( getContainer().textContent ).toContain( 'att_revert456' );
+		expect( getContainer().textContent ).toContain( 'Superseded by' );
+		expect( getContainer().textContent ).toContain( 'att_successor789' );
 
 		const verifyButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Verify envelope' );
+		).find( ( button ) => button.textContent === 'Run verification' );
+		const envelopeButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Load envelope' );
 		const subjectStateButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Check live subject' );
+		).find( ( button ) => button.textContent === 'Load live subject' );
 		const envelopeLink = getContainer().querySelector(
 			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123"]'
 		);
@@ -1843,6 +1853,7 @@ describe( 'ActivityLogApp', () => {
 		);
 
 		expect( verifyButton ).toBeTruthy();
+		expect( envelopeButton ).toBeTruthy();
 		expect( subjectStateButton ).toBeTruthy();
 		expect( envelopeLink?.textContent ).toBe( 'Open envelope JSON' );
 		expect( subjectStateLink?.textContent ).toBe(
@@ -1850,9 +1861,9 @@ describe( 'ActivityLogApp', () => {
 		);
 
 		apiFetch.mockResolvedValueOnce( {
-			statement_b64: 'eyJhdHRlc3RhdGlvbklkIjoiYXR0X2FiYzEyMyJ9',
-			signature_b64: 'signed-envelope',
-			key_id: 'site-key',
+			attestationId: 'att_abc123',
+			outcomes: [ 'signature_valid', 'live_matches_subject' ],
+			subjectError: null,
 		} );
 
 		await act( async () => {
@@ -1862,12 +1873,12 @@ describe( 'ActivityLogApp', () => {
 		expect(
 			apiFetch.mock.calls[ apiFetch.mock.calls.length - 1 ][ 0 ].url
 		).toBe(
-			'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123'
+			'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/verification'
 		);
+		expect( getContainer().textContent ).toContain( 'Signature valid' );
 		expect( getContainer().textContent ).toContain(
-			'Envelope loaded from the public endpoint.'
+			'Live subject matches'
 		);
-		expect( getContainer().textContent ).toContain( 'Key: site-key' );
 
 		apiFetch.mockResolvedValueOnce( {
 			subject_digest: 'sha256:abc123',
@@ -1943,6 +1954,8 @@ describe( 'ActivityLogApp', () => {
 				},
 				attestation: {
 					id: 'att_abc123',
+					verificationUrl:
+						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/verification',
 					verifyUrl:
 						'https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123',
 					subjectStateUrl:
@@ -1952,6 +1965,8 @@ describe( 'ActivityLogApp', () => {
 					subjectScope: 'global-styles',
 					createdAt: '2026-06-10T03:05:01+00:00',
 					revertedByAttestationId: 'att_revert456',
+					supersededByAttestationId: '',
+					supersededByVerifyUrl: '',
 				},
 			} ),
 		] );
@@ -1982,14 +1997,14 @@ describe( 'ActivityLogApp', () => {
 		// Verification actions stay top-level, outside the collapsed record.
 		const verifyButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Verify envelope' );
+		).find( ( button ) => button.textContent === 'Run verification' );
 		const verifyRawLink = getContainer().querySelector(
 			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123"]'
 		);
 		const subjectStateLink = getContainer().querySelector(
 			'a[href="https://example.test/wp-json/flavor-agent/v1/attestations/att_abc123/subject-state"]'
 		);
-		expect( verifyButton?.textContent ).toBe( 'Verify envelope' );
+		expect( verifyButton?.textContent ).toBe( 'Run verification' );
 		expect( verifyRawLink?.textContent ).toBe( 'Open envelope JSON' );
 		expect( subjectStateLink?.textContent ).toBe(
 			'Open live subject JSON'

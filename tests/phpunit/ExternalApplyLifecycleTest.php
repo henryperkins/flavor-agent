@@ -319,6 +319,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertIsArray( $snapshot['latest'] );
 		$this->assertSame( 'pending-newer', $snapshot['latest']['id'] );
 		$this->assertSame( 'pending', $snapshot['latest']['apply']['status'] );
+		$this->assertSame( 'User #7', $snapshot['latest']['userLabel'] );
 
 		$overdue = Repository::find( 'pending-overdue' );
 		$this->assertSame( 'expired', $overdue['apply']['status'] );
