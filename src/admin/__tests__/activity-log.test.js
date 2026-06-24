@@ -142,6 +142,9 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 
 	function LayoutView() {
 		const props = useContext( DataViewsContext );
+		const titleField = Array.isArray( props.fields )
+			? props.fields.find( ( field ) => field.id === 'title' )
+			: null;
 
 		if ( ! props.data.length ) {
 			return props.empty || null;
@@ -155,10 +158,13 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 					'button',
 					{
 						key: item.id,
+						'aria-label': item.title,
 						onClick: () => props.onClickItem?.( item ),
 						type: 'button',
 					},
-					item.title
+					titleField?.render
+						? titleField.render( { item } )
+						: item.title
 				)
 			)
 		);
@@ -365,7 +371,13 @@ async function renderApp( response, { bootData } = {} ) {
 function getVisibleTitles() {
 	return Array.from(
 		getContainer().querySelectorAll( '.mock-dataviews-layout button' )
-	).map( ( element ) => element.textContent );
+	).map( ( element ) => element.getAttribute( 'aria-label' ) );
+}
+
+function getRowButtonByTitle( title ) {
+	return Array.from(
+		getContainer().querySelectorAll( '.mock-dataviews-layout button' )
+	).find( ( button ) => button.getAttribute( 'aria-label' ) === title );
 }
 
 function getSummaryCardValue( label ) {
@@ -398,6 +410,14 @@ function getDetailSectionByLabel( label ) {
 			)?.textContent === label
 		);
 	} );
+}
+
+function getDefinitionValue( scope, label ) {
+	const term = Array.from( scope.querySelectorAll( 'dt' ) ).find(
+		( node ) => node.textContent === label
+	);
+
+	return term?.nextElementSibling?.textContent || '';
 }
 
 beforeEach( () => {
@@ -458,6 +478,243 @@ describe( 'ActivityLogApp', () => {
 		] );
 
 		expect( getSidebarTitle().textContent ).toBe( 'Linked activity entry' );
+	} );
+
+	test( 'renders a linked-row banner and selected-row action strip', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-2'
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-1',
+				suggestion: 'First activity entry',
+			} ),
+			createEntry( {
+				id: 'activity-2',
+				suggestion: 'Linked activity entry',
+				userId: 11,
+				target: {
+					blockName: 'core/paragraph',
+					blockPath: [ 0 ],
+				},
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				},
+			} ),
+		] );
+
+		const banner = getContainer().querySelector(
+			'.flavor-agent-activity-log__linked-row-banner'
+		);
+		const actionStrip = getContainer().querySelector(
+			'.flavor-agent-activity-log__action-strip'
+		);
+		const targetLink = Array.from(
+			actionStrip.querySelectorAll( 'a' )
+		).find( ( link ) => link.textContent.includes( 'Open target' ) );
+		const focusedLink = Array.from(
+			actionStrip.querySelectorAll( 'a' )
+		).find( ( link ) => link.textContent === 'Open focused view' );
+		const actionButtons = Array.from(
+			actionStrip.querySelectorAll( 'button' )
+		).map( ( button ) => button.textContent );
+
+		expect( banner ).not.toBeNull();
+		expect( banner.getAttribute( 'role' ) ).toBe( 'status' );
+		expect( banner.textContent ).toContain( 'Focused row' );
+		expect( banner.textContent ).toContain( 'Linked activity entry' );
+		expect( banner.textContent ).toContain( 'Clear focused row' );
+		expect( actionStrip ).not.toBeNull();
+		expect( actionStrip.getAttribute( 'aria-label' ) ).toBe(
+			'Selected row actions'
+		);
+		expect( targetLink.getAttribute( 'href' ) ).toBe(
+			'https://example.test/wp-admin/post.php?post=42&action=edit'
+		);
+		expect( targetLink.textContent ).toContain( 'Open post' );
+		expect( focusedLink.getAttribute( 'href' ) ).toBe(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-2'
+		);
+		expect( actionButtons ).toEqual(
+			expect.arrayContaining( [
+				'Same surface',
+				'Same user',
+				'Same entity',
+				'Same block path',
+			] )
+		);
+	} );
+
+	test( 'clears focused-row mode before loading a selected-row pivot', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-2'
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-2',
+				suggestion: 'Linked activity entry',
+				userId: 11,
+				target: {
+					blockName: 'core/paragraph',
+					blockPath: [ 0 ],
+				},
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				},
+			} ),
+		] );
+
+		const sameEntityButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Same entity' );
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].url ).toContain(
+			'activity=activity-2'
+		);
+		expect( sameEntityButton ).toBeDefined();
+
+		await act( async () => {
+			sameEntityButton.click();
+		} );
+		await flushEffects();
+
+		const nextUrl = apiFetch.mock.calls[ 1 ][ 0 ].url;
+		expect( nextUrl ).toContain( 'entityId=42' );
+		expect( nextUrl ).toContain( 'entityIdOperator=contains' );
+		expect( nextUrl ).not.toContain( 'activity=activity-2' );
+		expect( nextUrl ).toContain( 'page=1' );
+		expect( window.location.search ).toBe( '?page=flavor-agent-activity' );
+	} );
+
+	test( 'selected-row pivots preserve unrelated filters and replace their own filter', async () => {
+		window.localStorage.setItem(
+			VIEW_STORAGE_KEY,
+			JSON.stringify( {
+				...DEFAULT_ACTIVITY_VIEW,
+				page: 1,
+				filters: [
+					{
+						field: 'provider',
+						operator: 'is',
+						value: 'WordPress AI Client',
+					},
+					{
+						field: 'entityId',
+						operator: 'contains',
+						value: '99',
+					},
+				],
+			} )
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-1',
+				suggestion: 'Filter pivot row',
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				},
+			} ),
+		] );
+
+		const sameEntityButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Same entity' );
+
+		expect( sameEntityButton ).toBeDefined();
+
+		await act( async () => {
+			sameEntityButton.click();
+		} );
+		await flushEffects();
+
+		const nextUrl = apiFetch.mock.calls[ 1 ][ 0 ].url;
+		expect( nextUrl ).toContain( 'provider=WordPress+AI+Client' );
+		expect( nextUrl ).toContain( 'providerOperator=is' );
+		expect( nextUrl ).toContain( 'entityId=42' );
+		expect( nextUrl ).toContain( 'entityIdOperator=contains' );
+		expect( nextUrl ).not.toContain( 'entityId=99' );
+		expect( nextUrl ).toContain( 'page=1' );
+	} );
+
+	test( 'clears the linked-row banner without resetting the selected row', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-2'
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-2',
+				suggestion: 'Linked activity entry',
+			} ),
+		] );
+
+		const clearButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Clear focused row' );
+
+		expect( clearButton ).toBeDefined();
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-activity-log__linked-row-banner'
+			)
+		).not.toBeNull();
+
+		await act( async () => {
+			clearButton.click();
+		} );
+		await flushEffects();
+
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).not.toContain(
+			'activity=activity-2'
+		);
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-activity-log__linked-row-banner'
+			)
+		).toBeNull();
+		expect( getSidebarTitle().textContent ).toBe( 'Linked activity entry' );
+		expect( window.location.search ).toBe( '?page=flavor-agent-activity' );
+	} );
+
+	test( 'drops a stale focused-row query param after the response no longer contains that row', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=missing-activity'
+		);
+
+		await renderApp( [
+			createEntry( {
+				id: 'activity-1',
+				suggestion: 'First activity entry',
+			} ),
+		] );
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].url ).toContain(
+			'activity=missing-activity'
+		);
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-activity-log__linked-row-banner'
+			)
+		).toBeNull();
+		expect( getSidebarTitle().textContent ).toBe( 'First activity entry' );
+		expect( window.location.search ).toBe( '?page=flavor-agent-activity' );
 	} );
 
 	test( 'bypasses the persisted saved view when loading a linked activity from the URL', async () => {
@@ -553,6 +810,126 @@ describe( 'ActivityLogApp', () => {
 		expect( detailsRegion.getAttribute( 'aria-labelledby' ) ).toBe(
 			'flavor-agent-activity-log-details-title'
 		);
+	} );
+
+	test( 'renders passive discovery badges in the feed title without click behavior', async () => {
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-pending',
+				suggestion: 'Pending governance row',
+			} ),
+			createEntry( {
+				id: 'activity-request-log',
+				suggestion: 'AI request row',
+				request: {
+					ai: {
+						requestLogId: 'request-log-1',
+						requestToken: 'request-token-1',
+					},
+				},
+			} ),
+			createEntry( {
+				id: 'activity-attestation',
+				suggestion: 'Attested row',
+				attestation: {
+					id: 'att_abc123',
+				},
+			} ),
+			createEntry( {
+				id: 'activity-ordinary',
+				suggestion: 'Ordinary row',
+			} ),
+		] );
+
+		const badgeTexts = Array.from(
+			getContainer().querySelectorAll(
+				'.flavor-agent-activity-log__entry-badge'
+			)
+		).map( ( badge ) => badge.textContent );
+		const ordinaryRow = getRowButtonByTitle( 'Ordinary row' );
+
+		expect( badgeTexts ).toEqual(
+			expect.arrayContaining( [
+				expect.stringContaining( 'Pending approval' ),
+				'AI request',
+				'Attestation',
+			] )
+		);
+		expect(
+			getContainer().querySelectorAll(
+				'.flavor-agent-activity-log__entry-badge a, .flavor-agent-activity-log__entry-badge button'
+			)
+		).toHaveLength( 0 );
+		expect( ordinaryRow ).toBeDefined();
+		expect(
+			ordinaryRow.querySelector(
+				'.flavor-agent-activity-log__entry-badge'
+			)
+		).toBeNull();
+	} );
+
+	test( 'summarizes the selected row story before deeper technical sections', async () => {
+		await renderApp( [
+			createEntry( {
+				id: 'activity-story',
+				suggestion: 'Rewrite the intro copy',
+				userId: 11,
+				admin: {
+					operationTypeLabel: 'Rewrite copy',
+					statusLabel: 'Applied',
+					surfaceLabel: 'Editor canvas',
+					userLabel: 'Editor Haley',
+				},
+				request: {
+					ai: {
+						requestLogId: 'story-log',
+						requestToken: 'story-token',
+					},
+				},
+			} ),
+		] );
+
+		const story = getContainer().querySelector(
+			'.flavor-agent-activity-log__entry-story'
+		);
+		const detailLabels = Array.from(
+			getContainer().querySelectorAll(
+				'.flavor-agent-activity-log__detail-summary-label'
+			)
+		).map( ( node ) => node.textContent );
+
+		expect( story ).not.toBeNull();
+		expect( story.textContent ).toContain( 'At a glance' );
+		expect( getDefinitionValue( story, 'Current status' ) ).toBe(
+			'Applied'
+		);
+		expect(
+			story.querySelector(
+				'.flavor-agent-activity-log__status.is-applied'
+			)?.textContent
+		).toBe( 'Applied' );
+		expect( getDefinitionValue( story, 'Action' ) ).toContain(
+			'Rewrite copy'
+		);
+		expect( getDefinitionValue( story, 'Surface / entity' ) ).toContain(
+			'Editor canvas'
+		);
+		expect( getDefinitionValue( story, 'Surface / entity' ) ).toContain(
+			'Paragraph block'
+		);
+		expect( getDefinitionValue( story, 'Requested by' ) ).toBe(
+			'Editor Haley'
+		);
+		expect( getDefinitionValue( story, 'Recorded' ) ).not.toBe( '' );
+		expect( getDefinitionValue( story, 'Technical review' ) ).toContain(
+			'AI request log available'
+		);
+		expect( detailLabels.slice( 0, 4 ) ).toEqual( [
+			'Overview',
+			'Undo state',
+			'Provider diagnostics',
+			'Request context',
+		] );
 	} );
 
 	test( 'renders summary cards from the server response instead of the visible page size', async () => {
@@ -802,6 +1179,12 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'caps cryptographic record details so approval controls stay reachable', () => {
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/\.flavor-agent-activity-log__record-body\s*\{[^}]*max-height:\s*min\(40vh,\s*22rem\);[^}]*overflow:\s*auto;/s
+		);
+	} );
+
 	test( 'marks the selected table row with a non-color current state', () => {
 		expect( ACTIVITY_LOG_CSS ).toMatch(
 			/\.flavor-agent-activity-log\s+\.dataviews-view-table\s+tr:has\(\s*\.flavor-agent-activity-log__entry-title\.is-current\s*\)\s+td\s*\{[^}]*background:\s*var\(--flavor-agent-activity-log-accent-soft\);[^}]*box-shadow:\s*inset\s+0\s+0\s+0\s+1px\s+var\(--flavor-agent-activity-log-border-strong\);/s
@@ -1040,7 +1423,9 @@ describe( 'ActivityLogApp', () => {
 		] );
 
 		const overviewSection = getDetailSectionByLabel( 'Overview' );
-		const diagnosticsSection = getDetailSectionByLabel( 'Diagnostics' );
+		const diagnosticsSection = getDetailSectionByLabel(
+			'Provider diagnostics'
+		);
 
 		expect( overviewSection.open ).toBe( true );
 		expect( diagnosticsSection.open ).toBe( false );
@@ -1058,7 +1443,9 @@ describe( 'ActivityLogApp', () => {
 		} );
 
 		expect( getDetailSectionByLabel( 'Overview' ).open ).toBe( false );
-		expect( getDetailSectionByLabel( 'Diagnostics' ).open ).toBe( true );
+		expect( getDetailSectionByLabel( 'Provider diagnostics' ).open ).toBe(
+			true
+		);
 	} );
 
 	test( 'hides empty code rows and shows populated code rows as pre blocks', async () => {
@@ -1109,7 +1496,7 @@ describe( 'ActivityLogApp', () => {
 			} ),
 		] );
 
-		const requestSection = getDetailSectionByLabel( 'Request' );
+		const requestSection = getDetailSectionByLabel( 'Request context' );
 		expect( requestSection ).not.toBeNull();
 		const requestLabels = requestSection
 			? Array.from(
@@ -1129,10 +1516,8 @@ describe( 'ActivityLogApp', () => {
 		).toBeNull();
 		expect( getDetailSectionByLabel( 'State snapshots' ) ).toBeUndefined();
 
-		const populatedButton = Array.from(
-			getContainer().querySelectorAll( '.mock-dataviews-layout button' )
-		).find(
-			( button ) => button.textContent === 'Code detail populated check'
+		const populatedButton = getRowButtonByTitle(
+			'Code detail populated check'
 		);
 		expect( populatedButton ).toBeTruthy();
 
@@ -1140,7 +1525,8 @@ describe( 'ActivityLogApp', () => {
 			populatedButton.click();
 		} );
 
-		const populatedRequestSection = getDetailSectionByLabel( 'Request' );
+		const populatedRequestSection =
+			getDetailSectionByLabel( 'Request context' );
 		expect( populatedRequestSection ).not.toBeNull();
 		const populatedRequestLabels = populatedRequestSection
 			? Array.from(
@@ -1194,9 +1580,16 @@ describe( 'ActivityLogApp', () => {
 
 		await renderApp();
 
+		const requestLogPanel = getContainer().querySelector(
+			'.flavor-agent-activity-log__request-log'
+		);
 		const viewButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
 		).find( ( button ) => button.textContent === 'View AI request' );
+		expect( requestLogPanel?.textContent ).toContain( 'AI request log' );
+		expect( requestLogPanel?.textContent ).toContain(
+			'Open the WordPress AI request trace'
+		);
 		expect( viewButton ).toBeDefined();
 
 		await act( async () => {
@@ -1217,6 +1610,9 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).toContain( '312 ms' );
 		expect( getContainer().textContent ).toContain( '96 total tokens' );
 		expect( getContainer().textContent ).toContain(
+			'Loaded request details'
+		);
+		expect( getContainer().textContent ).toContain(
 			'Suggest a stronger intro.'
 		);
 		expect( getContainer().textContent ).toContain(
@@ -1230,6 +1626,83 @@ describe( 'ActivityLogApp', () => {
 		expect( requestLogsLink.getAttribute( 'href' ) ).toBe(
 			`${ BOOT_DATA.adminUrl }tools.php?page=ai-request-logs`
 		);
+	} );
+
+	test( 'announces AI request log loading while details are being fetched', async () => {
+		const requestLogResponse = createDeferred();
+
+		apiFetch.mockImplementation( ( request ) => {
+			const url = String( request?.url || '' );
+
+			if ( url.includes( 'flavor-agent/v1/activity?' ) ) {
+				return Promise.resolve(
+					buildResponse( [
+						createEntry( {
+							id: 'activity-with-loading-core-log',
+							suggestion: 'Recommendation with loading core log',
+							request: {
+								ai: {
+									requestLogId: 'loading-log',
+									requestToken: 'loading-token',
+								},
+							},
+						} ),
+					] )
+				);
+			}
+
+			if ( url.endsWith( '/ai/v1/logs/loading-log' ) ) {
+				return requestLogResponse.promise;
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected request: ${ url }` )
+			);
+		} );
+
+		await renderApp();
+
+		const viewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'View AI request' );
+
+		expect( viewButton ).toBeDefined();
+
+		await act( async () => {
+			viewButton.click();
+		} );
+		await flushEffects();
+
+		const loadingStatus = getContainer().querySelector(
+			'.screen-reader-text[role="status"][aria-live="polite"]'
+		);
+
+		expect( viewButton?.disabled ).toBe( true );
+		expect( viewButton?.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+		expect( viewButton?.getAttribute( 'aria-label' ) ).toBe(
+			'Loading AI request log.'
+		);
+		expect( loadingStatus ).not.toBeNull();
+		expect( loadingStatus?.textContent ).toBe( 'Loading AI request log.' );
+
+		await act( async () => {
+			requestLogResponse.resolve( {
+				provider: 'openai',
+				model: 'gpt-5.4-mini',
+			} );
+			await Promise.resolve();
+		} );
+		await flushEffects();
+
+		expect(
+			Array.from(
+				getContainer().querySelectorAll(
+					'.screen-reader-text[role="status"][aria-live="polite"]'
+				)
+			).some(
+				( element ) => element.textContent === 'Loading AI request log.'
+			)
+		).toBe( false );
 	} );
 
 	test( 'ignores stale core AI request log responses after selecting another row', async () => {
@@ -1286,9 +1759,7 @@ describe( 'ActivityLogApp', () => {
 		const viewButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
 		).find( ( button ) => button.textContent === 'View AI request' );
-		const secondRowButton = Array.from(
-			getContainer().querySelectorAll( '.mock-dataviews-layout button' )
-		).find( ( button ) => button.textContent === 'Second request row' );
+		const secondRowButton = getRowButtonByTitle( 'Second request row' );
 
 		expect( viewButton ).toBeDefined();
 		expect( secondRowButton ).toBeDefined();
@@ -1375,6 +1846,7 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).toContain(
 			'AI request log unavailable'
 		);
+		expect( getContainer().textContent ).toContain( 'AI request log' );
 		expect(
 			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
 				( button ) => button.textContent === 'View AI request'
@@ -1406,6 +1878,7 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).toContain(
 			'No model request was attempted for this diagnostic.'
 		);
+		expect( getContainer().textContent ).toContain( 'AI request log' );
 		expect( getContainer().textContent ).not.toContain(
 			'AI request log unavailable'
 		);
@@ -1585,9 +2058,10 @@ describe( 'ActivityLogApp', () => {
 
 		const targetLink = Array.from(
 			getContainer().querySelectorAll( 'a' )
-		).find( ( element ) => element.textContent === 'Open post' );
+		).find( ( element ) => element.textContent.includes( 'Open target' ) );
 
 		expect( targetLink ).toBeDefined();
+		expect( targetLink.textContent ).toContain( 'Open post' );
 		expect( targetLink.getAttribute( 'href' ) ).toBe(
 			'https://example.test/wp-admin/post.php?post=42&action=edit'
 		);
@@ -2253,9 +2727,7 @@ describe( 'ActivityLogApp', () => {
 		const verifyButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
 		).find( ( button ) => button.textContent === 'Run verification' );
-		const secondRowButton = Array.from(
-			getContainer().querySelectorAll( '.mock-dataviews-layout button' )
-		).find( ( button ) => button.textContent === 'Second attestation row' );
+		const secondRowButton = getRowButtonByTitle( 'Second attestation row' );
 
 		expect( verifyButton ).toBeDefined();
 		expect( secondRowButton ).toBeDefined();
@@ -2287,8 +2759,9 @@ describe( 'ActivityLogApp', () => {
 	function findCryptographicRecord() {
 		return Array.from( getContainer().querySelectorAll( 'details' ) ).find(
 			( node ) =>
-				node.querySelector( 'summary' )?.textContent ===
-				'Cryptographic record'
+				node.querySelector(
+					'.flavor-agent-activity-log__record-summary-label'
+				)?.textContent === 'Cryptographic record'
 		);
 	}
 
@@ -2369,6 +2842,11 @@ describe( 'ActivityLogApp', () => {
 		expect( record.tagName ).toBe( 'DETAILS' );
 		expect( record.open ).toBe( false );
 		expect( record.getAttribute( 'aria-label' ) ).toBeTruthy();
+		expect(
+			record.querySelector(
+				'.flavor-agent-activity-log__record-summary-text'
+			)?.textContent
+		).toContain( 'Freshness signatures' );
 
 		// Cryptographic evidence is inside the record (reachable, not removed).
 		expect( record.textContent ).toContain( 'att_abc123' );
@@ -2414,8 +2892,22 @@ describe( 'ActivityLogApp', () => {
 		] );
 
 		const record = findCryptographicRecord();
+		const approveButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Approve and apply' );
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Reject' );
+
 		expect( record ).toBeTruthy();
 		expect( record.open ).toBe( false );
+		expect( getContainer().textContent ).toContain(
+			'AI proposes; WordPress approves'
+		);
+		expect( approveButton ).toBeTruthy();
+		expect( rejectButton ).toBeTruthy();
+		expect( record.contains( approveButton ) ).toBe( false );
+		expect( record.contains( rejectButton ) ).toBe( false );
 		// Signatures recorded at request time stay reachable inside the record.
 		expect( record.textContent ).toContain( 'Resolved signature' );
 		expect( record.textContent ).toContain( 'Baseline hash' );
@@ -2584,9 +3076,7 @@ describe( 'ActivityLogApp', () => {
 		).find( ( button ) =>
 			button.textContent.includes( 'Approve and apply' )
 		);
-		const secondRowButton = Array.from(
-			getContainer().querySelectorAll( '.mock-dataviews-layout button' )
-		).find( ( button ) => button.textContent === 'Second decision row' );
+		const secondRowButton = getRowButtonByTitle( 'Second decision row' );
 
 		expect( approveButton ).toBeDefined();
 		expect( secondRowButton ).toBeDefined();

@@ -2256,6 +2256,172 @@ export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 	};
 }
 
+export function buildActivityPermalink( adminBaseUrl = '', activityId = '' ) {
+	const id =
+		typeof activityId === 'string' && activityId.trim()
+			? activityId.trim()
+			: '';
+
+	if ( ! id ) {
+		return '';
+	}
+
+	return buildAdminUrl( adminBaseUrl, 'options-general.php', {
+		page: 'flavor-agent-activity',
+		activity: id,
+	} );
+}
+
+function normalizeActionValue( value ) {
+	if ( ! [ 'string', 'number' ].includes( typeof value ) ) {
+		return '';
+	}
+
+	const normalized = String( value ).trim();
+
+	return normalized && normalized !== EMPTY_VALUE ? normalized : '';
+}
+
+function createFilterAction( { id, label, field, operator, value } ) {
+	const normalizedValue = normalizeActionValue( value );
+
+	if ( ! normalizedValue ) {
+		return null;
+	}
+
+	return {
+		id,
+		type: 'filter',
+		group: 'related',
+		label,
+		field,
+		operator,
+		value: normalizedValue,
+	};
+}
+
+export function normalizeSelectedActivityActions(
+	entry = {},
+	{ adminUrl = '' } = {}
+) {
+	const actions = [];
+	const targetLink =
+		normalizeActionValue( entry?.targetUrl ) &&
+		normalizeActionValue( entry?.targetLinkLabel )
+			? {
+					url: normalizeActionValue( entry.targetUrl ),
+					label: normalizeActionValue( entry.targetLinkLabel ),
+			  }
+			: buildActivityTargetLink( entry, adminUrl );
+	const targetUrl = normalizeActionValue( targetLink?.url );
+	const targetLabel = normalizeActionValue( targetLink?.label );
+	const activityId = normalizeActionValue( entry?.id );
+	const permalink = buildActivityPermalink( adminUrl, activityId );
+
+	if ( targetUrl ) {
+		actions.push( {
+			id: 'open-target',
+			type: 'link',
+			group: 'target',
+			label: __( 'Open target', 'flavor-agent' ),
+			detail: targetLabel,
+			url: targetUrl,
+		} );
+	}
+
+	if ( permalink ) {
+		actions.push( {
+			id: 'open-focused-view',
+			type: 'link',
+			group: 'target',
+			label: __( 'Open focused view', 'flavor-agent' ),
+			url: permalink,
+		} );
+	}
+
+	const userId = normalizeActionValue( entry?.userId );
+	const filterActions = [
+		createFilterAction( {
+			id: 'same-surface',
+			label: __( 'Same surface', 'flavor-agent' ),
+			field: 'surface',
+			operator: 'is',
+			value: entry?.surface,
+		} ),
+		userId && userId !== '0'
+			? createFilterAction( {
+					id: 'same-user',
+					label: __( 'Same user', 'flavor-agent' ),
+					field: 'userId',
+					operator: 'is',
+					value: userId,
+			  } )
+			: null,
+		createFilterAction( {
+			id: 'same-entity',
+			label: __( 'Same entity', 'flavor-agent' ),
+			field: 'entityId',
+			operator: 'contains',
+			value: entry?.entityId,
+		} ),
+		createFilterAction( {
+			id: 'same-block-path',
+			label: __( 'Same block path', 'flavor-agent' ),
+			field: 'blockPath',
+			operator: 'contains',
+			value: entry?.blockPath,
+		} ),
+	].filter( Boolean );
+
+	return [ ...actions, ...filterActions ];
+}
+
+export function normalizeActivityDiscoveryBadges( entry = {} ) {
+	const governanceDetails =
+		entry?.governanceDetails ||
+		( entry?.apply && typeof entry.apply === 'object'
+			? getGovernanceDetails( entry )
+			: null );
+	const badges = [];
+
+	if ( governanceDetails?.status === 'pending' ) {
+		badges.push( {
+			id: 'pending-governance',
+			label: __( 'Pending approval', 'flavor-agent' ),
+			detail: governanceDetails.expiresAt
+				? sprintf(
+						/* translators: %s: expiry timestamp. */
+						__( 'Expires %s', 'flavor-agent' ),
+						governanceDetails.expiresAt
+				  )
+				: '',
+			tone: 'warning',
+		} );
+	}
+
+	if ( normalizeActionValue( entry?.aiRequestLogId ) ) {
+		badges.push( {
+			id: 'ai-request',
+			label: __( 'AI request', 'flavor-agent' ),
+			tone: 'info',
+		} );
+	}
+
+	if (
+		entry?.attestation &&
+		typeof entry.attestation === 'object' &&
+		normalizeActionValue( entry.attestation.id )
+	) {
+		badges.push( {
+			id: 'attestation',
+			label: __( 'Attestation', 'flavor-agent' ),
+			tone: 'success',
+		} );
+	}
+
+	return badges;
+}
+
 export function formatActivityTimestamp(
 	timestamp,
 	{ locale = '', timeZone = 'UTC' } = {}

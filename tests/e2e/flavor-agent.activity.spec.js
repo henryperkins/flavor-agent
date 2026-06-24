@@ -68,13 +68,13 @@ const ACTIVITY_ENTRIES = [
 	},
 ];
 
-function buildActivityResponse( requestUrl ) {
+function buildActivityResponse( requestUrl, entries = ACTIVITY_ENTRIES ) {
 	const url = new URL( requestUrl );
 	const search = ( url.searchParams.get( 'search' ) || '' )
 		.trim()
 		.toLowerCase();
 	const filteredEntries = search
-		? ACTIVITY_ENTRIES.filter( ( entry ) =>
+		? entries.filter( ( entry ) =>
 				[
 					entry.suggestion,
 					entry.surface,
@@ -86,7 +86,7 @@ function buildActivityResponse( requestUrl ) {
 						String( value ).toLowerCase().includes( search )
 					)
 		  )
-		: ACTIVITY_ENTRIES;
+		: entries;
 
 	return {
 		entries: filteredEntries,
@@ -147,13 +147,15 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 
 	await expect(
 		page.locator( '#flavor-agent-activity-log-root' )
-	).toBeVisible( { timeout: 30_000 } );
+	).toBeVisible( {
+		timeout: 30_000,
+	} );
 	await expect(
 		page.getByRole( 'heading', { name: 'AI Activity Log' } )
 	).toBeVisible( { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__summary-item' )
-	).toHaveCount( 7, { timeout: 30_000 } );
+	).toHaveCount( 9, { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__feed' )
 	).toContainText( 'Refresh template hierarchy' );
@@ -186,6 +188,86 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 	await expect(
 		page.getByRole( 'button', { name: 'View options' } )
 	).toBeVisible();
+} );
+
+test( 'AI Activity linked-row mode clears the URL and keeps discovery badges visible', async ( {
+	page,
+} ) => {
+	const discoveryEntries = [
+		{
+			...ACTIVITY_ENTRIES[ 0 ],
+			request: {
+				...ACTIVITY_ENTRIES[ 0 ].request,
+				ai: {
+					requestLogId: 'request-log-1',
+					requestToken: 'request-token-1',
+				},
+			},
+			attestation: {
+				id: 'att_abc123',
+			},
+		},
+		ACTIVITY_ENTRIES[ 1 ],
+	];
+
+	await page.route(
+		'**/wp-json/flavor-agent/v1/activity**',
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					buildActivityResponse(
+						route.request().url(),
+						discoveryEntries
+					)
+				),
+			} );
+		}
+	);
+
+	await page.goto(
+		'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-block-1',
+		{
+			waitUntil: 'domcontentloaded',
+		}
+	);
+	await waitForWordPressReady( page );
+
+	await expect(
+		page.locator( '.flavor-agent-activity-log__linked-row-banner' )
+	).toContainText( 'Focused row' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__linked-row-banner' )
+	).toContainText( 'Rewrite hero heading' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__entry-badge', {
+			hasText: 'AI request',
+		} )
+	).toContainText( 'AI request' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__entry-badge', {
+			hasText: 'Attestation',
+		} )
+	).toContainText( 'Attestation' );
+	await expect(
+		page.getByRole( 'link', { name: /Open target/i } )
+	).toHaveAttribute(
+		'href',
+		/http:\/\/127\.0\.0\.1:\d+\/wp-admin\/post\.php\?post=42&action=edit$/
+	);
+
+	await page.getByRole( 'button', { name: 'Clear focused row' } ).click();
+
+	await expect( page ).toHaveURL(
+		/\/wp-admin\/options-general\.php\?page=flavor-agent-activity$/
+	);
+	await expect(
+		page.locator( '.flavor-agent-activity-log__linked-row-banner' )
+	).toHaveCount( 0 );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'Rewrite hero heading' );
 } );
 
 test( 'AI Activity page renders an inline load error instead of the empty activity copy', async ( {
@@ -406,10 +488,12 @@ foreach ( $entries as $entry ) {
 
 	await expect(
 		page.locator( '#flavor-agent-activity-log-root' )
-	).toBeVisible( { timeout: 30_000 } );
+	).toBeVisible( {
+		timeout: 30_000,
+	} );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__summary-item' )
-	).toHaveCount( 7, { timeout: 30_000 } );
+	).toHaveCount( 9, { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__feed' )
 	).toContainText( 'Full-stack template insert' );

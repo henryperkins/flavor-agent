@@ -40,13 +40,15 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Show ordered undo state using the canonical state machine in `docs/reference/activity-state-machine.md`
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provenance, diagnostics, undo-reason details, and structured state snapshots
+- Let admins move from a selected row to the honest target, a focused `Settings > AI Activity` permalink, or closely related feed pivots without inventing a second admin route contract
 - Let admins approve or reject pending external Global Styles / Style Book applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
 - Let admins discover Ring III governed-change attestations for eligible external style applies, including a site-run verification summary plus public envelope and subject-state links without making attestation a general AI-governance claim
+- Surface passive feed badges for pending approval, AI request-log availability, and attestation evidence before a row is opened
 - Let global admin activity reads request and render a bounded, sanitized governance learning report with outcome rates and aggregate groups by surface, operation type, validation reason, ranking signal, guideline version, and provider/model.
 - Filter audit entries by absolute or relative time without silently broadening malformed date filters; malformed active filters are blocked in the UI or rejected by REST, and `inThePast` and `over` use true timestamp windows, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
-This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, attestation discovery, structured diff and before/after summaries, plus a rendered backend/API aggregate report contract, but not a rich visual diff viewer, broader row actions/discovery, or cross-operator workflows.
+This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, attestation discovery, structured diff and before/after summaries, a rendered backend/API aggregate report contract, and the first selected-row action/discovery layer (focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges), but not a rich visual diff viewer or cross-operator workflows.
 
 ## Ordered Undo Rules
 
@@ -62,7 +64,7 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 | Store undo | `undoActivity()` (implemented in `src/store/activity-undo.js`, exposed via the store) | Runs safe undo and persists the undo-status transition |
 | Global Styles undo helpers | `getGlobalStylesActivityUndoState()` and `undoGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validate and restore the current Global Styles entity |
 | Admin page registration | `ActivityPage` in `inc/Admin/ActivityPage.php` | Registers `Settings > AI Activity` and localizes admin approval/audit/attestation-discovery boot data |
-| Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, summary cards, bounded learning-report aggregates, external-apply decision controls, attestation affordances, and custom detail sections |
+| Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, linked-row banner, selected-row action strip, passive discovery badges, bounded learning-report aggregates, external-apply decision controls, attestation affordances, and custom detail sections |
 | REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()`; `AttestationController` | Serve activity query, persistence, undo-status updates, admin approval/rejection decisions, and public attestation verification reads |
 | Permissions | `FlavorAgent\Activity\Permissions` | Applies contextual capability rules for scoped and global activity access |
 | Learning report | `FlavorAgent\Activity\GovernanceLearningReport` | Builds the optional bounded `learningReport` payload rendered for global admin activity reads |

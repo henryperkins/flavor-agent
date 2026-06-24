@@ -29,6 +29,7 @@ import './brand.css';
 import './activity-log.css';
 import {
 	areActivityViewsEqual,
+	buildActivityPermalink,
 	buildDecisionRequest,
 	clampActivityViewPage,
 	formatActivityTimestamp,
@@ -36,7 +37,9 @@ import {
 	getGovernancePlainSummary,
 	isPendingExternalApply,
 	normalizeActivityEntries,
+	normalizeActivityDiscoveryBadges,
 	normalizeGovernanceLearningReport,
+	normalizeSelectedActivityActions,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
@@ -68,6 +71,35 @@ function getLinkedActivityEntryId() {
 	const activityId = searchParams.get( 'activity' ) || '';
 
 	return typeof activityId === 'string' ? activityId.trim() : '';
+}
+
+function setLinkedActivityEntryIdInUrl( activityId = '' ) {
+	if (
+		typeof window === 'undefined' ||
+		typeof window.history?.replaceState !== 'function' ||
+		typeof window.location?.href !== 'string'
+	) {
+		return;
+	}
+
+	const normalizedId =
+		typeof activityId === 'string' && activityId.trim()
+			? activityId.trim()
+			: '';
+	const nextUrl = new URL( window.location.href );
+
+	if ( normalizedId ) {
+		nextUrl.searchParams.set( 'activity', normalizedId );
+	} else {
+		nextUrl.searchParams.delete( 'activity' );
+	}
+
+	const nextLocation = `${ nextUrl.pathname }${ nextUrl.search }${ nextUrl.hash }`;
+	const currentLocation = `${ window.location.pathname }${ window.location.search }${ window.location.hash }`;
+
+	if ( nextLocation !== currentLocation ) {
+		window.history.replaceState( window.history.state, '', nextLocation );
+	}
 }
 
 function getInvalidDayFilterError() {
@@ -197,27 +229,6 @@ function formatLearningReportRate( value ) {
 	return `${ Number.isInteger( rounded ) ? rounded : rounded.toFixed( 1 ) }%`;
 }
 
-function getLearningReportActivityUrl( adminUrl, activityId ) {
-	const id =
-		typeof activityId === 'string' && activityId.trim()
-			? activityId.trim()
-			: '';
-	const base =
-		typeof adminUrl === 'string' && adminUrl.trim() ? adminUrl.trim() : '';
-
-	if ( ! id || ! base ) {
-		return '';
-	}
-
-	const normalizedBase = base.endsWith( '/' ) ? base : `${ base }/`;
-	const params = new URLSearchParams( {
-		page: 'flavor-agent-activity',
-		activity: id,
-	} );
-
-	return `${ normalizedBase }options-general.php?${ params.toString() }`;
-}
-
 function getLearningReportGroups( report ) {
 	const groups = Array.isArray( report?.groupSections )
 		? report.groupSections
@@ -273,7 +284,7 @@ function getLearningReportSummaryMetrics( report, locale ) {
 }
 
 function LearningReportRow( { adminUrl, locale, row } ) {
-	const activityUrl = getLearningReportActivityUrl(
+	const activityUrl = buildActivityPermalink(
 		adminUrl,
 		row.representativeActivityId
 	);
@@ -825,7 +836,7 @@ const DETAIL_SECTIONS = [
 		id: 'overview',
 		label: __( 'Overview', 'flavor-agent' ),
 		summary: ( entry ) =>
-			[ entry.statusLabel, entry.operationTypeLabel ]
+			[ entry.statusLabel, entry.surfaceLabel, entry.operationTypeLabel ]
 				.filter( ( value ) => value && value !== NOT_RECORDED )
 				.join( ' · ' ),
 		rows: [
@@ -848,8 +859,26 @@ const DETAIL_SECTIONS = [
 		initialOpen: true,
 	},
 	{
+		id: 'undo',
+		label: __( 'Undo state', 'flavor-agent' ),
+		summary: ( entry ) => {
+			const parts = [ entry.undoStatusLabel ];
+
+			if ( entry.undoReason && entry.undoReason !== NOT_RECORDED ) {
+				parts.push( entry.undoReason );
+			}
+
+			return parts.filter( Boolean ).join( ' · ' );
+		},
+		rows: [
+			[ __( 'Undo state', 'flavor-agent' ), 'undoStatusLabel' ],
+			[ __( 'Undo reason', 'flavor-agent' ), 'undoReason' ],
+			[ __( 'Undo error', 'flavor-agent' ), 'undoError' ],
+		],
+	},
+	{
 		id: 'diagnostics',
-		label: __( 'Diagnostics', 'flavor-agent' ),
+		label: __( 'Provider diagnostics', 'flavor-agent' ),
 		summary: ( entry ) =>
 			[ entry.provider, entry.model, entry.providerPath ]
 				.filter( ( value ) => value && value !== NOT_RECORDED )
@@ -883,11 +912,20 @@ const DETAIL_SECTIONS = [
 	},
 	{
 		id: 'request',
-		label: __( 'Request', 'flavor-agent' ),
-		summary: ( entry ) =>
-			[ entry.requestAbility, entry.requestReference ]
-				.filter( ( value ) => value && value !== NOT_RECORDED )
-				.join( ' · ' ),
+		label: __( 'Request context', 'flavor-agent' ),
+		summary: ( entry ) => {
+			const parts = [
+				entry.requestAbility,
+				entry.requestRoute,
+				entry.requestReference,
+			].filter( ( value ) => value && value !== NOT_RECORDED );
+
+			if ( ! isEmptyDetailValue( entry.requestPrompt ) ) {
+				parts.push( __( 'Prompt recorded', 'flavor-agent' ) );
+			}
+
+			return parts.join( ' · ' );
+		},
 		rows: [
 			[ __( 'Ability', 'flavor-agent' ), 'requestAbility' ],
 			[ __( 'Route', 'flavor-agent' ), 'requestRoute' ],
@@ -896,27 +934,18 @@ const DETAIL_SECTIONS = [
 		],
 	},
 	{
-		id: 'undo',
-		label: __( 'Undo', 'flavor-agent' ),
-		summary: ( entry ) => {
-			const parts = [ entry.undoStatusLabel ];
-
-			if ( entry.undoReason && entry.undoReason !== NOT_RECORDED ) {
-				parts.push( entry.undoReason );
-			}
-
-			return parts.filter( Boolean ).join( ' · ' );
-		},
-		rows: [
-			[ __( 'Undo state', 'flavor-agent' ), 'undoStatusLabel' ],
-			[ __( 'Undo reason', 'flavor-agent' ), 'undoReason' ],
-			[ __( 'Undo error', 'flavor-agent' ), 'undoError' ],
-		],
-	},
-	{
 		id: 'state',
 		label: __( 'State snapshots', 'flavor-agent' ),
-		summary: () => '',
+		summary: ( entry ) =>
+			[
+				[ __( 'Structured diff', 'flavor-agent' ), 'stateDiff' ],
+				[ __( 'Before', 'flavor-agent' ), 'beforeSummary' ],
+				[ __( 'After', 'flavor-agent' ), 'afterSummary' ],
+			]
+				.filter( ( [ , key ] ) => ! isEmptyDetailValue( entry[ key ] ) )
+				.map( ( [ label ] ) => label )
+				.filter( ( value ) => value && value !== NOT_RECORDED )
+				.join( ' · ' ),
 		rows: [
 			[ __( 'Structured diff', 'flavor-agent' ), 'stateDiff', 'code' ],
 			[ __( 'Before', 'flavor-agent' ), 'beforeSummary', 'code' ],
@@ -932,6 +961,105 @@ function isEmptyDetailValue( value ) {
 		value === '' ||
 		value === NOT_RECORDED
 	);
+}
+
+function getNonEmptyDetailValues( values ) {
+	const seen = new Set();
+
+	return values.filter( ( value ) => {
+		if ( isEmptyDetailValue( value ) || seen.has( value ) ) {
+			return false;
+		}
+
+		seen.add( value );
+		return true;
+	} );
+}
+
+function getEntryTargetSummary( entry ) {
+	const governanceDetails = getGovernanceDetailsForEntry( entry );
+	const values = governanceDetails
+		? [
+				governanceDetails.targetLabel,
+				governanceDetails.surfaceLabel,
+				entry.documentLabel,
+		  ]
+		: [ entry.surfaceLabel, entry.entity, entry.documentLabel ];
+
+	return getNonEmptyDetailValues( values ).join( ' · ' ) || NOT_RECORDED;
+}
+
+function getEntryRequesterSummary( entry ) {
+	const governanceDetails = getGovernanceDetailsForEntry( entry );
+
+	return (
+		getNonEmptyDetailValues( [
+			governanceDetails?.requestedByLabel,
+			entry.user,
+		] )[ 0 ] || NOT_RECORDED
+	);
+}
+
+function getEntryTechnicalReviewSummary( entry ) {
+	if ( entry?.aiRequestLogId ) {
+		return __(
+			'AI request log available; diagnostics and snapshots below',
+			'flavor-agent'
+		);
+	}
+
+	if ( entry?.modelRequest?.attempted === false ) {
+		return __(
+			'No model request; diagnostics and snapshots below',
+			'flavor-agent'
+		);
+	}
+
+	if ( entry?.aiRequestToken ) {
+		return __(
+			'Request token recorded; AI request log unavailable',
+			'flavor-agent'
+		);
+	}
+
+	return __(
+		'Provider diagnostics, request context, and state snapshots below',
+		'flavor-agent'
+	);
+}
+
+function getEntryStoryRows( entry ) {
+	return [
+		{
+			label: __( 'Current status', 'flavor-agent' ),
+			value: entry.statusLabel,
+			kind: 'status',
+		},
+		{
+			label: __( 'Action', 'flavor-agent' ),
+			value:
+				getNonEmptyDetailValues( [
+					entry.operationTypeLabel,
+					entry.activityTypeLabel,
+				] ).join( ' · ' ) || NOT_RECORDED,
+		},
+		{
+			label: __( 'Surface / entity', 'flavor-agent' ),
+			value: getEntryTargetSummary( entry ),
+		},
+		{
+			label: __( 'Requested by', 'flavor-agent' ),
+			value: getEntryRequesterSummary( entry ),
+		},
+		{
+			label: __( 'Recorded', 'flavor-agent' ),
+			value: entry.timestampDisplay,
+		},
+		{
+			label: __( 'Technical review', 'flavor-agent' ),
+			value: getEntryTechnicalReviewSummary( entry ),
+		},
+	];
 }
 
 function ActivityDetailRow( { label, value, kind, status } ) {
@@ -989,6 +1117,129 @@ function ActivityDetailRow( { label, value, kind, status } ) {
 				{ value }
 			</dd>
 		</Fragment>
+	);
+}
+
+function ActivityEntryStory( { entry } ) {
+	return (
+		<section className="flavor-agent-activity-log__entry-story">
+			<h4 className="flavor-agent-activity-log__sidebar-subtitle">
+				{ __( 'At a glance', 'flavor-agent' ) }
+			</h4>
+			<dl className="flavor-agent-activity-log__detail-grid flavor-agent-activity-log__detail-grid--story">
+				{ getEntryStoryRows( entry ).map( ( row ) => (
+					<ActivityDetailRow
+						key={ row.label }
+						label={ row.label }
+						value={ row.value }
+						kind={ row.kind }
+						status={
+							row.kind === 'status' ? entry.status : undefined
+						}
+					/>
+				) ) }
+			</dl>
+		</section>
+	);
+}
+
+function SelectedActivityActions( { actions, onFilterAction } ) {
+	if ( ! actions.length ) {
+		return null;
+	}
+
+	const linkActions = actions.filter( ( action ) => action.type === 'link' );
+	const filterActions = actions.filter(
+		( action ) => action.type === 'filter'
+	);
+
+	return (
+		<div
+			className="flavor-agent-activity-log__action-strip"
+			aria-label={ __( 'Selected row actions', 'flavor-agent' ) }
+		>
+			{ linkActions.length > 0 && (
+				<div className="flavor-agent-activity-log__action-group">
+					<span className="flavor-agent-activity-log__action-group-label">
+						{ __( 'Open', 'flavor-agent' ) }
+					</span>
+					<div className="flavor-agent-activity-log__action-buttons">
+						{ linkActions.map( ( action ) => (
+							<Button
+								key={ action.id }
+								href={ action.url }
+								variant="secondary"
+							>
+								<span className="flavor-agent-activity-log__action-label">
+									{ action.label }
+								</span>
+								{ action.detail && (
+									<span className="flavor-agent-activity-log__action-detail">
+										{ action.detail }
+									</span>
+								) }
+							</Button>
+						) ) }
+					</div>
+				</div>
+			) }
+			{ filterActions.length > 0 && (
+				<div className="flavor-agent-activity-log__action-group">
+					<span className="flavor-agent-activity-log__action-group-label">
+						{ __( 'Related rows', 'flavor-agent' ) }
+					</span>
+					<div className="flavor-agent-activity-log__action-buttons">
+						{ filterActions.map( ( action ) => (
+							<Button
+								key={ action.id }
+								type="button"
+								variant="tertiary"
+								onClick={ () => onFilterAction( action ) }
+							>
+								{ action.label }
+							</Button>
+						) ) }
+					</div>
+				</div>
+			) }
+		</div>
+	);
+}
+
+function LinkedActivityBanner( { activityId, entry, onClear } ) {
+	if ( ! activityId ) {
+		return null;
+	}
+
+	return (
+		<div
+			className="flavor-agent-activity-log__linked-row-banner"
+			role="status"
+		>
+			<div className="flavor-agent-activity-log__linked-row-copy">
+				<span className="flavor-agent-activity-log__linked-row-kicker">
+					{ __( 'Focused row', 'flavor-agent' ) }
+				</span>
+				<p className="flavor-agent-activity-log__copy">
+					{ entry?.title
+						? sprintf(
+								/* translators: %s: focused activity row title. */
+								__(
+									'Showing the focused activity row: %s',
+									'flavor-agent'
+								),
+								entry.title
+						  )
+						: __(
+								'Showing a focused activity row from the URL.',
+								'flavor-agent'
+						  ) }
+				</p>
+			</div>
+			<Button type="button" variant="secondary" onClick={ onClear }>
+				{ __( 'Clear focused row', 'flavor-agent' ) }
+			</Button>
+		</div>
 	);
 }
 
@@ -1111,14 +1362,17 @@ function AiRequestLogPanel( { entry, bootData } ) {
 
 	if ( entry?.modelRequest?.attempted === false ) {
 		return (
-			<div className="flavor-agent-activity-log__request-log flavor-agent-activity-log__request-log--no-model">
+			<section className="flavor-agent-activity-log__request-log flavor-agent-activity-log__request-log--no-model">
+				<h4 className="flavor-agent-activity-log__sidebar-subtitle">
+					{ __( 'AI request log', 'flavor-agent' ) }
+				</h4>
 				<p className="flavor-agent-activity-log__copy">
 					{ __(
 						'No model request was attempted for this diagnostic.',
 						'flavor-agent'
 					) }
 				</p>
-			</div>
+			</section>
 		);
 	}
 
@@ -1128,14 +1382,17 @@ function AiRequestLogPanel( { entry, bootData } ) {
 
 	if ( ! requestLogId ) {
 		return (
-			<div className="flavor-agent-activity-log__request-log flavor-agent-activity-log__request-log--unavailable">
+			<section className="flavor-agent-activity-log__request-log flavor-agent-activity-log__request-log--unavailable">
+				<h4 className="flavor-agent-activity-log__sidebar-subtitle">
+					{ __( 'AI request log', 'flavor-agent' ) }
+				</h4>
 				<p className="flavor-agent-activity-log__copy">
 					{ __(
 						'AI request log unavailable (core logging may have been disabled at request time).',
 						'flavor-agent'
 					) }
 				</p>
-			</div>
+			</section>
 		);
 	}
 
@@ -1188,6 +1445,11 @@ function AiRequestLogPanel( { entry, bootData } ) {
 	};
 
 	const details = requestLogState.details;
+	const requestLogButtonLabel = __( 'View AI request', 'flavor-agent' );
+	const requestLogLoadingLabel = __(
+		'Loading AI request log.',
+		'flavor-agent'
+	);
 	const rows = details
 		? [
 				[ __( 'Provider', 'flavor-agent' ), details.provider ],
@@ -1198,16 +1460,42 @@ function AiRequestLogPanel( { entry, bootData } ) {
 		: [];
 
 	return (
-		<div className="flavor-agent-activity-log__request-log">
+		<section className="flavor-agent-activity-log__request-log">
+			<div>
+				<h4 className="flavor-agent-activity-log__sidebar-subtitle">
+					{ __( 'AI request log', 'flavor-agent' ) }
+				</h4>
+				<p className="flavor-agent-activity-log__copy">
+					{ __(
+						'Open the WordPress AI request trace for provider, model, timing, tokens, request, and response previews.',
+						'flavor-agent'
+					) }
+				</p>
+			</div>
 			<div className="flavor-agent-activity-log__request-log-actions">
 				<Button
+					aria-busy={ requestLogState.isLoading }
+					aria-label={
+						requestLogState.isLoading
+							? requestLogLoadingLabel
+							: requestLogButtonLabel
+					}
+					isBusy={ requestLogState.isLoading }
 					variant="secondary"
 					onClick={ loadRequestLog }
 					disabled={ requestLogState.isLoading }
 				>
-					{ requestLogState.isLoading && <Spinner /> }
-					{ __( 'View AI request', 'flavor-agent' ) }
+					{ requestLogButtonLabel }
 				</Button>
+				{ requestLogState.isLoading && (
+					<span
+						className="screen-reader-text"
+						role="status"
+						aria-live="polite"
+					>
+						{ requestLogLoadingLabel }
+					</span>
+				) }
 				{ entry.aiRequestLogsUrl && (
 					<Button
 						href={ entry.aiRequestLogsUrl }
@@ -1230,6 +1518,9 @@ function AiRequestLogPanel( { entry, bootData } ) {
 			) }
 			{ details && (
 				<div className="flavor-agent-activity-log__request-log-details">
+					<p className="flavor-agent-activity-log__request-log-summary">
+						{ __( 'Loaded request details', 'flavor-agent' ) }
+					</p>
 					<dl className="flavor-agent-activity-log__detail-grid">
 						{ rows.map( ( [ label, value ] ) => (
 							<ActivityDetailRow
@@ -1251,7 +1542,7 @@ function AiRequestLogPanel( { entry, bootData } ) {
 					</dl>
 				</div>
 			) }
-		</div>
+		</section>
 	);
 }
 
@@ -1823,7 +2114,15 @@ function CryptographicRecord( { details, artifact } ) {
 			) }
 		>
 			<summary className="flavor-agent-activity-log__record-summary">
-				{ __( 'Cryptographic record', 'flavor-agent' ) }
+				<span className="flavor-agent-activity-log__record-summary-label">
+					{ __( 'Cryptographic record', 'flavor-agent' ) }
+				</span>
+				<span className="flavor-agent-activity-log__record-summary-text">
+					{ __(
+						'Freshness signatures, attestation, raw diagnostics',
+						'flavor-agent'
+					) }
+				</span>
 			</summary>
 			<div className="flavor-agent-activity-log__record-body">
 				{ hasSignatureEvidence && (
@@ -1994,20 +2293,29 @@ function GovernanceEvidenceSection( {
 			/>
 			<div className="flavor-agent-activity-log__governance-subsection">
 				<h4 className="flavor-agent-activity-log__governance-subtitle">
-					{ __( 'Target and provenance', 'flavor-agent' ) }
+					{ __( 'Full provenance', 'flavor-agent' ) }
 				</h4>
 				<GovernanceDetailRows rows={ provenanceRows } />
 			</div>
 			<div className="flavor-agent-activity-log__governance-subsection">
 				<h4 className="flavor-agent-activity-log__governance-subtitle">
-					{ __( 'Undo and outcome', 'flavor-agent' ) }
+					{ __( 'Outcome and undo', 'flavor-agent' ) }
 				</h4>
 				<GovernanceDetailRows rows={ outcomeRows } />
 			</div>
-			<AttestationActions artifact={ artifact } />
-			<CryptographicRecord details={ details } artifact={ artifact } />
 			{ canDecide && (
 				<div className="flavor-agent-activity-log__decision">
+					<div>
+						<h4 className="flavor-agent-activity-log__governance-subtitle">
+							{ __( 'Decision', 'flavor-agent' ) }
+						</h4>
+						<p className="flavor-agent-activity-log__copy">
+							{ __(
+								'AI proposes; WordPress approves. Approving applies this bounded style change from WordPress; rejecting keeps the site unchanged.',
+								'flavor-agent'
+							) }
+						</p>
+					</div>
 					<TextareaControl
 						__nextHasNoMarginBottom
 						label={ __(
@@ -2043,6 +2351,8 @@ function GovernanceEvidenceSection( {
 					</Flex>
 				</div>
 			) }
+			<AttestationActions artifact={ artifact } />
+			<CryptographicRecord details={ details } artifact={ artifact } />
 		</section>
 	);
 }
@@ -2051,6 +2361,7 @@ function ActivityEntryDetails( {
 	entry,
 	bootData,
 	onDecided,
+	onFilterAction,
 	isLocallyDecided = false,
 } ) {
 	if ( ! entry ) {
@@ -2070,6 +2381,10 @@ function ActivityEntryDetails( {
 			</Card>
 		);
 	}
+
+	const selectedActions = normalizeSelectedActivityActions( entry, {
+		adminUrl: bootData?.adminUrl,
+	} );
 
 	return (
 		<Card className="flavor-agent-activity-log__sidebar-card">
@@ -2092,19 +2407,14 @@ function ActivityEntryDetails( {
 								{ entry.description }
 							</p>
 						</div>
-						{ entry.targetUrl && (
-							<div className="flavor-agent-activity-log__sidebar-actions">
-								<Button
-									href={ entry.targetUrl }
-									variant="secondary"
-								>
-									{ entry.targetLinkLabel }
-								</Button>
-							</div>
-						) }
 					</div>
 				</CardHeader>
 				<CardBody>
+					<SelectedActivityActions
+						actions={ selectedActions }
+						onFilterAction={ onFilterAction }
+					/>
+					<ActivityEntryStory entry={ entry } />
 					<AiRequestLogPanel entry={ entry } bootData={ bootData } />
 					<GovernanceEvidenceSection
 						entry={ entry }
@@ -2186,6 +2496,7 @@ export function ActivityLogApp( { bootData } ) {
 	const exitLinkedActivityMode = useCallback( () => {
 		if ( requestActivityId ) {
 			persistActivityViewRef.current = true;
+			setLinkedActivityEntryIdInUrl();
 			setRequestActivityId( '' );
 		}
 	}, [ requestActivityId ] );
@@ -2479,40 +2790,51 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
-				render: ( { item } ) => (
-					<span
-						id={ `flavor-agent-activity-log-entry-title-${ item.id }` }
-						className={ `flavor-agent-activity-log__entry-title${
-							item.id === selectedEntryId ? ' is-current' : ''
-						}${
-							item.governanceDetails?.status === 'pending'
-								? ' is-pending-governance'
-								: ''
-						}` }
-						aria-current={
-							item.id === selectedEntryId ? 'true' : undefined
-						}
-						aria-controls={
-							item.id === selectedEntryId
-								? 'flavor-agent-activity-log-details'
-								: undefined
-						}
-					>
-						{ item.title }
-						{ item.governanceDetails?.status === 'pending' && (
-							<span className="flavor-agent-activity-log__entry-badge">
-								{ __( 'Pending approval', 'flavor-agent' ) }
-								{ item.governanceDetails.expiresAt
-									? ` · ${ sprintf(
-											/* translators: %s: expiry timestamp. */
-											__( 'Expires %s', 'flavor-agent' ),
-											item.governanceDetails.expiresAt
-									  ) }`
-									: '' }
+				render: ( { item } ) => {
+					const badges = normalizeActivityDiscoveryBadges( item );
+
+					return (
+						<span
+							id={ `flavor-agent-activity-log-entry-title-${ item.id }` }
+							className={ `flavor-agent-activity-log__entry-title${
+								item.id === selectedEntryId ? ' is-current' : ''
+							}${ badges.length > 0 ? ' has-badges' : '' }` }
+							aria-current={
+								item.id === selectedEntryId ? 'true' : undefined
+							}
+							aria-controls={
+								item.id === selectedEntryId
+									? 'flavor-agent-activity-log-details'
+									: undefined
+							}
+						>
+							<span className="flavor-agent-activity-log__entry-title-text">
+								{ item.title }
 							</span>
-						) }
-					</span>
-				),
+							{ badges.length > 0 && (
+								<span
+									className="flavor-agent-activity-log__entry-badges"
+									aria-label={ __(
+										'Activity evidence',
+										'flavor-agent'
+									) }
+								>
+									{ badges.map( ( badge ) => (
+										<span
+											key={ badge.id }
+											className={ `flavor-agent-activity-log__entry-badge is-${ badge.tone }` }
+										>
+											{ badge.label }
+											{ badge.detail
+												? ` · ${ badge.detail }`
+												: '' }
+										</span>
+									) ) }
+								</span>
+							) }
+						</span>
+					);
+				},
 			},
 			{
 				id: 'description',
@@ -2771,8 +3093,8 @@ export function ActivityLogApp( { bootData } ) {
 
 	useEffect( () => {
 		if ( responseData.entries.length === 0 ) {
-			if ( requestActivityId ) {
-				setRequestActivityId( '' );
+			if ( requestActivityId && ! isLoading ) {
+				exitLinkedActivityMode();
 			}
 
 			if ( selectedEntryId && ! isLoading ) {
@@ -2795,9 +3117,10 @@ export function ActivityLogApp( { bootData } ) {
 				( entry ) => entry.id === requestActivityId
 			)
 		) {
-			setRequestActivityId( '' );
+			exitLinkedActivityMode();
 		}
 	}, [
+		exitLinkedActivityMode,
 		isLoading,
 		requestActivityId,
 		responseData.entries,
@@ -2818,6 +3141,46 @@ export function ActivityLogApp( { bootData } ) {
 			withPendingApprovalFilter( currentView, viewOptions )
 		);
 	}, [ exitLinkedActivityMode, viewOptions ] );
+	const applySelectedRowFilter = useCallback(
+		( action ) => {
+			if (
+				! action ||
+				action.type !== 'filter' ||
+				! action.field ||
+				! action.operator ||
+				action.value === undefined ||
+				action.value === null ||
+				action.value === ''
+			) {
+				return;
+			}
+
+			exitLinkedActivityMode();
+
+			setView( ( currentView ) => {
+				const normalizedView = normalizeStoredActivityView(
+					currentView,
+					viewOptions
+				);
+
+				return {
+					...normalizedView,
+					page: 1,
+					filters: [
+						...normalizedView.filters.filter(
+							( filter ) => filter?.field !== action.field
+						),
+						{
+							field: action.field,
+							operator: action.operator,
+							value: action.value,
+						},
+					],
+				};
+			} );
+		},
+		[ exitLinkedActivityMode, viewOptions ]
+	);
 	const emptyState = error ? (
 		<ErrorState
 			error={ error }
@@ -2994,6 +3357,12 @@ export function ActivityLogApp( { bootData } ) {
 					</div>
 				</div>
 
+				<LinkedActivityBanner
+					activityId={ requestActivityId }
+					entry={ selectedEntry }
+					onClear={ exitLinkedActivityMode }
+				/>
+
 				<div className="flavor-agent-activity-log__content">
 					<div className="flavor-agent-activity-log__feed">
 						<Card className="flavor-agent-activity-log__feed-card">
@@ -3010,6 +3379,7 @@ export function ActivityLogApp( { bootData } ) {
 							entry={ selectedEntry }
 							bootData={ bootData }
 							onDecided={ handleEntryDecided }
+							onFilterAction={ applySelectedRowFilter }
 							isLocallyDecided={ locallyDecidedEntryIds.has(
 								selectedEntry?.id
 							) }

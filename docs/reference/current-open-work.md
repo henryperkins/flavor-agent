@@ -11,7 +11,7 @@ Use it when you need to answer:
 
 ## Status
 
-Updated: 2026-06-22.
+Updated: 2026-06-24.
 
 Initial source basis: all repository/workspace doc-like files enumerated on 2026-06-05 (77 files: 69 under `docs/`, 8 root docs including the now-deleted untracked local review artifact `ConfirmedFindings.txt`; dependency/generated directories excluded). Open-work signals were compared across `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `improving-levers.md`, `docs/features/`, `docs/reference/`, `docs/wp7-migration-opportunities.md`, release docs, root docs, and the Gutenberg 23.3 validation records. Current active rows must cite tracked source files; deleted local artifacts are historical context only.
 
@@ -45,6 +45,8 @@ Initial source basis: all repository/workspace doc-like files enumerated on 2026
 
 2026-06-22 Ring III remediation shipped: closed the supersession-chain gap, replaced presence-only admin endpoint checks with a site-run verification summary, aligned the local and standalone verifiers on revert/supersession outcomes, and covered the standalone HTTP verifier core in PHPUnit while keeping independent verification separate from wp-admin convenience UX.
 
+2026-06-24 AI Activity row actions/discovery first layer: `Settings > AI Activity` now ships a linked-row banner for `?activity=` focus mode, selected-row target/focused-view/related-row actions, and passive feed badges for pending approval, AI request-log availability, and attestation evidence. The historical implementation plan is archived at `docs/superpowers/plans/archive/2026-06-24-ai-activity-row-actions-discovery.md`; this does not ship a rich visual diff viewer or cross-operator workflows.
+
 Archived files under `docs/superpowers/plans/archive/` and implemented design specs under `docs/superpowers/specs/` are historical context only. Do not treat them as active implementation plans. Any item below needs a fresh source-grounded plan before code changes unless the change is a narrow docs or verification update.
 
 ## Current Implementation Candidates
@@ -53,7 +55,7 @@ These items are not blocked by a known upstream API prerequisite. They still nee
 
 | Workstream | Why it is open | Current source | Next move |
 | --- | --- | --- | --- |
-| Admin activity governance deepening and learning reports | The shipped C1.1 console slice gives `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, an Approvals quick filter, a bounded rendered `learningReport` for global admin reads, durable pattern-trait capture for new pattern outcome rows, editor-side recognition of pending/rejected/expired/failed external-apply lifecycle rows, and wp-admin approval notifications for pending external style applies. A rich visual diff viewer, broader row actions/discovery, and cross-operator workflows remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `improving-levers.md` Phase 9; `docs/features/activity-and-audit.md`; follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | No remaining Phase 9 pattern-trait item; choose a different bounded governance follow-up before implementation. |
+| Admin activity governance deepening | The shipped C1.1 console slice plus the first 2026-06-24 row actions/discovery layer give `Settings > AI Activity` governance evidence, before/proposed/after style comparison, hardened decisions, an Approvals quick filter, a bounded rendered `learningReport` for global admin reads, durable pattern-trait capture for new pattern outcome rows, editor-side recognition of pending/rejected/expired/failed external-apply lifecycle rows, wp-admin approval notifications for pending external style applies, a linked-row focus banner, selected-row target/focused-view/related-row actions, and passive badges for pending approval, AI request-log availability, and attestation evidence. A rich visual diff viewer and cross-operator workflows remain open. | `STATUS.md`; `docs/SOURCE_OF_TRUTH.md`; `docs/features/activity-and-audit.md`; `docs/superpowers/plans/archive/2026-06-24-ai-activity-row-actions-discovery.md`; historical follow-up list in `docs/superpowers/plans/archive/2026-06-10-ai-activity-governance-console-c1-1.md` | Fresh bounded follow-up: rich visual diff viewer or template/template-part external-apply executors. Keep the shipped linked-row banner, selected-row actions, and passive badges as the baseline. |
 
 ## Sequenced Later
 
@@ -117,7 +119,7 @@ These can turn into implementation work only after the upstream contract changes
 
 ## Suggested Next Planning Order
 
-1. Approval notifications or template/template-part external-apply executors if the priority is extending the governance loop beyond the shipped C1.1 console; each needs its own bounded plan.
+1. Rich visual diff viewer or template/template-part external-apply executors if the priority is extending the governance loop beyond the shipped C1.1 console, learning-report slice, approval notices, and first row actions/discovery layer; each needs its own bounded plan.
 2. Block-operation expansion or a follow-up adapted-preview v2 if the priority is a new product surface; reuse or deliberately extract the shipped deterministic pattern adaptation module instead of planning a second sub-block mutation engine.
-3. Admin activity reports if the priority is the future learning loop; use the shipped Phase 8 attribution join contract as the input contract.
+3. Fixture-harvest export/redaction planning if the priority is the future learning loop; use the shipped Phase 8 attribution join contract and Phase 9 learning-report slice as the input contract.
 4. Release-validation chores before any v0.1.0 release decision or upstream compatibility claim.

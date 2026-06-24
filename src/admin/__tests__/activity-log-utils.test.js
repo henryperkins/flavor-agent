@@ -1,5 +1,6 @@
 import {
 	buildDecisionRequest,
+	buildActivityPermalink,
 	clampActivityViewPage,
 	DEFAULT_ACTIVITY_VIEW,
 	areActivityViewsEqual,
@@ -12,7 +13,9 @@ import {
 	getStyleComparisonRows,
 	isPendingExternalApply,
 	normalizeActivityEntries,
+	normalizeActivityDiscoveryBadges,
 	normalizeGovernanceLearningReport,
+	normalizeSelectedActivityActions,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
@@ -775,6 +778,163 @@ describe( 'activity log utils', () => {
 		);
 		expect( styleBookLink.label ).toBe( 'Open Styles' );
 		expect( styleBookLink.url ).toContain( '/wp-admin/site-editor.php?' );
+	} );
+
+	test( 'buildActivityPermalink uses the existing focused-row query contract', () => {
+		expect(
+			buildActivityPermalink(
+				'https://example.test/wp-admin',
+				' activity-9 '
+			)
+		).toBe(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-9'
+		);
+		expect(
+			buildActivityPermalink(
+				'https://example.test/wp-admin/',
+				'activity-10'
+			)
+		).toBe(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-10'
+		);
+		expect(
+			buildActivityPermalink( 'https://example.test/wp-admin/', '' )
+		).toBe( '' );
+		expect( buildActivityPermalink( '', 'activity-9' ) ).toBe( '' );
+	} );
+
+	test( 'normalizeSelectedActivityActions exposes only backed row actions and pivots', () => {
+		const [ normalized ] = normalizeActivityEntries(
+			[
+				createEntry( {
+					id: 'activity-actions',
+					userId: 11,
+					target: {
+						blockName: 'core/paragraph',
+						blockPath: [ 0 ],
+					},
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+					},
+				} ),
+			],
+			{
+				adminBaseUrl: 'https://example.test/wp-admin/',
+			}
+		);
+		const actions = normalizeSelectedActivityActions( normalized, {
+			adminUrl: 'https://example.test/wp-admin/',
+		} );
+
+		expect( actions.map( ( action ) => action.id ) ).toEqual( [
+			'open-target',
+			'open-focused-view',
+			'same-surface',
+			'same-user',
+			'same-entity',
+			'same-block-path',
+		] );
+		expect(
+			actions.find( ( action ) => action.id === 'open-target' )
+		).toMatchObject( {
+			type: 'link',
+			label: 'Open target',
+			detail: 'Open post',
+			url: 'https://example.test/wp-admin/post.php?post=42&action=edit',
+		} );
+		expect(
+			actions.find( ( action ) => action.id === 'open-focused-view' )
+		).toMatchObject( {
+			type: 'link',
+			label: 'Open focused view',
+			url: 'https://example.test/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-actions',
+		} );
+		expect(
+			actions.find( ( action ) => action.id === 'same-surface' )
+		).toMatchObject( {
+			type: 'filter',
+			field: 'surface',
+			operator: 'is',
+			value: 'block',
+		} );
+		expect(
+			actions.find( ( action ) => action.id === 'same-user' )
+		).toMatchObject( {
+			type: 'filter',
+			field: 'userId',
+			operator: 'is',
+			value: '11',
+		} );
+		expect(
+			actions.find( ( action ) => action.id === 'same-entity' )
+		).toMatchObject( {
+			type: 'filter',
+			field: 'entityId',
+			operator: 'contains',
+			value: '42',
+		} );
+		expect(
+			actions.find( ( action ) => action.id === 'same-block-path' )
+		).toMatchObject( {
+			type: 'filter',
+			field: 'blockPath',
+			operator: 'contains',
+			value: 'Paragraph · 1',
+		} );
+
+		expect(
+			normalizeSelectedActivityActions( {
+				id: '',
+				surface: '',
+				userId: '0',
+				entityId: '',
+				blockPath: '',
+			} )
+		).toEqual( [] );
+	} );
+
+	test( 'normalizeActivityDiscoveryBadges keeps passive evidence badges data-backed', () => {
+		const [ pending ] = normalizeActivityEntries( [
+			createEntry( {
+				id: 'activity-pending',
+				status: 'pending',
+				surface: 'global-styles',
+				apply: {
+					status: 'pending',
+					expiresAt: '2026-06-11T01:00:00+00:00',
+					operations: [],
+				},
+			} ),
+		] );
+		const badges = normalizeActivityDiscoveryBadges( {
+			...pending,
+			aiRequestLogId: 'request-log-1',
+			attestation: { id: 'att_abc123' },
+		} );
+
+		expect( badges ).toEqual( [
+			{
+				id: 'pending-governance',
+				label: 'Pending approval',
+				detail: 'Expires 2026-06-11T01:00:00+00:00',
+				tone: 'warning',
+			},
+			{
+				id: 'ai-request',
+				label: 'AI request',
+				tone: 'info',
+			},
+			{
+				id: 'attestation',
+				label: 'Attestation',
+				tone: 'success',
+			},
+		] );
+		expect( normalizeActivityDiscoveryBadges( createEntry() ) ).toEqual(
+			[]
+		);
 	} );
 
 	test( 'normalizeActivityEntries labels Style Book activity against the selected block target', () => {
