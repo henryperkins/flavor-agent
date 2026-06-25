@@ -36,7 +36,7 @@ Every executable recommendation runs one loop:
 1. **Generate** — the surface ability executes through the shared executor (`inc/Abilities/RecommendationAbilityExecution.php`), which injects guidelines, routes the provider, attaches best-effort developer-docs grounding when the search backend is reachable (grounding never blocks a recommendation; trust and currency are owned by `scripts/update-docs-ai-search.js`), and writes a `request_diagnostic` activity row for every request — including advisory-only and externally invoked ones.
 2. **Validate** — model output is parsed against strict response schemas and bounded operation catalogs. Rejected proposals are preserved as diagnostics (`rejectedOperations`, `validationReasons`), never silently dropped, and the client revalidates server-approved operations and fails closed on identity mismatch.
 3. **Review** — structural and theme-level changes require an explicit review step before apply; inline-safe changes are limited to bounded attribute updates classified by the actionability tiers.
-4. **Apply + record** — applies the plugin owns execute deterministically and write server-backed activity rows with provenance (provider path, model, prompt, route, token usage).
+4. **Apply + record** — applies the plugin owns execute deterministically and write server-backed activity rows with provenance (provider path, model, prompt, route).
 5. **Reverse** — undo revalidates the live document against the recorded post-apply state before reversing; drift blocks the undo instead of clobbering later human edits.
 
 Freshness signatures thread through the loop: request, review, and resolved signatures detect client, server, and docs-grounding drift, and stale context blocks apply (`stale_blocked`) rather than acting on outdated state.
@@ -81,7 +81,7 @@ Enforced by:
 - `inc/Abilities/RecommendationAbilityExecution.php` — centralized `request_diagnostic` emission for every recommendation execution, regardless of caller
 - `inc/Activity/Repository.php` / `Permissions.php` / `Serializer.php` — server-backed storage, contextual capability checks, provenance projection columns for audit filtering
 - `inc/Activity/GovernanceLearningReport.php` — optional bounded aggregate `learningReport` payload for global admin activity reads, with sanitized outcome rates and representative activity ids only
-- `POST /flavor-agent/v1/activity` — persists apply rows and scoped diagnostics with provider path, model, prompt, reference, token usage, and latency
+- `POST /flavor-agent/v1/activity` — persists apply rows and scoped diagnostics with provider path, model, prompt, reference, and route; token usage and request latency are not projected into any column and are recorded only inside the request.ai JSON blob of `request_diagnostic` rows
 - `inc/Admin/ActivityPage` + `src/admin/activity-log.js` — the `Settings > AI Activity` approval/audit/attestation-discovery surface (decision controls for pending external applies; non-pending rows stay inspection-only)
 
 Tested by: `tests/phpunit/RecommendationAbilityExecutionTest.php`, `ActivityRepositoryTest.php`, `ActivityPermissionsTest.php`, `ActivitySerializerTest.php`, `ActivityPageTest.php`.
@@ -166,7 +166,7 @@ External agents reach the layer through the same permission callbacks as the fir
 
 - the seven `recommend-*` abilities (feature-gated) — exposed as first-class MCP tools on the dedicated server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`)
 - the five `preview-recommend-*` siblings — side-effect-free signature dry-runs, registered before the feature gate is enabled so operators can verify wiring
-- nine public read helpers on the universal MCP default server (`meta.mcp.public = true`)
+- ten public read helpers on the universal MCP default server (`meta.mcp.public = true`)
 - the four external-apply abilities (feature-gated, dedicated server only): `request-style-apply` queues a review-gated style apply, `get-activity`/`list-activity` are the agent's attribution and status reads, and `undo-activity` is the server-side reverse path with ordered-undo and drift checks
 
 Generation-side governance is caller-independent: external recommendation calls flow through the same executor, schemas, validators, freshness signatures, and request-diagnostic attribution as the editor.
