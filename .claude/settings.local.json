@@ -4,6 +4,10 @@
     "wpds",
     "wordpress-docs-ai-search"
   ],
+  "skillOverrides": {
+    "blueprint": "off",
+    "jam-cli": "off"
+  },
   "enabledPlugins": {
     "playwright@claude-plugins-official": true
   }

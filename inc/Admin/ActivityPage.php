@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Admin;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Context\ServerCollector;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -208,9 +209,41 @@ final class ActivityPage {
 				'nonce'                  => wp_create_nonce( 'wp_rest' ),
 				'restUrl'                => rest_url(),
 				'settingsUrl'            => admin_url( 'options-general.php?page=flavor-agent' ),
+				'themeColorPresets'      => self::get_theme_color_presets(),
 				'timeZone'               => self::resolve_timezone(),
 			]
 		);
+	}
+
+	/**
+	 * @return array<int, array{name: string, slug: string, color: string}>
+	 */
+	private static function get_theme_color_presets(): array {
+		$presets       = ServerCollector::for_theme_presets();
+		$color_presets = is_array( $presets['colorPresets'] ?? null ) ? $presets['colorPresets'] : [];
+		$normalized    = [];
+
+		foreach ( $color_presets as $preset ) {
+			if ( ! is_array( $preset ) ) {
+				continue;
+			}
+
+			$slug  = sanitize_key( (string) ( $preset['slug'] ?? '' ) );
+			$color = trim( (string) ( $preset['color'] ?? '' ) );
+			$name  = sanitize_text_field( (string) ( $preset['name'] ?? '' ) );
+
+			if ( '' === $slug || '' === $color ) {
+				continue;
+			}
+
+			$normalized[] = [
+				'name'  => $name,
+				'slug'  => $slug,
+				'color' => $color,
+			];
+		}
+
+		return $normalized;
 	}
 
 	private static function is_activity_page_request(): bool {

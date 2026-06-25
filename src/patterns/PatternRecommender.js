@@ -1277,16 +1277,19 @@ export default function PatternRecommender() {
 				}
 			);
 
-			return buildPatternAdaptationPreview( {
-				pattern,
+			return {
 				sourceBlocks,
-				adaptationContext,
-				insertionTargetSignature: currentInsertionTargetSignature,
-				resolvedContextSignature: patternResolvedContextSignature,
-				themeTokens:
-					collectThemeTokensFromSettings( blockEditorSettings ),
-				blockRegistry,
-			} );
+				...buildPatternAdaptationPreview( {
+					pattern,
+					sourceBlocks,
+					adaptationContext,
+					insertionTargetSignature: currentInsertionTargetSignature,
+					resolvedContextSignature: patternResolvedContextSignature,
+					themeTokens:
+						collectThemeTokensFromSettings( blockEditorSettings ),
+					blockRegistry,
+				} ),
+			};
 		},
 		[
 			blockEditorSettings,
@@ -1322,7 +1325,8 @@ export default function PatternRecommender() {
 				pattern,
 				recommendation,
 				status: result.status,
-				blocks: result.blocks,
+				originalBlocks: result.sourceBlocks || [],
+				adaptedBlocks: result.blocks,
 				changes: result.plan?.changes || [],
 				adaptationSignature: result.adaptationSignature,
 			} );
@@ -1802,7 +1806,7 @@ export default function PatternRecommender() {
 			return;
 		}
 
-		const { pattern, recommendation, blocks } = adaptedPreview;
+		const { pattern, recommendation, adaptedBlocks } = adaptedPreview;
 		const fresh = buildCurrentAdaptation( pattern );
 
 		if (
@@ -1823,14 +1827,16 @@ export default function PatternRecommender() {
 			! ( await runPatternFreshnessGate( {
 				pattern,
 				recommendation,
-				blocks,
+				blocks: adaptedBlocks,
 				liveInput: buildBaseInput(),
 			} ) )
 		) {
 			return;
 		}
 
-		const clonedBlocks = blocks.map( ( block ) => cloneBlock( block ) );
+		const clonedBlocks = adaptedBlocks.map( ( block ) =>
+			cloneBlock( block )
+		);
 
 		const inserted = await runGuardedInsert( {
 			pattern,
@@ -2088,7 +2094,8 @@ export default function PatternRecommender() {
 						title={ getPatternTitle( adaptedPreview.pattern ) }
 						status={ adaptedPreview.status }
 						changes={ adaptedPreview.changes }
-						blocks={ adaptedPreview.blocks }
+						originalBlocks={ adaptedPreview.originalBlocks }
+						adaptedBlocks={ adaptedPreview.adaptedBlocks }
 						isStale={ adaptedPreview.status === 'stale' }
 						onInsertAdapted={ handleInsertAdapted }
 						onInsertOriginal={ () => {

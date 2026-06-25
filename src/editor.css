@@ -2441,12 +2441,42 @@
   color: var(--flavor-agent-editor-muted);
 }
 
+.flavor-agent-pattern-adaptation__compare {
+  display: grid;
+  gap: 8px;
+}
+
+.flavor-agent-pattern-adaptation__panel {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--wpds-color-stroke-surface-neutral-weak, #e0e0e0);
+  border-radius: var(--wpds-border-radius-xs, 2px);
+  background: var(--wpds-color-bg-surface, #fff);
+}
+
+.flavor-agent-pattern-adaptation__panel-title {
+  font-size: var(--wpds-font-size-xs, 11px);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--flavor-agent-editor-text);
+}
+
 .flavor-agent-pattern-adaptation__changes {
   margin: 0;
   padding-left: 18px;
   font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.45;
   color: var(--flavor-agent-editor-muted);
+}
+
+.flavor-agent-pattern-adaptation__changes li {
+  overflow-wrap: anywhere;
+}
+
+.flavor-agent-pattern-adaptation__change-path,
+.flavor-agent-pattern-adaptation__change-value {
+  font-family: monospace;
 }
 
 .flavor-agent-pattern-adaptation__preview {

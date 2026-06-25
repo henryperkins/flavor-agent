@@ -117,6 +117,8 @@ import {
 
 const DOCS_GROUNDING_WARNING = {
 	tone: 'info',
+	reason: '',
+	errorCode: '',
 	message:
 		'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.',
 };

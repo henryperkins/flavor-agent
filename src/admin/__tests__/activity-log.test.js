@@ -220,6 +220,18 @@ const BOOT_DATA = {
 	restUrl: 'https://example.test/wp-json/',
 	settingsUrl:
 		'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+	themeColorPresets: [
+		{
+			name: 'Accent',
+			slug: 'accent',
+			color: '#0b7b80',
+		},
+		{
+			name: 'Contrast',
+			slug: 'contrast',
+			color: '#17232a',
+		},
+	],
 	timeZone: 'UTC',
 	canApproveStyleApplies: true,
 };
@@ -418,6 +430,25 @@ function getDefinitionValue( scope, label ) {
 	);
 
 	return term?.nextElementSibling?.textContent || '';
+}
+
+function getVisualDiffViewer() {
+	return getContainer().querySelector(
+		'.flavor-agent-activity-log__visual-diff'
+	);
+}
+
+function getVisualDiffRow( label ) {
+	return Array.from(
+		getContainer().querySelectorAll(
+			'.flavor-agent-activity-log__visual-diff-row'
+		)
+	).find(
+		( row ) =>
+			row.querySelector(
+				'.flavor-agent-activity-log__visual-diff-row-title'
+			)?.textContent === label
+	);
 }
 
 beforeEach( () => {
@@ -2438,6 +2469,42 @@ describe( 'ActivityLogApp', () => {
 		await renderApp( [
 			createExternalApplyEntry( {
 				id: 'activity-pending',
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'var:preset|color|contrast',
+							},
+						},
+					},
+				},
+				after: {
+					operations: [],
+				},
+				apply: {
+					status: 'pending',
+					requestedBy: 7,
+					requestedAt: '2026-06-10T01:00:00+00:00',
+					expiresAt: '2026-06-11T01:00:00+00:00',
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
+						},
+						{
+							type: 'custom_unknown',
+							value: 'raw',
+						},
+					],
+					signatures: {
+						resolvedContextSignature: 'r'.repeat( 64 ),
+						reviewContextSignature: 'v'.repeat( 64 ),
+						baselineConfigHash: 'b'.repeat( 64 ),
+					},
+					requestReference: 'agent-req-1',
+				},
 			} ),
 			createExternalApplyEntry( {
 				id: 'activity-rejected',
@@ -2469,18 +2536,27 @@ describe( 'ActivityLogApp', () => {
 				},
 				before: {
 					userConfig: {
-						styles: { color: { text: 'old' } },
+						styles: {
+							color: {
+								text: 'var:preset|color|contrast',
+							},
+						},
 					},
 				},
 				after: {
 					userConfig: {
-						styles: { color: { text: 'new' } },
+						styles: {
+							color: {
+								text: 'var:preset|color|accent',
+							},
+						},
 					},
 					operations: [
 						{
 							type: 'set_styles',
 							path: [ 'color', 'text' ],
-							value: 'new',
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
 						},
 					],
 				},
@@ -2494,11 +2570,45 @@ describe( 'ActivityLogApp', () => {
 
 		expect( getContainer().textContent ).toContain( 'Governance evidence' );
 		expect( getContainer().textContent ).toContain( 'Approval required' );
-		expect( getContainer().textContent ).toContain( 'color.text' );
+		expect( getContainer().textContent ).not.toContain(
+			'Style comparison'
+		);
 		expect( getContainer().textContent ).toContain( 'agent-req-1' );
-		expect( getContainer().textContent ).toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Baseline unavailable'
 		);
+		expect( getVisualDiffViewer() ).not.toBeNull();
+		expect( getVisualDiffRow( 'color.text' ) ).not.toBeNull();
+		expect( getVisualDiffRow( 'color.text' )?.textContent ).toContain(
+			'Proposed only'
+		);
+		expect(
+			getVisualDiffRow( 'color.text' )?.querySelectorAll(
+				'.flavor-agent-activity-log__visual-diff-swatch'
+			)
+		).toHaveLength( 2 );
+		expect(
+			getVisualDiffRow( 'color.text' )?.querySelectorAll(
+				'.flavor-agent-activity-log__visual-diff-live'
+			)
+		).toHaveLength( 2 );
+		expect( getVisualDiffRow( 'color.text' )?.textContent ).toContain(
+			'resolved from the current theme palette'
+		);
+		expect( getVisualDiffRow( 'color.text' )?.textContent ).toContain(
+			'Not applied'
+		);
+		expect( getVisualDiffRow( 'Custom Unknown' )?.className ).toContain(
+			'is-unsupported'
+		);
+		expect( getVisualDiffRow( 'Custom Unknown' )?.textContent ).toContain(
+			'{"type":"custom_unknown","value":"raw"}'
+		);
+		expect(
+			getVisualDiffViewer().compareDocumentPosition(
+				getDetailSectionByLabel( 'State snapshots' )
+			)
+		).toBe( 4 );
 
 		await act( async () => {
 			getDataViewsMockState().latestProps.onClickItem( {
@@ -2528,8 +2638,162 @@ describe( 'ActivityLogApp', () => {
 			} );
 		} );
 		expect( getContainer().textContent ).toContain( 'Applied' );
-		expect( getContainer().textContent ).toContain( 'old' );
-		expect( getContainer().textContent ).toContain( 'new' );
+		expect( getVisualDiffRow( 'color.text' )?.className ).toContain(
+			'is-applied'
+		);
+		expect(
+			getVisualDiffRow( 'color.text' )?.querySelectorAll(
+				'.flavor-agent-activity-log__visual-diff-swatch'
+			)
+		).toHaveLength( 3 );
+		expect(
+			getVisualDiffRow( 'color.text' )?.querySelectorAll(
+				'.flavor-agent-activity-log__visual-diff-live'
+			)
+		).toHaveLength( 3 );
+	} );
+
+	test( 'renders honest proposed-only variation rows and distinct undone and blocked viewer states', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-variation'
+		);
+
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-variation',
+				status: 'applied',
+				after: {
+					operations: [
+						{
+							type: 'set_theme_variation',
+							variationIndex: 1,
+							variationTitle: 'High Contrast',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					requestedBy: 7,
+					requestedAt: '2026-06-10T01:00:00+00:00',
+					expiresAt: '2026-06-11T01:00:00+00:00',
+					operations: [],
+					requestReference: 'agent-variation-1',
+				},
+			} ),
+			createExternalApplyEntry( {
+				id: 'activity-undone',
+				status: 'undone',
+				undo: {
+					status: 'undone',
+					canUndo: false,
+				},
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'old',
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'new',
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'new',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					requestedBy: 7,
+					requestedAt: '2026-06-10T01:00:00+00:00',
+					expiresAt: '2026-06-11T01:00:00+00:00',
+					operations: [],
+					requestReference: 'agent-undone-1',
+				},
+			} ),
+			createExternalApplyEntry( {
+				id: 'activity-blocked',
+				status: 'blocked',
+				undo: {
+					status: 'blocked',
+					canUndo: false,
+					error: 'Undo blocked by newer AI actions.',
+				},
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'old',
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'new',
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'new',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					requestedBy: 7,
+					requestedAt: '2026-06-10T01:00:00+00:00',
+					expiresAt: '2026-06-11T01:00:00+00:00',
+					operations: [],
+					requestReference: 'agent-blocked-1',
+				},
+			} ),
+		] );
+
+		const variationRow = getVisualDiffRow( 'Theme variation' );
+		expect( variationRow ).not.toBeNull();
+		expect( variationRow.className ).toContain( 'is-variation' );
+		expect( variationRow.textContent ).toContain( 'High Contrast' );
+		expect(
+			variationRow.querySelectorAll(
+				'.flavor-agent-activity-log__visual-diff-stage'
+			)
+		).toHaveLength( 1 );
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onClickItem( {
+				id: 'activity-undone',
+			} );
+		} );
+		expect( getVisualDiffRow( 'color.text' )?.className ).toContain(
+			'is-undone'
+		);
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onClickItem( {
+				id: 'activity-blocked',
+			} );
+		} );
+		expect( getVisualDiffRow( 'color.text' )?.className ).toContain(
+			'is-blocked'
+		);
 	} );
 
 	test( 'renders attestation verification affordances for executed external applies', async () => {

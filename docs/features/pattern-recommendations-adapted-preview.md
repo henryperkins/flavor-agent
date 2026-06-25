@@ -1,10 +1,10 @@
 # Adapted Pattern Recommendation Preview
 
-This records the shipped v1 adapted-preview slice for the existing Pattern Recommendations surface, plus the remaining follow-up decisions. It builds on `docs/features/pattern-recommendations.md`, where Flavor Agent ranks patterns, displays them in the native Gutenberg inserter, and inserts the selected pattern as Gutenberg exposes it.
+This records the shipped adapted-preview surface for the existing Pattern Recommendations flow: the 2026-06-19 deterministic preview v1 plus the 2026-06-24 comparison follow-up. It builds on `docs/features/pattern-recommendations.md`, where Flavor Agent ranks patterns, displays them in the native Gutenberg inserter, and inserts the selected pattern as Gutenberg exposes it.
 
 ## Current Implementation State
 
-As of 2026-06-19, adapted pattern preview v1 is implemented for non-synced recommended patterns. The live pattern surface remains an inserter ranking assist surface, but non-synced shelf items now expose `Preview adapted` plus `Insert original`; synced/user `core/block` references keep a single unchanged `Insert` action and are not detached.
+As of 2026-06-24, adapted preview comparison is implemented for non-synced recommended patterns. The live pattern surface remains an inserter ranking assist surface, but non-synced shelf items now expose `Preview adapted`, `Insert adapted`, and `Insert original` through a labeled original/adapted compare panel; synced/user `core/block` references keep a single unchanged `Insert` action and are not detached.
 
 The shipped v1 seams are:
 
@@ -12,7 +12,7 @@ The shipped v1 seams are:
 - `src/patterns/pattern-insertability.js` owns reusable block resolution and resolved-block insertability helpers through `resolvePatternBlocks()`, `getRejectedResolvedBlockNames()`, and `isSyncedPatternReference()`.
 - `src/patterns/pattern-adaptation-context.js` reads the client-only nearby heading and alignment context from the live editor at preview time.
 - `src/patterns/pattern-adaptation.js` clones non-synced pattern blocks, applies the deterministic cosmetic rules, emits `pattern-adaptation-v1` plan changes, and returns a client-side `adaptationSignature`.
-- `src/patterns/PatternAdaptationPreview.js` renders the adapted clone with Gutenberg `BlockPreview` and exposes `Insert adapted`, `Insert original`, and `Close`.
+- `src/patterns/PatternAdaptationPreview.js` renders labeled original/adapted `BlockPreview` sections plus deterministic per-change summary rows, and exposes `Insert adapted`, `Insert original`, and `Close`.
 - `src/store/recommendation-outcomes.js` and `inc/Activity/RecommendationOutcome.php` allow the adapted outcome vocabulary: `adapted_preview_shown`, `adapted_inserted_from_preview`, `adaptation_blocked`, and `adapted_insert_failed`.
 
 The implemented rule set is intentionally cosmetic and deterministic: nearby heading-level alignment, supported alignment matching, theme color preset remapping, theme spacing preset remapping, and registered `core/button` style variation selection. The implementation does not change block names, add/remove top-level blocks, rewrite arbitrary HTML, generate content text, detach synced patterns, or use the model to author an adaptation plan.
@@ -21,7 +21,7 @@ The WordPress 7.0 Pattern Overrides premise remains current for custom blocks: a
 
 ## Goal
 
-Let users insert patterns that both fit the current insertion point and visually align with the surrounding page. The feature should preserve the existing structural recommendation contract, add a bounded cosmetic adaptation step, and show a visual preview of the exact adapted block tree before insertion.
+Let users insert patterns that both fit the current insertion point and visually align with the surrounding page. The feature should preserve the existing structural recommendation contract, add a bounded cosmetic adaptation step, and show a visual comparison of the exact original and adapted block trees before insertion.
 
 The core principle is:
 
@@ -43,15 +43,15 @@ The core principle is:
 
 The existing inserter shelf remains the entry point. Each non-synced recommended pattern exposes an adaptation-aware action set:
 
-- `Preview adapted` opens a visual preview of the adapted result.
+- `Preview adapted` opens a visual comparison of the original and adapted result.
 - `Insert adapted` inserts the adapted block clone.
 - `Insert original` remains available for trust and comparison.
 
 Synced/user `core/block` references keep a single unchanged `Insert` action in v1.
 
-The preview should make the adaptation explicit without making the surface feel like a separate workflow. A compact note can list the kinds of changes applied, such as "Adjusted spacing, heading level, button style, and color presets."
+The preview should make the adaptation explicit without making the surface feel like a separate workflow. The compare panel should label the two renders clearly and summarize each deterministic cosmetic change with block name, attribute path, and before/after values instead of a prose-only note.
 
-The preview should render the exact block array that would be inserted. It must not be an approximation, generated screenshot, or server-rendered substitute unless that substitute is explicitly labeled as a fallback.
+The preview should render the exact block arrays involved in insertion: the untouched original tree for trust/comparison and the adapted tree for `Insert adapted`. It must not be an approximation, generated screenshot, or server-rendered substitute unless that substitute is explicitly labeled as a fallback.
 
 ## Current Baseline
 
@@ -122,10 +122,10 @@ This rule keeps the current `visiblePatternNames` and allowed-pattern selector c
 
 The preview must satisfy these rules:
 
-- It renders the exact adapted block tree that insertion will use, but `Insert adapted` re-clones that tree immediately before dispatch so Gutenberg receives fresh block instances and the preview state is never mutated by insertion.
+- It renders the exact original and adapted block trees involved in insertion, but `Insert adapted` re-clones the adapted tree immediately before dispatch so Gutenberg receives fresh block instances and the preview state is never mutated by insertion.
 - It is keyed to the current insertion target signature and server `resolvedContextSignature`.
 - It invalidates when the insertion root, insertion index, server-resolved context, theme tokens, or source pattern changes.
-- It clearly distinguishes adapted output from original pattern output.
+- It clearly distinguishes adapted output from original pattern output with labeled compare sections and deterministic change-summary rows.
 - It fails closed when adapted blocks cannot be safely built or rendered.
 
 Two freshness inputs are not covered by today's signatures and need explicit handling:
@@ -224,7 +224,7 @@ Shipped source seams:
 - `src/patterns/pattern-insertability.js` for shared block resolution and insertability checks.
 - `src/patterns/pattern-adaptation-context.js` for the client-only adaptation signal.
 - `src/patterns/pattern-adaptation.js` for plan creation, block-tree mutation, and validation.
-- `src/patterns/PatternAdaptationPreview.js` for the preview UI around `BlockPreview`.
+- `src/patterns/PatternAdaptationPreview.js` for the compare UI around `BlockPreview`.
 - `src/store/recommendation-outcomes.js` for adapted preview and insertion events.
 - `inc/Activity/RecommendationOutcome.php` for server-side activity event normalization.
 - `inc/Abilities/PatternAbilities.php` remains unchanged unless future adaptation metadata needs server participation in the recommendation payload.
@@ -245,14 +245,14 @@ Unit tests cover:
 Integration or component tests cover:
 
 - preview opens from the inserter shelf,
-- `BlockPreview` receives adapted blocks,
+- `BlockPreview` receives both original and adapted blocks with stable compare labels,
 - `Insert adapted` dispatches adapted blocks,
 - `Insert original` dispatches untouched blocks,
 - wrong-target rollback still works with adapted blocks.
 
 E2E coverage now proves:
 
-- the user can preview an adapted recommendation before insertion,
+- the user can compare the original and adapted recommendation before insertion,
 - the inserted result matches the previewed adaptation,
 - wrong-target rollback still removes adapted clones when Gutenberg inserts outside the requested target.
 
@@ -264,8 +264,6 @@ The E2E suite extends the existing pattern-insert failure harness — `consumeE2
 - Whether content text adaptation belongs in a future version or should remain cosmetic-only.
 - Whether synced patterns can be detached in a future version, and what confirmation copy is required.
 - Whether adaptation plans should be generated by local heuristics only or assisted by the recommendation model.
-- Whether original/adapted comparison is necessary in v1 or can wait until users ask for it.
-
 ## Recommended First Slice
 
 The shipped v1 is the smallest trustworthy version:

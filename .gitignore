@@ -23,3 +23,7 @@ ImladrisDesignSystem.zip
 .claude/skills/
 .codex/skills/
 deck/
+
+# Local gcloud CLI install (not part of the plugin)
+google-cloud-sdk/
+google-cloud-cli-*.tar.gz

@@ -8,6 +8,123 @@
 
 **Tech Stack:** PHP 8.2 (`FlavorAgent\Apply\`, PSR-4), WordPress block APIs (`parse_blocks`/`serialize_blocks`/`get_block_template`/`wp_insert_post`/`wp_update_post`), `WP_Block_Patterns_Registry`, PHPUnit (`vendor/bin/phpunit`), `@wordpress/scripts` Jest for the admin slice.
 
+## Review revisions (2026-06-24, post-self-review against live code)
+
+These supersede the task bodies where they conflict; each task below carries a `→ Rn` pointer. All nine were grounded against the real `TemplatePartPrompt::validate_operations`, `PendingApplyDecision`, `ApplyAbilities::request_style_apply`, `Registration`, and `tests/phpunit/bootstrap.php`.
+
+**R1 — `apply_operations` ordering is unsound as drafted; replace with one descending pass (Task 5).**
+The drafted "removals deepest-first, then insertions frozen" mis-orders any plan that mixes a removal/replacement with an anchored insert, and any multi-insert plan: an earlier edit shifts a later op's frozen path, so the insert lands one slot off — silently, failing **open**. This is the primary external-agent threat model (arbitrary valid `operations` arrays). `validate_operations` (`block_paths_overlap`, TemplatePartPrompt.php:1249) already rejects equal and ancestor/descendant path pairs, leaving only *sibling* relationships between distinct ops. Therefore applying **all** ops in one lexicographic-**descending** pass over their effective target path is correct: editing the higher path first never shifts a still-frozen lower path. Delete `path_order`; implement:
+
+```php
+private static function apply_operations( array $blocks, array $operations ): array|\WP_Error {
+    // Phase 1 — verify every path-addressed op's expectedTarget against the ORIGINAL tree (fail closed, no mutation).
+    foreach ( $operations as $operation ) {
+        $path = self::op_path( $operation );
+        if ( null !== $path ) {
+            $err = self::assert_expected_target( BlockTreeMutator::resolve( $blocks, $path ), $operation );
+            if ( is_wp_error( $err ) ) {
+                return $err;
+            }
+        } elseif ( in_array( $operation['type'] ?? '', [ 'remove_block', 'replace_block_with_pattern' ], true ) ) {
+            return new \WP_Error( 'flavor_agent_apply_target_changed', 'A targeted operation is missing its path.', [ 'status' => 409 ] );
+        }
+    }
+
+    // Phase 2 — pre-resolve every pattern (fail closed, no mutation).
+    $resolved_patterns = [];
+    foreach ( $operations as $i => $operation ) {
+        if ( in_array( $operation['type'] ?? '', [ 'insert_pattern', 'replace_block_with_pattern' ], true ) ) {
+            $pattern_blocks = self::resolve_pattern_blocks( (string) ( $operation['patternName'] ?? '' ) );
+            if ( is_wp_error( $pattern_blocks ) ) {
+                return $pattern_blocks;
+            }
+            $resolved_patterns[ $i ] = $pattern_blocks;
+        }
+    }
+
+    // Phase 3 — apply ALL ops in one lexicographic-DESCENDING pass over effective paths.
+    // Overlap rejection guarantees no two ops are equal/ancestor/descendant, so higher-first never
+    // shifts a later op's frozen path; this composes removes, replaces and inserts (incl. mixed/multi-insert).
+    $indexed = [];
+    foreach ( $operations as $i => $operation ) {
+        $indexed[] = [ 'index' => $i, 'operation' => $operation ];
+    }
+    usort(
+        $indexed,
+        static fn ( array $a, array $b ): int => self::compare_paths(
+            self::effective_order_path( $b['operation'] ),
+            self::effective_order_path( $a['operation'] )
+        )
+    );
+    foreach ( $indexed as $item ) {
+        $blocks = self::apply_single_operation( $blocks, $item['operation'], $resolved_patterns[ $item['index'] ] ?? [] );
+        if ( is_wp_error( $blocks ) ) {
+            return $blocks;
+        }
+    }
+
+    return $blocks;
+}
+
+/** @param array<int,array<string,mixed>> $pattern_blocks */
+private static function apply_single_operation( array $blocks, array $operation, array $pattern_blocks ): array|\WP_Error {
+    switch ( (string) ( $operation['type'] ?? '' ) ) {
+        case 'remove_block':
+            return BlockTreeMutator::remove( $blocks, self::op_path( $operation ) ?? [] );
+        case 'replace_block_with_pattern':
+            return BlockTreeMutator::replace( $blocks, self::op_path( $operation ) ?? [], $pattern_blocks );
+        case 'insert_pattern':
+            return self::apply_insert( $blocks, $operation, $pattern_blocks );
+    }
+    return new \WP_Error( 'flavor_agent_apply_operations_invalid', 'Unsupported operation type at apply time.', [ 'status' => 409 ] );
+}
+
+/** 'end' sorts above every concrete path (applied first); 'start' below (applied last). @return int[] */
+private static function effective_order_path( array $operation ): array {
+    $placement = (string) ( $operation['placement'] ?? '' );
+    if ( 'end' === $placement )   { return [ PHP_INT_MAX ]; }
+    if ( 'start' === $placement ) { return [ PHP_INT_MIN ]; }
+    return self::op_path( $operation ) ?? [ PHP_INT_MIN ];
+}
+
+/** Lexicographic compare of two 0-indexed paths (ancestor/descendant pairs are already rejected). @param int[] $a @param int[] $b */
+private static function compare_paths( array $a, array $b ): int {
+    $len = max( count( $a ), count( $b ) );
+    for ( $i = 0; $i < $len; $i++ ) {
+        $av = $a[ $i ] ?? PHP_INT_MIN;
+        $bv = $b[ $i ] ?? PHP_INT_MIN;
+        if ( $av !== $bv ) {
+            return $av <=> $bv;
+        }
+    }
+    return 0;
+}
+```
+
+Keep `op_path`, `assert_expected_target`, `resolve_pattern_blocks`, and `apply_insert` as drafted (`apply_insert` already derives parent/index from the frozen anchor path, which is valid under descending order). Add the R8 regression tests.
+
+**R2 — Registry/test contradiction (Tasks 1 & 7).** `for_surface('template-part')` returns the class-string `TemplatePartApplyExecutor::class` (resolved at compile time; the class need not exist), so it is **never null**. Fix: in Task 1 **omit** the `'template-part'` match arm entirely — `for_surface` has only the `global-styles`/`style-book` arm + `default => null`, so Task 1's `assertNull('template-part')` passes. Task 7 **adds** the `'template-part' => TemplatePartApplyExecutor::class` arm and flips the assertion to `assertSame`.
+
+**R3 — Drift-gate keys confirmed; do NOT add an attributes gate.** `build_expected_target` emits `name`/`childCount` (verified, TemplatePartPrompt.php:639), so `assert_expected_target`'s reads are correct as drafted. It also emits `attributes`/`slot`, but those come from the analyzer's context summary, not raw parsed `attrs` — an equality gate against live `attrs` would fail **closed** on valid applies. Keep name + childCount only.
+
+**R4 — Registration needs three arms + an explicit schema, not "reuse as-is" (Task 9).** Verified against Registration.php:190–419:
+1. Add a `'flavor-agent/request-template-part-apply'` entry to `external_apply_ability_classes()` (+ `use ... RequestTemplatePartApplyAbility;`).
+2. Add `'flavor-agent/request-template-part-apply'` to the **`external_apply_meta()` match** alongside `request-style-apply` (`destructive:false, idempotent:false`). Without this it hits `default => readonly:true`, mislabeling a write-queue ability.
+3. Add `'flavor-agent/request-template-part-apply'` to the **`external_apply_output_schema()` match** alongside `request-style-apply` (same `activityId/status/expiresAt/requestReference` arm). The plan's "reusable as-is" is wrong — the match keys on `$ability_id`, so template-part would fall to `default => open_object_schema()`.
+4. Add a dedicated `template_part_apply_input_schema()` + `structural_operation_schema()` (the ability class calls the former directly). Mirror the style schema's permissive `open_object_schema()` envelope so the strict abilities-bridge ajv accepts `prompt`/`templatePartContext`/`suggestion`/`requestReference`; `required => ['scope','operations','signatures']` (NOT `templatePartContext`). The op item enum: `type ∈ {insert_pattern, replace_block_with_pattern, remove_block}`, `placement ∈ {start, end, before_block_path, after_block_path}`, `targetPath: integer[]`, `expectedTarget: open object`.
+
+**R5 — No filter seams; mirror StyleApplyExecutor via the bootstrap WP stubs (Tasks 4–6).** Drop the three `flavor_agent_*_for_apply` `apply_filters` seams — a public filter that can swap a governed apply's resolved subject or persisted content is a trust-boundary smell for this plugin. `bootstrap.php` already stubs `get_block_template`/`get_block_templates` (2686/2717), `WP_Block_Patterns_Registry` (1929), `parse_blocks` (3366). So: resolve via `ServerCollector::resolve_template_part_for_apply()` (→ `TemplateRepository::resolve_template_part` → `get_block_template`), collect via `ServerCollector::for_template_part()`, persist via `wp_update_post`/`wp_insert_post`. Tests seed the part into the `get_block_template(s)` stub store and register patterns via `WP_Block_Patterns_Registry::get_instance()->register(...)`, asserting against captured post writes — exactly how `StyleApplyExecutorTest` seeds `WordPressTestState::$posts`. **Task-4 step 0:** read those bootstrap stubs; extend them for `wp_template_part` insert/resolve + `serialize_blocks`/`wp_insert_post`/`wp_update_post` if absent, mirroring the `wp_global_styles` handling.
+
+**R6 — Add a nested-insert mutator test (Task 2).** The drafted insert test is top-level only and bypasses `splice_inner_content` entirely — yet that nested branch is what `insert_pattern` relies on. Add: insert a heading at `BlockTreeMutator::insert($blocks, [0], 0, $new)` into a group wrapping one paragraph; assert child order, `count(nulls)===2`, and `serialize_blocks` round-trips.
+
+**R7 — Invalidate caches after persist (Task 5).** Append `clean_post_cache($post_id)` after every write, plus the block-template resolution cache the active WP uses (confirm the exact key against core's `WP_REST_Templates_Controller::update_item` / `clean_block_template`, and against the bootstrap stub). Add a test that `undo()` after `execute()` reads fresh content (guards a false-positive drift on the round-trip).
+
+**R8 — Test matrix for Task 5** (all via real stubbed parts/patterns, no filter seams): remove (nested) + before/after snapshot · replace_block_with_pattern success · insert before/after/start/end success · childCount mismatch → fail-closed-no-write · type/name mismatch → fail-closed-no-write · unregistered pattern → fail-closed-no-write · **mixed** `remove [0]` + `insert after [2]` lands both correctly (R1 guard) · **multi-insert** `after [0]` + `after [2]` lands both at intended gaps (R1 guard) · **replace+insert** `replace [1]` (1→N) + `insert after [3]` correct.
+
+**R9 — Drop the unimplemented free function.** Task 1's Interfaces line mentions `external_apply_executor_for()`; only the static `ExternalApplyExecutorRegistry::for_surface` exists. Remove the free-function phrasing.
+
+---
+
 ## Global Constraints
 
 - PHP 8.2+, WP 7.0+; `declare(strict_types=1)` in every new PHP file; namespace `FlavorAgent\`.
@@ -33,7 +150,7 @@
 - Test: `tests/phpunit/ExternalApplyLifecycleTest.php` (existing — must stay green)
 
 **Interfaces:**
-- Produces: `interface ExternalApplyExecutor { static resolve_baseline(array $entry): string|\WP_Error; static execute(array $entry): array|\WP_Error; static undo(array $entry): array|\WP_Error; }` where `execute` returns `array{target,before,after}` and `undo` returns `array{result:string}`. A new free function `FlavorAgent\Apply\external_apply_executor_for(string $surface): ?class-string<ExternalApplyExecutor>` (implemented as a static `ExternalApplyExecutorRegistry::for_surface`) maps `global-styles`/`style-book` → `StyleApplyExecutor`.
+- Produces: `interface ExternalApplyExecutor { static resolve_baseline(array $entry): string|\WP_Error; static execute(array $entry): array|\WP_Error; static undo(array $entry): array|\WP_Error; }` where `execute` returns `array{target,before,after}` and `undo` returns `array{result:string}`. A static `ExternalApplyExecutorRegistry::for_surface(string $surface): ?class-string<ExternalApplyExecutor>` maps `global-styles`/`style-book` → `StyleApplyExecutor` (and, from Task 7, `template-part` → `TemplatePartApplyExecutor`). No free-function alias (R9).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -95,7 +212,7 @@ final class ExternalApplyExecutorRegistry {
     public static function for_surface( string $surface ): ?string {
         return match ( $surface ) {
             'global-styles', 'style-book' => StyleApplyExecutor::class,
-            'template-part'               => TemplatePartApplyExecutor::class,
+            // 'template-part' arm is added in Task 7 — see Review revision R2.
             default                       => null,
         };
     }
@@ -104,7 +221,7 @@ final class ExternalApplyExecutorRegistry {
 }
 ```
 
-Note: the `template-part` arm references `TemplatePartApplyExecutor` (Task 5). PHP resolves the class-string lazily, so this compiles before that class exists; the `template-part` registry test asserts `null` only until Task 7 flips it — keep the Task 1 assertion as `assertNull` and update it in Task 7.
+Note (R2): do **not** add a `'template-part'` arm here. `Foo::class` resolves at compile time even when the class is absent, so an arm would make `for_surface('template-part')` return a non-null class-string and fail Step 1's `assertNull`. The arm — and the matching `assertSame` — land in Task 7.
 
 - [ ] **Step 4: Make `StyleApplyExecutor` implement the interface**
 
@@ -622,6 +739,8 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 Run: `vendor/bin/phpunit tests/phpunit/TemplatePartApplyExecutorTest.php`
 Expected: FAIL (`TemplatePartApplyExecutor` not found).
 
+> **R5:** drop the `flavor_agent_*_for_apply` filter seams. Resolve via `ServerCollector::resolve_template_part_for_apply()` → `TemplateRepository::resolve_template_part` → `get_block_template` (stubbed in `bootstrap.php:2717`); tests seed the part into that stub. No public filter on a governed write path.
+
 - [ ] **Step 3: Create the executor skeleton with resolution + baseline**
 
 `inc/Apply/TemplatePartApplyExecutor.php` (the rest of the methods are added in Tasks 5–6):
@@ -771,6 +890,8 @@ Add the `self::entry()`, `self::context_allowing()` private helpers to the test 
 
 Run: `vendor/bin/phpunit tests/phpunit/TemplatePartApplyExecutorTest.php`
 Expected: FAIL (`execute` undefined).
+
+> **R1 + R5:** implement `apply_operations` and its ordering helpers from Review revision R1 — the `apply_operations`/`path_order` shown below is **superseded** (it mis-orders mixed and multi-insert plans, failing open). Resolve/collect/persist via real stubbed WP functions, not `apply_filters` seams. Add the R7 cache flush in `persist`. Cover the full R8 test matrix.
 
 - [ ] **Step 3: Implement `execute()` and collaborators**
 
@@ -1144,7 +1265,7 @@ git commit -m "feat: drift-checked template-part undo with content restore"
 ### Task 7: Wire executor into dispatch + branch attestation to style-only
 
 **Files:**
-- Modify: `inc/Apply/ExternalApplyExecutor.php` (registry `template-part` arm already present — confirm)
+- Modify: `inc/Apply/ExternalApplyExecutor.php` (add the `template-part` registry arm — deferred from Task 1 per R2)
 - Modify: `inc/Apply/PendingApplyDecision.php:127-151` (attestation only for style surfaces)
 - Test: `tests/phpunit/ExternalApplyLifecycleTest.php`
 
@@ -1190,7 +1311,7 @@ if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
 
 Apply the identical `in_array($surface, ['global-styles','style-book'], true)` guard around the `record_revert` block in `ApplyAbilities::undo_activity:369-399`.
 
-- [ ] **Step 4: Update the Task 1 registry assertion** (the earlier `assertNull('template-part')` becomes the new `assertSame(...)` test above; delete the stale assertion).
+- [ ] **Step 4: Add the registry arm + update the assertion (R2)** — add `'template-part' => TemplatePartApplyExecutor::class` to `ExternalApplyExecutorRegistry::for_surface` (deferred from Task 1), then replace Task 1's `assertNull('template-part')` with the `assertSame(...)` test from Step 1.
 
 - [ ] **Step 5: Run; expect PASS**
 
@@ -1361,7 +1482,7 @@ git commit -m "feat: add request-template-part-apply handler with two freshness 
 - Consumes: `ApplyAbilities::request_template_part_apply` (Task 8), `Registration::external_apply_meta`.
 - Produces: ability `flavor-agent/request-template-part-apply`, `edit_theme_options`, `meta.mcp.public = false`, dedicated-server roster only.
 
-- [ ] **Step 1: Read `inc/Abilities/Registration.php`** to find: where `RequestStyleApplyAbility` is registered, the guarded count string (`30`), `external_apply_input_schema`/`output_schema`/`meta`, and the dedicated-MCP roster array. Confirm whether the input schema is style-specific (it likely encodes `scope.globalStylesId`); if so, add a sibling `template_part_apply_input_schema( $name )` that encodes `scope.templatePartId` + `operations` + `signatures`. Mirror `output_schema` (returns `activityId/status/expiresAt/requestReference` — reusable as-is).
+- [ ] **Step 1: Apply Review revision R4** to `inc/Abilities/Registration.php` (shapes verified at lines 190–419): add the `external_apply_ability_classes()` entry; add `request-template-part-apply` to the **`external_apply_meta()` match** (`destructive:false`, else it defaults to `readonly:true`); add it to the **`external_apply_output_schema()` match** (NOT reusable as-is — the match keys on `$ability_id`, so the default open object would apply); and add a dedicated `template_part_apply_input_schema()` + `structural_operation_schema()`. Also locate the dedicated-MCP roster array and the guarded ability-count string (`30`).
 
 - [ ] **Step 2: Write failing tests** (mirror the existing `request-style-apply` rows in each suite): assert the ability registers, schema is valid, count is 31, and it is on the dedicated server but not `meta.mcp.public`.
 
@@ -1546,10 +1667,12 @@ git commit -m "test: verify template-part external-apply executor slice"
 
 **Spec coverage:** request ability (Task 8/9) · executor apply/undo with content-hash + expectedTarget drift + atomic mutation (Tasks 2,4,5,6) · pattern resolution incl. synced-out-of-scope fail-closed (Task 5) · theme-part materialization (Task 5) · dispatch seam + style parity (Task 1,7) · attestation style-only branch (Task 7) · admin structural summary (Task 10) · docs + count bump (Task 11) · gates (Task 12). All spec sections map to a task.
 
+**Grounded during review (see Review revisions R1–R9):** operation key shape (`targetPath`/`expectedBlockName`/`patternName`/`placement`/`expectedTarget`) matches `validate_operations`; the four `build_*_lookup(array $context)` signatures and `build_expected_target` keys (`name`/`childCount`) confirmed; `PendingApplyDecision` reads a hoisted top-level `$entry['apply']` so Task 8's `request.apply` storage is correct; `external_apply_meta`/`external_apply_output_schema` key on `$ability_id` and need explicit template-part arms; the bootstrap stubs `get_block_template`/`WP_Block_Patterns_Registry`/`parse_blocks`, so the executor uses real stubbed WP calls (no filter seams).
+
 **Open confirmations for the implementer (resolve at task start, not blockers):**
-- `TemplateAbilities::recommend_template_part` exact input keys for the `resolveSignatureOnly` probe (Task 8 Step 3) — confirm `templatePartRef` vs `templatePartContext` shape against TemplateAbilities.php:~161.
-- `ServerCollector` template-part accessor name for the Task 4 passthrough.
-- `Registration` input-schema helper shape and the exact guarded count string location (Task 9 Steps 1,5).
+- `TemplateAbilities::recommend_template_part` exact input keys for the `resolveSignatureOnly` probe (Task 8) — confirm `templatePartRef` vs `templatePartContext` shape, that it returns both signatures, and that it writes no diagnostic row in signature-only mode.
+- `ServerCollector` accessors: `for_template_part` plus the new `resolve_template_part_for_apply` passthrough; and whether `bootstrap.php` stubs `wp_insert_post`/`wp_update_post`/`serialize_blocks` for `wp_template_part` (extend per R5 if not).
+- The dedicated-MCP roster array location and the guarded ability-count string (`30`→`31`).
 
 **Placeholder scan:** no "TBD/handle errors/similar to" — the one `markTestIncomplete` (Task 7 Step 1) is explicitly replaced in the same step with a seeded-row drive.
 

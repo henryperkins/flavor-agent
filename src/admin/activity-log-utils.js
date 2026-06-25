@@ -1781,6 +1781,277 @@ function getComparisonStatus( lifecycleStatus, before, after ) {
 	return before === after ? 'unchanged' : 'changed';
 }
 
+function normalizeThemeColorPresetIndex( themeColorPresets = [] ) {
+	const index = {};
+
+	if ( Array.isArray( themeColorPresets ) ) {
+		themeColorPresets.forEach( ( preset ) => {
+			if ( ! isPlainObject( preset ) ) {
+				return;
+			}
+
+			const slug =
+				typeof preset.slug === 'string' ? preset.slug.trim() : '';
+			const color =
+				typeof preset.color === 'string' ? preset.color.trim() : '';
+
+			if ( slug && color ) {
+				index[ slug ] = color;
+			}
+		} );
+
+		return index;
+	}
+
+	if ( ! isPlainObject( themeColorPresets ) ) {
+		return index;
+	}
+
+	Object.entries( themeColorPresets ).forEach( ( [ slug, preset ] ) => {
+		if ( typeof preset === 'string' && slug.trim() && preset.trim() ) {
+			index[ slug.trim() ] = preset.trim();
+			return;
+		}
+
+		if ( ! isPlainObject( preset ) ) {
+			return;
+		}
+
+		const normalizedSlug =
+			typeof preset.slug === 'string' && preset.slug.trim()
+				? preset.slug.trim()
+				: slug.trim();
+		const color =
+			typeof preset.color === 'string' ? preset.color.trim() : '';
+
+		if ( normalizedSlug && color ) {
+			index[ normalizedSlug ] = color;
+		}
+	} );
+
+	return index;
+}
+
+function getStyleVisualDiffStatus( lifecycleStatus, comparisonStatus ) {
+	if ( comparisonStatus === 'unsupported' ) {
+		return 'unsupported';
+	}
+
+	if (
+		[ 'pending', 'rejected', 'expired', 'failed' ].includes(
+			lifecycleStatus
+		)
+	) {
+		return 'proposed';
+	}
+
+	if ( lifecycleStatus === 'undone' ) {
+		return 'undone';
+	}
+
+	if ( lifecycleStatus === 'blocked' ) {
+		return 'blocked';
+	}
+
+	return 'applied';
+}
+
+function getStyleVisualDiffKind( operation = {}, comparisonRow = {} ) {
+	if (
+		comparisonRow?.status === 'unsupported' ||
+		! [ 'set_styles', 'set_block_styles', 'set_theme_variation' ].includes(
+			operation?.type
+		)
+	) {
+		return 'unsupported';
+	}
+
+	if ( operation?.type === 'set_theme_variation' ) {
+		return 'variation';
+	}
+
+	const pathRoot =
+		Array.isArray( operation?.path ) && operation.path.length
+			? String( operation.path[ 0 ] ).toLowerCase()
+			: '';
+	const presetType =
+		typeof operation?.presetType === 'string'
+			? operation.presetType.toLowerCase()
+			: '';
+
+	if ( pathRoot === 'color' || presetType === 'color' ) {
+		return 'color';
+	}
+
+	if ( pathRoot === 'spacing' || presetType === 'spacing' ) {
+		return 'spacing';
+	}
+
+	return 'text';
+}
+
+function isFallbackStyleVisualValue( value ) {
+	return (
+		! value ||
+		[
+			EMPTY_VALUE,
+			__( 'Baseline unavailable', 'flavor-agent' ),
+			__( 'After unavailable', 'flavor-agent' ),
+			__( 'Not applied', 'flavor-agent' ),
+		].includes( value )
+	);
+}
+
+function parsePresetReference( value ) {
+	if ( typeof value !== 'string' || ! value.trim() ) {
+		return null;
+	}
+
+	const presetReference = value.match(
+		/^var:preset\|([a-z0-9-]+)\|([a-z0-9_-]+)$/i
+	);
+
+	if ( presetReference?.[ 1 ] && presetReference?.[ 2 ] ) {
+		return {
+			family: presetReference[ 1 ].toLowerCase(),
+			slug: presetReference[ 2 ],
+		};
+	}
+
+	const cssVariableReference = value.match(
+		/^var\(--wp--preset--([a-z0-9-]+)--([a-z0-9_-]+)\)$/i
+	);
+
+	if ( ! cssVariableReference?.[ 1 ] || ! cssVariableReference?.[ 2 ] ) {
+		return null;
+	}
+
+	return {
+		family: cssVariableReference[ 1 ].toLowerCase(),
+		slug: cssVariableReference[ 2 ],
+	};
+}
+
+function isLikelyCssColor( value ) {
+	if ( typeof value !== 'string' || ! value.trim() ) {
+		return false;
+	}
+
+	return (
+		/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test( value ) ||
+		/^(?:rgb|hsl)a?\(/i.test( value ) ||
+		/^color-mix\(/i.test( value )
+	);
+}
+
+function getChipVisualMetadata( value ) {
+	if ( isFallbackStyleVisualValue( value ) ) {
+		return null;
+	}
+
+	const preset = parsePresetReference( value );
+
+	return {
+		type: 'chip',
+		label: preset?.slug || String( value ),
+	};
+}
+
+function getColorVisualMetadata(
+	value,
+	operation = {},
+	phase = '',
+	{ themeColorPresetIndex = {} } = {}
+) {
+	if ( isFallbackStyleVisualValue( value ) ) {
+		return null;
+	}
+
+	const preset = parsePresetReference( value );
+
+	if ( preset?.family === 'color' ) {
+		const resolvedColor = themeColorPresetIndex[ preset.slug ] || '';
+
+		if ( resolvedColor ) {
+			return {
+				type: 'swatch',
+				label: preset.slug,
+				cssValue: resolvedColor,
+				// The stored snapshot only persists the preset reference, so
+				// this swatch is resolved against the current theme palette
+				// rather than the palette captured when the row was recorded.
+				resolvedFromPalette: true,
+			};
+		}
+
+		return getChipVisualMetadata( value );
+	}
+
+	if ( phase === 'proposed' ) {
+		const presetSlug = getPresetSlugFromOperation( operation );
+		const resolvedColor =
+			presetSlug && themeColorPresetIndex[ presetSlug ]
+				? themeColorPresetIndex[ presetSlug ]
+				: '';
+
+		if ( resolvedColor ) {
+			return {
+				type: 'swatch',
+				label: presetSlug,
+				cssValue: resolvedColor,
+				resolvedFromPalette: true,
+			};
+		}
+
+		if ( presetSlug ) {
+			return getChipVisualMetadata( value );
+		}
+	}
+
+	if ( isLikelyCssColor( value ) ) {
+		return {
+			type: 'swatch',
+			label: String( value ),
+			cssValue: String( value ),
+		};
+	}
+
+	return getChipVisualMetadata( value );
+}
+
+function getStyleVisualMetadata( kind, value, operation, phase, options = {} ) {
+	if ( kind === 'color' ) {
+		return getColorVisualMetadata( value, operation, phase, options );
+	}
+
+	if ( [ 'spacing', 'variation', 'text' ].includes( kind ) ) {
+		return getChipVisualMetadata( value );
+	}
+
+	return null;
+}
+
+function getRecordedVariationIdentity( state = {} ) {
+	const title = getFirstString( state, [
+		[ 'styleContext', 'activeVariationTitle' ],
+		[ 'context', 'styleContext', 'activeVariationTitle' ],
+		[ 'activeVariationTitle' ],
+	] );
+
+	if ( ! title ) {
+		return null;
+	}
+
+	return {
+		title,
+		index: getFirstNumber( state, [
+			[ 'styleContext', 'activeVariationIndex' ],
+			[ 'context', 'styleContext', 'activeVariationIndex' ],
+			[ 'activeVariationIndex' ],
+		] ),
+	};
+}
+
 export function getStyleComparisonRows( entry = {} ) {
 	if (
 		! [ 'global-styles', 'style-book' ].includes( entry?.surface ) &&
@@ -1890,6 +2161,114 @@ export function getStyleComparisonRows( entry = {} ) {
 	} );
 }
 
+export function getStyleVisualDiffRows(
+	entry = {},
+	{ themeColorPresetIndex = {} } = {}
+) {
+	const comparisonRows = getStyleComparisonRows( entry );
+
+	if ( ! comparisonRows.length ) {
+		return [];
+	}
+
+	const details = getExternalApplyDetails( entry );
+	const lifecycleStatus = getGovernanceLifecycleStatus( entry, details );
+	const operations = getOperationsForGovernance( entry );
+	const beforeVariation = getRecordedVariationIdentity(
+		lifecycleStatus === 'pending'
+			? getPendingBaselineState( entry )
+			: entry?.before || {}
+	);
+	const afterVariation = getRecordedVariationIdentity( entry?.after || {} );
+
+	return comparisonRows.map( ( comparisonRow, index ) => {
+		const operation = operations[ index ] || {};
+		const kind = getStyleVisualDiffKind( operation, comparisonRow );
+		const status = getStyleVisualDiffStatus(
+			lifecycleStatus,
+			comparisonRow?.status
+		);
+
+		if ( kind === 'unsupported' ) {
+			return {
+				kind,
+				label: comparisonRow.label,
+				status,
+				changeState: comparisonRow.status,
+				before: comparisonRow.before,
+				proposed: comparisonRow.proposed,
+				after: comparisonRow.after,
+				beforeVisual: null,
+				proposedVisual: null,
+				afterVisual: null,
+				hasResolvedVariationIdentity: false,
+			};
+		}
+
+		if ( kind === 'variation' ) {
+			const hasResolvedVariationIdentity =
+				status === 'applied' &&
+				Boolean( beforeVariation?.title ) &&
+				Boolean( afterVariation?.title );
+
+			return {
+				kind,
+				label: comparisonRow.label,
+				status,
+				changeState: comparisonRow.status,
+				before: hasResolvedVariationIdentity
+					? beforeVariation.title
+					: '',
+				proposed: comparisonRow.proposed,
+				after: hasResolvedVariationIdentity ? afterVariation.title : '',
+				beforeVisual: hasResolvedVariationIdentity
+					? getChipVisualMetadata( beforeVariation.title )
+					: null,
+				proposedVisual: getChipVisualMetadata( comparisonRow.proposed ),
+				afterVisual: hasResolvedVariationIdentity
+					? getChipVisualMetadata( afterVariation.title )
+					: null,
+				hasResolvedVariationIdentity,
+			};
+		}
+
+		return {
+			kind,
+			label: comparisonRow.label,
+			status,
+			changeState: comparisonRow.status,
+			before: comparisonRow.before,
+			proposed: comparisonRow.proposed,
+			after: comparisonRow.after,
+			beforeVisual: getStyleVisualMetadata(
+				kind,
+				comparisonRow.before,
+				operation,
+				'before',
+				{ themeColorPresetIndex }
+			),
+			proposedVisual: getStyleVisualMetadata(
+				kind,
+				comparisonRow.proposed,
+				operation,
+				'proposed',
+				{ themeColorPresetIndex }
+			),
+			afterVisual:
+				status === 'proposed'
+					? null
+					: getStyleVisualMetadata(
+							kind,
+							comparisonRow.after,
+							operation,
+							'after',
+							{ themeColorPresetIndex }
+					  ),
+			hasResolvedVariationIdentity: false,
+		};
+	} );
+}
+
 function getGovernanceTargetLabel( entry ) {
 	if ( entry?.surface === 'style-book' ) {
 		const blockTitle =
@@ -1937,7 +2316,10 @@ function getGovernanceDiagnosticText( entry, details ) {
 		.join( '\n' );
 }
 
-export function getGovernanceDetails( entry = {} ) {
+export function getGovernanceDetails(
+	entry = {},
+	{ themeColorPresetIndex = {} } = {}
+) {
 	if ( ! entry?.apply ) {
 		return null;
 	}
@@ -1946,6 +2328,9 @@ export function getGovernanceDetails( entry = {} ) {
 	const lifecycleStatus = getGovernanceLifecycleStatus( entry, details );
 	const signatures = details.signatures || {};
 	const comparisonRows = getStyleComparisonRows( entry );
+	const visualDiffRows = getStyleVisualDiffRows( entry, {
+		themeColorPresetIndex,
+	} );
 	const proposedOperations = details.operations.map(
 		formatStyleOperationSummary
 	);
@@ -1984,6 +2369,7 @@ export function getGovernanceDetails( entry = {} ) {
 		proposedOperations,
 		executedOperations,
 		comparisonRows,
+		visualDiffRows,
 		undoStatus,
 		canUndo: Boolean( entry?.undo?.canUndo ),
 		undoReason,
@@ -2658,6 +3044,7 @@ function normalizeActivityEntry(
 		settingsUrl = '',
 		connectorsUrl = '',
 		locale = '',
+		themeColorPresetIndex = {},
 		timeZone = 'UTC',
 	} = {}
 ) {
@@ -2745,7 +3132,9 @@ function normalizeActivityEntry(
 		EMPTY_VALUE;
 	const governanceDetails =
 		entry?.apply && typeof entry.apply === 'object'
-			? getGovernanceDetails( entry )
+			? getGovernanceDetails( entry, {
+					themeColorPresetIndex,
+			  } )
 			: null;
 
 	return {
@@ -2830,8 +3219,14 @@ export function normalizeActivityEntries( entries, context = {} ) {
 	const normalizedEntries = Array.isArray( entries )
 		? entries.filter( Boolean )
 		: [];
+	const themeColorPresetIndex = normalizeThemeColorPresetIndex(
+		context.themeColorPresets
+	);
 
 	return normalizedEntries.map( ( entry ) =>
-		normalizeActivityEntry( entry, normalizedEntries, context )
+		normalizeActivityEntry( entry, normalizedEntries, {
+			...context,
+			themeColorPresetIndex,
+		} )
 	);
 }

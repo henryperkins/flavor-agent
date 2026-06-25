@@ -1569,7 +1569,93 @@ function GovernanceOperationList( { title, operations = [] } ) {
 	);
 }
 
-function GovernanceComparisonTable( { rows = [] } ) {
+function getVisualDiffStatusLabel( status = '' ) {
+	switch ( status ) {
+		case 'proposed':
+			return __( 'Proposed only', 'flavor-agent' );
+		case 'undone':
+			return __( 'Undone', 'flavor-agent' );
+		case 'blocked':
+			return __( 'Undo blocked', 'flavor-agent' );
+		case 'unsupported':
+			return __( 'Text fallback', 'flavor-agent' );
+		default:
+			return __( 'Applied', 'flavor-agent' );
+	}
+}
+
+function GovernanceVisualDiffValue( { value = '', visual = null } ) {
+	if ( ! value ) {
+		return null;
+	}
+
+	const showRawValue = ! visual || visual.label !== value;
+	const livePreviewLabel = __(
+		'Live preview resolved from the current theme palette, not a frozen snapshot of when this change was recorded.',
+		'flavor-agent'
+	);
+
+	return (
+		<div className="flavor-agent-activity-log__visual-diff-value">
+			{ visual?.type === 'swatch' && (
+				<div
+					className={ `flavor-agent-activity-log__visual-diff-meta${
+						visual.resolvedFromPalette
+							? ' flavor-agent-activity-log__visual-diff-meta--live'
+							: ''
+					}` }
+				>
+					<span
+						className="flavor-agent-activity-log__visual-diff-swatch"
+						aria-hidden="true"
+						style={ { background: visual.cssValue } }
+					/>
+					<span className="flavor-agent-activity-log__visual-diff-chip">
+						{ visual.label }
+					</span>
+					{ visual.resolvedFromPalette && (
+						<span
+							className="flavor-agent-activity-log__visual-diff-live"
+							title={ livePreviewLabel }
+						>
+							<span aria-hidden="true">{ '∼' }</span>
+							<span className="screen-reader-text">
+								{ livePreviewLabel }
+							</span>
+						</span>
+					) }
+				</div>
+			) }
+			{ visual?.type === 'chip' && (
+				<span className="flavor-agent-activity-log__visual-diff-chip">
+					{ visual.label }
+				</span>
+			) }
+			{ showRawValue && (
+				<span className="flavor-agent-activity-log__visual-diff-raw">
+					{ value }
+				</span>
+			) }
+		</div>
+	);
+}
+
+function GovernanceVisualDiffStage( { label, value = '', visual = null } ) {
+	if ( ! value ) {
+		return null;
+	}
+
+	return (
+		<div className="flavor-agent-activity-log__visual-diff-stage">
+			<span className="flavor-agent-activity-log__visual-diff-stage-label">
+				{ label }
+			</span>
+			<GovernanceVisualDiffValue value={ value } visual={ visual } />
+		</div>
+	);
+}
+
+function GovernanceVisualDiffViewer( { rows = [] } ) {
 	if ( ! rows.length ) {
 		return null;
 	}
@@ -1577,37 +1663,76 @@ function GovernanceComparisonTable( { rows = [] } ) {
 	return (
 		<div className="flavor-agent-activity-log__governance-subsection">
 			<h4 className="flavor-agent-activity-log__governance-subtitle">
-				{ __( 'Style comparison', 'flavor-agent' ) }
+				{ __( 'Style changes', 'flavor-agent' ) }
 			</h4>
-			<div className="flavor-agent-activity-log__comparison" role="table">
-				<div
-					className="flavor-agent-activity-log__comparison-row flavor-agent-activity-log__comparison-row--header"
-					role="row"
-				>
-					<span role="columnheader">
-						{ __( 'Value', 'flavor-agent' ) }
-					</span>
-					<span role="columnheader">
-						{ __( 'Before', 'flavor-agent' ) }
-					</span>
-					<span role="columnheader">
-						{ __( 'Proposed', 'flavor-agent' ) }
-					</span>
-					<span role="columnheader">
-						{ __( 'After', 'flavor-agent' ) }
-					</span>
-				</div>
+			<div className="flavor-agent-activity-log__visual-diff">
 				{ rows.map( ( row, index ) => (
-					<div
+					<section
 						key={ `${ row.label }-${ index }` }
-						className={ `flavor-agent-activity-log__comparison-row is-${ row.status }` }
-						role="row"
+						className={ `flavor-agent-activity-log__visual-diff-row is-${ row.status } is-${ row.kind } state-${ row.changeState }` }
 					>
-						<span role="cell">{ row.label }</span>
-						<span role="cell">{ row.before }</span>
-						<span role="cell">{ row.proposed }</span>
-						<span role="cell">{ row.after }</span>
-					</div>
+						<div className="flavor-agent-activity-log__visual-diff-row-header">
+							<div className="flavor-agent-activity-log__visual-diff-row-copy">
+								<h5 className="flavor-agent-activity-log__visual-diff-row-title">
+									{ row.label }
+								</h5>
+								{ row.kind === 'variation' &&
+									! row.hasResolvedVariationIdentity && (
+										<p className="flavor-agent-activity-log__visual-diff-row-note">
+											{ __(
+												'Variation identity was not recorded in the snapshots. Inspect State snapshots below for raw evidence.',
+												'flavor-agent'
+											) }
+										</p>
+									) }
+								{ row.kind === 'unsupported' && (
+									<p className="flavor-agent-activity-log__visual-diff-row-note">
+										{ __(
+											'Rendered as plain text because this operation does not have a safe visual diff.',
+											'flavor-agent'
+										) }
+									</p>
+								) }
+							</div>
+							<span className="flavor-agent-activity-log__visual-diff-status">
+								{ getVisualDiffStatusLabel( row.status ) }
+							</span>
+						</div>
+						<div className="flavor-agent-activity-log__visual-diff-stages">
+							{ row.kind === 'variation' &&
+							! row.hasResolvedVariationIdentity ? (
+								<GovernanceVisualDiffStage
+									label={ __(
+										'Proposed variation',
+										'flavor-agent'
+									) }
+									value={ row.proposed }
+									visual={ row.proposedVisual }
+								/>
+							) : (
+								<Fragment>
+									<GovernanceVisualDiffStage
+										label={ __( 'Before', 'flavor-agent' ) }
+										value={ row.before }
+										visual={ row.beforeVisual }
+									/>
+									<GovernanceVisualDiffStage
+										label={ __(
+											'Proposed',
+											'flavor-agent'
+										) }
+										value={ row.proposed }
+										visual={ row.proposedVisual }
+									/>
+									<GovernanceVisualDiffStage
+										label={ __( 'After', 'flavor-agent' ) }
+										value={ row.after }
+										visual={ row.afterVisual }
+									/>
+								</Fragment>
+							) }
+						</div>
+					</section>
 				) ) }
 			</div>
 		</div>
@@ -2282,7 +2407,7 @@ function GovernanceEvidenceSection( {
 				</p>
 			</div>
 			<GovernancePlainSummary rows={ summaryRows } />
-			<GovernanceComparisonTable rows={ details.comparisonRows } />
+			<GovernanceVisualDiffViewer rows={ details.visualDiffRows || [] } />
 			<GovernanceOperationList
 				title={ __( 'Requested operations', 'flavor-agent' ) }
 				operations={ details.proposedOperations }
@@ -2547,6 +2672,7 @@ export function ActivityLogApp( { bootData } ) {
 				settingsUrl: bootData.settingsUrl,
 				connectorsUrl: bootData.connectorsUrl,
 				locale: bootData.locale,
+				themeColorPresets: bootData.themeColorPresets,
 				timeZone: bootData.timeZone,
 			} ),
 		[
@@ -2554,6 +2680,7 @@ export function ActivityLogApp( { bootData } ) {
 			bootData.connectorsUrl,
 			bootData.locale,
 			bootData.settingsUrl,
+			bootData.themeColorPresets,
 			bootData.timeZone,
 		]
 	);

@@ -68,7 +68,11 @@ const ACTIVITY_ENTRIES = [
 	},
 ];
 
-function buildActivityResponse( requestUrl, entries = ACTIVITY_ENTRIES ) {
+function buildActivityResponse(
+	requestUrl,
+	entries = ACTIVITY_ENTRIES,
+	overrides = {}
+) {
 	const url = new URL( requestUrl );
 	const search = ( url.searchParams.get( 'search' ) || '' )
 		.trim()
@@ -90,7 +94,7 @@ function buildActivityResponse( requestUrl, entries = ACTIVITY_ENTRIES ) {
 
 	return {
 		entries: filteredEntries,
-		filterOptions: {
+		filterOptions: overrides.filterOptions || {
 			surface: [
 				{ value: 'block', label: 'Block' },
 				{ value: 'template', label: 'Template' },
@@ -117,6 +121,7 @@ function buildActivityResponse( requestUrl, entries = ACTIVITY_ENTRIES ) {
 			review: 0,
 			blocked: 0,
 			failed: 0,
+			...( overrides.summary || {} ),
 		},
 	};
 }
@@ -268,6 +273,120 @@ test( 'AI Activity linked-row mode clears the URL and keeps discovery badges vis
 	await expect(
 		page.locator( '.flavor-agent-activity-log__sidebar' )
 	).toContainText( 'Rewrite hero heading' );
+} );
+
+test( 'AI Activity renders the rich visual diff viewer for pending governance rows without implying the site changed', async ( {
+	page,
+} ) => {
+	const governanceEntries = [
+		{
+			id: 'activity-style-apply',
+			type: 'apply_global_styles_suggestion',
+			surface: 'global-styles',
+			status: 'pending',
+			target: {
+				globalStylesId: '17',
+			},
+			suggestion: 'External: use the accent text preset',
+			before: {
+				userConfig: {
+					styles: {
+						color: {
+							text: 'var:preset|color|contrast',
+						},
+					},
+				},
+			},
+			after: {
+				operations: [],
+			},
+			request: {
+				prompt: 'Use the accent text preset for stronger emphasis.',
+				reference: 'external-apply:activity-spec',
+			},
+			apply: {
+				status: 'pending',
+				requestedBy: 7,
+				requestedAt: '2026-06-10T00:00:00Z',
+				expiresAt: '2030-06-10T00:00:00Z',
+				operations: [
+					{
+						type: 'set_styles',
+						path: [ 'color', 'text' ],
+						value: 'var:preset|color|accent',
+						presetSlug: 'accent',
+					},
+				],
+				signatures: {
+					resolvedContextSignature: 'r'.repeat( 64 ),
+					reviewContextSignature: 'v'.repeat( 64 ),
+					baselineConfigHash: 'b'.repeat( 64 ),
+				},
+				requestReference: 'activity-spec-req-1',
+			},
+			document: {
+				scopeKey: 'global_styles:17',
+				postType: 'global_styles',
+				entityId: '17',
+			},
+			timestamp: '2026-03-24T10:10:00Z',
+		},
+	];
+
+	await page.route(
+		'**/wp-json/flavor-agent/v1/activity**',
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					buildActivityResponse( route.request().url(), governanceEntries, {
+						summary: {
+							total: 1,
+							applied: 0,
+							pending: 1,
+						},
+					} )
+				),
+			} );
+		}
+	);
+
+	await page.goto(
+		'/wp-admin/options-general.php?page=flavor-agent-activity',
+		{
+			waitUntil: 'domcontentloaded',
+		}
+	);
+	await waitForWordPressReady( page );
+
+	const viewer = page.locator( '.flavor-agent-activity-log__visual-diff' );
+	const diffRow = viewer.locator(
+		'.flavor-agent-activity-log__visual-diff-row',
+		{
+			has: page.locator(
+				'.flavor-agent-activity-log__visual-diff-row-title',
+				{
+					hasText: 'color.text',
+				}
+			),
+		}
+	);
+
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'Governance evidence' );
+	await expect( viewer ).toBeVisible( { timeout: 30_000 } );
+	await expect( diffRow ).toContainText( 'Proposed only' );
+	await expect( diffRow ).toContainText( 'Not applied' );
+	await expect(
+		diffRow.locator( '.flavor-agent-activity-log__visual-diff-chip' ).first()
+	).toBeVisible();
+	await expect(
+		page.locator( '.flavor-agent-activity-log__detail-section' ).filter( {
+			hasText: 'State snapshots',
+		} )
+	).toBeVisible();
 } );
 
 test( 'AI Activity page renders an inline load error instead of the empty activity copy', async ( {

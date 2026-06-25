@@ -10,7 +10,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - Unavailable state: when Pattern Storage or the Embedding Model is missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
 - There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains an inserter ranking and guarded insertion assist instead of participating in the lane/review/apply/undo model
 - Pattern recommendations return `reviewContextSignature` and `resolvedContextSignature`; both `Insert original` and `Insert adapted` revalidate the server-resolved apply context through `resolveSignatureOnly` before dispatching core insertion, while the surface still avoids a separate Flavor Agent review/apply panel
-- Non-synced recommended patterns expose `Preview adapted` and `Insert original`; synced/user `core/block` reference patterns keep a single unchanged `Insert` action and are not detached
+- Non-synced recommended patterns expose `Preview adapted` and `Insert original`; preview opens a labeled original/adapted compare panel inside the inserter, while synced/user `core/block` reference patterns keep a single unchanged `Insert` action and are not detached
 
 ## Surfacing Conditions
 
@@ -34,7 +34,7 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 
 ## Adapted Preview
 
-For non-synced recommended patterns, the shelf offers `Preview adapted` beside `Insert original`. Preview builds a detached clone of the resolved pattern blocks, applies only deterministic cosmetic mutations, renders that adapted tree with Gutenberg `BlockPreview`, and keeps `Insert adapted`, `Insert original`, and `Close` in the inserter panel. `Insert adapted` re-clones the previewed tree immediately before dispatch so Gutenberg receives fresh block instances.
+For non-synced recommended patterns, the shelf offers `Preview adapted` beside `Insert original`. Preview keeps the untouched resolved block tree beside a detached adapted clone, applies only deterministic cosmetic mutations to the clone, and renders a stacked compare panel with labeled `Original pattern` and `Adapted result` `BlockPreview` sections plus deterministic per-change summary rows. `Insert adapted` re-clones the previewed adapted tree immediately before dispatch so Gutenberg receives fresh block instances.
 
 The v1 mutation allowlist is intentionally narrow:
 
@@ -66,7 +66,7 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 10. The store saves the recommendations plus the server `resolvedContextSignature`, and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
 11. If Pattern Storage or the Embedding Model is unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
 12. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
-13. For non-synced patterns, the shelf offers `Preview adapted` and `Insert original`. `Preview adapted` resolves and clones the pattern blocks, reads a client-only nearby heading/alignment context, applies deterministic cosmetic mutations, and renders the adapted clone in `PatternAdaptationPreview`.
+13. For non-synced patterns, the shelf offers `Preview adapted` and `Insert original`. `Preview adapted` resolves the original pattern blocks, builds an adapted clone, reads a client-only nearby heading/alignment context, applies deterministic cosmetic mutations, and renders both trees in `PatternAdaptationPreview` with a deterministic change summary.
 14. The user inserts either the original blocks or a fresh clone of the previewed adapted tree from the Flavor Agent shelf. Before dispatching core block insertion, the click handler checks the client insertion-target signature, reruns `flavor-agent/recommend-patterns` with `resolveSignatureOnly: true`, and blocks insertion if the server `resolvedContextSignature` no longer matches. Adapted insertion also rechecks the local `adaptationSignature` so nearby heading/alignment drift cannot insert a stale preview. After dispatch, it verifies that Gutenberg reported the cloned blocks at the requested target; if Gutenberg inserts them elsewhere, Flavor Agent removes those cloned blocks and records a diagnostic failure instead of logging a successful insert.
 
 ## Contract Pointers
@@ -80,7 +80,7 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 - Surface ranked patterns in a local inserter shelf without rewriting Gutenberg's pattern registry
 - Rank both registered patterns and synced/user patterns that Gutenberg exposes to the current insertion root
 - Insert matched allowed patterns directly from that shelf while still respecting the current allowed insertion root
-- Preview a safely adapted clone for non-synced patterns before insertion
+- Preview and compare the original and adapted block trees for non-synced patterns before insertion
 - Revalidate the current server apply context before direct insertion, so docs-grounding or pattern-catalog drift cannot apply an old ranked result
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
@@ -117,7 +117,7 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 | Inserter shelf | `PatternRecommender()` in `src/patterns/PatternRecommender.js` | Renders the local recommendation shelf and dispatches core block insertion for matched allowed patterns |
 | Adaptation context | `buildPatternAdaptationContext()` in `src/patterns/pattern-adaptation-context.js` | Reads nearby heading and alignment context from the live editor at preview time |
 | Adaptation engine | `buildPatternAdaptationPreview()` in `src/patterns/pattern-adaptation.js` | Clones non-synced pattern blocks, applies deterministic cosmetic rules, and emits the local adaptation signature |
-| Adapted preview UI | `PatternAdaptationPreview()` in `src/patterns/PatternAdaptationPreview.js` | Renders the adapted clone with Gutenberg `BlockPreview` and exposes adapted/original insert actions |
+| Adapted preview UI | `PatternAdaptationPreview()` in `src/patterns/PatternAdaptationPreview.js` | Renders the labeled original/adapted compare UI with Gutenberg `BlockPreview`, deterministic change-summary rows, and adapted/original insert actions |
 | Badge UI | `InserterBadge()` and `getInserterBadgeState()` | Render count/loading/error state next to the inserter toggle, counting only renderable allowed-pattern matches |
 | Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state, including the stored server apply signature |
 | Store revalidation | `resolvePatternRecommendationSignature()` in `src/store/index.js` | Reposts the current pattern input with `resolveSignatureOnly` before direct shelf insertion |

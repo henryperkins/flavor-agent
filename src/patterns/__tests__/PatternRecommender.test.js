@@ -1391,14 +1391,64 @@ describe( 'PatternRecommender', () => {
 		} );
 
 		expect( inserterContainer.textContent ).toContain( 'Adapted preview' );
+		expect( inserterContainer.textContent ).toContain( 'Original pattern' );
+		expect( inserterContainer.textContent ).toContain( 'Adapted result' );
 		expect( inserterContainer.textContent ).toContain(
-			'Heading level matched to nearby headings'
+			'Heading level matched to nearby headings - core/heading - level - 5 -> 3'
 		);
 		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				event: 'adapted_preview_shown',
 				surface: 'pattern',
 				reason: 'adapted_preview_ready',
+				patternKey: 'theme/hero',
+			} )
+		);
+	} );
+
+	test( 'keeps Insert original on the untouched block tree after preview opens', async () => {
+		setPrecedingHeadingContext( 2 );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [ { name: 'core/heading', attributes: { level: 5 } } ],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+
+		act( () => {
+			findButtonByText( inserterContainer, 'Preview adapted' ).click();
+		} );
+
+		mockCloneBlock.mockClear();
+
+		await act( async () => {
+			findButtonByText( inserterContainer, 'Insert original' ).click();
+		} );
+
+		expect( mockResolvePatternRecommendationSignature ).toHaveBeenCalled();
+		expect( mockCloneBlock ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				name: 'core/heading',
+				attributes: expect.objectContaining( { level: 5 } ),
+			} )
+		);
+		expect( mockInsertBlocks ).toHaveBeenCalledWith(
+			[
+				expect.objectContaining( {
+					name: 'core/heading',
+					attributes: expect.objectContaining( { level: 5 } ),
+					cloned: true,
+				} ),
+			],
+			1,
+			'root-a',
+			true
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'pattern_inserted_from_shelf',
+				surface: 'pattern',
+				reason: 'insert_blocks_success',
 				patternKey: 'theme/hero',
 			} )
 		);

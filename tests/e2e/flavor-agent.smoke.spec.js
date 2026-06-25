@@ -3815,11 +3815,25 @@ test( 'pattern surface adapted preview inserts adapted blocks', async ( {
 		.locator( '.flavor-agent-pattern-adaptation' )
 		.first();
 	await expect( previewPanel ).toBeVisible();
+	await expect( previewPanel.getByText( 'Original pattern' ) ).toBeVisible();
+	await expect( previewPanel.getByText( 'Adapted result' ) ).toBeVisible();
 	await expect(
-		previewPanel.getByText( 'Heading level matched to nearby headings' )
+		previewPanel.getByText(
+			'Heading level matched to nearby headings'
+		)
 	).toBeVisible();
 	await expect(
-		previewPanel.locator( '.flavor-agent-pattern-adaptation__preview' )
+		previewPanel.getByText( '5 -> 3' )
+	).toBeVisible();
+	await expect(
+		previewPanel.locator(
+			'.flavor-agent-pattern-adaptation__panel--original .flavor-agent-pattern-adaptation__preview'
+		)
+	).toBeVisible();
+	await expect(
+		previewPanel.locator(
+			'.flavor-agent-pattern-adaptation__panel--adapted .flavor-agent-pattern-adaptation__preview'
+		)
 	).toBeVisible();
 
 	const topLevelOrderBefore = await page.evaluate(

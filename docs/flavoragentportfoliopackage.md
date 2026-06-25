@@ -130,7 +130,7 @@ Current local non-browser artifact: `output/verify/summary.json` generated on **
 
 Latest targeted attestation evidence: `vendor/bin/phpunit --filter Attestation` passed on **2026-06-22**. The exact test/assertion totals are intentionally omitted here because the targeted suite changes as attestation coverage grows.
 
-Latest targeted browser governance evidence: the WP70 approvals spec passed on **2026-06-10** with `3` tests.
+Latest targeted browser governance evidence: `npm run test:e2e:playground -- tests/e2e/flavor-agent.activity.spec.js` and `npm run test:e2e:wp70 -- tests/e2e/flavor-agent.approvals.spec.js` passed on **2026-06-24**, covering the rich visual diff viewer on the mocked admin page plus reject-with-note and fail-closed approval behavior on the real WP70 harness (`4` + `3` tests).
 
 Latest full recorded browser-suite evidence is historical: Playground passed across two isolated full-suite runs on **2026-06-11**, and the Docker-backed WordPress 7.0 Site Editor suite passed on **2026-05-02** with `20 passed / 0 failed`. Full browser gates are re-run on the exact release commit before tagging.
 
@@ -138,11 +138,11 @@ Browser evidence is split intentionally: Playground covers fast post-editor smok
 
 ### Known limits
 
-Flavor Agent is a release-candidate project, not a production-scale observability product. The admin activity page is a first governance-console slice with external style-apply decisions, structured diff/before-after summaries, and diagnostics, but not yet a rich visual diff viewer or cross-operator workflow system.
+Flavor Agent is a release-candidate project, not a production-scale observability product. The admin activity page is a first governance-console slice with external style-apply decisions, structured diff/before-after summaries, selected-row actions, and a first rich visual diff layer for style-governance rows, but broader cross-operator workflow and observability work remains open.
 
 Attestation v1 is self-signed site-key attestation scoped to governed external Global Styles / Style Book applies and their attested reverts. It is not C2PA, not third-party identity, and not a transparency log. No attestation is emitted unless the site has a valid signing key configured.
 
-The roadmap still includes richer audit/discovery, visual diffing, learning attribution, learning reports, fixture harvest, bounded local ranking feedback, and editable site preference summaries.
+The roadmap still includes broader audit/discovery, tighter audit metadata, cross-operator workflows, learning attribution, learning reports, fixture harvest, bounded local ranking feedback, and editable site preference summaries.
 
 ---
 
@@ -223,8 +223,8 @@ Editor / MCP client
 
 **Next**
 
-- Richer visual diff viewer.
 - Broader audit/discovery actions.
+- Cross-operator workflow follow-through.
 - Learning attribution and reports.
 - Bounded local ranking feedback.
 - Swap the WordPress 7.0 harness onto the released "Armstrong" stable image.

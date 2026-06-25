@@ -11,6 +11,7 @@ import {
 	getGovernanceDetails,
 	getGovernancePlainSummary,
 	getStyleComparisonRows,
+	getStyleVisualDiffRows,
 	isPendingExternalApply,
 	normalizeActivityEntries,
 	normalizeActivityDiscoveryBadges,
@@ -1659,6 +1660,434 @@ describe( 'external apply helpers', () => {
 			before: 'Baseline unavailable',
 			proposed: 'accent',
 			after: 'Not applied',
+		} );
+	} );
+
+	test( 'getStyleVisualDiffRows normalizes color rows with swatch metadata', () => {
+		const rows = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'var:preset|color|contrast',
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'var:preset|color|accent',
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} ),
+			{
+				themeColorPresetIndex: {
+					accent: '#0b7b80',
+					contrast: '#17232a',
+				},
+			}
+		);
+
+		expect( rows ).toEqual( [
+			expect.objectContaining( {
+				kind: 'color',
+				label: 'color.text',
+				status: 'applied',
+				before: 'var:preset|color|contrast',
+				proposed: 'accent',
+				after: 'var:preset|color|accent',
+				beforeVisual: {
+					type: 'swatch',
+					label: 'contrast',
+					cssValue: '#17232a',
+					resolvedFromPalette: true,
+				},
+				proposedVisual: {
+					type: 'swatch',
+					label: 'accent',
+					cssValue: '#0b7b80',
+					resolvedFromPalette: true,
+				},
+				afterVisual: {
+					type: 'swatch',
+					label: 'accent',
+					cssValue: '#0b7b80',
+					resolvedFromPalette: true,
+				},
+			} ),
+		] );
+	} );
+
+	test( 'getStyleVisualDiffRows does not mark literal color swatches as live previews', () => {
+		const rows = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: '#ff0000',
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							color: {
+								text: '#00ff00',
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: '#00ff00',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} ),
+			{
+				themeColorPresetIndex: {
+					accent: '#0b7b80',
+				},
+			}
+		);
+
+		// Literal colors are frozen-truthful: the stored snapshot holds the
+		// exact value, so the swatch must not be flagged as a live preview.
+		expect( rows[ 0 ].beforeVisual ).toEqual( {
+			type: 'swatch',
+			label: '#ff0000',
+			cssValue: '#ff0000',
+		} );
+		expect( rows[ 0 ].afterVisual ).toEqual( {
+			type: 'swatch',
+			label: '#00ff00',
+			cssValue: '#00ff00',
+		} );
+	} );
+
+	test( 'getStyleVisualDiffRows falls back to chips when preset colors are unavailable on the admin page', () => {
+		const rows = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'var:preset|color|contrast',
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'var:preset|color|accent',
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} )
+		);
+
+		expect( rows[ 0 ] ).toMatchObject( {
+			beforeVisual: { type: 'chip', label: 'contrast' },
+			proposedVisual: { type: 'chip', label: 'accent' },
+			afterVisual: { type: 'chip', label: 'accent' },
+		} );
+	} );
+
+	test( 'getStyleVisualDiffRows preserves Style Book block labels and spacing chips', () => {
+		const rows = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				surface: 'style-book',
+				target: {
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+				},
+				before: {
+					userConfig: {
+						styles: {
+							blocks: {
+								'core/paragraph': {
+									spacing: {
+										blockGap: '1rem',
+									},
+								},
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							blocks: {
+								'core/paragraph': {
+									spacing: {
+										blockGap: '2rem',
+									},
+								},
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_block_styles',
+							blockName: 'core/paragraph',
+							path: [ 'spacing', 'blockGap' ],
+							value: '2rem',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} )
+		);
+
+		expect( rows[ 0 ] ).toMatchObject( {
+			kind: 'spacing',
+			label: 'Paragraph spacing.blockGap',
+			status: 'applied',
+			before: '1rem',
+			proposed: '2rem',
+			after: '2rem',
+			beforeVisual: { type: 'chip', label: '1rem' },
+			proposedVisual: { type: 'chip', label: '2rem' },
+			afterVisual: { type: 'chip', label: '2rem' },
+		} );
+	} );
+
+	test( 'getStyleVisualDiffRows keeps theme variations proposed-only unless snapshots expose truthful identities', () => {
+		const proposedOnly = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				after: {
+					operations: [
+						{
+							type: 'set_theme_variation',
+							variationIndex: 1,
+							variationTitle: 'High Contrast',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} )
+		);
+		const tracked = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				status: 'applied',
+				before: {
+					styleContext: {
+						activeVariationIndex: 0,
+						activeVariationTitle: 'Default',
+					},
+				},
+				after: {
+					styleContext: {
+						activeVariationIndex: 1,
+						activeVariationTitle: 'High Contrast',
+					},
+					operations: [
+						{
+							type: 'set_theme_variation',
+							variationIndex: 1,
+							variationTitle: 'High Contrast',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} )
+		);
+
+		expect( proposedOnly[ 0 ] ).toMatchObject( {
+			kind: 'variation',
+			status: 'applied',
+			before: '',
+			proposed: 'High Contrast',
+			after: '',
+			hasResolvedVariationIdentity: false,
+			proposedVisual: {
+				type: 'chip',
+				label: 'High Contrast',
+			},
+			beforeVisual: null,
+			afterVisual: null,
+		} );
+		expect( tracked[ 0 ] ).toMatchObject( {
+			kind: 'variation',
+			status: 'applied',
+			before: 'Default',
+			proposed: 'High Contrast',
+			after: 'High Contrast',
+			hasResolvedVariationIdentity: true,
+			beforeVisual: {
+				type: 'chip',
+				label: 'Default',
+			},
+			afterVisual: {
+				type: 'chip',
+				label: 'High Contrast',
+			},
+		} );
+	} );
+
+	test( 'getStyleVisualDiffRows keeps pending rows proposed-only and preserves undone and blocked lifecycle states', () => {
+		const pendingRows = getStyleVisualDiffRows( createStyleApplyEntry() );
+		const undoneRows = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				status: 'undone',
+				undo: {
+					status: 'undone',
+					canUndo: false,
+				},
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'old',
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'new',
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'new',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} )
+		);
+		const blockedRows = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				status: 'blocked',
+				undo: {
+					status: 'blocked',
+					canUndo: false,
+					error: 'Undo blocked by newer AI actions.',
+				},
+				before: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'old',
+							},
+						},
+					},
+				},
+				after: {
+					userConfig: {
+						styles: {
+							color: {
+								text: 'new',
+							},
+						},
+					},
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'text' ],
+							value: 'new',
+						},
+					],
+				},
+				apply: {
+					status: 'available',
+					operations: [],
+				},
+			} )
+		);
+
+		expect( pendingRows[ 0 ] ).toMatchObject( {
+			status: 'proposed',
+			before: 'Baseline unavailable',
+			proposed: 'accent',
+			after: 'Not applied',
+			afterVisual: null,
+		} );
+		expect( undoneRows[ 0 ]?.status ).toBe( 'undone' );
+		expect( blockedRows[ 0 ]?.status ).toBe( 'blocked' );
+	} );
+
+	test( 'getStyleVisualDiffRows falls back to unsupported text rows for unknown operations', () => {
+		const rows = getStyleVisualDiffRows(
+			createStyleApplyEntry( {
+				apply: {
+					status: 'pending',
+					operations: [ { type: 'custom_unknown', value: 'raw' } ],
+				},
+			} )
+		);
+
+		expect( rows[ 0 ] ).toMatchObject( {
+			kind: 'unsupported',
+			label: 'Custom Unknown',
+			status: 'unsupported',
+			proposed: '{"type":"custom_unknown","value":"raw"}',
+			beforeVisual: null,
+			proposedVisual: null,
+			afterVisual: null,
 		} );
 	} );
 } );

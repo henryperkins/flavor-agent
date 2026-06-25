@@ -94,22 +94,28 @@ test.describe( 'external apply approvals', () => {
 		).toBeVisible( { timeout: 30_000 } );
 
 		let sidebar = await openSeededExternalApply( page );
+		const diffRow = sidebar
+			.locator( '.flavor-agent-activity-log__visual-diff-row' )
+			.filter( {
+				hasText: 'color.text',
+			} );
 
 		await expect( sidebar.getByText( 'Governance evidence' ) ).toBeVisible();
 		await expect( sidebar.getByText( 'Approval required' ) ).toBeVisible();
+		await expect(
+			sidebar.locator( '.flavor-agent-activity-log__visual-diff' )
+		).toBeVisible();
 		await expect( sidebar.getByText( 'Requested operations' ) ).toBeVisible();
+		await expect( diffRow ).toBeVisible();
+		await expect( diffRow ).toContainText( 'Proposed only' );
+		await expect( diffRow ).toContainText( 'Baseline unavailable' );
+		await expect( diffRow ).toContainText( 'Not applied' );
 		await expect(
-			sidebar.getByRole( 'cell', { name: 'color.text' } )
+			diffRow.locator( '.flavor-agent-activity-log__visual-diff-chip' ).first()
 		).toBeVisible();
+		await expect( sidebar.getByText( 'Full provenance' ) ).toBeVisible();
 		await expect(
-			sidebar.getByRole( 'cell', { name: 'Baseline unavailable' } )
-		).toBeVisible();
-		await expect(
-			sidebar.getByRole( 'cell', { name: 'Not applied' } )
-		).toBeVisible();
-		await expect( sidebar.getByText( 'Target and provenance' ) ).toBeVisible();
-		await expect(
-			sidebar.getByText( 'User #1', { exact: true } )
+			sidebar.getByText( 'User #1', { exact: true } ).first()
 		).toBeVisible();
 		await expect(
 			sidebar.getByText( 'e2e-req-1', { exact: true } ).first()

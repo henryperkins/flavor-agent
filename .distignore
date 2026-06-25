@@ -54,3 +54,5 @@ tests
 tools
 tmp
 webpack.config.js
+google-cloud-sdk
+google-cloud-cli-*.tar.gz

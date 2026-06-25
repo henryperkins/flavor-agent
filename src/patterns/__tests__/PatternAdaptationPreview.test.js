@@ -33,11 +33,19 @@ function render( props ) {
 				status="ready"
 				changes={ [
 					{
-						reason: 'theme_color_alignment',
-						blockName: 'core/group',
+						reason: 'nearby_heading_hierarchy',
+						blockName: 'core/heading',
+						attribute: 'level',
+						from: 5,
+						to: 3,
 					},
 				] }
-				blocks={ [ { name: 'core/group' } ] }
+				originalBlocks={ [
+					{ name: 'core/heading', attributes: { level: 5 } },
+				] }
+				adaptedBlocks={ [
+					{ name: 'core/heading', attributes: { level: 3 } },
+				] }
 				isStale={ false }
 				onInsertAdapted={ jest.fn() }
 				onInsertOriginal={ jest.fn() }
@@ -53,13 +61,76 @@ beforeEach( () => {
 } );
 
 describe( 'PatternAdaptationPreview', () => {
-	test( 'renders BlockPreview with the adapted blocks when ready', () => {
+	test( 'renders labeled original and adapted BlockPreview panels when ready', () => {
 		render();
-		expect( mockBlockPreview ).toHaveBeenCalledWith(
-			expect.objectContaining( { blocks: [ { name: 'core/group' } ] } )
+		expect( getContainer().textContent ).toContain( 'Original pattern' );
+		expect( getContainer().textContent ).toContain( 'Adapted result' );
+		expect( mockBlockPreview ).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining( {
+				blocks: [
+					{
+						name: 'core/heading',
+						attributes: { level: 5 },
+					},
+				],
+			} )
+		);
+		expect( mockBlockPreview ).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining( {
+				blocks: [
+					{
+						name: 'core/heading',
+						attributes: { level: 3 },
+					},
+				],
+			} )
 		);
 		expect( getContainer().textContent ).toContain( 'Insert adapted' );
 		expect( getContainer().textContent ).toContain( 'Insert original' );
+	} );
+
+	test( 'renders a deterministic scalar change summary row', () => {
+		render();
+		expect( getContainer().textContent ).toContain(
+			'Heading level matched to nearby headings - core/heading - level - 5 -> 3'
+		);
+	} );
+
+	test( 'flattens nested object diffs to changed leaf paths only', () => {
+		render( {
+			changes: [
+				{
+					reason: 'theme_spacing_alignment',
+					blockName: 'core/group',
+					attribute: 'style',
+					from: {
+						spacing: {
+							padding: {
+								top: 'var:preset|spacing|80',
+								bottom: 'var:preset|spacing|80',
+							},
+						},
+					},
+					to: {
+						spacing: {
+							padding: {
+								top: 'var:preset|spacing|60',
+								bottom: 'var:preset|spacing|80',
+							},
+						},
+					},
+				},
+			],
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'Spacing aligned to theme presets - core/group - style.spacing.padding.top - var:preset|spacing|80 -> var:preset|spacing|60'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'style.spacing.padding.bottom'
+		);
 	} );
 
 	test( 'sets an i18n aria-label on the adapted insert button', () => {
@@ -94,11 +165,24 @@ describe( 'PatternAdaptationPreview', () => {
 		);
 		expect( button.disabled ).toBe( true );
 		expect( mockBlockPreview ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).not.toContain(
+			'Original pattern'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Adapted result' );
 	} );
 
 	test( 'shows a blocked message and only original/close when blocked', () => {
-		render( { status: 'blocked', blocks: [], changes: [] } );
+		render( {
+			status: 'blocked',
+			originalBlocks: [],
+			adaptedBlocks: [],
+			changes: [],
+		} );
 		expect( getContainer().textContent ).toContain( 'Insert original' );
 		expect( mockBlockPreview ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).not.toContain(
+			'Original pattern'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Adapted result' );
 	} );
 } );

@@ -40,6 +40,7 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Show ordered undo state using the canonical state machine in `docs/reference/activity-state-machine.md`
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provenance, diagnostics, undo-reason details, and structured state snapshots
+- Let admins inspect style-governance rows through a first rich visual diff layer with lifecycle-honest proposed/applied/undone/blocked states, swatches or chips where the stored payload supports them, and raw state snapshots as fallback evidence
 - Let admins move from a selected row to the honest target, a focused `Settings > AI Activity` permalink, or closely related feed pivots without inventing a second admin route contract
 - Let admins approve or reject pending external Global Styles / Style Book applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
 - Let admins discover Ring III governed-change attestations for eligible external style applies, including a site-run verification summary plus public envelope and subject-state links without making attestation a general AI-governance claim
@@ -48,7 +49,7 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Filter audit entries by absolute or relative time without silently broadening malformed date filters; malformed active filters are blocked in the UI or rejected by REST, and `inThePast` and `over` use true timestamp windows, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
-This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, attestation discovery, structured diff and before/after summaries, a rendered backend/API aggregate report contract, and the first selected-row action/discovery layer (focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges), but not a rich visual diff viewer or cross-operator workflows.
+This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, attestation discovery, structured diff and before/after summaries, a rendered backend/API aggregate report contract, the first selected-row action/discovery layer (focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges), and a first rich visual diff layer for style-governance rows. Broader cross-operator workflows and deeper observability remain open.
 
 ## Ordered Undo Rules
 

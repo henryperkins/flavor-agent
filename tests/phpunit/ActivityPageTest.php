@@ -136,6 +136,48 @@ final class ActivityPageTest extends TestCase {
 		$this->assertSame( '', trim( $output ) );
 	}
 
+	public function test_theme_color_presets_are_resolved_for_admin_boot_data(): void {
+		WordPressTestState::$global_settings = [
+			'color' => [
+				'palette' => [
+					[
+						'name'  => 'Accent',
+						'slug'  => 'accent',
+						'color' => '#0b7b80',
+					],
+					[
+						'name'  => 'Contrast',
+						'slug'  => 'contrast',
+						'color' => '#17232a',
+					],
+					[
+						'name'  => 'Empty',
+						'slug'  => 'empty',
+						'color' => '',
+					],
+				],
+			],
+		];
+		$method                              = new \ReflectionMethod( ActivityPage::class, 'get_theme_color_presets' );
+		$method->setAccessible( true );
+
+		$this->assertSame(
+			[
+				[
+					'name'  => 'Accent',
+					'slug'  => 'accent',
+					'color' => '#0b7b80',
+				],
+				[
+					'name'  => 'Contrast',
+					'slug'  => 'contrast',
+					'color' => '#17232a',
+				],
+			],
+			$method->invoke( null )
+		);
+	}
+
 	/**
 	 * @param array<string, mixed> $overrides
 	 */
