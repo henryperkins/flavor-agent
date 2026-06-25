@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Flavor Agent — refresh the release-state code-search index after each commit.
+#
+# Fire-and-forget + idempotent + self-healing: it detaches so the commit
+# returns instantly, re-indexes only the files changed since the last index
+# (advancing the baseline only on success), and NEVER blocks or fails a commit.
+# Install with: tools/code-search/install-hook.sh
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+tool="$repo_root/tools/code-search"
+py="$tool/.venv/bin/python"
+
+[ -x "$py" ] || exit 0                          # tooling not set up — skip silently
+[ -f "$HOME/.config/qdrant/env" ] || exit 0     # no Qdrant creds — skip silently
+
+(
+  set -a; . "$HOME/.config/qdrant/env"; set +a
+  export FASTEMBED_CACHE_PATH="$tool/.fastembed_cache" OMP_NUM_THREADS=3 EMBED_THREADS=3
+  # setsid+nohup so it outlives the git process; the single-instance lock in
+  # index.py prevents a burst of commits from stacking embedders.
+  setsid nohup "$py" "$tool/index.py" --incremental \
+    >> "$tool/incremental.log" 2>&1 < /dev/null &
+) >/dev/null 2>&1 || true
+exit 0

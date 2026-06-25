@@ -1,0 +1,5 @@
+# Release-state code-search index tooling (dev-only; .distignore'd, never ships).
+# Install into an isolated venv with a Python that has onnxruntime wheels (3.11–3.13):
+#   uv venv --python 3.11 .venv
+#   uv pip install --python .venv/bin/python -r requirements.txt
+qdrant-client[fastembed]>=1.18,<2

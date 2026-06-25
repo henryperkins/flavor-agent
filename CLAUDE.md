@@ -4,6 +4,20 @@ WordPress plugin: a governance layer for AI changes to a live site — schema-bo
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.2+
 
+## IMPORTANT — search the code via the hybrid index first
+
+A vector + lexical (hybrid) search index of the plugin's **release-state source** (first-party `flavor-agent.php`, `inc/**`, `src/**`, `assets/**`, `readme.txt` — no tests/`vendor`/`build`) lives in the `flavor-agent-release-code` Qdrant collection, driven by `tools/code-search/` (dev-only, `.distignore`'d — never ships). Prefer it over blind `grep` when locating code or answering "where/how is X" — semantic, conceptual, and exact-symbol lookups:
+
+```bash
+source ~/.config/qdrant/env
+tools/code-search/.venv/bin/python tools/code-search/search.py "how is activity-log access decided"  # hybrid (default)
+tools/code-search/.venv/bin/python tools/code-search/search.py "register_rest_route" --mode sparse     # exact symbol
+```
+
+Modes: `hybrid` (default) · `dense` (paraphrase) · `sparse` (exact identifiers). Flags: `--lang php|javascript|typescript|css` · `--path SUBSTR` · `--json` (machine output) · `-k N`. Embeddings run locally (fastembed, no API key); only Qdrant creds are needed.
+
+Freshness: a `post-commit` hook (`tools/code-search/install-hook.sh`) keeps the index current by running `index.py --incremental` (detached, re-indexes only changed files). Manual refresh: `index.py --incremental` (since last index) or `index.py --wipe` (full rebuild). If results look stale, check the indexed sha in `tools/code-search/.index-state.json` vs `git rev-parse HEAD`. See `tools/code-search/README.md`.
+
 ## MCP Tooling
 
 Use available MCP tools when they can speed up implementation, verification, or research. When the `wordpress-docs-ai-search` MCP server is available, consult it for Gutenberg, block editor, REST API, theme/theme.json, code-reference, Developer Blog, and current release-cycle decisions covered by the managed corpus; do not treat it as complete Plugin Handbook coverage unless the runbook's corpus scopes include that source. Treat results as grounding input. Trust and currency of the corpus are owned by `scripts/update-docs-ai-search.js` at ingestion time; the runtime (`inc/Cloudflare/AISearchClient.php`, `inc/Support/DocsGroundingSourcePolicy.php`) only applies structural URL hygiene and non-gating source labels.
