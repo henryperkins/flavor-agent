@@ -30,10 +30,12 @@ import './activity-log.css';
 import {
 	areActivityViewsEqual,
 	buildActivityPermalink,
+	buildClaimReleaseRequest,
 	buildClaimRequest,
 	buildDecisionRequest,
 	clampActivityViewPage,
 	formatActivityTimestamp,
+	formatApplyClaimNotice,
 	getGovernanceDetails,
 	getGovernancePlainSummary,
 	isPendingExternalApply,
@@ -2290,6 +2292,8 @@ function GovernanceEvidenceSection( {
 	entry,
 	bootData,
 	onDecided,
+	onClaimResolved,
+	currentUserId,
 	isLocallyDecided = false,
 } ) {
 	const details = getGovernanceDetailsForEntry( entry );
@@ -2298,6 +2302,7 @@ function GovernanceEvidenceSection( {
 	const [ decisionError, setDecisionError ] = useState( '' );
 	const decisionRequestTokenRef = useRef( 0 );
 	const isSubmittingRef = useRef( false );
+	const decisionSubmittedRef = useRef( false );
 
 	useEffect( () => {
 		decisionRequestTokenRef.current += 1;
@@ -2314,14 +2319,71 @@ function GovernanceEvidenceSection( {
 		[]
 	);
 
-	if ( ! details ) {
-		return null;
-	}
-
 	const canDecide =
 		! isLocallyDecided &&
 		isPendingExternalApply( entry ) &&
 		bootData?.canApproveStyleApplies;
+
+	useEffect( () => {
+		if ( ! canDecide || ! entry?.id ) {
+			return undefined;
+		}
+
+		decisionSubmittedRef.current = false;
+		const activityId = entry.id;
+		let active = true;
+
+		apiFetch( buildClaimRequest( bootData, activityId ) )
+			.then( ( response ) => {
+				if ( active ) {
+					onClaimResolved?.( activityId, response );
+				}
+			} )
+			.catch( () => {} );
+
+		return () => {
+			active = false;
+
+			// Release on abandon/close only. A submitted decision clears the claim
+			// server-side on success; a retryable failure must keep it. The 5-minute
+			// TTL covers any missed release.
+			if ( decisionSubmittedRef.current ) {
+				return;
+			}
+
+			apiFetch( buildClaimReleaseRequest( bootData, activityId ) ).catch(
+				() => {}
+			);
+		};
+	}, [ canDecide, entry?.id, bootData, onClaimResolved ] );
+
+	if ( ! details ) {
+		return null;
+	}
+
+	const claimNotice = formatApplyClaimNotice(
+		entry?.apply?.claim,
+		currentUserId
+	);
+
+	// Explicit Release control (spec :90): renders only when the viewer holds the
+	// claim. There is nothing for a non-holder to release, and we never steal.
+	const viewerId = Number( currentUserId );
+	const claimUserId = Number( entry?.apply?.claim?.userId );
+	const viewerHoldsClaim =
+		Number.isFinite( viewerId ) && viewerId > 0 && viewerId === claimUserId;
+
+	const releaseClaim = async () => {
+		try {
+			const response = await apiFetch(
+				buildClaimReleaseRequest( bootData, entry.id )
+			);
+			onClaimResolved?.( entry.id, response );
+		} catch {
+			// Best-effort; the 5-minute TTL covers a missed release.
+		}
+	};
+
 	const artifact = getAttestationArtifact( entry );
 	const summaryRows = getGovernancePlainSummary(
 		details,
@@ -2370,6 +2432,7 @@ function GovernanceEvidenceSection( {
 			}
 
 			onDecided?.( entry.id, response?.entry );
+			decisionSubmittedRef.current = true;
 		} catch ( error ) {
 			if ( decisionRequestTokenRef.current !== requestToken ) {
 				return;
@@ -2392,6 +2455,7 @@ function GovernanceEvidenceSection( {
 					}
 
 					onDecided?.( entry.id, claimResponse?.entry );
+					decisionSubmittedRef.current = true;
 					return;
 				} catch {
 					// Fall through to the inline error if the claim fetch also fails.
@@ -2467,6 +2531,22 @@ function GovernanceEvidenceSection( {
 								'flavor-agent'
 							) }
 						</p>
+						{ claimNotice && (
+							<p
+								className={ `flavor-agent-activity-log__claim-note${
+									claimNotice.isSelf ? ' is-self' : ''
+								}` }
+							>
+								{ claimNotice.isSelf
+									? claimNotice.text
+									: `🟡 ${ claimNotice.text }` }
+							</p>
+						) }
+						{ viewerHoldsClaim && (
+							<Button variant="tertiary" onClick={ releaseClaim }>
+								{ __( 'Release review claim', 'flavor-agent' ) }
+							</Button>
+						) }
 					</div>
 					<TextareaControl
 						__nextHasNoMarginBottom
@@ -2514,6 +2594,8 @@ function ActivityEntryDetails( {
 	bootData,
 	onDecided,
 	onFilterAction,
+	onClaimResolved,
+	currentUserId,
 	isLocallyDecided = false,
 } ) {
 	if ( ! entry ) {
@@ -2572,6 +2654,8 @@ function ActivityEntryDetails( {
 						entry={ entry }
 						bootData={ bootData }
 						onDecided={ onDecided }
+						onClaimResolved={ onClaimResolved }
+						currentUserId={ currentUserId }
 						isLocallyDecided={ isLocallyDecided }
 					/>
 					<div className="flavor-agent-activity-log__detail-sections">
@@ -2764,7 +2848,6 @@ export function ActivityLogApp( { bootData } ) {
 
 	// Forward-declared this task as a Task 7 deliverable; the decision panel
 	// (onClaimResolved) and the focus/visibility refresh wire it in Tasks 9–10.
-	// eslint-disable-next-line no-unused-vars
 	const applyClaimResponse = useCallback(
 		( activityId, response ) => {
 			if ( ! isPlainRecord( response ) ) {
@@ -3006,7 +3089,10 @@ export function ActivityLogApp( { bootData } ) {
 				enableSorting: false,
 				enableGlobalSearch: true,
 				render: ( { item } ) => {
-					const badges = normalizeActivityDiscoveryBadges( item );
+					const badges = normalizeActivityDiscoveryBadges(
+						item,
+						bootData?.currentUserId
+					);
 
 					return (
 						<span
@@ -3285,7 +3371,7 @@ export function ActivityLogApp( { bootData } ) {
 				enableGlobalSearch: true,
 			},
 		];
-	}, [ responseData, selectedEntryId ] );
+	}, [ responseData, selectedEntryId, bootData?.currentUserId ] );
 
 	const selectedEntry =
 		responseData.entries.find(
@@ -3616,6 +3702,8 @@ export function ActivityLogApp( { bootData } ) {
 							bootData={ bootData }
 							onDecided={ handleEntryDecided }
 							onFilterAction={ applySelectedRowFilter }
+							onClaimResolved={ applyClaimResponse }
+							currentUserId={ bootData?.currentUserId }
 							isLocallyDecided={ locallyDecidedEntryIds.has(
 								selectedEntry?.id
 							) }

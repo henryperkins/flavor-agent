@@ -1722,3 +1722,9 @@ body.settings_page_flavor-agent-activity {
     outline-offset: 2px;
   }
 }
+
+.flavor-agent-activity-log__claim-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--flavor-agent-activity-log-muted);
+}
