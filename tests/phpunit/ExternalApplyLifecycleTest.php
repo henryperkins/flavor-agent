@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository;
+use FlavorAgent\Apply\ApplyClaim;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -487,5 +488,65 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			trim( (string) ( $row['admin_operation_type'] ?? '' ) ),
 			'Pending rows must derive admin operation metadata from request.apply.operations.'
 		);
+	}
+
+	public function test_committed_transition_clears_an_active_claim(): void {
+		$created = $this->create_pending_entry();
+		$id      = (string) $created['id'];
+		ApplyClaim::claim( $id, 7 );
+		$this->assertNotNull( ApplyClaim::get( $id ) );
+
+		Repository::transition_external_apply(
+			$id,
+			[
+				'applyStatus'  => 'rejected',
+				'decidedBy'    => 7,
+				'decidedAt'    => gmdate( 'c' ),
+				'decisionNote' => '',
+			]
+		);
+
+		$this->assertNull( ApplyClaim::get( $id ) );
+	}
+
+	public function test_non_committing_transition_leaves_the_claim_untouched(): void {
+		$created = $this->create_pending_entry();
+		$id      = (string) $created['id'];
+
+		// First transition commits the row out of pending.
+		Repository::transition_external_apply( $id, [ 'applyStatus' => 'rejected' ] );
+
+		// A claim placed afterwards (directly, since the row is no longer pending)
+		// must survive a second, non-committing transition attempt.
+		$key = 'flavor_agent_apply_claim_' . md5( $id );
+		set_transient( $key, [ 'userId' => 7, 'claimedAt' => gmdate( 'c' ) ], ApplyClaim::TTL );
+
+		$second = Repository::transition_external_apply( $id, [ 'applyStatus' => 'available' ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $second );
+		$this->assertSame( 'flavor_agent_apply_invalid_transition', $second->get_error_code() );
+		$this->assertNotNull( ApplyClaim::get( $id ) );
+	}
+
+	public function test_foreign_claim_does_not_block_a_transition(): void {
+		$created = $this->create_pending_entry();
+		$id      = (string) $created['id'];
+
+		// A claim held by another user must not gate the decision path.
+		ApplyClaim::claim( $id, 9 );
+
+		WordPressTestState::$current_user_id = 7;
+		$updated = Repository::transition_external_apply(
+			$id,
+			[
+				'applyStatus'  => 'rejected',
+				'decidedBy'    => 7,
+				'decidedAt'    => gmdate( 'c' ),
+				'decisionNote' => '',
+			]
+		);
+
+		$this->assertIsArray( $updated );
+		$this->assertSame( 'rejected', $updated['apply']['status'] );
 	}
 }

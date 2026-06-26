@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Activity;
 
+use FlavorAgent\Apply\ApplyClaim;
 use FlavorAgent\Attestation\Repository as AttestationRepository;
 
 final class Repository {
@@ -934,6 +935,12 @@ final class Repository {
 		}
 
 		self::invalidate_pending_external_apply_notification_snapshot_cache();
+
+		// Committed out of pending: drop any advisory review claim so the decided
+		// row never shows a stale "being reviewed" badge. Reached only on the
+		// committed-success path — non-committing 404/409/500 returns above never
+		// arrive here, so a lost-race transition leaves the claim intact.
+		ApplyClaim::clear( $activity_id );
 
 		$stored = self::find( $activity_id );
 
