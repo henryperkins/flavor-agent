@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\REST;
 
 use FlavorAgent\Activity\Permissions as ActivityPermissions;
+use FlavorAgent\Apply\ApplyClaim;
 use FlavorAgent\Apply\PendingApplyDecision;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Activity\Serializer;
@@ -375,6 +376,37 @@ final class Agent_Controller {
 				],
 			]
 		);
+
+		\register_rest_route(
+			self::NAMESPACE,
+			'/activity/(?P<id>[A-Za-z0-9._:-]+)/claim',
+			[
+				[
+					'methods'             => 'POST',
+					'callback'            => [ __CLASS__, 'handle_activity_claim' ],
+					'permission_callback' => [ ActivityPermissions::class, 'can_decide_activity_request' ],
+					'args'                => [
+						'id' => [
+							'required'          => true,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+					],
+				],
+				[
+					'methods'             => 'DELETE',
+					'callback'            => [ __CLASS__, 'handle_activity_claim_release' ],
+					'permission_callback' => [ ActivityPermissions::class, 'can_decide_activity_request' ],
+					'args'                => [
+						'id' => [
+							'required'          => true,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+					],
+				],
+			]
+		);
 	}
 
 	public static function validate_structured_value( mixed $value ): bool {
@@ -713,5 +745,39 @@ final class Agent_Controller {
 		}
 
 		return new \WP_REST_Response( [ 'entry' => $result ], 200 );
+	}
+
+	public static function handle_activity_claim( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( ! ActivityPermissions::can_decide_activity_request( $request ) ) {
+			return ActivityPermissions::forbidden_error();
+		}
+
+		$result = ApplyClaim::claim(
+			(string) $request->get_param( 'id' ),
+			\get_current_user_id()
+		);
+
+		if ( \is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	public static function handle_activity_claim_release( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( ! ActivityPermissions::can_decide_activity_request( $request ) ) {
+			return ActivityPermissions::forbidden_error();
+		}
+
+		$result = ApplyClaim::release(
+			(string) $request->get_param( 'id' ),
+			\get_current_user_id()
+		);
+
+		if ( \is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response( $result, 200 );
 	}
 }
