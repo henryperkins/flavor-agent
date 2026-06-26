@@ -178,6 +178,18 @@ final class ActivityPageTest extends TestCase {
 		);
 	}
 
+	public function test_build_activity_log_boot_data_includes_current_user_id(): void {
+		WordPressTestState::$current_user_id = 42;
+
+		$method = new \ReflectionMethod( ActivityPage::class, 'build_activity_log_boot_data' );
+		$method->setAccessible( true );
+
+		$data = $method->invoke( null );
+
+		$this->assertArrayHasKey( 'currentUserId', $data );
+		$this->assertSame( 42, $data['currentUserId'] );
+	}
+
 	/**
 	 * @param array<string, mixed> $overrides
 	 */
