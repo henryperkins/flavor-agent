@@ -234,6 +234,7 @@ const BOOT_DATA = {
 	],
 	timeZone: 'UTC',
 	canApproveStyleApplies: true,
+	currentUserId: 7,
 };
 const ACTIVITY_LOG_CSS = fs.readFileSync(
 	path.join( __dirname, '../activity-log.css' ),
@@ -2457,6 +2458,62 @@ describe( 'ActivityLogApp', () => {
 				data: expect.objectContaining( { decision: 'approve' } ),
 			} )
 		);
+	} );
+
+	test( 'pins the terminal entry so a decided row survives leaving the pending-only feed', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply'
+		);
+
+		const pending = createExternalApplyEntry();
+		const decided = {
+			...pending,
+			status: 'rejected',
+			apply: { ...pending.apply, status: 'rejected', decidedBy: 7 },
+		};
+
+		let feedLoads = 0;
+
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/decision' ) ) {
+				return Promise.resolve( { entry: decided } );
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				// Defensive: Task 9's auto-claim fires on mount once it lands.
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			feedLoads += 1;
+			// 1st feed load has the pending row; after the decision the pending-only
+			// feed no longer includes it.
+			return Promise.resolve(
+				buildResponse( feedLoads <= 1 ? [ pending ] : [] )
+			);
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.trim() === 'Reject' );
+
+		await act( async () => {
+			rejectButton.click();
+		} );
+		await flushEffects();
+
+		// The pinned terminal entry keeps the details panel populated even though the
+		// feed refetch returned zero entries. Scope to the details region: a
+		// "Rejected" summary card always renders, so asserting on the whole
+		// container would pass even when the selection (and panel) clears.
+		const detailsRegion = getContainer().querySelector(
+			'.flavor-agent-activity-log__details-region'
+		);
+		expect( detailsRegion?.textContent ).toMatch( /Rejected/i );
 	} );
 
 	test( 'renders governance evidence for pending, rejected, failed, and executed external applies', async () => {

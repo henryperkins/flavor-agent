@@ -2612,6 +2612,7 @@ export function ActivityLogApp( { bootData } ) {
 	const [ locallyDecidedEntryIds, setLocallyDecidedEntryIds ] = useState(
 		() => new Set()
 	);
+	const [ pinnedTerminalEntry, setPinnedTerminalEntry ] = useState( null );
 	const [ requestActivityId, setRequestActivityId ] = useState(
 		linkedActivityEntryId
 	);
@@ -2720,12 +2721,72 @@ export function ActivityLogApp( { bootData } ) {
 								: existingEntry
 						),
 					} ) );
+
+					// A terminal (decided) entry is pinned so it stays legible after
+					// it drops out of the pending-only Approvals filter on refetch.
+					if ( normalizedEntry.status !== 'pending' ) {
+						setPinnedTerminalEntry( normalizedEntry );
+					}
 				}
 			}
 
 			setReloadToken( ( value ) => value + 1 );
 		},
 		[ normalizeAdminEntries ]
+	);
+
+	// Forward-declared this task as a Task 7 deliverable; the decision panel
+	// (onClaimResolved) and the focus/visibility refresh wire it in Tasks 9–10.
+	// eslint-disable-next-line no-unused-vars
+	const applyClaimResponse = useCallback(
+		( activityId, response ) => {
+			if ( ! isPlainRecord( response ) ) {
+				return;
+			}
+
+			const responseEntry = response.entry;
+
+			// /claim returns ActivityRepository::find()-shaped rows, whose lifecycle
+			// status lives at entry.apply.status — there is NO top-level entry.status
+			// (Serializer::hydrate_row synthesizes none; only the client-side
+			// normalizeActivityEntry does, and this response is NOT normalized).
+			// Reading entry.status here would be undefined for every successful
+			// pending claim and wrongly route it through handleEntryDecided, hiding
+			// the decision controls on a still-pending row.
+			const responseApply = isPlainRecord( responseEntry )
+				? responseEntry.apply
+				: null;
+			const responseApplyStatus =
+				isPlainRecord( responseApply ) &&
+				typeof responseApply.status === 'string'
+					? responseApply.status
+					: '';
+
+			// Decided/expired elsewhere (or by us): the row came back terminal — pin it.
+			if ( responseApplyStatus && responseApplyStatus !== 'pending' ) {
+				handleEntryDecided( activityId, responseEntry );
+				return;
+			}
+
+			// Still pending: merge the live claim onto the selected row so the
+			// badge reflects the current reviewer immediately.
+			const claim = isPlainRecord( response.claim )
+				? response.claim
+				: null;
+			setResponseData( ( current ) => ( {
+				...current,
+				entries: current.entries.map( ( existingEntry ) =>
+					existingEntry.id === activityId &&
+					isPlainRecord( existingEntry.apply )
+						? {
+								...existingEntry,
+								apply: { ...existingEntry.apply, claim },
+						  }
+						: existingEntry
+				),
+			} ) );
+		},
+		[ handleEntryDecided ]
 	);
 
 	useEffect( () => {
@@ -3202,7 +3263,10 @@ export function ActivityLogApp( { bootData } ) {
 	const selectedEntry =
 		responseData.entries.find(
 			( entry ) => entry.id === selectedEntryId
-		) || null;
+		) ||
+		( pinnedTerminalEntry && pinnedTerminalEntry.id === selectedEntryId
+			? pinnedTerminalEntry
+			: null );
 
 	useEffect( () => {
 		if ( ! persistActivityViewRef.current ) {
@@ -3219,6 +3283,14 @@ export function ActivityLogApp( { bootData } ) {
 	}, [ effectiveView, view, viewOptions ] );
 
 	useEffect( () => {
+		// A pinned terminal row stays selected even after it leaves the filtered feed.
+		if (
+			pinnedTerminalEntry?.id &&
+			pinnedTerminalEntry.id === selectedEntryId
+		) {
+			return;
+		}
+
 		if ( responseData.entries.length === 0 ) {
 			if ( requestActivityId && ! isLoading ) {
 				exitLinkedActivityMode();
@@ -3249,10 +3321,20 @@ export function ActivityLogApp( { bootData } ) {
 	}, [
 		exitLinkedActivityMode,
 		isLoading,
+		pinnedTerminalEntry,
 		requestActivityId,
 		responseData.entries,
 		selectedEntryId,
 	] );
+
+	useEffect( () => {
+		if (
+			pinnedTerminalEntry &&
+			pinnedTerminalEntry.id !== selectedEntryId
+		) {
+			setPinnedTerminalEntry( null );
+		}
+	}, [ pinnedTerminalEntry, selectedEntryId ] );
 
 	const summaryCards = getSummaryCards( responseData.summary );
 	const isViewModified = ! areActivityViewsEqual(
