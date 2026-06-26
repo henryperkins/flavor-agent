@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository;
+use FlavorAgent\Apply\ApplyClaim;
 use FlavorAgent\Attestation\Repository as AttestationRepository;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -2308,5 +2309,67 @@ final class ActivityRepositoryTest extends TestCase {
 		return function_exists( 'mb_strlen' )
 			? mb_strlen( $value, 'UTF-8' )
 			: strlen( $value );
+	}
+
+	public function test_enrich_admin_entries_attaches_claim_to_pending_rows_only(): void {
+		set_transient(
+			'flavor_agent_apply_claim_' . md5( 'pending-1' ),
+			[
+				'userId'    => 7,
+				'claimedAt' => '2026-06-25T00:00:00+00:00',
+			],
+			ApplyClaim::TTL
+		);
+
+		$entries = [
+			[
+				'id'    => 'pending-1',
+				'apply' => [ 'status' => 'pending' ],
+			],
+			[
+				'id'    => 'pending-2',
+				'apply' => [ 'status' => 'pending' ],
+			],
+			[
+				'id'    => 'applied-1',
+				'apply' => [ 'status' => 'available' ],
+			],
+			[ 'id' => 'plain-1' ],
+		];
+
+		$enriched = Repository::enrich_admin_entries_with_apply_claims( $entries );
+
+		$this->assertSame( 7, $enriched[0]['apply']['claim']['userId'] );
+		$this->assertNull( $enriched[1]['apply']['claim'] );
+		$this->assertArrayNotHasKey( 'claim', $enriched[2]['apply'] );
+		$this->assertArrayNotHasKey( 'apply', $enriched[3] );
+	}
+
+	public function test_enrich_admin_entries_skips_the_claim_on_an_overdue_pending_row(): void {
+		set_transient(
+			'flavor_agent_apply_claim_' . md5( 'overdue-1' ),
+			[
+				'userId'    => 7,
+				'claimedAt' => '2026-06-25T00:00:00+00:00',
+			],
+			ApplyClaim::TTL
+		);
+
+		$entries = [
+			[
+				'id'    => 'overdue-1',
+				'apply' => [
+					'status'    => 'pending',
+					'expiresAt' => gmdate( 'c', time() - 60 ),
+				],
+			],
+		];
+
+		$enriched = Repository::enrich_admin_entries_with_apply_claims( $entries );
+
+		// Overdue pending rows never advertise a review claim, and the read path
+		// performs no DB write to materialize the expiry (that stays on the action
+		// paths + the daily prune sweep).
+		$this->assertArrayNotHasKey( 'claim', $enriched[0]['apply'] );
 	}
 }

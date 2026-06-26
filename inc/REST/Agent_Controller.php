@@ -554,6 +554,10 @@ final class Agent_Controller {
 				]
 			);
 
+			if ( \is_array( $result['entries'] ?? null ) ) {
+				$result['entries'] = ActivityRepository::enrich_admin_entries_with_apply_claims( $result['entries'] );
+			}
+
 			return new \WP_REST_Response( $result, 200 );
 		}
 
