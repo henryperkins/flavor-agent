@@ -2516,6 +2516,127 @@ describe( 'ActivityLogApp', () => {
 		expect( detailsRegion?.textContent ).toMatch( /Rejected/i );
 	} );
 
+	test( 'a race-lost invalid_transition decision pins the terminal entry instead of a generic error', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply'
+		);
+
+		const pending = createExternalApplyEntry();
+		const terminal = {
+			...pending,
+			status: 'rejected',
+			apply: { ...pending.apply, status: 'rejected', decidedBy: 9 },
+		};
+		const raceError = Object.assign(
+			new Error(
+				'Flavor Agent external applies only transition out of the pending state once.'
+			),
+			{ code: 'flavor_agent_apply_invalid_transition' }
+		);
+		let feedLoads = 0;
+
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/decision' ) ) {
+				return Promise.reject( raceError );
+			}
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'POST'
+			) {
+				return Promise.resolve( { claim: null, entry: terminal } );
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( { claim: null, entry: terminal } );
+			}
+			feedLoads += 1;
+			// The pending-only feed drops the row once it is decided, so the
+			// pinned terminal entry (set via onDecided) keeps "Rejected" visible.
+			return Promise.resolve(
+				buildResponse( feedLoads <= 1 ? [ pending ] : [] )
+			);
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.trim() === 'Reject' );
+
+		await act( async () => {
+			rejectButton.click();
+		} );
+		await flushEffects();
+
+		expect( getContainer().textContent ).not.toMatch(
+			/The decision could not be recorded/i
+		);
+		// A "Rejected" summary card always renders, so scope the pinned-terminal
+		// assertion to the details region (mirrors the sibling "pins the terminal
+		// entry" test) — otherwise this passes even when the panel never pins.
+		const detailsRegion = getContainer().querySelector(
+			'.flavor-agent-activity-log__details-region'
+		);
+		expect( detailsRegion?.textContent ).toMatch( /Rejected/i );
+	} );
+
+	test( 'a retryable 500 decision keeps the claim and shows the inline retry error', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply'
+		);
+
+		const pending = createExternalApplyEntry();
+		const retryError = Object.assign(
+			new Error( 'Flavor Agent could not update the activity entry.' ),
+			{
+				code: 'flavor_agent_activity_update_failed',
+				data: { status: 500 },
+			}
+		);
+		const releaseSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/decision' ) ) {
+				return Promise.reject( retryError );
+			}
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				releaseSpy();
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.trim() === 'Reject' );
+
+		await act( async () => {
+			rejectButton.click();
+		} );
+		await flushEffects();
+
+		expect( getContainer().textContent ).toMatch(
+			/could not update the activity entry/i
+		);
+		// Row stays mounted (no abandon) and the decision was submitted, so the claim
+		// is never released on a retryable failure.
+		expect( releaseSpy ).not.toHaveBeenCalled();
+	} );
+
 	test( 'renders governance evidence for pending, rejected, failed, and executed external applies', async () => {
 		window.history.replaceState(
 			null,

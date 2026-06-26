@@ -30,6 +30,7 @@ import './activity-log.css';
 import {
 	areActivityViewsEqual,
 	buildActivityPermalink,
+	buildClaimRequest,
 	buildDecisionRequest,
 	clampActivityViewPage,
 	formatActivityTimestamp,
@@ -42,6 +43,7 @@ import {
 	normalizeSelectedActivityActions,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
+	TERMINAL_DECISION_ERROR_CODES,
 	writePersistedActivityView,
 } from './activity-log-utils';
 
@@ -2373,6 +2375,31 @@ function GovernanceEvidenceSection( {
 				return;
 			}
 
+			const code = typeof error?.code === 'string' ? error.code : '';
+
+			// Terminal race-loss: the row was decided by another admin. Fetch the
+			// terminal row via one claim call and pin it (legible conflict) instead
+			// of showing a generic error. invalid_transition is the genuine
+			// simultaneous-loss code; not_pending/expired are the re-read cases.
+			if ( TERMINAL_DECISION_ERROR_CODES.includes( code ) ) {
+				try {
+					const claimResponse = await apiFetch(
+						buildClaimRequest( bootData, entry.id )
+					);
+
+					if ( decisionRequestTokenRef.current !== requestToken ) {
+						return;
+					}
+
+					onDecided?.( entry.id, claimResponse?.entry );
+					return;
+				} catch {
+					// Fall through to the inline error if the claim fetch also fails.
+				}
+			}
+
+			// Retryable failures (500) and any unresolved terminal fetch: leave the
+			// row pending, keep the claim, and show the inline retry error.
 			setDecisionError(
 				error?.message ||
 					__( 'The decision could not be recorded.', 'flavor-agent' )
