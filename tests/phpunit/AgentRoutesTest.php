@@ -360,7 +360,7 @@ final class AgentRoutesTest extends TestCase {
 	}
 
 	public function test_claim_route_404s_on_missing_row_for_capable_user(): void {
-		WordPressTestState::$capabilities['manage_options']    = true;
+		WordPressTestState::$capabilities['manage_options']     = true;
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/activity/missing/claim' );

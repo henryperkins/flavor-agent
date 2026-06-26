@@ -519,7 +519,14 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		// A claim placed afterwards (directly, since the row is no longer pending)
 		// must survive a second, non-committing transition attempt.
 		$key = 'flavor_agent_apply_claim_' . md5( $id );
-		set_transient( $key, [ 'userId' => 7, 'claimedAt' => gmdate( 'c' ) ], ApplyClaim::TTL );
+		set_transient(
+			$key,
+			[
+				'userId'    => 7,
+				'claimedAt' => gmdate( 'c' ),
+			],
+			ApplyClaim::TTL
+		);
 
 		$second = Repository::transition_external_apply( $id, [ 'applyStatus' => 'available' ] );
 
@@ -536,7 +543,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		ApplyClaim::claim( $id, 9 );
 
 		WordPressTestState::$current_user_id = 7;
-		$updated = Repository::transition_external_apply(
+		$updated                             = Repository::transition_external_apply(
 			$id,
 			[
 				'applyStatus'  => 'rejected',
