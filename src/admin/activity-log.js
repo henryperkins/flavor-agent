@@ -54,6 +54,10 @@ const NOT_RECORDED = 'Not recorded';
 const ERROR_KIND_INVALID_DAY_FILTER = 'invalid-day-filter';
 const ERROR_KIND_FETCH = 'fetch';
 const LEARNING_REPORT_VERSION = 'governance-learning-report-v1';
+// Leading-edge debounce window for the focus/visibility refresh: the first event
+// fires synchronously, then further focus/visibility churn is suppressed for this
+// long so rapid tab-switching can't hammer the feed or the /claim endpoint.
+const FOCUS_REFRESH_DEBOUNCE_MS = 1000;
 const RELATIVE_DAY_UNITS = new Set( [
 	'hours',
 	'days',
@@ -3381,6 +3385,14 @@ export function ActivityLogApp( { bootData } ) {
 			? pinnedTerminalEntry
 			: null );
 
+	// Mirror the selected entry into a ref so the focus/visibility refresh effect
+	// (deps: [ bootData, applyClaimResponse ]) reads the live selection without a
+	// stale closure and without re-binding listeners on every selection change.
+	const selectedEntryRef = useRef( null );
+	useEffect( () => {
+		selectedEntryRef.current = selectedEntry;
+	}, [ selectedEntry ] );
+
 	useEffect( () => {
 		if ( ! persistActivityViewRef.current ) {
 			return;
@@ -3448,6 +3460,66 @@ export function ActivityLogApp( { bootData } ) {
 			setPinnedTerminalEntry( null );
 		}
 	}, [ pinnedTerminalEntry, selectedEntryId ] );
+
+	// Opportunistic refresh: when the reviewer returns to the tab/window, refetch
+	// the feed and (if a pending row is selected and they can approve) re-issue the
+	// claim so the TTL stays warm — and so a decided-elsewhere row is detected and
+	// pinned via applyClaimResponse. Event-driven only; there is no polling.
+	useEffect( () => {
+		if (
+			typeof window === 'undefined' ||
+			typeof document === 'undefined'
+		) {
+			return undefined;
+		}
+
+		let debounceTimer = null;
+
+		const handleFocusOrVisible = () => {
+			if ( document.visibilityState === 'hidden' ) {
+				return;
+			}
+
+			if ( debounceTimer ) {
+				return;
+			}
+
+			debounceTimer = setTimeout( () => {
+				debounceTimer = null;
+			}, FOCUS_REFRESH_DEBOUNCE_MS );
+
+			setReloadToken( ( value ) => value + 1 );
+
+			const selected = selectedEntryRef.current;
+
+			if (
+				selected?.id &&
+				selected.status === 'pending' &&
+				bootData?.canApproveStyleApplies
+			) {
+				apiFetch( buildClaimRequest( bootData, selected.id ) )
+					.then( ( response ) =>
+						applyClaimResponse( selected.id, response )
+					)
+					.catch( () => {} );
+			}
+		};
+
+		window.addEventListener( 'focus', handleFocusOrVisible );
+		document.addEventListener( 'visibilitychange', handleFocusOrVisible );
+
+		return () => {
+			window.removeEventListener( 'focus', handleFocusOrVisible );
+			document.removeEventListener(
+				'visibilitychange',
+				handleFocusOrVisible
+			);
+
+			if ( debounceTimer ) {
+				clearTimeout( debounceTimer );
+			}
+		};
+	}, [ bootData, applyClaimResponse ] );
 
 	const summaryCards = getSummaryCards( responseData.summary );
 	const isViewModified = ! areActivityViewsEqual(

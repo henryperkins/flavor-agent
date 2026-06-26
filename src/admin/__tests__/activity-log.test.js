@@ -3911,4 +3911,43 @@ describe( 'ActivityLogApp', () => {
 		);
 		expect( approveButton ).toBeFalsy();
 	} );
+
+	test( 'a window focus refreshes the feed and re-claims the selected pending row', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply'
+		);
+
+		const pending = createExternalApplyEntry();
+		const claimSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'POST'
+			) {
+				claimSpy();
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		// Row auto-selected by the deep link; the leading-edge debounce fires the
+		// re-claim synchronously on the first focus event (no fake timers needed).
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+		claimSpy.mockClear();
+		const callsBefore = apiFetch.mock.calls.length;
+
+		await act( async () => {
+			window.dispatchEvent( new Event( 'focus' ) );
+		} );
+		await flushEffects();
+
+		expect( apiFetch.mock.calls.length ).toBeGreaterThan( callsBefore );
+		expect( claimSpy ).toHaveBeenCalled();
+	} );
 } );
