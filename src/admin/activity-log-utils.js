@@ -1,4 +1,5 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { humanTimeDiff } from '@wordpress/date';
 
 import {
 	getResolvedActivityUndoState,
@@ -2580,6 +2581,87 @@ export function buildDecisionRequest( bootData, activityId, decision, note ) {
 	};
 }
 
+export const TERMINAL_DECISION_ERROR_CODES = [
+	'flavor_agent_apply_invalid_transition',
+	'flavor_agent_apply_not_pending',
+	'flavor_agent_apply_expired',
+];
+
+function buildClaimUrl( bootData, activityId ) {
+	return `${
+		bootData?.restUrl || ''
+	}flavor-agent/v1/activity/${ encodeURIComponent( activityId ) }/claim`;
+}
+
+export function buildClaimRequest( bootData, activityId ) {
+	return {
+		url: buildClaimUrl( bootData, activityId ),
+		method: 'POST',
+		headers: { 'X-WP-Nonce': bootData?.nonce || '' },
+	};
+}
+
+export function buildClaimReleaseRequest( bootData, activityId ) {
+	return {
+		url: buildClaimUrl( bootData, activityId ),
+		method: 'DELETE',
+		headers: { 'X-WP-Nonce': bootData?.nonce || '' },
+	};
+}
+
+/**
+ * Resolve a pending row's advisory claim into a passive badge notice.
+ *
+ * @param {Object|null}   claim         { userId, claimedAt } from apply.claim, or null.
+ * @param {number|string} currentUserId The viewer id (localize stringifies it).
+ * @param {Date}          [now]         Injectable "now" for deterministic tests.
+ * @return {{isSelf: boolean, text: string}|null} Notice descriptor, or null when absent.
+ */
+export function formatApplyClaimNotice( claim, currentUserId, now ) {
+	if ( ! claim || typeof claim !== 'object' ) {
+		return null;
+	}
+
+	const claimUserId = Number( claim.userId );
+
+	if ( ! Number.isFinite( claimUserId ) || claimUserId <= 0 ) {
+		return null;
+	}
+
+	const viewerId = Number( currentUserId );
+	const isSelf =
+		Number.isFinite( viewerId ) && viewerId > 0 && viewerId === claimUserId;
+
+	if ( isSelf ) {
+		return {
+			isSelf: true,
+			text: __( 'You’re reviewing this.', 'flavor-agent' ),
+		};
+	}
+
+	const label = formatUserIdLabel( claimUserId );
+	const relative =
+		typeof claim.claimedAt === 'string' && claim.claimedAt
+			? humanTimeDiff( claim.claimedAt, now )
+			: '';
+
+	return {
+		isSelf: false,
+		text: relative
+			? sprintf(
+					/* translators: 1: user label e.g. "User #5"; 2: relative time e.g. "3 minutes". */
+					__( '%1$s is reviewing · %2$s', 'flavor-agent' ),
+					label,
+					relative
+			  )
+			: sprintf(
+					/* translators: %s: user label e.g. "User #5". */
+					__( '%s is reviewing', 'flavor-agent' ),
+					label
+			  ),
+	};
+}
+
 export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 	const { postType, entityId } = getDocumentContext( entry );
 
@@ -2762,7 +2844,7 @@ export function normalizeSelectedActivityActions(
 	return [ ...actions, ...filterActions ];
 }
 
-export function normalizeActivityDiscoveryBadges( entry = {} ) {
+export function normalizeActivityDiscoveryBadges( entry = {}, currentUserId ) {
 	const governanceDetails =
 		entry?.governanceDetails ||
 		( entry?.apply && typeof entry.apply === 'object'
@@ -2782,6 +2864,19 @@ export function normalizeActivityDiscoveryBadges( entry = {} ) {
 				  )
 				: '',
 			tone: 'warning',
+		} );
+	}
+
+	const claimNotice = formatApplyClaimNotice(
+		entry?.apply?.claim,
+		currentUserId
+	);
+
+	if ( claimNotice ) {
+		badges.push( {
+			id: 'apply-claim',
+			label: claimNotice.text,
+			tone: claimNotice.isSelf ? 'info' : 'warning',
 		} );
 	}
 
