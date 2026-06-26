@@ -3950,4 +3950,68 @@ describe( 'ActivityLogApp', () => {
 		expect( apiFetch.mock.calls.length ).toBeGreaterThan( callsBefore );
 		expect( claimSpy ).toHaveBeenCalled();
 	} );
+
+	test( 'an explicit release suppresses the focus re-claim for that row (fix 1)', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		// The viewer (id 7) holds the claim, so the Release control renders and the
+		// mount auto-claim is a self-claim.
+		const pending = createExternalApplyEntry( {
+			apply: {
+				...createExternalApplyEntry().apply,
+				claim: { userId: 7, claimedAt: '2026-06-25T00:00:00+00:00' },
+			},
+		} );
+		let claimPosts = 0;
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'POST'
+			) {
+				claimPosts += 1;
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		// Mount auto-claim fires exactly one POST /claim.
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+		expect( claimPosts ).toBe( 1 );
+
+		// Explicitly release the claim (DELETE /claim).
+		const releaseButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) =>
+			/release review claim/i.test( button.textContent )
+		);
+		expect( releaseButton ).toBeTruthy();
+
+		await act( async () => {
+			releaseButton.click();
+		} );
+		await flushEffects();
+
+		const postsAfterRelease = claimPosts;
+
+		// A focus event must NOT silently re-acquire the just-released claim, or the
+		// explicit Release would feel like a no-op. The reloadToken bump still fires;
+		// only the re-claim is suppressed for the released row until the selection
+		// changes.
+		await act( async () => {
+			window.dispatchEvent( new Event( 'focus' ) );
+		} );
+		await flushEffects();
+
+		expect( claimPosts ).toBe( postsAfterRelease );
+	} );
 } );

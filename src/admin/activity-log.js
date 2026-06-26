@@ -2297,6 +2297,7 @@ function GovernanceEvidenceSection( {
 	bootData,
 	onDecided,
 	onClaimResolved,
+	onClaimReleased,
 	currentUserId,
 	isLocallyDecided = false,
 } ) {
@@ -2383,6 +2384,7 @@ function GovernanceEvidenceSection( {
 				buildClaimReleaseRequest( bootData, entry.id )
 			);
 			onClaimResolved?.( entry.id, response );
+			onClaimReleased?.( entry.id );
 		} catch {
 			// Best-effort; the 5-minute TTL covers a missed release.
 		}
@@ -2536,14 +2538,8 @@ function GovernanceEvidenceSection( {
 							) }
 						</p>
 						{ claimNotice && (
-							<p
-								className={ `flavor-agent-activity-log__claim-note${
-									claimNotice.isSelf ? ' is-self' : ''
-								}` }
-							>
-								{ claimNotice.isSelf
-									? claimNotice.text
-									: `🟡 ${ claimNotice.text }` }
+							<p className="flavor-agent-activity-log__claim-note">
+								{ claimNotice.text }
 							</p>
 						) }
 						{ viewerHoldsClaim && (
@@ -2599,6 +2595,7 @@ function ActivityEntryDetails( {
 	onDecided,
 	onFilterAction,
 	onClaimResolved,
+	onClaimReleased,
 	currentUserId,
 	isLocallyDecided = false,
 } ) {
@@ -2659,6 +2656,7 @@ function ActivityEntryDetails( {
 						bootData={ bootData }
 						onDecided={ onDecided }
 						onClaimResolved={ onClaimResolved }
+						onClaimReleased={ onClaimReleased }
 						currentUserId={ currentUserId }
 						isLocallyDecided={ isLocallyDecided }
 					/>
@@ -3393,6 +3391,20 @@ export function ActivityLogApp( { bootData } ) {
 		selectedEntryRef.current = selectedEntry;
 	}, [ selectedEntry ] );
 
+	// Tracks a row whose claim the viewer explicitly released while staying on it.
+	// The focus/visibility refresh must NOT silently re-acquire that claim, or the
+	// explicit Release would feel like a no-op. Cleared only when the SELECTED id
+	// changes — not when the selectedEntry object changes, because applyClaimResponse
+	// merges apply.claim and mints a new object on the same row, which would
+	// prematurely clear the suppression.
+	const releasedClaimIdRef = useRef( null );
+	const handleClaimReleased = useCallback( ( activityId ) => {
+		releasedClaimIdRef.current = activityId;
+	}, [] );
+	useEffect( () => {
+		releasedClaimIdRef.current = null;
+	}, [ selectedEntryId ] );
+
 	useEffect( () => {
 		if ( ! persistActivityViewRef.current ) {
 			return;
@@ -3495,7 +3507,8 @@ export function ActivityLogApp( { bootData } ) {
 			if (
 				selected?.id &&
 				selected.status === 'pending' &&
-				bootData?.canApproveStyleApplies
+				bootData?.canApproveStyleApplies &&
+				selected.id !== releasedClaimIdRef.current
 			) {
 				apiFetch( buildClaimRequest( bootData, selected.id ) )
 					.then( ( response ) =>
@@ -3775,6 +3788,7 @@ export function ActivityLogApp( { bootData } ) {
 							onDecided={ handleEntryDecided }
 							onFilterAction={ applySelectedRowFilter }
 							onClaimResolved={ applyClaimResponse }
+							onClaimReleased={ handleClaimReleased }
 							currentUserId={ bootData?.currentUserId }
 							isLocallyDecided={ locallyDecidedEntryIds.has(
 								selectedEntry?.id
