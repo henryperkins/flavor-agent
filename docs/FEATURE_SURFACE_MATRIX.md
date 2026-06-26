@@ -28,7 +28,7 @@ Content request diagnostics render inline only when the supported post/page cont
 | --- | --- | --- | --- |
 | WordPress Abilities API | Server-registered abilities under the `flavor-agent` category | Recommendation, content, helper, diagnostics, docs-grounding, theme, backend status, and feature-gated external-apply (`request-style-apply`, `get-activity`, `list-activity`, `undo-activity`) contracts | `docs/reference/abilities-and-routes.md` |
 | Helper abilities and diagnostics | Server helper abilities plus settings readiness/status contracts | Block, pattern, synced-pattern, template-part, theme, token, backend, and docs search helpers | `docs/features/helper-abilities.md` |
-| Flavor Agent REST API | Routes under `flavor-agent/v1` | Activity read/write/undo, external-apply decision, and manual pattern sync | `docs/reference/abilities-and-routes.md#rest-routes` |
+| Flavor Agent REST API | Routes under `flavor-agent/v1` | Activity read/write/undo, external-apply decision, advisory review-claim coordination, and manual pattern sync | `docs/reference/abilities-and-routes.md#rest-routes` |
 
 ## Quick Mapping
 

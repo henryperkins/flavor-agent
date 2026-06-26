@@ -82,7 +82,7 @@ Defines 30 abilities across block, pattern, template, navigation, docs, infra, c
 
 ### REST routes
 
-Remaining REST routes live under `flavor-agent/v1/`: `activity`, `activity/{id}/undo`, `activity/{id}/decision` (external-apply approval; `manage_options` plus the row's mutation capability), and `sync-patterns`. Recommendation surfaces are exposed through the Abilities API under `wp-abilities/v1`; block/pattern/content abilities require `edit_posts`, navigation/template/style abilities require `edit_theme_options`, activity uses contextual permissions, and sync requires `manage_options`. The four feature-gated external-apply abilities (`request-style-apply`, `get-activity`, `list-activity`, `undo-activity`) let an external agent queue a review-gated style apply, read its attribution/status, and undo executed style rows; approval stays admin-only via the decision route.
+Remaining REST routes live under `flavor-agent/v1/`: `activity`, `activity/{id}/undo`, `activity/{id}/decision` (external-apply approval; `manage_options` plus the row's mutation capability), `activity/{id}/claim` (POST/DELETE advisory review claim, same capability), and `sync-patterns`. Recommendation surfaces are exposed through the Abilities API under `wp-abilities/v1`; block/pattern/content abilities require `edit_posts`, navigation/template/style abilities require `edit_theme_options`, activity uses contextual permissions, and sync requires `manage_options`. The four feature-gated external-apply abilities (`request-style-apply`, `get-activity`, `list-activity`, `undo-activity`) let an external agent queue a review-gated style apply, read its attribution/status, and undo executed style rows; approval stays admin-only via the decision route.
 
 ### LLM provider architecture
 

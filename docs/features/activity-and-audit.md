@@ -43,6 +43,7 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Let admins inspect style-governance rows through a first rich visual diff layer with lifecycle-honest proposed/applied/undone/blocked states, swatches or chips where the stored payload supports them, and raw state snapshots as fallback evidence
 - Let admins move from a selected row to the honest target, a focused `Settings > AI Activity` permalink, or closely related feed pivots without inventing a second admin route contract
 - Let admins approve or reject pending external Global Styles / Style Book applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
+- Show advisory "being reviewed by X" claims on pending approvals so concurrent admins can coordinate, without the claim ever gating a decision; if another admin decides a row first, it resolves to its terminal approved/rejected state rather than surfacing a generic error
 - Let admins discover Ring III governed-change attestations for eligible external style applies, including a site-run verification summary plus public envelope and subject-state links without making attestation a general AI-governance claim
 - Surface passive feed badges for pending approval, AI request-log availability, and attestation evidence before a row is opened
 - Let global admin activity reads request and render a bounded, sanitized governance learning report with outcome rates and aggregate groups by surface, operation type, validation reason, ranking signal, guideline version, and provider/model.
