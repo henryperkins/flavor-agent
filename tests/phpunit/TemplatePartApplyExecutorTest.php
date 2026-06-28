@@ -49,6 +49,22 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		);
 	}
 
+	public function test_resolve_baseline_hashes_an_available_but_empty_part(): void {
+		$this->seed_part( 'twentytwentyfive//header', '' );
+
+		$hash = TemplatePartApplyExecutor::resolve_baseline(
+			[
+				'surface' => 'template-part',
+				'target'  => [ 'templatePartId' => 'twentytwentyfive//header' ],
+			]
+		);
+
+		$this->assertSame(
+			hash( 'sha256', serialize_blocks( parse_blocks( '' ) ) ),
+			$hash
+		);
+	}
+
 	public function test_resolve_baseline_errors_when_part_missing(): void {
 		$result = TemplatePartApplyExecutor::resolve_baseline(
 			[

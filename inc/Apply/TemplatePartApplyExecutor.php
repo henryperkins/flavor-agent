@@ -58,7 +58,11 @@ final class TemplatePartApplyExecutor {
 
 		$part = ServerCollector::resolve_template_part_for_apply( $ref );
 
-		if ( ! is_object( $part ) || '' === (string) ( $part->content ?? '' ) ) {
+		// Error only when the part is genuinely missing (non-object). An
+		// available-but-empty part is a legitimate apply target (e.g. a future
+		// insert-into-empty); its empty content hashes to a valid, stable
+		// baseline, so it must not be rejected here.
+		if ( ! is_object( $part ) ) {
 			return new \WP_Error(
 				'flavor_agent_apply_target_unavailable',
 				'The requested template part is not available on this site.',
