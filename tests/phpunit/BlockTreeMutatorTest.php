@@ -74,6 +74,33 @@ final class BlockTreeMutatorTest extends TestCase {
 		$this->assertStringContainsString( 'wp:paragraph', $html );
 	}
 
+	/**
+	 * End-insert into a nested wrapper (Task 5's apply_insert after_block_path on a
+	 * group's last child: parent [0], index === childCount). The new marker(s) must
+	 * land INSIDE the wrapper, after the last child marker but before the closing
+	 * </div> literal — not appended past it (which would serialize outside the group).
+	 */
+	public function test_insert_at_end_of_nested_wrapper_stays_inside_wrapper(): void {
+		$blocks    = $this->nested(); // group wrapping heading + paragraph (2 children).
+		$separator = parse_blocks( '<!-- wp:separator --><hr class="wp-block-separator"/><!-- /wp:separator -->' );
+		$next      = BlockTreeMutator::insert( $blocks, [ 0 ], 2, $separator );
+
+		$group = BlockTreeMutator::resolve( $next, [ 0 ] );
+		$this->assertSame( 'core/heading', $group['innerBlocks'][0]['blockName'] );
+		$this->assertSame( 'core/paragraph', $group['innerBlocks'][1]['blockName'] );
+		$this->assertSame( 'core/separator', $group['innerBlocks'][2]['blockName'] );
+		// One marker per child, none orphaned past the trailing literal.
+		$this->assertSame( 3, self::count_nulls( $group['innerContent'] ) );
+
+		// The separator serializes BEFORE the group's closing </div> (inside it).
+		$html         = serialize_blocks( $next );
+		$separator_at = strpos( $html, 'wp:separator' );
+		$closing_at   = strpos( $html, '</div>' );
+		$this->assertNotFalse( $separator_at );
+		$this->assertNotFalse( $closing_at );
+		$this->assertLessThan( $closing_at, $separator_at );
+	}
+
 	private static function count_nulls( array $inner_content ): int {
 		return count( array_filter( $inner_content, static fn ( $chunk ) => null === $chunk ) );
 	}

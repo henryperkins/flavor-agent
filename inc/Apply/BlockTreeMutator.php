@@ -92,9 +92,10 @@ final class BlockTreeMutator {
 	 * @return array<int,string|null>
 	 */
 	private static function splice_inner_content( array $inner_content, int $block_index, int $remove_count, int $insert_count ): array {
-		$result    = [];
-		$null_seen = 0;
-		$inserted  = false;
+		$result          = [];
+		$null_seen       = 0;
+		$inserted        = false;
+		$after_last_null = null; // Offset in $result just past the most recent preserved marker.
 
 		foreach ( $inner_content as $chunk ) {
 			if ( null !== $chunk ) {
@@ -118,13 +119,24 @@ final class BlockTreeMutator {
 				continue; // drop a marker inside the removed run
 			}
 
-			$result[] = $chunk; // preserve this marker
+			$result[]        = $chunk; // preserve this marker
+			$after_last_null = count( $result );
 		}
 
-		// Pure insert at/after the end of the null run (block_index >= null count).
+		// Pure insert past the end of the null run (block_index >= null count).
+		// Splice the fresh markers in right after the final child marker so they
+		// stay INSIDE a nested wrapper, before any trailing literal (e.g. the
+		// closing </div>). With no markers to anchor to (e.g. an empty wrapper),
+		// fall back to appending at the end.
 		if ( ! $inserted ) {
-			for ( $i = 0; $i < $insert_count; $i++ ) {
-				$result[] = null;
+			$fresh = array_fill( 0, max( 0, $insert_count ), null );
+
+			if ( null !== $after_last_null ) {
+				array_splice( $result, $after_last_null, 0, $fresh );
+			} else {
+				foreach ( $fresh as $marker ) {
+					$result[] = $marker;
+				}
 			}
 		}
 
