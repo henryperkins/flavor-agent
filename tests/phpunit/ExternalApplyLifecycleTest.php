@@ -556,4 +556,20 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertIsArray( $updated );
 		$this->assertSame( 'rejected', $updated['apply']['status'] );
 	}
+
+	public function test_style_apply_executor_implements_the_external_apply_contract(): void {
+		$this->assertInstanceOf(
+			\ReflectionClass::class,
+			new \ReflectionClass( \FlavorAgent\Apply\StyleApplyExecutor::class )
+		);
+		$this->assertTrue(
+			is_subclass_of( \FlavorAgent\Apply\StyleApplyExecutor::class, \FlavorAgent\Apply\ExternalApplyExecutor::class ),
+			'StyleApplyExecutor must implement ExternalApplyExecutor.'
+		);
+		$this->assertSame(
+			\FlavorAgent\Apply\StyleApplyExecutor::class,
+			\FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'global-styles' )
+		);
+		$this->assertNull( \FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'template-part' ) );
+	}
 }

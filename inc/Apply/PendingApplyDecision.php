@@ -76,20 +76,36 @@ final class PendingApplyDecision {
 		$global_styles_id = (string) ( $target['globalStylesId'] ?? '' );
 		$block_name       = (string) ( $target['blockName'] ?? '' );
 		$signatures       = is_array( $apply['signatures'] ?? null ) ? $apply['signatures'] : [];
-		$baseline         = (string) ( $signatures['baselineConfigHash'] ?? '' );
+		$baseline         = (string) ( $signatures['baselineConfigHash'] ?? $signatures['baselineContentHash'] ?? '' );
 
-		// Second freshness check: the live entity must still match the
+		$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
+
+		if ( null === $executor ) {
+			return ActivityRepository::transition_external_apply(
+				$activity_id,
+				[
+					'applyStatus'    => 'failed',
+					'decidedBy'      => $decided_by,
+					'decidedAt'      => $decided_at,
+					'decisionNote'   => $note,
+					'failureCode'    => 'flavor_agent_apply_surface_unsupported',
+					'failureMessage' => 'No external-apply executor is registered for this surface.',
+				]
+			);
+		}
+
+		// Second freshness check: the live baseline must still match the
 		// baseline recorded at request time. Drift fails closed.
-		$resolved     = StyleApplyExecutor::resolve_user_global_styles( $global_styles_id );
-		$stale_reason = '';
-		$failure_code = 'flavor_agent_apply_stale';
+		$live_baseline = $executor::resolve_baseline( $entry );
+		$stale_reason  = '';
+		$failure_code  = 'flavor_agent_apply_stale';
 
-		if ( is_wp_error( $resolved ) ) {
-			$stale_reason = $resolved->get_error_message();
+		if ( is_wp_error( $live_baseline ) ) {
+			$stale_reason = $live_baseline->get_error_message();
 			$failure_code = 'flavor_agent_apply_resolve_failed';
 		} elseif ( '' === $baseline ) {
 			$stale_reason = 'The baseline configuration hash is missing from this external apply request.';
-		} elseif ( ! hash_equals( StyleApplyExecutor::comparable_config_hash( $resolved['config'] ), $baseline ) ) {
+		} elseif ( ! hash_equals( $live_baseline, $baseline ) ) {
 			$stale_reason = 'The Global Styles entity changed after this apply was requested.';
 		}
 
@@ -107,8 +123,7 @@ final class PendingApplyDecision {
 			);
 		}
 
-		$operations = is_array( $apply['operations'] ?? null ) ? $apply['operations'] : [];
-		$result     = StyleApplyExecutor::apply( $surface, $global_styles_id, $operations, $block_name );
+		$result = $executor::execute( $entry );
 
 		if ( is_wp_error( $result ) ) {
 			return ActivityRepository::transition_external_apply(

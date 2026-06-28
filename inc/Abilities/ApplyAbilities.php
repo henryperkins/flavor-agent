@@ -6,6 +6,7 @@ namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Activity\RecommendationOutcome;
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Apply\ExternalApplyExecutorRegistry;
 use FlavorAgent\Apply\StyleApplyExecutor;
 use FlavorAgent\LLM\StylePrompt;
 use FlavorAgent\Support\NormalizesInput;
@@ -298,13 +299,14 @@ final class ApplyAbilities {
 			);
 		}
 
-		$entry   = ActivityRepository::maybe_expire_pending_apply( $entry );
-		$surface = (string) ( $entry['surface'] ?? '' );
+		$entry    = ActivityRepository::maybe_expire_pending_apply( $entry );
+		$surface  = (string) ( $entry['surface'] ?? '' );
+		$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
 
-		if ( ! in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+		if ( null === $executor ) {
 			return new \WP_Error(
 				'flavor_agent_undo_surface_unsupported',
-				'External undo currently supports Global Styles and Style Book activity rows.',
+				'External undo is not supported for this activity surface.',
 				[ 'status' => 400 ]
 			);
 		}
@@ -344,7 +346,7 @@ final class ApplyAbilities {
 			);
 		}
 
-		$result = StyleApplyExecutor::undo( $entry );
+		$result = $executor::undo( $entry );
 
 		if ( is_wp_error( $result ) ) {
 			if ( 'flavor_agent_undo_drift' === $result->get_error_code() ) {
