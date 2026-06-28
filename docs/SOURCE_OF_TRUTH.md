@@ -46,7 +46,7 @@ flavor-agent/
     Attestation/            Ring III governed-change statements, signing, key registry, verifier, and storage
     Activity/               Server-backed activity persistence, permissions, serialization
     Admin/                  Settings page + AI Activity admin app registration
-    Apply/                  Governed external applies: server-side style apply/undo executor + admin approval decision service
+    Apply/                  Governed external applies: server-side style and template-part apply/undo executors (executor registry) + admin approval decision service
    AzureOpenAI/            Legacy chat Responses facade for Connectors-owned text generation
    Embeddings/             Workers AI embedding client, embedding signatures, shared HTTP helpers, and Qdrant vector DB
     Cloudflare/             AI Search docs grounding, Workers AI, private pattern AI Search
@@ -122,6 +122,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 #### Template Part Recommendations
 
 - Site Editor template-part recommendations with review-before-apply, focus-block links, pattern browse links, bounded operations, advisory fallback, and activity/undo. Exact flow: [`features/template-part-recommendations.md`](features/template-part-recommendations.md). Operation vocabulary: [`reference/template-operations.md`](reference/template-operations.md).
+- Governed external template-part apply: external agents can request a review-gated template-part structural apply (`request-template-part-apply`) that queues a drift-checked pending row, is approved in `Settings > AI Activity`, executes ≤3 path-addressed bounded operations against one `wp_template_part` through the server-side executor registry, and is reversible via `undo-activity`. This is the second governed external-apply lane after style; it is **not attested** (Ring III attestation stays frozen to `external-style-apply-v1`).
 
 #### Global Styles Recommendations
 
@@ -153,7 +154,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 
-The code defines 30 abilities with full JSON Schema input/output definitions: seven recommendation abilities, thirteen helper/read abilities, the docs-search ability, five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and four feature-gated external-apply abilities (`request-style-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style apply, read activity, and undo executed style rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+The code defines 31 abilities with full JSON Schema input/output definitions: seven recommendation abilities, thirteen helper/read abilities, the docs-search ability, five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and five feature-gated external-apply abilities (`request-style-apply`, `request-template-part-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style or template-part apply, read activity, and undo executed style and template-part rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 #### Developer Docs
 
