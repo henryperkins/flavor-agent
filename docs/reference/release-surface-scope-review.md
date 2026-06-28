@@ -536,7 +536,7 @@ This checklist was advanced on 2026-06-18, but not completed.
 - Template, template-part, Global Styles, and Style Book surfaces still route executable suggestions through the shared review-before-apply shell and deterministic apply actions.
 - AI Activity remains the admin approval/audit/provenance surface; external-agent mutation is limited to pending Global Styles / Style Book apply decisions.
 - Settings remains scoped to plugin-owned embeddings, pattern storage, developer-doc grounding limits, Guidelines, manual pattern sync, connector readiness links, and AI Activity logging controls.
-- `docs/reference/abilities-and-routes.md` keeps helper/read abilities, preview abilities, recommendation abilities, and the four governed external-apply abilities separated by capability, annotation, and exposure contract.
+- `docs/reference/abilities-and-routes.md` keeps helper/read abilities, preview abilities, recommendation abilities, and the five governed external-apply abilities separated by capability, annotation, and exposure contract.
 
 This closes the scope-freeze sub-checklist only. It does not override the incomplete 2026-06-18 sign-off attempt above, the missing release screenshots, or the remaining Validation and Worktree Hygiene checklists below.
 
