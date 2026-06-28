@@ -19,7 +19,7 @@ The programmatic layer exposes the same governance model through the WordPress A
 **Proof points**
 
 - **8 first-party recommendation surfaces** plus one admin approval/audit surface.
-- **30 defined Ability contracts**, reconciled by category:
+- **31 defined Ability contracts**, reconciled by category:
 
 | Category                                   |  Count |
 | ------------------------------------------ | -----: |
@@ -28,8 +28,8 @@ The programmatic layer exposes the same governance model through the WordPress A
 | Public read / helper abilities             |     10 |
 | Abilities-API-only helper / read abilities |      3 |
 | Docs-search ability                        |      1 |
-| Governed external-apply abilities          |      4 |
-| **Total**                                  | **30** |
+| Governed external-apply abilities          |      5 |
+| **Total**                                  | **31** |
 
 Of the fourteen helper/search/infra contracts, ten are public read helpers exposed through the universal MCP discovery path; three (`list-synced-patterns`, `get-synced-pattern`, `check-status`) stay Abilities-API-only; and `search-wordpress-docs` is a separate `manage_options` docs-search tool.
 
@@ -165,7 +165,7 @@ WordPress context → recommendation ability → schema validation → review ga
 
 - Native Gutenberg and Site Editor surfaces.
 - 8 recommendation surfaces.
-- 30 defined Abilities API contracts.
+- 31 defined Abilities API contracts.
 - Admin approval/audit page.
 - External agents can request style applies, but admins decide.
 
