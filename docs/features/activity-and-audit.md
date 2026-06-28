@@ -67,7 +67,7 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 | Global Styles undo helpers | `getGlobalStylesActivityUndoState()` and `undoGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validate and restore the current Global Styles entity |
 | Admin page registration | `ActivityPage` in `inc/Admin/ActivityPage.php` | Registers `Settings > AI Activity` and localizes admin approval/audit/attestation-discovery boot data |
 | Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, linked-row banner, selected-row action strip, passive discovery badges, bounded learning-report aggregates, external-apply decision controls, attestation affordances, and custom detail sections |
-| REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()`; `AttestationController` | Serve activity query, persistence, undo-status updates, admin approval/rejection decisions, and public attestation verification reads |
+| REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()`, `handle_activity_claim()`, `handle_activity_claim_release()`; `AttestationController` | Serve activity query, persistence, undo-status updates, admin approval/rejection decisions, advisory review-claim coordination, and public attestation verification reads |
 | Permissions | `FlavorAgent\Activity\Permissions` | Applies contextual capability rules for scoped and global activity access |
 | Learning report | `FlavorAgent\Activity\GovernanceLearningReport` | Builds the optional bounded `learningReport` payload rendered for global admin activity reads |
 
@@ -77,6 +77,8 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 - REST: `POST /flavor-agent/v1/activity`
 - REST: `POST /flavor-agent/v1/activity/{id}/undo`
 - REST: `POST /flavor-agent/v1/activity/{id}/decision`
+- REST: `POST /flavor-agent/v1/activity/{id}/claim`
+- REST: `DELETE /flavor-agent/v1/activity/{id}/claim`
 - REST: `GET /flavor-agent/v1/attestations/{id}`
 - REST: `GET /flavor-agent/v1/attestations/{id}/verification`
 - REST: `GET /flavor-agent/v1/attestations/{id}/subject-state`

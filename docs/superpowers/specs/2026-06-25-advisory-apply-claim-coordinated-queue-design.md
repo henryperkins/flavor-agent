@@ -51,8 +51,8 @@ Both routes mirror `/activity/{id}/decision` and share its `permission_callback`
 
 | Route | Method | Permission | Behavior |
 | --- | --- | --- | --- |
-| `/activity/{id}/claim` | `POST` | `can_decide_activity_request` | `ApplyClaim::claim( id, current_user )`. `404` if the row is missing (handler-side, mirroring decision). Returns `{ claim: {userId, claimedAt}|null, entry: <serialized row> }`, `200`. Idempotent: re-claiming refreshes TTL; a foreign live claim is returned unchanged so the client can show "User #&lt;id&gt; is reviewing"; `entry` lets the client pin a decided-elsewhere row. Never `409` — claiming is advisory (best-effort write, per the Core invariant). |
-| `/activity/{id}/claim` | `DELETE` | `can_decide_activity_request` | `ApplyClaim::release( id, current_user )`. `404` if the row is missing (symmetry with claim/decision). Returns `{ claim: …|null, entry: <serialized row> }` (a foreign claim is left intact). Idempotent no-op when there is nothing of the caller's to release. |
+| `/activity/{id}/claim` | `POST` | `can_decide_activity_request` | `ApplyClaim::claim( id, current_user )`. `404` if the row is missing (handler-side, mirroring decision). Returns a nullable claim plus the serialized row, `200`. Idempotent: re-claiming refreshes TTL; a foreign live claim is returned unchanged so the client can show "User #&lt;id&gt; is reviewing"; `entry` lets the client pin a decided-elsewhere row. Never `409` — claiming is advisory (best-effort write, per the Core invariant). |
+| `/activity/{id}/claim` | `DELETE` | `can_decide_activity_request` | `ApplyClaim::release( id, current_user )`. `404` if the row is missing (symmetry with claim/decision). Returns a nullable claim plus the serialized row; a foreign claim is left intact, so caller-side release is an idempotent no-op unless the viewer owns the claim. |
 
 Handlers (`handle_activity_claim`, `handle_activity_claim_release`) live beside `handle_activity_decision` in `Agent_Controller` and call `ActivityPermissions::forbidden_error()` on gate failure, exactly as the decision handler does.
 

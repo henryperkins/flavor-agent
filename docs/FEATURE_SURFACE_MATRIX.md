@@ -42,6 +42,7 @@ Content request diagnostics render inline only when the supported post/page cont
 - Activity read/write -> `GET/POST /flavor-agent/v1/activity`
 - Activity undo -> `POST /flavor-agent/v1/activity/{id}/undo`
 - External-apply approval -> `POST /flavor-agent/v1/activity/{id}/decision`
+- Advisory review claim -> `POST/DELETE /flavor-agent/v1/activity/{id}/claim`
 - External agent style apply -> `flavor-agent/request-style-apply`; status/attribution reads -> `flavor-agent/get-activity` and `flavor-agent/list-activity`; server-side undo -> `flavor-agent/undo-activity`
 - Pattern sync -> `POST /flavor-agent/v1/sync-patterns`; status polling -> `GET /flavor-agent/v1/sync-patterns`
 
