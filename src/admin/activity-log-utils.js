@@ -2409,7 +2409,10 @@ function getGovernanceDiagnosticText( entry, details ) {
 		[ 'requestReference', details.requestReference ],
 		[ 'resolvedContextSignature', signatures.resolvedContextSignature ],
 		[ 'reviewContextSignature', signatures.reviewContextSignature ],
-		[ 'baselineConfigHash', signatures.baselineConfigHash ],
+		[
+			'baselineConfigHash',
+			signatures.baselineConfigHash || signatures.baselineContentHash,
+		],
 	].filter( ( [ , value ] ) => value );
 
 	return rows
@@ -2472,7 +2475,9 @@ export function getGovernanceDetails(
 		failureMessage: details.failureMessage,
 		hasResolvedSignature: Boolean( signatures.resolvedContextSignature ),
 		hasReviewSignature: Boolean( signatures.reviewContextSignature ),
-		hasBaselineHash: Boolean( signatures.baselineConfigHash ),
+		hasBaselineHash: Boolean(
+			signatures.baselineConfigHash || signatures.baselineContentHash
+		),
 		proposedOperations,
 		executedOperations,
 		comparisonRows,

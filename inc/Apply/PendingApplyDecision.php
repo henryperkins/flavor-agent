@@ -106,7 +106,7 @@ final class PendingApplyDecision {
 		} elseif ( '' === $baseline ) {
 			$stale_reason = 'The baseline configuration hash is missing from this external apply request.';
 		} elseif ( ! hash_equals( $live_baseline, $baseline ) ) {
-			$stale_reason = 'The Global Styles entity changed after this apply was requested.';
+			$stale_reason = 'The target entity changed after this apply was requested.';
 		}
 
 		if ( '' !== $stale_reason ) {

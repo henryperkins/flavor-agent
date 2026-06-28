@@ -7,6 +7,7 @@ jest.mock( '../../style-book/dom', () => ( {
 
 import {
 	createActivityEntry,
+	getActivityEntityKey,
 	getBlockActivityUndoState,
 	getCurrentActivityScope,
 	getLatestAppliedActivity,
@@ -826,5 +827,33 @@ describe( 'activity history helpers', () => {
 				error: null,
 			} )
 		);
+	} );
+
+	test( 'getActivityEntityKey distinguishes external template-part applies by part ref', () => {
+		const header = {
+			surface: 'template-part',
+			type: 'apply_template_part_suggestion',
+			target: {
+				templatePartId: 'twentytwentyfive//header',
+				templatePartRef: 'twentytwentyfive//header',
+			},
+		};
+		const footer = {
+			surface: 'template-part',
+			type: 'apply_template_part_suggestion',
+			target: {
+				templatePartId: 'twentytwentyfive//footer',
+				templatePartRef: 'twentytwentyfive//footer',
+			},
+		};
+
+		const headerKey = getActivityEntityKey( header );
+		const footerKey = getActivityEntityKey( footer );
+
+		// Both must carry their part ref (not collapse to the bare prefix), so
+		// ordered undo never treats distinct parts as the same entity.
+		expect( headerKey ).toBe( 'template-part:twentytwentyfive//header' );
+		expect( footerKey ).toBe( 'template-part:twentytwentyfive//footer' );
+		expect( headerKey ).not.toBe( footerKey );
 	} );
 } );

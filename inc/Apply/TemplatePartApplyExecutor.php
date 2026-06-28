@@ -92,9 +92,10 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 
 		return [
 			'target' => [
-				'templatePartId' => (string) ( $part->id ?? $ref ),
-				'slug'           => (string) ( $part->slug ?? '' ),
-				'area'           => (string) ( $part->area ?? '' ),
+				'templatePartId'  => (string) ( $part->id ?? $ref ),
+				'templatePartRef' => (string) ( $part->id ?? $ref ),
+				'slug'            => (string) ( $part->slug ?? '' ),
+				'area'            => (string) ( $part->area ?? '' ),
 			],
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
@@ -441,12 +442,25 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
-		return array_values(
+		$blocks = array_values(
 			array_filter(
 				parse_blocks( $markup ),
 				static fn ( $b ): bool => is_array( $b ) && null !== ( $b['blockName'] ?? null )
 			)
 		);
+
+		// Fail closed when the pattern markup carries no block delimiters: such a
+		// pattern filters down to zero blocks, which would silently degrade an
+		// insert/replace into a delete. Mirror the empty-markup error above.
+		if ( [] === $blocks ) {
+			return new \WP_Error(
+				'flavor_agent_apply_pattern_unavailable',
+				'The requested pattern resolved to no blocks and cannot be applied.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return $blocks;
 	}
 
 	/**

@@ -907,6 +907,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'pending', $stored['executionResult'] );
 		$this->assertSame( 'not_applicable', $stored['undo']['status'] );
 		$this->assertSame( self::TEMPLATE_PART_ID, $stored['target']['templatePartId'] );
+		$this->assertSame( self::TEMPLATE_PART_ID, $stored['target']['templatePartRef'] );
 		$this->assertSame( 'header', $stored['target']['slug'] );
 		$this->assertSame( 'header', $stored['target']['area'] );
 		$this->assertSame(
@@ -917,8 +918,15 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			(string) $signatures['resolvedContextSignature'],
 			$stored['apply']['signatures']['resolvedContextSignature']
 		);
-		$this->assertSame( 'template_part:' . self::TEMPLATE_PART_ID, $stored['document']['scopeKey'] );
+		$this->assertSame( 'wp_template_part:' . self::TEMPLATE_PART_ID, $stored['document']['scopeKey'] );
 		$this->assertSame( 'wp_template_part', $stored['document']['postType'] );
 		$this->assertNotEmpty( $stored['apply']['operations'] );
+
+		// Producer -> consumer: the stored row must derive a template-part entity
+		// whose ref is the part ref, not the document-key fallback. This locks the
+		// audit/ordered-undo key against the templatePartId-only regression.
+		$entity = \FlavorAgent\Activity\Serializer::derive_entity( $stored );
+		$this->assertSame( 'template-part', $entity['type'] );
+		$this->assertSame( self::TEMPLATE_PART_ID, $entity['ref'] );
 	}
 }

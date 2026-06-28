@@ -183,6 +183,8 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		);
 
 		$this->assertIsArray( $result );
+		$this->assertSame( self::PART_ID, $result['target']['templatePartId'] );
+		$this->assertSame( self::PART_ID, $result['target']['templatePartRef'] );
 		$this->assertSame( $content, $result['before']['content'] );
 		$this->assertStringNotContainsString( 'wp:heading', $result['after']['content'] );
 		$this->assertStringContainsString( 'Body', $result['after']['content'] );
@@ -585,6 +587,29 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_apply_pattern_unavailable', $result->get_error_code() );
 		$this->assertSame( $this->paragraph( 'Anchor' ), serialize_blocks( $blocks ), 'Phase 2 must abort before any mutation.' );
+	}
+
+	public function test_apply_operations_fails_closed_on_blockless_pattern_markup(): void {
+		// A registered pattern whose markup carries no block delimiters resolves to
+		// zero blocks after the freeform filter. Without the guard this would
+		// silently degrade an insert into a delete; it must fail closed instead.
+		$this->register_pattern( 'fa-test/blockless', 'Just plain prose, no block delimiters here.' );
+		$blocks = parse_blocks( $this->paragraph( 'Anchor' ) );
+
+		$result = self::apply_ops(
+			$blocks,
+			[
+				[
+					'type'        => 'insert_pattern',
+					'patternName' => 'fa-test/blockless',
+					'placement'   => 'end',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_pattern_unavailable', $result->get_error_code() );
+		$this->assertSame( $this->paragraph( 'Anchor' ), serialize_blocks( $blocks ), 'Blockless pattern must abort before any mutation.' );
 	}
 
 	// ---------------------------------------------------------------------

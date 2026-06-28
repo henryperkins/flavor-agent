@@ -339,7 +339,7 @@ final class ApplyAbilities {
 		$day_in_seconds    = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
 		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) );
 		$expires_at        = gmdate( 'c', time() + $ttl );
-		$scope_key         = 'template_part:' . $template_part_id;
+		$scope_key         = 'wp_template_part:' . $template_part_id;
 		$request_reference = sanitize_text_field( (string) ( $input['requestReference'] ?? '' ) );
 
 		$created = ActivityRepository::create(
@@ -347,9 +347,10 @@ final class ApplyAbilities {
 				'type'            => 'apply_template_part_suggestion',
 				'surface'         => 'template-part',
 				'target'          => [
-					'templatePartId' => $template_part_id,
-					'slug'           => sanitize_key( (string) ( $scope['slug'] ?? '' ) ),
-					'area'           => sanitize_key( (string) ( $scope['area'] ?? '' ) ),
+					'templatePartId'  => $template_part_id,
+					'templatePartRef' => $template_part_id,
+					'slug'            => sanitize_key( (string) ( $scope['slug'] ?? '' ) ),
+					'area'            => sanitize_key( (string) ( $scope['area'] ?? '' ) ),
 				],
 				'suggestion'      => sanitize_text_field( (string) ( $suggestion['label'] ?? 'External template-part apply request' ) ),
 				'before'          => [],

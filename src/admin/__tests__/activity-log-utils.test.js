@@ -1213,6 +1213,7 @@ describe( 'external apply helpers', () => {
 			status: 'pending',
 			suggestion: 'External: insert the header pattern',
 			target: {
+				templatePartId: 'twentytwentyfive//header',
 				templatePartRef: 'twentytwentyfive//header',
 				slug: 'header',
 				area: 'header',
@@ -1242,7 +1243,8 @@ describe( 'external apply helpers', () => {
 				signatures: {
 					resolvedContextSignature: 'r'.repeat( 64 ),
 					reviewContextSignature: 'v'.repeat( 64 ),
-					baselineConfigHash: 'b'.repeat( 64 ),
+					// Template-part rows store the content baseline, not config.
+					baselineContentHash: 'b'.repeat( 64 ),
 				},
 				requestReference: 'agent-req-tp-1',
 			},
@@ -1532,6 +1534,10 @@ describe( 'external apply helpers', () => {
 		expect( details.executedOperations ).toEqual( [
 			'Remove block · core/navigation · [0, 1]',
 		] );
+		// Template-part rows store baselineContentHash; the baseline-hash
+		// surfaces must fall back to it instead of reading "Not recorded".
+		expect( details.hasBaselineHash ).toBe( true );
+		expect( details.diagnosticText ).toContain( 'baselineConfigHash:' );
 	} );
 
 	test( 'getGovernanceDetails keeps style operations on style-shaped summaries', () => {
