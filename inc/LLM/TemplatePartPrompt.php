@@ -1127,6 +1127,25 @@ EXAMPLE
 	}
 
 	/**
+	 * Apply-time re-validation entry: rebuild the four lookups from a freshly
+	 * collected live context and run the same generation-time validator the
+	 * recommendation used. Mirrors StylePrompt::validate_operations_for_apply.
+	 *
+	 * @param array<int, mixed>    $operations Raw operations to re-validate.
+	 * @param array<string, mixed> $context    TemplatePartContextCollector::for_template_part() output.
+	 * @return array{operations: array<int, array<string, mixed>>, reasons: array<int, array{code: string, severity: string, message?: string}>}
+	 */
+	public static function validate_operations_for_apply( array $operations, array $context ): array {
+		return self::validate_operations(
+			$operations,
+			self::build_block_lookup( $context ),
+			self::build_pattern_lookup( $context ),
+			self::build_operation_target_lookup( $context ),
+			self::build_insertion_anchor_lookup( $context )
+		);
+	}
+
+	/**
 	 * @param array<int, mixed>                   $block_hints
 	 * @param array<string, array<string, mixed>> $block_lookup
 	 * @return array<int, array<string, mixed>>
