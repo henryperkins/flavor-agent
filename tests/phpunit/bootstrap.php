@@ -110,6 +110,12 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<int, array<string, mixed>> */
 		public static array $updated_posts = [];
 
+		/** @var array<int, array<string, mixed>> */
+		public static array $inserted_posts = [];
+
+		/** @var array<int, int> */
+		public static array $cleaned_post_caches = [];
+
 		/** @var array<string, array<string, mixed>> */
 		public static array $registered_post_types = [];
 
@@ -369,6 +375,8 @@ namespace FlavorAgent\Tests\Support {
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
 			self::$updated_posts               = [];
+			self::$inserted_posts              = [];
+			self::$cleaned_post_caches         = [];
 			self::$registered_post_types       = [];
 			self::$registered_taxonomies       = [];
 			self::$get_posts_calls             = [];
@@ -1955,6 +1963,19 @@ namespace {
 			}
 
 			/**
+			 * @return array<string, mixed>|null
+			 */
+			public function get_registered(string $pattern_name): ?array
+			{
+				return $this->registered[$pattern_name] ?? null;
+			}
+
+			public function is_registered(string $pattern_name): bool
+			{
+				return isset($this->registered[$pattern_name]);
+			}
+
+			/**
 			 * @return array<int, array<string, mixed>>
 			 */
 			public function get_all_registered(): array
@@ -3229,6 +3250,31 @@ namespace {
 			WordPressTestState::$updated_posts[] = $postarr;
 
 			return $id;
+		}
+	}
+
+	if (! function_exists('wp_insert_post')) {
+		function wp_insert_post(array $postarr, bool $wp_error = false)
+		{
+			unset($wp_error);
+
+			$id = 0;
+			foreach (array_keys(WordPressTestState::$posts) as $existing) {
+				$id = max($id, (int) $existing);
+			}
+			$id = $id > 0 ? $id + 1 : 5000;
+
+			WordPressTestState::$posts[$id]         = new \WP_Post(array_merge($postarr, ['ID' => $id]));
+			WordPressTestState::$inserted_posts[]   = array_merge($postarr, ['ID' => $id]);
+
+			return $id;
+		}
+	}
+
+	if (! function_exists('clean_post_cache')) {
+		function clean_post_cache($post): void
+		{
+			WordPressTestState::$cleaned_post_caches[] = (int) (is_object($post) ? ($post->ID ?? 0) : $post);
 		}
 	}
 
