@@ -1540,6 +1540,31 @@ describe( 'external apply helpers', () => {
 		expect( details.diagnosticText ).toContain( 'baselineConfigHash:' );
 	} );
 
+	test( 'getGovernanceDetails provides surface-aware approval copy', () => {
+		const templatePart = getGovernanceDetails(
+			createTemplatePartApplyEntry( { status: 'pending' } )
+		);
+		expect( templatePart.approvalCopy.reviewIntro ).toContain(
+			'template-part apply'
+		);
+		expect( templatePart.approvalCopy.retained ).toContain(
+			'template-part apply row'
+		);
+		expect( templatePart.approvalCopy.decision ).toContain(
+			'structural change'
+		);
+		expect( templatePart.approvalCopy.reviewIntro ).not.toContain(
+			'style apply'
+		);
+
+		const style = getGovernanceDetails(
+			createStyleApplyEntry( { status: 'pending' } )
+		);
+		expect( style.approvalCopy.reviewIntro ).toContain( 'style apply' );
+		expect( style.approvalCopy.retained ).toContain( 'style apply row' );
+		expect( style.approvalCopy.decision ).toContain( 'style change' );
+	} );
+
 	test( 'getGovernanceDetails keeps style operations on style-shaped summaries', () => {
 		const details = getGovernanceDetails(
 			createStyleApplyEntry( {

@@ -2420,6 +2420,50 @@ function getGovernanceDiagnosticText( entry, details ) {
 		.join( '\n' );
 }
 
+/**
+ * Surface-aware copy for the governance approval gate. The banner and decision
+ * prose must describe the actual change: the template-part lane applies bounded
+ * STRUCTURAL operations (insert/replace/remove block), not style operations, so
+ * the style-specific wording is wrong for those rows. Resolved at call time so
+ * translations bind correctly.
+ *
+ * @param {string} surface Activity surface identifier.
+ * @return {{reviewIntro: string, retained: string, decision: string}} Copy strings.
+ */
+function getGovernanceApprovalCopy( surface ) {
+	if ( surface === 'template-part' ) {
+		return {
+			reviewIntro: __(
+				'An external agent requested this bounded template-part apply. Review the operation, provenance, and freshness evidence before deciding.',
+				'flavor-agent'
+			),
+			retained: __(
+				'This external template-part apply row is retained for approval, provenance, freshness, and undo review.',
+				'flavor-agent'
+			),
+			decision: __(
+				'AI proposes; WordPress approves. Approving applies this bounded structural change from WordPress; rejecting keeps the site unchanged.',
+				'flavor-agent'
+			),
+		};
+	}
+
+	return {
+		reviewIntro: __(
+			'An external agent requested this bounded style apply. Review the operation, provenance, and freshness evidence before deciding.',
+			'flavor-agent'
+		),
+		retained: __(
+			'This external style apply row is retained for approval, provenance, freshness, and undo review.',
+			'flavor-agent'
+		),
+		decision: __(
+			'AI proposes; WordPress approves. Approving applies this bounded style change from WordPress; rejecting keeps the site unchanged.',
+			'flavor-agent'
+		),
+	};
+}
+
 export function getGovernanceDetails(
 	entry = {},
 	{ themeColorPresetIndex = {} } = {}
@@ -2478,6 +2522,7 @@ export function getGovernanceDetails(
 		hasBaselineHash: Boolean(
 			signatures.baselineConfigHash || signatures.baselineContentHash
 		),
+		approvalCopy: getGovernanceApprovalCopy( entry?.surface ),
 		proposedOperations,
 		executedOperations,
 		comparisonRows,

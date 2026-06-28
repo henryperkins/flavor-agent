@@ -2571,14 +2571,8 @@ function GovernanceEvidenceSection( {
 				<h3>{ details.lifecycleLabel }</h3>
 				<p>
 					{ details.status === 'pending'
-						? __(
-								'An external agent requested this bounded style apply. Review the operation, provenance, and freshness evidence before deciding.',
-								'flavor-agent'
-						  )
-						: __(
-								'This external style apply row is retained for approval, provenance, freshness, and undo review.',
-								'flavor-agent'
-						  ) }
+						? details.approvalCopy.reviewIntro
+						: details.approvalCopy.retained }
 				</p>
 			</div>
 			<GovernancePlainSummary rows={ summaryRows } />
@@ -2610,10 +2604,7 @@ function GovernanceEvidenceSection( {
 							{ __( 'Decision', 'flavor-agent' ) }
 						</h4>
 						<p className="flavor-agent-activity-log__copy">
-							{ __(
-								'AI proposes; WordPress approves. Approving applies this bounded style change from WordPress; rejecting keeps the site unchanged.',
-								'flavor-agent'
-							) }
+							{ details.approvalCopy.decision }
 						</p>
 						{ claimNotice && (
 							<p className="flavor-agent-activity-log__claim-note">

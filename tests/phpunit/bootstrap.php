@@ -68,6 +68,16 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $block_templates = [];
 
+		/**
+		 * Optional one-shot hook fired once, right after the first get_block_templates()
+		 * read. Lets a test model a concurrent live-part change landing between an
+		 * executor's initial read and its pre-persist write, to exercise the
+		 * read -> write concurrency gate. Cleared after it fires and on reset().
+		 *
+		 * @var callable|null
+		 */
+		public static $block_templates_read_hook = null;
+
 		public static array $transients = [];
 
 		public static array $transient_expirations = [];
@@ -359,6 +369,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$connector_api_errors        = [];
 			self::$capabilities                = [];
 			self::$block_templates             = [];
+			self::$block_templates_read_hook   = null;
 			self::$transients                  = [];
 			self::$transient_expirations       = [];
 			self::$registered_abilities        = [];
@@ -2732,6 +2743,13 @@ namespace {
 				}
 
 				$result[] = $template;
+			}
+
+			$hook = WordPressTestState::$block_templates_read_hook;
+
+			if (is_callable($hook)) {
+				WordPressTestState::$block_templates_read_hook = null;
+				$hook();
 			}
 
 			return $result;

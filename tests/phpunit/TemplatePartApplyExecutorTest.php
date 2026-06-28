@@ -418,6 +418,41 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$inserted_posts );
 	}
 
+	public function test_execute_fails_closed_when_part_changes_before_persist(): void {
+		// Parity with StyleApplyExecutor's final unchanged gate: a concurrent Site
+		// Editor / wp-cli save landing AFTER execute()'s initial read but BEFORE the
+		// write must abort with zero writes, not silently clobber the live part.
+		$group = '<!-- wp:group -->'
+			. '<!-- wp:heading --><h2>Title</h2><!-- /wp:heading -->'
+			. $this->paragraph( 'Body' )
+			. '<!-- /wp:group -->';
+		$this->seed_part( $group, 7100, 'header' );
+
+		// Append a sibling top-level block: the targeted remove [0,0] still
+		// re-validates against the live tree, but the whole-part content hash moves.
+		$changed                                       = $group . $this->paragraph( 'Concurrent edit' );
+		WordPressTestState::$block_templates_read_hook = function () use ( $changed ): void {
+			$this->seed_part( $changed, 7100, 'header' );
+		};
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0, 0 ],
+						'expectedBlockName' => 'core/heading',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'A pre-persist concurrent change must not write.' );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
 	// ---------------------------------------------------------------------
 	// apply_operations() — R1 single descending-pass ordering + fail-closed
 	// guards in isolation (no validator rebuild).
@@ -740,5 +775,26 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 			serialize_blocks( parse_blocks( (string) WordPressTestState::$posts[ $wp_id ]->post_content ) ),
 			'undo must restore the original before-content into the live part.'
 		);
+	}
+
+	public function test_undo_fails_closed_when_part_changes_before_restore_write(): void {
+		// Parity with StyleApplyExecutor::undo's pre-write unchanged gate: even after
+		// the live == after drift check passes, a concurrent save landing before the
+		// restore write must abort with zero writes.
+		$before = $this->paragraph( 'Original' );
+		$after  = $this->paragraph( 'Changed' );
+		$this->seed_part( $after, 7200 );
+
+		$changed                                       = $after . $this->paragraph( 'Concurrent edit' );
+		WordPressTestState::$block_templates_read_hook = function () use ( $changed ): void {
+			$this->seed_part( $changed, 7200 );
+		};
+
+		$result = TemplatePartApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'A pre-restore concurrent change must not write.' );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
 	}
 }

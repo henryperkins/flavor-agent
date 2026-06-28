@@ -42,6 +42,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		}
 
 		$before_content = (string) ( $part->content ?? '' );
+		$before_hash    = self::content_hash( $before_content );
 		$apply          = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 		$operations     = is_array( $apply['operations'] ?? null ) ? $apply['operations'] : [];
 
@@ -84,7 +85,18 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		}
 
 		$after_content = serialize_blocks( $blocks );
-		$persisted     = self::persist( $part, $after_content );
+
+		// Final concurrency gate (parity with StyleApplyExecutor::assert_global_styles_entity_unchanged):
+		// re-resolve the live part immediately before the write and fail closed if its
+		// content moved since the start-of-execute read, so a concurrent Site Editor /
+		// wp-cli save in the read -> write window is never silently overwritten.
+		$unchanged = self::assert_part_unchanged( $ref, $before_hash );
+
+		if ( is_wp_error( $unchanged ) ) {
+			return $unchanged;
+		}
+
+		$persisted = self::persist( $part, $after_content );
 
 		if ( is_wp_error( $persisted ) ) {
 			return $persisted;
@@ -130,7 +142,8 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{result: string}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
-		$part = self::resolve_part( self::part_ref( $entry ) );
+		$ref  = self::part_ref( $entry );
+		$part = self::resolve_part( $ref );
 
 		if ( is_wp_error( $part ) ) {
 			return $part;
@@ -161,6 +174,15 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 				'The template part changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
 				[ 'status' => 409 ]
 			);
+		}
+
+		// Final concurrency gate before the restore write, mirroring
+		// StyleApplyExecutor::undo: re-resolve and fail closed if the live part moved
+		// after the drift check but before the write.
+		$unchanged = self::assert_part_unchanged( $ref, $live_hash );
+
+		if ( is_wp_error( $unchanged ) ) {
+			return $unchanged;
 		}
 
 		$persisted = self::persist( $part, (string) $before['content'] );
@@ -208,6 +230,33 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 
 	private static function content_hash( string $content ): string {
 		return hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) );
+	}
+
+	/**
+	 * Final concurrency gate, mirroring StyleApplyExecutor::assert_global_styles_entity_unchanged:
+	 * re-resolve the live part immediately before a write and fail closed if its
+	 * parsed -> reserialized content hash moved since the value captured at the start
+	 * of the operation. Closes the read -> write window so a concurrent save is never
+	 * silently overwritten.
+	 *
+	 * @return true|\WP_Error
+	 */
+	private static function assert_part_unchanged( string $ref, string $expected_hash ): true|\WP_Error {
+		$current = self::resolve_part( $ref );
+
+		if ( is_wp_error( $current ) ) {
+			return $current;
+		}
+
+		if ( ! hash_equals( self::content_hash( (string) ( $current->content ?? '' ) ), $expected_hash ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_target_changed',
+				'The template part changed before Flavor Agent could persist this operation. Regenerate the request and try again.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return true;
 	}
 
 	/**
