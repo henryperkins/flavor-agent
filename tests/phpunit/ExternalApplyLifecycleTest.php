@@ -791,4 +791,134 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			\FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'template-part' )
 		);
 	}
+
+	/**
+	 * The single source of validatable header content the request handler and the
+	 * signature probe both read: a group wrapping a heading + paragraph, where a
+	 * remove of the heading at path [0,0] re-validates against the live contract.
+	 */
+	private function template_part_content(): string {
+		return '<!-- wp:group -->'
+			. '<!-- wp:heading --><h2>Title</h2><!-- /wp:heading -->'
+			. '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:group -->';
+	}
+
+	public function test_request_template_part_apply_rejects_stale_signatures(): void {
+		// Seed the part so the signature-only probe RESOLVES and returns real
+		// signatures; the provided 'stale' values then fail hash_equals.
+		$this->seed_template_part( $this->template_part_content(), 8810 );
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_part_apply(
+			[
+				'scope'      => [
+					'surface'        => 'template-part',
+					'templatePartId' => self::TEMPLATE_PART_ID,
+				],
+				'operations' => [
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0 ],
+						'expectedBlockName' => 'core/navigation',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => 'stale',
+					'reviewContextSignature'   => 'stale',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_stale', $result->get_error_code() );
+	}
+
+	public function test_request_template_part_apply_rejects_non_template_part_scope(): void {
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_part_apply(
+			[
+				'scope'      => [
+					'surface'        => 'global-styles',
+					'templatePartId' => self::TEMPLATE_PART_ID,
+				],
+				'operations' => [
+					[
+						'type'       => 'remove_block',
+						'targetPath' => [ 0 ],
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => str_repeat( 'a', 64 ),
+					'reviewContextSignature'   => str_repeat( 'b', 64 ),
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_template_part_scope', $result->get_error_code() );
+	}
+
+	public function test_request_template_part_apply_creates_pending_row_with_baseline_hash(): void {
+		$content = $this->template_part_content();
+		$this->seed_template_part( $content, 8811 );
+
+		// Mirror the style happy path: read the REAL signatures from the same
+		// signature-only probe the handler recomputes, then hand them back.
+		$signatures = \FlavorAgent\Abilities\TemplateAbilities::recommend_template_part(
+			[
+				'templatePartRef'      => self::TEMPLATE_PART_ID,
+				'prompt'               => 'trim the header',
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$this->assertIsArray( $signatures );
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_part_apply(
+			[
+				'scope'      => [
+					'surface'        => 'template-part',
+					'templatePartId' => self::TEMPLATE_PART_ID,
+					'slug'           => 'header',
+					'area'           => 'header',
+				],
+				'prompt'     => 'trim the header',
+				'operations' => [
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0, 0 ],
+						'expectedBlockName' => 'core/heading',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $result['status'] );
+		$this->assertNotSame( '', (string) $result['activityId'] );
+		$this->assertNotSame( '', (string) $result['expiresAt'] );
+
+		$stored = Repository::find( (string) $result['activityId'] );
+		$this->assertIsArray( $stored );
+		$this->assertSame( 'template-part', $stored['surface'] );
+		$this->assertSame( 'apply_template_part_suggestion', $stored['type'] );
+		$this->assertSame( 'pending', $stored['executionResult'] );
+		$this->assertSame( 'not_applicable', $stored['undo']['status'] );
+		$this->assertSame( self::TEMPLATE_PART_ID, $stored['target']['templatePartId'] );
+		$this->assertSame( 'header', $stored['target']['slug'] );
+		$this->assertSame( 'header', $stored['target']['area'] );
+		$this->assertSame(
+			hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) ),
+			$stored['apply']['signatures']['baselineContentHash']
+		);
+		$this->assertSame(
+			(string) $signatures['resolvedContextSignature'],
+			$stored['apply']['signatures']['resolvedContextSignature']
+		);
+		$this->assertSame( 'template_part:' . self::TEMPLATE_PART_ID, $stored['document']['scopeKey'] );
+		$this->assertSame( 'wp_template_part', $stored['document']['postType'] );
+		$this->assertNotEmpty( $stored['apply']['operations'] );
+	}
 }
