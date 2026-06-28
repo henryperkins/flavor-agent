@@ -702,6 +702,85 @@ function formatStyleOperationSummary( operation = {} ) {
 	return summarizeOperation( operation );
 }
 
+const STRUCTURAL_OPERATION_LABELS = {
+	insert_pattern: __( 'Insert pattern', 'flavor-agent' ),
+	replace_block_with_pattern: __(
+		'Replace block with pattern',
+		'flavor-agent'
+	),
+	remove_block: __( 'Remove block', 'flavor-agent' ),
+};
+
+const STRUCTURAL_PLACEMENT_LABELS = {
+	start: 'start',
+	end: 'end',
+	before_block_path: 'before',
+	after_block_path: 'after',
+};
+
+function formatStructuralPath( path ) {
+	return Array.isArray( path ) ? `[${ path.join( ', ' ) }]` : '';
+}
+
+/**
+ * Renders a single template-part structural operation as a readable, single-
+ * line summary for the AI Activity governance evidence panel.
+ *
+ * Shape mirrors formatStyleOperationSummary() but speaks to structural
+ * (insert_pattern / replace_block_with_pattern / remove_block) operations:
+ * `Type label · identifier · location`, where location combines an optional
+ * placement word (start / end / before / after) with a 0-based `[a, b]` path.
+ *
+ * @param {Object} operation Structural operation record.
+ * @return {string} Human-readable one-line summary.
+ */
+export function formatStructuralOperationSummary( operation = {} ) {
+	const type = operation?.type || '';
+	const typeLabel =
+		STRUCTURAL_OPERATION_LABELS[ type ] ||
+		humanizeValueLabel( type || 'operation' ) ||
+		__( 'Operation', 'flavor-agent' );
+
+	const parts = [ typeLabel ];
+
+	if ( type === 'remove_block' ) {
+		if ( operation?.expectedBlockName ) {
+			parts.push( operation.expectedBlockName );
+		}
+
+		parts.push( formatStructuralPath( operation?.targetPath ) );
+
+		return parts.join( ' · ' );
+	}
+
+	const patternLabel =
+		operation?.patternName || operation?.patternTitle || '';
+
+	if ( patternLabel ) {
+		parts.push( patternLabel );
+	}
+
+	const placementLabel =
+		STRUCTURAL_PLACEMENT_LABELS[ operation?.placement ] || '';
+	const pathLabel = formatStructuralPath( operation?.targetPath );
+
+	let locationLabel;
+
+	if ( placementLabel === 'start' || placementLabel === 'end' ) {
+		locationLabel = placementLabel;
+	} else if ( placementLabel ) {
+		locationLabel = `${ placementLabel } ${ pathLabel }`;
+	} else {
+		locationLabel = pathLabel;
+	}
+
+	if ( locationLabel ) {
+		parts.push( locationLabel );
+	}
+
+	return parts.join( ' · ' );
+}
+
 function flattenStateEntries( value, prefix = '' ) {
 	if ( Array.isArray( value ) ) {
 		if ( prefix.endsWith( 'operations' ) ) {
@@ -2271,6 +2350,27 @@ export function getStyleVisualDiffRows(
 }
 
 function getGovernanceTargetLabel( entry ) {
+	if ( entry?.surface === 'template-part' ) {
+		const slug =
+			entry?.target?.slug || entry?.target?.templatePartRef || '';
+		const area = entry?.target?.area || '';
+
+		if ( slug && area ) {
+			return sprintf(
+				/* translators: 1: template part slug, 2: template part area. */
+				__( 'Template part %1$s · %2$s', 'flavor-agent' ),
+				slug,
+				area
+			);
+		}
+
+		return sprintf(
+			/* translators: %s: template part identifier. */
+			__( 'Template part %s', 'flavor-agent' ),
+			slug || EMPTY_VALUE
+		);
+	}
+
 	if ( entry?.surface === 'style-book' ) {
 		const blockTitle =
 			entry?.target?.blockTitle ||
@@ -2332,11 +2432,17 @@ export function getGovernanceDetails(
 	const visualDiffRows = getStyleVisualDiffRows( entry, {
 		themeColorPresetIndex,
 	} );
-	const proposedOperations = details.operations.map(
-		formatStyleOperationSummary
+	const formatOperationSummary =
+		entry?.surface === 'template-part'
+			? formatStructuralOperationSummary
+			: formatStyleOperationSummary;
+	const proposedOperations = details.operations.map( ( operation ) =>
+		formatOperationSummary( operation )
 	);
 	const executedOperations = Array.isArray( entry?.after?.operations )
-		? entry.after.operations.map( formatStyleOperationSummary )
+		? entry.after.operations.map( ( operation ) =>
+				formatOperationSummary( operation )
+		  )
 		: [];
 	const undoStatus =
 		typeof entry?.undo?.status === 'string' ? entry.undo.status : '';

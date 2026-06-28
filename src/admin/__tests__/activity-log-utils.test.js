@@ -9,6 +9,7 @@ import {
 	buildActivityTargetLink,
 	formatActivityTimestamp,
 	formatApplyClaimNotice,
+	formatStructuralOperationSummary,
 	getActivityStatusLabel,
 	getExternalApplyDetails,
 	getGovernanceDetails,
@@ -1204,6 +1205,51 @@ describe( 'external apply helpers', () => {
 		} );
 	}
 
+	function createTemplatePartApplyEntry( overrides = {} ) {
+		return createEntry( {
+			id: 'activity-template-part-apply',
+			type: 'apply_template_part_suggestion',
+			surface: 'template-part',
+			status: 'pending',
+			suggestion: 'External: insert the header pattern',
+			target: {
+				templatePartRef: 'twentytwentyfive//header',
+				slug: 'header',
+				area: 'header',
+			},
+			document: {
+				scopeKey: 'wp_template_part:twentytwentyfive//header',
+				postType: 'wp_template_part',
+				entityId: 'twentytwentyfive//header',
+			},
+			undo: {
+				status: 'not_applicable',
+				canUndo: false,
+			},
+			apply: {
+				status: 'pending',
+				requestedBy: 7,
+				requestedAt: '2026-06-10T01:00:00+00:00',
+				expiresAt: '2026-06-11T01:00:00+00:00',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'twentytwentyfive/header',
+						placement: 'before_block_path',
+						targetPath: [ 0 ],
+					},
+				],
+				signatures: {
+					resolvedContextSignature: 'r'.repeat( 64 ),
+					reviewContextSignature: 'v'.repeat( 64 ),
+					baselineConfigHash: 'b'.repeat( 64 ),
+				},
+				requestReference: 'agent-req-tp-1',
+			},
+			...overrides,
+		} );
+	}
+
 	test( 'isPendingExternalApply requires pending status and an apply payload', () => {
 		expect(
 			isPendingExternalApply( {
@@ -1411,6 +1457,98 @@ describe( 'external apply helpers', () => {
 			lifecycleLabel: 'Undo blocked',
 			undoReason: 'Undo blocked by newer AI actions.',
 		} );
+	} );
+
+	test( 'formats template-part structural operations as readable summaries', () => {
+		expect(
+			formatStructuralOperationSummary( {
+				type: 'remove_block',
+				targetPath: [ 0, 1 ],
+				expectedBlockName: 'core/navigation',
+			} )
+		).toBe( 'Remove block · core/navigation · [0, 1]' );
+		expect(
+			formatStructuralOperationSummary( {
+				type: 'insert_pattern',
+				patternName: 'twentytwentyfive/header',
+				placement: 'before_block_path',
+				targetPath: [ 0 ],
+			} )
+		).toBe( 'Insert pattern · twentytwentyfive/header · before [0]' );
+	} );
+
+	test( 'formatStructuralOperationSummary covers replace, start, end, and after placements', () => {
+		expect(
+			formatStructuralOperationSummary( {
+				type: 'replace_block_with_pattern',
+				patternName: 'twentytwentyfive/footer',
+				targetPath: [ 2 ],
+			} )
+		).toBe( 'Replace block with pattern · twentytwentyfive/footer · [2]' );
+		expect(
+			formatStructuralOperationSummary( {
+				type: 'insert_pattern',
+				patternName: 'twentytwentyfive/header',
+				placement: 'start',
+			} )
+		).toBe( 'Insert pattern · twentytwentyfive/header · start' );
+		expect(
+			formatStructuralOperationSummary( {
+				type: 'insert_pattern',
+				patternName: 'twentytwentyfive/header',
+				placement: 'end',
+			} )
+		).toBe( 'Insert pattern · twentytwentyfive/header · end' );
+		expect(
+			formatStructuralOperationSummary( {
+				type: 'insert_pattern',
+				patternName: 'twentytwentyfive/footer',
+				placement: 'after_block_path',
+				targetPath: [ 1 ],
+			} )
+		).toBe( 'Insert pattern · twentytwentyfive/footer · after [1]' );
+	} );
+
+	test( 'getGovernanceDetails summarizes template-part structural operations and target', () => {
+		const details = getGovernanceDetails(
+			createTemplatePartApplyEntry( {
+				status: 'applied',
+				after: {
+					operations: [
+						{
+							type: 'remove_block',
+							targetPath: [ 0, 1 ],
+							expectedBlockName: 'core/navigation',
+						},
+					],
+				},
+			} )
+		);
+
+		expect( details.targetLabel ).toBe( 'Template part header · header' );
+		expect( details.proposedOperations ).toEqual( [
+			'Insert pattern · twentytwentyfive/header · before [0]',
+		] );
+		expect( details.executedOperations ).toEqual( [
+			'Remove block · core/navigation · [0, 1]',
+		] );
+	} );
+
+	test( 'getGovernanceDetails keeps style operations on style-shaped summaries', () => {
+		const details = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'applied',
+				after: {
+					operations: [ { type: 'set_styles', path: [ 'color' ] } ],
+				},
+			} )
+		);
+
+		expect( details.targetLabel ).toBe( 'Global Styles 17' );
+		expect( details.proposedOperations ).toEqual( [
+			'color.text → accent',
+		] );
+		expect( details.executedOperations ).toEqual( [ 'color → ' ] );
 	} );
 
 	function summaryMap( details, formatTimestamp ) {
