@@ -59,6 +59,22 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		];
 	}
 
+	/**
+	 * The hydrated activity entry an executed external template-part apply leaves
+	 * behind: the surface, the part target, and the before/after content snapshots
+	 * that undo() drift-checks against the live part.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function executed_entry( string $before, string $after ): array {
+		return [
+			'surface' => 'template-part',
+			'target'  => [ 'templatePartId' => self::PART_ID ],
+			'before'  => [ 'content' => $before ],
+			'after'   => [ 'content' => $after ],
+		];
+	}
+
 	private function register_pattern( string $name, string $content ): void {
 		\WP_Block_Patterns_Registry::get_instance()->register(
 			$name,
@@ -569,5 +585,135 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_apply_pattern_unavailable', $result->get_error_code() );
 		$this->assertSame( $this->paragraph( 'Anchor' ), serialize_blocks( $blocks ), 'Phase 2 must abort before any mutation.' );
+	}
+
+	// ---------------------------------------------------------------------
+	// undo() — drift-checked content restore (mirrors StyleApplyExecutor::undo).
+	// Writes are captured through the same $posts/$updated_posts stub the
+	// execute() tests use; there is NO filter seam (R5).
+	// ---------------------------------------------------------------------
+
+	public function test_undo_restores_before_content_when_live_matches_after(): void {
+		$before = $this->paragraph( 'Original' );
+		$after  = $this->paragraph( 'Changed' );
+		// Live part == after: this is the row we just applied, untouched since.
+		$this->seed_part( $after, 55 );
+
+		$result = TemplatePartApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame(
+			serialize_blocks( parse_blocks( $before ) ),
+			serialize_blocks( parse_blocks( (string) WordPressTestState::$posts[55]->post_content ) ),
+			'undo must restore the before snapshot into the live part.'
+		);
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
+	public function test_undo_fails_closed_on_drift_without_writing(): void {
+		// Live part is neither before nor after: someone edited it after our apply.
+		$this->seed_part( '<!-- wp:heading --><h2>Edited elsewhere</h2><!-- /wp:heading -->', 55 );
+
+		$result = TemplatePartApplyExecutor::undo(
+			self::executed_entry(
+				$this->paragraph( 'Original' ),
+				$this->paragraph( 'Changed' )
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_drift', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'A drift failure must not write.' );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
+	public function test_undo_is_idempotent_when_live_already_matches_before(): void {
+		$before = $this->paragraph( 'Original' );
+		$after  = $this->paragraph( 'Changed' );
+		// Live part == before: already rolled back; undo must be a no-op.
+		$this->seed_part( $before, 55 );
+
+		$result = TemplatePartApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'already_undone', $result['result'] );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'An already-undone row must not write.' );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
+	public function test_undo_snapshot_unsupported_when_content_missing(): void {
+		// The part resolves fine, but the row lacks the after snapshot.
+		$this->seed_part( $this->paragraph( 'Live' ), 55 );
+
+		$result = TemplatePartApplyExecutor::undo(
+			[
+				'surface' => 'template-part',
+				'target'  => [ 'templatePartId' => self::PART_ID ],
+				'before'  => [ 'content' => $this->paragraph( 'Original' ) ],
+				// 'after' content intentionally omitted.
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_snapshot_unsupported', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	/**
+	 * R7 round-trip freshness: a real execute() followed by undo() must compose.
+	 *
+	 * execute() persists the after-content and busts the post cache; undo() then
+	 * resolves the live part FRESH. We model the cache-busted DB re-read by
+	 * re-seeding the same block-template stub the resolver reads. Because the
+	 * static ServerCollector/TemplateRepository instances persist across both
+	 * calls, the only way undo() returns 'undone' (rather than mis-reading the
+	 * stale pre-apply 'before' as live and returning 'already_undone') is if
+	 * resolve_part genuinely re-reads the post-apply content — guarding against a
+	 * false-positive drift caused by a stale resolution cache on the round-trip.
+	 */
+	public function test_undo_after_execute_reads_fresh_content_and_restores_before(): void {
+		$wp_id  = 770;
+		$before = $this->paragraph( 'Keep' ) . $this->paragraph( 'DropMe' );
+		$this->seed_part( $before, $wp_id );
+
+		$executed = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 1 ],
+						'expectedBlockName' => 'core/paragraph',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $executed );
+		$after = (string) $executed['after']['content'];
+		$this->assertStringNotContainsString( 'DropMe', $after );
+		$this->assertSame(
+			$after,
+			(string) WordPressTestState::$posts[ $wp_id ]->post_content,
+			'execute() must persist the after-content to the live post.'
+		);
+		$this->assertNotEmpty( WordPressTestState::$cleaned_post_caches, 'execute() must bust the post cache (R7).' );
+
+		// Model the cache-busted DB re-read: the live part now resolves to the
+		// persisted after-content through the same stub the resolver reads.
+		$this->seed_part( (string) WordPressTestState::$posts[ $wp_id ]->post_content, $wp_id );
+
+		$undo = TemplatePartApplyExecutor::undo(
+			self::executed_entry( (string) $executed['before']['content'], $after )
+		);
+
+		$this->assertIsArray( $undo );
+		$this->assertSame( 'undone', $undo['result'], 'A fresh resolve must see the after-content as live and undo cleanly.' );
+		$this->assertSame(
+			serialize_blocks( parse_blocks( $before ) ),
+			serialize_blocks( parse_blocks( (string) WordPressTestState::$posts[ $wp_id ]->post_content ) ),
+			'undo must restore the original before-content into the live part.'
+		);
 	}
 }

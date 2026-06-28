@@ -16,10 +16,12 @@ use FlavorAgent\LLM\TemplatePartPrompt;
  * post_content. No attestation. See
  * docs/superpowers/specs/2026-06-24-template-part-external-apply-executor-design.md.
  *
- * `undo()` arrives in Task 6, at which point this class declares
- * `implements ExternalApplyExecutor`.
+ * `undo()` re-resolves the live part and restores the before snapshot under the
+ * same equality semantics as StyleApplyExecutor::undo, completing the
+ * resolve_baseline + execute + undo trio the ExternalApplyExecutor contract
+ * requires.
  */
-final class TemplatePartApplyExecutor {
+final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 
 	/**
 	 * Re-resolve the live part, re-validate every stored operation against a
@@ -114,6 +116,55 @@ final class TemplatePartApplyExecutor {
 		return is_wp_error( $part )
 			? $part
 			: self::content_hash( (string) ( $part->content ?? '' ) );
+	}
+
+	/**
+	 * Server-side undo with the exact equality semantics StyleApplyExecutor uses:
+	 * re-resolve the live part, then live == before → already undone (no write);
+	 * live != after → drift failure (fail closed, no write); else restore the
+	 * before snapshot. Hashes compare parsed -> reserialized content so that
+	 * insignificant serialization differences never read as drift.
+	 *
+	 * @param array<string, mixed> $entry Hydrated activity entry.
+	 * @return array{result: string}|\WP_Error
+	 */
+	public static function undo( array $entry ): array|\WP_Error {
+		$part = self::resolve_part( self::part_ref( $entry ) );
+
+		if ( is_wp_error( $part ) ) {
+			return $part;
+		}
+
+		$before = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
+		$after  = is_array( $entry['after'] ?? null ) ? $entry['after'] : [];
+
+		if ( ! array_key_exists( 'content', $before ) || ! array_key_exists( 'content', $after ) ) {
+			return new \WP_Error(
+				'flavor_agent_undo_snapshot_unsupported',
+				'This activity row does not record the before/after content snapshots needed for a server-side undo.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$live_hash   = self::content_hash( (string) ( $part->content ?? '' ) );
+		$before_hash = self::content_hash( (string) $before['content'] );
+		$after_hash  = self::content_hash( (string) $after['content'] );
+
+		if ( hash_equals( $live_hash, $before_hash ) ) {
+			return [ 'result' => 'already_undone' ];
+		}
+
+		if ( ! hash_equals( $live_hash, $after_hash ) ) {
+			return new \WP_Error(
+				'flavor_agent_undo_drift',
+				'The template part changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$persisted = self::persist( $part, (string) $before['content'] );
+
+		return is_wp_error( $persisted ) ? $persisted : [ 'result' => 'undone' ];
 	}
 
 	/**
