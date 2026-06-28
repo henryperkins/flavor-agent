@@ -232,6 +232,14 @@ final class ServerCollector {
 		return self::template_repository()->resolve_template_part( $ref );
 	}
 
+	/**
+	 * Re-resolve the live template for a governed external apply. No public
+	 * filter seam: a governed-write resolution path must not be interceptable.
+	 */
+	public static function resolve_template_for_apply( string $ref ): ?object {
+		return self::template_repository()->resolve_template( $ref );
+	}
+
 	public static function for_template(
 		string $template_ref,
 		?string $template_type = null,
