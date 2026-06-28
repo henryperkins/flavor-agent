@@ -3555,6 +3555,99 @@ namespace {
 		}
 	}
 
+	if (! function_exists('strip_core_block_namespace')) {
+		function strip_core_block_namespace(?string $block_name = null): ?string
+		{
+			if (is_string($block_name) && str_starts_with($block_name, 'core/')) {
+				$block_name = substr($block_name, 5);
+			}
+
+			return $block_name;
+		}
+	}
+
+	if (! function_exists('serialize_block_attributes')) {
+		function serialize_block_attributes(array $block_attributes): string
+		{
+			$encoded_attributes = wp_json_encode(
+				$block_attributes,
+				JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+			);
+
+			$encoded_attributes = preg_replace('/--/', '\\u002d\\u002d', (string) $encoded_attributes);
+			$encoded_attributes = preg_replace('/</', '\\u003c', $encoded_attributes);
+			$encoded_attributes = preg_replace('/>/', '\\u003e', $encoded_attributes);
+			$encoded_attributes = preg_replace('/&/', '\\u0026', $encoded_attributes);
+			$encoded_attributes = preg_replace('/\\\\"/', '\\u0022', $encoded_attributes);
+
+			return $encoded_attributes;
+		}
+	}
+
+	if (! function_exists('get_comment_delimited_block_content')) {
+		function get_comment_delimited_block_content(?string $block_name, array $block_attributes, string $block_content): string
+		{
+			if (null === $block_name) {
+				return $block_content;
+			}
+
+			$serialized_block_name = strip_core_block_namespace($block_name);
+			$serialized_attributes = empty($block_attributes)
+				? ''
+				: serialize_block_attributes($block_attributes) . ' ';
+
+			if ('' === $block_content) {
+				return sprintf('<!-- wp:%s %s/-->', $serialized_block_name, $serialized_attributes);
+			}
+
+			return sprintf(
+				'<!-- wp:%s %s-->%s<!-- /wp:%s -->',
+				$serialized_block_name,
+				$serialized_attributes,
+				$block_content,
+				$serialized_block_name
+			);
+		}
+	}
+
+	if (! function_exists('serialize_block')) {
+		function serialize_block(array $block): string
+		{
+			$block_content = '';
+
+			$index         = 0;
+			$inner_content = is_array($block['innerContent'] ?? null) ? $block['innerContent'] : [];
+			$inner_blocks  = is_array($block['innerBlocks'] ?? null) ? $block['innerBlocks'] : [];
+
+			foreach ($inner_content as $chunk) {
+				if (is_string($chunk)) {
+					$block_content .= $chunk;
+					continue;
+				}
+
+				$next = $inner_blocks[$index++] ?? null;
+				if (is_array($next)) {
+					$block_content .= serialize_block($next);
+				}
+			}
+
+			$attrs = is_array($block['attrs'] ?? null) ? $block['attrs'] : [];
+
+			return get_comment_delimited_block_content(
+				$block['blockName'] ?? null,
+				$attrs,
+				$block_content
+			);
+		}
+	}
+
+	if (! function_exists('serialize_blocks')) {
+		function serialize_blocks(array $blocks): string
+		{
+			return implode('', array_map('serialize_block', $blocks));
+		}
+	}
+
 	if (! function_exists('update_option')) {
 		function update_option(string $name, $value, $autoload = null): bool
 		{
