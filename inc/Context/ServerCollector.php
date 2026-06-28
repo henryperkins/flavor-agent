@@ -224,6 +224,14 @@ final class ServerCollector {
 		return self::template_part_context_collector()->for_template_part( $template_part_ref, $visible_pattern_names );
 	}
 
+	/**
+	 * Re-resolve the live template part for a governed external apply. No public
+	 * filter seam: a governed-write resolution path must not be interceptable.
+	 */
+	public static function resolve_template_part_for_apply( string $ref ): ?object {
+		return self::template_repository()->resolve_template_part( $ref );
+	}
+
 	public static function for_template(
 		string $template_ref,
 		?string $template_type = null,

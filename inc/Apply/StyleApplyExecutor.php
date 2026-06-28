@@ -19,7 +19,7 @@ use FlavorAgent\LLM\StylePrompt;
  * enforce WCAG AA contrast, write the wp_global_styles CPT through core APIs,
  * and snapshot in the editor-compatible before/after shapes.
  */
-final class StyleApplyExecutor {
+final class StyleApplyExecutor implements ExternalApplyExecutor {
 
 	public const SURFACE_GLOBAL_STYLES = 'global-styles';
 	public const SURFACE_STYLE_BOOK    = 'style-book';
@@ -134,6 +134,38 @@ final class StyleApplyExecutor {
 				'themeTokens'         => $theme_tokens,
 			],
 		];
+	}
+
+	/**
+	 * Re-resolve the live entity and return the comparable config hash the
+	 * decision service compares against the request-time baseline (gate 2).
+	 *
+	 * @param array<string, mixed> $entry Hydrated activity entry.
+	 */
+	public static function resolve_baseline( array $entry ): string|\WP_Error {
+		$target   = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$resolved = self::resolve_user_global_styles( (string) ( $target['globalStylesId'] ?? '' ) );
+
+		return is_wp_error( $resolved ) ? $resolved : self::comparable_config_hash( $resolved['config'] );
+	}
+
+	/**
+	 * Executor adapter onto apply() that unpacks the activity entry shape.
+	 *
+	 * @param array<string, mixed> $entry Hydrated activity entry.
+	 * @return array{target: array<string, mixed>, before: array<string, mixed>, after: array<string, mixed>}|\WP_Error
+	 */
+	public static function execute( array $entry ): array|\WP_Error {
+		$target     = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$apply      = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+		$operations = is_array( $apply['operations'] ?? null ) ? $apply['operations'] : [];
+
+		return self::apply(
+			(string) ( $entry['surface'] ?? '' ),
+			(string) ( $target['globalStylesId'] ?? '' ),
+			$operations,
+			(string) ( $target['blockName'] ?? '' )
+		);
 	}
 
 	/**

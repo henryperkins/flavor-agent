@@ -68,6 +68,16 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $block_templates = [];
 
+		/**
+		 * Optional one-shot hook fired once, right after the first get_block_templates()
+		 * read. Lets a test model a concurrent live-part change landing between an
+		 * executor's initial read and its pre-persist write, to exercise the
+		 * read -> write concurrency gate. Cleared after it fires and on reset().
+		 *
+		 * @var callable|null
+		 */
+		public static $block_templates_read_hook = null;
+
 		public static array $transients = [];
 
 		public static array $transient_expirations = [];
@@ -109,6 +119,12 @@ namespace FlavorAgent\Tests\Support {
 
 		/** @var array<int, array<string, mixed>> */
 		public static array $updated_posts = [];
+
+		/** @var array<int, array<string, mixed>> */
+		public static array $inserted_posts = [];
+
+		/** @var array<int, int> */
+		public static array $cleaned_post_caches = [];
 
 		/** @var array<string, array<string, mixed>> */
 		public static array $registered_post_types = [];
@@ -353,6 +369,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$connector_api_errors        = [];
 			self::$capabilities                = [];
 			self::$block_templates             = [];
+			self::$block_templates_read_hook   = null;
 			self::$transients                  = [];
 			self::$transient_expirations       = [];
 			self::$registered_abilities        = [];
@@ -369,6 +386,8 @@ namespace FlavorAgent\Tests\Support {
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
 			self::$updated_posts               = [];
+			self::$inserted_posts              = [];
+			self::$cleaned_post_caches         = [];
 			self::$registered_post_types       = [];
 			self::$registered_taxonomies       = [];
 			self::$get_posts_calls             = [];
@@ -1955,6 +1974,19 @@ namespace {
 			}
 
 			/**
+			 * @return array<string, mixed>|null
+			 */
+			public function get_registered(string $pattern_name): ?array
+			{
+				return $this->registered[$pattern_name] ?? null;
+			}
+
+			public function is_registered(string $pattern_name): bool
+			{
+				return isset($this->registered[$pattern_name]);
+			}
+
+			/**
 			 * @return array<int, array<string, mixed>>
 			 */
 			public function get_all_registered(): array
@@ -2713,6 +2745,13 @@ namespace {
 				$result[] = $template;
 			}
 
+			$hook = WordPressTestState::$block_templates_read_hook;
+
+			if (is_callable($hook)) {
+				WordPressTestState::$block_templates_read_hook = null;
+				$hook();
+			}
+
 			return $result;
 		}
 	}
@@ -3232,6 +3271,31 @@ namespace {
 		}
 	}
 
+	if (! function_exists('wp_insert_post')) {
+		function wp_insert_post(array $postarr, bool $wp_error = false)
+		{
+			unset($wp_error);
+
+			$id = 0;
+			foreach (array_keys(WordPressTestState::$posts) as $existing) {
+				$id = max($id, (int) $existing);
+			}
+			$id = $id > 0 ? $id + 1 : 5000;
+
+			WordPressTestState::$posts[$id]         = new \WP_Post(array_merge($postarr, ['ID' => $id]));
+			WordPressTestState::$inserted_posts[]   = array_merge($postarr, ['ID' => $id]);
+
+			return $id;
+		}
+	}
+
+	if (! function_exists('clean_post_cache')) {
+		function clean_post_cache($post): void
+		{
+			WordPressTestState::$cleaned_post_caches[] = (int) (is_object($post) ? ($post->ID ?? 0) : $post);
+		}
+	}
+
 	if (! class_exists('WP_Post')) {
 		class WP_Post
 		{
@@ -3552,6 +3616,99 @@ namespace {
 		function str_starts_with(string $haystack, string $needle): bool
 		{
 			return strncmp($haystack, $needle, strlen($needle)) === 0;
+		}
+	}
+
+	if (! function_exists('strip_core_block_namespace')) {
+		function strip_core_block_namespace(?string $block_name = null): ?string
+		{
+			if (is_string($block_name) && str_starts_with($block_name, 'core/')) {
+				$block_name = substr($block_name, 5);
+			}
+
+			return $block_name;
+		}
+	}
+
+	if (! function_exists('serialize_block_attributes')) {
+		function serialize_block_attributes(array $block_attributes): string
+		{
+			$encoded_attributes = wp_json_encode(
+				$block_attributes,
+				JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+			);
+
+			$encoded_attributes = preg_replace('/--/', '\\u002d\\u002d', (string) $encoded_attributes);
+			$encoded_attributes = preg_replace('/</', '\\u003c', $encoded_attributes);
+			$encoded_attributes = preg_replace('/>/', '\\u003e', $encoded_attributes);
+			$encoded_attributes = preg_replace('/&/', '\\u0026', $encoded_attributes);
+			$encoded_attributes = preg_replace('/\\\\"/', '\\u0022', $encoded_attributes);
+
+			return $encoded_attributes;
+		}
+	}
+
+	if (! function_exists('get_comment_delimited_block_content')) {
+		function get_comment_delimited_block_content(?string $block_name, array $block_attributes, string $block_content): string
+		{
+			if (null === $block_name) {
+				return $block_content;
+			}
+
+			$serialized_block_name = strip_core_block_namespace($block_name);
+			$serialized_attributes = empty($block_attributes)
+				? ''
+				: serialize_block_attributes($block_attributes) . ' ';
+
+			if ('' === $block_content) {
+				return sprintf('<!-- wp:%s %s/-->', $serialized_block_name, $serialized_attributes);
+			}
+
+			return sprintf(
+				'<!-- wp:%s %s-->%s<!-- /wp:%s -->',
+				$serialized_block_name,
+				$serialized_attributes,
+				$block_content,
+				$serialized_block_name
+			);
+		}
+	}
+
+	if (! function_exists('serialize_block')) {
+		function serialize_block(array $block): string
+		{
+			$block_content = '';
+
+			$index         = 0;
+			$inner_content = is_array($block['innerContent'] ?? null) ? $block['innerContent'] : [];
+			$inner_blocks  = is_array($block['innerBlocks'] ?? null) ? $block['innerBlocks'] : [];
+
+			foreach ($inner_content as $chunk) {
+				if (is_string($chunk)) {
+					$block_content .= $chunk;
+					continue;
+				}
+
+				$next = $inner_blocks[$index++] ?? null;
+				if (is_array($next)) {
+					$block_content .= serialize_block($next);
+				}
+			}
+
+			$attrs = is_array($block['attrs'] ?? null) ? $block['attrs'] : [];
+
+			return get_comment_delimited_block_content(
+				$block['blockName'] ?? null,
+				$attrs,
+				$block_content
+			);
+		}
+	}
+
+	if (! function_exists('serialize_blocks')) {
+		function serialize_blocks(array $blocks): string
+		{
+			return implode('', array_map('serialize_block', $blocks));
 		}
 	}
 

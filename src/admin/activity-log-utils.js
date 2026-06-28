@@ -702,6 +702,85 @@ function formatStyleOperationSummary( operation = {} ) {
 	return summarizeOperation( operation );
 }
 
+const STRUCTURAL_OPERATION_LABELS = {
+	insert_pattern: __( 'Insert pattern', 'flavor-agent' ),
+	replace_block_with_pattern: __(
+		'Replace block with pattern',
+		'flavor-agent'
+	),
+	remove_block: __( 'Remove block', 'flavor-agent' ),
+};
+
+const STRUCTURAL_PLACEMENT_LABELS = {
+	start: 'start',
+	end: 'end',
+	before_block_path: 'before',
+	after_block_path: 'after',
+};
+
+function formatStructuralPath( path ) {
+	return Array.isArray( path ) ? `[${ path.join( ', ' ) }]` : '';
+}
+
+/**
+ * Renders a single template-part structural operation as a readable, single-
+ * line summary for the AI Activity governance evidence panel.
+ *
+ * Shape mirrors formatStyleOperationSummary() but speaks to structural
+ * (insert_pattern / replace_block_with_pattern / remove_block) operations:
+ * `Type label · identifier · location`, where location combines an optional
+ * placement word (start / end / before / after) with a 0-based `[a, b]` path.
+ *
+ * @param {Object} operation Structural operation record.
+ * @return {string} Human-readable one-line summary.
+ */
+export function formatStructuralOperationSummary( operation = {} ) {
+	const type = operation?.type || '';
+	const typeLabel =
+		STRUCTURAL_OPERATION_LABELS[ type ] ||
+		humanizeValueLabel( type || 'operation' ) ||
+		__( 'Operation', 'flavor-agent' );
+
+	const parts = [ typeLabel ];
+
+	if ( type === 'remove_block' ) {
+		if ( operation?.expectedBlockName ) {
+			parts.push( operation.expectedBlockName );
+		}
+
+		parts.push( formatStructuralPath( operation?.targetPath ) );
+
+		return parts.join( ' · ' );
+	}
+
+	const patternLabel =
+		operation?.patternName || operation?.patternTitle || '';
+
+	if ( patternLabel ) {
+		parts.push( patternLabel );
+	}
+
+	const placementLabel =
+		STRUCTURAL_PLACEMENT_LABELS[ operation?.placement ] || '';
+	const pathLabel = formatStructuralPath( operation?.targetPath );
+
+	let locationLabel;
+
+	if ( placementLabel === 'start' || placementLabel === 'end' ) {
+		locationLabel = placementLabel;
+	} else if ( placementLabel ) {
+		locationLabel = `${ placementLabel } ${ pathLabel }`;
+	} else {
+		locationLabel = pathLabel;
+	}
+
+	if ( locationLabel ) {
+		parts.push( locationLabel );
+	}
+
+	return parts.join( ' · ' );
+}
+
 function flattenStateEntries( value, prefix = '' ) {
 	if ( Array.isArray( value ) ) {
 		if ( prefix.endsWith( 'operations' ) ) {
@@ -2271,6 +2350,27 @@ export function getStyleVisualDiffRows(
 }
 
 function getGovernanceTargetLabel( entry ) {
+	if ( entry?.surface === 'template-part' ) {
+		const slug =
+			entry?.target?.slug || entry?.target?.templatePartRef || '';
+		const area = entry?.target?.area || '';
+
+		if ( slug && area ) {
+			return sprintf(
+				/* translators: 1: template part slug, 2: template part area. */
+				__( 'Template part %1$s · %2$s', 'flavor-agent' ),
+				slug,
+				area
+			);
+		}
+
+		return sprintf(
+			/* translators: %s: template part identifier. */
+			__( 'Template part %s', 'flavor-agent' ),
+			slug || EMPTY_VALUE
+		);
+	}
+
 	if ( entry?.surface === 'style-book' ) {
 		const blockTitle =
 			entry?.target?.blockTitle ||
@@ -2309,12 +2409,59 @@ function getGovernanceDiagnosticText( entry, details ) {
 		[ 'requestReference', details.requestReference ],
 		[ 'resolvedContextSignature', signatures.resolvedContextSignature ],
 		[ 'reviewContextSignature', signatures.reviewContextSignature ],
-		[ 'baselineConfigHash', signatures.baselineConfigHash ],
+		[
+			'baselineConfigHash',
+			signatures.baselineConfigHash || signatures.baselineContentHash,
+		],
 	].filter( ( [ , value ] ) => value );
 
 	return rows
 		.map( ( [ label, value ] ) => `${ label }: ${ value }` )
 		.join( '\n' );
+}
+
+/**
+ * Surface-aware copy for the governance approval gate. The banner and decision
+ * prose must describe the actual change: the template-part lane applies bounded
+ * STRUCTURAL operations (insert/replace/remove block), not style operations, so
+ * the style-specific wording is wrong for those rows. Resolved at call time so
+ * translations bind correctly.
+ *
+ * @param {string} surface Activity surface identifier.
+ * @return {{reviewIntro: string, retained: string, decision: string}} Copy strings.
+ */
+function getGovernanceApprovalCopy( surface ) {
+	if ( surface === 'template-part' ) {
+		return {
+			reviewIntro: __(
+				'An external agent requested this bounded template-part apply. Review the operation, provenance, and freshness evidence before deciding.',
+				'flavor-agent'
+			),
+			retained: __(
+				'This external template-part apply row is retained for approval, provenance, freshness, and undo review.',
+				'flavor-agent'
+			),
+			decision: __(
+				'AI proposes; WordPress approves. Approving applies this bounded structural change from WordPress; rejecting keeps the site unchanged.',
+				'flavor-agent'
+			),
+		};
+	}
+
+	return {
+		reviewIntro: __(
+			'An external agent requested this bounded style apply. Review the operation, provenance, and freshness evidence before deciding.',
+			'flavor-agent'
+		),
+		retained: __(
+			'This external style apply row is retained for approval, provenance, freshness, and undo review.',
+			'flavor-agent'
+		),
+		decision: __(
+			'AI proposes; WordPress approves. Approving applies this bounded style change from WordPress; rejecting keeps the site unchanged.',
+			'flavor-agent'
+		),
+	};
 }
 
 export function getGovernanceDetails(
@@ -2332,11 +2479,17 @@ export function getGovernanceDetails(
 	const visualDiffRows = getStyleVisualDiffRows( entry, {
 		themeColorPresetIndex,
 	} );
-	const proposedOperations = details.operations.map(
-		formatStyleOperationSummary
+	const formatOperationSummary =
+		entry?.surface === 'template-part'
+			? formatStructuralOperationSummary
+			: formatStyleOperationSummary;
+	const proposedOperations = details.operations.map( ( operation ) =>
+		formatOperationSummary( operation )
 	);
 	const executedOperations = Array.isArray( entry?.after?.operations )
-		? entry.after.operations.map( formatStyleOperationSummary )
+		? entry.after.operations.map( ( operation ) =>
+				formatOperationSummary( operation )
+		  )
 		: [];
 	const undoStatus =
 		typeof entry?.undo?.status === 'string' ? entry.undo.status : '';
@@ -2366,7 +2519,10 @@ export function getGovernanceDetails(
 		failureMessage: details.failureMessage,
 		hasResolvedSignature: Boolean( signatures.resolvedContextSignature ),
 		hasReviewSignature: Boolean( signatures.reviewContextSignature ),
-		hasBaselineHash: Boolean( signatures.baselineConfigHash ),
+		hasBaselineHash: Boolean(
+			signatures.baselineConfigHash || signatures.baselineContentHash
+		),
+		approvalCopy: getGovernanceApprovalCopy( entry?.surface ),
 		proposedOperations,
 		executedOperations,
 		comparisonRows,

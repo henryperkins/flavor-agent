@@ -291,6 +291,80 @@ final class ActivityPermissionsTest extends TestCase {
 		];
 	}
 
+	public function test_template_part_apply_row_requires_theme_caps_for_decision_and_access(): void {
+		ActivityRepository::create( $this->build_template_part_apply_entry( 'tp-apply-1' ) );
+
+		$entry = ActivityRepository::find( 'tp-apply-1' );
+		$this->assertIsArray( $entry );
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/activity/tp-apply-1/decision' );
+		$request->set_param( 'id', 'tp-apply-1' );
+
+		// A super-admin who can also manage themes: both gates allow.
+		WordPressTestState::$capabilities = [
+			'manage_options'     => true,
+			'edit_theme_options' => true,
+		];
+
+		$this->assertTrue(
+			ActivityPermissions::can_decide_activity_request( $request ),
+			'manage_options + edit_theme_options must be able to decide a template-part apply.'
+		);
+		$this->assertTrue(
+			ActivityPermissions::can_access_entry( $entry ),
+			'manage_options + edit_theme_options must be able to access a template-part apply.'
+		);
+
+		// An edit_posts-only user: both gates deny (theme territory).
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+
+		$this->assertFalse(
+			ActivityPermissions::can_decide_activity_request( $request ),
+			'edit_posts alone must not decide a template-part apply.'
+		);
+		$this->assertFalse(
+			ActivityPermissions::can_access_entry( $entry ),
+			'edit_posts alone must not access a template-part apply.'
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_template_part_apply_entry( string $id ): array {
+		return [
+			'id'         => $id,
+			'type'       => 'apply_template_part_suggestion',
+			'surface'    => 'template-part',
+			'target'     => [
+				'templatePartId'  => 'twentytwentyfive//header',
+				'templatePartRef' => 'twentytwentyfive//header',
+				'slug'            => 'header',
+				'area'            => 'header',
+			],
+			'suggestion' => 'External template-part apply request',
+			'before'     => [],
+			'after'      => [],
+			'request'    => [
+				'prompt'    => 'Tighten the header.',
+				'reference' => 'external-apply:wp_template_part:twentytwentyfive//header',
+				'apply'     => [
+					'status' => 'pending',
+				],
+			],
+			'document'   => [
+				'scopeKey'   => 'wp_template_part:twentytwentyfive//header',
+				'postType'   => 'wp_template_part',
+				'entityId'   => 'twentytwentyfive//header',
+				'entityKind' => 'templatePart',
+				'entityName' => 'templatePart',
+			],
+			'timestamp'  => '2026-03-24T10:00:00Z',
+		];
+	}
+
 	/**
 	 * @return array<string, mixed>
 	 */

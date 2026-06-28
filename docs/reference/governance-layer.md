@@ -158,6 +158,8 @@ Every surface — including the advisory, editorial, and browse-only ones — is
 
 For the Global Styles and Style Book entries, the full loop now also runs **server-side for external agents**: request (`request-style-apply`) → human approval (`POST /flavor-agent/v1/activity/{id}/decision`) → server execute with freshness/operation re-validation → attributed activity row → server-side undo (`undo-activity`). An open Site Editor session does not live-refresh when an external apply lands; activity hydration shows it on the next load.
 
+The **template-part** surface now has the same server-side external lane: request (`request-template-part-apply`) → human approval (`POST /flavor-agent/v1/activity/{id}/decision`) → server execute of ≤3 path-addressed bounded operations against one `wp_template_part`, atomic and re-validated with drift gates → attributed activity row → server-side undo (`undo-activity`, dispatched through the shared executor registry). This is the second governed external-apply lane after style; unlike style it is **not attested** — Ring III attestation stays frozen to `external-style-apply-v1`. Page-level templates and the block surface remain editor-owned and are not yet exposed as external apply lanes.
+
 Ring III attestation coverage is intentionally narrower than the full governed-loop map: v1 attaches to the external Global Styles / Style Book approval path, because that path has both a durable human decision and a canonical style artifact digest. Advisory/editorial surfaces and editor-owned applies remain Govern evidence unless promoted through a separate surface plan with a real artifact digest and approval moment.
 
 ## External-Agent Parity
@@ -167,11 +169,11 @@ External agents reach the layer through the same permission callbacks as the fir
 - the seven `recommend-*` abilities (feature-gated) — exposed as first-class MCP tools on the dedicated server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`)
 - the five `preview-recommend-*` siblings — side-effect-free signature dry-runs, registered before the feature gate is enabled so operators can verify wiring
 - ten public read helpers on the universal MCP default server (`meta.mcp.public = true`)
-- the four external-apply abilities (feature-gated, dedicated server only): `request-style-apply` queues a review-gated style apply, `get-activity`/`list-activity` are the agent's attribution and status reads, and `undo-activity` is the server-side reverse path with ordered-undo and drift checks
+- the five external-apply abilities (feature-gated, dedicated server only): `request-style-apply` queues a review-gated style apply, `request-template-part-apply` queues a review-gated template-part structural apply, `get-activity`/`list-activity` are the agent's attribution and status reads, and `undo-activity` is the server-side reverse path with ordered-undo and drift checks across both lanes
 
 Generation-side governance is caller-independent: external recommendation calls flow through the same executor, schemas, validators, freshness signatures, and request-diagnostic attribution as the editor.
 
-The boundary, stated plainly: external agents can now request style applies, read their attribution, and undo executed style rows — but approval is never exposed to agents. Every external style apply is review-gated through `POST /flavor-agent/v1/activity/{id}/decision` (`manage_options` plus the row's mutation capability) in `Settings > AI Activity`, with freshness re-verified at request and again at approval. AI proposes; WordPress approves. Template, template-part, and block applies remain editor-owned (C2+), and admin-global activity reads stay REST-only.
+The boundary, stated plainly: external agents can now request style and template-part applies, read their attribution, and undo executed style and template-part rows — but approval is never exposed to agents. Every external apply is review-gated through `POST /flavor-agent/v1/activity/{id}/decision` (`manage_options` plus the row's mutation capability) in `Settings > AI Activity`, with freshness re-verified at request and again at approval. AI proposes; WordPress approves. Page-level template and block applies remain editor-owned (C2+), and admin-global activity reads stay REST-only.
 
 ## Foundation
 

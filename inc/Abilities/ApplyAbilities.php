@@ -6,8 +6,12 @@ namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Activity\RecommendationOutcome;
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Apply\ExternalApplyExecutorRegistry;
 use FlavorAgent\Apply\StyleApplyExecutor;
+use FlavorAgent\Apply\TemplatePartApplyExecutor;
+use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\StylePrompt;
+use FlavorAgent\LLM\TemplatePartPrompt;
 use FlavorAgent\Support\NormalizesInput;
 
 /**
@@ -210,6 +214,194 @@ final class ApplyAbilities {
 		];
 	}
 
+	/**
+	 * External-apply request handler for the template-part structural lane.
+	 *
+	 * Template-part analog of request_style_apply: two fail-closed freshness
+	 * gates, a per-user pending cap, then a PENDING activity row the admin
+	 * approval surface later approves/rejects. No attestation (frozen-lane).
+	 */
+	public static function request_template_part_apply( mixed $input ): array|\WP_Error {
+		$input             = self::normalize_map( $input );
+		$scope             = self::normalize_map( $input['scope'] ?? [] );
+		$prompt            = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
+		$operations        = self::normalize_list( $input['operations'] ?? [] );
+		$signatures        = self::normalize_map( $input['signatures'] ?? [] );
+		$provided_resolved = sanitize_text_field( (string) ( $signatures['resolvedContextSignature'] ?? '' ) );
+		$provided_review   = sanitize_text_field( (string) ( $signatures['reviewContextSignature'] ?? '' ) );
+		$surface           = sanitize_key( (string) ( $scope['surface'] ?? '' ) );
+		$template_part_id  = sanitize_text_field( (string) ( $scope['templatePartId'] ?? '' ) );
+
+		if ( 'template-part' !== $surface || '' === $template_part_id ) {
+			return new \WP_Error(
+				'invalid_template_part_scope',
+				'External template-part applies require a template-part scope with a templatePartId.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( [] === $operations ) {
+			return new \WP_Error(
+				'flavor_agent_apply_operations_invalid',
+				'External template-part applies require at least one executable operation.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( '' === $provided_resolved || '' === $provided_review ) {
+			return new \WP_Error(
+				'flavor_agent_apply_stale',
+				'External template-part applies require the resolved and review context signatures from the recommendation response.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		// First freshness gate: recompute both signatures through the same
+		// signature-only path the editor uses. recommend_template_part returns
+		// the two signatures before any payload build or diagnostic emission.
+		$probe_input = [
+			'templatePartRef'      => $template_part_id,
+			'prompt'               => $prompt,
+			'resolveSignatureOnly' => true,
+		];
+
+		// Only forward visiblePatternNames when supplied: recommend_template_part
+		// branches on array_key_exists, so an always-present key would shift the
+		// resolved context away from the editor's signature.
+		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
+			$probe_input['visiblePatternNames'] = self::normalize_list( $input['visiblePatternNames'] );
+		}
+
+		$signature_probe = TemplateAbilities::recommend_template_part( $probe_input );
+
+		if ( is_wp_error( $signature_probe ) ) {
+			return $signature_probe;
+		}
+
+		$recomputed_resolved = (string) ( $signature_probe['resolvedContextSignature'] ?? '' );
+		$recomputed_review   = (string) ( $signature_probe['reviewContextSignature'] ?? '' );
+
+		if (
+			! hash_equals( $recomputed_resolved, $provided_resolved )
+			|| ! hash_equals( $recomputed_review, $provided_review )
+		) {
+			return self::stale_error();
+		}
+
+		// Second freshness gate (request time): compute + store the live content
+		// baseline, then re-validate every operation against the live contract.
+		$baseline = TemplatePartApplyExecutor::resolve_baseline(
+			[
+				'surface' => 'template-part',
+				'target'  => [ 'templatePartId' => $template_part_id ],
+			]
+		);
+
+		if ( is_wp_error( $baseline ) ) {
+			return $baseline;
+		}
+
+		$context = ServerCollector::for_template_part( $template_part_id );
+
+		if ( is_wp_error( $context ) ) {
+			return $context;
+		}
+
+		$validated = TemplatePartPrompt::validate_operations_for_apply( $operations, $context );
+
+		if ( [] === $validated['operations'] || count( $validated['operations'] ) !== count( $operations ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_operations_invalid',
+				'One or more proposed template-part operations failed validation against the current execution contract.',
+				[
+					'status'            => 400,
+					'validationReasons' => $validated['reasons'],
+				]
+			);
+		}
+
+		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) );
+
+		if ( ActivityRepository::count_active_pending_external_applies( $user_id ) >= $cap ) {
+			return new \WP_Error(
+				'flavor_agent_apply_queue_full',
+				sprintf(
+					'You already have %d pending external applies awaiting review. Wait for a decision or expiry before requesting more.',
+					$cap
+				),
+				[ 'status' => 429 ]
+			);
+		}
+
+		$suggestion        = self::normalize_map( $input['suggestion'] ?? [] );
+		$timestamp         = gmdate( 'c' );
+		$day_in_seconds    = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
+		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) );
+		$expires_at        = gmdate( 'c', time() + $ttl );
+		$scope_key         = 'wp_template_part:' . $template_part_id;
+		$request_reference = sanitize_text_field( (string) ( $input['requestReference'] ?? '' ) );
+
+		$created = ActivityRepository::create(
+			[
+				'type'            => 'apply_template_part_suggestion',
+				'surface'         => 'template-part',
+				'target'          => [
+					'templatePartId'  => $template_part_id,
+					'templatePartRef' => $template_part_id,
+					'slug'            => sanitize_key( (string) ( $scope['slug'] ?? '' ) ),
+					'area'            => sanitize_key( (string) ( $scope['area'] ?? '' ) ),
+				],
+				'suggestion'      => sanitize_text_field( (string) ( $suggestion['label'] ?? 'External template-part apply request' ) ),
+				'before'          => [],
+				'after'           => [],
+				'executionResult' => 'pending',
+				'undo'            => [ 'status' => 'not_applicable' ],
+				'timestamp'       => $timestamp,
+				'request'         => [
+					'prompt'      => $prompt,
+					'reference'   => '' !== $request_reference ? $request_reference : 'external-apply:' . $scope_key,
+					'requestMeta' => [
+						'ability'            => 'flavor-agent/request-template-part-apply',
+						'executionTransport' => 'wp-abilities',
+						'route'              => 'wp-abilities:flavor-agent/request-template-part-apply',
+					],
+					'apply'       => [
+						'status'           => 'pending',
+						'requestedBy'      => $user_id,
+						'requestedAt'      => $timestamp,
+						'expiresAt'        => $expires_at,
+						'operations'       => $validated['operations'],
+						'signatures'       => [
+							'resolvedContextSignature' => $provided_resolved,
+							'reviewContextSignature'   => $provided_review,
+							'baselineContentHash'      => $baseline,
+						],
+						'requestReference' => $request_reference,
+					],
+				],
+				'document'        => [
+					'scopeKey'   => $scope_key,
+					'postType'   => 'wp_template_part',
+					'entityId'   => $template_part_id,
+					'entityKind' => 'templatePart',
+					'entityName' => 'templatePart',
+				],
+			]
+		);
+
+		if ( is_wp_error( $created ) ) {
+			return $created;
+		}
+
+		return [
+			'activityId'       => (string) ( $created['id'] ?? '' ),
+			'status'           => 'pending',
+			'expiresAt'        => $expires_at,
+			'requestReference' => $request_reference,
+		];
+	}
+
 	public static function get_activity( mixed $input ): array|\WP_Error {
 		$input       = self::normalize_map( $input );
 		$activity_id = sanitize_text_field( (string) ( $input['activityId'] ?? '' ) );
@@ -298,13 +490,14 @@ final class ApplyAbilities {
 			);
 		}
 
-		$entry   = ActivityRepository::maybe_expire_pending_apply( $entry );
-		$surface = (string) ( $entry['surface'] ?? '' );
+		$entry    = ActivityRepository::maybe_expire_pending_apply( $entry );
+		$surface  = (string) ( $entry['surface'] ?? '' );
+		$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
 
-		if ( ! in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+		if ( null === $executor ) {
 			return new \WP_Error(
 				'flavor_agent_undo_surface_unsupported',
-				'External undo currently supports Global Styles and Style Book activity rows.',
+				'External undo is not supported for this activity surface.',
 				[ 'status' => 400 ]
 			);
 		}
@@ -344,7 +537,7 @@ final class ApplyAbilities {
 			);
 		}
 
-		$result = StyleApplyExecutor::undo( $entry );
+		$result = $executor::undo( $entry );
 
 		if ( is_wp_error( $result ) ) {
 			if ( 'flavor_agent_undo_drift' === $result->get_error_code() ) {
@@ -366,35 +559,40 @@ final class ApplyAbilities {
 			return $updated;
 		}
 
-		$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
+		// Attestation is hard-bounded to the external-style-apply-v1 lane. Only the
+		// style surfaces may reach AttestationService; template-part (and any future
+		// surface) undos record no revert attestation.
+		if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+			$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
 
-		if ( null !== $prior ) {
-			try {
-				\FlavorAgent\Attestation\AttestationService::record_revert(
-					(string) $prior['attestation_id'],
-					[
-						'surface'            => (string) ( $entry['surface'] ?? '' ),
-						'globalStylesId'     => (string) ( $entry['target']['globalStylesId'] ?? '' ),
-						'blockName'          => (string) ( $entry['target']['blockName'] ?? '' ),
-						'operations'         => [],
-						'before'             => $entry['after'] ?? [],
-						'after'              => $entry['before'] ?? [],
-						'freshnessSignature' => '',
-						'actorRole'          => self::actor_role_for_undo(),
-						'requestedAt'        => '',
-						'decidedAt'          => gmdate( 'c' ),
-						'relatedActivityId'  => $activity_id,
-					]
-				);
-			} catch ( \Throwable $e ) {
-				\FlavorAgent\Attestation\AttestationService::record_failure(
-					$e,
-					[
-						'operation'            => 'revert',
-						'activityId'           => $activity_id,
-						'revertsAttestationId' => (string) $prior['attestation_id'],
-					]
-				);
+			if ( null !== $prior ) {
+				try {
+					\FlavorAgent\Attestation\AttestationService::record_revert(
+						(string) $prior['attestation_id'],
+						[
+							'surface'            => (string) ( $entry['surface'] ?? '' ),
+							'globalStylesId'     => (string) ( $entry['target']['globalStylesId'] ?? '' ),
+							'blockName'          => (string) ( $entry['target']['blockName'] ?? '' ),
+							'operations'         => [],
+							'before'             => $entry['after'] ?? [],
+							'after'              => $entry['before'] ?? [],
+							'freshnessSignature' => '',
+							'actorRole'          => self::actor_role_for_undo(),
+							'requestedAt'        => '',
+							'decidedAt'          => gmdate( 'c' ),
+							'relatedActivityId'  => $activity_id,
+						]
+					);
+				} catch ( \Throwable $e ) {
+					\FlavorAgent\Attestation\AttestationService::record_failure(
+						$e,
+						[
+							'operation'            => 'revert',
+							'activityId'           => $activity_id,
+							'revertsAttestationId' => (string) $prior['attestation_id'],
+						]
+					);
+				}
 			}
 		}
 

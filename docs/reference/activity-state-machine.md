@@ -24,6 +24,8 @@ When server hydration requests `groupBySurface=true`, the repository returns the
 
 External agents can request style applies through `flavor-agent/request-style-apply`. That creates a **pending** row in the same activity table; the post-apply undo machine below is unchanged and only begins once the row is executed.
 
+Template-part external applies (`flavor-agent/request-template-part-apply`) reuse this exact pre-apply section — same pending row, same freshness/drift gates at request and approval, same `apply.status` transitions, expiry, pending cap, and advisory claim overlay — with the only difference being that approval executes through the template-part executor in the shared executor registry (re-validating ≤3 bounded operations against one `wp_template_part`) instead of `StyleApplyExecutor`. They are not attested.
+
 `apply.status`: `pending → available (approved + executed) | rejected | expired | failed`
 
 - One row throughout: the pending row carries the proposed operations, requester provenance (`apply.requestedBy`, `apply.requestReference`), and freshness signatures under `request.apply`, hydrated as top-level `entry.apply`. On approval (`POST /flavor-agent/v1/activity/{id}/decision`, `manage_options` + the row's mutation capability) the server re-validates freshness and operations, executes through `FlavorAgent\Apply\StyleApplyExecutor`, records execution-time `before`/`after` snapshots, sets `decidedBy`/`decidedAt`, and the row becomes a normal undoable apply row (`apply.status: available`, `undo.status: available`, ordered undo applies).
