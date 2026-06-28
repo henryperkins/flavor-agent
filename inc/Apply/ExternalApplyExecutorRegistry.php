@@ -19,7 +19,7 @@ final class ExternalApplyExecutorRegistry {
 	public static function for_surface( string $surface ): ?string {
 		return match ( $surface ) {
 			'global-styles', 'style-book' => StyleApplyExecutor::class,
-			// 'template-part' arm is added in Task 7 — see Review revision R2.
+			'template-part'               => TemplatePartApplyExecutor::class,
 			default                       => null,
 		};
 	}

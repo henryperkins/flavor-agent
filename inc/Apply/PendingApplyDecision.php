@@ -139,30 +139,35 @@ final class PendingApplyDecision {
 			);
 		}
 
-		try {
-			\FlavorAgent\Attestation\AttestationService::record_apply(
-				[
-					'surface'            => $surface,
-					'globalStylesId'     => $global_styles_id,
-					'blockName'          => $block_name,
-					'operations'         => is_array( $result['after']['operations'] ?? null ) ? $result['after']['operations'] : [],
-					'before'             => $result['before'],
-					'after'              => $result['after'],
-					'freshnessSignature' => $baseline,
-					'actorRole'          => self::actor_role( $decided_by ),
-					'requestedAt'        => (string) ( $apply['requestedAt'] ?? '' ),
-					'decidedAt'          => $decided_at,
-					'relatedActivityId'  => $activity_id,
-				]
-			);
-		} catch ( \Throwable $e ) {
-			\FlavorAgent\Attestation\AttestationService::record_failure(
-				$e,
-				[
-					'operation'  => 'apply',
-					'activityId' => $activity_id,
-				]
-			);
+		// Attestation is hard-bounded to the external-style-apply-v1 lane. Only the
+		// style surfaces may reach AttestationService; template-part (and any future
+		// surface) applies record no attestation.
+		if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+			try {
+				\FlavorAgent\Attestation\AttestationService::record_apply(
+					[
+						'surface'            => $surface,
+						'globalStylesId'     => $global_styles_id,
+						'blockName'          => $block_name,
+						'operations'         => is_array( $result['after']['operations'] ?? null ) ? $result['after']['operations'] : [],
+						'before'             => $result['before'],
+						'after'              => $result['after'],
+						'freshnessSignature' => $baseline,
+						'actorRole'          => self::actor_role( $decided_by ),
+						'requestedAt'        => (string) ( $apply['requestedAt'] ?? '' ),
+						'decidedAt'          => $decided_at,
+						'relatedActivityId'  => $activity_id,
+					]
+				);
+			} catch ( \Throwable $e ) {
+				\FlavorAgent\Attestation\AttestationService::record_failure(
+					$e,
+					[
+						'operation'  => 'apply',
+						'activityId' => $activity_id,
+					]
+				);
+			}
 		}
 
 		return ActivityRepository::transition_external_apply(

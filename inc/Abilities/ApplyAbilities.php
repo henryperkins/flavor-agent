@@ -368,35 +368,40 @@ final class ApplyAbilities {
 			return $updated;
 		}
 
-		$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
+		// Attestation is hard-bounded to the external-style-apply-v1 lane. Only the
+		// style surfaces may reach AttestationService; template-part (and any future
+		// surface) undos record no revert attestation.
+		if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+			$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
 
-		if ( null !== $prior ) {
-			try {
-				\FlavorAgent\Attestation\AttestationService::record_revert(
-					(string) $prior['attestation_id'],
-					[
-						'surface'            => (string) ( $entry['surface'] ?? '' ),
-						'globalStylesId'     => (string) ( $entry['target']['globalStylesId'] ?? '' ),
-						'blockName'          => (string) ( $entry['target']['blockName'] ?? '' ),
-						'operations'         => [],
-						'before'             => $entry['after'] ?? [],
-						'after'              => $entry['before'] ?? [],
-						'freshnessSignature' => '',
-						'actorRole'          => self::actor_role_for_undo(),
-						'requestedAt'        => '',
-						'decidedAt'          => gmdate( 'c' ),
-						'relatedActivityId'  => $activity_id,
-					]
-				);
-			} catch ( \Throwable $e ) {
-				\FlavorAgent\Attestation\AttestationService::record_failure(
-					$e,
-					[
-						'operation'            => 'revert',
-						'activityId'           => $activity_id,
-						'revertsAttestationId' => (string) $prior['attestation_id'],
-					]
-				);
+			if ( null !== $prior ) {
+				try {
+					\FlavorAgent\Attestation\AttestationService::record_revert(
+						(string) $prior['attestation_id'],
+						[
+							'surface'            => (string) ( $entry['surface'] ?? '' ),
+							'globalStylesId'     => (string) ( $entry['target']['globalStylesId'] ?? '' ),
+							'blockName'          => (string) ( $entry['target']['blockName'] ?? '' ),
+							'operations'         => [],
+							'before'             => $entry['after'] ?? [],
+							'after'              => $entry['before'] ?? [],
+							'freshnessSignature' => '',
+							'actorRole'          => self::actor_role_for_undo(),
+							'requestedAt'        => '',
+							'decidedAt'          => gmdate( 'c' ),
+							'relatedActivityId'  => $activity_id,
+						]
+					);
+				} catch ( \Throwable $e ) {
+					\FlavorAgent\Attestation\AttestationService::record_failure(
+						$e,
+						[
+							'operation'            => 'revert',
+							'activityId'           => $activity_id,
+							'revertsAttestationId' => (string) $prior['attestation_id'],
+						]
+					);
+				}
 			}
 		}
 

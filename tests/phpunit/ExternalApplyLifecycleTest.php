@@ -75,6 +75,128 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		return $created;
 	}
 
+	/**
+	 * Seed the live Global Styles world a style-lane approve writes against:
+	 * an empty user config plus an accent/base palette with a light background
+	 * complement so a solo accent text operation passes the contrast gate.
+	 */
+	private function seed_global_styles_world(): void {
+		WordPressTestState::$posts[17]       = new \WP_Post(
+			[
+				'ID'           => 17,
+				'post_type'    => 'wp_global_styles',
+				'post_content' => (string) wp_json_encode(
+					[
+						'version'                     => 3,
+						'isGlobalStylesUserThemeJSON' => true,
+						'settings'                    => [],
+						'styles'                      => [],
+					]
+				),
+			]
+		);
+		WordPressTestState::$global_settings = [
+			'color' => [
+				'palette'    => [
+					'theme' => [
+						[
+							'slug'  => 'accent',
+							'name'  => 'Accent',
+							'color' => '#111111',
+						],
+						[
+							'slug'  => 'base',
+							'name'  => 'Base',
+							'color' => '#fefefe',
+						],
+					],
+				],
+				'background' => true,
+				'text'       => true,
+			],
+		];
+		WordPressTestState::$global_styles   = [ 'color' => [ 'background' => '#fefefe' ] ];
+	}
+
+	private const TEMPLATE_PART_ID = 'twentytwentyfive//header';
+
+	/**
+	 * The live template part a template-part approve writes against. Mirrors
+	 * TemplatePartApplyExecutorTest::seed_part: a DB-backed part the executor
+	 * re-collects, re-validates, mutates, and persists through the stubbed WP APIs.
+	 */
+	private function seed_template_part( string $content, int $wp_id ): void {
+		WordPressTestState::$active_theme                        = [ 'stylesheet' => 'twentytwentyfive' ];
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => self::TEMPLATE_PART_ID,
+				'wp_id'   => $wp_id,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			],
+		];
+		WordPressTestState::$posts[ $wp_id ]                     = new \WP_Post(
+			[
+				'ID'           => $wp_id,
+				'post_type'    => 'wp_template_part',
+				'post_content' => $content,
+			]
+		);
+	}
+
+	/**
+	 * Seed a PENDING template-part external-apply row whose baseline matches the
+	 * live part and whose single remove operation re-validates, so a decide()
+	 * approve drives all the way through the executor to a successful apply.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function create_template_part_pending_entry( string $content ): array {
+		$created = Repository::create(
+			[
+				'id'              => 'template-part-row',
+				'type'            => 'apply_template_part_suggestion',
+				'surface'         => 'template-part',
+				'target'          => [ 'templatePartId' => self::TEMPLATE_PART_ID ],
+				'suggestion'      => 'Trim the header',
+				'before'          => [],
+				'after'           => [],
+				'executionResult' => 'pending',
+				'undo'            => [ 'status' => 'not_applicable' ],
+				'request'         => [
+					'prompt'    => 'trim',
+					'reference' => 'external-apply:template-part:' . self::TEMPLATE_PART_ID,
+					'apply'     => [
+						'status'      => 'pending',
+						'requestedBy' => 7,
+						'requestedAt' => gmdate( 'c' ),
+						'expiresAt'   => gmdate( 'c', time() + 3600 ),
+						'operations'  => [
+							[
+								'type'              => 'remove_block',
+								'targetPath'        => [ 0, 0 ],
+								'expectedBlockName' => 'core/heading',
+							],
+						],
+						'signatures'  => [
+							'baselineConfigHash' => hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) ),
+						],
+					],
+				],
+				'document'        => [
+					'scopeKey' => 'template-part:' . self::TEMPLATE_PART_ID,
+					'postType' => 'wp_template_part',
+					'entityId' => self::TEMPLATE_PART_ID,
+				],
+			]
+		);
+		$this->assertIsArray( $created );
+
+		return $created;
+	}
+
 	public function test_pending_row_round_trips_with_apply_lifecycle(): void {
 		$created = $this->create_pending_entry();
 
@@ -557,6 +679,93 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'rejected', $updated['apply']['status'] );
 	}
 
+	/**
+	 * Frozen-lane proof: a template-part approve must NEVER reach AttestationService.
+	 *
+	 * The observable signal is non-tautological because a REAL signing key is
+	 * configured. With a key present:
+	 *   - the style lane genuinely signs + inserts an attestation row (asserted
+	 *     below), proving the recording machinery is live — so "no row for
+	 *     template-part" is meaningful rather than "recording is off everywhere";
+	 *   - if the template-part path were NOT surface-guarded it would call
+	 *     record_apply( surface => 'template-part' ), which trips
+	 *     AttestationService::assert_owned_lane_context, throws, is caught by the
+	 *     decide() try/catch, and fires flavor_agent_attestation_record_failed.
+	 *
+	 * Asserting that failure event NEVER fires (while the style lane succeeds with
+	 * the same key) proves the guard short-circuits the call before record_apply,
+	 * not that a missing key turned every recording into a no-op. Removing either
+	 * guard turns this test RED via a captured failure event.
+	 */
+	public function test_attestation_is_not_recorded_for_template_part_apply(): void {
+		$secret_key = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $secret_key );
+		\FlavorAgent\Attestation\Repository::install();
+
+		$failures = [];
+		add_action(
+			'flavor_agent_attestation_record_failed',
+			static function ( array $event ) use ( &$failures ): void {
+				$failures[] = $event;
+			}
+		);
+
+		// --- Style lane (regression guard): an approve must STILL record. ---
+		$this->seed_global_styles_world();
+		$style = $this->create_pending_entry(
+			[
+				'id'      => 'style-row',
+				'request' => [
+					'apply' => [
+						'signatures' => [
+							'baselineConfigHash' => \FlavorAgent\Apply\StyleApplyExecutor::comparable_config_hash(
+								[
+									'settings' => [],
+									'styles'   => [],
+								]
+							),
+						],
+					],
+				],
+			]
+		);
+
+		$style_decided = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $style['id'], 'approve' );
+
+		$this->assertIsArray( $style_decided );
+		$this->assertSame( 'available', $style_decided['apply']['status'] );
+		$this->assertIsArray(
+			\FlavorAgent\Attestation\Repository::find_by_related_activity( 'style-row' ),
+			'The style lane must still sign and record an attestation after the surface guard is added.'
+		);
+
+		// --- Template-part lane: an approve must NOT touch AttestationService. ---
+		$content = '<!-- wp:group -->'
+			. '<!-- wp:heading --><h2>Title</h2><!-- /wp:heading -->'
+			. '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:group -->';
+		$this->seed_template_part( $content, 8801 );
+		$part = $this->create_template_part_pending_entry( $content );
+
+		$part_decided = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $part['id'], 'approve' );
+
+		$this->assertIsArray( $part_decided );
+		$this->assertSame(
+			'available',
+			$part_decided['apply']['status'],
+			'The template-part executor must succeed so the post-apply attestation branch is actually exercised.'
+		);
+		$this->assertNull(
+			\FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $part['id'] ),
+			'No attestation may be recorded for a template-part apply.'
+		);
+		$this->assertSame(
+			[],
+			$failures,
+			'record_apply must never be attempted for template-part: the frozen-lane guard would otherwise throw and fire flavor_agent_attestation_record_failed.'
+		);
+	}
+
 	public function test_style_apply_executor_implements_the_external_apply_contract(): void {
 		$this->assertInstanceOf(
 			\ReflectionClass::class,
@@ -570,6 +779,16 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			\FlavorAgent\Apply\StyleApplyExecutor::class,
 			\FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'global-styles' )
 		);
-		$this->assertNull( \FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'template-part' ) );
+		$this->assertSame(
+			\FlavorAgent\Apply\TemplatePartApplyExecutor::class,
+			\FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'template-part' )
+		);
+	}
+
+	public function test_registry_routes_template_part_to_its_executor(): void {
+		$this->assertSame(
+			\FlavorAgent\Apply\TemplatePartApplyExecutor::class,
+			\FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'template-part' )
+		);
 	}
 }
