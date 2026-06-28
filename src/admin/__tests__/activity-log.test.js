@@ -2468,11 +2468,17 @@ describe( 'ActivityLogApp', () => {
 		);
 
 		const pending = createExternalApplyEntry();
-		const decided = {
+		const {
+			status: ignoredTerminalStatus,
+			statusLabel: ignoredTerminalStatusLabel,
+			...decided
+		} = {
 			...pending,
-			status: 'rejected',
+			executionResult: 'rejected',
 			apply: { ...pending.apply, status: 'rejected', decidedBy: 7 },
 		};
+		void ignoredTerminalStatus;
+		void ignoredTerminalStatusLabel;
 
 		let feedLoads = 0;
 
@@ -2513,6 +2519,13 @@ describe( 'ActivityLogApp', () => {
 		const detailsRegion = getContainer().querySelector(
 			'.flavor-agent-activity-log__details-region'
 		);
+		const story = getContainer().querySelector(
+			'.flavor-agent-activity-log__entry-story'
+		);
+
+		expect( getDefinitionValue( story, 'Current status' ) ).toBe(
+			'Rejected'
+		);
 		expect( detailsRegion?.textContent ).toMatch( /Rejected/i );
 	} );
 
@@ -2524,11 +2537,17 @@ describe( 'ActivityLogApp', () => {
 		);
 
 		const pending = createExternalApplyEntry();
-		const terminal = {
+		const {
+			status: ignoredRaceStatus,
+			statusLabel: ignoredRaceStatusLabel,
+			...terminal
+		} = {
 			...pending,
-			status: 'rejected',
+			executionResult: 'rejected',
 			apply: { ...pending.apply, status: 'rejected', decidedBy: 9 },
 		};
+		void ignoredRaceStatus;
+		void ignoredRaceStatusLabel;
 		const raceError = Object.assign(
 			new Error(
 				'Flavor Agent external applies only transition out of the pending state once.'
@@ -2754,6 +2773,49 @@ describe( 'ActivityLogApp', () => {
 		await act( async () => {
 			getRoot().unmount();
 		} );
+
+		expect( releaseSpy ).toHaveBeenCalled();
+	} );
+
+	test( 'releases an abandoned claim after the initial claim request settles late', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		const pending = createExternalApplyEntry();
+		const deferredClaim = createDeferred();
+		const releaseSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				releaseSpy();
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+
+			if ( request?.url?.includes( '/claim' ) ) {
+				return deferredClaim.promise;
+			}
+
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		await act( async () => {
+			getRoot().unmount();
+		} );
+
+		expect( releaseSpy ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			deferredClaim.resolve( {
+				claim: { userId: 7 },
+				entry: pending,
+			} );
+			await deferredClaim.promise;
+		} );
+		await flushEffects();
 
 		expect( releaseSpy ).toHaveBeenCalled();
 	} );

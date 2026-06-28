@@ -204,6 +204,54 @@ function isPlainRecord( value ) {
 	return !! value && typeof value === 'object' && ! Array.isArray( value );
 }
 
+const RAW_ACTIVITY_STATUSES = new Set( [
+	'applied',
+	'review',
+	'undone',
+	'blocked',
+	'failed',
+	'pending',
+	'rejected',
+	'expired',
+] );
+
+function withDerivedActivityStatus( entry ) {
+	if ( ! isPlainRecord( entry ) ) {
+		return entry;
+	}
+
+	const explicitStatus =
+		typeof entry.status === 'string' ? entry.status.trim() : '';
+
+	if ( explicitStatus ) {
+		return entry;
+	}
+
+	const applyStatus = isPlainRecord( entry.apply )
+		? String( entry.apply.status || '' ).trim()
+		: '';
+	const normalizedApplyStatus =
+		applyStatus === 'available' ? 'applied' : applyStatus;
+	const executionResult =
+		typeof entry.executionResult === 'string'
+			? entry.executionResult.trim()
+			: '';
+	const normalizedExecutionResult =
+		executionResult === 'available' ? 'applied' : executionResult;
+	let derivedStatus = '';
+
+	if ( RAW_ACTIVITY_STATUSES.has( normalizedApplyStatus ) ) {
+		derivedStatus = normalizedApplyStatus;
+	} else if ( RAW_ACTIVITY_STATUSES.has( normalizedExecutionResult ) ) {
+		derivedStatus = normalizedExecutionResult;
+	}
+
+	// /decision and /claim return Repository::find()-shaped rows, not the
+	// admin-page projection from query_admin(), so terminal lifecycle lives under
+	// apply.status / executionResult instead of top-level status.
+	return derivedStatus ? { ...entry, status: derivedStatus } : entry;
+}
+
 function getLearningReportInteger( value ) {
 	const number = Number( value );
 
@@ -2337,14 +2385,34 @@ function GovernanceEvidenceSection( {
 		decisionSubmittedRef.current = false;
 		const activityId = entry.id;
 		let active = true;
+		let claimRequestSettled = false;
+		let claimRequestSucceeded = false;
+		let releaseAfterClaimSettles = false;
+
+		const releaseClaimOnAbandon = () =>
+			apiFetch( buildClaimReleaseRequest( bootData, activityId ) ).catch(
+				() => {}
+			);
 
 		apiFetch( buildClaimRequest( bootData, activityId ) )
 			.then( ( response ) => {
+				claimRequestSettled = true;
+				claimRequestSucceeded = true;
+
 				if ( active ) {
 					onClaimResolved?.( activityId, response );
 				}
+
+				if (
+					releaseAfterClaimSettles &&
+					! decisionSubmittedRef.current
+				) {
+					releaseClaimOnAbandon();
+				}
 			} )
-			.catch( () => {} );
+			.catch( () => {
+				claimRequestSettled = true;
+			} );
 
 		return () => {
 			active = false;
@@ -2356,9 +2424,19 @@ function GovernanceEvidenceSection( {
 				return;
 			}
 
-			apiFetch( buildClaimReleaseRequest( bootData, activityId ) ).catch(
-				() => {}
-			);
+			if ( claimRequestSucceeded ) {
+				releaseClaimOnAbandon();
+				return;
+			}
+
+			if ( claimRequestSettled ) {
+				return;
+			}
+
+			// If abandon beats the initial POST /claim, wait for the claim request to
+			// settle before attempting release so a late-set transient is still
+			// cleaned up immediately instead of lingering until TTL expiry.
+			releaseAfterClaimSettles = true;
 		};
 	}, [ canDecide, entry?.id, bootData, onClaimResolved ] );
 
@@ -2821,8 +2899,10 @@ export function ActivityLogApp( { bootData } ) {
 				( typeof decidedEntry.status === 'string' ||
 					isPlainRecord( decidedEntry.apply ) )
 			) {
+				const normalizedSourceEntry =
+					withDerivedActivityStatus( decidedEntry );
 				const normalizedEntry = normalizeAdminEntries( [
-					decidedEntry,
+					normalizedSourceEntry,
 				] )[ 0 ];
 
 				if ( normalizedEntry?.id ) {
