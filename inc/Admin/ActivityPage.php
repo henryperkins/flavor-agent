@@ -199,20 +199,28 @@ final class ActivityPage {
 		wp_localize_script(
 			'flavor-agent-activity-log',
 			'flavorAgentActivityLog',
-			[
-				'adminUrl'               => admin_url(),
-				'canApproveStyleApplies' => current_user_can( 'edit_theme_options' ),
-				'connectorsUrl'          => admin_url( 'options-connectors.php' ),
-				'defaultPerPage'         => ActivityRepository::DEFAULT_PER_PAGE,
-				'locale'                 => self::resolve_locale(),
-				'maxPerPage'             => ActivityRepository::MAX_PER_PAGE,
-				'nonce'                  => wp_create_nonce( 'wp_rest' ),
-				'restUrl'                => rest_url(),
-				'settingsUrl'            => admin_url( 'options-general.php?page=flavor-agent' ),
-				'themeColorPresets'      => self::get_theme_color_presets(),
-				'timeZone'               => self::resolve_timezone(),
-			]
+			self::build_activity_log_boot_data()
 		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_activity_log_boot_data(): array {
+		return [
+			'adminUrl'               => admin_url(),
+			'canApproveStyleApplies' => current_user_can( 'edit_theme_options' ),
+			'connectorsUrl'          => admin_url( 'options-connectors.php' ),
+			'currentUserId'          => get_current_user_id(),
+			'defaultPerPage'         => ActivityRepository::DEFAULT_PER_PAGE,
+			'locale'                 => self::resolve_locale(),
+			'maxPerPage'             => ActivityRepository::MAX_PER_PAGE,
+			'nonce'                  => wp_create_nonce( 'wp_rest' ),
+			'restUrl'                => rest_url(),
+			'settingsUrl'            => admin_url( 'options-general.php?page=flavor-agent' ),
+			'themeColorPresets'      => self::get_theme_color_presets(),
+			'timeZone'               => self::resolve_timezone(),
+		];
 	}
 
 	/**

@@ -30,9 +30,12 @@ import './activity-log.css';
 import {
 	areActivityViewsEqual,
 	buildActivityPermalink,
+	buildClaimReleaseRequest,
+	buildClaimRequest,
 	buildDecisionRequest,
 	clampActivityViewPage,
 	formatActivityTimestamp,
+	formatApplyClaimNotice,
 	getGovernanceDetails,
 	getGovernancePlainSummary,
 	isPendingExternalApply,
@@ -42,6 +45,7 @@ import {
 	normalizeSelectedActivityActions,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
+	TERMINAL_DECISION_ERROR_CODES,
 	writePersistedActivityView,
 } from './activity-log-utils';
 
@@ -50,6 +54,10 @@ const NOT_RECORDED = 'Not recorded';
 const ERROR_KIND_INVALID_DAY_FILTER = 'invalid-day-filter';
 const ERROR_KIND_FETCH = 'fetch';
 const LEARNING_REPORT_VERSION = 'governance-learning-report-v1';
+// Leading-edge debounce window for the focus/visibility refresh: the first event
+// fires synchronously, then further focus/visibility churn is suppressed for this
+// long so rapid tab-switching can't hammer the feed or the /claim endpoint.
+const FOCUS_REFRESH_DEBOUNCE_MS = 1000;
 const RELATIVE_DAY_UNITS = new Set( [
 	'hours',
 	'days',
@@ -194,6 +202,54 @@ function getSummaryCards( entries ) {
 
 function isPlainRecord( value ) {
 	return !! value && typeof value === 'object' && ! Array.isArray( value );
+}
+
+const RAW_ACTIVITY_STATUSES = new Set( [
+	'applied',
+	'review',
+	'undone',
+	'blocked',
+	'failed',
+	'pending',
+	'rejected',
+	'expired',
+] );
+
+function withDerivedActivityStatus( entry ) {
+	if ( ! isPlainRecord( entry ) ) {
+		return entry;
+	}
+
+	const explicitStatus =
+		typeof entry.status === 'string' ? entry.status.trim() : '';
+
+	if ( explicitStatus ) {
+		return entry;
+	}
+
+	const applyStatus = isPlainRecord( entry.apply )
+		? String( entry.apply.status || '' ).trim()
+		: '';
+	const normalizedApplyStatus =
+		applyStatus === 'available' ? 'applied' : applyStatus;
+	const executionResult =
+		typeof entry.executionResult === 'string'
+			? entry.executionResult.trim()
+			: '';
+	const normalizedExecutionResult =
+		executionResult === 'available' ? 'applied' : executionResult;
+	let derivedStatus = '';
+
+	if ( RAW_ACTIVITY_STATUSES.has( normalizedApplyStatus ) ) {
+		derivedStatus = normalizedApplyStatus;
+	} else if ( RAW_ACTIVITY_STATUSES.has( normalizedExecutionResult ) ) {
+		derivedStatus = normalizedExecutionResult;
+	}
+
+	// /decision and /claim return Repository::find()-shaped rows, not the
+	// admin-page projection from query_admin(), so terminal lifecycle lives under
+	// apply.status / executionResult instead of top-level status.
+	return derivedStatus ? { ...entry, status: derivedStatus } : entry;
 }
 
 function getLearningReportInteger( value ) {
@@ -2288,6 +2344,9 @@ function GovernanceEvidenceSection( {
 	entry,
 	bootData,
 	onDecided,
+	onClaimResolved,
+	onClaimReleased,
+	currentUserId,
 	isLocallyDecided = false,
 } ) {
 	const details = getGovernanceDetailsForEntry( entry );
@@ -2296,6 +2355,7 @@ function GovernanceEvidenceSection( {
 	const [ decisionError, setDecisionError ] = useState( '' );
 	const decisionRequestTokenRef = useRef( 0 );
 	const isSubmittingRef = useRef( false );
+	const decisionSubmittedRef = useRef( false );
 
 	useEffect( () => {
 		decisionRequestTokenRef.current += 1;
@@ -2312,14 +2372,102 @@ function GovernanceEvidenceSection( {
 		[]
 	);
 
-	if ( ! details ) {
-		return null;
-	}
-
 	const canDecide =
 		! isLocallyDecided &&
 		isPendingExternalApply( entry ) &&
 		bootData?.canApproveStyleApplies;
+
+	useEffect( () => {
+		if ( ! canDecide || ! entry?.id ) {
+			return undefined;
+		}
+
+		decisionSubmittedRef.current = false;
+		const activityId = entry.id;
+		let active = true;
+		let claimRequestSettled = false;
+		let claimRequestSucceeded = false;
+		let releaseAfterClaimSettles = false;
+
+		const releaseClaimOnAbandon = () =>
+			apiFetch( buildClaimReleaseRequest( bootData, activityId ) ).catch(
+				() => {}
+			);
+
+		apiFetch( buildClaimRequest( bootData, activityId ) )
+			.then( ( response ) => {
+				claimRequestSettled = true;
+				claimRequestSucceeded = true;
+
+				if ( active ) {
+					onClaimResolved?.( activityId, response );
+				}
+
+				if (
+					releaseAfterClaimSettles &&
+					! decisionSubmittedRef.current
+				) {
+					releaseClaimOnAbandon();
+				}
+			} )
+			.catch( () => {
+				claimRequestSettled = true;
+			} );
+
+		return () => {
+			active = false;
+
+			// Release on abandon/close only. A submitted decision clears the claim
+			// server-side on success; a retryable failure must keep it. The 5-minute
+			// TTL covers any missed release.
+			if ( decisionSubmittedRef.current ) {
+				return;
+			}
+
+			if ( claimRequestSucceeded ) {
+				releaseClaimOnAbandon();
+				return;
+			}
+
+			if ( claimRequestSettled ) {
+				return;
+			}
+
+			// If abandon beats the initial POST /claim, wait for the claim request to
+			// settle before attempting release so a late-set transient is still
+			// cleaned up immediately instead of lingering until TTL expiry.
+			releaseAfterClaimSettles = true;
+		};
+	}, [ canDecide, entry?.id, bootData, onClaimResolved ] );
+
+	if ( ! details ) {
+		return null;
+	}
+
+	const claimNotice = formatApplyClaimNotice(
+		entry?.apply?.claim,
+		currentUserId
+	);
+
+	// Explicit Release control (spec :90): renders only when the viewer holds the
+	// claim. There is nothing for a non-holder to release, and we never steal.
+	const viewerId = Number( currentUserId );
+	const claimUserId = Number( entry?.apply?.claim?.userId );
+	const viewerHoldsClaim =
+		Number.isFinite( viewerId ) && viewerId > 0 && viewerId === claimUserId;
+
+	const releaseClaim = async () => {
+		try {
+			const response = await apiFetch(
+				buildClaimReleaseRequest( bootData, entry.id )
+			);
+			onClaimResolved?.( entry.id, response );
+			onClaimReleased?.( entry.id );
+		} catch {
+			// Best-effort; the 5-minute TTL covers a missed release.
+		}
+	};
+
 	const artifact = getAttestationArtifact( entry );
 	const summaryRows = getGovernancePlainSummary(
 		details,
@@ -2368,11 +2516,38 @@ function GovernanceEvidenceSection( {
 			}
 
 			onDecided?.( entry.id, response?.entry );
+			decisionSubmittedRef.current = true;
 		} catch ( error ) {
 			if ( decisionRequestTokenRef.current !== requestToken ) {
 				return;
 			}
 
+			const code = typeof error?.code === 'string' ? error.code : '';
+
+			// Terminal race-loss: the row was decided by another admin. Fetch the
+			// terminal row via one claim call and pin it (legible conflict) instead
+			// of showing a generic error. invalid_transition is the genuine
+			// simultaneous-loss code; not_pending/expired are the re-read cases.
+			if ( TERMINAL_DECISION_ERROR_CODES.includes( code ) ) {
+				try {
+					const claimResponse = await apiFetch(
+						buildClaimRequest( bootData, entry.id )
+					);
+
+					if ( decisionRequestTokenRef.current !== requestToken ) {
+						return;
+					}
+
+					onDecided?.( entry.id, claimResponse?.entry );
+					decisionSubmittedRef.current = true;
+					return;
+				} catch {
+					// Fall through to the inline error if the claim fetch also fails.
+				}
+			}
+
+			// Retryable failures (500) and any unresolved terminal fetch: leave the
+			// row pending, keep the claim, and show the inline retry error.
 			setDecisionError(
 				error?.message ||
 					__( 'The decision could not be recorded.', 'flavor-agent' )
@@ -2440,6 +2615,16 @@ function GovernanceEvidenceSection( {
 								'flavor-agent'
 							) }
 						</p>
+						{ claimNotice && (
+							<p className="flavor-agent-activity-log__claim-note">
+								{ claimNotice.text }
+							</p>
+						) }
+						{ viewerHoldsClaim && (
+							<Button variant="tertiary" onClick={ releaseClaim }>
+								{ __( 'Release review claim', 'flavor-agent' ) }
+							</Button>
+						) }
 					</div>
 					<TextareaControl
 						__nextHasNoMarginBottom
@@ -2487,6 +2672,9 @@ function ActivityEntryDetails( {
 	bootData,
 	onDecided,
 	onFilterAction,
+	onClaimResolved,
+	onClaimReleased,
+	currentUserId,
 	isLocallyDecided = false,
 } ) {
 	if ( ! entry ) {
@@ -2545,6 +2733,9 @@ function ActivityEntryDetails( {
 						entry={ entry }
 						bootData={ bootData }
 						onDecided={ onDecided }
+						onClaimResolved={ onClaimResolved }
+						onClaimReleased={ onClaimReleased }
+						currentUserId={ currentUserId }
 						isLocallyDecided={ isLocallyDecided }
 					/>
 					<div className="flavor-agent-activity-log__detail-sections">
@@ -2612,6 +2803,7 @@ export function ActivityLogApp( { bootData } ) {
 	const [ locallyDecidedEntryIds, setLocallyDecidedEntryIds ] = useState(
 		() => new Set()
 	);
+	const [ pinnedTerminalEntry, setPinnedTerminalEntry ] = useState( null );
 	const [ requestActivityId, setRequestActivityId ] = useState(
 		linkedActivityEntryId
 	);
@@ -2707,8 +2899,10 @@ export function ActivityLogApp( { bootData } ) {
 				( typeof decidedEntry.status === 'string' ||
 					isPlainRecord( decidedEntry.apply ) )
 			) {
+				const normalizedSourceEntry =
+					withDerivedActivityStatus( decidedEntry );
 				const normalizedEntry = normalizeAdminEntries( [
-					decidedEntry,
+					normalizedSourceEntry,
 				] )[ 0 ];
 
 				if ( normalizedEntry?.id ) {
@@ -2720,12 +2914,71 @@ export function ActivityLogApp( { bootData } ) {
 								: existingEntry
 						),
 					} ) );
+
+					// A terminal (decided) entry is pinned so it stays legible after
+					// it drops out of the pending-only Approvals filter on refetch.
+					if ( normalizedEntry.status !== 'pending' ) {
+						setPinnedTerminalEntry( normalizedEntry );
+					}
 				}
 			}
 
 			setReloadToken( ( value ) => value + 1 );
 		},
 		[ normalizeAdminEntries ]
+	);
+
+	// Forward-declared this task as a Task 7 deliverable; the decision panel
+	// (onClaimResolved) and the focus/visibility refresh wire it in Tasks 9–10.
+	const applyClaimResponse = useCallback(
+		( activityId, response ) => {
+			if ( ! isPlainRecord( response ) ) {
+				return;
+			}
+
+			const responseEntry = response.entry;
+
+			// /claim returns ActivityRepository::find()-shaped rows, whose lifecycle
+			// status lives at entry.apply.status — there is NO top-level entry.status
+			// (Serializer::hydrate_row synthesizes none; only the client-side
+			// normalizeActivityEntry does, and this response is NOT normalized).
+			// Reading entry.status here would be undefined for every successful
+			// pending claim and wrongly route it through handleEntryDecided, hiding
+			// the decision controls on a still-pending row.
+			const responseApply = isPlainRecord( responseEntry )
+				? responseEntry.apply
+				: null;
+			const responseApplyStatus =
+				isPlainRecord( responseApply ) &&
+				typeof responseApply.status === 'string'
+					? responseApply.status
+					: '';
+
+			// Decided/expired elsewhere (or by us): the row came back terminal — pin it.
+			if ( responseApplyStatus && responseApplyStatus !== 'pending' ) {
+				handleEntryDecided( activityId, responseEntry );
+				return;
+			}
+
+			// Still pending: merge the live claim onto the selected row so the
+			// badge reflects the current reviewer immediately.
+			const claim = isPlainRecord( response.claim )
+				? response.claim
+				: null;
+			setResponseData( ( current ) => ( {
+				...current,
+				entries: current.entries.map( ( existingEntry ) =>
+					existingEntry.id === activityId &&
+					isPlainRecord( existingEntry.apply )
+						? {
+								...existingEntry,
+								apply: { ...existingEntry.apply, claim },
+						  }
+						: existingEntry
+				),
+			} ) );
+		},
+		[ handleEntryDecided ]
 	);
 
 	useEffect( () => {
@@ -2918,7 +3171,10 @@ export function ActivityLogApp( { bootData } ) {
 				enableSorting: false,
 				enableGlobalSearch: true,
 				render: ( { item } ) => {
-					const badges = normalizeActivityDiscoveryBadges( item );
+					const badges = normalizeActivityDiscoveryBadges(
+						item,
+						bootData?.currentUserId
+					);
 
 					return (
 						<span
@@ -3197,12 +3453,37 @@ export function ActivityLogApp( { bootData } ) {
 				enableGlobalSearch: true,
 			},
 		];
-	}, [ responseData, selectedEntryId ] );
+	}, [ responseData, selectedEntryId, bootData?.currentUserId ] );
 
 	const selectedEntry =
 		responseData.entries.find(
 			( entry ) => entry.id === selectedEntryId
-		) || null;
+		) ||
+		( pinnedTerminalEntry && pinnedTerminalEntry.id === selectedEntryId
+			? pinnedTerminalEntry
+			: null );
+
+	// Mirror the selected entry into a ref so the focus/visibility refresh effect
+	// (deps: [ bootData, applyClaimResponse ]) reads the live selection without a
+	// stale closure and without re-binding listeners on every selection change.
+	const selectedEntryRef = useRef( null );
+	useEffect( () => {
+		selectedEntryRef.current = selectedEntry;
+	}, [ selectedEntry ] );
+
+	// Tracks a row whose claim the viewer explicitly released while staying on it.
+	// The focus/visibility refresh must NOT silently re-acquire that claim, or the
+	// explicit Release would feel like a no-op. Cleared only when the SELECTED id
+	// changes — not when the selectedEntry object changes, because applyClaimResponse
+	// merges apply.claim and mints a new object on the same row, which would
+	// prematurely clear the suppression.
+	const releasedClaimIdRef = useRef( null );
+	const handleClaimReleased = useCallback( ( activityId ) => {
+		releasedClaimIdRef.current = activityId;
+	}, [] );
+	useEffect( () => {
+		releasedClaimIdRef.current = null;
+	}, [ selectedEntryId ] );
 
 	useEffect( () => {
 		if ( ! persistActivityViewRef.current ) {
@@ -3219,6 +3500,14 @@ export function ActivityLogApp( { bootData } ) {
 	}, [ effectiveView, view, viewOptions ] );
 
 	useEffect( () => {
+		// A pinned terminal row stays selected even after it leaves the filtered feed.
+		if (
+			pinnedTerminalEntry?.id &&
+			pinnedTerminalEntry.id === selectedEntryId
+		) {
+			return;
+		}
+
 		if ( responseData.entries.length === 0 ) {
 			if ( requestActivityId && ! isLoading ) {
 				exitLinkedActivityMode();
@@ -3249,10 +3538,81 @@ export function ActivityLogApp( { bootData } ) {
 	}, [
 		exitLinkedActivityMode,
 		isLoading,
+		pinnedTerminalEntry,
 		requestActivityId,
 		responseData.entries,
 		selectedEntryId,
 	] );
+
+	useEffect( () => {
+		if (
+			pinnedTerminalEntry &&
+			pinnedTerminalEntry.id !== selectedEntryId
+		) {
+			setPinnedTerminalEntry( null );
+		}
+	}, [ pinnedTerminalEntry, selectedEntryId ] );
+
+	// Opportunistic refresh: when the reviewer returns to the tab/window, refetch
+	// the feed and (if a pending row is selected and they can approve) re-issue the
+	// claim so the TTL stays warm — and so a decided-elsewhere row is detected and
+	// pinned via applyClaimResponse. Event-driven only; there is no polling.
+	useEffect( () => {
+		if (
+			typeof window === 'undefined' ||
+			typeof document === 'undefined'
+		) {
+			return undefined;
+		}
+
+		let debounceTimer = null;
+
+		const handleFocusOrVisible = () => {
+			if ( document.visibilityState === 'hidden' ) {
+				return;
+			}
+
+			if ( debounceTimer ) {
+				return;
+			}
+
+			debounceTimer = setTimeout( () => {
+				debounceTimer = null;
+			}, FOCUS_REFRESH_DEBOUNCE_MS );
+
+			setReloadToken( ( value ) => value + 1 );
+
+			const selected = selectedEntryRef.current;
+
+			if (
+				selected?.id &&
+				selected.status === 'pending' &&
+				bootData?.canApproveStyleApplies &&
+				selected.id !== releasedClaimIdRef.current
+			) {
+				apiFetch( buildClaimRequest( bootData, selected.id ) )
+					.then( ( response ) =>
+						applyClaimResponse( selected.id, response )
+					)
+					.catch( () => {} );
+			}
+		};
+
+		window.addEventListener( 'focus', handleFocusOrVisible );
+		document.addEventListener( 'visibilitychange', handleFocusOrVisible );
+
+		return () => {
+			window.removeEventListener( 'focus', handleFocusOrVisible );
+			document.removeEventListener(
+				'visibilitychange',
+				handleFocusOrVisible
+			);
+
+			if ( debounceTimer ) {
+				clearTimeout( debounceTimer );
+			}
+		};
+	}, [ bootData, applyClaimResponse ] );
 
 	const summaryCards = getSummaryCards( responseData.summary );
 	const isViewModified = ! areActivityViewsEqual(
@@ -3507,6 +3867,9 @@ export function ActivityLogApp( { bootData } ) {
 							bootData={ bootData }
 							onDecided={ handleEntryDecided }
 							onFilterAction={ applySelectedRowFilter }
+							onClaimResolved={ applyClaimResponse }
+							onClaimReleased={ handleClaimReleased }
+							currentUserId={ bootData?.currentUserId }
 							isLocallyDecided={ locallyDecidedEntryIds.has(
 								selectedEntry?.id
 							) }

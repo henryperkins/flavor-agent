@@ -234,6 +234,7 @@ const BOOT_DATA = {
 	],
 	timeZone: 'UTC',
 	canApproveStyleApplies: true,
+	currentUserId: 7,
 };
 const ACTIVITY_LOG_CSS = fs.readFileSync(
 	path.join( __dirname, '../activity-log.css' ),
@@ -2459,6 +2460,505 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'pins the terminal entry so a decided row survives leaving the pending-only feed', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply'
+		);
+
+		const pending = createExternalApplyEntry();
+		const {
+			status: ignoredTerminalStatus,
+			statusLabel: ignoredTerminalStatusLabel,
+			...decided
+		} = {
+			...pending,
+			executionResult: 'rejected',
+			apply: { ...pending.apply, status: 'rejected', decidedBy: 7 },
+		};
+		void ignoredTerminalStatus;
+		void ignoredTerminalStatusLabel;
+
+		let feedLoads = 0;
+
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/decision' ) ) {
+				return Promise.resolve( { entry: decided } );
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				// Defensive: Task 9's auto-claim fires on mount once it lands.
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			feedLoads += 1;
+			// 1st feed load has the pending row; after the decision the pending-only
+			// feed no longer includes it.
+			return Promise.resolve(
+				buildResponse( feedLoads <= 1 ? [ pending ] : [] )
+			);
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.trim() === 'Reject' );
+
+		await act( async () => {
+			rejectButton.click();
+		} );
+		await flushEffects();
+
+		// The pinned terminal entry keeps the details panel populated even though the
+		// feed refetch returned zero entries. Scope to the details region: a
+		// "Rejected" summary card always renders, so asserting on the whole
+		// container would pass even when the selection (and panel) clears.
+		const detailsRegion = getContainer().querySelector(
+			'.flavor-agent-activity-log__details-region'
+		);
+		const story = getContainer().querySelector(
+			'.flavor-agent-activity-log__entry-story'
+		);
+
+		expect( getDefinitionValue( story, 'Current status' ) ).toBe(
+			'Rejected'
+		);
+		expect( detailsRegion?.textContent ).toMatch( /Rejected/i );
+	} );
+
+	test( 'a race-lost invalid_transition decision pins the terminal entry instead of a generic error', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply'
+		);
+
+		const pending = createExternalApplyEntry();
+		const {
+			status: ignoredRaceStatus,
+			statusLabel: ignoredRaceStatusLabel,
+			...terminal
+		} = {
+			...pending,
+			executionResult: 'rejected',
+			apply: { ...pending.apply, status: 'rejected', decidedBy: 9 },
+		};
+		void ignoredRaceStatus;
+		void ignoredRaceStatusLabel;
+		const raceError = Object.assign(
+			new Error(
+				'Flavor Agent external applies only transition out of the pending state once.'
+			),
+			{ code: 'flavor_agent_apply_invalid_transition' }
+		);
+		let feedLoads = 0;
+		let claimPosts = 0;
+
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/decision' ) ) {
+				return Promise.reject( raceError );
+			}
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'POST'
+			) {
+				claimPosts += 1;
+				// First POST is Task 9's mount auto-claim: the row is still
+				// pending, so the decision controls stay open. The second POST is
+				// the terminal fetch from the race-lost decision below.
+				return Promise.resolve(
+					claimPosts <= 1
+						? { claim: { userId: 7 }, entry: pending }
+						: { claim: null, entry: terminal }
+				);
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( { claim: null, entry: terminal } );
+			}
+			feedLoads += 1;
+			// The pending-only feed drops the row once it is decided, so the
+			// pinned terminal entry (set via onDecided) keeps "Rejected" visible.
+			return Promise.resolve(
+				buildResponse( feedLoads <= 1 ? [ pending ] : [] )
+			);
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.trim() === 'Reject' );
+
+		await act( async () => {
+			rejectButton.click();
+		} );
+		await flushEffects();
+
+		expect( getContainer().textContent ).not.toMatch(
+			/The decision could not be recorded/i
+		);
+		// A "Rejected" summary card always renders, so scope the pinned-terminal
+		// assertion to the details region (mirrors the sibling "pins the terminal
+		// entry" test) — otherwise this passes even when the panel never pins.
+		const detailsRegion = getContainer().querySelector(
+			'.flavor-agent-activity-log__details-region'
+		);
+		expect( detailsRegion?.textContent ).toMatch( /Rejected/i );
+	} );
+
+	test( 'a retryable 500 decision keeps the claim and shows the inline retry error', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply'
+		);
+
+		const pending = createExternalApplyEntry();
+		const retryError = Object.assign(
+			new Error( 'Flavor Agent could not update the activity entry.' ),
+			{
+				code: 'flavor_agent_activity_update_failed',
+				data: { status: 500 },
+			}
+		);
+		const releaseSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/decision' ) ) {
+				return Promise.reject( retryError );
+			}
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				releaseSpy();
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.trim() === 'Reject' );
+
+		await act( async () => {
+			rejectButton.click();
+		} );
+		await flushEffects();
+
+		expect( getContainer().textContent ).toMatch(
+			/could not update the activity entry/i
+		);
+		// Row stays mounted (no abandon) and the decision was submitted, so the claim
+		// is never released on a retryable failure.
+		expect( releaseSpy ).not.toHaveBeenCalled();
+	} );
+
+	const PENDING_DEEP_LINK =
+		'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply';
+
+	test( 'auto-claims on opening a pending decision and shows the "you’re reviewing" badge', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		const pending = createExternalApplyEntry();
+		// The server /claim response is an ActivityRepository::find()-shaped row: status
+		// lives ONLY at apply.status, with no top-level entry.status. createExternalApplyEntry
+		// models the *admin feed* row (which DOES carry a top-level status), so strip it
+		// here to exercise the real claim-response shape and catch any regression that
+		// reads entry.status instead of apply.status.
+		const claimEntry = { ...pending };
+		delete claimEntry.status;
+		delete claimEntry.statusLabel;
+		const claimSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'POST'
+			) {
+				claimSpy();
+				return Promise.resolve( {
+					claim: {
+						userId: 7,
+						claimedAt: '2026-06-25T00:00:00+00:00',
+					},
+					entry: claimEntry,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		// The row is auto-selected by the deep link → GovernanceEvidenceSection mounts → auto-claim.
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		expect( claimSpy ).toHaveBeenCalled();
+		expect( getContainer().textContent ).toMatch( /reviewing this/i );
+		// The find()-shaped claim entry has no top-level status; applyClaimResponse must
+		// read apply.status (still 'pending'), NOT entry.status — otherwise it pins the
+		// row as decided and hides the controls. The Reject control must still be present.
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.trim() === 'Reject' );
+		expect( rejectButton ).toBeTruthy();
+	} );
+
+	test( 'shows another reviewer’s claim as a passive note without disabling the buttons', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		const pending = createExternalApplyEntry( {
+			apply: {
+				...createExternalApplyEntry().apply,
+				claim: { userId: 5, claimedAt: '2026-06-25T00:00:00+00:00' },
+			},
+		} );
+
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( {
+					claim: { userId: 5 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		expect( getContainer().textContent ).toContain( 'User #5' );
+		// The Approve button remains enabled (claims never gate the decision).
+		const approveButton = [
+			...getContainer().querySelectorAll( 'button' ),
+		].find( ( button ) => /approve and apply/i.test( button.textContent ) );
+		expect( approveButton?.disabled ).toBeFalsy();
+	} );
+
+	test( 'releases the claim on abandon (unmount) and not after a decision submit', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		const pending = createExternalApplyEntry();
+		const releaseSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				releaseSpy();
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		// Unmount = abandon: the auto-claim effect cleanup releases because no decision
+		// was submitted. (getRoot().unmount runs the same cleanup as deselect/navigate.)
+		await act( async () => {
+			getRoot().unmount();
+		} );
+
+		expect( releaseSpy ).toHaveBeenCalled();
+	} );
+
+	test( 'releases an abandoned claim after the initial claim request settles late', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		const pending = createExternalApplyEntry();
+		const deferredClaim = createDeferred();
+		const releaseSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				releaseSpy();
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+
+			if ( request?.url?.includes( '/claim' ) ) {
+				return deferredClaim.promise;
+			}
+
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		await act( async () => {
+			getRoot().unmount();
+		} );
+
+		expect( releaseSpy ).not.toHaveBeenCalled();
+
+		await act( async () => {
+			deferredClaim.resolve( {
+				claim: { userId: 7 },
+				entry: pending,
+			} );
+			await deferredClaim.promise;
+		} );
+		await flushEffects();
+
+		expect( releaseSpy ).toHaveBeenCalled();
+	} );
+
+	test( 'a retryable failure then abandon releases the claim (not leaked to TTL)', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		const pending = createExternalApplyEntry();
+		const retryError = Object.assign(
+			new Error( 'Flavor Agent could not update the activity entry.' ),
+			{
+				code: 'flavor_agent_activity_update_failed',
+				data: { status: 500 },
+			}
+		);
+		const releaseSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/decision' ) ) {
+				return Promise.reject( retryError );
+			}
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				releaseSpy();
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const rejectButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.trim() === 'Reject' );
+
+		// Submit a decision that fails with a retryable 500 — the claim must survive...
+		await act( async () => {
+			rejectButton.click();
+		} );
+		await flushEffects();
+		expect( releaseSpy ).not.toHaveBeenCalled();
+
+		// ...then abandon the row. The decision never committed (claim still live), so the
+		// auto-claim cleanup MUST release it (decisionSubmittedRef stays false on a
+		// retryable failure). Without the fix the ref latched true and the claim leaked.
+		await act( async () => {
+			getRoot().unmount();
+		} );
+
+		expect( releaseSpy ).toHaveBeenCalled();
+	} );
+
+	test( 'renders the advisory claim badge in the feed keyed off the viewer (finding 1)', async () => {
+		// Self case so the test gates the call-site wiring: with currentUserId threaded
+		// into normalizeActivityDiscoveryBadges, the viewer's own claim reads
+		// "You're reviewing this"; without it, it would read "User #7 is reviewing".
+		const pending = createExternalApplyEntry( {
+			id: 'activity-pending',
+			suggestion: 'Pending governance row',
+			apply: {
+				...createExternalApplyEntry().apply,
+				claim: { userId: 7, claimedAt: '2026-06-25T00:00:00+00:00' },
+			},
+		} );
+
+		// mockImplementation (not renderApp([…])) so the auto-claim-on-select returns the
+		// claim shape rather than a feed object, leaving apply.claim intact.
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const badgeTexts = Array.from(
+			getContainer().querySelectorAll(
+				'.flavor-agent-activity-log__entry-badge'
+			)
+		).map( ( badge ) => badge.textContent );
+
+		expect(
+			badgeTexts.some( ( text ) => /reviewing this/i.test( text ) )
+		).toBe( true );
+	} );
+
+	test( 'renders a Release control for the claim holder and releases it on click (spec :90)', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		const pending = createExternalApplyEntry( {
+			apply: {
+				...createExternalApplyEntry().apply,
+				claim: { userId: 7, claimedAt: '2026-06-25T00:00:00+00:00' },
+			},
+		} );
+		const releaseSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				releaseSpy();
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+			if ( request?.url?.includes( '/claim' ) ) {
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+
+		const releaseButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) =>
+			/release review claim/i.test( button.textContent )
+		);
+		expect( releaseButton ).toBeTruthy();
+
+		await act( async () => {
+			releaseButton.click();
+		} );
+		await flushEffects();
+
+		expect( releaseSpy ).toHaveBeenCalled();
+	} );
+
 	test( 'renders governance evidence for pending, rejected, failed, and executed external applies', async () => {
 		window.history.replaceState(
 			null,
@@ -3439,12 +3939,15 @@ describe( 'ActivityLogApp', () => {
 		} );
 		await flushEffects();
 
-		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
-			'status=pending'
+		// The auto-selected first row is a pending external apply, so Task 9's
+		// mount auto-claim adds a POST /claim call; assert on the approvals feed
+		// request by URL rather than a positional mock.calls index.
+		const approvalsFeedCall = apiFetch.mock.calls.find(
+			( [ request ] ) =>
+				request?.url?.includes( 'status=pending' ) &&
+				request?.url?.includes( 'statusOperator=is' )
 		);
-		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
-			'statusOperator=is'
-		);
+		expect( approvalsFeedCall ).toBeDefined();
 	} );
 
 	test( 'hides decision actions when the user cannot approve style applies', async () => {
@@ -3469,5 +3972,108 @@ describe( 'ActivityLogApp', () => {
 			button.textContent.includes( 'Approve and apply' )
 		);
 		expect( approveButton ).toBeFalsy();
+	} );
+
+	test( 'a window focus refreshes the feed and re-claims the selected pending row', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-external-apply'
+		);
+
+		const pending = createExternalApplyEntry();
+		const claimSpy = jest.fn();
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'POST'
+			) {
+				claimSpy();
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		// Row auto-selected by the deep link; the leading-edge debounce fires the
+		// re-claim synchronously on the first focus event (no fake timers needed).
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+		claimSpy.mockClear();
+		const callsBefore = apiFetch.mock.calls.length;
+
+		await act( async () => {
+			window.dispatchEvent( new Event( 'focus' ) );
+		} );
+		await flushEffects();
+
+		expect( apiFetch.mock.calls.length ).toBeGreaterThan( callsBefore );
+		expect( claimSpy ).toHaveBeenCalled();
+	} );
+
+	test( 'an explicit release suppresses the focus re-claim for that row (fix 1)', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+
+		// The viewer (id 7) holds the claim, so the Release control renders and the
+		// mount auto-claim is a self-claim.
+		const pending = createExternalApplyEntry( {
+			apply: {
+				...createExternalApplyEntry().apply,
+				claim: { userId: 7, claimedAt: '2026-06-25T00:00:00+00:00' },
+			},
+		} );
+		let claimPosts = 0;
+
+		apiFetch.mockImplementation( ( request ) => {
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'POST'
+			) {
+				claimPosts += 1;
+				return Promise.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+			}
+			if (
+				request?.url?.includes( '/claim' ) &&
+				request?.method === 'DELETE'
+			) {
+				return Promise.resolve( { claim: null, entry: pending } );
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+
+		// Mount auto-claim fires exactly one POST /claim.
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+		expect( claimPosts ).toBe( 1 );
+
+		// Explicitly release the claim (DELETE /claim).
+		const releaseButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) =>
+			/release review claim/i.test( button.textContent )
+		);
+		expect( releaseButton ).toBeTruthy();
+
+		await act( async () => {
+			releaseButton.click();
+		} );
+		await flushEffects();
+
+		const postsAfterRelease = claimPosts;
+
+		// A focus event must NOT silently re-acquire the just-released claim, or the
+		// explicit Release would feel like a no-op. The reloadToken bump still fires;
+		// only the re-claim is suppressed for the released row until the selection
+		// changes.
+		await act( async () => {
+			window.dispatchEvent( new Event( 'focus' ) );
+		} );
+		await flushEffects();
+
+		expect( claimPosts ).toBe( postsAfterRelease );
 	} );
 } );

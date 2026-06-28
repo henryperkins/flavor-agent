@@ -1,4 +1,6 @@
 import {
+	buildClaimReleaseRequest,
+	buildClaimRequest,
 	buildDecisionRequest,
 	buildActivityPermalink,
 	clampActivityViewPage,
@@ -6,6 +8,7 @@ import {
 	areActivityViewsEqual,
 	buildActivityTargetLink,
 	formatActivityTimestamp,
+	formatApplyClaimNotice,
 	getActivityStatusLabel,
 	getExternalApplyDetails,
 	getGovernanceDetails,
@@ -20,6 +23,7 @@ import {
 	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
+	TERMINAL_DECISION_ERROR_CODES,
 } from '../activity-log-utils';
 
 function createEntry( overrides = {} ) {
@@ -2089,5 +2093,91 @@ describe( 'external apply helpers', () => {
 			proposedVisual: null,
 			afterVisual: null,
 		} );
+	} );
+} );
+
+describe( 'advisory apply claim helpers', () => {
+	const bootData = {
+		restUrl: 'https://example.test/wp-json/',
+		nonce: 'n0nce',
+	};
+
+	test( 'buildClaimRequest shapes a POST for apiFetch', () => {
+		expect( buildClaimRequest( bootData, 'act/1' ) ).toEqual( {
+			url: 'https://example.test/wp-json/flavor-agent/v1/activity/act%2F1/claim',
+			method: 'POST',
+			headers: { 'X-WP-Nonce': 'n0nce' },
+		} );
+	} );
+
+	test( 'buildClaimReleaseRequest shapes a DELETE for apiFetch', () => {
+		expect( buildClaimReleaseRequest( bootData, 'act-2' ) ).toEqual( {
+			url: 'https://example.test/wp-json/flavor-agent/v1/activity/act-2/claim',
+			method: 'DELETE',
+			headers: { 'X-WP-Nonce': 'n0nce' },
+		} );
+	} );
+
+	test( 'formatApplyClaimNotice returns self copy when the claim is the viewer’s', () => {
+		const notice = formatApplyClaimNotice(
+			{ userId: 7, claimedAt: '2026-06-25T00:00:00+00:00' },
+			'7'
+		);
+		expect( notice.isSelf ).toBe( true );
+		expect( notice.text ).toMatch( /reviewing/i );
+	} );
+
+	test( 'formatApplyClaimNotice labels another reviewer with User #id', () => {
+		const notice = formatApplyClaimNotice(
+			{ userId: 5, claimedAt: '2026-06-25T00:00:00+00:00' },
+			7,
+			new Date( '2026-06-25T00:03:00+00:00' )
+		);
+		expect( notice.isSelf ).toBe( false );
+		expect( notice.text ).toContain( 'User #5' );
+	} );
+
+	test( 'formatApplyClaimNotice returns null for an absent or invalid claim', () => {
+		expect( formatApplyClaimNotice( null, 7 ) ).toBeNull();
+		expect( formatApplyClaimNotice( { userId: 0 }, 7 ) ).toBeNull();
+	} );
+
+	test( 'TERMINAL_DECISION_ERROR_CODES are exactly the three terminal codes', () => {
+		expect( TERMINAL_DECISION_ERROR_CODES ).toEqual( [
+			'flavor_agent_apply_invalid_transition',
+			'flavor_agent_apply_not_pending',
+			'flavor_agent_apply_expired',
+		] );
+	} );
+
+	test( 'normalizeActivityDiscoveryBadges adds a claim badge for a row reviewed by another user', () => {
+		const badges = normalizeActivityDiscoveryBadges(
+			{
+				apply: {
+					status: 'pending',
+					claim: {
+						userId: 5,
+						claimedAt: '2026-06-25T00:00:00+00:00',
+					},
+				},
+			},
+			7
+		);
+		const claimBadge = badges.find(
+			( badge ) => badge.id === 'apply-claim'
+		);
+		expect( claimBadge ).toBeTruthy();
+		expect( claimBadge.label ).toContain( 'User #5' );
+		expect( claimBadge.tone ).toBe( 'warning' );
+	} );
+
+	test( 'normalizeActivityDiscoveryBadges omits the claim badge when there is no claim', () => {
+		const badges = normalizeActivityDiscoveryBadges(
+			{ apply: { status: 'pending' } },
+			7
+		);
+		expect(
+			badges.find( ( badge ) => badge.id === 'apply-claim' )
+		).toBeUndefined();
 	} );
 } );

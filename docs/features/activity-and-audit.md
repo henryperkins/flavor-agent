@@ -43,6 +43,7 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Let admins inspect style-governance rows through a first rich visual diff layer with lifecycle-honest proposed/applied/undone/blocked states, swatches or chips where the stored payload supports them, and raw state snapshots as fallback evidence
 - Let admins move from a selected row to the honest target, a focused `Settings > AI Activity` permalink, or closely related feed pivots without inventing a second admin route contract
 - Let admins approve or reject pending external Global Styles / Style Book applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
+- Show advisory "being reviewed by X" claims on pending approvals so concurrent admins can coordinate, without the claim ever gating a decision; if another admin decides a row first, it resolves to its terminal approved/rejected state rather than surfacing a generic error
 - Let admins discover Ring III governed-change attestations for eligible external style applies, including a site-run verification summary plus public envelope and subject-state links without making attestation a general AI-governance claim
 - Surface passive feed badges for pending approval, AI request-log availability, and attestation evidence before a row is opened
 - Let global admin activity reads request and render a bounded, sanitized governance learning report with outcome rates and aggregate groups by surface, operation type, validation reason, ranking signal, guideline version, and provider/model.
@@ -66,7 +67,7 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 | Global Styles undo helpers | `getGlobalStylesActivityUndoState()` and `undoGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validate and restore the current Global Styles entity |
 | Admin page registration | `ActivityPage` in `inc/Admin/ActivityPage.php` | Registers `Settings > AI Activity` and localizes admin approval/audit/attestation-discovery boot data |
 | Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, linked-row banner, selected-row action strip, passive discovery badges, bounded learning-report aggregates, external-apply decision controls, attestation affordances, and custom detail sections |
-| REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()`; `AttestationController` | Serve activity query, persistence, undo-status updates, admin approval/rejection decisions, and public attestation verification reads |
+| REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()`, `handle_activity_decision()`, `handle_activity_claim()`, `handle_activity_claim_release()`; `AttestationController` | Serve activity query, persistence, undo-status updates, admin approval/rejection decisions, advisory review-claim coordination, and public attestation verification reads |
 | Permissions | `FlavorAgent\Activity\Permissions` | Applies contextual capability rules for scoped and global activity access |
 | Learning report | `FlavorAgent\Activity\GovernanceLearningReport` | Builds the optional bounded `learningReport` payload rendered for global admin activity reads |
 
@@ -76,6 +77,8 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 - REST: `POST /flavor-agent/v1/activity`
 - REST: `POST /flavor-agent/v1/activity/{id}/undo`
 - REST: `POST /flavor-agent/v1/activity/{id}/decision`
+- REST: `POST /flavor-agent/v1/activity/{id}/claim`
+- REST: `DELETE /flavor-agent/v1/activity/{id}/claim`
 - REST: `GET /flavor-agent/v1/attestations/{id}`
 - REST: `GET /flavor-agent/v1/attestations/{id}/verification`
 - REST: `GET /flavor-agent/v1/attestations/{id}/subject-state`

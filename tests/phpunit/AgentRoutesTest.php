@@ -26,6 +26,7 @@ final class AgentRoutesTest extends TestCase {
 		$this->assertSame(
 			[
 				'/flavor-agent/v1/activity',
+				'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/claim',
 				'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/decision',
 				'/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/undo',
 				'/flavor-agent/v1/sync-patterns',
@@ -37,6 +38,7 @@ final class AgentRoutesTest extends TestCase {
 		$this->assertRouteMethods( '/flavor-agent/v1/activity', [ 'GET', 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/undo', [ 'POST' ] );
 		$this->assertRouteMethods( '/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/decision', [ 'POST' ] );
+		$this->assertRouteMethods( '/flavor-agent/v1/activity/(?P<id>[A-Za-z0-9._:-]+)/claim', [ 'POST', 'DELETE' ] );
 	}
 
 	public function test_recommendation_routes_are_not_registered_as_active_rest_routes(): void {
@@ -355,5 +357,30 @@ final class AgentRoutesTest extends TestCase {
 				]
 			)
 		);
+	}
+
+	public function test_claim_route_404s_on_missing_row_for_capable_user(): void {
+		WordPressTestState::$capabilities['manage_options']     = true;
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/activity/missing/claim' );
+		$request->set_param( 'id', 'missing' );
+
+		$response = Agent_Controller::handle_activity_claim( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'flavor_agent_activity_not_found', $response->get_error_code() );
+	}
+
+	public function test_claim_route_is_forbidden_without_manage_options(): void {
+		WordPressTestState::$capabilities['manage_options'] = false;
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/activity/x/claim' );
+		$request->set_param( 'id', 'x' );
+
+		$response = Agent_Controller::handle_activity_claim( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'flavor_agent_activity_forbidden', $response->get_error_code() );
 	}
 }

@@ -32,6 +32,7 @@ External agents can request style applies through `flavor-agent/request-style-ap
 - Expiry: default 24 h (`flavor_agent_external_apply_pending_ttl` filter), enforced lazily on reads and swept by the existing `flavor_agent_prune_activity` cron. A per-user pending cap (default 10, `flavor_agent_external_apply_pending_cap` filter) bounds queue abuse.
 - Pending, rejected, expired, and approval-failed rows use `undo.status: not_applicable`, keep `before`/`after` empty, never participate in ordered undo, and never block undo of older executed rows. Executed rows with `undo.status: failed` keep the existing blocking semantics because the mutation may still be live.
 - Operator guidance: an open Site Editor session editing Global Styles will make approvals fail closed (the live entity no longer matches the request-time baseline) — re-request the apply after the editing session saves. The Site Editor also does not live-refresh when an external apply lands; the new row appears on the next activity hydration.
+- Advisory review claims (`POST`/`DELETE /flavor-agent/v1/activity/{id}/claim`) are an advisory overlay on the `pending` state, never a transition input: they surface "being reviewed by X" coordination but do not gate a decision. The only transition guard remains the write-boundary `pending` check, and a claim is cleared on the committed transition.
 
 ## Undo States
 

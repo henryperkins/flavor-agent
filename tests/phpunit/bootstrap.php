@@ -1134,6 +1134,10 @@ namespace {
 		define('ARRAY_A', 'ARRAY_A');
 	}
 
+	if (! defined('MINUTE_IN_SECONDS')) {
+		define('MINUTE_IN_SECONDS', 60);
+	}
+
 	if (! class_exists('wpdb')) {
 		class wpdb
 		{

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Activity;
 
+use FlavorAgent\Apply\ApplyClaim;
 use FlavorAgent\Attestation\Repository as AttestationRepository;
 
 final class Repository {
@@ -516,6 +517,48 @@ final class Repository {
 	}
 
 	/**
+	 * Attach the advisory review claim to each pending external-apply row.
+	 * Transient-only, single bounded pass; pending external applies are few.
+	 *
+	 * @param array<int, array<string, mixed>> $entries
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function enrich_admin_entries_with_apply_claims( array $entries ): array {
+		$now = time();
+
+		return array_map(
+			static function ( $entry ) use ( $now ) {
+				if ( ! is_array( $entry ) ) {
+					return $entry;
+				}
+
+				$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : null;
+
+				if ( null === $apply || 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+					return $entry;
+				}
+
+				// Pure-read overdue guard (NO db write): an apply past its expiresAt is
+				// effectively expired and materializes to 'expired' on the next
+				// claim/decision action (or the daily prune sweep). Don't advertise a
+				// possibly-stale review claim on it. This deliberately does NOT call
+				// maybe_expire_pending_apply — the admin feed is a read projection and
+				// must not persist transitions; expiry stays an action-path concern.
+				$expires_at = strtotime( (string) ( $apply['expiresAt'] ?? '' ) );
+
+				if ( false !== $expires_at && $expires_at <= $now ) {
+					return $entry;
+				}
+
+				$entry['apply']['claim'] = ApplyClaim::get( (string) ( $entry['id'] ?? '' ) );
+
+				return $entry;
+			},
+			$entries
+		);
+	}
+
+	/**
 	 * @param array<string, mixed> $filters
 	 * @return int
 	 */
@@ -934,6 +977,12 @@ final class Repository {
 		}
 
 		self::invalidate_pending_external_apply_notification_snapshot_cache();
+
+		// Committed out of pending: drop any advisory review claim so the decided
+		// row never shows a stale "being reviewed" badge. Reached only on the
+		// committed-success path — non-committing 404/409/500 returns above never
+		// arrive here, so a lost-race transition leaves the claim intact.
+		ApplyClaim::clear( $activity_id );
 
 		$stored = self::find( $activity_id );
 
