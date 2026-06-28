@@ -140,6 +140,36 @@ final class AbilitySchemaContractTest extends TestCase {
 	}
 
 	/**
+	 * The template-part external-apply input schema is sourced from its own
+	 * builder (`template_part_apply_input_schema`), not `external_apply_input_schema`,
+	 * so it is guarded explicitly. Its output schema keys on `$ability_id` in the
+	 * shared `external_apply_output_schema` match and is covered here too.
+	 */
+	public function test_request_template_part_apply_schemas_use_only_draft04_keywords(): void {
+		$violations = [];
+
+		$this->collect_unknown_keywords(
+			Registration::template_part_apply_input_schema( 'flavor-agent/request-template-part-apply' ),
+			false,
+			'flavor-agent/request-template-part-apply.input_schema',
+			$violations
+		);
+		$this->collect_unknown_keywords(
+			Registration::external_apply_output_schema( 'flavor-agent/request-template-part-apply' ),
+			false,
+			'flavor-agent/request-template-part-apply.output_schema',
+			$violations
+		);
+
+		$this->assertSame(
+			[],
+			$violations,
+			"The request-template-part-apply schemas must only use JSON Schema draft-04 keywords. Offending\n"
+				. "keyword positions:\n  " . implode( "\n  ", $violations )
+		);
+	}
+
+	/**
 	 * Recursively walk a schema, recording keyword positions outside the
 	 * draft-04 vocabulary. Mirrors how ajv descends a schema: keys directly
 	 * under properties/patternProperties/definitions are property names (not

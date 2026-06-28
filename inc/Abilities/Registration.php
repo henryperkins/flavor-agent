@@ -20,6 +20,7 @@ use FlavorAgent\AI\Abilities\RecommendTemplatePartAbility;
 use FlavorAgent\AI\Abilities\GetActivityAbility;
 use FlavorAgent\AI\Abilities\ListActivityAbility;
 use FlavorAgent\AI\Abilities\RequestStyleApplyAbility;
+use FlavorAgent\AI\Abilities\RequestTemplatePartApplyAbility;
 use FlavorAgent\AI\Abilities\UndoActivityAbility;
 use FlavorAgent\Context\BlockOperationValidator;
 
@@ -189,22 +190,27 @@ final class Registration {
 	 */
 	public static function external_apply_ability_classes(): array {
 		return [
-			'flavor-agent/request-style-apply' => [
+			'flavor-agent/request-style-apply'         => [
 				'label'         => __( 'Request a governed style apply', 'flavor-agent' ),
 				'description'   => __( 'Queue a reviewed Global Styles or Style Book apply from a recommend-style result. Validates operations and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved.', 'flavor-agent' ),
 				'ability_class' => RequestStyleApplyAbility::class,
 			],
-			'flavor-agent/get-activity'        => [
+			'flavor-agent/request-template-part-apply' => [
+				'label'         => __( 'Request a governed template-part apply', 'flavor-agent' ),
+				'description'   => __( 'Queue a reviewed template-part structural apply from a recommend-template-part result. Validates the proposed operations and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved.', 'flavor-agent' ),
+				'ability_class' => RequestTemplatePartApplyAbility::class,
+			],
+			'flavor-agent/get-activity'                => [
 				'label'         => __( 'Get one AI activity entry', 'flavor-agent' ),
 				'description'   => __( 'Return a single Flavor Agent activity entry by id, including external-apply lifecycle status, decision provenance, and undo state. The polling read for agents awaiting an approval decision.', 'flavor-agent' ),
 				'ability_class' => GetActivityAbility::class,
 			],
-			'flavor-agent/list-activity'       => [
+			'flavor-agent/list-activity'               => [
 				'label'         => __( 'List scoped AI activity', 'flavor-agent' ),
 				'description'   => __( 'Return Flavor Agent activity entries for one scope key with optional surface and status filters. Admin-global reads stay on the REST activity route.', 'flavor-agent' ),
 				'ability_class' => ListActivityAbility::class,
 			],
-			'flavor-agent/undo-activity'       => [
+			'flavor-agent/undo-activity'               => [
 				'label'         => __( 'Undo an applied AI activity entry', 'flavor-agent' ),
 				'description'   => __( 'Server-side undo of an executed Global Styles or Style Book activity row: enforces ordered undo, verifies the recorded after-state still matches the live entity, restores the before snapshot, and persists the one-way undone/failed transition.', 'flavor-agent' ),
 				'ability_class' => UndoActivityAbility::class,
@@ -235,7 +241,8 @@ final class Registration {
 	 */
 	public static function external_apply_meta( string $ability_id ): array {
 		$annotations = match ( $ability_id ) {
-			'flavor-agent/request-style-apply' => [
+			'flavor-agent/request-style-apply',
+			'flavor-agent/request-template-part-apply' => [
 				'destructive' => false,
 				'idempotent'  => false,
 			],
@@ -380,11 +387,109 @@ final class Registration {
 	}
 
 	/**
+	 * Schema fragment for one proposed template-part structural operation.
+	 *
+	 * Mirrors the recommend-template-part output operation shape so the strict
+	 * abilities-bridge ajv-draft-04 validator accepts the same payload the
+	 * editor sends back unchanged. `type` and `placement` are bounded enums;
+	 * `expectedTarget` is an open object (the server attaches the live block
+	 * fingerprint), and extra keys are permitted by draft-04 default.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function structural_operation_schema(): array {
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'type'              => [
+					'type' => 'string',
+					'enum' => [ 'insert_pattern', 'replace_block_with_pattern', 'remove_block' ],
+				],
+				'patternName'       => [ 'type' => 'string' ],
+				'placement'         => [
+					'type' => 'string',
+					'enum' => [ 'start', 'end', 'before_block_path', 'after_block_path' ],
+				],
+				'targetPath'        => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'integer' ],
+				],
+				'expectedBlockName' => [ 'type' => [ 'string', 'null' ] ],
+				'expectedTarget'    => self::open_object_schema(),
+			],
+		];
+	}
+
+	/**
+	 * Input schema for the template-part external-apply ability.
+	 *
+	 * Sourced from a dedicated builder (the ability class calls this directly)
+	 * rather than the shared external_apply_input_schema match. Mirrors the
+	 * permissive request-style-apply envelope: open-object sub-schemas plus
+	 * optional prompt/suggestion/requestReference fields, so the strict
+	 * abilities-bridge ajv-draft-04 validator accepts the editor's payload.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function template_part_apply_input_schema( string $ability_id ): array {
+		return match ( $ability_id ) {
+			'flavor-agent/request-template-part-apply' => [
+				'type'       => 'object',
+				'properties' => [
+					'scope'               => self::open_object_schema(
+						[
+							'surface'        => [ 'type' => 'string' ],
+							'templatePartId' => [ 'type' => 'string' ],
+							'slug'           => [ 'type' => 'string' ],
+							'area'           => [ 'type' => 'string' ],
+						],
+						'Template-part scope: the same scope shape sent to recommend-template-part.'
+					),
+					'prompt'              => [
+						'type'        => 'string',
+						'description' => 'The prompt sent to recommend-template-part, byte-identical, so the resolved signature recomputes.',
+					],
+					'visiblePatternNames' => [
+						'type'  => 'array',
+						'items' => [ 'type' => 'string' ],
+					],
+					'operations'          => [
+						'type'  => 'array',
+						'items' => self::structural_operation_schema(),
+					],
+					'signatures'          => [
+						'type'       => 'object',
+						'properties' => [
+							'resolvedContextSignature' => [ 'type' => 'string' ],
+							'reviewContextSignature'   => [ 'type' => 'string' ],
+						],
+						'required'   => [ 'resolvedContextSignature', 'reviewContextSignature' ],
+					],
+					'suggestion'          => self::open_object_schema(
+						[
+							'label'       => [ 'type' => 'string' ],
+							'description' => [ 'type' => 'string' ],
+						],
+						'Human-readable label shown to the approver.'
+					),
+					'requestReference'    => [
+						'type'        => 'string',
+						'description' => 'Optional opaque agent-side reference echoed back on reads.',
+					],
+				],
+				'required'   => [ 'scope', 'operations', 'signatures' ],
+			],
+			default => self::open_object_schema(),
+		};
+	}
+
+	/**
 	 * @return array<string, mixed>
 	 */
 	public static function external_apply_output_schema( string $ability_id ): array {
 		return match ( $ability_id ) {
-			'flavor-agent/request-style-apply' => [
+			'flavor-agent/request-style-apply',
+			'flavor-agent/request-template-part-apply' => [
 				'type'       => 'object',
 				'properties' => [
 					'activityId'       => [ 'type' => 'string' ],

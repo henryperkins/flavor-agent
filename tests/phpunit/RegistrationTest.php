@@ -579,6 +579,7 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/preview-recommend-template',
 			'flavor-agent/preview-recommend-template-part',
 			'flavor-agent/request-style-apply',
+			'flavor-agent/request-template-part-apply',
 			'flavor-agent/get-activity',
 			'flavor-agent/list-activity',
 			'flavor-agent/undo-activity',
@@ -607,6 +608,7 @@ final class RegistrationTest extends TestCase {
 
 		foreach ( [
 			'flavor-agent/request-style-apply',
+			'flavor-agent/request-template-part-apply',
 			'flavor-agent/get-activity',
 			'flavor-agent/list-activity',
 			'flavor-agent/undo-activity',
@@ -632,21 +634,25 @@ final class RegistrationTest extends TestCase {
 
 	public function test_external_apply_abilities_are_never_mcp_public_and_declare_expected_annotations(): void {
 		$expectations = [
-			'flavor-agent/request-style-apply' => [
+			'flavor-agent/request-style-apply'         => [
 				'destructive' => false,
 				'idempotent'  => false,
 			],
-			'flavor-agent/get-activity'        => [
+			'flavor-agent/request-template-part-apply' => [
+				'destructive' => false,
+				'idempotent'  => false,
+			],
+			'flavor-agent/get-activity'                => [
 				'readonly'    => true,
 				'destructive' => false,
 				'idempotent'  => true,
 			],
-			'flavor-agent/list-activity'       => [
+			'flavor-agent/list-activity'               => [
 				'readonly'    => true,
 				'destructive' => false,
 				'idempotent'  => true,
 			],
-			'flavor-agent/undo-activity'       => [
+			'flavor-agent/undo-activity'               => [
 				'destructive' => true,
 				'idempotent'  => false,
 			],
