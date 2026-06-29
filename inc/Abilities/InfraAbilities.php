@@ -146,6 +146,8 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-style', 'edit_theme_options', $chat_configured );
 		$external_applies_available = FeatureBootstrap::recommendation_feature_enabled();
 		self::maybe_add_ability( $abilities, 'flavor-agent/request-style-apply', 'edit_theme_options', $external_applies_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/request-template-apply', 'edit_theme_options', $external_applies_available );
+		self::maybe_add_ability( $abilities, 'flavor-agent/request-template-part-apply', 'edit_theme_options', $external_applies_available );
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-activity', 'edit_posts', $external_applies_available );
 		self::maybe_add_ability( $abilities, 'flavor-agent/list-activity', 'edit_posts', $external_applies_available );
 		self::maybe_add_ability( $abilities, 'flavor-agent/undo-activity', 'edit_theme_options', $external_applies_available );

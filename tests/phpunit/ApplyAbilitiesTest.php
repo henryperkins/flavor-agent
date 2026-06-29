@@ -762,6 +762,19 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertTrue( $ability->permission_callback( [] ) );
 	}
 
+	public function test_request_template_apply_ability_requires_edit_theme_options(): void {
+		$ability = new \FlavorAgent\AI\Abilities\RequestTemplateApplyAbility(
+			\FlavorAgent\AI\Abilities\RequestTemplateApplyAbility::ABILITY_NAME,
+			[]
+		);
+
+		WordPressTestState::$capabilities = [ 'edit_posts' => true ];
+		$this->assertFalse( $ability->permission_callback( [] ) );
+
+		WordPressTestState::$capabilities = [ 'edit_theme_options' => true ];
+		$this->assertTrue( $ability->permission_callback( [] ) );
+	}
+
 	public function test_undo_activity_ability_enforces_the_row_capability_contextually(): void {
 		$row     = $this->create_executed_style_row();
 		$ability = new \FlavorAgent\AI\Abilities\UndoActivityAbility(

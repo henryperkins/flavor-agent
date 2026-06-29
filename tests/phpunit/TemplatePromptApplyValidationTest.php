@@ -20,10 +20,17 @@ final class TemplatePromptApplyValidationTest extends TestCase {
 		return [
 			'templateType'             => 'home',
 			'patterns'                 => [
-				[ 'name' => 'twentytwentyfive/hero', 'title' => 'Hero' ],
+				[
+					'name'  => 'twentytwentyfive/hero',
+					'title' => 'Hero',
+				],
 			],
 			'topLevelBlockTree'        => [
-				[ 'path' => [ 0 ], 'blockName' => 'core/group', 'innerBlocks' => [] ],
+				[
+					'path'        => [ 0 ],
+					'blockName'   => 'core/group',
+					'innerBlocks' => [],
+				],
 			],
 			'topLevelInsertionAnchors' => [
 				'start' => [ 'placement' => 'start' ],
@@ -35,7 +42,11 @@ final class TemplatePromptApplyValidationTest extends TestCase {
 	public function test_valid_start_insert_pattern_passes_with_no_expected_target(): void {
 		$result = TemplatePrompt::validate_operations_for_apply(
 			[
-				[ 'type' => 'insert_pattern', 'patternName' => 'twentytwentyfive/hero', 'placement' => 'start' ],
+				[
+					'type'        => 'insert_pattern',
+					'patternName' => 'twentytwentyfive/hero',
+					'placement'   => 'start',
+				],
 			],
 			$this->context()
 		);
@@ -49,7 +60,11 @@ final class TemplatePromptApplyValidationTest extends TestCase {
 	public function test_unknown_pattern_is_rejected_with_a_reason(): void {
 		$result = TemplatePrompt::validate_operations_for_apply(
 			[
-				[ 'type' => 'insert_pattern', 'patternName' => 'nope/missing', 'placement' => 'start' ],
+				[
+					'type'        => 'insert_pattern',
+					'patternName' => 'nope/missing',
+					'placement'   => 'start',
+				],
 			],
 			$this->context()
 		);

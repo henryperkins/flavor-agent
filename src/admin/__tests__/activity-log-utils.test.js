@@ -1252,6 +1252,51 @@ describe( 'external apply helpers', () => {
 		} );
 	}
 
+	function createTemplateApplyEntry( overrides = {} ) {
+		return createEntry( {
+			id: 'activity-template-apply',
+			type: 'apply_template_suggestion',
+			surface: 'template',
+			status: 'pending',
+			suggestion: 'External: insert the hero pattern',
+			target: {
+				templateRef: 'twentytwentyfive//home',
+				templateType: 'home',
+				slug: 'home',
+				title: 'Home',
+			},
+			document: {
+				scopeKey: 'wp_template:twentytwentyfive//home',
+				postType: 'wp_template',
+				entityId: 'twentytwentyfive//home',
+			},
+			undo: {
+				status: 'not_applicable',
+				canUndo: false,
+			},
+			apply: {
+				status: 'pending',
+				requestedBy: 7,
+				requestedAt: '2026-06-10T01:00:00+00:00',
+				expiresAt: '2026-06-11T01:00:00+00:00',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'twentytwentyfive/hero',
+						placement: 'start',
+					},
+				],
+				signatures: {
+					resolvedContextSignature: 'r'.repeat( 64 ),
+					reviewContextSignature: 'v'.repeat( 64 ),
+					baselineContentHash: 'b'.repeat( 64 ),
+				},
+				requestReference: 'agent-req-t-1',
+			},
+			...overrides,
+		} );
+	}
+
 	test( 'isPendingExternalApply requires pending status and an apply payload', () => {
 		expect(
 			isPendingExternalApply( {
@@ -1541,6 +1586,22 @@ describe( 'external apply helpers', () => {
 	} );
 
 	test( 'getGovernanceDetails provides surface-aware approval copy', () => {
+		const template = getGovernanceDetails(
+			createTemplateApplyEntry( { status: 'pending' } )
+		);
+		expect( template.approvalCopy.reviewIntro ).toContain(
+			'template apply'
+		);
+		expect( template.approvalCopy.retained ).toContain(
+			'template apply row'
+		);
+		expect( template.approvalCopy.decision ).toContain(
+			'structural change'
+		);
+		expect( template.approvalCopy.reviewIntro ).not.toContain(
+			'style apply'
+		);
+
 		const templatePart = getGovernanceDetails(
 			createTemplatePartApplyEntry( { status: 'pending' } )
 		);
@@ -1563,6 +1624,52 @@ describe( 'external apply helpers', () => {
 		expect( style.approvalCopy.reviewIntro ).toContain( 'style apply' );
 		expect( style.approvalCopy.retained ).toContain( 'style apply row' );
 		expect( style.approvalCopy.decision ).toContain( 'style change' );
+	} );
+
+	test( 'getGovernanceDetails summarizes template structural operations and target', () => {
+		const details = getGovernanceDetails(
+			createTemplateApplyEntry( {
+				status: 'applied',
+				after: {
+					operations: [
+						{
+							type: 'insert_pattern',
+							patternName: 'twentytwentyfive/footer',
+							placement: 'after_block_path',
+							targetPath: [ 1 ],
+						},
+					],
+				},
+			} )
+		);
+
+		expect( details.targetLabel ).toBe( 'Template home' );
+		expect( details.proposedOperations ).toEqual( [
+			'Insert pattern · twentytwentyfive/hero · start',
+		] );
+		expect( details.executedOperations ).toEqual( [
+			'Insert pattern · twentytwentyfive/footer · after [1]',
+		] );
+		expect( details.hasBaselineHash ).toBe( true );
+		expect( details.diagnosticText ).toContain( 'baselineConfigHash:' );
+	} );
+
+	test( 'getGovernanceDetails labels a template by templateRef when the slug is empty', () => {
+		// The request handler stores slug via sanitize_key, which yields '' when
+		// an external agent omits scope.slug. The target label must then fall back
+		// to the always-present templateRef rather than rendering an empty value.
+		const details = getGovernanceDetails(
+			createTemplateApplyEntry( {
+				target: {
+					templateRef: 'twentytwentyfive//home',
+					templateType: 'home',
+					slug: '',
+					title: 'Home',
+				},
+			} )
+		);
+
+		expect( details.targetLabel ).toBe( 'Template twentytwentyfive//home' );
 	} );
 
 	test( 'getGovernanceDetails keeps style operations on style-shaped summaries', () => {

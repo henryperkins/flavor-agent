@@ -14,7 +14,7 @@
 - **v1 operation scope:** `insert_pattern` **only** (one insert per request). Reject `assign_template_part` / `replace_template_part` / `remove_block` / `replace_block_with_pattern` fail-closed at the handler, the executor, and the input-schema `type` enum.
 - **Placement enum (exact strings):** `start`, `end`, `before_block_path`, `after_block_path`. Anchored (`before_block_path`/`after_block_path`) ops carry `targetPath` + `expectedTarget`; `start`/`end` carry neither.
 - **Attestation stays frozen to `external-style-apply-v1`:** do **not** add `'template'` to the `in_array($surface,['global-styles','style-book'],true)` branches in `PendingApplyDecision::decide` or `ApplyAbilities::undo_activity`.
-- **Freshness is server-only:** Gate-1 forwards `templateRef`/`templateType`/`prompt` + conditional `visiblePatternNames` + conditional `designSemantics`; never `editorSlots`/`editorStructure`.
+- **Freshness replays the signed recommendation envelope:** Gate-1 forwards `templateRef`/`templateType`/`prompt` plus conditional `visiblePatternNames`, `designSemantics`, `editorSlots`, and `editorStructure` exactly when the caller supplied them.
 - **Persist against the freshly re-resolved entity** returned by the final concurrency gate (closes the same-content materialization race) — never the start-of-execute object.
 - **Materialize** a theme-file template into a `wp_template` post with the **`wp_theme` term only** (no `wp_template_part_area` term).
 - **Ability count 31 → 32.** `scripts/check-doc-freshness.sh` hard-codes the count and must bump in the same change or `npm run check:docs` fails.
@@ -926,9 +926,9 @@ Add the handler method after `request_template_part_apply()`:
 		}
 
 		// First freshness gate: recompute both signatures through the same
-		// signature-only path the editor uses. Forward only server-reproducible
-		// inputs; designSemantics + visiblePatternNames are agent-providable and
-		// forwarded conditionally; editorSlots/editorStructure are never forwarded.
+		// signature-only path the editor uses. Replay every optional field that
+		// can participate in the signed recommend-template envelope, but only when
+		// the caller actually supplied it so absent keys never shift signatures.
 		$probe_input = [
 			'templateRef'          => $template_ref,
 			'prompt'               => $prompt,
@@ -1666,7 +1666,7 @@ git commit -m "chore(template-apply): verification fixes"
 - `TemplateApplyExecutor` (execute/resolve_baseline/undo/persist, materialization, concurrency-gate-returns-fresh-entity) → Task 3. ✓
 - Apply-time validator → Task 1. ✓ Governed-write resolver → Task 2. ✓
 - Registry arm + generic decide/undo dispatch → Task 3 (arm) + Task 6 (lifecycle proof). ✓
-- Freshness gates: Gate-1 (designSemantics/visiblePatternNames forwarded, editor overlays omitted), Gate-2a capture, Gate-2b approval re-check (generic, unchanged), re-validation, concurrency gate → Tasks 3, 4. ✓
+- Freshness gates: Gate-1 (designSemantics/visiblePatternNames/editor overlays replayed only when supplied), Gate-2a capture, Gate-2b approval re-check (generic, unchanged), re-validation, concurrency gate → Tasks 3, 4. ✓
 - Attestation frozen → Task 3 (no attestation branch added) + Task 6 (guard test). ✓
 - Admin three-helper `template` branch → Task 7. ✓
 - Docs + freshness-guard count + count-bearing refs + work-queue move → Task 8. ✓

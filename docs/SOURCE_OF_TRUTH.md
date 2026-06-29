@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-06-24
+> Last updated: 2026-06-28
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.2+
 
@@ -14,7 +14,7 @@ Flavor Agent is a WordPress plugin that lets AI work on a live site without unch
 
 Applied AI changes are now tracked through the shared activity system and can be reversed from the UI when the live document still matches the recorded post-apply state. Activity persistence now uses server-backed storage, with editor-scoped hydration and `sessionStorage` retained only as a cache/fallback for the current editing surface.
 
-The activity system now also has a first dedicated wp-admin approval/audit/attestation-discovery page at `Settings > AI Activity`, built with WordPress-native `DataViews` plus custom detail sections rather than a plugin-only table shell. It is the human gate for pending external Global Styles / Style Book applies and the admin discovery point for public attestation artifacts after eligible applies are signed. The first selected-row action/discovery layer is now in place there too: focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges, and a first rich visual diff viewer for style-governance rows derived from stored snapshots and bounded style operations.
+The activity system now also has a first dedicated wp-admin approval/audit/attestation-discovery page at `Settings > AI Activity`, built with WordPress-native `DataViews` plus custom detail sections rather than a plugin-only table shell. It is the human gate for pending external Global Styles / Style Book, template, and template-part applies and the admin discovery point for public attestation artifacts after eligible applies are signed. The first selected-row action/discovery layer is now in place there too: focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges, and a first rich visual diff viewer for style-governance rows derived from stored snapshots and bounded style operations.
 
 When a recommendation surface is in scope but unavailable, the native UI now stays visible long enough to explain whether the missing dependency belongs in core `Settings > Connectors` or plugin-owned `Settings > Flavor Agent`, including the inserter-backed pattern surface.
 
@@ -31,7 +31,7 @@ Eight first-party recommendation surfaces exist today:
 
 The plugin also ships one first-party admin approval/audit/attestation-discovery surface at `Settings > AI Activity`.
 
-A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor. External agents get the same recommendation, validation, and freshness contracts as the first-party editor; they can also request review-gated style applies, read their attribution, and undo executed style rows through feature-gated abilities, but approval stays admin-only (the `activity/{id}/decision` route) and admin-global activity reads remain REST-only (see `docs/reference/governance-layer.md`).
+A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor. External agents get the same recommendation, validation, and freshness contracts as the first-party editor; they can also request review-gated style, template, and template-part applies, read their attribution, and undo executed style, template, and template-part rows through feature-gated abilities, but approval stays admin-only (the `activity/{id}/decision` route) and admin-global activity reads remain REST-only (see `docs/reference/governance-layer.md`).
 
 ## Repository Layout
 
@@ -46,7 +46,7 @@ flavor-agent/
     Attestation/            Ring III governed-change statements, signing, key registry, verifier, and storage
     Activity/               Server-backed activity persistence, permissions, serialization
     Admin/                  Settings page + AI Activity admin app registration
-    Apply/                  Governed external applies: server-side style and template-part apply/undo executors (executor registry) + admin approval decision service
+    Apply/                  Governed external applies: server-side style, template, and template-part apply/undo executors (executor registry) + admin approval decision service
    AzureOpenAI/            Legacy chat Responses facade for Connectors-owned text generation
    Embeddings/             Workers AI embedding client, embedding signatures, shared HTTP helpers, and Qdrant vector DB
     Cloudflare/             AI Search docs grounding, Workers AI, private pattern AI Search
@@ -118,6 +118,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 #### Template Recommendations
 
 - Site Editor template recommendations with review-before-apply, bounded template-part and pattern operations, advisory fallback, and refresh-safe activity/undo. Exact flow: [`features/template-recommendations.md`](features/template-recommendations.md). Operation vocabulary: [`reference/template-operations.md`](reference/template-operations.md).
+- Governed external template apply: external agents can request a review-gated page-level template structural apply (`request-template-apply`) that queues a drift-checked pending row, is approved in `Settings > AI Activity`, executes one bounded `insert_pattern` against one `wp_template` through the server-side executor registry, and is reversible via `undo-activity`. This is the third governed external-apply lane after style and template-part; it is **not attested** (Ring III attestation stays frozen to `external-style-apply-v1`).
 
 #### Template Part Recommendations
 
@@ -146,7 +147,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### Admin Activity Page
 
-- `Settings > AI Activity` is the first approval/audit/attestation-discovery surface for recent server-backed actions, scoped diagnostics, pending external style applies, public verify links for attested style applies, the first linked-row/selected-row action-discovery layer, and a first rich visual diff viewer for style-governance rows. It is documented in [`features/activity-and-audit.md`](features/activity-and-audit.md).
+- `Settings > AI Activity` is the first approval/audit/attestation-discovery surface for recent server-backed actions, scoped diagnostics, pending external style/template/template-part applies, public verify links for attested style applies, the first linked-row/selected-row action-discovery layer, and a first rich visual diff viewer for style-governance rows. It is documented in [`features/activity-and-audit.md`](features/activity-and-audit.md).
 
 #### Pattern Index Lifecycle
 
@@ -154,7 +155,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 
-The code defines 31 abilities with full JSON Schema input/output definitions: seven recommendation abilities, thirteen helper/read abilities, the docs-search ability, five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and five feature-gated external-apply abilities (`request-style-apply`, `request-template-part-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style or template-part apply, read activity, and undo executed style and template-part rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+The code defines 32 abilities with full JSON Schema input/output definitions: seven recommendation abilities, thirteen helper/read abilities, the docs-search ability, five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and six feature-gated external-apply abilities (`request-style-apply`, `request-template-apply`, `request-template-part-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style, template, or template-part apply, read activity, and undo executed style, template, and template-part rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 #### Developer Docs
 

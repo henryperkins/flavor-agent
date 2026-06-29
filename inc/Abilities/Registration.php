@@ -20,6 +20,7 @@ use FlavorAgent\AI\Abilities\RecommendTemplatePartAbility;
 use FlavorAgent\AI\Abilities\GetActivityAbility;
 use FlavorAgent\AI\Abilities\ListActivityAbility;
 use FlavorAgent\AI\Abilities\RequestStyleApplyAbility;
+use FlavorAgent\AI\Abilities\RequestTemplateApplyAbility;
 use FlavorAgent\AI\Abilities\RequestTemplatePartApplyAbility;
 use FlavorAgent\AI\Abilities\UndoActivityAbility;
 use FlavorAgent\Context\BlockOperationValidator;
@@ -37,7 +38,7 @@ final class Registration {
 			'flavor-agent',
 			[
 				'label'       => __( 'Flavor Agent', 'flavor-agent' ),
-				'description' => __( 'Governed AI abilities for WordPress: schema-bounded recommendations, read-only context and preview helpers, and review-gated external style applies with server-side attribution and drift-safe undo. AI proposes; WordPress approves.', 'flavor-agent' ),
+				'description' => __( 'Governed AI abilities for WordPress: schema-bounded recommendations, read-only context and preview helpers, and review-gated external applies with server-side attribution and drift-safe undo. AI proposes; WordPress approves.', 'flavor-agent' ),
 			]
 		);
 	}
@@ -200,6 +201,11 @@ final class Registration {
 				'description'   => __( 'Queue a reviewed template-part structural apply from a recommend-template-part result. Validates the proposed operations and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved.', 'flavor-agent' ),
 				'ability_class' => RequestTemplatePartApplyAbility::class,
 			],
+			'flavor-agent/request-template-apply'      => [
+				'label'         => __( 'Request a governed template apply', 'flavor-agent' ),
+				'description'   => __( 'Queue a reviewed page-level template structural apply from a recommend-template result. Validates the proposed operation and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved.', 'flavor-agent' ),
+				'ability_class' => RequestTemplateApplyAbility::class,
+			],
 			'flavor-agent/get-activity'                => [
 				'label'         => __( 'Get one AI activity entry', 'flavor-agent' ),
 				'description'   => __( 'Return a single Flavor Agent activity entry by id, including external-apply lifecycle status, decision provenance, and undo state. The polling read for agents awaiting an approval decision.', 'flavor-agent' ),
@@ -212,7 +218,7 @@ final class Registration {
 			],
 			'flavor-agent/undo-activity'               => [
 				'label'         => __( 'Undo an applied AI activity entry', 'flavor-agent' ),
-				'description'   => __( 'Server-side undo of an executed Global Styles, Style Book, or template-part activity row: enforces ordered undo, verifies the recorded after-state still matches the live entity, restores the before snapshot, and persists the one-way undone/failed transition.', 'flavor-agent' ),
+				'description'   => __( 'Server-side undo of an executed Global Styles, Style Book, template, or template-part activity row: enforces ordered undo, verifies the recorded after-state still matches the live entity, restores the before snapshot, and persists the one-way undone/failed transition.', 'flavor-agent' ),
 				'ability_class' => UndoActivityAbility::class,
 			],
 		];
@@ -242,7 +248,8 @@ final class Registration {
 	public static function external_apply_meta( string $ability_id ): array {
 		$annotations = match ( $ability_id ) {
 			'flavor-agent/request-style-apply',
-			'flavor-agent/request-template-part-apply' => [
+			'flavor-agent/request-template-part-apply',
+			'flavor-agent/request-template-apply' => [
 				'destructive' => false,
 				'idempotent'  => false,
 			],
@@ -421,6 +428,37 @@ final class Registration {
 	}
 
 	/**
+	 * Schema fragment for one proposed page-level template structural operation.
+	 *
+	 * v1 is insert_pattern only. This is intentionally separate from the
+	 * template-part structural schema so the type enum cannot accidentally admit
+	 * template-part-only remove/replace operations.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function template_structural_operation_schema(): array {
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'type'           => [
+					'type' => 'string',
+					'enum' => [ 'insert_pattern' ],
+				],
+				'patternName'    => [ 'type' => 'string' ],
+				'placement'      => [
+					'type' => 'string',
+					'enum' => [ 'start', 'end', 'before_block_path', 'after_block_path' ],
+				],
+				'targetPath'     => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'integer' ],
+				],
+				'expectedTarget' => self::open_object_schema(),
+			],
+		];
+	}
+
+	/**
 	 * Input schema for the template-part external-apply ability.
 	 *
 	 * Sourced from a dedicated builder (the ability class calls this directly)
@@ -484,12 +522,77 @@ final class Registration {
 	}
 
 	/**
+	 * Input schema for the template external-apply ability.
+	 *
+	 * Mirrors the permissive template-part request envelope, but restricts the
+	 * operation items to the page-level template v1 insert_pattern-only contract.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function template_apply_input_schema( string $ability_id ): array {
+		return match ( $ability_id ) {
+			'flavor-agent/request-template-apply' => [
+				'type'       => 'object',
+				'properties' => [
+					'scope'               => self::open_object_schema(
+						[
+							'surface'      => [ 'type' => 'string' ],
+							'templateRef'  => [ 'type' => 'string' ],
+							'templateType' => [ 'type' => 'string' ],
+							'slug'         => [ 'type' => 'string' ],
+							'title'        => [ 'type' => 'string' ],
+						],
+						'Template scope: the same scope shape sent to recommend-template.'
+					),
+					'prompt'              => [
+						'type'        => 'string',
+						'description' => 'The prompt sent to recommend-template, byte-identical, so the resolved signature recomputes.',
+					],
+					'visiblePatternNames' => [
+						'type'  => 'array',
+						'items' => [ 'type' => 'string' ],
+					],
+					'designSemantics'     => self::open_object_schema(),
+					'editorSlots'         => self::template_editor_slots_schema(),
+					'editorStructure'     => self::template_editor_structure_schema(),
+					'operations'          => [
+						'type'  => 'array',
+						'items' => self::template_structural_operation_schema(),
+					],
+					'signatures'          => [
+						'type'       => 'object',
+						'properties' => [
+							'resolvedContextSignature' => [ 'type' => 'string' ],
+							'reviewContextSignature'   => [ 'type' => 'string' ],
+						],
+						'required'   => [ 'resolvedContextSignature', 'reviewContextSignature' ],
+					],
+					'suggestion'          => self::open_object_schema(
+						[
+							'label'       => [ 'type' => 'string' ],
+							'description' => [ 'type' => 'string' ],
+						],
+						'Human-readable label shown to the approver.'
+					),
+					'requestReference'    => [
+						'type'        => 'string',
+						'description' => 'Optional opaque agent-side reference echoed back on reads.',
+					],
+				],
+				'required'   => [ 'scope', 'operations', 'signatures' ],
+			],
+			default => self::open_object_schema(),
+		};
+	}
+
+	/**
 	 * @return array<string, mixed>
 	 */
 	public static function external_apply_output_schema( string $ability_id ): array {
 		return match ( $ability_id ) {
 			'flavor-agent/request-style-apply',
-			'flavor-agent/request-template-part-apply' => [
+			'flavor-agent/request-template-part-apply',
+			'flavor-agent/request-template-apply' => [
 				'type'       => 'object',
 				'properties' => [
 					'activityId'       => [ 'type' => 'string' ],
@@ -1356,96 +1459,8 @@ final class Registration {
 						'items' => [ 'type' => 'string' ],
 					],
 					'designSemantics'      => self::open_object_schema(),
-					'editorSlots'          => self::open_object_schema(
-						[
-							'assignedParts' => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'slug' => [ 'type' => 'string' ],
-										'area' => [ 'type' => 'string' ],
-									]
-								),
-							],
-							'emptyAreas'    => [
-								'type'  => 'array',
-								'items' => [ 'type' => 'string' ],
-							],
-							'allowedAreas'  => [
-								'type'  => 'array',
-								'items' => [ 'type' => 'string' ],
-							],
-						]
-					),
-					'editorStructure'      => self::open_object_schema(
-						[
-							'blockTree'         => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'path'       => [
-											'type'  => 'array',
-											'items' => [ 'type' => 'integer' ],
-										],
-										'name'       => [ 'type' => 'string' ],
-										'label'      => [ 'type' => 'string' ],
-										'attributes' => [ 'type' => 'object' ],
-										'childCount' => [ 'type' => 'integer' ],
-									]
-								),
-							],
-							'topLevelBlockTree' => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'path'       => [
-											'type'  => 'array',
-											'items' => [ 'type' => 'integer' ],
-										],
-										'name'       => [ 'type' => 'string' ],
-										'label'      => [ 'type' => 'string' ],
-										'attributes' => [ 'type' => 'object' ],
-										'childCount' => [ 'type' => 'integer' ],
-									]
-								),
-							],
-							'allBlockPaths'     => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(
-									[
-										'path'       => [
-											'type'  => 'array',
-											'items' => [ 'type' => 'integer' ],
-										],
-										'name'       => [ 'type' => 'string' ],
-										'label'      => [ 'type' => 'string' ],
-										'attributes' => [ 'type' => 'object' ],
-										'childCount' => [ 'type' => 'integer' ],
-									]
-								),
-							],
-							'topLevelBlocks'    => [
-								'type'  => 'array',
-								'items' => [ 'type' => 'string' ],
-							],
-							'structureStats'    => self::open_object_schema(
-								[
-									'blockCount'         => [ 'type' => 'integer' ],
-									'maxDepth'           => [ 'type' => 'integer' ],
-									'topLevelBlockCount' => [ 'type' => 'integer' ],
-									'hasNavigation'      => [ 'type' => 'boolean' ],
-								]
-							),
-							'operationTargets'  => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(),
-							],
-							'insertionAnchors'  => [
-								'type'  => 'array',
-								'items' => self::open_object_schema(),
-							],
-						]
-					),
+					'editorSlots'          => self::template_editor_slots_schema(),
+					'editorStructure'      => self::template_editor_structure_schema(),
 					'document'             => $document,
 					'clientRequest'        => $client_request,
 					'resolveSignatureOnly' => [
@@ -1879,6 +1894,102 @@ final class Registration {
 						'hasLockedBlocks'  => [ 'type' => 'boolean' ],
 					]
 				),
+			]
+		);
+	}
+
+	private static function template_editor_slots_schema(): array {
+		return self::open_object_schema(
+			[
+				'assignedParts' => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'slug' => [ 'type' => 'string' ],
+							'area' => [ 'type' => 'string' ],
+						]
+					),
+				],
+				'emptyAreas'    => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'allowedAreas'  => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+			]
+		);
+	}
+
+	private static function template_editor_structure_schema(): array {
+		return self::open_object_schema(
+			[
+				'blockTree'         => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'path'       => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+							'name'       => [ 'type' => 'string' ],
+							'label'      => [ 'type' => 'string' ],
+							'attributes' => [ 'type' => 'object' ],
+							'childCount' => [ 'type' => 'integer' ],
+						]
+					),
+				],
+				'topLevelBlockTree' => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'path'       => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+							'name'       => [ 'type' => 'string' ],
+							'label'      => [ 'type' => 'string' ],
+							'attributes' => [ 'type' => 'object' ],
+							'childCount' => [ 'type' => 'integer' ],
+						]
+					),
+				],
+				'allBlockPaths'     => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(
+						[
+							'path'       => [
+								'type'  => 'array',
+								'items' => [ 'type' => 'integer' ],
+							],
+							'name'       => [ 'type' => 'string' ],
+							'label'      => [ 'type' => 'string' ],
+							'attributes' => [ 'type' => 'object' ],
+							'childCount' => [ 'type' => 'integer' ],
+						]
+					),
+				],
+				'topLevelBlocks'    => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'structureStats'    => self::open_object_schema(
+					[
+						'blockCount'         => [ 'type' => 'integer' ],
+						'maxDepth'           => [ 'type' => 'integer' ],
+						'topLevelBlockCount' => [ 'type' => 'integer' ],
+						'hasNavigation'      => [ 'type' => 'boolean' ],
+					]
+				),
+				'operationTargets'  => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(),
+				],
+				'insertionAnchors'  => [
+					'type'  => 'array',
+					'items' => self::open_object_schema(),
+				],
 			]
 		);
 	}

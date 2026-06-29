@@ -670,6 +670,8 @@ final class InfraAbilitiesTest extends TestCase {
 		$status = InfraAbilities::check_status( [] );
 
 		$this->assertContains( 'flavor-agent/request-style-apply', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/request-template-apply', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/request-template-part-apply', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/undo-activity', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/get-activity', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/list-activity', $status['availableAbilities'] );
