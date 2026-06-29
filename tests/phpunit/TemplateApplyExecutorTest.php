@@ -201,6 +201,45 @@ final class TemplateApplyExecutorTest extends TestCase {
 		self::assert_before( 'Outro', 'Second', (string) WordPressTestState::$posts[9102]->post_content, 'after insertion must precede the next sibling.' );
 	}
 
+	/**
+	 * v1 is single-insert_pattern: TemplatePrompt::validate_operations_for_apply
+	 * caps insert_pattern at one op per request (repeated_pattern_insert), and
+	 * execute() re-runs that validator against the live contract before any
+	 * mutation. So a second insert_pattern fails closed with zero writes. This
+	 * also pins the v1 boundary: apply_operations()'s multi-op
+	 * descending-pass machinery (effective_order_path/compare_paths) is structural
+	 * parity with the template-part lane and is unreachable here — a future change
+	 * that lifts the single-insert cap must land its own multi-op ordering tests.
+	 */
+	public function test_execute_rejects_a_second_insert_pattern_op_in_v1(): void {
+		$this->seed_template( $this->paragraph( 'First' ) . $this->paragraph( 'Second' ), 9110 );
+		$this->register_pattern( 'tt5/alpha', $this->paragraph( 'Alpha' ) );
+		$this->register_pattern( 'tt5/beta', $this->paragraph( 'Beta' ) );
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/alpha',
+						'placement'   => 'start',
+					],
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/beta',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_operations_invalid', $result->get_error_code() );
+		$this->assertContains( 'repeated_pattern_insert', $result->get_error_data()['validationReasons'] ?? [] );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
 	public function test_execute_inserts_pattern_at_end(): void {
 		$this->seed_template( $this->paragraph( 'Body' ), 9103 );
 		$this->register_pattern( 'tt5/footer', $this->paragraph( 'Footer' ) );
@@ -339,6 +378,65 @@ final class TemplateApplyExecutorTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( [], WordPressTestState::$inserted_posts, 'A same-content materialization must not insert a duplicate row.' );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( 9200, WordPressTestState::$updated_posts[0]['ID'] );
+		$this->assertStringContainsString( 'Hero', (string) WordPressTestState::$posts[9200]->post_content );
+	}
+
+	/**
+	 * Directly exercises persist()'s duplicate-row guard, which the race test
+	 * above does NOT reach: there the read-hook re-seeds wp_id>0 on execute()'s
+	 * first store read, so the concurrency gate already returns a wp_id>0 entity
+	 * and persist() takes the in-place wp_update_post branch before the slug__in
+	 * guard. Here the theme-file template resolves with wp_id=0 through BOTH
+	 * execute() reads (resolve + concurrency gate) — its id matches the ref — while
+	 * a concurrent actor has materialized a SEPARATE wp_template row for the same
+	 * slug+theme (a distinct id, wp_id>0) that only the persist() slug__in query
+	 * surfaces. The guard must update that row in place; deleting it would insert
+	 * a duplicate and fail the inserted_posts assertion.
+	 */
+	public function test_persist_duplicate_row_guard_updates_concurrent_materialization_in_place(): void {
+		$content = $this->paragraph( 'Body' );
+
+		WordPressTestState::$block_templates['wp_template'] = [
+			(object) [
+				'id'      => self::TEMPLATE_REF,
+				'wp_id'   => 0,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $content,
+			],
+			(object) [
+				'id'      => 'twentytwentyfive//home-concurrent',
+				'wp_id'   => 9200,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $content,
+			],
+		];
+		WordPressTestState::$posts[9200]                    = new \WP_Post(
+			[
+				'ID'           => 9200,
+				'post_type'    => 'wp_template',
+				'post_content' => $content,
+			]
+		);
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], WordPressTestState::$inserted_posts, 'The duplicate-row guard must update the concurrently materialized row, not insert a second wp_template.' );
 		$this->assertCount( 1, WordPressTestState::$updated_posts );
 		$this->assertSame( 9200, WordPressTestState::$updated_posts[0]['ID'] );
 		$this->assertStringContainsString( 'Hero', (string) WordPressTestState::$posts[9200]->post_content );
