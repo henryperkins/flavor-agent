@@ -8,15 +8,18 @@ use FlavorAgent\Activity\RecommendationOutcome;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Apply\ExternalApplyExecutorRegistry;
 use FlavorAgent\Apply\StyleApplyExecutor;
+use FlavorAgent\Apply\TemplateApplyExecutor;
 use FlavorAgent\Apply\TemplatePartApplyExecutor;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\StylePrompt;
+use FlavorAgent\LLM\TemplatePrompt;
 use FlavorAgent\LLM\TemplatePartPrompt;
 use FlavorAgent\Support\NormalizesInput;
 
 /**
  * Handlers for the external-apply abilities: request-style-apply,
- * get-activity, list-activity, undo-activity.
+ * request-template-part-apply, request-template-apply, get-activity,
+ * list-activity, undo-activity.
  */
 final class ApplyAbilities {
 	use NormalizesInput;
@@ -386,6 +389,227 @@ final class ApplyAbilities {
 					'entityId'   => $template_part_id,
 					'entityKind' => 'templatePart',
 					'entityName' => 'templatePart',
+				],
+			]
+		);
+
+		if ( is_wp_error( $created ) ) {
+			return $created;
+		}
+
+		return [
+			'activityId'       => (string) ( $created['id'] ?? '' ),
+			'status'           => 'pending',
+			'expiresAt'        => $expires_at,
+			'requestReference' => $request_reference,
+		];
+	}
+
+	/**
+	 * Template analog of request_template_part_apply: two fail-closed freshness
+	 * gates, a per-user pending cap, then a pending activity row the admin
+	 * approval surface later approves or rejects. Gate 1 replays the same signed
+	 * recommend-template envelope, including optional live-editor overlays when
+	 * they were part of the original request. v1 is insert_pattern only. No
+	 * attestation (frozen lane).
+	 */
+	public static function request_template_apply( mixed $input ): array|\WP_Error {
+		$input             = self::normalize_map( $input );
+		$scope             = self::normalize_map( $input['scope'] ?? [] );
+		$prompt            = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
+		$operations        = self::normalize_list( $input['operations'] ?? [] );
+		$signatures        = self::normalize_map( $input['signatures'] ?? [] );
+		$provided_resolved = sanitize_text_field( (string) ( $signatures['resolvedContextSignature'] ?? '' ) );
+		$provided_review   = sanitize_text_field( (string) ( $signatures['reviewContextSignature'] ?? '' ) );
+		$surface           = sanitize_key( (string) ( $scope['surface'] ?? '' ) );
+		$template_ref      = sanitize_text_field( (string) ( $scope['templateRef'] ?? '' ) );
+		// Raw scope templateType drives the Gate-1 signature probe: recommend_template
+		// folds templateType verbatim into the resolved signature, so the probe must
+		// replay the same bytes or a faithful external replay false-fails as stale.
+		// The sanitize_key'd $template_type below is used for the row target, the
+		// baseline, and live re-validation — matching how the executor re-resolves it.
+		$raw_template_type = (string) ( $scope['templateType'] ?? '' );
+		$template_type     = sanitize_key( $raw_template_type );
+
+		if ( 'template' !== $surface || '' === $template_ref ) {
+			return new \WP_Error(
+				'invalid_template_scope',
+				'External template applies require a template scope with a templateRef.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( [] === $operations ) {
+			return new \WP_Error(
+				'flavor_agent_apply_operations_invalid',
+				'External template applies require at least one executable operation.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		// v1 guard: insert_pattern only.
+		foreach ( $operations as $operation ) {
+			if ( 'insert_pattern' !== ( is_array( $operation ) ? ( $operation['type'] ?? '' ) : '' ) ) {
+				return new \WP_Error(
+					'flavor_agent_apply_operations_invalid',
+					'External template applies support insert_pattern only in v1.',
+					[ 'status' => 400 ]
+				);
+			}
+		}
+
+		if ( '' === $provided_resolved || '' === $provided_review ) {
+			return new \WP_Error(
+				'flavor_agent_apply_stale',
+				'External template applies require the resolved and review context signatures from the recommendation response.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$probe_input = [
+			'templateRef'          => $template_ref,
+			'prompt'               => $prompt,
+			'resolveSignatureOnly' => true,
+		];
+
+		if ( '' !== $raw_template_type ) {
+			$probe_input['templateType'] = $raw_template_type;
+		}
+
+		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
+			$probe_input['visiblePatternNames'] = self::normalize_list( $input['visiblePatternNames'] );
+		}
+
+		if ( array_key_exists( 'designSemantics', $input ) ) {
+			$probe_input['designSemantics'] = $input['designSemantics'];
+		}
+
+		if ( array_key_exists( 'editorSlots', $input ) ) {
+			$probe_input['editorSlots'] = $input['editorSlots'];
+		}
+
+		if ( array_key_exists( 'editorStructure', $input ) ) {
+			$probe_input['editorStructure'] = $input['editorStructure'];
+		}
+
+		$signature_probe = TemplateAbilities::recommend_template( $probe_input );
+
+		if ( is_wp_error( $signature_probe ) ) {
+			return $signature_probe;
+		}
+
+		$recomputed_resolved = (string) ( $signature_probe['resolvedContextSignature'] ?? '' );
+		$recomputed_review   = (string) ( $signature_probe['reviewContextSignature'] ?? '' );
+
+		if (
+			! hash_equals( $recomputed_resolved, $provided_resolved )
+			|| ! hash_equals( $recomputed_review, $provided_review )
+		) {
+			return self::stale_error();
+		}
+
+		$baseline = TemplateApplyExecutor::resolve_baseline(
+			[
+				'surface' => 'template',
+				'target'  => [
+					'templateRef'  => $template_ref,
+					'templateType' => $template_type,
+				],
+			]
+		);
+
+		if ( is_wp_error( $baseline ) ) {
+			return $baseline;
+		}
+
+		$context = ServerCollector::for_template(
+			$template_ref,
+			'' !== $template_type ? $template_type : null
+		);
+
+		if ( is_wp_error( $context ) ) {
+			return $context;
+		}
+
+		$validated = TemplatePrompt::validate_operations_for_apply( $operations, $context );
+
+		if ( [] === $validated['operations'] || count( $validated['operations'] ) !== count( $operations ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_operations_invalid',
+				'One or more proposed template operations failed validation against the current execution contract.',
+				[
+					'status'            => 400,
+					'validationReasons' => $validated['reasons'],
+				]
+			);
+		}
+
+		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) );
+
+		if ( ActivityRepository::count_active_pending_external_applies( $user_id ) >= $cap ) {
+			return new \WP_Error(
+				'flavor_agent_apply_queue_full',
+				sprintf(
+					'You already have %d pending external applies awaiting review. Wait for a decision or expiry before requesting more.',
+					$cap
+				),
+				[ 'status' => 429 ]
+			);
+		}
+
+		$suggestion        = self::normalize_map( $input['suggestion'] ?? [] );
+		$timestamp         = gmdate( 'c' );
+		$day_in_seconds    = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
+		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) );
+		$expires_at        = gmdate( 'c', time() + $ttl );
+		$scope_key         = 'wp_template:' . $template_ref;
+		$request_reference = sanitize_text_field( (string) ( $input['requestReference'] ?? '' ) );
+
+		$created = ActivityRepository::create(
+			[
+				'type'            => 'apply_template_suggestion',
+				'surface'         => 'template',
+				'target'          => [
+					'templateRef'  => $template_ref,
+					'templateType' => $template_type,
+					'slug'         => sanitize_key( (string) ( $scope['slug'] ?? '' ) ),
+					'title'        => sanitize_text_field( (string) ( $scope['title'] ?? '' ) ),
+				],
+				'suggestion'      => sanitize_text_field( (string) ( $suggestion['label'] ?? 'External template apply request' ) ),
+				'before'          => [],
+				'after'           => [],
+				'executionResult' => 'pending',
+				'undo'            => [ 'status' => 'not_applicable' ],
+				'timestamp'       => $timestamp,
+				'request'         => [
+					'prompt'      => $prompt,
+					'reference'   => '' !== $request_reference ? $request_reference : 'external-apply:' . $scope_key,
+					'requestMeta' => [
+						'ability'            => 'flavor-agent/request-template-apply',
+						'executionTransport' => 'wp-abilities',
+						'route'              => 'wp-abilities:flavor-agent/request-template-apply',
+					],
+					'apply'       => [
+						'status'           => 'pending',
+						'requestedBy'      => $user_id,
+						'requestedAt'      => $timestamp,
+						'expiresAt'        => $expires_at,
+						'operations'       => $validated['operations'],
+						'signatures'       => [
+							'resolvedContextSignature' => $provided_resolved,
+							'reviewContextSignature'   => $provided_review,
+							'baselineContentHash'      => $baseline,
+						],
+						'requestReference' => $request_reference,
+					],
+				],
+				'document'        => [
+					'scopeKey'   => $scope_key,
+					'postType'   => 'wp_template',
+					'entityId'   => $template_ref,
+					'entityKind' => 'template',
+					'entityName' => 'template',
 				],
 			]
 		);

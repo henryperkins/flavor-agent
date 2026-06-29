@@ -1368,6 +1368,34 @@ EXAMPLE
 	}
 
 	/**
+	 * Apply-time re-validation. Rebuilds the generation-time lookups from a
+	 * freshly collected live for_template() context, re-runs the operation
+	 * validator, and normalizes to the shape the external executor and request
+	 * handler consume.
+	 *
+	 * @param array<int, array<string, mixed>> $operations
+	 * @param array<string, mixed>             $context Live ServerCollector::for_template() context.
+	 * @return array{operations: array<int, array<string, mixed>>, reasons: array<int, string>}
+	 */
+	public static function validate_operations_for_apply( array $operations, array $context ): array {
+		$result = self::validate_template_operations(
+			$operations,
+			self::build_unused_template_part_lookup( $context ),
+			self::build_assigned_template_part_lookup( $context ),
+			self::build_allowed_area_lookup( $context ),
+			self::build_empty_area_lookup( $context ),
+			self::build_pattern_lookup( $context ),
+			self::build_template_block_lookup( $context ),
+			self::build_insertion_anchor_lookup( $context )
+		);
+
+		return [
+			'operations' => $result['operations'],
+			'reasons'    => $result['invalid'] ? [ $result['code'] ] : [],
+		];
+	}
+
+	/**
 	 * Test seam exposing the private generation-time template-operation
 	 * validator so the per-branch reason-code coverage suite can assert one
 	 * specific code per rejection branch without driving the full

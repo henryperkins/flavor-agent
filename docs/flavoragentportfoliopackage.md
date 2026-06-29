@@ -14,12 +14,12 @@ Flavor Agent is a WordPress plugin that lets AI work on a live site without unch
 
 The user experience stays inside WordPress instead of becoming a separate chatbot. Flavor Agent appears in native Gutenberg and wp-admin surfaces: Block Inspector recommendations, pattern inserter ranking, content recommendations, navigation guidance, template and template-part recommendations, Global Styles, Style Book, and `Settings > AI Activity`.
 
-The programmatic layer exposes the same governance model through the WordPress Abilities API and MCP. The registry defines **31 ability contracts**: seven recommendation abilities, five signature-only preview/preflight abilities, fourteen helper/search/infra abilities, and five governed external-apply abilities.
+The programmatic layer exposes the same governance model through the WordPress Abilities API and MCP. The registry defines **32 ability contracts**: seven recommendation abilities, five signature-only preview/preflight abilities, fourteen helper/search/infra abilities, and six governed external-apply abilities.
 
 **Proof points**
 
 - **8 first-party recommendation surfaces** plus one admin approval/audit surface.
-- **31 defined Ability contracts**, reconciled by category:
+- **32 defined Ability contracts**, reconciled by category:
 
 | Category                                   |  Count |
 | ------------------------------------------ | -----: |
@@ -28,8 +28,8 @@ The programmatic layer exposes the same governance model through the WordPress A
 | Public read / helper abilities             |     10 |
 | Abilities-API-only helper / read abilities |      3 |
 | Docs-search ability                        |      1 |
-| Governed external-apply abilities          |      5 |
-| **Total**                                  | **31** |
+| Governed external-apply abilities          |      6 |
+| **Total**                                  | **32** |
 
 Of the fourteen helper/search/infra contracts, ten are public read helpers exposed through the universal MCP discovery path; three (`list-synced-patterns`, `get-synced-pattern`, `check-status`) stay Abilities-API-only; and `search-wordpress-docs` is a separate `manage_options` docs-search tool.
 
@@ -100,9 +100,9 @@ The boundaries are explicit. Content is editorial-only, pattern recommendations 
 
 ### Programmatic surface
 
-The registry defines 31 Abilities API contracts. The first-party UI executes recommendation abilities through the WordPress Abilities API, while REST remains for activity creation, admin decisions, undo transitions, and manual pattern sync.
+The registry defines 32 Abilities API contracts. The first-party UI executes recommendation abilities through the WordPress Abilities API, while REST remains for activity creation, admin decisions, undo transitions, and manual pattern sync.
 
-The dedicated MCP server exposes the seven recommendation abilities and five external-apply abilities as direct tools. Ten read helpers are public through the universal MCP discovery path; three helper/read contracts stay Abilities-API-only because they expose synced-pattern or backend inventory details. The default MCP/Abilities path keeps preview and helper abilities available for safer preflight and discovery.
+The dedicated MCP server exposes the seven recommendation abilities and six external-apply abilities as direct tools. Ten read helpers are public through the universal MCP discovery path; three helper/read contracts stay Abilities-API-only because they expose synced-pattern or backend inventory details. The default MCP/Abilities path keeps preview and helper abilities available for safer preflight and discovery.
 
 ### External-agent governance
 
@@ -165,7 +165,7 @@ WordPress context → recommendation ability → schema validation → review ga
 
 - Native Gutenberg and Site Editor surfaces.
 - 8 recommendation surfaces.
-- 31 defined Abilities API contracts.
+- 32 defined Abilities API contracts.
 - Admin approval/audit page.
 - External agents can request style applies, but admins decide.
 
@@ -204,7 +204,7 @@ Editor / MCP client
 **Proof**
 
 - `0.1.0` release candidate / pre-tag.
-- 31 defined ability contracts.
+- 32 defined ability contracts.
 - Server-backed activity table.
 - Admin approval flow for external style applies.
 - Self-signed attestation layer for approved external style applies and attested reverts.
@@ -293,7 +293,7 @@ If Plugin Check prerequisites are unavailable locally, `npm run verify -- --skip
 
 The same governance model an outside agent sees — verified end-to-end against a live site.
 
-1. **Discover.** `discover-abilities` on the universal default server returns the public MCP surface: ten read helpers, five signature-only `preview-recommend-*` dry runs, and the separate `search-wordpress-docs` tool (16 public abilities total). `get-ability-info` shows each contract's input/output schema. The seven `recommend-*` and four apply/activity tools live on the dedicated `flavor-agent` MCP server; neither server exposes an approve/decision tool — approval stays admin-only in wp-admin.
+1. **Discover.** `discover-abilities` on the universal default server returns the public MCP surface: ten read helpers, five signature-only `preview-recommend-*` dry runs, and the separate `search-wordpress-docs` tool (16 public abilities total). `get-ability-info` shows each contract's input/output schema. The seven `recommend-*` and six apply/activity tools live on the dedicated `flavor-agent` MCP server; neither server exposes an approve/decision tool — approval stays admin-only in wp-admin.
 2. **Read.** `execute-ability` on a read-only ability (e.g. `get-active-theme`, or a `preview-recommend-*` signature preflight) executes without invoking the AI Connector.
 3. **Propose.** `recommend-style` returns a bounded, preset-backed operation plus review/apply freshness signatures, and records a diagnostic activity row.
 4. **Request.** `request-style-apply` with the operation, the live `currentConfig`, and those signatures creates a pending row and mutates nothing. Freshness is enforced on two gates — recomputed signatures and `currentConfig` equal to the live entity; stale input is rejected as drift (re-derive with `preview-recommend-style`).
@@ -317,7 +317,7 @@ Agent governance isn't a WordPress-shaped problem — any system that lets AI ac
 
 Built a WordPress plugin that lets AI propose site-editing changes without giving the model unchecked control. Flavor Agent integrates into native Gutenberg, Site Editor, and wp-admin surfaces, including block recommendations, pattern ranking, content suggestions, template/template-part recommendations, Global Styles, Style Book, navigation guidance, and `Settings > AI Activity`.
 
-The core work is a governed mutation loop: strict schemas, bounded operation validators, review gates for structural/theme changes, server-backed activity attribution, freshness checks, optional site-key attestation, and drift-safe undo. The registry defines 31 WordPress Ability contracts and exposes MCP tools for external agents while keeping approval admin-only inside WordPress.
+The core work is a governed mutation loop: strict schemas, bounded operation validators, review gates for structural/theme changes, server-backed activity attribution, freshness checks, optional site-key attestation, and drift-safe undo. The registry defines 32 WordPress Ability contracts and exposes MCP tools for external agents while keeping approval admin-only inside WordPress.
 
 **Highlights:** WordPress Abilities API, MCP, Ed25519 self-attestation, PHP 8.2, Gutenberg, Site Editor, `@wordpress/*` packages (React), DataViews, Playwright, PHPUnit, Jest. Optional retrieval/grounding infrastructure: Cloudflare AI Search, Cloudflare Workers AI, Qdrant.
 

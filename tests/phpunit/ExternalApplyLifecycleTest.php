@@ -119,6 +119,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 	}
 
 	private const TEMPLATE_PART_ID = 'twentytwentyfive//header';
+	private const TEMPLATE_REF     = 'twentytwentyfive//home';
 
 	/**
 	 * The live template part a template-part approve writes against. Mirrors
@@ -142,6 +143,40 @@ final class ExternalApplyLifecycleTest extends TestCase {
 				'ID'           => $wp_id,
 				'post_type'    => 'wp_template_part',
 				'post_content' => $content,
+			]
+		);
+	}
+
+	private function seed_template( string $content, int $wp_id ): void {
+		WordPressTestState::$active_theme                   = [ 'stylesheet' => 'twentytwentyfive' ];
+		WordPressTestState::$block_templates['wp_template'] = [
+			(object) [
+				'id'      => self::TEMPLATE_REF,
+				'wp_id'   => $wp_id,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $content,
+			],
+		];
+		WordPressTestState::$posts[ $wp_id ]                = new \WP_Post(
+			[
+				'ID'           => $wp_id,
+				'post_type'    => 'wp_template',
+				'post_content' => $content,
+			]
+		);
+	}
+
+	private function paragraph( string $text ): string {
+		return '<!-- wp:paragraph --><p>' . $text . '</p><!-- /wp:paragraph -->';
+	}
+
+	private function register_pattern( string $name, string $content ): void {
+		\WP_Block_Patterns_Registry::get_instance()->register(
+			$name,
+			[
+				'title'   => $name,
+				'content' => $content,
 			]
 		);
 	}
@@ -764,6 +799,57 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			$failures,
 			'record_apply must never be attempted for template-part: the frozen-lane guard would otherwise throw and fire flavor_agent_attestation_record_failed.'
 		);
+
+		// --- Template lane: an approve must NOT touch AttestationService. ---
+		$template_content = $this->template_content();
+		$this->seed_template( $template_content, 8802 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+		$template_signatures = $this->resolve_template_signatures();
+		$template_request    = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'      => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+					'slug'         => 'home',
+					'title'        => 'Home',
+				],
+				'prompt'     => 'add a hero',
+				'operations' => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $template_signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $template_signatures['reviewContextSignature'],
+				],
+			]
+		);
+		$this->assertIsArray( $template_request );
+
+		$template_decided = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $template_request['activityId'],
+			'approve'
+		);
+
+		$this->assertIsArray( $template_decided );
+		$this->assertSame(
+			'available',
+			$template_decided['apply']['status'],
+			'The template executor must succeed so the post-apply attestation branch is actually exercised.'
+		);
+		$this->assertNull(
+			\FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $template_request['activityId'] ),
+			'No attestation may be recorded for a template apply.'
+		);
+		$this->assertSame(
+			[],
+			$failures,
+			'record_apply must never be attempted for template: the frozen-lane guard would otherwise throw and fire flavor_agent_attestation_record_failed.'
+		);
 	}
 
 	public function test_style_apply_executor_implements_the_external_apply_contract(): void {
@@ -802,6 +888,31 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			. '<!-- wp:heading --><h2>Title</h2><!-- /wp:heading -->'
 			. '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->'
 			. '<!-- /wp:group -->';
+	}
+
+	private function template_content(): string {
+		return $this->paragraph( 'Body' );
+	}
+
+	/**
+	 * @param array<string, mixed> $overrides
+	 * @return array<string, mixed>
+	 */
+	private function resolve_template_signatures( array $overrides = [] ): array {
+		$signatures = \FlavorAgent\Abilities\TemplateAbilities::recommend_template(
+			array_replace_recursive(
+				[
+					'templateRef'          => self::TEMPLATE_REF,
+					'templateType'         => 'home',
+					'prompt'               => 'add a hero',
+					'resolveSignatureOnly' => true,
+				],
+				$overrides
+			)
+		);
+		$this->assertIsArray( $signatures );
+
+		return $signatures;
 	}
 
 	public function test_request_template_part_apply_rejects_stale_signatures(): void {
@@ -928,5 +1039,345 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$entity = \FlavorAgent\Activity\Serializer::derive_entity( $stored );
 		$this->assertSame( 'template-part', $entity['type'] );
 		$this->assertSame( self::TEMPLATE_PART_ID, $entity['ref'] );
+	}
+
+	public function test_registry_routes_template_to_its_executor(): void {
+		$this->assertSame(
+			\FlavorAgent\Apply\TemplateApplyExecutor::class,
+			\FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'template' )
+		);
+	}
+
+	public function test_request_template_apply_rejects_invalid_scope(): void {
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'      => [ 'surface' => 'template' ],
+				'operations' => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => 'a',
+					'reviewContextSignature'   => 'b',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_template_scope', $result->get_error_code() );
+	}
+
+	public function test_request_template_apply_rejects_non_insert_pattern_ops(): void {
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'      => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+				],
+				'operations' => [
+					[
+						'type'       => 'remove_block',
+						'targetPath' => [ 0 ],
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => 'a',
+					'reviewContextSignature'   => 'b',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_operations_invalid', $result->get_error_code() );
+	}
+
+	public function test_request_template_apply_rejects_stale_signatures(): void {
+		$this->seed_template( $this->template_content(), 8820 );
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'      => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+				],
+				'operations' => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => 'stale',
+					'reviewContextSignature'   => 'stale',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_stale', $result->get_error_code() );
+	}
+
+	public function test_request_template_apply_accepts_signed_replay_with_design_semantics(): void {
+		$this->seed_template( $this->template_content(), 8821 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+		$design_semantics = [
+			'sectionRole' => 'hero',
+		];
+		$signatures       = $this->resolve_template_signatures(
+			[
+				'designSemantics' => $design_semantics,
+			]
+		);
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'           => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+					'slug'         => 'home',
+					'title'        => 'Home',
+				],
+				'prompt'          => 'add a hero',
+				'designSemantics' => $design_semantics,
+				'operations'      => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures'      => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $result['status'] );
+	}
+
+	public function test_request_template_apply_accepts_signed_replay_with_editor_overlays(): void {
+		$this->seed_template( $this->template_content(), 8822 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+		$overlays   = [
+			'editorSlots'     => [
+				'emptyAreas' => [ 'footer' ],
+			],
+			'editorStructure' => [
+				'topLevelBlockTree' => [
+					[
+						'path'       => [ 0 ],
+						'name'       => 'core/heading',
+						'label'      => 'Heading',
+						'childCount' => 0,
+					],
+				],
+				'structureStats'    => [
+					'blockCount'         => 1,
+					'topLevelBlockCount' => 1,
+					'firstTopLevelBlock' => 'core/heading',
+					'lastTopLevelBlock'  => 'core/heading',
+				],
+			],
+		];
+		$signatures = $this->resolve_template_signatures( $overlays );
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'           => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+				],
+				'prompt'          => 'add a hero',
+				'editorSlots'     => $overlays['editorSlots'],
+				'editorStructure' => $overlays['editorStructure'],
+				'operations'      => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures'      => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $result['status'] );
+	}
+
+	public function test_request_template_apply_replays_a_non_canonical_template_type_without_false_staleness(): void {
+		// recommend_template folds templateType RAW into the resolved signature
+		// (prepare_template_signature_context takes it verbatim), so a faithful
+		// external replay carrying a non-canonical type (uppercase, here
+		// 'Home-Page') must recompute byte-identically. sanitize_key'ing it inside
+		// the request handler's signature probe recomputes a different resolved
+		// hash and false-fails the replay as stale even though nothing drifted.
+		$this->seed_template( $this->template_content(), 8824 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+		$signatures = $this->resolve_template_signatures(
+			[
+				'templateType' => 'Home-Page',
+			]
+		);
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'      => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'Home-Page',
+					'slug'         => 'home',
+					'title'        => 'Home',
+				],
+				'prompt'     => 'add a hero',
+				'operations' => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $result['status'] );
+	}
+
+	public function test_request_template_apply_creates_pending_row_with_baseline_hash(): void {
+		$content = $this->template_content();
+		$this->seed_template( $content, 8823 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+		$signatures = $this->resolve_template_signatures();
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'      => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+					'slug'         => 'home',
+					'title'        => 'Home',
+				],
+				'prompt'     => 'add a hero',
+				'operations' => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $result['status'] );
+		$this->assertNotSame( '', (string) $result['activityId'] );
+		$this->assertNotSame( '', (string) $result['expiresAt'] );
+
+		$stored = Repository::find( (string) $result['activityId'] );
+		$this->assertIsArray( $stored );
+		$this->assertSame( 'template', $stored['surface'] );
+		$this->assertSame( 'apply_template_suggestion', $stored['type'] );
+		$this->assertSame( 'pending', $stored['executionResult'] );
+		$this->assertSame( 'not_applicable', $stored['undo']['status'] );
+		$this->assertSame( self::TEMPLATE_REF, $stored['target']['templateRef'] );
+		$this->assertSame( 'home', $stored['target']['templateType'] );
+		$this->assertSame( 'home', $stored['target']['slug'] );
+		$this->assertSame( 'Home', $stored['target']['title'] );
+		$this->assertSame(
+			hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) ),
+			$stored['apply']['signatures']['baselineContentHash']
+		);
+		$this->assertSame(
+			(string) $signatures['resolvedContextSignature'],
+			$stored['apply']['signatures']['resolvedContextSignature']
+		);
+		$this->assertSame( 'wp_template:' . self::TEMPLATE_REF, $stored['document']['scopeKey'] );
+		$this->assertSame( 'wp_template', $stored['document']['postType'] );
+		$this->assertNotEmpty( $stored['apply']['operations'] );
+
+		$entity = \FlavorAgent\Activity\Serializer::derive_entity( $stored );
+		$this->assertSame( 'template', $entity['type'] );
+		$this->assertSame( self::TEMPLATE_REF, $entity['ref'] );
+	}
+
+	public function test_request_template_apply_approves_executes_and_undoes(): void {
+		$content = $this->template_content();
+		$this->seed_template( $content, 8824 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+		$signatures = $this->resolve_template_signatures();
+
+		$pending = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'      => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+					'slug'         => 'home',
+					'title'        => 'Home',
+				],
+				'prompt'     => 'add a hero',
+				'operations' => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+		$this->assertIsArray( $pending );
+
+		$approved = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['activityId'],
+			'approve'
+		);
+
+		$this->assertIsArray( $approved );
+		$this->assertSame( 'available', $approved['apply']['status'] );
+		$this->assertStringStartsWith(
+			'<!-- wp:paragraph --><p>Hero',
+			(string) WordPressTestState::$posts[8824]->post_content
+		);
+		$this->seed_template(
+			(string) WordPressTestState::$posts[8824]->post_content,
+			8824
+		);
+
+		$undone = \FlavorAgent\Abilities\ApplyAbilities::undo_activity(
+			[
+				'activityId' => (string) $pending['activityId'],
+			]
+		);
+
+		$this->assertIsArray( $undone );
+		$this->assertSame( 'undone', $undone['result'] );
+		$this->assertSame( $content, (string) WordPressTestState::$posts[8824]->post_content );
 	}
 }

@@ -2350,6 +2350,14 @@ export function getStyleVisualDiffRows(
 }
 
 function getGovernanceTargetLabel( entry ) {
+	if ( entry?.surface === 'template' ) {
+		return sprintf(
+			/* translators: %s: template identifier. */
+			__( 'Template %s', 'flavor-agent' ),
+			entry?.target?.slug || entry?.target?.templateRef || EMPTY_VALUE
+		);
+	}
+
 	if ( entry?.surface === 'template-part' ) {
 		const slug =
 			entry?.target?.slug || entry?.target?.templatePartRef || '';
@@ -2431,6 +2439,23 @@ function getGovernanceDiagnosticText( entry, details ) {
  * @return {{reviewIntro: string, retained: string, decision: string}} Copy strings.
  */
 function getGovernanceApprovalCopy( surface ) {
+	if ( surface === 'template' ) {
+		return {
+			reviewIntro: __(
+				'An external agent requested this bounded template apply. Review the operation, provenance, and freshness evidence before deciding.',
+				'flavor-agent'
+			),
+			retained: __(
+				'This external template apply row is retained for approval, provenance, freshness, and undo review.',
+				'flavor-agent'
+			),
+			decision: __(
+				'AI proposes; WordPress approves. Approving applies this bounded structural change from WordPress; rejecting keeps the site unchanged.',
+				'flavor-agent'
+			),
+		};
+	}
+
 	if ( surface === 'template-part' ) {
 		return {
 			reviewIntro: __(
@@ -2479,10 +2504,11 @@ export function getGovernanceDetails(
 	const visualDiffRows = getStyleVisualDiffRows( entry, {
 		themeColorPresetIndex,
 	} );
-	const formatOperationSummary =
-		entry?.surface === 'template-part'
-			? formatStructuralOperationSummary
-			: formatStyleOperationSummary;
+	const formatOperationSummary = [ 'template', 'template-part' ].includes(
+		entry?.surface
+	)
+		? formatStructuralOperationSummary
+		: formatStyleOperationSummary;
 	const proposedOperations = details.operations.map( ( operation ) =>
 		formatOperationSummary( operation )
 	);

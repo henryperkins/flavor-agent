@@ -1,5 +1,7 @@
 # Template-Part External-Apply Executor Implementation Plan
 
+> Archived 2026-06-28 after the template-part external-apply executor shipped and the remaining page-level/block-surface follow-ups were split back into the current work queue.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend the C1 governed external-apply loop from the style lane to the template-part surface, so an external agent can request a drift-checked, human-approved, reversible structural apply (`insert_pattern` / `replace_block_with_pattern` / `remove_block`, ≤3 ops) to a single `wp_template_part`.
