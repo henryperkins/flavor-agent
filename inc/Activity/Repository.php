@@ -866,7 +866,7 @@ final class Repository {
 	/**
 	 * One-way transition of an external-apply row out of the pending state.
 	 *
-	 * @param array<string, mixed> $changes {applyStatus, decidedBy?, decidedAt?, decisionNote?, failureCode?, failureMessage?, executedAt?, before?, after?, target?}
+	 * @param array<string, mixed> $changes {applyStatus, decidedBy?, decidedByName?, decidedAt?, decisionNote?, failureCode?, failureMessage?, executedAt?, before?, after?, target?}
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public static function transition_external_apply( string $activity_id, array $changes ) {
@@ -914,7 +914,7 @@ final class Repository {
 		$timestamp       = gmdate( 'c' );
 		$apply['status'] = $next_status;
 
-		foreach ( [ 'decidedBy', 'decidedAt', 'decisionNote', 'failureCode', 'failureMessage', 'executedAt' ] as $field ) {
+		foreach ( [ 'decidedBy', 'decidedByName', 'decidedAt', 'decisionNote', 'failureCode', 'failureMessage', 'executedAt' ] as $field ) {
 			if ( array_key_exists( $field, $changes ) ) {
 				$apply[ $field ] = $changes[ $field ];
 			}

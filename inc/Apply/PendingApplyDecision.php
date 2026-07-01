@@ -55,18 +55,20 @@ final class PendingApplyDecision {
 			);
 		}
 
-		$decided_by = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
-		$decided_at = gmdate( 'c' );
-		$note       = sanitize_textarea_field( $note );
+		$decided_by      = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+		$decided_by_name = self::actor_display_name( $decided_by );
+		$decided_at      = gmdate( 'c' );
+		$note            = sanitize_textarea_field( $note );
 
 		if ( 'reject' === $decision ) {
 			return ActivityRepository::transition_external_apply(
 				$activity_id,
 				[
-					'applyStatus'  => 'rejected',
-					'decidedBy'    => $decided_by,
-					'decidedAt'    => $decided_at,
-					'decisionNote' => $note,
+					'applyStatus'   => 'rejected',
+					'decidedBy'     => $decided_by,
+					'decidedByName' => $decided_by_name,
+					'decidedAt'     => $decided_at,
+					'decisionNote'  => $note,
 				]
 			);
 		}
@@ -86,6 +88,7 @@ final class PendingApplyDecision {
 				[
 					'applyStatus'    => 'failed',
 					'decidedBy'      => $decided_by,
+					'decidedByName'  => $decided_by_name,
 					'decidedAt'      => $decided_at,
 					'decisionNote'   => $note,
 					'failureCode'    => 'flavor_agent_apply_surface_unsupported',
@@ -115,6 +118,7 @@ final class PendingApplyDecision {
 				[
 					'applyStatus'    => 'failed',
 					'decidedBy'      => $decided_by,
+					'decidedByName'  => $decided_by_name,
 					'decidedAt'      => $decided_at,
 					'decisionNote'   => $note,
 					'failureCode'    => $failure_code,
@@ -131,6 +135,7 @@ final class PendingApplyDecision {
 				[
 					'applyStatus'    => 'failed',
 					'decidedBy'      => $decided_by,
+					'decidedByName'  => $decided_by_name,
 					'decidedAt'      => $decided_at,
 					'decisionNote'   => $note,
 					'failureCode'    => (string) $result->get_error_code(),
@@ -173,14 +178,15 @@ final class PendingApplyDecision {
 		return ActivityRepository::transition_external_apply(
 			$activity_id,
 			[
-				'applyStatus'  => 'available',
-				'decidedBy'    => $decided_by,
-				'decidedAt'    => $decided_at,
-				'decisionNote' => $note,
-				'executedAt'   => gmdate( 'c' ),
-				'before'       => $result['before'],
-				'after'        => $result['after'],
-				'target'       => $result['target'],
+				'applyStatus'   => 'available',
+				'decidedBy'     => $decided_by,
+				'decidedByName' => $decided_by_name,
+				'decidedAt'     => $decided_at,
+				'decisionNote'  => $note,
+				'executedAt'    => gmdate( 'c' ),
+				'before'        => $result['before'],
+				'after'         => $result['after'],
+				'target'        => $result['target'],
 			]
 		);
 	}
@@ -194,5 +200,32 @@ final class PendingApplyDecision {
 		$roles = is_object( $user ) && is_array( $user->roles ?? null ) ? $user->roles : [];
 
 		return isset( $roles[0] ) ? sanitize_key( (string) $roles[0] ) : '';
+	}
+
+	/**
+	 * Durable, human-readable snapshot of the deciding user at decision time.
+	 *
+	 * The internal audit row's answer to "who approved this" — the FA-internal
+	 * analogue of the lane-4 `approved_by` provenance field. Deliberately kept
+	 * off the public attestation envelope, which stays role-only (PII-minimal).
+	 */
+	private static function actor_display_name( int $user_id ): string {
+		if ( $user_id <= 0 || ! function_exists( 'get_userdata' ) ) {
+			return '';
+		}
+
+		$user = get_userdata( $user_id );
+
+		if ( ! is_object( $user ) ) {
+			return '';
+		}
+
+		$display_name = isset( $user->display_name ) ? trim( (string) $user->display_name ) : '';
+
+		if ( '' === $display_name ) {
+			$display_name = isset( $user->user_login ) ? (string) $user->user_login : '';
+		}
+
+		return sanitize_text_field( $display_name );
 	}
 }
