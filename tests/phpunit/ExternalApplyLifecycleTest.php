@@ -306,6 +306,45 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( [], $updated['after'] );
 	}
 
+	public function test_transition_persists_the_decided_by_name_snapshot(): void {
+		$created = $this->create_pending_entry();
+
+		$updated = Repository::transition_external_apply(
+			(string) $created['id'],
+			[
+				'applyStatus'   => 'rejected',
+				'decidedBy'     => 3,
+				'decidedByName' => 'Grace Hopper',
+				'decidedAt'     => '2026-06-10T02:00:00+00:00',
+			]
+		);
+
+		$this->assertIsArray( $updated );
+		$this->assertSame( 'Grace Hopper', $updated['apply']['decidedByName'] );
+	}
+
+	public function test_decide_snapshots_the_deciding_users_display_name(): void {
+		WordPressTestState::$users[42]       = [
+			'display_name' => 'Ada Lovelace',
+			'user_login'   => 'ada',
+			'roles'        => [ 'administrator' ],
+		];
+		WordPressTestState::$current_user_id = 42;
+
+		$created = $this->create_pending_entry();
+
+		$decided = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $created['id'],
+			'reject',
+			'Not now'
+		);
+
+		$this->assertIsArray( $decided );
+		$this->assertSame( 'rejected', $decided['apply']['status'] );
+		$this->assertSame( 42, $decided['apply']['decidedBy'] );
+		$this->assertSame( 'Ada Lovelace', $decided['apply']['decidedByName'] );
+	}
+
 	public function test_transition_to_failed_records_failure_metadata(): void {
 		$created = $this->create_pending_entry();
 

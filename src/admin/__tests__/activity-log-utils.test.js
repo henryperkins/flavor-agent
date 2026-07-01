@@ -1506,6 +1506,35 @@ describe( 'external apply helpers', () => {
 		} );
 	} );
 
+	test( 'getGovernanceDetails prefers a decidedByName snapshot over the numeric user id', () => {
+		const named = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'rejected',
+				apply: {
+					status: 'rejected',
+					decidedBy: 42,
+					decidedByName: 'Ada Lovelace',
+					decidedAt: '2026-06-10T02:00:00+00:00',
+					operations: [],
+				},
+			} )
+		);
+		const unnamed = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'rejected',
+				apply: {
+					status: 'rejected',
+					decidedBy: 42,
+					decidedAt: '2026-06-10T02:00:00+00:00',
+					operations: [],
+				},
+			} )
+		);
+
+		expect( named.decidedByLabel ).toBe( 'Ada Lovelace' );
+		expect( unnamed.decidedByLabel ).toBe( 'User #42' );
+	} );
+
 	test( 'formats template-part structural operations as readable summaries', () => {
 		expect(
 			formatStructuralOperationSummary( {

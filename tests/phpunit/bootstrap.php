@@ -160,6 +160,9 @@ namespace FlavorAgent\Tests\Support {
 
 		public static int $current_user_id = 0;
 
+		/** @var array<int, array<string, mixed>> Seeded user records for get_userdata(): id → {display_name, user_login, roles}. */
+		public static array $users = [];
+
 		public static ?object $current_screen = null;
 
 		public static mixed $remote_post_response = [];
@@ -400,6 +403,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$wp_cli_messages             = [];
 			self::$db_insert_id                = 0;
 			self::$current_user_id             = 0;
+			self::$users                       = [];
 			self::$current_screen              = null;
 			self::$remote_post_response        = [];
 			self::$remote_get_response         = [];
@@ -2310,6 +2314,27 @@ namespace {
 		function get_current_user_id(): int
 		{
 			return WordPressTestState::$current_user_id;
+		}
+	}
+
+	if (! function_exists('get_userdata')) {
+		function get_userdata(int $user_id)
+		{
+			$user = WordPressTestState::$users[$user_id] ?? null;
+
+			if (! is_array($user)) {
+				return false;
+			}
+
+			return (object) array_merge(
+				[
+					'ID'           => $user_id,
+					'display_name' => '',
+					'user_login'   => '',
+					'roles'        => [],
+				],
+				$user
+			);
 		}
 	}
 

@@ -1673,6 +1673,8 @@ export function getExternalApplyDetails( entry ) {
 		decidedBy: Number.isFinite( Number( apply.decidedBy ) )
 			? Number( apply.decidedBy )
 			: 0,
+		decidedByName:
+			typeof apply.decidedByName === 'string' ? apply.decidedByName : '',
 		decidedAt: typeof apply.decidedAt === 'string' ? apply.decidedAt : '',
 		decisionNote:
 			typeof apply.decisionNote === 'string' ? apply.decisionNote : '',
@@ -1748,6 +1750,13 @@ function formatUserIdLabel( userId ) {
 				userId
 		  )
 		: EMPTY_VALUE;
+}
+
+// Prefer the durable display-name snapshot recorded at decision time; fall back
+// to the numeric id when no name was captured (older rows, or an absent user).
+function formatUserLabel( name, userId ) {
+	const trimmed = typeof name === 'string' ? name.trim() : '';
+	return trimmed || formatUserIdLabel( userId );
 }
 
 function getStyleConfigSnapshot( state = {} ) {
@@ -2537,7 +2546,11 @@ export function getGovernanceDetails(
 		expiresAt: details.expiresAt,
 		requestReference: details.requestReference,
 		decidedBy: details.decidedBy,
-		decidedByLabel: formatUserIdLabel( details.decidedBy ),
+		decidedByName: details.decidedByName,
+		decidedByLabel: formatUserLabel(
+			details.decidedByName,
+			details.decidedBy
+		),
 		decidedAt: details.decidedAt,
 		decisionNote: details.decisionNote,
 		executedAt: details.executedAt,
