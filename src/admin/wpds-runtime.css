@@ -6,23 +6,38 @@
  * Bridge the public admin color-scheme variables into the WPDS brand/focus
  * tokens these screens need so they react to the active admin color scheme
  * without depending on private @wordpress/theme APIs.
+ *
+ * The design-tokens @import must stay on the deep node_modules path: the
+ * build's postcss-import resolver cannot read package exports maps, and a
+ * JS-side `import "@wordpress/theme/design-tokens.css"` is tree-shaken away
+ * because the package declares `sideEffects: false`. The
+ * wpds-token-compatibility test pins this path to the package's public
+ * `./design-tokens.css` export target so an upstream relocation fails loudly.
  */
 body {
-	--wpds-color-bg-interactive-brand-strong: var(--wp-admin-theme-color, #3858e9);
-	--wpds-color-bg-interactive-brand-strong-active: var(--wp-admin-theme-color-darker-10, #2145e6);
-	--wpds-color-bg-interactive-brand-weak-active: color-mix(
+	--wpds-color-background-interactive-brand-strong: var(--wp-admin-theme-color, #3858e9);
+	--wpds-color-background-interactive-brand-strong-active: var(--wp-admin-theme-color-darker-10, #2145e6);
+	--wpds-color-background-interactive-brand-weak-active: color-mix(
 		in srgb,
 		var(--wp-admin-theme-color, #3858e9) 8%,
 		transparent
 	);
-	--wpds-color-bg-surface-brand: color-mix(
+	--wpds-color-background-surface-brand: color-mix(
 		in srgb,
 		var(--wp-admin-theme-color, #3858e9) 10%,
-		var(--wpds-color-bg-surface-neutral-strong, #ffffff)
+		var(--wpds-color-background-surface-neutral-strong, var(--wpds-color-bg-surface-neutral-strong, #ffffff))
 	);
-	--wpds-color-fg-interactive-brand: var(--wp-admin-theme-color, #3858e9);
-	--wpds-color-fg-interactive-brand-active: var(--wp-admin-theme-color-darker-20, #183ad6);
+	--wpds-color-foreground-interactive-brand: var(--wp-admin-theme-color, #3858e9);
+	--wpds-color-foreground-interactive-brand-active: var(--wp-admin-theme-color-darker-20, #183ad6);
 	--wpds-color-stroke-focus-brand: var(--wp-admin-theme-color, #3858e9);
 	--wpds-color-stroke-interactive-brand: var(--wp-admin-theme-color, #3858e9);
 	--wpds-color-stroke-interactive-brand-active: var(--wp-admin-theme-color-darker-20, #183ad6);
+
+	/* Backward aliases keep older WPDS consumers working when this bridge loads first. */
+	--wpds-color-bg-interactive-brand-strong: var(--wpds-color-background-interactive-brand-strong);
+	--wpds-color-bg-interactive-brand-strong-active: var(--wpds-color-background-interactive-brand-strong-active);
+	--wpds-color-bg-interactive-brand-weak-active: var(--wpds-color-background-interactive-brand-weak-active);
+	--wpds-color-bg-surface-brand: var(--wpds-color-background-surface-brand);
+	--wpds-color-fg-interactive-brand: var(--wpds-color-foreground-interactive-brand);
+	--wpds-color-fg-interactive-brand-active: var(--wpds-color-foreground-interactive-brand-active);
 }
