@@ -55,32 +55,32 @@
 	);
 	--flavor-agent-settings-status-border-success: color-mix(
 		in srgb,
-		var(--wpds-color-fg-content-success-weak, var(--flavor-agent-color-success))
+		var(--wpds-color-foreground-content-success-weak, var(--wpds-color-fg-content-success-weak, var(--flavor-agent-color-success)))
 			24%,
 		transparent
 	);
 	--flavor-agent-settings-status-border-warning: color-mix(
 		in srgb,
-		var(--wpds-color-fg-content-warning-weak, var(--flavor-agent-color-warning))
+		var(--wpds-color-foreground-content-warning-weak, var(--wpds-color-fg-content-warning-weak, var(--flavor-agent-color-warning)))
 			28%,
 		transparent
 	);
 	--flavor-agent-settings-status-border-error: color-mix(
 		in srgb,
-		var(--wpds-color-fg-content-error-weak, var(--flavor-agent-color-error))
+		var(--wpds-color-foreground-content-error-weak, var(--wpds-color-fg-content-error-weak, var(--flavor-agent-color-error)))
 			22%,
 		transparent
 	);
 	--flavor-agent-settings-glance-border-accent: var(--flavor-agent-color-accent-line);
 	--flavor-agent-settings-glance-border-success: color-mix(
 		in srgb,
-		var(--wpds-color-fg-content-success-weak, var(--flavor-agent-color-success))
+		var(--wpds-color-foreground-content-success-weak, var(--wpds-color-fg-content-success-weak, var(--flavor-agent-color-success)))
 			20%,
 		transparent
 	);
 	--flavor-agent-settings-glance-border-warning: color-mix(
 		in srgb,
-		var(--wpds-color-fg-content-warning-weak, var(--flavor-agent-color-warning))
+		var(--wpds-color-foreground-content-warning-weak, var(--wpds-color-fg-content-warning-weak, var(--flavor-agent-color-warning)))
 			24%,
 		transparent
 	);
@@ -104,12 +104,12 @@
 	--flavor-agent-surface: color-mix(
 		in srgb,
 		var(--flavor-agent-color-accent) 4%,
-		var(--wpds-color-bg-surface-neutral-strong, #ffffff)
+		var(--wpds-color-background-surface-neutral-strong, var(--wpds-color-bg-surface-neutral-strong, #ffffff))
 	);
 	--flavor-agent-surface-strong: color-mix(
 		in srgb,
 		var(--flavor-agent-color-accent) 8%,
-		var(--wpds-color-bg-surface-neutral-strong, #ffffff)
+		var(--wpds-color-background-surface-neutral-strong, var(--wpds-color-bg-surface-neutral-strong, #ffffff))
 	);
 
 	/* ── Brand typography ────────────────────────────────────────────────────── */

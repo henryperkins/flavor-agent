@@ -1231,7 +1231,7 @@ describe( 'ActivityLogApp', () => {
 
 	test( 'keeps activity log primary button foreground on the WPDS brand token', () => {
 		expect( ACTIVITY_LOG_CSS ).toMatch(
-			/\.flavor-agent-activity-log\s+\.components-button\.is-primary\s*\{[^}]*color:\s*var\(--wpds-color-fg-content-on-brand,\s*#fff\);/s
+			/\.flavor-agent-activity-log\s+\.components-button\.is-primary\s*\{[^}]*color:\s*var\(--wpds-color-foreground-content-on-brand,\s*var\(--wpds-color-fg-content-on-brand,\s*#fff\)\);/s
 		);
 	} );
 

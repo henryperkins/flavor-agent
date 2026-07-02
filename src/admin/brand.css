@@ -29,7 +29,7 @@
 	overflow: visible;
 	border: 1px solid var(--flavor-agent-brand-line);
 	border-radius: var(--wpds-border-radius-lg, 8px);
-	background: var(--wpds-color-bg-surface, #fff);
+	background: var(--wpds-color-background-surface, var(--wpds-color-bg-surface, #fff));
 	box-shadow: none;
 }
 
@@ -93,14 +93,14 @@
 
 .flavor-agent-admin-hero .button.button-secondary {
 	border-color: var(--flavor-agent-brand-line);
-	background: var(--wpds-color-bg-surface, #fff);
+	background: var(--wpds-color-background-surface, var(--wpds-color-bg-surface, #fff));
 	color: var(--flavor-agent-brand-text);
 }
 
 .flavor-agent-admin-hero .button.button-secondary:hover,
 .flavor-agent-admin-hero .button.button-secondary:focus {
 	border-color: var(--flavor-agent-brand-accent);
-	background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
+	background: var(--wpds-color-background-surface-neutral, var(--wpds-color-bg-surface-neutral, #f8f8f8));
 	color: var(--flavor-agent-brand-accent-strong);
 }
 
