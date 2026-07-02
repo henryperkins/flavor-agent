@@ -58,7 +58,7 @@ Note: the `WordPress 7.0 Field Guide` was published on 2026-05-14 during the rel
 - The 2026-05-22 PHP support clarification is now indexed as post-release compatibility context: WordPress 7.0 keeps PHP 7.4 as the minimum supported version and is now documented as fully supporting PHP 8.5.
 - On 2026-05-08, Core announced real-time collaboration will not ship in WordPress 7.0. Keep RTC references in this repo framed as Gutenberg-plugin or future-release compatibility watch items, not as WordPress 7.0 core requirements.
 - The WordPress 7.1 cycle is now open, but 7.1 material belongs here only when it clarifies the post-7.0 boundary. The React 19 upgrade/revert posts are included as supplemental Gutenberg compatibility context because Gutenberg 23.3 first shipped React 19, Gutenberg 23.3.2 reverted it, and 23.4 brings it back behind an experiment flag.
-- The Make/AI 1.0.0 post and WordPress/ai 1.0.0 / 1.0.2 GitHub releases are now indexed as adjacent WordPress 7.0 AI-stack sources. They add Request Logging, Connector Approvals, client-side Abilities usage in the canonical plugin, request-log polish, and strict REST/MCP schema fixes.
+- The Make/AI 1.0.0 post and WordPress/ai 1.0.0 / 1.0.2 / 1.1.0 GitHub releases are now indexed as adjacent WordPress 7.0 AI-stack sources. They add Request Logging, Connector Approvals, client-side Abilities usage in the canonical plugin, request-log polish, strict REST/MCP schema fixes, and — in `1.1.0` (2026-07-01) — the opt-in Key Encryption experiment (`#560`), an explicit Save on the developer-settings provider/model panel (`#761`), the renamed `core/read-settings` ability (`#691`/`#806`), character-based content gating (`#581`/`#802`), and the Type Ahead experiment (`#151`).
 - The WordPress Developer Blog now has a dedicated AI Client image-generation tutorial. It is useful as the clearest official example of the `WP_AI_Client_Prompt_Builder`, `using_model_preference()`, capability checks, and `Settings > Connectors` setup pattern.
 - The May and June Developer Blog roundups are now indexed. May covers the last pre-release Gutenberg workstream; June confirms 7.0 is released, 7.1 testing has begun, and the ongoing watch items include client-side media processing, React 19 compatibility, Abilities API refinements, PHP support labels, and Playground CLI migration.
 - The supplemental Gutenberg set now extends through 23.4. Keep the distinction explicit: WordPress 7.0.x is still documented as based on Gutenberg 22.6, while Gutenberg 23.2-23.4 are forward-compatibility context for plugin testing.
@@ -167,6 +167,7 @@ These are not dedicated release docs, but they surfaced in Developer Blog search
 
 These are not core release-plan docs, but they affect how WordPress 7.0-era AI and local tooling can be used around Flavor Agent.
 
+- 2026-07-01: [AI plugin 1.1.0 release](https://github.com/WordPress/ai/releases/tag/1.1.0)
 - 2026-06-16: [AI plugin 1.0.2 release](https://github.com/WordPress/ai/releases/tag/1.0.2)
 - 2026-05-21: [What's new in AI 1.0.0 (19 MAY 2026)?](https://make.wordpress.org/ai/2026/05/21/whats-new-in-ai-1-0-0/)
 - 2026-05-19: [AI plugin 1.0.0 release](https://github.com/WordPress/ai/releases/tag/1.0.0)

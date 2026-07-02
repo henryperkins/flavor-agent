@@ -14,7 +14,7 @@ Use it when you need to answer:
 - Public board: yes (read-only access requires `gh auth refresh -s read:project`)
 - Snapshot date: 2026-06-20 for the full project-board counts, using the maintained four-file workspace snapshot in `/home/dev/roadmaptrac/` (`wordpress-ai-roadmap.md`, `wordpress-ai-open-issues.md`, `wordpress-ai-planned-work.md`, and `wordpress-ai-cross-repo-dependencies.md`), regenerated via `/home/dev/roadmaptrac/wp-ai-roadmap-refresh.sh`.
 - Snapshot shape: 245 items total: 180 Done plus 65 not-Done items (54 open issues and 11 PR cards — 10 genuinely open plus the stale merged card #484). Status distribution is Done 180, In discussion / Needs decision 22, In progress 21, Backlog 10, To do 6, Needs review 5, Triage 1.
-- AI plugin release overlay refreshed: 2026-06-20. `WordPress/ai` release `1.0.2` is the latest shipped release (2026-06-16, a patch milestone carved out of 1.1.0), `1.1.0` is active (8 Done / 11 open) and due about 2026-06-25, and `1.2.0` is the next dated milestone. `WordPress/ai#595` ("Better connector approval matching") merged into `1.0.1` on 2026-05-26, so Flavor Agent's remaining Connector Approval work is post-ship smoke validation, not waiting for the upstream PR.
+- AI plugin release overlay refreshed: 2026-07-02. `WordPress/ai` release `1.1.0` is now the latest shipped release (2026-07-01, milestone #21), superseding the `1.0.2` patch milestone (2026-06-16); `1.2.0` is the next dated milestone. The project-board counts elsewhere in this doc remain the 2026-06-20 snapshot — only the release train was re-verified on 2026-07-02. `1.1.0` shipped two items with direct Flavor Agent bearing — the Key Encryption experiment (`#560`) and the developer-settings explicit-Save change (`#761`, no FA code change, smoke green) — plus the renamed `core/read-settings` ability (`#691`/`#806`) and character-based content gating (`#581`/`#802`); see the `1.1.0` overlay and items table below. `WordPress/ai#595` ("Better connector approval matching") shipped in `1.0.1` on 2026-05-26, so Flavor Agent's remaining Connector Approval work is post-ship smoke validation, not waiting for the upstream PR.
 - Release-cycle grounding: WordPress 7.0 is the current AI-stack floor for Flavor Agent. The relevant platform facts are the AI Client, Client-Side Abilities API, Connectors screen, Connectors API, DataViews/DataForms, and MCP/Abilities integration path.
 - Board ownership: the board is operationally the `WordPress/ai` showcase-plugin development tracker. The full board has 244 of 245 items in `WordPress/ai` plus one Google provider item (`WordPress/ai-provider-for-google#23`); `WordPress/abilities-api#84` is still open upstream (milestone Later) but is no longer on Project #240, so it is now a removed-board reference rather than a counted item. A separate curated cross-repo watchlist tracks 16 Gutenberg + abilities-api dependencies (10 open / 3 closed / 3 merged) outside the Project #240 totals.
 
@@ -63,8 +63,8 @@ gh api repos/WordPress/ai/milestones/7
 gh api 'repos/WordPress/ai/issues?milestone=7&state=all&per_page=100'
 gh api repos/WordPress/ai/milestones/18
 gh api 'repos/WordPress/ai/issues?milestone=18&state=all&per_page=100'
-gh api repos/WordPress/ai/milestones/20
-gh api 'repos/WordPress/ai/issues?milestone=20&state=all&per_page=100'
+gh api repos/WordPress/ai/milestones/21   # 1.1.0 (was #20 before the 1.0.2 patch carve-out)
+gh api 'repos/WordPress/ai/issues?milestone=21&state=all&per_page=100'
 gh api repos/WordPress/ai/milestones/19
 gh api 'repos/WordPress/ai/issues?milestone=19&state=all&per_page=100'
 ```
@@ -90,9 +90,8 @@ When this doc is updated, run `npm run check:docs` if any other live contributor
 | Total items | 245 = 174 PRs + 71 issues |
 | Open work | 65 = 54 open issues + 11 PR cards (10 open + stale merged #484) |
 | By repo | `WordPress/ai` 244, `WordPress/ai-provider-for-google` 1 (`abilities-api#84` removed from board) |
-| Latest shipped | `WordPress/ai` `1.0.2` (2026-06-16) |
-| Active release | `1.1.0` (8 Done / 11 open), due about 2026-06-25 |
-| Next release | `1.2.0` |
+| Latest shipped | `WordPress/ai` `1.1.0` (2026-07-01, milestone #21) |
+| Active / next release | `1.2.0` (next dated milestone; milestone counts not re-snapshotted since the 2026-06-20 board snapshot) |
 | Real roadmap backlog | `Future Release`: 47 (41 issues + 6 PRs) |
 
 The headline strategic read: WordPress core's AI direction is being prototyped almost entirely inside the core AI plugin. Treat the `WordPress/ai` release milestones as the source of truth for what the plugin is targeting next, and the project board as the broader pressure map for editor, admin, provider, governance, and ability surfaces.
@@ -109,13 +108,15 @@ AI plugin `1.0.0` shipped on 2026-05-19 and introduced Request Logging in `WordP
 
 AI plugin `1.0.0` also integrated Alt Text generation into Gutenberg's experimental Media Editor. That keeps the media-editor watch warm, but it does not create new Flavor Agent product work because this plugin does not own media editing, image generation, focal-point selection, or crop metadata surfaces. Open issues `WordPress/ai#325` and `WordPress/ai#238` remain Future Release/In progress media work, not a Flavor Agent collision.
 
+AI plugin `1.1.0` shipped on 2026-07-01 (milestone #21). Two shipped items have direct Flavor Agent bearing. First, the **Key Encryption** experiment (`WordPress/ai#560`) is an opt-in experiment that encrypts the AI plugin's own AI Connector API keys at rest — blanking `connectors_ai_*_api_key` and storing ciphertext under `_secret_ai/*` via a vendored, namespaced copy of `ericmann/displace-secrets-manager`, auto-decrypting when the experiment/AI/plugin is disabled. It is explicitly a proving ground for a *future core* Secrets Management API (Trac #64789), not a public API other plugins can call, so it does not yet cover Flavor Agent's own plaintext secrets — the `STATUS.md` secrets-migration watch item stays open, but the proving ground is now live code rather than a PR. Second, the developer-settings panel now requires an explicit **Save** (`WordPress/ai#761`) before Provider/Model persist (Reset-to-default auto-persists); this is a save-timing UX change only — the `wpai_feature_flavor-agent_field_developer` option name and its `{provider, model}` shape are unchanged, so `FeatureModelSelection::get()` and `WordPressAIClient::resolve_provider_model_selection()` need no change (verified 2026-07-02: `vendor/bin/phpunit tests/phpunit/WordPressAIClientTest.php`, 36 tests / 204 assertions green). The release also renamed the new settings ability to `core/read-settings` (`#691`/`#806`), switched content feature-gating to a locale-aware character-based count (`#581`/`#802`), added the `wpai_has_image_generation_support` filter (`#748`), and shipped the **Type Ahead** experiment (`#151`/`#776`); none of those require Flavor Agent code changes today.
+
 | Milestone URL                | Plugin version | State                         | Read for Flavor Agent                                                                                                                                                                                                                                     |
 | ---------------------------- | -------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WordPress/ai` milestone #17 | `0.9.0`        | Verified locally 2026-05-09 | Developer provider/model preference, Comment Moderation, Content Resizing, settings UI, and early provider-model work became baseline context. |
 | `WordPress/ai` milestone #7  | `1.0.0`        | Released 2026-05-19 | Request Logging and Connector Approvals shipped; provider/onboarding errors became more explicit; client-side Abilities API usage became part of the AI plugin baseline. |
 | `WordPress/ai` milestone #18 | `1.0.1`        | Released 2026-05-26 | Connector Approval caller matching (`#595`) shipped. Flavor Agent should validate post-approval behavior against this shipped baseline when a representative provider stack is available. |
 | `WordPress/ai` 1.0.2 milestone | `1.0.2`        | Released 2026-06-16 | Patch milestone carved out of 1.1.0 (11 items): Request Log copy-feedback (`#699`) and header-overlap (`#704`) fixes plus CJK/empty-state/button-sizing/translation stabilization (`#571`, `#578`, `#390`, `#391`, `#701`, `#721`) and Editorial Updates reload matching (`#678`). All AI-plugin-internal polish; no new Flavor Agent integration. |
-| `WordPress/ai` milestone #20 | `1.1.0`        | Active (8 Done / 11 open); due about 2026-06-25 | Stabilization wave: Request Log translations/copy/retention, CJK character-count fixes, empty-state bugs, Content Classification relevance, Editorial Updates/Visual Revisions, settings/provider gating, Type Ahead, C2PA Monitor, Stylelint, and alt-text URL matching. |
+| `WordPress/ai` milestone #21 | `1.1.0`        | Released 2026-07-01 | Two items with direct Flavor Agent bearing: the Key Encryption experiment (`#560`) and developer-settings explicit-Save (`#761`, no FA code change — smoke green 2026-07-02). Also renamed `core/read-settings` ability (`#691`/`#806`), character-based content gating (`#581`/`#802`), Type Ahead experiment (`#151`/`#776`), `wpai_has_image_generation_support` filter (`#748`), guest-comment moderation toggle (`#751`), and Request Log/UX stabilization. See the `1.1.0` narrative above and the items table below. |
 | `WordPress/ai` milestone #19 | `1.2.0`        | Next dated release | Connector Approval error copy, button sizing, C2PA manifest detection, Google provider image-generation bug, and agentic Refine / collaborative editorial planning. |
 
 ## Planned But Not Shipped Work To Track
@@ -173,6 +174,17 @@ Flavor Agent-relevant `1.0.0` items:
 | `WordPress/ai#452` — Content Classification relevance                                              | `inc/Abilities/ContentAbilities.php`, content panel taxonomy suggestions   | Content classification relevance work may become the canonical taxonomy/classification layer.                                   |
 | `WordPress/ai#482` — client-side Abilities API                                                     | Editor-side ability access and hydration assumptions                       | Merged in `1.0.0`; keep Flavor Agent's abilities bridge aligned with core hydration instead of adding parallel REST execution paths. |
 | `WordPress/ai#486` — developer settings mode for desired provider/model per feature                | Provider/model diagnostics and settings                                    | Merged in `0.9.0` and already honored by `WordPressAIClient::chat()`; do not create a competing Flavor Agent model pinning UI.  |
+
+Flavor Agent-relevant `1.1.0` items (shipped 2026-07-01):
+
+| Upstream artifact | Flavor Agent counterpart | Implication |
+| ----------------- | ------------------------ | ----------- |
+| `WordPress/ai#560` — Key Encryption experiment | `flavor-agent.php` secret options (`flavor_agent_cloudflare_workers_ai_api_token`, `flavor_agent_qdrant_key`), `STATUS.md` secrets watch item | Shipped as an opt-in experiment that encrypts **only the AI plugin's own** connector keys (`connectors_ai_*_api_key` → `_secret_ai/*`) via a vendored, namespaced `ericmann/displace-secrets-manager`; auto-decrypts when the experiment/AI/plugin is disabled. It is a proving ground for a *future core* Secrets Management API (Trac #64789), not a public API. No FA change today: FA's two plaintext secrets are out of scope, and adopting the AI plugin's internal vendored classes is not a supported path. Keep the `STATUS.md` watch item — the proving ground is now live code, not a PR. |
+| `WordPress/ai#761` — developer-settings explicit Save | `inc/AI/FeatureModelSelection.php`, `inc/LLM/WordPressAIClient.php:528` | Save-timing UX change only; the `wpai_feature_flavor-agent_field_developer` option name and `{provider, model}` shape are unchanged. No FA change — smoke green 2026-07-02 (`WordPressAIClientTest.php`, 36 tests / 204 assertions). Under the new draft/Save flow an unsaved selection never persists, so `resolve_provider_model_selection()` reads empty and uses its default routing — strictly safer than the old auto-save-on-change. |
+| `WordPress/ai#691` / `#806` — new `core/read-settings` ability | `inc/Abilities/Registration.php`, `@wordpress/core-abilities` hydration | New core-owned read ability (renamed from `core/settings`). FA references neither name, so no break. Adjacent to the `#40` core-abilities surface; keep FA's abilities bridge aligned with core hydration rather than shadowing core reads. |
+| `WordPress/ai#581` / `#802` — character-based minimum-content gating | Content-length gating in the content recommender surface | Upstream feature-availability gating is now locale-aware character counting instead of word counting. Watch/mirror only if FA gates a surface on content length; no current FA change. |
+| `WordPress/ai#151` / `#776` — Type Ahead experiment | `src/inspector/*` panel recommenders | Shipped. Cursor-inline ghost-text pattern, distinct from FA's panel-driven recommendations; supports provider/model overrides and Guidelines. Glance-only; no collision today. |
+| `WordPress/ai#748` — `wpai_has_image_generation_support` filter | (none) | Lets third parties claim image-generation support without an API key. Out of FA scope (no image-generation surface). |
 
 ## Release-Train Items To Watch First
 
@@ -247,8 +259,10 @@ Compete with `inc/OpenAI/Provider.php`, `inc/Embeddings/ConfigurationValidator.p
 | `WordPress/ai#595` | Deepest originating extension caller attribution for Connector Approval                                  | Merged; `1.0.1` |
 | `WordPress/ai#660` | Clearer error copy when a provider is blocked by Connector Approvals                                     | In progress; `1.2.0` |
 | `WordPress/ai#486` | Add developer settings mode with the ability to set desired provider and model per feature               | Merged; `0.9.0` |
+| `WordPress/ai#761` | Explicit Save button for developer settings provider/model (Reset-to-default auto-persists)              | Shipped; `1.1.0` |
 | `WordPress/ai#342` | Add permission controls for plugins to use a connected provider                                          | In discussion    |
 | `WordPress/ai#441` | Require explicit admin approval for plugin access to Connectors plus improve connector secret protection | In discussion    |
+| `WordPress/ai#560` | Key Encryption experiment (encrypt AI Connector API keys at rest; proving ground for a core Secrets API) | Shipped; `1.1.0` |
 | `WordPress/ai#211` | Add Service Account experiment                                                                           | In discussion    |
 | `WordPress/ai#191` | Add import/export support for AI settings and provider configuration                                     | Backlog          |
 | `WordPress/ai#27`  | Add developer support for pre-configured AI providers (also High priority above)                         | In discussion    |
@@ -261,6 +275,7 @@ Compete with `inc/Abilities/Registration.php` (32 defined abilities: seven recom
 | #                  | Title                                                                                         | Status           |
 | ------------------ | --------------------------------------------------------------------------------------------- | ---------------- |
 | `WordPress/ai#40`  | WordPress Core Abilities                                                                      | Open; `0.9.0`    |
+| `WordPress/ai#691` | New `core/read-settings` ability (renamed from `core/settings` in `#806`)                     | Shipped; `1.1.0` |
 | `WordPress/ai#354` | Unified Abilities exposure controls (per-surface gating)                                      | In discussion    |
 | `WordPress/ai#348` | Feature Request: Unified AI Management Layer for WordPress Core                               | In discussion    |
 | `WordPress/ai#481` | Ensure any `sanitize_callback` in Abilities input schema is executed                          | Open PR; Future Release |
@@ -280,7 +295,7 @@ Compete with the block recommendation flow in `src/inspector/BlockRecommendation
 | `WordPress/ai#297` | New experiment: Content Generation                                          | Backlog       |
 | `WordPress/ai#452` | Content Classification: improve relevance of taxonomy suggestions           | To do         |
 | `WordPress/ai#338` | New Experiments: Analytics-aware content and amplification recommendations  | In discussion |
-| `WordPress/ai#151` | Add Type Ahead experiment                                                   | In progress   |
+| `WordPress/ai#151` | Add Type Ahead experiment (provider/model overrides + Guidelines via `#776`) | Shipped; `1.1.0` |
 | `WordPress/ai#186` | Add tone adjustment controls for AI-generated content                       | Backlog       |
 | `WordPress/ai#187` | Support multilingual rewriting and translation via AI                       | Backlog       |
 | `WordPress/ai#188` | Add persona-driven content generation experiments                           | Backlog       |
