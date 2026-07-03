@@ -149,6 +149,7 @@ Tested by: `tests/phpunit/RecommendationSignatureTest.php`, `SignatureBoundaryTe
 | --- | --- | --- |
 | Block Inspector | Full loop | Inline-safe attribute applies; structural operations review-gated |
 | Template / Template part | Full loop | Review-before-apply; deterministic bounded operations |
+| Post-blocks (post/page structure) | Full loop | Review-before-apply; lock-aware bounded operations; external-agent surface only, no editor UI |
 | Global Styles / Style Book | Full loop | `theme.json`-bounded paths and theme-backed values |
 | Pattern inserter | Generate → validate → freshness-revalidated core insert | Intentionally ranking/browse-only; direct inserts are signature-revalidated but not recorded in apply/undo |
 | Content | Generate → validate | Editorial-only; a human copies text into the editor |
@@ -162,20 +163,22 @@ The **template-part** surface now has the same server-side external lane: reques
 
 The **page-level template** surface now has a third governed external lane: request (`request-template-apply`) → human approval (`POST /flavor-agent/v1/activity/{id}/decision`) → server execute of one bounded `insert_pattern` against one `wp_template`, atomic and re-validated with drift gates → attributed activity row → server-side undo (`undo-activity`, also dispatched through the shared executor registry). Like the template-part lane, it is **not attested** — Ring III attestation stays frozen to `external-style-apply-v1`. The block surface remains editor-owned and is not yet exposed as an external apply lane.
 
+The **post-blocks** surface adds a fourth governed external lane, extending the loop to individual posts and pages rather than theme-territory documents: request (`request-post-blocks-apply`) → human approval (`POST /flavor-agent/v1/activity/{id}/decision`, gated by `manage_options` plus `edit_post` on the target post) → server re-collects the live document target contract (post-type/status allowlist plus lock-aware target exclusion for `attrs.lock`/`templateLock`) and executes ≤3 path-addressed bounded operations against the post's `post_content` atomically through the same structural-operation grammar and apply pass the template-part lane uses → attributed activity row (scope key `{postType}:{postId}`) → server-side undo (`undo-activity`). Like template and template-part, it is **not attested**. This surface has no first-party editor UI; it exists to demonstrate the governance layer's parity boundary extends to arbitrary content documents, not only theme-territory ones.
+
 Ring III attestation coverage is intentionally narrower than the full governed-loop map: v1 attaches to the external Global Styles / Style Book approval path, because that path has both a durable human decision and a canonical style artifact digest. Advisory/editorial surfaces and editor-owned applies remain Govern evidence unless promoted through a separate surface plan with a real artifact digest and approval moment.
 
 ## External-Agent Parity
 
 External agents reach the layer through the same permission callbacks as the first-party editor (`edit_posts` / `edit_theme_options`, escalating to `edit_post` when a post ID is resolvable):
 
-- the seven `recommend-*` abilities (feature-gated) — exposed as first-class MCP tools on the dedicated server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`)
-- the five `preview-recommend-*` siblings — side-effect-free signature dry-runs, registered before the feature gate is enabled so operators can verify wiring
+- the eight `recommend-*` abilities (feature-gated) — exposed as first-class MCP tools on the dedicated server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`)
+- the six `preview-recommend-*` siblings — side-effect-free signature dry-runs, registered before the feature gate is enabled so operators can verify wiring
 - ten public read helpers on the universal MCP default server (`meta.mcp.public = true`)
-- the six external-apply abilities (feature-gated, dedicated server only): `request-style-apply` queues a review-gated style apply, `request-template-apply` queues a review-gated page-level template structural apply, `request-template-part-apply` queues a review-gated template-part structural apply, `get-activity`/`list-activity` are the agent's attribution and status reads, and `undo-activity` is the server-side reverse path with ordered-undo and drift checks across all three lanes
+- the seven external-apply abilities (feature-gated, dedicated server only): `request-style-apply` queues a review-gated style apply, `request-template-apply` queues a review-gated page-level template structural apply, `request-template-part-apply` queues a review-gated template-part structural apply, `request-post-blocks-apply` queues a review-gated post/page structural apply, `get-activity`/`list-activity` are the agent's attribution and status reads, and `undo-activity` is the server-side reverse path with ordered-undo and drift checks across all four lanes
 
 Generation-side governance is caller-independent: external recommendation calls flow through the same executor, schemas, validators, freshness signatures, and request-diagnostic attribution as the editor.
 
-The boundary, stated plainly: external agents can now request style, template, and template-part applies, read their attribution, and undo executed style, template, and template-part rows — but approval is never exposed to agents. Every external apply is review-gated through `POST /flavor-agent/v1/activity/{id}/decision` (`manage_options` plus the row's mutation capability) in `Settings > AI Activity`, with freshness re-verified at request and again at approval. AI proposes; WordPress approves. The block surface still remains editor-owned, and admin-global activity reads stay REST-only.
+The boundary, stated plainly: external agents can now request style, template, template-part, and post-blocks applies, read their attribution, and undo executed style, template, template-part, and post-blocks rows — but approval is never exposed to agents. Every external apply is review-gated through `POST /flavor-agent/v1/activity/{id}/decision` (`manage_options` plus the row's mutation capability) in `Settings > AI Activity`, with freshness re-verified at request and again at approval. AI proposes; WordPress approves. The block surface still remains editor-owned, and admin-global activity reads stay REST-only.
 
 ## Foundation
 

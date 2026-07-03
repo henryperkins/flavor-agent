@@ -10,7 +10,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 Navigation, pattern, and content recommendations do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. Scoped recommendation requests and recommendation outcomes can still persist diagnostic audit rows when a document scope is available; inline hydration is intentionally limited to the surfaces that expose a matching current-scope panel. Exact diagnostic row shapes and route contracts are canonical in `docs/reference/abilities-and-routes.md`.
 
-External-agent applies are intentionally narrower than the editor-owned apply map. In `0.1.0`, external agents can request Global Styles / Style Book applies through `request-style-apply`, page-level template applies through `request-template-apply`, and template-part applies through `request-template-part-apply`; administrators approve or reject those pending rows in `Settings > AI Activity`; approval executes server-side after freshness and operation revalidation. Block, content, navigation, and pattern external applies are not exposed.
+External-agent applies are intentionally narrower than the editor-owned apply map. In `0.1.0`, external agents can request Global Styles / Style Book applies through `request-style-apply`, page-level template applies through `request-template-apply`, template-part applies through `request-template-part-apply`, and post/page structural applies through `request-post-blocks-apply` (the only lane with no first-party editor UI -- it exists purely as an external-agent surface); administrators approve or reject those pending rows in `Settings > AI Activity`; approval executes server-side after freshness and operation revalidation. Block, content, navigation, and pattern external applies are not exposed.
 
 ## Surfacing Conditions
 
@@ -83,7 +83,7 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 - REST: `GET /flavor-agent/v1/attestations/{id}/verification`
 - REST: `GET /flavor-agent/v1/attestations/{id}/subject-state`
 - REST: `GET /flavor-agent/v1/attestations/keys`
-- Abilities: `flavor-agent/request-style-apply`, `flavor-agent/request-template-apply`, `flavor-agent/request-template-part-apply`, `flavor-agent/get-activity`, `flavor-agent/list-activity`, `flavor-agent/undo-activity`
+- Abilities: `flavor-agent/request-style-apply`, `flavor-agent/request-template-apply`, `flavor-agent/request-template-part-apply`, `flavor-agent/request-post-blocks-apply`, `flavor-agent/get-activity`, `flavor-agent/list-activity`, `flavor-agent/undo-activity`
 
 ## Key Implementation Files
 
