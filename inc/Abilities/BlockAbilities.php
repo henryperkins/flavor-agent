@@ -295,6 +295,17 @@ final class BlockAbilities {
 			$normalized['block']['title'] = $title;
 		}
 
+		// Trust boundary: on the first-party editorContext path the client
+		// supplies the introspected inspectorPanels (and content/config
+		// attributes below), which BlockRecommendationExecutionContract turns
+		// into the capability whitelist that gates which suggestions survive.
+		// This is safe because recommendations are advisory — the local apply
+		// still runs through the block editor's real supports/lock enforcement,
+		// and no governed write consumes a recommendation-supplied contract
+		// (the external apply lanes re-derive context server-side, with no
+		// filter seam). The external selectedBlock path re-introspects panels
+		// server-side rather than trusting the client. See
+		// docs/reference/governance-layer.md (recommendation trust boundary).
 		if ( array_key_exists( 'inspectorPanels', $block ) ) {
 			$inspector_panels                               = self::normalize_map( $block['inspectorPanels'] ?? [] );
 			$normalized['block']['inspectorPanels']         = $inspector_panels;
@@ -587,6 +598,58 @@ final class BlockAbilities {
 		$visual_hints = self::normalize_visual_hints( $parent['visualHints'] ?? [], true );
 		if ( ! empty( $visual_hints ) ) {
 			$normalized['visualHints'] = $visual_hints;
+		}
+
+		$layout_constraints = self::normalize_layout_constraints( $parent['layoutConstraints'] ?? [] );
+		if ( ! empty( $layout_constraints ) ) {
+			$normalized['layoutConstraints'] = $layout_constraints;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * Whitelist a parent container's resolved layout constraints (contentSize /
+	 * wideSize / orientation / column geometry) so the prompt can ground the
+	 * "respect the parent's width constraints" rule. Mirrors the client-side
+	 * getParentLayoutConstraints() key set; unknown keys are dropped.
+	 *
+	 * @return array<string, string|int|float|bool>
+	 */
+	private static function normalize_layout_constraints( mixed $raw_constraints ): array {
+		$map = self::normalize_map( $raw_constraints );
+
+		if ( empty( $map ) ) {
+			return [];
+		}
+
+		$allowed = [
+			'type',
+			'contentSize',
+			'wideSize',
+			'orientation',
+			'flexWrap',
+			'justifyContent',
+			'verticalAlignment',
+			'columnCount',
+			'minimumColumnWidth',
+			'columnWidth',
+		];
+
+		$normalized = [];
+
+		foreach ( $allowed as $key ) {
+			if ( ! array_key_exists( $key, $map ) ) {
+				continue;
+			}
+
+			$value = self::sanitize_scalar( $map[ $key ] );
+
+			if ( null === $value || '' === $value ) {
+				continue;
+			}
+
+			$normalized[ $key ] = $value;
 		}
 
 		return $normalized;

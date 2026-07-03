@@ -43,6 +43,13 @@ final class Prompt {
 		'pc',
 	];
 
+	// Theme-token prompt caps for the block surface. Intentionally more generous
+	// than the shared LLM\ThemeTokenFormatter (~20/family + a 2000-char backstop)
+	// used by the document/whole-surface prompts: block recommendations focus on
+	// ONE block, so surfacing more preset choices helps the model pick the best
+	// grounded value. The block theme-token section is non-required (priority 35)
+	// and PromptBudget drops it whole under pressure, so a larger list never
+	// blows the required sections. Keep the two formatters deliberately distinct.
 	private const THEME_TOKEN_PROMPT_MAX_ITEMS = 60;
 
 	private const THEME_TOKEN_PROMPT_MAX_MAP_ITEMS = 8;
@@ -60,6 +67,15 @@ final class Prompt {
 	 * Below the standard 0.5 mid-confidence threshold to signal low-confidence advisory recovery.
 	 */
 	private const PLAIN_TEXT_RECOVERY_CONFIDENCE = 0.35;
+
+	/**
+	 * Fraction of the prompt token budget the (required) block section may spend
+	 * rendering a single block's currentAttributes before truncation. Bounds the
+	 * one unbounded, user-content-bearing field (a data-URI image, a very long
+	 * content attribute) so it cannot blow the budget of the required section —
+	 * which PromptBudget can only drop whole, never trim in place.
+	 */
+	private const CURRENT_ATTRIBUTES_TOKEN_FRACTION = 0.4;
 
 	/**
 	 * Build the system prompt that instructs the LLM how to respond.
@@ -205,7 +221,7 @@ SYSTEM;
 		}
 
 		if ( ! empty( $block['currentAttributes'] ) ) {
-			$parts[] = 'Current attributes: ' . wp_json_encode( $block['currentAttributes'] );
+			$parts[] = 'Current attributes: ' . self::bounded_prompt_json( $block['currentAttributes'], $budget );
 		}
 
 		if ( ! empty( $block['currentAttributes']['metadata']['bindings'] ) ) {
@@ -529,6 +545,27 @@ SYSTEM;
 		return $budget->assemble();
 	}
 
+	/**
+	 * JSON-encode a value for the prompt, truncating to a share of the token
+	 * budget so a single oversized field cannot blow the required block section.
+	 *
+	 * @param mixed $value
+	 */
+	private static function bounded_prompt_json( mixed $value, PromptBudget $budget ): string {
+		$encoded = wp_json_encode( $value );
+
+		if ( ! is_string( $encoded ) ) {
+			return '';
+		}
+
+		$cap = max(
+			512,
+			(int) floor( $budget->get_max_tokens() * self::CURRENT_ATTRIBUTES_TOKEN_FRACTION )
+		);
+
+		return PromptBudget::trim_to_tokens( $encoded, $cap );
+	}
+
 	private static function limit_prompt_list( mixed $value, int $limit = self::THEME_TOKEN_PROMPT_MAX_ITEMS ): array {
 		if ( ! is_array( $value ) ) {
 			return [];
@@ -733,11 +770,48 @@ SYSTEM;
 			$parts[] = '[' . $visual . ']';
 		}
 
+		$constraints = self::format_layout_constraints( $parent_context['layoutConstraints'] ?? [] );
+		if ( $constraints !== '' ) {
+			$parts[] = '[constraints: ' . $constraints . ']';
+		}
+
 		if ( ! empty( $parent_context['childCount'] ) ) {
 			$parts[] = '(' . (int) $parent_context['childCount'] . ' children)';
 		}
 
 		return implode( ' ', array_filter( $parts ) );
+	}
+
+	/**
+	 * Format a parent container's resolved layout constraints (contentSize /
+	 * wideSize / orientation / column geometry) into a compact `key=value` list
+	 * so dimension suggestions can respect the parent's width and flow rules.
+	 *
+	 * @param mixed $layout_constraints
+	 */
+	private static function format_layout_constraints( mixed $layout_constraints ): string {
+		if ( ! is_array( $layout_constraints ) || [] === $layout_constraints ) {
+			return '';
+		}
+
+		$pairs = [];
+
+		foreach ( $layout_constraints as $key => $value ) {
+			if ( ! is_string( $key ) || ! is_scalar( $value ) ) {
+				continue;
+			}
+
+			$display = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value;
+			$display = sanitize_text_field( $display );
+
+			if ( '' === $display ) {
+				continue;
+			}
+
+			$pairs[] = $key . '=' . $display;
+		}
+
+		return implode( ', ', $pairs );
 	}
 
 	private static function format_visual_hints( array $visual_hints, bool $include_parent_extensions = false ): string {
@@ -1042,6 +1116,15 @@ SYSTEM;
 	 * payload with a sentence or two. It does not handle multiple top-level
 	 * objects, unbalanced braces inside string literals, or code-fenced JSON
 	 * containing prose. Those cases fall through to the parse_error WP_Error path.
+	 *
+	 * The span-plus-json_decode design is deliberately fail-closed on ambiguity:
+	 * when prose contributes an extra brace group (an example object, a stray
+	 * `{}` in a sentence, two top-level objects) the first…last span is invalid
+	 * JSON and the whole response is rejected rather than silently recovering
+	 * the WRONG object. Do not "harden" this into a first-balanced-object scan —
+	 * that regresses the safety property, and PromptRulesTest guards it (see
+	 * test_parse_response_returns_wp_error_when_response_has_two_top_level_json_objects
+	 * and ..._when_string_literal_contains_unbalanced_brace).
 	 */
 	private static function extract_json_object( string $text ): ?string {
 		$start = strpos( $text, '{' );

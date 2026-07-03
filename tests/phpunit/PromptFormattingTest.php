@@ -147,6 +147,47 @@ final class PromptFormattingTest extends TestCase {
 		$this->assertStringContainsString( '(4 children)', $prompt );
 	}
 
+	public function test_build_user_renders_parent_layout_constraints(): void {
+		$context = [
+			'block'         => [ 'name' => 'core/button' ],
+			'parentContext' => [
+				'block'             => 'core/group',
+				'layoutConstraints' => [
+					'type'        => 'constrained',
+					'contentSize' => '680px',
+					'wideSize'    => '1200px',
+				],
+			],
+			'themeTokens'   => [],
+		];
+
+		$prompt = Prompt::build_user( $context );
+
+		$this->assertStringContainsString( '## Parent container', $prompt );
+		$this->assertStringContainsString( 'contentSize=680px', $prompt );
+		$this->assertStringContainsString( 'wideSize=1200px', $prompt );
+	}
+
+	public function test_build_user_bounds_oversized_current_attributes(): void {
+		$huge    = str_repeat( 'A', 200000 );
+		$context = [
+			'block'       => [
+				'name'              => 'core/paragraph',
+				'currentAttributes' => [ 'content' => $huge ],
+			],
+			'themeTokens' => [],
+		];
+
+		$prompt = Prompt::build_user( $context );
+
+		// The small, critical part of the required block section still survives.
+		$this->assertStringContainsString( 'Name: core/paragraph', $prompt );
+		// The oversized attribute value is truncated, never emitted whole.
+		$this->assertStringNotContainsString( $huge, $prompt );
+		// The whole prompt stays far below the raw attribute size.
+		$this->assertLessThan( 60000, strlen( $prompt ) );
+	}
+
 	public function test_build_user_formats_sibling_summaries_with_hints(): void {
 		$context = [
 			'block'                  => [ 'name' => 'core/button' ],

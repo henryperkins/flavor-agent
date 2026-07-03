@@ -9,6 +9,12 @@ namespace FlavorAgent\LLM;
 
 final class ThemeTokenFormatter {
 
+	// Shared theme-token formatter for the document / whole-surface prompts
+	// (post-blocks, templates, template parts, navigation, style). Caps each
+	// family tighter than the block surface's inline formatter (LLM\Prompt,
+	// ~60/family) and adds a hard total-length backstop, because these prompts
+	// summarize an entire document rather than one block. The two are kept
+	// deliberately distinct — see the note in LLM\Prompt.
 	private const MAX_FORMATTED_LENGTH = 2000;
 
 	/**

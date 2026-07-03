@@ -1074,6 +1074,61 @@ describe( 'collectBlockContext', () => {
 		expect( result.parentContext ).not.toHaveProperty( 'job' );
 	} );
 
+	test( 'emits parent layout width constraints for dimension grounding', () => {
+		mockIntrospectBlockInstance.mockReturnValue( {
+			name: 'core/paragraph',
+			title: 'Paragraph',
+			currentAttributes: {},
+			inspectorPanels: {},
+			bindableAttributes: [],
+			styles: [],
+			activeStyle: null,
+			variations: [],
+			supportsContentRole: false,
+			contentAttributes: {},
+			configAttributes: {},
+			editingMode: 'default',
+			isInsideContentOnly: false,
+			blockVisibility: null,
+			childCount: 0,
+		} );
+		mockIntrospectBlockTree.mockReturnValue( [
+			{
+				clientId: 'parent-group',
+				innerBlocks: [ { clientId: 'child-1', innerBlocks: [] } ],
+			},
+		] );
+		mockAnnotateStructuralIdentity.mockReturnValue( [] );
+		mockFindNodePath.mockReturnValue( null );
+		mockCollectThemeTokens.mockReturnValue( {} );
+		mockSummarizeTokens.mockReturnValue( {} );
+		mockSelect.mockReturnValue( {
+			getBlockRootClientId: jest.fn().mockReturnValue( 'parent-group' ),
+			getBlockOrder: jest.fn().mockReturnValue( [ 'child-1' ] ),
+			getBlockName: jest
+				.fn()
+				.mockImplementation( ( id ) =>
+					id === 'parent-group' ? 'core/group' : undefined
+				),
+			getBlockAttributes: jest.fn().mockReturnValue( {
+				layout: {
+					type: 'constrained',
+					contentSize: '680px',
+					wideSize: '1200px',
+				},
+			} ),
+			getBlockCount: jest.fn().mockReturnValue( 1 ),
+		} );
+
+		const result = collectBlockContext( 'child-1' );
+
+		expect( result.parentContext.layoutConstraints ).toEqual( {
+			type: 'constrained',
+			contentSize: '680px',
+			wideSize: '1200px',
+		} );
+	} );
+
 	test( 'preserves existing siblingsBefore and siblingsAfter string arrays', () => {
 		mockIntrospectBlockInstance.mockReturnValue( {
 			name: 'core/paragraph',

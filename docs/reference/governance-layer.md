@@ -180,6 +180,16 @@ Generation-side governance is caller-independent: external recommendation calls 
 
 The boundary, stated plainly: external agents can now request style, template, template-part, and post-blocks applies, read their attribution, and undo executed style, template, template-part, and post-blocks rows — but approval is never exposed to agents. Every external apply is review-gated through `POST /flavor-agent/v1/activity/{id}/decision` (`manage_options` plus the row's mutation capability) in `Settings > AI Activity`, with freshness re-verified at request and again at approval. AI proposes; WordPress approves. The block surface still remains editor-owned, and admin-global activity reads stay REST-only.
 
+### Recommendation context trust boundary
+
+Recommendation context has two provenance paths with different trust postures. The **first-party `editorContext`** path trusts the client-supplied block manifest — introspected `inspectorPanels`, `bindableAttributes`, and content/config attribute keys — as the source for the execution contract (`BlockRecommendationExecutionContract`) that gates which suggestions survive validation. The **external `selectedBlock`** path does not: it re-introspects the block type server-side (`ServerCollector::for_block`), so an external caller cannot fabricate capabilities.
+
+Trusting the first-party manifest is safe because recommendations are advisory: the local apply still runs through the block editor's real `supports`/lock enforcement, and **no governed write consumes a recommendation-supplied execution contract**. The four external-apply lanes (style, template, template-part, post-blocks) re-collect and re-validate their target contract server-side at request and again at approval, with no filter seam. A recommendation's `executionContract` is an advisory shaping and attribution artifact, never an apply authority.
+
+### Data flow to the provider
+
+Generating a recommendation sends the relevant document slice to the site-configured AI provider through core `Settings > Connectors`. For the block surface that includes the selected block's current attributes (which can carry authored content, image URLs, and other values); for the structural surfaces it includes the block-tree structure with per-node attributes. This is inherent to advising on a block or document, and it follows the site's own Connectors configuration — Flavor Agent adds no separate provider credential for chat. Every generation is attributed server-side with a request-level activity row.
+
 ## Foundation
 
 The layer is built on the WordPress 7.0 AI stack: the WordPress AI plugin (feature registration and Guidelines), the AI Client + `Settings > Connectors` (all text generation), the Abilities API (all recommendation transport), and the MCP Adapter (external exposure). See `docs/reference/abilities-and-routes.md` for exact contracts and `docs/FEATURE_SURFACE_MATRIX.md` for the per-surface demonstration map.

@@ -360,6 +360,41 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_prepare_recommend_block_input_preserves_parent_layout_constraints_from_editor_context(): void {
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block'         => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [],
+					],
+					'parentContext' => [
+						'block'             => 'core/group',
+						'layoutConstraints' => [
+							'type'        => 'constrained',
+							'contentSize' => '680px',
+							'wideSize'    => '1200px',
+							'orientation' => 'horizontal',
+							'columnCount' => 3,
+							'unknown'     => 'drop-me',
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'type'        => 'constrained',
+				'contentSize' => '680px',
+				'wideSize'    => '1200px',
+				'orientation' => 'horizontal',
+				'columnCount' => 3,
+			],
+			$prepared['context']['parentContext']['layoutConstraints']
+		);
+	}
+
 	public function test_prepare_recommend_block_input_normalizes_parent_and_sibling_context_from_selected_block(): void {
 		$prepared = $this->invoke_prepare_recommend_block_input(
 			[

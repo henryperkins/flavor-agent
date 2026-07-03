@@ -432,8 +432,15 @@ final class StructuralOperationsGrammar {
 	}
 
 	/**
-	 * expectedTarget fingerprint: name + childCount (+ slot when present), NOT
-	 * attributes — attribute-level fingerprints churn on unrelated edits.
+	 * Build the expectedTarget payload recorded on a stored operation: name,
+	 * label, attributes, childCount, and slot (when present).
+	 *
+	 * The apply-time drift comparison (StructuralOperationsApplier::assert_expected_target)
+	 * enforces only name + childCount — the stable structural fingerprint.
+	 * label, attributes, and slot ride along as request-time provenance but are
+	 * intentionally NOT part of the comparison: attribute-level fingerprints
+	 * churn on unrelated edits, so comparing them would reject an apply after
+	 * any incidental content change to the target.
 	 *
 	 * @param array<string, mixed> $target_node
 	 * @return array<string, mixed>
