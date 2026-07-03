@@ -183,10 +183,22 @@ final class TemplateAbilities {
 			return $context;
 		}
 
-		$review_context = ServerCollector::for_template_part( $template_part_ref, null );
-		if ( is_wp_error( $review_context ) ) {
-			return $review_context;
-		}
+		// The review-context signature must stay independent of both the inserter's
+		// visible-pattern scope and the live editor overlay, so it is sourced from
+		// the pristine server identity + theme tokens captured here (untouched by
+		// the overlay merge below) plus the full, unscoped pattern candidate set.
+		// This reuses the already-collected structural slice instead of running a
+		// second full ServerCollector::for_template_part() for the same ref.
+		$review_context = [
+			'slug'        => (string) ( $context['slug'] ?? '' ),
+			'title'       => (string) ( $context['title'] ?? '' ),
+			'area'        => (string) ( $context['area'] ?? '' ),
+			'themeTokens' => is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : [],
+			'patterns'    => ServerCollector::for_template_part_candidate_patterns(
+				(string) ( $context['area'] ?? '' ),
+				null
+			),
+		];
 
 		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
 			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];

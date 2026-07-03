@@ -213,9 +213,13 @@ SYSTEM;
 				$header .= 'Showing ' . $max . ' of ' . count( $patterns ) . " patterns.\n";
 			}
 
-			$budget->add_section( 'patterns', $header . implode( "\n", $lines ), 55 );
+			// Priority 65 keeps the pattern vocabulary above the executable-operation
+			// examples (62) and structural constraints (60) that reference pattern
+			// names, mirroring the template-part surface that shares this structural
+			// grammar so the two cannot drift under budget pressure.
+			$budget->add_section( 'patterns', $header . implode( "\n", $lines ), 65 );
 		} else {
-			$budget->add_section( 'patterns', "## Available Patterns\nNo patterns are available.", 55 );
+			$budget->add_section( 'patterns', "## Available Patterns\nNo patterns are available.", 65 );
 		}
 
 		$theme_tokens = ThemeTokenFormatter::format(

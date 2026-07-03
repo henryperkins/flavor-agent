@@ -52,6 +52,40 @@ final class TemplatePartPromptTest extends TestCase {
 		);
 	}
 
+	public function test_build_user_keeps_few_shot_examples_over_docs_grounding_under_budget_pressure(): void {
+		$filter = static fn (): int => 2000;
+		add_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+
+		try {
+			$prompt = TemplatePartPrompt::build_user(
+				[
+					'templatePartRef' => 'twentytwentyfive//header',
+					'slug'            => 'header',
+					'title'           => 'Header',
+					'area'            => 'header',
+					'blockTree'       => [],
+					'patterns'        => [],
+					'themeTokens'     => [],
+				],
+				'FLAVOR_AGENT_INSTRUCTION_MARKER',
+				[
+					[
+						'title'   => 'Docs grounding',
+						'excerpt' => str_repeat( 'Documentation guidance. ', 350 ),
+					],
+				]
+			);
+		} finally {
+			remove_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+		}
+
+		// Under pressure the best-effort docs section is dropped before the
+		// deterministic worked example, so the few-shot survives.
+		$this->assertStringContainsString( 'FLAVOR_AGENT_INSTRUCTION_MARKER', $prompt );
+		$this->assertStringContainsString( '## Example - header template part with a weak utility row', $prompt );
+		$this->assertStringNotContainsString( '## WordPress Developer Guidance', $prompt );
+	}
+
 	public function test_build_user_does_not_inject_site_guidelines(): void {
 		WordPressTestState::$options = [
 			Guidelines::OPTION_SITE   => 'Header should support product discovery.',
@@ -301,6 +335,86 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertStringContainsString( '"placement":"before_block_path"', $prompt );
 		$this->assertStringContainsString( '"targetPath":[0]', $prompt );
 		$this->assertStringContainsString( '"type":"replace_block_with_pattern"', $prompt );
+	}
+
+	public function test_template_part_prompt_shows_a_remove_block_operation_example(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef'  => 'theme//header',
+				'slug'             => 'header',
+				'title'            => 'Header',
+				'area'             => 'header',
+				'blockTree'        => [
+					[
+						'path'  => [ 0 ],
+						'name'  => 'core/spacer',
+						'label' => 'Spacer',
+					],
+				],
+				'patterns'         => [
+					[
+						'name'  => 'theme/header-utility',
+						'title' => 'Header Utility',
+					],
+				],
+				'operationTargets' => [
+					[
+						'path'              => [ 0 ],
+						'name'              => 'core/spacer',
+						'label'             => 'Redundant spacer',
+						'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+						'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+					],
+				],
+				'insertionAnchors' => [
+					[
+						'placement'  => 'before_block_path',
+						'targetPath' => [ 0 ],
+						'blockName'  => 'core/spacer',
+						'label'      => 'Before Redundant spacer',
+					],
+				],
+			],
+			'Trim redundant structure from the header'
+		);
+
+		$this->assertStringContainsString( '## Executable Operation Examples', $prompt );
+		$this->assertStringContainsString( '"type":"remove_block"', $prompt );
+		$this->assertStringContainsString( '"expectedBlockName":"core/spacer"', $prompt );
+	}
+
+	public function test_template_part_prompt_shows_a_remove_block_example_without_candidate_patterns(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef'  => 'theme//header',
+				'slug'             => 'header',
+				'title'            => 'Header',
+				'area'             => 'header',
+				'blockTree'        => [
+					[
+						'path'  => [ 0 ],
+						'name'  => 'core/spacer',
+						'label' => 'Spacer',
+					],
+				],
+				'patterns'         => [],
+				'operationTargets' => [
+					[
+						'path'              => [ 0 ],
+						'name'              => 'core/spacer',
+						'label'             => 'Redundant spacer',
+						'allowedOperations' => [ 'remove_block' ],
+						'allowedInsertions' => [],
+					],
+				],
+				'insertionAnchors' => [],
+			],
+			'Trim redundant structure from the header'
+		);
+
+		$this->assertStringContainsString( '## Executable Operation Examples', $prompt );
+		$this->assertStringContainsString( '"type":"remove_block"', $prompt );
+		$this->assertStringContainsString( '"expectedBlockName":"core/spacer"', $prompt );
 	}
 
 	public function test_parse_response_keeps_only_valid_block_hints_and_patterns(): void {

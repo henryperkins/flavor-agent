@@ -662,34 +662,61 @@ final class StructuralOperationsGrammar {
 			}
 		}
 
-		if ( '' === $first_pattern ) {
-			return '';
-		}
-
 		$examples = [];
 
-		foreach ( $anchors as $anchor ) {
-			if ( ! is_array( $anchor ) ) {
-				continue;
+		// insert_pattern and replace_block_with_pattern both require a concrete
+		// pattern name, so they are only synthesized when a candidate pattern is
+		// available.
+		if ( '' !== $first_pattern ) {
+			foreach ( $anchors as $anchor ) {
+				if ( ! is_array( $anchor ) ) {
+					continue;
+				}
+
+				$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+				$path      = self::sanitize_block_path( $anchor['targetPath'] ?? null );
+
+				if ( in_array( $placement, [ 'before_block_path', 'after_block_path' ], true ) && null !== $path ) {
+					$examples[] = wp_json_encode(
+						[
+							'type'        => 'insert_pattern',
+							'patternName' => $first_pattern,
+							'placement'   => $placement,
+							'targetPath'  => $path,
+						],
+						JSON_UNESCAPED_SLASHES
+					);
+					break;
+				}
 			}
 
-			$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
-			$path      = self::sanitize_block_path( $anchor['targetPath'] ?? null );
+			foreach ( $targets as $target ) {
+				if ( ! is_array( $target ) ) {
+					continue;
+				}
 
-			if ( in_array( $placement, [ 'before_block_path', 'after_block_path' ], true ) && null !== $path ) {
-				$examples[] = wp_json_encode(
-					[
-						'type'        => 'insert_pattern',
-						'patternName' => $first_pattern,
-						'placement'   => $placement,
-						'targetPath'  => $path,
-					],
-					JSON_UNESCAPED_SLASHES
-				);
-				break;
+				$path    = self::sanitize_block_path( $target['path'] ?? null );
+				$name    = sanitize_text_field( (string) ( $target['name'] ?? '' ) );
+				$allowed = is_array( $target['allowedOperations'] ?? null ) ? $target['allowedOperations'] : [];
+
+				if ( null !== $path && '' !== $name && in_array( 'replace_block_with_pattern', $allowed, true ) ) {
+					$examples[] = wp_json_encode(
+						[
+							'type'              => 'replace_block_with_pattern',
+							'patternName'       => $first_pattern,
+							'targetPath'        => $path,
+							'expectedBlockName' => $name,
+						],
+						JSON_UNESCAPED_SLASHES
+					);
+					break;
+				}
 			}
 		}
 
+		// remove_block carries no pattern, so it is surfaced whenever a live target
+		// permits removal — independent of pattern availability. Without this, the
+		// most destructive operation would have no worked example in the prompt.
 		foreach ( $targets as $target ) {
 			if ( ! is_array( $target ) ) {
 				continue;
@@ -699,11 +726,10 @@ final class StructuralOperationsGrammar {
 			$name    = sanitize_text_field( (string) ( $target['name'] ?? '' ) );
 			$allowed = is_array( $target['allowedOperations'] ?? null ) ? $target['allowedOperations'] : [];
 
-			if ( null !== $path && '' !== $name && in_array( 'replace_block_with_pattern', $allowed, true ) ) {
+			if ( null !== $path && '' !== $name && in_array( 'remove_block', $allowed, true ) ) {
 				$examples[] = wp_json_encode(
 					[
-						'type'              => 'replace_block_with_pattern',
-						'patternName'       => $first_pattern,
+						'type'              => 'remove_block',
 						'targetPath'        => $path,
 						'expectedBlockName' => $name,
 					],

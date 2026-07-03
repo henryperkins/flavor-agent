@@ -227,6 +227,20 @@ final class ServerCollector {
 	}
 
 	/**
+	 * Area-relevant template-part pattern candidates via the same selector
+	 * {@see for_template_part()} uses, so the output is identical to
+	 * `for_template_part()['patterns']` for the same arguments. Exposed so the
+	 * pattern-set-stable review-context signature can source the full (unscoped)
+	 * candidate set without a second full structural collection for the same ref.
+	 *
+	 * @param string[]|null $visible_pattern_names
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function for_template_part_candidate_patterns( string $area, ?array $visible_pattern_names = null ): array {
+		return self::pattern_candidate_selector()->collect_template_part_candidate_patterns( $area, $visible_pattern_names );
+	}
+
+	/**
 	 * Server-collected document target contract for the external post-blocks
 	 * apply surface. No client-supplied tree is trusted for this surface.
 	 *
