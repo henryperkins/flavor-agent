@@ -297,7 +297,10 @@ final class ActivityPage {
 			return '' !== $title
 				/* translators: %s: post title. */
 				? sprintf( __( 'Post: %s', 'flavor-agent' ), $title )
-				: __( 'Post', 'flavor-agent' );
+				: ( '' !== $post_id
+					/* translators: %s: post ID. */
+					? sprintf( __( 'Post #%s', 'flavor-agent' ), $post_id )
+					: __( 'Post', 'flavor-agent' ) );
 		}
 
 		if ( 'style-book' === $surface && '' !== $block_name ) {

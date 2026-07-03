@@ -290,7 +290,7 @@ final class ApplyAbilities {
 			! hash_equals( $recomputed_resolved, $provided_resolved )
 			|| ! hash_equals( $recomputed_review, $provided_review )
 		) {
-			return self::stale_error();
+			return self::stale_error( 'flavor-agent/recommend-template-part' );
 		}
 
 		// Second freshness gate (request time): compute + store the live content
@@ -472,7 +472,7 @@ final class ApplyAbilities {
 			! hash_equals( $recomputed_resolved, $provided_resolved )
 			|| ! hash_equals( $recomputed_review, $provided_review )
 		) {
-			return self::stale_error();
+			return self::stale_error( 'flavor-agent/recommend-post-blocks' );
 		}
 
 		// Second freshness gate (request time): compute + store the live content
@@ -690,7 +690,7 @@ final class ApplyAbilities {
 			! hash_equals( $recomputed_resolved, $provided_resolved )
 			|| ! hash_equals( $recomputed_review, $provided_review )
 		) {
-			return self::stale_error();
+			return self::stale_error( 'flavor-agent/recommend-template' );
 		}
 
 		$baseline = TemplateApplyExecutor::resolve_baseline(
@@ -1042,10 +1042,10 @@ final class ApplyAbilities {
 		};
 	}
 
-	private static function stale_error(): \WP_Error {
+	private static function stale_error( string $recommend_ability = 'flavor-agent/recommend-style' ): \WP_Error {
 		return new \WP_Error(
 			'flavor_agent_apply_stale',
-			'The style recommendation context is stale. Re-run flavor-agent/recommend-style and request the apply again with fresh signatures.',
+			"The recommendation context is stale. Re-run {$recommend_ability} and request the apply again with fresh signatures.",
 			[ 'status' => 409 ]
 		);
 	}

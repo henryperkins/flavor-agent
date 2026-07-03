@@ -898,14 +898,6 @@ EXAMPLE
 	}
 
 	/**
-	 * @param array<int, int[]> $targeted_paths
-	 * @param int[]            $target_path
-	 */
-	private static function has_overlapping_template_part_operation_path( array $targeted_paths, array $target_path ): bool {
-		return StructuralOperationsGrammar::has_overlapping_operation_path( $targeted_paths, $target_path );
-	}
-
-	/**
 	 * @param int[] $path
 	 */
 	private static function block_path_key( array $path ): string {

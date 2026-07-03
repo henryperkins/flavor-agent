@@ -543,7 +543,9 @@ final class TemplateStructureAnalyzer {
 			$next_path          = array_merge( $path, [ (int) $index ] );
 			$allowed_operations = [];
 
-			if ( '' === $template_lock && empty( $lock ) ) {
+			$is_remove_locked = ! empty( $lock['remove'] ) || $has_container_lock;
+
+			if ( ! $is_remove_locked ) {
 				$allowed_operations[] = 'replace_block_with_pattern';
 				$allowed_operations[] = 'remove_block';
 			}

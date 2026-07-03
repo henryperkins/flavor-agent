@@ -63,10 +63,10 @@ final class PostBlocksContextCollector {
 			'title'                 => sanitize_text_field( (string) ( $post->post_title ?? '' ) ),
 			'blockTree'             => $block_tree,
 			'topLevelBlocks'        => $top_level_blocks,
-			'blockCounts'           => $summary_stats['blockCounts'],
+			'blockCounts'           => $summary_stats['blockCounts'] ?? [],
 			'structureStats'        => [
-				'blockCount' => $summary_stats['blockCount'],
-				'maxDepth'   => $summary_stats['maxDepth'],
+				'blockCount' => $summary_stats['blockCount'] ?? 0,
+				'maxDepth'   => $summary_stats['maxDepth'] ?? 0,
 			],
 			'operationTargets'      => $operation_targets,
 			'insertionAnchors'      => $insertion_anchors,

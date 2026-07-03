@@ -139,7 +139,7 @@ Enforced by:
 - `src/utils/recommendation-request-signature.js` + `src/utils/context-signature.js` — client request signatures derived from live editor context
 - `src/utils/recommendation-stale-reasons.js` + `src/components/StaleResultBanner.js` — effective stale-reason resolution and refresh CTA
 - `src/store/recommendation-outcomes.js` — `stale_blocked` outcome records in the diagnostic stream
-- Server `resolvedContextSignature` / `reviewContextSignature` on responses; the five `preview-recommend-*` abilities expose the same signatures as a side-effect-free dry-run
+- Server `resolvedContextSignature` / `reviewContextSignature` on responses; the six `preview-recommend-*` abilities expose the same signatures as a side-effect-free dry-run
 
 Tested by: `tests/phpunit/RecommendationSignatureTest.php`, `SignatureBoundaryTest.php`, `PreviewRecommendationAbilityTest.php`.
 
