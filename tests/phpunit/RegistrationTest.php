@@ -239,6 +239,7 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/recommend-patterns',
 			'flavor-agent/recommend-template',
 			'flavor-agent/recommend-template-part',
+			'flavor-agent/recommend-post-blocks',
 			'flavor-agent/recommend-navigation',
 			'flavor-agent/recommend-style',
 		] as $ability_id ) {
