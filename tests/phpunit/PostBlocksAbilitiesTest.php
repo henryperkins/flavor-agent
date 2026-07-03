@@ -66,7 +66,7 @@ final class PostBlocksAbilitiesTest extends TestCase {
 	public function test_review_signature_is_stable_for_identical_documents(): void {
 		$this->seed_post( 51, $this->paragraph( 'Same content' ) );
 
-		$first = PostBlocksAbilities::recommend_post_blocks(
+		$first  = PostBlocksAbilities::recommend_post_blocks(
 			[
 				'postId'               => 51,
 				'prompt'               => 'improve structure',
