@@ -14,7 +14,7 @@ final class RecommendationOutcomeMetrics {
 	 *
 	 * @var array<int, string>
 	 */
-	private const EXECUTABLE_OUTCOME_SURFACES = [ 'block', 'template', 'template-part', 'global-styles', 'style-book' ];
+	private const EXECUTABLE_OUTCOME_SURFACES = [ 'block', 'template', 'template-part', 'global-styles', 'style-book', 'post-blocks' ];
 
 	/**
 	 * @param array<int, array<string, mixed>> $entries
@@ -145,6 +145,7 @@ final class RecommendationOutcomeMetrics {
 				'apply_block_structural_suggestion',
 				'apply_template_suggestion',
 				'apply_template_part_suggestion',
+				'apply_post_blocks_suggestion',
 				'apply_global_styles_suggestion',
 				'apply_style_book_suggestion',
 			],

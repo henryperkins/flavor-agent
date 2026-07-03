@@ -7,6 +7,7 @@ namespace FlavorAgent\Abilities;
 use FlavorAgent\AI\FeatureBootstrap;
 use FlavorAgent\AI\Abilities\PreviewRecommendBlockAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendNavigationAbility;
+use FlavorAgent\AI\Abilities\PreviewRecommendPostBlocksAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendStyleAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendTemplateAbility;
 use FlavorAgent\AI\Abilities\PreviewRecommendTemplatePartAbility;
@@ -14,11 +15,13 @@ use FlavorAgent\AI\Abilities\RecommendBlockAbility;
 use FlavorAgent\AI\Abilities\RecommendContentAbility;
 use FlavorAgent\AI\Abilities\RecommendNavigationAbility;
 use FlavorAgent\AI\Abilities\RecommendPatternsAbility;
+use FlavorAgent\AI\Abilities\RecommendPostBlocksAbility;
 use FlavorAgent\AI\Abilities\RecommendStyleAbility;
 use FlavorAgent\AI\Abilities\RecommendTemplateAbility;
 use FlavorAgent\AI\Abilities\RecommendTemplatePartAbility;
 use FlavorAgent\AI\Abilities\GetActivityAbility;
 use FlavorAgent\AI\Abilities\ListActivityAbility;
+use FlavorAgent\AI\Abilities\RequestPostBlocksApplyAbility;
 use FlavorAgent\AI\Abilities\RequestStyleApplyAbility;
 use FlavorAgent\AI\Abilities\RequestTemplateApplyAbility;
 use FlavorAgent\AI\Abilities\RequestTemplatePartApplyAbility;
@@ -121,6 +124,11 @@ final class Registration {
 				'description'   => __( 'Resolve the review and apply context signatures for a template-part recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients.', 'flavor-agent' ),
 				'ability_class' => PreviewRecommendTemplatePartAbility::class,
 			],
+			'flavor-agent/preview-recommend-post-blocks'   => [
+				'label'         => __( 'Preview post-blocks recommendation signatures', 'flavor-agent' ),
+				'description'   => __( 'Resolve the review and apply context signatures for a post-blocks recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients.', 'flavor-agent' ),
+				'ability_class' => PreviewRecommendPostBlocksAbility::class,
+			],
 		];
 	}
 
@@ -180,6 +188,11 @@ final class Registration {
 				'description'   => __( 'Suggest focused structural improvements and patterns for a single template part. Operations come from a bounded template-part operation vocabulary, are previewed and reviewed before deterministic apply, and recorded server-side with drift-checked undo.', 'flavor-agent' ),
 				'ability_class' => RecommendTemplatePartAbility::class,
 			],
+			'flavor-agent/recommend-post-blocks'   => [
+				'label'         => __( 'Recommend post content structure', 'flavor-agent' ),
+				'description'   => __( 'Suggest focused structural improvements and patterns for a single post or page document. Operations come from the bounded structural-operation vocabulary over a server-collected, lock-aware document target contract, and external applies stay review-gated with drift-checked undo.', 'flavor-agent' ),
+				'ability_class' => RecommendPostBlocksAbility::class,
+			],
 		];
 	}
 
@@ -205,6 +218,11 @@ final class Registration {
 				'label'         => __( 'Request a governed template apply', 'flavor-agent' ),
 				'description'   => __( 'Queue a reviewed page-level template structural apply from a recommend-template result. Validates the proposed operation and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved.', 'flavor-agent' ),
 				'ability_class' => RequestTemplateApplyAbility::class,
+			],
+			'flavor-agent/request-post-blocks-apply'   => [
+				'label'         => __( 'Request a governed post-blocks apply', 'flavor-agent' ),
+				'description'   => __( 'Queue a reviewed structural apply against one post or page from a recommend-post-blocks result. Validates the proposed operations and freshness signatures against the live lock-aware document contract, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved.', 'flavor-agent' ),
+				'ability_class' => RequestPostBlocksApplyAbility::class,
 			],
 			'flavor-agent/get-activity'                => [
 				'label'         => __( 'Get one AI activity entry', 'flavor-agent' ),
@@ -249,7 +267,8 @@ final class Registration {
 		$annotations = match ( $ability_id ) {
 			'flavor-agent/request-style-apply',
 			'flavor-agent/request-template-part-apply',
-			'flavor-agent/request-template-apply' => [
+			'flavor-agent/request-template-apply',
+			'flavor-agent/request-post-blocks-apply' => [
 				'destructive' => false,
 				'idempotent'  => false,
 			],
@@ -522,6 +541,61 @@ final class Registration {
 	}
 
 	/**
+	 * Input schema for the post-blocks external-apply ability.
+	 *
+	 * Mirrors the permissive template-part request envelope: open-object
+	 * sub-schemas plus optional prompt/suggestion/requestReference fields, so
+	 * the strict abilities-bridge ajv-draft-04 validator accepts the payload.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function post_blocks_apply_input_schema( string $ability_id ): array {
+		return match ( $ability_id ) {
+			'flavor-agent/request-post-blocks-apply' => [
+				'type'       => 'object',
+				'properties' => [
+					'scope'            => self::open_object_schema(
+						[
+							'surface' => [ 'type' => 'string' ],
+							'postId'  => [ 'type' => 'integer' ],
+						],
+						'Post-blocks scope: surface "post-blocks" plus the target post/page ID.'
+					),
+					'prompt'           => [
+						'type'        => 'string',
+						'description' => 'The prompt sent to recommend-post-blocks, byte-identical, so the resolved signature recomputes.',
+					],
+					'operations'       => [
+						'type'  => 'array',
+						'items' => self::structural_operation_schema(),
+					],
+					'signatures'       => [
+						'type'       => 'object',
+						'properties' => [
+							'resolvedContextSignature' => [ 'type' => 'string' ],
+							'reviewContextSignature'   => [ 'type' => 'string' ],
+						],
+						'required'   => [ 'resolvedContextSignature', 'reviewContextSignature' ],
+					],
+					'suggestion'       => self::open_object_schema(
+						[
+							'label'       => [ 'type' => 'string' ],
+							'description' => [ 'type' => 'string' ],
+						],
+						'Human-readable label shown to the approver.'
+					),
+					'requestReference' => [
+						'type'        => 'string',
+						'description' => 'Optional opaque agent-side reference echoed back on reads.',
+					],
+				],
+				'required'   => [ 'scope', 'operations', 'signatures' ],
+			],
+			default => self::open_object_schema(),
+		};
+	}
+
+	/**
 	 * Input schema for the template external-apply ability.
 	 *
 	 * Mirrors the permissive template-part request envelope, but restricts the
@@ -592,7 +666,8 @@ final class Registration {
 		return match ( $ability_id ) {
 			'flavor-agent/request-style-apply',
 			'flavor-agent/request-template-part-apply',
-			'flavor-agent/request-template-apply' => [
+			'flavor-agent/request-template-apply',
+			'flavor-agent/request-post-blocks-apply' => [
 				'type'       => 'object',
 				'properties' => [
 					'activityId'       => [ 'type' => 'string' ],
@@ -1496,6 +1571,30 @@ final class Registration {
 				],
 				'required'   => [ 'templatePartRef' ],
 			],
+			'flavor-agent/recommend-post-blocks' => [
+				'type'       => 'object',
+				'properties' => [
+					'postId'               => [
+						'type'        => 'integer',
+						'description' => 'Target post or page ID. Context is server-collected; no client-supplied tree is trusted.',
+					],
+					'prompt'               => [
+						'type'        => 'string',
+						'description' => 'Optional user instruction. For example: "Add a call-to-action section after the intro."',
+					],
+					'requestReference'     => [
+						'type'        => 'string',
+						'description' => 'Optional opaque agent-side reference echoed back on reads.',
+					],
+					'document'             => $document,
+					'clientRequest'        => $client_request,
+					'resolveSignatureOnly' => [
+						'type'        => 'boolean',
+						'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model. Useful for dry-running this ability from the Ability Explorer or other tooling without invoking the AI Connector.',
+					],
+				],
+				'required'   => [ 'postId' ],
+			],
 			default => self::open_object_schema(),
 		};
 	}
@@ -1509,6 +1608,7 @@ final class Registration {
 			'flavor-agent/recommend-navigation' => self::navigation_recommendation_output_schema(),
 			'flavor-agent/recommend-template' => self::template_recommendation_output_schema(),
 			'flavor-agent/recommend-template-part' => self::template_part_recommendation_output_schema(),
+			'flavor-agent/recommend-post-blocks' => self::post_blocks_recommendation_output_schema(),
 			default => self::open_object_schema(
 				[
 					'recommendations'          => [
@@ -1733,6 +1833,30 @@ final class Registration {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Post-blocks recommendation output: the template-part suggestion shape
+	 * plus an echo of the live executable-target contract (operationTargets /
+	 * insertionAnchors) so external agents can ground follow-up requests.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function post_blocks_recommendation_output_schema(): array {
+		$schema = self::template_part_recommendation_output_schema();
+
+		if ( isset( $schema['properties'] ) && is_array( $schema['properties'] ) ) {
+			$schema['properties']['operationTargets'] = [
+				'type'  => 'array',
+				'items' => self::open_object_schema(),
+			];
+			$schema['properties']['insertionAnchors'] = [
+				'type'  => 'array',
+				'items' => self::open_object_schema(),
+			];
+		}
+
+		return $schema;
 	}
 
 	private static function template_part_recommendation_output_schema(): array {
