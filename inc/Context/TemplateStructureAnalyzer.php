@@ -353,6 +353,80 @@ final class TemplateStructureAnalyzer {
 	}
 
 	/**
+	 * Lock-aware operation-target walk for the post-blocks surface. Stricter
+	 * than the template-part walk (fail closed at collection time):
+	 *   - a block with attrs.lock.remove, any attrs.lock entry, or its own
+	 *     templateLock gets no remove/replace operations;
+	 *   - children of a container with templateLock all/insert/contentOnly are
+	 *     excluded entirely — no targets and therefore no insertion anchors
+	 *     inside it;
+	 *   - lock metadata is recorded on the target entry for honesty
+	 *     (lock.move blocks nothing in v1 — there is no move operation).
+	 *
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function collect_post_operation_targets( array $blocks ): array {
+		$targets = [];
+
+		$this->walk_post_operation_targets( $blocks, [], $targets );
+
+		return $targets;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $operation_targets
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function collect_post_insertion_anchors( array $operation_targets ): array {
+		$anchors = [
+			[
+				'placement' => 'start',
+				'label'     => 'Start of document',
+			],
+			[
+				'placement' => 'end',
+				'label'     => 'End of document',
+			],
+		];
+
+		foreach ( $operation_targets as $target ) {
+			if ( ! is_array( $target ) ) {
+				continue;
+			}
+
+			$path               = is_array( $target['path'] ?? null ) ? array_map( 'intval', $target['path'] ) : [];
+			$block_name         = sanitize_text_field( (string) ( $target['name'] ?? '' ) );
+			$label              = sanitize_text_field( (string) ( $target['label'] ?? $block_name ) );
+			$allowed_insertions = is_array( $target['allowedInsertions'] ?? null ) ? $target['allowedInsertions'] : [];
+
+			if ( [] === $path || '' === $block_name || '' === $label ) {
+				continue;
+			}
+
+			if ( in_array( 'before_block_path', $allowed_insertions, true ) ) {
+				$anchors[] = [
+					'placement'  => 'before_block_path',
+					'targetPath' => $path,
+					'blockName'  => $block_name,
+					'label'      => 'Before ' . $label,
+				];
+			}
+
+			if ( in_array( 'after_block_path', $allowed_insertions, true ) ) {
+				$anchors[] = [
+					'placement'  => 'after_block_path',
+					'targetPath' => $path,
+					'blockName'  => $block_name,
+					'label'      => 'After ' . $label,
+				];
+			}
+		}
+
+		return $anchors;
+	}
+
+	/**
 	 * @param array<int, array<string, mixed>> $blocks
 	 * @return array<string, mixed>
 	 */
@@ -441,6 +515,63 @@ final class TemplateStructureAnalyzer {
 					$inside_content_only || $is_content_only_container,
 					$targets
 				);
+			}
+		}
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @param array<int, int>                  $path
+	 * @param array<int, array<string, mixed>> $targets
+	 */
+	private function walk_post_operation_targets( array $blocks, array $path, array &$targets ): void {
+		foreach ( $blocks as $index => $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$name = (string) ( $block['blockName'] ?? '' );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$attributes         = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : [];
+			$template_lock      = strtolower( trim( (string) ( $attributes['templateLock'] ?? '' ) ) );
+			$lock               = is_array( $attributes['lock'] ?? null ) ? $attributes['lock'] : [];
+			$has_container_lock = in_array( $template_lock, [ 'all', 'insert', 'contentonly' ], true );
+			$next_path          = array_merge( $path, [ (int) $index ] );
+			$allowed_operations = [];
+
+			$is_remove_locked = ! empty( $lock['remove'] ) || $has_container_lock;
+
+			if ( ! $is_remove_locked ) {
+				$allowed_operations[] = 'replace_block_with_pattern';
+				$allowed_operations[] = 'remove_block';
+			}
+
+			$entry = [
+				'path'              => $next_path,
+				'name'              => $name,
+				'label'             => $this->describe_template_block_label( $name ),
+				'allowedOperations' => $allowed_operations,
+				'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+			];
+
+			if ( '' !== $template_lock || ! empty( $lock ) ) {
+				$entry['locked'] = [
+					'remove'       => ! empty( $lock['remove'] ),
+					'move'         => ! empty( $lock['move'] ),
+					'templateLock' => $template_lock,
+				];
+			}
+
+			$targets[] = $entry;
+
+			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+
+			if ( count( $inner_blocks ) > 0 && ! $has_container_lock ) {
+				$this->walk_post_operation_targets( $inner_blocks, $next_path, $targets );
 			}
 		}
 	}

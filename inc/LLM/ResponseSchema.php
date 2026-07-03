@@ -27,6 +27,9 @@ final class ResponseSchema {
 			'block' => self::block_schema(),
 			'template' => self::template_schema(),
 			'template_part' => self::template_part_schema(),
+			// Post-blocks shares the template-part suggestion shape: the same
+			// three structural operation types over a path-addressed tree.
+			'post_blocks' => self::template_part_schema(),
 			'style' => self::style_schema(),
 			'navigation' => self::navigation_schema(),
 			'content' => self::content_schema(),

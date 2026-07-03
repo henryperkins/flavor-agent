@@ -72,6 +72,7 @@ final class ValidationReason {
 		'malformed_operation'               => self::SEVERITY_REJECTED,
 		'overlapping_block_paths'           => self::SEVERITY_REJECTED,
 		'too_many_operations'               => self::SEVERITY_REJECTED,
+		'target_locked'                     => self::SEVERITY_REJECTED,
 		'advisory_only'                     => self::SEVERITY_DOWNGRADED,
 		'missing_structural_context'        => self::SEVERITY_REJECTED,
 		'operation_validation_failed'       => self::SEVERITY_REJECTED,

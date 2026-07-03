@@ -21,6 +21,7 @@ final class ExternalApplyExecutorRegistry {
 			'global-styles', 'style-book' => StyleApplyExecutor::class,
 			'template-part'               => TemplatePartApplyExecutor::class,
 			'template'                    => TemplateApplyExecutor::class,
+			'post-blocks'                 => PostBlocksApplyExecutor::class,
 			default                       => null,
 		};
 	}

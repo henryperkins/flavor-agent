@@ -67,7 +67,7 @@ abstract class RecommendationAbility extends Abstract_Ability {
 	}
 
 	private static function uses_post_scoped_permission(): bool {
-		return \in_array( static::SURFACE, [ 'block', 'content', 'pattern' ], true );
+		return \in_array( static::SURFACE, [ 'block', 'content', 'pattern', 'post-blocks' ], true );
 	}
 
 	public function meta(): array {

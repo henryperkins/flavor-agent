@@ -70,6 +70,15 @@ final class Serializer {
 			];
 		}
 
+		if ( 'post-blocks' === $surface ) {
+			$post_id = self::normalize_string( $target['postId'] ?? '' );
+
+			return [
+				'type' => 'post-blocks',
+				'ref'  => '' !== $post_id ? $post_id : $document_key,
+			];
+		}
+
 		if ( 'global-styles' === $surface ) {
 			$global_styles_ref = self::normalize_string( $target['globalStylesId'] ?? '' );
 

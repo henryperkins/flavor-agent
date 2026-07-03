@@ -63,6 +63,7 @@ final class RecommendationOutcome {
 		'pattern',
 		'navigation',
 		'content',
+		'post-blocks',
 	];
 
 	private const EVENT_LABELS = [

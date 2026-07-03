@@ -710,6 +710,9 @@ final class RecommendationAbilityExecution {
 			'template-part' => [
 				'templatePartRef' => \sanitize_text_field( (string) ( $input['templatePartRef'] ?? '' ) ),
 			],
+			'post-blocks' => [
+				'postId' => \max( 0, (int) ( $input['postId'] ?? 0 ) ),
+			],
 			'style' => self::build_style_target( $input ),
 			default => [],
 		};
@@ -873,7 +876,7 @@ final class RecommendationAbilityExecution {
 	 * @return array{reasonCounts: array<string, int>, validationVocabularyVersion: string}|array{}
 	 */
 	private static function aggregate_validation_reasons( string $surface, array $payload ): array {
-		if ( ! \in_array( $surface, [ 'block', 'style', 'template', 'template-part', 'global-styles', 'style-book' ], true ) ) {
+		if ( ! \in_array( $surface, [ 'block', 'style', 'template', 'template-part', 'global-styles', 'style-book', 'post-blocks' ], true ) ) {
 			return [];
 		}
 
@@ -984,6 +987,7 @@ final class RecommendationAbilityExecution {
 			'block' => \__( 'Block recommendation request', 'flavor-agent' ),
 			'template' => \__( 'Template recommendation request', 'flavor-agent' ),
 			'template-part' => \__( 'Template-part recommendation request', 'flavor-agent' ),
+			'post-blocks' => \__( 'Post content structure recommendation request', 'flavor-agent' ),
 			'global-styles' => \__( 'Global Styles recommendation request', 'flavor-agent' ),
 			'style-book' => \__( 'Style Book recommendation request', 'flavor-agent' ),
 			default => \__( 'AI request diagnostic', 'flavor-agent' ),
@@ -1020,7 +1024,7 @@ final class RecommendationAbilityExecution {
 			return \trim( (string) ( $payload['explanation'] ?? '' ) );
 		}
 
-		if ( \in_array( $surface, [ 'template', 'template-part', 'global-styles', 'style-book' ], true ) ) {
+		if ( \in_array( $surface, [ 'template', 'template-part', 'global-styles', 'style-book', 'post-blocks' ], true ) ) {
 			$suggestions = \is_array( $payload['suggestions'] ?? null ) ? $payload['suggestions'] : [];
 
 			return \trim( (string) ( $suggestions[0]['label'] ?? $payload['explanation'] ?? '' ) );
@@ -1129,6 +1133,7 @@ final class RecommendationAbilityExecution {
 			'block' => \__( 'Block request failed', 'flavor-agent' ),
 			'template' => \__( 'Template request failed', 'flavor-agent' ),
 			'template-part' => \__( 'Template-part request failed', 'flavor-agent' ),
+			'post-blocks' => \__( 'Post content structure request failed', 'flavor-agent' ),
 			'global-styles' => \__( 'Global Styles request failed', 'flavor-agent' ),
 			'style-book' => \__( 'Style Book request failed', 'flavor-agent' ),
 			default => \__( 'AI request failed', 'flavor-agent' ),
@@ -1157,6 +1162,11 @@ final class RecommendationAbilityExecution {
 				'template-part:%s:%s',
 				$scope_key,
 				\trim( (string) ( $target['templatePartRef'] ?? 'unknown' ) )
+			),
+			'post-blocks' => \sprintf(
+				'post-blocks:%s:%s',
+				$scope_key,
+				\trim( (string) ( $target['postId'] ?? 'unknown' ) )
 			),
 			'global-styles' => \sprintf(
 				'global-styles:%s:%s',
@@ -1191,7 +1201,7 @@ final class RecommendationAbilityExecution {
 			'block' => \count( \is_array( $payload['settings'] ?? null ) ? $payload['settings'] : [] )
 				+ \count( \is_array( $payload['styles'] ?? null ) ? $payload['styles'] : [] )
 				+ \count( \is_array( $payload['block'] ?? null ) ? $payload['block'] : [] ),
-			'template', 'template-part', 'global-styles', 'style-book' => \is_array( $payload['suggestions'] ?? null ) ? \count( $payload['suggestions'] ) : 0,
+			'template', 'template-part', 'global-styles', 'style-book', 'post-blocks' => \is_array( $payload['suggestions'] ?? null ) ? \count( $payload['suggestions'] ) : 0,
 			default => 0,
 		};
 	}

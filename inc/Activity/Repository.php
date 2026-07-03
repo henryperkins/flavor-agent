@@ -4673,6 +4673,7 @@ final class Repository {
 			'pattern'        => 'Pattern',
 			'template'       => 'Template',
 			'template-part'  => 'Template part',
+			'post-blocks'    => 'Post content',
 			'docs_grounding' => 'Developer Docs',
 			'global-styles'  => 'Global Styles',
 			'style-book'     => 'Style Book',
@@ -4872,6 +4873,19 @@ final class Repository {
 			return trim( (string) ( $target['templatePartRef'] ?? '' ) );
 		}
 
+		if ( 'post-blocks' === $surface ) {
+			return implode(
+				' ',
+				array_filter(
+					[
+						trim( (string) ( $target['title'] ?? '' ) ),
+						trim( (string) ( $target['postId'] ?? '' ) ),
+					],
+					static fn ( $value ): bool => '' !== $value
+				)
+			);
+		}
+
 		if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
 			return implode(
 				' ',
@@ -4982,7 +4996,7 @@ final class Repository {
 			return false;
 		}
 
-		return in_array( $surface, [ 'global-styles', 'style-book' ], true );
+		return in_array( $surface, [ 'global-styles', 'style-book', 'post-blocks' ], true );
 	}
 
 	private static function table_exists(): bool {

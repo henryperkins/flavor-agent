@@ -31,7 +31,7 @@ Eight first-party recommendation surfaces exist today:
 
 The plugin also ships one first-party admin approval/audit/attestation-discovery surface at `Settings > AI Activity`.
 
-A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor. External agents get the same recommendation, validation, and freshness contracts as the first-party editor; they can also request review-gated style, template, and template-part applies, read their attribution, and undo executed style, template, and template-part rows through feature-gated abilities, but approval stays admin-only (the `activity/{id}/decision` route) and admin-global activity reads remain REST-only (see `docs/reference/governance-layer.md`).
+A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor. External agents get the same recommendation, validation, and freshness contracts as the first-party editor; they can also request review-gated style, template, template-part, and post-blocks applies, read their attribution, and undo executed style, template, template-part, and post-blocks rows through feature-gated abilities, but approval stays admin-only (the `activity/{id}/decision` route) and admin-global activity reads remain REST-only (see `docs/reference/governance-layer.md`).
 
 ## Repository Layout
 
@@ -46,7 +46,7 @@ flavor-agent/
     Attestation/            Ring III governed-change statements, signing, key registry, verifier, and storage
     Activity/               Server-backed activity persistence, permissions, serialization
     Admin/                  Settings page + AI Activity admin app registration
-    Apply/                  Governed external applies: server-side style, template, and template-part apply/undo executors (executor registry) + admin approval decision service
+    Apply/                  Governed external applies: server-side style, template, template-part, and post-blocks apply/undo executors (executor registry, shared StructuralOperationsApplier) + admin approval decision service
    AzureOpenAI/            Legacy chat Responses facade for Connectors-owned text generation
    Embeddings/             Workers AI embedding client, embedding signatures, shared HTTP helpers, and Qdrant vector DB
     Cloudflare/             AI Search docs grounding, Workers AI, private pattern AI Search
@@ -124,6 +124,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 - Site Editor template-part recommendations with review-before-apply, focus-block links, pattern browse links, bounded operations, advisory fallback, and activity/undo. Exact flow: [`features/template-part-recommendations.md`](features/template-part-recommendations.md). Operation vocabulary: [`reference/template-operations.md`](reference/template-operations.md).
 - Governed external template-part apply: external agents can request a review-gated template-part structural apply (`request-template-part-apply`) that queues a drift-checked pending row, is approved in `Settings > AI Activity`, executes ≤3 path-addressed bounded operations against one `wp_template_part` through the server-side executor registry, and is reversible via `undo-activity`. This is the second governed external-apply lane after style; it is **not attested** (Ring III attestation stays frozen to `external-style-apply-v1`).
+- Governed external post-blocks apply: external agents can request a review-gated structural apply (`request-post-blocks-apply`) against one post or page's `post_content` -- extending the loop beyond theme-territory documents to arbitrary content -- that queues a drift-checked, post-scoped pending row, is approved in `Settings > AI Activity` (gated by `manage_options` plus `edit_post` on the target), executes ≤3 path-addressed, lock-aware bounded operations through the shared `StructuralOperationsGrammar`/`StructuralOperationsApplier` machinery the template-part lane uses, and is reversible via `undo-activity`. This is the fourth governed external-apply lane; it has no first-party editor UI and is **not attested** (Ring III attestation stays frozen to `external-style-apply-v1`).
 
 #### Global Styles Recommendations
 
@@ -155,7 +156,7 @@ When the WordPress AI plugin Connector Approval experiment is enabled, chat-back
 
 #### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 
-The code defines 32 abilities with full JSON Schema input/output definitions: seven recommendation abilities, thirteen helper/read abilities, the docs-search ability, five `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and six feature-gated external-apply abilities (`request-style-apply`, `request-template-apply`, `request-template-part-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style, template, or template-part apply, read activity, and undo executed style, template, and template-part rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+The code defines 35 abilities with full JSON Schema input/output definitions: eight recommendation abilities, thirteen helper/read abilities, the docs-search ability, six `preview-recommend-*` signature-only siblings that wrap the executable recommendation parents for safe click-to-run testing from the Abilities Explorer and external MCP clients, and seven feature-gated external-apply abilities (`request-style-apply`, `request-template-apply`, `request-template-part-apply`, `request-post-blocks-apply`, `get-activity`, `list-activity`, `undo-activity`) that let an external agent request a review-gated style, template, template-part, or post-blocks apply, read activity, and undo executed style, template, template-part, and post-blocks rows. The exact handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) live in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
 #### Developer Docs
 

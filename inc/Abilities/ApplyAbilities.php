@@ -7,10 +7,12 @@ namespace FlavorAgent\Abilities;
 use FlavorAgent\Activity\RecommendationOutcome;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Apply\ExternalApplyExecutorRegistry;
+use FlavorAgent\Apply\PostBlocksApplyExecutor;
 use FlavorAgent\Apply\StyleApplyExecutor;
 use FlavorAgent\Apply\TemplateApplyExecutor;
 use FlavorAgent\Apply\TemplatePartApplyExecutor;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\LLM\PostBlocksPrompt;
 use FlavorAgent\LLM\StylePrompt;
 use FlavorAgent\LLM\TemplatePrompt;
 use FlavorAgent\LLM\TemplatePartPrompt;
@@ -18,8 +20,8 @@ use FlavorAgent\Support\NormalizesInput;
 
 /**
  * Handlers for the external-apply abilities: request-style-apply,
- * request-template-part-apply, request-template-apply, get-activity,
- * list-activity, undo-activity.
+ * request-template-part-apply, request-template-apply,
+ * request-post-blocks-apply, get-activity, list-activity, undo-activity.
  */
 final class ApplyAbilities {
 	use NormalizesInput;
@@ -288,7 +290,7 @@ final class ApplyAbilities {
 			! hash_equals( $recomputed_resolved, $provided_resolved )
 			|| ! hash_equals( $recomputed_review, $provided_review )
 		) {
-			return self::stale_error();
+			return self::stale_error( 'flavor-agent/recommend-template-part' );
 		}
 
 		// Second freshness gate (request time): compute + store the live content
@@ -406,6 +408,189 @@ final class ApplyAbilities {
 	}
 
 	/**
+	 * Post-blocks analog of request_template_part_apply: two fail-closed
+	 * freshness gates, a per-user pending cap, then a pending activity row the
+	 * admin approval surface later approves or rejects. The scope key is
+	 * post-scoped ({postType}:{postId}) so Activity\Permissions binds both
+	 * access and decision to edit_post:N in addition to manage_options. No
+	 * attestation (frozen lane).
+	 */
+	public static function request_post_blocks_apply( mixed $input ): array|\WP_Error {
+		$input             = self::normalize_map( $input );
+		$scope             = self::normalize_map( $input['scope'] ?? [] );
+		$prompt            = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
+		$operations        = self::normalize_list( $input['operations'] ?? [] );
+		$signatures        = self::normalize_map( $input['signatures'] ?? [] );
+		$provided_resolved = sanitize_text_field( (string) ( $signatures['resolvedContextSignature'] ?? '' ) );
+		$provided_review   = sanitize_text_field( (string) ( $signatures['reviewContextSignature'] ?? '' ) );
+		$surface           = sanitize_key( (string) ( $scope['surface'] ?? '' ) );
+		$post_id           = (int) ( $scope['postId'] ?? 0 );
+
+		if ( 'post-blocks' !== $surface || $post_id <= 0 ) {
+			return new \WP_Error(
+				'invalid_post_blocks_scope',
+				'External post-blocks applies require a post-blocks scope with a postId.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( [] === $operations ) {
+			return new \WP_Error(
+				'flavor_agent_apply_operations_invalid',
+				'External post-blocks applies require at least one executable operation.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( '' === $provided_resolved || '' === $provided_review ) {
+			return new \WP_Error(
+				'flavor_agent_apply_stale',
+				'External post-blocks applies require the resolved and review context signatures from the recommendation response.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		// First freshness gate: recompute both signatures through the same
+		// signature-only path the recommendation used. recommend_post_blocks
+		// returns the two signatures before any payload build.
+		$signature_probe = PostBlocksAbilities::recommend_post_blocks(
+			[
+				'postId'               => $post_id,
+				'prompt'               => $prompt,
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		if ( is_wp_error( $signature_probe ) ) {
+			return $signature_probe;
+		}
+
+		$recomputed_resolved = (string) ( $signature_probe['resolvedContextSignature'] ?? '' );
+		$recomputed_review   = (string) ( $signature_probe['reviewContextSignature'] ?? '' );
+
+		if (
+			! hash_equals( $recomputed_resolved, $provided_resolved )
+			|| ! hash_equals( $recomputed_review, $provided_review )
+		) {
+			return self::stale_error( 'flavor-agent/recommend-post-blocks' );
+		}
+
+		// Second freshness gate (request time): compute + store the live content
+		// baseline, then re-validate every operation against the live contract
+		// (post-type/status allowlist plus lock-aware target exclusion).
+		$baseline = PostBlocksApplyExecutor::resolve_baseline(
+			[
+				'surface' => 'post-blocks',
+				'target'  => [ 'postId' => $post_id ],
+			]
+		);
+
+		if ( is_wp_error( $baseline ) ) {
+			return $baseline;
+		}
+
+		$context = ServerCollector::for_post_blocks( $post_id );
+
+		if ( is_wp_error( $context ) ) {
+			return $context;
+		}
+
+		$validated = PostBlocksPrompt::validate_operations_for_apply( $operations, $context );
+
+		if ( [] === $validated['operations'] || count( $validated['operations'] ) !== count( $operations ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_operations_invalid',
+				'One or more proposed post-blocks operations failed validation against the current execution contract.',
+				[
+					'status'            => 400,
+					'validationReasons' => $validated['reasons'],
+				]
+			);
+		}
+
+		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) );
+
+		if ( ActivityRepository::count_active_pending_external_applies( $user_id ) >= $cap ) {
+			return new \WP_Error(
+				'flavor_agent_apply_queue_full',
+				sprintf(
+					'You already have %d pending external applies awaiting review. Wait for a decision or expiry before requesting more.',
+					$cap
+				),
+				[ 'status' => 429 ]
+			);
+		}
+
+		$post_type         = sanitize_key( (string) ( $context['postType'] ?? 'post' ) );
+		$suggestion        = self::normalize_map( $input['suggestion'] ?? [] );
+		$timestamp         = gmdate( 'c' );
+		$day_in_seconds    = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
+		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) );
+		$expires_at        = gmdate( 'c', time() + $ttl );
+		$scope_key         = $post_type . ':' . $post_id;
+		$request_reference = sanitize_text_field( (string) ( $input['requestReference'] ?? '' ) );
+
+		$created = ActivityRepository::create(
+			[
+				'type'            => 'apply_post_blocks_suggestion',
+				'surface'         => 'post-blocks',
+				'target'          => [
+					'postId'   => $post_id,
+					'postType' => $post_type,
+					'title'    => sanitize_text_field( (string) ( $context['title'] ?? '' ) ),
+				],
+				'suggestion'      => sanitize_text_field( (string) ( $suggestion['label'] ?? 'External post-blocks apply request' ) ),
+				'before'          => [],
+				'after'           => [],
+				'executionResult' => 'pending',
+				'undo'            => [ 'status' => 'not_applicable' ],
+				'timestamp'       => $timestamp,
+				'request'         => [
+					'prompt'      => $prompt,
+					'reference'   => '' !== $request_reference ? $request_reference : 'external-apply:' . $scope_key,
+					'requestMeta' => [
+						'ability'            => 'flavor-agent/request-post-blocks-apply',
+						'executionTransport' => 'wp-abilities',
+						'route'              => 'wp-abilities:flavor-agent/request-post-blocks-apply',
+					],
+					'apply'       => [
+						'status'           => 'pending',
+						'requestedBy'      => $user_id,
+						'requestedAt'      => $timestamp,
+						'expiresAt'        => $expires_at,
+						'operations'       => $validated['operations'],
+						'signatures'       => [
+							'resolvedContextSignature' => $provided_resolved,
+							'reviewContextSignature'   => $provided_review,
+							'baselineContentHash'      => $baseline,
+						],
+						'requestReference' => $request_reference,
+					],
+				],
+				'document'        => [
+					'scopeKey'   => $scope_key,
+					'postType'   => $post_type,
+					'entityId'   => (string) $post_id,
+					'entityKind' => 'post',
+					'entityName' => 'postBlocks',
+				],
+			]
+		);
+
+		if ( is_wp_error( $created ) ) {
+			return $created;
+		}
+
+		return [
+			'activityId'       => (string) ( $created['id'] ?? '' ),
+			'status'           => 'pending',
+			'expiresAt'        => $expires_at,
+			'requestReference' => $request_reference,
+		];
+	}
+
+	/**
 	 * Template analog of request_template_part_apply: two fail-closed freshness
 	 * gates, a per-user pending cap, then a pending activity row the admin
 	 * approval surface later approves or rejects. Gate 1 replays the same signed
@@ -505,7 +690,7 @@ final class ApplyAbilities {
 			! hash_equals( $recomputed_resolved, $provided_resolved )
 			|| ! hash_equals( $recomputed_review, $provided_review )
 		) {
-			return self::stale_error();
+			return self::stale_error( 'flavor-agent/recommend-template' );
 		}
 
 		$baseline = TemplateApplyExecutor::resolve_baseline(
@@ -857,10 +1042,10 @@ final class ApplyAbilities {
 		};
 	}
 
-	private static function stale_error(): \WP_Error {
+	private static function stale_error( string $recommend_ability = 'flavor-agent/recommend-style' ): \WP_Error {
 		return new \WP_Error(
 			'flavor_agent_apply_stale',
-			'The style recommendation context is stale. Re-run flavor-agent/recommend-style and request the apply again with fresh signatures.',
+			"The recommendation context is stale. Re-run {$recommend_ability} and request the apply again with fresh signatures.",
 			[ 'status' => 409 ]
 		);
 	}

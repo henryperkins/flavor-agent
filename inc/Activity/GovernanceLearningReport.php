@@ -16,6 +16,7 @@ final class GovernanceLearningReport {
 		'apply_block_structural_suggestion',
 		'apply_template_suggestion',
 		'apply_template_part_suggestion',
+		'apply_post_blocks_suggestion',
 		'apply_global_styles_suggestion',
 		'apply_style_book_suggestion',
 	];

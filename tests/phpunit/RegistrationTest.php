@@ -239,6 +239,7 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/recommend-patterns',
 			'flavor-agent/recommend-template',
 			'flavor-agent/recommend-template-part',
+			'flavor-agent/recommend-post-blocks',
 			'flavor-agent/recommend-navigation',
 			'flavor-agent/recommend-style',
 		] as $ability_id ) {
@@ -578,9 +579,12 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/preview-recommend-style',
 			'flavor-agent/preview-recommend-template',
 			'flavor-agent/preview-recommend-template-part',
+			'flavor-agent/preview-recommend-post-blocks',
+			'flavor-agent/recommend-post-blocks',
 			'flavor-agent/request-style-apply',
 			'flavor-agent/request-template-part-apply',
 			'flavor-agent/request-template-apply',
+			'flavor-agent/request-post-blocks-apply',
 			'flavor-agent/get-activity',
 			'flavor-agent/list-activity',
 			'flavor-agent/undo-activity',
@@ -649,6 +653,10 @@ final class RegistrationTest extends TestCase {
 				'idempotent'  => false,
 			],
 			'flavor-agent/request-template-apply'      => [
+				'destructive' => false,
+				'idempotent'  => false,
+			],
+			'flavor-agent/request-post-blocks-apply'   => [
 				'destructive' => false,
 				'idempotent'  => false,
 			],

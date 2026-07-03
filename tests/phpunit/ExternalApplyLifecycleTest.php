@@ -1419,4 +1419,314 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'undone', $undone['result'] );
 		$this->assertSame( $content, (string) WordPressTestState::$posts[8824]->post_content );
 	}
+
+	// -----------------------------------------------------------------
+	// post-blocks lane
+	// -----------------------------------------------------------------
+
+	private const POST_BLOCKS_POST_ID = 9400;
+
+	private function seed_post_blocks_document( string $content, int $post_id = self::POST_BLOCKS_POST_ID, string $post_type = 'post', string $post_status = 'publish' ): void {
+		WordPressTestState::$posts[ $post_id ] = new \WP_Post(
+			[
+				'ID'           => $post_id,
+				'post_type'    => $post_type,
+				'post_status'  => $post_status,
+				'post_title'   => 'Doc ' . $post_id,
+				'post_content' => $content,
+			]
+		);
+	}
+
+	/**
+	 * A group wrapping a heading + paragraph, where a remove of the heading at
+	 * path [0,0] re-validates against the live document target contract.
+	 */
+	private function post_blocks_content(): string {
+		return '<!-- wp:group -->'
+			. '<!-- wp:heading --><h2>Title</h2><!-- /wp:heading -->'
+			. '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:group -->';
+	}
+
+	public function test_request_post_blocks_apply_rejects_stale_signatures(): void {
+		$this->seed_post_blocks_document( $this->post_blocks_content() );
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_post_blocks_apply(
+			[
+				'scope'      => [
+					'surface' => 'post-blocks',
+					'postId'  => self::POST_BLOCKS_POST_ID,
+				],
+				'operations' => [
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0, 0 ],
+						'expectedBlockName' => 'core/heading',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => 'stale',
+					'reviewContextSignature'   => 'stale',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_stale', $result->get_error_code() );
+	}
+
+	public function test_request_post_blocks_apply_rejects_non_post_blocks_scope(): void {
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_post_blocks_apply(
+			[
+				'scope'      => [
+					'surface' => 'global-styles',
+					'postId'  => self::POST_BLOCKS_POST_ID,
+				],
+				'operations' => [
+					[
+						'type'       => 'remove_block',
+						'targetPath' => [ 0 ],
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => str_repeat( 'a', 64 ),
+					'reviewContextSignature'   => str_repeat( 'b', 64 ),
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_post_blocks_scope', $result->get_error_code() );
+	}
+
+	public function test_request_post_blocks_apply_rejects_missing_post_id(): void {
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_post_blocks_apply(
+			[
+				'scope'      => [ 'surface' => 'post-blocks' ],
+				'operations' => [
+					[
+						'type'       => 'remove_block',
+						'targetPath' => [ 0 ],
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => str_repeat( 'a', 64 ),
+					'reviewContextSignature'   => str_repeat( 'b', 64 ),
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_post_blocks_scope', $result->get_error_code() );
+	}
+
+	public function test_request_post_blocks_apply_creates_pending_row_with_baseline_hash(): void {
+		$content = $this->post_blocks_content();
+		$this->seed_post_blocks_document( $content );
+
+		// Mirror the template-part happy path: read the REAL signatures from
+		// the same signature-only probe the handler recomputes.
+		$signatures = \FlavorAgent\Abilities\PostBlocksAbilities::recommend_post_blocks(
+			[
+				'postId'               => self::POST_BLOCKS_POST_ID,
+				'prompt'               => 'trim the heading',
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$this->assertIsArray( $signatures );
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_post_blocks_apply(
+			[
+				'scope'      => [
+					'surface' => 'post-blocks',
+					'postId'  => self::POST_BLOCKS_POST_ID,
+				],
+				'prompt'     => 'trim the heading',
+				'operations' => [
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0, 0 ],
+						'expectedBlockName' => 'core/heading',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'pending', $result['status'] );
+		$this->assertNotSame( '', (string) $result['activityId'] );
+		$this->assertNotSame( '', (string) $result['expiresAt'] );
+
+		$stored = Repository::find( (string) $result['activityId'] );
+		$this->assertIsArray( $stored );
+		$this->assertSame( 'post-blocks', $stored['surface'] );
+		$this->assertSame( 'apply_post_blocks_suggestion', $stored['type'] );
+		$this->assertSame( 'pending', $stored['executionResult'] );
+		$this->assertSame( 'not_applicable', $stored['undo']['status'] );
+		$this->assertSame( self::POST_BLOCKS_POST_ID, $stored['target']['postId'] );
+		$this->assertSame( 'post', $stored['target']['postType'] );
+		$this->assertSame(
+			hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) ),
+			$stored['apply']['signatures']['baselineContentHash']
+		);
+		$this->assertSame(
+			(string) $signatures['resolvedContextSignature'],
+			$stored['apply']['signatures']['resolvedContextSignature']
+		);
+		$this->assertSame( 'post:' . self::POST_BLOCKS_POST_ID, $stored['document']['scopeKey'] );
+		$this->assertSame( 'post', $stored['document']['postType'] );
+		$this->assertNotEmpty( $stored['apply']['operations'] );
+
+		// Producer -> consumer: the stored row must derive a post-blocks entity
+		// keyed by postId, not the document-key fallback.
+		$entity = \FlavorAgent\Activity\Serializer::derive_entity( $stored );
+		$this->assertSame( 'post-blocks', $entity['type'] );
+		$this->assertSame( (string) self::POST_BLOCKS_POST_ID, $entity['ref'] );
+	}
+
+	public function test_request_post_blocks_apply_rejects_unsupported_post_type(): void {
+		$this->seed_post_blocks_document( $this->post_blocks_content(), self::POST_BLOCKS_POST_ID, 'wp_template_part' );
+
+		$result = \FlavorAgent\Abilities\ApplyAbilities::request_post_blocks_apply(
+			[
+				'scope'      => [
+					'surface' => 'post-blocks',
+					'postId'  => self::POST_BLOCKS_POST_ID,
+				],
+				'operations' => [
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0, 0 ],
+						'expectedBlockName' => 'core/heading',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => str_repeat( 'a', 64 ),
+					'reviewContextSignature'   => str_repeat( 'b', 64 ),
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+	}
+
+	public function test_registry_routes_post_blocks_to_its_executor(): void {
+		$this->assertSame(
+			\FlavorAgent\Apply\PostBlocksApplyExecutor::class,
+			\FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'post-blocks' )
+		);
+	}
+
+	public function test_request_post_blocks_apply_approves_executes_and_undoes(): void {
+		$content = $this->post_blocks_content();
+		$this->seed_post_blocks_document( $content );
+
+		$signatures = \FlavorAgent\Abilities\PostBlocksAbilities::recommend_post_blocks(
+			[
+				'postId'               => self::POST_BLOCKS_POST_ID,
+				'prompt'               => 'trim the heading',
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$this->assertIsArray( $signatures );
+
+		$pending = \FlavorAgent\Abilities\ApplyAbilities::request_post_blocks_apply(
+			[
+				'scope'      => [
+					'surface' => 'post-blocks',
+					'postId'  => self::POST_BLOCKS_POST_ID,
+				],
+				'prompt'     => 'trim the heading',
+				'operations' => [
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0, 0 ],
+						'expectedBlockName' => 'core/heading',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+		$this->assertIsArray( $pending );
+
+		$approved = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['activityId'],
+			'approve'
+		);
+
+		$this->assertIsArray( $approved );
+		$this->assertSame( 'available', $approved['apply']['status'] );
+		$this->assertStringNotContainsString(
+			'Title',
+			(string) WordPressTestState::$posts[ self::POST_BLOCKS_POST_ID ]->post_content
+		);
+		$this->assertStringContainsString(
+			'Body',
+			(string) WordPressTestState::$posts[ self::POST_BLOCKS_POST_ID ]->post_content
+		);
+
+		$undone = \FlavorAgent\Abilities\ApplyAbilities::undo_activity(
+			[
+				'activityId' => (string) $pending['activityId'],
+			]
+		);
+
+		$this->assertIsArray( $undone );
+		$this->assertSame( 'undone', $undone['result'] );
+		$this->assertSame(
+			serialize_blocks( parse_blocks( $content ) ),
+			serialize_blocks( parse_blocks( (string) WordPressTestState::$posts[ self::POST_BLOCKS_POST_ID ]->post_content ) )
+		);
+	}
+
+	public function test_attestation_is_not_recorded_for_post_blocks_apply(): void {
+		$content = $this->post_blocks_content();
+		$this->seed_post_blocks_document( $content );
+
+		$signatures = \FlavorAgent\Abilities\PostBlocksAbilities::recommend_post_blocks(
+			[
+				'postId'               => self::POST_BLOCKS_POST_ID,
+				'prompt'               => 'trim the heading',
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$this->assertIsArray( $signatures );
+
+		$pending = \FlavorAgent\Abilities\ApplyAbilities::request_post_blocks_apply(
+			[
+				'scope'      => [
+					'surface' => 'post-blocks',
+					'postId'  => self::POST_BLOCKS_POST_ID,
+				],
+				'prompt'     => 'trim the heading',
+				'operations' => [
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0, 0 ],
+						'expectedBlockName' => 'core/heading',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+		$this->assertIsArray( $pending );
+
+		\FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['activityId'], 'approve' );
+
+		$this->assertNull(
+			\FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $pending['activityId'] ),
+			'post-blocks applies are not attested (frozen to external-style-apply-v1).'
+		);
+	}
 }

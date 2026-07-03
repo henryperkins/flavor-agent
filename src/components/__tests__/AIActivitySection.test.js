@@ -679,6 +679,17 @@ describe( 'AIActivitySection', () => {
 							},
 						},
 						{
+							id: 'post-blocks-diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion:
+								'Post content structure request complete',
+							surface: 'post-blocks',
+							undo: {
+								canUndo: false,
+								status: 'review',
+							},
+						},
+						{
 							id: 'global-styles-diagnostic-1',
 							type: 'request_diagnostic',
 							suggestion: 'Global Styles request complete',
@@ -721,6 +732,9 @@ describe( 'AIActivitySection', () => {
 		);
 		expect( getContainer().textContent ).toContain(
 			'Template part request diagnostic'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Post content structure request diagnostic'
 		);
 		expect( getContainer().textContent ).toContain(
 			'Global Styles request diagnostic'
