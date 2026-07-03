@@ -34,6 +34,8 @@ final class ServerCollector {
 
 	private static ?TemplatePartContextCollector $template_part_context_collector = null;
 
+	private static ?PostBlocksContextCollector $post_blocks_context_collector = null;
+
 	private static ?NavigationParser $navigation_parser = null;
 
 	private static ?NavigationContextCollector $navigation_context_collector = null;
@@ -225,6 +227,26 @@ final class ServerCollector {
 	}
 
 	/**
+	 * Server-collected document target contract for the external post-blocks
+	 * apply surface. No client-supplied tree is trusted for this surface.
+	 *
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function for_post_blocks( int $post_id ): array|\WP_Error {
+		return self::post_blocks_context_collector()->for_post_blocks( $post_id );
+	}
+
+	/**
+	 * Re-resolve the live post for a governed external apply. No public
+	 * filter seam: a governed-write resolution path must not be interceptable.
+	 *
+	 * @return \WP_Post|\WP_Error
+	 */
+	public static function resolve_post_for_apply( int $post_id ): object {
+		return self::post_blocks_context_collector()->resolve_post_for_apply( $post_id );
+	}
+
+	/**
 	 * Re-resolve the live template part for a governed external apply. No public
 	 * filter seam: a governed-write resolution path must not be interceptable.
 	 */
@@ -343,6 +365,14 @@ final class ServerCollector {
 			self::template_repository(),
 			self::template_structure_analyzer(),
 			self::pattern_override_analyzer(),
+			self::pattern_candidate_selector(),
+			self::theme_token_collector()
+		);
+	}
+
+	private static function post_blocks_context_collector(): PostBlocksContextCollector {
+		return self::$post_blocks_context_collector ??= new PostBlocksContextCollector(
+			self::template_structure_analyzer(),
 			self::pattern_candidate_selector(),
 			self::theme_token_collector()
 		);
