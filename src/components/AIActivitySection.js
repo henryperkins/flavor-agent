@@ -159,6 +159,8 @@ function describeActivity( entry ) {
 				return 'Template request diagnostic';
 			case 'template-part':
 				return 'Template part request diagnostic';
+			case 'post-blocks':
+				return 'Post content structure request diagnostic';
 			case 'global-styles':
 				return 'Global Styles request diagnostic';
 			case 'style-book':
@@ -179,6 +181,10 @@ function describeActivity( entry ) {
 
 	if ( entry?.surface === 'template-part' ) {
 		return 'Template part action';
+	}
+
+	if ( entry?.surface === 'post-blocks' ) {
+		return 'Post content action';
 	}
 
 	if ( entry?.surface === 'global-styles' ) {

@@ -89,7 +89,7 @@ final class ActivityPageTest extends TestCase {
 		ActivityPage::render_pending_external_apply_notice();
 		$output = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'Pending external style apply awaiting approval', $output );
+		$this->assertStringContainsString( 'Pending external apply awaiting approval', $output );
 		$this->assertStringContainsString( 'Style Book (core/button, Global Styles 17)', $output );
 		$this->assertStringContainsString( 'Requested by: User #7 (reference: agent-req-1)', $output );
 		$this->assertStringContainsString( 'Open AI Activity', $output );
@@ -188,6 +188,35 @@ final class ActivityPageTest extends TestCase {
 
 		$this->assertArrayHasKey( 'currentUserId', $data );
 		$this->assertSame( 42, $data['currentUserId'] );
+	}
+
+	public function test_render_pending_external_apply_notice_includes_post_title_and_id_for_post_blocks(): void {
+		$this->create_pending_entry(
+			[
+				'id'       => 'pending-post-blocks-notice',
+				'type'     => 'apply_post_blocks_suggestion',
+				'surface'  => 'post-blocks',
+				'target'   => [
+					'postId'   => 9400,
+					'postType' => 'post',
+					'title'    => 'Sample document',
+				],
+				'document' => [
+					'scopeKey' => 'post:9400',
+					'postType' => 'post',
+					'entityId' => '9400',
+				],
+			]
+		);
+		WordPressTestState::$capabilities['manage_options']     = true;
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		ob_start();
+		ActivityPage::render_pending_external_apply_notice();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Post: Sample document (#9400)', $output );
+		$this->assertStringContainsString( 'Open AI Activity', $output );
 	}
 
 	/**

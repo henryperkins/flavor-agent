@@ -567,6 +567,11 @@ function formatActivityTypeLabel( activityType = '' ) {
 			return __( 'Apply template suggestion', 'flavor-agent' );
 		case 'apply_template_part_suggestion':
 			return __( 'Apply template-part suggestion', 'flavor-agent' );
+		case 'apply_post_blocks_suggestion':
+			return __(
+				'Apply post content structure suggestion',
+				'flavor-agent'
+			);
 		case 'apply_global_styles_suggestion':
 			return __( 'Apply Global Styles suggestion', 'flavor-agent' );
 		default:
@@ -1065,6 +1070,8 @@ function formatSurfaceLabel( surface = '' ) {
 			return __( 'Template', 'flavor-agent' );
 		case 'template-part':
 			return __( 'Template part', 'flavor-agent' );
+		case 'post-blocks':
+			return __( 'Post content', 'flavor-agent' );
 		case 'global-styles':
 			return __( 'Global Styles', 'flavor-agent' );
 		case 'style-book':
@@ -1442,6 +1449,13 @@ function getActivityTitle( entry ) {
 		return __( 'Template-part suggestion applied', 'flavor-agent' );
 	}
 
+	if ( entry?.surface === 'post-blocks' ) {
+		return __(
+			'Post content structure suggestion applied',
+			'flavor-agent'
+		);
+	}
+
 	if ( entry?.surface === 'global-styles' ) {
 		return __( 'Global Styles suggestion applied', 'flavor-agent' );
 	}
@@ -1487,6 +1501,14 @@ function getActivityEntityLabel( entry ) {
 			/* translators: %s: template part identifier. */
 			__( 'Template part %s', 'flavor-agent' ),
 			entry?.target?.templatePartRef || EMPTY_VALUE
+		);
+	}
+
+	if ( entry?.surface === 'post-blocks' ) {
+		return sprintf(
+			/* translators: %s: post title or ID. */
+			__( 'Post %s', 'flavor-agent' ),
+			entry?.target?.title || entry?.target?.postId || EMPTY_VALUE
 		);
 	}
 
@@ -2388,6 +2410,14 @@ function getGovernanceTargetLabel( entry ) {
 		);
 	}
 
+	if ( entry?.surface === 'post-blocks' ) {
+		return sprintf(
+			/* translators: %s: post title or ID. */
+			__( 'Post %s', 'flavor-agent' ),
+			entry?.target?.title || entry?.target?.postId || EMPTY_VALUE
+		);
+	}
+
 	if ( entry?.surface === 'style-book' ) {
 		const blockTitle =
 			entry?.target?.blockTitle ||
@@ -2482,6 +2512,23 @@ function getGovernanceApprovalCopy( surface ) {
 		};
 	}
 
+	if ( surface === 'post-blocks' ) {
+		return {
+			reviewIntro: __(
+				'An external agent requested this bounded post-content apply. Review the operation, provenance, and freshness evidence before deciding.',
+				'flavor-agent'
+			),
+			retained: __(
+				'This external post-content apply row is retained for approval, provenance, freshness, and undo review.',
+				'flavor-agent'
+			),
+			decision: __(
+				'AI proposes; WordPress approves. Approving applies this bounded structural change from WordPress; rejecting keeps the site unchanged.',
+				'flavor-agent'
+			),
+		};
+	}
+
 	return {
 		reviewIntro: __(
 			'An external agent requested this bounded style apply. Review the operation, provenance, and freshness evidence before deciding.',
@@ -2513,9 +2560,11 @@ export function getGovernanceDetails(
 	const visualDiffRows = getStyleVisualDiffRows( entry, {
 		themeColorPresetIndex,
 	} );
-	const formatOperationSummary = [ 'template', 'template-part' ].includes(
-		entry?.surface
-	)
+	const formatOperationSummary = [
+		'template',
+		'template-part',
+		'post-blocks',
+	].includes( entry?.surface )
 		? formatStructuralOperationSummary
 		: formatStyleOperationSummary;
 	const proposedOperations = details.operations.map( ( operation ) =>
@@ -2900,6 +2949,16 @@ export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 				path: '/wp_global_styles',
 			} ),
 			label: __( 'Open Styles', 'flavor-agent' ),
+		};
+	}
+
+	if ( entry?.surface === 'post-blocks' && entry?.target?.postId ) {
+		return {
+			url: buildAdminUrl( adminBaseUrl, 'post.php', {
+				post: entry.target.postId,
+				action: 'edit',
+			} ),
+			label: __( 'Open post', 'flavor-agent' ),
 		};
 	}
 

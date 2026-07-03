@@ -107,7 +107,7 @@ final class ActivityPage {
 		?>
 		<div class="notice notice-warning">
 			<p>
-				<strong><?php echo esc_html__( 'Pending external style apply awaiting approval', 'flavor-agent' ); ?></strong>
+				<strong><?php echo esc_html__( 'Pending external apply awaiting approval', 'flavor-agent' ); ?></strong>
 				<?php
 				echo esc_html(
 					sprintf(
@@ -280,6 +280,25 @@ final class ActivityPage {
 		$document   = is_array( $entry['document'] ?? null ) ? $entry['document'] : [];
 		$styles_id  = trim( (string) ( $target['globalStylesId'] ?? $document['entityId'] ?? '' ) );
 		$block_name = trim( (string) ( $target['blockName'] ?? '' ) );
+
+		if ( 'post-blocks' === $surface ) {
+			$title   = trim( (string) ( $target['title'] ?? '' ) );
+			$post_id = trim( (string) ( $target['postId'] ?? $document['entityId'] ?? '' ) );
+
+			if ( '' !== $title && '' !== $post_id ) {
+				return sprintf(
+					/* translators: 1: post title, 2: post ID. */
+					__( 'Post: %1$s (#%2$s)', 'flavor-agent' ),
+					$title,
+					$post_id
+				);
+			}
+
+			return '' !== $title
+				/* translators: %s: post title. */
+				? sprintf( __( 'Post: %s', 'flavor-agent' ), $title )
+				: __( 'Post', 'flavor-agent' );
+		}
 
 		if ( 'style-book' === $surface && '' !== $block_name ) {
 			$context = '' !== $styles_id

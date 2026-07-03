@@ -1252,6 +1252,51 @@ describe( 'external apply helpers', () => {
 		} );
 	}
 
+	function createPostBlocksApplyEntry( overrides = {} ) {
+		return createEntry( {
+			id: 'activity-post-blocks-apply',
+			type: 'apply_post_blocks_suggestion',
+			surface: 'post-blocks',
+			status: 'pending',
+			suggestion: 'External: trim the heading',
+			target: {
+				postId: 9400,
+				postType: 'post',
+				title: 'Sample document',
+			},
+			document: {
+				scopeKey: 'post:9400',
+				postType: 'post',
+				entityId: '9400',
+			},
+			undo: {
+				status: 'not_applicable',
+				canUndo: false,
+			},
+			apply: {
+				status: 'pending',
+				requestedBy: 7,
+				requestedAt: '2026-06-10T01:00:00+00:00',
+				expiresAt: '2026-06-11T01:00:00+00:00',
+				operations: [
+					{
+						type: 'remove_block',
+						targetPath: [ 0, 0 ],
+						expectedBlockName: 'core/heading',
+					},
+				],
+				signatures: {
+					resolvedContextSignature: 'r'.repeat( 64 ),
+					reviewContextSignature: 'v'.repeat( 64 ),
+					// post-blocks rows store the content baseline, not config.
+					baselineContentHash: 'b'.repeat( 64 ),
+				},
+				requestReference: 'agent-req-pb-1',
+			},
+			...overrides,
+		} );
+	}
+
 	function createTemplateApplyEntry( overrides = {} ) {
 		return createEntry( {
 			id: 'activity-template-apply',
@@ -1653,6 +1698,51 @@ describe( 'external apply helpers', () => {
 		expect( style.approvalCopy.reviewIntro ).toContain( 'style apply' );
 		expect( style.approvalCopy.retained ).toContain( 'style apply row' );
 		expect( style.approvalCopy.decision ).toContain( 'style change' );
+
+		const postBlocks = getGovernanceDetails(
+			createPostBlocksApplyEntry( { status: 'pending' } )
+		);
+		expect( postBlocks.approvalCopy.reviewIntro ).toContain(
+			'post-content apply'
+		);
+		expect( postBlocks.approvalCopy.retained ).toContain(
+			'post-content apply row'
+		);
+		expect( postBlocks.approvalCopy.decision ).toContain(
+			'structural change'
+		);
+		expect( postBlocks.approvalCopy.reviewIntro ).not.toContain(
+			'style apply'
+		);
+	} );
+
+	test( 'getGovernanceDetails summarizes post-blocks structural operations and target', () => {
+		const details = getGovernanceDetails(
+			createPostBlocksApplyEntry( {
+				status: 'applied',
+				after: {
+					operations: [
+						{
+							type: 'remove_block',
+							targetPath: [ 0, 0 ],
+							expectedBlockName: 'core/heading',
+						},
+					],
+				},
+			} )
+		);
+
+		expect( details.targetLabel ).toBe( 'Post Sample document' );
+		expect( details.surfaceLabel ).toBe( 'Post content' );
+		expect( details.proposedOperations ).toEqual( [
+			'Remove block · core/heading · [0, 0]',
+		] );
+		expect( details.executedOperations ).toEqual( [
+			'Remove block · core/heading · [0, 0]',
+		] );
+		// post-blocks rows store baselineContentHash; the baseline-hash
+		// surfaces must fall back to it instead of reading "Not recorded".
+		expect( details.hasBaselineHash ).toBe( true );
 	} );
 
 	test( 'getGovernanceDetails summarizes template structural operations and target', () => {

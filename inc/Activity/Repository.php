@@ -4996,7 +4996,7 @@ final class Repository {
 			return false;
 		}
 
-		return in_array( $surface, [ 'global-styles', 'style-book' ], true );
+		return in_array( $surface, [ 'global-styles', 'style-book', 'post-blocks' ], true );
 	}
 
 	private static function table_exists(): bool {
