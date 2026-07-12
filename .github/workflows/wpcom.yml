@@ -1,4 +1,4 @@
-name: Publish Plugin
+name: Build WordPress.com Plugin Artifact
 
 on:
   push:
@@ -6,24 +6,35 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: wpcom-artifact-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  Publish-Plugin:
-    name: Publish Plugin
+  build-artifact:
+    name: Build WordPress.com plugin artifact
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      WPCOM_ARTIFACT_DIR: /tmp/wpcom-artifact
+      WPCOM_ARTIFACT_DIR: ${{ runner.temp }}/wpcom-artifact
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version: "24"
+          node-version-file: .nvmrc
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -32,33 +43,83 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      - name: Validate dependency manifests
+        run: composer validate --strict --no-check-publish
+
       - name: Install Node.js dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Build editor and admin assets
         run: npm run build
 
       - name: Prepare WordPress.com plugin artifact
-        run: bash scripts/prepare-release.sh "$WPCOM_ARTIFACT_DIR"
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- "$WPCOM_ARTIFACT_DIR"
+          bash scripts/prepare-release.sh "$WPCOM_ARTIFACT_DIR"
 
       - name: Validate WordPress.com plugin artifact
+        shell: bash
         run: |
-          test -f "$WPCOM_ARTIFACT_DIR/flavor-agent.php"
-          test -f "$WPCOM_ARTIFACT_DIR/vendor/autoload.php"
-          test -f "$WPCOM_ARTIFACT_DIR/build/index.js"
-          test -f "$WPCOM_ARTIFACT_DIR/build/index.asset.php"
-          test -f "$WPCOM_ARTIFACT_DIR/build/admin.js"
-          test -f "$WPCOM_ARTIFACT_DIR/build/admin.asset.php"
-          test -f "$WPCOM_ARTIFACT_DIR/build/activity-log.js"
-          test -f "$WPCOM_ARTIFACT_DIR/build/activity-log.asset.php"
-          test ! -d "$WPCOM_ARTIFACT_DIR/node_modules"
-          test ! -d "$WPCOM_ARTIFACT_DIR/src"
-          test ! -d "$WPCOM_ARTIFACT_DIR/tests"
-          test ! -d "$WPCOM_ARTIFACT_DIR/.github"
+          set -euo pipefail
 
-      - name: Upload the artifact
+          required_files=(
+            flavor-agent.php
+            readme.txt
+            vendor/autoload.php
+            build/index.js
+            build/index.asset.php
+            build/admin.js
+            build/admin.asset.php
+            build/activity-log.js
+            build/activity-log.asset.php
+          )
+
+          excluded_paths=(
+            .git
+            .github
+            node_modules
+            src
+            tests
+            scripts
+            docs
+            package.json
+            package-lock.json
+            phpunit.xml.dist
+            phpcs.xml.dist
+          )
+
+          for path in "${required_files[@]}"; do
+            test -f "$WPCOM_ARTIFACT_DIR/$path" || {
+              echo "::error file=$path::Required artifact file is missing"
+              exit 1
+            }
+          done
+
+          for path in "${excluded_paths[@]}"; do
+            test ! -e "$WPCOM_ARTIFACT_DIR/$path" || {
+              echo "::error file=$path::Development path was included in the artifact"
+              exit 1
+            }
+          done
+
+          php -l "$WPCOM_ARTIFACT_DIR/flavor-agent.php"
+
+          find "$WPCOM_ARTIFACT_DIR" -type l -print -quit |
+            grep -q . && {
+              echo "::error::Artifact contains symbolic links"
+              exit 1
+            } || true
+
+          echo "Artifact contents:"
+          du -sh "$WPCOM_ARTIFACT_DIR"
+          find "$WPCOM_ARTIFACT_DIR" -maxdepth 2 -type f -printf '%P\n' | sort
+
+      - name: Upload WordPress.com plugin artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wpcom
+          name: wpcom-${{ github.sha }}
           path: ${{ env.WPCOM_ARTIFACT_DIR }}
-          retention-days: 1
+          if-no-files-found: error
+          retention-days: 7
