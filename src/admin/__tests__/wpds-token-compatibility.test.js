@@ -5,7 +5,8 @@ const path = require( 'path' );
 const PACKAGE_JSON = require( '../../../package.json' );
 
 const SRC_DIR = path.join( __dirname, '../../' );
-const LEGACY_WPDS_COLOR_TOKEN = /--wpds-color-(bg|fg)-[a-z0-9-]+/g;
+const LEGACY_WPDS_COLOR_TOKEN =
+	/--wpds-color-(?:(?:bg|fg)-[a-z0-9-]+|stroke-focus-brand)/g;
 
 function listCssFiles( directory ) {
 	return fs
@@ -28,7 +29,11 @@ function removeComments( css ) {
 function toCurrentToken( token ) {
 	return token
 		.replace( '--wpds-color-bg-', '--wpds-color-background-' )
-		.replace( '--wpds-color-fg-', '--wpds-color-foreground-' );
+		.replace( '--wpds-color-fg-', '--wpds-color-foreground-' )
+		.replace(
+			'--wpds-color-stroke-focus-brand',
+			'--wpds-color-stroke-focus'
+		);
 }
 
 function collectUnpairedLegacyTokens( css, file ) {
@@ -97,7 +102,7 @@ describe( 'WPDS token compatibility', () => {
 		expect( fs.existsSync( exportedFile ) ).toBe( true );
 	} );
 
-	test( 'pairs legacy bg and fg color tokens with the current names', () => {
+	test( 'pairs legacy color tokens with the current names', () => {
 		const unpairedLegacyTokens = [];
 
 		for ( const filePath of listCssFiles( SRC_DIR ) ) {

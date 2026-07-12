@@ -29,7 +29,7 @@ body {
 	);
 	--wpds-color-foreground-interactive-brand: var(--wp-admin-theme-color, #3858e9);
 	--wpds-color-foreground-interactive-brand-active: var(--wp-admin-theme-color-darker-20, #183ad6);
-	--wpds-color-stroke-focus-brand: var(--wp-admin-theme-color, #3858e9);
+	--wpds-color-stroke-focus: var(--wp-admin-theme-color, #3858e9);
 	--wpds-color-stroke-interactive-brand: var(--wp-admin-theme-color, #3858e9);
 	--wpds-color-stroke-interactive-brand-active: var(--wp-admin-theme-color-darker-20, #183ad6);
 
@@ -40,4 +40,5 @@ body {
 	--wpds-color-bg-surface-brand: var(--wpds-color-background-surface-brand);
 	--wpds-color-fg-interactive-brand: var(--wpds-color-foreground-interactive-brand);
 	--wpds-color-fg-interactive-brand-active: var(--wpds-color-foreground-interactive-brand-active);
+	--wpds-color-stroke-focus-brand: var(--wpds-color-stroke-focus);
 }
