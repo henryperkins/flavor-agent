@@ -21,7 +21,6 @@ jobs:
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      WPCOM_ARTIFACT_DIR: ${{ runner.temp }}/wpcom-artifact
 
     steps:
       - name: Check out repository
@@ -54,6 +53,8 @@ jobs:
 
       - name: Prepare WordPress.com plugin artifact
         shell: bash
+        env:
+          WPCOM_ARTIFACT_DIR: ${{ runner.temp }}/wpcom-artifact
         run: |
           set -euo pipefail
           rm -rf -- "$WPCOM_ARTIFACT_DIR"
@@ -61,6 +62,8 @@ jobs:
 
       - name: Validate WordPress.com plugin artifact
         shell: bash
+        env:
+          WPCOM_ARTIFACT_DIR: ${{ runner.temp }}/wpcom-artifact
         run: |
           set -euo pipefail
 
@@ -120,6 +123,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wpcom-${{ github.sha }}
-          path: ${{ env.WPCOM_ARTIFACT_DIR }}
+          path: ${{ runner.temp }}/wpcom-artifact
           if-no-files-found: error
           retention-days: 7
