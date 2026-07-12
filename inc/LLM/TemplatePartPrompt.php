@@ -242,6 +242,12 @@ SYSTEM;
 			50
 		);
 
+		// Priority 65 keeps the pattern vocabulary above the executable-operation
+		// examples (62) and structural constraints (60) that reference pattern
+		// names, so a tightened prompt budget never strands those sections without
+		// the vocabulary they depend on. It stays below the structural context
+		// (structure summary 70, anchors 75, targets 80) so executable placement
+		// stays first when the budget is genuinely exhausted.
 		if ( count( $patterns ) > 0 ) {
 			$max   = self::MAX_PROMPT_PATTERNS;
 			$shown = array_slice( $patterns, 0, $max );
@@ -275,9 +281,9 @@ SYSTEM;
 				$header .= 'Showing ' . $max . ' of ' . count( $patterns ) . " patterns.\n";
 			}
 
-			$budget->add_section( 'patterns', $header . implode( "\n", $lines ), 55 );
+			$budget->add_section( 'patterns', $header . implode( "\n", $lines ), 65 );
 		} else {
-			$budget->add_section( 'patterns', "## Available Patterns\nNo area-relevant patterns are available.", 55 );
+			$budget->add_section( 'patterns', "## Available Patterns\nNo area-relevant patterns are available.", 65 );
 		}
 
 		$theme_tokens = ThemeTokenFormatter::format(
@@ -312,8 +318,12 @@ SYSTEM;
 			: 'Suggest improvements for this template part.';
 		$budget->add_section( 'user_instruction', "## User Instruction\n{$instruction}", 95, true );
 
+		// Priority 25 keeps the worked example above best-effort docs grounding
+		// (20) — the response schema already enforces shape, but the example still
+		// demonstrates good operation selection — while staying below theme tokens
+		// (30), which are hard capability constraints.
 		foreach ( self::get_few_shot_examples() as $index => $example ) {
-			$budget->add_section( 'few_shot_' . $index, $example, 10 );
+			$budget->add_section( 'few_shot_' . $index, $example, 25 );
 		}
 
 		return $budget->assemble();
