@@ -35,6 +35,7 @@ jsconfig.json
 jest.config.js
 node_modules
 output
+wpcom-artifact
 package-lock.json
 package.json
 phpcs.xml.dist

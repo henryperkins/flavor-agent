@@ -13,7 +13,9 @@ jobs:
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      WPCOM_ARTIFACT_DIR: /tmp/wpcom-artifact
+      # Stage inside the workspace (not /tmp) so upload-artifact@v4 places the
+      # plugin files at the artifact root, matching WordPress.com's validator.
+      WPCOM_ARTIFACT_DIR: ${{ github.workspace }}/wpcom-artifact
 
     steps:
       - name: Checkout
@@ -60,5 +62,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wpcom
-          path: ${{ env.WPCOM_ARTIFACT_DIR }}
+          # Relative path so the plugin files sit at the artifact root.
+          path: wpcom-artifact
+          if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
