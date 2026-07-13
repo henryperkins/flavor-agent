@@ -8,6 +8,7 @@
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 tool="$repo_root/tools/code-search"
 py="$tool/.venv/bin/python"
+[ -x "$py" ] || py="$tool/.venv/Scripts/python.exe"  # Windows venv layout
 
 [ -x "$py" ] || exit 0                          # tooling not set up — skip silently
 [ -f "$HOME/.config/qdrant/env" ] || exit 0     # no Qdrant creds — skip silently
@@ -17,7 +18,13 @@ py="$tool/.venv/bin/python"
   export FASTEMBED_CACHE_PATH="$tool/.fastembed_cache" OMP_NUM_THREADS=3 EMBED_THREADS=3
   # setsid+nohup so it outlives the git process; the single-instance lock in
   # index.py prevents a burst of commits from stacking embedders.
-  setsid nohup "$py" "$tool/index.py" --incremental \
-    >> "$tool/incremental.log" 2>&1 < /dev/null &
+  # (Git Bash on Windows has no setsid — plain nohup still detaches enough.)
+  if command -v setsid >/dev/null 2>&1; then
+    setsid nohup "$py" "$tool/index.py" --incremental \
+      >> "$tool/incremental.log" 2>&1 < /dev/null &
+  else
+    nohup "$py" "$tool/index.py" --incremental \
+      >> "$tool/incremental.log" 2>&1 < /dev/null &
+  fi
 ) >/dev/null 2>&1 || true
 exit 0
