@@ -139,15 +139,39 @@ def _lock_path():
     return C.state_path().with_name(".index.lock")
 
 
+def _pid_alive(pid):
+    """Read-only liveness probe. Never signals: os.kill(pid, 0) on Windows
+    raises WinError 87 for almost any pid (sig 0 is CTRL_C_EVENT) — or
+    interrupts a live process group — so probe via a SYNCHRONIZE handle."""
+    if os.name == "nt":
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        handle = k32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+        if not handle:
+            return False                                  # gone → stale
+        try:
+            return k32.WaitForSingleObject(handle, 0) == 0x102  # WAIT_TIMEOUT → running
+        finally:
+            k32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)              # raises if not running
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                  # exists, owned by someone else
+
+
 def acquire_lock():
     lock = _lock_path()
     if lock.exists():
         try:
             pid = int(lock.read_text().strip())
-            os.kill(pid, 0)          # raises if not running
+        except ValueError:
+            pid = 0                  # unreadable → stale
+        if pid > 0 and _pid_alive(pid):
             return None              # held by a live process
-        except (ValueError, ProcessLookupError, PermissionError):
-            pass                     # stale lock; take it over
+        # stale lock; take it over
     lock.write_text(str(os.getpid()))
     return lock
 
