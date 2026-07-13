@@ -420,11 +420,40 @@ function isCorpusDocumentUrl( value ) {
 	return true;
 }
 
+// Origins whose robots.txt advertises sitemaps far outside the trusted roots (the
+// shared wordpress.org origin also hosts /plugins/, /themes/, and the giant root
+// sitemap). For these origins only, sitemap crawling is additionally scoped to the
+// trusted roots' path prefixes; every other origin keeps origin-wide discovery so
+// developer.wordpress.org's root wp-sitemap.xml continues to work.
+const SITEMAP_PATH_SCOPED_ORIGINS = new Set( [ 'https://wordpress.org' ] );
+
+function sitemapPathPrefixesForRoots( roots ) {
+	const prefixes = new Map();
+	for ( const root of roots ) {
+		let url;
+		try {
+			url = new URL( root );
+		} catch {
+			continue;
+		}
+		if ( ! SITEMAP_PATH_SCOPED_ORIGINS.has( url.origin ) ) {
+			continue;
+		}
+		const prefix = url.pathname.endsWith( '/' ) ? url.pathname : `${ url.pathname }/`;
+		const list = prefixes.get( url.origin ) || [];
+		if ( ! list.includes( prefix ) ) {
+			list.push( prefix );
+		}
+		prefixes.set( url.origin, list );
+	}
+	return prefixes;
+}
+
 // Only fetch sitemaps that live on one of the trusted roots' origins. Sitemap
 // references come from robots.txt and nested <loc> entries, i.e. remote-controlled
 // input fetched by a secret-bearing workflow runner — constraining them to the
 // allowed https origins removes that SSRF surface.
-function sitemapUrlWithinOrigins( value, allowedOrigins ) {
+function sitemapUrlWithinOrigins( value, allowedOrigins, pathPrefixes = null ) {
 	const raw = String( value || '' ).trim();
 	if ( ! raw ) {
 		return '';
@@ -438,7 +467,14 @@ function sitemapUrlWithinOrigins( value, allowedOrigins ) {
 	if ( url.protocol !== 'https:' ) {
 		return '';
 	}
-	return allowedOrigins.has( url.origin ) ? url.toString() : '';
+	if ( ! allowedOrigins.has( url.origin ) ) {
+		return '';
+	}
+	const prefixes = pathPrefixes && pathPrefixes.get( url.origin );
+	if ( prefixes && ! prefixes.some( ( prefix ) => url.pathname.startsWith( prefix ) ) ) {
+		return '';
+	}
+	return url.toString();
 }
 
 async function readLimitedText( response, maxBytes ) {
@@ -674,11 +710,12 @@ async function discoverSourceUrls( roots, options ) {
 	}
 
 	const allowedOrigins = new Set( roots.map( ( root ) => new URL( root ).origin ) );
+	const sitemapPathPrefixes = sitemapPathPrefixesForRoots( roots );
 	const sitemapUrls = new Set();
 
 	for ( const origin of allowedOrigins ) {
 		for ( const sitemapUrl of await discoverRobotsSitemaps( origin ) ) {
-			const normalized = sitemapUrlWithinOrigins( sitemapUrl, allowedOrigins );
+			const normalized = sitemapUrlWithinOrigins( sitemapUrl, allowedOrigins, sitemapPathPrefixes );
 			if ( normalized ) {
 				sitemapUrls.add( normalized );
 			}
@@ -693,7 +730,8 @@ async function discoverSourceUrls( roots, options ) {
 		for ( const candidate of [ 'wp-sitemap.xml', 'sitemap.xml' ] ) {
 			const normalized = sitemapUrlWithinOrigins(
 				new URL( candidate, root ).toString(),
-				allowedOrigins
+				allowedOrigins,
+				sitemapPathPrefixes
 			);
 			if ( normalized ) {
 				sitemapUrls.add( normalized );
@@ -729,7 +767,7 @@ async function discoverSourceUrls( roots, options ) {
 				continue;
 			}
 			for ( const sitemapUrl of result.value.sitemaps ) {
-				const normalized = sitemapUrlWithinOrigins( sitemapUrl, allowedOrigins );
+				const normalized = sitemapUrlWithinOrigins( sitemapUrl, allowedOrigins, sitemapPathPrefixes );
 				if ( normalized && ! visitedSitemaps.has( normalized ) && ! queuedSitemaps.has( normalized ) ) {
 					queue.push( normalized );
 					queuedSitemaps.add( normalized );
@@ -2249,6 +2287,7 @@ module.exports = {
 	sourcePartIdentityForUrl,
 	parseArgs,
 	readSitemap,
+	sitemapPathPrefixesForRoots,
 	sitemapUrlWithinOrigins,
 	sourceRootsForRelease,
 	truncateUtf8ToBytes,

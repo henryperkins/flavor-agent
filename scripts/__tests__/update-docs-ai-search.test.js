@@ -20,6 +20,7 @@ const {
 	listBuiltinItems,
 	makeCorePostDate,
 	managedCompletedSourceUrlCount,
+	sitemapPathPrefixesForRoots,
 	manifestEntryFromExisting,
 	normalizeTrustedUrl,
 	parseArgs,
@@ -212,6 +213,82 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( sitemapUrlWithinOrigins( 'http://developer.wordpress.org/x.xml', allowed ) ).toBe( '' );
 		expect( sitemapUrlWithinOrigins( 'not a url', allowed ) ).toBe( '' );
 		expect( sitemapUrlWithinOrigins( '', allowed ) ).toBe( '' );
+	} );
+
+	test( 'sitemapUrlWithinOrigins scopes wordpress.org sitemaps to trusted path prefixes', () => {
+		const roots = [ 'https://wordpress.org/news/', 'https://developer.wordpress.org/block-editor/' ];
+		const allowedOrigins = new Set( roots.map( ( root ) => new URL( root ).origin ) );
+		const pathPrefixes = sitemapPathPrefixesForRoots( roots );
+
+		expect( pathPrefixes.get( 'https://wordpress.org' ) ).toEqual( [ '/news/' ] );
+		expect( pathPrefixes.has( 'https://developer.wordpress.org' ) ).toBe( false );
+
+		expect(
+			sitemapUrlWithinOrigins( 'https://wordpress.org/news/sitemap.xml', allowedOrigins, pathPrefixes )
+		).toBe( 'https://wordpress.org/news/sitemap.xml' );
+		expect(
+			sitemapUrlWithinOrigins( 'https://wordpress.org/sitemap.xml', allowedOrigins, pathPrefixes )
+		).toBe( '' );
+		expect(
+			sitemapUrlWithinOrigins( 'https://wordpress.org/news-sitemap.xml', allowedOrigins, pathPrefixes )
+		).toBe( '' );
+		expect(
+			sitemapUrlWithinOrigins( 'https://wordpress.org/plugins/sitemap.xml', allowedOrigins, pathPrefixes )
+		).toBe( '' );
+		expect(
+			sitemapUrlWithinOrigins( 'https://developer.wordpress.org/wp-sitemap.xml', allowedOrigins, pathPrefixes )
+		).toBe( 'https://developer.wordpress.org/wp-sitemap.xml' );
+	} );
+
+	test( 'discoverSourceUrls never crawls wordpress.org sitemaps outside /news/', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href === 'https://wordpress.org/robots.txt' ) {
+				return mockTextResponse(
+					[
+						'Sitemap: https://wordpress.org/sitemap.xml',
+						'Sitemap: https://wordpress.org/news-sitemap.xml',
+						'Sitemap: https://wordpress.org/plugins/sitemap.xml',
+						'Sitemap: https://wordpress.org/news/sitemap.xml',
+					].join( '\n' ),
+					href,
+					'text/plain'
+				);
+			}
+			if ( href === 'https://wordpress.org/news/sitemap.xml' ) {
+				return mockTextResponse(
+					[
+						'<urlset>',
+						'<url><loc>https://wordpress.org/news/2026/07/wordpress-7-0-1-maintenance-release/</loc></url>',
+						'</urlset>',
+					].join( '' ),
+					href
+				);
+			}
+			if ( href === 'https://wordpress.org/news/wp-sitemap.xml' ) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const { urls } = await discoverSourceUrls(
+			[ 'https://wordpress.org/news/' ],
+			{
+				sourceUrls: [],
+				sourceFile: '',
+				limit: 0,
+				recentPostMaxAgeDays: 180,
+				now: Date.parse( '2026-07-12T00:00:00Z' ),
+			}
+		);
+
+		expect( urls ).toEqual( [
+			'https://wordpress.org/news/2026/07/wordpress-7-0-1-maintenance-release/',
+		] );
+		const fetched = global.fetch.mock.calls.map( ( call ) => String( call[ 0 ] ) );
+		expect( fetched ).not.toContain( 'https://wordpress.org/sitemap.xml' );
+		expect( fetched ).not.toContain( 'https://wordpress.org/news-sitemap.xml' );
+		expect( fetched ).not.toContain( 'https://wordpress.org/plugins/sitemap.xml' );
 	} );
 
 	test( 'discoverSourceUrls does not fetch sitemaps from untrusted origins', async () => {
