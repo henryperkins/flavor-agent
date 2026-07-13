@@ -20,7 +20,7 @@ Freshness: a `post-commit` hook (`tools/code-search/install-hook.sh`) keeps the 
 
 ## MCP Tooling
 
-Use available MCP tools when they can speed up implementation, verification, or research. When the `wordpress-docs-ai-search` MCP server is available, consult it for Gutenberg, block editor, REST API, theme/theme.json, code-reference, Developer Blog, and current release-cycle decisions covered by the managed corpus; do not treat it as complete Plugin Handbook coverage unless the runbook's corpus scopes include that source. Treat results as grounding input. Trust and currency of the corpus are owned by `scripts/update-docs-ai-search.js` at ingestion time; the runtime (`inc/Cloudflare/AISearchClient.php`, `inc/Support/DocsGroundingSourcePolicy.php`) only applies structural URL hygiene and non-gating source labels.
+Use available MCP tools when they can speed up implementation, verification, or research. When the `wordpress-docs-ai-search` MCP server is available, consult it for Gutenberg, block editor, REST API, theme/theme.json, code-reference, Developer Blog, WordPress News, Make/AI updates, and current release-cycle decisions covered by the managed corpus; do not treat it as complete Plugin Handbook coverage unless the runbook's corpus scopes include that source. Treat results as grounding input. Trust and currency of the corpus are owned by `scripts/update-docs-ai-search.js` at ingestion time; the runtime (`inc/Cloudflare/AISearchClient.php`, `inc/Support/DocsGroundingSourcePolicy.php`) only applies structural URL hygiene and non-gating source labels.
 
 ## Commands
 

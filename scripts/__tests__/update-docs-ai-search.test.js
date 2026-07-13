@@ -991,6 +991,9 @@ describe( 'update-docs-ai-search helpers', () => {
 				'/mcp'
 			) }\``
 		);
+		expect( runbook ).toContain( 'https://wordpress.org/news/' );
+		expect( runbook ).toContain( 'https://make.wordpress.org/ai/' );
+		expect( runbook ).toContain( '--recent-post-max-age-days' );
 	} );
 
 	test( 'workflow requires explicit opt-in before updating Cloudflare instance config', () => {
