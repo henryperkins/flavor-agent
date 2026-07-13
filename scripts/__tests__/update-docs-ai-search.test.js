@@ -34,6 +34,8 @@ const {
 	sourceRootsForRelease,
 	truncateUtf8ToBytes,
 	urlMatchesRoots,
+	withinRecentPostWindow,
+	wordPressNewsPostDate,
 } = require( '../update-docs-ai-search.js' );
 
 function mockTextResponse( text, url, contentType = 'application/xml' ) {
@@ -284,13 +286,46 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( settled.pending ).toHaveLength( 0 );
 	} );
 
-	test( 'makeCorePostDate parses dated Make/Core post URLs and ignores the rest', () => {
+	test( 'makeCorePostDate parses dated Make subsite post URLs and ignores the rest', () => {
 		expect(
 			makeCorePostDate( 'https://make.wordpress.org/core/2026/05/14/wordpress-7-0-field-guide/' )
 		).toBe( Date.parse( '2026-05-14T00:00:00Z' ) );
+		expect(
+			makeCorePostDate( 'https://make.wordpress.org/ai/2026/07/08/whats-new-in-ai-1-1-0/' )
+		).toBe( Date.parse( '2026-07-08T00:00:00Z' ) );
 		expect( makeCorePostDate( 'https://make.wordpress.org/core/7-0/' ) ).toBeNull();
 		expect( makeCorePostDate( 'https://make.wordpress.org/core/handbook/about/' ) ).toBeNull();
+		expect( makeCorePostDate( 'https://make.wordpress.org/ai/handbook/' ) ).toBeNull();
 		expect( makeCorePostDate( 'https://developer.wordpress.org/news/2026/05/01/post/' ) ).toBeNull();
+	} );
+
+	test( 'wordPressNewsPostDate dates month-dated News posts at month start and ignores the rest', () => {
+		expect(
+			wordPressNewsPostDate( 'https://wordpress.org/news/2026/07/wordpress-7-0-1-maintenance-release/' )
+		).toBe( Date.parse( '2026-07-01T00:00:00Z' ) );
+		expect( wordPressNewsPostDate( 'https://wordpress.org/news/' ) ).toBeNull();
+		expect( wordPressNewsPostDate( 'https://wordpress.org/news/category/releases/' ) ).toBeNull();
+		expect( wordPressNewsPostDate( 'https://make.wordpress.org/core/2026/05/14/post/' ) ).toBeNull();
+	} );
+
+	test( 'withinRecentPostWindow gates dated make and news posts and passes undated docs', () => {
+		const cutoff = Date.parse( '2026-01-01T00:00:00Z' );
+		expect( withinRecentPostWindow( 'https://make.wordpress.org/ai/2026/07/08/whats-new-in-ai-1-1-0/', cutoff ) ).toBe( true );
+		expect( withinRecentPostWindow( 'https://make.wordpress.org/core/2025/01/15/old-dev-note/', cutoff ) ).toBe( false );
+		expect( withinRecentPostWindow( 'https://make.wordpress.org/ai/handbook/', cutoff ) ).toBe( false );
+		expect( withinRecentPostWindow( 'https://wordpress.org/news/2026/06/open-web-merch/', cutoff ) ).toBe( true );
+		expect( withinRecentPostWindow( 'https://wordpress.org/news/2025/11/old-post/', cutoff ) ).toBe( false );
+		expect( withinRecentPostWindow( 'https://developer.wordpress.org/reference/functions/register_block_type/', cutoff ) ).toBe( true );
+		expect( withinRecentPostWindow( 'https://wordpress.org/news/2025/11/old-post/', null ) ).toBe( true );
+	} );
+
+	test( 'parseArgs accepts the recent-post window flag and its make-core alias', () => {
+		expect( parseArgs( [] ).recentPostMaxAgeDays ).toBe( 180 );
+		expect( parseArgs( [ '--recent-post-max-age-days=45' ] ).recentPostMaxAgeDays ).toBe( 45 );
+		expect( parseArgs( [ '--make-core-max-age-days=90' ] ).recentPostMaxAgeDays ).toBe( 90 );
+		expect( () => parseArgs( [ '--recent-post-max-age-days=x' ] ) ).toThrow(
+			'recent-post-max-age-days must be a non-negative integer'
+		);
 	} );
 
 	test( 'discoverSourceUrls keeps recent Make/Core posts and drops stale or undated ones', async () => {

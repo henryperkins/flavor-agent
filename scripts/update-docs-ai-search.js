@@ -19,7 +19,7 @@ const FETCH_RETRIES = 2;
 const FETCH_RETRY_BASE_MS = 500;
 const RETRYABLE_STATUS = new Set( [ 429, 500, 502, 503, 504 ] );
 const REQUEST_TIMEOUT_MS = 30_000;
-const MAKE_CORE_DEFAULT_MAX_AGE_DAYS = 180;
+const RECENT_POST_DEFAULT_MAX_AGE_DAYS = 180;
 const DAY_MS = 86_400_000;
 const MAX_FETCH_BYTES = 12_000_000;
 const PREPARED_REGRESSION_RATIO = 0.8;
@@ -55,9 +55,11 @@ Options:
   --source-file=<path>   JSON array or newline-delimited trusted URL list (replaces sitemap
                          discovery; targeted runs never delete stale items).
   --limit=<n>            Limit discovered URLs, useful for smoke tests.
-  --make-core-max-age-days=<n>  Only ingest make.wordpress.org/core posts published
-                         within this many days (by /core/YYYY/MM/DD/ permalink date).
-                         0 ingests every matched post. Default: 180.
+  --recent-post-max-age-days=<n>  Only ingest dated posts (make.wordpress.org/core and
+                         /ai by /YYYY/MM/DD/ permalink date, wordpress.org/news by
+                         /YYYY/MM/) published within this many days. 0 ingests every
+                         matched post. Default: 180.
+                         --make-core-max-age-days is a deprecated alias.
   --dry-run              Discover and build payloads without Cloudflare writes.
   --delete-stale         Opt in to deleting stale managed docs items. Off by default and
                          always skipped for --limit, --source-url/--source-file, and any
@@ -87,7 +89,7 @@ function parseArgs( argv ) {
 		sourceUrls: [],
 		sourceFile: '',
 		limit: 0,
-		makeCoreMaxAgeDays: MAKE_CORE_DEFAULT_MAX_AGE_DAYS,
+		recentPostMaxAgeDays: RECENT_POST_DEFAULT_MAX_AGE_DAYS,
 		dryRun: false,
 		deleteStale: false,
 		configureInstance: false,
@@ -152,8 +154,9 @@ function parseArgs( argv ) {
 			case 'limit':
 				options.limit = normalizeNonNegativeInteger( value, 'limit' );
 				break;
+			case 'recent-post-max-age-days':
 			case 'make-core-max-age-days':
-				options.makeCoreMaxAgeDays = normalizeNonNegativeInteger( value, 'make-core-max-age-days' );
+				options.recentPostMaxAgeDays = normalizeNonNegativeInteger( value, key );
 				break;
 			case 'poll-seconds':
 				options.pollSeconds = normalizeNonNegativeInteger( value, 'poll-seconds' );
@@ -305,9 +308,9 @@ function urlMatchesRoots( value, roots ) {
 	} );
 }
 
-// Make/Core posts use dated permalinks (/core/YYYY/MM/DD/slug/). Parse that date so
-// discovery can keep the current release cycle and drop the long-tail archive. Returns
-// the UTC publish-day timestamp in ms, or null for non-make-core or undated URLs.
+// Make subsite posts use dated permalinks (/core/YYYY/MM/DD/slug/, /ai/YYYY/MM/DD/slug/).
+// Parse that date so discovery can keep the current release cycle and drop the long-tail
+// archive. Returns the UTC publish-day timestamp in ms, or null for non-make or undated URLs.
 function makeCorePostDate( url ) {
 	let parsed;
 	try {
@@ -318,7 +321,7 @@ function makeCorePostDate( url ) {
 	if ( parsed.hostname.toLowerCase() !== 'make.wordpress.org' ) {
 		return null;
 	}
-	const match = parsed.pathname.match( /^\/core\/(\d{4})\/(\d{2})\/(\d{2})\// );
+	const match = parsed.pathname.match( /^\/(?:core|ai)\/(\d{4})\/(\d{2})\/(\d{2})\// );
 	if ( ! match ) {
 		return null;
 	}
@@ -326,30 +329,59 @@ function makeCorePostDate( url ) {
 	return Number.isFinite( timestamp ) ? timestamp : null;
 }
 
-function makeCoreRecencyCutoff( options ) {
-	const now = Number.isFinite( options.now ) ? options.now : Date.now();
-	const maxAgeDays = Number.isFinite( options.makeCoreMaxAgeDays )
-		? options.makeCoreMaxAgeDays
-		: MAKE_CORE_DEFAULT_MAX_AGE_DAYS;
-	return maxAgeDays > 0 ? now - maxAgeDays * DAY_MS : null;
+// wordpress.org/news posts use month-dated permalinks (/news/YYYY/MM/slug/). Date them
+// at the first of the month UTC so the shared recency window can bound the two-decade
+// News archive the same way dated Make posts are bounded.
+function wordPressNewsPostDate( url ) {
+	let parsed;
+	try {
+		parsed = new URL( url );
+	} catch {
+		return null;
+	}
+	if ( parsed.hostname.toLowerCase() !== 'wordpress.org' ) {
+		return null;
+	}
+	const match = parsed.pathname.match( /^\/news\/(\d{4})\/(\d{2})\/[^/]/ );
+	if ( ! match ) {
+		return null;
+	}
+	const timestamp = Date.parse( `${ match[ 1 ] }-${ match[ 2 ] }-01T00:00:00Z` );
+	return Number.isFinite( timestamp ) ? timestamp : null;
 }
 
-// developer.wordpress.org reference/handbook URLs are undated and always pass; only
-// bulk-discovered make.wordpress.org/core posts are gated to the recency window. A null
-// cutoff (max-age-days=0) disables the gate. Explicit --source-url entries bypass this
-// gate entirely (see discoverSourceUrls).
-function withinMakeCoreWindow( url, cutoffMs ) {
+function recentPostRecencyCutoff( options ) {
+	const now = Number.isFinite( options.now ) ? options.now : Date.now();
+	const maxAgeDays = [ options.recentPostMaxAgeDays, options.makeCoreMaxAgeDays ].find(
+		( value ) => Number.isFinite( value )
+	);
+	const resolved = maxAgeDays === undefined ? RECENT_POST_DEFAULT_MAX_AGE_DAYS : maxAgeDays;
+	return resolved > 0 ? now - resolved * DAY_MS : null;
+}
+
+// developer.wordpress.org reference/handbook URLs are undated and always pass; bulk-
+// discovered dated-permalink posts (make.wordpress.org subsites, wordpress.org/news)
+// are gated to the shared recency window. A null cutoff (max-age-days=0) disables the
+// gate. Explicit --source-url entries bypass this gate entirely (see discoverSourceUrls).
+function withinRecentPostWindow( url, cutoffMs ) {
 	let host;
 	try {
 		host = new URL( url ).hostname.toLowerCase();
 	} catch {
 		return false;
 	}
-	if ( host !== 'make.wordpress.org' || cutoffMs === null ) {
+	if ( cutoffMs === null ) {
 		return true;
 	}
-	const published = makeCorePostDate( url );
-	return published !== null && published >= cutoffMs;
+	if ( host === 'make.wordpress.org' ) {
+		const published = makeCorePostDate( url );
+		return published !== null && published >= cutoffMs;
+	}
+	if ( host === 'wordpress.org' ) {
+		const published = wordPressNewsPostDate( url );
+		return published !== null && published >= cutoffMs;
+	}
+	return true;
 }
 
 function isCorpusDocumentUrl( value ) {
@@ -656,7 +688,7 @@ async function discoverSourceUrls( roots, options ) {
 
 	const discovered = new Set( roots.filter( isCorpusDocumentUrl ) );
 	const lastmods = new Map();
-	const makeCoreCutoff = makeCoreRecencyCutoff( options );
+	const recentPostCutoff = recentPostRecencyCutoff( options );
 	const discoveryErrors = [];
 	const visitedSitemaps = new Set();
 	const queue = [ ...sitemapUrls ];
@@ -694,7 +726,7 @@ async function discoverSourceUrls( roots, options ) {
 					normalized &&
 					urlMatchesRoots( normalized, roots ) &&
 					isCorpusDocumentUrl( normalized ) &&
-					withinMakeCoreWindow( normalized, makeCoreCutoff )
+					withinRecentPostWindow( normalized, recentPostCutoff )
 				) {
 					discovered.add( normalized );
 					const lastmod = result.value.lastmods && result.value.lastmods.get( loc );
@@ -2206,4 +2238,6 @@ module.exports = {
 	sourceRootsForRelease,
 	truncateUtf8ToBytes,
 	urlMatchesRoots,
+	withinRecentPostWindow,
+	wordPressNewsPostDate,
 };
