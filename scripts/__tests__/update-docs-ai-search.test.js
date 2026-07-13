@@ -385,9 +385,123 @@ describe( 'update-docs-ai-search helpers', () => {
 		] );
 	} );
 
-	test( 'isCorpusDocumentUrl drops release-cycle index and archive pages', () => {
+	test( 'discoverSourceUrls keeps recent make/ai posts and drops xposts and handbook pages', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href === 'https://make.wordpress.org/robots.txt' ) {
+				return mockTextResponse(
+					'Sitemap: https://make.wordpress.org/wp-sitemap.xml',
+					href,
+					'text/plain'
+				);
+			}
+			if ( href === 'https://make.wordpress.org/wp-sitemap.xml' ) {
+				return mockTextResponse(
+					[
+						'<sitemapindex>',
+						'<sitemap><loc>https://make.wordpress.org/wp-sitemap-posts-post-1.xml</loc></sitemap>',
+						'</sitemapindex>',
+					].join( '' ),
+					href
+				);
+			}
+			if ( href === 'https://make.wordpress.org/wp-sitemap-posts-post-1.xml' ) {
+				return mockTextResponse(
+					[
+						'<urlset>',
+						'<url><loc>https://make.wordpress.org/ai/2026/07/08/whats-new-in-ai-1-1-0/</loc></url>',
+						'<url><loc>https://make.wordpress.org/ai/2026/06/29/xpost-wordpress-credits-updates/</loc></url>',
+						'<url><loc>https://make.wordpress.org/ai/handbook/</loc></url>',
+						'<url><loc>https://make.wordpress.org/ai/2025/01/05/old-ai-post/</loc></url>',
+						'</urlset>',
+					].join( '' ),
+					href
+				);
+			}
+			if (
+				href === 'https://make.wordpress.org/ai/wp-sitemap.xml' ||
+				href === 'https://make.wordpress.org/ai/sitemap.xml'
+			) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const { urls } = await discoverSourceUrls(
+			[ 'https://make.wordpress.org/ai/' ],
+			{
+				sourceUrls: [],
+				sourceFile: '',
+				limit: 0,
+				recentPostMaxAgeDays: 180,
+				now: Date.parse( '2026-07-12T00:00:00Z' ),
+			}
+		);
+
+		expect( urls ).toEqual( [
+			'https://make.wordpress.org/ai/2026/07/08/whats-new-in-ai-1-1-0/',
+		] );
+	} );
+
+	test( 'discoverSourceUrls keeps recent month-dated News posts and drops archives', async () => {
+		global.fetch = jest.fn( ( url ) => {
+			const href = String( url );
+			if ( href === 'https://wordpress.org/robots.txt' ) {
+				return mockTextResponse(
+					'Sitemap: https://wordpress.org/news/sitemap.xml',
+					href,
+					'text/plain'
+				);
+			}
+			if ( href === 'https://wordpress.org/news/sitemap.xml' ) {
+				return mockTextResponse(
+					[
+						'<sitemapindex>',
+						'<sitemap><loc>https://wordpress.org/news/sitemap-2.xml</loc></sitemap>',
+						'</sitemapindex>',
+					].join( '' ),
+					href
+				);
+			}
+			if ( href === 'https://wordpress.org/news/sitemap-2.xml' ) {
+				return mockTextResponse(
+					[
+						'<urlset>',
+						'<url><loc>https://wordpress.org/news/2026/07/wordpress-7-0-1-maintenance-release/</loc></url>',
+						'<url><loc>https://wordpress.org/news/2020/08/older-post/</loc></url>',
+						'<url><loc>https://wordpress.org/news/category/releases/</loc></url>',
+						'</urlset>',
+					].join( '' ),
+					href
+				);
+			}
+			if ( href === 'https://wordpress.org/news/wp-sitemap.xml' ) {
+				return mockTextResponse( '<sitemapindex></sitemapindex>', href );
+			}
+			throw new Error( `Unexpected fetch: ${ href }` );
+		} );
+
+		const { urls } = await discoverSourceUrls(
+			[ 'https://wordpress.org/news/' ],
+			{
+				sourceUrls: [],
+				sourceFile: '',
+				limit: 0,
+				recentPostMaxAgeDays: 180,
+				now: Date.parse( '2026-07-12T00:00:00Z' ),
+			}
+		);
+
+		expect( urls ).toEqual( [
+			'https://wordpress.org/news/2026/07/wordpress-7-0-1-maintenance-release/',
+		] );
+	} );
+
+	test( 'isCorpusDocumentUrl drops release-cycle index, archive, and xpost pages', () => {
 		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/news/2026/05/01/post/' ) ).toBe( true );
 		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/core/2026/05/14/wordpress-7-0-field-guide/' ) ).toBe( true );
+		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/ai/2026/07/08/whats-new-in-ai-1-1-0/' ) ).toBe( true );
+		expect( isCorpusDocumentUrl( 'https://wordpress.org/news/2026/07/wordpress-7-0-1-maintenance-release/' ) ).toBe( true );
 		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/block-editor/' ) ).toBe( true );
 
 		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/news/' ) ).toBe( false );
@@ -395,6 +509,13 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( isCorpusDocumentUrl( 'https://developer.wordpress.org/news/tag/block-editor/' ) ).toBe( false );
 		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/core/' ) ).toBe( false );
 		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/core/tag/dev-notes-7-0/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/ai/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/ai/handbook/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/ai/2026/06/29/xpost-wordpress-credits-updates/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://make.wordpress.org/core/2026/06/01/xpost-editor-updates/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://wordpress.org/news/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://wordpress.org/news/2026/07/' ) ).toBe( false );
+		expect( isCorpusDocumentUrl( 'https://wordpress.org/news/category/releases/' ) ).toBe( false );
 	} );
 
 	test( 'discoverSourceUrls keeps explicitly supplied Make/Core URLs regardless of age', async () => {
@@ -538,6 +659,8 @@ describe( 'update-docs-ai-search helpers', () => {
 			'https://developer.wordpress.org/reference/',
 			'https://developer.wordpress.org/news/',
 			'https://make.wordpress.org/core/',
+			'https://make.wordpress.org/ai/',
+			'https://wordpress.org/news/',
 		] );
 	} );
 

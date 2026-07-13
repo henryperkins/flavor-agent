@@ -229,6 +229,8 @@ function sourceRootsForRelease() {
 		'https://developer.wordpress.org/reference/',
 		'https://developer.wordpress.org/news/',
 		'https://make.wordpress.org/core/',
+		'https://make.wordpress.org/ai/',
+		'https://wordpress.org/news/',
 	].map( ( value ) => normalizeTrustedUrl( value ) ).filter( Boolean );
 }
 
@@ -279,7 +281,13 @@ function isTrustedPath( url ) {
 	}
 
 	if ( host === 'make.wordpress.org' ) {
-		return pathName === '/core' || pathName.startsWith( '/core/' );
+		return [ '/core/', '/ai/' ].some(
+			( prefix ) => pathName === prefix.slice( 0, -1 ) || pathName.startsWith( prefix )
+		);
+	}
+
+	if ( host === 'wordpress.org' ) {
+		return pathName === '/news' || pathName.startsWith( '/news/' );
 	}
 
 	return false;
@@ -398,8 +406,15 @@ function isCorpusDocumentUrl( value ) {
 		return /^\/news\/\d{4}\/\d{2}\/(?:\d{2}\/)?[a-z0-9][^/]*$/.test( pathName );
 	}
 
-	if ( host === 'make.wordpress.org' && ( pathName === '/core' || pathName.startsWith( '/core/' ) ) ) {
-		return /^\/core\/\d{4}\/\d{2}\/\d{2}\/[a-z0-9][^/]*$/.test( pathName );
+	if (
+		host === 'make.wordpress.org' &&
+		( pathName === '/core' || pathName.startsWith( '/core/' ) || pathName === '/ai' || pathName.startsWith( '/ai/' ) )
+	) {
+		return /^\/(?:core|ai)\/\d{4}\/\d{2}\/\d{2}\/(?!xpost-)[a-z0-9][^/]*$/.test( pathName );
+	}
+
+	if ( host === 'wordpress.org' && ( pathName === '/news' || pathName.startsWith( '/news/' ) ) ) {
+		return /^\/news\/\d{4}\/\d{2}\/[a-z0-9][^/]*$/.test( pathName );
 	}
 
 	return true;
