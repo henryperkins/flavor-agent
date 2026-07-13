@@ -940,15 +940,18 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( parseArgs( [ '--configure', '--skip-configure' ] ).configureInstance ).toBe( false );
 	} );
 
-	test( 'workflow enables stale deletion for scheduled runs while manual dispatch stays opt-in', () => {
+	test( 'workflow enables stale deletion only for the Monday scheduled run', () => {
 		const workflow = fs.readFileSync(
 			path.resolve( __dirname, '../../.github/workflows/update-docs-ai-search.yml' ),
 			'utf8'
 		);
 
 		expect( workflow ).toContain(
-			"INPUT_DELETE_STALE: ${{ github.event_name == 'schedule' && 'true' || github.event.inputs.delete_stale || 'false' }}"
+			"INPUT_DELETE_STALE: ${{ github.event_name == 'schedule' && github.event.schedule == '17 5 * * 1' && 'true' || github.event.inputs.delete_stale || 'false' }}"
 		);
+		expect( workflow ).toContain( "- cron: '17 5 * * 0,2-6'" );
+		expect( workflow ).toContain( "- cron: '17 5 * * 1'" );
+		expect( workflow ).toMatch( /concurrency:\s*\n\s*group: update-docs-ai-search\s*\n\s*cancel-in-progress: false/ );
 		expect( workflow ).toMatch( /delete_stale:[\s\S]*?default: false/ );
 	} );
 

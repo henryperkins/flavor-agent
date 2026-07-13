@@ -2,6 +2,9 @@ name: Update Developer Docs AI Search
 
 on:
   schedule:
+    # Daily incremental ingest (every day except Monday) — no stale deletion.
+    - cron: '17 5 * * 0,2-6'
+    # Monday run — the weekly stale-deletion pass.
     - cron: '17 5 * * 1'
   workflow_dispatch:
     inputs:
@@ -37,6 +40,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: update-docs-ai-search
+  cancel-in-progress: false
+
 jobs:
   update-docs-ai-search:
     name: Update wp-dev-docs corpus
@@ -50,7 +57,7 @@ jobs:
       INPUT_RELEASE: ${{ github.event.inputs.release || '7-0' }}
       INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
       INPUT_LIMIT: ${{ github.event.inputs.limit || '' }}
-      INPUT_DELETE_STALE: ${{ github.event_name == 'schedule' && 'true' || github.event.inputs.delete_stale || 'false' }}
+      INPUT_DELETE_STALE: ${{ github.event_name == 'schedule' && github.event.schedule == '17 5 * * 1' && 'true' || github.event.inputs.delete_stale || 'false' }}
       INPUT_FULL: ${{ github.event.inputs.full || 'false' }}
       INPUT_CONFIGURE_INSTANCE: ${{ github.event.inputs.configure_instance || 'false' }}
     steps:
