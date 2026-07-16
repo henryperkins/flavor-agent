@@ -33,6 +33,11 @@ final class PromptBudget {
 	private const MIN_TOKENS = 2000;
 
 	/**
+	 * Minimum useful budget for a partially retained optional section.
+	 */
+	private const MIN_PARTIAL_SECTION_TOKENS = 120;
+
+	/**
 	 * @var int Maximum token budget for this instance.
 	 */
 	private int $max_tokens;
@@ -176,6 +181,11 @@ final class PromptBudget {
 				return $assembled;
 			}
 
+			$trimmed = self::trim_section_to_remaining_budget( $included, $lowest_index, $this->max_tokens );
+			if ( null !== $trimmed ) {
+				return $trimmed;
+			}
+
 			array_splice( $included, $lowest_index, 1 );
 		}
 
@@ -193,6 +203,49 @@ final class PromptBudget {
 		}
 
 		return implode( "\n\n", $parts );
+	}
+
+	/**
+	 * Keep a useful excerpt from a removable section when dropping the whole
+	 * section would leave otherwise-wasted budget. This avoids prompt-quality
+	 * cliffs where large supplemental context disappears entirely even though a
+	 * bounded summary can still fit beside higher-priority instructions.
+	 *
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool}> $sections
+	 */
+	private static function trim_section_to_remaining_budget( array $sections, int $section_index, int $max_tokens ): ?string {
+		if ( ! isset( $sections[ $section_index ] ) ) {
+			return null;
+		}
+
+		$section = $sections[ $section_index ];
+		if ( ! empty( $section['required'] ) ) {
+			return null;
+		}
+
+		$without_section = $sections;
+		array_splice( $without_section, $section_index, 1 );
+
+		$base_prompt  = self::join_sections( $without_section );
+		$base_tokens  = self::estimate_tokens( $base_prompt );
+		$join_tokens  = '' === $base_prompt ? 0 : self::estimate_tokens( "\n\n" );
+		$remaining    = $max_tokens - $base_tokens - $join_tokens;
+		$original     = (string) $section['content'];
+		$original_est = self::estimate_tokens( $original );
+
+		if ( $remaining < self::MIN_PARTIAL_SECTION_TOKENS || $remaining >= $original_est ) {
+			return null;
+		}
+
+		$sections[ $section_index ]['content'] = self::trim_to_tokens(
+			$original,
+			$remaining,
+			"\n\n[... section truncated for prompt budget ...]\n\n"
+		);
+
+		$assembled = self::join_sections( $sections );
+
+		return self::estimate_tokens( $assembled ) <= $max_tokens ? $assembled : null;
 	}
 
 	/**

@@ -39,7 +39,8 @@ final class PromptBudgetTest extends TestCase {
 
 		$result = $budget->assemble();
 		$this->assertStringContainsString( 'Critical context', $result );
-		$this->assertStringNotContainsString( str_repeat( 'x', 100 ), $result );
+		$this->assertLessThanOrEqual( 2000, PromptBudget::estimate_tokens( $result ) );
+		$this->assertStringContainsString( '[... section truncated for prompt budget ...]', $result );
 	}
 
 	public function test_high_priority_sections_kept_over_low(): void {
@@ -170,10 +171,12 @@ final class PromptBudgetTest extends TestCase {
 
 		$this->assertStringContainsString( '## Template', $result );
 		$this->assertStringContainsString( '## Structure Summary', $result );
-		$this->assertStringNotContainsString( str_repeat( 'token ', 100 ), $result );
+		$this->assertLessThanOrEqual( 2000, PromptBudget::estimate_tokens( $result ) );
+		$this->assertStringContainsString( '[... section truncated for prompt budget ...]', $result );
 
 		if ( str_contains( $result, '## Design semantic context' ) ) {
 			$semantic_body = trim( substr( $result, strpos( $result, '## Design semantic context' ) ) );
+			$semantic_body = explode( "\n\ntoken ", $semantic_body )[0];
 			$this->assertLessThanOrEqual( 120, PromptBudget::estimate_tokens( $semantic_body ) );
 		}
 	}
@@ -240,7 +243,8 @@ final class PromptBudgetTest extends TestCase {
 		$result = $budget->assemble();
 
 		$this->assertStringContainsString( 'required content', $result );
-		$this->assertStringNotContainsString( str_repeat( 'h', 100 ), $result );
+		$this->assertLessThanOrEqual( 2000, PromptBudget::estimate_tokens( $result ) );
+		$this->assertStringContainsString( '[... section truncated for prompt budget ...]', $result );
 	}
 
 	public function test_default_required_false_preserves_existing_behavior(): void {
@@ -251,7 +255,33 @@ final class PromptBudgetTest extends TestCase {
 		$result = $budget->assemble();
 
 		$this->assertStringContainsString( str_repeat( 'h', 100 ), $result );
-		$this->assertStringNotContainsString( str_repeat( 'l', 100 ), $result );
+		$this->assertLessThanOrEqual( 2000, PromptBudget::estimate_tokens( $result ) );
+		$this->assertStringContainsString( '[... section truncated for prompt budget ...]', $result );
+	}
+
+	public function test_oversized_optional_section_is_trimmed_before_it_is_dropped(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'identity', 'Critical instruction context.', 100, true );
+		$budget->add_section( 'docs', 'Docs opening. ' . str_repeat( 'Docs middle. ', 900 ) . 'Docs closing.', 10 );
+
+		$result = $budget->assemble();
+
+		$this->assertLessThanOrEqual( 2000, PromptBudget::estimate_tokens( $result ) );
+		$this->assertStringContainsString( 'Critical instruction context.', $result );
+		$this->assertStringContainsString( 'Docs opening.', $result );
+		$this->assertStringContainsString( '[... section truncated for prompt budget ...]', $result );
+		$this->assertStringContainsString( 'Docs closing.', $result );
+	}
+
+	public function test_oversized_optional_section_drops_when_no_useful_partial_budget_remains(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'identity', str_repeat( 'i', 7600 ), 100, true );
+		$budget->add_section( 'docs', 'Docs opening. ' . str_repeat( 'Docs middle. ', 900 ) . 'Docs closing.', 10 );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( str_repeat( 'i', 100 ), $result );
+		$this->assertStringNotContainsString( 'Docs opening.', $result );
 	}
 
 	public function test_equal_priority_drops_last_inserted_first(): void {
