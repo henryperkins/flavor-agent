@@ -34,8 +34,16 @@ final class PromptBudget {
 
 	/**
 	 * Minimum useful budget for a partially retained optional section.
+	 *
+	 * Public so tests (and callers) can reason about the threshold without
+	 * duplicating the literal.
 	 */
-	private const MIN_PARTIAL_SECTION_TOKENS = 120;
+	public const MIN_PARTIAL_SECTION_TOKENS = 120;
+
+	/**
+	 * Marker inserted where a partially retained section is truncated.
+	 */
+	public const PARTIAL_SECTION_TRUNCATION_MARKER = "\n\n[... section truncated for prompt budget ...]\n\n";
 
 	/**
 	 * @var int Maximum token budget for this instance.
@@ -43,7 +51,7 @@ final class PromptBudget {
 	private int $max_tokens;
 
 	/**
-	 * @var array<int, array{key: string, content: string, priority: int, required: bool}>
+	 * @var array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}>
 	 */
 	private array $sections = [];
 
@@ -70,21 +78,30 @@ final class PromptBudget {
 	 * Priority 100 = critical (identity, instructions), 50 = normal
 	 * context, 10 = supplemental (docs guidance, examples).
 	 *
-	 * @param string $key      Unique section identifier.
-	 * @param string $content  Section content.
-	 * @param int    $priority Higher = more important (100 max).
-	 * @param bool   $required Whether this section may not be dropped.
+	 * @param string $key       Unique section identifier.
+	 * @param string $content   Section content.
+	 * @param int    $priority  Higher = more important (100 max).
+	 * @param bool   $required  Whether this section may not be dropped.
+	 * @param bool   $trimmable Whether this section may be partially retained
+	 *                          (trimmed to a bounded excerpt) instead of being
+	 *                          dropped as a unit when budget is tight. Opt-in:
+	 *                          sections default to drop-as-unit so callers that
+	 *                          rely on a section disappearing entirely — voice
+	 *                          samples, worked examples, docs grounding — keep
+	 *                          that behavior. Ignored for required sections,
+	 *                          which are never trimmed or dropped.
 	 */
-	public function add_section( string $key, string $content, int $priority = 50, bool $required = false ): self {
+	public function add_section( string $key, string $content, int $priority = 50, bool $required = false, bool $trimmable = false ): self {
 		if ( '' === trim( $content ) ) {
 			return $this;
 		}
 
 		$this->sections[] = [
-			'key'      => $key,
-			'content'  => $content,
-			'priority' => max( 0, min( 100, $priority ) ),
-			'required' => $required,
+			'key'       => $key,
+			'content'   => $content,
+			'priority'  => max( 0, min( 100, $priority ) ),
+			'required'  => $required,
+			'trimmable' => $trimmable,
 		];
 
 		return $this;
@@ -194,7 +211,7 @@ final class PromptBudget {
 	}
 
 	/**
-	 * @param array<int, array{key: string, content: string, priority: int, required: bool}> $sections
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $sections
 	 */
 	private static function join_sections( array $sections ): string {
 		$parts = [];
@@ -211,7 +228,7 @@ final class PromptBudget {
 	 * cliffs where large supplemental context disappears entirely even though a
 	 * bounded summary can still fit beside higher-priority instructions.
 	 *
-	 * @param array<int, array{key: string, content: string, priority: int, required: bool}> $sections
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $sections
 	 */
 	private static function trim_section_to_remaining_budget( array $sections, int $section_index, int $max_tokens ): ?string {
 		if ( ! isset( $sections[ $section_index ] ) ) {
@@ -220,6 +237,17 @@ final class PromptBudget {
 
 		$section = $sections[ $section_index ];
 		if ( ! empty( $section['required'] ) ) {
+			return null;
+		}
+
+		// Partial retention is opt-in. Only sections explicitly marked
+		// trimmable are kept as a bounded excerpt; everything else is dropped
+		// as a unit. This preserves the drop-as-unit semantics that callers
+		// rely on for sections that are worse-than-useless when truncated —
+		// voice samples, worked few-shot examples, docs grounding — which must
+		// disappear entirely rather than leak a fragment back into a tight
+		// prompt.
+		if ( empty( $section['trimmable'] ) ) {
 			return null;
 		}
 
@@ -240,7 +268,7 @@ final class PromptBudget {
 		$sections[ $section_index ]['content'] = self::trim_to_tokens(
 			$original,
 			$remaining,
-			"\n\n[... section truncated for prompt budget ...]\n\n"
+			self::PARTIAL_SECTION_TRUNCATION_MARKER
 		);
 
 		$assembled = self::join_sections( $sections );
@@ -249,7 +277,7 @@ final class PromptBudget {
 	}
 
 	/**
-	 * @param array<int, array{key: string, content: string, priority: int, required: bool}> $sections
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $sections
 	 */
 	private static function get_lowest_priority_removable_index( array $sections ): ?int {
 		$lowest_index    = null;
