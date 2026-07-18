@@ -28,8 +28,8 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 5. `AIActivitySection` renders newest matching entries for the current scope and exposes inline undo only when an executable entry is still valid and tail-undoable
 6. `undoActivity()` validates the live editor state, performs the local undo, and persists the undo-status transition to `POST /flavor-agent/v1/activity/{id}/undo`
 7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` plus custom detail sections
-8. For a pending external style apply, an administrator approves or rejects through `POST /flavor-agent/v1/activity/{id}/decision`; approval revalidates and executes the style operation on the server, while rejection records the decision without mutating the site
-9. For an attested external style apply, the detail view exposes the attestation id, a site-run verification summary, raw signed-statement and subject-state URLs, and any revert/supersede chain context so a reviewer can move from wp-admin audit evidence to external verification without confusing endpoint loading for cryptographic verification
+8. For a pending external style, template, template-part, or post-blocks apply, an administrator approves or rejects through `POST /flavor-agent/v1/activity/{id}/decision`; approval revalidates and executes the bounded operation on the server, while rejection records the decision without mutating the site
+9. For an attested external style, template, or template-part apply, the detail view exposes the attestation id, a site-run verification summary, raw signed-statement and subject-state URLs, and any revert/supersede chain context so a reviewer can move from wp-admin audit evidence to external verification without confusing endpoint loading for cryptographic verification
 
 ## What This Surface Can Do
 
@@ -42,15 +42,15 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provenance, diagnostics, undo-reason details, and structured state snapshots
 - Let admins inspect style-governance rows through a first rich visual diff layer with lifecycle-honest proposed/applied/undone/blocked states, swatches or chips where the stored payload supports them, and raw state snapshots as fallback evidence
 - Let admins move from a selected row to the honest target, a focused `Settings > AI Activity` permalink, or closely related feed pivots without inventing a second admin route contract
-- Let admins approve or reject pending external Global Styles / Style Book applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
+- Let admins approve or reject pending external Global Styles / Style Book, template, template-part, and post-blocks applies from wp-admin; approval is the only external-agent apply gate and it executes server-side
 - Show advisory "being reviewed by X" claims on pending approvals so concurrent admins can coordinate, without the claim ever gating a decision; if another admin decides a row first, it resolves to its terminal approved/rejected state rather than surfacing a generic error
-- Let admins discover Ring III governed-change attestations for eligible external style applies, including a site-run verification summary plus public envelope and subject-state links without making attestation a general AI-governance claim
+- Let admins discover Ring III governed-change attestations for eligible external style, template, and template-part applies, including a site-run verification summary plus public envelope and subject-state links without making attestation a general AI-governance claim
 - Surface passive feed badges for pending approval, AI request-log availability, and attestation evidence before a row is opened
 - Let global admin activity reads request and render a bounded, sanitized governance learning report with outcome rates and aggregate groups by surface, operation type, validation reason, ranking signal, guideline version, and provider/model.
 - Filter audit entries by absolute or relative time without silently broadening malformed date filters; malformed active filters are blocked in the UI or rejected by REST, and `inThePast` and `over` use true timestamp windows, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
-This is still the first governance-console slice, not the final observability product. It includes external style-apply decisions, attestation discovery, structured diff and before/after summaries, a rendered backend/API aggregate report contract, the first selected-row action/discovery layer (focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges), and a first rich visual diff layer for style-governance rows. Broader cross-operator workflows and deeper observability remain open.
+This is still the first governance-console slice, not the final observability product. It includes external apply decisions, attestation discovery for eligible style/template/template-part lanes, structured diff and before/after summaries, a rendered backend/API aggregate report contract, the first selected-row action/discovery layer (focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges), and a first rich visual diff layer for style-governance rows. Broader cross-operator workflows and deeper observability remain open.
 
 ## Ordered Undo Rules
 

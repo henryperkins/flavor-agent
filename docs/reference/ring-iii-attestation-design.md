@@ -37,7 +37,7 @@ in-toto-style **attestation statement** that binds the governance decision to a 
 artifact state it produced**, stores it in a durable companion table, and publishes the statement
 and the public key at unauthenticated endpoints. A stranger verifies the signature against the
 published key (fully independent), then re-hashes the live subject — exposed via a public route,
-because core's config read is capability-gated (§6.2) — to confirm whether the attested content
+because core's relevant config and content reads are capability-gated (§6.2) — to confirm whether the attested content
 has been altered since.
 
 Chosen over the two alternatives:
@@ -100,26 +100,38 @@ and reads as serious to a contributor audience.
 }
 ```
 
-The `predicate.governance` block is intentionally narrow. It freezes the only
-attestation scope Flavor Agent owns today: `external-style-apply-v1`, meaning a
-WordPress-approved external Global Styles / Style Book mutation executed through
-FA's bounded server-side style executor. This prevents the signed statement from
-reading like a general AI-governance attestation for the site, the model, or
-all AI-assisted work.
+The example above shows the style lane. Flavor Agent owns exactly these Ring III lanes:
 
-### 4.1 Subject scoping (Style Book ≠ Global Styles)
+| Lane id | Surface value | Subject name | Subject scope | Canonical bytes | Executor id |
+|---|---|---|---|---|---|
+| `external-style-apply-v1` | `global-styles` / `style-book` | `wp_global_styles:{id}[#block]` | `global-styles` / `style-book-branch` | `Attestation\Canonicalizer` output for the full user config or selected block branch | `bounded-server-style-apply` |
+| `external-template-apply-v1` | `template` | `wp_template:{theme}//{slug}` | `template` | `serialize_blocks( parse_blocks( content ) )` | `bounded-server-template-apply` |
+| `external-template-part-apply-v1` | `template-part` | `wp_template_part:{theme}//{slug}` | `template-part` | `serialize_blocks( parse_blocks( content ) )` | `bounded-server-template-part-apply` |
+
+The `predicate.governance` block remains intentionally narrow for every lane: WordPress approved
+this external apply in `Settings > AI Activity`; Flavor Agent executed the named bounded
+server-side apply; and the resulting subject hashed to the signed digest. It does not attest to
+the site, model, or all AI-assisted work.
+
+### 4.1 Subject scoping and canonical bytes
 
 Style Book after-state is recorded as a **block branch only**
 (`inc/Apply/StyleApplyExecutor.php` `trim_config_to_block_branch()`), not the full entity. The
-subject therefore carries its scope explicitly:
+subject therefore carries its scope explicitly. Template subjects use canonical block
+serialization so their executor drift checks and attestation digests share the same bytes:
 
 - **Global Styles** — `scope: "global-styles"`, digest over the full canonical user config.
 - **Style Book** — `scope: "style-book-branch"`, `name` carries the block (`…#core/button`),
   digest over the extracted block branch.
+- **Template** — `scope: "template"`, `name` is `wp_template:{theme}//{slug}`, digest over
+  `serialize_blocks( parse_blocks( content ) )`.
+- **Template part** — `scope: "template-part"`, `name` is
+  `wp_template_part:{theme}//{slug}`, digest over the same canonical block serialization.
 
-The verifier reads `scope` from the subject and recomputes the matching digest. Branch-scoping
-is chosen over a full-entity digest deliberately: it answers "was *this* change altered" without
-false positives from unrelated later edits elsewhere in the entity.
+The verifier reads `scope` from the subject and recomputes the matching digest. Style Book
+branch-scoping answers "was *this* change altered" without false positives from unrelated later
+edits elsewhere in the entity. Template subjects embed the theme in the subject name, so
+supersede chains intentionally do not cross theme switches.
 
 ### 4.2 Public-safe statement — hard contract (allowlist, not denylist)
 
@@ -140,13 +152,13 @@ builder-level allowlist plus a test that asserts no field outside the allowlist 
 
 ### 4.3 Operations are public-safe (decided)
 
-The signed statement includes the applied **operations** (their theme.json paths and values), not
-only a digest. This is deliberate: FA's style operations are schema-bounded to validated
-theme.json paths and preset/validated values (the `recommend-style` contract + the WCAG AA
-contrast gate, `inc/LLM/StyleContrastValidator.php`), they are the *substance* of the provenance
-claim ("what was changed"), and they are semantically equivalent to the site's already-public
-rendered CSS. They are therefore explicitly allowlisted as public. The §4.2 prohibition targets
-raw config blobs, prompts, provider payloads, and PII — never the bounded operation set.
+The signed statement includes the applied **operations**, not only a digest. Style operations are
+schema-bounded to validated `theme.json` paths and preset/validated values (the `recommend-style`
+contract + the WCAG AA contrast gate, `inc/LLM/StyleContrastValidator.php`). Template and
+template-part operations are bounded structural operations against one named theme entity. These
+operations are the *substance* of the provenance claim ("what was changed") and are explicitly
+allowlisted as public. The §4.2 prohibition targets raw config/content snapshots, prompts,
+provider payloads, and PII — never the bounded operation set.
 
 ## 5. Data model — durable companion table
 
@@ -157,8 +169,8 @@ A new table, lifecycle-independent of AI Activity:
   attestation_id     CHAR/VARCHAR  PRIMARY KEY     -- "att_…", stable, durable
   schema_version     SMALLINT
   surface            VARCHAR
-  subject_name       VARCHAR                       -- "wp_global_styles:81[#block]"
-  subject_scope      VARCHAR                       -- global-styles | style-book-branch
+  subject_name       VARCHAR                       -- lane-specific canonical subject name (§4)
+  subject_scope      VARCHAR                       -- global-styles | style-book-branch | template | template-part
   after_digest       CHAR(64)                      -- sha256, == subject digest
   statement_bytes    LONGBLOB/LONGTEXT             -- exact canonical bytes that were signed
   signature          VARBINARY/TEXT                -- detached Ed25519 signature
@@ -193,10 +205,11 @@ Each unit has one purpose, a documented interface, and is independently testable
 | Unit | Purpose | Reuses / depends on |
 |---|---|---|
 | `Attestation\Canonicalizer` | **First-class public** deterministic serialize → sha256 of an artifact state, for Global Styles (full config) and Style Book (block branch). Single source of truth for *both* the executor's drift check and external attestation, so they can never diverge. Spec-documented for third-party reproduction. | Lift the now-private helpers `comparable_config` / `comparable_config_hash` / `canonicalize_values_deep` / `canonicalize_style_value` / `sort_keys_deep` / `trim_config_to_block_branch` out of `StyleApplyExecutor`. Its JS twin `getComparableGlobalStylesConfig` (referenced in `StyleApplyExecutor`) is part of the published canonicalization spec. |
+| `Attestation\BlockContentCanonicalizer` | Deterministic `serialize_blocks( parse_blocks( content ) )` bytes and sha256 digest for template and template-part subjects. Single source of truth for executor drift checks and external attestation. | WordPress block parser and serializer |
 | `Attestation\StatementBuilder` | (activity row + resolved before/after) → canonical in-toto Statement **bytes**. Enforces the §4.2 public-safe allowlist. | `Canonicalizer`, `Activity\Serializer` |
 | `Attestation\Signer` | (canonical bytes) → detached Ed25519 signature. No key → no attestation (never a fake one). | `sodium_crypto_sign_detached` (bundled, PHP 8.2+); key source (§7) |
 | `Attestation\Repository` | Append-only persistence + back-reference writes + lookups (`by id`, `reverts={id}`, `supersedes={id}`). | the new table |
-| Public REST routes | (a) `GET /wp-json/flavor-agent/v1/attestations/{id}` — the signed envelope (§6.1); (b) `GET …/attestations/keys` — JWKS from the key registry (§7); (c) `GET …/attestations/{id}/subject-state` — the **current** canonical subject artifact computed live by `Canonicalizer`, so a credential-less stranger can recompute the live digest without core's gated read (§6.2). All `permission_callback => __return_true`. | `Repository`, key registry, `Canonicalizer` |
+| Public REST routes | (a) `GET /wp-json/flavor-agent/v1/attestations/{id}` — the signed envelope (§6.1); (b) `GET …/attestations/keys` — JWKS from the key registry (§7); (c) `GET …/attestations/{id}/subject-state` — the **current** canonical subject artifact computed live by the surface's canonicalizer, so a credential-less stranger can recompute the live digest without core's gated read (§6.2). All `permission_callback => __return_true`. | `Repository`, key registry, canonicalizers, apply executors |
 | Verifier (script + `wp flavor-agent attestation verify {id}`) | The proof that it is stranger-verifiable: verify signature against JWKS, re-canonicalize the live subject, compare to subject digest, resolve revert chain → emit the §9 outcome. | published endpoints only |
 
 `.well-known/` publication is **deferred** — it needs rewrite/physical-file plumbing rather than
@@ -223,12 +236,18 @@ decoded bytes itself rather than trusting any digest a route reports.
 
 ### 6.2 Why a public subject-state route (and its honesty boundary)
 
-Core's Global Styles config is **not** anonymously readable —
-`WP_REST_Global_Styles_Controller::get_theme_item_permissions_check()` gates it behind
-`edit_theme_options`. A credential-less stranger therefore cannot fetch the live subject from core
-to recompute the digest, so FA exposes the minimal canonical slice itself via `subject-state`.
-Disclosure is bounded: the canonical style config is semantically equivalent to the rendered CSS
-the site already serves publicly (no prompts, payloads, or PII).
+Core's Global Styles config and editable template entity content are **not** anonymously readable.
+A credential-less stranger therefore cannot fetch the live subject from core to recompute the
+digest, so FA exposes the minimal canonical slice itself via `subject-state`. Disclosure is
+bounded to eligible theme-territory subjects: canonical style config is semantically equivalent
+to rendered CSS, while canonical template/template-part block serialization describes the
+publicly rendered site structure. The route never returns prompts, provider payloads, activity
+metadata, or PII.
+
+Post-blocks is explicitly frozen out of Ring III. A public `subject-state` response for that lane
+would disclose non-public `post_content`, while a title-bearing `subject_name` could leak content
+metadata. That lane needs a separate conditional-subject-state and ID-only subject design before
+it can become eligible.
 
 Honesty boundary (code docs + slide): the **signature + provenance** half — who attested what,
 when, and that the record is unaltered — is fully independent (published bytes + JWKS, no FA
@@ -254,13 +273,14 @@ and the transparency-log level (§12) addresses history-rewrite over time.
 
 **Apply (attest what actually happened):**
 
-1. `request-style-apply` → pending row (unchanged).
+1. `request-style-apply`, `request-template-apply`, or `request-template-part-apply` → pending row
+   (unchanged).
 2. Admin approves → `inc/Apply/PendingApplyDecision.php` second freshness check (`:81`,
-   "Drift fails closed") → `StyleApplyExecutor` applies.
+   "Drift fails closed") → the lane's bounded server executor applies.
 3. On success: `StatementBuilder` builds the canonical statement bytes; the `after` digest is
-   computed by `Attestation\Canonicalizer` from the **post-apply** state (same canonicalization
-   rules as the apply path's *pre-apply* `baselineConfigHash` freshness check, but a different
-   input and moment) → `Signer` signs → `Repository` appends the row.
+   computed from the **post-apply** state by the lane's canonicalizer (the same canonicalization
+   used by that executor's pre-apply drift check, but a different input and moment) → `Signer`
+   signs → `Repository` appends the row.
 4. `get-activity` / admin UI surface an "Attestation" artifact with a verify affordance.
 
 **Undo (chained, never mutating):**
@@ -304,9 +324,10 @@ resolved — the record is intact, the live state differs, and there is signed p
 
 ## 11. Testing strategy
 
-- **Canonicalizer determinism** — golden-vector tests; parity with the JS twin; preset-ref
-  canonicalization cases (the `var:preset|…` ↔ `var(--wp--…)` family that caused the 2026-06-21
-  undo-drift bug).
+- **Canonicalizer determinism** — style golden-vector tests, parity with the JS twin, and
+  preset-ref canonicalization cases (the `var:preset|…` ↔ `var(--wp--…)` family that caused the
+  2026-06-21 undo-drift bug); block-content fixtures prove digest parity with the executor drift
+  expression and reserialization idempotence.
 - **Signature round-trip** — sign → verify; tampered bytes → `record_tampered`.
 - **Wire-envelope determinism** — the signature still verifies over the served `statement_b64`
   *after* a full REST round-trip (guards against JSON reserialization).
@@ -330,8 +351,9 @@ The `keyId` + statement shape make all of these purely additive:
    upgrade. Maps to the slide's *durable credentials* row.
 2. **C2PA emission** — when core's media path ships (#421), emit a C2PA manifest from the same
    statement for image/text outputs. This is Approach B, reached without being blocked on it.
-3. **Broader surfaces** — extend beyond the style-apply loop only where a real artifact digest
-   and an approval moment both exist.
+3. **Broader surfaces** — extend beyond the three registered lanes only where a real public-safe
+   artifact digest and an approval moment both exist. Post-blocks requires the separate privacy
+   design described in §6.2 and §15.
 4. **Public rendered-CSS digest** — add a deterministic public CSS projection as a
    non-authoritative cross-check, then optionally sign both the config and CSS digests so
    verifiers can choose their trust level. Removes the present-state server-trust of §6.2 once the
@@ -372,10 +394,19 @@ The `keyId` + statement shape make all of these purely additive:
 13. Present-state verification: **subject-state route for v1**; public rendered-CSS digest and
     dual-signing are §12 forward levels (CSS canonicalization is too fragile to be
     foundational). — *user*
+14. Ring III includes three explicit lanes: style, template, and template-part external applies;
+    each has its own lane id, executor id, subject naming, scope, and canonicalizer. — *user*
+15. Template subject names include the theme, so supersede chains intentionally do not cross
+    theme switches. Post-blocks remains frozen pending a conditional public-subject design. —
+    *user*
 
 ## 15. Out of scope (v1)
 
 Advisory/editorial surfaces with no artifact (`recommend-content`, `recommend-navigation`);
-in-editor block/template applies (no admin-approval moment); `.well-known` publication;
-transparency-log anchoring; C2PA emission; third-party/CA signer identity; full-identity actor
-disclosure by default.
+in-editor block/template/template-part/style applies (no `Settings > AI Activity`
+admin-approval moment). External template and template-part applies are in scope because they do
+pass through that decision gate and the bounded server executors. External post-blocks apply is
+frozen: its `post_content` is not necessarily public, the current public `subject-state` contract
+would leak it, and a title-bearing subject name could leak metadata. Also out: `.well-known`
+publication; transparency-log anchoring; C2PA emission; third-party/CA signer identity;
+full-identity actor disclosure by default.
