@@ -36,6 +36,7 @@ import {
 	clampActivityViewPage,
 	formatActivityTimestamp,
 	formatApplyClaimNotice,
+	getAttestationLaneLabel,
 	getGovernanceDetails,
 	getGovernancePlainSummary,
 	isPendingExternalApply,
@@ -1869,18 +1870,6 @@ function getAttestationClaimLabel( claim ) {
 	}
 
 	return claim;
-}
-
-function getAttestationLaneLabel( lane ) {
-	if ( lane === 'external-style-apply-v1' ) {
-		return sprintf(
-			/* translators: %s: attestation lane identifier. */
-			__( 'External style apply (%s)', 'flavor-agent' ),
-			lane
-		);
-	}
-
-	return lane;
 }
 
 function getAttestationResultString( payload, key ) {

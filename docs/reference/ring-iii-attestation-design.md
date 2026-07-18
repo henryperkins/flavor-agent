@@ -1,9 +1,9 @@
 # Ring III Attestation — design
 
-**Status:** v1 implemented (external Global Styles / Style Book apply loop)
-**Date:** 2026-06-22
+**Status:** v1 implemented (external style, template, and template-part apply lanes)
+**Date:** 2026-06-22; amended 2026-07-17
 **Owner:** Henry Perkins
-**Scope of v1:** the external Global Styles / Style Book apply loop only
+**Scope of v1:** external style, template, and template-part applies approved through `Settings > AI Activity`
 
 This document specifies how Flavor Agent (FA) can genuinely satisfy **Ring III ("Attest")**
 of the Expose · Govern · Attest trust model — *provenance a stranger can verify, beyond the

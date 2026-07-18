@@ -14,7 +14,7 @@ use FlavorAgent\LLM\TemplatePartPrompt;
  * Mirrors StyleApplyExecutor: read the live part, re-validate operations and
  * expectedTarget fingerprints, mutate the parsed block tree atomically through
  * BlockTreeMutator, persist via core post APIs, and snapshot before/after
- * post_content. No attestation. See
+ * post_content. See
  * docs/superpowers/specs/2026-06-24-template-part-external-apply-executor-design.md.
  *
  * `undo()` re-resolves the live part and restores the before snapshot under the

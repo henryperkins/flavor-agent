@@ -1672,6 +1672,31 @@ export function getActivityStatusLabel( entry, allEntries = [] ) {
 	}
 }
 
+export function getAttestationLaneLabel( lane ) {
+	switch ( lane ) {
+		case 'external-style-apply-v1':
+			return sprintf(
+				/* translators: %s: attestation lane identifier. */
+				__( 'External style apply (%s)', 'flavor-agent' ),
+				lane
+			);
+		case 'external-template-apply-v1':
+			return sprintf(
+				/* translators: %s: attestation lane identifier. */
+				__( 'External template apply (%s)', 'flavor-agent' ),
+				lane
+			);
+		case 'external-template-part-apply-v1':
+			return sprintf(
+				/* translators: %s: attestation lane identifier. */
+				__( 'External template part apply (%s)', 'flavor-agent' ),
+				lane
+			);
+		default:
+			return lane;
+	}
+}
+
 export function isPendingExternalApply( entry ) {
 	return (
 		entry?.status === 'pending' &&

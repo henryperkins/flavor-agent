@@ -13,6 +13,7 @@ use PHPUnit\Framework\TestCase;
 final class ApplyAbilitiesTest extends TestCase {
 
 	private const GLOBAL_STYLES_ID = '17';
+	private const TEMPLATE_REF     = 'twentytwentyfive//home';
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -73,6 +74,26 @@ final class ApplyAbilitiesTest extends TestCase {
 						$config
 					)
 				),
+			]
+		);
+	}
+
+	private function seed_template_post( string $content, int $wp_id ): void {
+		WordPressTestState::$active_theme                   = [ 'stylesheet' => 'twentytwentyfive' ];
+		WordPressTestState::$block_templates['wp_template'] = [
+			(object) [
+				'id'      => self::TEMPLATE_REF,
+				'wp_id'   => $wp_id,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $content,
+			],
+		];
+		WordPressTestState::$posts[ $wp_id ]                = new \WP_Post(
+			[
+				'ID'           => $wp_id,
+				'post_type'    => 'wp_template',
+				'post_content' => $content,
 			]
 		);
 	}
@@ -542,6 +563,83 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( 'undone', $result['result'] );
 		$this->assertIsArray( \FlavorAgent\Attestation\Repository::find_by_reverts( 'att_prior_apply' ) );
+	}
+
+	public function test_undo_activity_records_a_template_revert_attestation_chain(): void {
+		$before = '<!-- wp:paragraph --><p>Before</p><!-- /wp:paragraph -->';
+		$after  = '<!-- wp:heading --><h1>After</h1><!-- /wp:heading -->';
+		$this->seed_template_post( $after, 7100 );
+
+		$activity = Repository::create(
+			[
+				'id'              => 'template-undo-row',
+				'type'            => 'apply_template_suggestion',
+				'surface'         => 'template',
+				'target'          => [
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+					'slug'         => 'home',
+					'title'        => 'Home',
+				],
+				'suggestion'      => 'Add a hero',
+				'before'          => [ 'content' => $before ],
+				'after'           => [
+					'content'    => $after,
+					'operations' => [],
+				],
+				'executionResult' => 'applied',
+				'undo'            => [ 'status' => 'available' ],
+				'document'        => [
+					'scopeKey'   => 'template:' . self::TEMPLATE_REF,
+					'postType'   => 'wp_template',
+					'entityId'   => self::TEMPLATE_REF,
+					'entityKind' => 'postType',
+					'entityName' => 'wp_template',
+				],
+			]
+		);
+		$this->assertIsArray( $activity );
+
+		$this->configure_attestation_key();
+		\FlavorAgent\Attestation\Repository::install();
+
+		$apply_attestation_id = \FlavorAgent\Attestation\AttestationService::record_apply(
+			[
+				'surface'            => 'template',
+				'templateRef'        => self::TEMPLATE_REF,
+				'operations'         => [],
+				'before'             => [ 'content' => $before ],
+				'after'              => [ 'content' => $after ],
+				'freshnessSignature' => 'template-f',
+				'actorRole'          => 'administrator',
+				'requestedAt'        => '2026-06-22T00:00:00+00:00',
+				'decidedAt'          => '2026-06-22T00:01:00+00:00',
+				'relatedActivityId'  => (string) $activity['id'],
+			]
+		);
+		$this->assertIsString( $apply_attestation_id );
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $activity['id'] ] );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( $before, (string) WordPressTestState::$posts[7100]->post_content );
+
+		$revert = \FlavorAgent\Attestation\Repository::find_by_reverts( $apply_attestation_id );
+		$this->assertIsArray( $revert );
+
+		$statement = json_decode( (string) $revert['statement_bytes'], true );
+		$this->assertIsArray( $statement );
+		$this->assertSame( 'external-template-apply-v1', $statement['predicate']['governance']['lane'] );
+		$this->assertSame( $apply_attestation_id, $statement['predicate']['revertsAttestationId'] );
+		$this->assertSame(
+			\FlavorAgent\Attestation\BlockContentCanonicalizer::digest( $after ),
+			$statement['predicate']['before']['sha256']
+		);
+		$this->assertSame(
+			\FlavorAgent\Attestation\BlockContentCanonicalizer::digest( $before ),
+			$statement['predicate']['after']['sha256']
+		);
 	}
 
 	public function test_decision_approve_executes_and_transitions_to_available(): void {

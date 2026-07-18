@@ -753,25 +753,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'rejected', $updated['apply']['status'] );
 	}
 
-	/**
-	 * Frozen-lane proof: a template-part approve must NEVER reach AttestationService.
-	 *
-	 * The observable signal is non-tautological because a REAL signing key is
-	 * configured. With a key present:
-	 *   - the style lane genuinely signs + inserts an attestation row (asserted
-	 *     below), proving the recording machinery is live — so "no row for
-	 *     template-part" is meaningful rather than "recording is off everywhere";
-	 *   - if the template-part path were NOT surface-guarded it would call
-	 *     record_apply( surface => 'template-part' ), which trips
-	 *     AttestationService::assert_owned_lane_context, throws, is caught by the
-	 *     decide() try/catch, and fires flavor_agent_attestation_record_failed.
-	 *
-	 * Asserting that failure event NEVER fires (while the style lane succeeds with
-	 * the same key) proves the guard short-circuits the call before record_apply,
-	 * not that a missing key turned every recording into a no-op. Removing either
-	 * guard turns this test RED via a captured failure event.
-	 */
-	public function test_attestation_is_not_recorded_for_template_part_apply(): void {
+	public function test_attestation_is_recorded_for_style_template_part_and_template_applies(): void {
 		$secret_key = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
 		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $secret_key );
 		\FlavorAgent\Attestation\Repository::install();
@@ -784,7 +766,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			}
 		);
 
-		// --- Style lane (regression guard): an approve must STILL record. ---
+		// --- Style lane regression guard. ---
 		$this->seed_global_styles_world();
 		$style = $this->create_pending_entry(
 			[
@@ -808,12 +790,14 @@ final class ExternalApplyLifecycleTest extends TestCase {
 
 		$this->assertIsArray( $style_decided );
 		$this->assertSame( 'available', $style_decided['apply']['status'] );
-		$this->assertIsArray(
-			\FlavorAgent\Attestation\Repository::find_by_related_activity( 'style-row' ),
-			'The style lane must still sign and record an attestation after the surface guard is added.'
-		);
+		$style_attestation = \FlavorAgent\Attestation\Repository::find_by_related_activity( 'style-row' );
+		$this->assertIsArray( $style_attestation );
 
-		// --- Template-part lane: an approve must NOT touch AttestationService. ---
+		$style_statement = json_decode( (string) $style_attestation['statement_bytes'], true );
+		$this->assertIsArray( $style_statement );
+		$this->assertSame( 'external-style-apply-v1', $style_statement['predicate']['governance']['lane'] );
+
+		// --- Template-part lane. ---
 		$content = '<!-- wp:group -->'
 			. '<!-- wp:heading --><h2>Title</h2><!-- /wp:heading -->'
 			. '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->'
@@ -829,17 +813,15 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			$part_decided['apply']['status'],
 			'The template-part executor must succeed so the post-apply attestation branch is actually exercised.'
 		);
-		$this->assertNull(
-			\FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $part['id'] ),
-			'No attestation may be recorded for a template-part apply.'
-		);
-		$this->assertSame(
-			[],
-			$failures,
-			'record_apply must never be attempted for template-part: the frozen-lane guard would otherwise throw and fire flavor_agent_attestation_record_failed.'
-		);
+		$part_attestation = \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $part['id'] );
+		$this->assertIsArray( $part_attestation );
 
-		// --- Template lane: an approve must NOT touch AttestationService. ---
+		$part_statement = json_decode( (string) $part_attestation['statement_bytes'], true );
+		$this->assertIsArray( $part_statement );
+		$this->assertSame( 'external-template-part-apply-v1', $part_statement['predicate']['governance']['lane'] );
+		$this->assertSame( 'wp_template_part:' . self::TEMPLATE_PART_ID, $part_statement['subject'][0]['name'] );
+
+		// --- Template lane. ---
 		$template_content = $this->template_content();
 		$this->seed_template( $template_content, 8802 );
 		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
@@ -880,15 +862,14 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			$template_decided['apply']['status'],
 			'The template executor must succeed so the post-apply attestation branch is actually exercised.'
 		);
-		$this->assertNull(
-			\FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $template_request['activityId'] ),
-			'No attestation may be recorded for a template apply.'
-		);
-		$this->assertSame(
-			[],
-			$failures,
-			'record_apply must never be attempted for template: the frozen-lane guard would otherwise throw and fire flavor_agent_attestation_record_failed.'
-		);
+		$template_attestation = \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $template_request['activityId'] );
+		$this->assertIsArray( $template_attestation );
+
+		$template_statement = json_decode( (string) $template_attestation['statement_bytes'], true );
+		$this->assertIsArray( $template_statement );
+		$this->assertSame( 'external-template-apply-v1', $template_statement['predicate']['governance']['lane'] );
+		$this->assertSame( 'wp_template:' . self::TEMPLATE_REF, $template_statement['subject'][0]['name'] );
+		$this->assertSame( [], $failures );
 	}
 
 	public function test_style_apply_executor_implements_the_external_apply_contract(): void {
@@ -1688,6 +1669,18 @@ final class ExternalApplyLifecycleTest extends TestCase {
 	}
 
 	public function test_attestation_is_not_recorded_for_post_blocks_apply(): void {
+		$secret_key = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $secret_key );
+		\FlavorAgent\Attestation\Repository::install();
+
+		$failures = [];
+		add_action(
+			'flavor_agent_attestation_record_failed',
+			static function ( array $event ) use ( &$failures ): void {
+				$failures[] = $event;
+			}
+		);
+
 		$content = $this->post_blocks_content();
 		$this->seed_post_blocks_document( $content );
 
@@ -1722,11 +1715,14 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		);
 		$this->assertIsArray( $pending );
 
-		\FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['activityId'], 'approve' );
+		$approved = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['activityId'], 'approve' );
 
+		$this->assertIsArray( $approved );
+		$this->assertSame( 'available', $approved['apply']['status'] );
 		$this->assertNull(
 			\FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $pending['activityId'] ),
-			'post-blocks applies are not attested (frozen to external-style-apply-v1).'
+			'Post-blocks stays frozen because the public subject-state contract cannot expose non-public post content.'
 		);
+		$this->assertSame( [], $failures );
 	}
 }
