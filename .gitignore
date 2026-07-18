@@ -22,7 +22,11 @@ ImladrisDesignSystem.zip
 .mcp.json
 .claude/skills/
 .codex/skills/
+.codex/config.toml
 deck/
+
+# Local-only scratch assets (kept on disk, never tracked or shipped)
+docs/reference/screens/
 
 # Local gcloud CLI install (not part of the plugin)
 google-cloud-sdk/
