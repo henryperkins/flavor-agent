@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Apply;
 
+use FlavorAgent\Attestation\BlockContentCanonicalizer;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\TemplatePrompt;
 
@@ -246,7 +247,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	}
 
 	private static function content_hash( string $content ): string {
-		return hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) );
+		return BlockContentCanonicalizer::digest( $content );
 	}
 
 	/**
