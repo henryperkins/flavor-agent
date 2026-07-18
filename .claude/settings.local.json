@@ -5,7 +5,6 @@
     "wordpress-docs-ai-search"
   ],
   "skillOverrides": {
-    "blueprint": "off",
     "jam-cli": "off"
   },
   "enabledPlugins": {
