@@ -1,6 +1,6 @@
 # Streaming Recommendations — Design Proposal
 
-**Status:** Design proposal · **Date:** 2026-05-24 · **Targets:** AI Plugin 7.1 cycle and `WordPress/php-ai-client` milestone 1.4.0
+**Status:** Design proposal · **Date:** 2026-05-24 · **Targets:** AI Plugin 7.1 cycle and `WordPress/php-ai-client` milestone 1.4.0 · **Update 2026-07-18:** `1.4.0` shipped 2026-07-15 *without* streaming (embedding APIs only); the implementation is now open PR [#255](https://github.com/WordPress/php-ai-client/pull/255) under review, with WordPress `Requests`-library maintenance constraints (current direction: the change lands inside `Requests`, not as a separate WP-core implementation). The trigger condition below is re-based accordingly.
 
 ## TL;DR
 
@@ -253,7 +253,7 @@ No changes to `components/AIReviewSection.js`, `components/RecommendationLane.js
 2. The 20 May summary explicitly tied streaming to the 7.1 cycle of the AI Plugin — that's downstream of php-ai-client 1.4.0. Two cycles of upstream movement need to settle.
 3. The leadership transition noted in the gap audit (Felix and James stepping back) makes any "build ahead of the API" investment higher-risk; the strategic re-survey may reshape the streaming roadmap.
 
-**Trigger condition to start:** php-ai-client 1.4.0 RC tag is cut AND the AI plugin lands a streaming-enabled Experiment in trunk. At that point, return to this doc, confirm the assumed surface (`is_supported_for_text_streaming()`, dual-channel response shape, separate model interface), and commit a workstream.
+**Trigger condition to start (re-based 2026-07-18; `1.4.0` shipped 2026-07-15 without streaming):** [php-ai-client#255](https://github.com/WordPress/php-ai-client/pull/255) merges, streaming primitives ship in a tagged `php-ai-client` release, AND the AI plugin lands a streaming-enabled Experiment in trunk. At that point, return to this doc, confirm the assumed surface (`is_supported_for_text_streaming()`, dual-channel response shape, separate model interface, and how the change-inside-`Requests` direction constrains the transport options above), and commit a workstream.
 
 **Hold posture until then:** track [#100](https://github.com/WordPress/php-ai-client/issues/100) and any AI plugin streaming PR; do NOT add `is_streaming_supported()`-style stubs to the codebase, because they'd commit Flavor Agent to a streaming contract that doesn't exist.
 
@@ -261,6 +261,7 @@ No changes to `components/AIReviewSection.js`, `components/RecommendationLane.js
 
 - AI Client streaming status verified from [php-ai-client#100](https://github.com/WordPress/php-ai-client/issues/100) (open, milestone 1.4.0), [php-ai-client#166](https://github.com/WordPress/php-ai-client/issues/166) + [#170](https://github.com/WordPress/php-ai-client/pull/170) (scaffolding removed 2026-01-16), and [php-ai-client#237](https://github.com/WordPress/php-ai-client/issues/237) (WordPress HTTP buffering constraint, 2026-05-19).
 - WP AI 7.1 streaming priority confirmed in the [20 May 2026 contributor summary](https://make.wordpress.org/ai/2026/05/21/ai-contributor-weekly-summary-20-may-2026/).
+- Slip verified 2026-07-18: the `1.4.0` release tag (2026-07-15) contains the embedding-generation APIs ([#244](https://github.com/WordPress/php-ai-client/pull/244)) but no streaming; issue [#100](https://github.com/WordPress/php-ai-client/issues/100) remains open and the implementation is open PR [#255](https://github.com/WordPress/php-ai-client/pull/255) under review. `Requests`-library maintenance constraints and the change-lands-inside-`Requests` direction per the [2026-07-15 contributor summary](https://make.wordpress.org/ai/2026/07/17/ai-contributor-weekly-summary-15-july-2026/).
 - `WordPressAIClient::chat()` signature verified at `inc/LLM/WordPressAIClient.php` lines 49–278.
 - Review-signature gate behavior verified at `inc/Support/RecommendationSignature.php` and `inc/Support/RecommendationReviewSignature.php`.
 - Recommendation ability schemas verified in `inc/Abilities/Registration.php` (`recommendation_output_schema()`).
