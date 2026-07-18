@@ -40,7 +40,7 @@ Start the Docker stack:
 ```bash
 npm run wp:start
 ```
-If you changed the Dockerfile or need to refresh the mutable WordPress image, rebuild once before starting:
+If you changed the Dockerfile or need to refresh the mutable WordPress image, run `wp:rebuild` instead. It pulls the current base image, rebuilds, and starts the stack:
 
 ```bash
 npm run wp:rebuild

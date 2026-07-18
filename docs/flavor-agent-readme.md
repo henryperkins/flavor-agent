@@ -299,7 +299,7 @@ npm run wp:start
 
 `wp:start` only starts the Docker containers. Follow `docs/reference/local-environment-setup.md` to install WordPress nightly/trunk and activate the required companion plugins: WordPress Beta Tester, Gutenberg, AI, OpenAI, Anthropic, and Google provider connectors, MCP Adapter, Plugin Check, and Flavor Agent.
 
-If you update Dockerfile requirements or need to refresh the mutable base image, run:
+If you update Dockerfile requirements or need to refresh the mutable base image, run `wp:rebuild` instead; it pulls the current base image, rebuilds, and starts the stack:
 
 ```bash
 npm run wp:rebuild
