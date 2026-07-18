@@ -6,6 +6,8 @@ const wp70Harness = getWp70HarnessConfig();
 
 const ACTIVITY_PAGE =
 	'/wp-admin/options-general.php?page=flavor-agent-activity';
+const TEMPLATE_APPLY_TITLE = 'External: append the query pattern to Home';
+const TEMPLATE_PATTERN_NAME = 'core/query-standard-posts';
 
 // End-to-end coverage of the human approval gate. Unlike the route-mocked
 // Playground activity specs, this one runs against the real repository and
@@ -69,10 +71,115 @@ $GLOBALS['wpdb']->query( "TRUNCATE TABLE {$table_name}" );
 	] );
 }
 
-async function openSeededExternalApply( page ) {
+function configureAttestationKey() {
+	const generated = runWpCli( wp70Harness, [
+		'eval',
+		"echo base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_seed_keypair( str_repeat( 'a', SODIUM_CRYPTO_SIGN_SEEDBYTES ) ) ) );",
+	] ).stdout.trim();
+
+	if ( ! generated ) {
+		throw new Error(
+			'Could not generate the WP70 attestation signing key.'
+		);
+	}
+
+	runWpCli( wp70Harness, [
+		'config',
+		'set',
+		'FLAVOR_AGENT_ATTEST_PRIVATE_KEY',
+		generated,
+		'--type=constant',
+	] );
+}
+
+function seedPendingTemplateApply( id ) {
+	configureAttestationKey();
+	runWpCli( wp70Harness, [
+		'eval',
+		`
+\\FlavorAgent\\Activity\\Repository::install();
+\\FlavorAgent\\Attestation\\Repository::install();
+$activity_table = $GLOBALS['wpdb']->prefix . 'flavor_agent_activity';
+$attestation_table = \\FlavorAgent\\Attestation\\Repository::table_name();
+$GLOBALS['wpdb']->query( "TRUNCATE TABLE {$activity_table}" );
+$GLOBALS['wpdb']->query( "TRUNCATE TABLE {$attestation_table}" );
+$template_posts = get_posts( array(
+	'post_type' => 'wp_template',
+	'post_status' => 'any',
+	'numberposts' => -1,
+	'fields' => 'ids',
+) );
+foreach ( $template_posts as $template_post_id ) {
+	wp_delete_post( $template_post_id, true );
+}
+$template_ref = '${ wp70Harness.themeSlug }//home';
+$template = \\FlavorAgent\\Context\\ServerCollector::resolve_template_for_apply( $template_ref );
+if ( ! is_object( $template ) ) {
+	throw new \\RuntimeException( 'Could not resolve the Home template fixture.' );
+}
+$pattern = \\WP_Block_Patterns_Registry::get_instance()->get_registered( '${ TEMPLATE_PATTERN_NAME }' );
+if ( ! is_array( $pattern ) ) {
+	throw new \\RuntimeException( 'Could not resolve the template pattern fixture.' );
+}
+$baseline = \\FlavorAgent\\Attestation\\BlockContentCanonicalizer::digest( (string) $template->content );
+\\FlavorAgent\\Activity\\Repository::create( array(
+	'id' => '${ id }',
+	'type' => 'apply_template_suggestion',
+	'surface' => 'template',
+	'target' => array(
+		'templateRef' => $template_ref,
+		'templateType' => 'home',
+		'slug' => 'home',
+		'title' => 'Home',
+	),
+	'suggestion' => '${ TEMPLATE_APPLY_TITLE }',
+	'before' => array(),
+	'after' => array(),
+	'executionResult' => 'pending',
+	'undo' => array( 'status' => 'not_applicable' ),
+	'request' => array(
+		'prompt' => 'Add the standard query pattern.',
+		'reference' => 'external-template-apply:e2e',
+		'apply' => array(
+			'status' => 'pending',
+			'requestedBy' => 1,
+			'requestedAt' => '2026-07-17T00:00:00Z',
+			'expiresAt' => '2030-07-17T00:00:00Z',
+			'operations' => array(
+				array(
+					'type' => 'insert_pattern',
+					'patternName' => '${ TEMPLATE_PATTERN_NAME }',
+					'placement' => 'end',
+				),
+			),
+			'signatures' => array(
+				'resolvedContextSignature' => str_repeat( 't', 64 ),
+				'reviewContextSignature' => str_repeat( 't', 64 ),
+				'baselineContentHash' => $baseline,
+			),
+			'requestReference' => 'e2e-template-req-1',
+		),
+	),
+	'document' => array(
+		'scopeKey' => 'wp_template:' . $template_ref,
+		'postType' => 'wp_template',
+		'entityId' => $template_ref,
+		'entityKind' => 'template',
+		'entityName' => 'template',
+	),
+	'timestamp' => '2026-07-17T00:00:00Z',
+) );
+`,
+	] );
+}
+
+async function openSeededExternalApply(
+	page,
+	title = 'External: use the accent text preset'
+) {
 	await page
 		.locator( '.flavor-agent-activity-log__feed' )
-		.getByText( 'External: use the accent text preset' )
+		.getByText( title )
 		.first()
 		.click();
 
@@ -100,18 +207,24 @@ test.describe( 'external apply approvals', () => {
 				hasText: 'color.text',
 			} );
 
-		await expect( sidebar.getByText( 'Governance evidence' ) ).toBeVisible();
+		await expect(
+			sidebar.getByText( 'Governance evidence' )
+		).toBeVisible();
 		await expect( sidebar.getByText( 'Approval required' ) ).toBeVisible();
 		await expect(
 			sidebar.locator( '.flavor-agent-activity-log__visual-diff' )
 		).toBeVisible();
-		await expect( sidebar.getByText( 'Requested operations' ) ).toBeVisible();
+		await expect(
+			sidebar.getByText( 'Requested operations' )
+		).toBeVisible();
 		await expect( diffRow ).toBeVisible();
 		await expect( diffRow ).toContainText( 'Proposed only' );
 		await expect( diffRow ).toContainText( 'Baseline unavailable' );
 		await expect( diffRow ).toContainText( 'Not applied' );
 		await expect(
-			diffRow.locator( '.flavor-agent-activity-log__visual-diff-chip' ).first()
+			diffRow
+				.locator( '.flavor-agent-activity-log__visual-diff-chip' )
+				.first()
 		).toBeVisible();
 		await expect( sidebar.getByText( 'Full provenance' ) ).toBeVisible();
 		await expect(
@@ -182,5 +295,40 @@ test.describe( 'external apply approvals', () => {
 				)
 				.first()
 		).toBeVisible();
+	} );
+
+	test( '@wp70-site-editor approving a template apply exposes its attestation badge', async ( {
+		page,
+	} ) => {
+		test.setTimeout( 120_000 );
+		seedPendingTemplateApply( 'activity-template-attestation' );
+
+		await page.goto( ACTIVITY_PAGE, { waitUntil: 'domcontentloaded' } );
+		await waitForWordPressReady( page );
+
+		await expect(
+			page.locator( '#flavor-agent-activity-log-root' )
+		).toBeVisible( { timeout: 30_000 } );
+
+		const sidebar = await openSeededExternalApply(
+			page,
+			TEMPLATE_APPLY_TITLE
+		);
+		await page.getByRole( 'button', { name: 'Approve and apply' } ).click();
+
+		await expect( sidebar.getByText( 'Applied' ).first() ).toBeVisible( {
+			timeout: 30_000,
+		} );
+		await expect(
+			page.locator( '.flavor-agent-activity-log__entry-badge', {
+				hasText: 'Attestation',
+			} )
+		).toBeVisible();
+		await expect( sidebar ).toContainText(
+			'External template apply (external-template-apply-v1)'
+		);
+		await expect( sidebar ).toContainText(
+			`wp_template:${ wp70Harness.themeSlug }//home`
+		);
 	} );
 } );
