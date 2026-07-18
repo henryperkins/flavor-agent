@@ -197,6 +197,40 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertCount( 1, WordPressTestState::$updated_posts );
 	}
 
+	public function test_execute_returns_the_post_persist_content_after_a_save_filter_changes_it(): void {
+		$content = $this->paragraph( 'Keep' ) . $this->paragraph( 'Remove' );
+		$this->seed_part( $content, 4399 );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$data['post_content'] = str_replace( '>Keep<', '>Keep saved<', (string) $data['post_content'] );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 1 ],
+						'expectedBlockName' => 'core/paragraph',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertStringContainsString( 'Keep saved', (string) WordPressTestState::$posts[4399]->post_content );
+		$this->assertSame( WordPressTestState::$posts[4399]->post_content, $result['after']['content'] );
+	}
+
 	public function test_execute_replaces_block_with_pattern(): void {
 		$content = $this->paragraph( 'KeepMe' ) . $this->paragraph( 'ReplaceMe' );
 		$this->seed_part( $content, 4322 );
@@ -384,6 +418,32 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertSame( 'flavor_agent_apply_operations_invalid', $result->get_error_code() );
 		$this->assertSame( [], WordPressTestState::$updated_posts, 'A re-validation failure must not write.' );
 		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
+	public function test_undo_returns_the_post_persist_content_after_a_save_filter_changes_it(): void {
+		$before = $this->paragraph( 'Original' );
+		$after  = $this->paragraph( 'Changed' );
+		$this->seed_part( $after, 55 );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$data['post_content'] = str_replace( '>Original<', '>Original saved<', (string) $data['post_content'] );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( WordPressTestState::$posts[55]->post_content, $result['after']['content'] );
+		$this->assertStringContainsString( '>Original saved<', $result['after']['content'] );
 	}
 
 	public function test_execute_fails_closed_on_unregistered_pattern_without_writing(): void {
@@ -699,6 +759,7 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'already_undone', $result['result'] );
+		$this->assertSame( $before, $result['after']['content'] );
 		$this->assertSame( [], WordPressTestState::$updated_posts, 'An already-undone row must not write.' );
 		$this->assertSame( [], WordPressTestState::$inserted_posts );
 	}

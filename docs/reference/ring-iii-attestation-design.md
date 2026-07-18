@@ -131,7 +131,9 @@ serialization so their executor drift checks and attestation digests share the s
 The verifier reads `scope` from the subject and recomputes the matching digest. Style Book
 branch-scoping answers "was *this* change altered" without false positives from unrelated later
 edits elsewhere in the entity. Template subjects embed the theme in the subject name, so
-supersede chains intentionally do not cross theme switches.
+supersede chains intentionally do not cross theme switches. Public live-state resolution is
+exactly theme-qualified: it must not fall back to a same-slug template or template part from the
+active theme after a switch.
 
 ### 4.2 Public-safe statement — hard contract (allowlist, not denylist)
 
@@ -157,8 +159,12 @@ schema-bounded to validated `theme.json` paths and preset/validated values (the 
 contract + the WCAG AA contrast gate, `inc/LLM/StyleContrastValidator.php`). Template and
 template-part operations are bounded structural operations against one named theme entity. These
 operations are the *substance* of the provenance claim ("what was changed") and are explicitly
-allowlisted as public. The §4.2 prohibition targets raw config/content snapshots, prompts,
-provider payloads, and PII — never the bounded operation set.
+allowlisted as public through a lane-specific projector. Unknown operation fields or an operation
+shape from another lane fail closed. The public structural fingerprint keeps the target block
+name, child count, and bounded slot identity when present; editor labels and raw target attributes
+are omitted. Executor-only style `beforeValue` data is also omitted because the signed before
+digest already binds the prior subject state. The §4.2 prohibition targets raw config/content
+snapshots, prompts, provider payloads, and PII — never the projected bounded operation set.
 
 ## 5. Data model — durable companion table
 
@@ -277,15 +283,19 @@ and the transparency-log level (§12) addresses history-rewrite over time.
    (unchanged).
 2. Admin approves → `inc/Apply/PendingApplyDecision.php` second freshness check (`:81`,
    "Drift fails closed") → the lane's bounded server executor applies.
-3. On success: `StatementBuilder` builds the canonical statement bytes; the `after` digest is
-   computed from the **post-apply** state by the lane's canonicalizer (the same canonicalization
-   used by that executor's pre-apply drift check, but a different input and moment) → `Signer`
-   signs → `Repository` appends the row.
+3. On success: the template and template-part executors re-read the persisted entity so WordPress
+   save filters are reflected, while the style executor supplies the bounded user-config snapshot
+   accepted by its write path. `StatementBuilder` builds the canonical statement bytes; the
+   `after` digest is computed from that lane result by the lane's canonicalizer (the same
+   canonicalization used by that executor's pre-apply drift check, but a different input and
+   moment) → `Signer` signs → `Repository` appends the row.
 4. `get-activity` / admin UI surface an "Attestation" artifact with a verify affordance.
 
 **Undo (chained, never mutating):**
 
 - An undo of change X produces a **new** attestation U with `revertsAttestationId = X.attestationId`.
+- Template and template-part undo re-read the restored entity after persistence, so the revert
+  attestation's `after` digest reflects any WordPress save-filter transformation.
 - The prior row X is never mutated. Reverse discovery ("was X reverted?") is a **query** —
   `Repository::find_by_reverts(X)` / `GET /attestations?reverts=X` — preserving immutability.
 - General supersession (a later change replacing an attested state) uses `supersedesAttestationId`

@@ -150,6 +150,40 @@ final class TemplateApplyExecutorTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$inserted_posts );
 	}
 
+	public function test_execute_returns_the_post_persist_content_after_a_save_filter_changes_it(): void {
+		$this->seed_template( $this->paragraph( 'Body' ), 9199 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$data['post_content'] = str_replace( '>Hero<', '>Hero saved<', (string) $data['post_content'] );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertStringContainsString( 'Hero saved', (string) WordPressTestState::$posts[9199]->post_content );
+		$this->assertSame( WordPressTestState::$posts[9199]->post_content, $result['after']['content'] );
+	}
+
 	public function test_execute_inserts_pattern_before_and_after_anchors(): void {
 		$content = $this->paragraph( 'First' ) . $this->paragraph( 'Second' );
 		$this->seed_template( $content, 9101 );
@@ -449,8 +483,36 @@ final class TemplateApplyExecutorTest extends TestCase {
 
 		$result = \FlavorAgent\Apply\TemplateApplyExecutor::undo( self::executed_entry( $before, $after ) );
 
-		$this->assertSame( [ 'result' => 'undone' ], $result );
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( $before, $result['after']['content'] );
 		$this->assertSame( $before, WordPressTestState::$posts[9300]->post_content );
+	}
+
+	public function test_undo_returns_the_post_persist_content_after_a_save_filter_changes_it(): void {
+		$before = $this->paragraph( 'Body' );
+		$after  = $this->paragraph( 'Hero' ) . $before;
+		$this->seed_template( $after, 9304 );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$data['post_content'] = str_replace( '>Body<', '>Body saved<', (string) $data['post_content'] );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( WordPressTestState::$posts[9304]->post_content, $result['after']['content'] );
+		$this->assertStringContainsString( '>Body saved<', $result['after']['content'] );
 	}
 
 	public function test_undo_returns_already_undone_when_live_matches_before(): void {
@@ -460,7 +522,9 @@ final class TemplateApplyExecutorTest extends TestCase {
 
 		$result = \FlavorAgent\Apply\TemplateApplyExecutor::undo( self::executed_entry( $before, $after ) );
 
-		$this->assertSame( [ 'result' => 'already_undone' ], $result );
+		$this->assertIsArray( $result );
+		$this->assertSame( 'already_undone', $result['result'] );
+		$this->assertSame( $before, $result['after']['content'] );
 		$this->assertSame( [], WordPressTestState::$updated_posts );
 	}
 

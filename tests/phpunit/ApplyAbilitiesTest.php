@@ -619,11 +619,25 @@ final class ApplyAbilitiesTest extends TestCase {
 		);
 		$this->assertIsString( $apply_attestation_id );
 
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$data['post_content'] = str_replace( '>Before<', '>Before saved<', (string) $data['post_content'] );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
 		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $activity['id'] ] );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'undone', $result['result'] );
-		$this->assertSame( $before, (string) WordPressTestState::$posts[7100]->post_content );
+		$persisted_before = (string) WordPressTestState::$posts[7100]->post_content;
+		$this->assertStringContainsString( '>Before saved<', $persisted_before );
 
 		$revert = \FlavorAgent\Attestation\Repository::find_by_reverts( $apply_attestation_id );
 		$this->assertIsArray( $revert );
@@ -637,7 +651,7 @@ final class ApplyAbilitiesTest extends TestCase {
 			$statement['predicate']['before']['sha256']
 		);
 		$this->assertSame(
-			\FlavorAgent\Attestation\BlockContentCanonicalizer::digest( $before ),
+			\FlavorAgent\Attestation\BlockContentCanonicalizer::digest( $persisted_before ),
 			$statement['predicate']['after']['sha256']
 		);
 	}

@@ -974,11 +974,14 @@ final class ApplyAbilities {
 			if ( null !== $prior ) {
 				try {
 					$target              = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+					$persisted_after     = is_array( $result['after'] ?? null )
+						? $result['after']
+						: ( is_array( $entry['before'] ?? null ) ? $entry['before'] : [] );
 					$attestation_context = [
 						'surface'            => $surface,
 						'operations'         => [],
 						'before'             => $entry['after'] ?? [],
-						'after'              => $entry['before'] ?? [],
+						'after'              => $persisted_after,
 						'freshnessSignature' => '',
 						'actorRole'          => self::actor_role_for_undo(),
 						'requestedAt'        => '',

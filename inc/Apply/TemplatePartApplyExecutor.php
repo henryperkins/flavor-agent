@@ -103,6 +103,12 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			return $persisted;
 		}
 
+		$persisted_content = self::resolve_persisted_content( $persisted );
+
+		if ( is_wp_error( $persisted_content ) ) {
+			return $persisted_content;
+		}
+
 		return [
 			'target' => [
 				'templatePartId'  => (string) ( $part->id ?? $ref ),
@@ -112,7 +118,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			],
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
-				'content'    => $after_content,
+				'content'    => $persisted_content,
 				'operations' => $validated['operations'],
 			],
 		];
@@ -144,6 +150,23 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	}
 
 	/**
+	 * Resolve the exact theme-qualified subject for public attestation checks.
+	 */
+	public static function resolve_attested_content( string $ref ): string|\WP_Error {
+		$part = ServerCollector::resolve_template_part_for_attestation( $ref );
+
+		if ( ! is_object( $part ) ) {
+			return new \WP_Error(
+				'flavor_agent_attestation_subject_unavailable',
+				'The attested template part is not available under its exact theme-qualified id.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return (string) ( $part->content ?? '' );
+	}
+
+	/**
 	 * Server-side undo with the exact equality semantics StyleApplyExecutor uses:
 	 * re-resolve the live part, then live == before → already undone (no write);
 	 * live != after → drift failure (fail closed, no write); else restore the
@@ -151,7 +174,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 * insignificant serialization differences never read as drift.
 	 *
 	 * @param array<string, mixed> $entry Hydrated activity entry.
-	 * @return array{result: string}|\WP_Error
+	 * @return array{result: string, after: array{content: string}}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
 		$ref  = self::part_ref( $entry );
@@ -177,7 +200,10 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		$after_hash  = self::content_hash( (string) $after['content'] );
 
 		if ( hash_equals( $live_hash, $before_hash ) ) {
-			return [ 'result' => 'already_undone' ];
+			return [
+				'result' => 'already_undone',
+				'after'  => [ 'content' => (string) ( $part->content ?? '' ) ],
+			];
 		}
 
 		if ( ! hash_equals( $live_hash, $after_hash ) ) {
@@ -199,7 +225,20 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 
 		$persisted = self::persist( $part, (string) $before['content'] );
 
-		return is_wp_error( $persisted ) ? $persisted : [ 'result' => 'undone' ];
+		if ( is_wp_error( $persisted ) ) {
+			return $persisted;
+		}
+
+		$persisted_content = self::resolve_persisted_content( $persisted );
+
+		if ( is_wp_error( $persisted_content ) ) {
+			return $persisted_content;
+		}
+
+		return [
+			'result' => 'undone',
+			'after'  => [ 'content' => $persisted_content ],
+		];
 	}
 
 	/**
@@ -371,6 +410,20 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		self::invalidate_part_cache( (int) $post_id );
 
 		return (int) $post_id;
+	}
+
+	private static function resolve_persisted_content( int $post_id ): string|\WP_Error {
+		$post = $post_id > 0 && function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+
+		if ( ! is_object( $post ) || 'wp_template_part' !== (string) ( $post->post_type ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_post_write_read_failed',
+				'Flavor Agent wrote the template part but could not confirm its persisted content.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		return (string) ( $post->post_content ?? '' );
 	}
 
 	/**

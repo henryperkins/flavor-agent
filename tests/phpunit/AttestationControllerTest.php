@@ -117,12 +117,46 @@ final class AttestationControllerTest extends TestCase {
 		$this->assertSame( BlockContentCanonicalizer::digest( $content ), $data['subject_digest'] );
 	}
 
+	public function test_template_part_subject_state_does_not_fallback_to_the_same_slug_in_another_theme(): void {
+		$attested_content = '<!-- wp:paragraph --><p>Attested header</p><!-- /wp:paragraph -->';
+		$other_content    = '<!-- wp:paragraph --><p>Other header</p><!-- /wp:paragraph -->';
+		$id               = $this->record_template_apply( 'template-part', self::PART_REF, $attested_content );
+
+		WordPressTestState::$active_theme = [ 'stylesheet' => 'twentytwentysix' ];
+		$this->seed_template( 'wp_template_part', 'twentytwentysix//header', $other_content, 'header' );
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id . '/subject-state' );
+		$request->set_param( 'id', $id );
+
+		$response = ( new AttestationController() )->get_subject_state( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( [ 'error' => 'subject_unavailable' ], $response->get_data() );
+	}
+
 	public function test_template_subject_state_returns_409_when_the_template_was_deleted(): void {
 		$content = '<!-- wp:paragraph --><p>Deleted</p><!-- /wp:paragraph -->';
 		$this->seed_template( 'wp_template', self::TEMPLATE_REF, $content, 'home' );
 		$id = $this->record_template_apply( 'template', self::TEMPLATE_REF, $content );
 
 		WordPressTestState::$block_templates['wp_template'] = [];
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id . '/subject-state' );
+		$request->set_param( 'id', $id );
+
+		$response = ( new AttestationController() )->get_subject_state( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( [ 'error' => 'subject_unavailable' ], $response->get_data() );
+	}
+
+	public function test_template_subject_state_does_not_fallback_to_the_same_slug_in_another_theme(): void {
+		$attested_content = '<!-- wp:paragraph --><p>Attested theme</p><!-- /wp:paragraph -->';
+		$other_content    = '<!-- wp:paragraph --><p>Other theme</p><!-- /wp:paragraph -->';
+		$id               = $this->record_template_apply( 'template', self::TEMPLATE_REF, $attested_content );
+
+		WordPressTestState::$active_theme = [ 'stylesheet' => 'twentytwentysix' ];
+		$this->seed_template( 'wp_template', 'twentytwentysix//home', $other_content, 'home' );
 
 		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id . '/subject-state' );
 		$request->set_param( 'id', $id );

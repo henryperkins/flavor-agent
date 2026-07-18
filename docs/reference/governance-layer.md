@@ -15,7 +15,7 @@ Flavor Agent lets AI work on a live WordPress site without unchecked control. Ev
 
 Public shorthand: AI proposes. WordPress approves. Operations are bounded, structural/theme changes are reviewed, applies are recorded server-side, and undo is drift-safe.
 
-Attest shorthand: WordPress is pursuing artifact provenance through C2PA; Flavor Agent owns **governed-change attestation** only for its `external-style-apply-v1` lane. That lane is the WordPress-approved external Global Styles / Style Book mutation path: a pending external style apply is approved in `Settings > AI Activity`, executed through Flavor Agent's bounded server-side style executor, and signed against the resulting style subject digest. That is deliberately narrower than general AI governance attestation and deliberately different from C2PA content credentials.
+Attest shorthand: WordPress is pursuing artifact provenance through C2PA; Flavor Agent owns **governed-change attestation** for three WordPress-approved external mutation lanes: `external-style-apply-v1`, `external-template-apply-v1`, and `external-template-part-apply-v1`. A pending apply is approved in `Settings > AI Activity`, executed through its bounded server-side executor, and signed against the resulting lane-specific subject digest. Post-blocks remains excluded because its potentially non-public content has no safe public subject-state contract. This boundary is deliberately narrower than general AI governance attestation and deliberately different from C2PA content credentials.
 
 ## Vocabulary Map
 
@@ -27,7 +27,7 @@ The thesis uses positioning vocabulary; the code uses freshness/signature vocabu
 | Review gate | Review-context signature plus the review-before-apply UI plus the pending-decision path for external applies | `inc/Support/RecommendationReviewSignature.php`; `src/components/AIReviewSection.js` + `src/inspector/block-review-state.js`; `POST /flavor-agent/v1/activity/{id}/decision` |
 | Bounded schemas / bounded operations | Strict response schemas plus operation validators plus execution contracts | `inc/LLM/ResponseSchema.php`; `inc/Context/BlockOperationValidator.php` + `inc/Context/BlockRecommendationExecutionContract.php`; template/template-part and style operation vocabularies |
 | Attribution | Server-side activity rows plus request tracing | `inc/Activity/Repository.php` and the `request_diagnostic` rows emitted by `inc/Abilities/RecommendationAbilityExecution.php`; `inc/Support/RequestTrace.php` |
-| Governed-change attestation | A signed, durable assertion over a reviewed external style apply, its public-safe operations, and the digest of the state FA produced; self-signed by the site's configured key, not a third-party identity credential | `inc/Attestation/*`; `GET /flavor-agent/v1/attestations/{id}`; `GET /flavor-agent/v1/attestations/keys`; `GET /flavor-agent/v1/attestations/{id}/subject-state`; `wp flavor-agent attestation verify` |
+| Governed-change attestation | A signed, durable assertion over a reviewed external style, template, or template-part apply, its public-safe operations, and the digest of the state FA produced; self-signed by the site's configured key, not a third-party identity credential | `inc/Attestation/*`; `GET /flavor-agent/v1/attestations/{id}`; `GET /flavor-agent/v1/attestations/keys`; `GET /flavor-agent/v1/attestations/{id}/subject-state`; `wp flavor-agent attestation verify` |
 
 ## The Governed Loop
 
@@ -88,13 +88,13 @@ Tested by: `tests/phpunit/RecommendationAbilityExecutionTest.php`, `ActivityRepo
 
 ### Attested
 
-**Guarantee:** an attested external Global Styles / Style Book apply produces a durable, public-safe, site-key-signed governed-change statement that can be verified outside wp-admin. The statement binds the approval, bounded operations, before/after digests, public key id, and optional revert/supersede chain. It also freezes Flavor Agent's owned attestation lane as `external-style-apply-v1` so the claim cannot blur into general AI governance. This is tamper-evident self-attestation rooted in the site's published key, not C2PA emission, third-party identity, or a transparency log.
+**Guarantee:** an attested external Global Styles, Style Book, template, or template-part apply produces a durable, public-safe, site-key-signed governed-change statement that can be verified outside wp-admin. The statement binds the approval, lane-specific bounded operations, before/after digests, public key id, and optional revert/supersede chain. Flavor Agent names each owned boundary explicitly as `external-style-apply-v1`, `external-template-apply-v1`, or `external-template-part-apply-v1` so the claim cannot blur into general AI governance. This is tamper-evident self-attestation rooted in the site's published key, not C2PA emission, third-party identity, or a transparency log.
 
 Owned claim, precisely:
 
-- WordPress approved a pending external Global Styles or Style Book apply in `Settings > AI Activity`.
-- Flavor Agent executed the bounded style operation set server-side for that request.
-- The resulting style subject hashed to the signed digest at attestation time.
+- WordPress approved a pending external style, template, or template-part apply in `Settings > AI Activity`.
+- Flavor Agent executed that lane's bounded operation set server-side for the request.
+- The resulting canonical style or block-content subject hashed to the signed digest at attestation time.
 - Later verification can show that subject as intact, changed, reverted, or superseded.
 
 Not claimed by this attestation:
@@ -106,15 +106,16 @@ Not claimed by this attestation:
 Enforced by:
 
 - `inc/Attestation/Canonicalizer.php` — canonical Global Styles / Style Book subject serialization and digest computation
+- `inc/Attestation/BlockContentCanonicalizer.php` — canonical template / template-part block serialization and digest computation, shared with executor drift checks
 - `inc/Attestation/StatementBuilder.php` — public-safe in-toto statement builder and allowlist boundary
 - `inc/Attestation/Signer.php` + `inc/Attestation/KeyManager.php` — Ed25519 signing and published key registry support
 - `inc/Attestation/Repository.php` — append-only, activity-retention-independent attestation rows and revert/supersede lookup
-- `inc/Attestation/AttestationService.php` — records the attestation after an approved external style apply succeeds
+- `inc/Attestation/AttestationService.php` — records attestations after approved applies and chained undos in each registered attestation lane
 - `inc/REST/AttestationController.php` — unauthenticated envelope, verification-summary, keys, and subject-state routes for external verification
 - `inc/CLI/AttestationCommand.php` and `tools/attestation-verify.php` — local and stranger-facing verifiers that report signature, live-state, revert, and supersession outcomes
 - `src/admin/activity-log.js` — AI Activity detail affordances for the site-run verification summary, raw public endpoint links, and attestation chain context
 
-Tested by: `tests/phpunit/AttestationCanonicalizerTest.php`, `AttestationStatementBuilderTest.php`, `AttestationSignerTest.php`, `AttestationKeyManagerTest.php`, `AttestationRepositoryTest.php`, `AttestationServiceTest.php`, `AttestationControllerTest.php`, `AttestationVerifierTest.php`, `AttestationCommandTest.php`, `AttestationRemoteVerifierTest.php`, plus admin projection coverage in `ActivitySerializerTest.php`, `ActivityRepositoryTest.php`, and `src/admin/__tests__/activity-log.test.js`.
+Tested by: `tests/phpunit/AttestationCanonicalizerTest.php`, `BlockContentCanonicalizerTest.php`, `AttestationStatementBuilderTest.php`, `AttestationSignerTest.php`, `AttestationKeyManagerTest.php`, `AttestationRepositoryTest.php`, `AttestationServiceTest.php`, `AttestationControllerTest.php`, `AttestationVerifierTest.php`, `AttestationCommandTest.php`, `AttestationRemoteVerifierTest.php`, `ExternalApplyLifecycleTest.php`, and `ApplyAbilitiesTest.php`, plus admin projection coverage in `ActivitySerializerTest.php`, `ActivityRepositoryTest.php`, and `src/admin/__tests__/activity-log.test.js`.
 
 ### Reversible
 
@@ -202,7 +203,7 @@ Flavor Agent should treat those as the **outer policy plane**. When those upstre
 
 This document owns the **inner mutation-governance contract**: for changes Flavor Agent mediates, the plugin still has to bound the operation, gather the right context, expose a review gate when the operation is structural or theme-level, attribute the request and apply, verify freshness before execution, and block unsafe undo after drift. Core can decide whether a plugin may use AI; Flavor Agent still decides whether a proposed block/template/style mutation is safe to apply to the current document.
 
-The same split applies to Attest. Upstream C2PA text/image provenance work can attest artifact provenance facts such as publisher identity, creation/editing, and ingredient history. Request logs, service accounts, visual revisions, and Site Agent concepts provide evidence and identity primitives. They do not yet define a general AI-governance attestation workflow. Flavor Agent's attestation lane is therefore the governed-change assertion it can prove locally: a specific FA-mediated mutation on the `external-style-apply-v1` lane was requested, reviewed by WordPress, applied through a bounded executor, signed against the resulting state, and later verified as intact, changed, reverted, or superseded. The wp-admin verification affordance is a convenience summary served by the site; independent verification remains the standalone HTTP verifier against the public envelope, keys, and subject-state endpoints.
+The same split applies to Attest. Upstream C2PA text/image provenance work can attest artifact provenance facts such as publisher identity, creation/editing, and ingredient history. Request logs, service accounts, visual revisions, and Site Agent concepts provide evidence and identity primitives. They do not yet define a general AI-governance attestation workflow. Flavor Agent's attestation boundary is therefore the governed-change assertion it can prove locally: a specific FA-mediated mutation on the `external-style-apply-v1`, `external-template-apply-v1`, or `external-template-part-apply-v1` lane was requested, reviewed by WordPress, applied through its bounded executor, signed against the resulting state, and later verified as intact, changed, reverted, or superseded. The wp-admin verification affordance is a convenience summary served by the site; independent verification remains the standalone HTTP verifier against the public envelope, keys, and subject-state endpoints.
 
 That split is intentional product positioning. The upstream Site Agent / AI Workspace direction, now with Agents API as a named substrate candidate, validates the external-agent path, but it does not make approval an agent capability. AI can propose actions through abilities and MCP; WordPress holds the human approval decision in `Settings > AI Activity` for Flavor Agent-owned external applies. If Flavor Agent later integrates with Agents API, it should feature-detect `wp_register_agent()` / `wp_agents_api_init` and keep product UX plus mutation apply/approve/undo policy local.
 

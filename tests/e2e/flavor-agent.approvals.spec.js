@@ -8,6 +8,9 @@ const ACTIVITY_PAGE =
 	'/wp-admin/options-general.php?page=flavor-agent-activity';
 const TEMPLATE_APPLY_TITLE = 'External: append the query pattern to Home';
 const TEMPLATE_PATTERN_NAME = 'core/query-standard-posts';
+let originalAttestationKey = '';
+let hadOriginalAttestationKey = false;
+let attestationKeyConfigured = false;
 
 // End-to-end coverage of the human approval gate. Unlike the route-mocked
 // Playground activity specs, this one runs against the real repository and
@@ -72,6 +75,24 @@ $GLOBALS['wpdb']->query( "TRUNCATE TABLE {$table_name}" );
 }
 
 function configureAttestationKey() {
+	if ( ! attestationKeyConfigured ) {
+		const current = runWpCli(
+			wp70Harness,
+			[
+				'config',
+				'get',
+				'FLAVOR_AGENT_ATTEST_PRIVATE_KEY',
+				'--type=constant',
+			],
+			{ allowFailure: true }
+		);
+
+		hadOriginalAttestationKey = current.status === 0;
+		originalAttestationKey = hadOriginalAttestationKey
+			? current.stdout.trim()
+			: '';
+	}
+
 	const generated = runWpCli( wp70Harness, [
 		'eval',
 		"echo base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_seed_keypair( str_repeat( 'a', SODIUM_CRYPTO_SIGN_SEEDBYTES ) ) ) );",
@@ -90,6 +111,36 @@ function configureAttestationKey() {
 		generated,
 		'--type=constant',
 	] );
+	attestationKeyConfigured = true;
+}
+
+function restoreAttestationKey() {
+	if ( ! attestationKeyConfigured ) {
+		return;
+	}
+
+	if ( hadOriginalAttestationKey ) {
+		runWpCli( wp70Harness, [
+			'config',
+			'set',
+			'FLAVOR_AGENT_ATTEST_PRIVATE_KEY',
+			originalAttestationKey,
+			'--type=constant',
+		] );
+	} else {
+		runWpCli(
+			wp70Harness,
+			[
+				'config',
+				'delete',
+				'FLAVOR_AGENT_ATTEST_PRIVATE_KEY',
+				'--type=constant',
+			],
+			{ allowFailure: true }
+		);
+	}
+
+	attestationKeyConfigured = false;
 }
 
 function seedPendingTemplateApply( id ) {
@@ -187,6 +238,10 @@ async function openSeededExternalApply(
 }
 
 test.describe( 'external apply approvals', () => {
+	test.afterAll( () => {
+		restoreAttestationKey();
+	} );
+
 	test( '@wp70-site-editor pending external applies appear and can be rejected with a note', async ( {
 		page,
 	} ) => {

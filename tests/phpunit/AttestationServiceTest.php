@@ -170,8 +170,15 @@ final class AttestationServiceTest extends TestCase {
 		$context['templateRef']       = 'twentytwentyfive//header';
 		$context['operations']        = [
 			[
-				'type'       => 'remove_block',
-				'targetPath' => [ 0 ],
+				'type'              => 'remove_block',
+				'expectedBlockName' => 'core/paragraph',
+				'expectedTarget'    => [
+					'name'       => 'core/paragraph',
+					'label'      => 'Paragraph',
+					'attributes' => [],
+					'childCount' => 0,
+				],
+				'targetPath'        => [ 0 ],
 			],
 		];
 		$context['after']             = [ 'content' => '' ];
@@ -252,8 +259,14 @@ final class AttestationServiceTest extends TestCase {
 			'blockName'          => '',
 			'operations'         => [
 				[
-					'path'  => [ 'color', 'background' ],
-					'value' => 'var:preset|color|parchment-100',
+					'type'       => 'set_styles',
+					'blockName'  => '',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|parchment-100',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'parchment-100',
+					'cssVar'     => 'var(--wp--preset--color--parchment-100)',
 				],
 			],
 			'before'             => [

@@ -152,7 +152,7 @@ final class AttestationController {
 			return self::subject_unavailable_response();
 		}
 
-		$content = TemplateApplyExecutor::resolve_live_content( $ref );
+		$content = TemplateApplyExecutor::resolve_attested_content( $ref );
 
 		if ( is_wp_error( $content ) ) {
 			return self::subject_unavailable_response();
@@ -174,7 +174,7 @@ final class AttestationController {
 			return self::subject_unavailable_response();
 		}
 
-		$content = TemplatePartApplyExecutor::resolve_live_content( $ref );
+		$content = TemplatePartApplyExecutor::resolve_attested_content( $ref );
 
 		if ( is_wp_error( $content ) ) {
 			return self::subject_unavailable_response();
