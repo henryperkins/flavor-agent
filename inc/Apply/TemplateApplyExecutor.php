@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Apply;
 
+use FlavorAgent\Attestation\BlockContentCanonicalizer;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\TemplatePrompt;
 
@@ -13,7 +14,7 @@ use FlavorAgent\LLM\TemplatePrompt;
  * Mirrors StyleApplyExecutor: read the live template, re-validate operations and
  * expectedTarget fingerprints, mutate the parsed block tree atomically through
  * BlockTreeMutator, persist via core post APIs, and snapshot before/after
- * post_content. No attestation. See
+ * post_content. See
  * docs/superpowers/specs/2026-06-28-wp-template-external-apply-executor-design.md.
  *
  * `undo()` re-resolves the live template and restores the before snapshot under the
@@ -117,6 +118,12 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			return $persisted;
 		}
 
+		$persisted_content = self::resolve_persisted_content( $persisted );
+
+		if ( is_wp_error( $persisted_content ) ) {
+			return $persisted_content;
+		}
+
 		return [
 			'target' => [
 				'templateRef'  => (string) ( $template->id ?? $ref ),
@@ -126,7 +133,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			],
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
-				'content'    => $after_content,
+				'content'    => $persisted_content,
 				'operations' => $executable_operations,
 			],
 		];
@@ -139,11 +146,39 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 * @param array<string, mixed> $entry
 	 */
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
-		$template = self::resolve_template( self::template_ref( $entry ) );
+		$content = self::resolve_live_content( self::template_ref( $entry ) );
+
+		return is_wp_error( $content )
+			? $content
+			: self::content_hash( $content );
+	}
+
+	/**
+	 * Resolve the live template content for public subject-state verification.
+	 */
+	public static function resolve_live_content( string $ref ): string|\WP_Error {
+		$template = self::resolve_template( $ref );
 
 		return is_wp_error( $template )
 			? $template
-			: self::content_hash( (string) ( $template->content ?? '' ) );
+			: (string) ( $template->content ?? '' );
+	}
+
+	/**
+	 * Resolve the exact theme-qualified subject for public attestation checks.
+	 */
+	public static function resolve_attested_content( string $ref ): string|\WP_Error {
+		$template = ServerCollector::resolve_template_for_attestation( $ref );
+
+		if ( ! is_object( $template ) ) {
+			return new \WP_Error(
+				'flavor_agent_attestation_subject_unavailable',
+				'The attested template is not available under its exact theme-qualified id.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return (string) ( $template->content ?? '' );
 	}
 
 	/**
@@ -154,7 +189,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 * insignificant serialization differences never read as drift.
 	 *
 	 * @param array<string, mixed> $entry Hydrated activity entry.
-	 * @return array{result: string}|\WP_Error
+	 * @return array{result: string, after: array{content: string}}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
 		$ref      = self::template_ref( $entry );
@@ -180,7 +215,10 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 		$after_hash  = self::content_hash( (string) $after['content'] );
 
 		if ( hash_equals( $live_hash, $before_hash ) ) {
-			return [ 'result' => 'already_undone' ];
+			return [
+				'result' => 'already_undone',
+				'after'  => [ 'content' => (string) ( $template->content ?? '' ) ],
+			];
 		}
 
 		if ( ! hash_equals( $live_hash, $after_hash ) ) {
@@ -199,7 +237,20 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 
 		$persisted = self::persist( $fresh, (string) $before['content'] );
 
-		return is_wp_error( $persisted ) ? $persisted : [ 'result' => 'undone' ];
+		if ( is_wp_error( $persisted ) ) {
+			return $persisted;
+		}
+
+		$persisted_content = self::resolve_persisted_content( $persisted );
+
+		if ( is_wp_error( $persisted_content ) ) {
+			return $persisted_content;
+		}
+
+		return [
+			'result' => 'undone',
+			'after'  => [ 'content' => $persisted_content ],
+		];
 	}
 
 	/**
@@ -246,7 +297,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	}
 
 	private static function content_hash( string $content ): string {
-		return hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) );
+		return BlockContentCanonicalizer::digest( $content );
 	}
 
 	/**
@@ -413,6 +464,20 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 		self::invalidate_template_cache( (int) $post_id );
 
 		return (int) $post_id;
+	}
+
+	private static function resolve_persisted_content( int $post_id ): string|\WP_Error {
+		$post = $post_id > 0 && function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+
+		if ( ! is_object( $post ) || 'wp_template' !== (string) ( $post->post_type ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_post_write_read_failed',
+				'Flavor Agent wrote the template but could not confirm its persisted content.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		return (string) ( $post->post_content ?? '' );
 	}
 
 	/**

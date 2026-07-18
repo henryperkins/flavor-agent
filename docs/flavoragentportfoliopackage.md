@@ -14,33 +14,33 @@ Flavor Agent is a WordPress plugin that lets AI work on a live site without unch
 
 The user experience stays inside WordPress instead of becoming a separate chatbot. Flavor Agent appears in native Gutenberg and wp-admin surfaces: Block Inspector recommendations, pattern inserter ranking, content recommendations, navigation guidance, template and template-part recommendations, Global Styles, Style Book, and `Settings > AI Activity`.
 
-The programmatic layer exposes the same governance model through the WordPress Abilities API and MCP. The registry defines **32 ability contracts**: seven recommendation abilities, five signature-only preview/preflight abilities, fourteen helper/search/infra abilities, and six governed external-apply abilities.
+The programmatic layer exposes the same governance model through the WordPress Abilities API and MCP. The registry defines **35 ability contracts**: eight recommendation abilities, six signature-only preview/preflight abilities, fourteen helper/search/infra abilities, and seven governed external-apply abilities.
 
 **Proof points**
 
 - **8 first-party recommendation surfaces** plus one admin approval/audit surface.
-- **32 defined Ability contracts**, reconciled by category:
+- **35 defined Ability contracts**, reconciled by category:
 
 | Category                                   |  Count |
 | ------------------------------------------ | -----: |
-| Recommendation abilities                   |      7 |
-| Preview / preflight abilities              |      5 |
+| Recommendation abilities                   |      8 |
+| Preview / preflight abilities              |      6 |
 | Public read / helper abilities             |     10 |
 | Abilities-API-only helper / read abilities |      3 |
 | Docs-search ability                        |      1 |
-| Governed external-apply abilities          |      6 |
-| **Total**                                  | **32** |
+| Governed external-apply abilities          |      7 |
+| **Total**                                  | **35** |
 
 Of the fourteen helper/search/infra contracts, ten are public read helpers exposed through the universal MCP discovery path; three (`list-synced-patterns`, `get-synced-pattern`, `check-status`) stay Abilities-API-only; and `search-wordpress-docs` is a separate `manage_options` docs-search tool.
 
-- **Governed external style applies:** agents can request Global Styles / Style Book changes, but only admins approve or reject them.
+- **Governed external applies:** agents can request style, template, template-part, or post-blocks changes, but only admins approve or reject them.
 - **Server-backed audit and undo:** activity rows store provenance, request metadata, before/after state, undo state, and admin projection fields.
-- **Self-signed attestation layer:** approved external style applies can emit tamper-evident site-key statements, public key material, live subject-state checks, and chained revert attestations when a signing key is configured.
-- **Verification evidence:** latest recorded successful non-browser run with Plugin Check green is 2026-06-21 (`node scripts/verify.js --skip-e2e`, build, JS lint, Plugin Check, JS unit, PHP lint, and 1,567 PHP tests green); current local fast-loop artifact in this checkout, generated 2026-06-23, is `pass` for a non-browser run with Plugin Check and E2E intentionally skipped (`--skip=lint-plugin --skip-e2e`) and records 1,570 JS unit tests plus 1,628 PHP tests passing.
+- **Self-signed attestation layer:** approved external style, template, and template-part applies can emit tamper-evident site-key statements, public key material, live subject-state checks, and chained revert attestations when a signing key is configured. Post-blocks remains excluded pending a public-safe subject design.
+- **Verification evidence:** `npm run verify -- --skip-e2e` recorded `pass` on 2026-07-18 with build, JS lint, Plugin Check, 1,644 JS tests, PHP lint, and 1,827 PHP tests / 8,335 assertions green. The targeted WP 7.0 approval spec passed 4/4, and its real template attestation returned `signature_valid` plus `live_matches_subject` with the live digest equal to the signed after digest.
 
 **Ethics / governance note**
 
-The main risk is overconfident AI mutating a publishing system. Flavor Agent mitigates that by bounding operations, review-gating structural/theme changes, attributing every request/apply, enforcing freshness checks, optionally emitting signed site-key attestations for governed external style applies, and blocking undo when the site has drifted.
+The main risk is overconfident AI mutating a publishing system. Flavor Agent mitigates that by bounding operations, review-gating structural/theme changes, attributing every request/apply, enforcing freshness checks, optionally emitting signed site-key attestations for governed external style, template, and template-part applies, and blocking undo when the site has drifted.
 
 > Agent governance isn't a WordPress-shaped problem — any system that lets AI act on live state needs the same guarantees: bounded operations, gated review, attribution, provable rollback. I built the layer on WordPress because that's where my depth is; the pattern is portable.
 
@@ -64,7 +64,7 @@ Build a WordPress-native AI system that can:
 4. Record AI actions server-side with provenance.
 5. Reverse changes only when the live state still matches the recorded post-apply state.
 6. Expose safe programmatic contracts to external agents through Abilities API and MCP.
-7. Emit self-signed public attestations for approved external style applies when a site signing key is configured.
+7. Emit self-signed public attestations for approved external style, template, and template-part applies when a site signing key is configured.
 
 ### Approach
 
@@ -78,7 +78,7 @@ Flavor Agent uses one governed loop for executable recommendations.
 
 **Apply and record.** Applies owned by Flavor Agent write server-backed activity rows with request metadata, before/after state, undo state, document scope, and admin projection fields for filtering.
 
-**Attest.** Approved external Global Styles / Style Book applies can produce an in-toto-style statement over the applied operations, before/after digests, actor role, decision timing, and related activity id. The statement is signed with the site's configured Ed25519 key, stored in a retention-independent attestation table, and exposed with public verification routes. No key means no attestation, never a fake placeholder.
+**Attest.** Approved external Global Styles, Style Book, template, and template-part applies can produce an in-toto-style statement over the public-safe applied operations, before/after digests, actor role, decision timing, and related activity id. The statement is signed with the site's configured Ed25519 key, stored in a retention-independent attestation table, and exposed with public verification routes. No key means no attestation, never a fake placeholder. Post-blocks remains deliberately un-attested because its potentially non-public content has no safe public subject-state contract.
 
 **Reverse.** Undo checks whether the live document still matches the recorded post-apply state. If the site changed after Flavor Agent acted, undo fails closed instead of clobbering human edits.
 
@@ -96,21 +96,21 @@ Flavor Agent currently demonstrates this governance layer across:
 - Style Book recommendations.
 - `Settings > AI Activity` approval/audit page.
 
-The boundaries are explicit. Content is editorial-only, pattern recommendations are browse/rank-first, navigation is advisory-only, and external-agent applies are limited to Global Styles / Style Book in this release.
+The boundaries are explicit. Content is editorial-only, pattern recommendations are browse/rank-first, navigation is advisory-only, and governed external-agent applies are limited to style, template, template-part, and post-blocks operations with admin-only approval.
 
 ### Programmatic surface
 
-The registry defines 32 Abilities API contracts. The first-party UI executes recommendation abilities through the WordPress Abilities API, while REST remains for activity creation, admin decisions, undo transitions, and manual pattern sync.
+The registry defines 35 Abilities API contracts. The first-party UI executes recommendation abilities through the WordPress Abilities API, while REST remains for activity creation, admin decisions, claim coordination, undo transitions, manual pattern sync, and public attestation reads.
 
-The dedicated MCP server exposes the seven recommendation abilities and six external-apply abilities as direct tools. Ten read helpers are public through the universal MCP discovery path; three helper/read contracts stay Abilities-API-only because they expose synced-pattern or backend inventory details. The default MCP/Abilities path keeps preview and helper abilities available for safer preflight and discovery.
+The dedicated MCP server exposes the eight recommendation abilities and seven external-apply abilities as direct tools. Ten read helpers are public through the universal MCP discovery path; three helper/read contracts stay Abilities-API-only because they expose synced-pattern or backend inventory details. The default MCP/Abilities path keeps preview and helper abilities available for safer preflight and discovery.
 
 ### External-agent governance
 
-External agents can request a governed style apply, read status/attribution, list scoped activity, and undo executed style rows. Approval is deliberately **not** exposed as an ability. The admin decision stays in `Settings > AI Activity`, guarded by `manage_options` and the row's contextual mutation capability.
+External agents can request governed style, template, template-part, or post-blocks applies, read status/attribution, list scoped activity, and undo executed rows. Approval is deliberately **not** exposed as an ability. The admin decision stays in `Settings > AI Activity`, guarded by `manage_options` and the row's contextual mutation capability.
 
-The decision service performs a second freshness check at approval time. If the Global Styles entity changed after the request was created, approval fails closed rather than applying stale operations.
+The decision service performs a second freshness check at approval time. If the target entity changed after the request was created, approval fails closed rather than applying stale operations.
 
-When `FLAVOR_AGENT_ATTEST_PRIVATE_KEY` or the `flavor_agent_attest_private_key` filter provides an Ed25519 secret key, approved external style applies create a companion attestation row. Public routes expose `/attestations/{id}`, `/attestations/keys`, and `/attestations/{id}/subject-state`; the verifier checks signature integrity and whether the live subject still matches the attested digest. The admin detail view can run a site-served verification summary for convenience, while independent verification is performed with `php tools/attestation-verify.php <baseUrl> <attestationId>` against the public envelope, key, and subject-state endpoints. If an attested style row is undone, Flavor Agent can record a chained revert attestation that points back to the prior attestation id.
+When `FLAVOR_AGENT_ATTEST_PRIVATE_KEY` or the `flavor_agent_attest_private_key` filter provides an Ed25519 secret key, approved external style, template, and template-part applies create companion attestation rows. Public routes expose `/attestations/{id}`, `/attestations/{id}/verification`, `/attestations/keys`, and `/attestations/{id}/subject-state`; the verifier checks signature integrity and whether the lane-specific live subject still matches the attested digest. The admin detail view can run a site-served verification summary for convenience, while independent verification is performed with `php tools/attestation-verify.php <baseUrl> <attestationId>` against the public envelope, key, and subject-state endpoints. Undoing an attested row can record a chained revert attestation that points back to the prior attestation id. Post-blocks remains outside this public proof boundary.
 
 ### Ranking and feedback loop
 
@@ -124,13 +124,11 @@ Outcome diagnostics track recommendation events such as `shown`, `selected_for_r
 
 The repo records meaningful engineering evidence rather than adoption metrics.
 
-Latest recorded successful non-browser evidence: `node scripts/verify.js --skip-e2e` passed on **2026-06-21**, with build, JS lint, Plugin Check, JS unit, PHP lint, and PHPUnit green. That run recorded **1,567 PHP tests** passing.
+Current non-browser evidence: `npm run verify -- --skip-e2e` generated `output/verify/summary.json` with status `pass` on **2026-07-18**. Build, JS lint, Plugin Check, JS unit, PHP lint, and PHPUnit all passed; the recorded counts are **109 JS suites / 1,644 tests** and **1,827 PHP tests / 8,335 assertions**. The docs and both E2E suites were intentionally outside that aggregate command.
 
-Current local non-browser artifact: `output/verify/summary.json` generated on **2026-06-23** is `pass` for a fast non-browser loop with Plugin Check and both E2E suites intentionally skipped (`--skip=lint-plugin --skip-e2e`). In that artifact, build, JS lint, JS unit, PHP lint, and PHPUnit passed; the recorded test counts are **1,570 JS unit tests** and **1,628 PHP tests** passing.
+Current targeted attestation evidence: the cross-surface PHPUnit target passed **213 tests / 874 assertions**, the AI Activity helper Jest target passed **75 tests**, and `npm run check:docs` passed on **2026-07-18**.
 
-Latest targeted attestation evidence: `vendor/bin/phpunit --filter Attestation` passed on **2026-06-22**. The exact test/assertion totals are intentionally omitted here because the targeted suite changes as attestation coverage grows.
-
-Latest targeted browser governance evidence: `npm run test:e2e:playground -- tests/e2e/flavor-agent.activity.spec.js` and `npm run test:e2e:wp70 -- tests/e2e/flavor-agent.approvals.spec.js` passed on **2026-06-24**, covering the rich visual diff viewer on the mocked admin page plus reject-with-note and fail-closed approval behavior on the real WP70 harness (`4` + `3` tests).
+Current targeted browser governance evidence: `npm run test:e2e:wp70 -- tests/e2e/flavor-agent.approvals.spec.js` passed **4/4** on **2026-07-18**, covering reject-with-note, fail-closed drift, and real template-attestation approval. The resulting public verification response reported `signature_valid` and `live_matches_subject`; the live subject digest exactly matched the signed after digest, and the spec removed its temporary signing key afterward.
 
 Latest full recorded browser-suite evidence is historical: Playground passed across two isolated full-suite runs on **2026-06-11**, and the Docker-backed WordPress 7.0 Site Editor suite passed on **2026-05-02** with `20 passed / 0 failed`. Full browser gates are re-run on the exact release commit before tagging.
 
@@ -138,9 +136,9 @@ Browser evidence is split intentionally: Playground covers fast post-editor smok
 
 ### Known limits
 
-Flavor Agent is a release-candidate project, not a production-scale observability product. The admin activity page is a first governance-console slice with external style-apply decisions, structured diff/before-after summaries, selected-row actions, and a first rich visual diff layer for style-governance rows, but broader cross-operator workflow and observability work remains open.
+Flavor Agent is a release-candidate project, not a production-scale observability product. The admin activity page is a first governance-console slice with external style, template, template-part, and post-blocks decisions, structured diff/before-after summaries, selected-row actions, and a first rich visual diff layer for style-governance rows, but broader cross-operator workflow and observability work remains open.
 
-Attestation v1 is self-signed site-key attestation scoped to governed external Global Styles / Style Book applies and their attested reverts. It is not C2PA, not third-party identity, and not a transparency log. No attestation is emitted unless the site has a valid signing key configured.
+Attestation v1 is self-signed site-key attestation scoped to governed external style, template, and template-part applies and their attested reverts. It is not C2PA, not third-party identity, and not a transparency log. No attestation is emitted unless the site has a valid signing key configured, and post-blocks remains excluded pending a public-safe subject design.
 
 The roadmap still includes broader audit/discovery, tighter audit metadata, cross-operator workflows, learning attribution, learning reports, fixture harvest, bounded local ranking feedback, and editable site preference summaries.
 
@@ -165,9 +163,9 @@ WordPress context → recommendation ability → schema validation → review ga
 
 - Native Gutenberg and Site Editor surfaces.
 - 8 recommendation surfaces.
-- 32 defined Abilities API contracts.
+- 35 defined Abilities API contracts.
 - Admin approval/audit page.
-- External agents can request style applies, but admins decide.
+- External agents can request governed style, template, template-part, and post-blocks applies, but admins decide.
 
 ### Slide 2 — Architecture
 
@@ -204,12 +202,12 @@ Editor / MCP client
 **Proof**
 
 - `0.1.0` release candidate / pre-tag.
-- 32 defined ability contracts.
+- 35 defined ability contracts.
 - Server-backed activity table.
-- Admin approval flow for external style applies.
-- Self-signed attestation layer for approved external style applies and attested reverts.
-- Latest fully recorded non-browser run with Plugin Check green (2026-06-21).
-- Current local fast-loop artifact (`output/verify/summary.json`) green (2026-06-23) with Plugin Check and E2E intentionally skipped (1,628 PHP tests).
+- Admin approval flow for external style, template, template-part, and post-blocks applies.
+- Self-signed attestation layer for approved external style, template, and template-part applies and attested reverts.
+- Current recorded non-browser run with Plugin Check green (2026-07-18): 1,644 JS tests and 1,827 PHP tests / 8,335 assertions.
+- Targeted WP 7.0 approval proof green (4/4), including a live template attestation that verifies as `signature_valid` + `live_matches_subject`.
 - Playground and WP 7.0 browser harness coverage.
 
 **Boundaries**
@@ -257,7 +255,7 @@ The key design principle is: AI proposes; WordPress approves.
 - Recommendation outcome diagnostics for shown, selected, blocked, failed, and inserted states.
 - WordPress Abilities API contracts for recommendations, previews, helpers, docs search, infra, and governed external apply.
 - MCP exposure for external agents, with admin-only approval retained in WordPress.
-- A self-signed attestation layer for approved external style applies, with public verification endpoints for signed statements, site keys, and live subject-state digests.
+- A self-signed attestation layer for approved external style, template, and template-part applies, with public verification endpoints for signed statements, site keys, and live subject-state digests; post-blocks remains excluded pending a public-safe subject design.
 
 ## Safety boundaries
 
@@ -293,7 +291,7 @@ If Plugin Check prerequisites are unavailable locally, `npm run verify -- --skip
 
 The same governance model an outside agent sees — verified end-to-end against a live site.
 
-1. **Discover.** `discover-abilities` on the universal default server returns the public MCP surface: ten read helpers, five signature-only `preview-recommend-*` dry runs, and the separate `search-wordpress-docs` tool (16 public abilities total). `get-ability-info` shows each contract's input/output schema. The seven `recommend-*` and six apply/activity tools live on the dedicated `flavor-agent` MCP server; neither server exposes an approve/decision tool — approval stays admin-only in wp-admin.
+1. **Discover.** `discover-abilities` on the universal default server returns the public MCP surface: ten read helpers, six signature-only `preview-recommend-*` dry runs, and the separate `search-wordpress-docs` tool (17 public abilities total). `get-ability-info` shows each contract's input/output schema. The eight `recommend-*` and seven apply/activity tools live on the dedicated `flavor-agent` MCP server; neither server exposes an approve/decision tool — approval stays admin-only in wp-admin.
 2. **Read.** `execute-ability` on a read-only ability (e.g. `get-active-theme`, or a `preview-recommend-*` signature preflight) executes without invoking the AI Connector.
 3. **Propose.** `recommend-style` returns a bounded, preset-backed operation plus review/apply freshness signatures, and records a diagnostic activity row.
 4. **Request.** `request-style-apply` with the operation, the live `currentConfig`, and those signatures creates a pending row and mutates nothing. Freshness is enforced on two gates — recomputed signatures and `currentConfig` equal to the live entity; stale input is rejected as drift (re-derive with `preview-recommend-style`).
@@ -317,7 +315,7 @@ Agent governance isn't a WordPress-shaped problem — any system that lets AI ac
 
 Built a WordPress plugin that lets AI propose site-editing changes without giving the model unchecked control. Flavor Agent integrates into native Gutenberg, Site Editor, and wp-admin surfaces, including block recommendations, pattern ranking, content suggestions, template/template-part recommendations, Global Styles, Style Book, navigation guidance, and `Settings > AI Activity`.
 
-The core work is a governed mutation loop: strict schemas, bounded operation validators, review gates for structural/theme changes, server-backed activity attribution, freshness checks, optional site-key attestation, and drift-safe undo. The registry defines 32 WordPress Ability contracts and exposes MCP tools for external agents while keeping approval admin-only inside WordPress.
+The core work is a governed mutation loop: strict schemas, bounded operation validators, review gates for structural/theme changes, server-backed activity attribution, freshness checks, optional site-key attestation, and drift-safe undo. The registry defines 35 WordPress Ability contracts and exposes MCP tools for external agents while keeping approval admin-only inside WordPress.
 
 **Highlights:** WordPress Abilities API, MCP, Ed25519 self-attestation, PHP 8.2, Gutenberg, Site Editor, `@wordpress/*` packages (React), DataViews, Playwright, PHPUnit, Jest. Optional retrieval/grounding infrastructure: Cloudflare AI Search, Cloudflare Workers AI, Qdrant.
 
@@ -326,10 +324,10 @@ The core work is a governed mutation loop: strict schemas, bounded operation val
 ## 6) Resume bullets
 
 - Built **Flavor Agent**, a WordPress governance layer for AI-mediated editing that routes recommendations through bounded schemas, review gates, server-side attribution, freshness checks, and drift-safe undo.
-- Implemented **31 WordPress Abilities API contracts** across recommendations, preview preflights, helper/read tools, docs search, infrastructure checks, and governed external style apply.
+- Implemented **35 WordPress Abilities API contracts** across recommendations, preview preflights, helper/read tools, docs search, infrastructure checks, and governed external apply.
 - Designed native Gutenberg/Site Editor surfaces for block, pattern, content, navigation, template, template-part, Global Styles, and Style Book recommendations.
-- Built `Settings > AI Activity`, a wp-admin approval/audit surface for external Global Styles / Style Book apply requests, provenance inspection, freshness evidence, and undo state.
-- Added a self-signed attestation layer for governed external style applies, exposing signed statements, public site keys, live subject-state digests, and chained revert attestations for independently checkable site-key proof.
+- Built `Settings > AI Activity`, a wp-admin approval/audit surface for external style, template, template-part, and post-blocks apply requests, provenance inspection, freshness evidence, and undo state.
+- Added a self-signed attestation layer for governed external style, template, and template-part applies, exposing signed statements, public site keys, live subject-state digests, and chained revert attestations for independently checkable site-key proof.
 - Added contextual ranking and outcome diagnostics so recommendations carry model, deterministic, and context score evidence plus events such as shown, selected for review, stale blocked, validation blocked, and inserted from shelf.
 - Maintained verification gates across JS build/lint/unit, PHP lint/PHPUnit, Plugin Check, docs freshness checks, Playground browser smoke tests, and Docker-backed WordPress 7.0 Site Editor tests.
 
@@ -354,4 +352,4 @@ Do **not** say:
 
 Say instead:
 
-> Flavor Agent is a WordPress-native governance layer for AI-mediated changes: bounded recommendations, review-gated mutation, server-side attribution, optional self-signed site-key attestation for governed external style applies, and drift-safe undo.
+> Flavor Agent is a WordPress-native governance layer for AI-mediated changes: bounded recommendations, review-gated mutation, server-side attribution, optional self-signed site-key attestation for governed external style, template, and template-part applies, and drift-safe undo.

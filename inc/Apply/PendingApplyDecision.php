@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace FlavorAgent\Apply;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Attestation\AttestationService;
 
 /**
  * Admin approval service for pending external applies. The human gate:
- * re-checks freshness against the live entity, executes through the style
- * executor on approve, and persists the one-row transition either way.
+ * re-checks freshness against the live entity, executes through the registered
+ * surface executor on approve, and persists the one-row transition either way.
  */
 final class PendingApplyDecision {
 
@@ -73,12 +74,9 @@ final class PendingApplyDecision {
 			);
 		}
 
-		$surface          = (string) ( $entry['surface'] ?? '' );
-		$target           = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
-		$global_styles_id = (string) ( $target['globalStylesId'] ?? '' );
-		$block_name       = (string) ( $target['blockName'] ?? '' );
-		$signatures       = is_array( $apply['signatures'] ?? null ) ? $apply['signatures'] : [];
-		$baseline         = (string) ( $signatures['baselineConfigHash'] ?? $signatures['baselineContentHash'] ?? '' );
+		$surface    = (string) ( $entry['surface'] ?? '' );
+		$signatures = is_array( $apply['signatures'] ?? null ) ? $apply['signatures'] : [];
+		$baseline   = (string) ( $signatures['baselineConfigHash'] ?? $signatures['baselineContentHash'] ?? '' );
 
 		$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
 
@@ -144,28 +142,33 @@ final class PendingApplyDecision {
 			);
 		}
 
-		// Attestation is hard-bounded to the external-style-apply-v1 lane. Only the
-		// style surfaces may reach AttestationService; template-part (and any future
-		// surface) applies record no attestation.
-		if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+		if ( AttestationService::surface_eligible( $surface ) ) {
 			try {
-				\FlavorAgent\Attestation\AttestationService::record_apply(
-					[
-						'surface'            => $surface,
-						'globalStylesId'     => $global_styles_id,
-						'blockName'          => $block_name,
-						'operations'         => is_array( $result['after']['operations'] ?? null ) ? $result['after']['operations'] : [],
-						'before'             => $result['before'],
-						'after'              => $result['after'],
-						'freshnessSignature' => $baseline,
-						'actorRole'          => self::actor_role( $decided_by ),
-						'requestedAt'        => (string) ( $apply['requestedAt'] ?? '' ),
-						'decidedAt'          => $decided_at,
-						'relatedActivityId'  => $activity_id,
-					]
-				);
+				$result_target       = is_array( $result['target'] ?? null ) ? $result['target'] : [];
+				$attestation_context = [
+					'surface'            => $surface,
+					'operations'         => is_array( $result['after']['operations'] ?? null ) ? $result['after']['operations'] : [],
+					'before'             => $result['before'],
+					'after'              => $result['after'],
+					'freshnessSignature' => $baseline,
+					'actorRole'          => self::actor_role( $decided_by ),
+					'requestedAt'        => (string) ( $apply['requestedAt'] ?? '' ),
+					'decidedAt'          => $decided_at,
+					'relatedActivityId'  => $activity_id,
+				];
+
+				if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+					$attestation_context['globalStylesId'] = (string) ( $result_target['globalStylesId'] ?? '' );
+					$attestation_context['blockName']      = (string) ( $result_target['blockName'] ?? '' );
+				} else {
+					$attestation_context['templateRef'] = 'template-part' === $surface
+						? (string) ( $result_target['templatePartRef'] ?? $result_target['templatePartId'] ?? '' )
+						: (string) ( $result_target['templateRef'] ?? '' );
+				}
+
+				AttestationService::record_apply( $attestation_context );
 			} catch ( \Throwable $e ) {
-				\FlavorAgent\Attestation\AttestationService::record_failure(
+				AttestationService::record_failure(
 					$e,
 					[
 						'operation'  => 'apply',

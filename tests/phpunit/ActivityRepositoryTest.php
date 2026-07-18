@@ -433,9 +433,9 @@ final class ActivityRepositoryTest extends TestCase {
 		AttestationRepository::insert(
 			[
 				'attestation_id'      => 'att_admin_page',
-				'surface'             => 'block',
-				'subject_name'        => 'post:42',
-				'subject_scope'       => 'block',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:81',
+				'subject_scope'       => 'global-styles',
 				'after_digest'        => str_repeat( 'a', 64 ),
 				'statement_bytes'     => '{}',
 				'signature_b64'       => 'sig',
@@ -446,9 +446,9 @@ final class ActivityRepositoryTest extends TestCase {
 		AttestationRepository::insert(
 			[
 				'attestation_id'            => 'att_successor',
-				'surface'                   => 'block',
-				'subject_name'              => 'post:42',
-				'subject_scope'             => 'block',
+				'surface'                   => 'global-styles',
+				'subject_name'              => 'wp_global_styles:81',
+				'subject_scope'             => 'global-styles',
 				'after_digest'              => str_repeat( 'b', 64 ),
 				'statement_bytes'           => '{}',
 				'signature_b64'             => 'sig',

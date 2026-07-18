@@ -316,6 +316,7 @@ final class Serializer {
 		$superseded_by     = self::normalize_nullable_string( $row['superseded_by_attestation_id'] ?? null );
 		$superseded_by_url = null;
 		$created_at_value  = self::normalize_string( $row['created_at'] ?? '' );
+		$surface           = self::normalize_string( $row['surface'] ?? '' );
 
 		if ( null !== $reverted_by && function_exists( 'rest_url' ) ) {
 			$reverted_by_url = \rest_url( 'flavor-agent/v1/attestations/' . rawurlencode( $reverted_by ) );
@@ -328,9 +329,9 @@ final class Serializer {
 		return [
 			'id'                        => $attestation_id,
 			'type'                      => null !== self::normalize_nullable_string( $row['reverts_attestation_id'] ?? null ) ? 'revert' : 'apply',
-			'surface'                   => self::normalize_string( $row['surface'] ?? '' ),
+			'surface'                   => $surface,
 			'governanceClaim'           => AttestationService::GOVERNANCE_CLAIM,
-			'governanceLane'            => AttestationService::GOVERNANCE_LANE,
+			'governanceLane'            => AttestationService::lane_for_surface( $surface ),
 			'subjectName'               => self::normalize_string( $row['subject_name'] ?? '' ),
 			'subjectScope'              => self::normalize_string( $row['subject_scope'] ?? '' ),
 			'keyId'                     => self::normalize_string( $row['key_id'] ?? '' ),

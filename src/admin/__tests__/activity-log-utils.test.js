@@ -11,6 +11,7 @@ import {
 	formatApplyClaimNotice,
 	formatStructuralOperationSummary,
 	getActivityStatusLabel,
+	getAttestationLaneLabel,
 	getExternalApplyDetails,
 	getGovernanceDetails,
 	getGovernancePlainSummary,
@@ -1402,6 +1403,23 @@ describe( 'external apply helpers', () => {
 		);
 		expect( getActivityStatusLabel( 'rejected' ) ).toBe( 'Rejected' );
 		expect( getActivityStatusLabel( 'expired' ) ).toBe( 'Expired' );
+	} );
+
+	test( 'attestation lane labels cover every public external-apply lane', () => {
+		expect( getAttestationLaneLabel( 'external-style-apply-v1' ) ).toBe(
+			'External style apply (external-style-apply-v1)'
+		);
+		expect( getAttestationLaneLabel( 'external-template-apply-v1' ) ).toBe(
+			'External template apply (external-template-apply-v1)'
+		);
+		expect(
+			getAttestationLaneLabel( 'external-template-part-apply-v1' )
+		).toBe(
+			'External template part apply (external-template-part-apply-v1)'
+		);
+		expect( getAttestationLaneLabel( 'future-lane-v1' ) ).toBe(
+			'future-lane-v1'
+		);
 	} );
 
 	test( 'status labels distinguish failed external applies from undo failures', () => {

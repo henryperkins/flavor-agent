@@ -16,6 +16,6 @@ interface ExternalApplyExecutor {
 	/** @return array{target: array<string,mixed>, before: array<string,mixed>, after: array<string,mixed>}|\WP_Error */
 	public static function execute( array $entry ): array|\WP_Error;
 
-	/** @return array{result: string}|\WP_Error */
+	/** @return array{result: string, after?: array<string, mixed>}|\WP_Error */
 	public static function undo( array $entry ): array|\WP_Error;
 }

@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace FlavorAgent\REST;
 
 use FlavorAgent\Apply\StyleApplyExecutor;
+use FlavorAgent\Apply\TemplateApplyExecutor;
+use FlavorAgent\Apply\TemplatePartApplyExecutor;
+use FlavorAgent\Attestation\BlockContentCanonicalizer;
 use FlavorAgent\Attestation\Canonicalizer;
 use FlavorAgent\Attestation\KeyManager;
 use FlavorAgent\Attestation\Repository;
@@ -103,16 +106,32 @@ final class AttestationController {
 	 * @param array<string, mixed> $row
 	 */
 	private function build_subject_state_response( array $row ): \WP_REST_Response {
+		return match ( (string) ( $row['surface'] ?? '' ) ) {
+			'global-styles', 'style-book' => $this->build_style_subject_state_response( $row ),
+			'template'                   => $this->build_template_subject_state_response( $row ),
+			'template-part'              => $this->build_template_part_subject_state_response( $row ),
+			default                      => self::subject_unavailable_response(),
+		};
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 */
+	private function build_style_subject_state_response( array $row ): \WP_REST_Response {
 		$name       = (string) $row['subject_name'];
 		$scope      = (string) $row['subject_scope'];
 		$hash_pos   = strpos( $name, '#' );
 		$block_name = false !== $hash_pos ? substr( $name, $hash_pos + 1 ) : '';
 		$base_name  = false !== $hash_pos ? substr( $name, 0, $hash_pos ) : $name;
-		$gs_id      = preg_replace( '/^wp_global_styles:/', '', $base_name );
-		$resolved   = StyleApplyExecutor::resolve_user_global_styles( is_string( $gs_id ) ? $gs_id : '' );
+
+		if ( ! str_starts_with( $base_name, 'wp_global_styles:' ) ) {
+			return self::subject_unavailable_response();
+		}
+
+		$resolved = StyleApplyExecutor::resolve_user_global_styles( substr( $base_name, strlen( 'wp_global_styles:' ) ) );
 
 		if ( \is_wp_error( $resolved ) ) {
-			return new \WP_REST_Response( [ 'error' => 'subject_unavailable' ], 409 );
+			return self::subject_unavailable_response();
 		}
 
 		$config = is_array( $resolved['config'] ?? null ) ? $resolved['config'] : [];
@@ -120,14 +139,74 @@ final class AttestationController {
 			? Canonicalizer::block_branch( $config, $block_name )
 			: $config;
 
+		return self::subject_state_response( Canonicalizer::canonical_bytes( $target ), $scope );
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 */
+	private function build_template_subject_state_response( array $row ): \WP_REST_Response {
+		$ref = self::subject_ref( (string) ( $row['subject_name'] ?? '' ), 'wp_template:' );
+
+		if ( '' === $ref ) {
+			return self::subject_unavailable_response();
+		}
+
+		$content = TemplateApplyExecutor::resolve_attested_content( $ref );
+
+		if ( is_wp_error( $content ) ) {
+			return self::subject_unavailable_response();
+		}
+
+		return self::subject_state_response(
+			BlockContentCanonicalizer::bytes( $content ),
+			(string) ( $row['subject_scope'] ?? 'template' )
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 */
+	private function build_template_part_subject_state_response( array $row ): \WP_REST_Response {
+		$ref = self::subject_ref( (string) ( $row['subject_name'] ?? '' ), 'wp_template_part:' );
+
+		if ( '' === $ref ) {
+			return self::subject_unavailable_response();
+		}
+
+		$content = TemplatePartApplyExecutor::resolve_attested_content( $ref );
+
+		if ( is_wp_error( $content ) ) {
+			return self::subject_unavailable_response();
+		}
+
+		return self::subject_state_response(
+			BlockContentCanonicalizer::bytes( $content ),
+			(string) ( $row['subject_scope'] ?? 'template-part' )
+		);
+	}
+
+	private static function subject_ref( string $subject_name, string $prefix ): string {
+		if ( ! str_starts_with( $subject_name, $prefix ) ) {
+			return '';
+		}
+
+		return trim( substr( $subject_name, strlen( $prefix ) ) );
+	}
+
+	private static function subject_state_response( string $canonical_bytes, string $scope ): \WP_REST_Response {
 		return new \WP_REST_Response(
 			[
-				'subject_canonical_b64' => KeyManager::b64url( Canonicalizer::canonical_bytes( $target ) ),
-				'subject_digest'        => Canonicalizer::digest( $target ),
+				'subject_canonical_b64' => KeyManager::b64url( $canonical_bytes ),
+				'subject_digest'        => hash( 'sha256', $canonical_bytes ),
 				'scope'                 => $scope,
 			],
 			200
 		);
+	}
+
+	private static function subject_unavailable_response(): \WP_REST_Response {
+		return new \WP_REST_Response( [ 'error' => 'subject_unavailable' ], 409 );
 	}
 
 	public function get_verification( \WP_REST_Request $request ): \WP_REST_Response {

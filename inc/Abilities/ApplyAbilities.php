@@ -11,6 +11,7 @@ use FlavorAgent\Apply\PostBlocksApplyExecutor;
 use FlavorAgent\Apply\StyleApplyExecutor;
 use FlavorAgent\Apply\TemplateApplyExecutor;
 use FlavorAgent\Apply\TemplatePartApplyExecutor;
+use FlavorAgent\Attestation\AttestationService;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\PostBlocksPrompt;
 use FlavorAgent\LLM\StylePrompt;
@@ -224,7 +225,7 @@ final class ApplyAbilities {
 	 *
 	 * Template-part analog of request_style_apply: two fail-closed freshness
 	 * gates, a per-user pending cap, then a PENDING activity row the admin
-	 * approval surface later approves/rejects. No attestation (frozen-lane).
+	 * approval surface later approves/rejects and attests after successful execution.
 	 */
 	public static function request_template_part_apply( mixed $input ): array|\WP_Error {
 		$input             = self::normalize_map( $input );
@@ -595,8 +596,7 @@ final class ApplyAbilities {
 	 * gates, a per-user pending cap, then a pending activity row the admin
 	 * approval surface later approves or rejects. Gate 1 replays the same signed
 	 * recommend-template envelope, including optional live-editor overlays when
-	 * they were part of the original request. v1 is insert_pattern only. No
-	 * attestation (frozen lane).
+	 * they were part of the original request. v1 is insert_pattern only.
 	 */
 	public static function request_template_apply( mixed $input ): array|\WP_Error {
 		$input             = self::normalize_map( $input );
@@ -968,32 +968,42 @@ final class ApplyAbilities {
 			return $updated;
 		}
 
-		// Attestation is hard-bounded to the external-style-apply-v1 lane. Only the
-		// style surfaces may reach AttestationService; template-part (and any future
-		// surface) undos record no revert attestation.
-		if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+		if ( AttestationService::surface_eligible( $surface ) ) {
 			$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
 
 			if ( null !== $prior ) {
 				try {
-					\FlavorAgent\Attestation\AttestationService::record_revert(
+					$target              = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+					$persisted_after     = is_array( $result['after'] ?? null )
+						? $result['after']
+						: ( is_array( $entry['before'] ?? null ) ? $entry['before'] : [] );
+					$attestation_context = [
+						'surface'            => $surface,
+						'operations'         => [],
+						'before'             => $entry['after'] ?? [],
+						'after'              => $persisted_after,
+						'freshnessSignature' => '',
+						'actorRole'          => self::actor_role_for_undo(),
+						'requestedAt'        => '',
+						'decidedAt'          => gmdate( 'c' ),
+						'relatedActivityId'  => $activity_id,
+					];
+
+					if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+						$attestation_context['globalStylesId'] = (string) ( $target['globalStylesId'] ?? '' );
+						$attestation_context['blockName']      = (string) ( $target['blockName'] ?? '' );
+					} else {
+						$attestation_context['templateRef'] = 'template-part' === $surface
+							? (string) ( $target['templatePartRef'] ?? $target['templatePartId'] ?? '' )
+							: (string) ( $target['templateRef'] ?? '' );
+					}
+
+					AttestationService::record_revert(
 						(string) $prior['attestation_id'],
-						[
-							'surface'            => (string) ( $entry['surface'] ?? '' ),
-							'globalStylesId'     => (string) ( $entry['target']['globalStylesId'] ?? '' ),
-							'blockName'          => (string) ( $entry['target']['blockName'] ?? '' ),
-							'operations'         => [],
-							'before'             => $entry['after'] ?? [],
-							'after'              => $entry['before'] ?? [],
-							'freshnessSignature' => '',
-							'actorRole'          => self::actor_role_for_undo(),
-							'requestedAt'        => '',
-							'decidedAt'          => gmdate( 'c' ),
-							'relatedActivityId'  => $activity_id,
-						]
+						$attestation_context
 					);
 				} catch ( \Throwable $e ) {
-					\FlavorAgent\Attestation\AttestationService::record_failure(
+					AttestationService::record_failure(
 						$e,
 						[
 							'operation'            => 'revert',

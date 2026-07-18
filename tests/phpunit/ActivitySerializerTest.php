@@ -471,6 +471,21 @@ final class ActivitySerializerTest extends TestCase {
 		);
 	}
 
+	public function test_normalize_attestation_artifact_maps_template_lane_from_surface(): void {
+		$artifact = Serializer::normalize_attestation_artifact(
+			[
+				'attestation_id' => 'att_template',
+				'surface'        => 'template',
+				'subject_name'   => 'wp_template:twentytwentyfive//home',
+				'subject_scope'  => 'template',
+				'key_id'         => 'site-key',
+				'created_at'     => '2026-06-22 10:00:00',
+			]
+		);
+
+		$this->assertSame( 'external-template-apply-v1', $artifact['governanceLane'] );
+	}
+
 	public function test_normalize_attestation_artifact_exposes_superseded_apply_reference(): void {
 		$artifact = Serializer::normalize_attestation_artifact(
 			[

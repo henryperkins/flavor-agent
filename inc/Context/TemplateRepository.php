@@ -120,6 +120,14 @@ final class TemplateRepository {
 		return is_object( $template_part ) ? $template_part : null;
 	}
 
+	/**
+	 * Resolve one canonical theme-qualified template-part id without slug or
+	 * wp_id fallback. Attestation subjects must remain bound to their theme.
+	 */
+	public function resolve_template_part_exact( string $template_part_ref ): ?object {
+		return $this->resolve_exact_theme_ref( $template_part_ref, 'wp_template_part' );
+	}
+
 	public function resolve_template_part_ref( string $requested_ref, object $template_part ): string {
 		$resolved_id = $this->canonical_template_part_id( $template_part );
 
@@ -186,6 +194,37 @@ final class TemplateRepository {
 		}
 
 		return is_object( $template ) ? $template : null;
+	}
+
+	/**
+	 * Resolve one canonical theme-qualified template id without slug or wp_id
+	 * fallback. Attestation subjects use this stricter identity contract so a
+	 * theme switch cannot substitute another theme's same-slug template.
+	 */
+	public function resolve_template_exact( string $template_ref ): ?object {
+		return $this->resolve_exact_theme_ref( $template_ref, 'wp_template' );
+	}
+
+	private function resolve_exact_theme_ref( string $template_ref, string $template_type ): ?object {
+		$normalized = $this->normalize_template_ref( $template_ref );
+
+		if ( 1 !== substr_count( $normalized, '//' ) ) {
+			return null;
+		}
+
+		[ $theme, $slug ] = explode( '//', $normalized, 2 );
+
+		if ( '' === $theme || '' === $slug ) {
+			return null;
+		}
+
+		$template = get_block_template( $normalized, $template_type );
+
+		if ( ! is_object( $template ) || $normalized !== trim( (string) ( $template->id ?? '' ) ) ) {
+			return null;
+		}
+
+		return $template;
 	}
 
 	private function canonical_template_part_id( object $template_part ): string {

@@ -269,11 +269,27 @@ final class ServerCollector {
 	}
 
 	/**
+	 * Resolve the exact theme-qualified template part named by an attestation
+	 * subject. Unlike the apply resolver, this permits no slug/wp_id fallback.
+	 */
+	public static function resolve_template_part_for_attestation( string $ref ): ?object {
+		return self::template_repository()->resolve_template_part_exact( $ref );
+	}
+
+	/**
 	 * Re-resolve the live template for a governed external apply. No public
 	 * filter seam: a governed-write resolution path must not be interceptable.
 	 */
 	public static function resolve_template_for_apply( string $ref ): ?object {
 		return self::template_repository()->resolve_template( $ref );
+	}
+
+	/**
+	 * Resolve the exact theme-qualified template named by an attestation subject.
+	 * Unlike the apply resolver, this deliberately permits no slug/wp_id fallback.
+	 */
+	public static function resolve_template_for_attestation( string $ref ): ?object {
+		return self::template_repository()->resolve_template_exact( $ref );
 	}
 
 	public static function for_template(

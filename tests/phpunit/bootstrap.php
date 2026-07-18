@@ -3284,6 +3284,11 @@ namespace {
 				return 0;
 			}
 
+			$filtered = apply_filters('wp_insert_post_data', $postarr, $postarr, $postarr, true);
+			if (is_array($filtered)) {
+				$postarr = $filtered;
+			}
+
 			foreach ($postarr as $key => $value) {
 				if ('ID' !== $key && property_exists(WordPressTestState::$posts[$id], $key)) {
 					WordPressTestState::$posts[$id]->{$key} = $value;
@@ -3300,6 +3305,11 @@ namespace {
 		function wp_insert_post(array $postarr, bool $wp_error = false)
 		{
 			unset($wp_error);
+
+			$filtered = apply_filters('wp_insert_post_data', $postarr, $postarr, $postarr, false);
+			if (is_array($filtered)) {
+				$postarr = $filtered;
+			}
 
 			$id = 0;
 			foreach (array_keys(WordPressTestState::$posts) as $existing) {
