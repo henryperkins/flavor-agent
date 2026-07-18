@@ -40,6 +40,11 @@ Start the Docker stack:
 ```bash
 npm run wp:start
 ```
+If you changed the Dockerfile or need to refresh the mutable WordPress image, run `wp:rebuild` instead. It pulls the current base image, rebuilds, and starts the stack:
+
+```bash
+npm run wp:rebuild
+```
 
 The first run creates `.env` from `.env.example` through `scripts/ensure-local-env.js` before starting containers. The wrapper in `scripts/docker-compose.js` uses the Docker Compose CLI plugin when available and falls back to `docker-compose`.
 The WordPress service also listens on the configured `WORDPRESS_PORT` inside the container so Site Health REST API and loopback checks can call `http://localhost:8888` from both the host and the container. On startup it ensures `wp-content/upgrade` is writable by the web server user for plugin and theme update checks.

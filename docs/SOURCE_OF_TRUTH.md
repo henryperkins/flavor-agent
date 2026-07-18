@@ -325,6 +325,7 @@ npm run test:e2e:playground          # Fast 6.9.4 Playground smoke harness
 npm run test:e2e:wp70                # Docker-backed WP 7.0 Site Editor harness
 node scripts/verify.js --skip-e2e    # Baseline non-browser release gate for cross-surface changes
 npm run wp:start                     # Local Docker stack up
+npm run wp:rebuild                   # Pull base image, rebuild, and start the local stack
 npm run wp:stop                      # Local Docker stack down
 npm run wp:reset                     # Local Docker stack reset
 npm run wp:e2e:wp70:bootstrap        # Provision the WP 7.0 browser harness without running tests
