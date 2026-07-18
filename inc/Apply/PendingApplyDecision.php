@@ -6,6 +6,7 @@ namespace FlavorAgent\Apply;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Attestation\AttestationService;
+use FlavorAgent\Attestation\RecordResult;
 
 /**
  * Admin approval service for pending external applies. The human gate:
@@ -142,6 +143,9 @@ final class PendingApplyDecision {
 			);
 		}
 
+		$attestation_status     = null;
+		$attestation_error_code = null;
+
 		if ( AttestationService::surface_eligible( $surface ) ) {
 			try {
 				$result_target       = is_array( $result['target'] ?? null ) ? $result['target'] : [];
@@ -166,31 +170,43 @@ final class PendingApplyDecision {
 						: (string) ( $result_target['templateRef'] ?? '' );
 				}
 
-				AttestationService::record_apply( $attestation_context );
+				$attestation_result     = AttestationService::record_apply( $attestation_context );
+				$attestation_status     = $attestation_result->status();
+				$attestation_error_code = $attestation_result->error_code();
 			} catch ( \Throwable $e ) {
+				$attestation_status     = RecordResult::STATUS_FAILED;
+				$attestation_error_code = 'unexpected_failure';
 				AttestationService::record_failure(
 					$e,
 					[
 						'operation'  => 'apply',
 						'activityId' => $activity_id,
+						'errorCode'  => $attestation_error_code,
 					]
 				);
 			}
 		}
 
+		$changes = [
+			'applyStatus'   => 'available',
+			'decidedBy'     => $decided_by,
+			'decidedByName' => $decided_by_name,
+			'decidedAt'     => $decided_at,
+			'decisionNote'  => $note,
+			'executedAt'    => gmdate( 'c' ),
+			'before'        => $result['before'],
+			'after'         => $result['after'],
+			'target'        => $result['target'],
+		];
+
+		if ( null !== $attestation_status ) {
+			$changes['attestationStatus']    = $attestation_status;
+			$changes['attestationErrorCode'] = $attestation_error_code;
+		}
+
 		return ActivityRepository::transition_external_apply(
 			$activity_id,
-			[
-				'applyStatus'   => 'available',
-				'decidedBy'     => $decided_by,
-				'decidedByName' => $decided_by_name,
-				'decidedAt'     => $decided_at,
-				'decisionNote'  => $note,
-				'executedAt'    => gmdate( 'c' ),
-				'before'        => $result['before'],
-				'after'         => $result['after'],
-				'target'        => $result['target'],
-			]
+			$changes
 		);
 	}
 

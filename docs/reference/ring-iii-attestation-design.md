@@ -273,7 +273,9 @@ and the transparency-log level (§12) addresses history-rewrite over time.
   active private key in env/constant. The keys route serves the whole registry as JWKS
   (`kty: OKP`, `crv: Ed25519`, RFC 8037). On rotation the new key is registered `active` and the
   prior marked `retired` but **kept**, so historical attestations stay verifiable; each
-  attestation row's `key_id` (and the statement's `site.keyId`) resolves into this registry.
+  attestation row's `key_id` (and the statement's `site.keyId`) resolves into this registry. If
+  an operator rotates A → B → A, reconciliation reactivates A, retires B, preserves A's original
+  `createdAt`, and still exports exactly one active key.
 
 ## 8. Lifecycle & data flow
 
@@ -291,6 +293,11 @@ and the transparency-log level (§12) addresses history-rewrite over time.
    moment) → `Signer` signs → `Repository` appends the row.
 4. `get-activity` / admin UI surface an "Attestation" artifact with a verify affordance.
 
+Attestation recording is best-effort **after** the governed mutation succeeds, but its result is
+not silent. The activity row's `apply.attestationStatus` records `recorded`, `not_configured`, or
+`failed`; failures carry a stable internal `attestationErrorCode` while the UI uses bounded copy
+instead of exposing exception text.
+
 **Undo (chained, never mutating):**
 
 - An undo of change X produces a **new** attestation U with `revertsAttestationId = X.attestationId`.
@@ -300,6 +307,9 @@ and the transparency-log level (§12) addresses history-rewrite over time.
   `Repository::find_by_reverts(X)` / `GET /attestations?reverts=X` — preserving immutability.
 - General supersession (a later change replacing an attested state) uses `supersedesAttestationId`
   the same way.
+- The terminal undo transition persists `undo.attestationStatus` in the same activity write:
+  `recorded`, `not_configured`, `failed`, or `not_applicable` when the original apply had no
+  attestation to chain from.
 
 Chaining links **attestation IDs**, not activity IDs: activity rows prune, attestation rows do
 not, so a chain through activity IDs would break. `relatedActivityId` remains optional context
@@ -314,23 +324,45 @@ reads as accountable, not as failure:
 |---|---|
 | `signature_valid` | Detached signature verifies over the decoded `statement_b64` bytes against the published key. |
 | `record_tampered` | Signature fails — the statement bytes do not match the signature. |
+| `statement_invalid` | The signed bytes do not match the exact v1 in-toto/profile shape, lane operation allowlist, digest binding, governance mapping, relationship rules, or key claim. |
+| `attestation_identity_mismatch` | The signed `attestationId` or normalized site URL does not match the id/site from which the record was requested. |
 | `live_matches_subject` | Re-canonicalized live subject digest == subject digest. The attested change is intact on the live site. |
 | `live_changed_since_attestation` | Live digest != subject digest, and no superseding/reverting attestation explains it. |
 | `reverted_by_attestation` | Live digest != subject digest **and** a chained attestation (`revertsAttestationId` → this one) accounts for it. The change was legitimately undone. |
+| `superseded_by_attestation` | A later signed apply chain accounts for the live state through `supersedesAttestationId`. |
+| `chain_invalid` | A referenced chain record is tampered, profile/identity-invalid, cyclic, crosses subjects/scopes, has broken digest continuity, or has the wrong signed relationship/decision. |
+| `chain_resolution_incomplete` | A referenced chain record could not be fetched or the bounded resolver reached its 50-record limit before finding the live state. |
+| `live_subject_unavailable` | Signature/profile verification completed, but the current canonical subject could not be resolved, so live-state verification is incomplete. |
 
 Combination example (a legitimately undone change): `signature_valid` **and**
 `live_changed_since_attestation` is superseded by **`reverted_by_attestation`** once the chain is
 resolved — the record is intact, the live state differs, and there is signed proof of *why*.
 
+The additive response fields are `verificationStatus` (`verified`, `warning`, `invalid`, or
+`incomplete`), `terminalAttestationId`, and `chainDepth`. Every traversed record is independently
+signature-, profile-, id-, and site-validated; unsigned reverse-discovery hints cannot establish
+revert or supersession. The resolver follows at most 50 total records and rejects cycles. CLI and
+standalone exit codes are `0` for complete valid verdicts (including honest unaccounted drift),
+`1` for invalid/tampered statements or chains, and `3` when verification is unavailable or
+incomplete.
+
 ## 10. Error handling / fail-closed
 
-- **No key configured** → attestation absent; row/UI shows "not attested." Never a placeholder
+- **No key configured** → attestation absent; the activity row records `not_configured` and the UI
+  says “Applied without attestation because no signing key was configured.” Never a placeholder
   signature.
-- **Signing failure** → change still applied (apply is the governed action), recorded as
-  applied-but-unattested, surfaced honestly.
+- **Signing/storage failure** → change still applied (apply is the governed action); the activity
+  row records `failed` with a stable internal code and the UI says “Applied, but attestation
+  recording failed.” Undo uses the equivalent terminal copy. Raw exception text stays in the
+  diagnostic hook/log, not the operator-facing status.
+- **Original apply had no attestation** → a successful undo records `not_applicable` and explains
+  that there was no original attestation to chain from.
 - **Verifier drift** (`live_changed_since_attestation`) → a true verdict, not an error; that is
   the feature detecting alteration.
 - **Key rotation** → old public keys retained in the registry / JWKS.
+- **Public verifier caching** → all four public reads, including errors, send
+  `Cache-Control: no-store, no-cache, must-revalidate, max-age=0` so a stale envelope, key set, or
+  live-state verdict is not reused as current evidence.
 
 ## 11. Testing strategy
 
@@ -343,8 +375,9 @@ resolved — the record is intact, the live state differs, and there is signed p
   *after* a full REST round-trip (guards against JSON reserialization).
 - **Subject-state route** — its returned canonical bytes hash to the same digest a freshly-applied
   attestation signed.
-- **Verifier outcome matrix** — intact / altered / reverted / superseded; the undo case must
-  resolve to `reverted_by_attestation`.
+- **Verifier outcome matrix** — intact / altered / reverted / superseded plus tampered, wrong
+  profile, cross-site/id replay, broken/cyclic chain, unavailable subject/record, and the bounded
+  50-record limit; the undo case must resolve to `reverted_by_attestation`.
 - **Public-safe contract** — a test asserting the persisted row contains *only* allowlisted
   fields (no prompt text, payloads, PII, raw content) even when handed an activity row full of
   them.

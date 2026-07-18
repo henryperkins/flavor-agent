@@ -434,6 +434,7 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( 'undone', $result['result'] );
 		$this->assertSame( 'undone', $result['entry']['undo']['status'] );
+		$this->assertSame( 'not_applicable', $result['entry']['undo']['attestationStatus'] );
 
 		$written = json_decode(
 			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
@@ -562,6 +563,8 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( 'recorded', $result['entry']['undo']['attestationStatus'] );
+		$this->assertNull( $result['entry']['undo']['attestationErrorCode'] );
 		$this->assertIsArray( \FlavorAgent\Attestation\Repository::find_by_reverts( 'att_prior_apply' ) );
 	}
 
@@ -616,7 +619,7 @@ final class ApplyAbilitiesTest extends TestCase {
 				'decidedAt'          => '2026-06-22T00:01:00+00:00',
 				'relatedActivityId'  => (string) $activity['id'],
 			]
-		);
+		)->attestation_id();
 		$this->assertIsString( $apply_attestation_id );
 
 		add_filter(
@@ -636,6 +639,7 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( 'recorded', $result['entry']['undo']['attestationStatus'] );
 		$persisted_before = (string) WordPressTestState::$posts[7100]->post_content;
 		$this->assertStringContainsString( '>Before saved<', $persisted_before );
 
@@ -670,6 +674,8 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertSame( 'available', $entry['apply']['status'] );
 		$this->assertSame( 'applied', $entry['executionResult'] );
 		$this->assertSame( 'available', $entry['undo']['status'] );
+		$this->assertSame( 'not_configured', $entry['apply']['attestationStatus'] );
+		$this->assertNull( $entry['apply']['attestationErrorCode'] );
 		$this->assertSame( 'Reviewed and safe', $entry['apply']['decisionNote'] );
 		$this->assertSame( 7, $entry['apply']['decidedBy'] );
 		$this->assertNotSame( '', (string) $entry['apply']['executedAt'] );
@@ -732,9 +738,12 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $entry );
 		$this->assertSame( 'available', $entry['apply']['status'] );
+		$this->assertSame( 'failed', $entry['apply']['attestationStatus'] );
+		$this->assertSame( 'unexpected_failure', $entry['apply']['attestationErrorCode'] );
 		$this->assertIsArray( $captured_event );
 		$this->assertSame( 'apply', $captured_event['operation'] );
 		$this->assertSame( (string) $pending['activityId'], $captured_event['activityId'] );
+		$this->assertSame( 'unexpected_failure', $captured_event['errorCode'] );
 		$this->assertSame( \RuntimeException::class, $captured_event['exceptionClass'] );
 		$this->assertSame( 'attestation signing unavailable', $captured_event['message'] );
 		$this->assertInstanceOf( \RuntimeException::class, $captured_error );

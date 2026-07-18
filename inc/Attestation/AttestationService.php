@@ -22,13 +22,11 @@ final class AttestationService {
 
 	/**
 	 * Record a signed attestation for an approved governed external-apply lane.
-	 * Returns the attestation id, or null when no signing key is configured.
-	 *
 	 * @param array<string, mixed> $ctx
 	 */
-	public static function record_apply( array $ctx ): ?string {
+	public static function record_apply( array $ctx ): RecordResult {
 		if ( ! KeyManager::configured() ) {
-			return null;
+			return RecordResult::not_configured();
 		}
 
 		self::assert_owned_lane_context( $ctx );
@@ -80,7 +78,12 @@ final class AttestationService {
 		$signed         = Signer::sign( $statement );
 
 		if ( null === $signed ) {
-			return null;
+			return self::failed_result(
+				'signing_failed',
+				'Flavor Agent could not sign the attestation statement.',
+				$ctx,
+				$attestation_id
+			);
 		}
 
 		$ok = Repository::insert(
@@ -99,17 +102,44 @@ final class AttestationService {
 			]
 		);
 
-		return $ok ? $attestation_id : null;
+		if ( ! $ok ) {
+			return self::failed_result(
+				'storage_failed',
+				'Flavor Agent could not persist the attestation record.',
+				$ctx,
+				$attestation_id
+			);
+		}
+
+		return RecordResult::recorded( $attestation_id );
 	}
 
 	/**
 	 * @param array<string, mixed> $ctx
 	 */
-	public static function record_revert( string $prior_attestation_id, array $ctx ): ?string {
+	public static function record_revert( string $prior_attestation_id, array $ctx ): RecordResult {
 		$ctx['revertsAttestationId'] = $prior_attestation_id;
 		$ctx['decision']             = 'revert';
 
 		return self::record_apply( $ctx );
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 */
+	private static function failed_result( string $error_code, string $message, array $context, string $attestation_id ): RecordResult {
+		self::record_failure(
+			new \RuntimeException( $message ),
+			[
+				'operation'            => 'revert' === (string) ( $context['decision'] ?? 'approve' ) ? 'revert' : 'apply',
+				'activityId'           => (string) ( $context['relatedActivityId'] ?? '' ),
+				'attestationId'        => $attestation_id,
+				'errorCode'            => $error_code,
+				'revertsAttestationId' => (string) ( $context['revertsAttestationId'] ?? '' ),
+			]
+		);
+
+		return RecordResult::failed( $error_code );
 	}
 
 	public static function surface_eligible( string $surface ): bool {
@@ -151,6 +181,10 @@ final class AttestationService {
 
 		if ( isset( $context['revertsAttestationId'] ) ) {
 			$event['revertsAttestationId'] = (string) $context['revertsAttestationId'];
+		}
+
+		if ( isset( $context['errorCode'] ) ) {
+			$event['errorCode'] = (string) $context['errorCode'];
 		}
 
 		if ( function_exists( 'do_action' ) ) {

@@ -212,7 +212,72 @@ final class AttestationControllerTest extends TestCase {
 		$this->assertSame( $id, $data['attestationId'] );
 		$this->assertContains( 'signature_valid', $data['outcomes'] );
 		$this->assertContains( 'live_matches_subject', $data['outcomes'] );
+		$this->assertSame( 'verified', $data['verificationStatus'] );
+		$this->assertSame( $id, $data['terminalAttestationId'] );
+		$this->assertSame( 0, $data['chainDepth'] );
 		$this->assertNull( $data['subjectError'] );
+	}
+
+	public function test_get_verification_rejects_an_unsigned_successor_row(): void {
+		$original = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => '#111111' ] ],
+		];
+		$changed  = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => '#222222' ] ],
+		];
+		$this->seed_global_styles_post( $changed );
+		$id = $this->record_apply( $original );
+		Repository::insert(
+			[
+				'attestation_id'            => 'att_fake',
+				'surface'                   => 'global-styles',
+				'subject_name'              => 'wp_global_styles:81',
+				'subject_scope'             => 'global-styles',
+				'after_digest'              => Canonicalizer::digest( $changed ),
+				'statement_bytes'           => '{}',
+				'signature_b64'             => KeyManager::b64url( 'invalid' ),
+				'key_id'                    => (string) KeyManager::key_id(),
+				'supersedes_attestation_id' => $id,
+			]
+		);
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id . '/verification' );
+		$request->set_param( 'id', $id );
+		$data = ( new AttestationController() )->get_verification( $request )->get_data();
+
+		$this->assertContains( 'signature_valid', $data['outcomes'] );
+		$this->assertContains( 'live_changed_since_attestation', $data['outcomes'] );
+		$this->assertContains( 'chain_invalid', $data['outcomes'] );
+		$this->assertNotContains( 'superseded_by_attestation', $data['outcomes'] );
+		$this->assertSame( 'invalid', $data['verificationStatus'] );
+	}
+
+	public function test_public_attestation_responses_are_never_cacheable(): void {
+		$config = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => '#111111' ] ],
+		];
+		$this->seed_global_styles_post( $config );
+		$id         = $this->record_apply( $config );
+		$controller = new AttestationController();
+		$request    = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id );
+		$request->set_param( 'id', $id );
+
+		$responses = [
+			$controller->get_keys( new \WP_REST_Request() ),
+			$controller->get_attestation( $request ),
+			$controller->get_subject_state( $request ),
+			$controller->get_verification( $request ),
+		];
+
+		foreach ( $responses as $response ) {
+			$this->assertSame(
+				'no-store, no-cache, must-revalidate, max-age=0',
+				$response->get_headers()['Cache-Control'] ?? null
+			);
+		}
 	}
 
 	/**
@@ -247,7 +312,7 @@ final class AttestationControllerTest extends TestCase {
 				'requestedAt'        => '2026-06-22T00:00:00+00:00',
 				'decidedAt'          => '2026-06-22T00:01:00+00:00',
 			]
-		);
+		)->attestation_id();
 
 		$this->assertIsString( $id );
 
@@ -268,7 +333,7 @@ final class AttestationControllerTest extends TestCase {
 				'requestedAt'        => '2026-06-22T00:00:00+00:00',
 				'decidedAt'          => '2026-06-22T00:01:00+00:00',
 			]
-		);
+		)->attestation_id();
 
 		$this->assertIsString( $id );
 

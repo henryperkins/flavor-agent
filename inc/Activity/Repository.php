@@ -758,7 +758,7 @@ final class Repository {
 	/**
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public static function update_undo_status( string $activity_id, string $status, ?string $error = null ) {
+	public static function update_undo_status( string $activity_id, string $status, ?string $error = null, array $metadata = [] ) {
 		global $wpdb;
 
 		if ( ! is_object( $wpdb ) ) {
@@ -813,15 +813,23 @@ final class Repository {
 			$error_message = $error;
 		}
 
+		$undo_state = [
+			'status'    => $status,
+			'error'     => 'failed' === $status ? $error_message : null,
+			'updatedAt' => $timestamp,
+			'undoneAt'  => 'undone' === $status
+				? $timestamp
+				: ( $current_entry['undo']['undoneAt'] ?? null ),
+		];
+
+		foreach ( [ 'attestationStatus', 'attestationErrorCode' ] as $field ) {
+			if ( array_key_exists( $field, $metadata ) ) {
+				$undo_state[ $field ] = $metadata[ $field ];
+			}
+		}
+
 		$undo = Serializer::normalize_undo_for_storage(
-			[
-				'status'    => $status,
-				'error'     => 'failed' === $status ? $error_message : null,
-				'updatedAt' => $timestamp,
-				'undoneAt'  => 'undone' === $status
-					? $timestamp
-					: ( $current_entry['undo']['undoneAt'] ?? null ),
-			],
+			$undo_state,
 			$timestamp
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
@@ -866,7 +874,7 @@ final class Repository {
 	/**
 	 * One-way transition of an external-apply row out of the pending state.
 	 *
-	 * @param array<string, mixed> $changes {applyStatus, decidedBy?, decidedByName?, decidedAt?, decisionNote?, failureCode?, failureMessage?, executedAt?, before?, after?, target?}
+	 * @param array<string, mixed> $changes {applyStatus, decidedBy?, decidedByName?, decidedAt?, decisionNote?, failureCode?, failureMessage?, executedAt?, attestationStatus?, attestationErrorCode?, before?, after?, target?}
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public static function transition_external_apply( string $activity_id, array $changes ) {
@@ -914,7 +922,7 @@ final class Repository {
 		$timestamp       = gmdate( 'c' );
 		$apply['status'] = $next_status;
 
-		foreach ( [ 'decidedBy', 'decidedByName', 'decidedAt', 'decisionNote', 'failureCode', 'failureMessage', 'executedAt' ] as $field ) {
+		foreach ( [ 'decidedBy', 'decidedByName', 'decidedAt', 'decisionNote', 'failureCode', 'failureMessage', 'executedAt', 'attestationStatus', 'attestationErrorCode' ] as $field ) {
 			if ( array_key_exists( $field, $changes ) ) {
 				$apply[ $field ] = $changes[ $field ];
 			}

@@ -38,4 +38,50 @@ final class AttestationKeyManagerTest extends TestCase {
 		$this->assertSame( 'active', $jwks['keys'][0]['status'] );
 		$this->assertNotSame( '', (string) $jwks['keys'][0]['createdAt'] );
 	}
+
+	public function test_rotating_from_a_to_b_and_back_to_a_reactivates_only_a(): void {
+		$key_a   = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		$key_b   = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		$current = $key_a;
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( &$current ): string {
+				return $current;
+			}
+		);
+
+		KeyManager::ensure_registered();
+		$id_a         = (string) KeyManager::key_id();
+		$first_export = $this->keys_by_id( KeyManager::jwks()['keys'] );
+
+		$current = $key_b;
+		KeyManager::ensure_registered();
+		$id_b = (string) KeyManager::key_id();
+
+		$current = $key_a;
+		KeyManager::ensure_registered();
+		$keys = $this->keys_by_id( KeyManager::jwks()['keys'] );
+
+		$this->assertSame( 'active', $keys[ $id_a ]['status'] );
+		$this->assertSame( 'retired', $keys[ $id_b ]['status'] );
+		$this->assertSame( $first_export[ $id_a ]['createdAt'], $keys[ $id_a ]['createdAt'] );
+		$this->assertCount(
+			1,
+			array_filter( $keys, static fn ( array $key ): bool => 'active' === $key['status'] )
+		);
+	}
+
+	/**
+	 * @param list<array<string, mixed>> $keys
+	 * @return array<string, array<string, mixed>>
+	 */
+	private function keys_by_id( array $keys ): array {
+		$indexed = [];
+
+		foreach ( $keys as $key ) {
+			$indexed[ (string) $key['kid'] ] = $key;
+		}
+
+		return $indexed;
+	}
 }

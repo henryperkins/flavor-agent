@@ -66,40 +66,27 @@ final class AttestationController {
 	public function get_keys( \WP_REST_Request $request ): \WP_REST_Response {
 		unset( $request );
 
-		return new \WP_REST_Response( KeyManager::jwks(), 200 );
+		return self::no_store( new \WP_REST_Response( KeyManager::jwks(), 200 ) );
 	}
 
 	public function get_attestation( \WP_REST_Request $request ): \WP_REST_Response {
 		$row = Repository::find( (string) $request->get_param( 'id' ) );
 
 		if ( null === $row ) {
-			return new \WP_REST_Response( [ 'error' => 'not_found' ], 404 );
+			return self::no_store( new \WP_REST_Response( [ 'error' => 'not_found' ], 404 ) );
 		}
 
-		$reverted_by   = Repository::find_by_reverts( (string) $row['attestation_id'] );
-		$superseded_by = Repository::find_by_supersedes( (string) $row['attestation_id'] );
-
-		return new \WP_REST_Response(
-			[
-				'statement_b64'                => KeyManager::b64url( (string) $row['statement_bytes'] ),
-				'signature_b64'                => (string) $row['signature_b64'],
-				'key_id'                       => (string) $row['key_id'],
-				'reverted_by_attestation_id'   => $reverted_by['attestation_id'] ?? null,
-				'superseded_by_attestation_id' => $superseded_by['attestation_id'] ?? null,
-				'statement_json'               => json_decode( (string) $row['statement_bytes'], true ),
-			],
-			200
-		);
+		return self::no_store( new \WP_REST_Response( self::envelope_from_row( $row ), 200 ) );
 	}
 
 	public function get_subject_state( \WP_REST_Request $request ): \WP_REST_Response {
 		$row = Repository::find( (string) $request->get_param( 'id' ) );
 
 		if ( null === $row ) {
-			return new \WP_REST_Response( [ 'error' => 'not_found' ], 404 );
+			return self::no_store( new \WP_REST_Response( [ 'error' => 'not_found' ], 404 ) );
 		}
 
-		return $this->build_subject_state_response( $row );
+		return self::no_store( $this->build_subject_state_response( $row ) );
 	}
 
 	/**
@@ -214,7 +201,7 @@ final class AttestationController {
 		$row = Repository::find( $id );
 
 		if ( null === $row ) {
-			return new \WP_REST_Response( [ 'error' => 'not_found' ], 404 );
+			return self::no_store( new \WP_REST_Response( [ 'error' => 'not_found' ], 404 ) );
 		}
 
 		$subject_response = $this->build_subject_state_response( $row );
@@ -230,31 +217,62 @@ final class AttestationController {
 			$subject_bytes = '' !== $subject_b64 ? self::b64url_decode( $subject_b64 ) : null;
 		}
 
-		$reverted_by   = Repository::find_by_reverts( $id );
-		$superseded_by = Repository::find_by_supersedes( $id );
-		$outcomes      = Verifier::evaluate(
-			(string) $row['statement_bytes'],
-			self::b64url_decode( (string) $row['signature_b64'] ),
+		$envelope      = self::envelope_from_row( $row );
+		$result        = Verifier::verify(
+			$envelope,
 			KeyManager::jwks(),
 			$subject_bytes,
-			isset( $reverted_by['attestation_id'] ) ? (string) $reverted_by['attestation_id'] : null,
-			isset( $superseded_by['attestation_id'] ) ? (string) $superseded_by['attestation_id'] : null
-		);
+			$id,
+			function_exists( 'home_url' ) ? (string) home_url() : '',
+			static function ( string $linked_id ): ?array {
+				$linked = Repository::find( $linked_id );
 
-		if ( null !== $subject_error ) {
-			$outcomes[] = 'live_subject_unavailable';
-		}
-
-		return new \WP_REST_Response(
-			[
-				'attestationId'             => $id,
-				'outcomes'                  => $outcomes,
-				'subjectError'              => $subject_error,
-				'revertedByAttestationId'   => $reverted_by['attestation_id'] ?? null,
-				'supersededByAttestationId' => $superseded_by['attestation_id'] ?? null,
-			],
-			200
+				return is_array( $linked ) ? self::envelope_from_row( $linked ) : null;
+			}
 		);
+		$reverted_by   = Repository::find_by_reverts( $id );
+		$superseded_by = Repository::find_by_supersedes( $id );
+
+		return self::no_store(
+			new \WP_REST_Response(
+				[
+					'attestationId'             => $id,
+					'outcomes'                  => $result['outcomes'],
+					'verificationStatus'        => $result['verificationStatus'],
+					'terminalAttestationId'     => $result['terminalAttestationId'],
+					'chainDepth'                => $result['chainDepth'],
+					'subjectError'              => $subject_error,
+					'revertedByAttestationId'   => $reverted_by['attestation_id'] ?? null,
+					'supersededByAttestationId' => $superseded_by['attestation_id'] ?? null,
+				],
+				200
+			)
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @return array<string, mixed>
+	 */
+	private static function envelope_from_row( array $row ): array {
+		$id            = (string) ( $row['attestation_id'] ?? '' );
+		$reverted_by   = Repository::find_by_reverts( $id );
+		$superseded_by = Repository::find_by_supersedes( $id );
+
+		return [
+			'statement_b64'                => KeyManager::b64url( (string) ( $row['statement_bytes'] ?? '' ) ),
+			'signature_b64'                => (string) ( $row['signature_b64'] ?? '' ),
+			'key_id'                       => (string) ( $row['key_id'] ?? '' ),
+			'reverted_by_attestation_id'   => $reverted_by['attestation_id'] ?? null,
+			'superseded_by_attestation_id' => $superseded_by['attestation_id'] ?? null,
+			'statement_json'               => json_decode( (string) ( $row['statement_bytes'] ?? '' ), true ),
+		];
+	}
+
+	private static function no_store( \WP_REST_Response $response ): \WP_REST_Response {
+		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+
+		return $response;
 	}
 
 	private static function b64url_decode( string $value ): string {

@@ -31,6 +31,17 @@ final class AttestationCommandTest extends TestCase {
 		);
 	}
 
+	public function test_verify_uses_incomplete_exit_code_when_attestation_is_missing(): void {
+		$this->expectException( \RuntimeException::class );
+		$this->expectExceptionMessage( 'Attestation not found: att_missing' );
+
+		try {
+			( new AttestationCommand() )->verify( [ 'att_missing' ], [] );
+		} finally {
+			$this->assertSame( 3, WordPressTestState::$wp_cli_exit_code );
+		}
+	}
+
 	public function test_verify_outputs_signature_and_live_match_outcomes(): void {
 		$config = [
 			'settings' => [],
@@ -61,7 +72,7 @@ final class AttestationCommandTest extends TestCase {
 				'requestedAt'        => '2026-06-22T00:00:00+00:00',
 				'decidedAt'          => '2026-06-22T00:01:00+00:00',
 			]
-		);
+		)->attestation_id();
 
 		$this->assertIsString( $id );
 
@@ -73,6 +84,9 @@ final class AttestationCommandTest extends TestCase {
 		$this->assertSame( $id, $data['attestationId'] ?? null );
 		$this->assertContains( 'signature_valid', $data['outcomes'] ?? [] );
 		$this->assertContains( 'live_matches_subject', $data['outcomes'] ?? [] );
+		$this->assertSame( 'verified', $data['verificationStatus'] ?? null );
+		$this->assertSame( $id, $data['terminalAttestationId'] ?? null );
+		$this->assertSame( 0, $data['chainDepth'] ?? null );
 		$this->assertSame( 'Attestation verified.', $this->last_cli_message( 'success' ) );
 	}
 
@@ -114,7 +128,7 @@ final class AttestationCommandTest extends TestCase {
 				'requestedAt'        => '2026-06-22T00:00:00+00:00',
 				'decidedAt'          => '2026-06-22T00:01:00+00:00',
 			]
-		);
+		)->attestation_id();
 
 		$this->assertIsString( $first_id );
 
@@ -133,7 +147,7 @@ final class AttestationCommandTest extends TestCase {
 				'requestedAt'        => '2026-06-22T00:02:00+00:00',
 				'decidedAt'          => '2026-06-22T00:03:00+00:00',
 			]
-		);
+		)->attestation_id();
 
 		$this->assertIsString( $second_id );
 
@@ -145,6 +159,9 @@ final class AttestationCommandTest extends TestCase {
 		$this->assertSame( $first_id, $data['attestationId'] ?? null );
 		$this->assertContains( 'signature_valid', $data['outcomes'] ?? [] );
 		$this->assertContains( 'superseded_by_attestation', $data['outcomes'] ?? [] );
+		$this->assertSame( 'verified', $data['verificationStatus'] ?? null );
+		$this->assertSame( $second_id, $data['terminalAttestationId'] ?? null );
+		$this->assertSame( 1, $data['chainDepth'] ?? null );
 	}
 
 	public function test_verify_fails_when_live_subject_cannot_be_resolved(): void {
@@ -172,7 +189,7 @@ final class AttestationCommandTest extends TestCase {
 				'requestedAt'        => '2026-06-22T00:00:00+00:00',
 				'decidedAt'          => '2026-06-22T00:01:00+00:00',
 			]
-		);
+		)->attestation_id();
 
 		$this->assertIsString( $id );
 
@@ -186,8 +203,11 @@ final class AttestationCommandTest extends TestCase {
 			$data = json_decode( $json, true );
 
 			$this->assertSame( $id, $data['attestationId'] ?? null );
+			$this->assertContains( 'signature_valid', $data['outcomes'] ?? [] );
 			$this->assertContains( 'live_subject_unavailable', $data['outcomes'] ?? [] );
+			$this->assertSame( 'incomplete', $data['verificationStatus'] ?? null );
 			$this->assertSame( 'subject_unavailable', $data['subjectError'] ?? null );
+			$this->assertSame( 3, WordPressTestState::$wp_cli_exit_code );
 			$this->assertSame(
 				[],
 				array_values(

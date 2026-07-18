@@ -790,6 +790,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 
 		$this->assertIsArray( $style_decided );
 		$this->assertSame( 'available', $style_decided['apply']['status'] );
+		$this->assertSame( 'recorded', $style_decided['apply']['attestationStatus'] );
 		$style_attestation = \FlavorAgent\Attestation\Repository::find_by_related_activity( 'style-row' );
 		$this->assertIsArray( $style_attestation );
 
@@ -813,6 +814,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			$part_decided['apply']['status'],
 			'The template-part executor must succeed so the post-apply attestation branch is actually exercised.'
 		);
+		$this->assertSame( 'recorded', $part_decided['apply']['attestationStatus'] );
 		$part_attestation = \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $part['id'] );
 		$this->assertIsArray( $part_attestation );
 
@@ -862,6 +864,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			$template_decided['apply']['status'],
 			'The template executor must succeed so the post-apply attestation branch is actually exercised.'
 		);
+		$this->assertSame( 'recorded', $template_decided['apply']['attestationStatus'] );
 		$template_attestation = \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $template_request['activityId'] );
 		$this->assertIsArray( $template_attestation );
 

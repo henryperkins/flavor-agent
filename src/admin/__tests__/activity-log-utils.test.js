@@ -1368,6 +1368,8 @@ describe( 'external apply helpers', () => {
 				requestReference: 'agent-req-1',
 				decisionNote: 'note',
 				failureCode: '',
+				attestationStatus: 'failed',
+				attestationErrorCode: 'storage_failed',
 			},
 		} );
 
@@ -1375,7 +1377,59 @@ describe( 'external apply helpers', () => {
 		expect( details.requestedBy ).toBe( 7 );
 		expect( details.operations ).toHaveLength( 1 );
 		expect( details.requestReference ).toBe( 'agent-req-1' );
+		expect( details.attestationStatus ).toBe( 'failed' );
+		expect( details.attestationErrorCode ).toBe( 'storage_failed' );
 		expect( getExternalApplyDetails( {} ).operations ).toEqual( [] );
+	} );
+
+	test( 'getGovernanceDetails explains apply and undo attestation outcomes without internal errors', () => {
+		const failed = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'applied',
+				apply: {
+					status: 'available',
+					operations: [],
+					attestationStatus: 'failed',
+					attestationErrorCode: 'unexpected_failure',
+				},
+			} )
+		);
+		const undone = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'undone',
+				apply: {
+					status: 'available',
+					operations: [],
+					attestationStatus: 'not_configured',
+				},
+				undo: {
+					status: 'undone',
+					canUndo: false,
+					attestationStatus: 'not_applicable',
+				},
+			} )
+		);
+		const historical = getGovernanceDetails(
+			createStyleApplyEntry( {
+				status: 'applied',
+				apply: { status: 'available', operations: [] },
+			} )
+		);
+
+		expect( failed.applyAttestationMessage ).toBe(
+			'Applied, but attestation recording failed.'
+		);
+		expect( failed.applyAttestationMessage ).not.toContain(
+			'unexpected_failure'
+		);
+		expect( undone.applyAttestationMessage ).toBe(
+			'Applied without attestation because no signing key was configured.'
+		);
+		expect( undone.undoAttestationMessage ).toBe(
+			'Undo was not attested because the original apply had no attestation.'
+		);
+		expect( historical.applyAttestationMessage ).toBe( '' );
+		expect( historical.undoAttestationMessage ).toBe( '' );
 	} );
 
 	test( 'buildDecisionRequest shapes the REST call for apiFetch', () => {

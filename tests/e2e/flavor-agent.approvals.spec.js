@@ -352,7 +352,7 @@ test.describe( 'external apply approvals', () => {
 		).toBeVisible();
 	} );
 
-	test( '@wp70-site-editor approving a template apply exposes its attestation badge', async ( {
+	test( '@wp70-site-editor approving a template apply exposes and verifies its attestation', async ( {
 		page,
 	} ) => {
 		test.setTimeout( 120_000 );
@@ -385,5 +385,52 @@ test.describe( 'external apply approvals', () => {
 		await expect( sidebar ).toContainText(
 			`wp_template:${ wp70Harness.themeSlug }//home`
 		);
+
+		const envelopeLink = sidebar.getByRole( 'link', {
+			name: 'Open envelope JSON',
+		} );
+		const envelopeUrl = await envelopeLink.getAttribute( 'href' );
+		expect( envelopeUrl ).toBeTruthy();
+
+		const envelopeResponse = await page.request.get( envelopeUrl );
+		expect( envelopeResponse.status() ).toBe( 200 );
+		expect( envelopeResponse.headers()[ 'cache-control' ] ).toBe(
+			'no-store, no-cache, must-revalidate, max-age=0'
+		);
+		const envelope = await envelopeResponse.json();
+		const statement = JSON.parse(
+			Buffer.from( envelope.statement_b64, 'base64url' ).toString( 'utf8' )
+		);
+
+		const subjectResponse = await page.request.get(
+			`${ envelopeUrl }/subject-state`
+		);
+		expect( subjectResponse.status() ).toBe( 200 );
+		const subject = await subjectResponse.json();
+
+		const verificationResponse = await page.request.get(
+			`${ envelopeUrl }/verification`
+		);
+		expect( verificationResponse.status() ).toBe( 200 );
+		const verification = await verificationResponse.json();
+
+		expect( verification.verificationStatus ).toBe( 'verified' );
+		expect( verification.terminalAttestationId ).toBe(
+			verification.attestationId
+		);
+		expect( verification.chainDepth ).toBe( 0 );
+		expect( verification.outcomes ).toEqual(
+			expect.arrayContaining( [
+				'signature_valid',
+				'live_matches_subject',
+			] )
+		);
+		expect( statement.predicate.after.sha256 ).toBe(
+			subject.subject_digest
+		);
+
+		await sidebar.getByRole( 'button', { name: 'Run verification' } ).click();
+		await expect( sidebar.getByText( 'Signature valid' ) ).toBeVisible();
+		await expect( sidebar.getByText( 'Live subject matches' ) ).toBeVisible();
 	} );
 } );

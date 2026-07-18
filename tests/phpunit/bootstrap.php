@@ -155,6 +155,7 @@ namespace FlavorAgent\Tests\Support {
 
 		/** @var array<int, array{type: string, message: string}> */
 		public static array $wp_cli_messages = [];
+		public static ?int $wp_cli_exit_code = null;
 
 		public static int $db_insert_id = 0;
 
@@ -401,6 +402,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$do_action_counts            = [];
 			self::$wp_cli_commands             = [];
 			self::$wp_cli_messages             = [];
+			self::$wp_cli_exit_code            = null;
 			self::$db_insert_id                = 0;
 			self::$current_user_id             = 0;
 			self::$users                       = [];
@@ -1087,6 +1089,9 @@ namespace {
 
 			private int $status;
 
+			/** @var array<string, string> */
+			private array $headers = [];
+
 			public function __construct($data = null, int $status = 200)
 			{
 				$this->data   = $data;
@@ -1101,6 +1106,18 @@ namespace {
 			public function get_status(): int
 			{
 				return $this->status;
+			}
+
+			public function header(string $key, string $value, bool $replace = true): void
+			{
+				unset($replace);
+				$this->headers[$key] = $value;
+			}
+
+			/** @return array<string, string> */
+			public function get_headers(): array
+			{
+				return $this->headers;
 			}
 		}
 	}
@@ -1145,6 +1162,16 @@ namespace {
 				if ($exit) {
 					throw new \RuntimeException($message);
 				}
+			}
+
+			public static function halt(int $exit_code): void
+			{
+				WordPressTestState::$wp_cli_exit_code = $exit_code;
+				$messages = WordPressTestState::$wp_cli_messages;
+				$last = end($messages);
+				$message = is_array($last) ? (string) ($last['message'] ?? '') : '';
+
+				throw new \RuntimeException($message);
 			}
 		}
 	}

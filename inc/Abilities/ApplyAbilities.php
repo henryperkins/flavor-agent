@@ -12,6 +12,7 @@ use FlavorAgent\Apply\StyleApplyExecutor;
 use FlavorAgent\Apply\TemplateApplyExecutor;
 use FlavorAgent\Apply\TemplatePartApplyExecutor;
 use FlavorAgent\Attestation\AttestationService;
+use FlavorAgent\Attestation\RecordResult;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\PostBlocksPrompt;
 use FlavorAgent\LLM\StylePrompt;
@@ -962,16 +963,13 @@ final class ApplyAbilities {
 			return $result;
 		}
 
-		$updated = ActivityRepository::update_undo_status( $activity_id, 'undone' );
-
-		if ( is_wp_error( $updated ) ) {
-			return $updated;
-		}
-
+		$attestation_metadata = [];
 		if ( AttestationService::surface_eligible( $surface ) ) {
 			$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
 
-			if ( null !== $prior ) {
+			if ( null === $prior ) {
+				$attestation_metadata['attestationStatus'] = 'not_applicable';
+			} else {
 				try {
 					$target              = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
 					$persisted_after     = is_array( $result['after'] ?? null )
@@ -998,21 +996,32 @@ final class ApplyAbilities {
 							: (string) ( $target['templateRef'] ?? '' );
 					}
 
-					AttestationService::record_revert(
+					$attestation_result                           = AttestationService::record_revert(
 						(string) $prior['attestation_id'],
 						$attestation_context
 					);
+					$attestation_metadata['attestationStatus']    = $attestation_result->status();
+					$attestation_metadata['attestationErrorCode'] = $attestation_result->error_code();
 				} catch ( \Throwable $e ) {
+					$attestation_metadata['attestationStatus']    = RecordResult::STATUS_FAILED;
+					$attestation_metadata['attestationErrorCode'] = 'unexpected_failure';
 					AttestationService::record_failure(
 						$e,
 						[
 							'operation'            => 'revert',
 							'activityId'           => $activity_id,
+							'errorCode'            => 'unexpected_failure',
 							'revertsAttestationId' => (string) $prior['attestation_id'],
 						]
 					);
 				}
 			}
+		}
+
+		$updated = ActivityRepository::update_undo_status( $activity_id, 'undone', null, $attestation_metadata );
+
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
 		}
 
 		return [

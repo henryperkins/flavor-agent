@@ -45,17 +45,17 @@ final class AttestationCommand {
 		$envelope = self::rest_json( '/flavor-agent/v1/attestations/' . rawurlencode( $id ), $id );
 
 		if ( 404 === $envelope['status'] ) {
-			\WP_CLI::error( sprintf( 'Attestation not found: %s', $id ) );
+			self::halt_with_error( sprintf( 'Attestation not found: %s', $id ), 3 );
 		}
 
 		if ( $envelope['status'] < 200 || $envelope['status'] >= 300 ) {
-			\WP_CLI::error( 'Attestation public envelope is unavailable.' );
+			self::halt_with_error( 'Attestation public envelope is unavailable.', 3 );
 		}
 
 		$keys = self::rest_json( '/flavor-agent/v1/attestations/keys' );
 
 		if ( $keys['status'] < 200 || $keys['status'] >= 300 ) {
-			\WP_CLI::error( 'Attestation public key set is unavailable.' );
+			self::halt_with_error( 'Attestation public key set is unavailable.', 3 );
 		}
 
 		$subject       = self::rest_json( '/flavor-agent/v1/attestations/' . rawurlencode( $id ) . '/subject-state', $id );
@@ -68,40 +68,57 @@ final class AttestationCommand {
 			$subject_error = 'subject_payload_invalid';
 		} else {
 			$subject_bytes = self::b64url_decode( (string) $subject['data']['subject_canonical_b64'] );
+
+			if ( null === $subject_bytes ) {
+				$subject_error = 'subject_payload_invalid';
+			}
 		}
 
-		$outcomes = Verifier::evaluate(
-			self::b64url_decode( (string) ( $envelope['data']['statement_b64'] ?? '' ) ),
-			self::b64url_decode( (string) ( $envelope['data']['signature_b64'] ?? '' ) ),
+		$result = Verifier::verify(
+			$envelope['data'],
 			$keys['data'],
 			$subject_bytes,
-			isset( $envelope['data']['reverted_by_attestation_id'] ) ? (string) $envelope['data']['reverted_by_attestation_id'] : null,
-			isset( $envelope['data']['superseded_by_attestation_id'] ) ? (string) $envelope['data']['superseded_by_attestation_id'] : null
-		);
+			$id,
+			function_exists( 'home_url' ) ? (string) home_url() : '',
+			static function ( string $linked_id ): ?array {
+				$linked = self::rest_json(
+					'/flavor-agent/v1/attestations/' . rawurlencode( $linked_id ),
+					$linked_id
+				);
 
-		if ( null !== $subject_error ) {
-			$outcomes[] = 'live_subject_unavailable';
-		}
+				return $linked['status'] >= 200 && $linked['status'] < 300
+					? $linked['data']
+					: [ '_resolution_incomplete' => true ];
+			}
+		);
 
 		\WP_CLI::line(
 			self::json_encode(
 				[
-					'attestationId' => $id,
-					'outcomes'      => $outcomes,
-					'subjectError'  => $subject_error,
+					'attestationId'         => $id,
+					'outcomes'              => $result['outcomes'],
+					'verificationStatus'    => $result['verificationStatus'],
+					'terminalAttestationId' => $result['terminalAttestationId'],
+					'chainDepth'            => $result['chainDepth'],
+					'subjectError'          => $subject_error,
 				]
 			)
 		);
 
-		if ( in_array( 'record_tampered', $outcomes, true ) ) {
-			\WP_CLI::error( 'Attestation verification failed.' );
+		if ( 1 === $result['exitCode'] ) {
+			self::halt_with_error( 'Attestation verification failed.', 1 );
 		}
 
-		if ( null !== $subject_error ) {
-			\WP_CLI::error( 'Attestation verification incomplete.' );
+		if ( 3 === $result['exitCode'] ) {
+			self::halt_with_error( 'Attestation verification incomplete.', 3 );
 		}
 
 		\WP_CLI::success( 'Attestation verified.' );
+	}
+
+	private static function halt_with_error( string $message, int $exit_code ): void {
+		\WP_CLI::error( $message, false );
+		\WP_CLI::halt( $exit_code );
 	}
 
 	/**
@@ -162,13 +179,13 @@ final class AttestationCommand {
 		return $controller->get_attestation( $request );
 	}
 
-	private static function b64url_decode( string $value ): string {
+	private static function b64url_decode( string $value ): ?string {
 		$decoded = base64_decode(
 			strtr( $value, '-_', '+/' ) . str_repeat( '=', ( 4 - strlen( $value ) % 4 ) % 4 ),
 			true
 		);
 
-		return false === $decoded ? '' : $decoded;
+		return false === $decoded ? null : $decoded;
 	}
 
 	/**

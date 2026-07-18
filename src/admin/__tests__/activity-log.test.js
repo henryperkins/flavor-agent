@@ -3377,6 +3377,9 @@ describe( 'ActivityLogApp', () => {
 		apiFetch.mockResolvedValueOnce( {
 			attestationId: 'att_abc123',
 			outcomes: [ 'signature_valid', 'live_matches_subject' ],
+			verificationStatus: 'verified',
+			terminalAttestationId: 'att_abc123',
+			chainDepth: 0,
 			subjectError: null,
 		} );
 
@@ -3392,6 +3395,70 @@ describe( 'ActivityLogApp', () => {
 		expect( getContainer().textContent ).toContain( 'Signature valid' );
 		expect( getContainer().textContent ).toContain(
 			'Live subject matches'
+		);
+		expect(
+			getContainer()
+				.querySelector(
+					'.flavor-agent-activity-log__attestation-result'
+				)
+				?.getAttribute( 'data-status' )
+		).toBe( 'success' );
+
+		apiFetch.mockResolvedValueOnce( {
+			attestationId: 'att_abc123',
+			outcomes: [
+				'signature_valid',
+				'attestation_identity_mismatch',
+				'chain_invalid',
+			],
+			verificationStatus: 'invalid',
+			terminalAttestationId: null,
+			chainDepth: 0,
+		} );
+
+		await act( async () => {
+			verifyButton.click();
+		} );
+
+		expect(
+			getContainer()
+				.querySelector(
+					'.flavor-agent-activity-log__attestation-result'
+				)
+				?.getAttribute( 'data-status' )
+		).toBe( 'error' );
+		expect( getContainer().textContent ).toContain(
+			'Attestation identity mismatch'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Attestation chain invalid'
+		);
+
+		apiFetch.mockResolvedValueOnce( {
+			attestationId: 'att_abc123',
+			outcomes: [
+				'signature_valid',
+				'live_changed_since_attestation',
+				'chain_resolution_incomplete',
+			],
+			verificationStatus: 'incomplete',
+			terminalAttestationId: null,
+			chainDepth: 0,
+		} );
+
+		await act( async () => {
+			verifyButton.click();
+		} );
+
+		expect(
+			getContainer()
+				.querySelector(
+					'.flavor-agent-activity-log__attestation-result'
+				)
+				?.getAttribute( 'data-status' )
+		).toBe( 'warning' );
+		expect( getContainer().textContent ).toContain(
+			'Attestation chain resolution incomplete'
 		);
 
 		apiFetch.mockResolvedValueOnce( {
@@ -3413,6 +3480,42 @@ describe( 'ActivityLogApp', () => {
 		);
 		expect( getContainer().textContent ).toContain(
 			'Digest: sha256:abc123'
+		);
+	} );
+
+	test( 'renders honest apply and undo attestation lifecycle copy', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-attestation-status'
+		);
+
+		await renderApp( [
+			createExternalApplyEntry( {
+				id: 'activity-attestation-status',
+				status: 'undone',
+				apply: {
+					status: 'available',
+					operations: [],
+					attestationStatus: 'failed',
+					attestationErrorCode: 'unexpected_failure',
+				},
+				undo: {
+					status: 'undone',
+					canUndo: false,
+					attestationStatus: 'not_applicable',
+				},
+			} ),
+		] );
+
+		expect( getContainer().textContent ).toContain(
+			'Applied, but attestation recording failed.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Undo was not attested because the original apply had no attestation.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'unexpected_failure'
 		);
 	} );
 

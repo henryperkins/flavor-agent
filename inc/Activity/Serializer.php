@@ -213,6 +213,15 @@ final class Serializer {
 				: null,
 		];
 
+		$attestation_status = self::normalize_string( $undo['attestationStatus'] ?? '' );
+
+		if ( in_array( $attestation_status, [ 'recorded', 'not_configured', 'failed', 'not_applicable' ], true ) ) {
+			$normalized['attestationStatus']    = $attestation_status;
+			$normalized['attestationErrorCode'] = 'failed' === $attestation_status
+				? self::normalize_nullable_string( $undo['attestationErrorCode'] ?? null )
+				: null;
+		}
+
 		return $normalized;
 	}
 

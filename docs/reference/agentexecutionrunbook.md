@@ -222,8 +222,10 @@ ATT=<attestation.id from get-activity>
 
 # (a) Stranger beyond the site — standalone, no WordPress, no creds:
 php tools/attestation-verify.php https://hperkins.blog "$ATT"
-#   -> {"attestationId":"…","outcomes":["signature_valid","live_matches_subject"]}
+#   -> {"attestationId":"…","outcomes":["signature_valid","live_matches_subject"],
+#       "verificationStatus":"verified","terminalAttestationId":"…","chainDepth":0}
 #      reverted row -> "reverted_by_attestation"; later edit -> "live_changed_since_attestation"
+#      exit 1 -> invalid/tampered profile, identity, or chain; exit 3 -> unavailable/incomplete
 
 # (b) Site runtime:
 wp --path=$P flavor-agent attestation verify "$ATT"          # Success: Attestation verified.
@@ -231,10 +233,18 @@ wp --path=$P flavor-agent attestation verify "$ATT"          # Success: Attestat
 # (c) Raw public envelope a third party fetches (no auth):
 curl -s https://hperkins.blog/wp-json/flavor-agent/v1/attestations/keys                  # JWKS (Ed25519 public key)
 curl -s https://hperkins.blog/wp-json/flavor-agent/v1/attestations/$ATT                  # signed in-toto statement + signature
+curl -s https://hperkins.blog/wp-json/flavor-agent/v1/attestations/$ATT/verification     # strict status + outcomes + terminal chain context
 curl -s https://hperkins.blog/wp-json/flavor-agent/v1/attestations/$ATT/subject-state    # live canonical subject + digest
 ```
 
-The verifier separates **signature validity** (signed by the site key, untampered) from **live-match** (the signed after-digest still equals the live entity), so an undo or any later edit reports `reverted_by_attestation` / `live_changed_since_attestation` while the signature stays valid. v1 is **site-key self-attestation** — no third-party identity or transparency log, and no prompts, payloads, or PII in the signed statement.
+The verifier separates **signature validity** (signed by the site key, untampered) from strict
+statement/profile and requested site/id binding, then from **live-match** (the signed after-digest
+still equals the live entity). Revert/supersession is accepted only through independently signed,
+same-subject, digest-continuous links; cycles and chains beyond 50 total records fail closed. An
+undo or any later edit therefore reports `reverted_by_attestation` /
+`live_changed_since_attestation` while the root signature stays valid. v1 is **site-key
+self-attestation** — no third-party identity or transparency log, and no prompts, payloads, or PII
+in the signed statement. All four public reads are explicitly `no-store`.
 
 ---
 

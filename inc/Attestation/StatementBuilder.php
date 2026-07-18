@@ -105,6 +105,20 @@ final class StatementBuilder {
 	}
 
 	/**
+	 * Verify that decoded public operations are already the exact allowlisted
+	 * projection for their governance lane.
+	 */
+	public static function operations_match_profile( mixed $operations, string $lane ): bool {
+		try {
+			$projected = self::public_safe_operations( $operations, $lane );
+
+			return self::canonical_json( $projected ) === self::canonical_json( $operations );
+		} catch ( \Throwable ) {
+			return false;
+		}
+	}
+
+	/**
 	 * @param array<string, mixed> $operation
 	 * @return array<string, mixed>
 	 */
@@ -331,7 +345,9 @@ final class StatementBuilder {
 	public static function canonical_json( array $data ): string {
 		self::ksort_deep( $data );
 
-		$json = wp_json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$json = function_exists( 'wp_json_encode' )
+			? \wp_json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
+			: json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 
 		if ( false === $json ) {
 			throw new \RuntimeException( 'Failed to encode canonical attestation JSON.' );

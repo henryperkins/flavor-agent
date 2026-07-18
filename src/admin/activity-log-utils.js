@@ -1731,6 +1731,13 @@ export function getExternalApplyDetails( entry ) {
 			typeof apply.failureMessage === 'string'
 				? apply.failureMessage
 				: '',
+		attestationStatus: normalizeAttestationRecordingStatus(
+			apply.attestationStatus
+		),
+		attestationErrorCode:
+			typeof apply.attestationErrorCode === 'string'
+				? apply.attestationErrorCode
+				: '',
 		executedAt:
 			typeof apply.executedAt === 'string' ? apply.executedAt : '',
 		operations: Array.isArray( apply.operations ) ? apply.operations : [],
@@ -1740,6 +1747,60 @@ export function getExternalApplyDetails( entry ) {
 				: '',
 		signatures: isPlainObject( apply.signatures ) ? apply.signatures : {},
 	};
+}
+
+function normalizeAttestationRecordingStatus( status ) {
+	return [
+		'recorded',
+		'not_configured',
+		'failed',
+		'not_applicable',
+	].includes( status )
+		? status
+		: '';
+}
+
+function getAttestationRecordingMessage( phase, status ) {
+	if ( phase === 'undo' ) {
+		switch ( status ) {
+			case 'recorded':
+				return __( 'Undo attestation recorded.', 'flavor-agent' );
+			case 'not_applicable':
+				return __(
+					'Undo was not attested because the original apply had no attestation.',
+					'flavor-agent'
+				);
+			case 'not_configured':
+				return __(
+					'Undo completed without attestation because no signing key was configured.',
+					'flavor-agent'
+				);
+			case 'failed':
+				return __(
+					'Undo completed, but attestation recording failed.',
+					'flavor-agent'
+				);
+			default:
+				return '';
+		}
+	}
+
+	switch ( status ) {
+		case 'recorded':
+			return __( 'Attestation recorded.', 'flavor-agent' );
+		case 'not_configured':
+			return __(
+				'Applied without attestation because no signing key was configured.',
+				'flavor-agent'
+			);
+		case 'failed':
+			return __(
+				'Applied, but attestation recording failed.',
+				'flavor-agent'
+			);
+		default:
+			return '';
+	}
 }
 
 function getGovernanceLifecycleStatus( entry, details ) {
@@ -2602,6 +2663,9 @@ export function getGovernanceDetails(
 		: [];
 	const undoStatus =
 		typeof entry?.undo?.status === 'string' ? entry.undo.status : '';
+	const undoAttestationStatus = normalizeAttestationRecordingStatus(
+		entry?.undo?.attestationStatus
+	);
 	const undoReason =
 		typeof entry?.undo?.error === 'string' && entry.undo.error.trim()
 			? entry.undo.error.trim()
@@ -2630,6 +2694,16 @@ export function getGovernanceDetails(
 		executedAt: details.executedAt,
 		failureCode: details.failureCode,
 		failureMessage: details.failureMessage,
+		applyAttestationStatus: details.attestationStatus,
+		applyAttestationMessage: getAttestationRecordingMessage(
+			'apply',
+			details.attestationStatus
+		),
+		undoAttestationStatus,
+		undoAttestationMessage: getAttestationRecordingMessage(
+			'undo',
+			undoAttestationStatus
+		),
 		hasResolvedSignature: Boolean( signatures.resolvedContextSignature ),
 		hasReviewSignature: Boolean( signatures.reviewContextSignature ),
 		hasBaselineHash: Boolean(

@@ -52,24 +52,40 @@ final class KeyManager {
 		$registry = \get_option( self::REGISTRY_OPTION, [] );
 		$registry = is_array( $registry ) ? $registry : [];
 
-		if ( isset( $registry[ $kid ] ) ) {
-			return;
-		}
-
+		$changed = false;
 		foreach ( $registry as $id => $record ) {
+			if ( ! is_array( $record ) ) {
+				continue;
+			}
+
+			if ( $id === $kid ) {
+				continue;
+			}
+
 			if ( 'active' === ( $record['status'] ?? '' ) ) {
 				$registry[ $id ]['status'] = 'retired';
+				$changed                   = true;
 			}
 		}
 
-		$registry[ $kid ] = [
+		$existing   = is_array( $registry[ $kid ] ?? null ) ? $registry[ $kid ] : [];
+		$registered = [
 			'kid'       => $kid,
 			'x'         => self::b64url( $pk ),
 			'status'    => 'active',
-			'createdAt' => gmdate( 'c' ),
+			'createdAt' => '' !== (string) ( $existing['createdAt'] ?? '' )
+				? (string) $existing['createdAt']
+				: gmdate( 'c' ),
 		];
 
-		\update_option( self::REGISTRY_OPTION, $registry, false );
+		if ( $existing !== $registered ) {
+			$registry[ $kid ] = $registered;
+			$changed          = true;
+		}
+
+		if ( $changed ) {
+			\update_option( self::REGISTRY_OPTION, $registry, false );
+		}
 	}
 
 	/**

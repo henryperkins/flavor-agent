@@ -168,7 +168,7 @@ Activity, sync-pattern, and public attestation routes live under `/flavor-agent/
 
 - **6 activity route methods** adapt the activity repository: GET `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`), POST `activity` (contextual), POST `activity/{id}/undo` (contextual), POST `activity/{id}/decision` (`manage_options` plus the row's mutation capability; approves or rejects a pending external apply), and POST/DELETE `activity/{id}/claim` (`manage_options` plus the row's mutation capability via `Activity\Permissions::can_decide_activity_request`; acquires/releases an advisory, auto-expiring review claim that never gates a decision)
 - **1 admin route path**: POST `sync-patterns` (`manage_options`) queues the manual pattern reindex; GET `sync-patterns` (`manage_options`) returns current sync state for polling
-- **3 public attestation route methods**: GET `attestations/keys` returns the public key registry; GET `attestations/{id}` returns the signed statement envelope; GET `attestations/{id}/subject-state` returns the current canonical subject slice for live-state verification
+- **4 public attestation GET paths**: `attestations/keys` returns the public key registry; `attestations/{id}` returns the signed statement envelope; `attestations/{id}/subject-state` returns the current canonical subject slice; and `attestations/{id}/verification` returns the strict site-served verification summary with status, terminal id, and chain depth
 
 #### Admin Settings
 

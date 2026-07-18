@@ -1881,6 +1881,16 @@ function getAttestationResultString( payload, key ) {
 const ATTESTATION_OUTCOME_LABELS = {
 	signature_valid: __( 'Signature valid', 'flavor-agent' ),
 	record_tampered: __( 'Record tampered', 'flavor-agent' ),
+	statement_invalid: __( 'Statement profile invalid', 'flavor-agent' ),
+	attestation_identity_mismatch: __(
+		'Attestation identity mismatch',
+		'flavor-agent'
+	),
+	chain_invalid: __( 'Attestation chain invalid', 'flavor-agent' ),
+	chain_resolution_incomplete: __(
+		'Attestation chain resolution incomplete',
+		'flavor-agent'
+	),
 	live_matches_subject: __( 'Live subject matches', 'flavor-agent' ),
 	reverted_by_attestation: __( 'Reverted by attestation', 'flavor-agent' ),
 	superseded_by_attestation: __(
@@ -1900,6 +1910,15 @@ function getVerificationCheckDetails( payload ) {
 		( outcome ) => ATTESTATION_OUTCOME_LABELS[ outcome ] || outcome
 	);
 	const subjectError = getAttestationResultString( payload, 'subjectError' );
+	const verificationStatus = getAttestationResultString(
+		payload,
+		'verificationStatus'
+	);
+	const terminalAttestationId = getAttestationResultString(
+		payload,
+		'terminalAttestationId'
+	);
+	const chainDepth = Number( payload?.chainDepth );
 
 	if ( subjectError ) {
 		details.push(
@@ -1911,12 +1930,68 @@ function getVerificationCheckDetails( payload ) {
 		);
 	}
 
+	if ( terminalAttestationId ) {
+		details.push(
+			sprintf(
+				/* translators: %s: terminal attestation id. */
+				__( 'Terminal attestation: %s', 'flavor-agent' ),
+				terminalAttestationId
+			)
+		);
+	}
+
+	if ( Number.isInteger( chainDepth ) && chainDepth >= 0 ) {
+		details.push(
+			sprintf(
+				/* translators: %d: number of signed attestation links followed. */
+				__( 'Chain depth: %d', 'flavor-agent' ),
+				chainDepth
+			)
+		);
+	}
+
+	let status;
+
+	if ( verificationStatus === 'invalid' ) {
+		status = 'error';
+	} else if (
+		verificationStatus === 'warning' ||
+		verificationStatus === 'incomplete'
+	) {
+		status = 'warning';
+	} else if ( verificationStatus === 'verified' ) {
+		status = 'success';
+	} else if (
+		outcomes.some( ( outcome ) =>
+			[
+				'record_tampered',
+				'statement_invalid',
+				'attestation_identity_mismatch',
+				'chain_invalid',
+			].includes( outcome )
+		)
+	) {
+		status = 'error';
+	} else if (
+		outcomes.some( ( outcome ) =>
+			[
+				'live_changed_since_attestation',
+				'live_subject_unavailable',
+				'chain_resolution_incomplete',
+			].includes( outcome )
+		)
+	) {
+		status = 'warning';
+	} else {
+		status = 'success';
+	}
+
 	return {
 		message: __(
 			'Verification completed using the public attestation endpoints.',
 			'flavor-agent'
 		),
-		status: outcomes.includes( 'record_tampered' ) ? 'error' : 'success',
+		status,
 		details,
 	};
 }
@@ -2480,6 +2555,14 @@ function GovernanceEvidenceSection( {
 	const outcomeRows = [
 		[ __( 'Failure code', 'flavor-agent' ), details.failureCode ],
 		[ __( 'Failure reason', 'flavor-agent' ), details.failureMessage ],
+		[
+			__( 'Apply attestation', 'flavor-agent' ),
+			details.applyAttestationMessage,
+		],
+		[
+			__( 'Undo attestation', 'flavor-agent' ),
+			details.undoAttestationMessage,
+		],
 		[ __( 'Undo state', 'flavor-agent' ), details.undoStatus ],
 		[ __( 'Undo reason', 'flavor-agent' ), details.undoReason ],
 	];

@@ -7,6 +7,7 @@ namespace FlavorAgent\Tests;
 use FlavorAgent\Attestation\AttestationService;
 use FlavorAgent\Attestation\BlockContentCanonicalizer;
 use FlavorAgent\Attestation\KeyManager;
+use FlavorAgent\Attestation\RecordResult;
 use FlavorAgent\Attestation\Repository;
 use FlavorAgent\Attestation\Signer;
 use FlavorAgent\Tests\Support\WordPressTestState;
@@ -24,7 +25,7 @@ final class AttestationServiceTest extends TestCase {
 		$this->configure_key();
 		Repository::install();
 
-		$id = AttestationService::record_apply( $this->apply_context() );
+		$id = AttestationService::record_apply( $this->apply_context() )->attestation_id();
 
 		$this->assertNotNull( $id );
 		$this->assertMatchesRegularExpression( '/^att_[a-f0-9]{32}$/', $id );
@@ -41,20 +42,35 @@ final class AttestationServiceTest extends TestCase {
 		);
 	}
 
-	public function test_record_apply_returns_null_without_key(): void {
+	public function test_record_apply_returns_a_typed_recorded_result(): void {
+		$this->configure_key();
+		Repository::install();
+
+		$result = AttestationService::record_apply( $this->apply_context() );
+
+		$this->assertInstanceOf( RecordResult::class, $result );
+		$this->assertSame( RecordResult::STATUS_RECORDED, $result->status() );
+		$this->assertMatchesRegularExpression( '/^att_[a-f0-9]{32}$/', (string) $result->attestation_id() );
+		$this->assertNull( $result->error_code() );
+	}
+
+	public function test_record_apply_returns_not_configured_without_key(): void {
 		add_filter( 'flavor_agent_attest_private_key', static fn (): string => '' );
 
-		$this->assertNull(
-			AttestationService::record_apply(
-				[
-					'surface'        => 'global-styles',
-					'globalStylesId' => '81',
-					'operations'     => [],
-					'before'         => [ 'userConfig' => [] ],
-					'after'          => [ 'userConfig' => [] ],
-				]
-			)
+		$result = AttestationService::record_apply(
+			[
+				'surface'        => 'global-styles',
+				'globalStylesId' => '81',
+				'operations'     => [],
+				'before'         => [ 'userConfig' => [] ],
+				'after'          => [ 'userConfig' => [] ],
+			]
 		);
+
+		$this->assertInstanceOf( RecordResult::class, $result );
+		$this->assertSame( RecordResult::STATUS_NOT_CONFIGURED, $result->status() );
+		$this->assertNull( $result->attestation_id() );
+		$this->assertNull( $result->error_code() );
 	}
 
 	public function test_record_apply_rejects_a_surface_outside_the_owned_lanes(): void {
@@ -85,7 +101,7 @@ final class AttestationServiceTest extends TestCase {
 		$this->configure_key();
 		Repository::install();
 
-		$apply_id = AttestationService::record_apply( $this->apply_context() );
+		$apply_id = AttestationService::record_apply( $this->apply_context() )->attestation_id();
 		$this->assertNotNull( $apply_id );
 
 		$revert_context               = $this->apply_context();
@@ -99,7 +115,7 @@ final class AttestationServiceTest extends TestCase {
 		$revert_context['decidedAt']  = '2026-06-22T00:02:00+00:00';
 		$revert_context['operations'] = [];
 
-		$revert_id = AttestationService::record_revert( $apply_id, $revert_context );
+		$revert_id = AttestationService::record_revert( $apply_id, $revert_context )->attestation_id();
 
 		$this->assertNotNull( $revert_id );
 		$this->assertSame( $revert_id, Repository::find_by_reverts( $apply_id )['attestation_id'] );
@@ -109,7 +125,7 @@ final class AttestationServiceTest extends TestCase {
 		$this->configure_key();
 		Repository::install();
 
-		$first_id = AttestationService::record_apply( $this->apply_context() );
+		$first_id = AttestationService::record_apply( $this->apply_context() )->attestation_id();
 		$this->assertNotNull( $first_id );
 
 		$second_context              = $this->apply_context();
@@ -125,7 +141,7 @@ final class AttestationServiceTest extends TestCase {
 		];
 		$second_context['decidedAt'] = '2026-06-22T00:02:00+00:00';
 
-		$second_id = AttestationService::record_apply( $second_context );
+		$second_id = AttestationService::record_apply( $second_context )->attestation_id();
 		$this->assertNotNull( $second_id );
 
 		$this->assertSame( $second_id, Repository::find_by_supersedes( $first_id )['attestation_id'] );
@@ -136,7 +152,7 @@ final class AttestationServiceTest extends TestCase {
 		Repository::install();
 
 		$context = $this->template_context();
-		$id      = AttestationService::record_apply( $context );
+		$id      = AttestationService::record_apply( $context )->attestation_id();
 
 		$this->assertNotNull( $id );
 
@@ -185,7 +201,7 @@ final class AttestationServiceTest extends TestCase {
 		$context['decidedAt']         = '2026-06-22T00:02:00+00:00';
 		$context['relatedActivityId'] = 'act_template_part';
 
-		$id = AttestationService::record_apply( $context );
+		$id = AttestationService::record_apply( $context )->attestation_id();
 
 		$this->assertNotNull( $id );
 
@@ -202,7 +218,7 @@ final class AttestationServiceTest extends TestCase {
 		$this->configure_key();
 		Repository::install();
 
-		$first_id = AttestationService::record_apply( $this->template_context() );
+		$first_id = AttestationService::record_apply( $this->template_context() )->attestation_id();
 		$this->assertNotNull( $first_id );
 
 		$second_context                      = $this->template_context();
@@ -211,7 +227,7 @@ final class AttestationServiceTest extends TestCase {
 		$second_context['decidedAt']         = '2026-06-22T00:02:00+00:00';
 		$second_context['relatedActivityId'] = 'act_template_2';
 
-		$second_id = AttestationService::record_apply( $second_context );
+		$second_id = AttestationService::record_apply( $second_context )->attestation_id();
 		$this->assertNotNull( $second_id );
 		$this->assertSame( $second_id, Repository::find_by_supersedes( $first_id )['attestation_id'] );
 	}
@@ -221,7 +237,7 @@ final class AttestationServiceTest extends TestCase {
 		Repository::install();
 
 		$apply_context = $this->template_context();
-		$apply_id      = AttestationService::record_apply( $apply_context );
+		$apply_id      = AttestationService::record_apply( $apply_context )->attestation_id();
 		$this->assertNotNull( $apply_id );
 
 		$revert_context                      = $apply_context;
@@ -231,7 +247,7 @@ final class AttestationServiceTest extends TestCase {
 		$revert_context['decidedAt']         = '2026-06-22T00:03:00+00:00';
 		$revert_context['relatedActivityId'] = 'act_template_revert';
 
-		$revert_id = AttestationService::record_revert( $apply_id, $revert_context );
+		$revert_id = AttestationService::record_revert( $apply_id, $revert_context )->attestation_id();
 
 		$this->assertNotNull( $revert_id );
 
