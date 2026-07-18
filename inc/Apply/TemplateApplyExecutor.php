@@ -140,11 +140,22 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 * @param array<string, mixed> $entry
 	 */
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
-		$template = self::resolve_template( self::template_ref( $entry ) );
+		$content = self::resolve_live_content( self::template_ref( $entry ) );
+
+		return is_wp_error( $content )
+			? $content
+			: self::content_hash( $content );
+	}
+
+	/**
+	 * Resolve the live template content for public subject-state verification.
+	 */
+	public static function resolve_live_content( string $ref ): string|\WP_Error {
+		$template = self::resolve_template( $ref );
 
 		return is_wp_error( $template )
 			? $template
-			: self::content_hash( (string) ( $template->content ?? '' ) );
+			: (string) ( $template->content ?? '' );
 	}
 
 	/**

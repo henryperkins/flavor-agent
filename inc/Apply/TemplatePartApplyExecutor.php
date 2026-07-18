@@ -125,11 +125,22 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 * @param array<string, mixed> $entry
 	 */
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
-		$part = self::resolve_part( self::part_ref( $entry ) );
+		$content = self::resolve_live_content( self::part_ref( $entry ) );
+
+		return is_wp_error( $content )
+			? $content
+			: self::content_hash( $content );
+	}
+
+	/**
+	 * Resolve the live template-part content for public subject-state verification.
+	 */
+	public static function resolve_live_content( string $ref ): string|\WP_Error {
+		$part = self::resolve_part( $ref );
 
 		return is_wp_error( $part )
 			? $part
-			: self::content_hash( (string) ( $part->content ?? '' ) );
+			: (string) ( $part->content ?? '' );
 	}
 
 	/**
@@ -243,13 +254,13 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 * @return true|\WP_Error
 	 */
 	private static function assert_part_unchanged( string $ref, string $expected_hash ): true|\WP_Error {
-		$current = self::resolve_part( $ref );
+		$current_content = self::resolve_live_content( $ref );
 
-		if ( is_wp_error( $current ) ) {
-			return $current;
+		if ( is_wp_error( $current_content ) ) {
+			return $current_content;
 		}
 
-		if ( ! hash_equals( self::content_hash( (string) ( $current->content ?? '' ) ), $expected_hash ) ) {
+		if ( ! hash_equals( self::content_hash( $current_content ), $expected_hash ) ) {
 			return new \WP_Error(
 				'flavor_agent_apply_target_changed',
 				'The template part changed before Flavor Agent could persist this operation. Regenerate the request and try again.',

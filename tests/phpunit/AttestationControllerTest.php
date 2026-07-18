@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Attestation\AttestationService;
+use FlavorAgent\Attestation\BlockContentCanonicalizer;
 use FlavorAgent\Attestation\Canonicalizer;
 use FlavorAgent\Attestation\KeyManager;
 use FlavorAgent\Attestation\Repository;
@@ -16,11 +17,14 @@ use PHPUnit\Framework\TestCase;
 final class AttestationControllerTest extends TestCase {
 
 	private const GLOBAL_STYLES_ID = '81';
+	private const TEMPLATE_REF     = 'twentytwentyfive//home';
+	private const PART_REF         = 'twentytwentyfive//header';
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		WordPressTestState::$active_theme = [ 'stylesheet' => 'twentytwentyfive' ];
 		$this->configure_key();
 		Repository::install();
 	}
@@ -73,6 +77,60 @@ final class AttestationControllerTest extends TestCase {
 		$this->assertSame( 'global-styles', $data['scope'] );
 		$this->assertSame( Canonicalizer::digest( $config ), $data['subject_digest'] );
 		$this->assertSame( Canonicalizer::canonical_bytes( $config ), self::b64url_decode( (string) $data['subject_canonical_b64'] ) );
+	}
+
+	public function test_template_subject_state_round_trips_the_statement_after_digest(): void {
+		$content = '<!-- wp:group --><div class="wp-block-group">'
+			. '<!-- wp:paragraph --><p>Live template</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+		$this->seed_template( 'wp_template', self::TEMPLATE_REF, $content, 'home' );
+		$id      = $this->record_template_apply( 'template', self::TEMPLATE_REF, $content );
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id . '/subject-state' );
+		$request->set_param( 'id', $id );
+
+		$response = ( new AttestationController() )->get_subject_state( $request );
+		$data     = $response->get_data();
+		$row      = Repository::find( $id );
+		$this->assertIsArray( $row );
+
+		$statement = json_decode( (string) $row['statement_bytes'], true );
+		$this->assertIsArray( $statement );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'template', $data['scope'] );
+		$this->assertSame( BlockContentCanonicalizer::bytes( $content ), self::b64url_decode( (string) $data['subject_canonical_b64'] ) );
+		$this->assertSame( $statement['predicate']['after']['sha256'], $data['subject_digest'] );
+	}
+
+	public function test_template_part_subject_state_returns_live_canonical_content(): void {
+		$content = '<!-- wp:navigation /-->';
+		$this->seed_template( 'wp_template_part', self::PART_REF, $content, 'header' );
+		$id      = $this->record_template_apply( 'template-part', self::PART_REF, $content );
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id . '/subject-state' );
+		$request->set_param( 'id', $id );
+
+		$response = ( new AttestationController() )->get_subject_state( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'template-part', $data['scope'] );
+		$this->assertSame( BlockContentCanonicalizer::digest( $content ), $data['subject_digest'] );
+	}
+
+	public function test_template_subject_state_returns_409_when_the_template_was_deleted(): void {
+		$content = '<!-- wp:paragraph --><p>Deleted</p><!-- /wp:paragraph -->';
+		$this->seed_template( 'wp_template', self::TEMPLATE_REF, $content, 'home' );
+		$id = $this->record_template_apply( 'template', self::TEMPLATE_REF, $content );
+
+		WordPressTestState::$block_templates['wp_template'] = [];
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/attestations/' . $id . '/subject-state' );
+		$request->set_param( 'id', $id );
+
+		$response = ( new AttestationController() )->get_subject_state( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( [ 'error' => 'subject_unavailable' ], $response->get_data() );
 	}
 
 	public function test_get_attestation_exposes_superseded_by_attestation_id(): void {
@@ -160,6 +218,39 @@ final class AttestationControllerTest extends TestCase {
 		$this->assertIsString( $id );
 
 		return $id;
+	}
+
+	private function record_template_apply( string $surface, string $ref, string $after_content ): string {
+		$id = AttestationService::record_apply(
+			[
+				'surface'            => $surface,
+				'templateRef'        => $ref,
+				'operations'         => [],
+				'before'             => [ 'content' => '' ],
+				'after'              => [ 'content' => $after_content ],
+				'freshnessSignature' => 'template-f',
+				'actorRole'          => 'administrator',
+				'relatedActivityId'  => 'act_' . str_replace( [ '/', '-' ], '_', $surface ),
+				'requestedAt'        => '2026-06-22T00:00:00+00:00',
+				'decidedAt'          => '2026-06-22T00:01:00+00:00',
+			]
+		);
+
+		$this->assertIsString( $id );
+
+		return $id;
+	}
+
+	private function seed_template( string $type, string $ref, string $content, string $slug ): void {
+		WordPressTestState::$block_templates[ $type ] = [
+			(object) [
+				'id'      => $ref,
+				'wp_id'   => 0,
+				'slug'    => $slug,
+				'title'   => ucfirst( $slug ),
+				'content' => $content,
+			],
+		];
 	}
 
 	/**
