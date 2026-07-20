@@ -10,7 +10,7 @@ use FlavorAgent\Attestation\Repository as AttestationRepository;
 final class Repository {
 
 	public const SCHEMA_OPTION                       = 'flavor_agent_activity_schema_version';
-	public const SCHEMA_VERSION                      = 4;
+	public const SCHEMA_VERSION                      = 5;
 	public const PRUNE_CRON_HOOK                     = 'flavor_agent_prune_activity';
 	public const ADMIN_PROJECTION_BACKFILL_CRON_HOOK = 'flavor_agent_backfill_activity_admin_projection';
 	public const DEFAULT_RETENTION_DAYS              = 90;
@@ -4118,8 +4118,30 @@ final class Repository {
 	 * }
 	 */
 	private static function get_admin_request_meta( array $request, array $row = [] ): array {
-		return [
-			'provider'           => self::get_first_string(
+		$resolved_provider      = self::get_first_string(
+			$request,
+			[
+				[ 'ai', 'requestSummary', 'resolvedProvider' ],
+				[ 'requestSummary', 'resolvedProvider' ],
+			]
+		);
+		$resolved_model         = self::get_first_string(
+			$request,
+			[
+				[ 'ai', 'requestSummary', 'resolvedModel' ],
+				[ 'requestSummary', 'resolvedModel' ],
+			]
+		);
+		$model_selection_source = self::get_first_string(
+			$request,
+			[
+				[ 'ai', 'requestSummary', 'modelSelectionSource' ],
+				[ 'requestSummary', 'modelSelectionSource' ],
+			]
+		);
+		$provider               = '' !== $resolved_provider
+			? $resolved_provider
+			: self::get_first_string(
 				$request,
 				[
 					[ 'ai', 'backendLabel' ],
@@ -4131,8 +4153,10 @@ final class Repository {
 					[ 'result', 'provider' ],
 				],
 				trim( (string) ( $row['admin_provider'] ?? '' ) )
-			),
-			'model'              => self::get_first_string(
+			);
+		$model                  = '' !== $resolved_model
+			? $resolved_model
+			: self::get_first_string(
 				$request,
 				[
 					[ 'ai', 'model' ],
@@ -4142,7 +4166,29 @@ final class Repository {
 					[ 'result', 'model' ],
 				],
 				trim( (string) ( $row['admin_model'] ?? '' ) )
-			),
+			);
+		$selected_provider      = $resolved_provider;
+
+		if ( '' === $selected_provider && 'default' === $model_selection_source ) {
+			$selected_provider = 'Provider-managed';
+		}
+
+		if ( '' === $selected_provider ) {
+			$selected_provider = self::get_first_string(
+				$request,
+				[
+					[ 'ai', 'selectedProviderLabel' ],
+					[ 'ai', 'selectedProvider' ],
+					[ 'selectedProviderLabel' ],
+					[ 'selectedProvider' ],
+				],
+				trim( (string) ( $row['admin_selected_provider'] ?? '' ) )
+			);
+		}
+
+		return [
+			'provider'           => $provider,
+			'model'              => $model,
 			'providerPath'       => self::get_first_string(
 				$request,
 				[
@@ -4169,16 +4215,7 @@ final class Repository {
 				],
 				trim( (string) ( $row['admin_credential_source'] ?? '' ) )
 			),
-			'selectedProvider'   => self::get_first_string(
-				$request,
-				[
-					[ 'ai', 'selectedProviderLabel' ],
-					[ 'ai', 'selectedProvider' ],
-					[ 'selectedProviderLabel' ],
-					[ 'selectedProvider' ],
-				],
-				trim( (string) ( $row['admin_selected_provider'] ?? '' ) )
-			),
+			'selectedProvider'   => $selected_provider,
 			'requestAbility'     => self::get_first_string(
 				$request,
 				[
@@ -4197,7 +4234,6 @@ final class Repository {
 			),
 		];
 	}
-
 	/**
 	 * @param array<string, mixed> $value
 	 * @param array<int, array<int, string>> $paths
