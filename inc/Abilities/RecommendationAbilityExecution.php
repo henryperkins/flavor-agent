@@ -378,9 +378,9 @@ final class RecommendationAbilityExecution {
 	 * @return array<string, mixed>
 	 */
 	private static function append_request_meta( array $payload, string $ability_name, FlavorAgentRequestTag $request_tag ): array {
-		$request_meta = \is_array( $payload['requestMeta'] ?? null )
-			? $payload['requestMeta']
-			: Provider::active_chat_request_meta();
+		$request_meta = self::merge_request_meta(
+			\is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : []
+		);
 
 		$request_meta['ability']            = $ability_name;
 		$request_meta['executionTransport'] = 'wp-abilities';
@@ -409,9 +409,9 @@ final class RecommendationAbilityExecution {
 		$data         = \is_array( $data )
 			? $data
 			: ( null !== $data ? [ 'originalData' => $data ] : [] );
-		$request_meta = \is_array( $data['requestMeta'] ?? null )
-			? $data['requestMeta']
-			: Provider::active_chat_request_meta();
+		$request_meta = self::merge_request_meta(
+			\is_array( $data['requestMeta'] ?? null ) ? $data['requestMeta'] : []
+		);
 
 		$request_meta['ability']            = $ability_name;
 		$request_meta['executionTransport'] = 'wp-abilities';
@@ -436,6 +436,64 @@ final class RecommendationAbilityExecution {
 			$error->get_error_message( $code ),
 			$data
 		);
+	}
+
+	/**
+	 * Merge callback-supplied request metadata over the diagnostics captured by
+	 * the runtime so a partial recommendation payload cannot discard provider
+	 * identity, transport, usage, or response details.
+	 *
+	 * @param array<string, mixed> $request_meta
+	 * @return array<string, mixed>
+	 */
+	private static function merge_request_meta( array $request_meta ): array {
+		$runtime_meta = Provider::active_chat_request_meta();
+		$merged       = \array_replace( $runtime_meta, $request_meta );
+
+		foreach ( [ 'tokenUsage', 'transport', 'requestSummary', 'responseSummary', 'errorSummary' ] as $key ) {
+			$runtime_value = \is_array( $runtime_meta[ $key ] ?? null ) ? $runtime_meta[ $key ] : [];
+			$request_value = \is_array( $request_meta[ $key ] ?? null ) ? $request_meta[ $key ] : [];
+
+			if ( [] === $runtime_value && [] === $request_value ) {
+				continue;
+			}
+
+			if ( [] !== $request_value && \array_is_list( $request_value ) ) {
+				$merged[ $key ] = $runtime_value;
+				continue;
+			}
+
+			$merged[ $key ] = self::merge_request_meta_array( $runtime_value, $request_value );
+		}
+
+		return $merged;
+	}
+
+	/**
+	 * Merge associative diagnostic maps while replacing list values atomically.
+	 *
+	 * @param array<mixed> $runtime_value
+	 * @param array<mixed> $request_value
+	 * @return array<mixed>
+	 */
+	private static function merge_request_meta_array( array $runtime_value, array $request_value ): array {
+		if ( [] === $request_value ) {
+			return $runtime_value;
+		}
+
+		if ( [] === $runtime_value || \array_is_list( $runtime_value ) || \array_is_list( $request_value ) ) {
+			return $request_value;
+		}
+
+		$merged = $runtime_value;
+
+		foreach ( $request_value as $key => $value ) {
+			$merged[ $key ] = \is_array( $value ) && \is_array( $merged[ $key ] ?? null )
+				? self::merge_request_meta_array( $merged[ $key ], $value )
+				: $value;
+		}
+
+		return $merged;
 	}
 
 	/**

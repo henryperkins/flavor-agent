@@ -176,7 +176,6 @@ final class Provider {
 	 * }
 	 */
 	public static function active_chat_request_meta(): array {
-		$selected_provider                          = self::get();
 		$config                                     = (
 			self::$has_fresh_runtime_chat_configuration
 			&& is_array( self::$last_runtime_chat_configuration )
@@ -185,7 +184,7 @@ final class Provider {
 			: self::chat_configuration();
 		self::$has_fresh_runtime_chat_configuration = false;
 		$provider                                   = self::normalize_provider_for_request_meta(
-			(string) ( $config['provider'] ?? $selected_provider )
+			(string) ( $config['provider'] ?? self::get() )
 		);
 		$provider_label                             = self::provider_label_for_request_meta( $provider );
 		$connector_meta                             = self::connector_meta_for_request_meta( $provider );
@@ -193,36 +192,18 @@ final class Provider {
 		$diagnostics                                = self::active_chat_diagnostics();
 		$backend_label                              = trim( (string) ( $config['label'] ?? $provider_label ) );
 		$model                                      = trim( (string) ( $config['model'] ?? '' ) );
-		$used_fallback                              = ! self::chat_provider_matches_selection( $selected_provider, $provider );
-		$owner                                      = 'flavor_agent';
-		$owner_label                                = 'Settings > Flavor Agent';
-		$path_label                                 = 'Flavor Agent chat backend';
-		$credential_source                          = 'plugin_settings';
-		$credential_label                           = 'Settings > Flavor Agent';
-
 		if ( self::is_connector( $provider ) ) {
-			$owner             = 'connectors';
-			$owner_label       = 'Settings > Connectors';
-			$path_label        = sprintf( '%s via Settings > Connectors', $provider_label );
-			$credential_source = 'provider_managed';
-			$credential_label  = 'Provider-managed';
+			$path_label = sprintf( '%s via Settings > Connectors', $provider_label );
 		} elseif ( self::is_wordpress_ai_client( $provider ) ) {
-			$owner             = 'connectors';
-			$owner_label       = 'Settings > Connectors';
-			$path_label        = 'WordPress AI Client via Settings > Connectors';
-			$credential_source = 'provider_managed';
-			$credential_label  = 'Provider-managed';
+			$path_label = 'WordPress AI Client via Settings > Connectors';
 		} else {
-			$owner             = 'connectors';
-			$owner_label       = 'Settings > Connectors';
-			$path_label        = sprintf( '%s has no selected chat connector', $provider_label );
-			$credential_source = 'provider_managed';
-			$credential_label  = 'Provider-managed';
+			$path_label = sprintf( '%s has no selected chat connector', $provider_label );
 		}
 
 		$meta = [
-			'selectedProvider'      => $selected_provider,
-			'selectedProviderLabel' => self::provider_label_for_request_meta( $selected_provider ),
+			// Connector-owned chat has no separate Flavor Agent provider selection.
+			'selectedProvider'      => $provider,
+			'selectedProviderLabel' => $provider_label,
 			'connectorId'           => $connector_meta['id'],
 			'connectorLabel'        => $connector_meta['label'],
 			'connectorPluginSlug'   => $connector_meta['pluginSlug'],
@@ -230,14 +211,14 @@ final class Provider {
 			'providerLabel'         => $provider_label,
 			'backendLabel'          => '' !== $backend_label ? $backend_label : $provider_label,
 			'model'                 => '' !== $model ? $model : 'provider-managed',
-			'owner'                 => $owner,
-			'ownerLabel'            => $owner_label,
+			'owner'                 => 'connectors',
+			'ownerLabel'            => 'Settings > Connectors',
 			'pathLabel'             => $path_label,
-			'credentialSource'      => $credential_source,
-			'credentialSourceLabel' => $credential_label,
+			'credentialSource'      => 'provider_managed',
+			'credentialSourceLabel' => 'Provider-managed',
 			'tokenUsage'            => $metrics['tokenUsage'],
 			'latencyMs'             => $metrics['latencyMs'],
-			'usedFallback'          => $used_fallback,
+			'usedFallback'          => false,
 		];
 
 		foreach ( [ 'transport', 'requestSummary', 'responseSummary', 'errorSummary' ] as $key ) {
@@ -578,31 +559,6 @@ final class Provider {
 		}
 
 		return '';
-	}
-
-	private static function chat_provider_matches_selection( string $selected_provider, string $provider ): bool {
-		$selected_provider = self::normalize_provider( $selected_provider );
-		$provider          = self::normalize_provider_for_request_meta( $provider );
-
-		if ( $provider === $selected_provider ) {
-			return true;
-		}
-
-		if (
-			WorkersAIEmbeddingConfiguration::PROVIDER === $selected_provider
-			&& self::WORDPRESS_AI_CLIENT_PROVIDER === $provider
-		) {
-			return true;
-		}
-
-		if (
-			self::WORDPRESS_AI_CLIENT_PROVIDER === $provider
-			&& ! self::is_connector( $selected_provider )
-		) {
-			return true;
-		}
-
-		return false;
 	}
 
 	/**

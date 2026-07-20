@@ -10,7 +10,7 @@ use FlavorAgent\Attestation\Repository as AttestationRepository;
 final class Repository {
 
 	public const SCHEMA_OPTION                       = 'flavor_agent_activity_schema_version';
-	public const SCHEMA_VERSION                      = 4;
+	public const SCHEMA_VERSION                      = 5;
 	public const PRUNE_CRON_HOOK                     = 'flavor_agent_prune_activity';
 	public const ADMIN_PROJECTION_BACKFILL_CRON_HOOK = 'flavor_agent_backfill_activity_admin_projection';
 	public const DEFAULT_RETENTION_DAYS              = 90;
@@ -25,6 +25,7 @@ final class Repository {
 	private const MAX_REPORT_ROW_LIMIT                    = 1000;
 	private const ADMIN_PROJECTION_BACKFILL_SIZE          = 250;
 	private const ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION = 'flavor_agent_activity_admin_projection_backfill_cursor';
+	private const ADMIN_PROJECTION_BACKFILL_FORCE_OPTION  = 'flavor_agent_activity_admin_projection_backfill_force';
 	private const ADMIN_HISTORY_QUERY_ENTITY_BATCH_SIZE   = 50;
 	private const ADMIN_HISTORY_QUERY_KEY_SEPARATOR       = "\x1F";
 	private const ADMIN_PROJECTION_SELECT_SQL             = 'id, activity_id, user_id, surface, entity_type, entity_ref, document_scope_key, activity_type, suggestion, undo_state, execution_result, created_at, admin_post_type, admin_entity_id, admin_block_path, admin_operation_type, admin_operation_label, admin_provider, admin_model, admin_provider_path, admin_configuration_owner, admin_credential_source, admin_selected_provider, admin_request_ability, admin_request_route, admin_request_reference, admin_request_prompt, admin_search_text';
@@ -141,7 +142,7 @@ final class Repository {
 		update_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
 
 		if ( $table_previously_exists && $installed_version < self::SCHEMA_VERSION ) {
-			self::schedule_admin_projection_backfill();
+			self::schedule_admin_projection_backfill( $installed_version < 5 );
 		}
 	}
 
@@ -1515,8 +1516,11 @@ final class Repository {
 		return is_array( $stored ) ? $stored : $existing_entry;
 	}
 
-	private static function schedule_admin_projection_backfill(): void {
-		if ( null === get_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION, null ) ) {
+	private static function schedule_admin_projection_backfill( bool $force = false ): void {
+		if ( $force ) {
+			update_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION, 0, false );
+			update_option( self::ADMIN_PROJECTION_BACKFILL_FORCE_OPTION, 1, false );
+		} elseif ( null === get_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION, null ) ) {
 			update_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION, 0, false );
 		}
 
@@ -1540,6 +1544,7 @@ final class Repository {
 	private static function clear_admin_projection_backfill_state(): void {
 		if ( function_exists( 'delete_option' ) ) {
 			delete_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION );
+			delete_option( self::ADMIN_PROJECTION_BACKFILL_FORCE_OPTION );
 		}
 
 		if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
@@ -1555,6 +1560,10 @@ final class Repository {
 	 * @param array<string, mixed> $row
 	 */
 	private static function row_requires_admin_projection_backfill( array $row ): bool {
+		if ( 1 === (int) get_option( self::ADMIN_PROJECTION_BACKFILL_FORCE_OPTION, 0 ) ) {
+			return true;
+		}
+
 		if ( '' === trim( (string) ( $row['admin_operation_type'] ?? '' ) )
 			|| '' === trim( (string) ( $row['admin_operation_label'] ?? '' ) )
 			|| '' === trim( (string) ( $row['admin_search_text'] ?? '' ) ) ) {
@@ -4118,8 +4127,30 @@ final class Repository {
 	 * }
 	 */
 	private static function get_admin_request_meta( array $request, array $row = [] ): array {
-		return [
-			'provider'           => self::get_first_string(
+		$resolved_provider      = self::get_first_string(
+			$request,
+			[
+				[ 'ai', 'requestSummary', 'resolvedProvider' ],
+				[ 'requestSummary', 'resolvedProvider' ],
+			]
+		);
+		$resolved_model         = self::get_first_string(
+			$request,
+			[
+				[ 'ai', 'requestSummary', 'resolvedModel' ],
+				[ 'requestSummary', 'resolvedModel' ],
+			]
+		);
+		$model_selection_source = self::get_first_string(
+			$request,
+			[
+				[ 'ai', 'requestSummary', 'modelSelectionSource' ],
+				[ 'requestSummary', 'modelSelectionSource' ],
+			]
+		);
+		$provider               = '' !== $resolved_provider
+			? $resolved_provider
+			: self::get_first_string(
 				$request,
 				[
 					[ 'ai', 'backendLabel' ],
@@ -4131,8 +4162,10 @@ final class Repository {
 					[ 'result', 'provider' ],
 				],
 				trim( (string) ( $row['admin_provider'] ?? '' ) )
-			),
-			'model'              => self::get_first_string(
+			);
+		$model                  = '' !== $resolved_model
+			? $resolved_model
+			: self::get_first_string(
 				$request,
 				[
 					[ 'ai', 'model' ],
@@ -4142,7 +4175,29 @@ final class Repository {
 					[ 'result', 'model' ],
 				],
 				trim( (string) ( $row['admin_model'] ?? '' ) )
-			),
+			);
+		$selected_provider      = $resolved_provider;
+
+		if ( '' === $selected_provider && 'default' === $model_selection_source ) {
+			$selected_provider = 'provider-managed';
+		}
+
+		if ( '' === $selected_provider ) {
+			$selected_provider = self::get_first_string(
+				$request,
+				[
+					[ 'ai', 'selectedProviderLabel' ],
+					[ 'ai', 'selectedProvider' ],
+					[ 'selectedProviderLabel' ],
+					[ 'selectedProvider' ],
+				],
+				trim( (string) ( $row['admin_selected_provider'] ?? '' ) )
+			);
+		}
+
+		return [
+			'provider'           => $provider,
+			'model'              => $model,
 			'providerPath'       => self::get_first_string(
 				$request,
 				[
@@ -4169,16 +4224,7 @@ final class Repository {
 				],
 				trim( (string) ( $row['admin_credential_source'] ?? '' ) )
 			),
-			'selectedProvider'   => self::get_first_string(
-				$request,
-				[
-					[ 'ai', 'selectedProviderLabel' ],
-					[ 'ai', 'selectedProvider' ],
-					[ 'selectedProviderLabel' ],
-					[ 'selectedProvider' ],
-				],
-				trim( (string) ( $row['admin_selected_provider'] ?? '' ) )
-			),
+			'selectedProvider'   => $selected_provider,
 			'requestAbility'     => self::get_first_string(
 				$request,
 				[
@@ -4197,7 +4243,6 @@ final class Repository {
 			),
 		];
 	}
-
 	/**
 	 * @param array<string, mixed> $value
 	 * @param array<int, array<int, string>> $paths

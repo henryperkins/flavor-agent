@@ -1,0 +1,268 @@
+<?php
+
+declare(strict_types=1);
+
+namespace FlavorAgent\Tests;
+
+use FlavorAgent\Abilities\RecommendationAbilityExecution;
+use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Tests\Support\WordPressTestState;
+use PHPUnit\Framework\TestCase;
+
+final class ProviderDiagnosticsActivityTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		WordPressTestState::reset();
+		ActivityRepository::install();
+	}
+
+	public function test_recommendation_execution_merges_runtime_diagnostics_into_partial_request_meta(): void {
+		$result = RecommendationAbilityExecution::execute(
+			'template',
+			'flavor-agent/recommend-template',
+			[
+				'templateRef' => 'theme//home',
+				'prompt'      => 'Tighten the structure.',
+				'document'    => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+			],
+			static function (): array {
+				Provider::record_runtime_chat_configuration(
+					[
+						'provider' => 'wordpress_ai_client',
+						'model'    => 'provider-managed',
+					]
+				);
+				Provider::record_runtime_chat_metrics(
+					[
+						'tokenUsage' => [
+							'input'  => 120,
+							'output' => 30,
+							'total'  => 150,
+						],
+						'latencyMs'  => 420,
+					]
+				);
+				Provider::record_runtime_chat_diagnostics(
+					[
+						'transport'       => [
+							'host'           => 'wordpress-ai-client',
+							'path'           => '/generate-text',
+							'timeoutSeconds' => 120,
+						],
+						'requestSummary'  => [
+							'bodyBytes'             => 1024,
+							'resolvedProvider'      => 'anthropic',
+							'resolvedModel'         => 'claude-sonnet-4-6',
+							'modelSelectionSource'  => 'ai_plugin_feature_developer',
+							'modelResolutionStatus' => 'model',
+							'modelPreferences'      => [ 'claude-sonnet-4-6', 'claude-haiku-4-5' ],
+						],
+						'responseSummary' => [
+							'httpStatus'        => 200,
+							'providerRequestId' => 'request-123',
+						],
+					]
+				);
+
+				return [
+					'suggestions' => [
+						[
+							'label' => 'Clarify header hierarchy',
+						],
+					],
+					'explanation' => 'Use fewer competing sections.',
+					'requestMeta' => [
+						'transport'       => [
+							'provider' => 'test-transport',
+						],
+						'requestSummary'  => [
+							'modelPreferences' => [ 'claude-opus-4-8' ],
+						],
+						'responseSummary' => [ 'malformed-callback-value' ],
+					],
+				];
+			}
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'WordPress AI Client', $result['requestMeta']['backendLabel'] ?? null );
+		$this->assertSame( 'wordpress-ai-client', $result['requestMeta']['transport']['host'] ?? null );
+		$this->assertSame( 'test-transport', $result['requestMeta']['transport']['provider'] ?? null );
+		$this->assertSame( 'anthropic', $result['requestMeta']['requestSummary']['resolvedProvider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $result['requestMeta']['requestSummary']['resolvedModel'] ?? null );
+		$this->assertSame( [ 'claude-opus-4-8' ], $result['requestMeta']['requestSummary']['modelPreferences'] ?? null );
+		$this->assertSame( 200, $result['requestMeta']['responseSummary']['httpStatus'] ?? null );
+		$this->assertSame( 150, $result['requestMeta']['tokenUsage']['total'] ?? null );
+		$this->assertSame( 420, $result['requestMeta']['latencyMs'] ?? null );
+
+		$rows = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+		$this->assertCount( 1, $rows );
+
+		$request = json_decode( (string) ( $rows[0]['request_json'] ?? '' ), true );
+		$this->assertSame( 'wordpress-ai-client', $request['ai']['transport']['host'] ?? null );
+		$this->assertSame( 'test-transport', $request['ai']['transport']['provider'] ?? null );
+		$this->assertSame( 'anthropic', $request['ai']['requestSummary']['resolvedProvider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $request['ai']['requestSummary']['resolvedModel'] ?? null );
+	}
+
+	public function test_admin_projection_prefers_resolved_chat_provider_over_legacy_provider_fields(): void {
+		$entry = [
+			'id'         => 'provider-diagnostic-activity',
+			'type'       => 'request_diagnostic',
+			'surface'    => 'template',
+			'target'     => [
+				'templateRef' => 'theme//home',
+			],
+			'suggestion' => 'Template recommendation request',
+			'before'     => [],
+			'after'      => [],
+			'request'    => [
+				'prompt'    => 'Tighten the structure.',
+				'reference' => 'template:theme//home:1',
+				'ai'        => [
+					'backendLabel'          => 'WordPress AI Client',
+					'provider'              => 'wordpress_ai_client',
+					'model'                 => 'provider-managed',
+					'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
+					'ownerLabel'            => 'Settings > Connectors',
+					'credentialSourceLabel' => 'Provider-managed',
+					'selectedProviderLabel' => 'Cloudflare Workers AI',
+					'requestSummary'        => [
+						'resolvedProvider'      => 'anthropic',
+						'resolvedModel'         => 'claude-sonnet-4-6',
+						'modelSelectionSource'  => 'ai_plugin_feature_developer',
+						'modelResolutionStatus' => 'model',
+					],
+				],
+			],
+			'document'   => [
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			],
+			'timestamp'  => '2026-07-20T12:00:00Z',
+		];
+
+		$method = new \ReflectionMethod( ActivityRepository::class, 'build_admin_projection_from_entry' );
+		$method->setAccessible( true );
+		$projection = $method->invoke( null, $entry );
+
+		$this->assertIsArray( $projection );
+		$this->assertSame( 'anthropic', $projection['admin_provider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $projection['admin_model'] ?? null );
+		$this->assertSame( 'anthropic', $projection['admin_selected_provider'] ?? null );
+	}
+
+	public function test_schema_v5_upgrade_reprojects_populated_legacy_provider_fields(): void {
+		ActivityRepository::create(
+			[
+				'id'         => 'legacy-provider-diagnostic',
+				'type'       => 'request_diagnostic',
+				'surface'    => 'template',
+				'target'     => [ 'templateRef' => 'theme//home' ],
+				'suggestion' => 'Template recommendation request',
+				'before'     => [],
+				'after'      => [],
+				'request'    => [
+					'ai' => [
+						'backendLabel'   => 'WordPress AI Client',
+						'provider'       => 'wordpress_ai_client',
+						'model'          => 'provider-managed',
+						'requestSummary' => [
+							'resolvedProvider' => 'anthropic',
+							'resolvedModel'    => 'claude-sonnet-4-6',
+						],
+					],
+				],
+				'document'   => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+				'timestamp'  => '2026-07-20T12:00:00Z',
+			]
+		);
+
+		$table_name = ActivityRepository::table_name();
+		$row        = &WordPressTestState::$db_tables[ $table_name ][0];
+
+		$row['admin_provider']          = 'WordPress AI Client';
+		$row['admin_model']             = 'provider-managed';
+		$row['admin_selected_provider'] = 'Cloudflare Workers AI';
+		WordPressTestState::$options[ ActivityRepository::SCHEMA_OPTION ] = 4;
+
+		ActivityRepository::maybe_install();
+		$processed = ActivityRepository::run_admin_projection_backfill();
+
+		$this->assertSame( 1, $processed );
+		$this->assertSame( 'anthropic', $row['admin_provider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $row['admin_model'] ?? null );
+		$this->assertSame( 'anthropic', $row['admin_selected_provider'] ?? null );
+
+		// Regression guard: once the final batch completes, the forced-backfill
+		// lifecycle must clear its cursor and force flag. If it did not, a later
+		// non-force schema upgrade would inherit a stale force flag and reproject
+		// the entire activity table on every batch (row_requires_admin_projection_backfill
+		// short-circuits true while the force flag is set).
+		$this->assertSame(
+			0,
+			(int) \get_option( 'flavor_agent_activity_admin_projection_backfill_force', 0 ),
+			'v5 forced backfill must clear the force flag on completion.'
+		);
+		$this->assertNull(
+			\get_option( 'flavor_agent_activity_admin_projection_backfill_cursor', null ),
+			'v5 forced backfill must clear the cursor on completion.'
+		);
+	}
+
+	public function test_admin_projection_marks_default_model_selection_as_provider_managed(): void {
+		$entry = [
+			'id'         => 'default-selection-diagnostic',
+			'type'       => 'request_diagnostic',
+			'surface'    => 'template',
+			'target'     => [
+				'templateRef' => 'theme//home',
+			],
+			'suggestion' => 'Template recommendation request',
+			'before'     => [],
+			'after'      => [],
+			'request'    => [
+				'prompt' => 'Tighten the structure.',
+				'ai'     => [
+					'backendLabel'   => 'WordPress AI Client',
+					'provider'       => 'wordpress_ai_client',
+					'model'          => 'provider-managed',
+					'requestSummary' => [
+						// No resolvedProvider: the AI Client resolved to the
+						// provider-managed/default path (no explicit provider and
+						// no developer feature selection).
+						'modelSelectionSource' => 'default',
+					],
+				],
+			],
+			'document'   => [
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			],
+			'timestamp'  => '2026-07-20T12:00:00Z',
+		];
+
+		$method = new \ReflectionMethod( ActivityRepository::class, 'build_admin_projection_from_entry' );
+		$method->setAccessible( true );
+		$projection = $method->invoke( null, $entry );
+
+		// With an empty resolvedProvider and modelSelectionSource 'default', the
+		// admin "Selected provider" projects the provider-managed sentinel rather
+		// than falling through to a stale selectedProviderLabel.
+		$this->assertIsArray( $projection );
+		$this->assertSame( 'provider-managed', $projection['admin_selected_provider'] ?? null );
+	}
+}
