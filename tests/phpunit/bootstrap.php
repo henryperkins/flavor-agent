@@ -443,6 +443,7 @@ namespace FlavorAgent\Tests\Support {
 
 			\WP_Block_Type_Registry::get_instance()->reset();
 			\WP_Block_Patterns_Registry::get_instance()->reset();
+			\WP_Block_Styles_Registry::get_instance()->reset();
 		}
 	}
 }
@@ -1990,6 +1991,86 @@ namespace {
 				}
 
 				$this->registered[$block_name] = $block_type;
+			}
+
+			public function reset(): void
+			{
+				$this->registered = [];
+			}
+		}
+	}
+
+	if (! class_exists('WP_Block_Styles_Registry')) {
+		class WP_Block_Styles_Registry
+		{
+
+			private static ?self $instance = null;
+
+			/**
+			 * @var array<string, array<string, array<string, mixed>>>
+			 */
+			private array $registered = [];
+
+			public static function get_instance(): self
+			{
+				if (null === self::$instance) {
+					self::$instance = new self();
+				}
+
+				return self::$instance;
+			}
+
+			/**
+			 * @param string|string[] $block_name
+			 * @param array<string, mixed> $style_properties
+			 */
+			public function register($block_name, array $style_properties): bool
+			{
+				$style_name = $style_properties['name'] ?? '';
+
+				if (! is_string($style_name) || '' === $style_name) {
+					return false;
+				}
+
+				// Core backfills the label from the name when it is absent.
+				if (empty($style_properties['label'])) {
+					$style_properties['label'] = $style_name;
+				}
+
+				$block_names = is_array($block_name) ? $block_name : [$block_name];
+
+				foreach ($block_names as $name) {
+					$this->registered[(string) $name][$style_name] = $style_properties;
+				}
+
+				return true;
+			}
+
+			/**
+			 * @return array<string, array<string, mixed>>
+			 */
+			public function get_registered_styles_for_block(string $block_name): array
+			{
+				return $this->registered[$block_name] ?? [];
+			}
+
+			/**
+			 * @return array<string, array<string, array<string, mixed>>>
+			 */
+			public function get_all_registered(): array
+			{
+				return $this->registered;
+			}
+
+			public function unregister(string $block_name, string $style_name): bool
+			{
+				if (! isset($this->registered[$block_name][$style_name])) {
+					return false;
+				}
+
+				unset($this->registered[$block_name][$style_name]);
+
+				return true;
 			}
 
 			public function reset(): void
