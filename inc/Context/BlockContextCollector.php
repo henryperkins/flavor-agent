@@ -38,7 +38,7 @@ final class BlockContextCollector {
 				'inspectorPanels'     => $type_info['inspectorPanels'] ?? [],
 				'styles'              => $type_info['styles'] ?? [],
 				'activeStyle'         => $this->block_type_introspector->extract_active_style(
-					$attributes['className'] ?? '',
+					is_string( $attributes['className'] ?? null ) ? $attributes['className'] : '',
 					$type_info['styles'] ?? []
 				),
 				'variations'          => $type_info['variations'] ?? [],

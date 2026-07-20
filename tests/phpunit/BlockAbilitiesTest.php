@@ -1468,4 +1468,59 @@ final class BlockAbilitiesTest extends TestCase {
 			'errorMessage'           => '',
 		];
 	}
+
+	/**
+	 * @return array<int, array{0: mixed}>
+	 */
+	public static function non_string_class_name_provider(): array {
+		return [
+			'int'   => [ 5 ],
+			'float' => [ 1.5 ],
+			'bool'  => [ true ],
+			'array' => [ [ 'is-style-outline' ] ],
+			'null'  => [ null ],
+		];
+	}
+
+	/**
+	 * @dataProvider non_string_class_name_provider
+	 */
+	public function test_selected_block_tolerates_non_string_class_name( mixed $class_name ): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'selectedBlock' => [
+					'blockName'  => 'core/paragraph',
+					'attributes' => [
+						'content'   => 'Hello world',
+						'className' => $class_name,
+					],
+				],
+			]
+		);
+
+		$this->assertArrayHasKey( 'activeStyle', $result['context']['block'] );
+		$this->assertNull( $result['context']['block']['activeStyle'] );
+	}
+
+	/**
+	 * @dataProvider non_string_class_name_provider
+	 */
+	public function test_editor_context_tolerates_non_string_class_name( mixed $class_name ): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [
+							'content'   => 'Hello world',
+							'className' => $class_name,
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertArrayHasKey( 'activeStyle', $result['context']['block'] );
+		$this->assertNull( $result['context']['block']['activeStyle'] );
+	}
 }
