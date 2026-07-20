@@ -341,14 +341,24 @@ final class BlockAbilities {
 			}
 		}
 
-			$styles = self::normalize_list( $block['styles'] ?? [] );
-		if ( ! empty( $styles ) ) {
-			$normalized['block']['styles'] = $styles;
+		// A well-shaped list is an assertion, including an empty one: the
+		// editor always sends this key, and [] is what it sends once the last
+		// registered style is unregistered. Shape-gated rather than presence-
+		// gated because normalize_list() flattens any non-array to [], which
+		// would turn malformed input into a total suppression of style
+		// variations — both in the prompt and at the editor apply gate.
+		if ( is_array( $block['styles'] ?? null ) ) {
+			$normalized['block']['styles'] = self::normalize_list( $block['styles'] );
 		}
 
-			$active_style = is_string( $block['activeStyle'] ?? null ) ? sanitize_text_field( $block['activeStyle'] ) : '';
-		if ( '' !== $active_style ) {
-			$normalized['block']['activeStyle'] = $active_style;
+		// Presence-gated rather than shape-gated, unlike its neighbours: the
+		// client sends a string or null, and an unusable value degrades to
+		// null, which is exactly "no active style" — the same answer
+		// extract_active_style() returns for an unmatched class.
+		if ( array_key_exists( 'activeStyle', $block ) ) {
+			$active_style = is_string( $block['activeStyle'] ) ? sanitize_text_field( $block['activeStyle'] ) : '';
+
+			$normalized['block']['activeStyle'] = '' !== $active_style ? $active_style : null;
 		}
 
 			$child_count = $block['childCount'] ?? null;
@@ -361,9 +371,8 @@ final class BlockAbilities {
 			$normalized['block']['structuralIdentity'] = $structural_identity;
 		}
 
-		$variations = self::normalize_list( $block['variations'] ?? [] );
-		if ( ! empty( $variations ) ) {
-			$normalized['block']['variations'] = $variations;
+		if ( is_array( $block['variations'] ?? null ) ) {
+			$normalized['block']['variations'] = self::normalize_list( $block['variations'] );
 		}
 
 		$normalized['block']['supportsContentRole'] =
