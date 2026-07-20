@@ -448,6 +448,68 @@ describe( 'global styles execution contract', () => {
 			] )
 		);
 	} );
+
+	describe( 'typography.textShadow gate', () => {
+		const TEXT_SHADOW_ENTRY = {
+			path: [ 'typography', 'textShadow' ],
+			valueSource: 'freeform',
+			validation: 'text-shadow',
+		};
+
+		afterEach( () => {
+			delete window.flavorAgentData;
+		} );
+
+		test( 'omits textShadow when the server reports it unsupported', () => {
+			const tokens = collectThemeTokensFromSettings( {
+				features: COMPLETE_FEATURES,
+			} );
+
+			expect(
+				getGlobalStylesSupportedStylePathsFromTokens( tokens, {
+					typographyTextShadow: false,
+				} )
+			).toEqual( expect.not.arrayContaining( [ TEXT_SHADOW_ENTRY ] ) );
+		} );
+
+		test( 'includes textShadow when the server reports it supported', () => {
+			const tokens = collectThemeTokensFromSettings( {
+				features: COMPLETE_FEATURES,
+			} );
+
+			expect(
+				getGlobalStylesSupportedStylePathsFromTokens( tokens, {
+					typographyTextShadow: true,
+				} )
+			).toEqual( expect.arrayContaining( [ TEXT_SHADOW_ENTRY ] ) );
+		} );
+
+		test( 'falls back to the localized capability when none is passed', () => {
+			window.flavorAgentData = {
+				capabilities: { styles: { typographyTextShadow: true } },
+			};
+
+			const tokens = collectThemeTokensFromSettings( {
+				features: COMPLETE_FEATURES,
+			} );
+
+			expect(
+				getGlobalStylesSupportedStylePathsFromTokens( tokens )
+			).toEqual( expect.arrayContaining( [ TEXT_SHADOW_ENTRY ] ) );
+		} );
+
+		test( 'omits textShadow when no capability is localized at all', () => {
+			const tokens = collectThemeTokensFromSettings( {
+				features: COMPLETE_FEATURES,
+			} );
+
+			// Deny-by-default: an older server that ships no styles capability
+			// must not have the client offering a path it will then refuse.
+			expect(
+				getGlobalStylesSupportedStylePathsFromTokens( tokens )
+			).toEqual( expect.not.arrayContaining( [ TEXT_SHADOW_ENTRY ] ) );
+		} );
+	} );
 } );
 
 describe( 'block style execution contract', () => {

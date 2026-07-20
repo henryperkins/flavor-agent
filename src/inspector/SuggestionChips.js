@@ -248,6 +248,7 @@ export default function SuggestionChips( {
 								}
 							>
 								<CheckboxControl
+									__nextHasNoMarginBottom
 									label={ s.label }
 									checked={ isSelected || isApplied }
 									disabled={ isRowDisabled }

@@ -266,6 +266,15 @@ function flavor_agent_get_editor_bootstrap_data(
 		'enableBlockStructuralActions' => flavor_agent_block_structural_actions_enabled(),
 		'capabilities'                 => [
 			'surfaces' => $surface_capabilities,
+			// The client builds its own Global Styles execution contract, so it
+			// needs the same runtime answer the server uses when deciding which
+			// style paths are offerable. Without this the two contracts diverge
+			// and every suggestion for a gated path fails client-side.
+			'styles'   => [
+				'typographyTextShadow' => FlavorAgent\Support\ThemeJsonCapabilities::current_user_can_persist_style_path(
+					[ 'typography', 'textShadow' ]
+				),
+			],
 		],
 		'canRecommendBlocks'           => $surface_capabilities['block']['available'],
 		'canRecommendPatterns'         => $surface_capabilities['pattern']['available'],

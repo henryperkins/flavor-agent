@@ -7,12 +7,6 @@ describe( 'panel delegation constants', () => {
 	test( 'shared style panel config drives the delegated style panel set', () => {
 		expect( STYLE_PANEL_DELEGATIONS ).toEqual( [
 			{
-				group: 'color',
-				panel: 'color',
-				label: 'AI color suggestions',
-				title: 'Color',
-			},
-			{
 				group: 'typography',
 				panel: 'typography',
 				label: 'AI typography suggestions',

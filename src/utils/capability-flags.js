@@ -34,6 +34,25 @@ function getFlavorAgentData( input = null ) {
 	return window.flavorAgentData || {};
 }
 
+/**
+ * Runtime style-path capabilities resolved server-side.
+ *
+ * Some style paths are gated on what the running theme.json implementation
+ * honors and on whether the current user can persist them, neither of which the
+ * client can determine on its own. The server ships the answer so the
+ * client-built execution contract matches the server's supported-path list.
+ *
+ * @param {Object|null} input Optional bootstrap data override, for tests.
+ * @return {Object} Style capability flags.
+ */
+export function getStyleCapabilities( input = null ) {
+	const capabilities = getFlavorAgentData( input )?.capabilities;
+
+	return capabilities && typeof capabilities.styles === 'object'
+		? capabilities.styles || {}
+		: {};
+}
+
 function normalizeAction( action ) {
 	if ( ! action || typeof action !== 'object' ) {
 		return null;

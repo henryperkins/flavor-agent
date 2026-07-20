@@ -4,18 +4,24 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+require_once __DIR__ . '/support/theme-json-stub.php';
+
 use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Support\ThemeJsonCapabilities;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
+use WP_Theme_JSON_Gutenberg;
 
 final class StyleAbilitiesTest extends TestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
 
+		WP_Theme_JSON_Gutenberg::reset();
+		ThemeJsonCapabilities::flush();
 		WordPressTestState::reset();
 		$this->configure_text_generation_connector();
 		$this->prime_default_docs_grounding();
@@ -664,6 +670,88 @@ final class StyleAbilitiesTest extends TestCase {
 				'valueSource' => 'color',
 			],
 			$paths
+		);
+	}
+
+	public function test_supported_style_paths_omit_text_shadow_when_the_runtime_does_not_honor_it(): void {
+		WordPressTestState::$capabilities = [ 'unfiltered_html' => true ];
+
+		$this->assertNotContains(
+			[
+				'path'        => [ 'typography', 'textShadow' ],
+				'valueSource' => 'freeform',
+			],
+			StyleAbilities::supported_style_paths(),
+			'textShadow must stay closed on a runtime whose theme.json strips it.'
+		);
+	}
+
+	public function test_supported_style_paths_offer_text_shadow_when_the_runtime_honors_it(): void {
+		WP_Theme_JSON_Gutenberg::$valid_style_paths = [ 'typography.textShadow' ];
+		WordPressTestState::$capabilities           = [ 'unfiltered_html' => true ];
+		ThemeJsonCapabilities::flush();
+
+		$this->assertContains(
+			[
+				'path'        => [ 'typography', 'textShadow' ],
+				'valueSource' => 'freeform',
+			],
+			StyleAbilities::supported_style_paths()
+		);
+	}
+
+	public function test_supported_style_paths_omit_text_shadow_for_users_who_cannot_persist_it(): void {
+		// Rendered by theme.json but absent from safe_style_css, and this user
+		// has the save-time kses pass applied — the value would be stripped, so
+		// offering it would produce an apply that silently does nothing.
+		WP_Theme_JSON_Gutenberg::$valid_style_paths = [ 'typography.textShadow' ];
+		WP_Theme_JSON_Gutenberg::$safe_style_paths  = [];
+		WordPressTestState::$capabilities           = [ 'unfiltered_html' => false ];
+		ThemeJsonCapabilities::flush();
+
+		$this->assertNotContains(
+			[
+				'path'        => [ 'typography', 'textShadow' ],
+				'valueSource' => 'freeform',
+			],
+			StyleAbilities::supported_style_paths()
+		);
+	}
+
+	public function test_supported_block_style_paths_never_offer_text_shadow(): void {
+		// #73320 adds no block.json support, so the block scope can never gate
+		// on it. Guards against a well-meaning addition to the block allowlist
+		// that would look alive in a stubbed test and be dead in production.
+		WP_Theme_JSON_Gutenberg::$valid_style_paths = [ 'typography.textShadow' ];
+		WP_Theme_JSON_Gutenberg::$safe_style_paths  = [ 'typography.textShadow' ];
+		WordPressTestState::$capabilities           = [ 'unfiltered_html' => true ];
+		ThemeJsonCapabilities::flush();
+
+		$paths = StyleAbilities::supported_style_paths_for_block(
+			[
+				'supports' => [
+					// Palette-backed, so setUp's theme tokens satisfy its gate
+					// and the assertion below has a positive control.
+					'color'      => [ 'background' => true ],
+					'typography' => [ 'textShadow' => true ],
+				],
+			]
+		);
+
+		$offered = array_map(
+			static fn( array $entry ): array => is_array( $entry['path'] ?? null ) ? $entry['path'] : [],
+			$paths
+		);
+
+		$this->assertContains(
+			[ 'color', 'background' ],
+			$offered,
+			'Sanity check: the block manifest gate is producing paths at all.'
+		);
+		$this->assertNotContains(
+			[ 'typography', 'textShadow' ],
+			$offered,
+			'textShadow is a global-styles-only path; #73320 adds no block support.'
 		);
 	}
 

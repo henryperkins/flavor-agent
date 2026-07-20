@@ -16,6 +16,7 @@ import {
 	getThemeTokenSourceDetails,
 } from './theme-settings';
 import { FREEFORM_STYLE_VALIDATORS } from '../utils/style-validation';
+import { getStyleCapabilities } from '../utils/capability-flags';
 
 /**
  * Collect the full design token manifest.
@@ -97,8 +98,12 @@ export function collectThemeTokensFromSettings( settings = {} ) {
 	};
 }
 
-export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
+export function getGlobalStylesSupportedStylePathsFromTokens(
+	tokens = {},
+	styleCapabilities = null
+) {
 	const supportedPaths = [];
+	const capabilities = styleCapabilities || getStyleCapabilities();
 	const hasColorPresets = Array.isArray( tokens?.color?.palette )
 		? tokens.color.palette.length > 0
 		: false;
@@ -230,6 +235,17 @@ export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
 		supportedPaths.push( {
 			path: [ 'shadow' ],
 			valueSource: 'shadow',
+		} );
+	}
+
+	// textShadow has no theme opt-in and no preset family, so unlike every path
+	// above it cannot be derived from tokens. The server resolves it at runtime
+	// and ships the answer; see ThemeJsonCapabilities.
+	if ( capabilities?.typographyTextShadow ) {
+		supportedPaths.push( {
+			path: [ 'typography', 'textShadow' ],
+			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.TEXT_SHADOW,
 		} );
 	}
 

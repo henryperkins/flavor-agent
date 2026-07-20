@@ -13,6 +13,7 @@ use FlavorAgent\Support\DocsGuidanceResult;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\RecommendationReviewSignature;
+use FlavorAgent\Support\ThemeJsonCapabilities;
 
 final class StyleAbilities {
 	use NormalizesInput;
@@ -740,6 +741,15 @@ final class StyleAbilities {
 
 		if ( ! empty( $theme_tokens['shadows'] ) ) {
 			$paths[] = self::supported_path( [ 'shadow' ], 'shadow' );
+		}
+
+		// textShadow has neither a theme opt-in nor a preset family, so unlike
+		// every path above it cannot be gated on theme features or tokens. It
+		// is gated instead on whether the running theme.json implementation
+		// renders the path at all, and whether this user can persist it — the
+		// save-time kses pass drops it for users without 'unfiltered_html'.
+		if ( ThemeJsonCapabilities::current_user_can_persist_style_path( [ 'typography', 'textShadow' ] ) ) {
+			$paths[] = self::supported_path( [ 'typography', 'textShadow' ], 'freeform' );
 		}
 
 		return array_values( $paths );

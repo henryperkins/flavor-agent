@@ -10,7 +10,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/referen
 - Secondary surfaces after a successful block request:
   - executable `SuggestionChips` lanes for `block`, `settings`, and `styles` inside the main `AI Recommendations` panel
   - `Review first` lane for validator-approved selected-block pattern operations when structural actions are enabled and the result is fresh; these can be applied only from the selected review card
-  - passive mirrored `SuggestionChips` injected into delegated native sub-panels such as position, advanced, bindings, list, color, typography, dimensions, border, shadow, filter, and background so the user can see the current result beside the matching core controls without creating a second apply surface. Shadow suggestions render inside Gutenberg's native Border/Shadow group.
+  - passive mirrored `SuggestionChips` injected into delegated native sub-panels such as position, advanced, bindings, list, typography, dimensions, border, shadow, filter, and background so the user can see the current result beside the matching core controls without creating a second apply surface. Shadow suggestions render inside Gutenberg's native Border/Shadow group. There is deliberately no `color` delegation: Gutenberg 23.5 (#77279) relocated text and background color controls into Typography and Background, so a `color` fill would be the only fill in that slot and would resurrect an otherwise-absent, empty Color panel. Color suggestions remain visible and appliable in the main panel, which does not filter by panel.
 
 ## Surfacing Conditions
 

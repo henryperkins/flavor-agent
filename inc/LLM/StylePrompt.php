@@ -81,6 +81,7 @@ Return ONLY a JSON object with this exact shape:
 	  border.radius = zero or positive CSS length/percentage.
 	  border.width = zero or positive CSS length.
 	  border.style = one of none, solid, dashed, dotted, double, groove, ridge, inset, outset, hidden.
+	  typography.textShadow = one to four comma-separated layers. Each layer is two CSS lengths (offset-x, offset-y, either sign) optionally followed by a third non-negative length (blur), plus at most one color. A color MUST be hex, rgb()/rgba()/hsl()/hsla(), a var() reference, transparent, or currentColor — never a bare color name. Never emit inset or a fourth length: both are box-shadow-only and make browsers discard the whole declaration.
 	- Do not emit customCSS, background images, arbitrary hex values, or arbitrary pixel spacing when a preset-backed path exists.
 	- set_theme_variation is allowed only for the global-styles surface. Never emit it for style-book.
 	- If set_theme_variation is present, emit at most one and place it before any set_styles or set_block_styles overrides. Do not combine set_theme_variation with color overrides in the same suggestion.
@@ -1371,6 +1372,7 @@ EXAMPLE
 
 		return match ( self::path_key( $path ) ) {
 			'typography.lineHeight' => self::validate_line_height_value( $value ),
+			'typography.textShadow' => self::validate_text_shadow_value( $value ),
 			'border.radius' => self::validate_length_value( $value, true ),
 			'border.width' => self::validate_length_value( $value, false ),
 			'border.style' => self::validate_border_style_value( $value ),
@@ -1379,6 +1381,245 @@ EXAMPLE
 				'value' => null,
 			],
 		};
+	}
+
+	/**
+	 * Comma-separated shadow layers are capped so a recommendation cannot turn
+	 * into a paint-performance problem on every page that uses the style.
+	 */
+	private const TEXT_SHADOW_MAX_LAYERS = 4;
+
+	private const TEXT_SHADOW_MAX_LENGTH = 200;
+
+	/**
+	 * Validates a `text-shadow` value structurally.
+	 *
+	 * This value is written into the site's global stylesheet, and for users
+	 * with `unfiltered_html` nothing downstream re-checks it — `safe_style_css`
+	 * never sees it. So the grammar is validated positively (2-3 lengths plus at
+	 * most one color per layer) rather than by scanning for known-bad strings.
+	 *
+	 * Note `inset` and a fourth length (spread) are `box-shadow`-only. A browser
+	 * drops the entire declaration when it sees them, which would reproduce the
+	 * silent no-op the capability probe exists to prevent — so both are refused.
+	 *
+	 * @return array{valid: bool, value: mixed}
+	 */
+	private static function validate_text_shadow_value( mixed $value ): array {
+		$invalid = [
+			'valid' => false,
+			'value' => null,
+		];
+
+		if ( ! is_string( $value ) ) {
+			return $invalid;
+		}
+
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed || strlen( $trimmed ) > self::TEXT_SHADOW_MAX_LENGTH ) {
+			return $invalid;
+		}
+
+		// Printable ASCII only: CSS escape sequences and control characters can
+		// reconstruct tokens the checks below would otherwise reject.
+		if ( 1 !== preg_match( '/^[\x20-\x7E]+$/', $trimmed ) ) {
+			return $invalid;
+		}
+
+		// Terminating the declaration, opening a rule or comment, or forcing
+		// precedence would let a value escape its property.
+		if ( 1 === preg_match( '~[;{}\\\\]|/\*|\*/|!\s*important~i', $trimmed ) ) {
+			return $invalid;
+		}
+
+		$layers = self::split_css_list( $trimmed );
+
+		if ( [] === $layers || count( $layers ) > self::TEXT_SHADOW_MAX_LAYERS ) {
+			return $invalid;
+		}
+
+		foreach ( $layers as $layer ) {
+			if ( ! self::is_valid_text_shadow_layer( $layer ) ) {
+				return $invalid;
+			}
+		}
+
+		return [
+			'valid' => true,
+			'value' => sanitize_text_field( $trimmed ),
+		];
+	}
+
+	private static function is_valid_text_shadow_layer( string $layer ): bool {
+		$tokens = self::split_css_tokens( $layer );
+
+		if ( count( $tokens ) < 2 || count( $tokens ) > 4 ) {
+			return false;
+		}
+
+		$lengths = [];
+		$colors  = 0;
+
+		foreach ( $tokens as $token ) {
+			if ( self::is_shadow_length( $token ) ) {
+				$lengths[] = $token;
+				continue;
+			}
+
+			if ( self::is_shadow_color( $token ) ) {
+				++$colors;
+				continue;
+			}
+
+			return false;
+		}
+
+		if ( $colors > 1 || count( $lengths ) < 2 || count( $lengths ) > 3 ) {
+			return false;
+		}
+
+		// Blur radius cannot be negative.
+		return ! ( 3 === count( $lengths ) && self::is_negative_css_length( $lengths[2] ) );
+	}
+
+	/**
+	 * Splits on top-level commas, leaving commas inside `rgba(…)` untouched.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function split_css_list( string $value ): array {
+		return self::split_css_parts( $value, ',' );
+	}
+
+	/**
+	 * Splits on top-level whitespace, leaving `rgba(0, 0, 0, .3)` intact.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function split_css_tokens( string $value ): array {
+		return self::split_css_parts( $value, ' ' );
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function split_css_parts( string $value, string $separator ): array {
+		$parts  = [];
+		$buffer = '';
+		$depth  = 0;
+		$length = strlen( $value );
+
+		for ( $index = 0; $index < $length; $index++ ) {
+			$char = $value[ $index ];
+
+			if ( '(' === $char ) {
+				++$depth;
+			} elseif ( ')' === $char ) {
+				--$depth;
+
+				if ( $depth < 0 ) {
+					return [];
+				}
+			}
+
+			$is_break = 0 === $depth && (
+				',' === $separator
+					? ',' === $char
+					: 1 === preg_match( '/\s/', $char )
+			);
+
+			if ( $is_break ) {
+				if ( ' ' === $separator ) {
+					if ( '' !== $buffer ) {
+						$parts[] = $buffer;
+						$buffer  = '';
+					}
+
+					continue;
+				}
+
+				$parts[] = trim( $buffer );
+				$buffer  = '';
+
+				continue;
+			}
+
+			$buffer .= $char;
+		}
+
+		if ( 0 !== $depth ) {
+			return [];
+		}
+
+		if ( ' ' === $separator ) {
+			if ( '' !== $buffer ) {
+				$parts[] = $buffer;
+			}
+
+			return $parts;
+		}
+
+		$parts[] = trim( $buffer );
+
+		foreach ( $parts as $part ) {
+			if ( '' === $part ) {
+				return [];
+			}
+		}
+
+		return $parts;
+	}
+
+	private static function is_shadow_length( string $token ): bool {
+		$magnitude = $token;
+		$signed    = false;
+
+		if ( '' !== $token && ( '+' === $token[0] || '-' === $token[0] ) ) {
+			$magnitude = substr( $token, 1 );
+			$signed    = true;
+		}
+
+		if ( '' === $magnitude ) {
+			return false;
+		}
+
+		// Reject a second sign, e.g. '--5px'.
+		if ( $signed && ( '+' === $magnitude[0] || '-' === $magnitude[0] ) ) {
+			return false;
+		}
+
+		return self::is_zero_css_length( $magnitude, false )
+			|| self::is_positive_css_length( $magnitude, false );
+	}
+
+	private static function is_negative_css_length( string $token ): bool {
+		if ( ! str_starts_with( $token, '-' ) ) {
+			return false;
+		}
+
+		return ! self::is_zero_css_length( substr( $token, 1 ), false );
+	}
+
+	/**
+	 * Accepts hex, the standard color functions, `var()` references, and the two
+	 * context keywords. Bare color names are refused: the grammar stays small
+	 * and predictable, and the prompt contract steers the model to hex/rgb().
+	 */
+	private static function is_shadow_color( string $token ): bool {
+		if ( 1 === preg_match( '/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $token ) ) {
+			return true;
+		}
+
+		if ( 1 === preg_match( '/^var\(\s*--[a-z0-9_-]+\s*\)$/i', $token ) ) {
+			return true;
+		}
+
+		if ( 1 === preg_match( '/^(?:rgb|rgba|hsl|hsla)\([0-9a-z%.,\/\s+-]*\)$/i', $token ) ) {
+			return true;
+		}
+
+		return in_array( strtolower( $token ), [ 'transparent', 'currentcolor' ], true );
 	}
 
 	/**

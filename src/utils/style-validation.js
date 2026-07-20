@@ -43,8 +43,17 @@ export const FREEFORM_STYLE_VALIDATORS = Object.freeze( {
 	LINE_HEIGHT: 'line-height',
 	SHADOW: 'shadow',
 	TEXT_DECORATION: 'text-decoration',
+	TEXT_SHADOW: 'text-shadow',
 	TEXT_TRANSFORM: 'text-transform',
 } );
+
+/**
+ * Comma-separated shadow layers are capped so a recommendation cannot turn into
+ * a paint-performance problem on every page that uses the style.
+ */
+const TEXT_SHADOW_MAX_LAYERS = 4;
+
+const TEXT_SHADOW_MAX_LENGTH = 200;
 
 export function sanitizeStyleKey( value ) {
 	return String( value || '' )
@@ -364,6 +373,214 @@ function validateShadowValue( value ) {
 	return validateSafeScalarStringValue( value );
 }
 
+/**
+ * Splits on top-level separators, leaving `rgba(0, 0, 0, .3)` intact.
+ *
+ * @param {string} value     Value to split.
+ * @param {string} separator Either ',' for layers or ' ' for tokens.
+ * @return {string[]} Parts, or an empty array when parentheses are unbalanced.
+ */
+function splitCssParts( value, separator ) {
+	const parts = [];
+	let buffer = '';
+	let depth = 0;
+
+	for ( const char of value ) {
+		if ( char === '(' ) {
+			depth += 1;
+		} else if ( char === ')' ) {
+			depth -= 1;
+
+			if ( depth < 0 ) {
+				return [];
+			}
+		}
+
+		const isBreak =
+			depth === 0 &&
+			( separator === ',' ? char === ',' : /\s/.test( char ) );
+
+		if ( isBreak ) {
+			if ( separator === ' ' ) {
+				if ( buffer ) {
+					parts.push( buffer );
+					buffer = '';
+				}
+
+				continue;
+			}
+
+			parts.push( buffer.trim() );
+			buffer = '';
+
+			continue;
+		}
+
+		buffer += char;
+	}
+
+	if ( depth !== 0 ) {
+		return [];
+	}
+
+	if ( separator === ' ' ) {
+		if ( buffer ) {
+			parts.push( buffer );
+		}
+
+		return parts;
+	}
+
+	parts.push( buffer.trim() );
+
+	return parts.some( ( part ) => ! part ) ? [] : parts;
+}
+
+function isShadowLength( token ) {
+	let magnitude = token;
+	let signed = false;
+
+	if ( token && ( token[ 0 ] === '+' || token[ 0 ] === '-' ) ) {
+		magnitude = token.slice( 1 );
+		signed = true;
+	}
+
+	if ( ! magnitude ) {
+		return false;
+	}
+
+	// Reject a second sign, e.g. '--5px'.
+	if ( signed && ( magnitude[ 0 ] === '+' || magnitude[ 0 ] === '-' ) ) {
+		return false;
+	}
+
+	return (
+		isZeroCssLength( magnitude, { allowPercentage: false } ) ||
+		isPositiveCssLength( magnitude, { allowPercentage: false } )
+	);
+}
+
+function isNegativeCssLength( token ) {
+	if ( ! token.startsWith( '-' ) ) {
+		return false;
+	}
+
+	return ! isZeroCssLength( token.slice( 1 ), { allowPercentage: false } );
+}
+
+/**
+ * Accepts hex, the standard color functions, `var()` references, and the two
+ * context keywords. Bare color names are refused so the grammar stays small and
+ * predictable; the prompt contract steers the model to hex/rgb().
+ *
+ * @param {string} token Candidate color token.
+ * @return {boolean} Whether the token is an accepted color.
+ */
+function isShadowColor( token ) {
+	if ( /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test( token ) ) {
+		return true;
+	}
+
+	if ( /^var\(\s*--[a-z0-9_-]+\s*\)$/i.test( token ) ) {
+		return true;
+	}
+
+	if ( /^(?:rgb|rgba|hsl|hsla)\([0-9a-z%.,/\s+-]*\)$/i.test( token ) ) {
+		return true;
+	}
+
+	return [ 'transparent', 'currentcolor' ].includes( token.toLowerCase() );
+}
+
+function isValidTextShadowLayer( layer ) {
+	const tokens = splitCssParts( layer, ' ' );
+
+	if ( tokens.length < 2 || tokens.length > 4 ) {
+		return false;
+	}
+
+	const lengths = [];
+	let colors = 0;
+
+	for ( const token of tokens ) {
+		if ( isShadowLength( token ) ) {
+			lengths.push( token );
+
+			continue;
+		}
+
+		if ( isShadowColor( token ) ) {
+			colors += 1;
+
+			continue;
+		}
+
+		return false;
+	}
+
+	if ( colors > 1 || lengths.length < 2 || lengths.length > 3 ) {
+		return false;
+	}
+
+	// Blur radius cannot be negative.
+	return ! ( lengths.length === 3 && isNegativeCssLength( lengths[ 2 ] ) );
+}
+
+/**
+ * Validates a `text-shadow` value structurally.
+ *
+ * This value is written into the site's global stylesheet, and for users with
+ * `unfiltered_html` nothing downstream re-checks it — `safe_style_css` never
+ * sees it. So the grammar is validated positively (2-3 lengths plus at most one
+ * color per layer) rather than by scanning for known-bad strings.
+ *
+ * `inset` and a fourth length (spread) are `box-shadow`-only; a browser drops
+ * the entire declaration when it sees them, so both are refused.
+ *
+ * Kept behaviorally identical to `StylePrompt::validate_text_shadow_value()`.
+ *
+ * @param {*} value Candidate value.
+ * @return {{valid: boolean, value: *}} Validation result.
+ */
+function validateTextShadowValue( value ) {
+	if ( typeof value !== 'string' ) {
+		return { valid: false, value: null };
+	}
+
+	const normalizedValue = value.trim();
+
+	if (
+		! normalizedValue ||
+		normalizedValue.length > TEXT_SHADOW_MAX_LENGTH
+	) {
+		return { valid: false, value: null };
+	}
+
+	// Printable ASCII only: CSS escape sequences and control characters can
+	// reconstruct tokens the checks below would otherwise reject.
+	if ( ! /^[\x20-\x7E]+$/.test( normalizedValue ) ) {
+		return { valid: false, value: null };
+	}
+
+	// Terminating the declaration, opening a rule or comment, or forcing
+	// precedence would let a value escape its property.
+	if ( /[;{}\\]|\/\*|\*\/|!\s*important/i.test( normalizedValue ) ) {
+		return { valid: false, value: null };
+	}
+
+	const layers = splitCssParts( normalizedValue, ',' );
+
+	if ( ! layers.length || layers.length > TEXT_SHADOW_MAX_LAYERS ) {
+		return { valid: false, value: null };
+	}
+
+	if ( ! layers.every( isValidTextShadowLayer ) ) {
+		return { valid: false, value: null };
+	}
+
+	return { valid: true, value: normalizedValue };
+}
+
 function validateTextDecorationValue( value ) {
 	const safeString = validateSafeScalarStringValue( value );
 
@@ -478,6 +695,8 @@ export function validateFreeformStyleValueByKind( kind, value ) {
 			return validateBorderStyleValue( value );
 		case FREEFORM_STYLE_VALIDATORS.SHADOW:
 			return validateShadowValue( value );
+		case FREEFORM_STYLE_VALIDATORS.TEXT_SHADOW:
+			return validateTextShadowValue( value );
 		case FREEFORM_STYLE_VALIDATORS.TEXT_DECORATION:
 			return validateTextDecorationValue( value );
 		case FREEFORM_STYLE_VALIDATORS.TEXT_TRANSFORM:

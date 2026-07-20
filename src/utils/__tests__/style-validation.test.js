@@ -243,6 +243,71 @@ describe( 'style-validation', () => {
 		}
 	);
 
+	// Mirrors the table in tests/phpunit/StylePromptTest.php
+	// (text_shadow_value_provider). The two validators are a cross-language
+	// pair; keep the cases in sync or drift becomes invisible.
+	test.each( [
+		[ 'two offsets', '1px 1px', true ],
+		[ 'offsets with blur', '1px 1px 2px', true ],
+		[ 'trailing hex color', '1px 1px 2px #000000', true ],
+		[ 'leading color', '#000000 1px 1px 2px', true ],
+		[ 'negative offsets', '-1px -2px 3px', true ],
+		[ 'zero offsets', '0 1px 2px', true ],
+		[ 'rgba inner commas', '0 1px 2px rgba(0, 0, 0, 0.3)', true ],
+		[ 'var reference', '0 1px 2px var(--wp--preset--color--accent)', true ],
+		[ 'multiple layers', '1px 1px 2px #000000, 0 0 4px #ffffff', true ],
+		[ 'currentColor', '0 1px currentColor', true ],
+
+		[ 'single length', '1px', false ],
+		[ 'spread radius', '1px 1px 2px 3px #000', false ],
+		[ 'inset keyword', 'inset 1px 1px #000', false ],
+		[ 'negative blur', '1px 1px -2px', false ],
+		[ 'bare color name', '1px 1px 2px red', false ],
+		[ 'url function', '1px 1px 2px url(evil.png)', false ],
+		[ 'declaration terminator', '1px 1px 2px #000; color: red', false ],
+		[ 'important', '1px 1px 2px #000 !important', false ],
+		[ 'comment syntax', '1px 1px /* x */ 2px', false ],
+		[ 'closing brace', '1px 1px 2px #000 }', false ],
+		[
+			'too many layers',
+			'1px 1px, 2px 2px, 3px 3px, 4px 4px, 5px 5px',
+			false,
+		],
+		[ 'unbalanced paren', '1px 1px 2px rgba(0,0,0,0.3', false ],
+		[ 'blank', '   ', false ],
+		[ 'percentage offsets', '10% 10%', false ],
+		[ 'doubled sign', '--1px 1px', false ],
+	] )( 'text-shadow validator: %s', ( _, value, expectedValid ) => {
+		expect(
+			validateFreeformStyleValueByKind(
+				FREEFORM_STYLE_VALIDATORS.TEXT_SHADOW,
+				value
+			)
+		).toEqual(
+			expectedValid
+				? { valid: true, value: value.trim() }
+				: { valid: false, value: null }
+		);
+	} );
+
+	test( 'text-shadow accepts a whole-value custom property reference', () => {
+		expect(
+			validateFreeformStyleValueByKind(
+				FREEFORM_STYLE_VALIDATORS.TEXT_SHADOW,
+				'var(--flavor-agent-shadow)'
+			)
+		).toEqual( { valid: true, value: 'var(--flavor-agent-shadow)' } );
+	} );
+
+	test( 'text-shadow rejects an over-long value', () => {
+		expect(
+			validateFreeformStyleValueByKind(
+				FREEFORM_STYLE_VALIDATORS.TEXT_SHADOW,
+				`1px 1px 2px #000000 /* ${ 'x'.repeat( 400 ) } */`
+			)
+		).toEqual( { valid: false, value: null } );
+	} );
+
 	test( 'rejects unsupported validator kinds with a clear error', () => {
 		expect(
 			validateFreeformStyleValueByKind( 'missing-validator', '12px' )

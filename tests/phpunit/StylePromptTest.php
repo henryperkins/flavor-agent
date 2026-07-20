@@ -2016,4 +2016,129 @@ final class StylePromptTest extends TestCase {
 		$this->assertSame( 'set_theme_variation', $result['operations'][0]['type'] );
 		$this->assertSame( 0, $result['operations'][0]['variationIndex'] );
 	}
+
+	/**
+	 * @dataProvider text_shadow_value_provider
+	 */
+	public function test_parse_response_validates_text_shadow_values(
+		string $value,
+		bool $expected_executable,
+		string $why
+	): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Lift the headline',
+							'description' => 'Add a soft text shadow.',
+							'category'    => 'typography',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'typography', 'textShadow' ],
+									'value'     => $value,
+									'valueType' => 'freeform',
+								],
+							],
+						],
+					],
+					'explanation' => 'Text shadow validation.',
+				]
+			),
+			$this->build_text_shadow_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			$expected_executable ? 'executable' : 'advisory',
+			$result['suggestions'][0]['tone'],
+			$why
+		);
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: bool, 2: string}>
+	 */
+	public function text_shadow_value_provider(): array {
+		return [
+			'two offsets'            => [ '1px 1px', true, 'Two lengths is the minimal valid layer.' ],
+			'offsets with blur'      => [ '1px 1px 2px', true, 'A third non-negative length is the blur radius.' ],
+			'trailing hex color'     => [ '1px 1px 2px #000000', true, 'A trailing hex color is valid.' ],
+			'leading color'          => [ '#000000 1px 1px 2px', true, 'CSS allows the color before the lengths.' ],
+			'negative offsets'       => [ '-1px -2px 3px', true, 'Offsets may be negative.' ],
+			'zero offsets'           => [ '0 1px 2px', true, 'A bare zero is a valid length.' ],
+			'rgba inner commas'      => [ '0 1px 2px rgba(0, 0, 0, 0.3)', true, 'Commas inside a color function are not layer separators.' ],
+			'var reference'          => [ '0 1px 2px var(--wp--preset--color--accent)', true, 'A var() color reference is allowed.' ],
+			'multiple layers'        => [ '1px 1px 2px #000000, 0 0 4px #ffffff', true, 'Comma-separated layers are allowed.' ],
+			'currentColor'           => [ '0 1px currentColor', true, 'currentColor is a context keyword.' ],
+
+			'single length'          => [ '1px', false, 'One length is not a valid layer.' ],
+			'spread radius'          => [ '1px 1px 2px 3px #000', false, 'A fourth length is box-shadow-only and voids the declaration.' ],
+			'inset keyword'          => [ 'inset 1px 1px #000', false, 'inset is box-shadow-only.' ],
+			'negative blur'          => [ '1px 1px -2px', false, 'Blur radius cannot be negative.' ],
+			'bare color name'        => [ '1px 1px 2px red', false, 'Bare color names are outside the accepted grammar.' ],
+			'url function'           => [ '1px 1px 2px url(evil.png)', false, 'Only color functions are accepted.' ],
+			'declaration terminator' => [ '1px 1px 2px #000; color: red', false, 'A semicolon could escape the declaration.' ],
+			'important'              => [ '1px 1px 2px #000 !important', false, 'Precedence forcing is refused.' ],
+			'comment syntax'         => [ '1px 1px /* x */ 2px', false, 'Comment syntax is refused.' ],
+			'closing brace'          => [ '1px 1px 2px #000 }', false, 'A brace could escape the rule.' ],
+			'too many layers'        => [ '1px 1px, 2px 2px, 3px 3px, 4px 4px, 5px 5px', false, 'Layer count is capped.' ],
+			'unbalanced paren'       => [ '1px 1px 2px rgba(0,0,0,0.3', false, 'Unbalanced parentheses are refused.' ],
+			'blank'                  => [ '   ', false, 'An empty value is refused.' ],
+			'percentage offsets'     => [ '10% 10%', false, 'text-shadow offsets cannot be percentages.' ],
+			'doubled sign'           => [ '--1px 1px', false, 'A doubled sign is not a length.' ],
+		];
+	}
+
+	public function test_parse_response_preserves_a_validated_text_shadow_value(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Lift the headline',
+							'description' => 'Add a soft text shadow.',
+							'category'    => 'typography',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'typography', 'textShadow' ],
+									'value'     => '0 1px 2px rgba(0, 0, 0, 0.3)',
+									'valueType' => 'freeform',
+								],
+							],
+						],
+					],
+					'explanation' => 'Text shadow round-trip.',
+				]
+			),
+			$this->build_text_shadow_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'executable', $result['suggestions'][0]['tone'] );
+		$this->assertSame(
+			'0 1px 2px rgba(0, 0, 0, 0.3)',
+			$result['suggestions'][0]['operations'][0]['value'] ?? null
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_text_shadow_context(): array {
+		$context = $this->build_context();
+
+		$context['styleContext']['supportedStylePaths'] = [
+			[
+				'path'        => [ 'typography', 'textShadow' ],
+				'valueSource' => 'freeform',
+			],
+		];
+
+		return $context;
+	}
 }

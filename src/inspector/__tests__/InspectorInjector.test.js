@@ -132,7 +132,7 @@ beforeEach( () => {
 					{ label: 'Use larger heading', panel: 'advanced' },
 				],
 				styles: [
-					{ label: 'Use accent color', panel: 'color' },
+					{ label: 'Use larger text', panel: 'typography' },
 					{ label: 'Use soft shadow', panel: 'shadow' },
 				],
 				block: [ { label: 'Hide on mobile' } ],
@@ -187,14 +187,16 @@ describe( 'InspectorInjector', () => {
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
 		expect( getContainer().textContent ).toContain(
-			'AI color suggestions passive'
+			'AI typography suggestions passive'
 		);
 		expect( getContainer().textContent ).toContain(
 			'AI shadow suggestions passive'
 		);
-		const colorChipProps = getLatestChipProps( 'AI color suggestions' );
+		const typographyChipProps = getLatestChipProps(
+			'AI typography suggestions'
+		);
 
-		expect( colorChipProps?.interactive ).toBe( false );
+		expect( typographyChipProps?.interactive ).toBe( false );
 	} );
 
 	test( 'keeps stale projected settings and style suggestions visible when context changes', () => {
@@ -208,7 +210,9 @@ describe( 'InspectorInjector', () => {
 						{ label: 'Use larger heading' },
 						{ label: 'Pin block', panel: 'position' },
 					],
-					styles: [ { label: 'Use accent color', panel: 'color' } ],
+					styles: [
+						{ label: 'Use larger text', panel: 'typography' },
+					],
 					block: [ { label: 'Hide on mobile' } ],
 				},
 				blockContextSignature: JSON.stringify( {
@@ -229,7 +233,7 @@ describe( 'InspectorInjector', () => {
 			'AI position suggestions stale passive'
 		);
 		expect( getContainer().textContent ).toContain(
-			'AI color suggestions stale passive'
+			'AI typography suggestions stale passive'
 		);
 	} );
 
@@ -237,7 +241,7 @@ describe( 'InspectorInjector', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain(
-			'AI color suggestions passive'
+			'AI typography suggestions passive'
 		);
 
 		mockCollectBlockContext.mockReturnValue( {
@@ -250,7 +254,7 @@ describe( 'InspectorInjector', () => {
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
 		expect( getContainer().textContent ).toContain(
-			'AI color suggestions stale passive'
+			'AI typography suggestions stale passive'
 		);
 	} );
 
@@ -265,7 +269,9 @@ describe( 'InspectorInjector', () => {
 						{ label: 'Use larger heading' },
 						{ label: 'Pin block', panel: 'position' },
 					],
-					styles: [ { label: 'Use accent color', panel: 'color' } ],
+					styles: [
+						{ label: 'Use larger text', panel: 'typography' },
+					],
 					block: [ { label: 'Hide on mobile' } ],
 				},
 			},
@@ -306,7 +312,9 @@ describe( 'InspectorInjector', () => {
 		const positionChipProps = getLatestChipProps(
 			'AI position suggestions'
 		);
-		const colorChipProps = getLatestChipProps( 'AI color suggestions' );
+		const typographyChipProps = getLatestChipProps(
+			'AI typography suggestions'
+		);
 		const panelProps =
 			mockRenderBlockRecommendationsPanel.mock.calls.at( -1 )[ 0 ];
 
@@ -314,7 +322,7 @@ describe( 'InspectorInjector', () => {
 			'AI position suggestions stale passive'
 		);
 		expect( getContainer().textContent ).toContain(
-			'AI color suggestions stale passive'
+			'AI typography suggestions stale passive'
 		);
 		expect( panelProps?.requestData?.currentRequestSignature ).toBe(
 			expectedRequestSignature
@@ -324,8 +332,8 @@ describe( 'InspectorInjector', () => {
 		);
 		expect( positionChipProps?.currentRequestSignature ).toBeUndefined();
 		expect( positionChipProps?.currentRequestInput ).toBeUndefined();
-		expect( colorChipProps?.currentRequestSignature ).toBeUndefined();
-		expect( colorChipProps?.currentRequestInput ).toBeUndefined();
+		expect( typographyChipProps?.currentRequestSignature ).toBeUndefined();
+		expect( typographyChipProps?.currentRequestInput ).toBeUndefined();
 	} );
 
 	test( 'preserves the in-flight prompt draft when a new recommendation result arrives', () => {
@@ -421,7 +429,10 @@ describe( 'InspectorInjector', () => {
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
 		expect( getContainer().textContent ).not.toContain(
-			'AI color suggestions'
+			'AI typography suggestions'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'AI shadow suggestions'
 		);
 	} );
 } );

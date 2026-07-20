@@ -17,12 +17,6 @@
  */
 export const STYLE_PANEL_DELEGATIONS = [
 	{
-		group: 'color',
-		panel: 'color',
-		label: 'AI color suggestions',
-		title: 'Color',
-	},
-	{
 		group: 'typography',
 		panel: 'typography',
 		label: 'AI typography suggestions',

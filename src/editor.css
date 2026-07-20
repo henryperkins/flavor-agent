@@ -1041,7 +1041,10 @@
 
 .flavor-agent-content-recommender__refine-toggle:focus-visible {
   outline: 2px solid
-    var(--wpds-color-border-focus, var(--flavor-agent-editor-accent));
+    var(
+      --wpds-color-stroke-focus,
+      var(--wpds-color-stroke-focus-brand, var(--flavor-agent-editor-accent))
+    );
   outline-offset: 2px;
 }
 
@@ -1155,7 +1158,10 @@
     :disabled
   ) {
   outline: 2px solid
-    var(--wpds-color-border-focus, var(--flavor-agent-editor-accent));
+    var(
+      --wpds-color-stroke-focus,
+      var(--wpds-color-stroke-focus-brand, var(--flavor-agent-editor-accent))
+    );
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -1200,7 +1206,13 @@
     :disabled
   ) {
   outline: 2px solid
-    var(--wpds-color-border-focus, var(--flavor-agent-editor-accent-strong));
+    var(
+      --wpds-color-stroke-focus,
+      var(
+        --wpds-color-stroke-focus-brand,
+        var(--flavor-agent-editor-accent-strong)
+      )
+    );
   outline-offset: 2px;
   box-shadow: none;
 }
