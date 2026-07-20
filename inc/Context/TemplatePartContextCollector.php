@@ -132,6 +132,60 @@ final class TemplatePartContextCollector {
 	}
 
 	/**
+	 * Analyze the composition profile from the editor's live block list,
+	 * expanding readable synced patterns (core/block) exactly as the last-saved
+	 * analysis does.
+	 *
+	 * The editor sends a synced pattern as a single unexpanded `core/block`
+	 * node, so re-deriving role coverage from those raw counts would misreport a
+	 * part composed of a synced pattern as missing the roles that pattern
+	 * supplies. Rebuilding minimal `core/block` stubs from the live list and
+	 * running them through the same tested expansion keeps the live profile in
+	 * step with the collector's synced-expanded one, while still letting genuine
+	 * live edits (e.g. removing the navigation) surface real gaps.
+	 *
+	 * @param string                                       $area
+	 * @param array<int, array{name: string, ref?: int}> $live_blocks Flat live block list (name plus optional synced ref).
+	 * @return array<string, mixed>
+	 */
+	public function analyze_live_composition_profile( string $area, array $live_blocks ): array {
+		$stubs = [];
+
+		foreach ( $live_blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$name = (string) ( $block['name'] ?? '' );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$attrs = [];
+
+			if ( 'core/block' === $name && isset( $block['ref'] ) && is_numeric( $block['ref'] ) ) {
+				$attrs['ref'] = (int) $block['ref'];
+			}
+
+			$stubs[] = [
+				'blockName'   => $name,
+				'attrs'       => $attrs,
+				'innerBlocks' => [],
+			];
+		}
+
+		$expanded = $this->expand_synced_patterns_for_analysis( $stubs );
+		$stats    = $this->template_structure_analyzer->collect_template_part_block_stats( $expanded );
+
+		return TemplatePartCompositionProfile::analyze(
+			$area,
+			$stats['blockCounts'],
+			(int) $stats['blockCount']
+		);
+	}
+
+	/**
 	 * Produce an analysis-only copy of the block tree with readable synced
 	 * pattern (core/block) references expanded to their wp_block content. A
 	 * synced pattern serializes as a self-closing reference with no inner

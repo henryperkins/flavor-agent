@@ -241,6 +241,19 @@ final class ServerCollector {
 	}
 
 	/**
+	 * Analyze the live template-part composition profile with readable synced
+	 * patterns expanded, so role-gap detection over the editor's live block list
+	 * matches what the operator actually sees (a synced-pattern-composed part is
+	 * not misread as missing the roles that pattern supplies).
+	 *
+	 * @param array<int, array{name: string, ref?: int}> $live_blocks
+	 * @return array<string, mixed>
+	 */
+	public static function for_live_template_part_composition_profile( string $area, array $live_blocks ): array {
+		return self::template_part_context_collector()->analyze_live_composition_profile( $area, $live_blocks );
+	}
+
+	/**
 	 * Server-collected document target contract for the external post-blocks
 	 * apply surface. No client-supplied tree is trusted for this surface.
 	 *

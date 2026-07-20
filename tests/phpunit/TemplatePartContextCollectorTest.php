@@ -95,4 +95,49 @@ final class TemplatePartContextCollectorTest extends TestCase {
 		);
 		$this->assertContains( 'core/block', $names );
 	}
+
+	public function test_analyze_live_composition_profile_expands_synced_pattern(): void {
+		// A header composed entirely of a synced pattern: the editor sends it as a
+		// single unexpanded core/block node, but its expanded content supplies both
+		// expected header roles, so the live profile must report no gaps.
+		WordPressTestState::$posts[55]                 = (object) [
+			'ID'           => 55,
+			'post_type'    => 'wp_block',
+			'post_status'  => 'publish',
+			'post_title'   => 'Branded header',
+			'post_content' => '<!-- wp:site-logo /--><!-- wp:navigation /-->',
+		];
+		WordPressTestState::$capabilities['read_post'] = true;
+
+		$profile = $this->build_collector()->analyze_live_composition_profile(
+			'header',
+			[
+				[
+					'name' => 'core/block',
+					'ref'  => 55,
+				],
+			]
+		);
+
+		$this->assertSame( [], $profile['missingRoles'] );
+		$this->assertContains( 'branding', $profile['presentRoles'] );
+		$this->assertContains( 'primary-navigation', $profile['presentRoles'] );
+		$this->assertFalse( $profile['isEmpty'] );
+		$this->assertFalse( $profile['isNearlyEmpty'] );
+	}
+
+	public function test_analyze_live_composition_profile_still_reports_genuine_gap(): void {
+		// With the synced pattern removed live, the header genuinely lacks
+		// navigation, so the gap must still surface (no sticky "was present" roles).
+		$profile = $this->build_collector()->analyze_live_composition_profile(
+			'header',
+			[
+				[ 'name' => 'core/site-logo' ],
+				[ 'name' => 'core/group' ],
+			]
+		);
+
+		$this->assertContains( 'primary-navigation', $profile['missingRoles'] );
+		$this->assertContains( 'branding', $profile['presentRoles'] );
+	}
 }
