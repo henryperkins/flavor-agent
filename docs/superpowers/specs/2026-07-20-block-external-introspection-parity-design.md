@@ -79,7 +79,7 @@ So the editor path is *mostly* unaffected: `BlockAbilities.php:344-347` override
 
 The loss is silent — the call site is `Prompt.php:1831`, which `return null`s with no entry in the `validationReasons` vocabulary the payload schema already supports (`Registration.php:2669-2688`).
 
-**Not affected:** the governed Style Book apply path. `StyleApplyExecutor.php:102-118` also consumes a `build_block_manifest()` result, but `StyleAbilities::supported_block_style_paths_from_manifest()` (`inc/Abilities/StyleAbilities.php:784-786`) reads only `supports` and `title`. No governed write reads manifest `styles`.
+**Apply-path consequence.** No *PHP* governed write reads manifest `styles` — `StyleApplyExecutor.php:102-118` consumes a `build_block_manifest()` result, but `StyleAbilities::supported_block_style_paths_from_manifest()` reads only `supports` and `title`. The **editor apply path does**: `executionContract.registeredStyles` gates `isValidStyleVariationSuggestion` (`src/store/update-helpers.js:2487`) and the `className` arm of `filterAttributeUpdatesForExecutionContract` (`:1226`) before `updateBlockAttributes` writes to post content (`src/store/index.js:2522`). Widening the manifest therefore widens what can be *applied*, not only what can be suggested. That is the intended outcome — a `register_block_style()` style is registered — but it is an apply-surface change and is covered by a JS regression test.
 
 ### Fix
 
