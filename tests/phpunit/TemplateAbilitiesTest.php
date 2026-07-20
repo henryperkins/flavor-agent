@@ -583,6 +583,94 @@ final class TemplateAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_enrich_template_part_design_semantics_fills_gaps_without_overriding_client(): void {
+		$method = new \ReflectionMethod(
+			TemplateAbilities::class,
+			'enrich_template_part_design_semantics'
+		);
+		$method->setAccessible( true );
+
+		$context = [
+			'compositionProfile'     => [
+				'negativeSignals' => [ 'header-missing-primary-navigation' ],
+			],
+			'derivedTokenAffinity'   => [
+				'color'    => [ 'base' ],
+				'spacing'  => [ '40' ],
+				'fontSize' => [],
+			],
+			'derivedContrastContext' => 'dark-parent',
+		];
+
+		// Explicit client contrast is preserved; server signals are unioned in.
+		$explicit = $method->invoke(
+			null,
+			[
+				'contrastContext' => 'light-parent',
+				'negativeSignals' => [ 'no-visible-patterns' ],
+				'tokenAffinity'   => [ 'color' => [ 'accent' ] ],
+			],
+			$context
+		);
+		$this->assertSame( 'light-parent', $explicit['contrastContext'] );
+		$this->assertContains( 'no-visible-patterns', $explicit['negativeSignals'] );
+		$this->assertContains( 'header-missing-primary-navigation', $explicit['negativeSignals'] );
+		$this->assertContains( 'accent', $explicit['tokenAffinity']['color'] );
+		$this->assertContains( 'base', $explicit['tokenAffinity']['color'] );
+		$this->assertSame( [ '40' ], $explicit['tokenAffinity']['spacing'] );
+
+		// Unknown client contrast is filled from the server-derived value.
+		$filled = $method->invoke(
+			null,
+			[ 'contrastContext' => 'unknown' ],
+			$context
+		);
+		$this->assertSame( 'dark-parent', $filled['contrastContext'] );
+		$this->assertContains( 'header-missing-primary-navigation', $filled['negativeSignals'] );
+	}
+
+	public function test_resolve_template_part_composition_profile_expands_live_synced_pattern(): void {
+		// The editor's live block index carries a synced pattern as a single
+		// unexpanded core/block node. Re-deriving role gaps must expand it (like
+		// the collector's last-saved analysis) so an already-complete header is not
+		// misreported as nearly empty / missing branding + navigation.
+		WordPressTestState::$posts[77]                 = (object) [
+			'ID'           => 77,
+			'post_type'    => 'wp_block',
+			'post_status'  => 'publish',
+			'post_title'   => 'Header pattern',
+			'post_content' => '<!-- wp:site-logo /--><!-- wp:navigation /-->',
+		];
+		WordPressTestState::$capabilities['read_post'] = true;
+
+		$method = new ReflectionMethod(
+			TemplateAbilities::class,
+			'resolve_template_part_composition_profile'
+		);
+		$method->setAccessible( true );
+
+		$profile = $method->invoke(
+			null,
+			[
+				'area'           => 'header',
+				'blockCounts'    => [ 'core/block' => 1 ],
+				'structureStats' => [ 'blockCount' => 1 ],
+				'allBlockPaths'  => [
+					[
+						'path'       => [ 0 ],
+						'name'       => 'core/block',
+						'attributes' => [ 'ref' => 77 ],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [], $profile['missingRoles'] );
+		$this->assertFalse( $profile['isNearlyEmpty'] );
+		$this->assertContains( 'branding', $profile['presentRoles'] );
+		$this->assertContains( 'primary-navigation', $profile['presentRoles'] );
+	}
+
 	public function test_recommend_template_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_text_generation_connector();
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(

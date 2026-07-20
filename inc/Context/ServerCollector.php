@@ -236,8 +236,21 @@ final class ServerCollector {
 	 * @param string[]|null $visible_pattern_names
 	 * @return array<int, array<string, mixed>>
 	 */
-	public static function for_template_part_candidate_patterns( string $area, ?array $visible_pattern_names = null ): array {
-		return self::pattern_candidate_selector()->collect_template_part_candidate_patterns( $area, $visible_pattern_names );
+	public static function for_template_part_candidate_patterns( string $area, ?array $visible_pattern_names = null, ?array $content_profile = null ): array {
+		return self::pattern_candidate_selector()->collect_template_part_candidate_patterns( $area, $visible_pattern_names, $content_profile );
+	}
+
+	/**
+	 * Analyze the live template-part composition profile with readable synced
+	 * patterns expanded, so role-gap detection over the editor's live block list
+	 * matches what the operator actually sees (a synced-pattern-composed part is
+	 * not misread as missing the roles that pattern supplies).
+	 *
+	 * @param array<int, array{name: string, ref?: int}> $live_blocks
+	 * @return array<string, mixed>
+	 */
+	public static function for_live_template_part_composition_profile( string $area, array $live_blocks ): array {
+		return self::template_part_context_collector()->analyze_live_composition_profile( $area, $live_blocks );
 	}
 
 	/**
@@ -396,7 +409,9 @@ final class ServerCollector {
 			self::template_structure_analyzer(),
 			self::pattern_override_analyzer(),
 			self::pattern_candidate_selector(),
-			self::theme_token_collector()
+			self::theme_token_collector(),
+			self::viewport_visibility_analyzer(),
+			self::synced_pattern_repository()
 		);
 	}
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Context;
 
+use FlavorAgent\Support\TemplatePartCompositionProfile;
+
 final class TemplatePartContextCollector {
 
 	public function __construct(
@@ -11,7 +13,9 @@ final class TemplatePartContextCollector {
 		private TemplateStructureAnalyzer $template_structure_analyzer,
 		private PatternOverrideAnalyzer $pattern_override_analyzer,
 		private PatternCandidateSelector $pattern_candidate_selector,
-		private ThemeTokenCollector $theme_token_collector
+		private ThemeTokenCollector $theme_token_collector,
+		private ViewportVisibilityAnalyzer $viewport_visibility_analyzer,
+		private SyncedPatternRepository $synced_pattern_repository
 	) {
 	}
 
@@ -57,17 +61,31 @@ final class TemplatePartContextCollector {
 		);
 		$summary_stats          = $this->template_structure_analyzer->collect_template_part_block_stats( $blocks );
 		$block_counts           = $summary_stats['blockCounts'];
+		$theme_tokens           = $this->theme_token_collector->for_tokens();
+
+		// Role coverage, token affinity, and contrast must reflect what actually
+		// renders, so analyze a copy of the tree with readable synced patterns
+		// (core/block) expanded to their content. The literal $blocks tree still
+		// backs the executable operation targets/anchors/locking below, so that
+		// contract is unchanged.
+		$analysis_blocks     = $this->expand_synced_patterns_for_analysis( $blocks );
+		$analysis_stats      = $this->template_structure_analyzer->collect_template_part_block_stats( $analysis_blocks );
+		$composition_profile = TemplatePartCompositionProfile::analyze(
+			$area,
+			$analysis_stats['blockCounts'],
+			(int) $analysis_stats['blockCount']
+		);
 
 		return [
-			'templatePartRef'         => $this->template_repository->resolve_template_part_ref( $template_part_ref, $template_part ),
-			'slug'                    => $slug,
-			'title'                   => '' !== $title ? $title : $template_part_ref,
-			'area'                    => $area,
-			'blockTree'               => $block_tree,
-			'topLevelBlocks'          => $top_level_blocks,
-			'currentPatternOverrides' => $this->pattern_override_analyzer->collect_current_pattern_override_summary( $blocks ),
-			'blockCounts'             => $block_counts,
-			'structureStats'          => [
+			'templatePartRef'           => $this->template_repository->resolve_template_part_ref( $template_part_ref, $template_part ),
+			'slug'                      => $slug,
+			'title'                     => '' !== $title ? $title : $template_part_ref,
+			'area'                      => $area,
+			'blockTree'                 => $block_tree,
+			'topLevelBlocks'            => $top_level_blocks,
+			'currentPatternOverrides'   => $this->pattern_override_analyzer->collect_current_pattern_override_summary( $blocks ),
+			'blockCounts'               => $block_counts,
+			'structureStats'            => [
 				'blockCount'            => $summary_stats['blockCount'],
 				'maxDepth'              => $summary_stats['maxDepth'],
 				'hasNavigation'         => ! empty( $block_counts['core/navigation'] ),
@@ -85,14 +103,151 @@ final class TemplatePartContextCollector {
 				'hasSingleWrapperGroup' => 1 === count( $top_level_blocks ) && 'core/group' === $top_level_blocks[0],
 				'isNearlyEmpty'         => $summary_stats['blockCount'] <= 1,
 			],
-			'operationTargets'        => $operation_targets,
-			'insertionAnchors'        => $insertion_anchors,
-			'structuralConstraints'   => $structural_constraints,
-			'patterns'                => $this->pattern_candidate_selector->collect_template_part_candidate_patterns(
+			'operationTargets'          => $operation_targets,
+			'insertionAnchors'          => $insertion_anchors,
+			'structuralConstraints'     => $structural_constraints,
+			'currentViewportVisibility' => $this->viewport_visibility_analyzer->collect_current_viewport_visibility_summary( $blocks ),
+			'patterns'                  => $this->pattern_candidate_selector->collect_template_part_candidate_patterns(
 				$area,
-				$visible_pattern_names
+				$visible_pattern_names,
+				$composition_profile
 			),
-			'themeTokens'             => $this->theme_token_collector->for_tokens(),
+			'themeTokens'               => $theme_tokens,
+			'compositionProfile'        => $composition_profile,
+			'derivedTokenAffinity'      => TemplatePartCompositionProfile::collect_token_affinity( $analysis_blocks ),
+			'derivedContrastContext'    => TemplatePartCompositionProfile::classify_root_contrast( $analysis_blocks, $theme_tokens ),
 		];
+	}
+
+	/**
+	 * Test seam exposing the synced-pattern analysis expansion so its
+	 * role-coverage behavior can be asserted without driving a full
+	 * template-part resolution.
+	 *
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function expand_synced_patterns_for_tests( array $blocks ): array {
+		return $this->expand_synced_patterns_for_analysis( $blocks );
+	}
+
+	/**
+	 * Analyze the composition profile from the editor's live block list,
+	 * expanding readable synced patterns (core/block) exactly as the last-saved
+	 * analysis does.
+	 *
+	 * The editor sends a synced pattern as a single unexpanded `core/block`
+	 * node, so re-deriving role coverage from those raw counts would misreport a
+	 * part composed of a synced pattern as missing the roles that pattern
+	 * supplies. Rebuilding minimal `core/block` stubs from the live list and
+	 * running them through the same tested expansion keeps the live profile in
+	 * step with the collector's synced-expanded one, while still letting genuine
+	 * live edits (e.g. removing the navigation) surface real gaps.
+	 *
+	 * @param string                                       $area
+	 * @param array<int, array{name: string, ref?: int}> $live_blocks Flat live block list (name plus optional synced ref).
+	 * @return array<string, mixed>
+	 */
+	public function analyze_live_composition_profile( string $area, array $live_blocks ): array {
+		$stubs = [];
+
+		foreach ( $live_blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$name = (string) ( $block['name'] ?? '' );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$attrs = [];
+
+			if ( 'core/block' === $name && isset( $block['ref'] ) && is_numeric( $block['ref'] ) ) {
+				$attrs['ref'] = (int) $block['ref'];
+			}
+
+			$stubs[] = [
+				'blockName'   => $name,
+				'attrs'       => $attrs,
+				'innerBlocks' => [],
+			];
+		}
+
+		$expanded = $this->expand_synced_patterns_for_analysis( $stubs );
+		$stats    = $this->template_structure_analyzer->collect_template_part_block_stats( $expanded );
+
+		return TemplatePartCompositionProfile::analyze(
+			$area,
+			$stats['blockCounts'],
+			(int) $stats['blockCount']
+		);
+	}
+
+	/**
+	 * Produce an analysis-only copy of the block tree with readable synced
+	 * pattern (core/block) references expanded to their wp_block content. A
+	 * synced pattern serializes as a self-closing reference with no inner
+	 * blocks, so without this a header built entirely from a synced pattern
+	 * would read as empty. Access is enforced (readable-only) and recursion is
+	 * both depth- and cycle-guarded.
+	 *
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @param array<int, bool>                 $seen_refs
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function expand_synced_patterns_for_analysis( array $blocks, array $seen_refs = [], int $depth = 0 ): array {
+		if ( $depth > 4 ) {
+			return $blocks;
+		}
+
+		$expanded = [];
+
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$name  = (string) ( $block['blockName'] ?? '' );
+			$attrs = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : [];
+
+			if ( 'core/block' === $name ) {
+				$ref = isset( $attrs['ref'] ) && is_numeric( $attrs['ref'] ) ? (int) $attrs['ref'] : 0;
+
+				if ( $ref > 0 && ! isset( $seen_refs[ $ref ] ) ) {
+					$pattern = $this->synced_pattern_repository->get_readable_pattern_for_recommendation( $ref );
+					$content = is_array( $pattern ) ? (string) ( $pattern['content'] ?? '' ) : '';
+
+					if ( '' !== $content ) {
+						$inner = $this->expand_synced_patterns_for_analysis(
+							parse_blocks( $content ),
+							$seen_refs + [ $ref => true ],
+							$depth + 1
+						);
+
+						foreach ( $inner as $inner_block ) {
+							$expanded[] = $inner_block;
+						}
+
+						continue;
+					}
+				}
+
+				// Unresolvable, inaccessible, or cyclic reference: keep the literal node.
+				$expanded[] = $block;
+				continue;
+			}
+
+			$children = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+
+			if ( [] !== $children ) {
+				$block['innerBlocks'] = $this->expand_synced_patterns_for_analysis( $children, $seen_refs, $depth + 1 );
+			}
+
+			$expanded[] = $block;
+		}
+
+		return $expanded;
 	}
 }

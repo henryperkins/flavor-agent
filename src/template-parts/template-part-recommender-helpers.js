@@ -1,5 +1,6 @@
 import {
 	collectPatternOverrideSummary,
+	collectViewportVisibilitySummary,
 	describeEditorBlockLabel,
 } from '../utils/editor-context-metadata';
 import {
@@ -402,6 +403,10 @@ export function buildEditorTemplatePartStructureSnapshot(
 			normalizedBlocks,
 			areaLookup
 		),
+		currentViewportVisibility: collectViewportVisibilitySummary(
+			normalizedBlocks,
+			areaLookup
+		),
 		operationTargets,
 		insertionAnchors: buildTemplatePartInsertionAnchors( operationTargets ),
 		structuralConstraints: {
@@ -441,6 +446,8 @@ export function buildTemplatePartRecommendationContextSignature( {
 		structuralConstraints: editorStructure?.structuralConstraints || null,
 		currentPatternOverrides:
 			editorStructure?.currentPatternOverrides || null,
+		currentViewportVisibility:
+			editorStructure?.currentViewportVisibility || null,
 		visiblePatternNames: Array.isArray( normalizedVisiblePatternNames )
 			? [ ...normalizedVisiblePatternNames ].sort()
 			: null,

@@ -17,6 +17,7 @@ use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\RecommendationReviewSignature;
 use FlavorAgent\Support\StringArray;
+use FlavorAgent\Support\TemplatePartCompositionProfile;
 
 final class TemplateAbilities {
 	use NormalizesInput;
@@ -204,15 +205,59 @@ final class TemplateAbilities {
 			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];
 		}
 
-		$editor_structure = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
-		$context          = self::apply_template_part_live_structure_context( $context, $editor_structure );
-		$design_semantics = DesignSemantics::normalize(
+		$editor_structure   = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
+		$has_live_structure = array_key_exists( 'blockCounts', $editor_structure )
+			|| array_key_exists( 'structureStats', $editor_structure )
+			|| array_key_exists( 'allBlockPaths', $editor_structure )
+			|| array_key_exists( 'blockTree', $editor_structure );
+		$context            = self::apply_template_part_live_structure_context( $context, $editor_structure );
+
+		$collector_profile = is_array( $context['compositionProfile'] ?? null ) ? $context['compositionProfile'] : [];
+
+		// When the editor sent live structure, re-derive the role gaps from what
+		// the operator currently sees; that may differ from the last-saved markup.
+		// Otherwise keep the collector's profile, which already expands synced
+		// patterns for non-editor callers (MCP / signature-only).
+		if ( $has_live_structure ) {
+			$context['compositionProfile'] = self::resolve_template_part_composition_profile( $context );
+		}
+
+		// The collector ranked and 30-capped $context['patterns'] against the
+		// pre-overlay profile. If the effective role gaps changed, re-rank against
+		// the live profile so a gap-filling pattern can surface (and is not lost
+		// beyond the cap). The review-context candidate set stays profile-free, so
+		// its signature semantics are unchanged.
+		if (
+			( $collector_profile['missingRoles'] ?? [] ) !== ( $context['compositionProfile']['missingRoles'] ?? [] )
+		) {
+			$context['patterns'] = ServerCollector::for_template_part_candidate_patterns(
+				sanitize_key( (string) ( $context['area'] ?? '' ) ),
+				$visible_pattern_names,
+				is_array( $context['compositionProfile'] ?? null ) ? $context['compositionProfile'] : []
+			);
+		}
+
+		// The review-context design semantics stay the pristine client value so
+		// the review signature keeps its existing meaning and its independence
+		// from server enrichment. The resolved/prompt context is additionally
+		// enriched with server-derived, content-authored signals (used-token
+		// affinity, background contrast, role gaps) that the client cannot
+		// compute from its summarized structure snapshot.
+		$client_design_semantics  = DesignSemantics::normalize(
 			$input['designSemantics'] ?? [],
 			'template-part'
 		);
-		if ( ! empty( $design_semantics ) ) {
-			$context['designSemantics']        = $design_semantics;
-			$review_context['designSemantics'] = $design_semantics;
+		$context_design_semantics = DesignSemantics::normalize(
+			self::enrich_template_part_design_semantics( $input['designSemantics'] ?? [], $context ),
+			'template-part'
+		);
+
+		if ( ! empty( $context_design_semantics ) ) {
+			$context['designSemantics'] = $context_design_semantics;
+		}
+
+		if ( ! empty( $client_design_semantics ) ) {
+			$review_context['designSemantics'] = $client_design_semantics;
 		}
 		$docs_result                = self::collect_template_part_wordpress_docs_guidance_result(
 			$context,
@@ -517,6 +562,12 @@ final class TemplateAbilities {
 			);
 		}
 
+		if ( array_key_exists( 'currentViewportVisibility', $input ) ) {
+			$result['currentViewportVisibility'] = self::normalize_viewport_visibility_summary(
+				$input['currentViewportVisibility']
+			);
+		}
+
 		if ( $has_live_path_coverage ) {
 			$result['topLevelBlocks'] = self::derive_template_part_top_level_blocks_from_path_lookup(
 				$path_lookup
@@ -605,6 +656,7 @@ final class TemplateAbilities {
 				'operationTargets',
 				'insertionAnchors',
 				'structuralConstraints',
+				'currentViewportVisibility',
 			] as $key
 		) {
 			if ( array_key_exists( $key, $editor_structure ) ) {
@@ -613,6 +665,176 @@ final class TemplateAbilities {
 		}
 
 		return $context;
+	}
+
+	/**
+	 * Re-derive the template-part composition profile from the current (possibly
+	 * live-overlaid) structure so downstream gap signals reflect what the
+	 * operator sees rather than only the last-saved markup.
+	 *
+	 * When the editor sent a live block index (allBlockPaths / blockTree), the
+	 * profile is derived through the collector's synced-pattern expansion: the
+	 * editor serializes a synced pattern as a single unexpanded `core/block`
+	 * node, so analyzing the raw counts would misreport a part composed of a
+	 * synced pattern as missing the roles that pattern supplies (the exact case
+	 * the collector's last-saved analysis already expands). Genuine live edits
+	 * still surface real gaps because the live block list drives the analysis.
+	 * Only when no block index is present (summarized counts alone) does it fall
+	 * back to counting the raw block-name map, where synced expansion is not
+	 * possible.
+	 *
+	 * @param array<string, mixed> $context
+	 * @return array<string, mixed>
+	 */
+	private static function resolve_template_part_composition_profile( array $context ): array {
+		$area        = sanitize_key( (string) ( $context['area'] ?? '' ) );
+		$live_blocks = self::collect_live_template_part_blocks_for_analysis( $context );
+
+		if ( [] !== $live_blocks ) {
+			return ServerCollector::for_live_template_part_composition_profile( $area, $live_blocks );
+		}
+
+		$counts      = is_array( $context['blockCounts'] ?? null ) ? $context['blockCounts'] : [];
+		$stats       = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
+		$block_count = isset( $stats['blockCount'] ) && is_numeric( $stats['blockCount'] )
+			? (int) $stats['blockCount']
+			: array_sum( array_map( 'intval', array_values( $counts ) ) );
+
+		return TemplatePartCompositionProfile::analyze( $area, $counts, $block_count );
+	}
+
+	/**
+	 * Flatten the live block index into a `{name, ref}` list for synced-aware
+	 * composition analysis. Prefers `allBlockPaths` (full depth, already flat);
+	 * falls back to a recursive walk of the depth-limited `blockTree`. Returns an
+	 * empty list when neither is present, signalling the counts-only fallback.
+	 *
+	 * @param array<string, mixed> $context
+	 * @return array<int, array{name: string, ref?: int}>
+	 */
+	private static function collect_live_template_part_blocks_for_analysis( array $context ): array {
+		$paths = is_array( $context['allBlockPaths'] ?? null ) ? $context['allBlockPaths'] : [];
+
+		if ( [] !== $paths ) {
+			$blocks = [];
+
+			foreach ( $paths as $node ) {
+				$entry = self::live_template_part_block_entry( $node );
+
+				if ( null !== $entry ) {
+					$blocks[] = $entry;
+				}
+			}
+
+			return $blocks;
+		}
+
+		$tree = is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : [];
+
+		if ( [] !== $tree ) {
+			$blocks = [];
+			self::flatten_live_template_part_block_tree( $tree, $blocks );
+
+			return $blocks;
+		}
+
+		return [];
+	}
+
+	/**
+	 * @param array<int, mixed>                             $nodes
+	 * @param array<int, array{name: string, ref?: int}> $blocks
+	 */
+	private static function flatten_live_template_part_block_tree( array $nodes, array &$blocks ): void {
+		foreach ( $nodes as $node ) {
+			$entry = self::live_template_part_block_entry( $node );
+
+			if ( null !== $entry ) {
+				$blocks[] = $entry;
+			}
+
+			if ( is_array( $node ) && is_array( $node['children'] ?? null ) && [] !== $node['children'] ) {
+				self::flatten_live_template_part_block_tree( $node['children'], $blocks );
+			}
+		}
+	}
+
+	/**
+	 * @return array{name: string, ref?: int}|null
+	 */
+	private static function live_template_part_block_entry( mixed $node ): ?array {
+		if ( ! is_array( $node ) ) {
+			return null;
+		}
+
+		$name = (string) ( $node['name'] ?? '' );
+
+		if ( '' === $name ) {
+			return null;
+		}
+
+		$entry      = [ 'name' => $name ];
+		$attributes = is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [];
+
+		if ( isset( $attributes['ref'] ) && is_numeric( $attributes['ref'] ) ) {
+			$entry['ref'] = (int) $attributes['ref'];
+		}
+
+		return $entry;
+	}
+
+	/**
+	 * Merge server-derived, content-authored design signals into the client's
+	 * design semantics: role-gap negative signals and used-token affinity are
+	 * unioned, and background contrast fills the client value only when the
+	 * client left it unknown, so an explicit client choice is never overridden.
+	 *
+	 * @param mixed                $client_design_semantics Raw client design semantics.
+	 * @param array<string, mixed> $context
+	 * @return array<string, mixed>
+	 */
+	private static function enrich_template_part_design_semantics( mixed $client_design_semantics, array $context ): array {
+		$semantics = self::normalize_input( $client_design_semantics );
+
+		if ( ! is_array( $semantics ) ) {
+			$semantics = [];
+		}
+
+		$profile        = is_array( $context['compositionProfile'] ?? null ) ? $context['compositionProfile'] : [];
+		$gap_signals    = is_array( $profile['negativeSignals'] ?? null ) ? $profile['negativeSignals'] : [];
+		$client_signals = is_array( $semantics['negativeSignals'] ?? null ) ? $semantics['negativeSignals'] : [];
+		$merged_signals = array_values( array_unique( array_merge( $client_signals, $gap_signals ) ) );
+
+		if ( [] !== $merged_signals ) {
+			$semantics['negativeSignals'] = $merged_signals;
+		}
+
+		$server_affinity = is_array( $context['derivedTokenAffinity'] ?? null ) ? $context['derivedTokenAffinity'] : [];
+		$client_affinity = is_array( $semantics['tokenAffinity'] ?? null ) ? $semantics['tokenAffinity'] : [];
+		$merged_affinity = [];
+
+		foreach ( [ 'color', 'spacing', 'fontSize' ] as $family ) {
+			$client_family = is_array( $client_affinity[ $family ] ?? null ) ? $client_affinity[ $family ] : [];
+			$server_family = is_array( $server_affinity[ $family ] ?? null ) ? $server_affinity[ $family ] : [];
+			$union         = array_values( array_unique( array_merge( $client_family, $server_family ) ) );
+
+			if ( [] !== $union ) {
+				$merged_affinity[ $family ] = $union;
+			}
+		}
+
+		if ( [] !== $merged_affinity ) {
+			$semantics['tokenAffinity'] = $merged_affinity;
+		}
+
+		$client_contrast = is_string( $semantics['contrastContext'] ?? null ) ? $semantics['contrastContext'] : '';
+		$server_contrast = is_string( $context['derivedContrastContext'] ?? null ) ? $context['derivedContrastContext'] : '';
+
+		if ( ( '' === $client_contrast || 'unknown' === $client_contrast ) && '' !== $server_contrast ) {
+			$semantics['contrastContext'] = $server_contrast;
+		}
+
+		return $semantics;
 	}
 
 	/**
