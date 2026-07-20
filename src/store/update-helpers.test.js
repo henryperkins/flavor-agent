@@ -1203,6 +1203,40 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
+	test( 'resolveExecutionContract prefers the server registeredStyles over the client-derived list', () => {
+		const recommendations = {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Use outline style',
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-outline',
+					},
+				},
+			],
+			explanation: 'The server list is authoritative.',
+		};
+
+		// ACCEPTED RISK (docs/superpowers/plans/2026-07-20-block-external-introspection-parity.md,
+		// Decision 2): the server contract overrides the client-derived mirror
+		// for registeredStyles at src/store/update-helpers.js:673-683 — only
+		// contentAttributeKeys and configAttributeKeys get client fallback. A
+		// style the client no longer knows about therefore still applies.
+		expect(
+			sanitizeRecommendationsForContext(
+				recommendations,
+				{ styles: [] },
+				{
+					allowedPanels: [],
+					hasExplicitlyEmptyPanels: false,
+					registeredStyles: [ 'outline' ],
+				}
+			).block
+		).toHaveLength( 1 );
+	} );
+
 	test( 'sanitizeRecommendationsForContext preserves best-effort settings and styles when panel mapping is unknown', () => {
 		const recommendations = {
 			settings: [
