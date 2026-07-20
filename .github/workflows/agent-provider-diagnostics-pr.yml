@@ -1,0 +1,68 @@
+name: Run provider diagnostics fix
+
+on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'agent/fix-recommendation-provider-diagnostics'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out fix branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer:v2
+
+      - name: Execute staged red-green verification
+        shell: bash
+        run: |
+          ruby -ryaml -e '
+            workflow = YAML.load_file(".github/workflows/agent-provider-diagnostics-fix.yml")
+            steps = workflow.fetch("jobs").fetch("apply-and-verify").fetch("steps")
+            scripts = steps.filter_map do |step|
+              next unless step["run"]
+              next if step["name"] == "Commit verified fix"
+              "printf \\"\\n== #{step.fetch("name")} ==\\n\\"\\n#{step.fetch("run")}"
+            end
+            File.write("/tmp/apply-provider-diagnostics.sh", "set -euo pipefail\n" + scripts.join("\n"))
+          '
+          bash /tmp/apply-provider-diagnostics.sh
+
+      - name: Commit verified fix and remove temporary workflows
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          rm \
+            .github/workflows/agent-provider-diagnostics-fix.yml \
+            .github/workflows/agent-provider-diagnostics-pr.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- \
+            inc/Abilities/RecommendationAbilityExecution.php \
+            inc/Activity/Repository.php \
+            tests/phpunit/ProviderDiagnosticsActivityTest.php \
+            .github/workflows/agent-provider-diagnostics-fix.yml \
+            .github/workflows/agent-provider-diagnostics-pr.yml
+          git commit -m 'Fix recommendation provider diagnostics'
+          git push origin HEAD:"${HEAD_BRANCH}"
