@@ -25,6 +25,7 @@ final class Repository {
 	private const MAX_REPORT_ROW_LIMIT                    = 1000;
 	private const ADMIN_PROJECTION_BACKFILL_SIZE          = 250;
 	private const ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION = 'flavor_agent_activity_admin_projection_backfill_cursor';
+	private const ADMIN_PROJECTION_BACKFILL_FORCE_OPTION  = 'flavor_agent_activity_admin_projection_backfill_force';
 	private const ADMIN_HISTORY_QUERY_ENTITY_BATCH_SIZE   = 50;
 	private const ADMIN_HISTORY_QUERY_KEY_SEPARATOR       = "\x1F";
 	private const ADMIN_PROJECTION_SELECT_SQL             = 'id, activity_id, user_id, surface, entity_type, entity_ref, document_scope_key, activity_type, suggestion, undo_state, execution_result, created_at, admin_post_type, admin_entity_id, admin_block_path, admin_operation_type, admin_operation_label, admin_provider, admin_model, admin_provider_path, admin_configuration_owner, admin_credential_source, admin_selected_provider, admin_request_ability, admin_request_route, admin_request_reference, admin_request_prompt, admin_search_text';
@@ -141,7 +142,7 @@ final class Repository {
 		update_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
 
 		if ( $table_previously_exists && $installed_version < self::SCHEMA_VERSION ) {
-			self::schedule_admin_projection_backfill();
+			self::schedule_admin_projection_backfill( $installed_version < 5 );
 		}
 	}
 
@@ -1515,8 +1516,11 @@ final class Repository {
 		return is_array( $stored ) ? $stored : $existing_entry;
 	}
 
-	private static function schedule_admin_projection_backfill(): void {
-		if ( null === get_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION, null ) ) {
+	private static function schedule_admin_projection_backfill( bool $force = false ): void {
+		if ( $force ) {
+			update_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION, 0, false );
+			update_option( self::ADMIN_PROJECTION_BACKFILL_FORCE_OPTION, 1, false );
+		} elseif ( null === get_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION, null ) ) {
 			update_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION, 0, false );
 		}
 
@@ -1540,6 +1544,7 @@ final class Repository {
 	private static function clear_admin_projection_backfill_state(): void {
 		if ( function_exists( 'delete_option' ) ) {
 			delete_option( self::ADMIN_PROJECTION_BACKFILL_CURSOR_OPTION );
+			delete_option( self::ADMIN_PROJECTION_BACKFILL_FORCE_OPTION );
 		}
 
 		if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
@@ -1555,6 +1560,10 @@ final class Repository {
 	 * @param array<string, mixed> $row
 	 */
 	private static function row_requires_admin_projection_backfill( array $row ): bool {
+		if ( 1 === (int) get_option( self::ADMIN_PROJECTION_BACKFILL_FORCE_OPTION, 0 ) ) {
+			return true;
+		}
+
 		if ( '' === trim( (string) ( $row['admin_operation_type'] ?? '' ) )
 			|| '' === trim( (string) ( $row['admin_operation_label'] ?? '' ) )
 			|| '' === trim( (string) ( $row['admin_search_text'] ?? '' ) ) ) {

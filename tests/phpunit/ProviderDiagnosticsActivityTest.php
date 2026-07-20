@@ -152,4 +152,51 @@ final class ProviderDiagnosticsActivityTest extends TestCase {
 		$this->assertSame( 'claude-sonnet-4-6', $projection['admin_model'] ?? null );
 		$this->assertSame( 'anthropic', $projection['admin_selected_provider'] ?? null );
 	}
+
+	public function test_schema_v5_upgrade_reprojects_populated_legacy_provider_fields(): void {
+		ActivityRepository::create(
+			[
+				'id'         => 'legacy-provider-diagnostic',
+				'type'       => 'request_diagnostic',
+				'surface'    => 'template',
+				'target'     => [ 'templateRef' => 'theme//home' ],
+				'suggestion' => 'Template recommendation request',
+				'before'     => [],
+				'after'      => [],
+				'request'    => [
+					'ai' => [
+						'backendLabel'   => 'WordPress AI Client',
+						'provider'       => 'wordpress_ai_client',
+						'model'          => 'provider-managed',
+						'requestSummary' => [
+							'resolvedProvider' => 'anthropic',
+							'resolvedModel'    => 'claude-sonnet-4-6',
+						],
+					],
+				],
+				'document'   => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+				'timestamp'  => '2026-07-20T12:00:00Z',
+			]
+		);
+
+		$table_name = ActivityRepository::table_name();
+		$row        = &WordPressTestState::$db_tables[ $table_name ][0];
+
+		$row['admin_provider']          = 'WordPress AI Client';
+		$row['admin_model']             = 'provider-managed';
+		$row['admin_selected_provider'] = 'Cloudflare Workers AI';
+		WordPressTestState::$options[ ActivityRepository::SCHEMA_OPTION ] = 4;
+
+		ActivityRepository::maybe_install();
+		$processed = ActivityRepository::run_admin_projection_backfill();
+
+		$this->assertSame( 1, $processed );
+		$this->assertSame( 'anthropic', $row['admin_provider'] ?? null );
+		$this->assertSame( 'claude-sonnet-4-6', $row['admin_model'] ?? null );
+		$this->assertSame( 'anthropic', $row['admin_selected_provider'] ?? null );
+	}
 }
