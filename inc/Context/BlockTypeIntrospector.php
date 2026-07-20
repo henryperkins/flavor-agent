@@ -245,7 +245,7 @@ final class BlockTypeIntrospector {
 		$supports              = $block_type->supports ?? [];
 		$supports_content_role = ! empty( $supports['contentRole'] );
 		$attributes            = $block_type->attributes ?? [];
-		$styles                = $block_type->styles ?? [];
+		$styles                = $this->collect_block_styles( $block_name, $block_type );
 		$variations            = $block_type->variations ?? [];
 		$bindable_attributes   = $this->resolve_bindable_attributes( $block_name );
 		$content_attrs         = [];
@@ -291,14 +291,7 @@ final class BlockTypeIntrospector {
 			'bindableAttributes'  => $bindable_attributes,
 			'contentAttributes'   => $content_attrs,
 			'configAttributes'    => $config_attrs,
-			'styles'              => array_map(
-				static fn( $style ) => [
-					'name'      => $style['name'] ?? '',
-					'label'     => $style['label'] ?? '',
-					'isDefault' => $style['isDefault'] ?? false,
-				],
-				$styles
-			),
+			'styles'              => $styles,
 			'variations'          => $include_variations
 				? array_map(
 					static fn( $variation ) => [
@@ -313,6 +306,73 @@ final class BlockTypeIntrospector {
 			'parent'              => $block_type->parent ?? null,
 			'allowedBlocks'       => $block_type->allowed_blocks ?? null,
 			'apiVersion'          => $block_type->api_version ?? 1,
+		];
+	}
+
+	/**
+	 * Merge block.json styles with register_block_style() registrations.
+	 *
+	 * register_block_style() writes only to WP_Block_Styles_Registry and never
+	 * touches WP_Block_Type::$styles. The editor stays complete because core
+	 * emits an explicit registerBlockStyle() call per registration, and core's
+	 * own block-types REST controller merges the registry into its styles
+	 * field — so reading $block_type->styles alone leaves server-derived
+	 * introspection short of both.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function collect_block_styles( string $block_name, object $block_type ): array {
+		$sources = (array) ( $block_type->styles ?? [] );
+
+		if ( class_exists( '\WP_Block_Styles_Registry' ) ) {
+			$registry = \WP_Block_Styles_Registry::get_instance();
+
+			if ( method_exists( $registry, 'get_registered_styles_for_block' ) ) {
+				foreach ( $registry->get_registered_styles_for_block( $block_name ) as $style ) {
+					$sources[] = $style;
+				}
+			}
+		}
+
+		$styles = [];
+
+		foreach ( $sources as $style ) {
+			$normalized = $this->normalize_block_style( $style );
+
+			if ( null === $normalized ) {
+				continue;
+			}
+
+			// First writer wins, so block.json survives a collision with the
+			// registry — matching the editor, whose getUniqueItemsByName keeps
+			// the first occurrence and always sees block.json first. Keyed on
+			// the sanitized name because every downstream consumer sanitizes
+			// before comparing.
+			$styles[ sanitize_key( $normalized['name'] ) ] ??= $normalized;
+		}
+
+		return array_values( $styles );
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private function normalize_block_style( mixed $style ): ?array {
+		if ( ! is_array( $style ) ) {
+			return null;
+		}
+
+		$name = is_string( $style['name'] ?? null ) ? $style['name'] : '';
+
+		if ( '' === sanitize_key( $name ) ) {
+			return null;
+		}
+
+		return [
+			'name'      => $name,
+			'label'     => is_string( $style['label'] ?? null ) ? $style['label'] : '',
+			// block.json uses isDefault; the styles registry uses is_default.
+			'isDefault' => (bool) ( $style['isDefault'] ?? $style['is_default'] ?? false ),
 		];
 	}
 

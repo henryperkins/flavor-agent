@@ -1468,4 +1468,178 @@ final class BlockAbilitiesTest extends TestCase {
 			'errorMessage'           => '',
 		];
 	}
+
+	/**
+	 * @return array<int, array{0: mixed}>
+	 */
+	public static function non_string_class_name_provider(): array {
+		return [
+			'int'   => [ 5 ],
+			'float' => [ 1.5 ],
+			'bool'  => [ true ],
+			'array' => [ [ 'is-style-outline' ] ],
+			'null'  => [ null ],
+		];
+	}
+
+	/**
+	 * @dataProvider non_string_class_name_provider
+	 */
+	public function test_selected_block_tolerates_non_string_class_name( mixed $class_name ): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'selectedBlock' => [
+					'blockName'  => 'core/paragraph',
+					'attributes' => [
+						'content'   => 'Hello world',
+						'className' => $class_name,
+					],
+				],
+			]
+		);
+
+		$this->assertArrayHasKey( 'activeStyle', $result['context']['block'] );
+		$this->assertNull( $result['context']['block']['activeStyle'] );
+	}
+
+	/**
+	 * @dataProvider non_string_class_name_provider
+	 */
+	public function test_editor_context_tolerates_non_string_class_name( mixed $class_name ): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [
+							'content'   => 'Hello world',
+							'className' => $class_name,
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertArrayHasKey( 'activeStyle', $result['context']['block'] );
+		$this->assertNull( $result['context']['block']['activeStyle'] );
+	}
+
+	public function test_editor_context_empty_styles_is_an_assertion(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'   => 'core/paragraph',
+						'styles' => [],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [], $result['context']['block']['styles'] ?? null );
+	}
+
+	public function test_editor_context_omitted_styles_falls_back_to_the_server_list(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name' => 'core/paragraph',
+					],
+				],
+			]
+		);
+
+		$names = array_column( $result['context']['block']['styles'] ?? [], 'name' );
+
+		$this->assertContains( 'outline', $names );
+	}
+
+	public function test_editor_context_malformed_styles_is_not_an_assertion(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'   => 'core/paragraph',
+						'styles' => 'outline',
+					],
+				],
+			]
+		);
+
+		// A non-array is unusable, not an assertion of emptiness — wiping the
+		// server list here would suppress every style-variation suggestion.
+		$names = array_column( $result['context']['block']['styles'] ?? [], 'name' );
+
+		$this->assertContains( 'outline', $names );
+	}
+
+	public function test_editor_context_null_active_style_is_an_assertion(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [
+							'className' => 'is-style-outline',
+						],
+						'styles'            => [],
+						'activeStyle'       => null,
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [], $result['context']['block']['styles'] ?? null );
+		$this->assertArrayHasKey( 'activeStyle', $result['context']['block'] );
+		$this->assertNull( $result['context']['block']['activeStyle'] );
+	}
+
+	public function test_editor_context_empty_variations_is_an_assertion(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'       => 'core/paragraph',
+						'variations' => [],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [], $result['context']['block']['variations'] ?? null );
+	}
+
+	public function test_editor_context_omitted_variations_falls_back_to_the_server_list(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name' => 'core/paragraph',
+					],
+				],
+			]
+		);
+
+		$names = array_column( $result['context']['block']['variations'] ?? [], 'name' );
+
+		$this->assertContains( 'intro', $names );
+	}
+
+	public function test_execution_contract_registered_styles_follows_asserted_empty_styles(): void {
+		$result = BlockAbilities::recommend_block(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'        => 'core/paragraph',
+						'styles'      => [],
+						'editingMode' => 'disabled',
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result['executionContract'] ?? null );
+		$this->assertSame( [], $result['executionContract']['registeredStyles'] ?? null );
+	}
 }

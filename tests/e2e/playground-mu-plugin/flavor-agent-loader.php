@@ -138,8 +138,28 @@ add_action(
 			[],
 			false
 		);
+		wp_enqueue_script(
+			'flavor-agent-playground-block-styles',
+			content_url('mu-plugins/flavor-agent-playground-block-styles.js'),
+			[ 'wp-blocks', 'wp-data', 'wp-dom-ready' ],
+			'1',
+			true
+		);
 	},
 	0
+);
+
+add_action(
+	'init',
+	static function (): void {
+		register_block_style(
+			'core/paragraph',
+			[
+				'name'  => 'fa-e2e-registry',
+				'label' => 'FA E2E Registry Style',
+			]
+		);
+	}
 );
 
 add_action(

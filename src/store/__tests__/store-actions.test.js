@@ -8994,6 +8994,78 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'applySelectedSuggestions applies a style variation registered only via register_block_style()', async () => {
+		const updateBlockAttributes = jest.fn();
+		const registry = createBlockApplyRegistry( {
+			attributes: {
+				className: 'custom-class',
+			},
+			updateBlockAttributes,
+		} );
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 1,
+					contextSignature: 'client-sig',
+					resolvedContextSignature: 'server-sig',
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Improve this block.',
+					blockContext: { name: 'core/group' },
+					executionContract: {
+						allowedPanels: [ 'styles' ],
+						// Present only because build_block_manifest() now merges
+						// WP_Block_Styles_Registry into the manifest; this name
+						// is absent from the block's own block.json styles.
+						registeredStyles: [ 'registry-only' ],
+					},
+				},
+			},
+		} );
+		const dispatch = jest.fn();
+		apiFetch.mockResolvedValueOnce( {
+			result: {
+				resolvedContextSignature: 'server-sig',
+				docsGrounding: { status: 'grounded' },
+			},
+		} );
+
+		const didApply = await actions.applySelectedSuggestions(
+			'block-1',
+			[
+				{
+					label: 'Registry-only style',
+					panel: 'styles',
+					type: 'style_variation',
+					attributeUpdates: { className: 'is-style-registry-only' },
+					suggestionKey: 'block:styles:1',
+					recommendationOutcome: {
+						recommendationSetId: 'block:1:hash_set',
+					},
+				},
+			],
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'client-sig',
+			} ),
+			{
+				clientId: 'block-1',
+				editorContext: { name: 'core/group' },
+				contextSignature: 'client-sig',
+				prompt: 'Improve this block.',
+			}
+		)( { dispatch, registry, select } );
+
+		expect( didApply ).toBe( true );
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
+			className: 'custom-class is-style-registry-only',
+		} );
+	} );
+
 	test( 'applySelectedSuggestions records validation blocked when all selected suggestions resolve empty', async () => {
 		const dispatch = jest.fn();
 		const select = createStoreSelectWithState( {

@@ -6036,3 +6036,108 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 		)
 		.toBe( true );
 } );
+
+test( 'an unregistered block style is asserted as empty in the recommendation request', async ( {
+	page,
+} ) => {
+	test.setTimeout( 180_000 );
+
+	const blockRequests = [];
+
+	await page.route(
+		recommendationAbilityRoute( 'recommend-block' ),
+		async ( route ) => {
+			blockRequests.push(
+				getAbilityRequestInput( route.request().postDataJSON() )
+			);
+
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature: 'block-resolved-context',
+					settings: [],
+					styles: [],
+					block: [],
+					explanation: 'No suggestions for this fixture.',
+				} ),
+			} );
+		}
+	);
+	await enableMockedRecommendationSurfaces( page, [ 'block' ] );
+
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await waitForBlockEditorApis( page );
+
+	// The mu-plugin fixture unregisters every core/quote style on domReady.
+	await expect
+		.poll(
+			async () =>
+				await page.evaluate(
+					() =>
+						(
+							window.wp.data
+								.select( 'core/blocks' )
+								.getBlockStyles( 'core/quote' ) || []
+						).length
+				),
+			{ timeout: 30_000 }
+		)
+		.toBe( 0 );
+
+	await page.evaluate( () => {
+		const { createBlock } = window.wp.blocks;
+		const { dispatch } = window.wp.data;
+		const block = createBlock( 'core/quote' );
+
+		dispatch( 'core/block-editor' ).resetBlocks( [ block ] );
+		dispatch( 'core/block-editor' ).selectBlock( block.clientId );
+	} );
+
+	await ensureSettingsSidebarOpen( page );
+	await page.evaluate( () => {
+		const blockEditor = window.wp.data.select( 'core/block-editor' );
+		const quote = blockEditor.getBlocks()[ 0 ];
+
+		if ( quote?.clientId ) {
+			window.wp.data
+				.dispatch( 'core/block-editor' )
+				.selectBlock( quote.clientId );
+		}
+	} );
+	await expect
+		.poll( () =>
+			page.evaluate(
+				() =>
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getSelectedBlock()?.name || ''
+			)
+		)
+		.toBe( 'core/quote' );
+
+	const promptInput = page.getByPlaceholder(
+		'Describe the outcome you want for this block.'
+	);
+
+	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await dismissWelcomeGuide( page );
+	await promptInput.fill( 'Improve this quote.' );
+	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+	await expect
+		.poll( () => blockRequests.length, { timeout: 30_000 } )
+		.toBeGreaterThan( 0 );
+
+	// The client must assert emptiness rather than omit the key — that is the
+	// distinction D4 makes the server honour.
+	const context = blockRequests[ 0 ].editorContext || {};
+
+	expect( context.block ).toHaveProperty( 'styles' );
+	expect( context.block.styles ).toEqual( [] );
+} );

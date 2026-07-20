@@ -173,7 +173,7 @@ Ring III attestation coverage is intentionally narrower than the full governed-l
 External agents reach the layer through the same permission callbacks as the first-party editor (`edit_posts` / `edit_theme_options`, escalating to `edit_post` when a post ID is resolvable):
 
 - the eight `recommend-*` abilities (feature-gated) — exposed as first-class MCP tools on the dedicated server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`)
-- the six `preview-recommend-*` siblings — side-effect-free signature dry-runs, registered before the feature gate is enabled so operators can verify wiring
+- the six `preview-recommend-*` siblings — side-effect-free signature dry-runs, also `meta.mcp.public = true` and so reachable on the universal MCP default server, registered before the feature gate is enabled so operators can verify wiring
 - ten public read helpers on the universal MCP default server (`meta.mcp.public = true`)
 - the seven external-apply abilities (feature-gated, dedicated server only): `request-style-apply` queues a review-gated style apply, `request-template-apply` queues a review-gated page-level template structural apply, `request-template-part-apply` queues a review-gated template-part structural apply, `request-post-blocks-apply` queues a review-gated post/page structural apply, `get-activity`/`list-activity` are the agent's attribution and status reads, and `undo-activity` is the server-side reverse path with ordered-undo and drift checks across all four lanes
 
@@ -183,9 +183,22 @@ The boundary, stated plainly: external agents can now request style, template, t
 
 ### Recommendation context trust boundary
 
-Recommendation context has two provenance paths with different trust postures. The **first-party `editorContext`** path trusts the client-supplied block manifest — introspected `inspectorPanels`, `bindableAttributes`, and content/config attribute keys — as the source for the execution contract (`BlockRecommendationExecutionContract`) that gates which suggestions survive validation. The **external `selectedBlock`** path does not: it re-introspects the block type server-side (`ServerCollector::for_block`), so an external caller cannot fabricate capabilities.
+Recommendation context is **caller-supplied advisory input on both paths**. There is no enforced first-party channel.
 
-Trusting the first-party manifest is safe because recommendations are advisory: the local apply still runs through the block editor's real `supports`/lock enforcement, and **no governed write consumes a recommendation-supplied execution contract**. The four external-apply lanes (style, template, template-part, post-blocks) re-collect and re-validate their target contract server-side at request and again at approval, with no filter seam. A recommendation's `executionContract` is an advisory shaping and attribution artifact, never an apply authority.
+`flavor-agent/recommend-block` accepts `editorContext` as an open object and selects the context path purely on key presence (`inc/Abilities/BlockAbilities.php:236-237`), with no provenance signal — no nonce class, no origin marker, nothing distinguishing the editor from any other client. Any holder of `edit_posts` can POST a fabricated `editorContext`. The `selectedBlock` path is not sealed either: it re-introspects the block type server-side, but `supportsContentRole` is OR-widened from client input (`inc/Abilities/BlockAbilities.php:462`), so a caller can turn it on though not off.
+
+Server-side re-introspection covers what it re-derives — `inspectorPanels`, `bindableAttributes` and content/config attribute keys are rebuilt from `WP_Block_Type_Registry` rather than trusted from the caller — but it is bounded by what the server can observe, not total. Block styles registered only in JavaScript via `registerBlockStyle()` are unreachable from PHP and are therefore absent from every server-derived manifest.
+
+`themeTokens` is deliberately client-preferred when supplied (`inc/Abilities/BlockAbilities.php:416-419`). The editor's `features` / `__experimentalFeatures` settings reflect per-context resolution — a style variation being previewed in the Site Editor, block-level setting overrides — that `wp_get_global_settings()` cannot observe, so the client value is frequently more accurate than the server's.
+
+This is safe because of what a caller *gains*, not because of how they arrive:
+
+- The **external apply lanes** (style, template, template-part, post-blocks) re-collect and re-validate their target contract server-side at request and again at approval, with no filter seam. No external apply consumes a recommendation-supplied execution contract.
+- The **editor apply path does** consume it — `executionContract.registeredStyles` gates which `is-style-*` className values survive (`src/store/update-helpers.js:1226`, `:2487`) before `updateBlockAttributes` writes them. Widening it buys a caller nothing: the same user holds `edit_posts` and can set any attribute by hand, and the apply still runs through the block editor's real `supports`/lock enforcement.
+
+A recommendation's `executionContract` is an advisory shaping and attribution artifact, never an apply authority.
+
+Exposure is not editor-only. `recommend-block` declares no `mcp` meta, so it is not on the universal MCP default server, but it is a first-class tool on the dedicated Flavor Agent MCP server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`), its `preview-recommend-block` sibling is `mcp.public` and reaches the same input preparation with `resolveSignatureOnly` forced, and the Abilities REST route is reachable directly. The permission gates are identical on every vector.
 
 ### Data flow to the provider
 
