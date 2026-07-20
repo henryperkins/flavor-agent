@@ -176,7 +176,6 @@ final class Provider {
 	 * }
 	 */
 	public static function active_chat_request_meta(): array {
-		$selected_provider                          = self::get();
 		$config                                     = (
 			self::$has_fresh_runtime_chat_configuration
 			&& is_array( self::$last_runtime_chat_configuration )
@@ -185,7 +184,7 @@ final class Provider {
 			: self::chat_configuration();
 		self::$has_fresh_runtime_chat_configuration = false;
 		$provider                                   = self::normalize_provider_for_request_meta(
-			(string) ( $config['provider'] ?? $selected_provider )
+			(string) ( $config['provider'] ?? self::get() )
 		);
 		$provider_label                             = self::provider_label_for_request_meta( $provider );
 		$connector_meta                             = self::connector_meta_for_request_meta( $provider );
@@ -193,12 +192,21 @@ final class Provider {
 		$diagnostics                                = self::active_chat_diagnostics();
 		$backend_label                              = trim( (string) ( $config['label'] ?? $provider_label ) );
 		$model                                      = trim( (string) ( $config['model'] ?? '' ) );
-		$used_fallback                              = ! self::chat_provider_matches_selection( $selected_provider, $provider );
-		$owner                                      = 'flavor_agent';
-		$owner_label                                = 'Settings > Flavor Agent';
-		$path_label                                 = 'Flavor Agent chat backend';
-		$credential_source                          = 'plugin_settings';
-		$credential_label                           = 'Settings > Flavor Agent';
+		// Chat is owned by Settings > Connectors via the WordPress AI Client, so
+		// the selected chat provider IS the resolved provider. Provider::get()
+		// returns the plugin's embeddings provider (Cloudflare Workers AI) and
+		// must never be reported as the chat selection: doing so mislabels the
+		// "Selected provider" diagnostic and, because the resolved chat provider
+		// never equals it, raises a false "used fallback" signal on every
+		// recommendation served by a real connector. No provider-level chat
+		// fallback exists in the Connectors-owned model.
+		$selected_provider = $provider;
+		$used_fallback     = false;
+		$owner             = 'flavor_agent';
+		$owner_label       = 'Settings > Flavor Agent';
+		$path_label        = 'Flavor Agent chat backend';
+		$credential_source = 'plugin_settings';
+		$credential_label  = 'Settings > Flavor Agent';
 
 		if ( self::is_connector( $provider ) ) {
 			$owner             = 'connectors';
@@ -222,7 +230,7 @@ final class Provider {
 
 		$meta = [
 			'selectedProvider'      => $selected_provider,
-			'selectedProviderLabel' => self::provider_label_for_request_meta( $selected_provider ),
+			'selectedProviderLabel' => $provider_label,
 			'connectorId'           => $connector_meta['id'],
 			'connectorLabel'        => $connector_meta['label'],
 			'connectorPluginSlug'   => $connector_meta['pluginSlug'],
@@ -578,31 +586,6 @@ final class Provider {
 		}
 
 		return '';
-	}
-
-	private static function chat_provider_matches_selection( string $selected_provider, string $provider ): bool {
-		$selected_provider = self::normalize_provider( $selected_provider );
-		$provider          = self::normalize_provider_for_request_meta( $provider );
-
-		if ( $provider === $selected_provider ) {
-			return true;
-		}
-
-		if (
-			WorkersAIEmbeddingConfiguration::PROVIDER === $selected_provider
-			&& self::WORDPRESS_AI_CLIENT_PROVIDER === $provider
-		) {
-			return true;
-		}
-
-		if (
-			self::WORDPRESS_AI_CLIENT_PROVIDER === $provider
-			&& ! self::is_connector( $selected_provider )
-		) {
-			return true;
-		}
-
-		return false;
 	}
 
 	/**

@@ -180,7 +180,8 @@ final class ProviderTest extends TestCase {
 
 		$meta = Provider::active_chat_request_meta();
 
-		$this->assertSame( 'cloudflare_workers_ai', $meta['selectedProvider'] );
+		$this->assertSame( 'wordpress_ai_client', $meta['selectedProvider'] );
+		$this->assertSame( 'WordPress AI Client', $meta['selectedProviderLabel'] );
 		$this->assertSame( 'wordpress_ai_client', $meta['provider'] );
 		$this->assertFalse( $meta['usedFallback'] );
 	}
@@ -292,7 +293,7 @@ final class ProviderTest extends TestCase {
 			Provider::chat_configuration();
 			$meta = Provider::active_chat_request_meta();
 
-			$this->assertSame( 'cloudflare_workers_ai', $meta['selectedProvider'] );
+			$this->assertSame( 'wordpress_ai_client', $meta['selectedProvider'] );
 			$this->assertSame( 'wordpress_ai_client', $meta['provider'] );
 			$this->assertSame( 'WordPress AI Client', $meta['providerLabel'] );
 			$this->assertSame( 'provider-managed', $meta['model'] );
@@ -331,6 +332,42 @@ final class ProviderTest extends TestCase {
 		$this->assertSame( 'wordpress_ai_client', $meta['connectorId'] );
 		$this->assertSame( 'WordPress AI Client', $meta['connectorLabel'] );
 		$this->assertSame( '', $meta['connectorPluginSlug'] );
+	}
+
+	public function test_active_chat_request_meta_reports_resolved_connector_as_selected_without_false_fallback(): void {
+		WordPressTestState::$connectors          = [
+			'anthropic' => [
+				'type'           => 'ai_provider',
+				'name'           => 'Anthropic',
+				'authentication' => [
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		// Simulate the runtime configuration WordPressAIClient::chat() records
+		// once it resolves to a real connector provider (developer-selected or
+		// explicit) — the common production path for recommendations.
+		Provider::record_runtime_chat_configuration(
+			[
+				'provider' => 'anthropic',
+				'model'    => 'claude-sonnet-4-6',
+			]
+		);
+
+		$meta = Provider::active_chat_request_meta();
+
+		// Regression: the selected chat provider is the resolved connector, never
+		// the plugin's embeddings provider (Cloudflare Workers AI), so the AI
+		// Activity "Selected provider" diagnostic is accurate and no false
+		// "used fallback" signal is raised.
+		$this->assertSame( 'anthropic', $meta['provider'] );
+		$this->assertSame( 'Anthropic', $meta['providerLabel'] );
+		$this->assertSame( 'claude-sonnet-4-6', $meta['model'] );
+		$this->assertSame( 'anthropic', $meta['selectedProvider'] );
+		$this->assertSame( 'Anthropic', $meta['selectedProviderLabel'] );
+		$this->assertFalse( $meta['usedFallback'] );
 	}
 
 	public function test_active_chat_request_meta_ignores_saved_connector_string_metadata(): void {
