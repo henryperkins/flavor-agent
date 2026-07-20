@@ -205,5 +205,64 @@ final class ProviderDiagnosticsActivityTest extends TestCase {
 		$this->assertSame( 'anthropic', $row['admin_provider'] ?? null );
 		$this->assertSame( 'claude-sonnet-4-6', $row['admin_model'] ?? null );
 		$this->assertSame( 'anthropic', $row['admin_selected_provider'] ?? null );
+
+		// Regression guard: once the final batch completes, the forced-backfill
+		// lifecycle must clear its cursor and force flag. If it did not, a later
+		// non-force schema upgrade would inherit a stale force flag and reproject
+		// the entire activity table on every batch (row_requires_admin_projection_backfill
+		// short-circuits true while the force flag is set).
+		$this->assertSame(
+			0,
+			(int) \get_option( 'flavor_agent_activity_admin_projection_backfill_force', 0 ),
+			'v5 forced backfill must clear the force flag on completion.'
+		);
+		$this->assertNull(
+			\get_option( 'flavor_agent_activity_admin_projection_backfill_cursor', null ),
+			'v5 forced backfill must clear the cursor on completion.'
+		);
+	}
+
+	public function test_admin_projection_marks_default_model_selection_as_provider_managed(): void {
+		$entry = [
+			'id'         => 'default-selection-diagnostic',
+			'type'       => 'request_diagnostic',
+			'surface'    => 'template',
+			'target'     => [
+				'templateRef' => 'theme//home',
+			],
+			'suggestion' => 'Template recommendation request',
+			'before'     => [],
+			'after'      => [],
+			'request'    => [
+				'prompt' => 'Tighten the structure.',
+				'ai'     => [
+					'backendLabel'   => 'WordPress AI Client',
+					'provider'       => 'wordpress_ai_client',
+					'model'          => 'provider-managed',
+					'requestSummary' => [
+						// No resolvedProvider: the AI Client resolved to the
+						// provider-managed/default path (no explicit provider and
+						// no developer feature selection).
+						'modelSelectionSource' => 'default',
+					],
+				],
+			],
+			'document'   => [
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			],
+			'timestamp'  => '2026-07-20T12:00:00Z',
+		];
+
+		$method = new \ReflectionMethod( ActivityRepository::class, 'build_admin_projection_from_entry' );
+		$method->setAccessible( true );
+		$projection = $method->invoke( null, $entry );
+
+		// With an empty resolvedProvider and modelSelectionSource 'default', the
+		// admin "Selected provider" projects the provider-managed sentinel rather
+		// than falling through to a stale selectedProviderLabel.
+		$this->assertIsArray( $projection );
+		$this->assertSame( 'provider-managed', $projection['admin_selected_provider'] ?? null );
 	}
 }
