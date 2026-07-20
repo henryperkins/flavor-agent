@@ -83,6 +83,9 @@ Rules:
 - Prefer valid `operations[]` when the user request maps directly to the Executable Operation Examples. Keep unsupported or ambiguous ideas in `patternSuggestions` and `blockHints`.
 - If Structural Constraints mention `contentOnly` or locked paths, keep those ideas advisory unless the path is explicitly listed as executable.
 - Keep patternSuggestions aligned with any executable operations you return.
+- When an Area Role & Composition section lists missing roles, prioritize suggestions that add those roles, drawing on the Available Patterns list; do not propose adding a role that is already present.
+- When the template part is empty or nearly empty, prefer a single `insert_pattern` at `start` that scaffolds a complete area layout from the Available Patterns instead of many small block hints.
+- When Current Viewport Visibility Constraints are listed, do not treat a block that is hidden on a viewport as missing on that viewport, and account for the constraint when recommending placement.
 - Keep recommendations advisory-first. Do not output raw block markup or free-form rewritten block trees.
 - Use blockHints to point at the most relevant places in the current structure when specific focus areas exist.
 - Use the WordPress Developer Guidance section as authoritative current WordPress context. Do not recommend capabilities, block supports, APIs, or editor workflows that contradict the provided guidance. If the user asks for a current WordPress feature that is absent from the guidance, keep the suggestion conservative and avoid claiming support.
@@ -181,6 +184,27 @@ SYSTEM;
 
 		if ( count( $structure_lines ) > 0 ) {
 			$budget->add_section( 'structure_summary', "## Structure Summary\n" . implode( "\n", $structure_lines ), 70 );
+		}
+
+		$composition_profile = is_array( $context['compositionProfile'] ?? null ) ? $context['compositionProfile'] : [];
+		$composition_lines   = self::format_composition_profile( $composition_profile );
+		if ( '' !== $composition_lines ) {
+			// Priority 72 keeps the area-role gap framing just above the raw
+			// structure summary (70) — it turns the boolean structure flags into
+			// design intent — while staying below the block tree and executable
+			// targets/anchors so concrete placement context is never starved.
+			$budget->add_section( 'area_role_composition', "## Area Role & Composition\n{$composition_lines}", 72 );
+		}
+
+		$current_viewport_visibility = is_array( $context['currentViewportVisibility'] ?? null )
+			? $context['currentViewportVisibility']
+			: [];
+		if ( ! empty( $current_viewport_visibility['blocks'] ) ) {
+			$budget->add_section(
+				'viewport_visibility',
+				"## Current Viewport Visibility Constraints\n" . self::format_current_viewport_visibility( $current_viewport_visibility ),
+				55
+			);
 		}
 
 		$block_tree = is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : [];
@@ -342,6 +366,31 @@ Input context:
 
 Expected response:
 {"suggestions":[{"label":"Add a utility row before navigation","description":"Insert the utility pattern ahead of the menu cluster to separate branding from utility links.","blockHints":[{"path":[0,1],"label":"Navigation block","blockName":"core/navigation","reason":"This is the busiest structural target in the header."}],"patternSuggestions":["example/header-utility-row"],"operations":[{"type":"insert_pattern","patternName":"example/header-utility-row","placement":"before_block_path","targetPath":[0,1],"expectedBlockName":null}],"confidence":0.8,"ranking":null}],"explanation":"Use a small pre-navigation utility row instead of overloading the main menu."}
+EXAMPLE
+			,
+			<<<'EXAMPLE'
+## Example - footer missing its social-links role
+
+Input context:
+- Template part: `footer`
+- Area Role & Composition: site identity present; social links missing
+- Available patterns: `example/footer-social-row`
+- Insert anchors include `end`
+
+Expected response:
+{"suggestions":[{"label":"Add a social links row","description":"The footer has site identity but no social links; append a compact social row to close the gap.","blockHints":[],"patternSuggestions":["example/footer-social-row"],"operations":[{"type":"insert_pattern","patternName":"example/footer-social-row","placement":"end","targetPath":null,"expectedBlockName":null}],"confidence":0.75,"ranking":null}],"explanation":"Fill the missing social-links role with a footer-scoped pattern rather than restyling existing blocks."}
+EXAMPLE
+			,
+			<<<'EXAMPLE'
+## Example - empty header template part
+
+Input context:
+- Template part: `header` with no blocks yet (Area Role & Composition marks it empty)
+- Available patterns: `example/header-classic`
+- Insert anchors: `start`, `end`
+
+Expected response:
+{"suggestions":[{"label":"Scaffold a classic header","description":"This header is empty; insert a complete header pattern with branding and navigation at the start.","blockHints":[],"patternSuggestions":["example/header-classic"],"operations":[{"type":"insert_pattern","patternName":"example/header-classic","placement":"start","targetPath":null,"expectedBlockName":null}],"confidence":0.7,"ranking":null}],"explanation":"An empty area is best filled with one whole-area pattern rather than piecemeal blocks."}
 EXAMPLE
 			,
 		];
@@ -950,5 +999,145 @@ EXAMPLE
 
 	private static function humanize_block_name( string $block_name ): string {
 		return StructuralOperationsGrammar::humanize_block_name( $block_name );
+	}
+
+	/**
+	 * Render the area role/composition profile as design-intent guidance: which
+	 * expected roles the part already covers, which are missing, and whether the
+	 * part is empty enough to scaffold from a single whole-area pattern.
+	 *
+	 * @param array<string, mixed> $profile TemplatePartCompositionProfile::analyze() output.
+	 */
+	private static function format_composition_profile( array $profile ): string {
+		if ( [] === $profile ) {
+			return '';
+		}
+
+		$area  = sanitize_text_field( (string) ( $profile['area'] ?? '' ) );
+		$lines = [];
+
+		if ( ! empty( $profile['isEmpty'] ) ) {
+			$lines[] = '' !== $area
+				? "This {$area} template part has no blocks yet. Scaffold a complete {$area} from a single area pattern inserted at `start`."
+				: 'This template part has no blocks yet. Scaffold it from a single area pattern inserted at `start`.';
+		} elseif ( ! empty( $profile['isNearlyEmpty'] ) ) {
+			$lines[] = 'This template part is nearly empty; prefer a whole-area pattern over incremental tweaks.';
+		}
+
+		$expected_roles = is_array( $profile['expectedRoles'] ?? null ) ? $profile['expectedRoles'] : [];
+		$missing_labels = [];
+
+		foreach ( $expected_roles as $role ) {
+			if ( ! is_array( $role ) ) {
+				continue;
+			}
+
+			$label = sanitize_text_field( (string) ( $role['label'] ?? ( $role['role'] ?? '' ) ) );
+
+			if ( '' === $label ) {
+				continue;
+			}
+
+			$present = ! empty( $role['present'] );
+			$lines[] = "- {$label}: " . ( $present ? 'present' : 'missing' );
+
+			if ( ! $present ) {
+				$missing_labels[] = $label;
+			}
+		}
+
+		if ( [] !== $missing_labels ) {
+			$lines[] = 'Prioritize adding: ' . implode( ', ', $missing_labels ) . '.';
+		}
+
+		$optional = array_values(
+			array_filter(
+				array_map(
+					'sanitize_text_field',
+					is_array( $profile['optionalPresentRoles'] ?? null ) ? $profile['optionalPresentRoles'] : []
+				),
+				static fn( string $role ): bool => '' !== $role
+			)
+		);
+
+		if ( [] !== $optional ) {
+			$lines[] = 'Also present: ' . implode( ', ', $optional ) . '.';
+		}
+
+		return [] !== $lines ? implode( "\n", $lines ) : '';
+	}
+
+	/**
+	 * Mirror of the template surface's viewport-visibility renderer, scoped to a
+	 * single template part, so recommendations respect blocks the operator has
+	 * hidden on specific viewports (WP 7.0 Block Visibility).
+	 *
+	 * @param array<string, mixed> $summary
+	 */
+	private static function format_current_viewport_visibility( array $summary ): string {
+		$blocks = is_array( $summary['blocks'] ?? null ) ? $summary['blocks'] : [];
+
+		if ( [] === $blocks ) {
+			return 'None detected.';
+		}
+
+		$lines = [];
+
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$label             = sanitize_text_field( (string) ( $block['label'] ?? ( $block['name'] ?? 'Block' ) ) );
+			$name              = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+			$path              = self::format_block_path_label( $block['path'] ?? null );
+			$hidden_viewports  = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['hiddenViewports'] ?? null ) ? $block['hiddenViewports'] : []
+					),
+					static fn( string $viewport ): bool => '' !== $viewport
+				)
+			);
+			$visible_viewports = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['visibleViewports'] ?? null ) ? $block['visibleViewports'] : []
+					),
+					static fn( string $viewport ): bool => '' !== $viewport
+				)
+			);
+			$details           = [];
+
+			if ( [] !== $hidden_viewports ) {
+				$details[] = 'hidden on `' . implode( '`, `', $hidden_viewports ) . '`';
+			}
+
+			if ( [] !== $visible_viewports ) {
+				$details[] = 'explicitly visible on `' . implode( '`, `', $visible_viewports ) . '`';
+			}
+
+			$line = '- ';
+
+			if ( '' !== $path ) {
+				$line .= "{$path} - ";
+			}
+
+			$line .= "`{$label}`";
+
+			if ( '' !== $name && $name !== $label ) {
+				$line .= " ({$name})";
+			}
+
+			if ( [] !== $details ) {
+				$line .= ': ' . implode( '; ', $details );
+			}
+
+			$lines[] = $line;
+		}
+
+		return [] !== $lines ? implode( "\n", $lines ) : 'None detected.';
 	}
 }

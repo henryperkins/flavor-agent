@@ -17,6 +17,7 @@ use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\RecommendationReviewSignature;
 use FlavorAgent\Support\StringArray;
+use FlavorAgent\Support\TemplatePartCompositionProfile;
 
 final class TemplateAbilities {
 	use NormalizesInput;
@@ -206,13 +207,33 @@ final class TemplateAbilities {
 
 		$editor_structure = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
 		$context          = self::apply_template_part_live_structure_context( $context, $editor_structure );
-		$design_semantics = DesignSemantics::normalize(
+
+		// Re-derive the composition profile from the (possibly live-overlaid)
+		// block counts so the prompt's area-role gaps match the block tree the
+		// operator is actually looking at, not only the last-saved markup.
+		$context['compositionProfile'] = self::resolve_template_part_composition_profile( $context );
+
+		// The review-context design semantics stay the pristine client value so
+		// the review signature keeps its existing meaning and its independence
+		// from server enrichment. The resolved/prompt context is additionally
+		// enriched with server-derived, content-authored signals (used-token
+		// affinity, background contrast, role gaps) that the client cannot
+		// compute from its summarized structure snapshot.
+		$client_design_semantics  = DesignSemantics::normalize(
 			$input['designSemantics'] ?? [],
 			'template-part'
 		);
-		if ( ! empty( $design_semantics ) ) {
-			$context['designSemantics']        = $design_semantics;
-			$review_context['designSemantics'] = $design_semantics;
+		$context_design_semantics = DesignSemantics::normalize(
+			self::enrich_template_part_design_semantics( $input['designSemantics'] ?? [], $context ),
+			'template-part'
+		);
+
+		if ( ! empty( $context_design_semantics ) ) {
+			$context['designSemantics'] = $context_design_semantics;
+		}
+
+		if ( ! empty( $client_design_semantics ) ) {
+			$review_context['designSemantics'] = $client_design_semantics;
 		}
 		$docs_result                = self::collect_template_part_wordpress_docs_guidance_result(
 			$context,
@@ -613,6 +634,82 @@ final class TemplateAbilities {
 		}
 
 		return $context;
+	}
+
+	/**
+	 * Re-derive the template-part composition profile from the current (possibly
+	 * live-overlaid) block counts so downstream gap signals reflect what the
+	 * operator sees rather than only the last-saved markup.
+	 *
+	 * @param array<string, mixed> $context
+	 * @return array<string, mixed>
+	 */
+	private static function resolve_template_part_composition_profile( array $context ): array {
+		$counts      = is_array( $context['blockCounts'] ?? null ) ? $context['blockCounts'] : [];
+		$stats       = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
+		$block_count = isset( $stats['blockCount'] ) && is_numeric( $stats['blockCount'] )
+			? (int) $stats['blockCount']
+			: array_sum( array_map( 'intval', array_values( $counts ) ) );
+
+		return TemplatePartCompositionProfile::analyze(
+			sanitize_key( (string) ( $context['area'] ?? '' ) ),
+			$counts,
+			$block_count
+		);
+	}
+
+	/**
+	 * Merge server-derived, content-authored design signals into the client's
+	 * design semantics: role-gap negative signals and used-token affinity are
+	 * unioned, and background contrast fills the client value only when the
+	 * client left it unknown, so an explicit client choice is never overridden.
+	 *
+	 * @param mixed                $client_design_semantics Raw client design semantics.
+	 * @param array<string, mixed> $context
+	 * @return array<string, mixed>
+	 */
+	private static function enrich_template_part_design_semantics( mixed $client_design_semantics, array $context ): array {
+		$semantics = self::normalize_input( $client_design_semantics );
+
+		if ( ! is_array( $semantics ) ) {
+			$semantics = [];
+		}
+
+		$profile        = is_array( $context['compositionProfile'] ?? null ) ? $context['compositionProfile'] : [];
+		$gap_signals    = is_array( $profile['negativeSignals'] ?? null ) ? $profile['negativeSignals'] : [];
+		$client_signals = is_array( $semantics['negativeSignals'] ?? null ) ? $semantics['negativeSignals'] : [];
+		$merged_signals = array_values( array_unique( array_merge( $client_signals, $gap_signals ) ) );
+
+		if ( [] !== $merged_signals ) {
+			$semantics['negativeSignals'] = $merged_signals;
+		}
+
+		$server_affinity = is_array( $context['derivedTokenAffinity'] ?? null ) ? $context['derivedTokenAffinity'] : [];
+		$client_affinity = is_array( $semantics['tokenAffinity'] ?? null ) ? $semantics['tokenAffinity'] : [];
+		$merged_affinity = [];
+
+		foreach ( [ 'color', 'spacing', 'fontSize' ] as $family ) {
+			$client_family = is_array( $client_affinity[ $family ] ?? null ) ? $client_affinity[ $family ] : [];
+			$server_family = is_array( $server_affinity[ $family ] ?? null ) ? $server_affinity[ $family ] : [];
+			$union         = array_values( array_unique( array_merge( $client_family, $server_family ) ) );
+
+			if ( [] !== $union ) {
+				$merged_affinity[ $family ] = $union;
+			}
+		}
+
+		if ( [] !== $merged_affinity ) {
+			$semantics['tokenAffinity'] = $merged_affinity;
+		}
+
+		$client_contrast = is_string( $semantics['contrastContext'] ?? null ) ? $semantics['contrastContext'] : '';
+		$server_contrast = is_string( $context['derivedContrastContext'] ?? null ) ? $context['derivedContrastContext'] : '';
+
+		if ( ( '' === $client_contrast || 'unknown' === $client_contrast ) && '' !== $server_contrast ) {
+			$semantics['contrastContext'] = $server_contrast;
+		}
+
+		return $semantics;
 	}
 
 	/**

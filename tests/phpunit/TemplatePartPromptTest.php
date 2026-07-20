@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Guidelines;
 use FlavorAgent\LLM\TemplatePartPrompt;
+use FlavorAgent\Support\TemplatePartCompositionProfile;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -145,6 +146,84 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertStringContainsString( 'containsSocialLinks: no', $prompt );
 		$this->assertStringContainsString( 'containsColumns: yes', $prompt );
 		$this->assertStringContainsString( 'containsSpacer: yes', $prompt );
+	}
+
+	public function test_build_user_includes_area_role_composition_gaps(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef'    => 'theme//header',
+				'slug'               => 'header',
+				'title'              => 'Header',
+				'area'               => 'header',
+				'blockTree'          => [],
+				'patterns'           => [],
+				'themeTokens'        => [],
+				'compositionProfile' => TemplatePartCompositionProfile::analyze(
+					'header',
+					[
+						'core/site-logo' => 1,
+						'core/group'     => 1,
+					],
+					2
+				),
+			]
+		);
+
+		$this->assertStringContainsString( '## Area Role & Composition', $prompt );
+		$this->assertStringContainsString( 'branding (logo/site title): present', $prompt );
+		$this->assertStringContainsString( 'primary navigation: missing', $prompt );
+		$this->assertStringContainsString( 'Prioritize adding: primary navigation.', $prompt );
+	}
+
+	public function test_build_user_scaffolds_empty_template_part(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef'    => 'theme//header',
+				'slug'               => 'header',
+				'title'              => 'Header',
+				'area'               => 'header',
+				'blockTree'          => [],
+				'patterns'           => [],
+				'themeTokens'        => [],
+				'compositionProfile' => TemplatePartCompositionProfile::analyze( 'header', [], 0 ),
+			]
+		);
+
+		$this->assertStringContainsString(
+			'This header template part has no blocks yet. Scaffold a complete header from a single area pattern inserted at `start`.',
+			$prompt
+		);
+	}
+
+	public function test_build_user_includes_viewport_visibility_constraints(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef'           => 'theme//header',
+				'slug'                      => 'header',
+				'title'                     => 'Header',
+				'area'                      => 'header',
+				'blockTree'                 => [],
+				'patterns'                  => [],
+				'themeTokens'               => [],
+				'currentViewportVisibility' => [
+					'hasVisibilityRules' => true,
+					'blockCount'         => 1,
+					'blocks'             => [
+						[
+							'path'             => [ 0, 1 ],
+							'name'             => 'core/navigation',
+							'label'            => 'Navigation',
+							'hiddenViewports'  => [ 'mobile' ],
+							'visibleViewports' => [],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertStringContainsString( '## Current Viewport Visibility Constraints', $prompt );
+		$this->assertStringContainsString( 'Path 1 > 2 - `Navigation`', $prompt );
+		$this->assertStringContainsString( 'hidden on `mobile`', $prompt );
 	}
 
 	public function test_build_user_includes_design_semantic_context(): void {
