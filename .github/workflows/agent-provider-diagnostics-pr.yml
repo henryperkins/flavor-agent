@@ -33,20 +33,66 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Execute staged red-green verification
+      - name: Prepare staged step runner
         shell: bash
         run: |
+          cat > /tmp/run-staged-step <<'BASH'
+          #!/usr/bin/env bash
+          set -uo pipefail
+          stage="$1"
+          printf '%s\n' "$stage" > /tmp/provider-diagnostics-stage
           ruby -ryaml -e '
+            name = ARGV.fetch(0)
             workflow = YAML.load_file(".github/workflows/agent-provider-diagnostics-fix.yml")
             steps = workflow.fetch("jobs").fetch("apply-and-verify").fetch("steps")
-            scripts = steps.filter_map do |step|
-              next unless step["run"]
-              next if step["name"] == "Commit verified fix"
-              step.fetch("run")
-            end
-            File.write("/tmp/apply-provider-diagnostics.sh", "set -euo pipefail\n" + scripts.join("\n"))
-          '
-          bash /tmp/apply-provider-diagnostics.sh
+            step = steps.find { |candidate| candidate["name"] == name }
+            abort("Staged step not found: #{name}") unless step && step["run"]
+            print step.fetch("run")
+          ' "$stage" > /tmp/provider-diagnostics-step.sh
+          set +e
+          bash /tmp/provider-diagnostics-step.sh 2>&1 | tee /tmp/provider-diagnostics-last.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+          BASH
+          chmod +x /tmp/run-staged-step
+
+      - name: Install PHP dependencies
+        run: /tmp/run-staged-step 'Install PHP dependencies'
+
+      - name: Add provider diagnostics regression tests
+        run: /tmp/run-staged-step 'Add provider diagnostics regression tests'
+
+      - name: Verify regression tests fail before the fix
+        run: /tmp/run-staged-step 'Verify regression tests fail before the fix'
+
+      - name: Apply the production fix
+        run: /tmp/run-staged-step 'Apply the production fix'
+
+      - name: Verify provider diagnostics regression and related PHP suites
+        run: /tmp/run-staged-step 'Verify provider diagnostics regression and related PHP suites'
+
+      - name: Lint changed PHP files
+        run: /tmp/run-staged-step 'Lint changed PHP files'
+
+      - name: Verify patch integrity
+        run: /tmp/run-staged-step 'Verify patch integrity'
+
+      - name: Publish verification failure
+        if: failure()
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          {
+            printf 'Stage: %s\n\n' "$(cat /tmp/provider-diagnostics-stage 2>/dev/null || printf 'unknown')"
+            tail -n 200 /tmp/provider-diagnostics-last.log 2>/dev/null || true
+          } > .github/provider-diagnostics-failure.log
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/provider-diagnostics-failure.log
+          git commit -m 'chore: capture provider diagnostics failure [skip ci]' -- .github/provider-diagnostics-failure.log
+          git push origin HEAD:"${HEAD_BRANCH}"
 
       - name: Commit verified fix and remove temporary workflows
         shell: bash
