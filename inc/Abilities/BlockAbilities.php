@@ -26,6 +26,14 @@ final class BlockAbilities {
 
 	private const STRUCTURAL_SUMMARY_MAX_DEPTH = 2;
 
+	// Mirrors BLOCK_INTERIOR_MAX_* in src/utils/block-recommendation-context.js.
+	// Larger than the branch caps because containers routinely hold 6-8 children.
+	private const BLOCK_INTERIOR_MAX_ITEMS = 8;
+
+	private const BLOCK_INTERIOR_MAX_CHILDREN = 8;
+
+	private const BLOCK_INTERIOR_MAX_DEPTH = 3;
+
 	private const DOCS_SCOPE_MAX_ITEMS = 3;
 
 	private const BLOCK_OPERATION_CONTEXT_MAX_PATTERNS = 20;
@@ -102,12 +110,13 @@ final class BlockAbilities {
 
 		$docs_guidance = DocsGuidanceResult::guidance( $docs_result );
 		$system_prompt = Prompt::build_system();
-		$user_prompt   = Prompt::build_user(
+		$built_prompt  = Prompt::build_user_with_diagnostics(
 			$context,
 			$prompt,
 			$docs_guidance,
 			$execution_contract
 		);
+		$user_prompt   = $built_prompt['prompt'];
 
 		$result = ChatClient::chat(
 			$system_prompt,
@@ -157,6 +166,14 @@ final class BlockAbilities {
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 		$payload['docsGrounding']            = DocsGuidanceResult::public_summary( $docs_result );
 		$payload['docsGroundingFingerprint'] = $docs_grounding_fingerprint;
+		// Only set on the path that actually built a prompt. The disabled-editing
+		// short-circuit above returns before prompt assembly, so omitting the key
+		// there reads as "no information" rather than "nothing was dropped".
+		$payload['promptDiagnostics'] = [
+			'droppedSections'     => $built_prompt['droppedSections'],
+			'trimmedSections'     => $built_prompt['trimmedSections'],
+			'themeTokenItemLimit' => $built_prompt['themeTokenItemLimit'],
+		];
 
 		return $payload;
 	}
@@ -391,6 +408,11 @@ final class BlockAbilities {
 			$normalized['structuralBranch'] = $structural_branch;
 		}
 
+		$block_interior = self::normalize_block_interior_items( $context['blockInterior'] ?? [] );
+		if ( ! empty( $block_interior ) ) {
+			$normalized['blockInterior'] = $block_interior;
+		}
+
 		$theme_tokens = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
 		if ( ! empty( $theme_tokens ) ) {
 			$normalized['themeTokens'] = $theme_tokens;
@@ -442,7 +464,9 @@ final class BlockAbilities {
 		$context['siblingsAfter']                = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
 		$context['structuralAncestors']          = self::normalize_structural_ancestor_items( $selected['structuralAncestors'] ?? [] );
 		$context['structuralBranch']             = self::normalize_structural_branch_items( $selected['structuralBranch'] ?? [] );
-		$context['themeTokens']                  = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
+		// Derived server-side from innerBlocks on this path, never client-supplied.
+		$context['blockInterior'] = self::normalize_block_interior_items( $context['blockInterior'] ?? [] );
+		$context['themeTokens']   = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
 
 		$structural_identity = self::normalize_map( $selected['structuralIdentity'] ?? [] );
 		if ( ! empty( $structural_identity ) ) {
@@ -665,6 +689,31 @@ final class BlockAbilities {
 		return self::normalize_structural_summary_items( $items );
 	}
 
+	/**
+	 * Normalize the selected block's own subtree.
+	 *
+	 * Placement fields are dropped: a descendant's template area is the selected
+	 * block's own and is already stated in the structural-identity section, so
+	 * repeating it here only creates a surface for the two to contradict.
+	 */
+	private static function normalize_block_interior_items( mixed $raw_items ): array {
+		return self::normalize_structural_summary_items(
+			array_slice(
+				self::normalize_list( $raw_items ),
+				0,
+				self::BLOCK_INTERIOR_MAX_ITEMS
+			),
+			true,
+			0,
+			[
+				'maxChildren' => self::BLOCK_INTERIOR_MAX_CHILDREN,
+				'maxDepth'    => self::BLOCK_INTERIOR_MAX_DEPTH,
+				'visualHints' => true,
+				'placement'   => false,
+			]
+		);
+	}
+
 	private static function normalize_structural_branch_items( mixed $raw_items ): array {
 		return self::normalize_structural_summary_items(
 			array_slice(
@@ -756,8 +805,18 @@ final class BlockAbilities {
 			&& \flavor_agent_block_structural_actions_enabled();
 	}
 
-	private static function normalize_structural_summary_items( array $items, bool $include_children = false, int $depth = 0 ): array {
-		$normalized = [];
+	/**
+	 * @param array{maxChildren?: int, maxDepth?: int, visualHints?: bool, placement?: bool} $options
+	 */
+	private static function normalize_structural_summary_items( array $items, bool $include_children = false, int $depth = 0, array $options = [] ): array {
+		$max_children = (int) ( $options['maxChildren'] ?? self::STRUCTURAL_SUMMARY_MAX_CHILDREN );
+		// Expressed as "node levels", matching the JS summarizeTree guard exactly
+		// so the two caps can be compared literally. The default reproduces the
+		// historical `$depth < STRUCTURAL_SUMMARY_MAX_DEPTH` behaviour.
+		$max_depth      = (int) ( $options['maxDepth'] ?? ( self::STRUCTURAL_SUMMARY_MAX_DEPTH + 1 ) );
+		$with_hints     = ! empty( $options['visualHints'] );
+		$with_placement = ! array_key_exists( 'placement', $options ) || ! empty( $options['placement'] );
+		$normalized     = [];
 
 		foreach ( $items as $item ) {
 			if ( ! is_array( $item ) ) {
@@ -786,19 +845,29 @@ final class BlockAbilities {
 				$summary['job'] = $job;
 			}
 
-			$location = is_string( $item['location'] ?? null ) ? sanitize_text_field( $item['location'] ) : '';
-			if ( '' !== $location ) {
-				$summary['location'] = $location;
+			if ( $with_placement ) {
+				$location = is_string( $item['location'] ?? null ) ? sanitize_text_field( $item['location'] ) : '';
+				if ( '' !== $location ) {
+					$summary['location'] = $location;
+				}
+
+				$template_area = is_string( $item['templateArea'] ?? null ) ? sanitize_text_field( $item['templateArea'] ) : '';
+				if ( '' !== $template_area ) {
+					$summary['templateArea'] = $template_area;
+				}
+
+				$template_part = is_string( $item['templatePartSlug'] ?? null ) ? sanitize_text_field( $item['templatePartSlug'] ) : '';
+				if ( '' !== $template_part ) {
+					$summary['templatePartSlug'] = $template_part;
+				}
 			}
 
-			$template_area = is_string( $item['templateArea'] ?? null ) ? sanitize_text_field( $item['templateArea'] ) : '';
-			if ( '' !== $template_area ) {
-				$summary['templateArea'] = $template_area;
-			}
+			if ( $with_hints ) {
+				$hints = self::normalize_visual_hints( $item['visualHints'] ?? [] );
 
-			$template_part = is_string( $item['templatePartSlug'] ?? null ) ? sanitize_text_field( $item['templatePartSlug'] ) : '';
-			if ( '' !== $template_part ) {
-				$summary['templatePartSlug'] = $template_part;
+				if ( ! empty( $hints ) ) {
+					$summary['visualHints'] = $hints;
+				}
 			}
 
 			if ( isset( $item['childCount'] ) && ( is_int( $item['childCount'] ) || is_numeric( $item['childCount'] ) ) ) {
@@ -814,10 +883,10 @@ final class BlockAbilities {
 				$hidden_child_count = max( 0, (int) ( $summary['moreChildren'] ?? 0 ) );
 				$displayed_children = [];
 
-				if ( $depth < self::STRUCTURAL_SUMMARY_MAX_DEPTH ) {
-					$visible_children    = array_slice( $raw_children, 0, self::STRUCTURAL_SUMMARY_MAX_CHILDREN );
+				if ( $depth + 1 < $max_depth ) {
+					$visible_children    = array_slice( $raw_children, 0, $max_children );
 					$hidden_child_count += max( 0, count( $raw_children ) - count( $visible_children ) );
-					$displayed_children  = self::normalize_structural_summary_items( $visible_children, true, $depth + 1 );
+					$displayed_children  = self::normalize_structural_summary_items( $visible_children, true, $depth + 1, $options );
 				} else {
 					$hidden_child_count += count( $raw_children );
 				}
@@ -840,7 +909,7 @@ final class BlockAbilities {
 				}
 			}
 
-			if ( isset( $item['isSelected'] ) ) {
+			if ( $with_placement && isset( $item['isSelected'] ) ) {
 				$summary['isSelected'] = (bool) $item['isSelected'];
 			}
 

@@ -12,8 +12,9 @@ use PHPUnit\Framework\TestCase;
 
 final class ApplyAbilitiesTest extends TestCase {
 
-	private const GLOBAL_STYLES_ID = '17';
-	private const TEMPLATE_REF     = 'twentytwentyfive//home';
+	private const GLOBAL_STYLES_ID  = '17';
+	private const TEMPLATE_REF      = 'twentytwentyfive//home';
+	private const TEMPLATE_PART_REF = 'twentytwentyfive//header';
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -93,6 +94,28 @@ final class ApplyAbilitiesTest extends TestCase {
 			[
 				'ID'           => $wp_id,
 				'post_type'    => 'wp_template',
+				'post_content' => $content,
+			]
+		);
+	}
+
+	private function seed_template_part_post( string $content, int $wp_id ): void {
+		WordPressTestState::$active_theme                        = [ 'stylesheet' => 'twentytwentyfive' ];
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => self::TEMPLATE_PART_REF,
+				'wp_id'   => $wp_id,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			],
+		];
+		WordPressTestState::$posts[ $wp_id ]                     = new \WP_Post(
+			[
+				'ID'           => $wp_id,
+				'post_type'    => 'wp_template_part',
+				'post_name'    => 'header',
 				'post_content' => $content,
 			]
 		);
@@ -658,6 +681,76 @@ final class ApplyAbilitiesTest extends TestCase {
 			\FlavorAgent\Attestation\BlockContentCanonicalizer::digest( $persisted_before ),
 			$statement['predicate']['after']['sha256']
 		);
+	}
+
+	public function test_undo_activity_records_a_template_part_revert_attestation_chain(): void {
+		$before = '<!-- wp:paragraph --><p>Before</p><!-- /wp:paragraph -->';
+		$after  = '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->';
+		$this->seed_template_part_post( $after, 7101 );
+
+		$activity = Repository::create(
+			[
+				'id'              => 'template-part-undo-row',
+				'type'            => 'apply_template_part_suggestion',
+				'surface'         => 'template-part',
+				'target'          => [
+					'templatePartId'  => self::TEMPLATE_PART_REF,
+					'templatePartRef' => self::TEMPLATE_PART_REF,
+					'slug'            => 'header',
+					'area'            => 'header',
+				],
+				'suggestion'      => 'Simplify the header',
+				'before'          => [ 'content' => $before ],
+				'after'           => [
+					'content'    => $after,
+					'operations' => [],
+				],
+				'executionResult' => 'applied',
+				'undo'            => [ 'status' => 'available' ],
+				'document'        => [
+					'scopeKey'   => 'wp_template_part:' . self::TEMPLATE_PART_REF,
+					'postType'   => 'wp_template_part',
+					'entityId'   => self::TEMPLATE_PART_REF,
+					'entityKind' => 'postType',
+					'entityName' => 'wp_template_part',
+				],
+			]
+		);
+		$this->assertIsArray( $activity );
+
+		$this->configure_attestation_key();
+		\FlavorAgent\Attestation\Repository::install();
+
+		$apply_attestation_id = \FlavorAgent\Attestation\AttestationService::record_apply(
+			[
+				'surface'            => 'template-part',
+				'templateRef'        => self::TEMPLATE_PART_REF,
+				'operations'         => [],
+				'before'             => [ 'content' => $before ],
+				'after'              => [ 'content' => $after ],
+				'freshnessSignature' => 'template-part-f',
+				'actorRole'          => 'administrator',
+				'requestedAt'        => '2026-06-22T00:00:00+00:00',
+				'decidedAt'          => '2026-06-22T00:01:00+00:00',
+				'relatedActivityId'  => (string) $activity['id'],
+			]
+		)->attestation_id();
+		$this->assertIsString( $apply_attestation_id );
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $activity['id'] ] );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( 'recorded', $result['entry']['undo']['attestationStatus'] );
+		$this->assertSame( $before, (string) WordPressTestState::$posts[7101]->post_content );
+
+		$revert = \FlavorAgent\Attestation\Repository::find_by_reverts( $apply_attestation_id );
+		$this->assertIsArray( $revert );
+
+		$statement = json_decode( (string) $revert['statement_bytes'], true );
+		$this->assertIsArray( $statement );
+		$this->assertSame( 'external-template-part-apply-v1', $statement['predicate']['governance']['lane'] );
+		$this->assertSame( $apply_attestation_id, $statement['predicate']['revertsAttestationId'] );
 	}
 
 	public function test_decision_approve_executes_and_transitions_to_available(): void {

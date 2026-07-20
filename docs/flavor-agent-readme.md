@@ -15,9 +15,9 @@ It currently has eight primary editor experiences:
 - Global Styles recommendations in the Site Editor Styles sidebar, bounded to validated `theme.json` paths and theme-backed values.
 - Style Book recommendations in the Site Editor Styles sidebar, scoped to per-block style paths and theme-backed values.
 
-It also ships the AI Activity admin approval/audit surface in wp-admin. C1 external-agent applies are limited to Global Styles and Style Book: an agent can request a style apply, but `Settings > AI Activity` is the human decision point before the server executes it.
+It also ships the AI Activity admin approval/audit surface in wp-admin. C1 external-agent applies are limited to four governed lanes — Global Styles / Style Book, `wp_template`, `wp_template_part`, and post-blocks: an agent can request an apply on any of them, but `Settings > AI Activity` is the human decision point before the server executes it.
 
-There is no separate approval sidebar in the current codebase. The eight surfaces intentionally split into four interaction models: direct apply for safe local block updates, review-before-apply for template/template-part/Global Styles/Style Book, editorial draft/edit/critique for content, and ranking/browse-only for patterns. Navigation is an advisory-only nested subsection inside block recommendations, and delegated block Inspector sub-panels now act only as passive mirrors of the main block result rather than standalone request/apply surfaces. Block, template, template-part, Global Styles, and Style Book applies write activity entries with inline undo; content, pattern, and navigation requests can persist read-only diagnostics when document scope is available. The current first-party editor UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data and adds the approval gate for pending external style applies.
+There is no separate approval sidebar in the current codebase. The eight surfaces intentionally split into four interaction models: direct apply for safe local block updates, review-before-apply for template/template-part/Global Styles/Style Book, editorial draft/edit/critique for content, and ranking/browse-only for patterns. Navigation is an advisory-only nested subsection inside block recommendations, and delegated block Inspector sub-panels now act only as passive mirrors of the main block result rather than standalone request/apply surfaces. Block, template, template-part, Global Styles, and Style Book applies write activity entries with inline undo; content, pattern, and navigation requests can persist read-only diagnostics when document scope is available. The current first-party editor UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data and adds the approval gate for pending external style, template, template-part, and post-blocks applies.
 
 ## Current Architecture
 
@@ -84,7 +84,7 @@ The product loop is consistent even when a surface stops early by design:
 
 1. AI proposes through a typed recommendation or external-apply ability.
 2. WordPress validates the output against bounded schemas, operation catalogs, current permissions, and freshness signatures.
-3. Structural and theme-level changes are reviewed before apply; external style applies are reviewed in `Settings > AI Activity`.
+3. Structural and theme-level changes are reviewed before apply; external applies are reviewed in `Settings > AI Activity`.
 4. Applies the plugin owns are recorded server-side with request/provider attribution.
 5. Undo is available only when the live target still matches the recorded post-apply state.
 
@@ -196,7 +196,7 @@ This surface is explicitly theme-safe: raw CSS, `customCSS`, unsupported style p
 
 Applied block, template, template-part, Global Styles, and Style Book suggestions write structured activity records through the server-backed activity repository, keyed to the current post, template, template-part, Global Styles, or Style Book scope. The editor hydrates that log on load and keeps `sessionStorage` only as a fast cache/fallback. Undo remains inline and editor-scoped: the newest valid tail of AI actions can be undone when the live state still matches the recorded post-apply snapshot, while older entries are blocked until newer AI actions are undone.
 
-`Settings > AI Activity` is also the governance console for external style applies. Pending `request-style-apply` rows show the requested Global Styles / Style Book operation and let administrators approve or reject. Approval executes on the server with fresh operation/context validation; rejection records the decision without mutating the site.
+`Settings > AI Activity` is also the governance console for external applies. Pending `request-style-apply`, `request-template-apply`, `request-template-part-apply`, and `request-post-blocks-apply` rows show the requested operation against its Global Styles / Style Book, `wp_template`, `wp_template_part`, or post-blocks target and let administrators approve or reject. Approval executes on the server with fresh operation/context validation; rejection records the decision without mutating the site.
 
 ## Settings
 
@@ -268,7 +268,7 @@ Implemented abilities:
 - `flavor-agent/list-activity`
 - `flavor-agent/undo-activity`
 
-All 32 ability contracts in the tree are implemented. The 14 helper/search abilities register whenever the Abilities API exists; the five preview siblings register when the canonical WordPress AI contracts are available and force signature-only execution; the seven recommendation abilities and the six external-apply abilities register only when the WordPress AI plugin contracts are available and Flavor Agent is enabled. On WordPress 7.0 admin screens, core now enqueues `@wordpress/core-abilities`, so registered server-side abilities are also hydrated into the client-side `core/abilities` store automatically. Flavor Agent's first-party editor UI uses the `flavor-agent` data store with an abilities bridge so prompt scoping, preview/apply, and undo stay tightly bounded.
+All 35 ability contracts in the tree are implemented: 8 recommendation, 13 helper/read, 1 docs search, 6 preview siblings, and 7 external-apply. The 13 helper/read abilities plus `search-wordpress-docs` register whenever the Abilities API exists; the six preview siblings register when the canonical WordPress AI contracts are available and force signature-only execution; the eight recommendation abilities and the seven external-apply abilities register only when the WordPress AI plugin contracts are available and Flavor Agent is enabled. Note the grouping: `Registration::external_apply_ability_classes()` counts seven abilities — the four governed apply *lanes* (`request-style-apply`, `request-template-apply`, `request-template-part-apply`, `request-post-blocks-apply`) plus `get-activity`, `list-activity`, and `undo-activity`. "Four external-apply lanes" and "seven external-apply abilities" both describe this same set at different granularity. On WordPress 7.0 admin screens, core now enqueues `@wordpress/core-abilities`, so registered server-side abilities are also hydrated into the client-side `core/abilities` store automatically. Flavor Agent's first-party editor UI uses the `flavor-agent` data store with an abilities bridge so prompt scoping, preview/apply, and undo stay tightly bounded.
 
 ## Pattern Index Lifecycle
 
@@ -297,7 +297,7 @@ Prepare the representative local WordPress runtime before manual editor or conne
 npm run wp:start
 ```
 
-`wp:start` only starts the Docker containers. Follow `docs/reference/local-environment-setup.md` to install WordPress nightly/trunk and activate the required companion plugins: WordPress Beta Tester, Gutenberg, AI, OpenAI, Anthropic, and Google provider connectors, MCP Adapter, Plugin Check, and Flavor Agent.
+`wp:start` only starts the Docker containers. Follow `docs/reference/local-environment-setup.md` to install WordPress `7.0` stable (or nightly/trunk when validating against upcoming releases) and activate the required companion plugins: WordPress Beta Tester, Gutenberg, AI, OpenAI, Anthropic, and Google provider connectors, MCP Adapter, Plugin Check, and Flavor Agent.
 
 If you update Dockerfile requirements or need to refresh the mutable base image, run `wp:rebuild` instead; it pulls the current base image, rebuilds, and starts the stack:
 

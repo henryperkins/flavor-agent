@@ -2,9 +2,11 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 const { spawnSync } = require( 'child_process' );
 
-// Keep the harness on the latest checked pre-release image until the official
-// WordPress 7.0 stable image exists and the repo's 7.0 verification pass is rerun.
-const DEFAULT_BASE_IMAGE = 'wordpress:beta-7.0-RC2-php8.2-apache';
+// Pinned to the exact stable WordPress 7.0.0 image so the harness is reproducible
+// across runs. Use the fully qualified patch tag (not the floating `7.0` tag) so a
+// future 7.0.x republish cannot silently change what the release gates verified.
+// Override with FLAVOR_AGENT_WP70_BASE_IMAGE to test against another build.
+const DEFAULT_BASE_IMAGE = 'wordpress:7.0.0-php8.2-apache';
 const DEFAULT_WORDPRESS_PORT = '9404';
 const DEFAULT_PHPMYADMIN_PORT = '9405';
 const DEFAULT_THEME_SLUG = 'flavor-agent-e2e';

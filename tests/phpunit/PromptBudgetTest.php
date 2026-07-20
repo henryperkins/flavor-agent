@@ -287,7 +287,12 @@ final class PromptBudgetTest extends TestCase {
 	}
 
 	public function test_equal_priority_drops_last_inserted_first(): void {
-		$budget = new PromptBudget( 2000 );
+		// Budget deliberately well below the point where a dropped 4000-char
+		// section could be restored by backfill (restoring one would need ~2005
+		// estimated tokens). At the previous 2000-token budget this test cleared
+		// that bar by only 5 tokens, so any small fixture or CHARS_PER_TOKEN
+		// change would have silently inverted what it asserts.
+		$budget = new PromptBudget( 1500 );
 		$budget->add_section( 'identity', 'identity content', 100 );
 		$budget->add_section( 'few_shot_0', str_repeat( '0', 4000 ), 10 );
 		$budget->add_section( 'few_shot_1', str_repeat( '1', 4000 ), 10 );
@@ -298,5 +303,109 @@ final class PromptBudgetTest extends TestCase {
 		$this->assertStringContainsString( 'identity content', $result );
 		$this->assertStringContainsString( str_repeat( '0', 100 ), $result );
 		$this->assertStringNotContainsString( str_repeat( '2', 100 ), $result );
+	}
+
+	public function test_backfill_restores_a_small_section_after_a_large_one_is_dropped(): void {
+		// The block-surface collateral loss: docs guidance (priority 30) is dropped
+		// before the much larger theme-token inventory (35), and the greedy loop
+		// never reconsidered it even though it fit comfortably afterwards.
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'identity', 'Critical instruction context.', 100, true );
+		$budget->add_section( 'big', str_repeat( 'B', 40000 ), 35 );
+		$budget->add_section( 'small', 'Docs guidance line.', 30 );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( 'Critical instruction context.', $result );
+		$this->assertStringContainsString( 'Docs guidance line.', $result );
+		$this->assertStringNotContainsString( str_repeat( 'B', 100 ), $result );
+		$this->assertLessThanOrEqual( 2000, PromptBudget::estimate_tokens( $result ) );
+		$this->assertSame( [ 'big' ], $budget->get_dropped_section_keys() );
+	}
+
+	public function test_backfill_keeps_scanning_after_a_candidate_does_not_fit(): void {
+		// A large section that cannot be restored must not hide a smaller one
+		// that can — i.e. the backfill scan has no early exit.
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'identity', 'Critical instruction context.', 100, true );
+		$budget->add_section( 'huge', str_repeat( 'H', 40000 ), 36 );
+		$budget->add_section( 'medium', str_repeat( 'M', 30000 ), 33 );
+		$budget->add_section( 'tiny', 'Tiny tail context.', 30 );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( 'Tiny tail context.', $result );
+		$this->assertStringNotContainsString( str_repeat( 'H', 100 ), $result );
+		$this->assertStringNotContainsString( str_repeat( 'M', 100 ), $result );
+		// Reported in drop order — lowest priority first — so 'medium' (33)
+		// precedes 'huge' (36). 'tiny' (30) was dropped first but then restored,
+		// so it is absent from the diagnostic.
+		$this->assertSame( [ 'medium', 'huge' ], $budget->get_dropped_section_keys() );
+	}
+
+	public function test_backfill_restores_sections_in_their_original_position(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'alpha', 'ALPHA', 100, true );
+		$budget->add_section( 'big', str_repeat( 'B', 40000 ), 35 );
+		$budget->add_section( 'small', 'SMALL', 30 );
+		$budget->add_section( 'omega', 'OMEGA', 100, true );
+
+		$result = $budget->assemble();
+
+		// Restored between alpha and omega, not appended at the end.
+		$this->assertSame( "ALPHA\n\nSMALL\n\nOMEGA", $result );
+	}
+
+	public function test_backfill_does_not_run_when_only_required_sections_remain(): void {
+		// Bail-out path: the prompt is already over budget, so restoring anything
+		// would push it further out.
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'required_a', str_repeat( 'a', 5000 ), 100, true );
+		$budget->add_section( 'required_b', str_repeat( 'b', 5000 ), 100, true );
+		$budget->add_section( 'optional', 'optional content', 10, false );
+
+		$result = $budget->assemble();
+
+		$this->assertStringNotContainsString( 'optional content', $result );
+		$this->assertSame( [ 'optional' ], $budget->get_dropped_section_keys() );
+		$this->assertGreaterThan( 2000, PromptBudget::estimate_tokens( $result ) );
+	}
+
+	public function test_trim_path_reports_partial_retention_and_does_not_backfill(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'identity', 'Critical instruction context.', 100, true );
+		$budget->add_section( 'docs', 'Docs opening. ' . str_repeat( 'Docs middle. ', 900 ) . 'Docs closing.', 10, false, true );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( trim( PromptBudget::PARTIAL_SECTION_TRUNCATION_MARKER ), $result );
+		$this->assertSame( [ 'docs' ], $budget->get_trimmed_section_keys() );
+		$this->assertSame( [], $budget->get_dropped_section_keys() );
+	}
+
+	public function test_assemble_is_idempotent_including_diagnostics(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'identity', 'Critical instruction context.', 100, true );
+		$budget->add_section( 'big', str_repeat( 'B', 40000 ), 35 );
+		$budget->add_section( 'small', 'Docs guidance line.', 30 );
+
+		$first         = $budget->assemble();
+		$first_dropped = $budget->get_dropped_section_keys();
+		$second        = $budget->assemble();
+
+		$this->assertSame( $first, $second );
+		$this->assertSame( $first_dropped, $budget->get_dropped_section_keys() );
+		$this->assertSame( [ 'big' ], $budget->get_dropped_section_keys() );
+	}
+
+	public function test_diagnostics_are_empty_when_everything_fits(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'identity', 'Short.', 100 );
+		$budget->add_section( 'extra', 'Also short.', 30 );
+
+		$budget->assemble();
+
+		$this->assertSame( [], $budget->get_dropped_section_keys() );
+		$this->assertSame( [], $budget->get_trimmed_section_keys() );
 	}
 }

@@ -476,6 +476,164 @@ final class TemplateApplyExecutorTest extends TestCase {
 		$this->assertStringContainsString( 'Hero', (string) WordPressTestState::$posts[9200]->post_content );
 	}
 
+	/**
+	 * The duplicate-row guard must not blind-overwrite a concurrent
+	 * materialization. When the row another actor created already holds our
+	 * desired content, accept it idempotently and write nothing.
+	 */
+	public function test_persist_duplicate_row_guard_accepts_an_already_desired_state_without_rewriting(): void {
+		$content         = $this->paragraph( 'Body' );
+		$pattern_content = $this->paragraph( 'Hero' );
+		$desired         = serialize_blocks(
+			array_merge(
+				parse_blocks( $pattern_content ),
+				parse_blocks( $content )
+			)
+		);
+
+		WordPressTestState::$block_templates['wp_template'] = [
+			(object) [
+				'id'      => self::TEMPLATE_REF,
+				'wp_id'   => 0,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $content,
+			],
+			(object) [
+				'id'      => 'twentytwentyfive//home-concurrent',
+				'wp_id'   => 9210,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $desired,
+			],
+		];
+		WordPressTestState::$posts[9210]                    = new \WP_Post(
+			[
+				'ID'           => 9210,
+				'post_type'    => 'wp_template',
+				'post_name'    => 'home',
+				'post_content' => $desired,
+			]
+		);
+		$this->register_pattern( 'tt5/hero', $pattern_content );
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $desired, $result['after']['content'] );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'An already-desired concurrent row must be accepted without a rewrite.' );
+	}
+
+	/**
+	 * When the concurrently materialized row holds content that is neither our
+	 * target nor the baseline we validated against, the write must fail closed
+	 * rather than silently overwriting the other actor's content. The template
+	 * lane is Ring III attested, so a silent overwrite would leave the activity
+	 * row and its attestation asserting content the site no longer has.
+	 */
+	public function test_persist_duplicate_row_guard_rejects_divergent_concurrent_content(): void {
+		$content    = $this->paragraph( 'Body' );
+		$concurrent = $this->paragraph( 'Concurrent edit' );
+
+		WordPressTestState::$block_templates['wp_template'] = [
+			(object) [
+				'id'      => self::TEMPLATE_REF,
+				'wp_id'   => 0,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $content,
+			],
+			(object) [
+				'id'      => 'twentytwentyfive//home-concurrent',
+				'wp_id'   => 9211,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $concurrent,
+			],
+		];
+		WordPressTestState::$posts[9211]                    = new \WP_Post(
+			[
+				'ID'           => 9211,
+				'post_type'    => 'wp_template',
+				'post_name'    => 'home',
+				'post_content' => $concurrent,
+			]
+		);
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( $concurrent, (string) WordPressTestState::$posts[9211]->post_content, 'The concurrent actor\'s content must survive untouched.' );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	/**
+	 * A suffixed slug means something already owns slug+theme. When no published
+	 * row owns it, the collision is NOT a concurrent materialization (core's
+	 * uniquifier also counts private rows, which the publish-only probe cannot
+	 * see), so the orphan is removed and the failure is reported as a slug
+	 * conflict rather than as phantom concurrency.
+	 */
+	public function test_materialization_slug_conflict_removes_the_orphan_and_reports_accurately(): void {
+		$this->seed_template( $this->paragraph( 'Body' ), 0 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 'wp_template' === ( $data['post_type'] ?? '' ) ) {
+					$data['post_name'] = 'home-2';
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_slug_conflict', $result->get_error_code() );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$this->assertCount( 1, WordPressTestState::$deleted_posts, 'The suffixed orphan row must be removed.' );
+		$this->assertArrayNotHasKey( WordPressTestState::$deleted_posts[0], WordPressTestState::$posts );
+	}
+
 	public function test_undo_restores_the_before_snapshot(): void {
 		$before = $this->paragraph( 'Body' );
 		$after  = $this->paragraph( 'Hero' ) . $before;
@@ -551,5 +709,223 @@ final class TemplateApplyExecutorTest extends TestCase {
 			\FlavorAgent\Apply\TemplateApplyExecutor::class,
 			\FlavorAgent\Apply\ExternalApplyExecutorRegistry::for_surface( 'template' )
 		);
+	}
+
+	/**
+	 * Core writes post_name through sanitize_title(), which collapses repeated
+	 * dashes and trims edge dashes; sanitize_key() does neither. Comparing the
+	 * two normalizers read a legitimate slug as a collision, force-deleted the
+	 * correctly written row, and failed the apply with a slug conflict that does
+	 * not exist -- permanently, because reconcile_existing_row() then probes a
+	 * slug that is not what got stored. Discriminating: reverting persist() to
+	 * sanitize_key() makes this fail with flavor_agent_apply_slug_conflict.
+	 */
+	public function test_materialization_accepts_a_slug_core_renormalizes(): void {
+		$this->seed_template( $this->paragraph( 'Anchor' ), 0, 'page--wide' );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$deleted_posts, 'A renormalized slug is not a collision and must not delete the row.' );
+		$this->assertSame( 'page-wide', (string) WordPressTestState::$inserted_posts[0]['post_name'] );
+	}
+
+	/**
+	 * target.* must describe the entity the write actually landed on, because it
+	 * is what lands in the activity row and the Ring III attestation subject. The
+	 * gate-2 re-resolve is the authority, not the start-of-execute read.
+	 * Discriminating: reverting target to $template-> reports the pre-gate slug
+	 * and title, and both assertions below fail.
+	 */
+	public function test_execute_reports_identity_from_the_regated_entity(): void {
+		$content = $this->paragraph( 'Body' );
+		$this->seed_template( $content, 9200 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		WordPressTestState::$block_templates_read_hook = static function () use ( $content ): void {
+			WordPressTestState::$block_templates['wp_template'] = [
+				(object) [
+					'id'      => self::TEMPLATE_REF,
+					'wp_id'   => 9200,
+					'slug'    => 'home-renamed',
+					'title'   => 'Home Renamed',
+					'content' => $content,
+				],
+			];
+		};
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'home-renamed', $result['target']['slug'] );
+		$this->assertSame( 'Home Renamed', $result['target']['title'] );
+	}
+
+	/**
+	 * A failed post-insert read-back is not a slug collision. Falling into the
+	 * collision arm would delete a row that was almost certainly written
+	 * correctly and report a cause known to be false, so the executor must fail
+	 * closed and LEAVE the row for an operator to reconcile.
+	 */
+	public function test_materialization_read_back_failure_leaves_the_row_and_reports_accurately(): void {
+		$this->seed_template( $this->paragraph( 'Anchor' ), 0 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 'wp_template' === ( $data['post_type'] ?? '' ) ) {
+					WordPressTestState::$next_get_post_returns_null = true;
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_post_write_read_failed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$deleted_posts, 'A read-back failure must not delete the row.' );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+	}
+
+	/**
+	 * wp_delete_post can return a WP_Post while a pre_delete_post filter
+	 * short-circuits the actual deletion. Trusting the return value would strand
+	 * the duplicate row AND then update the winning row too, so the executor
+	 * must confirm the row is gone and fail closed when it is not.
+	 */
+	public function test_materialization_slug_conflict_fails_closed_when_the_orphan_cannot_be_removed(): void {
+		$this->seed_template( $this->paragraph( 'Anchor' ), 0 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		WordPressTestState::$delete_post_short_circuits = true;
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 'wp_template' === ( $data['post_type'] ?? '' ) ) {
+					$data['post_name'] = 'home-2';
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_write_failed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'Failing to remove the orphan must not also update a winning row.' );
+	}
+
+	/**
+	 * When the slug suffix WAS caused by a genuine concurrent materialization,
+	 * the winning row becomes visible only after our insert. The post-insert
+	 * re-probe must drop our orphan and reconcile against the winner rather than
+	 * failing the operator out on a race the guard can safely resolve.
+	 */
+	public function test_materialization_slug_race_reconciles_against_the_winning_row(): void {
+		$content = $this->paragraph( 'Anchor' );
+		$this->seed_template( $content, 0 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		// Simulate the winner committing inside our insert: force the suffix and
+		// publish the concurrent row in the same step, so only the post-insert
+		// re-probe can see it.
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ) use ( $content ): array {
+				if ( 'wp_template' !== ( $data['post_type'] ?? '' ) ) {
+					return $data;
+				}
+
+				$data['post_name'] = 'home-2';
+
+				WordPressTestState::$block_templates['wp_template'][] = (object) [
+					'id'      => 'twentytwentyfive//home-winner',
+					'wp_id'   => 9300,
+					'slug'    => 'home',
+					'title'   => 'Home',
+					'content' => $content,
+				];
+
+				WordPressTestState::$posts[9300] = new \WP_Post(
+					[
+						'ID'           => 9300,
+						'post_type'    => 'wp_template',
+						'post_content' => $content,
+					]
+				);
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = \FlavorAgent\Apply\TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, WordPressTestState::$deleted_posts, 'The suffixed orphan must be removed.' );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( 9300, WordPressTestState::$updated_posts[0]['ID'], 'The winning row must be updated in place.' );
 	}
 }

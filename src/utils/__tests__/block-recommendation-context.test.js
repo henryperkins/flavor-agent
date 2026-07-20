@@ -1,9 +1,73 @@
 import {
 	BLOCK_STRUCTURAL_SUMMARY_MAX_ITEMS,
+	BLOCK_INTERIOR_MAX_ITEMS,
 	capBlockStructuralAncestorItems,
 	capBlockStructuralBranchItems,
+	capBlockInteriorItems,
 	buildBlockRecommendationContextSignature,
 } from '../block-recommendation-context';
+
+describe( 'block interior signature contract', () => {
+	const baseContext = {
+		block: { name: 'core/group' },
+		blockInterior: [
+			{
+				block: 'core/heading',
+				childCount: 0,
+				visualHints: { textColor: 'contrast' },
+			},
+		],
+	};
+
+	test( 'signature changes when a descendant visual hint changes', () => {
+		const before = buildBlockRecommendationContextSignature( baseContext );
+		const after = buildBlockRecommendationContextSignature( {
+			...baseContext,
+			blockInterior: [
+				{
+					block: 'core/heading',
+					childCount: 0,
+					visualHints: { textColor: 'accent' },
+				},
+			],
+		} );
+
+		expect( after ).not.toBe( before );
+	} );
+
+	// Stability against descendant text edits is a property of what the collector
+	// puts in blockInterior (includeBlockCapabilities: false), not of this hash
+	// function, so it is asserted in collector.test.js against the real call.
+
+	test( 'interior cap is applied inside the signature builder', () => {
+		// The server hashes the capped context, so an uncapped client-side hash
+		// would diverge and surface as a stale-context error at apply time.
+		const many = Array.from( { length: 20 }, ( _, index ) => ( {
+			block: `core/block-${ index }`,
+			childCount: 0,
+		} ) );
+
+		expect(
+			buildBlockRecommendationContextSignature( {
+				...baseContext,
+				blockInterior: many,
+			} )
+		).toBe(
+			buildBlockRecommendationContextSignature( {
+				...baseContext,
+				blockInterior: many.slice( 0, BLOCK_INTERIOR_MAX_ITEMS ),
+			} )
+		);
+	} );
+
+	test( 'capBlockInteriorItems caps and tolerates non-arrays', () => {
+		expect(
+			capBlockInteriorItems( new Array( 20 ).fill( {} ) )
+		).toHaveLength( BLOCK_INTERIOR_MAX_ITEMS );
+		expect( capBlockInteriorItems( null ) ).toEqual( [] );
+		expect( capBlockInteriorItems() ).toEqual( [] );
+	} );
+} );
 
 describe( 'buildBlockRecommendationContextSignature', () => {
 	test( 'includes parent and sibling summaries in signature', () => {

@@ -2,7 +2,9 @@
 
 Audit grounded in the last 30 days of WordPress core AI activity (Make WP AI, Make WP Core, WordPress.org Developer Blog, WordPress News). Purpose: surface where Flavor Agent's current code, docs, and roadmap are aligned with — or drifting from — the post-WP 7.0 AI stack, with special attention to items that landed AFTER the 2026-05-21 refresh of `wordpress-ai-roadmap-tracking.md`.
 
-> Currentness note, 2026-06-10: this remains a dated audit snapshot. Subsequent preview-ability and governed external-apply work raised the current contract to 29 abilities (seven recommendation, twelve helper/read, one docs search, five preview siblings, and four external-apply abilities). The ability-scale watch item remains valid, but use `docs/reference/current-open-work.md` and `docs/reference/abilities-and-routes.md` for the current count.
+> Currentness note, 2026-06-10: this remains a dated audit snapshot. Subsequent preview-ability and governed external-apply work raised the contract as of that date to 29 abilities (seven recommendation, twelve helper/read, one docs search, five preview siblings, and four external-apply abilities). The ability-scale watch item remains valid, but use `docs/reference/current-open-work.md` and `docs/reference/abilities-and-routes.md` for the current count.
+>
+> Currentness note, 2026-07-20: every ability count and apply/attestation scope below is superseded. The live contract is **35 abilities** (eight recommendation, thirteen helper/read, one docs search, six preview siblings, and seven external-apply abilities), governed external apply spans **four lanes** (style, `wp_template`, `wp_template_part`, post-blocks), and Ring III attestation covers **three lanes** (`external-style-apply-v1`, `external-template-apply-v1`, `external-template-part-apply-v1`) with post-blocks deliberately excluded. Read the numbers below as 2026-05-24 history, not current state.
 
 ## How to read this
 
@@ -82,7 +84,7 @@ Recommend converting line 312 of `wordpress-ai-roadmap-tracking.md` from "choose
 
 ### MCP Adapter integration — `inc/MCP/ServerBootstrap.php`, `flavor-agent.php` line 34 — **Aligned; doc framing corrected 2026-05-26**
 
-`ServerBootstrap::register()` hooks into `mcp_adapter_init`, uses `WP\MCP\Core\McpAdapter`, `WP\MCP\Transport\HttpTransport`, `WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler`, and `WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler`, registers all 7 recommendation abilities as MCP tools, and supplies its own auth callback. That matches the canonical contract from `WordPress/mcp-adapter`.
+`ServerBootstrap::register()` hooks into `mcp_adapter_init`, uses `WP\MCP\Core\McpAdapter`, `WP\MCP\Transport\HttpTransport`, `WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler`, and `WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler`, registered all 7 recommendation abilities as MCP tools at the time of this audit (8 today), and supplies its own auth callback. That matches the canonical contract from `WordPress/mcp-adapter`.
 
 Doc framing: the original 2026-05-24 audit recommended framing WP.org as the primary distribution path based on the 22 Apr 2026 contributor summary alone. A cross-check on 2026-05-26 against the upstream README at v0.5.0 (released 2026-04-15) shows the README treats Composer as the primary install method and the plugin form as an alternative, and does not mention WP.org. The 22 Apr decision still stands as a stated intent (`@justlevine` to initiate WP.org submission, `@jeffpaul` coordinating), but it has not landed in the README or in a WP.org listing. The corrected framing in `CLAUDE.md` line 48 and `docs/reference/local-environment-setup.md` lines 83 and 264 records both the contributor-track intent and the current README/v0.5.0 reality; the GitHub clone remains the active local-setup path until WP.org publication actually lands.
 

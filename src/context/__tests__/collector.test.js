@@ -280,6 +280,132 @@ describe( 'collectBlockContext', () => {
 		expect( result.block.bindableAttributes ).toEqual( [ 'url', 'text' ] );
 	} );
 
+	test( 'summarizes the selected block interior and stops the branch at the focus node', () => {
+		const childNode = {
+			clientId: 'child-1',
+			name: 'core/heading',
+			innerBlocks: [],
+		};
+		const selectedNode = {
+			clientId: 'client-1',
+			name: 'core/group',
+			innerBlocks: [ childNode ],
+			structuralIdentity: { role: 'section' },
+		};
+		const parentNode = {
+			clientId: 'parent-1',
+			name: 'core/group',
+			innerBlocks: [ selectedNode ],
+			structuralIdentity: { role: 'content-area' },
+		};
+
+		mockIntrospectBlockInstance.mockReturnValue( {
+			name: 'core/group',
+			title: 'Group',
+			currentAttributes: {},
+			inspectorPanels: {},
+			bindableAttributes: [],
+			styles: [],
+			activeStyle: null,
+			variations: [],
+			supportsContentRole: false,
+			contentAttributes: {},
+			configAttributes: {},
+			editingMode: 'default',
+			isInsideContentOnly: false,
+			blockVisibility: null,
+			childCount: 1,
+		} );
+		mockIntrospectBlockTree.mockReturnValue( [ parentNode ] );
+		mockAnnotateStructuralIdentity.mockReturnValue( [ parentNode ] );
+		mockFindNodePath.mockReturnValue( [ parentNode, selectedNode ] );
+		mockFindBranchRoot.mockReturnValue( parentNode );
+		mockToStructuralSummary.mockReturnValue( { block: 'core/group' } );
+		mockSummarizeTree.mockReturnValue( [ { block: 'core/heading' } ] );
+		mockCollectThemeTokens.mockReturnValue( {} );
+		mockSummarizeTokens.mockReturnValue( {} );
+		mockSelect.mockReturnValue( {
+			getBlockRootClientId: jest.fn().mockReturnValue( null ),
+			getBlockOrder: jest.fn().mockReturnValue( [] ),
+			getBlockName: jest.fn(),
+		} );
+
+		const result = collectBlockContext( 'client-1' );
+
+		expect( result.blockInterior ).toEqual( [ { block: 'core/heading' } ] );
+
+		const branchCall = mockSummarizeTree.mock.calls.find(
+			( [ tree ] ) => tree[ 0 ] === parentNode
+		);
+		const interiorCall = mockSummarizeTree.mock.calls.find(
+			( [ tree ] ) => tree[ 0 ] === childNode
+		);
+
+		// The branch must stop at the selected block so it never describes the
+		// same subtree as blockInterior at a different cap.
+		expect( branchCall[ 1 ] ).toEqual(
+			expect.objectContaining( {
+				focusClientId: 'client-1',
+				stopAtFocus: true,
+			} )
+		);
+
+		// Capabilities stay off: that flag would pull every descendant's text
+		// content into the context signature.
+		expect( interiorCall[ 1 ] ).toEqual(
+			expect.objectContaining( {
+				includeBlockCapabilities: false,
+				maxChildren: 8,
+				maxDepth: 3,
+			} )
+		);
+		expect( typeof interiorCall[ 1 ].visualHintExtractor ).toBe(
+			'function'
+		);
+		expect( interiorCall[ 1 ].focusClientId ).toBeUndefined();
+	} );
+
+	test( 'returns an empty interior for a leaf block', () => {
+		const selectedNode = {
+			clientId: 'client-1',
+			name: 'core/paragraph',
+			innerBlocks: [],
+		};
+
+		mockIntrospectBlockInstance.mockReturnValue( {
+			name: 'core/paragraph',
+			title: 'Paragraph',
+			currentAttributes: {},
+			inspectorPanels: {},
+			bindableAttributes: [],
+			styles: [],
+			activeStyle: null,
+			variations: [],
+			supportsContentRole: false,
+			contentAttributes: {},
+			configAttributes: {},
+			editingMode: 'default',
+			isInsideContentOnly: false,
+			blockVisibility: null,
+			childCount: 0,
+		} );
+		mockIntrospectBlockTree.mockReturnValue( [ selectedNode ] );
+		mockAnnotateStructuralIdentity.mockReturnValue( [ selectedNode ] );
+		mockFindNodePath.mockReturnValue( [ selectedNode ] );
+		mockFindBranchRoot.mockReturnValue( selectedNode );
+		mockToStructuralSummary.mockReturnValue( {} );
+		mockSummarizeTree.mockReturnValue( [] );
+		mockCollectThemeTokens.mockReturnValue( {} );
+		mockSummarizeTokens.mockReturnValue( {} );
+		mockSelect.mockReturnValue( {
+			getBlockRootClientId: jest.fn().mockReturnValue( null ),
+			getBlockOrder: jest.fn().mockReturnValue( [] ),
+			getBlockName: jest.fn(),
+		} );
+
+		expect( collectBlockContext( 'client-1' ).blockInterior ).toEqual( [] );
+	} );
+
 	test( 'adds deterministic allowed pattern context when structural actions are enabled', () => {
 		window.flavorAgentData = {
 			enableBlockStructuralActions: true,

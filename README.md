@@ -4,7 +4,7 @@ Flavor Agent lets AI work on a live WordPress site without unchecked control. Ev
 
 I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
 
-> **Release status:** `0.1.0` is release-candidate ready in this repository. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
+> **Release status:** `0.1.0` is in pre-tag hardening. RC1–RC3 are published; there is no final `v0.1.0` release yet, and release gates still have to be run against the exact tagged commit. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 
 1.0 when the core Abilities/AI Client surfaces stabilize.
 
@@ -24,11 +24,13 @@ Before publishing the GitHub release, add the remaining stills and replace this 
 
 Ship the code without a GIF if necessary, but do not ship the public release without the governance-console proof plus at least one strong native editor still.
 
+**As of 2026-07-20 only the governance-console still exists.** Each remaining asset needs a publicly reachable staged site with live provider credentials, so none of them can be captured from the local Docker stack. Per-asset blockers are recorded in [`docs/releases/v0.1.0-proof-assets.md`](docs/releases/v0.1.0-proof-assets.md). Treat that as an open release gate, not a formality.
+
 ## What it does
 
 - Mediates AI work through one governed loop: bounded operation schemas, freshness checks, review gates for structural/theme changes, server-side attribution, and drift-safe undo.
-- Gives administrators `Settings > AI Activity` as the human approval and audit surface for governed external style applies, recent Flavor Agent actions, provider-path details, undo state, and affected-entity links.
-- Lets external agents use the same WordPress Abilities API / MCP contracts to request recommendations, validation, diagnostics, and review-gated Global Styles / Style Book applies.
+- Gives administrators `Settings > AI Activity` as the human approval and audit surface for governed external applies, recent Flavor Agent actions, provider-path details, undo state, and affected-entity links.
+- Lets external agents use the same WordPress Abilities API / MCP contracts to request recommendations, validation, diagnostics, and review-gated applies across four lanes: Global Styles / Style Book, templates, template parts, and post blocks.
 - Demonstrates the governance layer through native WordPress surfaces: selected blocks, post/page content, the pattern inserter, Site Editor templates and template parts, navigation blocks, Global Styles, and Style Book.
 
 ## What it does not do
@@ -50,7 +52,7 @@ Flavor Agent is for WordPress builders, editors, and plugin developers who want 
 4. Activate **Flavor Agent** in WordPress.
 5. Configure text generation in `Settings > Connectors`; optionally configure pattern retrieval, embeddings, developer-doc grounding limits/diagnostics, and guidelines in `Settings > Flavor Agent`.
 
-For a representative development environment, use the local setup notes in [`docs/reference/local-environment-setup.md`](docs/reference/local-environment-setup.md). WordPress 7.0 is still pre-release as of this draft; the Docker-backed Site Editor harness pins a pre-release image until the stable 7.0 image exists.
+For a representative development environment, use the local setup notes in [`docs/reference/local-environment-setup.md`](docs/reference/local-environment-setup.md). WordPress 7.0 is released; the Docker-backed Site Editor harness pins the exact stable `wordpress:7.0.0-php8.2-apache` image so harness runs stay reproducible.
 
 ## Current status
 
@@ -63,15 +65,16 @@ For a representative development environment, use the local setup notes in [`doc
 
 Automated evidence currently recorded in the repository includes:
 
-- `node scripts/verify.js --skip-e2e` passing build, JS lint, Plugin Check, JS unit, PHP lint, and PHPUnit on 2026-05-02.
-- `npm run test:e2e:playground` passing `9` tests with `2` intentionally skipped in the Playground smoke harness on 2026-04-22.
-- `npm run test:e2e:wp70` passing `20` tests in the Docker-backed WordPress 7.0 Site Editor harness on 2026-05-02.
+- `vendor/bin/phpunit` passing `1925` tests / `8825` assertions on 2026-07-20.
+- `npm run test:unit` passing `1679` tests across `109` suites on 2026-07-20.
+- `vendor/bin/phpcs` clean (zero errors, zero warnings) on 2026-07-20.
+- Playwright harnesses (`test:e2e:playground`, `test:e2e:wp70`) have **not** been re-run since the WP 7.0 harness was repinned to stable `wordpress:7.0.0-php8.2-apache`; the last recorded runs predate that change.
 
-Re-run the verification gates on the exact commit you tag.
+These are working-tree numbers, not release evidence. Re-run the full gates — strict verify including Plugin Check, both Playwright harnesses, `npm run check:docs`, and `npm run dist` — on the exact commit you tag, and record the results before publishing.
 
 ## Architecture at a glance
 
-Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin apps under `src/`, and compiled assets in `build/`. The runtime defines 31 WordPress Ability contracts across recommendation, helper/read, docs-search, preview, external-apply, style, pattern, template, navigation, and infrastructure categories; helper/read abilities and the five signature-only `preview-recommend-*` siblings register whenever their core contracts are available, while recommendation and external-apply abilities also require the WordPress AI feature gate. The remaining plugin REST API stays intentionally thin for activity persistence, external-apply decisions, undo, and pattern sync.
+Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin apps under `src/`, and compiled assets in `build/`. The runtime defines 35 WordPress Ability contracts across recommendation, helper/read, docs-search, preview, external-apply, style, pattern, template, navigation, and infrastructure categories; helper/read abilities and the six signature-only `preview-recommend-*` siblings register whenever their core contracts are available, while recommendation and external-apply abilities also require the WordPress AI feature gate. The remaining plugin REST API stays intentionally thin for activity persistence, external-apply decisions, undo, and pattern sync.
 
 The editor app mounts first-party UI into native Gutenberg and Site Editor locations: block Inspector panels, post/page document panels, the pattern inserter, template and template-part panels, Global Styles, Style Book, and navigation-block advisory sections. Activity records are written server-side and reused by inline editor history plus the wp-admin approval/audit page.
 
@@ -101,7 +104,7 @@ See the external-service disclosure in [`readme.txt`](readme.txt) and [`docs/ref
 | Navigation     | Advisory-only                                                | Guidance for selected `core/navigation` blocks; no apply contract in `0.1.0`.      |
 | Global Styles  | Review-first apply/undo                                      | Validated `theme.json` operations only; no raw CSS or `customCSS`.                 |
 | Style Book     | Review-first apply/undo                                      | Block-example scoped style recommendations.                                        |
-| AI Activity    | Admin approval and audit                                     | Pending external style-apply decisions, server-backed activity feed, detail panel, and undo state; not a general observability product. |
+| AI Activity    | Admin approval and audit                                     | Pending external style, template, template-part, and post-blocks apply decisions, server-backed activity feed, detail panel, and undo state; not a general observability product. |
 
 ## Develop and verify
 
@@ -130,4 +133,4 @@ Start here:
 
 ## License
 
-Flavor Agent is licensed under the GPLv2 or later. See [`readme.txt`](readme.txt) for the WordPress.org-style license header.
+Flavor Agent is licensed under the GPL-2.0-or-later. The full license text ships in [`LICENSE`](LICENSE); [`readme.txt`](readme.txt) carries the WordPress.org-style license header.

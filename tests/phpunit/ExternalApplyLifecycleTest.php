@@ -189,45 +189,46 @@ final class ExternalApplyLifecycleTest extends TestCase {
 	 * @return array<string, mixed>
 	 */
 	private function create_template_part_pending_entry( string $content ): array {
-		$created = Repository::create(
+		$signatures = \FlavorAgent\Abilities\TemplateAbilities::recommend_template_part(
 			[
-				'id'              => 'template-part-row',
-				'type'            => 'apply_template_part_suggestion',
-				'surface'         => 'template-part',
-				'target'          => [ 'templatePartId' => self::TEMPLATE_PART_ID ],
-				'suggestion'      => 'Trim the header',
-				'before'          => [],
-				'after'           => [],
-				'executionResult' => 'pending',
-				'undo'            => [ 'status' => 'not_applicable' ],
-				'request'         => [
-					'prompt'    => 'trim',
-					'reference' => 'external-apply:template-part:' . self::TEMPLATE_PART_ID,
-					'apply'     => [
-						'status'      => 'pending',
-						'requestedBy' => 7,
-						'requestedAt' => gmdate( 'c' ),
-						'expiresAt'   => gmdate( 'c', time() + 3600 ),
-						'operations'  => [
-							[
-								'type'              => 'remove_block',
-								'targetPath'        => [ 0, 0 ],
-								'expectedBlockName' => 'core/heading',
-							],
-						],
-						'signatures'  => [
-							'baselineConfigHash' => hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) ),
-						],
+				'templatePartRef'      => self::TEMPLATE_PART_ID,
+				'prompt'               => 'trim the header',
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$this->assertIsArray( $signatures );
+
+		$pending = \FlavorAgent\Abilities\ApplyAbilities::request_template_part_apply(
+			[
+				'scope'      => [
+					'surface'        => 'template-part',
+					'templatePartId' => self::TEMPLATE_PART_ID,
+					'slug'           => 'header',
+					'area'           => 'header',
+				],
+				'prompt'     => 'trim the header',
+				'operations' => [
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0, 0 ],
+						'expectedBlockName' => 'core/heading',
 					],
 				],
-				'document'        => [
-					'scopeKey' => 'template-part:' . self::TEMPLATE_PART_ID,
-					'postType' => 'wp_template_part',
-					'entityId' => self::TEMPLATE_PART_ID,
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
 				],
 			]
 		);
+		$this->assertIsArray( $pending );
+
+		$created = Repository::find( (string) $pending['activityId'] );
 		$this->assertIsArray( $created );
+		$this->assertSame(
+			hash( 'sha256', serialize_blocks( parse_blocks( $content ) ) ),
+			$created['apply']['signatures']['baselineContentHash']
+		);
+		$this->assertSame( 'wp_template_part:' . self::TEMPLATE_PART_ID, $created['document']['scopeKey'] );
 
 		return $created;
 	}
@@ -1062,6 +1063,22 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$entity = \FlavorAgent\Activity\Serializer::derive_entity( $stored );
 		$this->assertSame( 'template-part', $entity['type'] );
 		$this->assertSame( self::TEMPLATE_PART_ID, $entity['ref'] );
+	}
+
+	public function test_template_part_approval_fails_closed_when_live_content_drifts_after_request(): void {
+		$content = $this->template_part_content();
+		$this->seed_template_part( $content, 8812 );
+		$pending = $this->create_template_part_pending_entry( $content );
+
+		$changed = $content . $this->paragraph( 'Changed after request' );
+		$this->seed_template_part( $changed, 8812 );
+
+		$decided = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['id'], 'approve' );
+
+		$this->assertIsArray( $decided );
+		$this->assertSame( 'failed', $decided['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_stale', $decided['apply']['failureCode'] );
+		$this->assertStringContainsString( 'Changed after request', (string) WordPressTestState::$posts[8812]->post_content );
 	}
 
 	public function test_registry_routes_template_to_its_executor(): void {

@@ -87,7 +87,7 @@ This document is the surface-specific release planning source of truth. Canonica
 | Template-part recommendations | Keep, strongest structural Site Editor surface | Header/footer/sidebar parts are focused enough for bounded review/apply/undo. | Improve operation yield without broadening operation vocabulary prematurely. |
 | Global Styles | Keep, guarded | Theme-level choices merit native review-first assistance. | `theme.json`-safe operations only; add contrast validation before stronger claims. |
 | Style Book | Keep, narrower than Global Styles | Block-example style review fits native style inspection. | Block-example scoped changes only; no general visual design generator. |
-| AI Activity | Keep as governance proof surface | Users need approval, provenance, freshness/failure evidence, and undo state. | Admin approval only for pending external style applies; no general observability console. |
+| AI Activity | Keep as governance proof surface | Users need approval, provenance, freshness/failure evidence, and undo state. | Admin approval only for pending external style, template, template-part, and post-blocks applies; no general observability console. |
 | Settings and sync | Keep as support surface | Setup must be understandable for recommendations to work. | No provider router; only plugin-owned backend setup and connector readiness messaging. |
 | Helper abilities and REST | Keep as infrastructure | The plugin needs structured capabilities for native surfaces and integrations. | Mark release-supported vs internal; do not expose a general tool catalog. |
 
@@ -376,7 +376,7 @@ Do not add:
 
 ### Current Fit
 
-Activity belongs because review/apply/undo needs provenance, and external-agent applies need a human approval point. The inline activity sections and admin approval/audit page support trust, recovery, and the governed external style-apply loop.
+Activity belongs because review/apply/undo needs provenance, and external-agent applies need a human approval point. The inline activity sections and admin approval/audit page support trust, recovery, and the governed external apply loop across its four lanes (style, template, template-part, post-blocks).
 
 ### Release Quality Assessment
 
@@ -390,7 +390,7 @@ Stop at:
 
 - Inline recent actions for executable editor scopes.
 - Ordered newest-valid-tail undo.
-- Admin approval/rejection for pending external style applies.
+- Admin approval/rejection for pending external style, template, template-part, and post-blocks applies.
 - Inspection-only admin audit for non-pending rows.
 - Search/filter/details for diagnostics and provenance.
 
@@ -523,7 +523,7 @@ This checklist was advanced on 2026-06-18, but not completed.
 - [x] Content recommendations editorial-only.
 - [x] Navigation recommendations advisory-only.
 - [x] Template, template-part, Global Styles, and Style Book review-first only.
-- [x] AI Activity limited to approval/audit/provenance in admin; only pending external style applies expose decision controls.
+- [x] AI Activity limited to approval/audit/provenance in admin; only pending external style, template, template-part, and post-blocks applies expose decision controls.
 - [x] Settings limited to setup, sync, and diagnostics.
 - [x] Helper abilities limited to recommendation support and read-only diagnostics unless backed by a first-party apply contract.
 

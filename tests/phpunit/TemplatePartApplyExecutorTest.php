@@ -24,14 +24,14 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 	 * seed a wp_template_part post as the wp_update_post write target. No filter
 	 * seam: the executor re-collects + persists through the real stubbed WP APIs.
 	 */
-	private function seed_part( string $content, int $wp_id = 0, string $area = '', string $slug = 'header' ): void {
+	private function seed_part( string $content, int $wp_id = 0, string $area = '', string $slug = 'header', string $title = 'Header' ): void {
 		WordPressTestState::$block_templates['wp_template_part'] = [
 			(object) [
 				'id'      => self::PART_ID,
 				'wp_id'   => $wp_id,
 				'slug'    => $slug,
 				'area'    => $area,
-				'title'   => 'Header',
+				'title'   => $title,
 				'content' => $content,
 			],
 		];
@@ -394,6 +394,404 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$updated_posts, 'A theme-file part is inserted, never updated.' );
 	}
 
+	/**
+	 * Covers the wp_id 0 -> 9201 concurrency race end to end.
+	 *
+	 * NOTE ON WHAT THIS DOES AND DOES NOT PIN. This test does NOT discriminate
+	 * $fresh from the stale start-of-execute object. With the slug unchanged,
+	 * reverting persist( $fresh, ... ) to persist( $part, ... ) reaches
+	 * reconcile_existing_row(), which finds the same wp_id=9201 row by slug and
+	 * updates it in place — so inserted_posts stays [] and updated_posts[0]['ID']
+	 * is still 9201, and every assertion below passes either way. The threading
+	 * and the reconcile guard converge here by construction.
+	 *
+	 * The assertions that DO fail when the entity threading is reverted are
+	 * test_materialization_writes_the_regated_identity() and
+	 * test_undo_materialization_writes_the_regated_identity(), which diverge the
+	 * identity fields persist() actually writes.
+	 */
+	public function test_materialization_race_writes_through_the_regated_entity(): void {
+		$content = $this->paragraph( 'Anchor' );
+		$this->seed_part( $content, 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		WordPressTestState::$block_templates_read_hook = function () use ( $content ): void {
+			$this->seed_part( $content, 9201, 'header', 'header' );
+		};
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], WordPressTestState::$inserted_posts, 'The write must follow the re-gated entity, not insert a duplicate from the stale read.' );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( 9201, WordPressTestState::$updated_posts[0]['ID'] );
+		$this->assertStringContainsString( 'TailPat', (string) WordPressTestState::$posts[9201]->post_content );
+	}
+
+	/**
+	 * Discriminating guard for persist( $fresh, ... ) in execute().
+	 *
+	 * Both reads see an unmaterialized theme-file part (wp_id=0), so persist()
+	 * takes the materialization branch and reconcile_existing_row() finds nothing
+	 * to reconcile against — it cannot mask the stale object. The identity fields
+	 * persist() writes (post_title, wp_template_part_area) therefore come from
+	 * whichever object was passed, and the re-gated read diverges on both.
+	 *
+	 * Models a theme update that relabels a part while its markup is byte
+	 * identical. Reverting :105 to persist( $part, ... ) writes 'Header'/'header'
+	 * and fails this test.
+	 */
+	public function test_materialization_writes_the_regated_identity(): void {
+		$content = $this->paragraph( 'Anchor' );
+		$this->seed_part( $content, 0, 'header', 'header', 'Header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		WordPressTestState::$block_templates_read_hook = function () use ( $content ): void {
+			$this->seed_part( $content, 0, 'footer', 'header', 'Site Header' );
+		};
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$inserted = WordPressTestState::$inserted_posts[0];
+		$this->assertSame(
+			'Site Header',
+			(string) $inserted['post_title'],
+			'The materialized row must carry the re-gated title, not the stale start-of-execute one.'
+		);
+		$this->assertSame(
+			[ 'footer' ],
+			$inserted['tax_input']['wp_template_part_area'] ?? null,
+			'The materialized row must carry the re-gated area.'
+		);
+	}
+
+	/**
+	 * Discriminating guard for persist( $fresh, ... ) in undo() (line ~234),
+	 * which had no coverage of its own. Same construction as the execute()
+	 * counterpart: unmaterialized on both reads, identity diverged by the hook.
+	 */
+	public function test_undo_materialization_writes_the_regated_identity(): void {
+		$before = $this->paragraph( 'Original' );
+		$after  = $this->paragraph( 'Changed' );
+		$this->seed_part( $after, 0, 'header', 'header', 'Header' );
+
+		WordPressTestState::$block_templates_read_hook = function () use ( $after ): void {
+			$this->seed_part( $after, 0, 'footer', 'header', 'Site Header' );
+		};
+
+		$result = TemplatePartApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$inserted = WordPressTestState::$inserted_posts[0];
+		$this->assertSame(
+			'Site Header',
+			(string) $inserted['post_title'],
+			'The undo write must follow the re-gated entity, not the pre-drift-check read.'
+		);
+		$this->assertSame(
+			[ 'footer' ],
+			$inserted['tax_input']['wp_template_part_area'] ?? null
+		);
+		$this->assertStringContainsString( 'Original', (string) $inserted['post_content'] );
+	}
+
+	public function test_persist_duplicate_row_guard_updates_concurrent_materialization_in_place(): void {
+		$content = $this->paragraph( 'Anchor' );
+
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => self::PART_ID,
+				'wp_id'   => 0,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			],
+			(object) [
+				'id'      => 'twentytwentyfive//header-concurrent',
+				'wp_id'   => 9202,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			],
+		];
+		WordPressTestState::$posts[9202]                         = new \WP_Post(
+			[
+				'ID'           => 9202,
+				'post_type'    => 'wp_template_part',
+				'post_name'    => 'header',
+				'post_content' => $content,
+			]
+		);
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], WordPressTestState::$inserted_posts, 'The duplicate-row guard must update the concurrent row.' );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( 9202, WordPressTestState::$updated_posts[0]['ID'] );
+		$this->assertStringContainsString( 'TailPat', (string) WordPressTestState::$posts[9202]->post_content );
+	}
+
+	public function test_persist_duplicate_row_guard_accepts_an_already_desired_state_without_rewriting(): void {
+		$content         = $this->paragraph( 'Anchor' );
+		$pattern_content = $this->paragraph( 'TailPat' );
+		$desired         = serialize_blocks(
+			array_merge(
+				parse_blocks( $content ),
+				parse_blocks( $pattern_content )
+			)
+		);
+
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => self::PART_ID,
+				'wp_id'   => 0,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			],
+			(object) [
+				'id'      => 'twentytwentyfive//header-concurrent',
+				'wp_id'   => 9203,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $desired,
+			],
+		];
+		WordPressTestState::$posts[9203]                         = new \WP_Post(
+			[
+				'ID'           => 9203,
+				'post_type'    => 'wp_template_part',
+				'post_name'    => 'header',
+				'post_content' => $desired,
+			]
+		);
+		$this->register_pattern( 'fa-test/tail', $pattern_content );
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $desired, $result['after']['content'] );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_persist_duplicate_row_guard_rejects_divergent_concurrent_content(): void {
+		$content    = $this->paragraph( 'Anchor' );
+		$concurrent = $this->paragraph( 'Concurrent edit' );
+
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => self::PART_ID,
+				'wp_id'   => 0,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			],
+			(object) [
+				'id'      => 'twentytwentyfive//header-concurrent',
+				'wp_id'   => 9204,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $concurrent,
+			],
+		];
+		WordPressTestState::$posts[9204]                         = new \WP_Post(
+			[
+				'ID'           => 9204,
+				'post_type'    => 'wp_template_part',
+				'post_name'    => 'header',
+				'post_content' => $concurrent,
+			]
+		);
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( $concurrent, (string) WordPressTestState::$posts[9204]->post_content );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	/**
+	 * A suffixed slug means something already owns slug+theme. When no published
+	 * row owns it, the collision is NOT a concurrent materialization (core's
+	 * uniquifier also counts private rows, which the publish-only probe cannot
+	 * see), so the orphan is removed and the failure is reported as a slug
+	 * conflict rather than as phantom concurrency. Reporting concurrency here
+	 * would send the operator chasing a writer that does not exist, and the
+	 * condition does not self-heal on retry.
+	 */
+	public function test_materialization_slug_conflict_removes_the_orphan_and_reports_accurately(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 'wp_template_part' === ( $data['post_type'] ?? '' ) ) {
+					$data['post_name'] = 'header-2';
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_slug_conflict', $result->get_error_code() );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$this->assertCount( 1, WordPressTestState::$deleted_posts );
+		$this->assertArrayNotHasKey( WordPressTestState::$deleted_posts[0], WordPressTestState::$posts );
+	}
+
+	/**
+	 * When the slug suffix WAS caused by a genuine concurrent materialization,
+	 * the row becomes visible only after our insert. The post-insert re-probe
+	 * must drop our orphan and reconcile against the winner rather than failing
+	 * the operator out on a race the guard can safely resolve.
+	 */
+	public function test_materialization_slug_race_reconciles_against_the_winning_row(): void {
+		$content = $this->paragraph( 'Anchor' );
+		$this->seed_part( $content, 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		// Simulate the winner committing inside our insert: force the suffix and
+		// publish the concurrent row in the same step, so only the post-insert
+		// re-probe can see it.
+		add_filter(
+			'wp_insert_post_data',
+			function ( array $data ) use ( $content ): array {
+				if ( 'wp_template_part' !== ( $data['post_type'] ?? '' ) ) {
+					return $data;
+				}
+
+				$data['post_name'] = 'header-2';
+
+				WordPressTestState::$block_templates['wp_template_part'][] = (object) [
+					'id'      => 'twentytwentyfive//header-winner',
+					'wp_id'   => 9205,
+					'slug'    => 'header',
+					'area'    => 'header',
+					'title'   => 'Header',
+					'content' => $content,
+				];
+				WordPressTestState::$posts[9205]                           = new \WP_Post(
+					[
+						'ID'           => 9205,
+						'post_type'    => 'wp_template_part',
+						'post_name'    => 'header',
+						'post_content' => $content,
+					]
+				);
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, WordPressTestState::$deleted_posts, 'The suffixed orphan must be removed before reconciling.' );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( 9205, WordPressTestState::$updated_posts[0]['ID'], 'The winning row must be updated in place.' );
+		$this->assertStringContainsString( 'TailPat', (string) WordPressTestState::$posts[9205]->post_content );
+		// The winner is seeded under a non-canonical id so the row is
+		// unambiguously distinct from the entity under test; target identity
+		// always comes from the re-gated entity, since persist() returns only a
+		// post id. This string is the Ring III attestation subject, so it must
+		// name the logical part.
+		$this->assertSame( self::PART_ID, $result['target']['templatePartId'] );
+		$this->assertSame( self::PART_ID, $result['target']['templatePartRef'] );
+	}
+
 	// ---------------------------------------------------------------------
 	// execute() — fail closed, zero writes (atomicity).
 	// ---------------------------------------------------------------------
@@ -417,6 +815,34 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_apply_operations_invalid', $result->get_error_code() );
 		$this->assertSame( [], WordPressTestState::$updated_posts, 'A re-validation failure must not write.' );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
+	public function test_execute_enforces_the_request_time_expected_target(): void {
+		$content = '<!-- wp:group -->'
+			. $this->paragraph( 'Child' )
+			. '<!-- /wp:group -->';
+		$this->seed_part( $content, 100, 'header' );
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0 ],
+						'expectedBlockName' => 'core/group',
+						'expectedTarget'    => [
+							'name'       => 'core/group',
+							'childCount' => 0,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
 		$this->assertSame( [], WordPressTestState::$inserted_posts );
 	}
 
@@ -857,5 +1283,161 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
 		$this->assertSame( [], WordPressTestState::$updated_posts, 'A pre-restore concurrent change must not write.' );
 		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
+	/**
+	 * Core writes post_name through sanitize_title(), which collapses repeated
+	 * dashes and trims edge dashes; sanitize_key() does neither. Comparing the
+	 * two normalizers read a legitimate slug as a collision, force-deleted the
+	 * correctly written row, and failed the apply with a slug conflict that does
+	 * not exist -- permanently, because reconcile_existing_row() then probes a
+	 * slug that is not what got stored. Discriminating: reverting persist() to
+	 * sanitize_key() makes this fail with flavor_agent_apply_slug_conflict.
+	 */
+	public function test_materialization_accepts_a_slug_core_renormalizes(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'site--header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$deleted_posts, 'A renormalized slug is not a collision and must not delete the row.' );
+		$this->assertSame( 'site-header', (string) WordPressTestState::$inserted_posts[0]['post_name'] );
+	}
+
+	/**
+	 * target.* must describe the entity the write actually landed on, because it
+	 * is what lands in the activity row and the Ring III attestation subject. The
+	 * gate-2 re-resolve is the authority, not the start-of-execute read.
+	 * Discriminating: reverting target to $part-> reports the pre-gate slug and
+	 * area, and both assertions below fail.
+	 */
+	public function test_execute_reports_identity_from_the_regated_entity(): void {
+		$content = $this->paragraph( 'Body' );
+		$this->seed_part( $content, 9201, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		WordPressTestState::$block_templates_read_hook = static function () use ( $content ): void {
+			WordPressTestState::$block_templates['wp_template_part'] = [
+				(object) [
+					'id'      => self::PART_ID,
+					'wp_id'   => 9201,
+					'slug'    => 'header-renamed',
+					'area'    => 'uncategorized',
+					'title'   => 'Header Renamed',
+					'content' => $content,
+				],
+			];
+		};
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'header-renamed', $result['target']['slug'] );
+		$this->assertSame( 'uncategorized', $result['target']['area'] );
+	}
+
+	/**
+	 * A failed post-insert read-back is not a slug collision. Falling into the
+	 * collision arm would delete a row that was almost certainly written
+	 * correctly and report a cause known to be false, so the executor must fail
+	 * closed and LEAVE the row for an operator to reconcile.
+	 */
+	public function test_materialization_read_back_failure_leaves_the_row_and_reports_accurately(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 'wp_template_part' === ( $data['post_type'] ?? '' ) ) {
+					WordPressTestState::$next_get_post_returns_null = true;
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_post_write_read_failed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$deleted_posts, 'A read-back failure must not delete the row.' );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+	}
+
+	/**
+	 * wp_delete_post can return a WP_Post while a pre_delete_post filter
+	 * short-circuits the actual deletion. Trusting the return value would strand
+	 * the duplicate row AND then update the winning row too, so the executor
+	 * must confirm the row is gone and fail closed when it is not.
+	 */
+	public function test_materialization_slug_conflict_fails_closed_when_the_orphan_cannot_be_removed(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		WordPressTestState::$delete_post_short_circuits = true;
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 'wp_template_part' === ( $data['post_type'] ?? '' ) ) {
+					$data['post_name'] = 'header-2';
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_write_failed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'Failing to remove the orphan must not also update a winning row.' );
 	}
 }

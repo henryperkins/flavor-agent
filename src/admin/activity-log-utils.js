@@ -717,10 +717,10 @@ const STRUCTURAL_OPERATION_LABELS = {
 };
 
 const STRUCTURAL_PLACEMENT_LABELS = {
-	start: 'start',
-	end: 'end',
-	before_block_path: 'before',
-	after_block_path: 'after',
+	start: __( 'start', 'flavor-agent' ),
+	end: __( 'end', 'flavor-agent' ),
+	before_block_path: __( 'before', 'flavor-agent' ),
+	after_block_path: __( 'after', 'flavor-agent' ),
 };
 
 function formatStructuralPath( path ) {
@@ -765,13 +765,13 @@ export function formatStructuralOperationSummary( operation = {} ) {
 		parts.push( patternLabel );
 	}
 
-	const placementLabel =
-		STRUCTURAL_PLACEMENT_LABELS[ operation?.placement ] || '';
+	const placement = operation?.placement || '';
+	const placementLabel = STRUCTURAL_PLACEMENT_LABELS[ placement ] || '';
 	const pathLabel = formatStructuralPath( operation?.targetPath );
 
 	let locationLabel;
 
-	if ( placementLabel === 'start' || placementLabel === 'end' ) {
+	if ( placement === 'start' || placement === 'end' ) {
 		locationLabel = placementLabel;
 	} else if ( placementLabel ) {
 		locationLabel = `${ placementLabel } ${ pathLabel }`;
@@ -2537,15 +2537,15 @@ function getGovernanceTargetLabel( entry ) {
 
 function getGovernanceDiagnosticText( entry, details ) {
 	const signatures = details.signatures || {};
+	const baselineRow = signatures.baselineConfigHash
+		? [ 'baselineConfigHash', signatures.baselineConfigHash ]
+		: [ 'baselineContentHash', signatures.baselineContentHash ];
 	const rows = [
 		[ 'activityId', entry?.id || '' ],
 		[ 'requestReference', details.requestReference ],
 		[ 'resolvedContextSignature', signatures.resolvedContextSignature ],
 		[ 'reviewContextSignature', signatures.reviewContextSignature ],
-		[
-			'baselineConfigHash',
-			signatures.baselineConfigHash || signatures.baselineContentHash,
-		],
+		baselineRow,
 	].filter( ( [ , value ] ) => value );
 
 	return rows

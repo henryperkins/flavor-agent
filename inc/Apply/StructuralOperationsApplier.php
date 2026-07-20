@@ -121,6 +121,32 @@ final class StructuralOperationsApplier {
 	}
 
 	/**
+	 * Re-attach request-time expectedTarget fingerprints after live contract
+	 * validation so the apply pass compares against the approved request rather
+	 * than a fingerprint rebuilt from the current tree.
+	 *
+	 * @param array<int, array<string, mixed>> $validated_operations
+	 * @param array<int, mixed>                $requested_operations
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function restore_requested_expected_targets( array $validated_operations, array $requested_operations ): array {
+		foreach ( $validated_operations as $index => $operation ) {
+			$requested = is_array( $requested_operations[ $index ] ?? null )
+				? $requested_operations[ $index ]
+				: [];
+
+			if (
+				null !== self::op_path( $operation )
+				&& is_array( $requested['expectedTarget'] ?? null )
+			) {
+				$validated_operations[ $index ]['expectedTarget'] = $requested['expectedTarget'];
+			}
+		}
+
+		return $validated_operations;
+	}
+
+	/**
 	 * @param array<int, array<string, mixed>> $blocks
 	 * @param array<int, array<string, mixed>> $pattern_blocks
 	 * @return array<int, array<string, mixed>>|\WP_Error

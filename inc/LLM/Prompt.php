@@ -47,12 +47,30 @@ final class Prompt {
 	// than the shared LLM\ThemeTokenFormatter (~20/family + a 2000-char backstop)
 	// used by the document/whole-surface prompts: block recommendations focus on
 	// ONE block, so surfacing more preset choices helps the model pick the best
-	// grounded value. The block theme-token section is non-required (priority 35)
-	// and PromptBudget drops it whole under pressure, so a larger list never
-	// blows the required sections. Keep the two formatters deliberately distinct.
+	// grounded value. Keep the two formatters deliberately distinct.
+	//
+	// The value list is sized by stepping down THEME_TOKEN_PROMPT_STEPS until it
+	// fits THEME_TOKEN_TOKEN_FRACTION of the budget. Item-count reduction rather
+	// than text truncation: a severed preset slug is worse than an omitted one,
+	// because the model completes it and the validator then strips the result.
+	// Every shortened family announces "(showing N of M)" so the model can never
+	// mistake a shortened family for an empty one and take the freeform-value
+	// license that build_system() grants only for genuinely empty families.
 	private const THEME_TOKEN_PROMPT_MAX_ITEMS = 60;
 
 	private const THEME_TOKEN_PROMPT_MAX_MAP_ITEMS = 8;
+
+	/**
+	 * Descending per-family item caps, tried in order until the rendered value
+	 * list fits its share of the prompt budget.
+	 *
+	 * @var array<int, int>
+	 */
+	private const THEME_TOKEN_PROMPT_STEPS = [ 60, 30, 15, 8 ];
+
+	private const THEME_TOKEN_TOKEN_FRACTION = 0.25;
+
+	private const THEME_TOKEN_MIN_TOKENS = 500;
 
 	private const BLOCK_OPERATION_PROMPT_MAX_PATTERNS = 20;
 
@@ -162,9 +180,11 @@ Rules:
 - When structural actions are not described in the prompt, return operations: [].
 - Use "list" for List View tab suggestions.
 - When bindableAttributes are provided, only suggest metadata.bindings changes for those attribute names.
-- Only suggest preset values that exist in the provided themeTokens.
+- Only suggest preset values that exist in the provided theme token values.
 - CSS custom property references like var(--wp--custom--brand-accent) are allowed when they match the theme's live variables.
-- When the relevant preset family is empty in themeTokens, you may fall back to safe raw values for that property (for example hex colors, font sizes, font families, or shadow strings).
+- Preset CSS variables follow a fixed convention, so you can always derive one from a slug: var(--wp--preset--{family}--{slug}), where {family} is exactly one of color, gradient, duotone, font-size, font-family, spacing, shadow. Note the hyphenated spelling — font-size, not fontSize. Example: the slug "accent" in the color family is var(--wp--preset--color--accent). The prompt lists slugs and their values; it does not list a CSS variable for each preset.
+- The Execution contract's presetPolicy is authoritative for which families are closed sets. Fall back to safe raw values (for example hex colors, font sizes, font families, or shadow strings) ONLY for a family listed in presetPolicy.freeformFamilies. For any family in presetPolicy.closedFamilies, always use one of its preset slugs — even if its value list was shortened with "(showing N of M)" or omitted entirely for length.
+- A theme token family that is shortened or absent from the prompt is not an empty family. Never infer that raw values are allowed from the absence of a value list.
 - Use the WordPress Developer Guidance section as authoritative current WordPress context. Do not recommend capabilities, block supports, APIs, or editor workflows that contradict the provided guidance. If the user asks for a current WordPress feature that is absent from the guidance, keep the suggestion conservative and avoid claiming support.
 - If the guidance explicitly marks the user's requested API, workflow, or feature as deprecated, unsupported, experimental, or replaced, warn about that conflict and suggest the documented replacement instead of complying with the stale request.
 - When structural identity is provided, treat it as the block's job on this page. Distinguish role and location from raw block name alone (for example, header navigation vs footer navigation, main query vs sidebar query).
@@ -203,6 +223,24 @@ SYSTEM;
 		array $docs_guidance = [],
 		array $execution_contract = []
 	): string {
+		return self::build_user_with_diagnostics( $context, $prompt, $docs_guidance, $execution_contract )['prompt'];
+	}
+
+	/**
+	 * Build the user prompt and report what the budget had to give up.
+	 *
+	 * Separate from build_user() so the long-standing string return stays intact
+	 * for its many callers, while the ability layer can explain a weak or empty
+	 * recommendation set that was caused by context being trimmed for budget.
+	 *
+	 * @return array{prompt: string, droppedSections: array<int, string>, trimmedSections: array<int, string>, themeTokenItemLimit: int}
+	 */
+	public static function build_user_with_diagnostics(
+		array $context,
+		string $prompt = '',
+		array $docs_guidance = [],
+		array $execution_contract = []
+	): array {
 		$max_tokens = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'block' );
 		$budget     = new PromptBudget( $max_tokens );
 		$block      = $context['block'] ?? [];
@@ -260,6 +298,14 @@ SYSTEM;
 			$parts[] = 'Active style: ' . $block['activeStyle'];
 		}
 
+		// Content attributes are listed before config attributes: in contentOnly
+		// mode they are the only editable surface, and the post-generation filter
+		// judges suggestions against exactly these keys.
+		if ( ! empty( $block['contentAttributes'] ) ) {
+			$parts[] = 'Content attribute schema (role=content): '
+				. self::bounded_prompt_json( $block['contentAttributes'], $budget );
+		}
+
 		if ( ! empty( $block['configAttributes'] ) ) {
 			$parts[] = 'Config attribute schema: ' . wp_json_encode( $block['configAttributes'] );
 		}
@@ -272,6 +318,10 @@ SYSTEM;
 						'styleSupportPaths'        => $execution_contract['styleSupportPaths'] ?? [],
 						'registeredStyles'         => $execution_contract['registeredStyles'] ?? [],
 						'hasExplicitlyEmptyPanels' => ! empty( $execution_contract['hasExplicitlyEmptyPanels'] ),
+						// Lives in the required block section so the closed/freeform
+						// policy survives even when the value inventory is trimmed
+						// or dropped for budget.
+						'presetPolicy'             => self::build_preset_policy( $execution_contract ),
 					],
 					static fn( mixed $value ): bool => [] !== $value && null !== $value && false !== $value
 				)
@@ -339,6 +389,10 @@ SYSTEM;
 				&& empty( $block['contentAttributes'] )
 			) {
 				$parts[] = 'This block exposes editable content through inner blocks via supports.contentRole and has no direct content attributes on its wrapper. Do not suggest direct wrapper attribute changes.';
+			} elseif ( ! empty( $block['contentAttributes'] ) ) {
+				$parts[] = 'Editable content attributes: ' . wp_json_encode(
+					array_values( array_keys( $block['contentAttributes'] ) )
+				);
 			}
 		}
 
@@ -349,63 +403,12 @@ SYSTEM;
 		$budget->add_section( 'block_constraints', implode( "\n", $parts ), 92, $restrictions['contentOnly'] );
 		$parts = [];
 
+		// Theme capabilities and the preset value inventory are separate sections.
+		// enabledFeatures and layout are declared hard capability constraints in
+		// build_system(), so they must not share a droppable section with the
+		// (much larger) value lists: losing "this theme disabled padding" is a
+		// correctness problem, losing "here are 60 colors" is only a grounding one.
 		$parts[] = '## Theme Tokens';
-
-		if ( ! empty( $tokens['colors'] ) ) {
-			$parts[] = 'Colors: ' . implode( ', ', self::limit_prompt_list( $tokens['colors'] ) );
-		}
-
-		if ( ! empty( $tokens['colorPresets'] ) ) {
-			$parts[] = 'Color preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['colorPresets'] ) );
-		}
-
-		if ( ! empty( $tokens['gradients'] ) ) {
-			$parts[] = 'Gradients: ' . implode( ', ', self::limit_prompt_list( $tokens['gradients'] ) );
-		}
-
-		if ( ! empty( $tokens['gradientPresets'] ) ) {
-			$parts[] = 'Gradient preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['gradientPresets'] ) );
-		}
-
-		if ( ! empty( $tokens['fontSizes'] ) ) {
-			$parts[] = 'Font sizes: ' . implode( ', ', self::limit_prompt_list( $tokens['fontSizes'] ) );
-		}
-
-		if ( ! empty( $tokens['fontSizePresets'] ) ) {
-			$parts[] = 'Font size preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['fontSizePresets'] ) );
-		}
-
-		if ( ! empty( $tokens['fontFamilies'] ) ) {
-			$parts[] = 'Font families: ' . implode( ', ', self::limit_prompt_list( $tokens['fontFamilies'] ) );
-		}
-
-		if ( ! empty( $tokens['fontFamilyPresets'] ) ) {
-			$parts[] = 'Font family preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['fontFamilyPresets'] ) );
-		}
-
-		if ( ! empty( $tokens['spacing'] ) ) {
-			$parts[] = 'Spacing: ' . implode( ', ', self::limit_prompt_list( $tokens['spacing'] ) );
-		}
-
-		if ( ! empty( $tokens['spacingPresets'] ) ) {
-			$parts[] = 'Spacing preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['spacingPresets'] ) );
-		}
-
-		if ( ! empty( $tokens['shadows'] ) ) {
-			$parts[] = 'Shadows: ' . implode( ', ', self::limit_prompt_list( $tokens['shadows'] ) );
-		}
-
-		if ( ! empty( $tokens['shadowPresets'] ) ) {
-			$parts[] = 'Shadow preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['shadowPresets'] ) );
-		}
-
-		if ( ! empty( $tokens['duotone'] ) ) {
-			$parts[] = 'Duotone presets: ' . implode( ', ', self::limit_prompt_list( $tokens['duotone'] ) );
-		}
-
-		if ( ! empty( $tokens['duotonePresets'] ) ) {
-			$parts[] = 'Duotone preset details: ' . wp_json_encode( self::limit_prompt_list( $tokens['duotonePresets'] ) );
-		}
 
 		if ( ! empty( $tokens['diagnostics'] ) ) {
 			$parts[] = 'Theme token diagnostics: ' . wp_json_encode( $tokens['diagnostics'] );
@@ -427,8 +430,16 @@ SYSTEM;
 			$parts[] = 'Block pseudo-class styles (hover/focus/active): ' . wp_json_encode( self::limit_prompt_map( $tokens['blockPseudoStyles'] ) );
 		}
 
-		$budget->add_section( 'theme_tokens', implode( "\n", $parts ), 35 );
+		$budget->add_section( 'theme_capabilities', implode( "\n", $parts ), 76 );
 		$parts = [];
+
+		$theme_token_item_limit = self::resolve_theme_token_item_limit( $tokens, $budget );
+
+		$budget->add_section(
+			'theme_token_values',
+			self::format_theme_token_values( $tokens, $theme_token_item_limit ),
+			35
+		);
 
 		$has_sibling_summaries = ! empty( $context['siblingSummariesBefore'] ) || ! empty( $context['siblingSummariesAfter'] );
 		if ( $has_sibling_summaries || ! empty( $context['siblingsBefore'] ) || ! empty( $context['siblingsAfter'] ) ) {
@@ -490,6 +501,20 @@ SYSTEM;
 			$parts = [];
 		}
 
+		$block_interior = self::format_block_interior(
+			is_array( $context['blockInterior'] ?? null ) ? $context['blockInterior'] : [],
+			(int) ( $block['childCount'] ?? 0 )
+		);
+		if ( '' !== $block_interior ) {
+			$parts[] = '## Inside this block';
+			$parts[] = $block_interior;
+			// Above parent (80) and siblings (78): for containers, what is inside
+			// outranks what is beside. Below block_operations (84) and structural
+			// identity (86), which gate whether a suggestion can be applied at all.
+			$budget->add_section( 'block_interior', implode( "\n", $parts ), 82 );
+			$parts = [];
+		}
+
 		$block_operation_context = self::format_block_operation_context(
 			is_array( $context['blockOperationContext'] ?? null ) ? $context['blockOperationContext'] : []
 		);
@@ -542,7 +567,14 @@ SYSTEM;
 			$budget->add_section( 'user_instruction', implode( "\n", $parts ), 98, true );
 		}
 
-		return $budget->assemble();
+		$assembled = $budget->assemble();
+
+		return [
+			'prompt'              => $assembled,
+			'droppedSections'     => $budget->get_dropped_section_keys(),
+			'trimmedSections'     => $budget->get_trimmed_section_keys(),
+			'themeTokenItemLimit' => $theme_token_item_limit,
+		];
 	}
 
 	/**
@@ -580,6 +612,215 @@ SYSTEM;
 		}
 
 		return array_slice( $value, 0, max( 0, $limit ), true );
+	}
+
+	/**
+	 * Theme-token families rendered into the value inventory.
+	 *
+	 * Tuple order: prompt label, structured preset key, pre-flattened fallback
+	 * key, and the preset field holding the family's value.
+	 *
+	 * @var array<int, array{0: string, 1: string, 2: string, 3: string}>
+	 */
+	private const THEME_TOKEN_FAMILIES = [
+		[ 'Colors', 'colorPresets', 'colors', 'color' ],
+		[ 'Gradients', 'gradientPresets', 'gradients', 'gradient' ],
+		[ 'Font sizes', 'fontSizePresets', 'fontSizes', 'size' ],
+		[ 'Font families', 'fontFamilyPresets', 'fontFamilies', 'fontFamily' ],
+		[ 'Spacing', 'spacingPresets', 'spacing', 'size' ],
+		[ 'Shadows', 'shadowPresets', 'shadows', 'shadow' ],
+		[ 'Duotone presets', 'duotonePresets', 'duotone', 'colors' ],
+	];
+
+	/**
+	 * Pick the largest per-family item cap whose rendered output still fits the
+	 * theme-token share of the prompt budget.
+	 */
+	private static function resolve_theme_token_item_limit( array $tokens, PromptBudget $budget ): int {
+		$cap  = max(
+			self::THEME_TOKEN_MIN_TOKENS,
+			(int) floor( $budget->get_max_tokens() * self::THEME_TOKEN_TOKEN_FRACTION )
+		);
+		$last = self::THEME_TOKEN_PROMPT_MAX_ITEMS;
+
+		foreach ( self::THEME_TOKEN_PROMPT_STEPS as $step ) {
+			$last = $step;
+
+			if ( PromptBudget::estimate_tokens( self::format_theme_token_values( $tokens, $step ) ) <= $cap ) {
+				return $step;
+			}
+		}
+
+		// Floor: the smallest step still overflows, so render it anyway and let
+		// PromptBudget decide whether the section survives.
+		return $last;
+	}
+
+	/**
+	 * Render the preset value inventory as flat "slug: value" lists.
+	 */
+	private static function format_theme_token_values( array $tokens, int $item_limit ): string {
+		$lines = [];
+
+		foreach ( self::THEME_TOKEN_FAMILIES as [ $label, $preset_key, $flat_key, $value_key ] ) {
+			$line = self::format_theme_token_family(
+				$label,
+				is_array( $tokens[ $preset_key ] ?? null ) ? $tokens[ $preset_key ] : [],
+				is_array( $tokens[ $flat_key ] ?? null ) ? $tokens[ $flat_key ] : [],
+				$value_key,
+				$item_limit
+			);
+
+			if ( '' !== $line ) {
+				$lines[] = $line;
+			}
+		}
+
+		if ( [] === $lines ) {
+			return '';
+		}
+
+		array_unshift( $lines, '## Theme token values' );
+
+		return implode( "\n", $lines );
+	}
+
+	/**
+	 * Render one preset family, announcing any shortening so the model cannot
+	 * mistake a trimmed family for an absent one.
+	 */
+	private static function format_theme_token_family(
+		string $label,
+		array $presets,
+		array $flat,
+		string $value_key,
+		int $item_limit
+	): string {
+		$limit   = max( 0, $item_limit );
+		$entries = [];
+		$total   = 0;
+
+		if ( [] !== $presets ) {
+			// Prefer the structured presets: they carry values the pre-flattened
+			// list drops (fluid font sizing, every duotone stop).
+			$total = count( $presets );
+
+			foreach ( array_slice( $presets, 0, $limit ) as $preset ) {
+				$entry = is_array( $preset )
+					? self::format_theme_token_entry( $preset, $value_key )
+					: '';
+
+				if ( '' !== $entry ) {
+					$entries[] = $entry;
+				}
+			}
+		}
+
+		// Fall back to the flat list when there is no structured preset array, or
+		// when none of its members were usable. External clients may send preset
+		// families as slug-only scalars; a malformed structured payload must not
+		// suppress a perfectly good flat list and silently blank the family —
+		// which would also read as "family empty" and license raw values.
+		if ( [] === $entries && [] !== $flat ) {
+			$total = count( $flat );
+
+			foreach ( array_slice( $flat, 0, $limit ) as $entry ) {
+				if ( is_scalar( $entry ) && '' !== trim( (string) $entry ) ) {
+					$entries[] = trim( (string) $entry );
+				}
+			}
+		}
+
+		if ( [] === $entries ) {
+			return '';
+		}
+
+		$suffix = $total > count( $entries )
+			? sprintf( ' (showing %d of %d)', count( $entries ), $total )
+			: '';
+
+		return $label . $suffix . ': ' . implode( ', ', $entries );
+	}
+
+	/**
+	 * Format a single preset as "slug: value". CSS custom properties are omitted
+	 * deliberately — build_system() states the derivation convention, so echoing
+	 * one variable per preset would roughly double this section for no new
+	 * information.
+	 */
+	private static function format_theme_token_entry( array $preset, string $value_key ): string {
+		$slug = isset( $preset['slug'] ) && is_scalar( $preset['slug'] )
+			? trim( (string) $preset['slug'] )
+			: '';
+
+		if ( '' === $slug ) {
+			return '';
+		}
+
+		$raw = $preset[ $value_key ] ?? null;
+
+		if ( 'colors' === $value_key ) {
+			$value = is_array( $raw )
+				? implode( ' / ', array_map( 'strval', array_filter( $raw, 'is_scalar' ) ) )
+				: '';
+		} else {
+			$value = is_scalar( $raw ) ? trim( (string) $raw ) : '';
+		}
+
+		if ( '' === $value ) {
+			return $slug;
+		}
+
+		$entry = $slug . ': ' . $value;
+
+		// Fluid sizing exists only on the structured preset. The server collector
+		// keys it `fluid`; the editor collector keys it `fluidSize`.
+		$fluid = $preset['fluid'] ?? $preset['fluidSize'] ?? null;
+
+		if ( is_array( $fluid ) && [] !== $fluid ) {
+			$entry .= ' (fluid: ' . wp_json_encode( $fluid ) . ')';
+		}
+
+		return $entry;
+	}
+
+	/**
+	 * Partition preset families into closed sets and families that permit raw
+	 * values, using the same emptiness predicate the post-generation filter
+	 * applies in preset_type_allows_freeform_fallback(). Deriving both from one
+	 * predicate keeps what the model is told and what it is judged by in step.
+	 *
+	 * @return array<string, array<int, string>>
+	 */
+	private static function build_preset_policy( array $execution_contract ): array {
+		$preset_slugs = $execution_contract['presetSlugs'] ?? null;
+
+		if ( ! is_array( $preset_slugs ) || [] === $preset_slugs ) {
+			return [];
+		}
+
+		$closed   = [];
+		$freeform = [];
+
+		foreach ( $preset_slugs as $family => $slugs ) {
+			if ( ! is_string( $family ) || ! is_array( $slugs ) ) {
+				continue;
+			}
+
+			if ( [] === $slugs ) {
+				$freeform[] = $family;
+			} else {
+				$closed[] = $family;
+			}
+		}
+
+		return array_filter(
+			[
+				'closedFamilies'   => $closed,
+				'freeformFamilies' => $freeform,
+			],
+			static fn( array $families ): bool => [] !== $families
+		);
 	}
 
 	private static function format_structural_ancestors( array $ancestors, array $selected_identity = [] ): string {
@@ -631,7 +872,38 @@ SYSTEM;
 		return implode( "\n", $lines );
 	}
 
-	private static function render_structural_branch_node( array $node, int $depth, array &$lines ): void {
+	/**
+	 * Render the selected block's own subtree.
+	 *
+	 * Separate from the structural branch, which stops at the selected block:
+	 * the branch answers "what neighborhood is this block in?", this answers
+	 * "what is inside it?".
+	 */
+	private static function format_block_interior( array $interior, int $child_count = 0 ): string {
+		if ( empty( $interior ) ) {
+			return '';
+		}
+
+		$lines = [];
+
+		// summarizeTree slices the top level without reporting it, so the
+		// already-normalized childCount is what discloses the shortfall.
+		if ( $child_count > count( $interior ) ) {
+			$lines[] = sprintf(
+				'Showing %d of %d direct children.',
+				count( $interior ),
+				$child_count
+			);
+		}
+
+		foreach ( $interior as $node ) {
+			self::render_structural_branch_node( $node, 0, $lines, true );
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	private static function render_structural_branch_node( array $node, int $depth, array &$lines, bool $include_visual_hints = false ): void {
 		$indent = str_repeat( '  ', $depth );
 		$label  = self::format_structural_label( $node );
 
@@ -643,6 +915,16 @@ SYSTEM;
 			$label .= ' (' . (int) $node['childCount'] . ' children)';
 		}
 
+		if ( $include_visual_hints ) {
+			$hints = self::format_visual_hints(
+				is_array( $node['visualHints'] ?? null ) ? $node['visualHints'] : []
+			);
+
+			if ( '' !== $hints ) {
+				$label .= ' [' . $hints . ']';
+			}
+		}
+
 		if ( ! empty( $node['isSelected'] ) ) {
 			$label .= ' <- selected';
 		}
@@ -651,7 +933,7 @@ SYSTEM;
 
 		if ( ! empty( $node['children'] ) && is_array( $node['children'] ) ) {
 			foreach ( $node['children'] as $child ) {
-				self::render_structural_branch_node( $child, $depth + 1, $lines );
+				self::render_structural_branch_node( $child, $depth + 1, $lines, $include_visual_hints );
 			}
 		}
 

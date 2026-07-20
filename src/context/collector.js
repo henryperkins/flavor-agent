@@ -26,8 +26,11 @@ import {
 	BLOCK_SIBLING_SUMMARY_MAX_ITEMS,
 	BLOCK_STRUCTURAL_BRANCH_MAX_CHILDREN,
 	BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH,
+	BLOCK_INTERIOR_MAX_CHILDREN,
+	BLOCK_INTERIOR_MAX_DEPTH,
 	capBlockStructuralAncestorItems,
 	capBlockStructuralBranchItems,
+	capBlockInteriorItems,
 	buildBlockRecommendationContextSignature,
 } from '../utils/block-recommendation-context';
 import {
@@ -571,9 +574,10 @@ export function collectBlockContext( clientId ) {
 	let blockIdentity = {};
 	let structuralAncestors = [];
 	let branchRoot = null;
+	let selectedNode = null;
 
 	if ( path ) {
-		const selectedNode = path[ path.length - 1 ];
+		selectedNode = path[ path.length - 1 ];
 		blockIdentity = selectedNode?.structuralIdentity || {};
 		structuralAncestors = capBlockStructuralAncestorItems(
 			path.slice( 0, -1 ).map( ( node ) => toStructuralSummary( node ) )
@@ -598,6 +602,10 @@ export function collectBlockContext( clientId ) {
 		? capBlockStructuralBranchItems(
 				summarizeTree( [ branchRoot ], {
 					focusClientId: clientId,
+					// The selected block's interior is described by blockInterior
+					// instead, so the branch answers only "what neighborhood am I
+					// in?" and never disagrees with it about the same subtree.
+					stopAtFocus: true,
 					includeBlockCapabilities: false,
 					includeStructuralIdentity: true,
 					maxChildren: BLOCK_STRUCTURAL_BRANCH_MAX_CHILDREN,
@@ -605,6 +613,21 @@ export function collectBlockContext( clientId ) {
 				} )
 		  )
 		: [];
+
+	// What is inside the selected block. Capabilities are excluded deliberately:
+	// that flag would pull each descendant's `content` into the signature, making
+	// recommendations stale on every keystroke inside a container block — exactly
+	// the blocks this context exists to serve.
+	const blockInterior = capBlockInteriorItems(
+		summarizeTree( selectedNode?.innerBlocks || [], {
+			includeBlockCapabilities: false,
+			includeStructuralIdentity: true,
+			visualHintExtractor: ( attrs ) =>
+				extractVisualHints( attrs, BASE_VISUAL_HINT_PATHS ),
+			maxChildren: BLOCK_INTERIOR_MAX_CHILDREN,
+			maxDepth: BLOCK_INTERIOR_MAX_DEPTH,
+		} )
+	);
 
 	const { summary: tokenSummary } = getCachedThemeTokens();
 	const parentContext = getParentContext(
@@ -663,6 +686,7 @@ export function collectBlockContext( clientId ) {
 		...( parentContext ? { parentContext } : {} ),
 		structuralAncestors,
 		structuralBranch,
+		blockInterior,
 		themeTokens: tokenSummary,
 	};
 

@@ -371,6 +371,8 @@ export function introspectBlockTree(
 export function summarizeTree( tree, options = {}, depth = 0 ) {
 	const {
 		focusClientId = '',
+		stopAtFocus = false,
+		visualHintExtractor = null,
 		includeBlockCapabilities = true,
 		includeStructuralIdentity = false,
 		maxChildren = Number.POSITIVE_INFINITY,
@@ -433,7 +435,18 @@ export function summarizeTree( tree, options = {}, depth = 0 ) {
 			}
 		}
 
-		if ( focusClientId && node.clientId === focusClientId ) {
+		if ( typeof visualHintExtractor === 'function' ) {
+			const hints = visualHintExtractor( node.currentAttributes );
+
+			if ( hints && Object.keys( hints ).length ) {
+				summary.visualHints = hints;
+			}
+		}
+
+		const isFocusNode =
+			Boolean( focusClientId ) && node.clientId === focusClientId;
+
+		if ( isFocusNode ) {
 			summary.isSelected = true;
 		}
 
@@ -441,7 +454,16 @@ export function summarizeTree( tree, options = {}, depth = 0 ) {
 			summary.childCount = node.childCount;
 		}
 
-		if ( depth + 1 < maxDepth && node.innerBlocks.length ) {
+		// Stop at the focus node when its interior is rendered by a dedicated
+		// section. Two descriptions of one subtree, summarized at different caps,
+		// would disagree inside a single prompt. childCount still reports size,
+		// and moreChildren is deliberately not set: these children are shown
+		// elsewhere, not hidden.
+		if (
+			! ( isFocusNode && stopAtFocus ) &&
+			depth + 1 < maxDepth &&
+			node.innerBlocks.length
+		) {
 			const children = node.innerBlocks.slice( 0, maxChildren );
 
 			summary.children = summarizeTree( children, options, depth + 1 );

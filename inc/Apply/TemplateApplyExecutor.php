@@ -91,7 +91,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
-		$executable_operations = self::restore_requested_expected_targets(
+		$executable_operations = StructuralOperationsApplier::restore_requested_expected_targets(
 			$validated['operations'],
 			$operations
 		);
@@ -112,7 +112,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			return $fresh;
 		}
 
-		$persisted = self::persist( $fresh, $after_content );
+		$persisted = self::persist( $fresh, $after_content, $before_hash );
 
 		if ( is_wp_error( $persisted ) ) {
 			return $persisted;
@@ -125,11 +125,14 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 		}
 
 		return [
+			// Identity comes from the re-gated entity, not the start-of-execute
+			// read: this is the value that lands in the activity row and the
+			// Ring III attestation subject, so it must describe what was written.
 			'target' => [
-				'templateRef'  => (string) ( $template->id ?? $ref ),
+				'templateRef'  => (string) ( $fresh->id ?? $ref ),
 				'templateType' => $type,
-				'slug'         => (string) ( $template->slug ?? '' ),
-				'title'        => (string) ( $template->title ?? '' ),
+				'slug'         => (string) ( $fresh->slug ?? '' ),
+				'title'        => (string) ( $fresh->title ?? '' ),
 			],
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
@@ -235,7 +238,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			return $fresh;
 		}
 
-		$persisted = self::persist( $fresh, (string) $before['content'] );
+		$persisted = self::persist( $fresh, (string) $before['content'], $live_hash );
 
 		if ( is_wp_error( $persisted ) ) {
 			return $persisted;
@@ -340,41 +343,6 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	}
 
 	/**
-	 * @param array<string, mixed> $operation
-	 * @return int[]|null
-	 */
-	private static function op_path( array $operation ): ?array {
-		return StructuralOperationsApplier::op_path( $operation );
-	}
-
-	/**
-	 * Re-attach the stored expectedTarget fingerprints after live contract
-	 * re-validation so execute() still enforces drift against the approved row,
-	 * not the freshly rebuilt lookup snapshot.
-	 *
-	 * @param array<int, array<string, mixed>> $validated_operations
-	 * @param array<int, mixed>                $requested_operations
-	 * @return array<int, array<string, mixed>>
-	 */
-	private static function restore_requested_expected_targets( array $validated_operations, array $requested_operations ): array {
-		foreach ( $validated_operations as $index => $operation ) {
-			$requested = is_array( $requested_operations[ $index ] ?? null )
-				? $requested_operations[ $index ]
-				: [];
-
-			if (
-				null !== self::op_path( $operation )
-				&& is_array( $requested['expectedTarget'] ?? null )
-			) {
-				$validated_operations[ $index ]['expectedTarget'] = $requested['expectedTarget'];
-			}
-		}
-
-		return $validated_operations;
-	}
-
-
-	/**
 	 * Persist the mutated content: update a DB-backed template in place, or
 	 * materialize a theme-file template into a wp_template post on first apply.
 	 * Receives the entity re-resolved by the concurrency gate, so a same-content
@@ -383,7 +351,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @return int|\WP_Error The persisted post id.
 	 */
-	private static function persist( object $template, string $content ): int|\WP_Error {
+	private static function persist( object $template, string $content, string $expected_hash ): int|\WP_Error {
 		$wp_id = (int) ( $template->wp_id ?? 0 );
 
 		if ( $wp_id > 0 ) {
@@ -412,7 +380,14 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			return (int) $updated;
 		}
 
-		$slug       = sanitize_key( (string) ( $template->slug ?? '' ) );
+		// Normalize through core's own post_name normalizer so the post-insert
+		// read-back compares like with like. sanitize_key() keeps `--` and edge
+		// dashes that sanitize_title() -- which wp_insert_post applies to
+		// post_name -- collapses and trims; that divergence reads as a phantom
+		// slug collision. sanitize_title() is idempotent on its own output, so
+		// this is exactly what core will store, and it is also what
+		// reconcile_existing_row() must probe with.
+		$slug       = sanitize_title( sanitize_key( (string) ( $template->slug ?? '' ) ) );
 		$stylesheet = function_exists( 'get_stylesheet' ) ? sanitize_key( (string) get_stylesheet() ) : '';
 
 		if ( '' === $slug || '' === $stylesheet ) {
@@ -424,15 +399,12 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 		}
 
 		// Duplicate-row guard: if a wp_template post already exists for this
-		// slug + theme (a concurrent materialization), update it in place.
-		$existing = get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template' );
+		// slug + theme (a concurrent materialization), reconcile against it
+		// instead of inserting a second row or blind-overwriting its content.
+		$reconciled = self::reconcile_existing_row( $slug, $content, $expected_hash );
 
-		foreach ( $existing as $candidate ) {
-			$candidate_wp_id = (int) ( $candidate->wp_id ?? 0 );
-
-			if ( $candidate_wp_id > 0 ) {
-				return self::persist( (object) [ 'wp_id' => $candidate_wp_id ], $content );
-			}
+		if ( null !== $reconciled ) {
+			return $reconciled;
 		}
 
 		$post_id = wp_insert_post(
@@ -461,9 +433,105 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
+		// Core scopes wp_template slug uniqueness to the active theme, so a suffixed
+		// slug means another row already owns slug + theme. Drop the orphan we just
+		// created, then decide what actually owns it.
+		$inserted = get_post( (int) $post_id );
+
+		// A failed read-back is not a slug collision. Falling into the collision
+		// arm would delete a row that was almost certainly written correctly and
+		// report a cause we know to be false, so fail closed and leave the row --
+		// matching execute()'s existing post-persist read-back contract.
+		if ( ! is_object( $inserted ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_post_write_read_failed',
+				'Flavor Agent materialized the template but could not confirm its stored slug.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$inserted_slug = (string) ( $inserted->post_name ?? '' );
+
+		if ( $slug !== $inserted_slug ) {
+			$deleted = wp_delete_post( (int) $post_id, true );
+
+			// wp_delete_post returns the deleted post, or false/null on failure --
+			// but a pre_delete_post filter can short-circuit deletion while still
+			// returning a WP_Post. Confirm the row is actually gone rather than
+			// trusting the return value: otherwise we strand the duplicate here
+			// and then also update the winning row below.
+			if ( ! $deleted || is_object( get_post( (int) $post_id ) ) ) {
+				return new \WP_Error(
+					'flavor_agent_apply_write_failed',
+					'Flavor Agent detected a template slug collision but could not remove the duplicate row.',
+					[ 'status' => 500 ]
+				);
+			}
+
+			// A row that raced us to publish is visible now; reconcile against it.
+			$reconciled = self::reconcile_existing_row( $slug, $content, $expected_hash );
+
+			if ( null !== $reconciled ) {
+				return $reconciled;
+			}
+
+			// Nothing published owns the slug, so this is not concurrency. Core's
+			// uniquifier also counts non-published rows that the publish-only probe
+			// cannot see. Report the real cause instead of phantom concurrency.
+			return new \WP_Error(
+				'flavor_agent_apply_slug_conflict',
+				'Another template already uses this slug for the active theme. Resolve the conflicting template before applying.',
+				[ 'status' => 409 ]
+			);
+		}
+
 		self::invalidate_template_cache( (int) $post_id );
 
 		return (int) $post_id;
+	}
+
+	/**
+	 * Reconcile a first materialization against a wp_template row that another
+	 * actor created for the same slug + theme between our read and our write.
+	 *
+	 * Returns null when no materialized row owns the slug, so the caller may
+	 * insert. Otherwise accepts an already-desired state idempotently, fails
+	 * closed when the row diverged from the baseline we validated against, and
+	 * updates in place when it still matches that baseline.
+	 *
+	 * @return int|\WP_Error|null
+	 */
+	private static function reconcile_existing_row( string $slug, string $content, string $expected_hash ): int|\WP_Error|null {
+		$existing = get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template' );
+
+		foreach ( $existing as $candidate ) {
+			$candidate_wp_id = (int) ( $candidate->wp_id ?? 0 );
+
+			if ( $candidate_wp_id <= 0 ) {
+				continue;
+			}
+
+			$candidate_hash = self::content_hash( (string) ( $candidate->content ?? '' ) );
+
+			// Already the state we intended to write: accept without rewriting.
+			if ( hash_equals( self::content_hash( $content ), $candidate_hash ) ) {
+				return $candidate_wp_id;
+			}
+
+			// Diverged from the baseline this apply was validated against, so the
+			// operations were never checked against what is actually stored.
+			if ( ! hash_equals( $expected_hash, $candidate_hash ) ) {
+				return new \WP_Error(
+					'flavor_agent_apply_target_changed',
+					'The template changed while Flavor Agent was materializing it. Regenerate the request and try again.',
+					[ 'status' => 409 ]
+				);
+			}
+
+			return self::persist( (object) [ 'wp_id' => $candidate_wp_id ], $content, $expected_hash );
+		}
+
+		return null;
 	}
 
 	private static function resolve_persisted_content( int $post_id ): string|\WP_Error {

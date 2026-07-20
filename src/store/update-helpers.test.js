@@ -1816,6 +1816,72 @@ describe( 'update helpers', () => {
 		);
 	} );
 
+	test( 'buildBlockRecommendationDiagnostics reports context dropped for prompt budget', () => {
+		const rawRecommendations = {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: '',
+			preFilteringCounts: { settings: 0, styles: 0, block: 0 },
+			promptDiagnostics: {
+				droppedSections: [ 'theme_token_values' ],
+				trimmedSections: [],
+				themeTokenItemLimit: 8,
+			},
+		};
+		const sanitizedRecommendations = sanitizeRecommendationsForContext(
+			rawRecommendations,
+			{ editingMode: 'default' }
+		);
+
+		const diagnostics = buildBlockRecommendationDiagnostics(
+			rawRecommendations,
+			sanitizedRecommendations,
+			{ editingMode: 'default' }
+		);
+
+		expect( diagnostics.reasonCodes ).toContain(
+			'prompt_budget_dropped_context'
+		);
+		expect( diagnostics.detailLines ).toEqual(
+			expect.arrayContaining( [
+				expect.stringContaining( 'theme_token_values' ),
+			] )
+		);
+		// The pre-existing reason must still be reported; the budget notice is
+		// additive, not a replacement.
+		expect( diagnostics.reasonCodes ).toContain(
+			'model_returned_no_block_items'
+		);
+	} );
+
+	test( 'buildBlockRecommendationDiagnostics omits the budget notice when nothing was dropped', () => {
+		const rawRecommendations = {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: '',
+			preFilteringCounts: { settings: 0, styles: 0, block: 0 },
+			promptDiagnostics: {
+				droppedSections: [],
+				trimmedSections: [],
+				themeTokenItemLimit: 60,
+			},
+		};
+		const sanitizedRecommendations = sanitizeRecommendationsForContext(
+			rawRecommendations,
+			{ editingMode: 'default' }
+		);
+
+		expect(
+			buildBlockRecommendationDiagnostics(
+				rawRecommendations,
+				sanitizedRecommendations,
+				{ editingMode: 'default' }
+			).reasonCodes
+		).not.toContain( 'prompt_budget_dropped_context' );
+	} );
+
 	test( 'buildBlockRecommendationDiagnostics falls back to rawCounts when preFilteringCounts is absent', () => {
 		const rawRecommendations = {
 			settings: [],

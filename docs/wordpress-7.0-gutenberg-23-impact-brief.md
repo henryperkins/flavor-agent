@@ -119,9 +119,9 @@ Action:
 - Avoid assuming that new Gutenberg 23.x plugin APIs or UI details are available in every WordPress 7.0 environment.
 - For the 23.4 changes specifically, keep Flavor Agent's readiness logic based on the WordPress AI Client probe path, treat React 19 as an experiment-gated smoke target, and verify the Pattern Inserter / Navigation submenu / AI Activity / Global Styles surfaces in a representative Gutenberg-plugin runtime.
 
-### 2. Update the WP 7.0 harness image when the stable Docker image exists
+### 2. WP 7.0 harness image updated to the stable Docker image
 
-The repo still pins the Docker-backed WP 7.0 harness to a pre-release image via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the current pinned tag and override instructions live in `docs/reference/local-environment-setup.md`.
+Done: the Docker-backed WP 7.0 harness now pins the exact stable image `wordpress:7.0.0-php8.2-apache` via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the current pinned tag and override instructions live in `docs/reference/local-environment-setup.md`.
 
 Grounding:
 

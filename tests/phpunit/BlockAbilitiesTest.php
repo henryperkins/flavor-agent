@@ -662,6 +662,183 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_prepare_recommend_block_input_normalizes_block_interior(): void {
+		$children = [];
+		for ( $index = 0; $index < 12; $index++ ) {
+			$children[] = [
+				'block' => 'core/paragraph',
+				'title' => 'Paragraph ' . $index,
+			];
+		}
+
+		$interior = [];
+		for ( $index = 0; $index < 12; $index++ ) {
+			$interior[] = [
+				'block'            => 'core/column',
+				'title'            => 'Column ' . $index,
+				'children'         => $children,
+				'visualHints'      => [
+					'backgroundColor' => 'base',
+					'bogusHint'       => 'dropped',
+				],
+				'templateArea'     => 'header',
+				'templatePartSlug' => 'header',
+				'isSelected'       => true,
+			];
+		}
+
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block'         => [ 'name' => 'core/group' ],
+					'blockInterior' => $interior,
+				],
+			]
+		);
+
+		$normalized = $prepared['context']['blockInterior'] ?? [];
+
+		$this->assertCount( 8, $normalized, 'Top-level interior items are capped at 8.' );
+		$this->assertCount( 8, $normalized[0]['children'] ?? [], 'Per-node children are capped at 8.' );
+		$this->assertSame( 4, $normalized[0]['moreChildren'] ?? null, 'Hidden children are rolled up.' );
+		$this->assertSame(
+			[ 'backgroundColor' => 'base' ],
+			$normalized[0]['visualHints'] ?? null,
+			'Visual hints are narrowed to the shared allowlist.'
+		);
+		// Placement fields belong to the selected block, not its descendants.
+		$this->assertArrayNotHasKey( 'templateArea', $normalized[0] );
+		$this->assertArrayNotHasKey( 'templatePartSlug', $normalized[0] );
+		$this->assertArrayNotHasKey( 'isSelected', $normalized[0] );
+	}
+
+	public function test_prepare_recommend_block_input_derives_interior_from_selected_block_inner_blocks(): void {
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'selectedBlock' => [
+					'blockName'   => 'core/group',
+					'attributes'  => [],
+					'innerBlocks' => [
+						[
+							'blockName'   => 'core/heading',
+							'attrs'       => [ 'textColor' => 'contrast' ],
+							'innerBlocks' => [],
+						],
+						[
+							'blockName'   => 'core/columns',
+							'attrs'       => [],
+							'innerBlocks' => [
+								[
+									'blockName'   => 'core/column',
+									'attrs'       => [],
+									'innerBlocks' => [],
+								],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$interior = $prepared['context']['blockInterior'] ?? [];
+
+		$this->assertCount( 2, $interior );
+		$this->assertSame( 'core/heading', $interior[0]['block'] ?? null );
+		$this->assertSame( [ 'textColor' => 'contrast' ], $interior[0]['visualHints'] ?? null );
+		$this->assertSame( 1, $interior[1]['childCount'] ?? null );
+		$this->assertSame( 'core/column', $interior[1]['children'][0]['block'] ?? null );
+	}
+
+	public function test_recommend_block_reports_prompt_diagnostics_when_context_is_dropped(): void {
+		$this->configure_text_generation_connector();
+		WordPressTestState::$transients = [];
+		$this->route_docs_grounding_search( [] );
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Nothing to suggest.',
+			]
+		);
+
+		// Preset values too bulky to render at any ladder step, so the inventory
+		// is dropped outright and the operator can be told why.
+		$bulky = [];
+		for ( $index = 0; $index < 40; $index++ ) {
+			$bulky[] = sprintf( 'color-%02d: %s', $index, str_repeat( 'x', 4000 ) );
+		}
+
+		$budget_filter = static fn(): int => 2000;
+		add_filter( 'flavor_agent_prompt_budget_max_tokens', $budget_filter, 10 );
+
+		try {
+			$result = BlockAbilities::recommend_block(
+				[
+					'editorContext' => [
+						'block'       => [
+							'name'              => 'core/paragraph',
+							'currentAttributes' => [ 'content' => 'Hello world' ],
+						],
+						'themeTokens' => [ 'colors' => $bulky ],
+					],
+				]
+			);
+		} finally {
+			remove_filter( 'flavor_agent_prompt_budget_max_tokens', $budget_filter, 10 );
+		}
+
+		$this->assertIsArray( $result );
+		$this->assertContains(
+			'theme_token_values',
+			$result['promptDiagnostics']['droppedSections'] ?? []
+		);
+		$this->assertSame( 8, $result['promptDiagnostics']['themeTokenItemLimit'] ?? null );
+	}
+
+	public function test_recommend_block_reports_empty_prompt_diagnostics_when_everything_fits(): void {
+		$this->configure_text_generation_connector();
+		WordPressTestState::$transients = [];
+		$this->route_docs_grounding_search( [] );
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Nothing to suggest.',
+			]
+		);
+
+		$result = BlockAbilities::recommend_block(
+			[
+				'editorContext' => [
+					'block'       => [ 'name' => 'core/paragraph' ],
+					'themeTokens' => [ 'colors' => [ 'accent: #ff5500' ] ],
+				],
+			]
+		);
+
+		$this->assertSame( [], $result['promptDiagnostics']['droppedSections'] ?? null );
+		$this->assertSame( [], $result['promptDiagnostics']['trimmedSections'] ?? null );
+	}
+
+	public function test_recommend_block_omits_prompt_diagnostics_when_editing_is_disabled(): void {
+		$result = BlockAbilities::recommend_block(
+			[
+				'selectedBlock' => [
+					'blockName'   => 'core/paragraph',
+					'attributes'  => [ 'content' => 'Hello world' ],
+					'editingMode' => 'disabled',
+				],
+			]
+		);
+
+		// No prompt was built on this path, so the key is absent rather than
+		// claiming nothing was dropped.
+		$this->assertIsArray( $result );
+		$this->assertArrayNotHasKey( 'promptDiagnostics', $result );
+	}
+
 	public function test_recommend_block_proceeds_when_docs_grounding_is_empty(): void {
 		$this->configure_text_generation_connector();
 		WordPressTestState::$transients = [];

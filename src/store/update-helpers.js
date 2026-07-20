@@ -2272,6 +2272,26 @@ export function buildBlockRecommendationDiagnostics(
 		);
 	}
 
+	// Standalone on purpose: folding this into the `reasonCodes.length === 0`
+	// branch above would suppress the block_items_removed_after_validation
+	// fallback. Note this function returns early when block suggestions survived,
+	// so a dropped-context notice only reaches the operator on an empty result —
+	// surfacing it on successful-but-less-grounded results needs a separate path.
+	const droppedPromptSections = Array.isArray(
+		rawRecommendations?.promptDiagnostics?.droppedSections
+	)
+		? rawRecommendations.promptDiagnostics.droppedSections
+		: [];
+
+	if ( droppedPromptSections.length > 0 ) {
+		reasonCodes.push( 'prompt_budget_dropped_context' );
+		detailLines.push(
+			`Part of the editor context did not fit the prompt budget (dropped: ${ droppedPromptSections.join(
+				', '
+			) }). Suggestions may be less grounded in your theme.`
+		);
+	}
+
 	return {
 		hasEmptyBlockResult: true,
 		title:

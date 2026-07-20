@@ -5,7 +5,7 @@
 ### Flavor Agent — governance layer for AI-mediated WordPress changes
 
 **Role:** Builder / AI systems engineer / WordPress product engineer
-**Status:** `0.1.0` release candidate / pre-tag
+**Status:** `0.1.0` release candidates published through `v0.1.0-rc.3`; no final `0.1.0` tag yet, with release gates still pending on the tagged commit
 **Core stack:** WordPress plugin, PHP 8.2, Gutenberg, Site Editor, WordPress Abilities API, MCP, WordPress REST for activity/decisions/sync/attestation, Ed25519 site-key attestations, `@wordpress/*` packages (React), DataViews, PHPUnit, Jest, Playwright
 **Retrieval & grounding (optional infrastructure):** WordPress AI Client / Connectors for text generation; optional Cloudflare AI Search for private pattern retrieval and WordPress developer-doc grounding; optional Cloudflare Workers AI embeddings plus Qdrant for vector-backed pattern retrieval
 **License:** GPL-2.0-or-later
@@ -201,7 +201,7 @@ Editor / MCP client
 
 **Proof**
 
-- `0.1.0` release candidate / pre-tag.
+- `0.1.0` release candidates published through `v0.1.0-rc.3`; no final `0.1.0` tag yet.
 - 35 defined ability contracts.
 - Server-backed activity table.
 - Admin approval flow for external style, template, template-part, and post-blocks applies.
@@ -243,7 +243,7 @@ It lets AI propose block, pattern, content, template, template-part, navigation,
 
 The key design principle is: AI proposes; WordPress approves.
 
-**Status:** `0.1.0` release candidate / pre-tag.
+**Status:** `0.1.0` release candidates published through `v0.1.0-rc.3`; no final `0.1.0` tag yet, with release gates still pending on the tagged commit.
 
 ## What I built
 

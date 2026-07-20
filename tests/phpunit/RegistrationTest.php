@@ -615,6 +615,7 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/request-style-apply',
 			'flavor-agent/request-template-part-apply',
 			'flavor-agent/request-template-apply',
+			'flavor-agent/request-post-blocks-apply',
 			'flavor-agent/get-activity',
 			'flavor-agent/list-activity',
 			'flavor-agent/undo-activity',
@@ -637,7 +638,27 @@ final class RegistrationTest extends TestCase {
 			WordPressTestState::$registered_abilities
 		);
 		$this->assertArrayNotHasKey(
+			'flavor-agent/request-template-part-apply',
+			WordPressTestState::$registered_abilities
+		);
+		$this->assertArrayNotHasKey(
 			'flavor-agent/request-template-apply',
+			WordPressTestState::$registered_abilities
+		);
+		$this->assertArrayNotHasKey(
+			'flavor-agent/request-post-blocks-apply',
+			WordPressTestState::$registered_abilities
+		);
+		$this->assertArrayNotHasKey(
+			'flavor-agent/get-activity',
+			WordPressTestState::$registered_abilities
+		);
+		$this->assertArrayNotHasKey(
+			'flavor-agent/list-activity',
+			WordPressTestState::$registered_abilities
+		);
+		$this->assertArrayNotHasKey(
+			'flavor-agent/undo-activity',
 			WordPressTestState::$registered_abilities
 		);
 	}

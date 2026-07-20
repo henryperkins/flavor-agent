@@ -18,8 +18,10 @@ use FlavorAgent\LLM\PostBlocksPrompt;
  * exclusion), re-verify each op's expectedTarget fingerprint, mutate the
  * parsed block tree atomically through the shared StructuralOperationsApplier,
  * persist via wp_update_post, and snapshot before/after post_content. Any
- * drift fails closed with zero writes. No attestation — the attestation lane
- * is hard-bounded to external-style-apply-v1.
+ * drift fails closed with zero writes. No attestation: Ring III now covers the
+ * style, template, and template-part lanes, but post-blocks stays excluded
+ * because its non-public post_content is incompatible with the public
+ * subject-state contract an attestation verifier has to be able to re-read.
  */
 final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 
@@ -74,7 +76,12 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
-		$blocks = StructuralOperationsApplier::apply_operations( parse_blocks( $before_content ), $validated['operations'] );
+		$executable_operations = StructuralOperationsApplier::restore_requested_expected_targets(
+			$validated['operations'],
+			$operations
+		);
+
+		$blocks = StructuralOperationsApplier::apply_operations( parse_blocks( $before_content ), $executable_operations );
 
 		if ( is_wp_error( $blocks ) ) {
 			return $blocks;
@@ -98,6 +105,12 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 			return $persisted;
 		}
 
+		$persisted_content = self::resolve_persisted_content( $persisted );
+
+		if ( is_wp_error( $persisted_content ) ) {
+			return $persisted_content;
+		}
+
 		return [
 			'target' => [
 				'postId'   => $post_id,
@@ -106,10 +119,41 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 			],
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
-				'content'    => $after_content,
-				'operations' => $validated['operations'],
+				// The read-back, not the locally serialized string: see
+				// resolve_persisted_content() for why recording the latter makes
+				// the apply permanently unrevertable.
+				'content'    => $persisted_content,
+				'operations' => $executable_operations,
 			],
 		];
+	}
+
+	/**
+	 * Read back what wp_update_post actually stored.
+	 *
+	 * A save filter can rewrite post_content on write — wp_filter_post_kses runs
+	 * whenever the approving user lacks unfiltered_html (every non-super-admin on
+	 * multisite, and everyone under DISALLOW_UNFILTERED_HTML), and any third-party
+	 * content_save_pre / wp_insert_post_data filter has the same effect. Recording
+	 * the locally serialized string instead would leave the activity row
+	 * describing content that is not on the site, and undo's
+	 * hash_equals( $live_hash, $after_hash ) guard would never match again, so the
+	 * governed apply could never be reversed through the plugin's own undo path.
+	 *
+	 * Parity with TemplateApplyExecutor / TemplatePartApplyExecutor.
+	 */
+	private static function resolve_persisted_content( int $post_id ): string|\WP_Error {
+		$post = $post_id > 0 && function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+
+		if ( ! is_object( $post ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_post_write_read_failed',
+				'Flavor Agent wrote the post but could not confirm its persisted content.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		return (string) ( $post->post_content ?? '' );
 	}
 
 	/**

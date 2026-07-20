@@ -110,6 +110,104 @@ final class PostBlocksApplyExecutorTest extends TestCase {
 	// execute — success matrix
 	// ---------------------------------------------------------------------
 
+	/**
+	 * Pins the recorded after-snapshot to what wp_update_post actually stored.
+	 *
+	 * wp_filter_post_kses runs whenever the approving user lacks unfiltered_html
+	 * — every non-super-admin on multisite, and everyone under
+	 * DISALLOW_UNFILTERED_HTML — and it rewrites ordinary block markup (real
+	 * wp_kses_post normalizes `<img ... />`). Recording the locally serialized
+	 * string instead leaves the activity row describing content that is not on
+	 * the site, and undo's hash_equals( live, after ) guard can then never match.
+	 */
+	public function test_execute_records_the_persisted_content_after_a_save_filter_changes_it(): void {
+		$content = $this->paragraph( 'Keep' ) . $this->paragraph( 'Drop' );
+		$this->seed_post( 9350, $content );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$data['post_content'] = str_replace( '>Keep<', '>Keep saved<', (string) $data['post_content'] );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = PostBlocksApplyExecutor::execute(
+			$this->entry(
+				9350,
+				[
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 1 ],
+						'expectedBlockName' => 'core/paragraph',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			$this->live_content( 9350 ),
+			$result['after']['content'],
+			'The recorded after-snapshot must equal live content, or undo can never match it.'
+		);
+		$this->assertStringContainsString( 'Keep saved', $result['after']['content'] );
+	}
+
+	/**
+	 * The consequence of the above: undo must still reverse a governed apply on a
+	 * site whose save pipeline rewrites content. Before the read-back this
+	 * returned flavor_agent_undo_drift permanently.
+	 */
+	public function test_undo_succeeds_when_a_save_filter_rewrote_the_applied_content(): void {
+		$content = $this->paragraph( 'Keep' ) . $this->paragraph( 'Drop' );
+		$this->seed_post( 9351, $content );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$data['post_content'] = str_replace( '>Keep<', '>Keep saved<', (string) $data['post_content'] );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$executed = PostBlocksApplyExecutor::execute(
+			$this->entry(
+				9351,
+				[
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 1 ],
+						'expectedBlockName' => 'core/paragraph',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $executed );
+
+		$undone = PostBlocksApplyExecutor::undo(
+			self::executed_entry(
+				9351,
+				(string) $executed['before']['content'],
+				(string) $executed['after']['content']
+			)
+		);
+
+		$this->assertIsArray( $undone, 'Undo must not report drift for a change the save pipeline itself made.' );
+		$this->assertSame( 'undone', $undone['result'] ?? null );
+	}
+
 	public function test_execute_removes_a_block(): void {
 		$content = $this->paragraph( 'Keep' ) . $this->paragraph( 'Drop' );
 		$this->seed_post( 9301, $content );
@@ -295,6 +393,35 @@ final class PostBlocksApplyExecutorTest extends TestCase {
 		$codes = array_column( (array) ( $result->get_error_data()['validationReasons'] ?? [] ), 'code' );
 		$this->assertContains( 'target_locked', $codes );
 		$this->assertSame( $content, $this->live_content( 9307 ) );
+	}
+
+	public function test_execute_enforces_the_request_time_expected_target(): void {
+		$content = '<!-- wp:group -->'
+			. $this->paragraph( 'Child' )
+			. '<!-- /wp:group -->';
+		$this->seed_post( 9308, $content );
+
+		$result = PostBlocksApplyExecutor::execute(
+			$this->entry(
+				9308,
+				[
+					[
+						'type'              => 'remove_block',
+						'targetPath'        => [ 0 ],
+						'expectedBlockName' => 'core/group',
+						'expectedTarget'    => [
+							'name'       => 'core/group',
+							'childCount' => 0,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( $content, $this->live_content( 9308 ) );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
 	}
 
 	public function test_execute_rejects_wrong_post_type_with_zero_writes(): void {

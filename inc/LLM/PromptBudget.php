@@ -56,6 +56,21 @@ final class PromptBudget {
 	private array $sections = [];
 
 	/**
+	 * Section keys dropped by the most recent assemble() call, in drop order.
+	 * Sections that were dropped and then restored by backfill are not listed.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $dropped_section_keys = [];
+
+	/**
+	 * Section keys partially retained (trimmed) by the most recent assemble().
+	 *
+	 * @var array<int, string>
+	 */
+	private array $trimmed_section_keys = [];
+
+	/**
 	 * @param int $max_tokens Maximum token budget (0 uses the default).
 	 */
 	public function __construct( int $max_tokens = 0 ) {
@@ -185,29 +200,118 @@ final class PromptBudget {
 	 * @return string Assembled prompt with sections joined by double newlines.
 	 */
 	public function assemble(): string {
+		$this->dropped_section_keys = [];
+		$this->trimmed_section_keys = [];
+
+		// Keyed by original insertion index so dropping (unset) and restoring
+		// (re-assign + ksort) both preserve the documented section order.
 		$included = $this->sections;
+		$dropped  = [];
 
 		while ( count( $included ) > 1 ) {
 			$assembled = self::join_sections( $included );
 			if ( self::estimate_tokens( $assembled ) <= $this->max_tokens ) {
+				$included = self::backfill_dropped_sections( $included, $dropped, $this->max_tokens );
+				$this->record_dropped_sections( $dropped, $included );
+
+				return self::join_sections( $included );
+			}
+
+			$lowest_key = self::get_lowest_priority_removable_key( $included );
+			if ( null === $lowest_key ) {
+				// Only required sections remain and they still overflow. Restoring
+				// anything would push an already-over-budget prompt further out.
+				$this->record_dropped_sections( $dropped, $included );
+
 				return $assembled;
 			}
 
-			$lowest_index = self::get_lowest_priority_removable_index( $included );
-			if ( null === $lowest_index ) {
-				return $assembled;
-			}
-
-			$trimmed = self::trim_section_to_remaining_budget( $included, $lowest_index, $this->max_tokens );
+			$trimmed = self::trim_section_to_remaining_budget( $included, $lowest_key, $this->max_tokens );
 			if ( null !== $trimmed ) {
+				// Partial retention deliberately spends the budget down to the cap.
+				// Backfilling into its rounding slack would change trim semantics.
+				$this->trimmed_section_keys[] = $included[ $lowest_key ]['key'];
+				$this->record_dropped_sections( $dropped, $included );
+
 				return $trimmed;
 			}
 
-			array_splice( $included, $lowest_index, 1 );
+			$dropped[ $lowest_key ] = $included[ $lowest_key ];
+			unset( $included[ $lowest_key ] );
 		}
+
+		$included = self::backfill_dropped_sections( $included, $dropped, $this->max_tokens );
+		$this->record_dropped_sections( $dropped, $included );
 
 		// Single section or empty — return as-is, even if still over budget.
 		return self::join_sections( $included );
+	}
+
+	/**
+	 * Section keys dropped by the most recent assemble() call.
+	 *
+	 * @return array<int, string>
+	 */
+	public function get_dropped_section_keys(): array {
+		return $this->dropped_section_keys;
+	}
+
+	/**
+	 * Section keys partially retained by the most recent assemble() call.
+	 *
+	 * @return array<int, string>
+	 */
+	public function get_trimmed_section_keys(): array {
+		return $this->trimmed_section_keys;
+	}
+
+	/**
+	 * Restore dropped sections that fit once a larger section has been removed.
+	 *
+	 * Without this, the greedy one-way drop loop discards small low-priority
+	 * sections that would comfortably fit after a much larger one is gone —
+	 * leaving budget unused and context lost for no benefit.
+	 *
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $included
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $dropped
+	 * @return array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}>
+	 */
+	private static function backfill_dropped_sections( array $included, array $dropped, int $max_tokens ): array {
+		if ( [] === $dropped ) {
+			return $included;
+		}
+
+		// Reverse drop order is highest-priority-dropped first: the loop always
+		// removes the current minimum priority, so drop priorities are
+		// non-decreasing and their reverse is non-increasing.
+		foreach ( array_reverse( $dropped, true ) as $index => $section ) {
+			$candidate           = $included;
+			$candidate[ $index ] = $section;
+			ksort( $candidate );
+
+			// Whole sections only, never re-trimmed, and measured on the fully
+			// joined result so separators and per-section rounding are exact.
+			if ( self::estimate_tokens( self::join_sections( $candidate ) ) <= $max_tokens ) {
+				$included = $candidate;
+			}
+
+			// Deliberately no early exit: a large section that cannot fit must
+			// not hide a smaller one that can.
+		}
+
+		return $included;
+	}
+
+	/**
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $dropped
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $included
+	 */
+	private function record_dropped_sections( array $dropped, array $included ): void {
+		foreach ( $dropped as $index => $section ) {
+			if ( ! array_key_exists( $index, $included ) ) {
+				$this->dropped_section_keys[] = $section['key'];
+			}
+		}
 	}
 
 	/**
@@ -230,12 +334,12 @@ final class PromptBudget {
 	 *
 	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $sections
 	 */
-	private static function trim_section_to_remaining_budget( array $sections, int $section_index, int $max_tokens ): ?string {
-		if ( ! isset( $sections[ $section_index ] ) ) {
+	private static function trim_section_to_remaining_budget( array $sections, int $section_key, int $max_tokens ): ?string {
+		if ( ! isset( $sections[ $section_key ] ) ) {
 			return null;
 		}
 
-		$section = $sections[ $section_index ];
+		$section = $sections[ $section_key ];
 		if ( ! empty( $section['required'] ) ) {
 			return null;
 		}
@@ -252,7 +356,7 @@ final class PromptBudget {
 		}
 
 		$without_section = $sections;
-		array_splice( $without_section, $section_index, 1 );
+		unset( $without_section[ $section_key ] );
 
 		$base_prompt  = self::join_sections( $without_section );
 		$base_tokens  = self::estimate_tokens( $base_prompt );
@@ -265,7 +369,7 @@ final class PromptBudget {
 			return null;
 		}
 
-		$sections[ $section_index ]['content'] = self::trim_to_tokens(
+		$sections[ $section_key ]['content'] = self::trim_to_tokens(
 			$original,
 			$remaining,
 			self::PARTIAL_SECTION_TRUNCATION_MARKER
@@ -279,12 +383,17 @@ final class PromptBudget {
 	/**
 	 * @param array<int, array{key: string, content: string, priority: int, required: bool, trimmable: bool}> $sections
 	 */
-	private static function get_lowest_priority_removable_index( array $sections ): ?int {
-		$lowest_index    = null;
+	private static function get_lowest_priority_removable_key( array $sections ): ?int {
+		$lowest_key      = null;
 		$lowest_priority = PHP_INT_MAX;
 
-		for ( $index = count( $sections ) - 1; $index >= 0; --$index ) {
-			$section = $sections[ $index ];
+		// Descending insertion index with a strict comparison keeps "last inserted
+		// drops first" among equal priorities, matching the original positional scan.
+		$keys = array_keys( $sections );
+		rsort( $keys );
+
+		foreach ( $keys as $key ) {
+			$section = $sections[ $key ];
 
 			if ( ! empty( $section['required'] ) ) {
 				continue;
@@ -292,12 +401,12 @@ final class PromptBudget {
 
 			$priority = (int) ( $section['priority'] ?? 0 );
 			if ( $priority < $lowest_priority ) {
-				$lowest_index    = $index;
+				$lowest_key      = $key;
 				$lowest_priority = $priority;
 			}
 		}
 
-		return $lowest_index;
+		return $lowest_key;
 	}
 
 	private static function string_length( string $text ): int {

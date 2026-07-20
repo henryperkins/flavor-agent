@@ -27,11 +27,11 @@ WORDPRESS_BASE_IMAGE=wordpress:beta
 # Latest stable (downgrade if you need to test against ship-released WordPress)
 # WORDPRESS_BASE_IMAGE=wordpress:php8.2-apache
 
-# Pin a specific RC (matches the WP 7.0 E2E harness)
-# WORDPRESS_BASE_IMAGE=wordpress:beta-7.0-RC2-php8.2-apache
+# Pin stable 7.0.0 (matches the WP 7.0 E2E harness)
+# WORDPRESS_BASE_IMAGE=wordpress:7.0.0-php8.2-apache
 ```
 
-The separate `FLAVOR_AGENT_WP70_BASE_IMAGE` stays pinned to `wordpress:beta-7.0-RC2-php8.2-apache` for the reproducible WP 7.0 E2E harness (`npm run test:e2e:wp70`).
+The separate `FLAVOR_AGENT_WP70_BASE_IMAGE` stays pinned to the exact stable `wordpress:7.0.0-php8.2-apache` for the reproducible WP 7.0 E2E harness (`npm run test:e2e:wp70`). The fully qualified patch tag is deliberate: the floating `7.0` tag can be republished, which would silently change what the release gates verified.
 
 ## Start And Install WordPress
 

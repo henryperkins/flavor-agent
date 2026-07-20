@@ -315,6 +315,19 @@ final class ActivityPermissionsTest extends TestCase {
 			'manage_options + edit_theme_options must be able to access a template-part apply.'
 		);
 
+		WordPressTestState::$capabilities = [
+			'manage_options' => true,
+		];
+
+		$this->assertFalse(
+			ActivityPermissions::can_decide_activity_request( $request ),
+			'manage_options without edit_theme_options must not decide a template-part apply.'
+		);
+		$this->assertFalse(
+			ActivityPermissions::can_access_entry( $entry ),
+			'manage_options without edit_theme_options must not access a template-part apply.'
+		);
+
 		// An edit_posts-only user: both gates deny (theme territory).
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,

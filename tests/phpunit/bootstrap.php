@@ -124,6 +124,23 @@ namespace FlavorAgent\Tests\Support {
 		public static array $inserted_posts = [];
 
 		/** @var array<int, int> */
+		public static array $deleted_posts = [];
+
+		/**
+		 * One-shot: the next get_post() returns null. Models an object-cache miss
+		 * or a filtered-away read, which is the only way to reach the
+		 * post-insert read-back failure arm in the apply executors.
+		 */
+		public static bool $next_get_post_returns_null = false;
+
+		/**
+		 * When true, wp_delete_post() returns the WP_Post without removing it.
+		 * Models a pre_delete_post filter that short-circuits deletion while
+		 * still returning a post -- the exact case the executors guard against.
+		 */
+		public static bool $delete_post_short_circuits = false;
+
+		/** @var array<int, int> */
 		public static array $cleaned_post_caches = [];
 
 		/** @var array<string, array<string, mixed>> */
@@ -391,6 +408,9 @@ namespace FlavorAgent\Tests\Support {
 			self::$posts                       = [];
 			self::$updated_posts               = [];
 			self::$inserted_posts              = [];
+			self::$deleted_posts               = [];
+			self::$next_get_post_returns_null  = false;
+			self::$delete_post_short_circuits  = false;
 			self::$cleaned_post_caches         = [];
 			self::$registered_post_types       = [];
 			self::$registered_taxonomies       = [];
@@ -3292,6 +3312,12 @@ namespace {
 	if (! function_exists('get_post')) {
 		function get_post($post_id = null)
 		{
+			if (WordPressTestState::$next_get_post_returns_null) {
+				WordPressTestState::$next_get_post_returns_null = false;
+
+				return null;
+			}
+
 			if ($post_id === null) {
 				return null;
 			}
@@ -3333,6 +3359,16 @@ namespace {
 		{
 			unset($wp_error);
 
+			// Core normalizes post_name through sanitize_title() BEFORE the
+			// wp_insert_post_data filter runs, so a caller-supplied slug that
+			// sanitize_title() rewrites (`a--b` -> `a-b`, `-a-` -> `a`) is stored
+			// rewritten. Modelling this is what lets the suite catch a caller that
+			// compares its pre-insert slug against the stored post_name using a
+			// different normalizer.
+			if (isset($postarr['post_name']) && is_string($postarr['post_name'])) {
+				$postarr['post_name'] = sanitize_title($postarr['post_name']);
+			}
+
 			$filtered = apply_filters('wp_insert_post_data', $postarr, $postarr, $postarr, false);
 			if (is_array($filtered)) {
 				$postarr = $filtered;
@@ -3351,6 +3387,30 @@ namespace {
 		}
 	}
 
+	if (! function_exists('wp_delete_post')) {
+		function wp_delete_post(int $post_id, bool $force_delete = false)
+		{
+			unset($force_delete);
+
+			if (! isset(WordPressTestState::$posts[$post_id])) {
+				return false;
+			}
+
+			$post = WordPressTestState::$posts[$post_id];
+
+			// A pre_delete_post filter can short-circuit deletion and still return
+			// a WP_Post. Callers that trust the return value strand the row.
+			if (WordPressTestState::$delete_post_short_circuits) {
+				return $post;
+			}
+
+			unset(WordPressTestState::$posts[$post_id]);
+			WordPressTestState::$deleted_posts[] = $post_id;
+
+			return $post;
+		}
+	}
+
 	if (! function_exists('clean_post_cache')) {
 		function clean_post_cache($post): void
 		{
@@ -3365,6 +3425,8 @@ namespace {
 			public int $ID = 0;
 
 			public string $post_title = '';
+
+			public string $post_name = '';
 
 			public string $post_content = '';
 

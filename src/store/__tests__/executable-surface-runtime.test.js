@@ -243,7 +243,7 @@ describe( 'executable-surface runtime apply thunk', () => {
 			{
 				dispatchToastForActivity: null,
 				getCurrentActivityScope: jest.fn( () => ( {
-					key: 'template_part:home//header',
+					key: 'wp_template_part:home//header',
 				} ) ),
 				guardSurfaceApplyFreshness: jest.fn( () => null ),
 				guardSurfaceApplyResolvedFreshness: jest.fn( () =>

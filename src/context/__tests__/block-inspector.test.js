@@ -19,6 +19,7 @@ const {
 	introspectBlockInstance,
 	introspectBlockType,
 	resolveInspectorPanels,
+	summarizeTree,
 } = require( '../block-inspector' );
 
 describe( 'resolveInspectorPanels', () => {
@@ -207,5 +208,81 @@ describe( 'resolveInspectorPanels', () => {
 
 		expect( tree ).toHaveLength( 32 );
 		expect( blockEditorSelectors.getBlockName ).toHaveBeenCalledTimes( 32 );
+	} );
+} );
+
+describe( 'summarizeTree interior options', () => {
+	const node = (
+		clientId,
+		name,
+		innerBlocks = [],
+		currentAttributes = {}
+	) => ( {
+		clientId,
+		name,
+		title: name,
+		currentAttributes,
+		inspectorPanels: {},
+		styles: [],
+		activeStyle: null,
+		editingMode: 'default',
+		childCount: innerBlocks.length,
+		innerBlocks,
+	} );
+
+	test( 'stopAtFocus prunes the focus node children but keeps childCount', () => {
+		const tree = [
+			node( 'parent', 'core/group', [
+				node( 'focus', 'core/cover', [
+					node( 'deep', 'core/paragraph' ),
+				] ),
+			] ),
+		];
+
+		const [ parent ] = summarizeTree( tree, {
+			focusClientId: 'focus',
+			stopAtFocus: true,
+			includeBlockCapabilities: false,
+			maxDepth: 10,
+		} );
+
+		const focus = parent.children[ 0 ];
+
+		expect( focus.isSelected ).toBe( true );
+		expect( focus.childCount ).toBe( 1 );
+		expect( focus.children ).toBeUndefined();
+		// These children are shown in a dedicated section, not hidden, so the
+		// "more children not shown" signal must not fire.
+		expect( focus.moreChildren ).toBeUndefined();
+	} );
+
+	test( 'without stopAtFocus the focus node still recurses', () => {
+		const tree = [
+			node( 'focus', 'core/cover', [ node( 'deep', 'core/paragraph' ) ] ),
+		];
+
+		const [ focus ] = summarizeTree( tree, {
+			focusClientId: 'focus',
+			includeBlockCapabilities: false,
+			maxDepth: 10,
+		} );
+
+		expect( focus.children ).toHaveLength( 1 );
+	} );
+
+	test( 'visualHintExtractor attaches hints and omits empty results', () => {
+		const tree = [
+			node( 'a', 'core/heading', [], { textColor: 'contrast' } ),
+			node( 'b', 'core/spacer', [], {} ),
+		];
+
+		const [ withHints, withoutHints ] = summarizeTree( tree, {
+			includeBlockCapabilities: false,
+			visualHintExtractor: ( attrs ) =>
+				attrs.textColor ? { textColor: attrs.textColor } : {},
+		} );
+
+		expect( withHints.visualHints ).toEqual( { textColor: 'contrast' } );
+		expect( withoutHints.visualHints ).toBeUndefined();
 	} );
 } );

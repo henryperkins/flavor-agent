@@ -236,7 +236,7 @@ final class Registration {
 			],
 			'flavor-agent/undo-activity'               => [
 				'label'         => __( 'Undo an applied AI activity entry', 'flavor-agent' ),
-				'description'   => __( 'Server-side undo of an executed Global Styles, Style Book, template, or template-part activity row: enforces ordered undo, verifies the recorded after-state still matches the live entity, restores the before snapshot, and persists the one-way undone/failed transition.', 'flavor-agent' ),
+				'description'   => __( 'Server-side undo of an executed Global Styles, Style Book, template, template-part, or post-blocks activity row: enforces ordered undo, verifies the recorded after-state still matches the live entity, restores the before snapshot, and persists the one-way undone/failed transition.', 'flavor-agent' ),
 				'ability_class' => UndoActivityAbility::class,
 			],
 		];
@@ -2817,6 +2817,22 @@ final class Registration {
 							'settings' => [ 'type' => 'integer' ],
 							'styles'   => [ 'type' => 'integer' ],
 							'block'    => [ 'type' => 'integer' ],
+						],
+					],
+					'promptDiagnostics'        => [
+						'type'       => 'object',
+						'properties' => [
+							'droppedSections'     => [
+								'type'     => 'array',
+								'items'    => [ 'type' => 'string' ],
+								'maxItems' => 32,
+							],
+							'trimmedSections'     => [
+								'type'     => 'array',
+								'items'    => [ 'type' => 'string' ],
+								'maxItems' => 32,
+							],
+							'themeTokenItemLimit' => [ 'type' => 'integer' ],
 						],
 					],
 					'executionContract'        => [ 'type' => 'object' ],

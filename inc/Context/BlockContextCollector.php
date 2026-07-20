@@ -6,6 +6,13 @@ namespace FlavorAgent\Context;
 
 final class BlockContextCollector {
 
+	/**
+	 * Node levels emitted for the selected block's interior. Matches
+	 * BlockAbilities::BLOCK_INTERIOR_MAX_DEPTH, which caps the same tree after
+	 * normalization; item and per-node child counts are capped there too.
+	 */
+	private const INTERIOR_MAX_DEPTH = 3;
+
 	public function __construct(
 		private BlockTypeIntrospector $block_type_introspector,
 		private ThemeTokenCollector $theme_token_collector
@@ -61,6 +68,62 @@ final class BlockContextCollector {
 			$result['siblingSummariesAfter'] = $sibling_summaries_after;
 		}
 
+		$block_interior = $this->summarize_inner_blocks( $inner_blocks );
+
+		if ( ! empty( $block_interior ) ) {
+			$result['blockInterior'] = $block_interior;
+		}
+
 		return $result;
+	}
+
+	/**
+	 * Summarize the selected block's own subtree for external clients.
+	 *
+	 * Degrades relative to the editor payload by design: no title (that would
+	 * cost one block-type introspection per node) and no role/job (no structural
+	 * annotation exists server-side). Visual hints are emitted as raw attributes
+	 * and narrowed downstream by BlockAbilities::normalize_visual_hints(), so the
+	 * allowlist has exactly one implementation.
+	 *
+	 * @param array<int, mixed> $inner_blocks
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function summarize_inner_blocks( array $inner_blocks, int $depth = 0 ): array {
+		$summaries = [];
+
+		foreach ( $inner_blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			// Accept both the parse_blocks shape and the normalized editor shape.
+			$name = $block['blockName'] ?? $block['name'] ?? '';
+
+			if ( ! is_string( $name ) || '' === $name ) {
+				continue;
+			}
+
+			$attributes = $block['attrs'] ?? $block['attributes'] ?? [];
+			$children   = $block['innerBlocks'] ?? [];
+			$children   = is_array( $children ) ? $children : [];
+
+			$summary = [
+				'block'      => $name,
+				'childCount' => count( $children ),
+			];
+
+			if ( is_array( $attributes ) && [] !== $attributes ) {
+				$summary['visualHints'] = $attributes;
+			}
+
+			if ( $depth + 1 < self::INTERIOR_MAX_DEPTH && [] !== $children ) {
+				$summary['children'] = $this->summarize_inner_blocks( $children, $depth + 1 );
+			}
+
+			$summaries[] = $summary;
+		}
+
+		return $summaries;
 	}
 }

@@ -12,6 +12,9 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 live_docs=(
 	"${repo_root}/flavor-agent.php"
 	"${repo_root}/readme.txt"
+	"${repo_root}/README.md"
+	"${repo_root}/docs/releases/v0.1.0.md"
+	"${repo_root}/docs/releases/v0.1.0-proof-assets.md"
 	"${repo_root}/AGENTS.md"
 	"${repo_root}/CLAUDE.md"
 	"${repo_root}/.github/copilot-instructions.md"
@@ -47,6 +50,28 @@ check_absent() {
 	(( ++total ))
 	local output rc=0
 	output=$(rg -n -F --no-heading --color never -- "$pattern" "$@" 2>&1) || rc=$?
+	case "$rc" in
+		0)
+			echo "Doc freshness check failed: ${description}" >&2
+			echo "$output" >&2
+			(( ++failed ))
+			;;
+		1) ;;
+		*)
+			echo "Doc freshness check could not run: ${description} (rg exit=${rc})" >&2
+			echo "$output" >&2
+			(( ++failed ))
+			;;
+	esac
+}
+
+# Regex search -- pattern must NOT appear in the given files.
+check_absent_regex() {
+	local description="$1" pattern="$2"
+	shift 2
+	(( ++total ))
+	local output rc=0
+	output=$(rg -n --no-heading --color never -- "$pattern" "$@" 2>&1) || rc=$?
 	case "$rc" in
 		0)
 			echo "Doc freshness check failed: ${description}" >&2
@@ -151,6 +176,51 @@ check_present_in_each_fixed() {
 check_absent \
 	'old 11-ability wording still appears in live docs' \
 	'11 abilities' \
+	"${live_docs[@]}"
+
+# Ability-count drift guard. README.md and docs/releases/v0.1.0.md sat outside
+# live_docs through four consecutive count bumps (29 -> 30 -> 31 -> 32 -> 35),
+# which is how "31"/"32" survived to the release artifacts. A fixed-string list
+# could not catch it: README phrases the total as "31 WordPress Ability
+# contracts" (capital A, extra word), which matched none of the guarded
+# literals. Match every superseded total across every phrasing instead.
+#
+# STATUS.md is deliberately excluded from THIS check. It is a dated,
+# append-only verification log whose entries legitimately quote superseded
+# counts when recording what changed -- including quoting README's old
+# "31 WordPress Ability contracts" phrasing while documenting this very guard,
+# which made the guard fail on its own changelog. A dated historical entry is
+# not a stale live claim. Every doc that asserts a CURRENT total is still
+# covered, which is what this guard exists to protect.
+ability_count_docs=()
+for doc in "${live_docs[@]}"; do
+	[[ "$doc" == "${repo_root}/STATUS.md" ]] && continue
+	ability_count_docs+=("$doc")
+done
+
+check_absent_regex \
+	'superseded ability count still appears in live docs (current: 35)' \
+	'\b(29|30|31|32|33|34) +(WordPress +)?[Aa]bilit(y|ies)\b' \
+	"${ability_count_docs[@]}"
+
+check_absent \
+	'superseded preview-sibling count still appears in live docs (current: six)' \
+	'five signature-only' \
+	"${live_docs[@]}"
+
+check_absent \
+	'style-only external-apply scope still appears in live docs (current: four lanes)' \
+	'External applies are limited to Global Styles and Style Book' \
+	"${live_docs[@]}"
+
+check_absent \
+	'WordPress 7.0 still described as pre-release in live docs (7.0 is released)' \
+	'WordPress 7.0 is still pre-release' \
+	"${live_docs[@]}"
+
+check_absent \
+	'WP 7.0 harness still pinned to the RC image in live docs (current: stable 7.0.0)' \
+	'beta-7.0-RC2' \
 	"${live_docs[@]}"
 
 check_absent \

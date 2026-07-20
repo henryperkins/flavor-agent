@@ -1728,7 +1728,7 @@ describe( 'external apply helpers', () => {
 		// Template-part rows store baselineContentHash; the baseline-hash
 		// surfaces must fall back to it instead of reading "Not recorded".
 		expect( details.hasBaselineHash ).toBe( true );
-		expect( details.diagnosticText ).toContain( 'baselineConfigHash:' );
+		expect( details.diagnosticText ).toContain( 'baselineContentHash:' );
 	} );
 
 	test( 'getGovernanceDetails provides surface-aware approval copy', () => {
@@ -1842,7 +1842,7 @@ describe( 'external apply helpers', () => {
 			'Insert pattern · twentytwentyfive/footer · after [1]',
 		] );
 		expect( details.hasBaselineHash ).toBe( true );
-		expect( details.diagnosticText ).toContain( 'baselineConfigHash:' );
+		expect( details.diagnosticText ).toContain( 'baselineContentHash:' );
 	} );
 
 	test( 'getGovernanceDetails labels a template by templateRef when the slug is empty', () => {
