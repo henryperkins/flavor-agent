@@ -538,6 +538,12 @@ final class TemplateAbilities {
 			);
 		}
 
+		if ( array_key_exists( 'currentViewportVisibility', $input ) ) {
+			$result['currentViewportVisibility'] = self::normalize_viewport_visibility_summary(
+				$input['currentViewportVisibility']
+			);
+		}
+
 		if ( $has_live_path_coverage ) {
 			$result['topLevelBlocks'] = self::derive_template_part_top_level_blocks_from_path_lookup(
 				$path_lookup
@@ -626,6 +632,7 @@ final class TemplateAbilities {
 				'operationTargets',
 				'insertionAnchors',
 				'structuralConstraints',
+				'currentViewportVisibility',
 			] as $key
 		) {
 			if ( array_key_exists( $key, $editor_structure ) ) {

@@ -13,7 +13,8 @@ final class TemplatePartContextCollector {
 		private TemplateStructureAnalyzer $template_structure_analyzer,
 		private PatternOverrideAnalyzer $pattern_override_analyzer,
 		private PatternCandidateSelector $pattern_candidate_selector,
-		private ThemeTokenCollector $theme_token_collector
+		private ThemeTokenCollector $theme_token_collector,
+		private ViewportVisibilityAnalyzer $viewport_visibility_analyzer
 	) {
 	}
 
@@ -67,15 +68,15 @@ final class TemplatePartContextCollector {
 		);
 
 		return [
-			'templatePartRef'         => $this->template_repository->resolve_template_part_ref( $template_part_ref, $template_part ),
-			'slug'                    => $slug,
-			'title'                   => '' !== $title ? $title : $template_part_ref,
-			'area'                    => $area,
-			'blockTree'               => $block_tree,
-			'topLevelBlocks'          => $top_level_blocks,
-			'currentPatternOverrides' => $this->pattern_override_analyzer->collect_current_pattern_override_summary( $blocks ),
-			'blockCounts'             => $block_counts,
-			'structureStats'          => [
+			'templatePartRef'           => $this->template_repository->resolve_template_part_ref( $template_part_ref, $template_part ),
+			'slug'                      => $slug,
+			'title'                     => '' !== $title ? $title : $template_part_ref,
+			'area'                      => $area,
+			'blockTree'                 => $block_tree,
+			'topLevelBlocks'            => $top_level_blocks,
+			'currentPatternOverrides'   => $this->pattern_override_analyzer->collect_current_pattern_override_summary( $blocks ),
+			'blockCounts'               => $block_counts,
+			'structureStats'            => [
 				'blockCount'            => $summary_stats['blockCount'],
 				'maxDepth'              => $summary_stats['maxDepth'],
 				'hasNavigation'         => ! empty( $block_counts['core/navigation'] ),
@@ -93,18 +94,19 @@ final class TemplatePartContextCollector {
 				'hasSingleWrapperGroup' => 1 === count( $top_level_blocks ) && 'core/group' === $top_level_blocks[0],
 				'isNearlyEmpty'         => $summary_stats['blockCount'] <= 1,
 			],
-			'operationTargets'        => $operation_targets,
-			'insertionAnchors'        => $insertion_anchors,
-			'structuralConstraints'   => $structural_constraints,
-			'patterns'                => $this->pattern_candidate_selector->collect_template_part_candidate_patterns(
+			'operationTargets'          => $operation_targets,
+			'insertionAnchors'          => $insertion_anchors,
+			'structuralConstraints'     => $structural_constraints,
+			'currentViewportVisibility' => $this->viewport_visibility_analyzer->collect_current_viewport_visibility_summary( $blocks ),
+			'patterns'                  => $this->pattern_candidate_selector->collect_template_part_candidate_patterns(
 				$area,
 				$visible_pattern_names,
 				$composition_profile
 			),
-			'themeTokens'             => $theme_tokens,
-			'compositionProfile'      => $composition_profile,
-			'derivedTokenAffinity'    => TemplatePartCompositionProfile::collect_token_affinity( $blocks ),
-			'derivedContrastContext'  => TemplatePartCompositionProfile::classify_root_contrast( $blocks, $theme_tokens ),
+			'themeTokens'               => $theme_tokens,
+			'compositionProfile'        => $composition_profile,
+			'derivedTokenAffinity'      => TemplatePartCompositionProfile::collect_token_affinity( $blocks ),
+			'derivedContrastContext'    => TemplatePartCompositionProfile::classify_root_contrast( $blocks, $theme_tokens ),
 		];
 	}
 }

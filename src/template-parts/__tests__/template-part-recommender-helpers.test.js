@@ -353,6 +353,11 @@ describe( 'template-part recommender helpers', () => {
 				blockNames: [],
 				blocks: [],
 			},
+			currentViewportVisibility: {
+				hasVisibilityRules: false,
+				blockCount: 0,
+				blocks: [],
+			},
 			operationTargets: [
 				{
 					path: [ 0 ],
@@ -498,6 +503,11 @@ describe( 'template-part recommender helpers', () => {
 				hasOverrides: false,
 				blockCount: 0,
 				blockNames: [],
+				blocks: [],
+			},
+			currentViewportVisibility: {
+				hasVisibilityRules: false,
+				blockCount: 0,
 				blocks: [],
 			},
 			operationTargets: [],

@@ -396,7 +396,8 @@ final class ServerCollector {
 			self::template_structure_analyzer(),
 			self::pattern_override_analyzer(),
 			self::pattern_candidate_selector(),
-			self::theme_token_collector()
+			self::theme_token_collector(),
+			self::viewport_visibility_analyzer()
 		);
 	}
 

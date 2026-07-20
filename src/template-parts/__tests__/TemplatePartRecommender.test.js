@@ -1234,6 +1234,11 @@ describe( 'TemplatePartRecommender', () => {
 						blockNames: [],
 						blocks: [],
 					},
+					currentViewportVisibility: {
+						hasVisibilityRules: false,
+						blockCount: 0,
+						blocks: [],
+					},
 					operationTargets: [],
 					insertionAnchors: [
 						{
