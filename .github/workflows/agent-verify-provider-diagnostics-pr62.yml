@@ -1,0 +1,197 @@
+name: Verify provider diagnostics activity contract
+
+on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'claude/provider-diagnostics-ai-activity-mbii56'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer:v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Add end-to-end recommendation activity regression
+        shell: bash
+        run: |
+          cat > tests/phpunit/ProviderDiagnosticsActivityIntegrationTest.php <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace FlavorAgent\Tests;
+
+          use FlavorAgent\Abilities\RecommendationAbilityExecution;
+          use FlavorAgent\Activity\Repository as ActivityRepository;
+          use FlavorAgent\OpenAI\Provider;
+          use FlavorAgent\Tests\Support\WordPressTestState;
+          use PHPUnit\Framework\TestCase;
+
+          final class ProviderDiagnosticsActivityIntegrationTest extends TestCase {
+
+          	protected function setUp(): void {
+          		parent::setUp();
+
+          		WordPressTestState::reset();
+          		ActivityRepository::install();
+          	}
+
+          	public function test_recommendation_activity_projects_resolved_selected_provider_without_fallback(): void {
+          		WordPressTestState::$connectors = [
+          			'anthropic' => [
+          				'type'           => 'ai_provider',
+          				'name'           => 'Anthropic',
+          				'authentication' => [
+          					'setting_name' => 'connectors_ai_anthropic_api_key',
+          				],
+          			],
+          		];
+
+          		$result = RecommendationAbilityExecution::execute(
+          			'template',
+          			'flavor-agent/recommend-template',
+          			[
+          				'templateRef' => 'theme//home',
+          				'prompt'      => 'Tighten the structure.',
+          				'document'    => [
+          					'scopeKey' => 'wp_template:theme//home',
+          					'postType' => 'wp_template',
+          					'entityId' => 'theme//home',
+          				],
+          			],
+          			static function (): array {
+          				Provider::record_runtime_chat_configuration(
+          					[
+          						'provider' => 'anthropic',
+          						'model'    => 'claude-sonnet-4-6',
+          					]
+          				);
+
+          				return [
+          					'suggestions' => [],
+          					'explanation' => 'Use fewer competing sections.',
+          				];
+          			}
+          		);
+
+          		$this->assertIsArray( $result );
+          		$this->assertSame( 'anthropic', $result['requestMeta']['provider'] ?? null );
+          		$this->assertSame( 'Anthropic', $result['requestMeta']['providerLabel'] ?? null );
+          		$this->assertSame( 'anthropic', $result['requestMeta']['selectedProvider'] ?? null );
+          		$this->assertSame( 'Anthropic', $result['requestMeta']['selectedProviderLabel'] ?? null );
+          		$this->assertFalse( $result['requestMeta']['usedFallback'] ?? true );
+
+          		$rows = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+          		$this->assertCount( 1, $rows );
+          		$this->assertSame( 'Anthropic', $rows[0]['admin_provider'] ?? null );
+          		$this->assertSame( 'claude-sonnet-4-6', $rows[0]['admin_model'] ?? null );
+          		$this->assertSame( 'Anthropic', $rows[0]['admin_selected_provider'] ?? null );
+
+          		$request = json_decode( (string) ( $rows[0]['request_json'] ?? '' ), true );
+          		$this->assertSame( 'anthropic', $request['ai']['provider'] ?? null );
+          		$this->assertSame( 'anthropic', $request['ai']['selectedProvider'] ?? null );
+          		$this->assertSame( 'Anthropic', $request['ai']['selectedProviderLabel'] ?? null );
+          		$this->assertFalse( $request['ai']['usedFallback'] ?? true );
+          	}
+          }
+          PHP
+
+      - name: Verify PHP provider and activity contracts
+        shell: bash
+        run: |
+          vendor/bin/phpunit \
+            tests/phpunit/ProviderDiagnosticsActivityIntegrationTest.php \
+            tests/phpunit/ProviderTest.php \
+            tests/phpunit/RecommendationAbilityExecutionTest.php \
+            tests/phpunit/ActivityRepositoryTest.php \
+            2>&1 | tee /tmp/provider-diagnostics-php.log
+
+      - name: Lint changed and regression PHP files
+        shell: bash
+        run: |
+          vendor/bin/phpcs \
+            inc/OpenAI/Provider.php \
+            tests/phpunit/ProviderTest.php \
+            tests/phpunit/ProviderDiagnosticsActivityIntegrationTest.php \
+            2>&1 | tee /tmp/provider-diagnostics-phpcs.log
+
+      - name: Verify AI Activity normalization and rendering contract
+        shell: bash
+        run: |
+          npx wp-scripts test-unit-js \
+            src/admin/__tests__/activity-log-utils.test.js \
+            --runInBand \
+            2>&1 | tee /tmp/provider-diagnostics-js.log
+
+      - name: Verify patch integrity
+        run: git diff --check
+
+      - name: Publish verification failure
+        if: failure()
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          {
+            printf '%s\n' 'Provider diagnostics PR #62 verification failed.'
+            for log in \
+              /tmp/provider-diagnostics-php.log \
+              /tmp/provider-diagnostics-phpcs.log \
+              /tmp/provider-diagnostics-js.log; do
+              if [ -f "$log" ]; then
+                printf '\n== %s ==\n' "$(basename "$log")"
+                tail -n 160 "$log"
+              fi
+            done
+          } > .github/provider-diagnostics-pr62-failure.log
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/provider-diagnostics-pr62-failure.log
+          git commit -m 'chore: capture provider diagnostics verification failure [skip ci]' -- .github/provider-diagnostics-pr62-failure.log
+          git push origin HEAD:"${HEAD_BRANCH}"
+
+      - name: Remove temporary verification workflow
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          rm .github/workflows/agent-verify-provider-diagnostics-pr62.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- .github/workflows/agent-verify-provider-diagnostics-pr62.yml
+          git commit -m 'chore: remove provider diagnostics verification workflow'
+          git push origin HEAD:"${HEAD_BRANCH}"
