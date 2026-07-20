@@ -458,7 +458,34 @@ final class RecommendationAbilityExecution {
 				continue;
 			}
 
-			$merged[ $key ] = \array_replace_recursive( $runtime_value, $request_value );
+			$merged[ $key ] = self::merge_request_meta_array( $runtime_value, $request_value );
+		}
+
+		return $merged;
+	}
+
+	/**
+	 * Merge associative diagnostic maps while replacing list values atomically.
+	 *
+	 * @param array<mixed> $runtime_value
+	 * @param array<mixed> $request_value
+	 * @return array<mixed>
+	 */
+	private static function merge_request_meta_array( array $runtime_value, array $request_value ): array {
+		if ( [] === $request_value ) {
+			return $runtime_value;
+		}
+
+		if ( [] === $runtime_value || \array_is_list( $runtime_value ) || \array_is_list( $request_value ) ) {
+			return $request_value;
+		}
+
+		$merged = $runtime_value;
+
+		foreach ( $request_value as $key => $value ) {
+			$merged[ $key ] = \is_array( $value ) && \is_array( $merged[ $key ] ?? null )
+				? self::merge_request_meta_array( $merged[ $key ], $value )
+				: $value;
 		}
 
 		return $merged;

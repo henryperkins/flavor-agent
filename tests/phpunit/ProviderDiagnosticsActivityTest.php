@@ -62,6 +62,7 @@ final class ProviderDiagnosticsActivityTest extends TestCase {
 							'resolvedModel'         => 'claude-sonnet-4-6',
 							'modelSelectionSource'  => 'ai_plugin_feature_developer',
 							'modelResolutionStatus' => 'model',
+							'modelPreferences'      => [ 'claude-sonnet-4-6', 'claude-haiku-4-5' ],
 						],
 						'responseSummary' => [
 							'httpStatus'        => 200,
@@ -78,8 +79,11 @@ final class ProviderDiagnosticsActivityTest extends TestCase {
 					],
 					'explanation' => 'Use fewer competing sections.',
 					'requestMeta' => [
-						'transport' => [
+						'transport'      => [
 							'provider' => 'test-transport',
+						],
+						'requestSummary' => [
+							'modelPreferences' => [ 'claude-opus-4-8' ],
 						],
 					],
 				];
@@ -92,6 +96,7 @@ final class ProviderDiagnosticsActivityTest extends TestCase {
 		$this->assertSame( 'test-transport', $result['requestMeta']['transport']['provider'] ?? null );
 		$this->assertSame( 'anthropic', $result['requestMeta']['requestSummary']['resolvedProvider'] ?? null );
 		$this->assertSame( 'claude-sonnet-4-6', $result['requestMeta']['requestSummary']['resolvedModel'] ?? null );
+		$this->assertSame( [ 'claude-opus-4-8' ], $result['requestMeta']['requestSummary']['modelPreferences'] ?? null );
 		$this->assertSame( 150, $result['requestMeta']['tokenUsage']['total'] ?? null );
 		$this->assertSame( 420, $result['requestMeta']['latencyMs'] ?? null );
 
