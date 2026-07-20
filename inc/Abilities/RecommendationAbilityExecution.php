@@ -458,6 +458,11 @@ final class RecommendationAbilityExecution {
 				continue;
 			}
 
+			if ( [] !== $request_value && \array_is_list( $request_value ) ) {
+				$merged[ $key ] = $runtime_value;
+				continue;
+			}
+
 			$merged[ $key ] = self::merge_request_meta_array( $runtime_value, $request_value );
 		}
 

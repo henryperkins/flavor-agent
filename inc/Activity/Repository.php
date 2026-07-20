@@ -4179,7 +4179,7 @@ final class Repository {
 		$selected_provider      = $resolved_provider;
 
 		if ( '' === $selected_provider && 'default' === $model_selection_source ) {
-			$selected_provider = 'Provider-managed';
+			$selected_provider = 'provider-managed';
 		}
 
 		if ( '' === $selected_provider ) {
