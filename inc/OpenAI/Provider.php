@@ -192,44 +192,17 @@ final class Provider {
 		$diagnostics                                = self::active_chat_diagnostics();
 		$backend_label                              = trim( (string) ( $config['label'] ?? $provider_label ) );
 		$model                                      = trim( (string) ( $config['model'] ?? '' ) );
-		// Chat is owned by Settings > Connectors via the WordPress AI Client, so
-		// the selected chat provider IS the resolved provider. Provider::get()
-		// returns the plugin's embeddings provider (Cloudflare Workers AI) and
-		// must never be reported as the chat selection: doing so mislabels the
-		// "Selected provider" diagnostic and, because the resolved chat provider
-		// never equals it, raises a false "used fallback" signal on every
-		// recommendation served by a real connector. No provider-level chat
-		// fallback exists in the Connectors-owned model.
-		$selected_provider = $provider;
-		$used_fallback     = false;
-		$owner             = 'flavor_agent';
-		$owner_label       = 'Settings > Flavor Agent';
-		$path_label        = 'Flavor Agent chat backend';
-		$credential_source = 'plugin_settings';
-		$credential_label  = 'Settings > Flavor Agent';
-
 		if ( self::is_connector( $provider ) ) {
-			$owner             = 'connectors';
-			$owner_label       = 'Settings > Connectors';
-			$path_label        = sprintf( '%s via Settings > Connectors', $provider_label );
-			$credential_source = 'provider_managed';
-			$credential_label  = 'Provider-managed';
+			$path_label = sprintf( '%s via Settings > Connectors', $provider_label );
 		} elseif ( self::is_wordpress_ai_client( $provider ) ) {
-			$owner             = 'connectors';
-			$owner_label       = 'Settings > Connectors';
-			$path_label        = 'WordPress AI Client via Settings > Connectors';
-			$credential_source = 'provider_managed';
-			$credential_label  = 'Provider-managed';
+			$path_label = 'WordPress AI Client via Settings > Connectors';
 		} else {
-			$owner             = 'connectors';
-			$owner_label       = 'Settings > Connectors';
-			$path_label        = sprintf( '%s has no selected chat connector', $provider_label );
-			$credential_source = 'provider_managed';
-			$credential_label  = 'Provider-managed';
+			$path_label = sprintf( '%s has no selected chat connector', $provider_label );
 		}
 
 		$meta = [
-			'selectedProvider'      => $selected_provider,
+			// Connector-owned chat has no separate Flavor Agent provider selection.
+			'selectedProvider'      => $provider,
 			'selectedProviderLabel' => $provider_label,
 			'connectorId'           => $connector_meta['id'],
 			'connectorLabel'        => $connector_meta['label'],
@@ -238,14 +211,14 @@ final class Provider {
 			'providerLabel'         => $provider_label,
 			'backendLabel'          => '' !== $backend_label ? $backend_label : $provider_label,
 			'model'                 => '' !== $model ? $model : 'provider-managed',
-			'owner'                 => $owner,
-			'ownerLabel'            => $owner_label,
+			'owner'                 => 'connectors',
+			'ownerLabel'            => 'Settings > Connectors',
 			'pathLabel'             => $path_label,
-			'credentialSource'      => $credential_source,
-			'credentialSourceLabel' => $credential_label,
+			'credentialSource'      => 'provider_managed',
+			'credentialSourceLabel' => 'Provider-managed',
 			'tokenUsage'            => $metrics['tokenUsage'],
 			'latencyMs'             => $metrics['latencyMs'],
-			'usedFallback'          => $used_fallback,
+			'usedFallback'          => false,
 		];
 
 		foreach ( [ 'transport', 'requestSummary', 'responseSummary', 'errorSummary' ] as $key ) {
