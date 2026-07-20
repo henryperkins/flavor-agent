@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Context;
 
+use FlavorAgent\Support\TemplatePartCompositionProfile;
+
 final class TemplatePartContextCollector {
 
 	public function __construct(
@@ -57,6 +59,12 @@ final class TemplatePartContextCollector {
 		);
 		$summary_stats          = $this->template_structure_analyzer->collect_template_part_block_stats( $blocks );
 		$block_counts           = $summary_stats['blockCounts'];
+		$theme_tokens           = $this->theme_token_collector->for_tokens();
+		$composition_profile    = TemplatePartCompositionProfile::analyze(
+			$area,
+			$block_counts,
+			(int) $summary_stats['blockCount']
+		);
 
 		return [
 			'templatePartRef'         => $this->template_repository->resolve_template_part_ref( $template_part_ref, $template_part ),
@@ -90,9 +98,13 @@ final class TemplatePartContextCollector {
 			'structuralConstraints'   => $structural_constraints,
 			'patterns'                => $this->pattern_candidate_selector->collect_template_part_candidate_patterns(
 				$area,
-				$visible_pattern_names
+				$visible_pattern_names,
+				$composition_profile
 			),
-			'themeTokens'             => $this->theme_token_collector->for_tokens(),
+			'themeTokens'             => $theme_tokens,
+			'compositionProfile'      => $composition_profile,
+			'derivedTokenAffinity'    => TemplatePartCompositionProfile::collect_token_affinity( $blocks ),
+			'derivedContrastContext'  => TemplatePartCompositionProfile::classify_root_contrast( $blocks, $theme_tokens ),
 		];
 	}
 }

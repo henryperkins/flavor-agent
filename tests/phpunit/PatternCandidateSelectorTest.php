@@ -225,6 +225,55 @@ final class PatternCandidateSelectorTest extends TestCase {
 		$this->assertSame( 'plugin/visible', $candidates[0]['name'] );
 	}
 
+	public function test_collect_template_part_candidate_patterns_boosts_gap_filling_pattern(): void {
+		$selector = $this->build_selector();
+
+		// Two header patterns with identical base area scores (both
+		// core/template-part + a 'header' term match). Registration order puts
+		// the plain one first, so without content awareness it wins the tie.
+		$this->register_pattern(
+			'plugin/header-plain',
+			[
+				'title'      => 'Header Banner',
+				'blockTypes' => [ 'core/template-part' ],
+				'content'    => '<!-- wp:site-logo /-->',
+			]
+		);
+		$this->register_pattern(
+			'plugin/header-with-nav',
+			[
+				'title'      => 'Header Bar',
+				'blockTypes' => [ 'core/template-part' ],
+				'content'    => '<!-- wp:navigation /-->',
+			]
+		);
+
+		// Without a content profile, the tie breaks on registration order.
+		$baseline = array_map(
+			static fn( array $p ): string => $p['name'],
+			$selector->collect_template_part_candidate_patterns( 'header' )
+		);
+		$this->assertSame(
+			[ 'plugin/header-plain', 'plugin/header-with-nav' ],
+			$baseline
+		);
+
+		// With a missing-navigation gap, the pattern that supplies core/navigation
+		// is boosted above the equally area-relevant plain header pattern.
+		$ranked = array_map(
+			static fn( array $p ): string => $p['name'],
+			$selector->collect_template_part_candidate_patterns(
+				'header',
+				null,
+				[ 'missingRoles' => [ 'primary-navigation' ] ]
+			)
+		);
+		$this->assertSame(
+			[ 'plugin/header-with-nav', 'plugin/header-plain' ],
+			$ranked
+		);
+	}
+
 	public function test_collect_template_part_candidate_patterns_falls_back_to_kebab_term_for_unknown_areas(): void {
 		$selector = $this->build_selector();
 
