@@ -42,7 +42,7 @@ jobs:
             scripts = steps.filter_map do |step|
               next unless step["run"]
               next if step["name"] == "Commit verified fix"
-              "printf \\"\\n== #{step.fetch("name")} ==\\n\\"\\n#{step.fetch("run")}"
+              step.fetch("run")
             end
             File.write("/tmp/apply-provider-diagnostics.sh", "set -euo pipefail\n" + scripts.join("\n"))
           '
