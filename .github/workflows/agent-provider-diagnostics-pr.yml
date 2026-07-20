@@ -36,6 +36,7 @@ jobs:
       - name: Prepare staged step runner
         shell: bash
         run: |
+          rm -f .github/provider-diagnostics-failure.log
           cat > /tmp/run-staged-step <<'BASH'
           #!/usr/bin/env bash
           set -uo pipefail
@@ -68,6 +69,22 @@ jobs:
 
       - name: Apply the production fix
         run: /tmp/run-staged-step 'Apply the production fix'
+
+      - name: Auto-format changed PHP files
+        shell: bash
+        run: |
+          printf '%s\n' 'Auto-format changed PHP files' > /tmp/provider-diagnostics-stage
+          set +e
+          vendor/bin/phpcbf \
+            inc/Abilities/RecommendationAbilityExecution.php \
+            inc/Activity/Repository.php \
+            tests/phpunit/ProviderDiagnosticsActivityTest.php \
+            2>&1 | tee /tmp/provider-diagnostics-last.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -gt 1 ]; then
+            exit "$status"
+          fi
 
       - name: Verify provider diagnostics regression and related PHP suites
         run: /tmp/run-staged-step 'Verify provider diagnostics regression and related PHP suites'
@@ -108,6 +125,7 @@ jobs:
             inc/Abilities/RecommendationAbilityExecution.php \
             inc/Activity/Repository.php \
             tests/phpunit/ProviderDiagnosticsActivityTest.php \
+            .github/provider-diagnostics-failure.log \
             .github/workflows/agent-provider-diagnostics-fix.yml \
             .github/workflows/agent-provider-diagnostics-pr.yml
           git commit -m 'Fix recommendation provider diagnostics'
