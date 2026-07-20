@@ -1,0 +1,455 @@
+name: Apply provider diagnostics regression fix
+
+on:
+  push:
+    branches:
+      - 'agent/fix-recommendation-provider-diagnostics'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out fix branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/fix-recommendation-provider-diagnostics
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Add provider diagnostics regression tests
+        shell: bash
+        run: |
+          cat > tests/phpunit/ProviderDiagnosticsActivityTest.php <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace FlavorAgent\Tests;
+
+          use FlavorAgent\Abilities\RecommendationAbilityExecution;
+          use FlavorAgent\Activity\Repository as ActivityRepository;
+          use FlavorAgent\OpenAI\Provider;
+          use FlavorAgent\Tests\Support\WordPressTestState;
+          use PHPUnit\Framework\TestCase;
+
+          final class ProviderDiagnosticsActivityTest extends TestCase {
+
+          	protected function setUp(): void {
+          		parent::setUp();
+
+          		WordPressTestState::reset();
+          		ActivityRepository::install();
+          	}
+
+          	public function test_recommendation_execution_merges_runtime_diagnostics_into_partial_request_meta(): void {
+          		$result = RecommendationAbilityExecution::execute(
+          			'template',
+          			'flavor-agent/recommend-template',
+          			[
+          				'templateRef' => 'theme//home',
+          				'prompt'      => 'Tighten the structure.',
+          				'document'    => [
+          					'scopeKey' => 'wp_template:theme//home',
+          					'postType' => 'wp_template',
+          					'entityId' => 'theme//home',
+          				],
+          			],
+          			static function (): array {
+          				Provider::record_runtime_chat_configuration(
+          					[
+          						'provider' => 'wordpress_ai_client',
+          						'model'    => 'provider-managed',
+          					]
+          				);
+          				Provider::record_runtime_chat_metrics(
+          					[
+          						'tokenUsage' => [
+          							'input'  => 120,
+          							'output' => 30,
+          							'total'  => 150,
+          						],
+          						'latencyMs'  => 420,
+          					]
+          				);
+          				Provider::record_runtime_chat_diagnostics(
+          					[
+          						'transport'      => [
+          							'host'           => 'wordpress-ai-client',
+          							'path'           => '/generate-text',
+          							'timeoutSeconds' => 120,
+          						],
+          						'requestSummary' => [
+          							'bodyBytes'             => 1024,
+          							'resolvedProvider'      => 'anthropic',
+          							'resolvedModel'         => 'claude-sonnet-4-6',
+          							'modelSelectionSource'  => 'ai_plugin_feature_developer',
+          							'modelResolutionStatus' => 'model',
+          						],
+          						'responseSummary' => [
+          							'httpStatus'       => 200,
+          							'providerRequestId' => 'request-123',
+          						],
+          					]
+          				);
+
+          				return [
+          					'suggestions' => [
+          						[
+          							'label' => 'Clarify header hierarchy',
+          						],
+          					],
+          					'explanation' => 'Use fewer competing sections.',
+          					'requestMeta' => [
+          						'transport' => [
+          							'provider' => 'test-transport',
+          						],
+          					],
+          				];
+          			}
+          		);
+
+          		$this->assertIsArray( $result );
+          		$this->assertSame( 'WordPress AI Client', $result['requestMeta']['backendLabel'] ?? null );
+          		$this->assertSame( 'wordpress-ai-client', $result['requestMeta']['transport']['host'] ?? null );
+          		$this->assertSame( 'test-transport', $result['requestMeta']['transport']['provider'] ?? null );
+          		$this->assertSame( 'anthropic', $result['requestMeta']['requestSummary']['resolvedProvider'] ?? null );
+          		$this->assertSame( 'claude-sonnet-4-6', $result['requestMeta']['requestSummary']['resolvedModel'] ?? null );
+          		$this->assertSame( 150, $result['requestMeta']['tokenUsage']['total'] ?? null );
+          		$this->assertSame( 420, $result['requestMeta']['latencyMs'] ?? null );
+
+          		$rows = WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? [];
+          		$this->assertCount( 1, $rows );
+
+          		$request = json_decode( (string) ( $rows[0]['request_json'] ?? '' ), true );
+          		$this->assertSame( 'wordpress-ai-client', $request['ai']['transport']['host'] ?? null );
+          		$this->assertSame( 'test-transport', $request['ai']['transport']['provider'] ?? null );
+          		$this->assertSame( 'anthropic', $request['ai']['requestSummary']['resolvedProvider'] ?? null );
+          		$this->assertSame( 'claude-sonnet-4-6', $request['ai']['requestSummary']['resolvedModel'] ?? null );
+          	}
+
+          	public function test_admin_projection_prefers_resolved_chat_provider_over_legacy_provider_fields(): void {
+          		$entry = [
+          			'id'         => 'provider-diagnostic-activity',
+          			'type'       => 'request_diagnostic',
+          			'surface'    => 'template',
+          			'target'     => [
+          				'templateRef' => 'theme//home',
+          			],
+          			'suggestion' => 'Template recommendation request',
+          			'before'     => [],
+          			'after'      => [],
+          			'request'    => [
+          				'prompt'    => 'Tighten the structure.',
+          				'reference' => 'template:theme//home:1',
+          				'ai'        => [
+          					'backendLabel'          => 'WordPress AI Client',
+          					'provider'              => 'wordpress_ai_client',
+          					'model'                 => 'provider-managed',
+          					'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
+          					'ownerLabel'            => 'Settings > Connectors',
+          					'credentialSourceLabel' => 'Provider-managed',
+          					'selectedProviderLabel' => 'Cloudflare Workers AI',
+          					'requestSummary'        => [
+          						'resolvedProvider'      => 'anthropic',
+          						'resolvedModel'         => 'claude-sonnet-4-6',
+          						'modelSelectionSource'  => 'ai_plugin_feature_developer',
+          						'modelResolutionStatus' => 'model',
+          					],
+          				],
+          			],
+          			'document'   => [
+          				'scopeKey' => 'wp_template:theme//home',
+          				'postType' => 'wp_template',
+          				'entityId' => 'theme//home',
+          			],
+          			'timestamp'  => '2026-07-20T12:00:00Z',
+          		];
+
+          		$method = new \ReflectionMethod( ActivityRepository::class, 'build_admin_projection_from_entry' );
+          		$method->setAccessible( true );
+          		$projection = $method->invoke( null, $entry );
+
+          		$this->assertIsArray( $projection );
+          		$this->assertSame( 'anthropic', $projection['admin_provider'] ?? null );
+          		$this->assertSame( 'claude-sonnet-4-6', $projection['admin_model'] ?? null );
+          		$this->assertSame( 'anthropic', $projection['admin_selected_provider'] ?? null );
+          	}
+          }
+          PHP
+
+      - name: Verify regression tests fail before the fix
+        shell: bash
+        run: |
+          set +e
+          vendor/bin/phpunit tests/phpunit/ProviderDiagnosticsActivityTest.php > /tmp/provider-diagnostics-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/provider-diagnostics-red.log
+
+          if [ "$status" -eq 0 ]; then
+            echo 'Regression test unexpectedly passed before the production fix.' >&2
+            exit 1
+          fi
+
+          if grep -q 'ERRORS!' /tmp/provider-diagnostics-red.log; then
+            echo 'Regression test errored instead of failing assertions.' >&2
+            exit 1
+          fi
+
+          grep -q 'FAILURES!' /tmp/provider-diagnostics-red.log
+
+      - name: Apply the production fix
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected one match, found {count}')
+              return text.replace(old, new, 1)
+
+          execution_path = Path('inc/Abilities/RecommendationAbilityExecution.php')
+          execution = execution_path.read_text()
+          execution = replace_once(
+              execution,
+              """\t\t$request_meta = \\is_array( $payload['requestMeta'] ?? null )
+          \t\t\t? $payload['requestMeta']
+          \t\t\t: Provider::active_chat_request_meta();""",
+              """\t\t$request_meta = self::merge_request_meta(
+          \t\t\t\\is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : []
+          \t\t);""",
+              'success request metadata merge',
+          )
+          execution = replace_once(
+              execution,
+              """\t\t$request_meta = \\is_array( $data['requestMeta'] ?? null )
+          \t\t\t? $data['requestMeta']
+          \t\t\t: Provider::active_chat_request_meta();""",
+              """\t\t$request_meta = self::merge_request_meta(
+          \t\t\t\\is_array( $data['requestMeta'] ?? null ) ? $data['requestMeta'] : []
+          \t\t);""",
+              'error request metadata merge',
+          )
+          helper_marker = """\t/**
+          \t * @param array<string, mixed> $request_meta
+          \t * @return array<string, mixed>
+          \t */
+          \tprivate static function append_request_log_meta"""
+          helper = """\t/**
+          \t * Merge callback-supplied request metadata over the diagnostics captured by
+          \t * the runtime so a partial recommendation payload cannot discard provider
+          \t * identity, transport, usage, or response details.
+          \t *
+          \t * @param array<string, mixed> $request_meta
+          \t * @return array<string, mixed>
+          \t */
+          \tprivate static function merge_request_meta( array $request_meta ): array {
+          \t\t$runtime_meta = Provider::active_chat_request_meta();
+          \t\t$merged       = \\array_replace( $runtime_meta, $request_meta );
+
+          \t\tforeach ( [ 'tokenUsage', 'transport', 'requestSummary', 'responseSummary', 'errorSummary' ] as $key ) {
+          \t\t\t$runtime_value = \\is_array( $runtime_meta[ $key ] ?? null ) ? $runtime_meta[ $key ] : [];
+          \t\t\t$request_value = \\is_array( $request_meta[ $key ] ?? null ) ? $request_meta[ $key ] : [];
+
+          \t\t\tif ( [] === $runtime_value && [] === $request_value ) {
+          \t\t\t\tcontinue;
+          \t\t\t}
+
+          \t\t\t$merged[ $key ] = \\array_replace_recursive( $runtime_value, $request_value );
+          \t\t}
+
+          \t\treturn $merged;
+          \t}
+
+          """
+          if execution.count(helper_marker) != 1:
+              raise RuntimeError('request metadata helper insertion marker not found exactly once')
+          execution = execution.replace(helper_marker, helper + helper_marker, 1)
+          execution_path.write_text(execution)
+
+          repository_path = Path('inc/Activity/Repository.php')
+          repository = repository_path.read_text()
+          repository = replace_once(
+              repository,
+              "\tpublic const SCHEMA_VERSION                      = 4;",
+              "\tpublic const SCHEMA_VERSION                      = 5;",
+              'activity schema version',
+          )
+
+          function_start = repository.index(
+              "\tprivate static function get_admin_request_meta( array $request, array $row = [] ): array {"
+          )
+          function_end = repository.index(
+              "\n\t/**\n\t * @param array<string, mixed> $value",
+              function_start,
+          )
+          replacement = r'''\tprivate static function get_admin_request_meta( array $request, array $row = [] ): array {
+          \t\t$resolved_provider = self::get_first_string(
+          \t\t\t$request,
+          \t\t\t[
+          \t\t\t\t[ 'ai', 'requestSummary', 'resolvedProvider' ],
+          \t\t\t\t[ 'requestSummary', 'resolvedProvider' ],
+          \t\t\t]
+          \t\t);
+          \t\t$resolved_model = self::get_first_string(
+          \t\t\t$request,
+          \t\t\t[
+          \t\t\t\t[ 'ai', 'requestSummary', 'resolvedModel' ],
+          \t\t\t\t[ 'requestSummary', 'resolvedModel' ],
+          \t\t\t]
+          \t\t);
+          \t\t$model_selection_source = self::get_first_string(
+          \t\t\t$request,
+          \t\t\t[
+          \t\t\t\t[ 'ai', 'requestSummary', 'modelSelectionSource' ],
+          \t\t\t\t[ 'requestSummary', 'modelSelectionSource' ],
+          \t\t\t]
+          \t\t);
+          \t\t$provider = '' !== $resolved_provider
+          \t\t\t? $resolved_provider
+          \t\t\t: self::get_first_string(
+          \t\t\t\t$request,
+          \t\t\t\t[
+          \t\t\t\t\t[ 'ai', 'backendLabel' ],
+          \t\t\t\t\t[ 'ai', 'providerLabel' ],
+          \t\t\t\t\t[ 'provider' ],
+          \t\t\t\t\t[ 'providerName' ],
+          \t\t\t\t\t[ 'metadata', 'provider' ],
+          \t\t\t\t\t[ 'ai', 'provider' ],
+          \t\t\t\t\t[ 'result', 'provider' ],
+          \t\t\t\t],
+          \t\t\t\ttrim( (string) ( $row['admin_provider'] ?? '' ) )
+          \t\t\t);
+          \t\t$model = '' !== $resolved_model
+          \t\t\t? $resolved_model
+          \t\t\t: self::get_first_string(
+          \t\t\t\t$request,
+          \t\t\t\t[
+          \t\t\t\t\t[ 'ai', 'model' ],
+          \t\t\t\t\t[ 'model' ],
+          \t\t\t\t\t[ 'modelName' ],
+          \t\t\t\t\t[ 'metadata', 'model' ],
+          \t\t\t\t\t[ 'result', 'model' ],
+          \t\t\t\t],
+          \t\t\t\ttrim( (string) ( $row['admin_model'] ?? '' ) )
+          \t\t\t);
+          \t\t$selected_provider = $resolved_provider;
+
+          \t\tif ( '' === $selected_provider && 'default' === $model_selection_source ) {
+          \t\t\t$selected_provider = 'Provider-managed';
+          \t\t}
+
+          \t\tif ( '' === $selected_provider ) {
+          \t\t\t$selected_provider = self::get_first_string(
+          \t\t\t\t$request,
+          \t\t\t\t[
+          \t\t\t\t\t[ 'ai', 'selectedProviderLabel' ],
+          \t\t\t\t\t[ 'ai', 'selectedProvider' ],
+          \t\t\t\t\t[ 'selectedProviderLabel' ],
+          \t\t\t\t\t[ 'selectedProvider' ],
+          \t\t\t\t],
+          \t\t\t\ttrim( (string) ( $row['admin_selected_provider'] ?? '' ) )
+          \t\t\t);
+          \t\t}
+
+          \t\treturn [
+          \t\t\t'provider'           => $provider,
+          \t\t\t'model'              => $model,
+          \t\t\t'providerPath'       => self::get_first_string(
+          \t\t\t\t$request,
+          \t\t\t\t[
+          \t\t\t\t\t[ 'ai', 'pathLabel' ],
+          \t\t\t\t\t[ 'pathLabel' ],
+          \t\t\t\t],
+          \t\t\t\ttrim( (string) ( $row['admin_provider_path'] ?? '' ) )
+          \t\t\t),
+          \t\t\t'configurationOwner' => self::get_first_string(
+          \t\t\t\t$request,
+          \t\t\t\t[
+          \t\t\t\t\t[ 'ai', 'ownerLabel' ],
+          \t\t\t\t\t[ 'ownerLabel' ],
+          \t\t\t\t],
+          \t\t\t\ttrim( (string) ( $row['admin_configuration_owner'] ?? '' ) )
+          \t\t\t),
+          \t\t\t'credentialSource'   => self::get_first_string(
+          \t\t\t\t$request,
+          \t\t\t\t[
+          \t\t\t\t\t[ 'ai', 'credentialSourceLabel' ],
+          \t\t\t\t\t[ 'ai', 'credentialSource' ],
+          \t\t\t\t\t[ 'credentialSourceLabel' ],
+          \t\t\t\t\t[ 'credentialSource' ],
+          \t\t\t\t],
+          \t\t\t\ttrim( (string) ( $row['admin_credential_source'] ?? '' ) )
+          \t\t\t),
+          \t\t\t'selectedProvider'   => $selected_provider,
+          \t\t\t'requestAbility'     => self::get_first_string(
+          \t\t\t\t$request,
+          \t\t\t\t[
+          \t\t\t\t\t[ 'ai', 'ability' ],
+          \t\t\t\t\t[ 'ability' ],
+          \t\t\t\t],
+          \t\t\t\ttrim( (string) ( $row['admin_request_ability'] ?? '' ) )
+          \t\t\t),
+          \t\t\t'requestRoute'       => self::get_first_string(
+          \t\t\t\t$request,
+          \t\t\t\t[
+          \t\t\t\t\t[ 'ai', 'route' ],
+          \t\t\t\t\t[ 'route' ],
+          \t\t\t\t],
+          \t\t\t\ttrim( (string) ( $row['admin_request_route'] ?? '' ) )
+          \t\t\t),
+          \t\t];
+          \t}
+          '''
+          replacement = replacement.replace('\\t', '\t')
+          repository = repository[:function_start] + replacement.rstrip('\n') + repository[function_end:]
+          repository_path.write_text(repository)
+          PY
+
+      - name: Verify provider diagnostics regression and related PHP suites
+        shell: bash
+        run: |
+          vendor/bin/phpunit \
+            tests/phpunit/ProviderDiagnosticsActivityTest.php \
+            tests/phpunit/RecommendationAbilityExecutionTest.php \
+            tests/phpunit/ActivityRepositoryTest.php
+
+      - name: Lint changed PHP files
+        run: |
+          vendor/bin/phpcs \
+            inc/Abilities/RecommendationAbilityExecution.php \
+            inc/Activity/Repository.php \
+            tests/phpunit/ProviderDiagnosticsActivityTest.php
+
+      - name: Verify patch integrity
+        run: git diff --check
+
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          rm .github/workflows/agent-provider-diagnostics-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            inc/Abilities/RecommendationAbilityExecution.php \
+            inc/Activity/Repository.php \
+            tests/phpunit/ProviderDiagnosticsActivityTest.php \
+            .github/workflows/agent-provider-diagnostics-fix.yml
+          git commit -m 'Fix recommendation provider diagnostics'
+          git push origin HEAD:agent/fix-recommendation-provider-diagnostics
