@@ -211,4 +211,109 @@ final class TemplatePartCompositionProfileTest extends TestCase {
 		);
 		$this->assertSame( '', $unknown );
 	}
+
+	public function test_classify_root_contrast_detects_media_backed_cover(): void {
+		$media_cover = TemplatePartCompositionProfile::classify_root_contrast(
+			[
+				[
+					'blockName'   => 'core/cover',
+					'attrs'       => [
+						'url'          => 'https://example.com/hero.jpg',
+						'id'           => 42,
+						'dimRatio'     => 50,
+						'overlayColor' => 'dark',
+					],
+					'innerBlocks' => [],
+				],
+			],
+			[]
+		);
+		$this->assertSame( 'image-overlay', $media_cover );
+
+		$featured_cover = TemplatePartCompositionProfile::classify_root_contrast(
+			[
+				[
+					'blockName'   => 'core/cover',
+					'attrs'       => [ 'useFeaturedImage' => true ],
+					'innerBlocks' => [],
+				],
+			],
+			[]
+		);
+		$this->assertSame( 'image-overlay', $featured_cover );
+
+		// A color-only Cover carries no media, so it is not an overlay context.
+		$color_only_cover = TemplatePartCompositionProfile::classify_root_contrast(
+			[
+				[
+					'blockName'   => 'core/cover',
+					'attrs'       => [
+						'overlayColor' => 'light',
+						'dimRatio'     => 100,
+					],
+					'innerBlocks' => [],
+				],
+			],
+			[]
+		);
+		$this->assertSame( '', $color_only_cover );
+	}
+
+	public function test_collect_token_affinity_captures_every_preset_in_one_value(): void {
+		$blocks = [
+			[
+				'blockName'   => 'core/group',
+				'attrs'       => [
+					'style' => [
+						'color' => [
+							'gradient' => 'linear-gradient(var:preset|color|primary 0%, var:preset|color|secondary 100%)',
+						],
+					],
+				],
+				'innerBlocks' => [],
+			],
+		];
+
+		$affinity = TemplatePartCompositionProfile::collect_token_affinity( $blocks );
+
+		$this->assertSame( [ 'primary', 'secondary' ], $affinity['color'] );
+	}
+
+	public function test_classify_root_contrast_treats_transparency_as_unknown(): void {
+		$transparent = TemplatePartCompositionProfile::classify_root_contrast(
+			[
+				[
+					'blockName'   => 'core/group',
+					'attrs'       => [ 'style' => [ 'color' => [ 'background' => '#00000000' ] ] ],
+					'innerBlocks' => [],
+				],
+			],
+			[]
+		);
+		$this->assertSame( '', $transparent );
+
+		$opaque_eight_digit = TemplatePartCompositionProfile::classify_root_contrast(
+			[
+				[
+					'blockName'   => 'core/group',
+					'attrs'       => [ 'style' => [ 'color' => [ 'background' => '#111111ff' ] ] ],
+					'innerBlocks' => [],
+				],
+			],
+			[]
+		);
+		$this->assertSame( 'dark-parent', $opaque_eight_digit );
+
+		$opaque_shorthand = TemplatePartCompositionProfile::classify_root_contrast(
+			[
+				[
+					'blockName'   => 'core/group',
+					'attrs'       => [ 'style' => [ 'color' => [ 'background' => '#000f' ] ] ],
+					'innerBlocks' => [],
+				],
+			],
+			[]
+		);
+		$this->assertSame( 'dark-parent', $opaque_shorthand );
+	}
 }

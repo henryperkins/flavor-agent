@@ -245,6 +245,7 @@ final class TemplatePartCompositionProfile {
 			return '';
 		}
 
+		$name  = (string) ( $root['blockName'] ?? '' );
 		$attrs = is_array( $root['attrs'] ?? null ) ? $root['attrs'] : [];
 		$style = is_array( $attrs['style'] ?? null ) ? $attrs['style'] : [];
 
@@ -252,6 +253,7 @@ final class TemplatePartCompositionProfile {
 			isset( $attrs['gradient'] )
 			|| isset( $style['color']['gradient'] )
 			|| isset( $style['background']['backgroundImage'] )
+			|| ( 'core/cover' === $name && self::cover_has_media( $attrs ) )
 		) {
 			return 'image-overlay';
 		}
@@ -269,6 +271,29 @@ final class TemplatePartCompositionProfile {
 		}
 
 		return $luminance < 0.4 ? 'dark-parent' : 'light-parent';
+	}
+
+	/**
+	 * A core/cover block represents its background through media attributes
+	 * (url/id/useFeaturedImage/video source), not generic block background-color
+	 * support, so a media-backed Cover root is an image-overlay context. A
+	 * deliberately color-only Cover (no media) is not treated as media-backed.
+	 *
+	 * @param array<string, mixed> $attrs
+	 */
+	private static function cover_has_media( array $attrs ): bool {
+		if ( ! empty( $attrs['useFeaturedImage'] ) ) {
+			return true;
+		}
+
+		$url = $attrs['url'] ?? null;
+		if ( is_string( $url ) && '' !== trim( $url ) ) {
+			return true;
+		}
+
+		$id = $attrs['id'] ?? null;
+
+		return is_numeric( $id ) && (int) $id > 0;
 	}
 
 	/**
@@ -323,28 +348,32 @@ final class TemplatePartCompositionProfile {
 				continue;
 			}
 
-			if ( ! preg_match( '/var:preset\|([a-z-]+)\|([A-Za-z0-9-]+)/', $value, $matches ) ) {
+			// A single CSS value can carry more than one preset reference (e.g. a
+			// custom gradient with two color stops), so capture every match.
+			if ( ! preg_match_all( '/var:preset\|([a-z-]+)\|([A-Za-z0-9-]+)/', $value, $matches, PREG_SET_ORDER ) ) {
 				continue;
 			}
 
-			$family = $matches[1];
-			$slug   = sanitize_key( $matches[2] );
+			foreach ( $matches as $match ) {
+				$family = $match[1];
+				$slug   = sanitize_key( $match[2] );
 
-			if ( '' === $slug ) {
-				continue;
-			}
+				if ( '' === $slug ) {
+					continue;
+				}
 
-			switch ( $family ) {
-				case 'color':
-				case 'gradient':
-					$affinity['color'][] = $slug;
-					break;
-				case 'spacing':
-					$affinity['spacing'][] = $slug;
-					break;
-				case 'font-size':
-					$affinity['fontSize'][] = $slug;
-					break;
+				switch ( $family ) {
+					case 'color':
+					case 'gradient':
+						$affinity['color'][] = $slug;
+						break;
+					case 'spacing':
+						$affinity['spacing'][] = $slug;
+						break;
+					case 'font-size':
+						$affinity['fontSize'][] = $slug;
+						break;
+				}
 			}
 		}
 	}
@@ -433,17 +462,35 @@ final class TemplatePartCompositionProfile {
 	}
 
 	private static function relative_luminance( string $hex ): float {
-		$hex = ltrim( trim( $hex ), '#' );
+		$hex   = ltrim( trim( $hex ), '#' );
+		$alpha = 255;
 
-		if ( 3 === strlen( $hex ) ) {
-			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-		}
-
-		if ( 8 === strlen( $hex ) ) {
-			$hex = substr( $hex, 0, 6 );
+		switch ( strlen( $hex ) ) {
+			case 3:
+				$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+				break;
+			case 4:
+				$alpha = (int) hexdec( $hex[3] . $hex[3] );
+				$hex   = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+				break;
+			case 6:
+				break;
+			case 8:
+				$alpha = (int) hexdec( substr( $hex, 6, 2 ) );
+				$hex   = substr( $hex, 0, 6 );
+				break;
+			default:
+				return -1.0;
 		}
 
 		if ( ! preg_match( '/^[0-9a-fA-F]{6}$/', $hex ) ) {
+			return -1.0;
+		}
+
+		// A non-opaque background composites over an unknown parent, so its
+		// effective luminance is indeterminate. Refuse to classify rather than
+		// let a transparent color (e.g. #00000000) read as a dark parent.
+		if ( $alpha < 242 ) {
 			return -1.0;
 		}
 

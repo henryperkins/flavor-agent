@@ -205,13 +205,37 @@ final class TemplateAbilities {
 			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];
 		}
 
-		$editor_structure = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
-		$context          = self::apply_template_part_live_structure_context( $context, $editor_structure );
+		$editor_structure   = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
+		$has_live_structure = array_key_exists( 'blockCounts', $editor_structure )
+			|| array_key_exists( 'structureStats', $editor_structure )
+			|| array_key_exists( 'allBlockPaths', $editor_structure )
+			|| array_key_exists( 'blockTree', $editor_structure );
+		$context            = self::apply_template_part_live_structure_context( $context, $editor_structure );
 
-		// Re-derive the composition profile from the (possibly live-overlaid)
-		// block counts so the prompt's area-role gaps match the block tree the
-		// operator is actually looking at, not only the last-saved markup.
-		$context['compositionProfile'] = self::resolve_template_part_composition_profile( $context );
+		$collector_profile = is_array( $context['compositionProfile'] ?? null ) ? $context['compositionProfile'] : [];
+
+		// When the editor sent live structure, re-derive the role gaps from what
+		// the operator currently sees; that may differ from the last-saved markup.
+		// Otherwise keep the collector's profile, which already expands synced
+		// patterns for non-editor callers (MCP / signature-only).
+		if ( $has_live_structure ) {
+			$context['compositionProfile'] = self::resolve_template_part_composition_profile( $context );
+		}
+
+		// The collector ranked and 30-capped $context['patterns'] against the
+		// pre-overlay profile. If the effective role gaps changed, re-rank against
+		// the live profile so a gap-filling pattern can surface (and is not lost
+		// beyond the cap). The review-context candidate set stays profile-free, so
+		// its signature semantics are unchanged.
+		if (
+			( $collector_profile['missingRoles'] ?? [] ) !== ( $context['compositionProfile']['missingRoles'] ?? [] )
+		) {
+			$context['patterns'] = ServerCollector::for_template_part_candidate_patterns(
+				sanitize_key( (string) ( $context['area'] ?? '' ) ),
+				$visible_pattern_names,
+				is_array( $context['compositionProfile'] ?? null ) ? $context['compositionProfile'] : []
+			);
+		}
 
 		// The review-context design semantics stay the pristine client value so
 		// the review signature keeps its existing meaning and its independence

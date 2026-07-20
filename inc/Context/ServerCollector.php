@@ -236,8 +236,8 @@ final class ServerCollector {
 	 * @param string[]|null $visible_pattern_names
 	 * @return array<int, array<string, mixed>>
 	 */
-	public static function for_template_part_candidate_patterns( string $area, ?array $visible_pattern_names = null ): array {
-		return self::pattern_candidate_selector()->collect_template_part_candidate_patterns( $area, $visible_pattern_names );
+	public static function for_template_part_candidate_patterns( string $area, ?array $visible_pattern_names = null, ?array $content_profile = null ): array {
+		return self::pattern_candidate_selector()->collect_template_part_candidate_patterns( $area, $visible_pattern_names, $content_profile );
 	}
 
 	/**
@@ -397,7 +397,8 @@ final class ServerCollector {
 			self::pattern_override_analyzer(),
 			self::pattern_candidate_selector(),
 			self::theme_token_collector(),
-			self::viewport_visibility_analyzer()
+			self::viewport_visibility_analyzer(),
+			self::synced_pattern_repository()
 		);
 	}
 

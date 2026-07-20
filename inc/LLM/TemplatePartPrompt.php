@@ -369,16 +369,16 @@ Expected response:
 EXAMPLE
 			,
 			<<<'EXAMPLE'
-## Example - footer missing its social-links role
+## Example - footer missing its site-identity role
 
 Input context:
 - Template part: `footer`
-- Area Role & Composition: site identity present; social links missing
-- Available patterns: `example/footer-social-row`
-- Insert anchors include `end`
+- Area Role & Composition: site identity (logo/title/tagline): missing
+- Available patterns: `example/footer-colophon`
+- Insert anchors include `start`
 
 Expected response:
-{"suggestions":[{"label":"Add a social links row","description":"The footer has site identity but no social links; append a compact social row to close the gap.","blockHints":[],"patternSuggestions":["example/footer-social-row"],"operations":[{"type":"insert_pattern","patternName":"example/footer-social-row","placement":"end","targetPath":null,"expectedBlockName":null}],"confidence":0.75,"ranking":null}],"explanation":"Fill the missing social-links role with a footer-scoped pattern rather than restyling existing blocks."}
+{"suggestions":[{"label":"Add a site-identity colophon","description":"The footer has navigation but no site identity; add a colophon with the site title to close the gap.","blockHints":[],"patternSuggestions":["example/footer-colophon"],"operations":[{"type":"insert_pattern","patternName":"example/footer-colophon","placement":"start","targetPath":null,"expectedBlockName":null}],"confidence":0.75,"ranking":null}],"explanation":"Fill the missing site-identity role with a footer-scoped colophon pattern rather than restyling existing blocks."}
 EXAMPLE
 			,
 			<<<'EXAMPLE'
