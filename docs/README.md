@@ -62,6 +62,7 @@ Read these documents in this order:
    - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
    - `cross-surface-validation-gates.md` — additive hard-stop validation rules and release evidence for multi-surface or shared-subsystem changes.
    - `governance-layer.md` — the governance-layer contract map: pillars, enforcing code paths, surface loop coverage, and external-agent parity boundaries.
+   - `agents-api-integration.md` — adoption boundary and phased plan for using Agents API as an optional runtime over Flavor Agent abilities without replacing its governance state machines.
    - `release-surface-scope-review.md` — release stopping points per surface, scope-freeze checklist, and product-coherence rubric for what merits release presence.
    - `surfaces/release-stop-lines.md` — canonical release stop-line catalog used by the release scope review.
    - `release-submission-and-review.md` — WordPress.org submission artifacts, guideline audit, reviewer-cycle discipline, and KPIs from pre-submission through approval.
@@ -113,6 +114,7 @@ Each top-level doc has one job:
    - `recommendation-ui-consistency.md` — Which interaction model does each surface use, and which differences are intentional exceptions?
    - `cross-surface-validation-gates.md` — Which release gates does a multi-surface or shared-subsystem change trigger, and what evidence is required before sign-off?
    - `governance-layer.md` — Which control bounds, reviews, attributes, or reverses an AI change, and where is it enforced and tested?
+   - `agents-api-integration.md` — Which Agents API contracts should Flavor Agent adopt, which governance contracts remain authoritative, and which gates precede a dependency decision?
    - `release-surface-scope-review.md` — Which surfaces merit release presence? Which surfaces should stop, harden, or remain advisory before release?
    - `surfaces/release-stop-lines.md` — Which stop line applies to each release surface?
    - `release-submission-and-review.md` — Which artifacts and audits does WordPress.org require? Which signals indicate progress toward approval?
