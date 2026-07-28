@@ -19,14 +19,27 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class WordPressAIClient {
 
-	private const SETUP_MESSAGE                    = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
-	private const CONNECTOR_NOT_APPROVED_CODE      = 'wpai_connector_not_approved';
-	private const PROMPT_PREVENTED_CODE            = 'prompt_prevented';
-	private const PROMPT_PREVENTED_MESSAGE         = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
-	private const DEFAULT_REQUEST_TIMEOUT          = 90;
-	private const REASONING_EFFORTS                = [ 'low', 'medium', 'high', 'xhigh' ];
-	private const SCHEMA_UNION_LIMIT               = 16;
-	private const ANTHROPIC_SCHEMA_BYTE_LIMIT      = 4096;
+	private const SETUP_MESSAGE               = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const CONNECTOR_NOT_APPROVED_CODE = 'wpai_connector_not_approved';
+	private const PROMPT_PREVENTED_CODE       = 'prompt_prevented';
+	private const PROMPT_PREVENTED_MESSAGE    = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
+	private const DEFAULT_REQUEST_TIMEOUT     = 90;
+	private const REASONING_EFFORTS           = [ 'low', 'medium', 'high', 'xhigh' ];
+	private const SCHEMA_UNION_LIMIT          = 16;
+	/*
+	 * Anthropic compiles structured-output schemas into a decoding grammar and
+	 * rejects the request outright once that grammar gets too large. The limit
+	 * is not published, so this ceiling is measured, not guessed: on
+	 * claude-opus-5 a 1,728-byte prepared schema succeeds and a 3,427-byte one
+	 * fails with "The compiled grammar is too large" (2026-07-28, evidence in
+	 * docs/validation/2026-07-28-anthropic-block-recommendation-live-failure.md).
+	 * 2048 sits inside that verified band: every surface except block keeps its
+	 * schema, and block drops to prompt-shaped output rather than 400-ing.
+	 *
+	 * Raising this requires a fresh live measurement, not a local test run --
+	 * the suite can only check our own arithmetic, never the provider's limit.
+	 */
+	private const ANTHROPIC_SCHEMA_BYTE_LIMIT      = 2048;
 	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
 
 	/**
@@ -104,6 +117,7 @@ final class WordPressAIClient {
 		$selection         = self::resolve_provider_model_selection( $provider );
 		$resolved_provider = $selection['provider'];
 		$model_options     = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
+		$raw_system_prompt = $system_prompt;
 		$system_prompt     = WordPressAIPolicy::system_instruction(
 			$system_prompt,
 			$ability_name,
@@ -148,9 +162,8 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$prompt_without_output_schema = $prompt;
-		$schema                       = self::prepare_output_schema( $schema, $resolved_provider );
-		$prompt                       = self::apply_output_schema( $prompt, $schema );
+		$schema = self::prepare_output_schema( $schema, $resolved_provider );
+		$prompt = self::apply_output_schema( $prompt, $schema );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -225,8 +238,33 @@ final class WordPressAIClient {
 						);
 					}
 
+					// Rebuild the prompt from scratch rather than reusing a
+					// pre-schema copy. The copy is unsafe because the AI Client
+					// builder is only shallow-cloned before as_json_response(),
+					// so it can share mutated nested state -- which matches the
+					// live 2026-07-28 failure where this retry fired and the
+					// request still died on the same oversized grammar.
+					// Rebuilding also regenerates the system instruction with
+					// hasSchema => false. That is inert on a stock install
+					// (WordPressAIPolicy::system_instruction just passes through
+					// the wpai_system_instruction filter) but matters to anyone
+					// filtering on it.
+					$rebuilt = self::build_prompt_without_output_schema(
+						$raw_system_prompt,
+						$user_prompt,
+						$selection,
+						$resolved_provider,
+						$reasoning_effort,
+						$model_options,
+						$ability_name
+					);
+
+					if ( is_wp_error( $rebuilt ) ) {
+						return $rebuilt;
+					}
+
 					$schema                  = null;
-					$prompt                  = $prompt_without_output_schema;
+					$prompt                  = $rebuilt;
 					$request_timeout_seconds = self::request_timeout_seconds(
 						$resolved_provider,
 						$reasoning_effort,
@@ -845,6 +883,68 @@ final class WordPressAIClient {
 			],
 			default => null,
 		};
+	}
+
+	/**
+	 * Build a prompt that never had an output schema attached.
+	 *
+	 * Used by the grammar-limit retry. This deliberately replays the whole
+	 * construction chain instead of reusing a copy captured before
+	 * apply_output_schema(), because the system instruction itself varies with
+	 * hasSchema and because the prompt builder is only shallow-cloned before
+	 * mutation.
+	 *
+	 * @param array{provider: string, model: string, source: string, modelResolutionStatus: string} $selection
+	 * @param array<string, mixed>                                                                  $model_options
+	 * @return object|\WP_Error
+	 */
+	private static function build_prompt_without_output_schema(
+		string $raw_system_prompt,
+		string $user_prompt,
+		array $selection,
+		string $resolved_provider,
+		?string $reasoning_effort,
+		array $model_options,
+		string $ability_name
+	) {
+		$system_prompt = WordPressAIPolicy::system_instruction(
+			$raw_system_prompt,
+			$ability_name,
+			[
+				'provider'        => $resolved_provider,
+				'reasoningEffort' => self::normalize_reasoning_effort_value( $reasoning_effort ),
+				'hasSchema'       => false,
+			]
+		);
+
+		$prompt = self::make_prompt(
+			$user_prompt,
+			[
+				'system_instruction' => $system_prompt,
+			] + $model_options
+		);
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		// Pass a copy: apply_provider_model_selection() takes $selection by
+		// reference, and the retry must not rewrite the diagnostics the first
+		// attempt already recorded.
+		$selection_copy = $selection;
+		$prompt         = self::apply_provider_model_selection( $prompt, $selection_copy );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		$prompt = self::apply_system_instruction( $prompt, $system_prompt );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		return self::apply_reasoning_effort( $prompt, $resolved_provider, $reasoning_effort );
 	}
 
 	private static function prepare_output_schema( ?array $schema, string $provider = '' ): ?array {

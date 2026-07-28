@@ -127,18 +127,52 @@ The harness also cannot detect retry contamination: the stub
 `WordPressTestState::$last_ai_client_prompt` (`tests/phpunit/bootstrap.php:808`),
 so a clone and its original are indistinguishable in tests.
 
-## Required before release
+## Measured boundary
 
-- [ ] Lower `ANTHROPIC_SCHEMA_BYTE_LIMIT` to a value validated against the live
-      API, or stop sending a response schema for the block surface on Anthropic
-      and rely on prompt-level shape instructions plus the existing server-side
-      validators.
-- [ ] Determine why the grammar-limit retry does not rescue the request, and fix
-      it. A working retry is the safety net for every future schema growth.
-- [ ] Replace the `<= 4096` assertion with one anchored to a provider-verified
-      limit, and add a regression test that can observe retry contamination
-      (the current stub cannot).
-- [ ] Re-run this exact check against the live site after the fix.
+Four surfaces were run live against the same site, provider, and model. Only the
+response-schema size varies:
+
+| Surface | Prepared schema | Request body | Result |
+| --- | ---: | ---: | --- |
+| `recommend-content` | 546 B | — | **200** |
+| `recommend-navigation` | 1,325 B | 8,395 B | **200** |
+| `recommend-template` | 1,728 B | 21,445 B | **200** |
+| `recommend-style` | 1,769 B | — | **200** |
+| `recommend-block` | 3,427 B | 21,661 B | **400** |
+
+Template and block sent near-identical **body** sizes (21,445 vs 21,661) with
+opposite outcomes, which rules out total request size and isolates the schema.
+The failing boundary is therefore **(1,769 B, 3,427 B]**.
+
+## Fix applied
+
+- `ANTHROPIC_SCHEMA_BYTE_LIMIT` lowered `4096` → **`2048`**, inside the verified
+  band. Every surface at or below 1,769 B keeps structured output; block exceeds
+  the ceiling, has nothing left to strip after enums, and so
+  `prepare_anthropic_output_schema()` returns `null` — block sends no schema and
+  the request succeeds instead of 400-ing.
+- The grammar-limit retry now **rebuilds** the prompt via
+  `build_prompt_without_output_schema()` rather than reusing a copy captured
+  before `apply_output_schema()`. The copy was unsafe because
+  `clone_prompt_for_optional_feature()` is a shallow `clone`, so it can share
+  mutated nested state with the schema-bearing prompt. Rebuilding also
+  regenerates the system instruction with `hasSchema => false` (inert on a stock
+  install, since `WordPressAIPolicy::system_instruction()` only passes through
+  the `wpai_system_instruction` filter, but correct for anyone filtering it).
+
+Both regression tests were confirmed to **fail when the fix is reverted**. Note
+the obvious assertion does not work: checking `json_schema` after the retry
+passes either way, because the stub's `sync_state()` pushes the reused object's
+own schema-free state into the recorded prompt. The discriminating signal is the
+system instruction, which is generated with `hasSchema`.
+
+## Still open
+
+- [ ] **Not yet re-verified live.** The fix is committed but hperkins.blog runs
+      the deployed `0.1.0` build; confirming it needs the branch deployed there.
+- [ ] The exact provider ceiling is bounded, not pinned. If block's schema is
+      ever shrunk below 2,048 it could regain structured output, but that needs a
+      fresh live measurement — the suite can only check our own arithmetic.
 
 ## Reproduction
 
