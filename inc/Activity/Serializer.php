@@ -201,18 +201,19 @@ final class Serializer {
 
 	/**
 	 * @param array<string, mixed> $undo
+	 * @param string               $timestamp       Fallback timestamp for updatedAt/undoneAt.
+	 * @param bool                 $client_supplied True when the undo object arrives through
+	 *                                              entry creation (Repository::create and its
+	 *                                              duplicate-create merge). A creator may never
+	 *                                              assert `verification: "server"` — no executor
+	 *                                              read live state for a row being born — so a
+	 *                                              supplied `server` is downgraded to
+	 *                                              `client-reported`. An absent verification
+	 *                                              stays absent: server-authored diagnostics are
+	 *                                              also born terminal, and stamping them as a
+	 *                                              client's report would misattribute authorship.
+	 *                                              Only update_undo_status() establishes `server`.
 	 * @return array<string, mixed>
-	 */
-	/**
-	 * @param bool $client_supplied True when the undo object arrives across the
-	 *                              client activity-creation boundary
-	 *                              (POST /flavor-agent/v1/activity and its
-	 *                              duplicate-create merge). A row born terminal
-	 *                              is by definition the client's report, so any
-	 *                              caller-supplied `verification` — including a
-	 *                              forged `server` — is replaced with
-	 *                              `client-reported`. Only update_undo_status()
-	 *                              and the coordinator may establish `server`.
 	 */
 	public static function normalize_undo_for_storage( array $undo, string $timestamp, bool $client_supplied = false ): array {
 		$status = self::normalize_string( $undo['status'] ?? self::UNDO_STATUS_AVAILABLE );
@@ -241,9 +242,12 @@ final class Serializer {
 		$verification = self::normalize_string( $undo['verification'] ?? '' );
 
 		if ( in_array( $status, [ self::UNDO_STATUS_UNDONE, self::UNDO_STATUS_FAILED ], true ) ) {
-			if ( $client_supplied ) {
-				// No caller may assert server verification for a row it
-				// creates: no executor read live state for this transition.
+			if ( $client_supplied && self::UNDO_VERIFICATION_SERVER === $verification ) {
+				// No creator may assert server verification: no executor read
+				// live state for a row being born. The explicit claim becomes
+				// the honest one. An absent verification is left absent --
+				// server-authored diagnostic rows are also born terminal, and
+				// labelling them a client's report would misattribute them.
 				$normalized['verification'] = self::UNDO_VERIFICATION_CLIENT_REPORTED;
 			} elseif ( in_array( $verification, [ self::UNDO_VERIFICATION_SERVER, self::UNDO_VERIFICATION_CLIENT_REPORTED ], true ) ) {
 				$normalized['verification'] = $verification;

@@ -64,17 +64,37 @@ final class ActivitySerializerTest extends TestCase {
 		);
 		$this->assertSame(
 			[
-				'canUndo'      => false,
-				'status'       => 'failed',
-				'error'        => 'Apply failed',
-				'updatedAt'    => '2026-03-24T10:05:00+00:00',
-				'undoneAt'     => null,
-				// A row born terminal through the client-creation boundary is
-				// by definition the client's report -- normalize_entry() stamps
-				// this regardless of what the caller supplied.
-				'verification' => 'client-reported',
+				'canUndo'   => false,
+				'status'    => 'failed',
+				'error'     => 'Apply failed',
+				'updatedAt' => '2026-03-24T10:05:00+00:00',
+				'undoneAt'  => null,
 			],
 			$entry['undo']
+		);
+	}
+
+	/**
+	 * A row born terminal with NO verification claim stays unlabelled.
+	 * Server-authored request diagnostics (RecommendationAbilityExecution's
+	 * failed-request rows) are also born `failed` through Repository::create;
+	 * stamping them `client-reported` would assert a client reported something
+	 * when the server itself authored the record.
+	 */
+	public function test_normalize_entry_leaves_absent_verification_absent_on_born_terminal_rows(): void {
+		$entry = Serializer::normalize_entry(
+			[
+				'type'     => 'request_diagnostic',
+				'surface'  => 'block',
+				'document' => [ 'scopeKey' => 'post:42' ],
+				'undo'     => [ 'status' => 'failed' ],
+			]
+		);
+
+		$this->assertArrayNotHasKey(
+			'verification',
+			$entry['undo'],
+			'An unclaimed terminal row must not be attributed to anyone.'
 		);
 	}
 

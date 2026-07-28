@@ -131,7 +131,7 @@ final class UndoCoordinator {
 	 * Revert the live subject, then record the outcome that revert produced.
 	 *
 	 * The caller is responsible for the gates that precede this -- run
-	 * gate_entry_for_undo() first.
+	 * resolve_entry_for_undo() and gate_undoable() first.
 	 *
 	 * @param string                              $activity_id Row being undone.
 	 * @param array<string, mixed>                $entry       Hydrated activity entry.
