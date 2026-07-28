@@ -935,6 +935,7 @@ final class WordPressAIClient {
 			}
 		}
 
+		// Dependency values can be subschemas or lists of required property names.
 		if ( isset( $schema['dependencies'] ) && is_array( $schema['dependencies'] ) ) {
 			foreach ( $schema['dependencies'] as $key => $dependency ) {
 				if ( is_array( $dependency ) && ! self::is_list_array( $dependency ) ) {
@@ -1454,6 +1455,7 @@ final class WordPressAIClient {
 	private static function is_output_schema_grammar_limit_error( \WP_Error $error ): bool {
 		$message = strtolower( self::normalize_ai_client_error_message( $error->get_error_message() ) );
 
+		// Match the known constrained-decoding grammar limit responses.
 		return str_contains( $message, 'compiled grammar is too large' )
 			|| str_contains( $message, 'schema is too complex for compilation' );
 	}

@@ -493,7 +493,7 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'number', $score_schema['type'] ?? null );
 	}
 
-	public function test_chat_removes_anthropic_bounds_from_legacy_nested_schema_locations(): void {
+	public function test_chat_removes_anthropic_bounds_from_additional_items_and_schema_dependencies(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,
 		];
