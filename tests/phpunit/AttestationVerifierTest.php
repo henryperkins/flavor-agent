@@ -47,6 +47,57 @@ final class AttestationVerifierTest extends TestCase {
 		$this->assertContains( 'live_matches_subject', $result['outcomes'] );
 	}
 
+	/**
+	 * The JWKS-honesty safety pin. When a signing key's private half
+	 * disappears, jwks() demotes its served status to verification_only —
+	 * and that demotion must not cost previously issued attestations their
+	 * verifiability. Key selection matches kid/kty/crv/use/alg and never
+	 * reads `status`, so an envelope signed while the key was active still
+	 * verifies against the demoted JWKS.
+	 */
+	public function test_envelope_signed_before_key_loss_still_verifies_against_the_demoted_jwks(): void {
+		// Added after setUp()'s fixed-key filter, so this mutable filter wins.
+		$sk      = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		$current = $sk;
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( &$current ): string {
+				return $current;
+			}
+		);
+		KeyManager::ensure_registered();
+
+		$config   = [
+			'settings' => [],
+			'styles'   => [ 'color' => [ 'background' => 'var:preset|color|parchment-100' ] ],
+		];
+		$envelope = $this->signed_envelope(
+			'att_demoted',
+			str_repeat( 'b', 64 ),
+			Canonicalizer::digest( $config )
+		);
+
+		// The private half disappears after signing; the served JWKS demotes.
+		$current = '';
+		$jwks    = KeyManager::jwks();
+		$this->assertSame( KeyManager::STATUS_VERIFICATION_ONLY, $jwks['keys'][0]['status'] );
+
+		$result = Verifier::verify(
+			$envelope,
+			$jwks,
+			Canonicalizer::canonical_bytes( $config ),
+			'att_demoted',
+			'https://example.test'
+		);
+
+		$this->assertContains(
+			'signature_valid',
+			$result['outcomes'],
+			'Demoting a served key status must never break verification of attestations it already signed.'
+		);
+		$this->assertContains( 'live_matches_subject', $result['outcomes'] );
+	}
+
 	public function test_tampered_statement_yields_record_tampered(): void {
 		$envelope                  = $this->signed_envelope( 'att_1', str_repeat( 'b', 64 ), str_repeat( 'a', 64 ) );
 		$bytes                     = $this->decode_b64url( $envelope['statement_b64'] );

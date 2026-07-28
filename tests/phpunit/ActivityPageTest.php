@@ -178,6 +178,37 @@ final class ActivityPageTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The approver's pre-decision attestation signal. apply.attestationStatus
+	 * is only written at approve-execution time, so without this flag a
+	 * pending eligible-lane apply gives the approver no way to see that
+	 * approving will execute unattested (validation record 2026-07-28,
+	 * Finding 1). The eligible-surface list ships from the server so the
+	 * client never duplicates AttestationService::ELIGIBLE_SURFACES.
+	 */
+	public function test_boot_data_reports_attestation_signing_availability(): void {
+		$method = new \ReflectionMethod( ActivityPage::class, 'build_activity_log_boot_data' );
+		$method->setAccessible( true );
+
+		$data = $method->invoke( null );
+
+		$this->assertFalse(
+			$data['attestation']['signingAvailable'] ?? null,
+			'With no signing key configured the approver-facing flag must say so.'
+		);
+		$this->assertSame(
+			[ 'global-styles', 'style-book', 'template', 'template-part' ],
+			$data['attestation']['eligibleSurfaces'] ?? null
+		);
+
+		$sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $sk );
+
+		$data = $method->invoke( null );
+
+		$this->assertTrue( $data['attestation']['signingAvailable'] ?? null );
+	}
+
 	public function test_build_activity_log_boot_data_includes_current_user_id(): void {
 		WordPressTestState::$current_user_id = 42;
 

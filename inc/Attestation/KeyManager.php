@@ -89,15 +89,39 @@ final class KeyManager {
 	}
 
 	/**
+	 * Served when a registered key's stored status says `active` but the site
+	 * cannot currently sign with it. The key stays published so previously
+	 * issued attestations remain verifiable (verification matches kid/kty/crv/
+	 * use/alg and never reads `status`), but the JWKS no longer claims a
+	 * signing capability the site does not have.
+	 */
+	public const STATUS_VERIFICATION_ONLY = 'verification_only';
+
+	/**
+	 * The registry's stored status is rotation bookkeeping written at signing
+	 * time (Signer::sign -> ensure_registered), so it freezes at its last
+	 * signed value: a site whose private key later disappears keeps a stored
+	 * `active` forever, because the only writer never runs without a private
+	 * key. Honesty therefore has to be computed here, at serve time -- `active`
+	 * is only served for the key the site can sign with right now. This method
+	 * must never write: it backs a public, unauthenticated GET route.
+	 *
 	 * @return array{keys: list<array{kty: string, crv: string, x: string, kid: string, use: string, alg: string, status: string, createdAt: string}>}
 	 */
 	public static function jwks(): array {
-		$registry = \get_option( self::REGISTRY_OPTION, [] );
-		$keys     = [];
+		$registry     = \get_option( self::REGISTRY_OPTION, [] );
+		$keys         = [];
+		$signable_kid = self::key_id();
 
 		foreach ( is_array( $registry ) ? $registry : [] as $record ) {
 			if ( ! is_array( $record ) ) {
 				continue;
+			}
+
+			$status = (string) ( $record['status'] ?? '' );
+
+			if ( 'active' === $status && (string) ( $record['kid'] ?? '' ) !== (string) $signable_kid ) {
+				$status = self::STATUS_VERIFICATION_ONLY;
 			}
 
 			$keys[] = [
@@ -107,7 +131,7 @@ final class KeyManager {
 				'kid'       => (string) $record['kid'],
 				'use'       => 'sig',
 				'alg'       => 'EdDSA',
-				'status'    => (string) ( $record['status'] ?? '' ),
+				'status'    => $status,
 				'createdAt' => (string) ( $record['createdAt'] ?? '' ),
 			];
 		}

@@ -72,6 +72,79 @@ final class AttestationKeyManagerTest extends TestCase {
 	}
 
 	/**
+	 * The live P0 (validation record 2026-07-28, Finding 1): a key signs and
+	 * registers as `active`, then its private half disappears — constant
+	 * removed, filter mu-plugin deactivated, or the database cloned to an
+	 * environment without the key. The stored registry keeps `active` forever
+	 * because its only writer runs at signing time, so honesty has to be
+	 * computed when the JWKS is served: an outside verifier must not read a
+	 * signing capability the site does not have, while the key itself stays
+	 * published so previously issued attestations remain verifiable.
+	 */
+	public function test_jwks_serves_verification_only_for_an_active_key_whose_private_half_is_gone(): void {
+		$sk      = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		$current = $sk;
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( &$current ): string {
+				return $current;
+			}
+		);
+
+		KeyManager::ensure_registered();
+		$kid    = (string) KeyManager::key_id();
+		$before = $this->keys_by_id( KeyManager::jwks()['keys'] );
+		$this->assertSame( 'active', $before[ $kid ]['status'] );
+
+		// The private half disappears; the stored registry still says active.
+		$current = '';
+		$this->assertFalse( KeyManager::configured() );
+
+		$keys = $this->keys_by_id( KeyManager::jwks()['keys'] );
+
+		$this->assertSame(
+			KeyManager::STATUS_VERIFICATION_ONLY,
+			$keys[ $kid ]['status'],
+			'A key the site cannot sign with must not be served as active.'
+		);
+		$this->assertSame( $before[ $kid ]['x'], $keys[ $kid ]['x'], 'The public key stays published for verification.' );
+		$this->assertSame( $before[ $kid ]['kid'], $keys[ $kid ]['kid'] );
+	}
+
+	/**
+	 * Serving honesty must not write it: jwks() backs a public unauthenticated
+	 * GET, and the stored registry is rotation bookkeeping owned by the signer.
+	 */
+	public function test_jwks_demotion_never_rewrites_the_stored_registry(): void {
+		$sk      = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		$current = $sk;
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( &$current ): string {
+				return $current;
+			}
+		);
+
+		KeyManager::ensure_registered();
+		$kid     = (string) KeyManager::key_id();
+		$current = '';
+
+		KeyManager::jwks();
+
+		$stored = WordPressTestState::$options['flavor_agent_attestation_public_keys'] ?? [];
+		$this->assertSame(
+			'active',
+			$stored[ $kid ]['status'] ?? null,
+			'The stored status is signing-time bookkeeping; read-time honesty must not mutate it.'
+		);
+
+		// And when the key returns, the served status recovers on its own.
+		$current = $sk;
+		$keys    = $this->keys_by_id( KeyManager::jwks()['keys'] );
+		$this->assertSame( 'active', $keys[ $kid ]['status'] );
+	}
+
+	/**
 	 * @param list<array<string, mixed>> $keys
 	 * @return array<string, array<string, mixed>>
 	 */

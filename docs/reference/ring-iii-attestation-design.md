@@ -275,7 +275,22 @@ and the transparency-log level (§12) addresses history-rewrite over time.
   prior marked `retired` but **kept**, so historical attestations stay verifiable; each
   attestation row's `key_id` (and the statement's `site.keyId`) resolves into this registry. If
   an operator rotates A → B → A, reconciliation reactivates A, retires B, preserves A's original
-  `createdAt`, and still exports exactly one active key.
+  `createdAt`, and exports at most one active key.
+- **Served key status is signing-availability truth, not stored bookkeeping.** The stored
+  registry status is written at signing time (`Signer::sign → ensure_registered`), so it freezes
+  at its last signed value: a site whose private key later disappears (constant removed, filter
+  mu-plugin deactivated, database cloned without the key) keeps a stored `active` forever.
+  `KeyManager::jwks()` therefore recomputes the served status at read time — `active` is served
+  only for the key the site can sign with **right now**; a stored-`active` key whose private half
+  is unavailable is served as **`verification_only`**. The key stays published (verification
+  selects keys by `kid`/`kty`/`crv`/`use`/`alg` and never reads `status`, so previously issued
+  attestations keep verifying), but the JWKS no longer claims a signing capability the site does
+  not have. The read never writes: it backs a public, unauthenticated GET. Status vocabulary:
+  `active` — the site can sign with this key now; `retired` — deliberately rotated away, kept for
+  verification; `verification_only` — stored as active but currently unsignable (served status
+  only, never stored). A JWKS with **no** `active` key is the honest signal that the lane cannot
+  currently produce new attestations. The live 2026-07-28 incident (`docs/validation/`
+  `2026-07-28-governed-style-apply-lane-live.md`, Finding 1) is the motivating case.
 
 ## 8. Lifecycle & data flow
 

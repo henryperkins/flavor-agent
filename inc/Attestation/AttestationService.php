@@ -146,6 +146,16 @@ final class AttestationService {
 		return in_array( trim( $surface ), self::ELIGIBLE_SURFACES, true );
 	}
 
+	/**
+	 * The attestation-eligible surfaces, for callers that ship the list to a
+	 * client (e.g. the AI Activity boot data) so it is never duplicated there.
+	 *
+	 * @return list<string>
+	 */
+	public static function eligible_surfaces(): array {
+		return self::ELIGIBLE_SURFACES;
+	}
+
 	public static function lane_for_surface( string $surface ): string {
 		return match ( trim( $surface ) ) {
 			'global-styles', 'style-book' => self::GOVERNANCE_LANE,

@@ -46,6 +46,7 @@ import {
 	normalizeSelectedActivityActions,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
+	shouldWarnUnattestedApproval,
 	TERMINAL_DECISION_ERROR_CODES,
 	writePersistedActivityView,
 } from './activity-log-utils';
@@ -2689,6 +2690,18 @@ function GovernanceEvidenceSection( {
 							</Button>
 						) }
 					</div>
+					{ shouldWarnUnattestedApproval( entry, bootData ) && (
+						<Notice
+							status="warning"
+							isDismissible={ false }
+							className="flavor-agent-activity-log__unattested-warning"
+						>
+							{ __(
+								'Approving will apply this change without a Ring III attestation: this site has no attestation signing key configured. The apply will still be recorded and undoable, but external verifiers will have no signed record of it.',
+								'flavor-agent'
+							) }
+						</Notice>
+					) }
 					<TextareaControl
 						__nextHasNoMarginBottom
 						label={ __(

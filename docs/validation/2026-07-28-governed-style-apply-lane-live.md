@@ -65,15 +65,39 @@ GET /wp-json/flavor-agent/v1/attestations/keys
           "createdAt":"2026-06-22T12:13:47+00:00"}]}
 ```
 
-So the public key is registered and published while signing is unavailable. A
-verifier fetching that JWKS would reasonably conclude the lane is attested. It is
-not: approved applies are silently recorded as unattested, and the release notes
-claim "Ring III attestation on three of the four lanes."
+So the public key is registered and published while signing is unavailable. To
+be precise about what each artifact proves: JWKS publication never attests any
+individual apply — the activity row is what records this apply's
+`attestationStatus: "not_configured"` — but an `active` key is a reasonable
+basis for an outside verifier to infer that signing is *configured* and that
+governed applies on the eligible lanes are being attested going forward. That
+inference is wrong here, and the release notes claim "Ring III attestation on
+three of the four lanes."
 
 Either the private key must be present wherever the public key is advertised, or
 a key without a usable private half must not be published as `status: "active"`.
 `attestationStatus: "not_configured"` should also surface in the admin approval
 UI rather than only in the raw row.
+
+**Fixed on this branch (not yet re-verified live):**
+
+- `KeyManager::jwks()` now recomputes the served status at read time: `active`
+  is served only for the key the site can sign with right now, and a
+  stored-`active` key whose private half is unavailable is served as
+  `verification_only`. The key stays published — verification selects keys by
+  `kid`/`kty`/`crv`/`use`/`alg` and never reads `status`, and a regression test
+  pins that an envelope signed before key loss still verifies against the
+  demoted JWKS. The stored registry is never rewritten by the read (it backs a
+  public unauthenticated GET). On this site the keys route would now report
+  `"status": "verification_only"` for `212313e9433250dc782136e7d315c83f`.
+- `Settings > AI Activity` now warns the approver *before* the decision:
+  `flavorAgentActivityLog` boot data carries
+  `attestation.signingAvailable` (`KeyManager::configured()`) plus the
+  server-provided eligible-surface list, and the decision panel renders a
+  warning notice on pending eligible-lane applies when signing is unavailable.
+  Post-decision rows already rendered the honest `not_configured` copy; the
+  missing piece was the pre-decision signal, since `apply.attestationStatus` is
+  only written at approve-execution time.
 
 ## Finding 2 — undo reported success but did not revert
 
@@ -88,7 +112,7 @@ The change was still live. Confirmed two independent ways:
 
 | Source | `styles.typography` before apply | after "successful" undo |
 | --- | --- | --- |
-| `get-theme-styles` → `styleContext.currentConfig` | `null` | `{"fontSize":"var:preset|font-size|md"}` |
+| `get-theme-styles` → `styleContext.currentConfig` | `null` | `{"fontSize":"var:preset\|font-size\|md"}` |
 | `wp/v2/global-styles/81` (authoritative entity) | *(absent)* | `{"fontSize":"var(--wp--preset--font-size--md)"}` |
 
 The second read bypasses Flavor Agent entirely, so this is not a stale-cache
@@ -112,11 +136,14 @@ original held only `css`). Verified back to `null` from both readers.
 
 ## Required before release
 
-- [ ] Do not publish a JWKS key as `status: "active"` when no private key is
+- [x] Do not publish a JWKS key as `status: "active"` when no private key is
       available to sign with, or provision the private key on any site that
-      advertises one.
-- [ ] Surface `attestationStatus` in `Settings > AI Activity` so an unattested
-      apply on an attested lane is visible to the approver.
+      advertises one. — `KeyManager::jwks()` serves `verification_only` for a
+      stored-`active` key with no usable private half; see Finding 1 above.
+- [x] Surface `attestationStatus` in `Settings > AI Activity` so an unattested
+      apply on an attested lane is visible to the approver. — pre-decision
+      warning notice driven by `attestation.signingAvailable` boot data;
+      post-decision rows already carried the honest copy.
 - [x] Fix undo so it either reverts or reports failure. A `status: "undone"`
       transition must be written **after** a verified revert, never before.
 - [x] Add a regression test that asserts the *live subject state* after undo,
