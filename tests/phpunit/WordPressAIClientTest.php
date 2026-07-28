@@ -545,7 +545,7 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( [ 'mode' ], $schema['dependencies']['limit'] ?? null );
 	}
 
-	public function test_chat_keeps_large_anthropic_output_shape_without_grammar_heavy_value_constraints(): void {
+	public function test_chat_keeps_large_anthropic_output_shape_within_the_grammar_budget(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,
 		];
@@ -572,12 +572,98 @@ final class WordPressAIClientTest extends TestCase {
 			[ 'settings', 'styles', 'block', 'recommendedSets', 'explanation' ],
 			$schema['required'] ?? null
 		);
-		$this->assertArrayNotHasKey(
-			'enum',
-			$schema['properties']['settings']['items']['properties']['panel'] ?? []
-		);
 		$this->assertLessThanOrEqual( 4096, strlen( (string) wp_json_encode( $schema ) ) );
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+	}
+
+	/**
+	 * The block schema repeats a whole item shape across settings/styles. Sharing
+	 * those repeats through $defs brings it inside Anthropic's grammar budget
+	 * without spending the enum constraints, which are what route a suggestion
+	 * into the correct Inspector sub-panel.
+	 */
+	public function test_chat_preserves_block_panel_enums_for_anthropic_by_sharing_repeated_subschemas(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			null,
+			ResponseSchema::get( 'block' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+
+		$settings_items = self::resolve_schema_ref(
+			$schema,
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items' ] ) ?? []
+		);
+		$styles_items   = self::resolve_schema_ref(
+			$schema,
+			self::schema_at_path( $schema, [ 'properties', 'styles', 'items' ] ) ?? []
+		);
+
+		$this->assertSame(
+			[ 'general', 'layout', 'position', 'advanced', 'bindings', 'list', 'color', 'filter', 'typography', 'dimensions', 'border', 'shadow', 'background' ],
+			$settings_items['properties']['panel']['enum'] ?? null,
+			'The settings panel enum must survive the Anthropic grammar budget.'
+		);
+		$this->assertSame(
+			[ 'attribute_change', 'style_variation', '' ],
+			$settings_items['properties']['type']['enum'] ?? null
+		);
+		$this->assertSame(
+			$settings_items,
+			$styles_items,
+			'settings and styles share one item contract, so they must resolve to the same shape.'
+		);
+
+		$block_items = self::resolve_schema_ref(
+			$schema,
+			self::schema_at_path( $schema, [ 'properties', 'block', 'items' ] ) ?? []
+		);
+
+		$this->assertSame(
+			[ 'insert_pattern', 'replace_block_with_pattern' ],
+			self::resolve_schema_ref(
+				$schema,
+				self::schema_at_path( $block_items, [ 'properties', 'operations', 'items' ] ) ?? []
+			)['properties']['type']['enum'] ?? null
+		);
+	}
+
+	public function test_chat_shares_repeated_subschemas_only_when_anthropic_needs_the_headroom(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'openai',
+			null,
+			ResponseSchema::get( 'block' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+		$this->assertArrayNotHasKey(
+			'$ref',
+			$schema['properties']['settings']['items'] ?? [],
+			'Providers without the Anthropic grammar budget keep the inline shape.'
+		);
+		$this->assertSame(
+			[ 'general', 'layout', 'position', 'advanced', 'bindings', 'list', 'color', 'filter', 'typography', 'dimensions', 'border', 'shadow', 'background' ],
+			$schema['properties']['settings']['items']['properties']['panel']['enum'] ?? null
+		);
 	}
 
 	public function test_chat_preserves_enum_constraints_for_small_anthropic_output_schema(): void {

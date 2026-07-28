@@ -28,6 +28,13 @@ final class WordPressAIClient {
 	private const SCHEMA_UNION_LIMIT               = 16;
 	private const ANTHROPIC_SCHEMA_BYTE_LIMIT      = 4096;
 	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
+	private const SHARED_SCHEMA_REF_NAME_PREFIX    = 'flavorAgentSharedSchema';
+
+	/**
+	 * Byte floor for hoisting a repeated subschema into `$defs`. Below this a
+	 * definition plus its references costs more than the duplication it removes.
+	 */
+	private const SHARED_SCHEMA_MIN_BYTES = 160;
 
 	/**
 	 * Whether the WordPress AI Client runtime (the "ai" feature plugin / SDK)
@@ -883,12 +890,244 @@ final class WordPressAIClient {
 			return $schema;
 		}
 
-		// Anthropic compiles structured-output schemas into grammars. Keep the
-		// final compacted response shape strict, but leave enum checks to Flavor
-		// Agent's server-side validators when value expansions make it too large.
+		// Anthropic compiles structured-output schemas into grammars. The block
+		// surface repeats whole item shapes across settings/styles, so hoisting
+		// identical subschemas into $defs removes the duplicated branches without
+		// changing what the contract accepts. Try that before giving up any
+		// constraints: it is what keeps enums on the wire.
+		$schema = self::share_repeated_subschemas( $schema );
+
+		if ( ! self::anthropic_output_schema_exceeds_byte_limit( $schema ) ) {
+			return $schema;
+		}
+
+		// Still over budget. Keep the final compacted response shape strict, but
+		// leave enum checks to Flavor Agent's server-side validators when value
+		// expansions make it too large.
 		$schema = self::remove_schema_keywords( $schema, [ 'enum' ] );
 
 		return self::anthropic_output_schema_exceeds_byte_limit( $schema ) ? null : $schema;
+	}
+
+	/**
+	 * Hoist every subschema that appears more than once into `$defs` and replace
+	 * the occurrences with `$ref`.
+	 *
+	 * Only object and enum nodes above a byte floor are considered: they are the
+	 * shapes that carry repeated branches into the compiled grammar, and small
+	 * nodes cost more as a definition than they save as a reference. The
+	 * response schemas are finite trees, so a node can never contain itself and
+	 * the rewrite cannot introduce a reference cycle.
+	 */
+	private static function share_repeated_subschemas( array $schema ): array {
+		$occurrences = [];
+		self::collect_shareable_subschemas( $schema, $occurrences, true );
+
+		$repeated = array_filter(
+			$occurrences,
+			static fn ( array $occurrence ): bool => $occurrence['count'] > 1
+		);
+
+		if ( [] === $repeated ) {
+			return $schema;
+		}
+
+		// Largest first, so an outer duplicate becomes the definition rather than
+		// being fragmented into references to its own inner duplicates.
+		uasort(
+			$repeated,
+			static fn ( array $a, array $b ): int => strlen( $b['signature'] ) <=> strlen( $a['signature'] )
+		);
+
+		$definitions = isset( $schema['$defs'] ) && is_array( $schema['$defs'] ) ? $schema['$defs'] : [];
+		$references  = [];
+		$index       = 0;
+
+		foreach ( $repeated as $signature => $occurrence ) {
+			$name                     = self::SHARED_SCHEMA_REF_NAME_PREFIX . ++$index;
+			$references[ $signature ] = $name;
+			$definitions[ $name ]     = $occurrence['schema'];
+		}
+
+		$schema = self::replace_shared_subschemas_with_refs( $schema, $references, true );
+
+		// A definition can itself contain another repeated shape. Rewrite inside
+		// each one too, minus its own signature so it cannot reference itself.
+		foreach ( $definitions as $name => $definition ) {
+			if ( ! is_array( $definition ) ) {
+				continue;
+			}
+
+			$own_signature = array_search( $name, $references, true );
+			$nested        = is_string( $own_signature )
+				? array_diff_key( $references, [ $own_signature => $name ] )
+				: $references;
+
+			$definitions[ $name ] = self::replace_shared_subschemas_with_refs( $definition, $nested, true );
+		}
+
+		$schema['$defs'] = $definitions;
+
+		return $schema;
+	}
+
+	/**
+	 * @param array<string, array{count: int, schema: array<string, mixed>, signature: string}> $occurrences
+	 */
+	private static function collect_shareable_subschemas( array $schema, array &$occurrences, bool $is_root ): void {
+		if ( ! $is_root && self::is_shareable_subschema( $schema ) ) {
+			$signature = wp_json_encode( $schema );
+
+			if ( is_string( $signature ) && strlen( $signature ) >= self::SHARED_SCHEMA_MIN_BYTES ) {
+				if ( ! isset( $occurrences[ $signature ] ) ) {
+					$occurrences[ $signature ] = [
+						'count'     => 0,
+						'schema'    => $schema,
+						'signature' => $signature,
+					];
+				}
+
+				++$occurrences[ $signature ]['count'];
+			}
+		}
+
+		self::walk_child_schemas(
+			$schema,
+			static function ( array $child_schema ) use ( &$occurrences ): void {
+				self::collect_shareable_subschemas( $child_schema, $occurrences, false );
+			}
+		);
+	}
+
+	private static function is_shareable_subschema( array $schema ): bool {
+		if ( isset( $schema['$ref'] ) ) {
+			return false;
+		}
+
+		return self::schema_includes_type( $schema, 'object' ) || isset( $schema['enum'] );
+	}
+
+	/**
+	 * @param array<string, string> $references Signature => definition name.
+	 */
+	private static function replace_shared_subschemas_with_refs( array $schema, array $references, bool $is_root ): array {
+		if ( [] === $references ) {
+			return $schema;
+		}
+
+		if ( ! $is_root ) {
+			$signature = wp_json_encode( $schema );
+
+			if ( is_string( $signature ) && isset( $references[ $signature ] ) ) {
+				return [ '$ref' => '#/$defs/' . $references[ $signature ] ];
+			}
+		}
+
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
+			// The root's own $defs holds the definitions themselves; they are
+			// rewritten separately so a definition never references itself.
+			if ( $is_root && '$defs' === $collection_key ) {
+				continue;
+			}
+
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $collection_key ][ $key ] = self::replace_shared_subschemas_with_refs( $child_schema, $references, false );
+				}
+			}
+		}
+
+		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+			if ( ! isset( $schema[ $schema_key ] ) || ! is_array( $schema[ $schema_key ] ) ) {
+				continue;
+			}
+
+			$schema[ $schema_key ] = self::replace_shared_subschema_node_or_list_with_refs( $schema[ $schema_key ], $references );
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $schema_list_key ][ $key ] = self::replace_shared_subschemas_with_refs( $child_schema, $references, false );
+				}
+			}
+		}
+
+		return $schema;
+	}
+
+	/**
+	 * @param array<string, string> $references
+	 */
+	private static function replace_shared_subschema_node_or_list_with_refs( array $schema, array $references ): array {
+		if ( ! self::is_list_array( $schema ) ) {
+			return self::replace_shared_subschemas_with_refs( $schema, $references, false );
+		}
+
+		foreach ( $schema as $key => $child_schema ) {
+			if ( is_array( $child_schema ) ) {
+				$schema[ $key ] = self::replace_shared_subschemas_with_refs( $child_schema, $references, false );
+			}
+		}
+
+		return $schema;
+	}
+
+	/**
+	 * @param callable(array<string, mixed>): void $callback
+	 */
+	private static function walk_child_schemas( array $schema, callable $callback ): void {
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $collection_key ] as $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$callback( $child_schema );
+				}
+			}
+		}
+
+		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+			if ( ! isset( $schema[ $schema_key ] ) || ! is_array( $schema[ $schema_key ] ) ) {
+				continue;
+			}
+
+			$child = $schema[ $schema_key ];
+
+			if ( self::is_list_array( $child ) ) {
+				foreach ( $child as $list_child ) {
+					if ( is_array( $list_child ) ) {
+						$callback( $list_child );
+					}
+				}
+
+				continue;
+			}
+
+			$callback( $child );
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $schema_list_key ] as $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$callback( $child_schema );
+				}
+			}
+		}
 	}
 
 	private static function anthropic_output_schema_exceeds_byte_limit( array $schema ): bool {
