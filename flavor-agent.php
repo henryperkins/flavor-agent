@@ -115,6 +115,7 @@ add_action( 'wp_abilities_api_init', [ FlavorAgent\AI\FeatureBootstrap::class, '
 // docs/reference/agents-api-integration.md.
 add_action( FlavorAgent\AgentsAPI\Compatibility::REGISTRATION_HOOK, [ FlavorAgent\AgentsAPI\Registration::class, 'register' ] );
 add_action( 'init', [ FlavorAgent\AgentsAPI\RunContext::class, 'register' ], 5 );
+add_action( 'init', [ FlavorAgent\AgentsAPI\DispatchGuard::class, 'register' ], 5 );
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	FlavorAgent\CLI\AttestationCommand::register();

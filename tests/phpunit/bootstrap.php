@@ -3174,6 +3174,18 @@ namespace {
 				{
 					return is_array($this->args['input_schema'] ?? null) ? $this->args['input_schema'] : [];
 				}
+
+				public function get_meta(): array
+				{
+					return is_array($this->args['meta'] ?? null) ? $this->args['meta'] : [];
+				}
+
+				public function get_meta_item(string $key, mixed $default = null): mixed
+				{
+					$meta = is_array($this->args['meta'] ?? null) ? $this->args['meta'] : [];
+
+					return $meta[$key] ?? $default;
+				}
 			};
 		}
 	}

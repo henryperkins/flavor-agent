@@ -7,6 +7,7 @@ namespace FlavorAgent\Tests;
 use FlavorAgent\Abilities\Registration as AbilityRegistration;
 use FlavorAgent\AgentsAPI\AgentDefinition;
 use FlavorAgent\AgentsAPI\Compatibility;
+use FlavorAgent\AgentsAPI\DispatchGuard;
 use FlavorAgent\AgentsAPI\Registration;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -277,6 +278,117 @@ final class AgentsApiUpstreamContractTest extends TestCase {
 			[ 'agents/ability-call', 'agents/ability-search' ],
 			AgentDefinition::denied_runtime_abilities()
 		);
+	}
+
+	/**
+	 * {@see DispatchGuard} hangs entirely on one upstream filter name and one
+	 * input key. Neither is a documented API, so a rename would disarm the
+	 * guard in total silence — the filter would simply never fire and every
+	 * unit test would stay green. Pin both to the real source.
+	 */
+	public function test_the_dispatch_permission_seam_still_exists_upstream(): void {
+		$contents = $this->meta_abilities_source();
+
+		$this->assertSame(
+			1,
+			\preg_match(
+				'/function\s+agents_ability_call_permission\(\s*array\s+\$input\s*\)[^{]*\{\s*return\s*\(bool\)\s*apply_filters\(\s*\'([^\']+)\'/',
+				$contents,
+				$match
+			),
+			'Upstream restructured the ability-call permission gate; DispatchGuard has no hook left.'
+		);
+
+		$this->assertSame(
+			DispatchGuard::PERMISSION_FILTER,
+			$match[1],
+			'Upstream renamed the ability-call permission filter; the guard is attached to a hook that never fires.'
+		);
+
+		$this->assertSame(
+			1,
+			\preg_match( '/\$name\s*=\s*is_string\(\s*\$input\[\'name\'\]/', $contents ),
+			'The target ability no longer arrives as $input[\'name\']; the guard reads the wrong key and guards nothing.'
+		);
+	}
+
+	/**
+	 * The guard exists because generic dispatch has no target allowlist. If
+	 * upstream grows one, this fails and the guard should be re-argued rather
+	 * than kept out of habit.
+	 */
+	public function test_generic_dispatch_still_has_no_target_allowlist(): void {
+		$contents = $this->meta_abilities_source();
+
+		$this->assertSame(
+			1,
+			\preg_match( '/function\s+agents_ability_call\(\s*array\s+\$input\s*\)[^}]*?\{(.*?)\n\}/s', $contents, $match ),
+			'Could not isolate agents_ability_call() to re-check its guards.'
+		);
+
+		$body = $match[1];
+
+		\preg_match_all( '/return new \\\\WP_Error\(\s*\'([^\']+)\'/', $body, $codes );
+
+		// Exactly three rejections, and only one of them looks at the target:
+		// `missing_name` is input validation, `not_found` is post-dispatch, and
+		// `recursion` refuses one single name — this ability. Nothing consults
+		// an allowlist, which is why the guard exists.
+		$this->assertSame(
+			[
+				'agents_ability_call_missing_name',
+				'agents_ability_call_recursion',
+				'agents_ability_call_not_found',
+			],
+			$codes[1],
+			'agents_ability_call() changed its rejection set. If upstream added a target allowlist, '
+				. 'DispatchGuard should be re-argued rather than kept out of habit.'
+		);
+
+		$this->assertStringContainsString(
+			'WP_Agent_Ability_Dispatcher::dispatch( $name, $parameters )',
+			$body,
+			'The target name still reaches the dispatcher unfiltered.'
+		);
+	}
+
+	/**
+	 * Scope check for the guard's deliberate exclusion of workflow steps. The
+	 * workflow runner dispatches an ability named in a spec, which is an
+	 * authored grant rather than a model's mid-conversation choice — so it is
+	 * left alone. Assert the shape that reasoning depends on.
+	 */
+	public function test_workflow_ability_steps_dispatch_without_a_model_in_the_loop(): void {
+		$path = $this->upstream_path();
+		$file = $path . '/src/Workflows/class-wp-agent-workflow-runner.php';
+
+		$this->assertFileExists( $file );
+
+		$contents = (string) \file_get_contents( $file );
+
+		$this->assertSame(
+			1,
+			\preg_match(
+				'/function\s+default_ability_handler\([^)]*\)[^{]*\{(.*?)\n\t\}/s',
+				$contents,
+				$match
+			),
+			'Upstream restructured the workflow ability step handler; re-check the guard scope note.'
+		);
+
+		$this->assertStringContainsString(
+			"\$step['ability']",
+			$match[1],
+			'The workflow ability name no longer comes from the authored step spec, which is the reason this path is unguarded.'
+		);
+	}
+
+	private function meta_abilities_source(): string {
+		$file = $this->upstream_path() . '/src/Tools/register-agent-ability-meta-abilities.php';
+
+		$this->assertFileExists( $file, 'Upstream moved the dispatch meta-abilities.' );
+
+		return (string) \file_get_contents( $file );
 	}
 
 	/**

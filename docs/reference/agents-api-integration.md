@@ -37,7 +37,7 @@ Phases 0 and 1 are implemented. Phase 2 (governed apply requests) and Phase 3 (e
 | Phase | State | Evidence |
 | --- | --- | --- |
 | 0 — contract fixture | Shipped | `inc/AgentsAPI/Compatibility.php`, `tests/phpunit/AgentsApiAdapterAbsentTest.php`, `tests/phpunit/AgentsApiCompatibilityTest.php`, `tests/phpunit/AgentsApiUpstreamContractTest.php` |
-| 1 — read/recommend agent | Shipped | `inc/AgentsAPI/AgentDefinition.php`, `inc/AgentsAPI/Registration.php`, `inc/AgentsAPI/RunContext.php`, `tests/phpunit/AgentsApiRegistrationTest.php`, `tests/phpunit/AgentsApiRunContextTest.php` |
+| 1 — read/recommend agent | Shipped | `inc/AgentsAPI/AgentDefinition.php`, `inc/AgentsAPI/Registration.php`, `inc/AgentsAPI/RunContext.php`, `inc/AgentsAPI/DispatchGuard.php`, `tests/phpunit/AgentsApiRegistrationTest.php`, `tests/phpunit/AgentsApiRunContextTest.php`, `tests/phpunit/AgentsApiDispatchGuardTest.php` |
 | 2 — governed apply requests | Not started | — |
 | 3 — optional external channels | Not started | — |
 
@@ -48,7 +48,22 @@ git clone --branch v0.7.0 --depth 1 https://github.com/Automattic/agents-api.git
 FLAVOR_AGENT_AGENTS_API_PATH=/tmp/agents-api vendor/bin/phpunit --filter AgentsApiUpstreamContractTest
 ```
 
-Treat it as required evidence when raising `MINIMUM_VERSION`; a skip is not a pass. What remains unproven by any test in this repo: that a live `agents/chat` run dispatches these tools and that a real provider turn completes. That needs the local runtime, and the runtime evidence for it is `requestMeta.agentRun` appearing on the resulting activity rows.
+Treat it as required evidence when raising `MINIMUM_VERSION`; a skip is not a pass. What remains unproven by any test in this repo: that a live `agents/chat` run dispatches these tools and that a real provider turn completes. That needs a running site, which is what the evidence harness below is for.
+
+**Evidence harness (`scripts/demo-agents-api.php`).** Dev-only, `.distignore`'d. Answers "is the Agents API actually driving Flavor Agent on this site, right now?" with observations rather than assertions, in three tiers:
+
+```bash
+wp eval-file scripts/demo-agents-api.php                       # tiers A + C: free, deterministic
+FA_DEMO_TIERS=A,B,C wp eval-file scripts/demo-agents-api.php   # adds a real provider call
+```
+
+- **Tier A — wiring.** Runtime version, agent registered, tool profile shape, deny list survived registration, dispatch guard attached, `check-status` reporting `agentRuntime`.
+- **Tier C — boundary.** Generic dispatch of `undo-activity` refused; `request-style-apply` still reachable (proving the guard is scoped, not blanket); no mutation or dispatch tool in the agent profile.
+- **Tier B — live run.** A real `agents/chat` turn. Evidence that the runtime dispatched Flavor Agent abilities comes from upstream's own `metadata.agents_api.tool_observability.calls[]`, not from parsing the reply; the run id is then correlated against activity rows.
+
+Tier B is opt-in because it spends a real provider call. It reports `inconclusive` rather than `fail` when the model simply chose not to call a tool — that is a model outcome, not a wiring defect. Tier B3 reads `RequestLoggingBridge::should_persist_request_diagnostic()` first and reports `skip` with the setting to change when core AI Request Logging is on and dual logging is off, because in that configuration no diagnostic row is written and a missing correlation would otherwise read as a broken attribution bridge.
+
+The last stdout line is always `DEMO_RESULT={...}` (`schemaVersion`, `status`, `tiers`, `counts`, per-check `{id, label, status, detail}`), matching the shape `scripts/verify.js` emits.
 
 **Pinned release.** `Compatibility::MINIMUM_VERSION` is `0.7.0`. The adapter is written against the upstream registration and tool-policy contracts as of that tag; raise the constant only alongside a re-read of `src/Registry/register-agents.php`, `src/Channels/register-default-agents-chat-handler.php`, and `src/Tools/class-wp-agent-tool-policy.php` upstream plus a passing contract-test run.
 
@@ -65,6 +80,27 @@ Allow-mode does not stop it. A tool marked `mandatory` by any policy provider is
 Scope of the exposure, stated precisely. What never broke: the target ability's own permission callback still runs under `WP_Ability::execute()`, `agents/ability-call` itself requires `manage_options`, and the four `request-*-apply` abilities only create pending rows an administrator still has to approve. What did break without the deny entry: this agent's declared tool profile, which is the boundary Phase 1 is defined by — and `undo-activity` is the sharp edge, because it reverses an executed apply with no second approval.
 
 Because the deny list names upstream abilities by string literal, an upstream rename would silently disarm it. `test_denied_dispatch_ability_names_still_match_upstream` pins both literals to upstream's own `AGENTS_ABILITY_CALL_ABILITY` / `AGENTS_ABILITY_SEARCH_ABILITY` constants so a rename fails at version-bump time instead of at runtime.
+
+**`DispatchGuard` — the site-wide half.** The deny list above binds one agent definition. It does nothing for a run driven by any *other* agent registered on the site, and a site with the Agents API installed generally has several. `inc/AgentsAPI/DispatchGuard.php` binds the ability instead: it filters upstream's `agents_ability_call_permission` and refuses destructive Flavor Agent abilities regardless of which agent is running.
+
+Registration is deliberately unconditional — not gated on `Compatibility::supported()`. A site on an Agents API version this plugin does not otherwise integrate with still has `agents/ability-call`; hardening that declines to apply itself on an unsupported runtime protects the wrong thing. When Agents API is absent the filter simply never fires.
+
+Scope is narrow, and the narrowness is the design. "Reached through the Abilities API" is not by itself a threat — several Flavor Agent abilities are *designed* to be called that way:
+
+| Path | Guarded | Why |
+| --- | --- | --- |
+| `agents/ability-call` | Yes | The target name is chosen by a model mid-conversation. Nothing about that choice was authored, reviewed, or declared. |
+| Workflow `ability` steps | No | `WP_Agent_Workflow_Runner::default_ability_handler()` dispatches a name written into a workflow spec — a deliberate grant, the same class of act as adding a tool to an agent definition. |
+| Declared agent tools | No (bounded elsewhere) | Held by the agent's own tool policy. |
+| MCP and REST external-apply lanes | No | The shipped, attested surface. Guarding these would break a released feature. |
+
+What is guarded is narrower still: only abilities whose own declared annotations say `destructive`. Today that is exactly one, `undo-activity`. The four `request-*-apply` abilities are **not** guarded — queuing a pending row *is* the governed loop working, an administrator still decides it in `Settings > AI Activity`, and they are the external-apply surface. `undo-activity` is the one that executes on the live site with no second approval.
+
+Note what this is and is not. `agents/ability-call` requires `manage_options`, and `undo-activity` resolves to a contextual check that `manage_options` already satisfies, so no capability boundary was ever crossed — an administrator could always have undone the row from the admin screen. What the guard restores is *deliberateness*: the difference between an administrator deciding to undo and a model picking `undo-activity` out of the ability registry mid-conversation.
+
+Classification uses two sources because neither alone suffices: a static derivation from first-party registration data (works with no WordPress runtime, and is what the unit tests pin), plus live `destructive` annotation introspection (catches an ability registered inline in `Registration::register_abilities()`, which the static derivation cannot enumerate). The guard only ever narrows — a decision that already denied the call is returned untouched. `flavor_agent_agents_api_dispatch_allowed` is the escape hatch and requires a strict `true`; `flavor_agent_agents_api_dispatch_denied` fires on refusal.
+
+The guard depends entirely on one undocumented upstream filter name and one input key, so `AgentsApiUpstreamContractTest::test_the_dispatch_permission_seam_still_exists_upstream` pins both against real source — a rename would otherwise disarm the guard in total silence, with every unit test still green. `test_generic_dispatch_still_has_no_target_allowlist` asserts the premise the guard rests on, so that if upstream grows its own allowlist the guard is re-argued rather than kept out of habit.
 
 **Budgets.** `max_turns` is 6, below the upstream default of 12. `tool_call_rules` rate-limits read tools after any read anchor (`max_calls` 8) before the run has to commit to a recommendation. Completion is not gated: answering "which templates exist?" is a legitimate run that never needs a recommendation.
 
@@ -223,6 +259,7 @@ Adopt memory only after there is a user-visible memory policy with consent, auth
 | Expanded attack surface through chat, tokens, or bridges | Optional activation, explicit principals, capability ceilings, rate limits, revocation, and least-privilege ability allowlists. |
 | Model calls a mutating ability directly | Expose only request-apply abilities; exclude private executors/routes; retain server-side permission and freshness checks. |
 | Generic runtime dispatch bypasses the tool profile | Name `agents/ability-call` and `agents/ability-search` in `tool_policy.deny` (allow-mode alone is bypassable by a `mandatory` tool); pin the literals to upstream constants in a contract test. |
+| Another agent on the site reaches a destructive ability by reflection | `DispatchGuard` filters `agents_ability_call_permission` site-wide, refusing Flavor Agent abilities annotated `destructive` whichever agent is running; pin the upstream filter name and input key in a contract test. |
 | Duplicate approval systems | Keep Flavor Agent pending applies authoritative; adapt status instead of mirroring actions. |
 | Audit/transcript data leakage | Store redaction-safe identifiers only; keep secrets, raw inputs, and transcripts out of activity metadata. |
 | Session semantics collide with stale-response tokens | Name and model them separately; do not reuse IDs without an explicit mapping table/contract. |
