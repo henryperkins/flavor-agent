@@ -125,44 +125,63 @@ final class WordPressAIClient {
 				'hasSchema'       => is_array( $schema ) && [] !== $schema,
 			]
 		);
-		$prompt            = self::make_prompt(
+		// Built on demand so the grammar-limit retry below can get a genuinely
+		// schema-free builder. Holding on to the pre-schema handle would not:
+		// apply_output_schema() only shallow-clones, so if the AI Client builder
+		// keeps its output schema on a shared sub-object (a ModelConfig DTO, say)
+		// the "without schema" handle points at the mutated state and the retry
+		// re-sends the very schema it is supposed to drop.
+		$build_prompt = static function () use (
 			$user_prompt,
-			[
-				'system_instruction' => $system_prompt,
-			] + $model_options
-		);
+			$system_prompt,
+			$model_options,
+			// By reference: apply_provider_model_selection() records the model
+			// resolution status back onto $selection, and build_request_diagnostics()
+			// reports it.
+			&$selection,
+			$resolved_provider,
+			$reasoning_effort
+		): mixed {
+			$prompt = self::make_prompt(
+				$user_prompt,
+				[
+					'system_instruction' => $system_prompt,
+				] + $model_options
+			);
+
+			if ( is_wp_error( $prompt ) ) {
+				return $prompt;
+			}
+
+			$prompt = self::apply_provider_model_selection( $prompt, $selection );
+
+			if ( is_wp_error( $prompt ) ) {
+				return $prompt;
+			}
+
+			$supported = self::ensure_text_generation_supported( $prompt );
+
+			if ( is_wp_error( $supported ) ) {
+				return $supported;
+			}
+
+			$prompt = self::apply_system_instruction( $prompt, $system_prompt );
+
+			if ( is_wp_error( $prompt ) ) {
+				return $prompt;
+			}
+
+			return self::apply_reasoning_effort( $prompt, $resolved_provider, $reasoning_effort );
+		};
+
+		$prompt = $build_prompt();
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
 		}
 
-		$prompt = self::apply_provider_model_selection( $prompt, $selection );
-
-		if ( is_wp_error( $prompt ) ) {
-			return $prompt;
-		}
-
-		$supported = self::ensure_text_generation_supported( $prompt );
-
-		if ( is_wp_error( $supported ) ) {
-			return $supported;
-		}
-
-		$prompt = self::apply_system_instruction( $prompt, $system_prompt );
-
-		if ( is_wp_error( $prompt ) ) {
-			return $prompt;
-		}
-
-		$prompt = self::apply_reasoning_effort( $prompt, $resolved_provider, $reasoning_effort );
-
-		if ( is_wp_error( $prompt ) ) {
-			return $prompt;
-		}
-
-		$prompt_without_output_schema = $prompt;
-		$schema                       = self::prepare_output_schema( $schema, $resolved_provider );
-		$prompt                       = self::apply_output_schema( $prompt, $schema );
+		$schema = self::prepare_output_schema( $schema, $resolved_provider );
+		$prompt = self::apply_output_schema( $prompt, $schema );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -237,8 +256,14 @@ final class WordPressAIClient {
 						);
 					}
 
+					$retry_prompt = $build_prompt();
+
+					if ( is_wp_error( $retry_prompt ) ) {
+						return $retry_prompt;
+					}
+
 					$schema                  = null;
-					$prompt                  = $prompt_without_output_schema;
+					$prompt                  = $retry_prompt;
 					$request_timeout_seconds = self::request_timeout_seconds(
 						$resolved_provider,
 						$reasoning_effort,

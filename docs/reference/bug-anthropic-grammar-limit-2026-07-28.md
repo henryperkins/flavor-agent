@@ -83,30 +83,42 @@ Every static response schema, encoded, against the two constants this client enf
 All 18 block unions come from `nullable_ranking_schema` being inlined three times, via
 `block_display_metadata_schema()` appearing in the `settings`, `styles`, and `block` item shapes.
 
-## Leading hypothesis for the actual cause
+## Ruled out: ability and MCP tool schemas
 
-The error names *tool schemas*, plural *strict tools*. Flavor Agent never attaches tools to its
-own outbound chat request — there is no tool wiring in `inc/`. But it registers 15 abilities whose
-**input** schemas are large, and exposes them as MCP tools via
-`inc/MCP/ServerBootstrap.php:34-51`:
+The error names *tool schemas*, plural *strict tools*, which makes the registered abilities an
+obvious suspect — `flavor-agent/recommend-block` alone has an **8,342-byte input schema**, the
+largest of 15 abilities totalling 26,956 bytes, and 11 are MCP-public.
 
-| Ability | Input schema bytes |
-|---|---|
-| `flavor-agent/recommend-block` | **8,342** |
-| `flavor-agent/recommend-template-part` | 3,218 |
-| `flavor-agent/recommend-template` | 3,195 |
-| `flavor-agent/recommend-style` | 2,884 |
-| `flavor-agent/recommend-patterns` | 2,127 |
-| … 10 more | … |
-| **Total across 15 tools** | **26,956** |
+They are not on this request. A repo-wide search for outbound tool wiring
+(`tools`, `tool_choice`, `function_declaration`, `using_tools`) returns **zero hits**. The only
+outbound path is `ChatClient::chat` → `ResponsesClient::rank` → `WordPressAIClient::chat`, and the
+only AI-client filters this plugin registers are `wpai_request_log_context`,
+`wpai_system_instruction`, and `wpai_default_feature_classes` — none attach tools. The
+Abilities/MCP surface in `inc/MCP/ServerBootstrap.php` is **inbound only**: it serves tools to
+external MCP clients and never rides along on Flavor Agent's own chat request.
 
-`recommend-block`'s input schema is itself dominated by `selectedBlock` (6,959 of 8,342 bytes),
-which repeats near-identical node shapes across `structuralBranch`, `parentContext`,
-`siblingSummariesBefore` (973 B), `siblingSummariesAfter` (972 B), and `structuralAncestors`.
+So "the number of strict tools" is generic error text. The single strict tool on this request is
+the one the provider synthesizes from the JSON output schema — which points back at
+`ResponseSchema`, and squarely contradicts the byte arithmetic above.
 
-If the AI plugin or MCP adapter attaches registered abilities as strict tools to chat requests,
-this is the grammar the error is describing. **This is unverified** — the bridge lives in the WP AI
-plugin, not in this repository.
+## Reconciling the contradiction
+
+Those two findings only fit together one way: the request that failed **did** carry the schema,
+and the diagnostics that say otherwise are reconstructed rather than observed.
+
+`build_request_diagnostics()` rebuilds `bodyBytes` from the local `$schema` variable, which the
+retry sets to `null` — it never inspects the builder that is actually sent. Meanwhile
+`apply_output_schema()` takes a **shallow** `clone`. If the AI Client's prompt builder keeps its
+output schema on a shared sub-object (a `ModelConfig` DTO, say), then mutating the clone also
+mutates the handle the retry was meant to fall back to, so attempt 2 re-sends the schema while
+reporting a schema-free payload.
+
+That explains every observation: a schema-free-looking 30,203-byte record, a grammar error on a
+request that supposedly had no grammar, and a retry that changed nothing.
+
+Fix 5 removes the dependency on that handle. Whether the shared-DTO hazard is real in the shipped
+AI Client is **still unverified** — the test double holds its state in a PHP array, which a shallow
+clone copies, so it cannot reproduce the hazard either way.
 
 ## The mitigations were unreachable on the path that fails
 
@@ -131,8 +143,9 @@ caught the resulting 400.
 
 ## Resolution (2026-07-28)
 
-Four fixes landed. None is proven to clear the 400, because the binding constraint is still
-unidentified; each fixes a defect confirmed by measurement.
+Five fixes landed. Each addresses a defect confirmed by measurement or by reading the code; the
+binding constraint is still not proven, so treat the 400 as possible until a live run says
+otherwise.
 
 1. **`Keep Anthropic block enums by sharing repeated subschemas`** — the block schema previously
    fit only because `prepare_anthropic_output_schema()` stripped **every** enum, silently removing
@@ -154,13 +167,22 @@ unidentified; each fixes a defect confirmed by measurement.
    the block schema goes out at 3,354 bytes with enums intact instead of 4,151 unmitigated. The
    genuinely lossy steps (numeric-bound removal, enum stripping, dropping the schema) stay gated on
    a known `anthropic` slug, since firing those on a guess would degrade other providers.
+5. **`Rebuild the prompt for the grammar-limit retry`** — the retry fell back to a handle captured
+   before the schema was applied, which is only schema-free if the builder does not share mutable
+   state across a shallow clone. It now constructs a fresh builder, so the fallback is correct
+   regardless of how the AI Client stores its output schema. Guarded by asserting the retry path
+   builds two prompts, not one.
 
 ## What is still unexplained
 
-The retry at `WordPressAIClient.php:217-252` drops the schema and re-issues once. The byte
-arithmetic above indicates the recorded failure is that **second, schema-free** request — meaning
-the grammar survived removal of our schema entirely. Until the tool-attachment path is identified,
-the 400 should be expected to recur.
+Whether the shared-DTO hazard is real in the shipped AI Client. If it is, fix 5 is the one that
+matters and the 400 should stop. If it is not, then a schema-free request genuinely provoked a
+grammar error, and the source is somewhere neither this repository nor these measurements can see.
+
+The cheap way to settle it, with a live runtime: log the builder's own view of its output schema
+immediately before the retry's `generate_text_result()` call, rather than trusting
+`build_request_diagnostics()`, which reconstructs `bodyBytes` from a local variable and would
+report a schema-free payload either way.
 
 ## Known-weak guards found during the investigation (not fixed)
 
@@ -180,12 +202,11 @@ the 400 should be expected to recur.
   schema still require that slug — so they remain unreachable on the default Connectors path, and
   an Anthropic-backed connector registered under another id (Bedrock, Vertex) never gets them.
   Reaching them needs a way to ask the AI Client which provider it actually resolved.
-- **The schema-drop retry may not drop the schema.** `$prompt_without_output_schema = $prompt`
-  copies an object handle, and `apply_output_schema()` takes a *shallow* `clone`. If the AI Client
-  builder stores the output schema on a shared sub-object (a `ModelConfig` DTO, say), the retry
-  re-sends it while `build_request_diagnostics()` — which reconstructs `bodyBytes` from
-  `$schema = null` rather than reading the builder — reports a schema-free payload. That would
-  reconcile every observation here, and it is the first thing to check with the AI Client in scope.
+- **Diagnostics are reconstructed, not observed.** `build_request_diagnostics()` builds `bodyBytes`
+  from the local `$schema` variable rather than from the prompt actually sent, so on the retry path
+  it reports a schema-free payload whether or not one was sent. Fix 5 removes the specific hazard,
+  but the reporting remains unable to falsify itself — which is what made this incident so hard to
+  read.
 - **`allowedPatterns` is uncapped client-side.** All 248 entries are POSTed and stable-serialized
   into the per-keystroke context signature; the server's cap is positional head-truncation with no
   relevance ranking, so the 20 the model sees are just the first 20 in registration order.

@@ -821,6 +821,10 @@ final class WordPressAIClientTest extends TestCase {
 			remove_filter( 'http_request_args', $capture_attempt );
 		}
 
+		// Snapshot before active_chat_request_meta(), whose support probe builds
+		// a prompt of its own.
+		$prompt_builds = count( WordPressTestState::$ai_service_calls );
+
 		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
 
 		$this->assertSame(
@@ -832,6 +836,16 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertNull( $attempt_schemas[1] );
 		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( 'grammar_limit', $meta['requestSummary']['outputSchemaFallback'] ?? null );
+
+		// The retry must build its own prompt rather than reuse a handle captured
+		// before the schema was applied: apply_output_schema() only shallow-clones,
+		// so a builder that keeps its output schema on a shared sub-object would
+		// hand the retry back the very schema it is dropping.
+		$this->assertSame(
+			2,
+			$prompt_builds,
+			'The grammar-limit retry should construct a fresh prompt builder.'
+		);
 	}
 
 	public function test_chat_preserves_numeric_bounds_for_other_output_schema_providers(): void {
