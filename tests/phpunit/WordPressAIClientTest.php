@@ -974,6 +974,132 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The schema-free retry needs its own request_ready trace event.
+	 *
+	 * The trace is what a production diagnostician reads. request_ready is emitted
+	 * once, before the first attempt, so a grammar-limit retry sends a second
+	 * provider request that leaves no trace of its own -- and that retry, with
+	 * hasSchema false and a different instruction and body size, is precisely the
+	 * request the fallback exists to make visible.
+	 */
+	public function test_grammar_limit_retry_emits_its_own_request_ready_trace_event(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'prompt_client_error',
+			'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+		);
+
+		$events = [];
+		add_action(
+			'flavor_agent_diagnostic_trace',
+			static function ( array $entry ) use ( &$events ): void {
+				$events[] = $entry;
+			},
+			10,
+			1
+		);
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$ready = array_values(
+			array_filter(
+				$events,
+				static fn ( array $entry ): bool => 'ai.chat.request_ready' === ( $entry['event'] ?? '' )
+			)
+		);
+
+		$this->assertCount(
+			2,
+			$ready,
+			'Two provider requests were sent, so the trace must carry two request_ready events.'
+		);
+		$this->assertTrue(
+			$ready[0]['context']['hasSchema'] ?? false,
+			'The first request carried the output schema.'
+		);
+		$this->assertFalse(
+			$ready[1]['context']['hasSchema'] ?? true,
+			'The retry sends no schema and the trace must say so.'
+		);
+		$this->assertSame(
+			'grammar_limit',
+			$ready[1]['context']['outputSchemaFallback'] ?? null,
+			'The retry event must identify itself as the fallback, not read as a duplicate.'
+		);
+	}
+
+	/**
+	 * A failed rebuild must not leave its resolution in the runtime configuration.
+	 *
+	 * apply_provider_model_selection() records the resolved provider/model into
+	 * process-global state that Provider::active_chat_request_meta() reads for the
+	 * activity row's provider path. The rebuild resolves again; if it then fails,
+	 * the request that was actually sent is still the first one, so the row would
+	 * otherwise report the provider path of a request that never went out.
+	 * Verified to fail without the restore.
+	 */
+	public function test_failed_grammar_limit_rebuild_restores_the_runtime_chat_configuration(): void {
+		self::register_ai_provider_connector( 'anthropic', 'Anthropic' );
+		WordPressTestState::$options                    = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'anthropic',
+				'model'    => 'claude-sonnet-4-6',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		// The first attempt resolves the configured model; the rebuild falls back
+		// to provider-managed and then fails while re-applying the instruction.
+		WordPressTestState::$ai_client_model_resolution_results = [
+			null,
+			new \WP_Error( 'model_not_found', 'The configured model is no longer available.' ),
+		];
+		WordPressTestState::$ai_client_prompt_method_throws     = [
+			'using_system_instruction' => [
+				null,
+				null,
+				null,
+				new \RuntimeException( 'Prompt builder rejected the instruction.' ),
+			],
+		];
+		WordPressTestState::$ai_client_generate_text_result     = new \WP_Error(
+			'prompt_client_error',
+			'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+		);
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
+			null,
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'grammar_limit_rebuild_failed',
+			$meta['requestSummary']['outputSchemaFallback'] ?? null,
+			'The rebuild did not fail, so this test is not exercising the restore path.'
+		);
+		$this->assertSame(
+			'claude-sonnet-4-6',
+			$meta['model'] ?? null,
+			'The runtime configuration reported the failed rebuild\'s resolution instead of the request that was sent.'
+		);
+	}
+
 	public function test_chat_preserves_enum_constraints_for_small_anthropic_output_schema(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,

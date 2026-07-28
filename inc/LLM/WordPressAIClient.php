@@ -269,6 +269,15 @@ final class WordPressAIClient {
 					// (WordPressAIPolicy::system_instruction just passes through
 					// the wpai_system_instruction filter) but matters to anyone
 					// filtering on it.
+					/*
+					 * The rebuild re-resolves the provider/model, and that
+					 * resolution overwrites the process-global runtime chat
+					 * configuration AI Activity reads for the provider path. If the
+					 * rebuild then fails, the request that was actually sent is
+					 * still the first one, so its configuration has to survive.
+					 */
+					$runtime_configuration = Provider::snapshot_runtime_chat_configuration();
+
 					$rebuilt = self::build_prompt_without_output_schema(
 						$raw_system_prompt,
 						$user_prompt,
@@ -280,6 +289,8 @@ final class WordPressAIClient {
 					);
 
 					if ( is_wp_error( $rebuilt ) ) {
+						Provider::restore_runtime_chat_configuration( $runtime_configuration );
+
 						/*
 						 * Surface the rebuild failure as the result rather than
 						 * returning early: an early return would skip error
@@ -328,6 +339,32 @@ final class WordPressAIClient {
 							$rebuilt['selection']
 						);
 						$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
+
+						if ( $trace_consumed ) {
+							/*
+							 * A second provider request is about to go out. Without
+							 * its own request_ready event the trace shows one request
+							 * where two were sent, and the schema-free retry -- the
+							 * one this fallback exists to make visible -- is the one
+							 * missing. The fallback marker rides along so the second
+							 * event is not mistaken for a duplicate of the first.
+							 */
+							RequestTrace::event(
+								'ai.chat.request_ready',
+								array_merge(
+									self::build_chat_trace_context(
+										$rebuilt['systemPrompt'],
+										$user_prompt,
+										$resolved_provider,
+										$reasoning_effort,
+										null,
+										$request_timeout_seconds,
+										0
+									),
+									[ 'outputSchemaFallback' => 'grammar_limit' ]
+								)
+							);
+						}
 
 						$result = self::call_prompt_method_with_request_timeout(
 							$prompt,

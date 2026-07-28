@@ -207,6 +207,18 @@ The failing boundary is therefore **(1,769 B, 3,427 B]**.
   requested. Before this change a deliberately degraded request was
   indistinguishable from a surface that never asked for a schema.
 
+- The retry now emits its own `ai.chat.request_ready` trace event, carrying
+  `hasSchema: false` and `outputSchemaFallback: "grammar_limit"`. Previously
+  `request_ready` fired once, before the first attempt, so a diagnostic trace
+  showed one request where two were sent — and the missing one was the
+  schema-free retry this fallback exists to make visible.
+- A rebuild that fails now restores the runtime chat configuration captured
+  before it ran. Provider/model resolution records its result into
+  process-global state that `Provider::active_chat_request_meta()` reads for the
+  activity row's provider path; the rebuild resolves again, so a failure after
+  that point would have left the row reporting the provider path of a request
+  that was never sent.
+
 All regression tests were confirmed to **fail when the fix is reverted**. Note
 the obvious assertion does not work: checking `json_schema` after the retry
 passes either way, because the stub's `sync_state()` pushes the reused object's

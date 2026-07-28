@@ -231,6 +231,33 @@ final class Provider {
 	}
 
 	/**
+	 * Capture the recorded runtime chat configuration so a speculative resolution
+	 * can be rolled back.
+	 *
+	 * Provider/model resolution records its result as a side effect, and a caller
+	 * that resolves for a request it then fails to build would otherwise leave
+	 * this describing a request that was never sent.
+	 *
+	 * @return array{configuration: array<string, mixed>|null, fresh: bool}
+	 */
+	public static function snapshot_runtime_chat_configuration(): array {
+		return [
+			'configuration' => self::$last_runtime_chat_configuration,
+			'fresh'         => self::$has_fresh_runtime_chat_configuration,
+		];
+	}
+
+	/**
+	 * @param array{configuration: array<string, mixed>|null, fresh: bool} $snapshot
+	 */
+	public static function restore_runtime_chat_configuration( array $snapshot ): void {
+		$configuration = $snapshot['configuration'] ?? null;
+
+		self::$last_runtime_chat_configuration      = is_array( $configuration ) ? $configuration : null;
+		self::$has_fresh_runtime_chat_configuration = (bool) ( $snapshot['fresh'] ?? false );
+	}
+
+	/**
 	 * @param array<string, mixed>|null $configuration
 	 */
 	public static function record_runtime_chat_configuration( ?array $configuration ): void {
