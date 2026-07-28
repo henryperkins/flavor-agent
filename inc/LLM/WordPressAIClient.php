@@ -26,6 +26,7 @@ final class WordPressAIClient {
 	private const DEFAULT_REQUEST_TIMEOUT          = 90;
 	private const REASONING_EFFORTS                = [ 'low', 'medium', 'high', 'xhigh' ];
 	private const SCHEMA_UNION_LIMIT               = 16;
+	private const ANTHROPIC_SCHEMA_BYTE_LIMIT      = 4096;
 	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
 
 	/**
@@ -147,8 +148,9 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$schema = self::prepare_output_schema( $schema, $resolved_provider );
-		$prompt = self::apply_output_schema( $prompt, $schema );
+		$prompt_without_output_schema = $prompt;
+		$schema                       = self::prepare_output_schema( $schema, $resolved_provider );
+		$prompt                       = self::apply_output_schema( $prompt, $schema );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -211,6 +213,43 @@ final class WordPressAIClient {
 				[],
 				$request_timeout_seconds
 			);
+
+			if ( is_wp_error( $result ) && null !== $schema ) {
+				$normalized_error = self::normalize_ai_client_error( $result );
+
+				if ( self::is_output_schema_grammar_limit_error( $normalized_error ) ) {
+					if ( $trace_consumed ) {
+						RequestTrace::event(
+							'ai.chat.output_schema_fallback',
+							self::build_error_trace_context( $normalized_error )
+						);
+					}
+
+					$schema                  = null;
+					$prompt                  = $prompt_without_output_schema;
+					$request_timeout_seconds = self::request_timeout_seconds(
+						$resolved_provider,
+						$reasoning_effort,
+						null
+					);
+					$request_diagnostics     = self::build_request_diagnostics(
+						$system_prompt,
+						$user_prompt,
+						$resolved_provider,
+						$reasoning_effort,
+						null,
+						$request_timeout_seconds,
+						$selection
+					);
+					$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
+					$result = self::call_prompt_method_with_request_timeout(
+						$prompt,
+						'generate_text_result',
+						[],
+						$request_timeout_seconds
+					);
+				}
+			}
 		} catch ( \Throwable $throwable ) {
 			$throwable_context = RequestTrace::throwable_context( $throwable );
 			if ( $trace_consumed ) {
@@ -813,31 +852,49 @@ final class WordPressAIClient {
 			return null;
 		}
 
-		$schema = self::normalize_output_schema( $schema );
-		$schema = self::normalize_output_schema_for_provider( $schema, $provider );
+		$provider = sanitize_key( $provider );
+		$schema   = self::normalize_output_schema( $schema );
+		$schema   = self::normalize_output_schema_for_provider( $schema, $provider );
 
-		if ( ! self::should_skip_output_schema( $schema ) ) {
-			return $schema;
+		if ( self::should_skip_output_schema( $schema ) ) {
+			$schema = self::compact_schema_for_union_limit( $schema );
+
+			if ( self::should_skip_output_schema( $schema ) ) {
+				return null;
+			}
 		}
 
-		$compact_schema = self::compact_schema_for_union_limit( $schema );
-
-		return self::should_skip_output_schema( $compact_schema ) ? null : $compact_schema;
+		return self::prepare_anthropic_output_schema( $schema, $provider );
 	}
 
 	private static function normalize_output_schema_for_provider( array $schema, string $provider ): array {
-		if ( 'anthropic' !== sanitize_key( $provider ) ) {
+		if ( 'anthropic' !== $provider ) {
+			return $schema;
+		}
+
+		return self::remove_schema_keywords(
+			$schema,
+			[ 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf' ]
+		);
+	}
+
+	private static function prepare_anthropic_output_schema( array $schema, string $provider ): ?array {
+		if ( 'anthropic' !== $provider || ! self::anthropic_output_schema_exceeds_byte_limit( $schema ) ) {
 			return $schema;
 		}
 
 		// Anthropic compiles structured-output schemas into grammars. Keep the
-		// complete response shape strict, but leave value-domain checks to Flavor
-		// Agent's existing server-side validators so large enum expansions and
-		// numeric ranges cannot make an otherwise valid request uncompilable.
-		return self::remove_schema_keywords(
-			$schema,
-			[ 'enum', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf' ]
-		);
+		// final compacted response shape strict, but leave enum checks to Flavor
+		// Agent's server-side validators when value expansions make it too large.
+		$schema = self::remove_schema_keywords( $schema, [ 'enum' ] );
+
+		return self::anthropic_output_schema_exceeds_byte_limit( $schema ) ? null : $schema;
+	}
+
+	private static function anthropic_output_schema_exceeds_byte_limit( array $schema ): bool {
+		$encoded_schema = wp_json_encode( $schema );
+
+		return ! is_string( $encoded_schema ) || strlen( $encoded_schema ) > self::ANTHROPIC_SCHEMA_BYTE_LIMIT;
 	}
 
 	private static function remove_schema_keywords( array $schema, array $keywords ): array {
@@ -845,22 +902,59 @@ final class WordPressAIClient {
 			unset( $schema[ $keyword ] );
 		}
 
-		foreach ( $schema as $key => $value ) {
-			if ( ! is_array( $value ) ) {
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas' ] as $collection_key ) {
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
 				continue;
 			}
 
-			if ( self::is_list_array( $value ) ) {
-				foreach ( $value as $child_key => $child_schema ) {
-					if ( is_array( $child_schema ) ) {
-						$value[ $child_key ] = self::remove_schema_keywords( $child_schema, $keywords );
-					}
+			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $collection_key ][ $key ] = self::remove_schema_keywords( $child_schema, $keywords );
 				}
-			} else {
-				$value = self::remove_schema_keywords( $value, $keywords );
+			}
+		}
+
+		foreach ( [ 'items', 'additionalItems', 'unevaluatedItems', 'contains', 'additionalProperties', 'unevaluatedProperties', 'propertyNames', 'not', 'if', 'then', 'else', 'contentSchema' ] as $schema_key ) {
+			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
+				$schema[ $schema_key ] = self::remove_schema_keywords_from_schema_or_schema_list(
+					$schema[ $schema_key ],
+					$keywords
+				);
+			}
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
 			}
 
-			$schema[ $key ] = $value;
+			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $schema_list_key ][ $key ] = self::remove_schema_keywords( $child_schema, $keywords );
+				}
+			}
+		}
+
+		if ( isset( $schema['dependencies'] ) && is_array( $schema['dependencies'] ) ) {
+			foreach ( $schema['dependencies'] as $key => $dependency ) {
+				if ( is_array( $dependency ) && ! self::is_list_array( $dependency ) ) {
+					$schema['dependencies'][ $key ] = self::remove_schema_keywords( $dependency, $keywords );
+				}
+			}
+		}
+
+		return $schema;
+	}
+
+	private static function remove_schema_keywords_from_schema_or_schema_list( array $schema, array $keywords ): array {
+		if ( ! self::is_list_array( $schema ) ) {
+			return self::remove_schema_keywords( $schema, $keywords );
+		}
+
+		foreach ( $schema as $key => $child_schema ) {
+			if ( is_array( $child_schema ) ) {
+				$schema[ $key ] = self::remove_schema_keywords( $child_schema, $keywords );
+			}
 		}
 
 		return $schema;
@@ -1355,6 +1449,13 @@ final class WordPressAIClient {
 			$normalized_message,
 			$error->get_error_data( $code )
 		);
+	}
+
+	private static function is_output_schema_grammar_limit_error( \WP_Error $error ): bool {
+		$message = strtolower( self::normalize_ai_client_error_message( $error->get_error_message() ) );
+
+		return str_contains( $message, 'compiled grammar is too large' )
+			|| str_contains( $message, 'schema is too complex for compilation' );
 	}
 
 	private static function connector_approval_error_data( \WP_Error $error ): array {
