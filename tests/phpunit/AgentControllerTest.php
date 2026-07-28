@@ -670,7 +670,13 @@ final class AgentControllerTest extends TestCase {
 		$this->assertSame( 'activity-1', $data['entries'][4]['id'] ?? null );
 	}
 
-	public function test_handle_update_activity_undo_persists_status_changes(): void {
+	/**
+	 * An editor-authored template row records the operations it applied, not a
+	 * content snapshot, so the server has nothing to compare live state against.
+	 * The transition is still recorded -- as the editor's report, never as a
+	 * verified revert. See ActivityUndoRouteTest for the server-verified path.
+	 */
+	public function test_handle_update_activity_undo_records_an_editor_report_as_client_reported(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
 
@@ -684,9 +690,13 @@ final class AgentControllerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'undone', $data['entry']['undo']['status'] ?? null );
+		$this->assertSame( 'client_reported', $data['result'] ?? null );
 		$this->assertSame(
-			'undone',
-			$response->get_data()['entry']['undo']['status'] ?? null
+			'client-reported',
+			$data['entry']['undo']['verification'] ?? null
 		);
 	}
 

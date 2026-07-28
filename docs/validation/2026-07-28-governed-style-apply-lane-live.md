@@ -4,10 +4,13 @@ The full external-apply lane was driven end to end against a real site:
 `get-theme-styles` → `recommend-style` → `request-style-apply` → approve →
 undo. Most of it works as documented. Two things do not.
 
-| Finding | Severity |
-| --- | --- |
-| Approved apply emitted **no attestation** (`attestationStatus: "not_configured"`) while the site publishes an active JWKS key | **P0** |
-| **Undo reported success but did not revert the change** | **P0** |
+| Finding | Severity | Status |
+| --- | --- | --- |
+| Approved apply emitted **no attestation** (`attestationStatus: "not_configured"`) while the site publishes an active JWKS key | **P0** | Open |
+| **Undo reported success but did not revert the change** | **P0** | Fixed in code; live re-verification still open |
+
+Findings below record what was observed on 2026-07-28 and are left as written.
+Remediation state is tracked in [Required before release](#required-before-release).
 
 ## Environment
 
@@ -114,12 +117,52 @@ original held only `css`). Verified back to `null` from both readers.
       advertises one.
 - [ ] Surface `attestationStatus` in `Settings > AI Activity` so an unattested
       apply on an attested lane is visible to the approver.
-- [ ] Fix undo so it either reverts or reports failure. A `status: "undone"`
+- [x] Fix undo so it either reverts or reports failure. A `status: "undone"`
       transition must be written **after** a verified revert, never before.
-- [ ] Add a regression test that asserts the *live subject state* after undo,
+- [x] Add a regression test that asserts the *live subject state* after undo,
       not just the recorded undo status. The current suite asserts the row
       transition, which is exactly what passed here while the site stayed changed.
-- [ ] Re-run this lane end to end after the fixes.
+- [ ] Re-run this lane end to end after the fixes. **Open.** Needs the branch
+      deployed to a provider-backed site; not available from this environment,
+      so nothing here claims live re-verification.
+
+### Finding 2 — what changed
+
+`POST /flavor-agent/v1/activity/{id}/undo` no longer writes the caller's
+requested status. It runs the same governed path the `undo-activity` ability
+uses — both now dispatch through `FlavorAgent\Apply\UndoCoordinator::run_verified_undo()`,
+so the verified and unverified paths cannot drift apart again:
+
+- The surface executor reads live state and reverts it before any `undone` is
+  written. Live state already equal to `before` resolves as `already_undone`
+  without a second write, which is the ordinary case — the editor reverts
+  client-side before it reports. Drift writes `failed` with the drift message
+  and returns `409`.
+- Rows whose subject lives in the editor and has no server-side state to check
+  (`block`, `navigation`, `content`, and editor-authored `template` /
+  `template-part` rows, which record operations rather than a content snapshot)
+  are recorded as `undo.verification: "client-reported"` — the transition is
+  kept, but the audit trail no longer presents it as a verified revert.
+- A row that executed server-side but carries no comparable snapshot is refused
+  with `409 flavor_agent_undo_unverifiable` and stays `available`. There is no
+  honest terminal state available for it, so none is written.
+- A caller may still report `status: "failed"` for its own client-side failure;
+  failure never claims a revert happened. It may no longer assert success.
+
+The row from this session — an approved, server-executed `global-styles` apply —
+is squarely in the first case. Under the fix it would have reverted
+`styles.typography` on `wp/v2/global-styles/81` before writing `undone`, or
+returned `409` and recorded `failed`.
+
+Regression coverage is `tests/phpunit/ActivityUndoRouteTest.php`, which asserts
+the **live Global Styles entity** after undo rather than the row transition.
+Each test was confirmed to fail with its own fix reverted: with the pre-fix
+handler restored, all seven fail, and the headline one fails with the entity
+still holding `var:preset|color|accent` while the row reads `undone` — this
+finding, reproduced. Removing only the `undo.verification` persistence fails the
+five tests that assert it.
+
+Finding 1 is untouched and remains open.
 
 ## Reproduction
 

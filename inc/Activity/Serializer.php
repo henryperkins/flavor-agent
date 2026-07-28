@@ -14,6 +14,9 @@ final class Serializer {
 	private const UNDO_STATUS_REVIEW         = 'review';
 	private const UNDO_STATUS_UNDONE         = 'undone';
 
+	private const UNDO_VERIFICATION_SERVER          = 'server';
+	private const UNDO_VERIFICATION_CLIENT_REPORTED = 'client-reported';
+
 	/**
 	 * @param array<string, mixed> $entry
 	 * @return array<string, mixed>
@@ -212,6 +215,20 @@ final class Serializer {
 				? self::normalize_timestamp( $undo['undoneAt'] ?? $timestamp )
 				: null,
 		];
+
+		// How the terminal status was established: `server` means an executor
+		// read -- and where needed wrote -- live state; `client-reported` means
+		// the subject lives in the editor and the transition is the client's
+		// report. Absent on rows that never reached a terminal status, and on
+		// terminal rows written before undo verification existed.
+		$verification = self::normalize_string( $undo['verification'] ?? '' );
+
+		if (
+			in_array( $status, [ self::UNDO_STATUS_UNDONE, self::UNDO_STATUS_FAILED ], true )
+			&& in_array( $verification, [ self::UNDO_VERIFICATION_SERVER, self::UNDO_VERIFICATION_CLIENT_REPORTED ], true )
+		) {
+			$normalized['verification'] = $verification;
+		}
 
 		$attestation_status = self::normalize_string( $undo['attestationStatus'] ?? '' );
 

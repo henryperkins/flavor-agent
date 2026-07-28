@@ -1,0 +1,201 @@
+<?php
+
+declare(strict_types=1);
+
+namespace FlavorAgent\Apply;
+
+use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Attestation\AttestationService;
+use FlavorAgent\Attestation\RecordResult;
+use FlavorAgent\Attestation\Repository as AttestationRepository;
+
+/**
+ * The governed undo core: run the surface executor against live state, then
+ * write the terminal activity status from what the executor actually did.
+ *
+ * Both undo entry points -- the `flavor-agent/undo-activity` ability and
+ * `POST /flavor-agent/v1/activity/{id}/undo` -- dispatch here, so on any
+ * surface that owns a server-side subject a verified revert is the only way a
+ * row reaches `undo.status = "undone"`. Callers keep their own pre-checks and
+ * response shaping; the verify-then-write step lives here once so the two
+ * paths cannot drift apart again.
+ */
+final class UndoCoordinator {
+
+	public const RESULT_UNDONE          = 'undone';
+	public const RESULT_ALREADY_UNDONE  = 'already_undone';
+	public const RESULT_FAILED          = 'failed';
+	public const RESULT_CLIENT_REPORTED = 'client_reported';
+
+	/** Terminal status established by reading -- and where needed writing -- live state. */
+	public const VERIFICATION_SERVER = 'server';
+
+	/** Terminal status is the editor's report; no server-side subject exists to verify it against. */
+	public const VERIFICATION_CLIENT_REPORTED = 'client-reported';
+
+	/** The row carries no snapshot this executor can compare live state against. */
+	public const ERROR_SNAPSHOT_UNSUPPORTED = 'flavor_agent_undo_snapshot_unsupported';
+
+	private const ERROR_DRIFT = 'flavor_agent_undo_drift';
+
+	/**
+	 * Pending, rejected, expired, and approval-failed external applies never
+	 * executed, so there is nothing to revert. Callers must reject these before
+	 * dispatching to an executor -- a pending row's snapshots describe a change
+	 * the site never received, and undoing it would be an unreviewed mutation.
+	 *
+	 * @param array<string, mixed> $entry
+	 */
+	public static function is_non_executed_apply_entry( array $entry ): bool {
+		$execution_result = (string) ( $entry['executionResult'] ?? '' );
+
+		if ( in_array( $execution_result, [ 'pending', 'rejected', 'expired' ], true ) ) {
+			return true;
+		}
+
+		return 'failed' === $execution_result
+			&& '' === (string) ( $entry['apply']['executedAt'] ?? '' );
+	}
+
+	/**
+	 * Revert the live subject, then record the outcome that revert produced.
+	 *
+	 * The caller is responsible for the gates that precede this: row lookup,
+	 * pending-apply expiry, the never-executed guard, the undo-status
+	 * transition check, and the ordered-undo gate.
+	 *
+	 * @param string                              $activity_id Row being undone.
+	 * @param array<string, mixed>                $entry       Hydrated activity entry.
+	 * @param class-string<ExternalApplyExecutor> $executor    Executor for the row's surface.
+	 * @return array{entry: array<string, mixed>, result: string, error: string|null}|\WP_Error
+	 */
+	public static function run_verified_undo( string $activity_id, array $entry, string $executor ): array|\WP_Error {
+		$result = $executor::undo( $entry );
+
+		if ( is_wp_error( $result ) ) {
+			if ( self::ERROR_DRIFT !== $result->get_error_code() ) {
+				// Passed through unchanged. Includes ERROR_SNAPSHOT_UNSUPPORTED,
+				// which callers inspect to decide what an unverifiable row may do.
+				return $result;
+			}
+
+			$failed = ActivityRepository::update_undo_status(
+				$activity_id,
+				'failed',
+				$result->get_error_message(),
+				[ 'verification' => self::VERIFICATION_SERVER ]
+			);
+
+			return [
+				'entry'  => is_array( $failed ) ? $failed : $entry,
+				'result' => self::RESULT_FAILED,
+				'error'  => $result->get_error_message(),
+			];
+		}
+
+		$metadata                 = self::revert_attestation_metadata( $activity_id, $entry, $result );
+		$metadata['verification'] = self::VERIFICATION_SERVER;
+
+		$updated = ActivityRepository::update_undo_status( $activity_id, 'undone', null, $metadata );
+
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
+		}
+
+		return [
+			'entry'  => $updated,
+			'result' => self::RESULT_ALREADY_UNDONE === (string) ( $result['result'] ?? '' )
+				? self::RESULT_ALREADY_UNDONE
+				: self::RESULT_UNDONE,
+			'error'  => null,
+		];
+	}
+
+	/**
+	 * Ring III revert attestation for the undo that just succeeded.
+	 *
+	 * @param array<string, mixed> $entry
+	 * @param array<string, mixed> $result Executor return value.
+	 * @return array<string, mixed> Metadata merged into the undo state.
+	 */
+	private static function revert_attestation_metadata( string $activity_id, array $entry, array $result ): array {
+		$surface = (string) ( $entry['surface'] ?? '' );
+
+		if ( ! AttestationService::surface_eligible( $surface ) ) {
+			return [];
+		}
+
+		$prior = AttestationRepository::find_by_related_activity( $activity_id );
+
+		if ( null === $prior ) {
+			return [ 'attestationStatus' => 'not_applicable' ];
+		}
+
+		try {
+			$target              = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+			$persisted_after     = is_array( $result['after'] ?? null )
+				? $result['after']
+				: ( is_array( $entry['before'] ?? null ) ? $entry['before'] : [] );
+			$attestation_context = [
+				'surface'            => $surface,
+				'operations'         => [],
+				'before'             => $entry['after'] ?? [],
+				'after'              => $persisted_after,
+				'freshnessSignature' => '',
+				'actorRole'          => self::actor_role_for_undo(),
+				'requestedAt'        => '',
+				'decidedAt'          => gmdate( 'c' ),
+				'relatedActivityId'  => $activity_id,
+			];
+
+			if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+				$attestation_context['globalStylesId'] = (string) ( $target['globalStylesId'] ?? '' );
+				$attestation_context['blockName']      = (string) ( $target['blockName'] ?? '' );
+			} else {
+				$attestation_context['templateRef'] = 'template-part' === $surface
+					? (string) ( $target['templatePartRef'] ?? $target['templatePartId'] ?? '' )
+					: (string) ( $target['templateRef'] ?? '' );
+			}
+
+			$attestation_result = AttestationService::record_revert(
+				(string) $prior['attestation_id'],
+				$attestation_context
+			);
+
+			return [
+				'attestationStatus'    => $attestation_result->status(),
+				'attestationErrorCode' => $attestation_result->error_code(),
+			];
+		} catch ( \Throwable $e ) {
+			AttestationService::record_failure(
+				$e,
+				[
+					'operation'            => 'revert',
+					'activityId'           => $activity_id,
+					'errorCode'            => 'unexpected_failure',
+					'revertsAttestationId' => (string) $prior['attestation_id'],
+				]
+			);
+
+			return [
+				'attestationStatus'    => RecordResult::STATUS_FAILED,
+				'attestationErrorCode' => 'unexpected_failure',
+			];
+		}
+	}
+
+	private static function actor_role_for_undo(): string {
+		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+
+		if ( $user_id <= 0 || ! function_exists( 'get_userdata' ) ) {
+			return '';
+		}
+
+		$user  = get_userdata( $user_id );
+		$roles = is_object( $user ) && is_array( $user->roles ?? null ) ? $user->roles : [];
+
+		return isset( $roles[0] ) ? sanitize_key( (string) $roles[0] ) : '';
+	}
+
+	private function __construct() {}
+}

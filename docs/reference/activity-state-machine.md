@@ -66,6 +66,20 @@ No other persisted transitions are accepted. The `update_undo_status()` method r
 
 Persisted server state remains one-way: `update_undo_status()` only writes `undone` and `failed`.
 
+### What establishes a terminal state
+
+A terminal row records **how** it got there in `undo.verification`, so the audit trail never has to be read as a claim of more than actually happened:
+
+| `undo.verification` | Meaning |
+|---|---|
+| `server` | An executor read live state and confirmed or performed the revert. Written by `UndoCoordinator::run_verified_undo()` for both `undone` and drift-`failed`. |
+| `client-reported` | The subject lives in the editor; there is no server-side state to check. The transition is the client's report of its own undo. |
+| *(absent)* | The row is not terminal, or it reached a terminal state before undo verification existed. |
+
+Neither undo entry point takes a caller's success claim on trust. `POST /flavor-agent/v1/activity/{id}/undo` and the `undo-activity` ability both dispatch through `UndoCoordinator::run_verified_undo()`, which runs the surface executor first and derives the status from what the executor did. A caller may still report `status: "failed"` for its own client-side failure — failure never asserts that a revert happened — but an `undone` request is granted only after verification, or recorded as `client-reported` when no server-side subject exists. A row that executed server-side but carries no comparable snapshot is refused with `409 flavor_agent_undo_unverifiable` and stays `available` rather than being closed out.
+
+This is the fix for the 2026-07-28 live finding, where the route wrote `undone` from the request parameter alone and the change stayed on the site (`docs/validation/2026-07-28-governed-style-apply-lane-live.md`, Finding 2).
+
 Even those writes are only valid while the persisted server state is still `available`. Terminal rewrites are rejected with HTTP `409`, including:
 
 - `undone -> failed`

@@ -11,8 +11,7 @@ use FlavorAgent\Apply\PostBlocksApplyExecutor;
 use FlavorAgent\Apply\StyleApplyExecutor;
 use FlavorAgent\Apply\TemplateApplyExecutor;
 use FlavorAgent\Apply\TemplatePartApplyExecutor;
-use FlavorAgent\Attestation\AttestationService;
-use FlavorAgent\Attestation\RecordResult;
+use FlavorAgent\Apply\UndoCoordinator;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\PostBlocksPrompt;
 use FlavorAgent\LLM\StylePrompt;
@@ -912,7 +911,7 @@ final class ApplyAbilities {
 			);
 		}
 
-		if ( self::is_non_executed_apply_entry( $entry ) ) {
+		if ( UndoCoordinator::is_non_executed_apply_entry( $entry ) ) {
 			return new \WP_Error(
 				'flavor_agent_activity_not_undoable',
 				'Pending, rejected, expired, and approval-failed external applies never executed and cannot be undone.',
@@ -947,102 +946,7 @@ final class ApplyAbilities {
 			);
 		}
 
-		$result = $executor::undo( $entry );
-
-		if ( is_wp_error( $result ) ) {
-			if ( 'flavor_agent_undo_drift' === $result->get_error_code() ) {
-				$failed = ActivityRepository::update_undo_status( $activity_id, 'failed', $result->get_error_message() );
-
-				return [
-					'entry'  => is_array( $failed ) ? $failed : $entry,
-					'result' => 'failed',
-					'error'  => $result->get_error_message(),
-				];
-			}
-
-			return $result;
-		}
-
-		$attestation_metadata = [];
-		if ( AttestationService::surface_eligible( $surface ) ) {
-			$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
-
-			if ( null === $prior ) {
-				$attestation_metadata['attestationStatus'] = 'not_applicable';
-			} else {
-				try {
-					$target              = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
-					$persisted_after     = is_array( $result['after'] ?? null )
-						? $result['after']
-						: ( is_array( $entry['before'] ?? null ) ? $entry['before'] : [] );
-					$attestation_context = [
-						'surface'            => $surface,
-						'operations'         => [],
-						'before'             => $entry['after'] ?? [],
-						'after'              => $persisted_after,
-						'freshnessSignature' => '',
-						'actorRole'          => self::actor_role_for_undo(),
-						'requestedAt'        => '',
-						'decidedAt'          => gmdate( 'c' ),
-						'relatedActivityId'  => $activity_id,
-					];
-
-					if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
-						$attestation_context['globalStylesId'] = (string) ( $target['globalStylesId'] ?? '' );
-						$attestation_context['blockName']      = (string) ( $target['blockName'] ?? '' );
-					} else {
-						$attestation_context['templateRef'] = 'template-part' === $surface
-							? (string) ( $target['templatePartRef'] ?? $target['templatePartId'] ?? '' )
-							: (string) ( $target['templateRef'] ?? '' );
-					}
-
-					$attestation_result                           = AttestationService::record_revert(
-						(string) $prior['attestation_id'],
-						$attestation_context
-					);
-					$attestation_metadata['attestationStatus']    = $attestation_result->status();
-					$attestation_metadata['attestationErrorCode'] = $attestation_result->error_code();
-				} catch ( \Throwable $e ) {
-					$attestation_metadata['attestationStatus']    = RecordResult::STATUS_FAILED;
-					$attestation_metadata['attestationErrorCode'] = 'unexpected_failure';
-					AttestationService::record_failure(
-						$e,
-						[
-							'operation'            => 'revert',
-							'activityId'           => $activity_id,
-							'errorCode'            => 'unexpected_failure',
-							'revertsAttestationId' => (string) $prior['attestation_id'],
-						]
-					);
-				}
-			}
-		}
-
-		$updated = ActivityRepository::update_undo_status( $activity_id, 'undone', null, $attestation_metadata );
-
-		if ( is_wp_error( $updated ) ) {
-			return $updated;
-		}
-
-		return [
-			'entry'  => $updated,
-			'result' => 'already_undone' === (string) ( $result['result'] ?? '' ) ? 'already_undone' : 'undone',
-			'error'  => null,
-		];
-	}
-
-	/**
-	 * @param array<string, mixed> $entry
-	 */
-	private static function is_non_executed_apply_entry( array $entry ): bool {
-		$execution_result = (string) ( $entry['executionResult'] ?? '' );
-
-		if ( in_array( $execution_result, [ 'pending', 'rejected', 'expired' ], true ) ) {
-			return true;
-		}
-
-		return 'failed' === $execution_result
-			&& '' === (string) ( $entry['apply']['executedAt'] ?? '' );
+		return UndoCoordinator::run_verified_undo( $activity_id, $entry, $executor );
 	}
 
 	/**
@@ -1067,19 +971,6 @@ final class ApplyAbilities {
 			"The recommendation context is stale. Re-run {$recommend_ability} and request the apply again with fresh signatures.",
 			[ 'status' => 409 ]
 		);
-	}
-
-	private static function actor_role_for_undo(): string {
-		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
-
-		if ( $user_id <= 0 || ! function_exists( 'get_userdata' ) ) {
-			return '';
-		}
-
-		$user  = get_userdata( $user_id );
-		$roles = is_object( $user ) && is_array( $user->roles ?? null ) ? $user->roles : [];
-
-		return isset( $roles[0] ) ? sanitize_key( (string) $roles[0] ) : '';
 	}
 
 	private static function persist_stale_blocked_outcome( string $surface, string $global_styles_id, string $block_name, string $source_signature, string $reason ): void {

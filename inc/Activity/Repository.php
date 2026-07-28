@@ -757,6 +757,7 @@ final class Repository {
 	}
 
 	/**
+	 * @param array<string, mixed> $metadata {verification?, attestationStatus?, attestationErrorCode?}
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public static function update_undo_status( string $activity_id, string $status, ?string $error = null, array $metadata = [] ) {
@@ -823,7 +824,7 @@ final class Repository {
 				: ( $current_entry['undo']['undoneAt'] ?? null ),
 		];
 
-		foreach ( [ 'attestationStatus', 'attestationErrorCode' ] as $field ) {
+		foreach ( [ 'verification', 'attestationStatus', 'attestationErrorCode' ] as $field ) {
 			if ( array_key_exists( $field, $metadata ) ) {
 				$undo_state[ $field ] = $metadata[ $field ];
 			}

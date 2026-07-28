@@ -41,7 +41,7 @@ Content request diagnostics render inline only when the supported post/page cont
 - Template-part panel -> `flavor-agent/recommend-template-part`
 - Global Styles / Style Book panel -> `flavor-agent/recommend-style`
 - Activity read/write -> `GET/POST /flavor-agent/v1/activity`
-- Activity undo -> `POST /flavor-agent/v1/activity/{id}/undo`
+- Activity undo -> `POST /flavor-agent/v1/activity/{id}/undo` (server-verified through the surface executor where the row has a server-side subject; recorded as `client-reported` where it does not)
 - External-apply approval -> `POST /flavor-agent/v1/activity/{id}/decision`
 - Advisory review claim -> `POST/DELETE /flavor-agent/v1/activity/{id}/claim`
 - External agent style apply -> `flavor-agent/request-style-apply`; external agent template apply -> `flavor-agent/request-template-apply`; external agent template-part apply -> `flavor-agent/request-template-part-apply`; external agent post-blocks apply -> `flavor-agent/request-post-blocks-apply`; status/attribution reads -> `flavor-agent/get-activity` and `flavor-agent/list-activity`; server-side undo (all four lanes) -> `flavor-agent/undo-activity`
