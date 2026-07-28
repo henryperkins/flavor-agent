@@ -383,6 +383,63 @@ final class AgentsApiUpstreamContractTest extends TestCase {
 		);
 	}
 
+	/**
+	 * `RunContext` binds captured run identifiers to the ability the runtime is
+	 * about to dispatch, replicating upstream's own resolution order. If that
+	 * order drifts, attribution binds to a name that never executes and is
+	 * silently dropped — a correlation that quietly stops correlating.
+	 */
+	public function test_tool_call_ability_resolution_order_still_matches_upstream(): void {
+		$file = $this->upstream_path() . '/src/Tools/class-wp-agent-ability-tool-executor.php';
+
+		$this->assertFileExists( $file );
+
+		$contents = (string) \file_get_contents( $file );
+
+		$this->assertSame(
+			1,
+			\preg_match(
+				'/private function ability_name\([^)]*\)[^{]*\{.*?\$candidates\s*=\s*array\((.*?)\);/s',
+				$contents,
+				$match
+			),
+			'Upstream restructured tool-call ability resolution; RunContext::target_ability() must be re-derived.'
+		);
+
+		\preg_match_all( '/\$(?:tool_definition|metadata|tool_call)\[\'([a-z_]+)\'\]/', $match[1], $keys );
+
+		$this->assertSame(
+			[ 'ability', 'ability_name', 'ability_name', 'tool_name' ],
+			$keys[1],
+			'The candidate order changed. RunContext resolves ability -> ability_name -> metadata.ability_name -> tool_name.'
+		);
+	}
+
+	/**
+	 * The keys `RunContext` reads out of the pre-tool-call mediation context.
+	 */
+	public function test_mediation_context_still_carries_the_keys_run_context_reads(): void {
+		$file = $this->upstream_path() . '/src/Runtime/class-wp-agent-conversation-loop.php';
+
+		$this->assertFileExists( $file );
+
+		$contents = (string) \file_get_contents( $file );
+
+		$this->assertSame(
+			1,
+			\preg_match( '/\$mediation_context\s*=\s*array\((.*?)\n\t\t\t\);/s', $contents, $match ),
+			'Could not isolate the pre-tool-call mediation context.'
+		);
+
+		foreach ( [ 'tool_name', 'tool_declaration', 'prepared_tool_call', 'raw_tool_call', 'turn_context' ] as $key ) {
+			$this->assertStringContainsString(
+				"'" . $key . "'",
+				$match[1],
+				\sprintf( 'RunContext reads %s out of the mediation context and upstream stopped providing it.', $key )
+			);
+		}
+	}
+
 	private function meta_abilities_source(): string {
 		$file = $this->upstream_path() . '/src/Tools/register-agent-ability-meta-abilities.php';
 

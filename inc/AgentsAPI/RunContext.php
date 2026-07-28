@@ -50,6 +50,23 @@ final class RunContext {
 	 */
 	private static array $current = [];
 
+	/**
+	 * Ability the captured context belongs to.
+	 *
+	 * The seam is a *pre*-call hook and upstream exposes no matching post-call
+	 * hook, so nothing signals that a tool call finished. Without a binding, a
+	 * later recommendation in the same PHP process — a long-lived WP-CLI run,
+	 * or a workflow that dispatches an ability step after a chat step — would
+	 * inherit the finished run's identifiers and write them onto its activity
+	 * row. Attribution that is confidently wrong is worse than absent.
+	 *
+	 * Two bounds replace the missing lifecycle signal: the context is only
+	 * attached to the ability the runtime said it was about to dispatch, and
+	 * {@see self::consume()} clears it on read, so one pre-call hook yields at
+	 * most one attribution.
+	 */
+	private static string $current_ability = '';
+
 	private static bool $registered = false;
 
 	/**
@@ -96,9 +113,44 @@ final class RunContext {
 			}
 		}
 
-		self::$current = $captured;
+		self::$current         = $captured;
+		self::$current_ability = [] === $captured ? '' : self::target_ability( $context );
 
 		return $decision;
+	}
+
+	/**
+	 * Ability the runtime is about to dispatch for this tool call.
+	 *
+	 * Mirrors `WP_Agent_Ability_Tool_Executor::ability_name()`: a tool
+	 * declaration may carry an `ability` / `ability_name` when the model-facing
+	 * tool name differs from the registered ability, so the model-facing name is
+	 * the last resort rather than the first. Pinned against upstream by
+	 * {@see \FlavorAgent\Tests\AgentsApiUpstreamContractTest}.
+	 *
+	 * @param array<string, mixed> $context Upstream mediation context.
+	 */
+	private static function target_ability( array $context ): string {
+		$declaration = \is_array( $context['tool_declaration'] ?? null ) ? $context['tool_declaration'] : [];
+		$tool_call   = \is_array( $context['prepared_tool_call'] ?? null )
+			? $context['prepared_tool_call']
+			: ( \is_array( $context['raw_tool_call'] ?? null ) ? $context['raw_tool_call'] : [] );
+		$metadata    = \is_array( $tool_call['metadata'] ?? null ) ? $tool_call['metadata'] : [];
+
+		foreach (
+			[
+				$declaration['ability'] ?? null,
+				$declaration['ability_name'] ?? null,
+				$metadata['ability_name'] ?? null,
+				$context['tool_name'] ?? null,
+			] as $candidate
+		) {
+			if ( \is_string( $candidate ) && '' !== \trim( $candidate ) ) {
+				return \trim( $candidate );
+			}
+		}
+
+		return '';
 	}
 
 	public static function is_active(): bool {
@@ -116,11 +168,42 @@ final class RunContext {
 	}
 
 	/**
+	 * Take the run identifiers for one ability dispatch, clearing them.
+	 *
+	 * Returns an empty array unless a run is active *and* `$ability_name` is the
+	 * ability the runtime said it was dispatching. Both conditions matter: the
+	 * first stops attribution outliving the process's last agent turn, the
+	 * second stops a finished turn's identifiers landing on an unrelated
+	 * recommendation that happens to run next in the same process.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function consume( string $ability_name ): array {
+		if ( [] === self::$current || \trim( $ability_name ) !== self::$current_ability ) {
+			return [];
+		}
+
+		$captured = self::$current;
+
+		self::reset();
+
+		return $captured;
+	}
+
+	/**
+	 * Ability the current captured context is bound to.
+	 */
+	public static function current_ability(): string {
+		return self::$current_ability;
+	}
+
+	/**
 	 * Clear the captured context. Used by tests and by any caller that needs to
 	 * guarantee a clean attribution boundary within one process.
 	 */
 	public static function reset(): void {
-		self::$current = [];
+		self::$current         = [];
+		self::$current_ability = '';
 	}
 
 	/**

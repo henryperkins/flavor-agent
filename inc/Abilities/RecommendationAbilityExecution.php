@@ -386,7 +386,7 @@ final class RecommendationAbilityExecution {
 		$request_meta['ability']            = $ability_name;
 		$request_meta['executionTransport'] = 'wp-abilities';
 		$request_meta['route']              = 'wp-abilities:' . $ability_name;
-		$request_meta                       = self::append_agent_run_meta( $request_meta );
+		$request_meta                       = self::append_agent_run_meta( $request_meta, $ability_name );
 
 		if ( 'flavor-agent/recommend-patterns' === $ability_name ) {
 			$request_meta = self::append_pattern_request_meta( $request_meta );
@@ -416,8 +416,12 @@ final class RecommendationAbilityExecution {
 	 * @param array<string, mixed> $request_meta
 	 * @return array<string, mixed>
 	 */
-	private static function append_agent_run_meta( array $request_meta ): array {
-		$agent_run = AgentRunContext::current();
+	private static function append_agent_run_meta( array $request_meta, string $ability_name ): array {
+		// Bound to this ability and cleared on read: the upstream seam is a
+		// pre-call hook with no post-call counterpart, so a run's identifiers
+		// would otherwise persist for the rest of the process and land on the
+		// next recommendation that happened to follow it.
+		$agent_run = AgentRunContext::consume( $ability_name );
 
 		if ( [] === $agent_run ) {
 			return $request_meta;
@@ -441,7 +445,7 @@ final class RecommendationAbilityExecution {
 		$request_meta['ability']            = $ability_name;
 		$request_meta['executionTransport'] = 'wp-abilities';
 		$request_meta['route']              = 'wp-abilities:' . $ability_name;
-		$request_meta                       = self::append_agent_run_meta( $request_meta );
+		$request_meta                       = self::append_agent_run_meta( $request_meta, $ability_name );
 
 		if ( 'flavor-agent/recommend-patterns' === $ability_name ) {
 			$request_meta = self::append_pattern_request_meta( $request_meta );

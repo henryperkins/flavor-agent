@@ -52,6 +52,12 @@ const FAIL         = 'fail';
 const SKIP         = 'skip';
 const INCONCLUSIVE = 'inconclusive';
 
+/**
+ * Overall-only: nothing failed, but the run did not gather the evidence it was
+ * asked for. Never a per-check status.
+ */
+const INCOMPLETE = 'incomplete';
+
 $quiet   = '' !== (string) getenv( 'FA_DEMO_JSON' );
 $tiers   = parse_tiers( (string) getenv( 'FA_DEMO_TIERS' ) );
 $results = [];
@@ -498,17 +504,46 @@ if ( in_array( 'B', $tiers, true ) ) {
 
 // ---------------------------------------------------------------- Summary ---
 $counts = array_count_values( array_column( $results, 'status' ) );
-$overall = ( $counts[ FAIL ] ?? 0 ) > 0 ? FAIL : PASS;
+
+// `pass` has to mean "the evidence was gathered", not merely "nothing blew up".
+// This harness exists to answer the Phase 1 live-run exit gate, and a tier B
+// that was *asked for* but produced only skips and inconclusives gathered no
+// live evidence at all — reporting that as `pass` would let a consumer reading
+// DEMO_RESULT.status treat the gate as met on the strength of the wiring checks
+// alone. Mirrors the pass/fail/incomplete vocabulary of scripts/verify.js.
+$requested_b = in_array( 'B', $tiers, true );
+$live_proof  = false;
+
+foreach ( $results as $check ) {
+	if ( \in_array( $check['id'], [ 'B1', 'B2' ], true ) && PASS === $check['status'] ) {
+		$live_proof = true;
+	}
+}
+
+if ( ( $counts[ FAIL ] ?? 0 ) > 0 ) {
+	$overall = FAIL;
+} elseif ( ( $counts[ INCONCLUSIVE ] ?? 0 ) > 0 || ( $requested_b && ! $live_proof ) ) {
+	$overall = INCOMPLETE;
+} else {
+	$overall = PASS;
+}
 
 if ( ! $quiet ) {
 	printf(
-		"\n%d checks: %d pass, %d fail, %d inconclusive, %d skipped\n\n",
+		"\n%d checks: %d pass, %d fail, %d inconclusive, %d skipped\noverall: %s\n",
 		count( $results ),
 		$counts[ PASS ] ?? 0,
 		$counts[ FAIL ] ?? 0,
 		$counts[ INCONCLUSIVE ] ?? 0,
-		$counts[ SKIP ] ?? 0
+		$counts[ SKIP ] ?? 0,
+		strtoupper( $overall )
 	);
+
+	if ( INCOMPLETE === $overall ) {
+		echo "  No live-run evidence was gathered. This is not a passing exit gate.\n";
+	}
+
+	echo "\n";
 }
 
 echo 'DEMO_RESULT=' . wp_json_encode(

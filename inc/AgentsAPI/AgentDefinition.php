@@ -58,7 +58,15 @@ final class AgentDefinition {
 	 * `templatePartRef` the agent cannot invent, so the corresponding list
 	 * abilities are part of the least-privilege profile rather than an
 	 * expansion of it — without them those recommendation tools are unusable
-	 * through a conversational entry point.
+	 * through a conversational entry point. The same is true of
+	 * `get-theme-styles`, which supplies the `scope` and `styleContext` that
+	 * `recommend-style` declares required.
+	 *
+	 * A closed allowlist that omits a supplier does not fail loudly — the
+	 * recommendation tool stays advertised and fails at call time on a missing
+	 * input the model cannot obtain. {@see \FlavorAgent\Tests\AgentsApiToolClosureTest}
+	 * exists so a future recommendation tool cannot be added without its
+	 * supplier.
 	 *
 	 * @var array<int, string>
 	 */
@@ -66,6 +74,7 @@ final class AgentDefinition {
 		'flavor-agent/check-status',
 		'flavor-agent/get-active-theme',
 		'flavor-agent/get-theme-tokens',
+		'flavor-agent/get-theme-styles',
 		'flavor-agent/list-templates',
 		'flavor-agent/list-template-parts',
 		'flavor-agent/list-patterns',

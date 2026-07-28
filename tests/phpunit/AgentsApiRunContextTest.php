@@ -159,17 +159,101 @@ final class AgentsApiRunContextTest extends TestCase {
 	}
 
 	/**
+	 * The seam is a *pre*-call hook and upstream has no post-call counterpart,
+	 * so nothing signals that a tool call finished. Without a lifecycle bound,
+	 * a finished run's identifiers would sit in a static for the rest of the
+	 * process and be stamped onto whatever recommendation ran next — a
+	 * long-lived WP-CLI process, or a workflow dispatching an ability step
+	 * after a chat step. Attribution that is confidently wrong is worse than
+	 * absent, so the context is consumed on read.
+	 */
+	public function test_a_finished_run_does_not_attribute_a_later_recommendation(): void {
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			]
+		);
+
+		$first = $this->append_agent_run_meta( [ 'ability' => 'flavor-agent/recommend-block' ] );
+		$this->assertArrayHasKey( 'agentRun', $first );
+
+		$second = $this->append_agent_run_meta( [ 'ability' => 'flavor-agent/recommend-block' ] );
+		$this->assertArrayNotHasKey(
+			'agentRun',
+			$second,
+			'A second recommendation in the same process inherited the finished run.'
+		);
+	}
+
+	/**
+	 * A run does not license attribution of *any* ability — only the one the
+	 * runtime said it was dispatching.
+	 */
+	public function test_does_not_attribute_an_ability_the_runtime_was_not_dispatching(): void {
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			],
+			'flavor-agent/recommend-block'
+		);
+
+		$this->assertArrayNotHasKey(
+			'agentRun',
+			$this->append_agent_run_meta( [], 'flavor-agent/recommend-style' )
+		);
+
+		// The bound ability is untouched by the mismatched read.
+		$this->assertArrayHasKey(
+			'agentRun',
+			$this->append_agent_run_meta( [], 'flavor-agent/recommend-block' )
+		);
+	}
+
+	/**
+	 * A tool declaration may map a model-facing name onto a different registered
+	 * ability. Upstream resolves `ability` / `ability_name` ahead of the tool
+	 * name, and so must this, or attribution binds to a name that never
+	 * executes and is silently dropped.
+	 */
+	public function test_resolves_the_ability_behind_a_renamed_tool(): void {
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			],
+			'flavor_agent_recommend_style',
+			[ 'ability' => 'flavor-agent/recommend-style' ]
+		);
+
+		$this->assertSame( 'flavor-agent/recommend-style', RunContext::current_ability() );
+		$this->assertArrayHasKey(
+			'agentRun',
+			$this->append_agent_run_meta( [], 'flavor-agent/recommend-style' )
+		);
+	}
+
+	/**
 	 * @param array<string, mixed> $turn_context
 	 * @return array<string, mixed>
 	 */
-	private function observe( array $turn_context ): array {
+	private function observe(
+		array $turn_context,
+		string $tool_name = 'flavor-agent/recommend-block',
+		array $tool_declaration = []
+	): array {
 		$decision = RunContext::observe(
 			[
 				'action'   => 'proceed',
 				'result'   => [],
 				'complete' => false,
 			],
-			[ 'turn_context' => $turn_context ]
+			[
+				'turn_context'     => $turn_context,
+				'tool_name'        => $tool_name,
+				'tool_declaration' => $tool_declaration,
+			]
 		);
 
 		$this->assertIsArray( $decision );
@@ -181,12 +265,15 @@ final class AgentsApiRunContextTest extends TestCase {
 	 * @param array<string, mixed> $request_meta
 	 * @return array<string, mixed>
 	 */
-	private function append_agent_run_meta( array $request_meta ): array {
+	private function append_agent_run_meta(
+		array $request_meta,
+		string $ability_name = 'flavor-agent/recommend-block'
+	): array {
 		$method = new ReflectionMethod( RecommendationAbilityExecution::class, 'append_agent_run_meta' );
 		$method->setAccessible( true );
 
 		/** @var array<string, mixed> $result */
-		$result = $method->invoke( null, $request_meta );
+		$result = $method->invoke( null, $request_meta, $ability_name );
 
 		return $result;
 	}
