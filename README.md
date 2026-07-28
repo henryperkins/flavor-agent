@@ -24,7 +24,7 @@ Before publishing the GitHub release, add the remaining stills and replace this 
 
 Ship the code without a GIF if necessary, but do not ship the public release without the governance-console proof plus at least one strong native editor still.
 
-**As of 2026-07-20 only the governance-console still exists.** Each remaining asset needs a publicly reachable staged site with live provider credentials, so none of them can be captured from the local Docker stack. Per-asset blockers are recorded in [`docs/releases/v0.1.0-proof-assets.md`](docs/releases/v0.1.0-proof-assets.md). Treat that as an open release gate, not a formality.
+**As of 2026-07-28 only the governance-console still exists.** Each remaining asset needs a publicly reachable staged site with live provider credentials, so none of them can be captured from the local Docker stack. Per-asset blockers are recorded in [`docs/releases/v0.1.0-proof-assets.md`](docs/releases/v0.1.0-proof-assets.md). Treat that as an open release gate, not a formality.
 
 ## What it does
 
