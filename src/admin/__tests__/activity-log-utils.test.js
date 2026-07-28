@@ -24,6 +24,7 @@ import {
 	normalizeSelectedActivityActions,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
+	shouldWarnUnattestedApproval,
 	writePersistedActivityView,
 	TERMINAL_DECISION_ERROR_CODES,
 } from '../activity-log-utils';
@@ -1159,6 +1160,64 @@ describe( 'activity log utils', () => {
 				page: 4,
 			} ).page
 		).toBe( 4 );
+	} );
+} );
+
+describe( 'shouldWarnUnattestedApproval', () => {
+	const bootData = {
+		attestation: {
+			signingAvailable: false,
+			eligibleSurfaces: [
+				'global-styles',
+				'style-book',
+				'template',
+				'template-part',
+			],
+		},
+	};
+
+	test( 'warns for an eligible surface when signing is unavailable', () => {
+		expect(
+			shouldWarnUnattestedApproval(
+				{ surface: 'global-styles' },
+				bootData
+			)
+		).toBe( true );
+		expect(
+			shouldWarnUnattestedApproval(
+				{ surface: 'template-part' },
+				bootData
+			)
+		).toBe( true );
+	} );
+
+	test( 'does not warn when signing is available', () => {
+		expect(
+			shouldWarnUnattestedApproval(
+				{ surface: 'global-styles' },
+				{
+					attestation: {
+						...bootData.attestation,
+						signingAvailable: true,
+					},
+				}
+			)
+		).toBe( false );
+	} );
+
+	test( 'does not warn for an ineligible surface', () => {
+		expect(
+			shouldWarnUnattestedApproval( { surface: 'block' }, bootData )
+		).toBe( false );
+	} );
+
+	test( 'does not warn when boot data has no attestation block', () => {
+		expect(
+			shouldWarnUnattestedApproval( { surface: 'global-styles' }, {} )
+		).toBe( false );
+		expect(
+			shouldWarnUnattestedApproval( { surface: 'global-styles' }, null )
+		).toBe( false );
 	} );
 } );
 

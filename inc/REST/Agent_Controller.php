@@ -6,7 +6,9 @@ namespace FlavorAgent\REST;
 
 use FlavorAgent\Activity\Permissions as ActivityPermissions;
 use FlavorAgent\Apply\ApplyClaim;
+use FlavorAgent\Apply\ExternalApplyExecutorRegistry;
 use FlavorAgent\Apply\PendingApplyDecision;
+use FlavorAgent\Apply\UndoCoordinator;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Activity\Serializer;
 use FlavorAgent\Patterns\PatternIndex;
@@ -338,6 +340,7 @@ final class Agent_Controller {
 						'required'          => false,
 						'type'              => 'string',
 						'default'           => 'undone',
+						'enum'              => [ 'undone', 'failed' ],
 						'sanitize_callback' => 'sanitize_text_field',
 					],
 					'error'  => [
@@ -707,27 +710,136 @@ final class Agent_Controller {
 		);
 	}
 
+	/**
+	 * The editor's undo report-back channel, and the governed undo path for any
+	 * row whose subject the server owns.
+	 *
+	 * A caller may report that its own client-side undo failed -- failure never
+	 * claims a revert happened -- but it may not assert success. An `undone`
+	 * request is only granted after the surface executor has read live state and
+	 * confirmed (or performed) the revert. Rows whose subject lives in the
+	 * editor, and so has no server-side state to check, are recorded as
+	 * `client-reported` rather than as a verified revert.
+	 */
 	public static function handle_update_activity_undo( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		if ( ! ActivityPermissions::can_access_activity_request( $request ) ) {
 			return ActivityPermissions::forbidden_error();
 		}
 
-		$status = (string) $request->get_param( 'status' );
-		$result = ActivityRepository::update_undo_status(
-			(string) $request->get_param( 'id' ),
-			'' !== $status ? $status : 'undone',
-			$request->has_param( 'error' )
-				? (string) $request->get_param( 'error' )
-				: null
-		);
+		$activity_id = (string) $request->get_param( 'id' );
+		$status      = (string) $request->get_param( 'status' );
+		$status      = '' !== $status ? $status : 'undone';
+		$error       = $request->has_param( 'error' )
+			? (string) $request->get_param( 'error' )
+			: null;
 
-		if ( \is_wp_error( $result ) ) {
-			return $result;
+		// The route args enum enforces this for REST traffic, but direct
+		// callers bypass route-arg validation, so the handler states its own
+		// contract: anything that is not an explicit failure report is not
+		// silently treated as an undo request.
+		if ( ! \in_array( $status, [ 'undone', 'failed' ], true ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_status',
+				'Flavor Agent activity updates only support failed or undone status transitions.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( 'failed' === $status ) {
+			return self::activity_undo_response(
+				ActivityRepository::update_undo_status(
+					$activity_id,
+					'failed',
+					$error,
+					[ 'verification' => UndoCoordinator::VERIFICATION_CLIENT_REPORTED ]
+				),
+				UndoCoordinator::RESULT_FAILED
+			);
+		}
+
+		$entry = UndoCoordinator::resolve_entry_for_undo( $activity_id );
+
+		if ( \is_wp_error( $entry ) ) {
+			return $entry;
+		}
+
+		// The shared gates run before any executor dispatch.
+		// update_undo_status() repeats the transition and ordering checks at
+		// the write boundary, but an executor writes live state, so an
+		// ineligible row must never reach one. Unlike the ability, an
+		// already-undone row is rejected here: the editor tracks its own row
+		// state, so a repeat report is a bug rather than idempotent retry.
+		$gated = UndoCoordinator::gate_undoable( $activity_id, $entry, false );
+
+		if ( \is_wp_error( $gated ) ) {
+			return $gated;
+		}
+
+		$executor = ExternalApplyExecutorRegistry::for_surface( (string) ( $entry['surface'] ?? '' ) );
+
+		if ( null !== $executor ) {
+			$verified = UndoCoordinator::run_verified_undo( $activity_id, $entry, $executor );
+
+			if ( ! \is_wp_error( $verified ) ) {
+				if ( UndoCoordinator::RESULT_FAILED === $verified['result'] ) {
+					// The row is already written as failed; report the revert
+					// failure to the caller instead of a 200 it would read as success.
+					return new \WP_Error(
+						UndoCoordinator::ERROR_DRIFT,
+						(string) $verified['error'],
+						[ 'status' => 409 ]
+					);
+				}
+
+				return new \WP_REST_Response(
+					[
+						'entry'  => $verified['entry'],
+						'result' => $verified['result'],
+					],
+					200
+				);
+			}
+
+			if ( UndoCoordinator::ERROR_SNAPSHOT_UNSUPPORTED !== $verified->get_error_code() ) {
+				return $verified;
+			}
+
+			// The surface has an executor but this row carries no snapshot to
+			// compare live state against -- an editor-authored row, or one
+			// written before the surface recorded snapshots. Fall through.
+		}
+
+		if ( '' !== (string) ( $entry['apply']['executedAt'] ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_undo_unverifiable',
+				'This apply executed on the server, but the activity row does not carry the snapshots needed to verify a revert. Restore the change manually; Flavor Agent will not record an undo it cannot verify.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return self::activity_undo_response(
+			ActivityRepository::update_undo_status(
+				$activity_id,
+				'undone',
+				null,
+				[ 'verification' => UndoCoordinator::VERIFICATION_CLIENT_REPORTED ]
+			),
+			UndoCoordinator::RESULT_CLIENT_REPORTED
+		);
+	}
+
+	/**
+	 * @param array<string, mixed>|\WP_Error $entry
+	 */
+	private static function activity_undo_response( $entry, string $result ): \WP_REST_Response|\WP_Error {
+		if ( \is_wp_error( $entry ) ) {
+			return $entry;
 		}
 
 		return new \WP_REST_Response(
 			[
-				'entry' => $result,
+				'entry'  => $entry,
+				'result' => $result,
 			],
 			200
 		);

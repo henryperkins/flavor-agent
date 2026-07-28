@@ -163,6 +163,25 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @param array<string, mixed> $entry
 	 */
+	/**
+	 * Post-blocks is the one lane whose capability is per-object, so it is the
+	 * one where a target that diverges from the authorized document scope
+	 * escalates: `edit_post:100` must not become a write to post 200.
+	 */
+	public static function authorize_target( array $entry ): true|\WP_Error {
+		$post_id = self::post_id( $entry );
+
+		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_target_forbidden',
+				'You are not allowed to modify the post this activity row targets.',
+				[ 'status' => 403 ]
+			);
+		}
+
+		return true;
+	}
+
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
 		$post = ServerCollector::resolve_post_for_apply( self::post_id( $entry ) );
 

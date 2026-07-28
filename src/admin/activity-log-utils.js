@@ -1749,6 +1749,40 @@ export function getExternalApplyDetails( entry ) {
 	};
 }
 
+/**
+ * Whether approving this pending apply would execute without a Ring III
+ * attestation on a lane that is supposed to have one.
+ *
+ * apply.attestationStatus is only written at approve-execution time, so a
+ * pending row carries no attestation field of its own; the pre-decision
+ * signal comes from boot data instead — `attestation.signingAvailable`
+ * (KeyManager::configured() at page load) plus the server-provided
+ * eligible-surface list, so the client never duplicates
+ * AttestationService::ELIGIBLE_SURFACES. Boot data lacking the attestation
+ * block (older cached page markup) produces no warning rather than a false
+ * alarm.
+ *
+ * @param {Object} entry    Activity entry.
+ * @param {Object} bootData flavorAgentActivityLog boot data.
+ * @return {boolean} True when the approver should be warned.
+ */
+export function shouldWarnUnattestedApproval( entry, bootData ) {
+	const attestation =
+		bootData?.attestation && typeof bootData.attestation === 'object'
+			? bootData.attestation
+			: null;
+
+	if ( ! attestation || attestation.signingAvailable !== false ) {
+		return false;
+	}
+
+	const eligibleSurfaces = Array.isArray( attestation.eligibleSurfaces )
+		? attestation.eligibleSurfaces
+		: [];
+
+	return eligibleSurfaces.includes( entry?.surface );
+}
+
 function normalizeAttestationRecordingStatus( status ) {
 	return [
 		'recorded',

@@ -2423,6 +2423,58 @@ describe( 'ActivityLogApp', () => {
 		).toBe( true );
 	} );
 
+	test( 'warns the approver when an eligible-lane apply would execute unattested', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-9'
+		);
+
+		await renderApp( [ createExternalApplyEntry( { id: 'activity-9' } ) ], {
+			bootData: {
+				attestation: {
+					signingAvailable: false,
+					eligibleSurfaces: [
+						'global-styles',
+						'style-book',
+						'template',
+						'template-part',
+					],
+				},
+			},
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'Approving will apply this change without a Ring III attestation'
+		);
+	} );
+
+	test( 'does not warn the approver when attestation signing is available', async () => {
+		window.history.replaceState(
+			null,
+			'',
+			'/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-9'
+		);
+
+		await renderApp( [ createExternalApplyEntry( { id: 'activity-9' } ) ], {
+			bootData: {
+				attestation: {
+					signingAvailable: true,
+					eligibleSurfaces: [
+						'global-styles',
+						'style-book',
+						'template',
+						'template-part',
+					],
+				},
+			},
+		} );
+
+		expect( getContainer().textContent ).not.toContain(
+			'without a Ring III attestation'
+		);
+	} );
+
 	test( 'shows approve and reject actions for pending external applies and posts the decision', async () => {
 		window.history.replaceState(
 			null,

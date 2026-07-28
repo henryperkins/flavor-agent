@@ -74,6 +74,58 @@ final class ActivitySerializerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A row born terminal with NO verification claim stays unlabelled.
+	 * Server-authored request diagnostics (RecommendationAbilityExecution's
+	 * failed-request rows) are also born `failed` through Repository::create;
+	 * stamping them `client-reported` would assert a client reported something
+	 * when the server itself authored the record.
+	 */
+	public function test_normalize_entry_leaves_absent_verification_absent_on_born_terminal_rows(): void {
+		$entry = Serializer::normalize_entry(
+			[
+				'type'     => 'request_diagnostic',
+				'surface'  => 'block',
+				'document' => [ 'scopeKey' => 'post:42' ],
+				'undo'     => [ 'status' => 'failed' ],
+			]
+		);
+
+		$this->assertArrayNotHasKey(
+			'verification',
+			$entry['undo'],
+			'An unclaimed terminal row must not be attributed to anyone.'
+		);
+	}
+
+	/**
+	 * No caller may assert server verification for a row it creates. The
+	 * client-creation boundary (POST /flavor-agent/v1/activity and its
+	 * duplicate-create merge both normalize through normalize_entry()) must
+	 * replace a forged `verification: "server"` with `client-reported` --
+	 * otherwise any user with activity access can fabricate a row the audit
+	 * trail presents as a server-verified revert.
+	 */
+	public function test_normalize_entry_rejects_caller_supplied_server_verification(): void {
+		$entry = Serializer::normalize_entry(
+			[
+				'type'     => 'apply_suggestion',
+				'surface'  => 'block',
+				'document' => [ 'scopeKey' => 'post:42' ],
+				'undo'     => [
+					'status'       => 'undone',
+					'verification' => 'server',
+				],
+			]
+		);
+
+		$this->assertSame(
+			'client-reported',
+			$entry['undo']['verification'] ?? null,
+			'A created row may never claim a server-verified undo.'
+		);
+	}
+
 	public function test_apply_row_request_recommendation_validation_reason_round_trips(): void {
 		$entry = [
 			'type'    => 'apply_template_suggestion',

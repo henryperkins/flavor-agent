@@ -96,6 +96,32 @@ final class PendingApplyDecision {
 			);
 		}
 
+		/*
+		 * Authorize the approver against the executor's actual target before
+		 * anything reads or writes it. The decision route already requires
+		 * manage_options plus the row's mutation capability, but those
+		 * authorize the row's `document` scope while the executor writes what
+		 * `target` names -- so this closes the same document/target divergence
+		 * the undo path does, and keeps an approver from being walked into a
+		 * write the row's scope did not describe.
+		 */
+		$authorized = $executor::authorize_target( $entry );
+
+		if ( is_wp_error( $authorized ) ) {
+			return ActivityRepository::transition_external_apply(
+				$activity_id,
+				[
+					'applyStatus'    => 'failed',
+					'decidedBy'      => $decided_by,
+					'decidedByName'  => $decided_by_name,
+					'decidedAt'      => $decided_at,
+					'decisionNote'   => $note,
+					'failureCode'    => (string) $authorized->get_error_code(),
+					'failureMessage' => $authorized->get_error_message(),
+				]
+			);
+		}
+
 		// Second freshness check: the live baseline must still match the
 		// baseline recorded at request time. Drift fails closed.
 		$live_baseline = $executor::resolve_baseline( $entry );

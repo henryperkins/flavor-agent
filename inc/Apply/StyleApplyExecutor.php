@@ -142,6 +142,24 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @param array<string, mixed> $entry Hydrated activity entry.
 	 */
+	/**
+	 * Theme-territory targets are governed by a site-wide capability, so a
+	 * divergent target cannot reach anything `edit_theme_options` does not
+	 * already cover. Re-asserted at dispatch anyway: the check belongs next to
+	 * the write, not only in the row-level context resolution.
+	 */
+	public static function authorize_target( array $entry ): true|\WP_Error {
+		unset( $entry );
+
+		return current_user_can( 'edit_theme_options' )
+			? true
+			: new \WP_Error(
+				'flavor_agent_apply_target_forbidden',
+				'You are not allowed to modify this site\'s styles.',
+				[ 'status' => 403 ]
+			);
+	}
+
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
 		$target   = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
 		$resolved = self::resolve_user_global_styles( (string) ( $target['globalStylesId'] ?? '' ) );

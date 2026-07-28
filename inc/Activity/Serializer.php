@@ -15,6 +15,14 @@ final class Serializer {
 	private const UNDO_STATUS_UNDONE         = 'undone';
 
 	/**
+	 * Single source for the undo verification vocabulary;
+	 * UndoCoordinator::VERIFICATION_* alias these so the two layers cannot
+	 * drift apart.
+	 */
+	public const UNDO_VERIFICATION_SERVER          = 'server';
+	public const UNDO_VERIFICATION_CLIENT_REPORTED = 'client-reported';
+
+	/**
 	 * @param array<string, mixed> $entry
 	 * @return array<string, mixed>
 	 */
@@ -37,7 +45,8 @@ final class Serializer {
 			'executionResult' => self::normalize_string( $entry['executionResult'] ?? 'applied' ),
 			'undo'            => self::normalize_undo_for_storage(
 				is_array( $entry['undo'] ?? null ) ? $entry['undo'] : [],
-				$timestamp
+				$timestamp,
+				true
 			),
 		];
 	}
@@ -192,9 +201,21 @@ final class Serializer {
 
 	/**
 	 * @param array<string, mixed> $undo
+	 * @param string               $timestamp       Fallback timestamp for updatedAt/undoneAt.
+	 * @param bool                 $client_supplied True when the undo object arrives through
+	 *                                              entry creation (Repository::create and its
+	 *                                              duplicate-create merge). A creator may never
+	 *                                              assert `verification: "server"` — no executor
+	 *                                              read live state for a row being born — so a
+	 *                                              supplied `server` is downgraded to
+	 *                                              `client-reported`. An absent verification
+	 *                                              stays absent: server-authored diagnostics are
+	 *                                              also born terminal, and stamping them as a
+	 *                                              client's report would misattribute authorship.
+	 *                                              Only update_undo_status() establishes `server`.
 	 * @return array<string, mixed>
 	 */
-	public static function normalize_undo_for_storage( array $undo, string $timestamp ): array {
+	public static function normalize_undo_for_storage( array $undo, string $timestamp, bool $client_supplied = false ): array {
 		$status = self::normalize_string( $undo['status'] ?? self::UNDO_STATUS_AVAILABLE );
 
 		if ( ! in_array( $status, [ self::UNDO_STATUS_AVAILABLE, self::UNDO_STATUS_FAILED, self::UNDO_STATUS_NOT_APPLICABLE, self::UNDO_STATUS_REVIEW, self::UNDO_STATUS_UNDONE ], true ) ) {
@@ -212,6 +233,26 @@ final class Serializer {
 				? self::normalize_timestamp( $undo['undoneAt'] ?? $timestamp )
 				: null,
 		];
+
+		// How the terminal status was established: `server` means an executor
+		// read -- and where needed wrote -- live state; `client-reported` means
+		// the subject lives in the editor and the transition is the client's
+		// report. Absent on rows that never reached a terminal status, and on
+		// terminal rows written before undo verification existed.
+		$verification = self::normalize_string( $undo['verification'] ?? '' );
+
+		if ( in_array( $status, [ self::UNDO_STATUS_UNDONE, self::UNDO_STATUS_FAILED ], true ) ) {
+			if ( $client_supplied && self::UNDO_VERIFICATION_SERVER === $verification ) {
+				// No creator may assert server verification: no executor read
+				// live state for a row being born. The explicit claim becomes
+				// the honest one. An absent verification is left absent --
+				// server-authored diagnostic rows are also born terminal, and
+				// labelling them a client's report would misattribute them.
+				$normalized['verification'] = self::UNDO_VERIFICATION_CLIENT_REPORTED;
+			} elseif ( in_array( $verification, [ self::UNDO_VERIFICATION_SERVER, self::UNDO_VERIFICATION_CLIENT_REPORTED ], true ) ) {
+				$normalized['verification'] = $verification;
+			}
+		}
 
 		$attestation_status = self::normalize_string( $undo['attestationStatus'] ?? '' );
 

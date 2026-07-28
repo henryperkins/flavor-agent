@@ -148,6 +148,24 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @param array<string, mixed> $entry
 	 */
+	/**
+	 * Theme-territory targets are governed by a site-wide capability, so a
+	 * divergent target cannot reach anything `edit_theme_options` does not
+	 * already cover. Re-asserted at dispatch anyway: the check belongs next to
+	 * the write, not only in the row-level context resolution.
+	 */
+	public static function authorize_target( array $entry ): true|\WP_Error {
+		unset( $entry );
+
+		return current_user_can( 'edit_theme_options' )
+			? true
+			: new \WP_Error(
+				'flavor_agent_apply_target_forbidden',
+				'You are not allowed to modify this site\'s templates.',
+				[ 'status' => 403 ]
+			);
+	}
+
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
 		$content = self::resolve_live_content( self::template_ref( $entry ) );
 
@@ -195,13 +213,14 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{result: string, after: array{content: string}}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
-		$ref      = self::template_ref( $entry );
-		$template = self::resolve_template( $ref );
-
-		if ( is_wp_error( $template ) ) {
-			return $template;
-		}
-
+		/*
+		 * Row-shape checks come before live-state resolution, mirroring
+		 * StyleApplyExecutor::undo. Editor-authored template rows record
+		 * operation snapshots rather than content snapshots, and their
+		 * classification as snapshot-unsupported (which lets undo callers fall
+		 * back to a client-reported transition) must not depend on whether the
+		 * live template still resolves.
+		 */
 		$before = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
 		$after  = is_array( $entry['after'] ?? null ) ? $entry['after'] : [];
 
@@ -211,6 +230,22 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 				'This activity row does not record the before/after content snapshots needed for a server-side undo.',
 				[ 'status' => 409 ]
 			);
+		}
+
+		$ref = self::template_ref( $entry );
+
+		if ( '' === $ref ) {
+			return new \WP_Error(
+				'flavor_agent_undo_snapshot_unsupported',
+				'This activity row does not record a server-resolvable template target and cannot be undone server-side.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$template = self::resolve_template( $ref );
+
+		if ( is_wp_error( $template ) ) {
+			return $template;
 		}
 
 		$live_hash   = self::content_hash( (string) ( $template->content ?? '' ) );

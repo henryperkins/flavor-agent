@@ -19,14 +19,27 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class WordPressAIClient {
 
-	private const SETUP_MESSAGE                    = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
-	private const CONNECTOR_NOT_APPROVED_CODE      = 'wpai_connector_not_approved';
-	private const PROMPT_PREVENTED_CODE            = 'prompt_prevented';
-	private const PROMPT_PREVENTED_MESSAGE         = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
-	private const DEFAULT_REQUEST_TIMEOUT          = 90;
-	private const REASONING_EFFORTS                = [ 'low', 'medium', 'high', 'xhigh' ];
-	private const SCHEMA_UNION_LIMIT               = 16;
-	private const ANTHROPIC_SCHEMA_BYTE_LIMIT      = 4096;
+	private const SETUP_MESSAGE               = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const CONNECTOR_NOT_APPROVED_CODE = 'wpai_connector_not_approved';
+	private const PROMPT_PREVENTED_CODE       = 'prompt_prevented';
+	private const PROMPT_PREVENTED_MESSAGE    = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
+	private const DEFAULT_REQUEST_TIMEOUT     = 90;
+	private const REASONING_EFFORTS           = [ 'low', 'medium', 'high', 'xhigh' ];
+	private const SCHEMA_UNION_LIMIT          = 16;
+	/*
+	 * Anthropic compiles structured-output schemas into a decoding grammar and
+	 * rejects the request outright once that grammar gets too large. The limit
+	 * is not published, so this ceiling is measured, not guessed: on
+	 * claude-opus-5 a 1,728-byte prepared schema succeeds and a 3,427-byte one
+	 * fails with "The compiled grammar is too large" (2026-07-28, evidence in
+	 * docs/validation/2026-07-28-anthropic-block-recommendation-live-failure.md).
+	 * 2048 sits inside that verified band: every surface except block keeps its
+	 * schema, and block drops to prompt-shaped output rather than 400-ing.
+	 *
+	 * Raising this requires a fresh live measurement, not a local test run --
+	 * the suite can only check our own arithmetic, never the provider's limit.
+	 */
+	private const ANTHROPIC_SCHEMA_BYTE_LIMIT      = 2048;
 	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
 
 	/**
@@ -104,7 +117,20 @@ final class WordPressAIClient {
 		$selection         = self::resolve_provider_model_selection( $provider );
 		$resolved_provider = $selection['provider'];
 		$model_options     = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
-		$system_prompt     = WordPressAIPolicy::system_instruction(
+		$raw_system_prompt = $system_prompt;
+		/*
+		 * Prepare the schema before building the system instruction. Provider
+		 * preparation can drop the schema outright -- an Anthropic block schema
+		 * exceeds the grammar ceiling and comes back null -- and the instruction
+		 * must describe the request actually being sent, not the one originally
+		 * requested. Building it from the raw schema would hand
+		 * wpai_system_instruction a hasSchema of true for a schema-free request,
+		 * the exact mismatch the grammar-limit retry path takes care to avoid.
+		 */
+		$prepared_schema        = self::prepare_output_schema_with_reason( $schema, $resolved_provider );
+		$schema                 = $prepared_schema['schema'];
+		$output_schema_fallback = $prepared_schema['dropped'];
+		$system_prompt          = WordPressAIPolicy::system_instruction(
 			$system_prompt,
 			$ability_name,
 			[
@@ -113,7 +139,7 @@ final class WordPressAIClient {
 				'hasSchema'       => is_array( $schema ) && [] !== $schema,
 			]
 		);
-		$prompt            = self::make_prompt(
+		$prompt                 = self::make_prompt(
 			$user_prompt,
 			[
 				'system_instruction' => $system_prompt,
@@ -148,9 +174,7 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$prompt_without_output_schema = $prompt;
-		$schema                       = self::prepare_output_schema( $schema, $resolved_provider );
-		$prompt                       = self::apply_output_schema( $prompt, $schema );
+		$prompt = self::apply_output_schema( $prompt, $schema );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -171,9 +195,18 @@ final class WordPressAIClient {
 			$request_timeout_seconds,
 			$selection
 		);
-		$trace_consumed          = RequestTrace::is_consumed();
-		$owns_trace              = $trace_consumed && ! RequestTrace::is_active();
-		$chat_trace_context      = $trace_consumed
+
+		if ( null !== $output_schema_fallback ) {
+			// The caller asked for structured output and preparation dropped it
+			// before the request was built. Record why, so the activity trail
+			// distinguishes a deliberately degraded request from a surface that
+			// never asked for a schema in the first place.
+			$request_diagnostics['requestSummary']['outputSchemaFallback'] = $output_schema_fallback;
+		}
+
+		$trace_consumed     = RequestTrace::is_consumed();
+		$owns_trace         = $trace_consumed && ! RequestTrace::is_active();
+		$chat_trace_context = $trace_consumed
 			? self::build_chat_trace_context(
 				$system_prompt,
 				$user_prompt,
@@ -225,29 +258,121 @@ final class WordPressAIClient {
 						);
 					}
 
-					$schema                  = null;
-					$prompt                  = $prompt_without_output_schema;
-					$request_timeout_seconds = self::request_timeout_seconds(
-						$resolved_provider,
-						$reasoning_effort,
-						null
-					);
-					$request_diagnostics     = self::build_request_diagnostics(
-						$system_prompt,
+					// Rebuild the prompt from scratch rather than reusing a
+					// pre-schema copy. The copy is unsafe because the AI Client
+					// builder is only shallow-cloned before as_json_response(),
+					// so it can share mutated nested state -- which matches the
+					// live 2026-07-28 failure where this retry fired and the
+					// request still died on the same oversized grammar.
+					// Rebuilding also regenerates the system instruction with
+					// hasSchema => false. That is inert on a stock install
+					// (WordPressAIPolicy::system_instruction just passes through
+					// the wpai_system_instruction filter) but matters to anyone
+					// filtering on it.
+					/*
+					 * The rebuild re-resolves the provider/model, and that
+					 * resolution overwrites the process-global runtime chat
+					 * configuration AI Activity reads for the provider path. If the
+					 * rebuild then fails, the request that was actually sent is
+					 * still the first one, so its configuration has to survive.
+					 */
+					$runtime_configuration = Provider::snapshot_runtime_chat_configuration();
+
+					$rebuilt = self::build_prompt_without_output_schema(
+						$raw_system_prompt,
 						$user_prompt,
+						$selection,
 						$resolved_provider,
 						$reasoning_effort,
-						null,
-						$request_timeout_seconds,
-						$selection
+						$model_options,
+						$ability_name
 					);
-					$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
-					$result = self::call_prompt_method_with_request_timeout(
-						$prompt,
-						'generate_text_result',
-						[],
-						$request_timeout_seconds
-					);
+
+					if ( is_wp_error( $rebuilt ) ) {
+						Provider::restore_runtime_chat_configuration( $runtime_configuration );
+
+						/*
+						 * Surface the rebuild failure as the result rather than
+						 * returning early: an early return would skip error
+						 * normalization, diagnostics recording, and
+						 * RequestTrace::finish() below, leaving an owned trace
+						 * open until shutdown.
+						 *
+						 * $request_diagnostics keeps describing the schema-bearing
+						 * request, which is the only one that reached the provider.
+						 * Mark the failed fallback so the recorded error is not read
+						 * as that request's own outcome -- without the marker the row
+						 * says a schema-mode request failed with a prompt-build error
+						 * it never hit.
+						 */
+						$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit_rebuild_failed';
+
+						$result = $rebuilt;
+					} else {
+						$schema                  = null;
+						$prompt                  = $rebuilt['prompt'];
+						$request_timeout_seconds = self::request_timeout_seconds(
+							$resolved_provider,
+							$reasoning_effort,
+							null
+						);
+						/*
+						 * Build diagnostics from the rebuilt instruction and the
+						 * rebuilt model selection, not the originals. A
+						 * wpai_system_instruction filter can vary its text on
+						 * hasSchema, and the retry sends the hasSchema => false
+						 * variant -- reporting the schema-mode text here would
+						 * record instructionsChars and bodyBytes for a request that
+						 * was never sent. Model resolution is re-run during the
+						 * rebuild for the same reason: if it falls back to a
+						 * provider-managed model this time, the original selection
+						 * would report the configured model for a response that did
+						 * not use it.
+						 */
+						$request_diagnostics = self::build_request_diagnostics(
+							$rebuilt['systemPrompt'],
+							$user_prompt,
+							$resolved_provider,
+							$reasoning_effort,
+							null,
+							$request_timeout_seconds,
+							$rebuilt['selection']
+						);
+						$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
+
+						if ( $trace_consumed ) {
+							/*
+							 * A second provider request is about to go out. Without
+							 * its own request_ready event the trace shows one request
+							 * where two were sent, and the schema-free retry -- the
+							 * one this fallback exists to make visible -- is the one
+							 * missing. The fallback marker rides along so the second
+							 * event is not mistaken for a duplicate of the first.
+							 */
+							RequestTrace::event(
+								'ai.chat.request_ready',
+								array_merge(
+									self::build_chat_trace_context(
+										$rebuilt['systemPrompt'],
+										$user_prompt,
+										$resolved_provider,
+										$reasoning_effort,
+										null,
+										$request_timeout_seconds,
+										0
+									),
+									[ 'outputSchemaFallback' => 'grammar_limit' ]
+								)
+							);
+						}
+
+						$result = self::call_prompt_method_with_request_timeout(
+							$prompt,
+							'generate_text_result',
+							[],
+							$request_timeout_seconds
+						);
+					}
 				}
 			}
 		} catch ( \Throwable $throwable ) {
@@ -847,9 +972,125 @@ final class WordPressAIClient {
 		};
 	}
 
+	/**
+	 * Build a prompt that never had an output schema attached.
+	 *
+	 * Used by the grammar-limit retry. This deliberately replays the whole
+	 * construction chain instead of reusing a copy captured before
+	 * apply_output_schema(), because the system instruction itself varies with
+	 * hasSchema and because the prompt builder is only shallow-cloned before
+	 * mutation.
+	 *
+	 * Returns the rebuilt system instruction and the rebuilt model selection
+	 * alongside the prompt. A wpai_system_instruction filter can vary its text on
+	 * hasSchema, so the retry's diagnostics must be built from the instruction
+	 * actually sent -- otherwise instructionsChars and bodyBytes describe the
+	 * schema-mode text the retry replaced. The selection is returned for the same
+	 * reason: apply_provider_model_selection() rewrites it while resolving, and
+	 * the retry resolves again, so its diagnostics must report what the retry
+	 * resolved rather than what the first attempt did.
+	 *
+	 * @param array{provider: string, model: string, source: string, modelResolutionStatus: string} $selection
+	 * @param array<string, mixed>                                                                  $model_options
+	 * @return array{prompt: object, systemPrompt: string, selection: array<string, mixed>}|\WP_Error
+	 */
+	private static function build_prompt_without_output_schema(
+		string $raw_system_prompt,
+		string $user_prompt,
+		array $selection,
+		string $resolved_provider,
+		?string $reasoning_effort,
+		array $model_options,
+		string $ability_name
+	) {
+		$system_prompt = WordPressAIPolicy::system_instruction(
+			$raw_system_prompt,
+			$ability_name,
+			[
+				'provider'        => $resolved_provider,
+				'reasoningEffort' => self::normalize_reasoning_effort_value( $reasoning_effort ),
+				'hasSchema'       => false,
+			]
+		);
+
+		$prompt = self::make_prompt(
+			$user_prompt,
+			[
+				'system_instruction' => $system_prompt,
+			] + $model_options
+		);
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		// Resolve into a copy: apply_provider_model_selection() takes $selection
+		// by reference, and if the rebuild fails the caller still reports the
+		// first attempt's request -- which must keep the first attempt's
+		// resolution. The copy is returned below so a successful retry reports
+		// its own.
+		$selection_copy = $selection;
+		$prompt         = self::apply_provider_model_selection( $prompt, $selection_copy );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		// Retry-time resolution can differ from the first attempt's -- the
+		// configured model may have disappeared and selection fallen back to a
+		// provider-managed one -- so the rebuilt builder needs the same support
+		// gate the original passed. Without it the retry would call
+		// generate_text_result() on an unsupported selection instead of
+		// returning the normalized missing-provider or prompt-prevented error.
+		$supported = self::ensure_text_generation_supported( $prompt );
+
+		if ( is_wp_error( $supported ) ) {
+			return $supported;
+		}
+
+		$prompt = self::apply_system_instruction( $prompt, $system_prompt );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		$prompt = self::apply_reasoning_effort( $prompt, $resolved_provider, $reasoning_effort );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		return [
+			'prompt'       => $prompt,
+			'systemPrompt' => $system_prompt,
+			'selection'    => $selection_copy,
+		];
+	}
+
 	private static function prepare_output_schema( ?array $schema, string $provider = '' ): ?array {
+		return self::prepare_output_schema_with_reason( $schema, $provider )['schema'];
+	}
+
+	/**
+	 * Prepare an output schema and report why it was dropped, if it was.
+	 *
+	 * Preparation can legitimately return null for a caller that asked for
+	 * structured output -- an Anthropic block schema exceeds the grammar byte
+	 * ceiling and has nothing left to strip. That is a deliberate degradation,
+	 * and the request diagnostics have to say so: without a reason a schema-free
+	 * block request looks identical to a surface that never wanted structured
+	 * output at all, which is exactly the distinction the 2026-07-28 Anthropic
+	 * investigation needed and could not read off the activity record.
+	 *
+	 * @param array<string, mixed>|null $schema
+	 * @return array{schema: array<string, mixed>|null, dropped: string|null}
+	 */
+	private static function prepare_output_schema_with_reason( ?array $schema, string $provider = '' ): array {
 		if ( null === $schema || [] === $schema ) {
-			return null;
+			return [
+				'schema'  => null,
+				'dropped' => null,
+			];
 		}
 
 		$provider = sanitize_key( $provider );
@@ -860,11 +1101,19 @@ final class WordPressAIClient {
 			$schema = self::compact_schema_for_union_limit( $schema );
 
 			if ( self::exceeds_schema_union_limit( $schema ) ) {
-				return null;
+				return [
+					'schema'  => null,
+					'dropped' => 'schema_union_limit',
+				];
 			}
 		}
 
-		return self::prepare_anthropic_output_schema( $schema, $provider );
+		$prepared = self::prepare_anthropic_output_schema( $schema, $provider );
+
+		return [
+			'schema'  => $prepared,
+			'dropped' => null === $prepared ? 'schema_byte_limit' : null,
+		];
 	}
 
 	private static function normalize_output_schema_for_provider( array $schema, string $provider ): array {

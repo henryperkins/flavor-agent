@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace FlavorAgent\Admin;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Attestation\AttestationService;
+use FlavorAgent\Attestation\KeyManager as AttestationKeyManager;
 use FlavorAgent\Context\ServerCollector;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -209,6 +211,18 @@ final class ActivityPage {
 	private static function build_activity_log_boot_data(): array {
 		return [
 			'adminUrl'               => admin_url(),
+			/*
+			 * Pre-decision attestation signal. apply.attestationStatus is only
+			 * written at approve-execution time, so a pending row carries no
+			 * attestation field -- without this the approver has no way to see
+			 * that approving an eligible-lane apply will execute unattested.
+			 * The eligible-surface list is sent from the server so the client
+			 * never duplicates AttestationService::ELIGIBLE_SURFACES.
+			 */
+			'attestation'            => [
+				'signingAvailable' => AttestationKeyManager::configured(),
+				'eligibleSurfaces' => AttestationService::eligible_surfaces(),
+			],
 			'canApproveStyleApplies' => current_user_can( 'edit_theme_options' ),
 			'connectorsUrl'          => admin_url( 'options-connectors.php' ),
 			'currentUserId'          => get_current_user_id(),

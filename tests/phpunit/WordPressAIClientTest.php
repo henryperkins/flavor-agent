@@ -545,7 +545,17 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( [ 'mode' ], $schema['dependencies']['limit'] ?? null );
 	}
 
-	public function test_chat_keeps_large_anthropic_output_shape_without_grammar_heavy_value_constraints(): void {
+	/**
+	 * The block schema cannot be shrunk under Anthropic's grammar ceiling.
+	 *
+	 * Stripping enums and numeric bounds only gets it to 3,427 bytes, and a
+	 * 3,427-byte schema was measured failing live on claude-opus-5 with
+	 * "The compiled grammar is too large" while 1,728 bytes succeeded
+	 * (2026-07-28). So the contract for block on Anthropic is to send no
+	 * structured output at all and let the server-side validators enforce
+	 * shape -- degraded, but a working recommendation instead of a 400.
+	 */
+	public function test_chat_drops_block_output_schema_for_anthropic_rather_than_sending_an_oversized_grammar(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,
 		];
@@ -563,21 +573,581 @@ final class WordPressAIClientTest extends TestCase {
 			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
 			$result
 		);
-		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
-
-		$this->assertIsArray( $schema );
-		$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ) );
-		$this->assertSame( 'object', $schema['type'] ?? null );
-		$this->assertSame(
-			[ 'settings', 'styles', 'block', 'recommendedSets', 'explanation' ],
-			$schema['required'] ?? null
+		$this->assertNull(
+			WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null,
+			'Block must send no output schema to Anthropic; its compacted schema still exceeds the measured grammar ceiling.'
 		);
-		$this->assertArrayNotHasKey(
-			'enum',
-			$schema['properties']['settings']['items']['properties']['panel'] ?? []
-		);
-		$this->assertLessThanOrEqual( 4096, strlen( (string) wp_json_encode( $schema ) ) );
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+	}
+
+	/**
+	 * Dropping the schema must also flip the instruction out of schema mode.
+	 *
+	 * The system instruction is generated with hasSchema, and provider
+	 * preparation can drop the schema entirely. If the instruction is built from
+	 * the raw schema, a filter sees hasSchema => true for a request that carries
+	 * no schema -- the exact mismatch the grammar-limit retry path avoids.
+	 */
+	public function test_block_request_reports_no_schema_to_the_system_instruction_filter_on_anthropic(): void {
+		$seen   = [];
+		$record = static function ( $instruction, $ability_name, $data ) use ( &$seen ) {
+			unset( $ability_name );
+			$seen[] = $data['hasSchema'] ?? null;
+
+			return $instruction;
+		};
+
+		add_filter( 'wpai_system_instruction', $record, 10, 3 );
+
+		try {
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"OK."}';
+
+			WordPressAIClient::chat(
+				'System.',
+				'User.',
+				'anthropic',
+				'medium',
+				ResponseSchema::get( 'block' )
+			);
+
+			$this->assertNotEmpty( $seen, 'The system-instruction filter never ran.' );
+			$this->assertFalse(
+				(bool) $seen[0],
+				'Block on Anthropic sends no schema, so the instruction must be built with hasSchema => false.'
+			);
+		} finally {
+			remove_filter( 'wpai_system_instruction', $record, 10 );
+		}
+	}
+
+	/**
+	 * A surface that keeps its schema must still report schema mode.
+	 */
+	public function test_surface_that_keeps_its_schema_reports_schema_mode_to_the_filter(): void {
+		$seen   = [];
+		$record = static function ( $instruction, $ability_name, $data ) use ( &$seen ) {
+			unset( $ability_name );
+			$seen[] = $data['hasSchema'] ?? null;
+
+			return $instruction;
+		};
+
+		add_filter( 'wpai_system_instruction', $record, 10, 3 );
+
+		try {
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_generate_text_result = '{}';
+
+			WordPressAIClient::chat(
+				'System.',
+				'User.',
+				'anthropic',
+				'medium',
+				ResponseSchema::get( 'template' )
+			);
+
+			$this->assertNotEmpty( $seen );
+			$this->assertTrue( (bool) $seen[0] );
+		} finally {
+			remove_filter( 'wpai_system_instruction', $record, 10 );
+		}
+	}
+
+	/**
+	 * Every other surface stays under the ceiling and keeps structured output.
+	 *
+	 * Guards against a future schema growing past the limit unnoticed: block is
+	 * meant to be the only surface that degrades.
+	 */
+	public function test_chat_keeps_output_schema_for_every_surface_that_fits_the_anthropic_grammar_ceiling(): void {
+		$surfaces = [ 'template', 'template_part', 'post_blocks', 'style', 'navigation', 'content', 'pattern' ];
+
+		foreach ( $surfaces as $surface ) {
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_generate_text_result = '{}';
+
+			WordPressAIClient::chat(
+				'System.',
+				'User.',
+				'anthropic',
+				'medium',
+				ResponseSchema::get( $surface )
+			);
+
+			$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+			$this->assertIsArray(
+				$schema,
+				sprintf( 'Surface "%s" unexpectedly dropped its output schema for Anthropic.', $surface )
+			);
+			$this->assertLessThanOrEqual(
+				2048,
+				strlen( (string) wp_json_encode( $schema ) ),
+				sprintf( 'Surface "%s" exceeds the measured Anthropic grammar ceiling.', $surface )
+			);
+		}
+	}
+
+	/**
+	 * The grammar-limit retry must send a prompt that never carried a schema.
+	 *
+	 * Regression guard. The retry used to reuse a copy of the prompt captured
+	 * before apply_output_schema(); that copy is unsafe because the AI Client
+	 * builder is only shallow-cloned before mutation, and because the system
+	 * instruction is generated with hasSchema and so still asked for schema
+	 * output. Live on 2026-07-28 the retry fired and the request failed anyway
+	 * with the same grammar error.
+	 *
+	 * Asserting on json_schema alone does NOT catch this: the stub's
+	 * sync_state() pushes the reused object's own (schema-free) state into the
+	 * recorded prompt, so a reuse and a rebuild look identical there. The
+	 * discriminating signal is the system instruction, which is generated with
+	 * hasSchema -- a reused prompt still carries the schema-mode instruction.
+	 * Verified to fail when the fix is reverted.
+	 */
+	public function test_grammar_limit_retry_rebuilds_the_prompt_instead_of_reusing_the_schema_mode_one(): void {
+		$marker = static function ( $instruction, $ability_name, $data ) {
+			unset( $ability_name );
+
+			return $instruction . ( ! empty( $data['hasSchema'] ) ? ' [SCHEMA-MODE]' : ' [NO-SCHEMA]' );
+		};
+
+		add_filter( 'wpai_system_instruction', $marker, 10, 3 );
+
+		try {
+			WordPressTestState::$ai_client_provider_support = [
+				'anthropic' => true,
+			];
+			// The stub returns this for every call, so the retry sees it too. We
+			// assert on what the retry *sent*, not on it eventually succeeding.
+			WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+				'prompt_client_error',
+				'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+			);
+
+			$result = WordPressAIClient::chat(
+				'System.',
+				'User.',
+				'anthropic',
+				'medium',
+				ResponseSchema::get( 'template' )
+			);
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+
+			$system = (string) ( WordPressTestState::$last_ai_client_prompt['system'] ?? '' );
+
+			$this->assertStringContainsString(
+				'[NO-SCHEMA]',
+				$system,
+				'The grammar-limit retry reused the schema-mode prompt instead of rebuilding one without a schema.'
+			);
+			$this->assertStringNotContainsString( '[SCHEMA-MODE]', $system );
+		} finally {
+			remove_filter( 'wpai_system_instruction', $marker, 10 );
+		}
+	}
+
+	/**
+	 * Retry diagnostics must measure the instruction the retry actually sent.
+	 *
+	 * A wpai_system_instruction filter can return different text for
+	 * hasSchema => false. The retry sends that variant, so reporting the
+	 * schema-mode text would record instructionsChars and bodyBytes for a
+	 * request that was never sent -- in runtime diagnostics and in the AI
+	 * Activity metadata derived from them.
+	 */
+	public function test_grammar_limit_retry_reports_diagnostics_for_the_rebuilt_instruction(): void {
+		$schema_mode = str_repeat( 'A', 400 );
+		$no_schema   = str_repeat( 'B', 40 );
+		$vary        = static function ( $instruction, $ability_name, $data ) use ( $schema_mode, $no_schema ) {
+			unset( $instruction, $ability_name );
+
+			return ! empty( $data['hasSchema'] ) ? $schema_mode : $no_schema;
+		};
+
+		add_filter( 'wpai_system_instruction', $vary, 10, 3 );
+
+		try {
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+				'prompt_client_error',
+				'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+			);
+
+			WordPressAIClient::chat(
+				'System.',
+				'User.',
+				'anthropic',
+				'medium',
+				ResponseSchema::get( 'template' )
+			);
+
+			$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+			$this->assertSame(
+				'grammar_limit',
+				$meta['requestSummary']['outputSchemaFallback'] ?? null,
+				'The retry did not run, so this test is not exercising the diagnostics path.'
+			);
+			$this->assertSame(
+				strlen( $no_schema ),
+				$meta['requestSummary']['instructionsChars'] ?? null,
+				'Retry diagnostics reported the schema-mode instruction rather than the one actually sent.'
+			);
+		} finally {
+			remove_filter( 'wpai_system_instruction', $vary, 10 );
+		}
+	}
+
+	/**
+	 * A preflight schema drop must be recorded, not silently applied.
+	 *
+	 * Block asks for structured output and Anthropic preparation returns null
+	 * because the compacted schema still exceeds the grammar byte ceiling. That is
+	 * a deliberate degradation, and without a marker the activity record is
+	 * identical to a surface that never wanted a schema -- which is exactly the
+	 * distinction the 2026-07-28 live investigation needed and could not read off
+	 * the recorded request.
+	 */
+	public function test_preflight_schema_drop_is_recorded_in_request_diagnostics(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"OK."}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			'medium',
+			ResponseSchema::get( 'block' )
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertNull(
+			WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null,
+			'This test only means anything if block actually sent no schema.'
+		);
+		$this->assertSame(
+			'schema_byte_limit',
+			$meta['requestSummary']['outputSchemaFallback'] ?? null,
+			'A schema dropped before the request was built must say so in the request diagnostics.'
+		);
+	}
+
+	/**
+	 * A surface that keeps its schema must not claim a fallback.
+	 *
+	 * The marker only means something if its absence means "structured output was
+	 * requested and sent".
+	 */
+	public function test_request_without_a_dropped_schema_records_no_output_schema_fallback(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertIsArray( WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null );
+		$this->assertArrayNotHasKey( 'outputSchemaFallback', $meta['requestSummary'] ?? [] );
+	}
+
+	/**
+	 * A failed rebuild must not be recorded as the first request's own outcome.
+	 *
+	 * When the schema-free rebuild cannot be constructed, the diagnostics still
+	 * describe the schema-bearing request -- correctly, because that is the only
+	 * one that reached the provider. But the error attached to them is the rebuild
+	 * failure, so without a marker the row reads as "the schema-mode request
+	 * failed with a prompt-build error", which never happened. Verified to fail
+	 * when the marker is removed.
+	 */
+	public function test_failed_grammar_limit_rebuild_is_marked_in_request_diagnostics(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'prompt_client_error',
+			'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+		);
+		// Let the first attempt build, then fail the rebuild: a connector dropping
+		// out between the two attempts.
+		WordPressTestState::$ai_client_prompt_method_throws = [
+			'using_provider' => [ null, new \RuntimeException( 'Connector is no longer available.' ) ],
+		];
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'grammar_limit_rebuild_failed',
+			$meta['requestSummary']['outputSchemaFallback'] ?? null,
+			'A grammar-limit retry that could not be rebuilt must be distinguishable from one that was never attempted.'
+		);
+		$this->assertIsArray(
+			$meta['requestSummary'] ?? null,
+			'Diagnostics must still be recorded rather than returning early.'
+		);
+	}
+
+	/**
+	 * Retry diagnostics must report the model the retry resolved.
+	 *
+	 * apply_provider_model_selection() rewrites the selection while resolving, and
+	 * the rebuild resolves again. If the retry falls back to a provider-managed
+	 * model, reusing the first attempt's selection would tell AI Activity that the
+	 * configured model produced a response it never touched. Verified to fail when
+	 * the retry diagnostics are built from the original selection.
+	 */
+	public function test_grammar_limit_retry_reports_the_model_selection_it_resolved(): void {
+		self::register_ai_provider_connector( 'anthropic', 'Anthropic' );
+		WordPressTestState::$options                    = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'anthropic',
+				'model'    => 'claude-sonnet-4-6',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		// First attempt resolves the configured model; the rebuild does not.
+		WordPressTestState::$ai_client_model_resolution_results = [
+			null,
+			new \WP_Error( 'model_not_found', 'The configured model is no longer available.' ),
+		];
+		WordPressTestState::$ai_client_generate_text_result     = new \WP_Error(
+			'prompt_client_error',
+			'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+		);
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			null,
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertSame(
+			'grammar_limit',
+			$meta['requestSummary']['outputSchemaFallback'] ?? null,
+			'The retry did not run, so this test is not exercising the diagnostics path.'
+		);
+		$this->assertSame(
+			'provider-managed',
+			$meta['requestSummary']['resolvedModel'] ?? null,
+			'Retry diagnostics reported the first attempt\'s model rather than the one the retry resolved.'
+		);
+		$this->assertSame(
+			'model_resolution_failed_provider_fallback',
+			$meta['requestSummary']['modelResolutionStatus'] ?? null
+		);
+	}
+
+	/**
+	 * The schema-free retry needs its own request_ready trace event.
+	 *
+	 * The trace is what a production diagnostician reads. request_ready is emitted
+	 * once, before the first attempt, so a grammar-limit retry sends a second
+	 * provider request that leaves no trace of its own -- and that retry, with
+	 * hasSchema false and a different instruction and body size, is precisely the
+	 * request the fallback exists to make visible.
+	 */
+	public function test_grammar_limit_retry_emits_its_own_request_ready_trace_event(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'prompt_client_error',
+			'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+		);
+
+		$events = [];
+		add_action(
+			'flavor_agent_diagnostic_trace',
+			static function ( array $entry ) use ( &$events ): void {
+				$events[] = $entry;
+			},
+			10,
+			1
+		);
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$ready = array_values(
+			array_filter(
+				$events,
+				static fn ( array $entry ): bool => 'ai.chat.request_ready' === ( $entry['event'] ?? '' )
+			)
+		);
+
+		$this->assertCount(
+			2,
+			$ready,
+			'Two provider requests were sent, so the trace must carry two request_ready events.'
+		);
+		$this->assertTrue(
+			$ready[0]['context']['hasSchema'] ?? false,
+			'The first request carried the output schema.'
+		);
+		$this->assertFalse(
+			$ready[1]['context']['hasSchema'] ?? true,
+			'The retry sends no schema and the trace must say so.'
+		);
+		$this->assertSame(
+			'grammar_limit',
+			$ready[1]['context']['outputSchemaFallback'] ?? null,
+			'The retry event must identify itself as the fallback, not read as a duplicate.'
+		);
+	}
+
+	/**
+	 * A failed rebuild must not leave its resolution in the runtime configuration.
+	 *
+	 * apply_provider_model_selection() records the resolved provider/model into
+	 * process-global state that Provider::active_chat_request_meta() reads for the
+	 * activity row's provider path. The rebuild resolves again; if it then fails,
+	 * the request that was actually sent is still the first one, so the row would
+	 * otherwise report the provider path of a request that never went out.
+	 * Verified to fail without the restore.
+	 */
+	public function test_failed_grammar_limit_rebuild_restores_the_runtime_chat_configuration(): void {
+		self::register_ai_provider_connector( 'anthropic', 'Anthropic' );
+		WordPressTestState::$options                    = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'anthropic',
+				'model'    => 'claude-sonnet-4-6',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		// The first attempt resolves the configured model; the rebuild falls back
+		// to provider-managed and then fails while re-applying the instruction.
+		WordPressTestState::$ai_client_model_resolution_results = [
+			null,
+			new \WP_Error( 'model_not_found', 'The configured model is no longer available.' ),
+		];
+		WordPressTestState::$ai_client_prompt_method_throws     = [
+			'using_system_instruction' => [
+				null,
+				null,
+				null,
+				new \RuntimeException( 'Prompt builder rejected the instruction.' ),
+			],
+		];
+		WordPressTestState::$ai_client_generate_text_result     = new \WP_Error(
+			'prompt_client_error',
+			'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+		);
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
+			null,
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'grammar_limit_rebuild_failed',
+			$meta['requestSummary']['outputSchemaFallback'] ?? null,
+			'The rebuild did not fail, so this test is not exercising the restore path.'
+		);
+		$this->assertSame(
+			'claude-sonnet-4-6',
+			$meta['model'] ?? null,
+			'The runtime configuration reported the failed rebuild\'s resolution instead of the request that was sent.'
+		);
+	}
+
+	/**
+	 * The rebuilt retry prompt must pass the same generation-support gate the
+	 * original passed. Retry-time resolution can differ from the first
+	 * attempt's, so without the gate the retry calls generate_text_result()
+	 * on an unchecked builder instead of failing the rebuild.
+	 *
+	 * Queue sizing: the first attempt consumes three
+	 * is_supported_for_text_generation calls (the chat() entry gate plus the
+	 * optional-feature probes), so the fourth lands on the rebuild's gate --
+	 * sized empirically against the stub. With the gate present the queued failure aborts the rebuild and
+	 * the request records grammar_limit_rebuild_failed; under revert the same
+	 * queued failure is swallowed by the rebuild's reasoning probe, the retry
+	 * proceeds unchecked, and the marker stays grammar_limit -- which is the
+	 * discriminating assertion.
+	 */
+	public function test_grammar_limit_retry_support_gate_failure_aborts_the_rebuild(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'prompt_client_error',
+			'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+		);
+		WordPressTestState::$ai_client_prompt_method_throws = [
+			'is_supported_for_text_generation' => [
+				null,
+				null,
+				null,
+				new \RuntimeException( 'Connector support probe failed.' ),
+			],
+		];
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'grammar_limit_rebuild_failed',
+			$meta['requestSummary']['outputSchemaFallback'] ?? null,
+			'A retry whose support gate fails must abort the rebuild rather than sending an unchecked request.'
+		);
 	}
 
 	public function test_chat_preserves_enum_constraints_for_small_anthropic_output_schema(): void {

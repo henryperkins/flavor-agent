@@ -66,6 +66,22 @@ No other persisted transitions are accepted. The `update_undo_status()` method r
 
 Persisted server state remains one-way: `update_undo_status()` only writes `undone` and `failed`.
 
+### What establishes a terminal state
+
+A terminal row records **how** it got there in `undo.verification`, so the audit trail never has to be read as a claim of more than actually happened:
+
+| `undo.verification` | Meaning |
+|---|---|
+| `server` | An executor read live state and confirmed or performed the revert. Written by `UndoCoordinator::run_verified_undo()` for both `undone` and drift-`failed`. |
+| `client-reported` | The server did not check live state. Two cases reach it: the row is not server-verifiable — the subject lives in the editor, or the row is editor-authored on an executor-backed surface (template, template-part) and records operation snapshots plus editor-shape targets rather than the content snapshots a server executor compares, and never executed server-side — **or** the caller reported `status: "failed"` for its own undo, which is honoured without dispatching an executor even on a server-owned subject, because a failure report never claims a revert happened. Verifiability is decided by the row's shape, not by whether its live target currently resolves. Read it as "not server-verified", not as "no server-side subject exists". |
+| *(absent)* | The row is not terminal, or it reached a terminal state before undo verification existed. |
+
+The failure case matters to anyone auditing: a `failed` + `client-reported` row on a Global Styles, template, template-part, or post-blocks subject means the change is **still live** and the server never touched it. `ActivityUndoRouteTest::test_undo_honors_a_client_failure_report_without_touching_live_state()` pins exactly that.
+
+Neither undo entry point takes a caller's success claim on trust. `POST /flavor-agent/v1/activity/{id}/undo` and the `undo-activity` ability both dispatch through `UndoCoordinator::run_verified_undo()`, which runs the surface executor first and derives the status from what the executor did. A caller may still report `status: "failed"` for its own client-side failure — failure never asserts that a revert happened — but an `undone` request is granted only after verification, or recorded as `client-reported` when no server-side subject exists. A row that executed server-side but carries no comparable snapshot is refused with `409 flavor_agent_undo_unverifiable` and stays `available` rather than being closed out.
+
+This is the fix for the 2026-07-28 live finding, where the route wrote `undone` from the request parameter alone and the change stayed on the site (`docs/validation/2026-07-28-governed-style-apply-lane-live.md`, Finding 2).
+
 Even those writes are only valid while the persisted server state is still `available`. Terminal rewrites are rejected with HTTP `409`, including:
 
 - `undone -> failed`
@@ -108,6 +124,7 @@ The client also enforces this rule before sending the request:
 | `undo.error` | `string` or `null` | Set on `failed` transitions |
 | `undo.updatedAt` | ISO 8601 `string` | Set on any transition |
 | `undo.undoneAt` | ISO 8601 `string` or `null` | Set on `undone` transitions |
+| `undo.verification` | `"server"` or `"client-reported"` | Set on `undone`/`failed` transitions (see the terminal-state section above for what each value asserts); absent on non-terminal rows and on terminal rows written before undo verification existed. Rows created through the client activity-creation boundary can never carry `server`. |
 
 ## Review-Only Audit Rows
 
