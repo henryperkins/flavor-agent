@@ -189,6 +189,97 @@ final class AgentsApiUpstreamContractTest extends TestCase {
 	}
 
 	/**
+	 * `agents/ability-call` invokes any registered ability by name with no
+	 * target allowlist, so a run that can see it reaches every ability on the
+	 * site regardless of this agent's `enabled_tools`.
+	 *
+	 * Allow-mode does not stop it: a tool marked `mandatory` by any policy
+	 * provider is preserved through the allow filter. Only `deny`, applied last
+	 * and unconditionally, does. This drives the real resolver with a
+	 * `mandatory` dispatch tool injected to prove that.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_mandatory_dispatch_meta_ability_cannot_survive_the_deny_list(): void {
+		$this->boot_upstream();
+
+		$config = \wp_get_agent( AgentDefinition::SLUG )->get_default_config();
+
+		// Hardcoded, NOT read from AgentDefinition::denied_runtime_abilities().
+		// Iterating the constant would make this test delete its own coverage:
+		// removing an entry from the deny list would also remove it from the
+		// loop, and the test would still pass.
+		foreach ( [ 'agents/ability-call', 'agents/ability-search' ] as $dispatch_tool ) {
+			$declarations = [
+				'flavor-agent/recommend-block' => [
+					'name'        => 'flavor-agent/recommend-block',
+					'description' => 'x',
+					'parameters'  => [],
+				],
+				$dispatch_tool                 => [
+					'name'        => $dispatch_tool,
+					'description' => 'x',
+					'parameters'  => [],
+					// Any policy provider can set this; it survives allow-mode.
+					'mandatory'   => true,
+				],
+			];
+
+			$visible = ( new \WP_Agent_Tool_Policy() )->resolve( $declarations, [ 'agent_config' => $config ] );
+
+			$this->assertArrayNotHasKey(
+				$dispatch_tool,
+				$visible,
+				\sprintf(
+					'%s survived as a mandatory tool. The agent can now reach every ability on the site, including the apply and undo abilities Phase 1 excludes.',
+					$dispatch_tool
+				)
+			);
+		}
+	}
+
+	/**
+	 * The deny list names upstream abilities by string literal. Pin those
+	 * literals to upstream's own constants so a rename is caught when the
+	 * pinned version moves rather than silently disarming the deny at runtime.
+	 */
+	public function test_denied_dispatch_ability_names_still_match_upstream(): void {
+		$path = $this->upstream_path();
+		$file = $path . '/src/Tools/register-agent-ability-meta-abilities.php';
+
+		$this->assertFileExists(
+			$file,
+			'Upstream moved the dispatch meta-abilities; re-derive AgentDefinition::DENIED_RUNTIME_ABILITIES.'
+		);
+
+		$contents = (string) \file_get_contents( $file );
+
+		foreach (
+			[
+				'AGENTS_ABILITY_CALL_ABILITY'   => 'agents/ability-call',
+				'AGENTS_ABILITY_SEARCH_ABILITY' => 'agents/ability-search',
+			] as $constant => $expected
+		) {
+			$this->assertSame(
+				1,
+				\preg_match( "/const\s+{$constant}\s*=\s*'([^']+)'/", $contents, $match ),
+				\sprintf( 'Upstream no longer defines %s.', $constant )
+			);
+			$this->assertSame(
+				$expected,
+				$match[1],
+				\sprintf( 'Upstream renamed %s; the deny list literal no longer matches and is silently disarmed.', $constant )
+			);
+		}
+
+		$this->assertSame(
+			[ 'agents/ability-call', 'agents/ability-search' ],
+			AgentDefinition::denied_runtime_abilities()
+		);
+	}
+
+	/**
 	 * `Compatibility::detected_version()` reads the upstream plugin header
 	 * because upstream defines no version constant. Assert that assumption
 	 * against the real file rather than through the test bootstrap's

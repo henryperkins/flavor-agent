@@ -102,6 +102,37 @@ final class AgentDefinition {
 	];
 
 	/**
+	 * Upstream dispatch meta-abilities that must never be visible to this agent.
+	 *
+	 * `agents/ability-call` invokes *any* registered ability by name. It carries
+	 * no target allowlist — its only guard is a self-recursion check — so a run
+	 * that can see it reaches every ability on the site, including the five
+	 * above, regardless of what this agent declares in `enabled_tools`. The
+	 * target's own permission callback still runs, so capability enforcement
+	 * holds; what does not hold is this agent's tool profile, which is the
+	 * boundary Phase 1 is defined by.
+	 *
+	 * Naming these in `deny` rather than relying on allow-mode is deliberate. A
+	 * tool marked `mandatory` by any policy provider survives the allow filter
+	 * (`WP_Agent_Tool_Policy::resolve()` preserves it), and `deny` is the only
+	 * filter applied unconditionally and last.
+	 *
+	 * `agents/ability-search` is read-only and not itself a dispatch path; it is
+	 * denied for least-privilege hygiene, so the model is not handed an
+	 * enumeration of abilities outside its own profile.
+	 *
+	 * These literals are pinned upstream API. {@see AgentsApiUpstreamContractTest}
+	 * asserts them against upstream's own constants so a rename is caught when
+	 * the pinned version moves, not silently at runtime.
+	 *
+	 * @var array<int, string>
+	 */
+	private const DENIED_RUNTIME_ABILITIES = [
+		'agents/ability-call',
+		'agents/ability-search',
+	];
+
+	/**
 	 * Ability names the agent may call, before registration filtering.
 	 *
 	 * @return array<int, string>
@@ -126,12 +157,31 @@ final class AgentDefinition {
 	}
 
 	/**
-	 * Ability names that must never reach the agent runtime in this phase.
+	 * Flavor Agent ability names that must never reach the agent runtime in
+	 * this phase.
 	 *
 	 * @return array<int, string>
 	 */
 	public static function forbidden_abilities(): array {
 		return self::FORBIDDEN_ABILITIES;
+	}
+
+	/**
+	 * Upstream dispatch meta-abilities denied to this agent.
+	 *
+	 * @return array<int, string>
+	 */
+	public static function denied_runtime_abilities(): array {
+		return self::DENIED_RUNTIME_ABILITIES;
+	}
+
+	/**
+	 * Everything the agent's tool policy denies unconditionally.
+	 *
+	 * @return array<int, string>
+	 */
+	public static function deny_list(): array {
+		return \array_merge( self::FORBIDDEN_ABILITIES, self::DENIED_RUNTIME_ABILITIES );
 	}
 
 	/**
@@ -158,11 +208,13 @@ final class AgentDefinition {
 				// resolver rather than by the declaration list: allow-mode
 				// keeps the profile closed even if another policy fragment
 				// widens it, and the deny list removes mutation-capable
-				// abilities unconditionally (deny is applied last).
+				// abilities plus upstream's generic dispatch meta-abilities
+				// unconditionally. Deny is applied last and, unlike allow-mode,
+				// is not bypassed by a tool marked `mandatory`.
 				'tool_policy'     => [
 					'mode'  => 'allow',
 					'tools' => $tools,
-					'deny'  => self::FORBIDDEN_ABILITIES,
+					'deny'  => self::deny_list(),
 				],
 				'tool_call_rules' => self::tool_call_rules( $tools ),
 			],

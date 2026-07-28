@@ -112,6 +112,36 @@ final class AgentsApiRegistrationTest extends TestCase {
 		}
 	}
 
+	public function test_denies_the_upstream_generic_dispatch_meta_abilities(): void {
+		$this->fire_registration_hook();
+
+		$config = $this->registered_config();
+
+		foreach ( AgentDefinition::denied_runtime_abilities() as $dispatch_tool ) {
+			$this->assertNotContains( $dispatch_tool, $config['enabled_tools'] );
+			$this->assertContains(
+				$dispatch_tool,
+				$config['tool_policy']['deny'],
+				'agents/ability-call reaches any ability by name, so allow-mode alone does not bound this agent.'
+			);
+		}
+	}
+
+	public function test_a_site_filter_cannot_add_a_dispatch_meta_ability(): void {
+		\add_filter(
+			AgentDefinition::TOOL_ALLOWLIST_FILTER,
+			static function ( array $allowlist ): array {
+				$allowlist[] = 'agents/ability-call';
+
+				return $allowlist;
+			}
+		);
+
+		$this->fire_registration_hook();
+
+		$this->assertNotContains( 'agents/ability-call', $this->registered_config()['enabled_tools'] );
+	}
+
 	public function test_a_site_filter_cannot_add_a_mutation_tool(): void {
 		\add_filter(
 			AgentDefinition::TOOL_ALLOWLIST_FILTER,

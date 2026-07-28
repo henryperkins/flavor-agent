@@ -130,7 +130,7 @@ final class Registration {
 	 * @return array<int, string>
 	 */
 	public static function resolve_tools(): array {
-		$forbidden = AgentDefinition::forbidden_abilities();
+		$forbidden = AgentDefinition::deny_list();
 		$resolved  = [];
 
 		foreach ( AgentDefinition::tool_allowlist() as $ability_name ) {
