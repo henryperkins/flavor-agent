@@ -190,7 +190,24 @@ The failing boundary is therefore **(1,769 B, 3,427 B]**.
   install, since `WordPressAIPolicy::system_instruction()` only passes through
   the `wpai_system_instruction` filter, but correct for anyone filtering it).
 
-Both regression tests were confirmed to **fail when the fix is reverted**. Note
+- `requestSummary.outputSchemaFallback` now records *why* structured output was
+  degraded, not just that a retry ran. The live capture above shows
+  `"grammar_limit"` because the deployed build sent the oversized schema and
+  retried; after the fix block drops its schema before the request is built and
+  reports `"schema_byte_limit"` instead. Full value set:
+
+  | Value | Meaning |
+  | --- | --- |
+  | `schema_byte_limit` | Preparation dropped the schema before the request was built — it exceeds the Anthropic grammar byte ceiling with nothing left to strip. **Expected for `recommend-block` on Anthropic after this fix.** |
+  | `schema_union_limit` | Preparation dropped the schema because it still exceeds the union limit after compaction. |
+  | `grammar_limit` | A schema was sent, the provider rejected it as an oversized grammar, and the schema-free retry was built and sent. |
+  | `grammar_limit_rebuild_failed` | Same, but the schema-free retry could not be constructed; the recorded request is the schema-bearing one and the recorded error is the rebuild failure. |
+
+  Absence of the key means structured output was requested and sent, or never
+  requested. Before this change a deliberately degraded request was
+  indistinguishable from a surface that never asked for a schema.
+
+All regression tests were confirmed to **fail when the fix is reverted**. Note
 the obvious assertion does not work: checking `json_schema` after the retry
 passes either way, because the stub's `sync_state()` pushes the reused object's
 own schema-free state into the recorded prompt. The discriminating signal is the
@@ -200,6 +217,9 @@ system instruction, which is generated with `hasSchema`.
 
 - [ ] **Not yet re-verified live.** The fix is committed but hperkins.blog runs
       the deployed `0.1.0` build; confirming it needs the branch deployed there.
+      On re-run, `recommend-block` should return HTTP 200 with
+      `outputSchemaFallback: "schema_byte_limit"` — that marker is the signal the
+      fixed build is the one answering.
 - [ ] The exact provider ceiling is bounded, not pinned. If block's schema is
       ever shrunk below 2,048 it could regain structured output, but that needs a
       fresh live measurement — the suite can only check our own arithmetic.

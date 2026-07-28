@@ -201,7 +201,40 @@ namespace FlavorAgent\Tests\Support {
 
 		public static mixed $ai_client_model_resolution_error = null;
 
+		/**
+		 * Per-call model-resolution results, consumed in order before
+		 * $ai_client_model_resolution_error. A WP_Error entry fails that one call;
+		 * a null entry resolves normally. Lets a test resolve a model on a first
+		 * attempt and fall back to provider-managed on its retry, which is how the
+		 * two attempts end up with different selections.
+		 *
+		 * @var array<int, mixed>
+		 */
+		public static array $ai_client_model_resolution_results = [];
+
+		/**
+		 * Per-method throwable queues for WP_AI_Client_Prompt_Builder calls,
+		 * consumed in order: [ 'using_provider' => [ null, $throwable ] ] lets the
+		 * first call through and fails the second. Models a connector dropping out
+		 * between a first attempt and its retry -- the only way to reach the
+		 * grammar-limit rebuild-failure branch.
+		 *
+		 * @var array<string, array<int, \Throwable|null>>
+		 */
+		public static array $ai_client_prompt_method_throws = [];
+
 		public static ?object $current_post = null;
+
+		public static function consume_ai_client_prompt_method_throwable(string $method): ?\Throwable
+		{
+			if (empty(self::$ai_client_prompt_method_throws[$method])) {
+				return null;
+			}
+
+			$next = array_shift(self::$ai_client_prompt_method_throws[$method]);
+
+			return $next instanceof \Throwable ? $next : null;
+		}
 
 		/**
 		 * @param array<string, string> $errors
@@ -435,6 +468,8 @@ namespace FlavorAgent\Tests\Support {
 			self::$ai_client_generate_text_result = '';
 			self::$ai_client_generate_text_throws = null;
 			self::$ai_client_model_resolution_error = null;
+			self::$ai_client_model_resolution_results = [];
+			self::$ai_client_prompt_method_throws = [];
 			self::$current_post                = null;
 
 			$GLOBALS['wp_settings_fields']   = [];
@@ -506,6 +541,14 @@ namespace WordPress\AiClient {
 
 			public function getProviderModel(string $provider, string $model): object
 			{
+				if ([] !== WordPressTestState::$ai_client_model_resolution_results) {
+					$queued = array_shift(WordPressTestState::$ai_client_model_resolution_results);
+
+					if ($queued instanceof \WP_Error) {
+						return $queued;
+					}
+				}
+
 				if (WordPressTestState::$ai_client_model_resolution_error instanceof \WP_Error) {
 					return WordPressTestState::$ai_client_model_resolution_error;
 				}
@@ -877,6 +920,12 @@ namespace {
 
 			public function __call(string $name, array $arguments)
 			{
+				$queued_throwable = WordPressTestState::consume_ai_client_prompt_method_throwable($name);
+
+				if (null !== $queued_throwable) {
+					throw $queued_throwable;
+				}
+
 				switch ($name) {
 					case 'using_system_instruction':
 						$this->state['system'] = (string) ($arguments[0] ?? '');
