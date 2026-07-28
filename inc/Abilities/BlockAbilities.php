@@ -38,6 +38,9 @@ final class BlockAbilities {
 
 	private const BLOCK_OPERATION_CONTEXT_MAX_PATTERNS = 20;
 
+	/** Mirrors BlockTypeIntrospector::block_type_manifest()'s $max_variations. */
+	private const BLOCK_VARIATION_MAX = 10;
+
 	private const BLOCK_OPERATION_CONTEXT_ALLOWED_ACTIONS = [
 		'insert_before',
 		'insert_after',
@@ -372,7 +375,7 @@ final class BlockAbilities {
 		}
 
 		if ( is_array( $block['variations'] ?? null ) ) {
-			$normalized['block']['variations'] = self::normalize_list( $block['variations'] );
+			$normalized['block']['variations'] = self::normalize_block_variations( $block['variations'] );
 		}
 
 		$normalized['block']['supportsContentRole'] =
@@ -585,6 +588,70 @@ final class BlockAbilities {
 			$visual_hints = self::normalize_visual_hints( $summary['visualHints'] ?? [] );
 			if ( ! empty( $visual_hints ) ) {
 				$entry['visualHints'] = $visual_hints;
+			}
+
+			$normalized[] = $entry;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * Reduce client-supplied block variations to the published contract.
+	 *
+	 * Core permits a variation's `title` and `description` to be React elements
+	 * rather than strings, and the editor sends whatever `getBlockVariations()`
+	 * returned. normalize_list() preserves every nested key, so an element
+	 * arrives with its internal shape intact — `_owner`, `ref`, and a `props`
+	 * subtree that can carry unrelated post IDs — and Prompt::build_user()
+	 * encodes that straight into the message sent to the provider.
+	 *
+	 * Keep the same four fields BlockTypeIntrospector::block_type_manifest()
+	 * publishes, under the same cap, and only when they are strings.
+	 */
+	private static function normalize_block_variations( mixed $raw_variations ): array {
+		$normalized = [];
+
+		foreach ( self::normalize_list( $raw_variations ) as $variation ) {
+			if ( count( $normalized ) >= self::BLOCK_VARIATION_MAX ) {
+				break;
+			}
+
+			if ( ! is_array( $variation ) ) {
+				continue;
+			}
+
+			$name = is_string( $variation['name'] ?? null ) ? sanitize_text_field( $variation['name'] ) : '';
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$entry = [
+				'name' => $name,
+			];
+
+			$title = is_string( $variation['title'] ?? null ) ? sanitize_text_field( $variation['title'] ) : '';
+			if ( '' !== $title ) {
+				$entry['title'] = $title;
+			}
+
+			$description = is_string( $variation['description'] ?? null )
+				? sanitize_text_field( $variation['description'] )
+				: '';
+			if ( '' !== $description ) {
+				$entry['description'] = $description;
+			}
+
+			$scope = [];
+			foreach ( self::normalize_list( $variation['scope'] ?? [] ) as $scope_entry ) {
+				if ( is_string( $scope_entry ) && '' !== $scope_entry ) {
+					$scope[] = sanitize_key( $scope_entry );
+				}
+			}
+
+			if ( [] !== $scope ) {
+				$entry['scope'] = $scope;
 			}
 
 			$normalized[] = $entry;
