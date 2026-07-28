@@ -103,12 +103,15 @@ outranked". Stable Developer Docs are present, healthy, and retrievable:
 | `block.json supports attributes` | developer-docs 8 | `/block-editor/getting-started/fundamentals/block-json/`, core-block reference pages |
 | `WordPress 7.0 Field Guide` | make-core 2, developer-blog 2, make-ai 2, wordpress-news 2 | `/news/2026/06/whats-new-for-developers-june-2026/`, `wordpress.org/news/2026/05/wordpress-7-0-release-candidate-4/` |
 
-Ingestion is also still running. Observed `retrieved_at` values across probes
-span 2026-06-17, 2026-06-29, 2026-07-13, and 2026-07-18, which is the expected
-signature of the incremental updater: unchanged pages keep their original crawl
-timestamp and only changed pages are re-fetched. A uniform 2026-06-17
-`retrieved_at` across the validation query's result set reflects that the
-dev-chat-agenda cluster has not changed since then — not a stalled workflow.
+Ingestion has also run recently — as of the crawl evidence, through
+2026-07-18. Observed `retrieved_at` values across probes span 2026-06-17,
+2026-06-29, 2026-07-13, and 2026-07-18, which is the expected signature of the
+incremental updater: unchanged pages keep their original crawl timestamp and
+only changed pages are re-fetched. A uniform 2026-06-17 `retrieved_at` across
+the validation query's result set reflects that the dev-chat-agenda cluster has
+not changed since then. None of this proves the updater ran on 2026-07-28 —
+no run from today is recorded here — but there is no evidence of a stalled
+workflow.
 
 ## Diagnosis
 

@@ -288,10 +288,10 @@ and the transparency-log level (§12) addresses history-rewrite over time.
   not have. The read never writes: it backs a public, unauthenticated GET. Status vocabulary:
   `active` — the site can sign with this key now; `retired` — deliberately rotated away, kept for
   verification; `verification_only` — stored as active but currently unsignable (served status
-  only, never stored). A JWKS with **no** `active` key means none of the *published* keys was
-  signable at serve time — not that the lane can never attest again: a freshly rotated-in private
-  key enters the registry only on its first successful signing, so during that window the JWKS
-  shows no active key while the next governed apply will still attest. The live 2026-07-28
+  only, never stored). A JWKS with **no** `active` key means no *published* key was signable at
+  serve time — not that the lane can never attest again: a freshly rotated-in private key enters
+  the registry only on its first successful signing, so during that window the JWKS shows no
+  active key while the next governed apply will still attest. The live 2026-07-28
   incident (`docs/validation/2026-07-28-governed-style-apply-lane-live.md`, Finding 1) is the
   motivating case.
 

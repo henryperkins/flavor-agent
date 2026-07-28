@@ -144,8 +144,12 @@ original held only `css`). Verified back to `null` from both readers.
       apply on an attested lane is visible to the approver. — pre-decision
       warning notice driven by `attestation.signingAvailable` boot data;
       post-decision rows already carried the honest copy.
-- [x] Fix undo so it either reverts or reports failure. A `status: "undone"`
-      transition must be written **after** a verified revert, never before.
+- [x] Fix undo so a success claim is never taken on trust. A `status: "undone"`
+      with `verification: "server"` is written only **after** a verified revert;
+      a failed revert reports failure; and a row the server cannot verify (the
+      editor-owned and editor-authored cases in "what changed" below) records
+      its transition as `verification: "client-reported"` — permitted, and
+      deliberately not presented as either a verified revert or a failure.
 - [x] Add a regression test that asserts the *live subject state* after undo,
       not just the recorded undo status. The current suite asserts the row
       transition, which is exactly what passed here while the site stayed changed.
