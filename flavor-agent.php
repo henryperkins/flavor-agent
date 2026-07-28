@@ -109,6 +109,13 @@ add_action(
 add_action( 'wp_abilities_api_categories_init', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_global_ability_category' ] );
 add_action( 'wp_abilities_api_init', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_global_helper_abilities' ] );
 
+// Optional Agents API adapter. Automattic's Agents API is a companion plugin,
+// never a dependency: when it is absent these hooks never fire and every other
+// Flavor Agent surface behaves identically. See
+// docs/reference/agents-api-integration.md.
+add_action( FlavorAgent\AgentsAPI\Compatibility::REGISTRATION_HOOK, [ FlavorAgent\AgentsAPI\Registration::class, 'register' ] );
+add_action( 'init', [ FlavorAgent\AgentsAPI\RunContext::class, 'register' ], 5 );
+
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	FlavorAgent\CLI\AttestationCommand::register();
 }

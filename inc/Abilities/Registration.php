@@ -1314,6 +1314,18 @@ final class Registration {
 								],
 							],
 						],
+						'agentRuntime'       => [
+							'type'        => 'object',
+							'description' => 'Optional Agents API runtime readiness, reported independently of recommendation backend readiness.',
+							'properties'  => [
+								'present'         => [ 'type' => 'boolean' ],
+								'supported'       => [ 'type' => 'boolean' ],
+								'version'         => [ 'type' => 'string' ],
+								'minimumVersion'  => [ 'type' => 'string' ],
+								'reason'          => [ 'type' => 'string' ],
+								'missingContract' => [ 'type' => 'string' ],
+							],
+						],
 					],
 				],
 				'meta'                => self::readonly_rest_meta(),

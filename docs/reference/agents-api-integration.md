@@ -30,6 +30,31 @@ Flavor Agent UI and stores
     -> review decisions, audit history, attribution, freshness, execution, undo
 ```
 
+## Implementation Status
+
+Phases 0 and 1 are implemented. Phase 2 (governed apply requests) and Phase 3 (external channels) are not started, and the deferred memory/workflow work remains deferred.
+
+| Phase | State | Evidence |
+| --- | --- | --- |
+| 0 — contract fixture | Shipped | `inc/AgentsAPI/Compatibility.php`, `tests/phpunit/AgentsApiAdapterAbsentTest.php`, `tests/phpunit/AgentsApiCompatibilityTest.php` |
+| 1 — read/recommend agent | Shipped | `inc/AgentsAPI/AgentDefinition.php`, `inc/AgentsAPI/Registration.php`, `inc/AgentsAPI/RunContext.php`, `tests/phpunit/AgentsApiRegistrationTest.php`, `tests/phpunit/AgentsApiRunContextTest.php` |
+| 2 — governed apply requests | Not started | — |
+| 3 — optional external channels | Not started | — |
+
+**Pinned release.** `Compatibility::MINIMUM_VERSION` is `0.7.0`. The adapter is written against the upstream registration and tool-policy contracts as of that tag; raise the constant only alongside a re-read of `src/Registry/register-agents.php`, `src/Channels/register-default-agents-chat-handler.php`, and `src/Tools/class-wp-agent-tool-policy.php` upstream plus a passing contract-test run.
+
+**Activation boundary.** Three independent gates, all required: a supported Agents API runtime, `FeatureBootstrap::canonical_contracts_available()`, and the Flavor Agent feature gate. Agents API is deliberately absent from `canonical_contracts_available()` itself, so a Jetpack-only site keeps the existing non-agent runtime and never advertises agent readiness. The gate fails closed on a missing symbol (`class:WP_Agent`, `const:WP_Agent_Tool_Policy::MODE_ALLOW`, …) or an undetectable version, not just on an old version string. Readiness is reported by `flavor-agent/check-status` under a top-level `agentRuntime` key, separate from `backends`.
+
+**Tool profile.** `default_config.enabled_tools` carries status, discovery, preview, recommendation, and scoped activity-read abilities. Three bounds apply on top of it: allow-mode `tool_policy`, an unconditional `deny` list covering the four `request-*-apply` abilities and `undo-activity`, and each ability's own permission callback at dispatch. The `flavor_agent_agents_api_tool_allowlist` filter can extend the profile but cannot add a denied ability — the deny list is applied after the filter — and names that do not resolve to a registered ability are dropped rather than declared as broken tools.
+
+This deviates from the Phase 1 bullet above in one respect, deliberately: five read helpers (`get-active-theme`, `get-theme-tokens`, `list-templates`, `list-template-parts`, `list-patterns`) are allowlisted alongside status/preview/recommendation/activity-read. `recommend-template` and `recommend-template-part` take a `templateRef` / `templatePartRef` an agent cannot invent, so without them the Phase 1 exit gate is unreachable for those surfaces. All five are existing read-only abilities already marked `mcp.public`, so this widens discovery, not privilege.
+
+**Budgets.** `max_turns` is 6, below the upstream default of 12. `tool_call_rules` rate-limits read tools after any read anchor (`max_calls` 8) before the run has to commit to a recommendation. Completion is not gated: answering "which templates exist?" is a legitimate run that never needs a recommendation.
+
+**Attribution.** `RunContext` observes `agents_api_pre_tool_call_decision` and returns the decision unchanged, capturing only agent slug, run id, and session id — normalized and capped at 128 bytes each. Those reach activity rows as `requestMeta.agentRun`; `executionTransport` stays `wp-abilities` because the agent runtime mediates the tool call rather than replacing the ability dispatch path. Bearer tokens, the execution principal, caller context, tool parameters, and transcript content are never read. The hook fires inside the canonical conversation loop, so it covers any runtime driving that loop; a consumer runtime that replaces the loop wholesale would need its own bridge, and correlation is best-effort by design — the activity row remains the audit record either way.
+
+**Packaging.** No production Composer requirement and no `Requires Plugins` relationship, per the dependency decision below. Agents API is a companion plugin; when it is absent the hooks in `flavor-agent.php` never fire.
+
 ## Fit Assessment
 
 | Agents API capability | Current Flavor Agent capability | Decision |
