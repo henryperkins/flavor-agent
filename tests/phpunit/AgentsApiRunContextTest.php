@@ -308,6 +308,103 @@ final class AgentsApiRunContextTest extends TestCase {
 	}
 
 	/**
+	 * The path every earlier lifecycle fix left open: mediation says
+	 * `proceed`, so the context is captured, but core then rejects the call in
+	 * `permission_callback` or input validation and the recommendation
+	 * callback never runs. Consuming at callback entry cannot see that.
+	 *
+	 * Core fires `wp_ability_invoked` at the top of `WP_Ability::execute()`,
+	 * ahead of both checks, for every attempt — so binding there means a
+	 * capture cannot survive into a later call whatever the outcome.
+	 */
+	public function test_a_dispatch_rejected_before_the_callback_leaves_nothing_behind(): void {
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			],
+			'flavor-agent/recommend-block'
+		);
+
+		// The ability starts executing; core rejects it on permission or
+		// schema before the callback, so nothing else happens this call.
+		RunContext::bind_invocation( 'flavor-agent/recommend-block' );
+
+		// A later, unrelated execution of the same ability must not inherit it.
+		RunContext::bind_invocation( 'flavor-agent/recommend-block' );
+
+		$this->assertSame(
+			[],
+			RunContext::consume( 'flavor-agent/recommend-block' ),
+			'A rejected dispatch left its run identifiers for the next call of the same ability.'
+		);
+	}
+
+	/**
+	 * The binding is only worth anything if it is actually attached to core's
+	 * action. Driving it through `do_action` rather than calling the method
+	 * directly is what makes removing the `add_action` a test failure.
+	 */
+	public function test_the_binding_is_attached_to_the_core_action(): void {
+		RunContext::register();
+
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			],
+			'flavor-agent/recommend-block'
+		);
+
+		\do_action( RunContext::ABILITY_INVOKED_ACTION, 'flavor-agent/list-templates', [], null );
+
+		$this->assertSame(
+			[],
+			RunContext::consume( 'flavor-agent/recommend-block' ),
+			'The capture survived an unrelated ability execution, so the core action is not wired up.'
+		);
+	}
+
+	/**
+	 * The bound ability never executing at all — the runtime dispatched
+	 * something else next — must also drop the capture rather than hold it.
+	 */
+	public function test_a_different_ability_executing_drops_the_capture(): void {
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			],
+			'flavor-agent/recommend-block'
+		);
+
+		RunContext::bind_invocation( 'flavor-agent/list-templates' );
+
+		$this->assertSame( [], RunContext::consume( 'flavor-agent/list-templates' ) );
+		$this->assertSame( [], RunContext::consume( 'flavor-agent/recommend-block' ) );
+	}
+
+	public function test_the_bound_ability_executing_still_receives_the_context(): void {
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			],
+			'flavor-agent/recommend-block'
+		);
+
+		RunContext::bind_invocation( 'flavor-agent/recommend-block' );
+
+		$this->assertSame(
+			[
+				'agentSlug' => 'flavor-agent',
+				'runId'     => 'run_01HTESTRUN',
+			],
+			RunContext::consume( 'flavor-agent/recommend-block' )
+		);
+	}
+
+	/**
 	 * A tool declaration may map a model-facing name onto a different registered
 	 * ability. Upstream resolves `ability` / `ability_name` ahead of the tool
 	 * name, and so must this, or attribution binds to a name that never

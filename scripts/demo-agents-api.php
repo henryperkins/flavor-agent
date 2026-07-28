@@ -7,7 +7,13 @@
  * Agent, and does the Phase 1 boundary hold?
  *
  * Run:
- *   wp eval-file scripts/demo-agents-api.php
+ *   wp eval-file scripts/demo-agents-api.php --user=1
+ *
+ * `--user` is required, not decorative. WP-CLI runs with no acting user by
+ * default, so every capability check resolves against user 0: `check-status`
+ * is `edit_posts`-gated and `agents/chat` is administrator-gated, and both
+ * would be denied. Pass an administrator id (or login). The harness fails A0
+ * loudly rather than letting that look like a wiring problem.
  *
  * Tiers:
  *   A  wiring     - is the agent registered, with the tool profile we think?
@@ -18,7 +24,7 @@
  * provider call against whatever core Connector the site has configured, so it
  * is opt-in:
  *
- *   FA_DEMO_TIERS=A,B,C wp eval-file scripts/demo-agents-api.php
+ *   FA_DEMO_TIERS=A,B,C wp eval-file scripts/demo-agents-api.php --user=1
  *
  * Other environment overrides:
  *   FA_DEMO_PROMPT   user message for the tier B turn
@@ -116,6 +122,35 @@ function summarize( $value ): string {
 }
 
 /**
+ * Explain a non-passing B2 without guessing.
+ *
+ * @param array<int, array<string, mixed>> $ours      Flavor Agent tool calls.
+ * @param array<int, array<string, mixed>> $succeeded Successful recommend-* calls.
+ */
+function b2_note( array $ours, array $succeeded ): string {
+	if ( [] !== $succeeded ) {
+		return '';
+	}
+
+	if ( [] === $ours ) {
+		return 'The model answered without calling a Flavor Agent tool. That is a model choice, not a wiring '
+			. 'failure - re-run with a prompt that needs live site data.';
+	}
+
+	$recommendations = array_filter(
+		$ours,
+		static fn( array $call ): bool => str_starts_with( (string) ( $call['tool_name'] ?? '' ), 'flavor-agent/recommend-' )
+	);
+
+	if ( [] === $recommendations ) {
+		return 'Tools ran but none of them was a recommendation, so nothing exercised the surface this gate is about.';
+	}
+
+	return 'A recommendation was dispatched but did not succeed. Check its status above - a schema, permission '
+		. 'or provider error is a real failure of the lane, not merely missing evidence.';
+}
+
+/**
  * @return array<int, string>
  */
 function parse_tiers( string $raw ): array {
@@ -168,6 +203,27 @@ if ( ! $quiet ) {
 		implode( ',', $tiers )
 	);
 }
+
+// An acting user is a precondition for everything below, not part of what is
+// being tested. Without `--user`, WP-CLI resolves capabilities against user 0
+// and A6 and tier B fail for a reason that has nothing to do with the
+// integration. Say so first, in one line, rather than letting it masquerade as
+// a wiring failure six checks later.
+$acting_user = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+
+observe(
+	$results,
+	$quiet,
+	'A0',
+	'An acting WordPress user is selected',
+	$acting_user > 0 ? PASS : FAIL,
+	[
+		'userId' => $acting_user,
+		'hint'   => $acting_user > 0
+			? ''
+			: 'WP-CLI runs with no user by default. Re-run with --user=<administrator id or login>.',
+	]
+);
 
 // ---------------------------------------------------------------- Tier A ----
 if ( in_array( 'A', $tiers, true ) ) {
@@ -435,24 +491,42 @@ if ( in_array( 'B', $tiers, true ) ) {
 				)
 			);
 
+			// A dispatched tool is not a working tool. A `recommend-*` call
+			// that fails on schema, permission or provider error still appears
+			// here, and its failure diagnostic still carries the run id — so
+			// counting attempts rather than successes would let a turn where
+			// every recommendation errored satisfy the gate, with the model
+			// politely explaining the error in a `completed` reply.
+			$succeeded = array_values(
+				array_filter(
+					$ours,
+					static function ( array $call ): bool {
+						return 'succeeded' === ( $call['status'] ?? '' )
+							&& str_starts_with( (string) $call['tool_name'], 'flavor-agent/recommend-' );
+					}
+				)
+			);
+
 			observe(
 				$results,
 				$quiet,
 				'B2',
-				'The runtime dispatched at least one Flavor Agent ability as a tool',
-				[] !== $ours ? PASS : INCONCLUSIVE,
+				'The runtime completed at least one Flavor Agent recommendation as a tool',
+				[] !== $succeeded ? PASS : INCONCLUSIVE,
 				[
-					'flavorAgentCalls' => array_map(
+					'succeededRecommendations' => array_map(
+						static fn( array $call ): string => (string) $call['tool_name'],
+						$succeeded
+					),
+					'flavorAgentCalls'         => array_map(
 						static fn( array $call ): array => [
 							'tool'   => $call['tool_name'] ?? '',
 							'status' => $call['status'] ?? '',
 						],
 						$ours
 					),
-					'allToolCalls'     => count( $calls ),
-					'note'             => [] === $ours
-						? 'The model answered without calling a tool. That is a model choice, not a wiring failure - re-run with a prompt that needs live site data.'
-						: '',
+					'allToolCalls'             => count( $calls ),
+					'note'                     => b2_note( $ours, $succeeded ),
 				]
 			);
 

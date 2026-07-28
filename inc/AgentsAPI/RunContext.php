@@ -43,6 +43,22 @@ final class RunContext {
 	 */
 	public const PRE_TOOL_CALL_FILTER = 'agents_api_pre_tool_call_decision';
 
+	/**
+	 * Core's per-execution entry signal, fired at the top of
+	 * `WP_Ability::execute()`. Core documents it as firing "for every call
+	 * regardless of outcome (validation failure, permission denial,
+	 * short-circuit, or successful execution)", ahead of input normalization —
+	 * which is exactly the guarantee this class needs and the upstream Agents
+	 * API seam does not provide.
+	 *
+	 * `@since 7.1.0`, and this plugin supports WordPress 7.0+. On 7.0 the
+	 * action never fires and {@see self::consume()} falls back to matching the
+	 * bound ability name, which cannot detect a dispatch rejected before the
+	 * callback. That residual window — same process, same ability, after a
+	 * mediated-but-rejected call — is real on 7.0 and closed on 7.1+.
+	 */
+	public const ABILITY_INVOKED_ACTION = 'wp_ability_invoked';
+
 	private const MAX_VALUE_BYTES = 128;
 
 	/**
@@ -67,6 +83,26 @@ final class RunContext {
 	 */
 	private static string $current_ability = '';
 
+	/**
+	 * Context handed to the ability execution currently underway.
+	 *
+	 * Core fires `wp_ability_invoked` at the top of `WP_Ability::execute()` —
+	 * before the permission check and before input validation — for every
+	 * execution attempt whatever its outcome. That is the one signal in this
+	 * whole chain that is guaranteed to arrive, so the capture is moved here
+	 * the moment *any* ability starts executing, and dropped if that ability
+	 * is not the one the capture was bound to.
+	 *
+	 * The consequence is what earlier, path-by-path fixes could not achieve: a
+	 * capture cannot outlive the next execution attempt. A tool call rejected
+	 * after mediation but before the callback — by `permission_callback`, by
+	 * schema validation, by anything — leaves nothing behind, because the next
+	 * ability to execute overwrites this slot with its own (empty) answer.
+	 *
+	 * @var array<string, string>
+	 */
+	private static array $invocation = [];
+
 	private static bool $registered = false;
 
 	/**
@@ -87,6 +123,7 @@ final class RunContext {
 		// guarantee: a callback registered later still wins, and the ability
 		// binding plus consume-on-read are what bound the damage if one does.
 		\add_filter( self::PRE_TOOL_CALL_FILTER, [ self::class, 'observe' ], \PHP_INT_MAX, 2 );
+		\add_action( self::ABILITY_INVOKED_ACTION, [ self::class, 'bind_invocation' ], 0, 1 );
 	}
 
 	/**
@@ -106,7 +143,7 @@ final class RunContext {
 		// bound to an ability that did not run, free to be consumed by a later
 		// non-agent execution of that same ability in the same process.
 		if ( ! self::decision_proceeds( $decision ) ) {
-			self::reset();
+			self::clear_capture();
 
 			return $decision;
 		}
@@ -216,15 +253,55 @@ final class RunContext {
 	 * @return array<string, string>
 	 */
 	public static function consume( string $ability_name ): array {
+		// When core's per-execution signal is available it is authoritative:
+		// `bind_invocation()` has already decided whether this execution owns
+		// the capture, and cannot have left one behind from an earlier call.
+		if ( [] !== self::$invocation ) {
+			$captured = self::$invocation;
+
+			self::$invocation = [];
+
+			return $captured;
+		}
+
+		// Fallback for a runtime without `wp_ability_invoked` — an older core,
+		// or a direct call that bypasses `WP_Ability::execute()`. Weaker,
+		// because nothing signals a dispatch that was rejected before the
+		// callback, which is why the action above is preferred.
 		if ( [] === self::$current || \trim( $ability_name ) !== self::$current_ability ) {
 			return [];
 		}
 
 		$captured = self::$current;
 
-		self::reset();
+		self::clear_capture();
 
 		return $captured;
+	}
+
+	private static function clear_capture(): void {
+		self::$current         = [];
+		self::$current_ability = '';
+	}
+
+	/**
+	 * Hand the pending capture to the ability execution that is starting.
+	 *
+	 * Fires for every ability, agent-driven or not, which is precisely what
+	 * makes it safe: an execution that is not the bound one overwrites the slot
+	 * with nothing, so no capture can survive into a later call.
+	 *
+	 * @param mixed $ability_name Ability being executed.
+	 */
+	public static function bind_invocation( mixed $ability_name = null ): void {
+		$name = \is_string( $ability_name ) ? \trim( $ability_name ) : '';
+
+		self::$invocation = ( '' !== $name && $name === self::$current_ability ) ? self::$current : [];
+
+		// The capture is spent either way: it belonged to this execution, or
+		// the execution it was waiting for never happened.
+		self::$current         = [];
+		self::$current_ability = '';
 	}
 
 	/**
@@ -239,8 +316,15 @@ final class RunContext {
 	 * guarantee a clean attribution boundary within one process.
 	 */
 	public static function reset(): void {
-		self::$current         = [];
-		self::$current_ability = '';
+		self::clear_capture();
+
+		self::$invocation = [];
+
+		// Also drops the registration latch, so a test that wipes the global
+		// hook table can re-attach. Production never calls this — the two
+		// internal clear points use clear_capture() precisely so that
+		// de-registering mid-run is not something this class can do to itself.
+		self::$registered = false;
 	}
 
 	/**
