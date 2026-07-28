@@ -115,6 +115,70 @@ final class AgentsApiRunContextTest extends TestCase {
 		$this->assertArrayNotHasKey( 'sessionId', $captured, 'An empty identifier is omitted rather than stored blank.' );
 	}
 
+	/**
+	 * `reject`, `replace_result` and `pending` all short-circuit with a
+	 * synthesized result — the ability never runs. Capturing anyway would leave
+	 * a context bound to an ability that did not execute, which a later
+	 * non-agent call of that same ability could then consume.
+	 *
+	 * @dataProvider non_dispatching_decisions
+	 */
+	public function test_does_not_capture_a_call_that_never_reaches_its_ability( string $action ): void {
+		RunContext::observe(
+			[
+				'action'   => $action,
+				'result'   => [],
+				'complete' => false,
+			],
+			[
+				'turn_context' => [
+					'agent_slug' => 'flavor-agent',
+					'run_id'     => 'run_01HTESTRUN',
+				],
+				'tool_name'    => 'flavor-agent/recommend-block',
+			]
+		);
+
+		$this->assertFalse( RunContext::is_active(), \sprintf( 'A %s decision was captured.', $action ) );
+		$this->assertSame( '', RunContext::current_ability() );
+	}
+
+	/**
+	 * @return array<string, array{0: string}>
+	 */
+	public static function non_dispatching_decisions(): array {
+		return [
+			'reject'         => [ 'reject' ],
+			'replace_result' => [ 'replace_result' ],
+			'pending'        => [ 'pending' ],
+		];
+	}
+
+	/**
+	 * A rejection after an earlier capture must clear it, not leave the prior
+	 * call's identifiers standing.
+	 */
+	public function test_a_rejection_clears_a_previously_captured_context(): void {
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			]
+		);
+
+		$this->assertTrue( RunContext::is_active() );
+
+		RunContext::observe(
+			[ 'action' => 'reject' ],
+			[
+				'turn_context' => [ 'agent_slug' => 'flavor-agent' ],
+				'tool_name'    => 'flavor-agent/recommend-block',
+			]
+		);
+
+		$this->assertFalse( RunContext::is_active() );
+	}
+
 	public function test_ignores_a_malformed_mediation_context(): void {
 		$this->assertSame( 'proceed', RunContext::observe( 'proceed', null ) );
 		$this->assertSame( [], RunContext::current() );

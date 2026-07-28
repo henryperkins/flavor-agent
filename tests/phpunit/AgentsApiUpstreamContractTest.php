@@ -440,6 +440,43 @@ final class AgentsApiUpstreamContractTest extends TestCase {
 		}
 	}
 
+	/**
+	 * `RunContext` captures only for a decision that actually dispatches. That
+	 * depends on upstream's mediation-action vocabulary and on `proceed` being
+	 * the only value that reaches the ability.
+	 */
+	public function test_mediation_decision_vocabulary_still_matches_upstream(): void {
+		$file = $this->upstream_path() . '/src/Runtime/class-wp-agent-conversation-loop.php';
+
+		$this->assertFileExists( $file );
+
+		$contents = (string) \file_get_contents( $file );
+
+		$this->assertSame(
+			1,
+			\preg_match(
+				'/if\s*\(\s*!\s*in_array\(\s*\$action,\s*array\(([^)]*)\),\s*true\s*\)\s*\)/',
+				$contents,
+				$match
+			),
+			'Upstream no longer validates the mediation action against a fixed list.'
+		);
+
+		\preg_match_all( "/'([a-z_]+)'/", $match[1], $actions );
+
+		$this->assertSame(
+			[ 'proceed', 'reject', 'replace_result', 'pending' ],
+			$actions[1],
+			'The mediation action vocabulary changed; RunContext::decision_proceeds() must be re-derived.'
+		);
+
+		$this->assertStringContainsString(
+			'\'proceed\' === $action',
+			$contents,
+			'`proceed` is no longer the distinguished dispatching action.'
+		);
+	}
+
 	private function meta_abilities_source(): string {
 		$file = $this->upstream_path() . '/src/Tools/register-agent-ability-meta-abilities.php';
 

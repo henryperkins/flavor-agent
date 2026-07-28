@@ -80,7 +80,13 @@ final class RunContext {
 
 		self::$registered = true;
 
-		\add_filter( self::PRE_TOOL_CALL_FILTER, [ self::class, 'observe' ], 10, 2 );
+		// Deliberately last. Upstream applies this filter after its own
+		// mediator has run, and any other callback may still reject or replace
+		// the call after us — so observing late gives the most accurate view of
+		// whether the ability will actually dispatch. Best effort, not a
+		// guarantee: a callback registered later still wins, and the ability
+		// binding plus consume-on-read are what bound the damage if one does.
+		\add_filter( self::PRE_TOOL_CALL_FILTER, [ self::class, 'observe' ], \PHP_INT_MAX, 2 );
 	}
 
 	/**
@@ -92,6 +98,16 @@ final class RunContext {
 	 */
 	public static function observe( mixed $decision, mixed $context = null ): mixed {
 		if ( ! \is_array( $context ) ) {
+			return $decision;
+		}
+
+		// A rejected, replaced, or deferred call never reaches the ability, so
+		// there is nothing to attribute. Capturing anyway would leave a context
+		// bound to an ability that did not run, free to be consumed by a later
+		// non-agent execution of that same ability in the same process.
+		if ( ! self::decision_proceeds( $decision ) ) {
+			self::reset();
+
 			return $decision;
 		}
 
@@ -117,6 +133,27 @@ final class RunContext {
 		self::$current_ability = [] === $captured ? '' : self::target_ability( $context );
 
 		return $decision;
+	}
+
+	/**
+	 * Whether the mediation decision lets the tool call reach its ability.
+	 *
+	 * Upstream's vocabulary is `proceed` / `reject` / `replace_result` /
+	 * `pending`, and only `proceed` dispatches; the other three short-circuit
+	 * with a synthesized result. A non-array decision is treated as proceeding
+	 * because that is upstream's own fallback when normalization rejects the
+	 * shape. Pinned by {@see \FlavorAgent\Tests\AgentsApiUpstreamContractTest}.
+	 *
+	 * @param mixed $decision Upstream mediation decision.
+	 */
+	private static function decision_proceeds( mixed $decision ): bool {
+		if ( ! \is_array( $decision ) ) {
+			return true;
+		}
+
+		$action = $decision['action'] ?? 'proceed';
+
+		return ! \is_string( $action ) || 'proceed' === \strtolower( \trim( $action ) );
 	}
 
 	/**

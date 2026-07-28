@@ -518,18 +518,24 @@ $counts = array_count_values( array_column( $results, 'status' ) );
 // live evidence at all — reporting that as `pass` would let a consumer reading
 // DEMO_RESULT.status treat the gate as met on the strength of the wiring checks
 // alone. Mirrors the pass/fail/incomplete vocabulary of scripts/verify.js.
-$requested_b = in_array( 'B', $tiers, true );
-$live_proof  = false;
+// Every tier B check has to pass, not just the ones that happened to run. A
+// `skip` counts against the gate exactly as an `inconclusive` does: B3 skips
+// when core AI Request Logging is on and dual logging is off, which is a real
+// site configuration in which B1 and B2 can both pass while no activity-row
+// correlation was ever gathered. Calling that `pass` would let a consumer
+// accept the exit gate without the attribution evidence that *is* the gate.
+$requested_b   = in_array( 'B', $tiers, true );
+$live_evidence = true;
 
 foreach ( $results as $check ) {
-	if ( \in_array( $check['id'], [ 'B1', 'B2' ], true ) && PASS === $check['status'] ) {
-		$live_proof = true;
+	if ( str_starts_with( $check['id'], 'B' ) && PASS !== $check['status'] ) {
+		$live_evidence = false;
 	}
 }
 
 if ( ( $counts[ FAIL ] ?? 0 ) > 0 ) {
 	$overall = FAIL;
-} elseif ( ( $counts[ INCONCLUSIVE ] ?? 0 ) > 0 || ( $requested_b && ! $live_proof ) ) {
+} elseif ( ( $counts[ INCONCLUSIVE ] ?? 0 ) > 0 || ( $requested_b && ! $live_evidence ) ) {
 	$overall = INCOMPLETE;
 } else {
 	$overall = PASS;
