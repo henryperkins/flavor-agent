@@ -122,6 +122,36 @@ function summarize( $value ): string {
 }
 
 /**
+ * Explain a failed preflight in terms of the remedy.
+ *
+ * @param array<string, string> $missing_caps Capability => why it is needed.
+ */
+function preflight_hint( int $acting_user, array $missing_caps ): string {
+	if ( 0 === $acting_user ) {
+		return 'WP-CLI runs with no user by default. Re-run with --user=<administrator id or login>.';
+	}
+
+	if ( [] === $missing_caps ) {
+		return '';
+	}
+
+	return sprintf(
+		'User %d lacks %s. Re-run as an administrator. (agents/chat defaults to manage_options; a site that '
+			. 'filters agents_chat_permission may legitimately differ, in which case this check is stricter '
+			. 'than the runtime.)',
+		$acting_user,
+		implode(
+			', ',
+			array_map(
+				static fn( string $cap, string $why ): string => $cap . ' (needed by ' . $why . ')',
+				array_keys( $missing_caps ),
+				array_values( $missing_caps )
+			)
+		)
+	);
+}
+
+/**
  * Explain a non-passing B2 without guessing.
  *
  * @param array<int, array<string, mixed>> $ours      Flavor Agent tool calls.
@@ -211,17 +241,41 @@ if ( ! $quiet ) {
 // a wiring failure six checks later.
 $acting_user = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
 
+// A user id is not enough: the tiers need specific capabilities, and a
+// non-zero id that lacks them fails later in ways that look like backend
+// problems. Tier A reads `check-status` (`edit_posts`); tier B calls
+// `agents/chat`, whose upstream gate defaults to `manage_options`.
+$required_caps = [];
+
+if ( in_array( 'A', $tiers, true ) ) {
+	$required_caps['edit_posts'] = 'check-status (tier A6)';
+}
+
+if ( in_array( 'B', $tiers, true ) ) {
+	$required_caps['manage_options'] = 'agents/chat (tier B)';
+}
+
+$missing_caps = [];
+
+foreach ( $required_caps as $capability => $why ) {
+	if ( ! current_user_can( $capability ) ) {
+		$missing_caps[ $capability ] = $why;
+	}
+}
+
+$preflight_ok = $acting_user > 0 && [] === $missing_caps;
+
 observe(
 	$results,
 	$quiet,
 	'A0',
-	'An acting WordPress user is selected',
-	$acting_user > 0 ? PASS : FAIL,
+	'The acting user holds the capabilities the requested tiers need',
+	$preflight_ok ? PASS : FAIL,
 	[
-		'userId' => $acting_user,
-		'hint'   => $acting_user > 0
-			? ''
-			: 'WP-CLI runs with no user by default. Re-run with --user=<administrator id or login>.',
+		'userId'       => $acting_user,
+		'requiredCaps' => array_keys( $required_caps ),
+		'missingCaps'  => $missing_caps,
+		'hint'         => preflight_hint( $acting_user, $missing_caps ),
 	]
 );
 
