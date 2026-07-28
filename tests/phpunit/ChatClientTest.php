@@ -258,23 +258,23 @@ final class ChatClientTest extends TestCase {
 		$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ) );
 		$this->assertSame(
 			'string',
-			$schema['properties']['settings']['items']['properties']['attributeUpdates']['type'] ?? null
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'attributeUpdates', 'type' ] )
 		);
 		$this->assertSame(
 			'string',
-			$schema['properties']['settings']['items']['properties']['currentValue']['type'] ?? null
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'currentValue', 'type' ] )
 		);
 		$this->assertSame(
 			'number',
-			$schema['properties']['settings']['items']['properties']['confidence']['type'] ?? null
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'confidence', 'type' ] )
 		);
 		$this->assertArrayNotHasKey(
 			'proposedOperations',
-			$schema['properties']['block']['items']['properties'] ?? []
+			self::schema_at_path( $schema, [ 'properties', 'block', 'items', 'properties' ] ) ?? []
 		);
 		$this->assertArrayNotHasKey(
 			'rejectedOperations',
-			$schema['properties']['block']['items']['properties'] ?? []
+			self::schema_at_path( $schema, [ 'properties', 'block', 'items', 'properties' ] ) ?? []
 		);
 	}
 
@@ -517,6 +517,51 @@ final class ChatClientTest extends TestCase {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Walk a schema path, resolving `$ref` at every step, so assertions describe
+	 * the contract rather than which nodes happen to be hoisted into `$defs`.
+	 *
+	 * @param array<string, mixed>      $schema Node to start from.
+	 * @param array<int, string>        $path   Keys to follow.
+	 * @param array<string, mixed>|null $root   Document holding `$defs`.
+	 */
+	private static function schema_at_path( array $schema, array $path, ?array $root = null ): mixed {
+		$root    = $root ?? $schema;
+		$current = self::resolve_schema_ref( $root, $schema );
+
+		foreach ( $path as $segment ) {
+			if ( ! is_array( $current ) || ! array_key_exists( $segment, $current ) ) {
+				return null;
+			}
+
+			$current = $current[ $segment ];
+
+			if ( is_array( $current ) ) {
+				$current = self::resolve_schema_ref( $root, $current );
+			}
+		}
+
+		return $current;
+	}
+
+	/**
+	 * @param array<string, mixed> $root
+	 * @param array<string, mixed> $schema
+	 * @return array<string, mixed>
+	 */
+	private static function resolve_schema_ref( array $root, array $schema ): array {
+		$ref = is_string( $schema['$ref'] ?? null ) ? $schema['$ref'] : '';
+
+		if ( ! str_starts_with( $ref, '#/$defs/' ) ) {
+			return $schema;
+		}
+
+		$definition_name = substr( $ref, strlen( '#/$defs/' ) );
+		$definition      = $root['$defs'][ $definition_name ] ?? null;
+
+		return is_array( $definition ) ? $definition : $schema;
 	}
 
 	private static function schema_includes_type( array $schema, string $type ): bool {

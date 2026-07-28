@@ -380,17 +380,17 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertIsArray( $schema );
 		$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ) );
 
-		$block_properties = $schema['properties']['block']['items']['properties'] ?? [];
+		$block_properties = self::schema_at_path( $schema, [ 'properties', 'block', 'items', 'properties' ] ) ?? [];
 		$this->assertArrayHasKey( 'operations', $block_properties );
 		$this->assertArrayNotHasKey( 'proposedOperations', $block_properties );
 		$this->assertArrayNotHasKey( 'rejectedOperations', $block_properties );
 		$this->assertSame(
 			'string',
-			$schema['properties']['settings']['items']['properties']['attributeUpdates']['type'] ?? null
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'attributeUpdates', 'type' ] )
 		);
 		$this->assertSame(
 			'number',
-			$schema['properties']['settings']['items']['properties']['confidence']['type'] ?? null
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'confidence', 'type' ] )
 		);
 	}
 
@@ -638,16 +638,20 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
-	public function test_chat_shares_repeated_subschemas_only_when_anthropic_needs_the_headroom(): void {
-		WordPressTestState::$ai_client_provider_support     = [
-			'openai' => true,
-		];
+	/**
+	 * The core Settings > Connectors path never yields a provider slug —
+	 * Provider::chat_configuration() resolves to the 'wordpress_ai_client'
+	 * sentinel, is_connector() rejects it, and chat() receives ''. Sharing
+	 * repeated subschemas has to run there or it never runs on a real site.
+	 */
+	public function test_chat_shares_repeated_subschemas_when_the_provider_is_unresolved(): void {
+		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
 		WordPressAIClient::chat(
 			'System.',
 			'User.',
-			'openai',
+			null,
 			null,
 			ResponseSchema::get( 'block' )
 		);
@@ -655,14 +659,43 @@ final class WordPressAIClientTest extends TestCase {
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
 
 		$this->assertIsArray( $schema );
-		$this->assertArrayNotHasKey(
-			'$ref',
-			$schema['properties']['settings']['items'] ?? [],
-			'Providers without the Anthropic grammar budget keep the inline shape.'
+		$this->assertArrayHasKey(
+			'$defs',
+			$schema,
+			'An oversized schema must be compacted even when no provider slug is known.'
+		);
+		$this->assertLessThanOrEqual(
+			4096,
+			strlen( (string) wp_json_encode( $schema ) )
 		);
 		$this->assertSame(
 			[ 'general', 'layout', 'position', 'advanced', 'bindings', 'list', 'color', 'filter', 'typography', 'dimensions', 'border', 'shadow', 'background' ],
-			$schema['properties']['settings']['items']['properties']['panel']['enum'] ?? null
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'panel', 'enum' ] ),
+			'Sharing is lossless, so the enums survive on the unresolved-provider path too.'
+		);
+	}
+
+	public function test_chat_keeps_small_schemas_inline_for_every_provider(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Keep it."}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'openai',
+			null,
+			ResponseSchema::get( 'template' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+		$this->assertArrayNotHasKey(
+			'$defs',
+			$schema,
+			'A schema already inside the byte ceiling is sent untouched.'
 		);
 	}
 
@@ -1433,8 +1466,21 @@ final class WordPressAIClientTest extends TestCase {
 	 * @param array<string, mixed> $schema
 	 * @param array<int, string>  $path
 	 */
-	private static function schema_at_path( array $schema, array $path ): mixed {
-		$current = $schema;
+	/**
+	 * Walk a schema path, resolving `$ref` at every step.
+	 *
+	 * Large schemas have their repeated subschemas hoisted into `$defs`, so a
+	 * literal path like properties.settings.items.properties.x stops at the
+	 * reference. Resolving as we walk keeps these assertions about the contract
+	 * rather than about which nodes happen to be shared.
+	 *
+	 * @param array<string, mixed>      $schema Node to start from.
+	 * @param array<int, string>        $path   Keys to follow.
+	 * @param array<string, mixed>|null $root   Document holding `$defs`.
+	 */
+	private static function schema_at_path( array $schema, array $path, ?array $root = null ): mixed {
+		$root    = $root ?? $schema;
+		$current = self::resolve_schema_ref( $root, $schema );
 
 		foreach ( $path as $segment ) {
 			if ( ! is_array( $current ) || ! array_key_exists( $segment, $current ) ) {
@@ -1442,6 +1488,10 @@ final class WordPressAIClientTest extends TestCase {
 			}
 
 			$current = $current[ $segment ];
+
+			if ( is_array( $current ) ) {
+				$current = self::resolve_schema_ref( $root, $current );
+			}
 		}
 
 		return $current;

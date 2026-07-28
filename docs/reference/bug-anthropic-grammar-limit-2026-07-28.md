@@ -108,10 +108,31 @@ If the AI plugin or MCP adapter attaches registered abilities as strict tools to
 this is the grammar the error is describing. **This is unverified** — the bridge lives in the WP AI
 plugin, not in this repository.
 
+## The mitigations were unreachable on the path that fails
+
+Every Anthropic-specific mitigation — the ones added in PRs #68/#70 and the first version of fix 1
+below — is gated on `$resolved_provider === 'anthropic'`. That slug never arrives on the core
+`Settings > Connectors` path, which is exactly how the incident site is configured:
+
+1. `ChatClient::chat()` calls `ResponsesClient::rank( …, null, … )` — no provider argument.
+2. `ResponsesClient::rank()` sets `$pinned_connector = Provider::is_connector( $config['provider'] ) ? … : null`.
+3. `Provider::chat_configuration()` → `runtime_chat_configuration()` returns
+   `wordpress_ai_client_configuration()`, whose `provider` is the sentinel `'wordpress_ai_client'`.
+4. `Provider::is_connector( 'wordpress_ai_client' )` is **false** → `$pinned_connector = null`.
+5. `resolve_provider_model_selection( null )` finds no explicit provider and no developer feature
+   selection → `provider => ''`.
+
+Verified by execution against the test doubles with an Anthropic connector registered:
+`chat_configuration()['provider']` is `'wordpress_ai_client'` and `is_connector()` is `false`.
+
+So on a default site the block schema went to the provider at 4,151 bytes with **no mitigation
+applied at all** — not even the enum stripping — and only the provider-agnostic runtime retry
+caught the resulting 400.
+
 ## Resolution (2026-07-28)
 
-Three fixes landed. None of them is proven to clear the 400, because the binding constraint is
-still unidentified; each fixes a defect confirmed by measurement.
+Four fixes landed. None is proven to clear the 400, because the binding constraint is still
+unidentified; each fixes a defect confirmed by measurement.
 
 1. **`Keep Anthropic block enums by sharing repeated subschemas`** — the block schema previously
    fit only because `prepare_anthropic_output_schema()` stripped **every** enum, silently removing
@@ -127,6 +148,12 @@ still unidentified; each fixes a defect confirmed by measurement.
    "Undo unavailable" next to the provider error, which is what suggested undo re-issues AI calls.
    It does not: `activity/{id}/undo` is a pure DB transition plus a client-side snapshot replay,
    and `inc/Apply/`, `inc/Activity/`, `inc/REST/` contain no provider references at all.
+4. **`Run the lossless schema compaction without a provider slug`** — subschema sharing is
+   semantically identity-preserving, so it no longer waits for a provider it will not get. It now
+   runs for any schema over the byte ceiling, which is what makes fix 1 reachable in production:
+   the block schema goes out at 3,354 bytes with enums intact instead of 4,151 unmitigated. The
+   genuinely lossy steps (numeric-bound removal, enum stripping, dropping the schema) stay gated on
+   a known `anthropic` slug, since firing those on a guess would degrade other providers.
 
 ## What is still unexplained
 
@@ -148,8 +175,17 @@ the 400 should be expected to recur.
 - **`compact_nullable_schema_unions()` narrows the contract.** It collapses `["X","null"]` to `"X"`
   while the property stays in `required`, forbidding the null that `nullable_confidence` documents
   as "return null to defer to deterministic ranking".
-- **Anthropic fallbacks are keyed on the exact slug `anthropic`.** An Anthropic-backed connector
-  registered under another id (Bedrock, Vertex) gets none of these protections.
+- **The remaining lossy fallbacks are still keyed on the exact slug `anthropic`.** Fix 4 makes the
+  lossless step provider-agnostic, but numeric-bound removal, enum stripping, and dropping the
+  schema still require that slug — so they remain unreachable on the default Connectors path, and
+  an Anthropic-backed connector registered under another id (Bedrock, Vertex) never gets them.
+  Reaching them needs a way to ask the AI Client which provider it actually resolved.
+- **The schema-drop retry may not drop the schema.** `$prompt_without_output_schema = $prompt`
+  copies an object handle, and `apply_output_schema()` takes a *shallow* `clone`. If the AI Client
+  builder stores the output schema on a shared sub-object (a `ModelConfig` DTO, say), the retry
+  re-sends it while `build_request_diagnostics()` — which reconstructs `bodyBytes` from
+  `$schema = null` rather than reading the builder — reports a schema-free payload. That would
+  reconcile every observation here, and it is the first thing to check with the AI Client in scope.
 - **`allowedPatterns` is uncapped client-side.** All 248 entries are POSTed and stable-serialized
   into the per-keystroke context signature; the server's cap is positional head-truncation with no
   relevance ranking, so the 20 the model sees are just the first 20 in registration order.

@@ -19,14 +19,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class WordPressAIClient {
 
-	private const SETUP_MESSAGE                    = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
-	private const CONNECTOR_NOT_APPROVED_CODE      = 'wpai_connector_not_approved';
-	private const PROMPT_PREVENTED_CODE            = 'prompt_prevented';
-	private const PROMPT_PREVENTED_MESSAGE         = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
-	private const DEFAULT_REQUEST_TIMEOUT          = 90;
-	private const REASONING_EFFORTS                = [ 'low', 'medium', 'high', 'xhigh' ];
-	private const SCHEMA_UNION_LIMIT               = 16;
-	private const ANTHROPIC_SCHEMA_BYTE_LIMIT      = 4096;
+	private const SETUP_MESSAGE               = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const CONNECTOR_NOT_APPROVED_CODE = 'wpai_connector_not_approved';
+	private const PROMPT_PREVENTED_CODE       = 'prompt_prevented';
+	private const PROMPT_PREVENTED_MESSAGE    = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
+	private const DEFAULT_REQUEST_TIMEOUT     = 90;
+	private const REASONING_EFFORTS           = [ 'low', 'medium', 'high', 'xhigh' ];
+	private const SCHEMA_UNION_LIMIT          = 16;
+	/**
+	 * Byte ceiling above which a response schema is treated as grammar-heavy.
+	 * A proxy for compiled-grammar cost, not a provider-published limit — the
+	 * tightest observed is Anthropic's, so it is set from that.
+	 */
+	private const OUTPUT_SCHEMA_BYTE_LIMIT         = 4096;
 	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
 	private const SHARED_SCHEMA_REF_NAME_PREFIX    = 'flavorAgentSharedSchema';
 
@@ -871,6 +876,18 @@ final class WordPressAIClient {
 			}
 		}
 
+		// Providers compile structured-output schemas into grammars, and repeated
+		// branches are what make one large. Sharing identical subschemas is
+		// lossless for every consumer, so it does not need a provider slug to
+		// justify it — which matters because on the core Settings > Connectors
+		// path we do not have one: Provider::chat_configuration() resolves to the
+		// 'wordpress_ai_client' sentinel, is_connector() rejects it, and
+		// $provider arrives here as ''. Gating this on 'anthropic' would mean it
+		// never ran for the sites that need it.
+		if ( self::output_schema_exceeds_byte_limit( $schema ) ) {
+			$schema = self::share_repeated_subschemas( $schema );
+		}
+
 		return self::prepare_anthropic_output_schema( $schema, $provider );
 	}
 
@@ -885,28 +902,24 @@ final class WordPressAIClient {
 		);
 	}
 
+	/**
+	 * Lossy last resort, kept behind a known-Anthropic slug.
+	 *
+	 * Sharing repeated subschemas already ran in prepare_output_schema() and is
+	 * lossless. Everything here gives up part of the contract, so it stays gated
+	 * on actually knowing the provider rather than firing on a guess.
+	 */
 	private static function prepare_anthropic_output_schema( array $schema, string $provider ): ?array {
-		if ( 'anthropic' !== $provider || ! self::anthropic_output_schema_exceeds_byte_limit( $schema ) ) {
+		if ( 'anthropic' !== $provider || ! self::output_schema_exceeds_byte_limit( $schema ) ) {
 			return $schema;
 		}
 
-		// Anthropic compiles structured-output schemas into grammars. The block
-		// surface repeats whole item shapes across settings/styles, so hoisting
-		// identical subschemas into $defs removes the duplicated branches without
-		// changing what the contract accepts. Try that before giving up any
-		// constraints: it is what keeps enums on the wire.
-		$schema = self::share_repeated_subschemas( $schema );
-
-		if ( ! self::anthropic_output_schema_exceeds_byte_limit( $schema ) ) {
-			return $schema;
-		}
-
-		// Still over budget. Keep the final compacted response shape strict, but
-		// leave enum checks to Flavor Agent's server-side validators when value
-		// expansions make it too large.
+		// Keep the compacted response shape strict, but leave enum checks to
+		// Flavor Agent's server-side validators when value expansions make the
+		// schema too large.
 		$schema = self::remove_schema_keywords( $schema, [ 'enum' ] );
 
-		return self::anthropic_output_schema_exceeds_byte_limit( $schema ) ? null : $schema;
+		return self::output_schema_exceeds_byte_limit( $schema ) ? null : $schema;
 	}
 
 	/**
@@ -1130,10 +1143,10 @@ final class WordPressAIClient {
 		}
 	}
 
-	private static function anthropic_output_schema_exceeds_byte_limit( array $schema ): bool {
+	private static function output_schema_exceeds_byte_limit( array $schema ): bool {
 		$encoded_schema = wp_json_encode( $schema );
 
-		return ! is_string( $encoded_schema ) || strlen( $encoded_schema ) > self::ANTHROPIC_SCHEMA_BYTE_LIMIT;
+		return ! is_string( $encoded_schema ) || strlen( $encoded_schema ) > self::OUTPUT_SCHEMA_BYTE_LIMIT;
 	}
 
 	private static function remove_schema_keywords( array $schema, array $keywords ): array {
