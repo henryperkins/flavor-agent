@@ -195,13 +195,14 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{result: string, after: array{content: string}}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
-		$ref      = self::template_ref( $entry );
-		$template = self::resolve_template( $ref );
-
-		if ( is_wp_error( $template ) ) {
-			return $template;
-		}
-
+		/*
+		 * Row-shape checks come before live-state resolution, mirroring
+		 * StyleApplyExecutor::undo. Editor-authored template rows record
+		 * operation snapshots rather than content snapshots, and their
+		 * classification as snapshot-unsupported (which lets undo callers fall
+		 * back to a client-reported transition) must not depend on whether the
+		 * live template still resolves.
+		 */
 		$before = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
 		$after  = is_array( $entry['after'] ?? null ) ? $entry['after'] : [];
 
@@ -211,6 +212,22 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 				'This activity row does not record the before/after content snapshots needed for a server-side undo.',
 				[ 'status' => 409 ]
 			);
+		}
+
+		$ref = self::template_ref( $entry );
+
+		if ( '' === $ref ) {
+			return new \WP_Error(
+				'flavor_agent_undo_snapshot_unsupported',
+				'This activity row does not record a server-resolvable template target and cannot be undone server-side.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$template = self::resolve_template( $ref );
+
+		if ( is_wp_error( $template ) ) {
+			return $template;
 		}
 
 		$live_hash   = self::content_hash( (string) ( $template->content ?? '' ) );

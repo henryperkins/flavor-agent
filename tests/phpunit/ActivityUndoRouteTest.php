@@ -319,6 +319,86 @@ final class ActivityUndoRouteTest extends TestCase {
 	}
 
 	/**
+	 * The WP70 smoke regression (CI on a36fe73). An editor-authored
+	 * template-part apply records target.templatePartRef plus operation-level
+	 * before/after snapshots -- not the content snapshots and
+	 * target.templatePartId the external executor writes. The surface has an
+	 * executor, so the route dispatches it; the executor must classify the row
+	 * as snapshot-unsupported so the route falls back to a client-reported
+	 * transition, exactly as the template surface already does. Before the fix
+	 * the executor resolved the target first, read the templatePartId key the
+	 * editor never writes, and returned flavor_agent_apply_target_unavailable
+	 * -- an error the route surfaced to the editor, which then showed a failed
+	 * undo for a revert that had actually happened.
+	 */
+	public function test_undo_records_an_editor_template_part_row_as_client_reported(): void {
+		$created = Repository::create(
+			[
+				'type'       => 'apply_template_part_suggestion',
+				'surface'    => 'template-part',
+				'target'     => [ 'templatePartRef' => 'twentytwentyfive//header' ],
+				'suggestion' => 'Add utility row',
+				'before'     => [ 'operations' => [] ],
+				'after'      => [ 'operations' => [ [ 'type' => 'insert_pattern' ] ] ],
+				'document'   => [
+					'scopeKey' => 'wp_template_part:twentytwentyfive//header',
+					'postType' => 'wp_template_part',
+					'entityId' => 'twentytwentyfive//header',
+				],
+			]
+		);
+		$this->assertIsArray( $created );
+		WordPressTestState::$updated_posts = [];
+
+		$response = $this->undo( (string) $created['id'] );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$data = $response->get_data();
+		$this->assertSame( 'client_reported', $data['result'] ?? null );
+		$this->assertSame( 'undone', $data['entry']['undo']['status'] );
+		$this->assertSame(
+			'client-reported',
+			$data['entry']['undo']['verification'] ?? null,
+			'An editor-authored row on an executor-backed surface is recorded as a report, not a verified revert.'
+		);
+		$this->assertSame( [], WordPressTestState::$updated_posts, 'The unverifiable row must not trigger a server-side write.' );
+	}
+
+	/**
+	 * Shape decides verifiability, not live state. An editor-authored template
+	 * row whose templateRef no longer resolves (the template was deleted, or
+	 * the ref format is editor-local) is still a snapshot-less row: it must
+	 * take the client-reported path rather than surfacing a target-resolution
+	 * error for a revert the editor already performed.
+	 */
+	public function test_undo_records_an_editor_template_row_as_client_reported_when_the_template_is_gone(): void {
+		$created = Repository::create(
+			[
+				'type'       => 'apply_template_suggestion',
+				'surface'    => 'template',
+				'target'     => [ 'templateRef' => 'twentytwentyfive//no-such-template' ],
+				'suggestion' => 'Tighten the hero',
+				'before'     => [ 'operations' => [] ],
+				'after'      => [ 'operations' => [ [ 'type' => 'insert_pattern' ] ] ],
+				'document'   => [
+					'scopeKey' => 'wp_template:twentytwentyfive//no-such-template',
+					'postType' => 'wp_template',
+					'entityId' => 'twentytwentyfive//no-such-template',
+				],
+			]
+		);
+		$this->assertIsArray( $created );
+
+		$response = $this->undo( (string) $created['id'] );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$data = $response->get_data();
+		$this->assertSame( 'client_reported', $data['result'] ?? null );
+		$this->assertSame( 'undone', $data['entry']['undo']['status'] );
+		$this->assertSame( 'client-reported', $data['entry']['undo']['verification'] ?? null );
+	}
+
+	/**
 	 * A caller may report that its own undo failed -- failure never claims a
 	 * revert happened -- and that report must not trigger a server-side write.
 	 */
