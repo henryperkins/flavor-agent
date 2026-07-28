@@ -26,6 +26,7 @@ final class WordPressAIClient {
 	private const DEFAULT_REQUEST_TIMEOUT          = 90;
 	private const REASONING_EFFORTS                = [ 'low', 'medium', 'high', 'xhigh' ];
 	private const SCHEMA_UNION_LIMIT               = 16;
+	private const ANTHROPIC_SCHEMA_BYTE_LIMIT      = 4096;
 	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
 
 	/**
@@ -816,6 +817,15 @@ final class WordPressAIClient {
 		$schema = self::normalize_output_schema( $schema );
 		$schema = self::normalize_output_schema_for_provider( $schema, $provider );
 
+		// Anthropic compiles JSON response schemas into grammars before inference.
+		// The block recommendation contract is valid JSON Schema, but its repeated
+		// strict item shapes can exceed that provider's grammar complexity limit.
+		// In that case, prefer the existing prompt plus server-side response
+		// validation over sending a request the provider will reject outright.
+		if ( self::should_skip_anthropic_output_schema( $schema, $provider ) ) {
+			return null;
+		}
+
 		if ( ! self::should_skip_output_schema( $schema ) ) {
 			return $schema;
 		}
@@ -823,6 +833,16 @@ final class WordPressAIClient {
 		$compact_schema = self::compact_schema_for_union_limit( $schema );
 
 		return self::should_skip_output_schema( $compact_schema ) ? null : $compact_schema;
+	}
+
+	private static function should_skip_anthropic_output_schema( array $schema, string $provider ): bool {
+		if ( 'anthropic' !== sanitize_key( $provider ) ) {
+			return false;
+		}
+
+		$encoded_schema = wp_json_encode( $schema );
+
+		return is_string( $encoded_schema ) && strlen( $encoded_schema ) > self::ANTHROPIC_SCHEMA_BYTE_LIMIT;
 	}
 
 	private static function normalize_output_schema_for_provider( array $schema, string $provider ): array {

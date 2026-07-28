@@ -493,6 +493,28 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'number', $score_schema['type'] ?? null );
 	}
 
+	public function test_chat_omits_large_output_schema_that_exceeds_anthropic_grammar_limit(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.',
+			'anthropic',
+			'medium',
+			ResponseSchema::get( 'block' )
+		);
+
+		$this->assertSame(
+			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
+			$result
+		);
+		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+	}
+
 	public function test_chat_preserves_numeric_bounds_for_other_output_schema_providers(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'openai' => true,
