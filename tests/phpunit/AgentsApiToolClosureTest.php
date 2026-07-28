@@ -81,11 +81,27 @@ final class AgentsApiToolClosureTest extends TestCase {
 	 * @var array<string, array<string, string>>
 	 */
 	private const RUNTIME_SUPPLIERS = [
-		'flavor-agent/recommend-patterns'   => [
+		'flavor-agent/recommend-patterns' => [
 			'visiblePatternNames' => 'flavor-agent/list-patterns',
 		],
+	];
+
+	/**
+	 * Runtime-enforced inputs with no supplier anywhere in the profile.
+	 *
+	 * `recommend-navigation` needs a `wp_navigation` post id or navigation
+	 * block markup. `list-template-parts` returns `wp_template_part` metadata —
+	 * id, slug, title, area, content — which is a different entity entirely; an
+	 * earlier version of this file named it as the supplier and was simply
+	 * wrong, which let a presence-only check certify a lane the agent cannot
+	 * actually start. Flavor Agent registers nothing that enumerates navigation
+	 * menus, so the input has to arrive from the conversation or from core.
+	 *
+	 * @var array<string, array<string, string>>
+	 */
+	private const RUNTIME_UNRESOLVED = [
 		'flavor-agent/recommend-navigation' => [
-			'menuId|navigationMarkup' => 'flavor-agent/list-template-parts',
+			'menuId|navigationMarkup' => 'No Flavor Agent ability enumerates wp_navigation posts or returns navigation block markup.',
 		],
 	];
 
@@ -209,6 +225,34 @@ final class AgentsApiToolClosureTest extends TestCase {
 				);
 			}
 		}
+	}
+
+	/**
+	 * A named supplier has to actually produce the input. Asserting only that
+	 * some ability is present in the profile certifies nothing — that is how
+	 * `list-template-parts` came to be recorded as the source of a navigation
+	 * menu id.
+	 */
+	public function test_runtime_unresolved_inputs_have_not_grown(): void {
+		$this->assertSame(
+			[ 'flavor-agent/recommend-navigation.menuId|navigationMarkup' ],
+			\array_merge(
+				...\array_map(
+					static fn( string $tool, array $inputs ): array => \array_map(
+						static fn( string $input ): string => $tool . '.' . $input,
+						\array_keys( $inputs )
+					),
+					\array_keys( self::RUNTIME_UNRESOLVED ),
+					\array_values( self::RUNTIME_UNRESOLVED )
+				)
+			),
+			'The set of runtime-enforced inputs the agent cannot obtain changed.'
+		);
+
+		// It stays in the profile deliberately: a caller that already holds
+		// markup (the editor, or a conversation that pasted it) can still use
+		// the lane. What it cannot do is bootstrap one from a cold start.
+		$this->assertContains( 'flavor-agent/recommend-navigation', AgentDefinition::tool_allowlist() );
 	}
 
 	public function test_unresolved_inputs_have_not_grown(): void {

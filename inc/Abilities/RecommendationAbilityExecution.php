@@ -420,11 +420,7 @@ final class RecommendationAbilityExecution {
 	 * is still how the call reached this ability; the agent runtime mediates
 	 * the tool call, it does not replace the ability dispatch path.
 	 *
-	 * @param array<string, mixed> $request_meta
-	 * @return array<string, mixed>
-	 */
-	/**
-	 * @param array<string, mixed> $request_meta
+	 * @param array<string, mixed>  $request_meta
 	 * @param array<string, string> $agent_run Already consumed by {@see self::execute()}.
 	 * @return array<string, mixed>
 	 */

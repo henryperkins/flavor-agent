@@ -164,8 +164,16 @@ final class Compatibility {
 	 * failure mode this gate exists to prevent.
 	 */
 	public static function version_supported(): bool {
-		$version = self::detected_version();
+		return self::meets_minimum( self::detected_version() );
+	}
 
+	/**
+	 * Shared by {@see self::version_supported()} and {@see self::status()}, which
+	 * needs the version string for reporting anyway. A helper rather than
+	 * having `status()` call `version_supported()`, because that would re-read
+	 * the plugin header for an answer it already has the input for.
+	 */
+	private static function meets_minimum( string $version ): bool {
 		if ( '' === $version ) {
 			return false;
 		}
@@ -209,7 +217,7 @@ final class Compatibility {
 			$reason = 'contract_missing';
 		} elseif ( '' === $version ) {
 			$reason = 'version_undetectable';
-		} elseif ( ! \version_compare( $version, self::MINIMUM_VERSION, '>=' ) ) {
+		} elseif ( ! self::meets_minimum( $version ) ) {
 			$reason = 'version_unsupported';
 		} else {
 			$supported = true;

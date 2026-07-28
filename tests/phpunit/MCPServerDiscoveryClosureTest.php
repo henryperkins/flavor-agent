@@ -102,17 +102,29 @@ final class MCPServerDiscoveryClosureTest extends TestCase {
 	 * @var array<string, array<string, array{supplier: string, enforcement: string}>>
 	 */
 	private const RUNTIME_REQUIRED = [
-		'flavor-agent/recommend-patterns'   => [
+		'flavor-agent/recommend-patterns' => [
 			'visiblePatternNames' => [
 				'supplier'    => 'flavor-agent/list-patterns',
 				'enforcement' => 'PatternAbilities::recommend_patterns() returns [ recommendations => [] ] before retrieval when this is null or empty — a silent success, not an error.',
 			],
 		],
+	];
+
+	/**
+	 * Runtime-enforced inputs with no supplier on this server.
+	 *
+	 * `recommend-navigation` needs a `wp_navigation` post id or navigation
+	 * block markup, and `list-template-parts` — named here in an earlier
+	 * version of this file — returns `wp_template_part` metadata, a different
+	 * entity. Naming a supplier that cannot produce the input is worse than
+	 * recording none, because the presence check then passes and certifies a
+	 * lane no cold client can start.
+	 *
+	 * @var array<string, array<string, string>>
+	 */
+	private const RUNTIME_UNRESOLVED = [
 		'flavor-agent/recommend-navigation' => [
-			'menuId|navigationMarkup' => [
-				'supplier'    => 'flavor-agent/list-template-parts',
-				'enforcement' => 'NavigationAbilities::recommend_navigation() returns WP_Error missing_navigation_input unless one of the two is present, before the resolveSignatureOnly early return.',
-			],
+			'menuId|navigationMarkup' => 'NavigationAbilities::recommend_navigation() returns WP_Error missing_navigation_input unless one is present, and no ability on this server enumerates wp_navigation posts.',
 		],
 	];
 
@@ -269,6 +281,22 @@ final class MCPServerDiscoveryClosureTest extends TestCase {
 				);
 			}
 		}
+	}
+
+	public function test_runtime_unresolved_inputs_have_not_grown(): void {
+		$unresolved = [];
+
+		foreach ( self::RUNTIME_UNRESOLVED as $tool => $inputs ) {
+			foreach ( \array_keys( $inputs ) as $input ) {
+				$unresolved[] = $tool . '.' . $input;
+			}
+		}
+
+		$this->assertSame(
+			[ 'flavor-agent/recommend-navigation.menuId|navigationMarkup' ],
+			$unresolved,
+			'The set of runtime-enforced inputs a cold client cannot obtain changed.'
+		);
 	}
 
 	/**

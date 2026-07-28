@@ -2614,16 +2614,19 @@ namespace {
 			WordPressTestState::$do_action_counts[$hook_name] =
 				(WordPressTestState::$do_action_counts[$hook_name] ?? 0) + 1;
 
-			if (empty(WordPressTestState::$filters[$hook_name])) {
-				return;
-			}
-
-			$callbacks = WordPressTestState::$filters[$hook_name];
-			ksort($callbacks);
-
+			// Pushed before the no-callbacks bail so `doing_action()` answers
+			// true for a hook with no listeners, as core does. The Agents API
+			// stubs gate registration on exactly that.
 			WordPressTestState::$current_actions[] = $hook_name;
 
 			try {
+				if (empty(WordPressTestState::$filters[$hook_name])) {
+					return;
+				}
+
+				$callbacks = WordPressTestState::$filters[$hook_name];
+				ksort($callbacks);
+
 				foreach ($callbacks as $entries) {
 					foreach ($entries as $entry) {
 						$accepted_args = (int) ($entry['accepted_args'] ?? 1);

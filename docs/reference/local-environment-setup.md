@@ -151,8 +151,16 @@ cd /var/www/html/wp-content/plugins
 if [ ! -d agents-api/.git ]; then
 	rm -rf agents-api
 	git clone --branch v0.7.0 --depth 1 https://github.com/Automattic/agents-api.git agents-api
+else
+	# An existing checkout may sit on another branch or tag. The adapter is
+	# pinned, so move it onto v0.7.0 rather than activating whatever is there.
+	cd agents-api
+	git fetch --depth 1 origin tag v0.7.0
+	git checkout --detach v0.7.0
+	cd ..
 fi
 cd agents-api
+git describe --tags --exact-match >/dev/null 2>&1 || { echo "agents-api checkout is not on a tag; expected v0.7.0" >&2; exit 1; }
 composer install --no-interaction --prefer-dist
 wp plugin activate agents-api --allow-root'
 ```
