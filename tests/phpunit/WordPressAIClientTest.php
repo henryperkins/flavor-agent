@@ -493,7 +493,7 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'number', $score_schema['type'] ?? null );
 	}
 
-	public function test_chat_omits_large_output_schema_that_exceeds_anthropic_grammar_limit(): void {
+	public function test_chat_keeps_large_anthropic_output_shape_without_grammar_heavy_value_constraints(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,
 		];
@@ -511,7 +511,19 @@ final class WordPressAIClientTest extends TestCase {
 			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
 			$result
 		);
-		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+		$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ) );
+		$this->assertSame( 'object', $schema['type'] ?? null );
+		$this->assertSame(
+			[ 'settings', 'styles', 'block', 'recommendedSets', 'explanation' ],
+			$schema['required'] ?? null
+		);
+		$this->assertArrayNotHasKey(
+			'enum',
+			$schema['properties']['settings']['items']['properties']['panel'] ?? []
+		);
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 	}
 
@@ -541,6 +553,34 @@ final class WordPressAIClientTest extends TestCase {
 		$score_schema = WordPressTestState::$last_ai_client_prompt['json_schema']['properties']['score'] ?? [];
 		$this->assertSame( 0, $score_schema['minimum'] ?? null );
 		$this->assertSame( 1, $score_schema['maximum'] ?? null );
+	}
+
+	public function test_chat_preserves_value_constraints_for_other_output_schema_providers(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"panel":"color"}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'openai',
+			null,
+			[
+				'type'       => 'object',
+				'properties' => [
+					'panel' => [
+						'type' => 'string',
+						'enum' => [ 'color', 'typography' ],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'color', 'typography' ],
+			WordPressTestState::$last_ai_client_prompt['json_schema']['properties']['panel']['enum'] ?? null
+		);
 	}
 
 	public function test_chat_applies_reasoning_effort_when_the_prompt_builder_supports_it(): void {
