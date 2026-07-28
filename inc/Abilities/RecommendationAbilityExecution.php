@@ -41,6 +41,13 @@ final class RecommendationAbilityExecution {
 		$request_token          = self::latest_request_token( $ability_name, $surface, $client_request );
 		$request_tag            = self::build_request_tag( $surface, $ability_name, $request_input, $client_request );
 
+		// Consumed once, here, rather than inside the request-meta builders.
+		// `execute()` has early returns — signature-only resolution and
+		// non-array results — that never reach those builders, and a context
+		// left unconsumed on one of those paths survives to attribute a later
+		// call of this same ability in the same process.
+		$agent_run = AgentRunContext::consume( $ability_name );
+
 		FlavorAgentRequestTag::start( $request_tag );
 		try {
 			$result = self::execute_with_system_instruction(
@@ -54,7 +61,7 @@ final class RecommendationAbilityExecution {
 
 		if ( \is_wp_error( $result ) ) {
 			if ( ! $resolve_signature_only ) {
-				$result = self::append_request_meta_to_error( $result, $ability_name, $request_tag );
+				$result = self::append_request_meta_to_error( $result, $ability_name, $request_tag, $agent_run );
 			}
 
 			if ( ! $resolve_signature_only && self::should_persist_activity_request_diagnostic( $ability_name, $surface, $client_request ) ) {
@@ -76,7 +83,7 @@ final class RecommendationAbilityExecution {
 				: $result;
 		}
 
-		$payload = self::append_request_meta( $result, $ability_name, $request_tag );
+		$payload = self::append_request_meta( $result, $ability_name, $request_tag, $agent_run );
 		if ( self::should_persist_activity_request_diagnostic( $ability_name, $surface, $client_request ) ) {
 			self::persist_request_diagnostic_activity(
 				self::resolve_activity_surface( $surface, $request_input ),
@@ -378,7 +385,7 @@ final class RecommendationAbilityExecution {
 	 * @param array<string, mixed> $payload
 	 * @return array<string, mixed>
 	 */
-	private static function append_request_meta( array $payload, string $ability_name, FlavorAgentRequestTag $request_tag ): array {
+	private static function append_request_meta( array $payload, string $ability_name, FlavorAgentRequestTag $request_tag, array $agent_run = [] ): array {
 		$request_meta = self::merge_request_meta(
 			\is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : []
 		);
@@ -386,7 +393,7 @@ final class RecommendationAbilityExecution {
 		$request_meta['ability']            = $ability_name;
 		$request_meta['executionTransport'] = 'wp-abilities';
 		$request_meta['route']              = 'wp-abilities:' . $ability_name;
-		$request_meta                       = self::append_agent_run_meta( $request_meta, $ability_name );
+		$request_meta                       = self::append_agent_run_meta( $request_meta, $agent_run );
 
 		if ( 'flavor-agent/recommend-patterns' === $ability_name ) {
 			$request_meta = self::append_pattern_request_meta( $request_meta );
@@ -416,13 +423,12 @@ final class RecommendationAbilityExecution {
 	 * @param array<string, mixed> $request_meta
 	 * @return array<string, mixed>
 	 */
-	private static function append_agent_run_meta( array $request_meta, string $ability_name ): array {
-		// Bound to this ability and cleared on read: the upstream seam is a
-		// pre-call hook with no post-call counterpart, so a run's identifiers
-		// would otherwise persist for the rest of the process and land on the
-		// next recommendation that happened to follow it.
-		$agent_run = AgentRunContext::consume( $ability_name );
-
+	/**
+	 * @param array<string, mixed> $request_meta
+	 * @param array<string, string> $agent_run Already consumed by {@see self::execute()}.
+	 * @return array<string, mixed>
+	 */
+	private static function append_agent_run_meta( array $request_meta, array $agent_run ): array {
 		if ( [] === $agent_run ) {
 			return $request_meta;
 		}
@@ -432,7 +438,7 @@ final class RecommendationAbilityExecution {
 		return $request_meta;
 	}
 
-	private static function append_request_meta_to_error( \WP_Error $error, string $ability_name, FlavorAgentRequestTag $request_tag ): \WP_Error {
+	private static function append_request_meta_to_error( \WP_Error $error, string $ability_name, FlavorAgentRequestTag $request_tag, array $agent_run = [] ): \WP_Error {
 		$code         = $error->get_error_code();
 		$data         = $error->get_error_data( $code );
 		$data         = \is_array( $data )
@@ -445,7 +451,7 @@ final class RecommendationAbilityExecution {
 		$request_meta['ability']            = $ability_name;
 		$request_meta['executionTransport'] = 'wp-abilities';
 		$request_meta['route']              = 'wp-abilities:' . $ability_name;
-		$request_meta                       = self::append_agent_run_meta( $request_meta, $ability_name );
+		$request_meta                       = self::append_agent_run_meta( $request_meta, $agent_run );
 
 		if ( 'flavor-agent/recommend-patterns' === $ability_name ) {
 			$request_meta = self::append_pattern_request_meta( $request_meta );

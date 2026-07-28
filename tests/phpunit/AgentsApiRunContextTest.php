@@ -212,6 +212,38 @@ final class AgentsApiRunContextTest extends TestCase {
 	}
 
 	/**
+	 * `execute()` returns early for signature-only resolution, before either
+	 * request-meta builder runs. Consuming inside those builders therefore left
+	 * this path unconsumed, and the context survived to attribute a later call
+	 * of the same ability. Consumption moved to ability entry; this pins it
+	 * there.
+	 */
+	public function test_signature_only_resolution_still_consumes_the_run_context(): void {
+		$this->observe(
+			[
+				'agent_slug' => 'flavor-agent',
+				'run_id'     => 'run_01HTESTRUN',
+			],
+			'flavor-agent/recommend-block'
+		);
+
+		$this->assertTrue( RunContext::is_active() );
+
+		RecommendationAbilityExecution::execute(
+			'block',
+			'flavor-agent/recommend-block',
+			[ 'resolveSignatureOnly' => true ],
+			static fn(): array => [ 'signatures' => [] ]
+		);
+
+		$this->assertSame(
+			[],
+			RunContext::current(),
+			'A signature-only call left the run context set for the next execution of this ability.'
+		);
+	}
+
+	/**
 	 * A tool declaration may map a model-facing name onto a different registered
 	 * ability. Upstream resolves `ability` / `ability_name` ahead of the tool
 	 * name, and so must this, or attribution binds to a name that never
@@ -272,8 +304,10 @@ final class AgentsApiRunContextTest extends TestCase {
 		$method = new ReflectionMethod( RecommendationAbilityExecution::class, 'append_agent_run_meta' );
 		$method->setAccessible( true );
 
+		// Mirrors `execute()`: consume once, then hand the result to the
+		// request-meta builder.
 		/** @var array<string, mixed> $result */
-		$result = $method->invoke( null, $request_meta, $ability_name );
+		$result = $method->invoke( null, $request_meta, RunContext::consume( $ability_name ) );
 
 		return $result;
 	}

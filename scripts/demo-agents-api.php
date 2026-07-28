@@ -348,7 +348,14 @@ if ( in_array( 'B', $tiers, true ) ) {
 		$prompt = (string) getenv( 'FA_DEMO_PROMPT' );
 
 		if ( '' === trim( $prompt ) ) {
-			$prompt = 'Which templates does this site have? Use your tools to check, then name them.';
+			// Must drive the full read -> recommend loop, not just a read.
+			// Read-only tools persist no activity row, so a prompt that stops
+			// at enumeration leaves B3 with nothing to correlate and the run
+			// can never satisfy the exit gate it exists to test. This mirrors
+			// the agent's own tool_call_rules: discover, then commit to one
+			// recommendation.
+			$prompt = 'List this site\'s templates, choose one, and recommend a concrete improvement to it. '
+				. 'Use your tools for both steps.';
 		}
 
 		$before = microtime( true );
