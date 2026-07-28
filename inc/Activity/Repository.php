@@ -757,10 +757,16 @@ final class Repository {
 	}
 
 	/**
-	 * @param array<string, mixed> $metadata {verification?, attestationStatus?, attestationErrorCode?}
+	 * @param array<string, mixed> $metadata                 {verification?, attestationStatus?, attestationErrorCode?}
+	 * @param bool                 $revert_already_performed Caller has already reverted the live subject and
+	 *                                                       enforced the ordered gate immediately before doing so.
+	 *                                                       Skips only the ordered re-check: refusing the write at
+	 *                                                       this point cannot un-revert the subject, it would just
+	 *                                                       leave the row `available` while the change is gone.
+	 *                                                       The available-only transition guard still applies.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public static function update_undo_status( string $activity_id, string $status, ?string $error = null, array $metadata = [] ) {
+	public static function update_undo_status( string $activity_id, string $status, ?string $error = null, array $metadata = [], bool $revert_already_performed = false ) {
 		global $wpdb;
 
 		if ( ! is_object( $wpdb ) ) {
@@ -800,7 +806,7 @@ final class Repository {
 			);
 		}
 
-		if ( 'undone' === $status && ! self::is_ordered_undo_eligible( $current_row ) ) {
+		if ( 'undone' === $status && ! $revert_already_performed && ! self::is_ordered_undo_eligible( $current_row ) ) {
 			return new \WP_Error(
 				'flavor_agent_activity_undo_blocked',
 				'Undo blocked by newer AI actions.',

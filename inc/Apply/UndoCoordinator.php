@@ -96,7 +96,19 @@ final class UndoCoordinator {
 		$metadata                 = self::revert_attestation_metadata( $activity_id, $entry, $result );
 		$metadata['verification'] = self::VERIFICATION_SERVER;
 
-		$updated = ActivityRepository::update_undo_status( $activity_id, 'undone', null, $metadata );
+		// The subject is already reverted. update_undo_status() re-checks the
+		// ordered-undo rule at the write boundary, and a newer activity on the
+		// same entity landing since the caller's gate would reject this write --
+		// leaving the row `available` while the change is gone. Refusing to
+		// record a revert cannot un-perform it, so the ordered rule governs
+		// whether an undo may start, not whether a completed one is recorded.
+		$updated = ActivityRepository::update_undo_status(
+			$activity_id,
+			'undone',
+			null,
+			$metadata,
+			true
+		);
 
 		if ( is_wp_error( $updated ) ) {
 			return $updated;

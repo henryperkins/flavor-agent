@@ -350,6 +350,70 @@ final class ActivityUndoRouteTest extends TestCase {
 	}
 
 	/**
+	 * The ordered-undo gate runs before the executor, but update_undo_status()
+	 * re-checks it at the write boundary. If a newer activity on the same entity
+	 * lands in between, the subject has already been reverted -- refusing to
+	 * record that cannot un-revert it, it only hides it. The coordinator must
+	 * still write the terminal status for a revert it actually performed.
+	 */
+	public function test_verified_undo_records_a_revert_it_performed_even_if_ordering_lapsed(): void {
+		$row = $this->create_executed_row();
+		$this->seed_live_styles( self::APPLIED_STYLES );
+
+		// A newer, still-undoable activity on the same entity: exactly what a
+		// concurrent insert between the gate and the terminal write produces.
+		$newer = Repository::create(
+			[
+				'type'       => 'apply_global_styles_suggestion',
+				'surface'    => 'global-styles',
+				'target'     => [ 'globalStylesId' => (string) self::GLOBAL_STYLES_ID ],
+				'suggestion' => 'A newer change on the same entity',
+				'before'     => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'after'      => [
+					'userConfig' => [
+						'settings' => [],
+						'styles'   => [],
+					],
+				],
+				'document'   => [
+					'scopeKey' => 'global_styles:' . self::GLOBAL_STYLES_ID,
+					'postType' => 'global_styles',
+					'entityId' => (string) self::GLOBAL_STYLES_ID,
+				],
+			]
+		);
+		$this->assertIsArray( $newer );
+		$this->assertFalse(
+			Repository::can_perform_ordered_undo( (string) $row['id'] ),
+			'The newer row must make the target ordered-undo ineligible.'
+		);
+
+		$result = \FlavorAgent\Apply\UndoCoordinator::run_verified_undo(
+			(string) $row['id'],
+			$row,
+			\FlavorAgent\Apply\StyleApplyExecutor::class
+		);
+
+		$this->assertIsArray( $result, 'A performed revert must not be reported as a plain error.' );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame(
+			[],
+			$this->live_styles(),
+			'The executor reverted the subject.'
+		);
+		$this->assertSame(
+			'undone',
+			Repository::find( (string) $row['id'] )['undo']['status'],
+			'A reverted subject must never be left with an available row -- that is the record/reality split this whole change exists to close.'
+		);
+	}
+
+	/**
 	 * A pending row's snapshots describe a change the site never received.
 	 * Undoing one would be an unreviewed mutation, so the gate runs before any
 	 * executor dispatch.

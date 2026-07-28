@@ -162,6 +162,22 @@ still holding `var:preset|color|accent` while the row reads `undone` — this
 finding, reproduced. Removing only the `undo.verification` persistence fails the
 five tests that assert it.
 
+Review of the fix then surfaced a second instance of the same failure class,
+now fixed and covered by an eighth test. The ordered-undo gate runs before the
+executor, but `update_undo_status()` re-checks it at the write boundary — so a
+newer activity on the same entity arriving in between left the subject reverted
+while the row stayed `available` and the caller got `409 undo_blocked`. Record
+and reality split apart again, in the opposite direction. The ordered rule now
+governs whether an undo may *start*, not whether a performed one is *recorded*:
+refusing the write cannot un-revert the subject, it only hides the revert.
+
+**Harness evidence.** The WordPress 7.0 Site Editor suite — the matching
+harness for this surface, which the working container could not provision —
+ran in CI on the fix and passed 29/29
+([run 30339074400](https://github.com/henryperkins/flavor-agent/actions/runs/30339074400)).
+Read from the job log, not the check-run conclusion: that job is
+`continue-on-error: true`, so its green mark is not by itself proof.
+
 Finding 1 is untouched and remains open.
 
 ## Reproduction

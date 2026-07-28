@@ -73,8 +73,10 @@ A terminal row records **how** it got there in `undo.verification`, so the audit
 | `undo.verification` | Meaning |
 |---|---|
 | `server` | An executor read live state and confirmed or performed the revert. Written by `UndoCoordinator::run_verified_undo()` for both `undone` and drift-`failed`. |
-| `client-reported` | The subject lives in the editor; there is no server-side state to check. The transition is the client's report of its own undo. |
+| `client-reported` | The server did not check live state. Two cases reach it: the subject lives in the editor and there is nothing server-side to check, **or** the caller reported `status: "failed"` for its own undo — which is honoured without dispatching an executor even on a server-owned subject, because a failure report never claims a revert happened. Read it as "not server-verified", not as "no server-side subject exists". |
 | *(absent)* | The row is not terminal, or it reached a terminal state before undo verification existed. |
+
+The failure case matters to anyone auditing: a `failed` + `client-reported` row on a Global Styles, template, template-part, or post-blocks subject means the change is **still live** and the server never touched it. `ActivityUndoRouteTest::test_undo_honors_a_client_failure_report_without_touching_live_state()` pins exactly that.
 
 Neither undo entry point takes a caller's success claim on trust. `POST /flavor-agent/v1/activity/{id}/undo` and the `undo-activity` ability both dispatch through `UndoCoordinator::run_verified_undo()`, which runs the surface executor first and derives the status from what the executor did. A caller may still report `status: "failed"` for its own client-side failure — failure never asserts that a revert happened — but an `undone` request is granted only after verification, or recorded as `client-reported` when no server-side subject exists. A row that executed server-side but carries no comparable snapshot is refused with `409 flavor_agent_undo_unverifiable` and stays `available` rather than being closed out.
 
