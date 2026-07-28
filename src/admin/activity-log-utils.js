@@ -1427,6 +1427,16 @@ function getUndoStatusLabel( status, resolvedUndo = null, entry = null ) {
 		return __( 'Undo available', 'flavor-agent' );
 	}
 
+	// A failed request never applied anything, so there is nothing to undo.
+	// The row only carries undo.status === 'failed' because that is the single
+	// channel the serializer keeps an error string on. Delegating below would
+	// lose the entry — getActivityStatusLabel needs the object to recognise a
+	// request diagnostic — and the row would read "Undo unavailable", which
+	// implies an apply that was attempted and cannot be reversed.
+	if ( entry?.type === 'request_diagnostic' && status === 'failed' ) {
+		return __( 'Undo not applicable', 'flavor-agent' );
+	}
+
 	return getActivityStatusLabel( status );
 }
 
