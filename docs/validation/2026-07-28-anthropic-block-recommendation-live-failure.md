@@ -10,13 +10,13 @@ assumption that PR #70 (`Avoid oversized Anthropic response grammars`, merged
 
 | | |
 | --- | --- |
-| Site | `https://hperkins.blog` (WordPress.com **Atomic**, blog_id `253647414`) |
+| Site | `https://hperkins.blog` (WordPress.com **Atomic**) — the maintainer's own public demo site |
 | Flavor Agent | `0.1.0`, active |
 | WordPress AI plugin | `1.2.0`, active |
 | Abilities | 106 total registered; **35** `flavor-agent/*` — matches the documented count |
 | Provider | Anthropic via `Settings > Connectors` (`ai-provider-for-anthropic`) |
 | Model | `claude-opus-5` |
-| Auth | administrator (`hperkinsh`) via application password |
+| Auth | an administrator account via a since-revoked application password |
 
 `flavor-agent/check-status` reported `configured: true` with every surface
 `available: true, reason: "ready"` before the run.
@@ -26,7 +26,7 @@ assumption that PR #70 (`Avoid oversized Anthropic response grammars`, merged
 `POST /wp-abilities/v1/abilities/flavor-agent/recommend-block/run` →
 **HTTP 400**:
 
-```
+```text
 prompt_client_error
 Bad Request (400) - The compiled grammar is too large, which would cause
 performance issues. Simplify your tool schemas or reduce the number of
@@ -78,13 +78,34 @@ Same site, same provider, same model, same session:
 | `flavor-agent/recommend-content` | 546 B | **HTTP 200 — success** |
 | `flavor-agent/recommend-block` | 3,427 B | **HTTP 400 — grammar too large** |
 
-If registered abilities were being sent as strict tools, both would fail. Only
-the large-response-schema surface fails, so the response schema is the cause.
+The differential alone does **not** settle this. A shared tool set could sit
+inside one combined grammar budget, fitting alongside the small schema and
+overflowing only when the large one is added — in which case both the tools and
+the schema contribute and the comparison cannot separate them.
+
+What settles it is the provider source. `ai-provider-for-anthropic` v1.0.3 —
+the exact version deployed here — only ever populates `tools` when function
+declarations or web search are configured, and Flavor Agent configures neither:
+
+```php
+$functionDeclarations = $config->getFunctionDeclarations();
+$webSearch            = $config->getWebSearch();
+if (is_array($functionDeclarations) || $webSearch) {
+    $params['tools'] = $this->prepareToolsParam($functionDeclarations, $webSearch);
+}
+```
+
+So no tools are transmitted on either request, registered abilities are not part
+of the grammar, and the schema is the only varying input. Anthropic's docs
+confirm grammar compilation applies to structured outputs generally, so the
+"tool schemas / strict tools" wording is generic compiler error text rather than
+a pointer at the Abilities surface. Full source review:
+[`docs/reference/ai-provider-for-anthropic-review.md`](../reference/ai-provider-for-anthropic-review.md).
 
 Per-surface prepared sizes (Anthropic path) — block is the only outlier, which
 is consistent with block being the only surface reported broken:
 
-```
+```text
 block 3427   style 1769   template 1728   template_part 1719
 post_blocks 1719   navigation 1325   content 546   pattern 312
 ```
@@ -122,10 +143,19 @@ which asserts the block schema ends `<= 4096` bytes. That assertion is satisfied
 at 3,427 bytes — and the request still fails in production. **The suite asserts
 the plugin's own threshold, not the provider's actual limit.**
 
-The harness also cannot detect retry contamination: the stub
-`as_json_response()` returns `$this` and writes to the global static
-`WordPressTestState::$last_ai_client_prompt` (`tests/phpunit/bootstrap.php:808`),
-so a clone and its original are indistinguishable in tests.
+The harness's blind spot is narrower than "clones are indistinguishable" — that
+framing was wrong. `test_chat_retries_without_output_schema_after_unpinned_grammar_limit_error()`
+captures the schema per attempt through an `http_request_args` filter and
+asserts a schema on attempt one and `null` on the retry, so the harness does
+separate the two attempts, and `WP_AI_Client_Prompt_Builder` copies its private
+array state per clone.
+
+The real gap is that the stub's state is a **flat array**, while the live
+dependency holds nested configuration objects. A shallow `clone` copies a flat
+array by value but shares nested objects by reference, so the aliasing that can
+occur against the real `php-ai-client` builder cannot occur against the stub —
+the retry path is exercised, just never under the conditions that break it.
+That is why the suite stayed green while production failed.
 
 ## Measured boundary
 

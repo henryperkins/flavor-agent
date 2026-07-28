@@ -581,6 +581,84 @@ final class WordPressAIClientTest extends TestCase {
 	}
 
 	/**
+	 * Dropping the schema must also flip the instruction out of schema mode.
+	 *
+	 * The system instruction is generated with hasSchema, and provider
+	 * preparation can drop the schema entirely. If the instruction is built from
+	 * the raw schema, a filter sees hasSchema => true for a request that carries
+	 * no schema -- the exact mismatch the grammar-limit retry path avoids.
+	 */
+	public function test_block_request_reports_no_schema_to_the_system_instruction_filter_on_anthropic(): void {
+		$seen   = [];
+		$record = static function ( $instruction, $ability_name, $data ) use ( &$seen ) {
+			unset( $ability_name );
+			$seen[] = $data['hasSchema'] ?? null;
+
+			return $instruction;
+		};
+
+		add_filter( 'wpai_system_instruction', $record, 10, 3 );
+
+		try {
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"OK."}';
+
+			WordPressAIClient::chat(
+				'System.',
+				'User.',
+				'anthropic',
+				'medium',
+				ResponseSchema::get( 'block' )
+			);
+
+			$this->assertNotEmpty( $seen, 'The system-instruction filter never ran.' );
+			$this->assertFalse(
+				(bool) $seen[0],
+				'Block on Anthropic sends no schema, so the instruction must be built with hasSchema => false.'
+			);
+		} finally {
+			remove_filter( 'wpai_system_instruction', $record, 10 );
+		}
+	}
+
+	/**
+	 * A surface that keeps its schema must still report schema mode.
+	 */
+	public function test_surface_that_keeps_its_schema_reports_schema_mode_to_the_filter(): void {
+		$seen   = [];
+		$record = static function ( $instruction, $ability_name, $data ) use ( &$seen ) {
+			unset( $ability_name );
+			$seen[] = $data['hasSchema'] ?? null;
+
+			return $instruction;
+		};
+
+		add_filter( 'wpai_system_instruction', $record, 10, 3 );
+
+		try {
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_generate_text_result = '{}';
+
+			WordPressAIClient::chat(
+				'System.',
+				'User.',
+				'anthropic',
+				'medium',
+				ResponseSchema::get( 'template' )
+			);
+
+			$this->assertNotEmpty( $seen );
+			$this->assertTrue( (bool) $seen[0] );
+		} finally {
+			remove_filter( 'wpai_system_instruction', $record, 10 );
+		}
+	}
+
+	/**
 	 * Every other surface stays under the ceiling and keeps structured output.
 	 *
 	 * Guards against a future schema growing past the limit unnoticed: block is

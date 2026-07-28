@@ -118,7 +118,17 @@ final class WordPressAIClient {
 		$resolved_provider = $selection['provider'];
 		$model_options     = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
 		$raw_system_prompt = $system_prompt;
-		$system_prompt     = WordPressAIPolicy::system_instruction(
+		/*
+		 * Prepare the schema before building the system instruction. Provider
+		 * preparation can drop the schema outright -- an Anthropic block schema
+		 * exceeds the grammar ceiling and comes back null -- and the instruction
+		 * must describe the request actually being sent, not the one originally
+		 * requested. Building it from the raw schema would hand
+		 * wpai_system_instruction a hasSchema of true for a schema-free request,
+		 * the exact mismatch the grammar-limit retry path takes care to avoid.
+		 */
+		$schema        = self::prepare_output_schema( $schema, $resolved_provider );
+		$system_prompt = WordPressAIPolicy::system_instruction(
 			$system_prompt,
 			$ability_name,
 			[
@@ -127,7 +137,7 @@ final class WordPressAIClient {
 				'hasSchema'       => is_array( $schema ) && [] !== $schema,
 			]
 		);
-		$prompt            = self::make_prompt(
+		$prompt        = self::make_prompt(
 			$user_prompt,
 			[
 				'system_instruction' => $system_prompt,
@@ -162,7 +172,6 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$schema = self::prepare_output_schema( $schema, $resolved_provider );
 		$prompt = self::apply_output_schema( $prompt, $schema );
 
 		if ( is_wp_error( $prompt ) ) {
@@ -260,32 +269,40 @@ final class WordPressAIClient {
 					);
 
 					if ( is_wp_error( $rebuilt ) ) {
-						return $rebuilt;
-					}
+						/*
+						 * Surface the rebuild failure as the result rather than
+						 * returning early: an early return would skip error
+						 * normalization, diagnostics recording, and
+						 * RequestTrace::finish() below, leaving an owned trace
+						 * open until shutdown.
+						 */
+						$result = $rebuilt;
+					} else {
+						$schema                  = null;
+						$prompt                  = $rebuilt;
+						$request_timeout_seconds = self::request_timeout_seconds(
+							$resolved_provider,
+							$reasoning_effort,
+							null
+						);
+						$request_diagnostics     = self::build_request_diagnostics(
+							$system_prompt,
+							$user_prompt,
+							$resolved_provider,
+							$reasoning_effort,
+							null,
+							$request_timeout_seconds,
+							$selection
+						);
+						$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
 
-					$schema                  = null;
-					$prompt                  = $rebuilt;
-					$request_timeout_seconds = self::request_timeout_seconds(
-						$resolved_provider,
-						$reasoning_effort,
-						null
-					);
-					$request_diagnostics     = self::build_request_diagnostics(
-						$system_prompt,
-						$user_prompt,
-						$resolved_provider,
-						$reasoning_effort,
-						null,
-						$request_timeout_seconds,
-						$selection
-					);
-					$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
-					$result = self::call_prompt_method_with_request_timeout(
-						$prompt,
-						'generate_text_result',
-						[],
-						$request_timeout_seconds
-					);
+						$result = self::call_prompt_method_with_request_timeout(
+							$prompt,
+							'generate_text_result',
+							[],
+							$request_timeout_seconds
+						);
+					}
 				}
 			}
 		} catch ( \Throwable $throwable ) {

@@ -12,8 +12,8 @@ undo. Most of it works as documented. Two things do not.
 ## Environment
 
 `https://hperkins.blog` — WordPress.com Atomic, Flavor Agent `0.1.0`, AI plugin
-`1.2.0`, Anthropic connector on `claude-opus-5`, administrator via application
-password. Activity row `825f94bf-644c-4ef2-8885-19fdae3ee516`.
+`1.2.0`, Anthropic connector on `claude-opus-5`, an administrator account via a
+since-revoked application password. Activity row `825f94bf-644c-4ef2-8885-19fdae3ee516`.
 
 ## What worked
 
@@ -55,7 +55,7 @@ that method requires a **private** key (`KeyManager.php:28-30`).
 The problem is what an outside observer sees. The site's public JWKS is live and
 advertises an **active** key:
 
-```
+```text
 GET /wp-json/flavor-agent/v1/attestations/keys
 {"keys":[{"kty":"OKP","crv":"Ed25519","kid":"212313e9433250dc782136e7d315c83f",
           "use":"sig","alg":"EdDSA","status":"active",
@@ -126,7 +126,7 @@ original held only `css`). Verified back to `null` from both readers.
 `get-theme-styles` returns `scope` and `styleContext` in the shape
 `recommend-style` wants, so the whole lane chains without hand-built context:
 
-```
+```text
 GET  /wp-json/wp-abilities/v1/abilities/flavor-agent/get-theme-styles/run
 POST /wp-json/wp-abilities/v1/abilities/flavor-agent/recommend-style/run
        {"input":{"scope":…,"styleContext":…,"prompt":…}}

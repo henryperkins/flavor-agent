@@ -39,7 +39,7 @@ retrieval-ranking failure on the broad validation query, not missing coverage.
 Matches the `VALIDATION_QUERY` constant in `scripts/update-docs-ai-search.js`
 and the runbook:
 
-```
+```text
 WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes
 ```
 
