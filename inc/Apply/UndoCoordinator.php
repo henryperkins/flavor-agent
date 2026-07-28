@@ -28,15 +28,15 @@ final class UndoCoordinator {
 	public const RESULT_CLIENT_REPORTED = 'client_reported';
 
 	/** Terminal status established by reading -- and where needed writing -- live state. */
-	public const VERIFICATION_SERVER = 'server';
+	public const VERIFICATION_SERVER = \FlavorAgent\Activity\Serializer::UNDO_VERIFICATION_SERVER;
 
 	/** Terminal status is the editor's report; no server-side subject exists to verify it against. */
-	public const VERIFICATION_CLIENT_REPORTED = 'client-reported';
+	public const VERIFICATION_CLIENT_REPORTED = \FlavorAgent\Activity\Serializer::UNDO_VERIFICATION_CLIENT_REPORTED;
 
 	/** The row carries no snapshot this executor can compare live state against. */
 	public const ERROR_SNAPSHOT_UNSUPPORTED = 'flavor_agent_undo_snapshot_unsupported';
 
-	private const ERROR_DRIFT = 'flavor_agent_undo_drift';
+	public const ERROR_DRIFT = 'flavor_agent_undo_drift';
 
 	/**
 	 * Pending, rejected, expired, and approval-failed external applies never
@@ -58,11 +58,80 @@ final class UndoCoordinator {
 	}
 
 	/**
+	 * Resolve the row an undo targets: lookup plus pending-apply expiry.
+	 *
+	 * Shared by both undo entry points so lookup semantics cannot drift.
+	 *
+	 * @return array<string, mixed>|\WP_Error The hydrated (possibly expired) entry.
+	 */
+	public static function resolve_entry_for_undo( string $activity_id ): array|\WP_Error {
+		$entry = ActivityRepository::find( $activity_id );
+
+		if ( ! is_array( $entry ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_found',
+				'Flavor Agent could not find that activity entry.',
+				[ 'status' => 404 ]
+			);
+		}
+
+		return ActivityRepository::maybe_expire_pending_apply( $entry );
+	}
+
+	/**
+	 * The ordered gate sequence both undo entry points run before any
+	 * executor dispatch: the never-executed guard, the available-only
+	 * transition check, and the ordered-undo gate.
+	 *
+	 * Living here once is the point -- the REST route and the ability used to
+	 * carry their own copies, which is exactly the drift that let the two undo
+	 * paths diverge in the first place. The single intentional difference
+	 * between the callers is idempotency on an already-undone row: the ability
+	 * reports it as success to external agents, the REST route rejects the
+	 * re-transition, so that one choice is the flag.
+	 *
+	 * @param array<string, mixed> $entry Entry from resolve_entry_for_undo().
+	 * @return array{alreadyUndone: bool}|\WP_Error
+	 */
+	public static function gate_undoable( string $activity_id, array $entry, bool $treat_undone_as_already_undone ): array|\WP_Error {
+		if ( self::is_non_executed_apply_entry( $entry ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_undoable',
+				'Pending, rejected, expired, and approval-failed external applies never executed and cannot be undone.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$undo_status = (string) ( $entry['undo']['status'] ?? '' );
+
+		if ( $treat_undone_as_already_undone && 'undone' === $undo_status ) {
+			return [ 'alreadyUndone' => true ];
+		}
+
+		if ( 'available' !== $undo_status ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_undo_transition',
+				'Flavor Agent only allows undo status changes from the available state.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		if ( ! ActivityRepository::can_perform_ordered_undo( $activity_id ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_undo_blocked',
+				'Undo blocked by newer AI actions.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return [ 'alreadyUndone' => false ];
+	}
+
+	/**
 	 * Revert the live subject, then record the outcome that revert produced.
 	 *
-	 * The caller is responsible for the gates that precede this: row lookup,
-	 * pending-apply expiry, the never-executed guard, the undo-status
-	 * transition check, and the ordered-undo gate.
+	 * The caller is responsible for the gates that precede this -- run
+	 * gate_entry_for_undo() first.
 	 *
 	 * @param string                              $activity_id Row being undone.
 	 * @param array<string, mixed>                $entry       Hydrated activity entry.
@@ -86,8 +155,16 @@ final class UndoCoordinator {
 				[ 'verification' => self::VERIFICATION_SERVER ]
 			);
 
+			if ( is_wp_error( $failed ) ) {
+				// The drift outcome could not be persisted. Surface the
+				// storage failure rather than a normal `failed` result --
+				// otherwise the caller reports drift while the audit row
+				// silently stays `available` with no verification record.
+				return $failed;
+			}
+
 			return [
-				'entry'  => is_array( $failed ) ? $failed : $entry,
+				'entry'  => $failed,
 				'result' => self::RESULT_FAILED,
 				'error'  => $result->get_error_message(),
 			];

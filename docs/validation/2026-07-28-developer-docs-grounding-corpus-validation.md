@@ -85,8 +85,11 @@ The same query was re-run at four caps. `developer-docs` never appears, even at
 | 16 | 16 | make-core 14, wordpress-news 1, developer-blog 1 | FAIL |
 | 20 | 20 | make-core 18, wordpress-news 1, developer-blog 1 | FAIL |
 
-Raising the cap only adds more Make/Core dev-chat chunks. No value reachable
-from plugin configuration makes this query satisfy the gate.
+At the plugin-reachable caps (4 and 8) every returned chunk is Make/Core; the
+diagnostic-only caps (16 and 20) add one `wordpress-news` and one
+`developer-blog` chunk but still zero `developer-docs` chunks, which is the
+label Gate A requires. No value reachable from plugin configuration makes this
+query satisfy the gate.
 
 ## Targeted probes
 

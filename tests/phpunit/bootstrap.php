@@ -223,6 +223,13 @@ namespace FlavorAgent\Tests\Support {
 		 */
 		public static array $ai_client_prompt_method_throws = [];
 
+		/**
+		 * One-shot: the next $wpdb->update() returns false, the wpdb error
+		 * signal for a failed write (distinct from 0 matched rows). Models a
+		 * storage failure at a terminal-status write boundary.
+		 */
+		public static bool $db_update_fails_once = false;
+
 		public static ?object $current_post = null;
 
 		public static function consume_ai_client_prompt_method_throwable(string $method): ?\Throwable
@@ -470,6 +477,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$ai_client_model_resolution_error = null;
 			self::$ai_client_model_resolution_results = [];
 			self::$ai_client_prompt_method_throws = [];
+			self::$db_update_fails_once        = false;
 			self::$current_post                = null;
 
 			$GLOBALS['wp_settings_fields']   = [];
@@ -1381,6 +1389,12 @@ namespace {
 				array $format = [],
 				array $where_format = []
 			) {
+				if (WordPressTestState::$db_update_fails_once) {
+					WordPressTestState::$db_update_fails_once = false;
+
+					return false;
+				}
+
 				if (! isset(WordPressTestState::$db_tables[$table])) {
 					return 0;
 				}

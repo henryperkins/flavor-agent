@@ -1100,6 +1100,56 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The rebuilt retry prompt must pass the same generation-support gate the
+	 * original passed. Retry-time resolution can differ from the first
+	 * attempt's, so without the gate the retry calls generate_text_result()
+	 * on an unchecked builder instead of failing the rebuild.
+	 *
+	 * Queue sizing: the first attempt consumes three
+	 * is_supported_for_text_generation calls (the chat() entry gate plus the
+	 * optional-feature probes), so the fourth lands on the rebuild's gate --
+	 * sized empirically against the stub. With the gate present the queued failure aborts the rebuild and
+	 * the request records grammar_limit_rebuild_failed; under revert the same
+	 * queued failure is swallowed by the rebuild's reasoning probe, the retry
+	 * proceeds unchecked, and the marker stays grammar_limit -- which is the
+	 * discriminating assertion.
+	 */
+	public function test_grammar_limit_retry_support_gate_failure_aborts_the_rebuild(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'prompt_client_error',
+			'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+		);
+		WordPressTestState::$ai_client_prompt_method_throws = [
+			'is_supported_for_text_generation' => [
+				null,
+				null,
+				null,
+				new \RuntimeException( 'Connector support probe failed.' ),
+			],
+		];
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			'medium',
+			ResponseSchema::get( 'template' )
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'grammar_limit_rebuild_failed',
+			$meta['requestSummary']['outputSchemaFallback'] ?? null,
+			'A retry whose support gate fails must abort the rebuild rather than sending an unchecked request.'
+		);
+	}
+
 	public function test_chat_preserves_enum_constraints_for_small_anthropic_output_schema(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,

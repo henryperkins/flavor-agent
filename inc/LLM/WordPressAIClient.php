@@ -1036,6 +1036,18 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
+		// Retry-time resolution can differ from the first attempt's -- the
+		// configured model may have disappeared and selection fallen back to a
+		// provider-managed one -- so the rebuilt builder needs the same support
+		// gate the original passed. Without it the retry would call
+		// generate_text_result() on an unsupported selection instead of
+		// returning the normalized missing-provider or prompt-prevented error.
+		$supported = self::ensure_text_generation_supported( $prompt );
+
+		if ( is_wp_error( $supported ) ) {
+			return $supported;
+		}
+
 		$prompt = self::apply_system_instruction( $prompt, $system_prompt );
 
 		if ( is_wp_error( $prompt ) ) {

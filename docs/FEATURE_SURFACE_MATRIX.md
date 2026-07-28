@@ -41,7 +41,7 @@ Content request diagnostics render inline only when the supported post/page cont
 - Template-part panel -> `flavor-agent/recommend-template-part`
 - Global Styles / Style Book panel -> `flavor-agent/recommend-style`
 - Activity read/write -> `GET/POST /flavor-agent/v1/activity`
-- Activity undo -> `POST /flavor-agent/v1/activity/{id}/undo` (server-verified through the surface executor where the row has a server-side subject; recorded as `client-reported` where it does not)
+- Activity undo -> `POST /flavor-agent/v1/activity/{id}/undo` (server-verified through the surface executor where the row records comparable snapshots; recorded as `client-reported` where it does not, including editor-authored template/template-part rows. A server-executed row lacking comparable snapshots is refused with `409 flavor_agent_undo_unverifiable` and stays `available`; a caller's own failure report is honoured as `failed` + `client-reported` even on a server-owned subject)
 - External-apply approval -> `POST /flavor-agent/v1/activity/{id}/decision`
 - Advisory review claim -> `POST/DELETE /flavor-agent/v1/activity/{id}/claim`
 - External agent style apply -> `flavor-agent/request-style-apply`; external agent template apply -> `flavor-agent/request-template-apply`; external agent template-part apply -> `flavor-agent/request-template-part-apply`; external agent post-blocks apply -> `flavor-agent/request-post-blocks-apply`; status/attribution reads -> `flavor-agent/get-activity` and `flavor-agent/list-activity`; server-side undo (all four lanes) -> `flavor-agent/undo-activity`

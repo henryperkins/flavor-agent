@@ -889,19 +889,17 @@ final class ApplyAbilities {
 			);
 		}
 
-		$entry = ActivityRepository::find( $activity_id );
+		$entry = UndoCoordinator::resolve_entry_for_undo( $activity_id );
 
-		if ( ! is_array( $entry ) ) {
-			return new \WP_Error(
-				'flavor_agent_activity_not_found',
-				'Flavor Agent could not find that activity entry.',
-				[ 'status' => 404 ]
-			);
+		if ( is_wp_error( $entry ) ) {
+			return $entry;
 		}
 
-		$entry    = ActivityRepository::maybe_expire_pending_apply( $entry );
-		$surface  = (string) ( $entry['surface'] ?? '' );
-		$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
+		// The executor check precedes the row-state gates deliberately: an
+		// unsupported surface can never be undone through this ability, so
+		// surface_unsupported is the most informative answer regardless of the
+		// row's current state.
+		$executor = ExternalApplyExecutorRegistry::for_surface( (string) ( $entry['surface'] ?? '' ) );
 
 		if ( null === $executor ) {
 			return new \WP_Error(
@@ -911,39 +909,21 @@ final class ApplyAbilities {
 			);
 		}
 
-		if ( UndoCoordinator::is_non_executed_apply_entry( $entry ) ) {
-			return new \WP_Error(
-				'flavor_agent_activity_not_undoable',
-				'Pending, rejected, expired, and approval-failed external applies never executed and cannot be undone.',
-				[ 'status' => 409 ]
-			);
+		// Idempotency is the one caller-specific gate choice: external agents
+		// get already-undone reported as success rather than a 409.
+		$gated = UndoCoordinator::gate_undoable( $activity_id, $entry, true );
+
+		if ( is_wp_error( $gated ) ) {
+			return $gated;
 		}
 
-		$undo_status = (string) ( $entry['undo']['status'] ?? '' );
-
-		if ( 'undone' === $undo_status ) {
+		if ( $gated['alreadyUndone'] ) {
 			// Idempotent success report without rewriting the terminal row.
 			return [
 				'entry'  => $entry,
 				'result' => 'already_undone',
 				'error'  => null,
 			];
-		}
-
-		if ( 'available' !== $undo_status ) {
-			return new \WP_Error(
-				'flavor_agent_activity_invalid_undo_transition',
-				'Flavor Agent only allows undo status changes from the available state.',
-				[ 'status' => 409 ]
-			);
-		}
-
-		if ( ! ActivityRepository::can_perform_ordered_undo( $activity_id ) ) {
-			return new \WP_Error(
-				'flavor_agent_activity_undo_blocked',
-				'Undo blocked by newer AI actions.',
-				[ 'status' => 409 ]
-			);
 		}
 
 		return UndoCoordinator::run_verified_undo( $activity_id, $entry, $executor );

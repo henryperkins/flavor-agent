@@ -1975,6 +1975,42 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The duplicate-create merge path writes the incoming normalized undo onto
+	 * an existing available row, so it is a second door for the same forgery
+	 * normalize_entry() closes: a caller re-creating its own row must not be
+	 * able to smuggle `verification: "server"` into the merged terminal state.
+	 */
+	public function test_create_merge_records_a_terminal_undo_as_client_reported_even_when_server_is_claimed(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_template_entry( 'activity-1', '2026-03-24T10:00:00Z' )
+		);
+
+		$merged = Repository::create(
+			array_merge(
+				$this->build_template_entry( 'activity-1', '2026-03-24T10:00:00Z' ),
+				[
+					'undo' => [
+						'status'       => 'undone',
+						'updatedAt'    => '2026-03-24T10:05:00Z',
+						'undoneAt'     => '2026-03-24T10:05:00Z',
+						'verification' => 'server',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $merged );
+		$this->assertSame( 'undone', $merged['undo']['status'] ?? null );
+		$this->assertSame(
+			'client-reported',
+			$merged['undo']['verification'] ?? null,
+			'The merge path may never store a caller-claimed server verification.'
+		);
+	}
+
 	public function test_query_admin_filters_hours_by_timestamp_across_day_boundaries(): void {
 		$timezone_names = [
 			'Pacific/Kiritimati',

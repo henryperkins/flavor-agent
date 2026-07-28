@@ -64,13 +64,45 @@ final class ActivitySerializerTest extends TestCase {
 		);
 		$this->assertSame(
 			[
-				'canUndo'   => false,
-				'status'    => 'failed',
-				'error'     => 'Apply failed',
-				'updatedAt' => '2026-03-24T10:05:00+00:00',
-				'undoneAt'  => null,
+				'canUndo'      => false,
+				'status'       => 'failed',
+				'error'        => 'Apply failed',
+				'updatedAt'    => '2026-03-24T10:05:00+00:00',
+				'undoneAt'     => null,
+				// A row born terminal through the client-creation boundary is
+				// by definition the client's report -- normalize_entry() stamps
+				// this regardless of what the caller supplied.
+				'verification' => 'client-reported',
 			],
 			$entry['undo']
+		);
+	}
+
+	/**
+	 * No caller may assert server verification for a row it creates. The
+	 * client-creation boundary (POST /flavor-agent/v1/activity and its
+	 * duplicate-create merge both normalize through normalize_entry()) must
+	 * replace a forged `verification: "server"` with `client-reported` --
+	 * otherwise any user with activity access can fabricate a row the audit
+	 * trail presents as a server-verified revert.
+	 */
+	public function test_normalize_entry_rejects_caller_supplied_server_verification(): void {
+		$entry = Serializer::normalize_entry(
+			[
+				'type'     => 'apply_suggestion',
+				'surface'  => 'block',
+				'document' => [ 'scopeKey' => 'post:42' ],
+				'undo'     => [
+					'status'       => 'undone',
+					'verification' => 'server',
+				],
+			]
+		);
+
+		$this->assertSame(
+			'client-reported',
+			$entry['undo']['verification'] ?? null,
+			'A created row may never claim a server-verified undo.'
 		);
 	}
 

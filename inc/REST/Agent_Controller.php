@@ -733,6 +733,18 @@ final class Agent_Controller {
 			? (string) $request->get_param( 'error' )
 			: null;
 
+		// The route args enum enforces this for REST traffic, but direct
+		// callers bypass route-arg validation, so the handler states its own
+		// contract: anything that is not an explicit failure report is not
+		// silently treated as an undo request.
+		if ( ! \in_array( $status, [ 'undone', 'failed' ], true ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_status',
+				'Flavor Agent activity updates only support failed or undone status transitions.',
+				[ 'status' => 400 ]
+			);
+		}
+
 		if ( 'failed' === $status ) {
 			return self::activity_undo_response(
 				ActivityRepository::update_undo_status(
@@ -745,43 +757,22 @@ final class Agent_Controller {
 			);
 		}
 
-		$entry = ActivityRepository::find( $activity_id );
+		$entry = UndoCoordinator::resolve_entry_for_undo( $activity_id );
 
-		if ( ! \is_array( $entry ) ) {
-			return new \WP_Error(
-				'flavor_agent_activity_not_found',
-				'Flavor Agent could not find that activity entry.',
-				[ 'status' => 404 ]
-			);
+		if ( \is_wp_error( $entry ) ) {
+			return $entry;
 		}
 
-		$entry = ActivityRepository::maybe_expire_pending_apply( $entry );
+		// The shared gates run before any executor dispatch.
+		// update_undo_status() repeats the transition and ordering checks at
+		// the write boundary, but an executor writes live state, so an
+		// ineligible row must never reach one. Unlike the ability, an
+		// already-undone row is rejected here: the editor tracks its own row
+		// state, so a repeat report is a bug rather than idempotent retry.
+		$gated = UndoCoordinator::gate_undoable( $activity_id, $entry, false );
 
-		// These gates run before any executor dispatch. update_undo_status()
-		// repeats the last two at the write boundary, but an executor writes
-		// live state, so an ineligible row must never reach one.
-		if ( UndoCoordinator::is_non_executed_apply_entry( $entry ) ) {
-			return new \WP_Error(
-				'flavor_agent_activity_not_undoable',
-				'Pending, rejected, expired, and approval-failed external applies never executed and cannot be undone.',
-				[ 'status' => 409 ]
-			);
-		}
-
-		if ( 'available' !== (string) ( $entry['undo']['status'] ?? '' ) ) {
-			return new \WP_Error(
-				'flavor_agent_activity_invalid_undo_transition',
-				'Flavor Agent only allows undo status changes from the available state.',
-				[ 'status' => 409 ]
-			);
-		}
-
-		if ( ! ActivityRepository::can_perform_ordered_undo( $activity_id ) ) {
-			return new \WP_Error(
-				'flavor_agent_activity_undo_blocked',
-				'Undo blocked by newer AI actions.',
-				[ 'status' => 409 ]
-			);
+		if ( \is_wp_error( $gated ) ) {
+			return $gated;
 		}
 
 		$executor = ExternalApplyExecutorRegistry::for_surface( (string) ( $entry['surface'] ?? '' ) );
@@ -794,7 +785,7 @@ final class Agent_Controller {
 					// The row is already written as failed; report the revert
 					// failure to the caller instead of a 200 it would read as success.
 					return new \WP_Error(
-						'flavor_agent_undo_drift',
+						UndoCoordinator::ERROR_DRIFT,
 						(string) $verified['error'],
 						[ 'status' => 409 ]
 					);

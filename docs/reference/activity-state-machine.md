@@ -124,6 +124,7 @@ The client also enforces this rule before sending the request:
 | `undo.error` | `string` or `null` | Set on `failed` transitions |
 | `undo.updatedAt` | ISO 8601 `string` | Set on any transition |
 | `undo.undoneAt` | ISO 8601 `string` or `null` | Set on `undone` transitions |
+| `undo.verification` | `"server"` or `"client-reported"` | Set on `undone`/`failed` transitions (see the terminal-state section above for what each value asserts); absent on non-terminal rows and on terminal rows written before undo verification existed. Rows created through the client activity-creation boundary can never carry `server`. |
 
 ## Review-Only Audit Rows
 

@@ -319,6 +319,67 @@ final class ActivityUndoRouteTest extends TestCase {
 	}
 
 	/**
+	 * The handler states its own status contract. The route args enum guards
+	 * REST traffic, but direct callers bypass route-arg validation, and a
+	 * typo'd status must not be silently treated as an undo request.
+	 */
+	public function test_undo_rejects_an_unrecognized_status(): void {
+		$row = $this->create_executed_row();
+
+		$response = $this->undo( (string) $row['id'], [ 'status' => 'unodne' ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'flavor_agent_activity_invalid_status', $response->get_error_code() );
+		$this->assertSame( 400, $response->get_error_data()['status'] ?? null );
+
+		$stored = Repository::find( (string) $row['id'] );
+		$this->assertSame( 'available', $stored['undo']['status'] );
+	}
+
+	/**
+	 * The executor-error pass-through branch. A row that carries comparable
+	 * snapshots but whose live target no longer resolves is neither drift nor
+	 * snapshot-unsupported: the executor's own error surfaces to the caller
+	 * unchanged, the row stays available, and nothing is written.
+	 */
+	public function test_undo_passes_through_an_executor_error_for_a_missing_target(): void {
+		$row = $this->create_executed_row();
+		unset( WordPressTestState::$posts[ self::GLOBAL_STYLES_ID ] );
+		WordPressTestState::$updated_posts = [];
+
+		$response = $this->undo( (string) $row['id'] );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'flavor_agent_apply_target_unavailable', $response->get_error_code() );
+
+		$stored = Repository::find( (string) $row['id'] );
+		$this->assertSame( 'available', $stored['undo']['status'] );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	/**
+	 * A drift outcome that cannot be persisted must surface the storage
+	 * failure, not a normal drift report. Otherwise the caller is told the
+	 * undo failed on drift while the audit row silently stays `available`
+	 * with no verification record of the attempt.
+	 */
+	public function test_drift_that_cannot_be_persisted_surfaces_the_storage_failure(): void {
+		$row = $this->create_executed_row();
+		// Live state matches neither before nor after: drift.
+		$this->seed_live_styles( [ 'color' => [ 'text' => 'var:preset|color|contrast' ] ] );
+		WordPressTestState::$db_update_fails_once = true;
+
+		$response = $this->undo( (string) $row['id'] );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame(
+			'flavor_agent_activity_update_failed',
+			$response->get_error_code(),
+			'A swallowed storage failure would report drift while the row stays available unrecorded.'
+		);
+	}
+
+	/**
 	 * The WP70 smoke regression (CI on a36fe73). An editor-authored
 	 * template-part apply records target.templatePartRef plus operation-level
 	 * before/after snapshots -- not the content snapshots and
