@@ -463,6 +463,64 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 	}
 
+	public function test_chat_removes_unsupported_numeric_bounds_from_anthropic_output_schema(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"score":0.8}';
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			null,
+			[
+				'type'       => 'object',
+				'properties' => [
+					'score' => [
+						'type'    => 'number',
+						'minimum' => 0,
+						'maximum' => 1,
+					],
+				],
+			]
+		);
+
+		$this->assertSame( '{"score":0.8}', $result );
+		$score_schema = WordPressTestState::$last_ai_client_prompt['json_schema']['properties']['score'] ?? [];
+		$this->assertArrayNotHasKey( 'minimum', $score_schema );
+		$this->assertArrayNotHasKey( 'maximum', $score_schema );
+		$this->assertSame( 'number', $score_schema['type'] ?? null );
+	}
+
+	public function test_chat_preserves_numeric_bounds_for_other_output_schema_providers(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"score":0.8}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'openai',
+			null,
+			[
+				'type'       => 'object',
+				'properties' => [
+					'score' => [
+						'type'    => 'number',
+						'minimum' => 0,
+						'maximum' => 1,
+					],
+				],
+			]
+		);
+
+		$score_schema = WordPressTestState::$last_ai_client_prompt['json_schema']['properties']['score'] ?? [];
+		$this->assertSame( 0, $score_schema['minimum'] ?? null );
+		$this->assertSame( 1, $score_schema['maximum'] ?? null );
+	}
+
 	public function test_chat_applies_reasoning_effort_when_the_prompt_builder_supports_it(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';

@@ -147,7 +147,7 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$schema = self::prepare_output_schema( $schema );
+		$schema = self::prepare_output_schema( $schema, $resolved_provider );
 		$prompt = self::apply_output_schema( $prompt, $schema );
 
 		if ( is_wp_error( $prompt ) ) {
@@ -345,7 +345,7 @@ final class WordPressAIClient {
 			]
 		);
 
-		$schema = self::prepare_output_schema( $schema );
+		$schema = self::prepare_output_schema( $schema, JetpackAIProvider::PROVIDER_SLUG );
 
 		$timeout_seconds = self::request_timeout_seconds(
 			JetpackAIProvider::PROVIDER_SLUG,
@@ -808,12 +808,13 @@ final class WordPressAIClient {
 		};
 	}
 
-	private static function prepare_output_schema( ?array $schema ): ?array {
+	private static function prepare_output_schema( ?array $schema, string $provider = '' ): ?array {
 		if ( null === $schema || [] === $schema ) {
 			return null;
 		}
 
 		$schema = self::normalize_output_schema( $schema );
+		$schema = self::normalize_output_schema_for_provider( $schema, $provider );
 
 		if ( ! self::should_skip_output_schema( $schema ) ) {
 			return $schema;
@@ -822,6 +823,40 @@ final class WordPressAIClient {
 		$compact_schema = self::compact_schema_for_union_limit( $schema );
 
 		return self::should_skip_output_schema( $compact_schema ) ? null : $compact_schema;
+	}
+
+	private static function normalize_output_schema_for_provider( array $schema, string $provider ): array {
+		if ( 'anthropic' !== sanitize_key( $provider ) ) {
+			return $schema;
+		}
+
+		return self::remove_schema_keywords( $schema, [ 'minimum', 'maximum' ] );
+	}
+
+	private static function remove_schema_keywords( array $schema, array $keywords ): array {
+		foreach ( $keywords as $keyword ) {
+			unset( $schema[ $keyword ] );
+		}
+
+		foreach ( $schema as $key => $value ) {
+			if ( ! is_array( $value ) ) {
+				continue;
+			}
+
+			if ( self::is_list_array( $value ) ) {
+				foreach ( $value as $child_key => $child_schema ) {
+					if ( is_array( $child_schema ) ) {
+						$value[ $child_key ] = self::remove_schema_keywords( $child_schema, $keywords );
+					}
+				}
+			} else {
+				$value = self::remove_schema_keywords( $value, $keywords );
+			}
+
+			$schema[ $key ] = $value;
+		}
+
+		return $schema;
 	}
 
 	private static function apply_output_schema( object $prompt, ?array $schema ): object {
