@@ -319,6 +319,141 @@ final class ActivityUndoRouteTest extends TestCase {
 	}
 
 	/**
+	 * Privilege escalation regression (Codex P1 on `f8df343`).
+	 *
+	 * Row-level permission checks authorize `document`, but the executor
+	 * writes what `target` names, and both are caller-supplied. Post-blocks is
+	 * the one lane whose capability is per-object, so a row whose document
+	 * scopes a post the caller may edit and whose target names one they may
+	 * not used to drive `wp_update_post()` on the second post with
+	 * caller-supplied content — the drift gate is satisfied by setting
+	 * `after.content` to the victim's current (often public) content.
+	 *
+	 * Reproduced before the fix: HTTP 200, post 200 rewritten to the
+	 * attacker's `before.content`.
+	 */
+	public function test_undo_refuses_a_target_post_the_caller_cannot_edit(): void {
+		WordPressTestState::$capabilities['edit_posts']    = true;
+		WordPressTestState::$capabilities['edit_post:100'] = true;
+		WordPressTestState::$capabilities['edit_post:200'] = false;
+
+		$victim_content = '<!-- wp:paragraph --><p>Victim</p><!-- /wp:paragraph -->';
+
+		foreach ( [ 100, 200 ] as $post_id ) {
+			WordPressTestState::$posts[ $post_id ] = new \WP_Post(
+				[
+					'ID'           => $post_id,
+					'post_type'    => 'post',
+					'post_status'  => 'publish',
+					'post_content' => 200 === $post_id
+						? $victim_content
+						: '<!-- wp:paragraph --><p>Mine</p><!-- /wp:paragraph -->',
+				]
+			);
+		}
+
+		$created = Repository::create(
+			[
+				'type'       => 'apply_post_blocks_suggestion',
+				'surface'    => 'post-blocks',
+				// Authorization reads this: a post the caller may edit.
+				'document'   => [
+					'scopeKey' => 'post:100',
+					'postType' => 'post',
+					'entityId' => '100',
+				],
+				// The executor writes this: a post they may not.
+				'target'     => [ 'postId' => 200 ],
+				'suggestion' => 'Rewrite the introduction.',
+				'before'     => [ 'content' => '<!-- wp:paragraph --><p>Injected</p><!-- /wp:paragraph -->' ],
+				'after'      => [ 'content' => $victim_content ],
+			]
+		);
+		$this->assertIsArray( $created );
+		WordPressTestState::$updated_posts = [];
+
+		$response = $this->undo( (string) $created['id'] );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $response->get_error_code() );
+		$this->assertSame( 403, $response->get_error_data()['status'] ?? null );
+		$this->assertSame(
+			$victim_content,
+			(string) WordPressTestState::$posts[200]->post_content,
+			'The unauthorized target post must be byte-identical after the refused undo.'
+		);
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	/**
+	 * The same divergence on the apply side. The decision route requires
+	 * manage_options, so this is a confused-deputy risk rather than direct
+	 * escalation — an approver acting on a row scoped to one post must not be
+	 * walked into executing against another.
+	 */
+	public function test_approval_fails_closed_when_the_target_post_is_not_authorized(): void {
+		WordPressTestState::$capabilities['manage_options'] = true;
+		WordPressTestState::$capabilities['edit_posts']     = true;
+		WordPressTestState::$capabilities['edit_post:100']  = true;
+		WordPressTestState::$capabilities['edit_post:200']  = false;
+
+		$victim_content = '<!-- wp:paragraph --><p>Victim</p><!-- /wp:paragraph -->';
+
+		WordPressTestState::$posts[200] = new \WP_Post(
+			[
+				'ID'           => 200,
+				'post_type'    => 'post',
+				'post_status'  => 'publish',
+				'post_content' => $victim_content,
+			]
+		);
+
+		$created = Repository::create(
+			[
+				'type'            => 'apply_post_blocks_suggestion',
+				'surface'         => 'post-blocks',
+				'target'          => [ 'postId' => 200 ],
+				'suggestion'      => 'Rewrite the introduction.',
+				'before'          => [],
+				'after'           => [],
+				'executionResult' => 'pending',
+				'undo'            => [ 'status' => 'not_applicable' ],
+				'request'         => [
+					'prompt' => 'rewrite',
+					'apply'  => [
+						'status'      => 'pending',
+						'requestedBy' => 7,
+						'requestedAt' => gmdate( 'c' ),
+						'expiresAt'   => gmdate( 'c', time() + 3600 ),
+					],
+				],
+				'document'        => [
+					'scopeKey' => 'post:100',
+					'postType' => 'post',
+					'entityId' => '100',
+				],
+			]
+		);
+		$this->assertIsArray( $created );
+		WordPressTestState::$updated_posts = [];
+
+		$decided = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $created['id'], 'approve', '' );
+
+		$this->assertIsArray( $decided );
+		$this->assertSame( 'failed', $decided['executionResult'] ?? null );
+		$this->assertSame(
+			'flavor_agent_apply_target_forbidden',
+			$decided['apply']['failureCode'] ?? null
+		);
+		$this->assertSame(
+			$victim_content,
+			(string) WordPressTestState::$posts[200]->post_content,
+			'A refused approval must not touch the target post.'
+		);
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	/**
 	 * The handler states its own status contract. The route args enum guards
 	 * REST traffic, but direct callers bypass route-arg validation, and a
 	 * typo'd status must not be silently treated as an undo request.

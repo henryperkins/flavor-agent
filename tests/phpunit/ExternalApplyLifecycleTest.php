@@ -15,6 +15,15 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		parent::setUp();
 		WordPressTestState::reset();
 		WordPressTestState::$current_user_id = 7;
+		// These tests call the decision service directly, bypassing the REST
+		// permission callback, so the capabilities an approver necessarily
+		// holds have to be granted here. Executors now authorize their own
+		// write target at dispatch; an unauthenticated context is not a state
+		// the decision route can produce.
+		WordPressTestState::$capabilities['manage_options']     = true;
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		WordPressTestState::$capabilities['edit_posts']         = true;
+		WordPressTestState::$capabilities['edit_post']          = true;
 		Repository::install();
 	}
 

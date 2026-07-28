@@ -139,6 +139,19 @@ final class UndoCoordinator {
 	 * @return array{entry: array<string, mixed>, result: string, error: string|null}|\WP_Error
 	 */
 	public static function run_verified_undo( string $activity_id, array $entry, string $executor ): array|\WP_Error {
+		/*
+		 * Authorize the target before the executor touches it. Row-level
+		 * permission checks authorize `document`, the executor writes
+		 * `target`, and both are caller-supplied -- so on post-blocks, whose
+		 * capability is per-object, a row scoped to a post the caller may edit
+		 * could otherwise drive a write to one they may not.
+		 */
+		$authorized = $executor::authorize_target( $entry );
+
+		if ( is_wp_error( $authorized ) ) {
+			return $authorized;
+		}
+
 		$result = $executor::undo( $entry );
 
 		if ( is_wp_error( $result ) ) {
