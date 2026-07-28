@@ -856,10 +856,10 @@ final class WordPressAIClient {
 		$schema   = self::normalize_output_schema( $schema );
 		$schema   = self::normalize_output_schema_for_provider( $schema, $provider );
 
-		if ( self::should_skip_output_schema( $schema ) ) {
+		if ( self::exceeds_schema_union_limit( $schema ) ) {
 			$schema = self::compact_schema_for_union_limit( $schema );
 
-			if ( self::should_skip_output_schema( $schema ) ) {
+			if ( self::exceeds_schema_union_limit( $schema ) ) {
 				return null;
 			}
 		}
@@ -1133,7 +1133,7 @@ final class WordPressAIClient {
 		return is_array( $schema_type ) && in_array( $type, $schema_type, true );
 	}
 
-	private static function should_skip_output_schema( array $schema ): bool {
+	private static function exceeds_schema_union_limit( array $schema ): bool {
 		return self::count_schema_unions( $schema ) > self::SCHEMA_UNION_LIMIT;
 	}
 

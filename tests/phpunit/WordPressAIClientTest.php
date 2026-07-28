@@ -534,9 +534,14 @@ final class WordPressAIClientTest extends TestCase {
 		);
 
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
+		$values = $schema['properties']['values'] ?? null;
+		$limit  = $schema['dependencies']['mode']['properties']['limit'] ?? null;
 
-		$this->assertArrayNotHasKey( 'minimum', $schema['properties']['values']['additionalItems'] ?? [] );
-		$this->assertArrayNotHasKey( 'maximum', $schema['dependencies']['mode']['properties']['limit'] ?? [] );
+		$this->assertIsArray( $values );
+		$this->assertIsArray( $values['additionalItems'] ?? null );
+		$this->assertArrayNotHasKey( 'minimum', $values['additionalItems'] );
+		$this->assertIsArray( $limit );
+		$this->assertArrayNotHasKey( 'maximum', $limit );
 		$this->assertSame( [ 'mode' ], $schema['dependencies']['limit'] ?? null );
 	}
 
