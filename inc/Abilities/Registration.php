@@ -1199,7 +1199,7 @@ final class Registration {
 				'description'         => __( 'Return the applied global theme styles plus extracted element and block pseudo-state styles, along with the live Global Styles scope and context needed to call recommend-style or request-style-apply. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_styles' ],
-				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'permission_callback' => [ self::class, 'can_get_theme_styles' ],
 				'input_schema'        => [
 					'type'    => 'object',
 					'default' => [],
@@ -1338,6 +1338,23 @@ final class Registration {
 	}
 
 	public static function can_list_templates( mixed $_input = null ): bool {
+		return current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' );
+	}
+
+	/**
+	 * `get-theme-styles` supplies the `scope` and `styleContext` that
+	 * `recommend-style` and `request-style-apply` declare required, and both of
+	 * those are gated on `edit_theme_options`. Gating the supplier on
+	 * `edit_posts` alone left the whole style lane unusable for a role that has
+	 * `edit_theme_options` without `edit_posts` — it could call the consumer but
+	 * never obtain the consumer's required input.
+	 *
+	 * The same OR gate as {@see self::can_list_templates()}, for the same
+	 * reason. It grants no data such a role cannot already read: the Site Editor
+	 * and core's global-styles REST route expose the same configuration to
+	 * `edit_theme_options`.
+	 */
+	public static function can_get_theme_styles( mixed $_input = null ): bool {
 		return current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' );
 	}
 

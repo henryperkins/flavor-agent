@@ -59,7 +59,7 @@ FA_DEMO_TIERS=A,B,C wp eval-file scripts/demo-agents-api.php   # adds a real pro
 
 - **Tier A — wiring.** Runtime version, agent registered, tool profile shape, deny list survived registration, dispatch guard attached, `check-status` reporting `agentRuntime`.
 - **Tier C — boundary.** Generic dispatch of `undo-activity` refused; `request-style-apply` still reachable (proving the guard is scoped, not blanket); no mutation or dispatch tool in the agent profile.
-- **Tier B — live run.** A real `agents/chat` turn. Evidence that the runtime dispatched Flavor Agent abilities comes from upstream's own `metadata.agents_api.tool_observability.calls[]`, not from parsing the reply; the run id is then correlated against activity rows.
+- **Tier B — live run.** A real `agents/chat` turn. Evidence that the runtime dispatched Flavor Agent abilities comes from upstream's own `metadata.agents_api.tool_observability.calls[]`, not from parsing the reply; the run id is then correlated against activity rows. B1 requires `completed === true` and not merely a run id — upstream returns `completed: false` when the agent expects further work, which is a live possibility here because `max_turns` is deliberately 6 against an upstream default of 12, and a truncated conversation is not the gate.
 
 The default tier B prompt drives the full read → recommend loop (list templates, pick one, recommend an improvement) rather than stopping at enumeration. That is deliberate: read-only tools persist no activity row, so a discovery-only prompt leaves B3 with nothing to correlate and the run can never satisfy the gate it exists to test. Override with `FA_DEMO_PROMPT`.
 

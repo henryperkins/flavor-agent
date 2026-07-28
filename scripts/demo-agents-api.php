@@ -390,18 +390,31 @@ if ( in_array( 'B', $tiers, true ) ) {
 			$reply  = is_array( $reply ) ? $reply : [];
 			$run_id = (string) ( $reply['run_id'] ?? '' );
 
+			// A run id alone is not a completed turn. Upstream sets
+			// `completed: false` when the agent expects further work — a paused
+			// approval, or an exhausted turn budget, which is a live
+			// possibility here because MAX_TURNS is deliberately 6 against an
+			// upstream default of 12. Passing B1 on the id alone would let a
+			// truncated conversation satisfy a gate whose whole subject is that
+			// a real turn ran to completion.
+			$completed = true === ( $reply['completed'] ?? null );
+
 			observe(
 				$results,
 				$quiet,
 				'B1',
 				'A real agents/chat turn completed',
-				'' !== $run_id ? PASS : INCONCLUSIVE,
+				'' !== $run_id && $completed ? PASS : INCONCLUSIVE,
 				[
 					'runId'      => $run_id,
 					'sessionId'  => $reply['session_id'] ?? '',
 					'completed'  => $reply['completed'] ?? null,
 					'elapsedSec' => $elapsed,
 					'reply'      => substr( (string) ( $reply['reply'] ?? '' ), 0, 300 ),
+					'note'       => '' !== $run_id && ! $completed
+						? 'The turn returned a run id but did not complete — most likely the max_turns budget '
+							. 'or a pending approval. Not a wiring failure, but not the exit gate either.'
+						: '',
 				]
 			);
 

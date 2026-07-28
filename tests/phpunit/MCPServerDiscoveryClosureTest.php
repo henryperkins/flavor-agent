@@ -272,6 +272,72 @@ final class MCPServerDiscoveryClosureTest extends TestCase {
 	}
 
 	/**
+	 * Reachability is a capability question as well as a tool-list question.
+	 *
+	 * This server's transport gate is `edit_posts || edit_theme_options`, so it
+	 * deliberately admits a theme-only principal. A supplier gated on
+	 * `edit_posts` alone is therefore uncallable for exactly the role that can
+	 * reach the theme-scoped consumers — `recommend-style` and
+	 * `request-style-apply` are both `edit_theme_options`, so such a role could
+	 * call the consumer but never obtain its required input. `get-theme-styles`
+	 * shipped that way; `list-templates` and `list-template-parts` did not.
+	 */
+	public function test_a_supplier_admits_every_principal_its_consumer_admits(): void {
+		$pairs = [];
+
+		foreach ( self::SUPPLIERS as $consumer => $inputs ) {
+			foreach ( $inputs as $supplier ) {
+				$pairs[ $consumer ][ $supplier ] = true;
+			}
+		}
+
+		foreach ( self::RUNTIME_REQUIRED as $consumer => $inputs ) {
+			foreach ( $inputs as $spec ) {
+				$pairs[ $consumer ][ $spec['supplier'] ] = true;
+			}
+		}
+
+		foreach ( [ 'edit_posts', 'edit_theme_options' ] as $capability ) {
+			WordPressTestState::$capabilities = [ $capability => true ];
+
+			$this->assertTrue(
+				ServerBootstrap::can_access_transport(),
+				\sprintf( 'Precondition: %s alone reaches this server.', $capability )
+			);
+
+			foreach ( $pairs as $consumer => $suppliers ) {
+				// A role that cannot call the consumer never needs its input;
+				// `list-patterns` is `edit_posts`-only and so is
+				// `recommend-patterns`, which is consistent rather than broken.
+				if ( ! $this->permits( $consumer ) ) {
+					continue;
+				}
+
+				foreach ( \array_keys( $suppliers ) as $supplier ) {
+					$this->assertTrue(
+						$this->permits( (string) $supplier ),
+						\sprintf(
+							'A principal holding only %s may call %s but is denied its supplier %s, '
+								. 'so the lane is advertised and uncallable for that role.',
+							$capability,
+							$consumer,
+							$supplier
+						)
+					);
+				}
+			}
+		}
+	}
+
+	private function permits( string $ability ): bool {
+		$callback = WordPressTestState::$registered_abilities[ $ability ]['permission_callback'] ?? null;
+
+		$this->assertIsCallable( $callback, \sprintf( '%s has no permission callback.', $ability ) );
+
+		return (bool) \call_user_func( $callback, [] );
+	}
+
+	/**
 	 * @return array<int, string>
 	 */
 	private function required_inputs( string $tool ): array {
