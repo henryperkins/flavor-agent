@@ -755,6 +755,60 @@ final class WordPressAIClientTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Retry diagnostics must measure the instruction the retry actually sent.
+	 *
+	 * A wpai_system_instruction filter can return different text for
+	 * hasSchema => false. The retry sends that variant, so reporting the
+	 * schema-mode text would record instructionsChars and bodyBytes for a
+	 * request that was never sent -- in runtime diagnostics and in the AI
+	 * Activity metadata derived from them.
+	 */
+	public function test_grammar_limit_retry_reports_diagnostics_for_the_rebuilt_instruction(): void {
+		$schema_mode = str_repeat( 'A', 400 );
+		$no_schema   = str_repeat( 'B', 40 );
+		$vary        = static function ( $instruction, $ability_name, $data ) use ( $schema_mode, $no_schema ) {
+			unset( $instruction, $ability_name );
+
+			return ! empty( $data['hasSchema'] ) ? $schema_mode : $no_schema;
+		};
+
+		add_filter( 'wpai_system_instruction', $vary, 10, 3 );
+
+		try {
+			WordPressTestState::$ai_client_provider_support     = [
+				'anthropic' => true,
+			];
+			WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+				'prompt_client_error',
+				'Bad Request (400) - The compiled grammar is too large, which would cause performance issues.'
+			);
+
+			WordPressAIClient::chat(
+				'System.',
+				'User.',
+				'anthropic',
+				'medium',
+				ResponseSchema::get( 'template' )
+			);
+
+			$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+			$this->assertSame(
+				'grammar_limit',
+				$meta['requestSummary']['outputSchemaFallback'] ?? null,
+				'The retry did not run, so this test is not exercising the diagnostics path.'
+			);
+			$this->assertSame(
+				strlen( $no_schema ),
+				$meta['requestSummary']['instructionsChars'] ?? null,
+				'Retry diagnostics reported the schema-mode instruction rather than the one actually sent.'
+			);
+		} finally {
+			remove_filter( 'wpai_system_instruction', $vary, 10 );
+		}
+	}
+
 	public function test_chat_preserves_enum_constraints_for_small_anthropic_output_schema(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,

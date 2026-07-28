@@ -279,14 +279,22 @@ final class WordPressAIClient {
 						$result = $rebuilt;
 					} else {
 						$schema                  = null;
-						$prompt                  = $rebuilt;
+						$prompt                  = $rebuilt['prompt'];
 						$request_timeout_seconds = self::request_timeout_seconds(
 							$resolved_provider,
 							$reasoning_effort,
 							null
 						);
-						$request_diagnostics     = self::build_request_diagnostics(
-							$system_prompt,
+						/*
+						 * Build diagnostics from the rebuilt instruction, not the
+						 * original. A wpai_system_instruction filter can vary its
+						 * text on hasSchema, and the retry sends the hasSchema =>
+						 * false variant -- reporting the schema-mode text here
+						 * would record instructionsChars and bodyBytes for a
+						 * request that was never sent.
+						 */
+						$request_diagnostics = self::build_request_diagnostics(
+							$rebuilt['systemPrompt'],
 							$user_prompt,
 							$resolved_provider,
 							$reasoning_effort,
@@ -911,9 +919,15 @@ final class WordPressAIClient {
 	 * hasSchema and because the prompt builder is only shallow-cloned before
 	 * mutation.
 	 *
+	 * Returns the rebuilt system instruction alongside the prompt. A
+	 * wpai_system_instruction filter can vary its text on hasSchema, so the
+	 * retry's diagnostics must be built from the instruction actually sent --
+	 * otherwise instructionsChars and bodyBytes describe the schema-mode text
+	 * the retry replaced.
+	 *
 	 * @param array{provider: string, model: string, source: string, modelResolutionStatus: string} $selection
 	 * @param array<string, mixed>                                                                  $model_options
-	 * @return object|\WP_Error
+	 * @return array{prompt: object, systemPrompt: string}|\WP_Error
 	 */
 	private static function build_prompt_without_output_schema(
 		string $raw_system_prompt,
@@ -961,7 +975,16 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		return self::apply_reasoning_effort( $prompt, $resolved_provider, $reasoning_effort );
+		$prompt = self::apply_reasoning_effort( $prompt, $resolved_provider, $reasoning_effort );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		return [
+			'prompt'       => $prompt,
+			'systemPrompt' => $system_prompt,
+		];
 	}
 
 	private static function prepare_output_schema( ?array $schema, string $provider = '' ): ?array {
