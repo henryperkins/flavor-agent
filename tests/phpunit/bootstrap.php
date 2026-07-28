@@ -3081,6 +3081,13 @@ namespace {
 		}
 	}
 
+	if (! function_exists('did_action')) {
+		function did_action(string $hook_name): int
+		{
+			return (int) (WordPressTestState::$do_action_counts[$hook_name] ?? 0);
+		}
+	}
+
 	if (! function_exists('doing_action')) {
 		function doing_action(?string $hook_name = null): bool
 		{

@@ -36,16 +36,25 @@ Phases 0 and 1 are implemented. Phase 2 (governed apply requests) and Phase 3 (e
 
 | Phase | State | Evidence |
 | --- | --- | --- |
-| 0 — contract fixture | Shipped | `inc/AgentsAPI/Compatibility.php`, `tests/phpunit/AgentsApiAdapterAbsentTest.php`, `tests/phpunit/AgentsApiCompatibilityTest.php` |
+| 0 — contract fixture | Shipped | `inc/AgentsAPI/Compatibility.php`, `tests/phpunit/AgentsApiAdapterAbsentTest.php`, `tests/phpunit/AgentsApiCompatibilityTest.php`, `tests/phpunit/AgentsApiUpstreamContractTest.php` |
 | 1 — read/recommend agent | Shipped | `inc/AgentsAPI/AgentDefinition.php`, `inc/AgentsAPI/Registration.php`, `inc/AgentsAPI/RunContext.php`, `tests/phpunit/AgentsApiRegistrationTest.php`, `tests/phpunit/AgentsApiRunContextTest.php` |
 | 2 — governed apply requests | Not started | — |
 | 3 — optional external channels | Not started | — |
+
+**What the tests prove, and what they do not.** Most of the suite runs against stubs in `tests/phpunit/support/agents-api-stubs.php`, written from a reading of the upstream source. Those prove the adapter's own logic but not that the reading was correct — a misread would be encoded identically on both sides and stay green. `AgentsApiUpstreamContractTest` closes that gap by loading upstream's real registry, definition object, and tool-policy resolver and driving them with the definition the plugin ships. It skips unless `FLAVOR_AGENT_AGENTS_API_PATH` points at a checkout:
+
+```bash
+git clone --branch v0.7.0 --depth 1 https://github.com/Automattic/agents-api.git /tmp/agents-api
+FLAVOR_AGENT_AGENTS_API_PATH=/tmp/agents-api vendor/bin/phpunit --filter AgentsApiUpstreamContractTest
+```
+
+Treat it as required evidence when raising `MINIMUM_VERSION`; a skip is not a pass. What remains unproven by any test in this repo: that a live `agents/chat` run dispatches these tools and that a real provider turn completes. That needs the local runtime, and the runtime evidence for it is `requestMeta.agentRun` appearing on the resulting activity rows.
 
 **Pinned release.** `Compatibility::MINIMUM_VERSION` is `0.7.0`. The adapter is written against the upstream registration and tool-policy contracts as of that tag; raise the constant only alongside a re-read of `src/Registry/register-agents.php`, `src/Channels/register-default-agents-chat-handler.php`, and `src/Tools/class-wp-agent-tool-policy.php` upstream plus a passing contract-test run.
 
 **Activation boundary.** Three independent gates, all required: a supported Agents API runtime, `FeatureBootstrap::canonical_contracts_available()`, and the Flavor Agent feature gate. Agents API is deliberately absent from `canonical_contracts_available()` itself, so a Jetpack-only site keeps the existing non-agent runtime and never advertises agent readiness. The gate fails closed on a missing symbol (`class:WP_Agent`, `const:WP_Agent_Tool_Policy::MODE_ALLOW`, …) or an undetectable version, not just on an old version string. Readiness is reported by `flavor-agent/check-status` under a top-level `agentRuntime` key, separate from `backends`.
 
-**Tool profile.** `default_config.enabled_tools` carries status, discovery, preview, recommendation, and scoped activity-read abilities. Three bounds apply on top of it: allow-mode `tool_policy`, an unconditional `deny` list covering the four `request-*-apply` abilities and `undo-activity`, and each ability's own permission callback at dispatch. The `flavor_agent_agents_api_tool_allowlist` filter can extend the profile but cannot add a denied ability — the deny list is applied after the filter — and names that do not resolve to a registered ability are dropped rather than declared as broken tools.
+**Tool profile.** `default_config.enabled_tools` carries status, discovery, preview, recommendation, and scoped activity-read abilities. Three bounds apply on top of it, in order: `Registration::resolve_tools()` strips forbidden names before they reach the definition; allow-mode `tool_policy` hides anything outside the list; and an unconditional `deny` list covering the four `request-*-apply` abilities and `undo-activity` is applied last by upstream, so it still holds if the first two are bypassed. These are layered, not redundant — the deny list is only load-bearing when the allowlist is contaminated, which is exactly the case `AgentsApiUpstreamContractTest::test_deny_list_survives_a_contaminated_allowlist` simulates against the real resolver. Beneath all three, each ability's own permission callback runs at dispatch. The `flavor_agent_agents_api_tool_allowlist` filter can extend the profile but cannot add a denied ability — the deny list is applied after the filter — and names that do not resolve to a registered ability are dropped rather than declared as broken tools.
 
 This deviates from the Phase 1 bullet above in one respect, deliberately: five read helpers (`get-active-theme`, `get-theme-tokens`, `list-templates`, `list-template-parts`, `list-patterns`) are allowlisted alongside status/preview/recommendation/activity-read. `recommend-template` and `recommend-template-part` take a `templateRef` / `templatePartRef` an agent cannot invent, so without them the Phase 1 exit gate is unreachable for those surfaces. All five are existing read-only abilities already marked `mcp.public`, so this widens discovery, not privilege.
 
