@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
-require_once __DIR__ . '/support/theme-json-stub.php';
+require_once __DIR__ . '/Support/theme-json-stub.php';
 
 use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Cloudflare\AISearchClient;
