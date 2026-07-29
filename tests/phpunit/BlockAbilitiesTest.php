@@ -1666,6 +1666,29 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertStringNotContainsString( 'props', $encoded );
 	}
 
+	public function test_editor_context_variations_drop_empty_and_duplicate_scopes_after_sanitizing(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'       => 'core/paragraph',
+						'variations' => [
+							[
+								'name'  => 'grid',
+								'scope' => [ 'inserter', '👀', [ 'nested' ], 'inserter', '' ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'inserter' ],
+			$result['context']['block']['variations'][0]['scope'] ?? null
+		);
+	}
+
 	public function test_editor_context_variations_are_capped_and_require_a_name(): void {
 		$supplied = [
 			[ 'title' => 'Nameless' ],

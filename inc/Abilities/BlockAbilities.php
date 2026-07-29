@@ -645,9 +645,17 @@ final class BlockAbilities {
 
 			$scope = [];
 			foreach ( self::normalize_list( $variation['scope'] ?? [] ) as $scope_entry ) {
-				if ( is_string( $scope_entry ) && '' !== $scope_entry ) {
-					$scope[] = sanitize_key( $scope_entry );
+				if ( ! is_string( $scope_entry ) ) {
+					continue;
 				}
+
+				$scope_entry = sanitize_key( $scope_entry );
+
+				if ( '' === $scope_entry || in_array( $scope_entry, $scope, true ) ) {
+					continue;
+				}
+
+				$scope[] = $scope_entry;
 			}
 
 			if ( [] !== $scope ) {

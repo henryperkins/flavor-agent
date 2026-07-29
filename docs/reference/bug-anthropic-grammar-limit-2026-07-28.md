@@ -2,14 +2,14 @@
 
 - **Date found:** 2026-07-28 (live activity row on `hperkins.blog`, record `13dea3b4…`, Group block on page #36)
 - **Severity:** High — the recorded run shows 100 failed/unavailable of 334 actions, with `claude-opus-5` at 0% apply against `gpt-5.5` at 45.5%.
-- **Status:** Partially fixed 2026-07-28 (see **Resolution**). The binding constraint is **not** identified; see **What is still unexplained**.
+- **Status:** Mitigated in PR #74; a live Anthropic connector run is still required to confirm the incident is resolved.
 - **Component:** `inc/LLM/WordPressAIClient.php`, `inc/LLM/ResponseSchema.php`, `inc/Abilities/Registration.php`
 
 ## Summary
 
 `flavor-agent/recommend-block` fails against the Anthropic connector with:
 
-```
+```text
 Bad Request (400) - The compiled grammar is too large, which would cause
 performance issues. Simplify your tool schemas or reduce the number of
 strict tools.
@@ -46,7 +46,7 @@ none of that can reach the compiled grammar:
 
 Context size is a real cost in tokens and latency. It is not this bug.
 
-## Evidence: the failing request carried no output schema
+## Evidence limitation: the recorded row cannot prove which schema was sent
 
 `build_request_diagnostics()` (`inc/LLM/WordPressAIClient.php`) includes the schema in
 `bodyBytes` under `text.format.schema` whenever the schema is non-null. `wp_json_encode` can only
@@ -56,14 +56,17 @@ Context size is a real cost in tokens and latency. It is not this bug.
 |---|---|
 | instructions + input, no schema, no reasoning | 28,401 |
 | … + `reasoning.effort` | 28,433 |
-| … + the 3,427-byte Anthropic-prepared block schema | **31,888** |
+| … + the then-measured Anthropic-prepared block schema | **31,888** |
 | **Recorded on the failing row** | **30,203** |
 
-30,203 sits *below* the with-schema floor. The schema was therefore absent from the request that
-produced this diagnostic — yet Anthropic still returned a grammar error naming *tool schemas* and
-*the number of strict tools*.
+30,203 sits below the reconstructed with-schema floor. That initially looked like proof that the
+failing request carried no output schema, but `bodyBytes` is not a wire capture:
+`build_request_diagnostics()` rebuilds it from the local `$schema` variable. The grammar-limit
+fallback sets that variable to `null`, so the recorded row describes the fallback state even if an
+earlier builder still held a schema.
 
-**The grammar did not come from Flavor Agent's response schema.**
+The row therefore does **not** establish whether the provider received Flavor Agent's response
+schema. A live request capture or a builder-level schema inspection is needed to settle that.
 
 ## Measured: block is the only surface near the limit
 
@@ -97,14 +100,15 @@ only AI-client filters this plugin registers are `wpai_request_log_context`,
 Abilities/MCP surface in `inc/MCP/ServerBootstrap.php` is **inbound only**: it serves tools to
 external MCP clients and never rides along on Flavor Agent's own chat request.
 
-So "the number of strict tools" is generic error text. The single strict tool on this request is
-the one the provider synthesizes from the JSON output schema — which points back at
-`ResponseSchema`, and squarely contradicts the byte arithmetic above.
+Within this repository, the response schema is the only known outbound grammar source. The AI
+Client runtime or provider connector may add behavior that this repository cannot observe, so the
+provider's references to "tool schemas" and "strict tools" cannot identify the source by
+themselves.
 
 ## Reconciling the contradiction
 
-Those two findings only fit together one way: the request that failed **did** carry the schema,
-and the diagnostics that say otherwise are reconstructed rather than observed.
+One plausible explanation is that the failed request did carry the schema while the reconstructed
+diagnostics described the schema-free fallback.
 
 `build_request_diagnostics()` rebuilds `bodyBytes` from the local `$schema` variable, which the
 retry sets to `null` — it never inspects the builder that is actually sent. Meanwhile
@@ -113,17 +117,17 @@ output schema on a shared sub-object (a `ModelConfig` DTO, say), then mutating t
 mutates the handle the retry was meant to fall back to, so attempt 2 re-sends the schema while
 reporting a schema-free payload.
 
-That explains every observation: a schema-free-looking 30,203-byte record, a grammar error on a
-request that supposedly had no grammar, and a retry that changed nothing.
+That would explain a schema-free-looking 30,203-byte record, a grammar error, and a retry that
+changed nothing. It remains a hypothesis rather than proof.
 
-Fix 5 removes the dependency on that handle. Whether the shared-DTO hazard is real in the shipped
-AI Client is **still unverified** — the test double holds its state in a PHP array, which a shallow
-clone copies, so it cannot reproduce the hazard either way.
+Rebuilding the fallback prompt removes the dependency on that handle. Whether the shared-DTO
+hazard is real in the shipped AI Client is **still unverified** — the test double holds its state
+in a PHP array, which a shallow clone copies, so it cannot reproduce the hazard either way.
 
 ## The mitigations were unreachable on the path that fails
 
-Every Anthropic-specific mitigation — the ones added in PRs #68/#70 and the first version of fix 1
-below — is gated on `$resolved_provider === 'anthropic'`. That slug never arrives on the core
+Before PR #74, every Anthropic-specific mitigation from PRs #68/#70 was gated on
+`$resolved_provider === 'anthropic'`. That slug never arrives on the core
 `Settings > Connectors` path, which is exactly how the incident site is configured:
 
 1. `ChatClient::chat()` calls `ResponsesClient::rank( …, null, … )` — no provider argument.
@@ -137,76 +141,89 @@ below — is gated on `$resolved_provider === 'anthropic'`. That slug never arri
 Verified by execution against the test doubles with an Anthropic connector registered:
 `chat_configuration()['provider']` is `'wordpress_ai_client'` and `is_connector()` is `false`.
 
-So on a default site the block schema went to the provider at 4,151 bytes with **no mitigation
-applied at all** — not even the enum stripping — and only the provider-agnostic runtime retry
-caught the resulting 400.
+Before PR #74, the then-current implementation sent the block schema on this path at 4,151 bytes
+with no provider-specific mitigation. Only the provider-agnostic runtime retry could catch the
+resulting 400.
 
 ## Resolution (2026-07-28)
 
-Five fixes landed. Each addresses a defect confirmed by measurement or by reading the code; the
-binding constraint is still not proven, so treat the 400 as possible until a live run says
-otherwise.
+PR #74 carries bounded mitigations for every defect that could be reproduced locally. The 4,096
+byte threshold remains a local heuristic, not a provider-published compiled-grammar limit.
+[Anthropic's structured-output documentation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+documents grammar-complexity limits and recommends simplifying deeply nested or highly optional
+schemas, but does not promise that local references reduce the compiled grammar.
 
-1. **`Keep Anthropic block enums by sharing repeated subschemas`** — the block schema previously
-   fit only because `prepare_anthropic_output_schema()` stripped **every** enum, silently removing
-   the `panel` constraint that routes a suggestion into the correct Inspector sub-panel. Anthropic
-   sessions got structurally valid but mis-routed suggestions with no error, while OpenAI kept its
-   enums. Repeated subschemas are now hoisted into `$defs`, bringing the schema to 3,330 bytes with
-   all six enums intact. Enum stripping remains the next fallback; dropping the schema the last.
-2. **`Stop React elements leaking into the block recommendation context`** — core permits a block
-   variation's `title`/`description` to be a React element, and `core/group` ships one. The element
-   reached the provider with `_owner`, `ref`, and a `props` subtree carrying an unrelated
-   `postId: 339584`. Now coerced at the collector and narrowed at the ability boundary.
-3. **`Label failed AI requests as not undoable`** — a request that never applied anything read
-   "Undo unavailable" next to the provider error, which is what suggested undo re-issues AI calls.
-   It does not: `activity/{id}/undo` is a pure DB transition plus a client-side snapshot replay,
-   and `inc/Apply/`, `inc/Activity/`, `inc/REST/` contain no provider references at all.
-4. **`Run the lossless schema compaction without a provider slug`** — subschema sharing is
-   semantically identity-preserving, so it no longer waits for a provider it will not get. It now
-   runs for any schema over the byte ceiling, which is what makes fix 1 reachable in production:
-   the block schema goes out at 3,354 bytes with enums intact instead of 4,151 unmitigated. The
-   genuinely lossy steps (numeric-bound removal, enum stripping, dropping the schema) stay gated on
-   a known `anthropic` slug, since firing those on a guess would degrade other providers.
-5. **`Rebuild the prompt for the grammar-limit retry`** — the retry fell back to a handle captured
-   before the schema was applied, which is only schema-free if the builder does not share mutable
-   state across a shallow clone. It now constructs a fresh builder, so the fallback is correct
-   regardless of how the AI Client stores its output schema. Guarded by asserting the retry path
-   builds two prompts, not one.
+| Resolution path | Raw bytes | Before repeat sharing | Sent bytes | Enums | `$defs` |
+|---|---:|---:|---:|---:|---:|
+| Unresolved Settings > Connectors provider | 4,760 | 4,169 | 3,346 | 6 | 2 |
+| Explicit Anthropic provider | 4,760 | 4,145 | 2,789 | 0 | 2 |
+
+1. **Share repeated subschemas without requiring a provider slug.** Repeated object and enum
+   branches are hoisted into local `$defs` when the normalized schema crosses the byte heuristic.
+   This takes the unresolved-provider block schema to 3,346 serialized bytes while retaining all
+   six enum keywords. The rewrite now traverses conditionals, dependent schemas, and legacy schema
+   dependencies, and generated definition names cannot overwrite caller-owned `$defs`.
+2. **Keep the conservative fallback for a known Anthropic provider.** `$defs` reduces serialized
+   bytes, but the provider may inline references while compiling its grammar. If the pre-sharing
+   schema crossed the heuristic, a known Anthropic request still removes enums and sends the
+   2,789-byte schema. Small Anthropic schemas keep their enum constraints. An unresolved provider
+   is not guessed; it keeps the lossless schema and relies on the runtime retry if the provider
+   rejects it.
+3. **Rebuild the prompt for the grammar-limit retry.** The retry constructs a fresh prompt builder
+   before sending a schema-free request, so it does not depend on shallow-clone internals. A failure
+   while rebuilding now follows the normal error path and closes the diagnostic trace instead of
+   returning early with an active trace.
+4. **Narrow block variations at both trust boundaries.** React-element labels are dropped instead
+   of serialized. Malformed variations no longer consume the ten-item cap, and empty or duplicate
+   scopes are removed after sanitization.
+5. **Label failed AI requests as not undoable.** A request that never applied anything now reads
+   "Undo not applicable" rather than implying that an undo action exists.
 
 ## What is still unexplained
 
-Whether the shared-DTO hazard is real in the shipped AI Client. If it is, fix 5 is the one that
-matters and the 400 should stop. If it is not, then a schema-free request genuinely provoked a
-grammar error, and the source is somewhere neither this repository nor these measurements can see.
+The test double cannot establish whether the shipped AI Client shares schema state across shallow
+clones, and serialized byte reduction does not establish how Anthropic compiles local `$ref`
+targets. The retry is now correct under either clone model, but only a live Anthropic connector run
+can confirm that the original 400 no longer reaches the user.
 
-The cheap way to settle it, with a live runtime: log the builder's own view of its output schema
-immediately before the retry's `generate_text_result()` call, rather than trusting
-`build_request_diagnostics()`, which reconstructs `bodyBytes` from a local variable and would
-report a schema-free payload either way.
+For live diagnosis, inspect the builder's own output-schema state immediately before each
+`generate_text_result()` call. Do not infer it from `build_request_diagnostics()`, which
+reconstructs `bodyBytes` from a local variable.
+
+## Validation evidence
+
+| Gate | Evidence | Result |
+|---|---|---|
+| Shared client and ability contracts | `WordPressAIClientTest.php`, `ChatClientTest.php`, `BlockAbilitiesTest.php` | 108 tests, 541 assertions passed |
+| Editor collector and activity labels | Targeted `block-inspector.test.js` and `activity-log-utils.test.js` | 87 tests passed |
+| Contributor documentation | `npm run check:docs` | Passed |
+| Full aggregate | `npm run verify`; structured result in `output/verify/summary.json` | `status: pass`; build, JS lint, Plugin Check, 1,694 JS tests, PHP lint, 2,008 PHP tests, and both E2E suites passed |
+| Post editor, Block Inspector, patterns, navigation, AI Activity | Playground Playwright harness | 17 tests passed |
+| WordPress 7.0 Site Editor, settings, approvals, apply, activity, drift, undo | WP 7.0 Playwright harness | 29 tests passed |
+| Live Anthropic connector | Reproduce the original Group-block request on the incident site | Not run; required before claiming the production incident is resolved |
 
 ## Known-weak guards found during the investigation (not fixed)
 
 - **The union guard is an accounting artifact.** `compact_schema_for_union_limit()` takes the block
   schema from 18 unions to 6 purely by `$ref`-ing three identical subschemas into one `$defs` entry;
   `count_schema_unions()` then counts it once. A compiler that inlines `$ref` sees 18 either way.
-  The same caveat applies to fix 1 above: it reduces serialized bytes and duplicated branches, which
-  is what the local heuristic measures, but whether it reduces the *compiled* grammar depends on
-  whether the provider shares or inlines `$def` rules.
-- **Enum stripping is all-or-nothing.** It fired 55 bytes over budget and deleted all 8 enum
-  keywords, including 2- and 3-member enums that cost almost nothing.
+  The same caveat applies to repeat sharing: it reduces serialized bytes and duplicated branches,
+  which is what the local heuristic measures, but whether it reduces the *compiled* grammar
+  depends on whether the provider shares or inlines `$defs` rules.
+- **Enum stripping is all-or-nothing.** It deletes every enum keyword, including two- and
+  three-member enums that cost almost nothing.
 - **`compact_nullable_schema_unions()` narrows the contract.** It collapses `["X","null"]` to `"X"`
   while the property stays in `required`, forbidding the null that `nullable_confidence` documents
   as "return null to defer to deterministic ranking".
-- **The remaining lossy fallbacks are still keyed on the exact slug `anthropic`.** Fix 4 makes the
-  lossless step provider-agnostic, but numeric-bound removal, enum stripping, and dropping the
-  schema still require that slug — so they remain unreachable on the default Connectors path, and
-  an Anthropic-backed connector registered under another id (Bedrock, Vertex) never gets them.
-  Reaching them needs a way to ask the AI Client which provider it actually resolved.
+- **The remaining lossy fallbacks are still keyed on the exact slug `anthropic`.** Repeat sharing
+  and the schema-free runtime retry are provider-agnostic, but numeric-bound removal, proactive
+  enum stripping, and dropping an oversized schema still require that slug. An Anthropic-backed
+  connector registered under another id (Bedrock, Vertex) cannot receive those proactive steps
+  until the AI Client exposes which provider it actually resolved.
 - **Diagnostics are reconstructed, not observed.** `build_request_diagnostics()` builds `bodyBytes`
   from the local `$schema` variable rather than from the prompt actually sent, so on the retry path
-  it reports a schema-free payload whether or not one was sent. Fix 5 removes the specific hazard,
-  but the reporting remains unable to falsify itself — which is what made this incident so hard to
-  read.
+  it reports a schema-free payload whether or not one was sent. Rebuilding the prompt removes the
+  specific retry hazard, but the reporting remains unable to falsify itself.
 - **`allowedPatterns` is uncapped client-side.** All 248 entries are POSTed and stable-serialized
   into the per-keystroke context signature; the server's cap is positional head-truncation with no
   relevance ranking, so the 20 the model sees are just the first 20 in registration order.

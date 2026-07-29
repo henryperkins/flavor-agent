@@ -213,7 +213,38 @@ export function introspectBlockType( blockName ) {
 	const supportsContentRole = supports?.contentRole === true;
 	const attributes = blockType.attributes || {};
 	const styles = store.getBlockStyles( blockName ) || [];
-	const variations = store.getBlockVariations( blockName, 'block' ) || [];
+	const variations = store.getBlockVariations( blockName, 'block' );
+	const normalizedVariations = Array.isArray( variations )
+		? variations
+				.filter(
+					( variation ) =>
+						variation !== null &&
+						typeof variation === 'object' &&
+						typeof variation.name === 'string' &&
+						variation.name.trim() !== ''
+				)
+				.slice( 0, MAX_VARIATIONS )
+				.map( ( variation ) => {
+					const scope = Array.isArray( variation.scope )
+						? [
+								...new Set(
+									variation.scope.filter(
+										( entry ) =>
+											typeof entry === 'string' &&
+											entry.trim() !== ''
+									)
+								),
+						  ]
+						: [];
+
+					return {
+						name: variation.name,
+						title: asPlainText( variation.title ),
+						description: asPlainText( variation.description ),
+						scope: scope.length ? scope : undefined,
+					};
+				} )
+		: [];
 
 	const contentAttrs = {};
 	const configAttrs = {};
@@ -259,12 +290,7 @@ export function introspectBlockType( blockName ) {
 			label: s.label,
 			isDefault: s.isDefault || false,
 		} ) ),
-		variations: variations.slice( 0, MAX_VARIATIONS ).map( ( v ) => ( {
-			name: v.name,
-			title: asPlainText( v.title ),
-			description: asPlainText( v.description ),
-			scope: Array.isArray( v.scope ) ? v.scope : undefined,
-		} ) ),
+		variations: normalizedVariations,
 		parent: blockType.parent || null,
 		allowedBlocks: blockType.allowedBlocks || null,
 		apiVersion: blockType.apiVersion || 1,

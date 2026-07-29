@@ -34,6 +34,33 @@ final class WordPressAIClient {
 	private const OUTPUT_SCHEMA_BYTE_LIMIT         = 4096;
 	private const RANKING_CONTRACT_SCHEMA_REF_NAME = 'flavorAgentRankingContract';
 	private const SHARED_SCHEMA_REF_NAME_PREFIX    = 'flavorAgentSharedSchema';
+	private const SCHEMA_COLLECTION_KEYS           = [
+		'properties',
+		'patternProperties',
+		'definitions',
+		'$defs',
+		'dependentSchemas',
+	];
+	private const SCHEMA_NODE_OR_LIST_KEYS         = [
+		'items',
+		'additionalItems',
+		'unevaluatedItems',
+		'contains',
+		'additionalProperties',
+		'unevaluatedProperties',
+		'propertyNames',
+		'not',
+		'if',
+		'then',
+		'else',
+		'contentSchema',
+	];
+	private const SCHEMA_LIST_KEYS                 = [
+		'anyOf',
+		'oneOf',
+		'allOf',
+		'prefixItems',
+	];
 
 	/**
 	 * Byte floor for hoisting a repeated subschema into `$defs`. Below this a
@@ -256,35 +283,36 @@ final class WordPressAIClient {
 						);
 					}
 
+					$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
 					$retry_prompt = $build_prompt();
 
 					if ( is_wp_error( $retry_prompt ) ) {
-						return $retry_prompt;
+						$result = $retry_prompt;
+					} else {
+						$schema                  = null;
+						$prompt                  = $retry_prompt;
+						$request_timeout_seconds = self::request_timeout_seconds(
+							$resolved_provider,
+							$reasoning_effort,
+							null
+						);
+						$request_diagnostics     = self::build_request_diagnostics(
+							$system_prompt,
+							$user_prompt,
+							$resolved_provider,
+							$reasoning_effort,
+							null,
+							$request_timeout_seconds,
+							$selection
+						);
+						$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
+						$result = self::call_prompt_method_with_request_timeout(
+							$prompt,
+							'generate_text_result',
+							[],
+							$request_timeout_seconds
+						);
 					}
-
-					$schema                  = null;
-					$prompt                  = $retry_prompt;
-					$request_timeout_seconds = self::request_timeout_seconds(
-						$resolved_provider,
-						$reasoning_effort,
-						null
-					);
-					$request_diagnostics     = self::build_request_diagnostics(
-						$system_prompt,
-						$user_prompt,
-						$resolved_provider,
-						$reasoning_effort,
-						null,
-						$request_timeout_seconds,
-						$selection
-					);
-					$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
-					$result = self::call_prompt_method_with_request_timeout(
-						$prompt,
-						'generate_text_result',
-						[],
-						$request_timeout_seconds
-					);
 				}
 			}
 		} catch ( \Throwable $throwable ) {
@@ -902,18 +930,24 @@ final class WordPressAIClient {
 		}
 
 		// Providers compile structured-output schemas into grammars, and repeated
-		// branches are what make one large. Sharing identical subschemas is
-		// lossless for every consumer, so it does not need a provider slug to
-		// justify it — which matters because on the core Settings > Connectors
-		// path we do not have one: Provider::chat_configuration() resolves to the
-		// 'wordpress_ai_client' sentinel, is_connector() rejects it, and
-		// $provider arrives here as ''. Gating this on 'anthropic' would mean it
-		// never ran for the sites that need it.
-		if ( self::output_schema_exceeds_byte_limit( $schema ) ) {
+		// branches are what make one large. Sharing identical subschemas preserves
+		// JSON Schema semantics, so it does not need a provider slug to justify it
+		// — which matters because on the core Settings > Connectors path we do not
+		// have one: Provider::chat_configuration() resolves to the
+		// 'wordpress_ai_client' sentinel, is_connector() rejects it, and $provider
+		// arrives here as ''. Gating this on 'anthropic' would mean it never ran
+		// for the sites that need it.
+		$exceeded_byte_limit_before_sharing = self::output_schema_exceeds_byte_limit( $schema );
+
+		if ( $exceeded_byte_limit_before_sharing ) {
 			$schema = self::share_repeated_subschemas( $schema );
 		}
 
-		return self::prepare_anthropic_output_schema( $schema, $provider );
+		return self::prepare_anthropic_output_schema(
+			$schema,
+			$provider,
+			$exceeded_byte_limit_before_sharing
+		);
 	}
 
 	private static function normalize_output_schema_for_provider( array $schema, string $provider ): array {
@@ -934,14 +968,25 @@ final class WordPressAIClient {
 	 * lossless. Everything here gives up part of the contract, so it stays gated
 	 * on actually knowing the provider rather than firing on a guess.
 	 */
-	private static function prepare_anthropic_output_schema( array $schema, string $provider ): ?array {
-		if ( 'anthropic' !== $provider || ! self::output_schema_exceeds_byte_limit( $schema ) ) {
+	private static function prepare_anthropic_output_schema(
+		array $schema,
+		string $provider,
+		bool $exceeded_byte_limit_before_sharing
+	): ?array {
+		if (
+			'anthropic' !== $provider
+			|| (
+				! $exceeded_byte_limit_before_sharing
+				&& ! self::output_schema_exceeds_byte_limit( $schema )
+			)
+		) {
 			return $schema;
 		}
 
-		// Keep the compacted response shape strict, but leave enum checks to
-		// Flavor Agent's server-side validators when value expansions make the
-		// schema too large.
+		// `$defs` reduces the serialized payload, but providers may inline local
+		// references while compiling the constrained-decoding grammar. Preserve
+		// the known-Anthropic fallback when the pre-sharing schema crossed the
+		// heuristic budget, and leave enum checks to server-side validators.
 		$schema = self::remove_schema_keywords( $schema, [ 'enum' ] );
 
 		return self::output_schema_exceeds_byte_limit( $schema ) ? null : $schema;
@@ -982,7 +1027,10 @@ final class WordPressAIClient {
 		$index       = 0;
 
 		foreach ( $repeated as $signature => $occurrence ) {
-			$name                     = self::SHARED_SCHEMA_REF_NAME_PREFIX . ++$index;
+			do {
+				$name = self::SHARED_SCHEMA_REF_NAME_PREFIX . ++$index;
+			} while ( array_key_exists( $name, $definitions ) );
+
 			$references[ $signature ] = $name;
 			$definitions[ $name ]     = $occurrence['schema'];
 		}
@@ -1061,111 +1109,102 @@ final class WordPressAIClient {
 			}
 		}
 
-		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
-			// The root's own $defs holds the definitions themselves; they are
-			// rewritten separately so a definition never references itself.
-			if ( $is_root && '$defs' === $collection_key ) {
-				continue;
-			}
-
-			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $collection_key ][ $key ] = self::replace_shared_subschemas_with_refs( $child_schema, $references, false );
-				}
-			}
-		}
-
-		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
-			if ( ! isset( $schema[ $schema_key ] ) || ! is_array( $schema[ $schema_key ] ) ) {
-				continue;
-			}
-
-			$schema[ $schema_key ] = self::replace_shared_subschema_node_or_list_with_refs( $schema[ $schema_key ], $references );
-		}
-
-		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
-			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $schema_list_key ][ $key ] = self::replace_shared_subschemas_with_refs( $child_schema, $references, false );
-				}
-			}
-		}
-
-		return $schema;
-	}
-
-	/**
-	 * @param array<string, string> $references
-	 */
-	private static function replace_shared_subschema_node_or_list_with_refs( array $schema, array $references ): array {
-		if ( ! self::is_list_array( $schema ) ) {
-			return self::replace_shared_subschemas_with_refs( $schema, $references, false );
-		}
-
-		foreach ( $schema as $key => $child_schema ) {
-			if ( is_array( $child_schema ) ) {
-				$schema[ $key ] = self::replace_shared_subschemas_with_refs( $child_schema, $references, false );
-			}
-		}
-
-		return $schema;
+		// The root's own $defs holds the definitions themselves; they are
+		// rewritten separately so a definition never references itself.
+		return self::map_child_schemas(
+			$schema,
+			static fn ( array $child_schema ): array => self::replace_shared_subschemas_with_refs(
+				$child_schema,
+				$references,
+				false
+			),
+			$is_root ? [ '$defs' ] : []
+		);
 	}
 
 	/**
 	 * @param callable(array<string, mixed>): void $callback
 	 */
 	private static function walk_child_schemas( array $schema, callable $callback ): void {
-		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
-			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+		self::map_child_schemas(
+			$schema,
+			static function ( array $child_schema ) use ( $callback ): array {
+				$callback( $child_schema );
+
+				return $child_schema;
+			}
+		);
+	}
+
+	/**
+	 * Apply one recursive schema transform to every immediate child schema.
+	 *
+	 * `dependencies` is special: each value may be either a subschema or a list
+	 * of required property names, so only associative values are transformed.
+	 *
+	 * @param callable(array<string, mixed>): array<string, mixed> $mapper
+	 * @param array<int, string>                                  $skip_collection_keys
+	 * @return array<string, mixed>
+	 */
+	private static function map_child_schemas(
+		array $schema,
+		callable $mapper,
+		array $skip_collection_keys = []
+	): array {
+		foreach ( self::SCHEMA_COLLECTION_KEYS as $collection_key ) {
+			if (
+				in_array( $collection_key, $skip_collection_keys, true )
+				|| ! isset( $schema[ $collection_key ] )
+				|| ! is_array( $schema[ $collection_key ] )
+			) {
 				continue;
 			}
 
-			foreach ( $schema[ $collection_key ] as $child_schema ) {
+			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
 				if ( is_array( $child_schema ) ) {
-					$callback( $child_schema );
+					$schema[ $collection_key ][ $key ] = $mapper( $child_schema );
 				}
 			}
 		}
 
-		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+		foreach ( self::SCHEMA_NODE_OR_LIST_KEYS as $schema_key ) {
 			if ( ! isset( $schema[ $schema_key ] ) || ! is_array( $schema[ $schema_key ] ) ) {
 				continue;
 			}
 
-			$child = $schema[ $schema_key ];
-
-			if ( self::is_list_array( $child ) ) {
-				foreach ( $child as $list_child ) {
-					if ( is_array( $list_child ) ) {
-						$callback( $list_child );
-					}
-				}
-
+			if ( ! self::is_list_array( $schema[ $schema_key ] ) ) {
+				$schema[ $schema_key ] = $mapper( $schema[ $schema_key ] );
 				continue;
 			}
 
-			$callback( $child );
+			foreach ( $schema[ $schema_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $schema_key ][ $key ] = $mapper( $child_schema );
+				}
+			}
 		}
 
-		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+		foreach ( self::SCHEMA_LIST_KEYS as $schema_list_key ) {
 			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
 				continue;
 			}
 
-			foreach ( $schema[ $schema_list_key ] as $child_schema ) {
+			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
 				if ( is_array( $child_schema ) ) {
-					$callback( $child_schema );
+					$schema[ $schema_list_key ][ $key ] = $mapper( $child_schema );
 				}
 			}
 		}
+
+		if ( isset( $schema['dependencies'] ) && is_array( $schema['dependencies'] ) ) {
+			foreach ( $schema['dependencies'] as $key => $dependency ) {
+				if ( is_array( $dependency ) && ! self::is_list_array( $dependency ) ) {
+					$schema['dependencies'][ $key ] = $mapper( $dependency );
+				}
+			}
+		}
+
+		return $schema;
 	}
 
 	private static function output_schema_exceeds_byte_limit( array $schema ): bool {
@@ -1179,63 +1218,13 @@ final class WordPressAIClient {
 			unset( $schema[ $keyword ] );
 		}
 
-		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas' ] as $collection_key ) {
-			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $collection_key ][ $key ] = self::remove_schema_keywords( $child_schema, $keywords );
-				}
-			}
-		}
-
-		foreach ( [ 'items', 'additionalItems', 'unevaluatedItems', 'contains', 'additionalProperties', 'unevaluatedProperties', 'propertyNames', 'not', 'if', 'then', 'else', 'contentSchema' ] as $schema_key ) {
-			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
-				$schema[ $schema_key ] = self::remove_schema_keywords_from_schema_or_schema_list(
-					$schema[ $schema_key ],
-					$keywords
-				);
-			}
-		}
-
-		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
-			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $schema_list_key ][ $key ] = self::remove_schema_keywords( $child_schema, $keywords );
-				}
-			}
-		}
-
-		// Dependency values can be subschemas or lists of required property names.
-		if ( isset( $schema['dependencies'] ) && is_array( $schema['dependencies'] ) ) {
-			foreach ( $schema['dependencies'] as $key => $dependency ) {
-				if ( is_array( $dependency ) && ! self::is_list_array( $dependency ) ) {
-					$schema['dependencies'][ $key ] = self::remove_schema_keywords( $dependency, $keywords );
-				}
-			}
-		}
-
-		return $schema;
-	}
-
-	private static function remove_schema_keywords_from_schema_or_schema_list( array $schema, array $keywords ): array {
-		if ( ! self::is_list_array( $schema ) ) {
-			return self::remove_schema_keywords( $schema, $keywords );
-		}
-
-		foreach ( $schema as $key => $child_schema ) {
-			if ( is_array( $child_schema ) ) {
-				$schema[ $key ] = self::remove_schema_keywords( $child_schema, $keywords );
-			}
-		}
-
-		return $schema;
+		return self::map_child_schemas(
+			$schema,
+			static fn ( array $child_schema ): array => self::remove_schema_keywords(
+				$child_schema,
+				$keywords
+			)
+		);
 	}
 
 	private static function apply_output_schema( object $prompt, ?array $schema ): object {
@@ -1304,51 +1293,10 @@ final class WordPressAIClient {
 	}
 
 	private static function normalize_nested_schemas( array $schema ): array {
-		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
-			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $collection_key ][ $key ] = self::normalize_output_schema( $child_schema );
-				}
-			}
-		}
-
-		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
-			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
-				$schema[ $schema_key ] = self::normalize_schema_or_schema_list( $schema[ $schema_key ] );
-			}
-		}
-
-		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
-			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $schema_list_key ][ $key ] = self::normalize_output_schema( $child_schema );
-				}
-			}
-		}
-
-		return $schema;
-	}
-
-	private static function normalize_schema_or_schema_list( array $schema ): array {
-		if ( ! self::is_list_array( $schema ) ) {
-			return self::normalize_output_schema( $schema );
-		}
-
-		foreach ( $schema as $key => $child_schema ) {
-			if ( is_array( $child_schema ) ) {
-				$schema[ $key ] = self::normalize_output_schema( $child_schema );
-			}
-		}
-
-		return $schema;
+		return self::map_child_schemas(
+			$schema,
+			static fn ( array $child_schema ): array => self::normalize_output_schema( $child_schema )
+		);
 	}
 
 	private static function expand_union_enum_schema( array $schema ): array {
@@ -1437,51 +1385,15 @@ final class WordPressAIClient {
 			];
 		}
 
-		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
-			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
-				continue;
+		return self::map_child_schemas(
+			$schema,
+			static function ( array $child_schema ) use ( &$ranking_schema ): array {
+				return self::replace_nullable_ranking_contract_schemas_with_ref(
+					$child_schema,
+					$ranking_schema
+				);
 			}
-
-			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $collection_key ][ $key ] = self::replace_nullable_ranking_contract_schemas_with_ref( $child_schema, $ranking_schema );
-				}
-			}
-		}
-
-		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
-			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
-				$schema[ $schema_key ] = self::replace_nullable_ranking_contract_schema_node_or_list_with_ref( $schema[ $schema_key ], $ranking_schema );
-			}
-		}
-
-		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
-			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $schema_list_key ][ $key ] = self::replace_nullable_ranking_contract_schemas_with_ref( $child_schema, $ranking_schema );
-				}
-			}
-		}
-
-		return $schema;
-	}
-
-	private static function replace_nullable_ranking_contract_schema_node_or_list_with_ref( array $schema, ?array &$ranking_schema ): array {
-		if ( ! self::is_list_array( $schema ) ) {
-			return self::replace_nullable_ranking_contract_schemas_with_ref( $schema, $ranking_schema );
-		}
-
-		foreach ( $schema as $key => $child_schema ) {
-			if ( is_array( $child_schema ) ) {
-				$schema[ $key ] = self::replace_nullable_ranking_contract_schemas_with_ref( $child_schema, $ranking_schema );
-			}
-		}
-
-		return $schema;
+		);
 	}
 
 	private static function is_nullable_ranking_contract_schema( array $schema ): bool {
@@ -1518,51 +1430,10 @@ final class WordPressAIClient {
 			}
 		}
 
-		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
-			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $collection_key ][ $key ] = self::compact_nullable_schema_unions( $child_schema );
-				}
-			}
-		}
-
-		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
-			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
-				$schema[ $schema_key ] = self::compact_nullable_schema_node_or_list( $schema[ $schema_key ] );
-			}
-		}
-
-		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
-			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$schema[ $schema_list_key ][ $key ] = self::compact_nullable_schema_unions( $child_schema );
-				}
-			}
-		}
-
-		return $schema;
-	}
-
-	private static function compact_nullable_schema_node_or_list( array $schema ): array {
-		if ( ! self::is_list_array( $schema ) ) {
-			return self::compact_nullable_schema_unions( $schema );
-		}
-
-		foreach ( $schema as $key => $child_schema ) {
-			if ( is_array( $child_schema ) ) {
-				$schema[ $key ] = self::compact_nullable_schema_unions( $child_schema );
-			}
-		}
-
-		return $schema;
+		return self::map_child_schemas(
+			$schema,
+			static fn ( array $child_schema ): array => self::compact_nullable_schema_unions( $child_schema )
+		);
 	}
 
 	private static function count_schema_unions( array $schema ): int {
@@ -1576,35 +1447,12 @@ final class WordPressAIClient {
 			++$count;
 		}
 
-		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
-			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
-				continue;
+		self::walk_child_schemas(
+			$schema,
+			static function ( array $child_schema ) use ( &$count ): void {
+				$count += self::count_schema_unions( $child_schema );
 			}
-
-			foreach ( $schema[ $collection_key ] as $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$count += self::count_schema_unions( $child_schema );
-				}
-			}
-		}
-
-		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
-			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
-				$count += self::count_schema_unions( $schema[ $schema_key ] );
-			}
-		}
-
-		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
-			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
-				continue;
-			}
-
-			foreach ( $schema[ $schema_list_key ] as $child_schema ) {
-				if ( is_array( $child_schema ) ) {
-					$count += self::count_schema_unions( $child_schema );
-				}
-			}
-		}
+		);
 
 		return $count;
 	}

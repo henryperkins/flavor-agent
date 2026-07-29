@@ -293,6 +293,34 @@ describe( 'introspectBlockType variations', () => {
 		expect( manifest.variations ).toHaveLength( 10 );
 		expect( manifest.variations[ 0 ].name ).toBe( 'variation-0' );
 	} );
+
+	test( 'filters malformed variations before applying the cap', () => {
+		blocksSelectors.getBlockVariations.mockReturnValue( [
+			...Array.from( { length: 10 }, () => null ),
+			{ title: 'Nameless' },
+			...Array.from( { length: 12 }, ( _, index ) => ( {
+				name: `variation-${ index }`,
+				title: `Variation ${ index }`,
+				scope:
+					index === 0
+						? [ 'inserter', null, {}, '', 'block', 'inserter' ]
+						: [ 'inserter' ],
+			} ) ),
+		] );
+
+		const manifest = introspectBlockType( 'core/group' );
+
+		expect( manifest.variations ).toHaveLength( 10 );
+		expect(
+			manifest.variations.map( ( variation ) => variation.name )
+		).toEqual(
+			Array.from( { length: 10 }, ( _, index ) => `variation-${ index }` )
+		);
+		expect( manifest.variations[ 0 ].scope ).toEqual( [
+			'inserter',
+			'block',
+		] );
+	} );
 } );
 
 describe( 'summarizeTree interior options', () => {
