@@ -30,6 +30,26 @@ const GENERAL_PANEL_EXCLUDED_ATTRIBUTES = new Set( [
 	'lock',
 ] );
 
+// Mirrors the server-side cap in BlockTypeIntrospector::block_type_manifest().
+const MAX_VARIATIONS = 10;
+
+/**
+ * Coerce a variation label to plain text.
+ *
+ * Core lets a block variation's `title` and `description` be React elements
+ * rather than strings — `core/group` ships one. Serializing an element sends
+ * its whole internal shape (`_owner`, `ref`, and every nested `props` value,
+ * which can include unrelated post IDs) to the provider, so anything that is
+ * not already a string is dropped rather than stringified into `[object
+ * Object]`.
+ *
+ * @param {unknown} value Candidate label.
+ * @return {string|undefined} The label when it is a string, else undefined.
+ */
+function asPlainText( value ) {
+	return typeof value === 'string' ? value : undefined;
+}
+
 /**
  * Flatten a nested supports object into dot-path -> value entries.
  *
@@ -193,7 +213,38 @@ export function introspectBlockType( blockName ) {
 	const supportsContentRole = supports?.contentRole === true;
 	const attributes = blockType.attributes || {};
 	const styles = store.getBlockStyles( blockName ) || [];
-	const variations = store.getBlockVariations( blockName, 'block' ) || [];
+	const variations = store.getBlockVariations( blockName, 'block' );
+	const normalizedVariations = Array.isArray( variations )
+		? variations
+				.filter(
+					( variation ) =>
+						variation !== null &&
+						typeof variation === 'object' &&
+						typeof variation.name === 'string' &&
+						variation.name.trim() !== ''
+				)
+				.slice( 0, MAX_VARIATIONS )
+				.map( ( variation ) => {
+					const scope = Array.isArray( variation.scope )
+						? [
+								...new Set(
+									variation.scope.filter(
+										( entry ) =>
+											typeof entry === 'string' &&
+											entry.trim() !== ''
+									)
+								),
+						  ]
+						: [];
+
+					return {
+						name: variation.name,
+						title: asPlainText( variation.title ),
+						description: asPlainText( variation.description ),
+						scope: scope.length ? scope : undefined,
+					};
+				} )
+		: [];
 
 	const contentAttrs = {};
 	const configAttrs = {};
@@ -239,12 +290,7 @@ export function introspectBlockType( blockName ) {
 			label: s.label,
 			isDefault: s.isDefault || false,
 		} ) ),
-		variations: variations.map( ( v ) => ( {
-			name: v.name,
-			title: v.title,
-			description: v.description,
-			scope: v.scope,
-		} ) ),
+		variations: normalizedVariations,
 		parent: blockType.parent || null,
 		allowedBlocks: blockType.allowedBlocks || null,
 		apiVersion: blockType.apiVersion || 1,

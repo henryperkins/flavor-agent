@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\WordPressAIClient;
+use FlavorAgent\Support\RequestTrace;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -380,17 +381,17 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertIsArray( $schema );
 		$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ) );
 
-		$block_properties = $schema['properties']['block']['items']['properties'] ?? [];
+		$block_properties = self::schema_at_path( $schema, [ 'properties', 'block', 'items', 'properties' ] ) ?? [];
 		$this->assertArrayHasKey( 'operations', $block_properties );
 		$this->assertArrayNotHasKey( 'proposedOperations', $block_properties );
 		$this->assertArrayNotHasKey( 'rejectedOperations', $block_properties );
 		$this->assertSame(
 			'string',
-			$schema['properties']['settings']['items']['properties']['attributeUpdates']['type'] ?? null
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'attributeUpdates', 'type' ] )
 		);
 		$this->assertSame(
 			'number',
-			$schema['properties']['settings']['items']['properties']['confidence']['type'] ?? null
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'confidence', 'type' ] )
 		);
 	}
 
@@ -545,7 +546,7 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( [ 'mode' ], $schema['dependencies']['limit'] ?? null );
 	}
 
-	public function test_chat_keeps_large_anthropic_output_shape_without_grammar_heavy_value_constraints(): void {
+	public function test_chat_keeps_large_anthropic_output_shape_within_the_grammar_budget(): void {
 		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,
 		];
@@ -572,12 +573,219 @@ final class WordPressAIClientTest extends TestCase {
 			[ 'settings', 'styles', 'block', 'recommendedSets', 'explanation' ],
 			$schema['required'] ?? null
 		);
-		$this->assertArrayNotHasKey(
-			'enum',
-			$schema['properties']['settings']['items']['properties']['panel'] ?? []
-		);
 		$this->assertLessThanOrEqual( 4096, strlen( (string) wp_json_encode( $schema ) ) );
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+	}
+
+	public function test_chat_keeps_the_known_anthropic_fallback_after_serialized_schema_compaction(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'anthropic',
+			null,
+			ResponseSchema::get( 'block' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+
+		$settings_items = self::resolve_schema_ref(
+			$schema,
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items' ] ) ?? []
+		);
+		$styles_items   = self::resolve_schema_ref(
+			$schema,
+			self::schema_at_path( $schema, [ 'properties', 'styles', 'items' ] ) ?? []
+		);
+
+		$this->assertArrayNotHasKey( 'enum', $settings_items['properties']['panel'] ?? [] );
+		$this->assertArrayNotHasKey( 'enum', $settings_items['properties']['type'] ?? [] );
+		$this->assertSame(
+			$settings_items,
+			$styles_items,
+			'settings and styles share one item contract, so they must resolve to the same shape.'
+		);
+
+		$block_items = self::resolve_schema_ref(
+			$schema,
+			self::schema_at_path( $schema, [ 'properties', 'block', 'items' ] ) ?? []
+		);
+
+		$this->assertArrayNotHasKey(
+			'enum',
+			self::resolve_schema_ref(
+				$schema,
+				self::schema_at_path( $block_items, [ 'properties', 'operations', 'items' ] ) ?? []
+			)['properties']['type'] ?? []
+		);
+	}
+
+	/**
+	 * The core Settings > Connectors path never yields a provider slug —
+	 * Provider::chat_configuration() resolves to the 'wordpress_ai_client'
+	 * sentinel, is_connector() rejects it, and chat() receives ''. Sharing
+	 * repeated subschemas has to run there or it never runs on a real site.
+	 */
+	public function test_chat_shares_repeated_subschemas_when_the_provider_is_unresolved(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			null,
+			null,
+			ResponseSchema::get( 'block' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+		$this->assertArrayHasKey(
+			'$defs',
+			$schema,
+			'An oversized schema must be compacted even when no provider slug is known.'
+		);
+		$this->assertLessThanOrEqual(
+			4096,
+			strlen( (string) wp_json_encode( $schema ) )
+		);
+		$this->assertSame(
+			[ 'general', 'layout', 'position', 'advanced', 'bindings', 'list', 'color', 'filter', 'typography', 'dimensions', 'border', 'shadow', 'background' ],
+			self::schema_at_path( $schema, [ 'properties', 'settings', 'items', 'properties', 'panel', 'enum' ] ),
+			'Sharing is lossless, so the enums survive on the unresolved-provider path too.'
+		);
+	}
+
+	public function test_chat_keeps_small_schemas_inline_for_every_provider(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Keep it."}';
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			'openai',
+			null,
+			ResponseSchema::get( 'template' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+		$this->assertArrayNotHasKey(
+			'$defs',
+			$schema,
+			'A schema already inside the byte ceiling is sent untouched.'
+		);
+	}
+
+	public function test_chat_preserves_existing_definition_names_when_sharing_repeated_subschemas(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"first":{"value":"a"},"second":{"value":"b"}}';
+		$repeated = [
+			'type'                 => 'object',
+			'properties'           => [
+				'value' => [
+					'type'        => 'string',
+					'description' => str_repeat( 'shared-value-', 20 ),
+				],
+			],
+			'required'             => [ 'value' ],
+			'additionalProperties' => false,
+		];
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			null,
+			null,
+			[
+				'type'        => 'object',
+				'description' => str_repeat( 'root-description-', 260 ),
+				'properties'  => [
+					'first'  => $repeated,
+					'second' => $repeated,
+				],
+				'$defs'       => [
+					'flavorAgentSharedSchema1' => [
+						'type' => 'string',
+						'enum' => [ 'preserve-me' ],
+					],
+				],
+			]
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+		$this->assertSame(
+			[ 'preserve-me' ],
+			$schema['$defs']['flavorAgentSharedSchema1']['enum'] ?? null
+		);
+		$this->assertSame(
+			'#/$defs/flavorAgentSharedSchema2',
+			$schema['properties']['first']['$ref'] ?? null
+		);
+		$this->assertSame(
+			$schema['properties']['first']['$ref'] ?? null,
+			$schema['properties']['second']['$ref'] ?? null
+		);
+	}
+
+	public function test_chat_shares_repeated_subschemas_in_conditionals_and_dependencies(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"mode":"grid"}';
+		$repeated = [
+			'type'                 => 'object',
+			'properties'           => [
+				'mode' => [
+					'type'        => 'string',
+					'description' => str_repeat( 'conditional-value-', 16 ),
+				],
+			],
+			'required'             => [ 'mode' ],
+			'additionalProperties' => false,
+		];
+
+		WordPressAIClient::chat(
+			'System.',
+			'User.',
+			null,
+			null,
+			[
+				'type'             => 'object',
+				'description'      => str_repeat( 'root-description-', 260 ),
+				'properties'       => [
+					'mode' => [ 'type' => 'string' ],
+				],
+				'if'               => $repeated,
+				'then'             => $repeated,
+				'dependentSchemas' => [
+					'mode' => $repeated,
+				],
+				'dependencies'     => [
+					'mode'  => $repeated,
+					'other' => [ 'mode' ],
+				],
+			]
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+
+		$this->assertIsArray( $schema );
+		$this->assertIsString( $schema['if']['$ref'] ?? null );
+		$this->assertSame( $schema['if'], $schema['then'] ?? null );
+		$this->assertSame( $schema['if'], $schema['dependentSchemas']['mode'] ?? null );
+		$this->assertSame( $schema['if'], $schema['dependencies']['mode'] ?? null );
+		$this->assertSame( [ 'mode' ], $schema['dependencies']['other'] ?? null );
 	}
 
 	public function test_chat_preserves_enum_constraints_for_small_anthropic_output_schema(): void {
@@ -702,6 +910,10 @@ final class WordPressAIClientTest extends TestCase {
 			remove_filter( 'http_request_args', $capture_attempt );
 		}
 
+		// Snapshot before active_chat_request_meta(), whose support probe builds
+		// a prompt of its own.
+		$prompt_builds = count( WordPressTestState::$ai_service_calls );
+
 		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
 
 		$this->assertSame(
@@ -713,6 +925,80 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertNull( $attempt_schemas[1] );
 		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( 'grammar_limit', $meta['requestSummary']['outputSchemaFallback'] ?? null );
+
+		// The retry must build its own prompt rather than reuse a handle captured
+		// before the schema was applied: apply_output_schema() only shallow-clones,
+		// so a builder that keeps its output schema on a shared sub-object would
+		// hand the retry back the very schema it is dropping.
+		$this->assertSame(
+			2,
+			$prompt_builds,
+			'The grammar-limit retry should construct a fresh prompt builder.'
+		);
+	}
+
+	public function test_chat_finishes_its_trace_when_the_schema_fallback_prompt_cannot_be_built(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'wp_ai_client_request_failed',
+			'The compiled grammar is too large, which would cause performance issues.',
+			[ 'status' => 400 ]
+		);
+		$events = [];
+
+		add_action(
+			'flavor_agent_diagnostic_trace',
+			static function ( array $entry ) use ( &$events ): void {
+				$events[] = $entry['event'] ?? '';
+			}
+		);
+		$disable_retry_prompt = static function ( array $args ): array {
+			WordPressTestState::$ai_client_supported = false;
+
+			return $args;
+		};
+		add_filter( 'http_request_args', $disable_retry_prompt );
+
+		try {
+			$result = WordPressAIClient::chat(
+				'System.',
+				'User.',
+				null,
+				null,
+				[
+					'type'       => 'object',
+					'properties' => [
+						'value' => [ 'type' => 'string' ],
+					],
+				]
+			);
+		} finally {
+			remove_filter( 'http_request_args', $disable_retry_prompt );
+		}
+
+		$trace_active = RequestTrace::is_active();
+		if ( $trace_active ) {
+			RequestTrace::finish( 'test.cleanup' );
+		}
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_text_generation_provider', $result->get_error_code() );
+		$this->assertFalse( $trace_active );
+		$this->assertSame(
+			'grammar_limit',
+			$meta['requestSummary']['outputSchemaFallback'] ?? null
+		);
+		$this->assertSame(
+			[
+				'ai.chat.start',
+				'ai.chat.request_ready',
+				'ai.chat.output_schema_fallback',
+				'ai.chat.error',
+				'ai.chat.finish',
+			],
+			$events
+		);
 	}
 
 	public function test_chat_preserves_numeric_bounds_for_other_output_schema_providers(): void {
@@ -1344,11 +1630,20 @@ final class WordPressAIClientTest extends TestCase {
 	}
 
 	/**
-	 * @param array<string, mixed> $schema
-	 * @param array<int, string>  $path
+	 * Walk a schema path, resolving `$ref` at every step.
+	 *
+	 * Large schemas have their repeated subschemas hoisted into `$defs`, so a
+	 * literal path like properties.settings.items.properties.x stops at the
+	 * reference. Resolving as we walk keeps these assertions about the contract
+	 * rather than about which nodes happen to be shared.
+	 *
+	 * @param array<string, mixed>      $schema Node to start from.
+	 * @param array<int, string>        $path   Keys to follow.
+	 * @param array<string, mixed>|null $root   Document holding `$defs`.
 	 */
-	private static function schema_at_path( array $schema, array $path ): mixed {
-		$current = $schema;
+	private static function schema_at_path( array $schema, array $path, ?array $root = null ): mixed {
+		$root    = $root ?? $schema;
+		$current = self::resolve_schema_ref( $root, $schema );
 
 		foreach ( $path as $segment ) {
 			if ( ! is_array( $current ) || ! array_key_exists( $segment, $current ) ) {
@@ -1356,6 +1651,10 @@ final class WordPressAIClientTest extends TestCase {
 			}
 
 			$current = $current[ $segment ];
+
+			if ( is_array( $current ) ) {
+				$current = self::resolve_schema_ref( $root, $current );
+			}
 		}
 
 		return $current;

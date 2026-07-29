@@ -353,10 +353,12 @@ describe( 'activity log utils', () => {
 			} ),
 		] );
 
+		// The request never applied anything, so the undo column must not imply
+		// an apply that cannot be reversed.
 		expect( entries[ 0 ] ).toMatchObject( {
 			status: 'failed',
 			statusLabel: 'Request failed',
-			undoStatusLabel: 'Undo unavailable',
+			undoStatusLabel: 'Undo not applicable',
 			undoReason: 'Missing draft context.',
 			entity: 'Content',
 		} );

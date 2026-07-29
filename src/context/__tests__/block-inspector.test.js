@@ -211,6 +211,118 @@ describe( 'resolveInspectorPanels', () => {
 	} );
 } );
 
+describe( 'introspectBlockType variations', () => {
+	let blocksSelectors;
+	let blockEditorSelectors;
+
+	beforeEach( () => {
+		blocksSelectors = {
+			getBlockType: jest.fn().mockReturnValue( {
+				title: 'Group',
+				category: 'design',
+				description: 'Group block',
+				supports: {},
+				attributes: {},
+			} ),
+			getBlockStyles: jest.fn().mockReturnValue( [] ),
+			getBlockVariations: jest.fn().mockReturnValue( [] ),
+		};
+		blockEditorSelectors = {
+			getSettings: jest.fn().mockReturnValue( {} ),
+		};
+
+		select.mockImplementation( ( store ) => {
+			if ( store === mockBlocksStore ) {
+				return blocksSelectors;
+			}
+
+			if ( store === mockBlockEditorStore ) {
+				return blockEditorSelectors;
+			}
+
+			return {};
+		} );
+	} );
+
+	test( 'drops React element labels instead of serializing their internals', () => {
+		// core/group ships a variation whose description is a React element.
+		const reactElement = {
+			$$typeof: Symbol.for( 'react.element' ),
+			type: 'span',
+			key: null,
+			ref: null,
+			_owner: { tag: 'FiberNode' },
+			props: { children: { props: { postId: 339584 } } },
+		};
+
+		blocksSelectors.getBlockVariations.mockReturnValue( [
+			{
+				name: 'grid',
+				title: 'Grid',
+				description: reactElement,
+				scope: [ 'inserter', 'block' ],
+			},
+		] );
+
+		const manifest = introspectBlockType( 'core/group' );
+
+		expect( manifest.variations ).toEqual( [
+			{
+				name: 'grid',
+				title: 'Grid',
+				description: undefined,
+				scope: [ 'inserter', 'block' ],
+			},
+		] );
+		expect( JSON.stringify( manifest.variations ) ).not.toContain(
+			'339584'
+		);
+	} );
+
+	test( 'caps variations at the server-side limit', () => {
+		blocksSelectors.getBlockVariations.mockReturnValue(
+			Array.from( { length: 14 }, ( _, index ) => ( {
+				name: `variation-${ index }`,
+				title: `Variation ${ index }`,
+				scope: [ 'inserter' ],
+			} ) )
+		);
+
+		const manifest = introspectBlockType( 'core/group' );
+
+		expect( manifest.variations ).toHaveLength( 10 );
+		expect( manifest.variations[ 0 ].name ).toBe( 'variation-0' );
+	} );
+
+	test( 'filters malformed variations before applying the cap', () => {
+		blocksSelectors.getBlockVariations.mockReturnValue( [
+			...Array.from( { length: 10 }, () => null ),
+			{ title: 'Nameless' },
+			...Array.from( { length: 12 }, ( _, index ) => ( {
+				name: `variation-${ index }`,
+				title: `Variation ${ index }`,
+				scope:
+					index === 0
+						? [ 'inserter', null, {}, '', 'block', 'inserter' ]
+						: [ 'inserter' ],
+			} ) ),
+		] );
+
+		const manifest = introspectBlockType( 'core/group' );
+
+		expect( manifest.variations ).toHaveLength( 10 );
+		expect(
+			manifest.variations.map( ( variation ) => variation.name )
+		).toEqual(
+			Array.from( { length: 10 }, ( _, index ) => `variation-${ index }` )
+		);
+		expect( manifest.variations[ 0 ].scope ).toEqual( [
+			'inserter',
+			'block',
+		] );
+	} );
+} );
+
 describe( 'summarizeTree interior options', () => {
 	const node = (
 		clientId,

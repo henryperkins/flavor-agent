@@ -1610,6 +1610,112 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertSame( [], $result['context']['block']['variations'] ?? null );
 	}
 
+	/**
+	 * Core lets a variation's title/description be a React element. The editor
+	 * forwards whatever getBlockVariations() returned, so the trust boundary has
+	 * to drop the element rather than let normalize_list() carry its internals —
+	 * `_owner`, `ref`, and a props subtree holding an unrelated post ID — into
+	 * the prompt that goes to the provider.
+	 */
+	public function test_editor_context_variations_drop_non_string_labels(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'       => 'core/paragraph',
+						'variations' => [
+							[
+								'name'        => 'grid',
+								'title'       => 'Grid',
+								'description' => [
+									'key'      => null,
+									'ref'      => null,
+									'_owner'   => [ 'tag' => 'FiberNode' ],
+									'props'    => [
+										'children' => [
+											'props' => [ 'postId' => 339584 ],
+										],
+									],
+									'$$typeof' => 'Symbol(react.element)',
+								],
+								'scope'       => [ 'inserter', 'block' ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$variations = $result['context']['block']['variations'] ?? null;
+
+		$this->assertSame(
+			[
+				[
+					'name'  => 'grid',
+					'title' => 'Grid',
+					'scope' => [ 'inserter', 'block' ],
+				],
+			],
+			$variations
+		);
+
+		$encoded = (string) wp_json_encode( $variations );
+
+		$this->assertStringNotContainsString( '339584', $encoded );
+		$this->assertStringNotContainsString( '_owner', $encoded );
+		$this->assertStringNotContainsString( 'props', $encoded );
+	}
+
+	public function test_editor_context_variations_drop_empty_and_duplicate_scopes_after_sanitizing(): void {
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'       => 'core/paragraph',
+						'variations' => [
+							[
+								'name'  => 'grid',
+								'scope' => [ 'inserter', '👀', [ 'nested' ], 'inserter', '' ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'inserter' ],
+			$result['context']['block']['variations'][0]['scope'] ?? null
+		);
+	}
+
+	public function test_editor_context_variations_are_capped_and_require_a_name(): void {
+		$supplied = [
+			[ 'title' => 'Nameless' ],
+		];
+
+		for ( $index = 0; $index < 14; ++$index ) {
+			$supplied[] = [ 'name' => 'variation-' . $index ];
+		}
+
+		$result = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'       => 'core/paragraph',
+						'variations' => $supplied,
+					],
+				],
+			]
+		);
+
+		$names = array_column( $result['context']['block']['variations'] ?? [], 'name' );
+
+		$this->assertCount( 10, $names );
+		$this->assertNotContains( '', $names );
+		$this->assertSame( 'variation-0', $names[0] );
+	}
+
 	public function test_editor_context_omitted_variations_falls_back_to_the_server_list(): void {
 		$result = $this->invoke_prepare_recommend_block_input(
 			[
