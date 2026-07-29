@@ -1151,6 +1151,23 @@ final class WordPressAIClient {
 		callable $mapper,
 		array $skip_collection_keys = []
 	): array {
+		$schema = self::map_schema_collections( $schema, $mapper, $skip_collection_keys );
+		$schema = self::map_schema_nodes_or_lists( $schema, $mapper );
+		$schema = self::map_schema_lists( $schema, $mapper );
+
+		return self::map_schema_dependencies( $schema, $mapper );
+	}
+
+	/**
+	 * @param callable(array<string, mixed>): array<string, mixed> $mapper
+	 * @param array<int, string>                                  $skip_collection_keys
+	 * @return array<string, mixed>
+	 */
+	private static function map_schema_collections(
+		array $schema,
+		callable $mapper,
+		array $skip_collection_keys
+	): array {
 		foreach ( self::SCHEMA_COLLECTION_KEYS as $collection_key ) {
 			if (
 				in_array( $collection_key, $skip_collection_keys, true )
@@ -1167,6 +1184,14 @@ final class WordPressAIClient {
 			}
 		}
 
+		return $schema;
+	}
+
+	/**
+	 * @param callable(array<string, mixed>): array<string, mixed> $mapper
+	 * @return array<string, mixed>
+	 */
+	private static function map_schema_nodes_or_lists( array $schema, callable $mapper ): array {
 		foreach ( self::SCHEMA_NODE_OR_LIST_KEYS as $schema_key ) {
 			if ( ! isset( $schema[ $schema_key ] ) || ! is_array( $schema[ $schema_key ] ) ) {
 				continue;
@@ -1184,6 +1209,14 @@ final class WordPressAIClient {
 			}
 		}
 
+		return $schema;
+	}
+
+	/**
+	 * @param callable(array<string, mixed>): array<string, mixed> $mapper
+	 * @return array<string, mixed>
+	 */
+	private static function map_schema_lists( array $schema, callable $mapper ): array {
 		foreach ( self::SCHEMA_LIST_KEYS as $schema_list_key ) {
 			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
 				continue;
@@ -1196,6 +1229,14 @@ final class WordPressAIClient {
 			}
 		}
 
+		return $schema;
+	}
+
+	/**
+	 * @param callable(array<string, mixed>): array<string, mixed> $mapper
+	 * @return array<string, mixed>
+	 */
+	private static function map_schema_dependencies( array $schema, callable $mapper ): array {
 		if ( isset( $schema['dependencies'] ) && is_array( $schema['dependencies'] ) ) {
 			foreach ( $schema['dependencies'] as $key => $dependency ) {
 				if ( is_array( $dependency ) && ! self::is_list_array( $dependency ) ) {
