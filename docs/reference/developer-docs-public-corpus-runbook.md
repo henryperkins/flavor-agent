@@ -110,7 +110,7 @@ Refresh cadence:
 - If a Make/Core Field Guide, dev-note batch, RC post, or Gutenberg release post lands and the daily run failed, dispatch the workflow manually within 48 hours.
 
 Corpus validation:
-- Run the validation query: `WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes`.
+- Run the validation query: `WordPress developer documentation block.json metadata reference for WordPress 7.0`.
 - Replace `WordPress 7.0` in the validation query with the active major-release label whenever the release cycle changes.
 - In an agent session with the MCP server available, run the same query through `wordpress-docs-ai-search` and confirm the returned chunks include the stable docs plus current-cycle sources expected below.
 - Query the public endpoint with the same request shape used by `AISearchClient::build_search_request_body()`: a user message containing the validation query and `ai_search_options.retrieval.max_num_results` set to at least `4`.

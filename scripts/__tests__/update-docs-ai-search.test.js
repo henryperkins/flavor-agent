@@ -35,6 +35,7 @@ const {
 	sourceRootsForRelease,
 	truncateUtf8ToBytes,
 	urlMatchesRoots,
+	validatePublicEndpoint,
 	withinRecentPostWindow,
 	wordPressNewsPostDate,
 } = require( '../update-docs-ai-search.js' );
@@ -86,6 +87,41 @@ describe( 'update-docs-ai-search helpers', () => {
 	afterEach( () => {
 		global.fetch = originalFetch;
 		jest.restoreAllMocks();
+	} );
+
+	test( 'validates the public endpoint with a developer-docs-specific query', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+		} );
+		const request = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
+
+		expect( request.messages[ 0 ].content ).toBe(
+			'WordPress developer documentation block.json metadata reference for WordPress 7.0'
+		);
+		expect( validation ).toMatchObject( {
+			status: 200,
+			chunkCount: 1,
+			sourceTypes: [ 'developer-docs' ],
+			ok: true,
+		} );
 	} );
 
 	test( 'resolves trusted relative canonical URLs against the response URL', () => {

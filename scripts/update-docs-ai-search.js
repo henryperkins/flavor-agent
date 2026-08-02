@@ -30,7 +30,7 @@ const BUILD_ERROR_ATTENTION_RATIO = 0.02;
 // re-uploads on the next `--full` run. Superseded same-source generations are
 // pruned after the replacement key settles.
 const DOC_LAYOUT_VERSION = 2;
-const VALIDATION_QUERY = 'WordPress current block editor developer guidance, WordPress 7.0 dev notes, Gutenberg release notes';
+const VALIDATION_QUERY = 'WordPress developer documentation block.json metadata reference for WordPress 7.0';
 
 const METADATA_SCHEMA = [
 	{ field_name: 'source_url', data_type: 'text' },
@@ -2292,6 +2292,7 @@ module.exports = {
 	sourceRootsForRelease,
 	truncateUtf8ToBytes,
 	urlMatchesRoots,
+	validatePublicEndpoint,
 	withinRecentPostWindow,
 	wordPressNewsPostDate,
 };
