@@ -13,6 +13,10 @@
 
 	<exclude-pattern>vendor/*</exclude-pattern>
 	<exclude-pattern>tests/phpunit/bootstrap.php</exclude-pattern>
+	<!-- Global stand-ins for WordPress/upstream symbols, not plugin code: they
+	     need braced namespaces and several classes per file for the same reason
+	     the bootstrap does. -->
+	<exclude-pattern>tests/phpunit/support/*</exclude-pattern>
 
 	<rule ref="WordPress-Core">
 		<exclude name="Universal.Arrays.DisallowShortArraySyntax.Found"/>
