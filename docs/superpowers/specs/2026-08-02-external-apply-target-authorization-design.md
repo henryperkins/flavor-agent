@@ -11,7 +11,7 @@ The fix belongs at executor dispatch because that is the last shared boundary th
 
 ## Scope
 
-This slice changes only target identity and capability authorization for the four governed executor families:
+This slice changes target identity and capability authorization for the four governed executor families, plus the bounded persistence and decision atomicity required for those authorization results to remain truthful:
 
 - Global Styles and Style Book;
 - templates;
@@ -20,7 +20,9 @@ This slice changes only target identity and capability authorization for the fou
 
 It covers approval-time execution through `PendingApplyDecision` and server-side undo through `ApplyAbilities::undo_activity()` on current `master`.
 
-It does not import PR #72's broader undo coordinator, attestation architecture, provider, UI, or release-document changes. The narrow apply/revert attestation call-site edits required to consume the canonical target are in scope. It does not change operation validation, drift comparison, activity visibility, ranking, or the permissions required to request a pending apply.
+For templates and template parts, the slice also serializes canonical-target persistence through a strict database mutex and verifies the authoritative post-write canonical identity before snapshots or attestation are recorded. At the activity boundary, each approve or reject atomically claims the pending row before target work and consumes that exact owner-qualified claim in its terminal transition, so competing decisions and expiry cannot record a different outcome around a successful write.
+
+It does not import PR #72's broader undo coordinator, attestation architecture, provider, UI, or release-document changes. The narrow apply/revert attestation call-site edits required to consume the canonical target are in scope. It does not change operation validation, drift comparison, ranking, or the permissions required to request a pending apply. The successful rejection outcome is unchanged, but rejection now consumes the same atomic decision claim as approval.
 
 This design defines the scope of any separately authorized local implementation. It does not itself authorize implementation, committing, pushing, opening or updating a pull request, merging, deploying, tagging, or publishing. Each action requires the separate approval appropriate to it.
 
@@ -95,14 +97,17 @@ All surfaces require `document.postType`; it is never inferred from `surface` or
 
 ### Approval
 
-`PendingApplyDecision::decide()` keeps rejection behavior unchanged. For approval:
+`PendingApplyDecision::decide()` preserves the successful rejection outcome but serializes every decision in the activity row itself. After validating the row and decision, it atomically replaces `execution_result = pending` with a bounded opaque claim owner. All ordinary transitions, including lazy and scheduled expiry, still compare-and-swap from `pending` and therefore lose once execution is claimed. Approval and rejection can finish only by consuming the exact claim value they acquired.
 
-1. Load and validate the pending row.
-2. Resolve the executor.
-3. Call `authorize_target()`, which resolves the canonical identity and compares the complete document identity.
-4. Only after success, resolve the live baseline and execute.
-5. Build any attestation subject from the canonical execution target.
-6. Persist the existing applied or failed transition.
+For approval:
+
+1. Load and validate the pending row and requested decision.
+2. Atomically claim the row from `pending` with an owner-qualified execution marker.
+3. Resolve the executor.
+4. Call `authorize_target()`, which resolves the canonical identity and compares the complete document identity.
+5. Only after success, resolve the live baseline and execute.
+6. Build any attestation subject from the canonical execution target.
+7. Persist the existing applied or failed transition by consuming the exact claim owner.
 
 Authorization therefore occurs before the first Flavor Agent target-content collection, state comparison, or mutation in `resolve_baseline()`.
 
@@ -123,7 +128,9 @@ Within `authorize_target()`, identity validation runs first. A divergent row ret
 
 That precedence is the contract of `authorize_target()` when the service reaches it. Public REST and Ability permission callbacks remain an outer layer and may reject first with their existing activity/permission 403 response. An outer denial does not call the decision or undo service, does not reveal whether persisted target fields mismatch, and does not transition the row.
 
-On approval, when `PendingApplyDecision::decide()` reaches `authorize_target()`, either target error transitions the still-pending row to `apply.status = failed` through the existing transition API, preserving decision attribution and recording the bounded error code/message. No target content is read or written. If the outer permission callback rejects first, the row remains pending because the service never runs.
+On approval, when `PendingApplyDecision::decide()` reaches `authorize_target()`, either target error transitions the claimed row to `apply.status = failed` by consuming the exact decision claim through the transition API, preserving decision attribution and recording the bounded error code/message. No target content is read or written. If the outer permission callback rejects first, the row remains pending because the service never runs.
+
+Decision-claim or target-mutex contention returns `flavor_agent_apply_materialization_locked` with HTTP 409. Target-lock contention and target-lock-store failure occur before target writes, so the service owner-qualifies the claim release back to `pending` and returns the original 409 or 500 for retry. A claim is never released after target execution begins; success or failure consumes it in the terminal transition. An abandoned claim or target mutex has no automatic lease takeover and remains fail-closed for operator recovery. Exact active decision claims project outward as `executionResult = pending`, remain included in public pending filters, the per-user pending cap, and the admin pending notice, and cannot be expired by the ordinary `pending` compare-and-swap. The reserved `claim:` storage namespace, in any ASCII case, is rejected at activity-entry ingestion before event-specific normalization so clients cannot forge an internal owner marker; malformed historical claim-prefixed values are not classified as active claims.
 
 On undo, an outer permission denial, ordered-undo failure, or target-authorization error leaves the row and live target unchanged. When `authorize_target()` is reached, either target error is returned and the row remains `available`; live target state and undo metadata remain byte-for-byte unchanged. A user who lacks permission must not be able to terminalize another operator's undo. A malformed historical row remains visibly unresolved rather than being misreported as undone.
 
@@ -160,7 +167,12 @@ The post-block tests count the core post-type lookup separately from Flavor Agen
 - Each executor rejects a canonical identity when `edit_theme_options` is absent.
 - Template-part cases cover equal dual aliases, accepted `templatePartId`-only rows, rejected `templatePartRef`-only rows, missing aliases, and unequal aliases. The ref-only and unequal-alias cases prove neither baseline/content resolver nor attestation recorder is called.
 - Template and template-part cases seed a different theme-qualified entity with the same slug and prove repository compatibility fallback cannot satisfy the canonical target; baseline, execute, and undo fail before consuming or mutating that entity's content.
-- Existing applied-state, drift, materialization, and attestation tests remain green.
+- Materialization scans same-slug results for the exact canonical ref, but an unrelated-only result remains fail-closed. It preserves the exact core stylesheet identity, rejects an active-theme switch or slug normalization that would change the canonical ref before insertion, then re-resolves the exact ref after insertion and requires its exact ref plus `wp_id` to match before recording success or attestation.
+- Template and template-part persistence acquires a strict database-backed mutex keyed by site, surface, and exact canonical ref before the final live-content hash gate, then holds it through path selection, every write, exact persisted-content readback, cleanup, and reconciliation. Contention returns a retryable `409` with zero target writes and leaves the approval row pending; lock-store failures return `500`. The lock uses a plain conditional insert plus owner-qualified delete against the database object and options table captured at acquisition, so a hook-time blog-context switch cannot strand the original row. Lock decisions use direct SQL and do not depend on option-cache invalidation. There is no automatic lease takeover, so an abandoned or corrupt owner remains fail-closed for operator recovery.
+- The activity decision service atomically replaces `execution_result = pending` with a bounded opaque claim before authorization or target reads and requires that exact claim in the terminal update. A second approve or reject in the post-write/pre-transition gap receives the retryable 409, while expiry and every ordinary transition lose their `pending` compare-and-swap; none can double-apply operations, terminalize the first writer, or replace the first approver's attribution. Public reads normalize only the exact claim syntax back to pending, and pending queues/notices include it without exposing the owner token.
+- After every update or materialization, the executor re-resolves the exact canonical ref and requires its `wp_id` to equal the row just written before it returns snapshots or attestation fields. A same-ref authoritative result bound to another `wp_id` fails closed; a direct `wp_id` query cannot override that result. A save hook that moves the post to another slug or theme therefore cannot leave an activity row or Ring III statement identifying the pre-write subject; non-authoritative labels come from the post-write entity.
+- A confirmed post-write identity mismatch removes only the just-inserted row and verifies deletion before reconciling a concurrent canonical winner. An unavailable exact read remains fail-closed and leaves the row for operator reconciliation because its identity is unknown.
+- Existing applied-state, drift, materialization, and attestation tests remain green except the legacy slug-renormalization cases, which now assert the stricter fail-closed canonical-identity contract.
 
 ### Contract and boundary coverage
 
@@ -168,6 +180,8 @@ The post-block tests count the core post-type lookup separately from Flavor Agen
 - Approval invokes authorization before baseline resolution. Add test-harness-only counters or one-shot hooks around target-content collection, executor writes, and attestation recording; a denied fixture must record zero calls to all three while persisting the expected failed decision.
 - Undo invokes authorization after ordered-undo validation but before executor undo. A blocked older row proves ordered-undo retains precedence and the authorizer is not reached; a topmost denied row proves content resolution, mutation, attestation, and activity transition are not reached.
 - Exercise the outer REST/Ability permission callback separately from direct service calls: outer denial returns the existing permission error and leaves a pending/available row unchanged, while a permission-passed direct service path exposes the stable target error and its documented transition semantics.
+- Force a second approval into the interval after target-lock release but before the first terminal activity transition. It must receive the retryable lock error while the first approval remains `available`, owns the decision attribution, and writes the target exactly once.
+- Force expiry into the target-write interval. Its ordinary pending transition must lose to the owner-qualified decision claim, while the approval records `available` with the exact persisted snapshot. A syntactically valid but different claim owner cannot release or terminalize the row.
 - Error persistence contains bounded codes/messages and no target content.
 
 The call-order seam belongs only in `tests/phpunit/bootstrap.php` or test fixtures. Do not add a production `apply_filters()` bypass around executor lookup, identity resolution, or authorization merely to make ordering mockable.
@@ -206,15 +220,18 @@ Before merging the focused security PR, run the full canonical verifier with Plu
 
 - `inc/Apply/ExternalApplyExecutor.php`
 - `inc/Apply/StyleApplyExecutor.php`
+- `inc/Apply/MaterializationLock.php`
 - `inc/Apply/TemplateApplyExecutor.php`
 - `inc/Apply/TemplatePartApplyExecutor.php`
 - `inc/Apply/PostBlocksApplyExecutor.php`
 - `inc/Apply/PendingApplyDecision.php`
 - `inc/Abilities/ApplyAbilities.php`
+- `inc/Activity/Repository.php`
 - `tests/phpunit/ExternalApplyLifecycleTest.php`
 - `tests/phpunit/ApplyAbilitiesTest.php`
 - `tests/phpunit/ActivityPermissionsTest.php`
 - `tests/phpunit/StyleApplyExecutorTest.php`
+- `tests/phpunit/MaterializationLockTest.php`
 - `tests/phpunit/TemplateApplyExecutorTest.php`
 - `tests/phpunit/TemplatePartApplyExecutorTest.php`
 - `tests/phpunit/PostBlocksApplyExecutorTest.php`
@@ -223,7 +240,7 @@ Before merging the focused security PR, run the full canonical verifier with Plu
 
 ## Compatibility And Rollout
 
-No database migration is required. Canonical rows created by current request abilities already duplicate the same subject in `target`, `document.entityId`, `document.postType`, and `document.scopeKey`.
+No database migration is required. Canonical rows created by current request abilities already duplicate the same subject in `target`, `document.entityId`, `document.postType`, and `document.scopeKey`. The transient owner marker fits the existing `execution_result varchar(32)` column. Public and admin projections use byte- and case-exact owner-marker matching, pending caps and notices continue to include it, and ordered-undo logic treats it as an active newer operation. Activity ingestion reserves the entire `claim:` namespace case-insensitively before outcome normalization. A request interrupted after claiming remains visible and fail-closed for operator recovery rather than being silently retried.
 
 Compatibility is governed by the matrix above. A legacy template-part row containing only `templatePartId` is safe only when the complete document identity agrees; a ref-only, incomplete, or contradictory historical row remains non-executable. This fail-closed behavior is intentional. The release record should state that such rows require manual inspection rather than offering an unsafe compatibility fallback.
 
@@ -238,6 +255,9 @@ The intended integration unit is a focused security pull request based on curren
 - Target/document divergence fails independently of capability possession.
 - The post-blocks regression proves an authorized post cannot proxy a write to another post.
 - When the decision service reaches target authorization, approval denial records an honest failed row without a target content read/write; an outer permission denial leaves it pending.
+- Approval and rejection claim `pending` before target work and consume only their own claim; concurrent decisions and expiry cannot win between a target write and its activity transition.
+- Exact active claims stay publicly pending in get/list activity responses, pending filters, queue limits, and notices without revealing the claim owner; malformed or client-supplied claim-prefixed values cannot enter that state.
+- Target persistence contention and lock-store failure release only the caller-owned no-write claim back to pending, preserving a safe retry.
 - Undo preserves existing lifecycle/ordered-error precedence, and target denial performs no content read/write, attestation, or target/activity transition.
 - All legitimate executor paths and existing permission defenses remain green.
 - Verification evidence belongs to the final focused security SHA.

@@ -8,11 +8,12 @@ use FlavorAgent\Attestation\AttestationService;
 
 final class Serializer {
 
-	private const UNDO_STATUS_AVAILABLE      = 'available';
-	private const UNDO_STATUS_FAILED         = 'failed';
-	private const UNDO_STATUS_NOT_APPLICABLE = 'not_applicable';
-	private const UNDO_STATUS_REVIEW         = 'review';
-	private const UNDO_STATUS_UNDONE         = 'undone';
+	private const EXTERNAL_APPLY_DECISION_CLAIM_PATTERN = '/^claim:[a-f0-9]{24}$/';
+	private const UNDO_STATUS_AVAILABLE                 = 'available';
+	private const UNDO_STATUS_FAILED                    = 'failed';
+	private const UNDO_STATUS_NOT_APPLICABLE            = 'not_applicable';
+	private const UNDO_STATUS_REVIEW                    = 'review';
+	private const UNDO_STATUS_UNDONE                    = 'undone';
 
 	/**
 	 * @param array<string, mixed> $entry
@@ -250,7 +251,7 @@ final class Serializer {
 			'request'         => self::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' ),
 			'document'        => self::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' ),
 			'timestamp'       => $timestamp,
-			'executionResult' => self::normalize_string( $row['execution_result'] ?? 'applied' ),
+			'executionResult' => self::normalize_execution_result_for_read( $row['execution_result'] ?? 'applied' ),
 			'undo'            => $undo,
 			'userId'          => $user_id,
 			'userLabel'       => self::resolve_user_label( $user_id ),
@@ -433,6 +434,14 @@ final class Serializer {
 
 	private static function normalize_string( $value ): string {
 		return trim( (string) $value );
+	}
+
+	private static function normalize_execution_result_for_read( $value ): string {
+		$normalized = self::normalize_string( $value );
+
+		return 1 === preg_match( self::EXTERNAL_APPLY_DECISION_CLAIM_PATTERN, $normalized )
+			? 'pending'
+			: $normalized;
 	}
 
 	private static function resolve_user_label( int $user_id ): string {

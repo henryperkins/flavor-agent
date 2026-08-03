@@ -394,6 +394,29 @@ final class ActivitySerializerTest extends TestCase {
 		$this->assertSame( 'not_applicable', $entry['undo']['status'] );
 	}
 
+	public function test_hydrate_row_projects_only_exact_decision_claims_as_pending(): void {
+		$row = [
+			'activity_id'      => 'apply-row-claim',
+			'surface'          => 'global-styles',
+			'activity_type'    => 'apply_global_styles_suggestion',
+			'request_json'     => '{"apply":{"status":"pending"}}',
+			'execution_result' => 'claim:' . str_repeat( 'a', 24 ),
+			'undo_state'       => '{"status":"not_applicable"}',
+			'created_at'       => '2026-06-10 01:00:00',
+		];
+
+		$claimed = Serializer::hydrate_row( $row );
+		$this->assertSame( 'pending', $claimed['executionResult'] );
+
+		$row['execution_result'] = 'claim:not-an-owner-token';
+		$malformed               = Serializer::hydrate_row( $row );
+		$this->assertSame( 'claim:not-an-owner-token', $malformed['executionResult'] );
+
+		$row['execution_result'] = 'CLAIM:' . str_repeat( 'A', 24 );
+		$uppercase               = Serializer::hydrate_row( $row );
+		$this->assertSame( 'CLAIM:' . str_repeat( 'A', 24 ), $uppercase['executionResult'] );
+	}
+
 	public function test_hydrate_row_does_not_query_attestation_storage(): void {
 		AttestationRepository::install();
 		AttestationRepository::insert(

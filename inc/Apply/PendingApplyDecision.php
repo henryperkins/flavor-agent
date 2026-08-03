@@ -19,6 +19,15 @@ final class PendingApplyDecision {
 	 * @return array<string, mixed>|\WP_Error The transitioned activity entry.
 	 */
 	public static function decide( string $activity_id, string $decision, string $note = '' ): array|\WP_Error {
+		return self::decide_with_claim( $activity_id, $decision, $note );
+	}
+
+	/**
+	 * Atomically claim and execute one activity decision.
+	 *
+	 * @return array<string, mixed>|\WP_Error The transitioned activity entry.
+	 */
+	private static function decide_with_claim( string $activity_id, string $decision, string $note ): array|\WP_Error {
 		$entry = ActivityRepository::find( $activity_id );
 
 		if ( ! is_array( $entry ) ) {
@@ -57,13 +66,19 @@ final class PendingApplyDecision {
 			);
 		}
 
+		$claim = ActivityRepository::claim_external_apply_decision( $activity_id );
+
+		if ( is_wp_error( $claim ) ) {
+			return $claim;
+		}
+
 		$decided_by      = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
 		$decided_by_name = self::actor_display_name( $decided_by );
 		$decided_at      = gmdate( 'c' );
 		$note            = sanitize_textarea_field( $note );
 
 		if ( 'reject' === $decision ) {
-			return ActivityRepository::transition_external_apply(
+			return ActivityRepository::transition_claimed_external_apply(
 				$activity_id,
 				[
 					'applyStatus'   => 'rejected',
@@ -71,7 +86,8 @@ final class PendingApplyDecision {
 					'decidedByName' => $decided_by_name,
 					'decidedAt'     => $decided_at,
 					'decisionNote'  => $note,
-				]
+				],
+				$claim
 			);
 		}
 
@@ -82,7 +98,7 @@ final class PendingApplyDecision {
 		$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
 
 		if ( null === $executor ) {
-			return ActivityRepository::transition_external_apply(
+			return ActivityRepository::transition_claimed_external_apply(
 				$activity_id,
 				[
 					'applyStatus'    => 'failed',
@@ -92,14 +108,15 @@ final class PendingApplyDecision {
 					'decisionNote'   => $note,
 					'failureCode'    => 'flavor_agent_apply_surface_unsupported',
 					'failureMessage' => 'No external-apply executor is registered for this surface.',
-				]
+				],
+				$claim
 			);
 		}
 
 		$authorized = $executor::authorize_target( $entry );
 
 		if ( is_wp_error( $authorized ) ) {
-			return ActivityRepository::transition_external_apply(
+			return ActivityRepository::transition_claimed_external_apply(
 				$activity_id,
 				[
 					'applyStatus'    => 'failed',
@@ -109,7 +126,8 @@ final class PendingApplyDecision {
 					'decisionNote'   => $note,
 					'failureCode'    => (string) $authorized->get_error_code(),
 					'failureMessage' => (string) $authorized->get_error_message(),
-				]
+				],
+				$claim
 			);
 		}
 
@@ -129,7 +147,7 @@ final class PendingApplyDecision {
 		}
 
 		if ( '' !== $stale_reason ) {
-			return ActivityRepository::transition_external_apply(
+			return ActivityRepository::transition_claimed_external_apply(
 				$activity_id,
 				[
 					'applyStatus'    => 'failed',
@@ -139,14 +157,25 @@ final class PendingApplyDecision {
 					'decisionNote'   => $note,
 					'failureCode'    => $failure_code,
 					'failureMessage' => $stale_reason,
-				]
+				],
+				$claim
 			);
 		}
 
 		$result = $executor::execute( $entry );
 
 		if ( is_wp_error( $result ) ) {
-			return ActivityRepository::transition_external_apply(
+			if ( in_array( $result->get_error_code(), [ 'flavor_agent_apply_materialization_locked', 'flavor_agent_apply_lock_unavailable' ], true ) ) {
+				$released = ActivityRepository::release_external_apply_decision_claim( $activity_id, $claim );
+
+				if ( is_wp_error( $released ) ) {
+					return $released;
+				}
+
+				return $result;
+			}
+
+			return ActivityRepository::transition_claimed_external_apply(
 				$activity_id,
 				[
 					'applyStatus'    => 'failed',
@@ -156,7 +185,8 @@ final class PendingApplyDecision {
 					'decisionNote'   => $note,
 					'failureCode'    => (string) $result->get_error_code(),
 					'failureMessage' => (string) $result->get_error_message(),
-				]
+				],
+				$claim
 			);
 		}
 
@@ -216,9 +246,10 @@ final class PendingApplyDecision {
 			$changes['attestationErrorCode'] = $attestation_error_code;
 		}
 
-		return ActivityRepository::transition_external_apply(
+		return ActivityRepository::transition_claimed_external_apply(
 			$activity_id,
-			$changes
+			$changes,
+			$claim
 		);
 	}
 

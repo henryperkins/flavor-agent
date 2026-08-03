@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Apply\TemplatePartApplyExecutor;
+use FlavorAgent\Apply\MaterializationLock;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -280,6 +281,15 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		return '<!-- wp:paragraph --><p>' . $text . '</p><!-- /wp:paragraph -->';
 	}
 
+	/** @return array<string, mixed> */
+	private static function materialization_locks(): array {
+		return array_filter(
+			WordPressTestState::$options,
+			static fn( string $key ): bool => str_starts_with( $key, 'flavor_agent_materialization_lock_' ),
+			ARRAY_FILTER_USE_KEY
+		);
+	}
+
 	/**
 	 * Reflection seam onto the private R1 three-phase apply pipeline so the
 	 * ordering + fail-closed guards can be proven without the collector/validator
@@ -420,6 +430,151 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertStringContainsString( 'Keep saved', (string) WordPressTestState::$posts[4399]->post_content );
 		$this->assertSame( WordPressTestState::$posts[4399]->post_content, $result['after']['content'] );
+	}
+
+	public function test_execute_fails_when_a_save_hook_moves_the_post_off_the_canonical_ref(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 9514, 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		WordPressTestState::$posts[9514]->post_name                      = 'header';
+		WordPressTestState::$object_terms[9514]['wp_theme']              = [ 'twentytwentyfive' ];
+		WordPressTestState::$object_terms[9514]['wp_template_part_area'] = [ 'header' ];
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 9514 === (int) ( $data['ID'] ?? 0 ) ) {
+					$data['post_name'] = 'header-moved';
+					WordPressTestState::$block_templates['wp_template_part'][0]->id   = 'twentytwentyfive//header-moved';
+					WordPressTestState::$block_templates['wp_template_part'][0]->slug = 'header-moved';
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_post_write_read_failed', $result->get_error_code() );
+		$this->assertSame( 'header-moved', WordPressTestState::$posts[9514]->post_name );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( [], self::materialization_locks() );
+	}
+
+	public function test_execute_fails_when_exact_post_write_resolution_selects_another_post(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 9516, 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 9516 === (int) ( $data['ID'] ?? 0 ) ) {
+					WordPressTestState::$posts[9599]        = new \WP_Post(
+						[
+							'ID'           => 9599,
+							'post_type'    => 'wp_template_part',
+							'post_name'    => 'header',
+							'post_content' => '<!-- wp:paragraph --><p>Other row</p><!-- /wp:paragraph -->',
+						]
+					);
+					WordPressTestState::$object_terms[9599] = [
+						'wp_theme'              => [ 'twentytwentyfive' ],
+						'wp_template_part_area' => [ 'header' ],
+					];
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_post_write_read_failed', $result->get_error_code() );
+		$this->assertSame(
+			9599,
+			\FlavorAgent\Context\ServerCollector::resolve_template_part_for_attestation( self::PART_ID )?->wp_id
+		);
+		$this->assertSame( [], self::materialization_locks() );
+	}
+
+	public function test_execute_regates_live_content_after_acquiring_the_target_lock(): void {
+		$before     = $this->paragraph( 'Anchor' );
+		$concurrent = $before . $this->paragraph( 'Concurrent edit' );
+		$this->seed_part( $before, 9510, 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		WordPressTestState::$before_materialization_lock_insert = function () use ( $concurrent ): void {
+			$this->seed_part( $concurrent, 9510, 'header' );
+		};
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( $concurrent, WordPressTestState::$posts[9510]->post_content );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertSame( [], self::materialization_locks() );
+	}
+
+	public function test_execute_captures_persisted_content_before_releasing_the_target_lock(): void {
+		$before = $this->paragraph( 'Anchor' );
+		$later  = $this->paragraph( 'Later writer' );
+		$this->seed_part( $before, 9511, 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		WordPressTestState::$after_materialization_lock_delete = static function () use ( $later ): void {
+			WordPressTestState::$posts[9511]->post_content                       = $later;
+			WordPressTestState::$block_templates['wp_template_part'][0]->content = $later;
+		};
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertStringContainsString( 'TailPat', $result['after']['content'] );
+		$this->assertStringNotContainsString( 'Later writer', $result['after']['content'] );
+		$this->assertSame( $later, WordPressTestState::$posts[9511]->post_content );
+		$this->assertSame( [], self::materialization_locks() );
 	}
 
 	public function test_execute_replaces_block_with_pattern(): void {
@@ -585,6 +740,205 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$updated_posts, 'A theme-file part is inserted, never updated.' );
 	}
 
+	public function test_materialization_rejects_an_active_theme_switch_before_the_write(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		WordPressTestState::$block_templates_read_hook = static function (): void {
+			WordPressTestState::$active_theme = [ 'stylesheet' => 'othertheme' ];
+		};
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_materialization_fails_retryably_when_the_canonical_target_is_locked(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		$lock = MaterializationLock::acquire( 'template-part', self::PART_ID );
+		$this->assertInstanceOf( MaterializationLock::class, $lock );
+
+		try {
+			$result = TemplatePartApplyExecutor::execute(
+				$this->entry(
+					[
+						[
+							'type'        => 'insert_pattern',
+							'patternName' => 'fa-test/tail',
+							'placement'   => 'end',
+						],
+					]
+				)
+			);
+		} finally {
+			$lock->release();
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_materialization_locked', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_materialization_releases_the_lock_when_the_insert_throws(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				unset( $data );
+
+				throw new \RuntimeException( 'template-part insert interrupted' );
+			}
+		);
+
+		try {
+			TemplatePartApplyExecutor::execute(
+				$this->entry(
+					[
+						[
+							'type'        => 'insert_pattern',
+							'patternName' => 'fa-test/tail',
+							'placement'   => 'end',
+						],
+					]
+				)
+			);
+			$this->fail( 'Expected the insert hook to interrupt template-part materialization.' );
+		} catch ( \RuntimeException $error ) {
+			$this->assertSame( 'template-part insert interrupted', $error->getMessage() );
+		}
+
+		$this->assertSame( [], self::materialization_locks() );
+	}
+
+	public function test_materialization_lock_blocks_a_nested_update_before_attestation(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		$entry  = $this->entry(
+			[
+				[
+					'type'        => 'insert_pattern',
+					'patternName' => 'fa-test/tail',
+					'placement'   => 'end',
+				],
+			]
+		);
+		$nested = null;
+		add_action(
+			'wp_after_insert_post',
+			static function ( int $post_id, \WP_Post $post ) use ( $entry, &$nested ): void {
+				unset( $post_id );
+
+				if ( 'wp_template_part' === $post->post_type && null === $nested ) {
+					$nested = TemplatePartApplyExecutor::execute( $entry );
+				}
+			},
+			10,
+			2
+		);
+
+		$result = TemplatePartApplyExecutor::execute( $entry );
+
+		$this->assertIsArray( $result );
+		$this->assertInstanceOf( \WP_Error::class, $nested );
+		$this->assertSame( 'flavor_agent_apply_materialization_locked', $nested->get_error_code() );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_materialization_preserves_the_exact_mixed_case_stylesheet_identity(): void {
+		$ref = 'MyTheme//header';
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		WordPressTestState::$block_templates['wp_template_part'][0]->id = $ref;
+		WordPressTestState::$active_theme                               = [ 'stylesheet' => 'MyTheme' ];
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		$entry                              = $this->entry(
+			[
+				[
+					'type'        => 'insert_pattern',
+					'patternName' => 'fa-test/tail',
+					'placement'   => 'end',
+				],
+			]
+		);
+		$entry['target']['templatePartId']  = $ref;
+		$entry['target']['templatePartRef'] = $ref;
+		$entry['document']['entityId']      = $ref;
+		$entry['document']['scopeKey']      = 'wp_template_part:' . $ref;
+
+		$result = TemplatePartApplyExecutor::execute( $entry );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$post_id = (int) WordPressTestState::$inserted_posts[0]['ID'];
+		$this->assertSame( [ 'MyTheme' ], WordPressTestState::$object_terms[ $post_id ]['wp_theme'] );
+	}
+
+	public function test_materialization_removes_the_row_when_taxonomy_assignment_is_skipped(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		WordPressTestState::$skip_insert_taxonomy_assignment = true;
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_post_write_read_failed', $result->get_error_code() );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$post_id = (int) WordPressTestState::$inserted_posts[0]['ID'];
+		$this->assertSame( [ $post_id ], WordPressTestState::$deleted_posts );
+		$this->assertArrayNotHasKey( $post_id, WordPressTestState::$posts );
+		$this->assertArrayNotHasKey( $post_id, WordPressTestState::$object_terms );
+	}
+
+	public function test_materialization_identity_failure_fails_closed_when_the_row_cannot_be_removed(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		WordPressTestState::$skip_insert_taxonomy_assignment = true;
+		WordPressTestState::$delete_post_short_circuits      = true;
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_write_failed', $result->get_error_code() );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$post_id = (int) WordPressTestState::$inserted_posts[0]['ID'];
+		$this->assertArrayHasKey( $post_id, WordPressTestState::$posts );
+	}
+
 	/**
 	 * Covers the wp_id 0 -> 9201 concurrency race end to end.
 	 *
@@ -721,23 +1075,34 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 				'title'   => 'Header',
 				'content' => $content,
 			],
-			(object) [
+		];
+		WordPressTestState::$before_block_templates_query        = static function ( array $query, string $template_type ) use ( $content ): void {
+			if ( 'wp_template_part' !== $template_type || empty( $query['slug__in'] ) ) {
+				return;
+			}
+
+			WordPressTestState::$before_block_templates_query          = null;
+			WordPressTestState::$block_templates['wp_template_part'][] = (object) [
 				'id'      => self::PART_ID,
 				'wp_id'   => 9202,
 				'slug'    => 'header',
 				'area'    => 'header',
 				'title'   => 'Header',
 				'content' => $content,
-			],
-		];
-		WordPressTestState::$posts[9202]                         = new \WP_Post(
-			[
-				'ID'           => 9202,
-				'post_type'    => 'wp_template_part',
-				'post_name'    => 'header',
-				'post_content' => $content,
-			]
-		);
+			];
+			WordPressTestState::$posts[9202]                           = new \WP_Post(
+				[
+					'ID'           => 9202,
+					'post_type'    => 'wp_template_part',
+					'post_name'    => 'header',
+					'post_content' => $content,
+				]
+			);
+			WordPressTestState::$object_terms[9202]                    = [
+				'wp_theme'              => [ 'twentytwentyfive' ],
+				'wp_template_part_area' => [ 'header' ],
+			];
+		};
 		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
 
 		$result = TemplatePartApplyExecutor::execute(
@@ -757,6 +1122,136 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertCount( 1, WordPressTestState::$updated_posts );
 		$this->assertSame( 9202, WordPressTestState::$updated_posts[0]['ID'] );
 		$this->assertStringContainsString( 'TailPat', (string) WordPressTestState::$posts[9202]->post_content );
+	}
+
+	public function test_persist_duplicate_row_guard_finds_the_canonical_row_after_an_unrelated_candidate(): void {
+		$content = $this->paragraph( 'Anchor' );
+
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => 'plugin//header',
+				'wp_id'   => 9220,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Plugin Header',
+				'content' => $this->paragraph( 'Unrelated' ),
+			],
+			(object) [
+				'id'      => self::PART_ID,
+				'wp_id'   => 0,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			],
+		];
+		WordPressTestState::$before_block_templates_query        = static function ( array $query, string $template_type ) use ( $content ): void {
+			if ( 'wp_template_part' !== $template_type || empty( $query['slug__in'] ) ) {
+				return;
+			}
+
+			WordPressTestState::$before_block_templates_query          = null;
+			WordPressTestState::$block_templates['wp_template_part'][] = (object) [
+				'id'      => self::PART_ID,
+				'wp_id'   => 9221,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			];
+			WordPressTestState::$posts[9221]                           = new \WP_Post(
+				[
+					'ID'           => 9221,
+					'post_type'    => 'wp_template_part',
+					'post_name'    => 'header',
+					'post_content' => $content,
+				]
+			);
+			WordPressTestState::$object_terms[9221]                    = [
+				'wp_theme'              => [ 'twentytwentyfive' ],
+				'wp_template_part_area' => [ 'header' ],
+			];
+		};
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( 9221, WordPressTestState::$updated_posts[0]['ID'] );
+		$this->assertStringContainsString( 'TailPat', (string) WordPressTestState::$posts[9221]->post_content );
+	}
+
+	public function test_post_write_identity_race_removes_its_row_and_reconciles_the_winner(): void {
+		$content = $this->paragraph( 'Anchor' );
+		$this->seed_part( $content, 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		add_action(
+			'wp_after_insert_post',
+			static function ( int $post_id, \WP_Post $post ) use ( $content ): void {
+				if ( 'wp_template_part' !== $post->post_type ) {
+					return;
+				}
+
+				$winner_id                                      = $post_id + 1;
+				WordPressTestState::$posts[ $winner_id ]        = new \WP_Post(
+					[
+						'ID'           => $winner_id,
+						'post_type'    => 'wp_template_part',
+						'post_status'  => 'publish',
+						'post_name'    => 'header',
+						'post_title'   => 'Header',
+						'post_content' => $content,
+					]
+				);
+				WordPressTestState::$object_terms[ $winner_id ] = [
+					'wp_theme'              => [ 'twentytwentyfive' ],
+					'wp_template_part_area' => [ 'header' ],
+				];
+				WordPressTestState::$block_templates['wp_template_part'][] = (object) [
+					'id'      => self::PART_ID,
+					'wp_id'   => $winner_id,
+					'slug'    => 'header',
+					'area'    => 'header',
+					'title'   => 'Header',
+					'content' => $content,
+				];
+			},
+			10,
+			2
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$inserted_id = (int) WordPressTestState::$inserted_posts[0]['ID'];
+		$winner_id   = $inserted_id + 1;
+		$this->assertSame( [ $inserted_id ], WordPressTestState::$deleted_posts );
+		$this->assertArrayNotHasKey( $inserted_id, WordPressTestState::$posts );
+		$this->assertSame( $winner_id, WordPressTestState::$updated_posts[0]['ID'] );
+		$this->assertStringContainsString( 'TailPat', (string) WordPressTestState::$posts[ $winner_id ]->post_content );
 	}
 
 	public function test_persist_duplicate_row_guard_rejects_a_same_slug_different_part_id_before_content_or_writes(): void {
@@ -838,23 +1333,34 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 				'title'   => 'Header',
 				'content' => $content,
 			],
-			(object) [
+		];
+		WordPressTestState::$before_block_templates_query        = static function ( array $query, string $template_type ) use ( $desired ): void {
+			if ( 'wp_template_part' !== $template_type || empty( $query['slug__in'] ) ) {
+				return;
+			}
+
+			WordPressTestState::$before_block_templates_query          = null;
+			WordPressTestState::$block_templates['wp_template_part'][] = (object) [
 				'id'      => self::PART_ID,
 				'wp_id'   => 9203,
 				'slug'    => 'header',
 				'area'    => 'header',
 				'title'   => 'Header',
 				'content' => $desired,
-			],
-		];
-		WordPressTestState::$posts[9203]                         = new \WP_Post(
-			[
-				'ID'           => 9203,
-				'post_type'    => 'wp_template_part',
-				'post_name'    => 'header',
-				'post_content' => $desired,
-			]
-		);
+			];
+			WordPressTestState::$posts[9203]                           = new \WP_Post(
+				[
+					'ID'           => 9203,
+					'post_type'    => 'wp_template_part',
+					'post_name'    => 'header',
+					'post_content' => $desired,
+				]
+			);
+			WordPressTestState::$object_terms[9203]                    = [
+				'wp_theme'              => [ 'twentytwentyfive' ],
+				'wp_template_part_area' => [ 'header' ],
+			];
+		};
 		$this->register_pattern( 'fa-test/tail', $pattern_content );
 
 		$result = TemplatePartApplyExecutor::execute(
@@ -1010,6 +1516,10 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 						'post_content' => $content,
 					]
 				);
+				WordPressTestState::$object_terms[9205]                    = [
+					'wp_theme'              => [ 'twentytwentyfive' ],
+					'wp_template_part_area' => [ 'header' ],
+				];
 
 				return $data;
 			},
@@ -1119,6 +1629,74 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertSame( 'undone', $result['result'] );
 		$this->assertSame( WordPressTestState::$posts[55]->post_content, $result['after']['content'] );
 		$this->assertStringContainsString( '>Original saved<', $result['after']['content'] );
+	}
+
+	public function test_undo_fails_when_a_save_hook_moves_the_post_off_the_canonical_ref(): void {
+		$before = $this->paragraph( 'Original' );
+		$after  = $this->paragraph( 'Changed' );
+		$this->seed_part( $after, 9515, 'header' );
+		WordPressTestState::$posts[9515]->post_name                      = 'header';
+		WordPressTestState::$object_terms[9515]['wp_theme']              = [ 'twentytwentyfive' ];
+		WordPressTestState::$object_terms[9515]['wp_template_part_area'] = [ 'header' ];
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( 9515 === (int) ( $data['ID'] ?? 0 ) ) {
+					$data['post_name'] = 'header-moved';
+					WordPressTestState::$block_templates['wp_template_part'][0]->id   = 'twentytwentyfive//header-moved';
+					WordPressTestState::$block_templates['wp_template_part'][0]->slug = 'header-moved';
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = TemplatePartApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_post_write_read_failed', $result->get_error_code() );
+		$this->assertSame( 'header-moved', WordPressTestState::$posts[9515]->post_name );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+		$this->assertSame( [], self::materialization_locks() );
+	}
+
+	public function test_undo_regates_live_content_after_acquiring_the_target_lock(): void {
+		$before     = $this->paragraph( 'Original' );
+		$after      = $this->paragraph( 'Changed' );
+		$concurrent = $after . $this->paragraph( 'Concurrent edit' );
+		$this->seed_part( $after, 9512, 'header' );
+		WordPressTestState::$before_materialization_lock_insert = function () use ( $concurrent ): void {
+			$this->seed_part( $concurrent, 9512, 'header' );
+		};
+
+		$result = TemplatePartApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( $concurrent, WordPressTestState::$posts[9512]->post_content );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertSame( [], self::materialization_locks() );
+	}
+
+	public function test_undo_captures_persisted_content_before_releasing_the_target_lock(): void {
+		$before = $this->paragraph( 'Original' );
+		$after  = $this->paragraph( 'Changed' );
+		$later  = $this->paragraph( 'Later writer' );
+		$this->seed_part( $after, 9513, 'header' );
+		WordPressTestState::$after_materialization_lock_delete = static function () use ( $later ): void {
+			WordPressTestState::$posts[9513]->post_content                       = $later;
+			WordPressTestState::$block_templates['wp_template_part'][0]->content = $later;
+		};
+
+		$result = TemplatePartApplyExecutor::undo( self::executed_entry( $before, $after ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'undone', $result['result'] );
+		$this->assertSame( $before, $result['after']['content'] );
+		$this->assertSame( $later, WordPressTestState::$posts[9513]->post_content );
+		$this->assertSame( [], self::materialization_locks() );
 	}
 
 	public function test_execute_fails_closed_on_unregistered_pattern_without_writing(): void {
@@ -1535,15 +2113,11 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 	}
 
 	/**
-	 * Core writes post_name through sanitize_title(), which collapses repeated
-	 * dashes and trims edge dashes; sanitize_key() does neither. Comparing the
-	 * two normalizers read a legitimate slug as a collision, force-deleted the
-	 * correctly written row, and failed the apply with a slug conflict that does
-	 * not exist -- permanently, because reconcile_existing_row() then probes a
-	 * slug that is not what got stored. Discriminating: reverting persist() to
-	 * sanitize_key() makes this fail with flavor_agent_apply_slug_conflict.
+	 * A canonical template-part ref is a byte-exact authorization and attestation
+	 * subject. If core would normalize its slug on insert, the write would land on
+	 * a different ref, so materialization must fail before creating the row.
 	 */
-	public function test_materialization_accepts_a_slug_core_renormalizes(): void {
+	public function test_materialization_rejects_a_slug_that_would_change_the_canonical_ref(): void {
 		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'site--header' );
 		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
 
@@ -1559,10 +2133,10 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 			)
 		);
 
-		$this->assertIsArray( $result );
-		$this->assertCount( 1, WordPressTestState::$inserted_posts );
-		$this->assertSame( [], WordPressTestState::$deleted_posts, 'A renormalized slug is not a collision and must not delete the row.' );
-		$this->assertSame( 'site-header', (string) WordPressTestState::$inserted_posts[0]['post_name'] );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+		$this->assertSame( [], WordPressTestState::$deleted_posts );
 	}
 
 	/**
@@ -1646,6 +2220,42 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertSame( 'flavor_agent_apply_post_write_read_failed', $result->get_error_code() );
 		$this->assertSame( [], WordPressTestState::$deleted_posts, 'A read-back failure must not delete the row.' );
 		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+	}
+
+	public function test_materialization_exact_identity_read_failure_leaves_the_row_for_reconciliation(): void {
+		$this->seed_part( $this->paragraph( 'Anchor' ), 0, 'header', 'header' );
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+		add_action(
+			'wp_after_insert_post',
+			static function ( int $post_id, \WP_Post $post ): void {
+				unset( $post_id );
+
+				if ( 'wp_template_part' === $post->post_type ) {
+					WordPressTestState::$next_get_block_template_returns_null = true;
+				}
+			},
+			10,
+			2
+		);
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_post_write_read_failed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$deleted_posts );
+		$this->assertCount( 1, WordPressTestState::$inserted_posts );
+		$post_id = (int) WordPressTestState::$inserted_posts[0]['ID'];
+		$this->assertArrayHasKey( $post_id, WordPressTestState::$posts );
 	}
 
 	/**

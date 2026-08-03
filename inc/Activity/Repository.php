@@ -30,6 +30,8 @@ final class Repository {
 	private const ADMIN_HISTORY_QUERY_KEY_SEPARATOR       = "\x1F";
 	private const ADMIN_PROJECTION_SELECT_SQL             = 'id, activity_id, user_id, surface, entity_type, entity_ref, document_scope_key, activity_type, suggestion, undo_state, execution_result, created_at, admin_post_type, admin_entity_id, admin_block_path, admin_operation_type, admin_operation_label, admin_provider, admin_model, admin_provider_path, admin_configuration_owner, admin_credential_source, admin_selected_provider, admin_request_ability, admin_request_route, admin_request_reference, admin_request_prompt, admin_search_text';
 	private const PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY = 'flavor_agent_pending_external_apply_notice_snapshot';
+	private const EXTERNAL_APPLY_DECISION_CLAIM_PREFIX    = 'claim:';
+	private const EXTERNAL_APPLY_DECISION_CLAIM_SQL_REGEX = '^636C61696D3A(3[0-9]|6[1-6]){24}$';
 	private const ADMIN_PROJECTION_VARCHAR_LIMITS         = [
 		'admin_post_type'           => 64,
 		'admin_entity_id'           => 191,
@@ -162,6 +164,15 @@ final class Repository {
 		}
 
 		$normalized = Serializer::normalize_entry( $entry );
+
+		if ( str_starts_with( strtolower( (string) $normalized['executionResult'] ), self::EXTERNAL_APPLY_DECISION_CLAIM_PREFIX ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_entry',
+				'Flavor Agent activity entries cannot set the reserved external-apply decision claim state.',
+				[ 'status' => 400 ]
+			);
+		}
+
 		$normalized = RecommendationOutcome::normalize_entry( $normalized );
 
 		if ( is_wp_error( $normalized ) ) {
@@ -873,12 +884,191 @@ final class Repository {
 	}
 
 	/**
+	 * Atomically claim one pending external apply before any target state is read
+	 * or written. The owner-qualified execution_result value makes every existing
+	 * pending transition, including expiry, lose the same database CAS.
+	 *
+	 * @return string|\WP_Error Opaque claim owner value for terminal transition.
+	 */
+	public static function claim_external_apply_decision( string $activity_id ): string|\WP_Error {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_storage_unavailable',
+				'Flavor Agent activity storage is unavailable.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$row = self::find_row( $activity_id );
+
+		if ( ! is_array( $row ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_found',
+				'Flavor Agent could not find that activity entry.',
+				[ 'status' => 404 ]
+			);
+		}
+
+		$entry = Serializer::hydrate_row( $row );
+		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only claim pending decisions.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		try {
+			$claim = self::EXTERNAL_APPLY_DECISION_CLAIM_PREFIX . bin2hex( random_bytes( 12 ) );
+		} catch ( \Throwable ) {
+			return new \WP_Error(
+				'flavor_agent_activity_claim_failed',
+				'Flavor Agent could not create an external-apply decision claim.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$timestamp = gmdate( 'c' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Claims a plugin-owned activity row with an owner-qualified compare-and-swap before target execution.
+		$updated = $wpdb->update(
+			self::table_name(),
+			[
+				'execution_result' => $claim,
+				'updated_at'       => Serializer::mysql_datetime_from_timestamp( $timestamp ),
+			],
+			[
+				'activity_id'      => $activity_id,
+				'execution_result' => 'pending',
+			]
+		);
+
+		if ( false === $updated ) {
+			return new \WP_Error(
+				'flavor_agent_activity_update_failed',
+				'Flavor Agent could not claim the external-apply decision.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( 0 === (int) $updated ) {
+			$current = self::find_row( $activity_id );
+
+			if ( is_array( $current ) && self::is_external_apply_decision_claim( (string) ( $current['execution_result'] ?? '' ) ) ) {
+				return new \WP_Error(
+					'flavor_agent_apply_materialization_locked',
+					'Another Flavor Agent request is processing this apply decision. Retry the request.',
+					[ 'status' => 409 ]
+				);
+			}
+
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only claim the pending state once.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		self::invalidate_pending_external_apply_notification_snapshot_cache();
+
+		return $claim;
+	}
+
+	/**
+	 * Release an owner-qualified decision claim only when target execution did not
+	 * begin (for example, target-lock contention), restoring safe retryability.
+	 *
+	 * @return true|\WP_Error
+	 */
+	public static function release_external_apply_decision_claim( string $activity_id, string $claim ) {
+		global $wpdb;
+
+		if ( ! self::is_external_apply_decision_claim( $claim ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent received an invalid external-apply decision claim.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		if ( ! is_object( $wpdb ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_storage_unavailable',
+				'Flavor Agent activity storage is unavailable.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Releases only the caller-owned activity decision claim after a no-write retryable outcome.
+		$updated = $wpdb->update(
+			self::table_name(),
+			[
+				'execution_result' => 'pending',
+				'updated_at'       => Serializer::mysql_datetime_from_timestamp( gmdate( 'c' ) ),
+			],
+			[
+				'activity_id'      => $activity_id,
+				'execution_result' => $claim,
+			]
+		);
+
+		if ( false === $updated ) {
+			return new \WP_Error(
+				'flavor_agent_activity_update_failed',
+				'Flavor Agent could not release the external-apply decision claim.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( 0 === (int) $updated ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent could not release an external-apply decision claim it no longer owns.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		self::invalidate_pending_external_apply_notification_snapshot_cache();
+
+		return true;
+	}
+
+	/**
 	 * One-way transition of an external-apply row out of the pending state.
 	 *
 	 * @param array<string, mixed> $changes {applyStatus, decidedBy?, decidedByName?, decidedAt?, decisionNote?, failureCode?, failureMessage?, executedAt?, attestationStatus?, attestationErrorCode?, before?, after?, target?}
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public static function transition_external_apply( string $activity_id, array $changes ) {
+		return self::transition_external_apply_from_execution_result( $activity_id, $changes, 'pending' );
+	}
+
+	/**
+	 * Consume an owner-qualified decision claim in the terminal activity update.
+	 *
+	 * @param array<string, mixed> $changes
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function transition_claimed_external_apply( string $activity_id, array $changes, string $claim ) {
+		if ( ! self::is_external_apply_decision_claim( $claim ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent received an invalid external-apply decision claim.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return self::transition_external_apply_from_execution_result( $activity_id, $changes, $claim );
+	}
+
+	/**
+	 * @param array<string, mixed> $changes
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private static function transition_external_apply_from_execution_result( string $activity_id, array $changes, string $expected_execution_result ) {
 		global $wpdb;
 
 		if ( ! is_object( $wpdb ) ) {
@@ -946,15 +1136,15 @@ final class Repository {
 			);
 		}
 
-		// Keep the pending guard at the write boundary so simultaneous decisions
-		// cannot overwrite an already-decided row after both readers saw pending.
+		// Keep the exact owner/state guard at the write boundary. Ordinary expiry
+		// consumes pending; an executing decision consumes only its opaque claim.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
 		$updated = $wpdb->update(
 			self::table_name(),
 			$update,
 			[
 				'activity_id'      => $activity_id,
-				'execution_result' => 'pending',
+				'execution_result' => $expected_execution_result,
 			]
 		);
 
@@ -1004,6 +1194,10 @@ final class Repository {
 			'Flavor Agent could not find that activity entry.',
 			[ 'status' => 404 ]
 		);
+	}
+
+	private static function is_external_apply_decision_claim( string $value ): bool {
+		return 1 === preg_match( '/^' . preg_quote( self::EXTERNAL_APPLY_DECISION_CLAIM_PREFIX, '/' ) . '[a-f0-9]{24}$/', $value );
 	}
 
 	/**
@@ -1075,9 +1269,10 @@ final class Repository {
 		}
 
 		$sql = $wpdb->prepare(
-			'SELECT * FROM %i WHERE execution_result = %s AND user_id = %d',
+			'SELECT * FROM %i WHERE (execution_result = %s OR CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s) AND user_id = %d',
 			self::table_name(),
 			'pending',
+			self::EXTERNAL_APPLY_DECISION_CLAIM_SQL_REGEX,
 			$user_id
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Counts the requesting user's pending external applies; prepared above.
@@ -1177,15 +1372,17 @@ final class Repository {
 		}
 
 		$sql = $wpdb->prepare(
-			'SELECT activity_id, user_id, surface, target_json, request_json, document_json, execution_result FROM %i WHERE execution_result = %s ORDER BY created_at DESC, id DESC',
+			'SELECT activity_id, user_id, surface, target_json, request_json, document_json, execution_result FROM %i WHERE execution_result = %s OR CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s ORDER BY created_at DESC, id DESC',
 			self::table_name(),
-			'pending'
+			'pending',
+			self::EXTERNAL_APPLY_DECISION_CLAIM_SQL_REGEX
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Rebuilds the admin notice snapshot from the plugin-owned activity table only when the cache is invalid or stale.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
-			$entry = self::maybe_expire_pending_external_apply_notice_entry(
+			$is_claimed = self::is_external_apply_decision_claim( trim( (string) ( $row['execution_result'] ?? '' ) ) );
+			$entry      = self::maybe_expire_pending_external_apply_notice_entry(
 				self::hydrate_pending_external_apply_notice_entry( $row )
 			);
 
@@ -1199,7 +1396,9 @@ final class Repository {
 				$snapshot['latest'] = $entry;
 			}
 
-			self::track_pending_external_apply_notice_expiry( $snapshot, (string) ( $entry['apply']['expiresAt'] ?? '' ) );
+			if ( ! $is_claimed ) {
+				self::track_pending_external_apply_notice_expiry( $snapshot, (string) ( $entry['apply']['expiresAt'] ?? '' ) );
+			}
 		}
 
 		return $snapshot;
@@ -1244,7 +1443,9 @@ final class Repository {
 			'surface'         => trim( (string) ( $row['surface'] ?? '' ) ),
 			'target'          => Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' ),
 			'document'        => Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' ),
-			'executionResult' => trim( (string) ( $row['execution_result'] ?? '' ) ),
+			'executionResult' => self::is_external_apply_decision_claim( trim( (string) ( $row['execution_result'] ?? '' ) ) )
+				? 'pending'
+				: trim( (string) ( $row['execution_result'] ?? '' ) ),
 			'userId'          => $user_id,
 			'userLabel'       => self::resolve_admin_user_label( $user_id ),
 		];
@@ -2635,7 +2836,7 @@ final class Repository {
 		$newer_active_condition = self::get_admin_sql_newer_active_exists();
 
 		return '(CASE'
-			. " WHEN t.execution_result IN ('pending') THEN 'pending'"
+			. " WHEN t.execution_result IN ('pending') OR CONVERT(HEX(t.execution_result) USING utf8mb4) REGEXP '" . self::EXTERNAL_APPLY_DECISION_CLAIM_SQL_REGEX . "' THEN 'pending'"
 			. " WHEN t.execution_result IN ('rejected') THEN 'rejected'"
 			. " WHEN t.execution_result IN ('expired') THEN 'expired'"
 			. " WHEN t.execution_result IN ('failed') THEN 'failed'"
@@ -2906,6 +3107,12 @@ final class Repository {
 			}
 
 			$entity_indexes[ $key ][] = $index;
+			$execution_result         = trim( (string) ( $row['execution_result'] ?? '' ) );
+
+			if ( self::is_external_apply_decision_claim( $execution_result ) ) {
+				$activity_id                = trim( (string) ( $row['activity_id'] ?? '' ) );
+				$status_map[ $activity_id ] = 'pending';
+			}
 
 			if ( self::is_review_only_row( $row ) ) {
 				$activity_id                = trim( (string) ( $row['activity_id'] ?? '' ) );
@@ -2937,6 +3144,12 @@ final class Repository {
 				$undo_status = self::get_admin_row_undo_status( $row );
 
 				if ( '' === $activity_id ) {
+					continue;
+				}
+
+				if ( self::is_external_apply_decision_claim( trim( (string) ( $row['execution_result'] ?? '' ) ) ) ) {
+					$status_map[ $activity_id ] = 'pending';
+					$has_active_newer_entry     = true;
 					continue;
 				}
 

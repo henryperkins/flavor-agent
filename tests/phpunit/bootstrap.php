@@ -81,6 +81,15 @@ namespace FlavorAgent\Tests\Support {
 		 */
 		public static $block_templates_read_hook = null;
 
+		/**
+		 * Optional query-aware hook fired before get_block_templates() snapshots its
+		 * store. Tests use it to publish a concurrent customization exactly when the
+		 * executor enters its duplicate-row probe.
+		 *
+		 * @var callable|null
+		 */
+		public static $before_block_templates_query = null;
+
 		public static array $transients = [];
 
 		public static array $transient_expirations = [];
@@ -114,6 +123,18 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<string, mixed> */
 		public static array $option_autoload = [];
 
+		/** Models a database failure while inserting a strict option lock row. */
+		public static bool $option_insert_fails = false;
+
+		/** One-shot interleaving immediately before an option-lock INSERT. */
+		public static $before_materialization_lock_insert = null;
+
+		/** One-shot interleaving immediately after an owned option-lock DELETE. */
+		public static $after_materialization_lock_delete = null;
+
+		/** Models an exception-throwing persistent object-cache drop-in. */
+		public static bool $wp_cache_delete_throws = false;
+
 		/** @var array<string> */
 		public static array $cleared_cron_hooks = [];
 
@@ -131,6 +152,18 @@ namespace FlavorAgent\Tests\Support {
 
 		/** @var array<int, array<string, mixed>> */
 		public static array $inserted_posts = [];
+
+		/** @var array<int, array<string, array<int, string>>> */
+		public static array $object_terms = [];
+
+		/**
+		 * Models wp_insert_post() silently skipping or failing tax_input assignment.
+		 * Core capability-gates the assignment and ignores wp_set_post_terms errors.
+		 */
+		public static bool $skip_insert_taxonomy_assignment = false;
+
+		/** One-shot exact block-template lookup failure after a successful write. */
+		public static bool $next_get_block_template_returns_null = false;
 
 		/** @var array<int, int> */
 		public static array $deleted_posts = [];
@@ -186,6 +219,8 @@ namespace FlavorAgent\Tests\Support {
 		public static int $db_insert_id = 0;
 
 		public static int $current_user_id = 0;
+
+		public static int $current_blog_id = 1;
 
 		/** @var array<int, array<string, mixed>> Seeded user records for get_userdata(): id → {display_name, user_login, roles}. */
 		public static array $users = [];
@@ -401,6 +436,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$capability_checks           = [];
 			self::$block_templates             = [];
 			self::$block_templates_read_hook   = null;
+			self::$before_block_templates_query = null;
 			self::$transients                  = [];
 			self::$transient_expirations       = [];
 			self::$registered_abilities        = [];
@@ -414,12 +450,19 @@ namespace FlavorAgent\Tests\Support {
 			self::$scheduled_events            = [];
 			self::$updated_options              = [];
 			self::$option_autoload              = [];
+			self::$option_insert_fails          = false;
+			self::$before_materialization_lock_insert = null;
+			self::$after_materialization_lock_delete  = null;
+			self::$wp_cache_delete_throws       = false;
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
 			self::$get_post_calls              = [];
 			self::$get_post_type_calls         = [];
 			self::$updated_posts               = [];
 			self::$inserted_posts              = [];
+			self::$object_terms                        = [];
+			self::$skip_insert_taxonomy_assignment     = false;
+			self::$next_get_block_template_returns_null = false;
 			self::$deleted_posts               = [];
 			self::$next_get_post_returns_null  = false;
 			self::$delete_post_short_circuits  = false;
@@ -437,6 +480,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$wp_cli_exit_code            = null;
 			self::$db_insert_id                = 0;
 			self::$current_user_id             = 0;
+			self::$current_blog_id             = 1;
 			self::$users                       = [];
 			self::$current_screen              = null;
 			self::$remote_post_response        = [];
@@ -1227,6 +1271,8 @@ namespace {
 
 			public string $prefix = 'wp_';
 
+			public string $options = 'wp_options';
+
 			public int $insert_id = 0;
 
 			public function get_charset_collate(): string
@@ -1319,6 +1365,32 @@ namespace {
 
 			public function insert(string $table, array $data, array $format = [])
 			{
+				if ($this->options === $table) {
+					$option_name = (string) ($data['option_name'] ?? '');
+					$hook        = WordPressTestState::$before_materialization_lock_insert;
+
+					if (
+						str_starts_with($option_name, 'flavor_agent_materialization_lock_')
+						&& is_callable($hook)
+					) {
+						WordPressTestState::$before_materialization_lock_insert = null;
+						$hook();
+					}
+
+					if (
+						WordPressTestState::$option_insert_fails
+						|| '' === $option_name
+						|| array_key_exists($option_name, WordPressTestState::$options)
+					) {
+						return false;
+					}
+
+					WordPressTestState::$options[$option_name]         = $data['option_value'] ?? '';
+					WordPressTestState::$option_autoload[$option_name] = $data['autoload'] ?? 'no';
+
+					return 1;
+				}
+
 				WordPressTestState::$db_insert_id += 1;
 				$row = array_merge(
 					[
@@ -1335,6 +1407,66 @@ namespace {
 				$this->insert_id = WordPressTestState::$db_insert_id;
 
 				return 1;
+			}
+
+			public function delete(
+				string $table,
+				array $where,
+				array $where_format = []
+			) {
+				unset($where_format);
+
+				if ($this->options === $table) {
+					$option_name  = (string) ($where['option_name'] ?? '');
+					$option_value = (string) ($where['option_value'] ?? '');
+
+					if (
+						! array_key_exists($option_name, WordPressTestState::$options)
+						|| (string) WordPressTestState::$options[$option_name] !== $option_value
+					) {
+						return 0;
+					}
+
+					unset(
+						WordPressTestState::$options[$option_name],
+						WordPressTestState::$option_autoload[$option_name]
+					);
+
+					$hook = WordPressTestState::$after_materialization_lock_delete;
+
+					if (
+						str_starts_with($option_name, 'flavor_agent_materialization_lock_')
+						&& is_callable($hook)
+					) {
+						WordPressTestState::$after_materialization_lock_delete = null;
+						$hook();
+					}
+
+					return 1;
+				}
+
+				if (! isset(WordPressTestState::$db_tables[$table])) {
+					return 0;
+				}
+
+				$deleted = 0;
+
+				WordPressTestState::$db_tables[$table] = array_values(
+					array_filter(
+						WordPressTestState::$db_tables[$table],
+						function (array $row) use ($where, &$deleted): bool {
+							if (! $this->row_matches($row, $where)) {
+								return true;
+							}
+
+							++$deleted;
+
+							return false;
+						}
+					)
+				);
+
+				return $deleted;
 			}
 
 			public function update(
@@ -1372,6 +1504,18 @@ namespace {
 			public function get_var(string $query)
 			{
 				WordPressTestState::$db_queries[] = $query;
+
+				if (
+					preg_match(
+						'/SELECT\s+option_value\s+FROM\s+`?wp_options`?\s+WHERE\s+option_name\s*=\s*\'([^\']+)\'/i',
+						$query,
+						$matches
+					)
+				) {
+					$option_name = stripslashes((string) ($matches[1] ?? ''));
+
+					return WordPressTestState::$options[$option_name] ?? null;
+				}
 
 				if (preg_match("/SHOW TABLES LIKE '([^']+)'/i", $query, $matches)) {
 					$table = stripslashes((string) ($matches[1] ?? ''));
@@ -1516,10 +1660,28 @@ namespace {
 
 						if (preg_match("/execution_result\s*=\s*'([^']*)'/i", $query, $matches)) {
 							$execution_result = stripslashes((string) ($matches[1] ?? ''));
-							$rows             = array_values(
+							$regexp_pattern   = null;
+
+							if (preg_match("/CONVERT\(HEX\(execution_result\)\s+USING\s+utf8mb4\)\s+REGEXP\s*'([^']*)'/i", $query, $regexp_matches)) {
+								$regexp_pattern = stripslashes((string) ($regexp_matches[1] ?? ''));
+							}
+
+							$rows = array_values(
 								array_filter(
 									$rows,
-									static fn(array $row): bool => (string) ($row['execution_result'] ?? '') === $execution_result
+									static function (array $row) use ($execution_result, $regexp_pattern): bool {
+										$stored = (string) ($row['execution_result'] ?? '');
+
+										if ($stored === $execution_result) {
+											return true;
+										}
+
+										return is_string($regexp_pattern)
+											&& 1 === preg_match(
+												'/' . str_replace('/', '\\/', $regexp_pattern) . '/i',
+												strtoupper(bin2hex($stored))
+											);
+									}
 								)
 							);
 						}
@@ -1738,8 +1900,13 @@ namespace {
 				if (preg_match('/COUNT\(\*\)\s+AS\s+total/i', $query) && str_contains($query, 'AS admin_status')) {
 					$grouped = [];
 
+					$claim_regexp_is_exact = 1 === preg_match(
+						'/CONVERT\(HEX\(t\.execution_result\)\s+USING\s+utf8mb4\)\s+REGEXP/i',
+						$query
+					);
+
 					foreach ($rows as $row) {
-						$status = $this->resolve_activity_admin_status($row, $all_rows);
+						$status = $this->resolve_activity_admin_status($row, $all_rows, $claim_regexp_is_exact);
 
 						if (! isset($grouped[$status])) {
 							$grouped[$status] = 0;
@@ -1887,15 +2054,24 @@ namespace {
 			 * @param array<string, mixed> $row
 			 * @param array<int, array<string, mixed>> $all_rows
 			 */
-			private function resolve_activity_admin_status(array $row, array $all_rows): string
+			private function resolve_activity_admin_status(
+				array $row,
+				array $all_rows,
+				bool $claim_regexp_is_exact
+			): string
 			{
 				$undo = json_decode((string) ($row['undo_state'] ?? ''), true);
 				$undo_status = is_array($undo) ? (string) ($undo['status'] ?? 'available') : 'available';
 				$is_review = 'request_diagnostic' === (string) ($row['activity_type'] ?? '')
 					|| 'review' === (string) ($row['execution_result'] ?? '');
+				$execution_result = (string) ($row['execution_result'] ?? '');
+
+				if (1 === preg_match('/^claim:[a-f0-9]{24}$/' . ($claim_regexp_is_exact ? '' : 'i'), $execution_result)) {
+					return 'pending';
+				}
 
 				$non_executed = in_array(
-					(string) ($row['execution_result'] ?? ''),
+					$execution_result,
 					['pending', 'rejected', 'expired', 'failed'],
 					true
 				);
@@ -2366,7 +2542,7 @@ namespace {
 	if (! function_exists('get_current_blog_id')) {
 		function get_current_blog_id(): int
 		{
-			return 1;
+			return WordPressTestState::$current_blog_id;
 		}
 	}
 
@@ -2891,6 +3067,12 @@ namespace {
 	if (! function_exists('get_block_templates')) {
 		function get_block_templates(array $query = [], string $template_type = 'wp_template'): array
 		{
+			$before_hook = WordPressTestState::$before_block_templates_query;
+
+			if (is_callable($before_hook)) {
+				$before_hook($query, $template_type);
+			}
+
 			$templates = WordPressTestState::$block_templates[$template_type] ?? [];
 			$result    = [];
 
@@ -2929,6 +3111,45 @@ namespace {
 	if (! function_exists('get_block_template')) {
 		function get_block_template(string $id, string $template_type = 'wp_template')
 		{
+			if (WordPressTestState::$next_get_block_template_returns_null) {
+				WordPressTestState::$next_get_block_template_returns_null = false;
+
+				return null;
+			}
+
+			$parts = explode('//', $id, 2);
+
+			if (2 === count($parts)) {
+				[$theme, $slug] = $parts;
+
+				foreach (array_reverse(WordPressTestState::$posts, true) as $post_id => $post) {
+					$terms  = WordPressTestState::$object_terms[(int) $post_id] ?? [];
+					$themes = is_array($terms['wp_theme'] ?? null) ? $terms['wp_theme'] : [];
+
+					if (
+						! is_object($post)
+						|| $template_type !== (string) ($post->post_type ?? '')
+						|| $slug !== (string) ($post->post_name ?? '')
+						|| ! in_array($theme, $themes, true)
+					) {
+						continue;
+					}
+
+					$areas = is_array($terms['wp_template_part_area'] ?? null)
+						? $terms['wp_template_part_area']
+						: [];
+
+					return (object) [
+						'id'      => $id,
+						'wp_id'   => (int) $post_id,
+						'slug'    => $slug,
+						'title'   => (string) ($post->post_title ?? ''),
+						'area'    => (string) ($areas[0] ?? ''),
+						'content' => (string) ($post->post_content ?? ''),
+					];
+				}
+			}
+
 			foreach (get_block_templates([], $template_type) as $template) {
 				if ((string) ($template->id ?? '') === $id) {
 					return $template;
@@ -3469,6 +3690,8 @@ namespace {
 		function wp_insert_post(array $postarr, bool $wp_error = false)
 		{
 			unset($wp_error);
+			$unsanitized_postarr = $postarr;
+			$tax_input           = is_array($postarr['tax_input'] ?? null) ? $postarr['tax_input'] : [];
 
 			// Core normalizes post_name through sanitize_title() BEFORE the
 			// wp_insert_post_data filter runs, so a caller-supplied slug that
@@ -3480,10 +3703,14 @@ namespace {
 				$postarr['post_name'] = sanitize_title($postarr['post_name']);
 			}
 
-			$filtered = apply_filters('wp_insert_post_data', $postarr, $postarr, $postarr, false);
+			$database_data = $postarr;
+			unset($database_data['tax_input']);
+
+			$filtered = apply_filters('wp_insert_post_data', $database_data, $postarr, $unsanitized_postarr, false);
 			if (is_array($filtered)) {
-				$postarr = $filtered;
+				$postarr = array_merge($postarr, $filtered);
 			}
+			$postarr['tax_input'] = $tax_input;
 
 			$id = 0;
 			foreach (array_keys(WordPressTestState::$posts) as $existing) {
@@ -3491,8 +3718,22 @@ namespace {
 			}
 			$id = $id > 0 ? $id + 1 : 5000;
 
-			WordPressTestState::$posts[$id]         = new \WP_Post(array_merge($postarr, ['ID' => $id]));
-			WordPressTestState::$inserted_posts[]   = array_merge($postarr, ['ID' => $id]);
+			WordPressTestState::$posts[$id]       = new \WP_Post(array_merge($postarr, ['ID' => $id]));
+			WordPressTestState::$inserted_posts[] = array_merge($postarr, ['ID' => $id]);
+
+			if (! WordPressTestState::$skip_insert_taxonomy_assignment) {
+				foreach ($tax_input as $taxonomy => $terms) {
+					$terms = is_array($terms) ? $terms : [$terms];
+					WordPressTestState::$object_terms[$id][(string) $taxonomy] = array_values(
+						array_filter(
+							array_map('strval', $terms),
+							static fn(string $term): bool => '' !== $term
+						)
+					);
+				}
+			}
+
+			do_action('wp_after_insert_post', $id, WordPressTestState::$posts[$id], false, null);
 
 			return $id;
 		}
@@ -3516,6 +3757,7 @@ namespace {
 			}
 
 			unset(WordPressTestState::$posts[$post_id]);
+			unset(WordPressTestState::$object_terms[$post_id]);
 			WordPressTestState::$deleted_posts[] = $post_id;
 
 			return $post;
@@ -3984,6 +4226,19 @@ namespace {
 				WordPressTestState::$updated_options[$name],
 				WordPressTestState::$option_autoload[$name]
 			);
+
+			return true;
+		}
+	}
+
+	if (! function_exists('wp_cache_delete')) {
+		function wp_cache_delete(string $key, string $group = ''): bool
+		{
+			unset($key, $group);
+
+			if (WordPressTestState::$wp_cache_delete_throws) {
+				throw new \RuntimeException('object cache unavailable');
+			}
 
 			return true;
 		}

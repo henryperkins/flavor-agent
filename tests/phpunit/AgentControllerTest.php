@@ -249,6 +249,63 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_create_activity_rejects_reserved_decision_claim_execution_results(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		foreach ( [ 'claim:' . str_repeat( 'a', 24 ), 'claim:not-an-owner-token', 'CLAIM:' . str_repeat( 'A', 24 ) ] as $index => $execution_result ) {
+			$activity_id              = 'activity-forged-claim-' . (string) $index;
+			$entry                    = $this->build_activity_entry( $activity_id );
+			$entry['executionResult'] = $execution_result;
+			$request                  = new \WP_REST_Request( 'POST', '/flavor-agent/v1/activity' );
+			$request->set_param( 'entry', $entry );
+
+			$response = Agent_Controller::handle_create_activity( $request );
+
+			$this->assertInstanceOf( \WP_Error::class, $response );
+			$this->assertSame( 'flavor_agent_activity_invalid_entry', $response->get_error_code() );
+			$this->assertSame( 400, $response->get_error_data()['status'] ?? null );
+			$this->assertNull( ActivityRepository::find( $activity_id ) );
+		}
+	}
+
+	public function test_handle_create_activity_rejects_reserved_claim_before_outcome_normalization(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		$outcome_id = 'outcome-forged-claim';
+		$request    = new \WP_REST_Request( 'POST', '/flavor-agent/v1/activity' );
+		$request->set_param(
+			'entry',
+			[
+				'id'              => $outcome_id,
+				'type'            => 'recommendation_outcome',
+				'surface'         => 'pattern',
+				'target'          => [ 'recommendationSetId' => 'set-forged-claim' ],
+				'after'           => [
+					'outcome' => [
+						'event'               => 'shown',
+						'recommendationSetId' => 'set-forged-claim',
+						'visibility'          => 'diagnostic',
+					],
+				],
+				'document'        => [
+					'scopeKey' => 'wp_template:theme//home',
+					'postType' => 'wp_template',
+					'entityId' => 'theme//home',
+				],
+				'executionResult' => 'claim:' . str_repeat( 'b', 24 ),
+			]
+		);
+
+		$response = Agent_Controller::handle_create_activity( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'flavor_agent_activity_invalid_entry', $response->get_error_code() );
+		$this->assertSame( 400, $response->get_error_data()['status'] ?? null );
+		$this->assertNull( ActivityRepository::find( $outcome_id ) );
+	}
+
 	public function test_handle_get_activity_filters_by_scope_key(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['edit_theme_options'] = true;

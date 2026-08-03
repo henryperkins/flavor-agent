@@ -239,11 +239,13 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertSame( 'flavor_agent_apply_stale', $result->get_error_code() );
 	}
 
-	public function test_request_style_apply_enforces_the_per_user_pending_cap(): void {
+	public function test_request_style_apply_pending_cap_counts_an_active_decision_claim(): void {
 		add_filter( 'flavor_agent_external_apply_pending_cap', static fn(): int => 1 );
 
 		$first = ApplyAbilities::request_style_apply( $this->agent_request_input() );
 		$this->assertIsArray( $first );
+		$claim = Repository::claim_external_apply_decision( (string) $first['activityId'] );
+		$this->assertIsString( $claim );
 
 		$second = ApplyAbilities::request_style_apply( $this->agent_request_input() );
 
@@ -407,6 +409,31 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		$all = ApplyAbilities::list_activity( [ 'scopeKey' => 'global_styles:17' ] );
 		$this->assertCount( 2, $all['entries'] );
+	}
+
+	public function test_active_decision_claim_projects_as_pending_for_get_and_list_activity(): void {
+		$created = ApplyAbilities::request_style_apply( $this->agent_request_input() );
+		$this->assertIsArray( $created );
+		$activity_id = (string) $created['activityId'];
+		$claim       = Repository::claim_external_apply_decision( $activity_id );
+		$this->assertIsString( $claim );
+
+		$fetched = ApplyAbilities::get_activity( [ 'activityId' => $activity_id ] );
+
+		$this->assertIsArray( $fetched );
+		$this->assertSame( 'pending', $fetched['entry']['executionResult'] );
+		$this->assertSame( 'pending', $fetched['entry']['apply']['status'] );
+
+		$pending = ApplyAbilities::list_activity(
+			[
+				'scopeKey' => 'global_styles:17',
+				'status'   => 'pending',
+			]
+		);
+
+		$this->assertIsArray( $pending );
+		$this->assertSame( [ $activity_id ], array_column( $pending['entries'], 'id' ) );
+		$this->assertSame( 'pending', $pending['entries'][0]['executionResult'] );
 	}
 
 	/**
@@ -600,8 +627,10 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
-		$this->assertSame( $before_row, Repository::find( (string) $row['id'] ) );
-		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] );
+		$after_row = Repository::find( (string) $row['id'] );
+		$this->assertIsArray( $after_row );
+		$this->assertSame( $before_row, $after_row );
+		$this->assertSame( 'available', $after_row['undo']['status'] );
 		$this->assertSame( $document_content, (string) WordPressTestState::$posts[100]->post_content );
 		$this->assertSame( $target_content, (string) WordPressTestState::$posts[200]->post_content );
 		$this->assertSame( [], WordPressTestState::$get_post_calls );
@@ -661,7 +690,9 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$capability_checks );
 		$this->assertSame( [], WordPressTestState::$get_post_calls );
 		$this->assertSame( [], WordPressTestState::$updated_posts );
-		$this->assertSame( 'available', Repository::find( (string) $older['id'] )['undo']['status'] );
+		$after_row = Repository::find( (string) $older['id'] );
+		$this->assertIsArray( $after_row );
+		$this->assertSame( 'available', $after_row['undo']['status'] );
 	}
 
 	public function test_undo_activity_rejects_unsupported_surfaces(): void {
