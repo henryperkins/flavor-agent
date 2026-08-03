@@ -23,6 +23,7 @@ final class ApplyAbilitiesTest extends TestCase {
 		WordPressTestState::$capabilities    = [
 			'edit_theme_options' => true,
 			'edit_posts'         => true,
+			'edit_post'          => true,
 		];
 		Repository::install();
 		$this->seed_global_styles_post(
@@ -435,12 +436,73 @@ final class ApplyAbilitiesTest extends TestCase {
 					'operations' => [],
 				],
 				'undo'       => [ 'status' => 'available' ],
-				'document'   => [ 'scopeKey' => 'global_styles:17' ],
+				'document'   => [
+					'entityId' => self::GLOBAL_STYLES_ID,
+					'postType' => 'global_styles',
+					'scopeKey' => 'global_styles:17',
+				],
 			]
 		);
 		$this->assertIsArray( $created );
 
 		return $created;
+	}
+
+	private function seed_post_blocks_post( int $post_id, string $content ): void {
+		WordPressTestState::$posts[ $post_id ] = new \WP_Post(
+			[
+				'ID'           => $post_id,
+				'post_type'    => 'post',
+				'post_status'  => 'publish',
+				'post_title'   => 'Post ' . $post_id,
+				'post_content' => $content,
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $target_overrides
+	 * @return array<string, mixed>
+	 */
+	private function create_executed_post_blocks_row(
+		string $id,
+		int $document_post_id,
+		int $target_post_id,
+		array $target_overrides = []
+	): array {
+		$before = '<!-- wp:paragraph --><p>Before</p><!-- /wp:paragraph -->';
+		$after  = '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->';
+		$target = array_replace(
+			[
+				'postId'   => $target_post_id,
+				'postType' => 'post',
+			],
+			$target_overrides
+		);
+		$row    = Repository::create(
+			[
+				'id'              => $id,
+				'type'            => 'apply_post_blocks_suggestion',
+				'surface'         => 'post-blocks',
+				'target'          => $target,
+				'suggestion'      => 'Replace the paragraph',
+				'before'          => [ 'content' => $before ],
+				'after'           => [
+					'content'    => $after,
+					'operations' => [],
+				],
+				'executionResult' => 'applied',
+				'undo'            => [ 'status' => 'available' ],
+				'document'        => [
+					'entityId' => (string) $document_post_id,
+					'postType' => 'post',
+					'scopeKey' => 'post:' . $document_post_id,
+				],
+			]
+		);
+		$this->assertIsArray( $row );
+
+		return $row;
 	}
 
 	public function test_undo_activity_restores_the_entity_and_persists_undone(): void {
@@ -513,6 +575,93 @@ final class ApplyAbilitiesTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_activity_undo_blocked', $result->get_error_code() );
+	}
+
+	public function test_undo_activity_denies_a_divergent_topmost_post_target_without_content_or_row_changes(): void {
+		$document_content = '<!-- wp:paragraph --><p>Document 100</p><!-- /wp:paragraph -->';
+		$target_content   = '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->';
+		$this->seed_post_blocks_post( 100, $document_content );
+		$this->seed_post_blocks_post( 200, $target_content );
+		WordPressTestState::$capabilities = [
+			'edit_post:100' => true,
+			'edit_post:200' => true,
+		];
+		$row                              = $this->create_executed_post_blocks_row( 'post-target-mismatch-undo', 100, 200 );
+		$before_row                       = Repository::find( (string) $row['id'] );
+		$this->assertIsArray( $before_row );
+
+		WordPressTestState::$get_post_calls      = [];
+		WordPressTestState::$get_post_type_calls = [];
+		WordPressTestState::$updated_posts       = [];
+		WordPressTestState::$capability_checks   = [];
+		$result                                  = ApplyAbilities::undo_activity(
+			[ 'activityId' => (string) $row['id'] ]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+		$this->assertSame( $before_row, Repository::find( (string) $row['id'] ) );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] );
+		$this->assertSame( $document_content, (string) WordPressTestState::$posts[100]->post_content );
+		$this->assertSame( $target_content, (string) WordPressTestState::$posts[200]->post_content );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertNull( \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $row['id'] ) );
+	}
+
+	public function test_undo_activity_denies_a_coherent_forbidden_post_target_without_content_or_row_changes(): void {
+		$target_content = '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->';
+		$this->seed_post_blocks_post( 200, $target_content );
+		WordPressTestState::$capabilities = [ 'edit_post:200' => false ];
+		$row                              = $this->create_executed_post_blocks_row( 'post-target-forbidden-undo', 200, 200 );
+		$before_row                       = Repository::find( (string) $row['id'] );
+		$this->assertIsArray( $before_row );
+
+		WordPressTestState::$get_post_calls      = [];
+		WordPressTestState::$get_post_type_calls = [];
+		WordPressTestState::$updated_posts       = [];
+		WordPressTestState::$capability_checks   = [];
+		$result                                  = ApplyAbilities::undo_activity(
+			[ 'activityId' => (string) $row['id'] ]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $result->get_error_code() );
+		$this->assertSame( $before_row, Repository::find( (string) $row['id'] ) );
+		$this->assertSame( $target_content, (string) WordPressTestState::$posts[200]->post_content );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertNull( \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $row['id'] ) );
+	}
+
+	public function test_ordered_undo_blocking_precedes_authorization_of_an_older_malformed_row(): void {
+		$after = '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->';
+		$this->seed_post_blocks_post( 100, $after );
+		$this->seed_post_blocks_post( 200, $after );
+		$older = $this->create_executed_post_blocks_row(
+			'post-target-malformed-older',
+			100,
+			100,
+			[ 'postType' => 'page' ]
+		);
+		$newer = $this->create_executed_post_blocks_row( 'post-target-valid-newer', 100, 100 );
+		$this->assertNotSame( $older['id'], $newer['id'] );
+
+		WordPressTestState::$get_post_calls      = [];
+		WordPressTestState::$get_post_type_calls = [];
+		WordPressTestState::$updated_posts       = [];
+		WordPressTestState::$capability_checks   = [];
+		$result                                  = ApplyAbilities::undo_activity(
+			[ 'activityId' => (string) $older['id'] ]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_activity_undo_blocked', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$get_post_type_calls );
+		$this->assertSame( [], WordPressTestState::$capability_checks );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertSame( 'available', Repository::find( (string) $older['id'] )['undo']['status'] );
 	}
 
 	public function test_undo_activity_rejects_unsupported_surfaces(): void {
@@ -616,7 +765,7 @@ final class ApplyAbilitiesTest extends TestCase {
 				'executionResult' => 'applied',
 				'undo'            => [ 'status' => 'available' ],
 				'document'        => [
-					'scopeKey'   => 'template:' . self::TEMPLATE_REF,
+					'scopeKey'   => 'wp_template:' . self::TEMPLATE_REF,
 					'postType'   => 'wp_template',
 					'entityId'   => self::TEMPLATE_REF,
 					'entityKind' => 'postType',
@@ -694,10 +843,9 @@ final class ApplyAbilitiesTest extends TestCase {
 				'type'            => 'apply_template_part_suggestion',
 				'surface'         => 'template-part',
 				'target'          => [
-					'templatePartId'  => self::TEMPLATE_PART_REF,
-					'templatePartRef' => self::TEMPLATE_PART_REF,
-					'slug'            => 'header',
-					'area'            => 'header',
+					'templatePartId' => '  ' . self::TEMPLATE_PART_REF . '  ',
+					'slug'           => 'header',
+					'area'           => 'header',
 				],
 				'suggestion'      => 'Simplify the header',
 				'before'          => [ 'content' => $before ],
@@ -717,6 +865,15 @@ final class ApplyAbilitiesTest extends TestCase {
 			]
 		);
 		$this->assertIsArray( $activity );
+		$identity = \FlavorAgent\Apply\TemplatePartApplyExecutor::resolve_target_identity( $activity );
+		$this->assertIsArray( $identity );
+		$expected_subject   = 'wp_template_part:' . $identity['target']['templatePartRef'];
+		$raw_target         = is_array( $activity['target'] ?? null ) ? $activity['target'] : [];
+		$old_fallback_value = (string) ( $raw_target['templatePartRef'] ?? $raw_target['templatePartId'] ?? '' );
+		$old_raw_subject    = 'wp_template_part:' . $old_fallback_value;
+		$this->assertSame( self::TEMPLATE_PART_REF, $identity['target']['templatePartRef'] );
+		$this->assertSame( 'wp_template_part:  ' . self::TEMPLATE_PART_REF . '  ', $old_raw_subject );
+		$this->assertNotSame( $expected_subject, $old_raw_subject );
 
 		$this->configure_attestation_key();
 		\FlavorAgent\Attestation\Repository::install();
@@ -750,6 +907,7 @@ final class ApplyAbilitiesTest extends TestCase {
 		$statement = json_decode( (string) $revert['statement_bytes'], true );
 		$this->assertIsArray( $statement );
 		$this->assertSame( 'external-template-part-apply-v1', $statement['predicate']['governance']['lane'] );
+		$this->assertSame( $expected_subject, $statement['subject'][0]['name'] );
 		$this->assertSame( $apply_attestation_id, $statement['predicate']['revertsAttestationId'] );
 	}
 

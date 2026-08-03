@@ -37,24 +37,155 @@ final class PostBlocksApplyExecutorTest extends TestCase {
 	 * @param array<int, array<string, mixed>> $operations
 	 * @return array<string, mixed>
 	 */
-	private function entry( int $post_id, array $operations ): array {
+	private function entry( int $post_id, array $operations, string $post_type = 'post' ): array {
 		return [
-			'surface' => 'post-blocks',
-			'target'  => [ 'postId' => $post_id ],
-			'apply'   => [ 'operations' => $operations ],
+			'surface'  => 'post-blocks',
+			'target'   => [
+				'postId'   => $post_id,
+				'postType' => $post_type,
+			],
+			'document' => [
+				'entityId' => (string) $post_id,
+				'postType' => $post_type,
+				'scopeKey' => $post_type . ':' . $post_id,
+			],
+			'apply'    => [ 'operations' => $operations ],
 		];
 	}
 
 	/**
 	 * @return array<string, mixed>
 	 */
-	private static function executed_entry( int $post_id, string $before, string $after ): array {
+	private static function executed_entry( int $post_id, string $before, string $after, string $post_type = 'post' ): array {
 		return [
-			'surface' => 'post-blocks',
-			'target'  => [ 'postId' => $post_id ],
-			'before'  => [ 'content' => $before ],
-			'after'   => [ 'content' => $after ],
+			'surface'  => 'post-blocks',
+			'target'   => [
+				'postId'   => $post_id,
+				'postType' => $post_type,
+			],
+			'document' => [
+				'entityId' => (string) $post_id,
+				'postType' => $post_type,
+				'scopeKey' => $post_type . ':' . $post_id,
+			],
+			'before'   => [ 'content' => $before ],
+			'after'    => [ 'content' => $after ],
 		];
+	}
+
+	public function test_resolve_target_identity_binds_post_id_to_actual_post_type(): void {
+		$this->seed_post( 9300, $this->paragraph( 'Body' ), 'page' );
+
+		$identity = PostBlocksApplyExecutor::resolve_target_identity( $this->entry( 9300, [], 'page' ) );
+
+		$this->assertSame(
+			[
+				'target'   => [
+					'postId'   => 9300,
+					'postType' => 'page',
+				],
+				'document' => [
+					'entityId' => '9300',
+					'postType' => 'page',
+					'scopeKey' => 'page:9300',
+				],
+			],
+			$identity
+		);
+		$this->assertSame( [ 9300 ], WordPressTestState::$get_post_type_calls );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+	}
+
+	public function test_authorize_target_rejects_a_document_for_one_post_and_target_for_another_even_when_both_are_editable(): void {
+		$this->seed_post( 100, $this->paragraph( 'Allowed' ) );
+		$this->seed_post( 200, $this->paragraph( 'Target' ) );
+		$entry                         = $this->entry( 200, [] );
+		$entry['document']['entityId'] = '100';
+		$entry['document']['scopeKey'] = 'post:100';
+		WordPressTestState::$capabilities['edit_post:100'] = true;
+		WordPressTestState::$capabilities['edit_post:200'] = true;
+
+		$result = PostBlocksApplyExecutor::authorize_target( $entry );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( [ 200 ], WordPressTestState::$get_post_type_calls );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame( [], WordPressTestState::$capability_checks );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_authorize_target_rejects_a_stored_post_type_that_disagrees_with_actual_metadata_before_capability(): void {
+		$this->seed_post( 200, $this->paragraph( 'Page' ), 'page' );
+
+		$result = PostBlocksApplyExecutor::authorize_target( $this->entry( 200, [], 'post' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+		$this->assertSame( [ 200 ], WordPressTestState::$get_post_type_calls );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame( [], WordPressTestState::$capability_checks );
+	}
+
+	public function test_authorize_target_requires_edit_post_on_the_canonical_target_without_collecting_content(): void {
+		$this->seed_post( 200, $this->paragraph( 'Page' ), 'page' );
+
+		$result = PostBlocksApplyExecutor::authorize_target( $this->entry( 200, [], 'page' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( [ 200 ], WordPressTestState::$get_post_type_calls );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame(
+			[
+				[
+					'capability' => 'edit_post',
+					'args'       => [ 200 ],
+				],
+			],
+			WordPressTestState::$capability_checks
+		);
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+
+		WordPressTestState::$capabilities['edit_post:200'] = true;
+		$this->assertTrue( PostBlocksApplyExecutor::authorize_target( $this->entry( 200, [], 'page' ) ) );
+	}
+
+	public function test_authorize_target_rejects_missing_or_non_positive_post_identity(): void {
+		$this->seed_post( 200, $this->paragraph( 'Post' ) );
+		$missing_target_type = $this->entry( 200, [] );
+		unset( $missing_target_type['target']['postType'] );
+		$malformed_id                     = $this->entry( 200, [] );
+		$malformed_id['target']['postId'] = '200junk';
+		$missing_document_entity          = $this->entry( 200, [] );
+		$missing_document_type            = $this->entry( 200, [] );
+		$missing_document_scope           = $this->entry( 200, [] );
+		$noncanonical_document_scope      = $this->entry( 200, [] );
+		unset( $missing_document_entity['document']['entityId'] );
+		unset( $missing_document_type['document']['postType'] );
+		unset( $missing_document_scope['document']['scopeKey'] );
+		$noncanonical_document_scope['document']['scopeKey'] = 'post:0200';
+		$entries = [
+			$this->entry( 0, [] ),
+			$missing_target_type,
+			$malformed_id,
+			$missing_document_entity,
+			$missing_document_type,
+			$missing_document_scope,
+			$noncanonical_document_scope,
+		];
+
+		foreach ( $entries as $entry ) {
+			WordPressTestState::$get_post_type_calls = [];
+			WordPressTestState::$capability_checks   = [];
+			$result                                  = PostBlocksApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+			$this->assertSame( [], WordPressTestState::$capability_checks );
+		}
 	}
 
 	private function register_pattern( string $name, string $content ): void {
@@ -103,7 +234,7 @@ final class PostBlocksApplyExecutorTest extends TestCase {
 		$result = PostBlocksApplyExecutor::resolve_baseline( $this->entry( 424242, [] ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_apply_target_unavailable', $result->get_error_code() );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
 	}
 
 	// ---------------------------------------------------------------------
@@ -437,7 +568,8 @@ final class PostBlocksApplyExecutorTest extends TestCase {
 						'targetPath'        => [ 0 ],
 						'expectedBlockName' => 'core/paragraph',
 					],
-				]
+				],
+				'wp_template_part'
 			)
 		);
 
@@ -572,8 +704,16 @@ final class PostBlocksApplyExecutorTest extends TestCase {
 
 		$result = PostBlocksApplyExecutor::undo(
 			[
-				'surface' => 'post-blocks',
-				'target'  => [ 'postId' => 9313 ],
+				'surface'  => 'post-blocks',
+				'target'   => [
+					'postId'   => 9313,
+					'postType' => 'post',
+				],
+				'document' => [
+					'entityId' => '9313',
+					'postType' => 'post',
+					'scopeKey' => 'post:9313',
+				],
 			]
 		);
 

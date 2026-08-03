@@ -483,7 +483,10 @@ final class ApplyAbilities {
 		$baseline = PostBlocksApplyExecutor::resolve_baseline(
 			[
 				'surface' => 'post-blocks',
-				'target'  => [ 'postId' => $post_id ],
+				'target'  => [
+					'postId'   => $post_id,
+					'postType' => function_exists( 'get_post_type' ) ? (string) get_post_type( $post_id ) : '',
+				],
 			]
 		);
 
@@ -947,6 +950,20 @@ final class ApplyAbilities {
 			);
 		}
 
+		$authorized = $executor::authorize_target( $entry );
+
+		if ( is_wp_error( $authorized ) ) {
+			return $authorized;
+		}
+
+		$identity = $executor::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$canonical_target = $identity['target'];
+
 		$result = $executor::undo( $entry );
 
 		if ( is_wp_error( $result ) ) {
@@ -971,7 +988,6 @@ final class ApplyAbilities {
 				$attestation_metadata['attestationStatus'] = 'not_applicable';
 			} else {
 				try {
-					$target              = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
 					$persisted_after     = is_array( $result['after'] ?? null )
 						? $result['after']
 						: ( is_array( $entry['before'] ?? null ) ? $entry['before'] : [] );
@@ -988,12 +1004,12 @@ final class ApplyAbilities {
 					];
 
 					if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
-						$attestation_context['globalStylesId'] = (string) ( $target['globalStylesId'] ?? '' );
-						$attestation_context['blockName']      = (string) ( $target['blockName'] ?? '' );
+						$attestation_context['globalStylesId'] = (string) ( $canonical_target['globalStylesId'] ?? '' );
+						$attestation_context['blockName']      = (string) ( $canonical_target['blockName'] ?? '' );
 					} else {
 						$attestation_context['templateRef'] = 'template-part' === $surface
-							? (string) ( $target['templatePartRef'] ?? $target['templatePartId'] ?? '' )
-							: (string) ( $target['templateRef'] ?? '' );
+							? (string) ( $canonical_target['templatePartRef'] ?? '' )
+							: (string) ( $canonical_target['templateRef'] ?? '' );
 					}
 
 					$attestation_result                           = AttestationService::record_revert(

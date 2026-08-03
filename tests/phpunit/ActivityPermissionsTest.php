@@ -343,6 +343,120 @@ final class ActivityPermissionsTest extends TestCase {
 		);
 	}
 
+	public function test_decision_rest_permission_denial_uses_document_context_before_target_authorization(): void {
+		$created = ActivityRepository::create(
+			$this->build_external_post_blocks_entry( 'outer-decision-denied', true )
+		);
+		$this->assertIsArray( $created );
+		$before = ActivityRepository::find( (string) $created['id'] );
+		$this->assertIsArray( $before );
+		WordPressTestState::$capabilities = [
+			'manage_options' => true,
+			'edit_post:100'  => false,
+			'edit_post:200'  => true,
+		];
+
+		WordPressTestState::$get_post_type_calls = [];
+		WordPressTestState::$capability_checks   = [];
+		$request                                 = new \WP_REST_Request(
+			'POST',
+			'/flavor-agent/v1/activity/outer-decision-denied/decision'
+		);
+		$request->set_param( 'id', 'outer-decision-denied' );
+		$request->set_param( 'decision', 'approve' );
+		$result = Agent_Controller::handle_activity_decision( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_activity_forbidden', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( $before, ActivityRepository::find( (string) $created['id'] ) );
+		$this->assertSame( [], WordPressTestState::$get_post_type_calls );
+		$this->assertSame(
+			[
+				[
+					'capability' => 'manage_options',
+					'args'       => [],
+				],
+				[
+					'capability' => 'edit_post',
+					'args'       => [ 100 ],
+				],
+			],
+			WordPressTestState::$capability_checks
+		);
+	}
+
+	public function test_undo_ability_permission_denial_uses_document_context_before_target_authorization(): void {
+		$created = ActivityRepository::create(
+			$this->build_external_post_blocks_entry( 'outer-undo-denied', false )
+		);
+		$this->assertIsArray( $created );
+		$before = ActivityRepository::find( (string) $created['id'] );
+		$this->assertIsArray( $before );
+		WordPressTestState::$capabilities = [
+			'edit_post:100' => false,
+			'edit_post:200' => true,
+		];
+		$ability                          = new \FlavorAgent\AI\Abilities\UndoActivityAbility(
+			\FlavorAgent\AI\Abilities\UndoActivityAbility::ABILITY_NAME,
+			[]
+		);
+
+		WordPressTestState::$get_post_type_calls = [];
+		WordPressTestState::$capability_checks   = [];
+		$this->assertFalse( $ability->permission_callback( [ 'activityId' => (string) $created['id'] ] ) );
+
+		$this->assertSame( $before, ActivityRepository::find( (string) $created['id'] ) );
+		$this->assertSame( [], WordPressTestState::$get_post_type_calls );
+		$this->assertSame(
+			[
+				[
+					'capability' => 'edit_post',
+					'args'       => [ 100 ],
+				],
+			],
+			WordPressTestState::$capability_checks
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_external_post_blocks_entry( string $id, bool $pending ): array {
+		$before = '<!-- wp:paragraph --><p>Before</p><!-- /wp:paragraph -->';
+		$after  = '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->';
+
+		return [
+			'id'              => $id,
+			'type'            => 'apply_post_blocks_suggestion',
+			'surface'         => 'post-blocks',
+			'target'          => [
+				'postId'   => 200,
+				'postType' => 'post',
+			],
+			'suggestion'      => 'Replace the paragraph',
+			'before'          => $pending ? [] : [ 'content' => $before ],
+			'after'           => $pending ? [] : [
+				'content'    => $after,
+				'operations' => [],
+			],
+			'executionResult' => $pending ? 'pending' : 'applied',
+			'undo'            => [ 'status' => $pending ? 'not_applicable' : 'available' ],
+			'request'         => $pending ? [
+				'apply' => [
+					'status'      => 'pending',
+					'requestedAt' => gmdate( 'c' ),
+					'expiresAt'   => gmdate( 'c', time() + 3600 ),
+				],
+			] : [],
+			'document'        => [
+				'entityId' => '100',
+				'postType' => 'post',
+				'scopeKey' => 'post:100',
+			],
+		];
+	}
+
 	/**
 	 * @return array<string, mixed>
 	 */

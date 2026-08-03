@@ -25,6 +25,70 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	public const SURFACE_STYLE_BOOK    = 'style-book';
 
 	/**
+	 * @param array<string, mixed> $entry
+	 * @return array{target: array<string, string>, document: array{entityId: string, postType: string, scopeKey: string}}|\WP_Error
+	 */
+	public static function resolve_target_identity( array $entry ): array|\WP_Error {
+		$target           = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$surface          = (string) ( $entry['surface'] ?? '' );
+		$raw_global_id    = $target['globalStylesId'] ?? null;
+		$global_styles_id = is_string( $raw_global_id ) ? trim( $raw_global_id ) : '';
+
+		if (
+			! in_array( $surface, [ self::SURFACE_GLOBAL_STYLES, self::SURFACE_STYLE_BOOK ], true )
+			|| ! is_string( $raw_global_id )
+			|| $raw_global_id !== $global_styles_id
+			|| ! preg_match( '/^[1-9][0-9]*$/D', $global_styles_id )
+			|| (string) (int) $global_styles_id !== $global_styles_id
+		) {
+			return self::target_mismatch();
+		}
+
+		$block_name = '';
+
+		if ( self::SURFACE_STYLE_BOOK === $surface ) {
+			$raw_block_name = $target['blockName'] ?? null;
+
+			if ( ! is_string( $raw_block_name ) ) {
+				return self::target_mismatch();
+			}
+
+			$block_name = sanitize_text_field( trim( $raw_block_name ) );
+
+			if ( '' === $block_name ) {
+				return self::target_mismatch();
+			}
+		}
+
+		return [
+			'target'   => array_merge(
+				[ 'globalStylesId' => $global_styles_id ],
+				self::SURFACE_STYLE_BOOK === $surface ? [ 'blockName' => $block_name ] : []
+			),
+			'document' => [
+				'entityId' => $global_styles_id,
+				'postType' => 'global_styles',
+				'scopeKey' => StyleAbilities::canonical_scope_key_for( $surface, $global_styles_id, $block_name ),
+			],
+		];
+	}
+
+	/** @param array<string, mixed> $entry */
+	public static function authorize_target( array $entry ): true|\WP_Error {
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		if ( ! self::has_matching_document( $entry, $identity['document'] ) ) {
+			return self::target_mismatch();
+		}
+
+		return current_user_can( 'edit_theme_options' ) ? true : self::target_forbidden();
+	}
+
+	/**
 	 * @return array{postId: int, config: array{settings: array<string, mixed>, styles: array<string, mixed>}, raw: array<string, mixed>, fingerprint: string}|\WP_Error
 	 */
 	public static function resolve_user_global_styles( string $global_styles_id ): array|\WP_Error {
@@ -143,8 +207,13 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	 * @param array<string, mixed> $entry Hydrated activity entry.
 	 */
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
-		$target   = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
-		$resolved = self::resolve_user_global_styles( (string) ( $target['globalStylesId'] ?? '' ) );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$resolved = self::resolve_user_global_styles( $identity['target']['globalStylesId'] );
 
 		return is_wp_error( $resolved ) ? $resolved : self::comparable_config_hash( $resolved['config'] );
 	}
@@ -156,16 +225,32 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{target: array<string, mixed>, before: array<string, mixed>, after: array<string, mixed>}|\WP_Error
 	 */
 	public static function execute( array $entry ): array|\WP_Error {
-		$target     = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
 		$apply      = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 		$operations = is_array( $apply['operations'] ?? null ) ? $apply['operations'] : [];
-
-		return self::apply(
+		$result     = self::apply(
 			(string) ( $entry['surface'] ?? '' ),
-			(string) ( $target['globalStylesId'] ?? '' ),
+			$identity['target']['globalStylesId'],
 			$operations,
-			(string) ( $target['blockName'] ?? '' )
+			(string) ( $identity['target']['blockName'] ?? '' )
 		);
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$live_target      = is_array( $result['target'] ?? null ) ? $result['target'] : [];
+		$result['target'] = array_merge(
+			$identity['target'],
+			isset( $live_target['blockTitle'] ) ? [ 'blockTitle' => (string) $live_target['blockTitle'] ] : []
+		);
+
+		return $result;
 	}
 
 	/**
@@ -315,17 +400,15 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{result: string}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
-		$surface          = (string) ( $entry['surface'] ?? '' );
-		$target           = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
-		$global_styles_id = trim( (string) ( $target['globalStylesId'] ?? '' ) );
+		$identity = self::resolve_target_identity( $entry );
 
-		if ( '' === $global_styles_id ) {
-			return new \WP_Error(
-				'flavor_agent_undo_snapshot_unsupported',
-				'This activity row does not record a Global Styles target and cannot be undone server-side.',
-				[ 'status' => 409 ]
-			);
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
 		}
+
+		$surface          = (string) ( $entry['surface'] ?? '' );
+		$target           = $identity['target'];
+		$global_styles_id = $target['globalStylesId'];
 
 		$before = is_array( $entry['before'] ?? null ) ? $entry['before'] : [];
 		$after  = is_array( $entry['after'] ?? null ) ? $entry['after'] : [];
@@ -455,6 +538,27 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 		}
 
 		return [ 'result' => 'undone' ];
+	}
+
+	/** @param array<string, mixed> $entry @param array{entityId: string, postType: string, scopeKey: string} $canonical */
+	private static function has_matching_document( array $entry, array $canonical ): bool {
+		$document = is_array( $entry['document'] ?? null ) ? $entry['document'] : [];
+
+		foreach ( $canonical as $field => $value ) {
+			if ( ! array_key_exists( $field, $document ) || $value !== $document[ $field ] ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static function target_mismatch(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_apply_target_mismatch', 'The stored Global Styles target does not match its canonical document identity.', [ 'status' => 409 ] );
+	}
+
+	private static function target_forbidden(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_apply_target_forbidden', 'You are not allowed to apply changes to these Global Styles.', [ 'status' => 403 ] );
 	}
 
 	/**

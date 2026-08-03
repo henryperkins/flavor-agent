@@ -96,6 +96,23 @@ final class PendingApplyDecision {
 			);
 		}
 
+		$authorized = $executor::authorize_target( $entry );
+
+		if ( is_wp_error( $authorized ) ) {
+			return ActivityRepository::transition_external_apply(
+				$activity_id,
+				[
+					'applyStatus'    => 'failed',
+					'decidedBy'      => $decided_by,
+					'decidedByName'  => $decided_by_name,
+					'decidedAt'      => $decided_at,
+					'decisionNote'   => $note,
+					'failureCode'    => (string) $authorized->get_error_code(),
+					'failureMessage' => (string) $authorized->get_error_message(),
+				]
+			);
+		}
+
 		// Second freshness check: the live baseline must still match the
 		// baseline recorded at request time. Drift fails closed.
 		$live_baseline = $executor::resolve_baseline( $entry );
@@ -161,13 +178,8 @@ final class PendingApplyDecision {
 					'relatedActivityId'  => $activity_id,
 				];
 
-				if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
-					$attestation_context['globalStylesId'] = (string) ( $result_target['globalStylesId'] ?? '' );
-					$attestation_context['blockName']      = (string) ( $result_target['blockName'] ?? '' );
-				} else {
-					$attestation_context['templateRef'] = 'template-part' === $surface
-						? (string) ( $result_target['templatePartRef'] ?? $result_target['templatePartId'] ?? '' )
-						: (string) ( $result_target['templateRef'] ?? '' );
+				foreach ( self::apply_attestation_target_fields( $surface, $result_target ) as $key => $value ) {
+					$attestation_context[ $key ] = $value;
 				}
 
 				$attestation_result     = AttestationService::record_apply( $attestation_context );
@@ -208,6 +220,25 @@ final class PendingApplyDecision {
 			$activity_id,
 			$changes
 		);
+	}
+
+	/**
+	 * @param array<string, mixed> $target
+	 * @return array<string, string>
+	 */
+	private static function apply_attestation_target_fields( string $surface, array $target ): array {
+		if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+			return [
+				'globalStylesId' => (string) ( $target['globalStylesId'] ?? '' ),
+				'blockName'      => (string) ( $target['blockName'] ?? '' ),
+			];
+		}
+
+		return [
+			'templateRef' => 'template-part' === $surface
+				? (string) ( $target['templatePartRef'] ?? '' )
+				: (string) ( $target['templateRef'] ?? '' ),
+		];
 	}
 
 	private static function actor_role( int $user_id ): string {

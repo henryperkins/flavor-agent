@@ -53,9 +53,17 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 	 */
 	private function entry( array $operations ): array {
 		return [
-			'surface' => 'template-part',
-			'target'  => [ 'templatePartId' => self::PART_ID ],
-			'apply'   => [ 'operations' => $operations ],
+			'surface'  => 'template-part',
+			'target'   => [
+				'templatePartId'  => self::PART_ID,
+				'templatePartRef' => self::PART_ID,
+			],
+			'document' => [
+				'entityId' => self::PART_ID,
+				'postType' => 'wp_template_part',
+				'scopeKey' => 'wp_template_part:' . self::PART_ID,
+			],
+			'apply'    => [ 'operations' => $operations ],
 		];
 	}
 
@@ -68,11 +76,194 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 	 */
 	private static function executed_entry( string $before, string $after ): array {
 		return [
-			'surface' => 'template-part',
-			'target'  => [ 'templatePartId' => self::PART_ID ],
-			'before'  => [ 'content' => $before ],
-			'after'   => [ 'content' => $after ],
+			'surface'  => 'template-part',
+			'target'   => [
+				'templatePartId'  => self::PART_ID,
+				'templatePartRef' => self::PART_ID,
+			],
+			'document' => [
+				'entityId' => self::PART_ID,
+				'postType' => 'wp_template_part',
+				'scopeKey' => 'wp_template_part:' . self::PART_ID,
+			],
+			'before'   => [ 'content' => $before ],
+			'after'    => [ 'content' => $after ],
 		];
+	}
+
+	public function test_resolve_target_identity_returns_equal_template_part_aliases(): void {
+		$identity = TemplatePartApplyExecutor::resolve_target_identity( $this->entry( [] ) );
+
+		$this->assertSame(
+			[
+				'target'   => [
+					'templatePartId'  => self::PART_ID,
+					'templatePartRef' => self::PART_ID,
+				],
+				'document' => [
+					'entityId' => self::PART_ID,
+					'postType' => 'wp_template_part',
+					'scopeKey' => 'wp_template_part:' . self::PART_ID,
+				],
+			],
+			$identity
+		);
+	}
+
+	public function test_resolve_target_identity_accepts_an_id_only_legacy_row_and_populates_both_aliases(): void {
+		$entry = $this->entry( [] );
+		unset( $entry['target']['templatePartRef'] );
+
+		$identity = TemplatePartApplyExecutor::resolve_target_identity( $entry );
+
+		$this->assertIsArray( $identity );
+		$this->assertSame(
+			[
+				'templatePartId'  => self::PART_ID,
+				'templatePartRef' => self::PART_ID,
+			],
+			$identity['target']
+		);
+	}
+
+	public function test_authorize_target_rejects_missing_or_conflicting_template_part_ids_before_reads_or_capability(): void {
+		$fixtures = [
+			'ref-only' => [ 'templatePartRef' => self::PART_ID ],
+			'missing'  => [],
+			'conflict' => [
+				'templatePartId'  => self::PART_ID,
+				'templatePartRef' => 'twentytwentyfive//footer',
+			],
+		];
+
+		foreach ( $fixtures as $label => $target ) {
+			$entry                                 = $this->entry( [] );
+			$entry['target']                       = $target;
+			$reads                                 = 0;
+			WordPressTestState::$capability_checks = [];
+			WordPressTestState::$block_templates_read_hook = static function () use ( &$reads ): void {
+				++$reads;
+			};
+
+			$result = TemplatePartApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result, $label );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code(), $label );
+			$this->assertSame( 409, $result->get_error_data()['status'] ?? null, $label );
+			$this->assertSame( 0, $reads, $label );
+			$this->assertSame( [], WordPressTestState::$capability_checks, $label );
+		}
+	}
+
+	public function test_authorize_target_rejects_non_string_template_part_aliases_before_reads_or_capability(): void {
+		$fixtures = [
+			[
+				'templatePartId'  => [],
+				'templatePartRef' => [],
+			],
+			[
+				'templatePartId'  => 17,
+				'templatePartRef' => 17,
+			],
+			[
+				'templatePartId'  => new \stdClass(),
+				'templatePartRef' => self::PART_ID,
+			],
+			[
+				'templatePartId'  => [ 'first' ],
+				'templatePartRef' => [ 'second' ],
+			],
+		];
+
+		foreach ( $fixtures as $target ) {
+			$entry           = $this->entry( [] );
+			$entry['target'] = $target;
+			$canonical_ref   = is_int( $target['templatePartId'] ) ? (string) $target['templatePartId'] : 'Array';
+
+			if ( ! is_object( $target['templatePartId'] ) ) {
+				$entry['document'] = [
+					'entityId' => $canonical_ref,
+					'postType' => 'wp_template_part',
+					'scopeKey' => 'wp_template_part:' . $canonical_ref,
+				];
+			}
+
+			$reads = 0;
+
+			WordPressTestState::$capability_checks         = [];
+			WordPressTestState::$block_templates_read_hook = static function () use ( &$reads ): void {
+				++$reads;
+			};
+
+			$result = TemplatePartApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+			$this->assertSame( 409, $result->get_error_data()['status'] ?? null );
+			$this->assertSame( 0, $reads );
+			$this->assertSame( [], WordPressTestState::$capability_checks );
+		}
+	}
+
+	public function test_authorize_target_rejects_each_divergent_template_part_document_field_before_capability(): void {
+		$mutations = [
+			'entityId' => 'twentytwentyfive//footer',
+			'postType' => 'wp_template',
+			'scopeKey' => 'wp_template_part:twentytwentyfive//footer',
+		];
+
+		foreach ( $mutations as $field => $value ) {
+			$entry                                 = $this->entry( [] );
+			$entry['document'][ $field ]           = $value;
+			WordPressTestState::$capability_checks = [];
+
+			$result = TemplatePartApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result, $field );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code(), $field );
+			$this->assertSame( [], WordPressTestState::$capability_checks, $field );
+		}
+
+		foreach ( array_keys( $mutations ) as $field ) {
+			$entry = $this->entry( [] );
+			unset( $entry['document'][ $field ] );
+			WordPressTestState::$capability_checks = [];
+
+			$result = TemplatePartApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result, 'missing ' . $field );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code(), 'missing ' . $field );
+			$this->assertSame( [], WordPressTestState::$capability_checks, 'missing ' . $field );
+		}
+	}
+
+	public function test_authorize_target_requires_edit_theme_options_for_a_canonical_template_part(): void {
+		$result = TemplatePartApplyExecutor::authorize_target( $this->entry( [] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] ?? null );
+
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		$this->assertTrue( TemplatePartApplyExecutor::authorize_target( $this->entry( [] ) ) );
+	}
+
+	public function test_resolve_baseline_rejects_repository_slug_fallback_to_a_different_template_part_id(): void {
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => 'othertheme//header',
+				'wp_id'   => 0,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Other Header',
+				'content' => '<!-- wp:paragraph --><p>Wrong subject</p><!-- /wp:paragraph -->',
+			],
+		];
+
+		$result = TemplatePartApplyExecutor::resolve_baseline( $this->entry( [] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
 	}
 
 	private function register_pattern( string $name, string $content ): void {
@@ -156,7 +347,7 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$result = TemplatePartApplyExecutor::resolve_baseline( [ 'surface' => 'template-part' ] );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_apply_target_unavailable', $result->get_error_code() );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
 	}
 
 	// ---------------------------------------------------------------------
@@ -531,7 +722,7 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 				'content' => $content,
 			],
 			(object) [
-				'id'      => 'twentytwentyfive//header-concurrent',
+				'id'      => self::PART_ID,
 				'wp_id'   => 9202,
 				'slug'    => 'header',
 				'area'    => 'header',
@@ -568,6 +759,66 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertStringContainsString( 'TailPat', (string) WordPressTestState::$posts[9202]->post_content );
 	}
 
+	public function test_persist_duplicate_row_guard_rejects_a_same_slug_different_part_id_before_content_or_writes(): void {
+		$content       = $this->paragraph( 'Anchor' );
+		$content_reads = 0;
+		$candidate     = new class( $content, $content_reads ) {
+			public string $id   = 'twentytwentyfive//header-concurrent';
+			public int $wp_id   = 9209;
+			public string $slug = 'header';
+			private string $stored_content;
+			private $content_reads;
+
+			public function __construct( string $stored_content, int &$content_reads ) {
+				$this->stored_content = $stored_content;
+				$this->content_reads  =& $content_reads;
+			}
+
+			public function __isset( string $name ): bool {
+				return 'content' === $name;
+			}
+
+			public function __get( string $name ): mixed {
+				if ( 'content' === $name ) {
+					++$this->content_reads;
+					return $this->stored_content;
+				}
+
+				return null;
+			}
+		};
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'id'      => self::PART_ID,
+				'wp_id'   => 0,
+				'slug'    => 'header',
+				'area'    => 'header',
+				'title'   => 'Header',
+				'content' => $content,
+			],
+			$candidate,
+		];
+		$this->register_pattern( 'fa-test/tail', $this->paragraph( 'TailPat' ) );
+
+		$result = TemplatePartApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'fa-test/tail',
+						'placement'   => 'end',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+		$this->assertSame( 0, $content_reads );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
 	public function test_persist_duplicate_row_guard_accepts_an_already_desired_state_without_rewriting(): void {
 		$content         = $this->paragraph( 'Anchor' );
 		$pattern_content = $this->paragraph( 'TailPat' );
@@ -588,7 +839,7 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 				'content' => $content,
 			],
 			(object) [
-				'id'      => 'twentytwentyfive//header-concurrent',
+				'id'      => self::PART_ID,
 				'wp_id'   => 9203,
 				'slug'    => 'header',
 				'area'    => 'header',
@@ -638,7 +889,7 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 				'content' => $content,
 			],
 			(object) [
-				'id'      => 'twentytwentyfive//header-concurrent',
+				'id'      => self::PART_ID,
 				'wp_id'   => 9204,
 				'slug'    => 'header',
 				'area'    => 'header',
@@ -744,7 +995,7 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 				$data['post_name'] = 'header-2';
 
 				WordPressTestState::$block_templates['wp_template_part'][] = (object) [
-					'id'      => 'twentytwentyfive//header-winner',
+					'id'      => self::PART_ID,
 					'wp_id'   => 9205,
 					'slug'    => 'header',
 					'area'    => 'header',
@@ -783,11 +1034,9 @@ final class TemplatePartApplyExecutorTest extends TestCase {
 		$this->assertCount( 1, WordPressTestState::$updated_posts );
 		$this->assertSame( 9205, WordPressTestState::$updated_posts[0]['ID'], 'The winning row must be updated in place.' );
 		$this->assertStringContainsString( 'TailPat', (string) WordPressTestState::$posts[9205]->post_content );
-		// The winner is seeded under a non-canonical id so the row is
-		// unambiguously distinct from the entity under test; target identity
-		// always comes from the re-gated entity, since persist() returns only a
-		// post id. This string is the Ring III attestation subject, so it must
-		// name the logical part.
+		// The winner carries the same canonical part id; only this identity is safe
+		// to reconcile after the insert race. The result retains that executor-owned
+		// subject for the Ring III attestation.
 		$this->assertSame( self::PART_ID, $result['target']['templatePartId'] );
 		$this->assertSame( self::PART_ID, $result['target']['templatePartRef'] );
 	}

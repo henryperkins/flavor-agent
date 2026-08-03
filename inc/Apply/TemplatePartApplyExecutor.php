@@ -25,6 +25,56 @@ use FlavorAgent\LLM\TemplatePartPrompt;
 final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 
 	/**
+	 * @param array<string, mixed> $entry
+	 * @return array{target: array{templatePartId: string, templatePartRef: string}, document: array{entityId: string, postType: string, scopeKey: string}}|\WP_Error
+	 */
+	public static function resolve_target_identity( array $entry ): array|\WP_Error {
+		$target    = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$raw_ref   = $target['templatePartId'] ?? null;
+		$has_alias = array_key_exists( 'templatePartRef', $target );
+		$raw_alias = $has_alias ? $target['templatePartRef'] : null;
+		$ref       = is_string( $raw_ref ) ? trim( $raw_ref ) : '';
+		$alias     = is_string( $raw_alias ) ? trim( $raw_alias ) : '';
+
+		if (
+			'template-part' !== (string) ( $entry['surface'] ?? '' )
+			|| ! is_string( $raw_ref )
+			|| ( $has_alias && ! is_string( $raw_alias ) )
+			|| '' === $ref
+			|| ( $has_alias && ( '' === $alias || $ref !== $alias ) )
+		) {
+			return self::target_mismatch();
+		}
+
+		return [
+			'target'   => [
+				'templatePartId'  => $ref,
+				'templatePartRef' => $ref,
+			],
+			'document' => [
+				'entityId' => $ref,
+				'postType' => 'wp_template_part',
+				'scopeKey' => 'wp_template_part:' . $ref,
+			],
+		];
+	}
+
+	/** @param array<string, mixed> $entry */
+	public static function authorize_target( array $entry ): true|\WP_Error {
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		if ( ! self::has_matching_document( $entry, $identity['document'] ) ) {
+			return self::target_mismatch();
+		}
+
+		return current_user_can( 'edit_theme_options' ) ? true : self::target_forbidden();
+	}
+
+	/**
 	 * Re-resolve the live part, re-validate every stored operation against a
 	 * freshly collected live context, re-verify each path-addressed op's
 	 * expectedTarget fingerprint, mutate the parsed block tree atomically, and
@@ -35,7 +85,13 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{target: array<string, string>, before: array<string, string>, after: array<string, mixed>}|\WP_Error
 	 */
 	public static function execute( array $entry ): array|\WP_Error {
-		$ref  = self::part_ref( $entry );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$ref  = $identity['target']['templatePartId'];
 		$part = self::resolve_part( $ref );
 
 		if ( is_wp_error( $part ) ) {
@@ -102,7 +158,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			return $fresh;
 		}
 
-		$persisted = self::persist( $fresh, $after_content, $before_hash );
+		$persisted = self::persist( $fresh, $after_content, $before_hash, $ref );
 
 		if ( is_wp_error( $persisted ) ) {
 			return $persisted;
@@ -118,12 +174,13 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			// Identity comes from the re-gated entity, not the start-of-execute
 			// read: this is the value that lands in the activity row and the
 			// Ring III attestation subject, so it must describe what was written.
-			'target' => [
-				'templatePartId'  => (string) ( $fresh->id ?? $ref ),
-				'templatePartRef' => (string) ( $fresh->id ?? $ref ),
-				'slug'            => (string) ( $fresh->slug ?? '' ),
-				'area'            => (string) ( $fresh->area ?? '' ),
-			],
+			'target' => array_merge(
+				$identity['target'],
+				[
+					'slug' => (string) ( $fresh->slug ?? '' ),
+					'area' => (string) ( $fresh->area ?? '' ),
+				]
+			),
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
 				'content'    => $persisted_content,
@@ -139,7 +196,13 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 * @param array<string, mixed> $entry
 	 */
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
-		$content = self::resolve_live_content( self::part_ref( $entry ) );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$content = self::resolve_live_content( $identity['target']['templatePartId'] );
 
 		return is_wp_error( $content )
 			? $content
@@ -185,7 +248,13 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{result: string, after: array{content: string}}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
-		$ref  = self::part_ref( $entry );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$ref  = $identity['target']['templatePartId'];
 		$part = self::resolve_part( $ref );
 
 		if ( is_wp_error( $part ) ) {
@@ -231,7 +300,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			return $fresh;
 		}
 
-		$persisted = self::persist( $fresh, (string) $before['content'], $live_hash );
+		$persisted = self::persist( $fresh, (string) $before['content'], $live_hash, $ref );
 
 		if ( is_wp_error( $persisted ) ) {
 			return $persisted;
@@ -249,13 +318,25 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		];
 	}
 
-	/**
-	 * @param array<string, mixed> $entry
-	 */
-	private static function part_ref( array $entry ): string {
-		$target = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+	/** @param array<string, mixed> $entry @param array{entityId: string, postType: string, scopeKey: string} $canonical */
+	private static function has_matching_document( array $entry, array $canonical ): bool {
+		$document = is_array( $entry['document'] ?? null ) ? $entry['document'] : [];
 
-		return trim( (string) ( $target['templatePartId'] ?? '' ) );
+		foreach ( $canonical as $field => $value ) {
+			if ( ! array_key_exists( $field, $document ) || $value !== $document[ $field ] ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static function target_mismatch(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_apply_target_mismatch', 'The stored template-part target does not match its canonical document identity.', [ 'status' => 409 ] );
+	}
+
+	private static function target_forbidden(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_apply_target_forbidden', 'You are not allowed to apply changes to this template part.', [ 'status' => 403 ] );
 	}
 
 	/**
@@ -282,6 +363,10 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 				'The requested template part is not available on this site.',
 				[ 'status' => 404 ]
 			);
+		}
+
+		if ( $ref !== (string) ( $part->id ?? '' ) ) {
+			return self::target_mismatch();
 		}
 
 		return $part;
@@ -341,7 +426,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @return int|\WP_Error The persisted post id.
 	 */
-	private static function persist( object $part, string $content, string $expected_hash ): int|\WP_Error {
+	private static function persist( object $part, string $content, string $expected_hash, string $canonical_ref ): int|\WP_Error {
 		$wp_id = (int) ( $part->wp_id ?? 0 );
 
 		if ( $wp_id > 0 ) {
@@ -392,7 +477,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		// If another approval materialized the same active-theme part after our
 		// final read, reconcile against that row instead of creating a suffixed
 		// orphan or blind-overwriting what the other actor wrote.
-		$reconciled = self::reconcile_existing_row( $slug, $content, $expected_hash );
+		$reconciled = self::reconcile_existing_row( $canonical_ref, $slug, $content, $expected_hash );
 
 		if ( null !== $reconciled ) {
 			return $reconciled;
@@ -458,7 +543,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			}
 
 			// A row that raced us to publish is visible now; reconcile against it.
-			$reconciled = self::reconcile_existing_row( $slug, $content, $expected_hash );
+			$reconciled = self::reconcile_existing_row( $canonical_ref, $slug, $content, $expected_hash );
 
 			if ( null !== $reconciled ) {
 				return $reconciled;
@@ -491,10 +576,14 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @return int|\WP_Error|null
 	 */
-	private static function reconcile_existing_row( string $slug, string $content, string $expected_hash ): int|\WP_Error|null {
+	private static function reconcile_existing_row( string $canonical_ref, string $slug, string $content, string $expected_hash ): int|\WP_Error|null {
 		$existing = get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template_part' );
 
 		foreach ( $existing as $candidate ) {
+			if ( ! is_object( $candidate ) || $canonical_ref !== (string) ( $candidate->id ?? '' ) ) {
+				return self::target_mismatch();
+			}
+
 			$candidate_wp_id = (int) ( $candidate->wp_id ?? 0 );
 
 			if ( $candidate_wp_id <= 0 ) {
@@ -518,7 +607,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 				);
 			}
 
-			return self::persist( (object) [ 'wp_id' => $candidate_wp_id ], $content, $expected_hash );
+			return self::persist( (object) [ 'wp_id' => $candidate_wp_id ], $content, $expected_hash, $canonical_ref );
 		}
 
 		return null;

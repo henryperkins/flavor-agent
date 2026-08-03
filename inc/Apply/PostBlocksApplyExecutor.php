@@ -27,10 +27,69 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 
 	/**
 	 * @param array<string, mixed> $entry
+	 * @return array{target: array{postId: int, postType: string}, document: array{entityId: string, postType: string, scopeKey: string}}|\WP_Error
+	 */
+	public static function resolve_target_identity( array $entry ): array|\WP_Error {
+		$target  = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$post_id = self::canonical_post_id( $target['postId'] ?? null );
+
+		if ( 'post-blocks' !== (string) ( $entry['surface'] ?? '' ) || null === $post_id ) {
+			return self::target_mismatch();
+		}
+
+		$actual_post_type = function_exists( 'get_post_type' ) ? get_post_type( $post_id ) : false;
+		$stored_post_type = $target['postType'] ?? null;
+
+		if (
+			! is_string( $actual_post_type )
+			|| '' === $actual_post_type
+			|| ! is_string( $stored_post_type )
+			|| '' === $stored_post_type
+			|| $stored_post_type !== $actual_post_type
+		) {
+			return self::target_mismatch();
+		}
+
+		return [
+			'target'   => [
+				'postId'   => $post_id,
+				'postType' => $actual_post_type,
+			],
+			'document' => [
+				'entityId' => (string) $post_id,
+				'postType' => $actual_post_type,
+				'scopeKey' => $actual_post_type . ':' . $post_id,
+			],
+		];
+	}
+
+	/** @param array<string, mixed> $entry */
+	public static function authorize_target( array $entry ): true|\WP_Error {
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		if ( ! self::has_matching_document( $entry, $identity['document'] ) ) {
+			return self::target_mismatch();
+		}
+
+		return current_user_can( 'edit_post', $identity['target']['postId'] ) ? true : self::target_forbidden();
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
 	 * @return array{target: array<string, mixed>, before: array<string, string>, after: array<string, mixed>}|\WP_Error
 	 */
 	public static function execute( array $entry ): array|\WP_Error {
-		$post_id = self::post_id( $entry );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$post_id = $identity['target']['postId'];
 		$post    = ServerCollector::resolve_post_for_apply( $post_id );
 
 		if ( is_wp_error( $post ) ) {
@@ -93,10 +152,10 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 		// re-resolve the live post immediately before the write and fail closed
 		// if its content moved since the start-of-execute read, so a concurrent
 		// editor save in the read -> write window is never silently overwritten.
-		$unchanged = self::assert_post_unchanged( $post_id, $before_hash );
+		$fresh = self::assert_post_unchanged( $post_id, $before_hash );
 
-		if ( is_wp_error( $unchanged ) ) {
-			return $unchanged;
+		if ( is_wp_error( $fresh ) ) {
+			return $fresh;
 		}
 
 		$persisted = self::persist( $post_id, $after_content );
@@ -112,11 +171,10 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 		}
 
 		return [
-			'target' => [
-				'postId'   => $post_id,
-				'postType' => (string) ( $post->post_type ?? '' ),
-				'title'    => (string) ( $post->post_title ?? '' ),
-			],
+			'target' => array_merge(
+				$identity['target'],
+				[ 'title' => (string) ( $fresh->post_title ?? '' ) ]
+			),
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
 				// The read-back, not the locally serialized string: see
@@ -164,7 +222,13 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 	 * @param array<string, mixed> $entry
 	 */
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
-		$post = ServerCollector::resolve_post_for_apply( self::post_id( $entry ) );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$post = ServerCollector::resolve_post_for_apply( $identity['target']['postId'] );
 
 		return is_wp_error( $post )
 			? $post
@@ -182,7 +246,13 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{result: string}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
-		$post_id = self::post_id( $entry );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$post_id = $identity['target']['postId'];
 		$post    = ServerCollector::resolve_post_for_apply( $post_id );
 
 		if ( is_wp_error( $post ) ) {
@@ -229,13 +299,37 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 		return is_wp_error( $persisted ) ? $persisted : [ 'result' => 'undone' ];
 	}
 
-	/**
-	 * @param array<string, mixed> $entry
-	 */
-	private static function post_id( array $entry ): int {
-		$target = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+	private static function canonical_post_id( mixed $value ): ?int {
+		if ( is_int( $value ) ) {
+			return $value > 0 ? $value : null;
+		}
 
-		return (int) ( $target['postId'] ?? 0 );
+		if ( ! is_string( $value ) || ! preg_match( '/^[1-9][0-9]*$/D', $value ) || (string) (int) $value !== $value ) {
+			return null;
+		}
+
+		return (int) $value;
+	}
+
+	/** @param array<string, mixed> $entry @param array{entityId: string, postType: string, scopeKey: string} $canonical */
+	private static function has_matching_document( array $entry, array $canonical ): bool {
+		$document = is_array( $entry['document'] ?? null ) ? $entry['document'] : [];
+
+		foreach ( $canonical as $field => $value ) {
+			if ( ! array_key_exists( $field, $document ) || $value !== $document[ $field ] ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static function target_mismatch(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_apply_target_mismatch', 'The stored post target does not match its canonical document identity.', [ 'status' => 409 ] );
+	}
+
+	private static function target_forbidden(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_apply_target_forbidden', 'You are not allowed to apply changes to this post.', [ 'status' => 403 ] );
 	}
 
 	private static function content_hash( string $content ): string {
@@ -247,9 +341,9 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 	 * write and fail closed if its parsed -> reserialized content hash moved
 	 * since the value captured at the start of the operation.
 	 *
-	 * @return true|\WP_Error
+	 * @return object A post object or WP_Error.
 	 */
-	private static function assert_post_unchanged( int $post_id, string $expected_hash ): true|\WP_Error {
+	private static function assert_post_unchanged( int $post_id, string $expected_hash ): object {
 		$current = ServerCollector::resolve_post_for_apply( $post_id );
 
 		if ( is_wp_error( $current ) ) {
@@ -264,7 +358,7 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
-		return true;
+		return $current;
 	}
 
 	/**

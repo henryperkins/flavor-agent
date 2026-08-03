@@ -15,7 +15,36 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		parent::setUp();
 		WordPressTestState::reset();
 		WordPressTestState::$current_user_id = 7;
+		WordPressTestState::$capabilities    = [
+			'edit_theme_options' => true,
+			'edit_post'          => true,
+		];
 		Repository::install();
+	}
+
+	/**
+	 * Replace the raw persisted target to model legacy/corrupt rows that current
+	 * request producers no longer emit.
+	 *
+	 * @param array<string, mixed> $target
+	 * @return array<string, mixed>
+	 */
+	private function replace_activity_target( string $activity_id, array $target ): array {
+		$table = Repository::table_name();
+
+		foreach ( WordPressTestState::$db_tables[ $table ] ?? [] as $index => $row ) {
+			if ( $activity_id !== (string) ( $row['activity_id'] ?? '' ) ) {
+				continue;
+			}
+
+			WordPressTestState::$db_tables[ $table ][ $index ]['target_json'] = (string) wp_json_encode( $target );
+			$stored = Repository::find( $activity_id );
+			$this->assertIsArray( $stored );
+
+			return $stored;
+		}
+
+		$this->fail( 'Expected the activity fixture to exist before replacing its target.' );
 	}
 
 	/**
@@ -806,6 +835,15 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			. '<!-- /wp:group -->';
 		$this->seed_template_part( $content, 8801 );
 		$part = $this->create_template_part_pending_entry( $content );
+		$part = $this->replace_activity_target(
+			(string) $part['id'],
+			[
+				'templatePartId' => self::TEMPLATE_PART_ID,
+				'slug'           => 'header',
+				'area'           => 'header',
+			]
+		);
+		$this->assertArrayNotHasKey( 'templatePartRef', $part['target'] );
 
 		$part_decided = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $part['id'], 'approve' );
 
@@ -816,6 +854,8 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			'The template-part executor must succeed so the post-apply attestation branch is actually exercised.'
 		);
 		$this->assertSame( 'recorded', $part_decided['apply']['attestationStatus'] );
+		$this->assertSame( self::TEMPLATE_PART_ID, $part_decided['target']['templatePartId'] );
+		$this->assertSame( self::TEMPLATE_PART_ID, $part_decided['target']['templatePartRef'] );
 		$part_attestation = \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $part['id'] );
 		$this->assertIsArray( $part_attestation );
 
@@ -874,6 +914,90 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'external-template-apply-v1', $template_statement['predicate']['governance']['lane'] );
 		$this->assertSame( 'wp_template:' . self::TEMPLATE_REF, $template_statement['subject'][0]['name'] );
 		$this->assertSame( [], $failures );
+	}
+
+	public function test_apply_attestation_target_fields_never_fall_back_to_a_template_part_id(): void {
+		$reflection = new \ReflectionClass( \FlavorAgent\Apply\PendingApplyDecision::class );
+		$this->assertTrue(
+			$reflection->hasMethod( 'apply_attestation_target_fields' ),
+			'PendingApplyDecision must project canonical execution-result target fields through one pure helper.'
+		);
+		$method = $reflection->getMethod( 'apply_attestation_target_fields' );
+		$method->setAccessible( true );
+
+		$this->assertSame(
+			[ 'templateRef' => '' ],
+			$method->invoke(
+				null,
+				'template-part',
+				[ 'templatePartId' => self::TEMPLATE_PART_ID ]
+			)
+		);
+		$this->assertSame(
+			[ 'templateRef' => self::TEMPLATE_PART_ID ],
+			$method->invoke(
+				null,
+				'template-part',
+				[
+					'templatePartId'  => 'legacy-id-is-not-authoritative-here',
+					'templatePartRef' => self::TEMPLATE_PART_ID,
+				]
+			)
+		);
+		$this->assertSame(
+			[ 'templateRef' => self::TEMPLATE_REF ],
+			$method->invoke( null, 'template', [ 'templateRef' => self::TEMPLATE_REF ] )
+		);
+		$this->assertSame(
+			[
+				'globalStylesId' => '17',
+				'blockName'      => 'core/paragraph',
+			],
+			$method->invoke(
+				null,
+				'style-book',
+				[
+					'globalStylesId' => '17',
+					'blockName'      => 'core/paragraph',
+				]
+			)
+		);
+	}
+
+	public function test_template_part_approval_denies_corrupt_dual_aliases_before_attestation(): void {
+		$secret_key = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn (): string => $secret_key );
+		\FlavorAgent\Attestation\Repository::install();
+
+		$content = $this->template_part_content();
+		$this->seed_template_part( $content, 8803 );
+		$pending = $this->create_template_part_pending_entry( $content );
+		$pending = $this->replace_activity_target(
+			(string) $pending['id'],
+			[
+				'templatePartId'  => self::TEMPLATE_PART_ID,
+				'templatePartRef' => 'twentytwentyfive//footer',
+				'slug'            => 'header',
+				'area'            => 'header',
+			]
+		);
+
+		WordPressTestState::$get_post_calls = [];
+		WordPressTestState::$updated_posts  = [];
+		$decided                            = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['id'],
+			'approve'
+		);
+
+		$this->assertIsArray( $decided );
+		$this->assertSame( 'failed', $decided['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $decided['apply']['failureCode'] );
+		$this->assertSame( $content, (string) WordPressTestState::$posts[8803]->post_content );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertNull(
+			\FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $pending['id'] )
+		);
 	}
 
 	public function test_style_apply_executor_implements_the_external_apply_contract(): void {
@@ -1448,6 +1572,139 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			. '<!-- wp:heading --><h2>Title</h2><!-- /wp:heading -->'
 			. '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->'
 			. '<!-- /wp:group -->';
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function create_pending_post_blocks_entry( string $id, int $document_post_id, int $target_post_id ): array {
+		$target_content = (string) ( WordPressTestState::$posts[ $target_post_id ]->post_content ?? '' );
+		$created        = Repository::create(
+			[
+				'id'              => $id,
+				'type'            => 'apply_post_blocks_suggestion',
+				'surface'         => 'post-blocks',
+				'target'          => [
+					'postId'   => $target_post_id,
+					'postType' => 'post',
+				],
+				'suggestion'      => 'Remove the heading',
+				'before'          => [],
+				'after'           => [],
+				'executionResult' => 'pending',
+				'undo'            => [ 'status' => 'not_applicable' ],
+				'request'         => [
+					'prompt'    => 'trim the heading',
+					'reference' => 'external-apply:post:' . $target_post_id,
+					'apply'     => [
+						'status'      => 'pending',
+						'requestedBy' => 7,
+						'requestedAt' => gmdate( 'c' ),
+						'expiresAt'   => gmdate( 'c', time() + 3600 ),
+						'operations'  => [
+							[
+								'type'              => 'remove_block',
+								'targetPath'        => [ 0, 0 ],
+								'expectedBlockName' => 'core/heading',
+							],
+						],
+						'signatures'  => [
+							'baselineContentHash' => hash(
+								'sha256',
+								serialize_blocks( parse_blocks( $target_content ) )
+							),
+						],
+					],
+				],
+				'document'        => [
+					'entityId' => (string) $document_post_id,
+					'postType' => 'post',
+					'scopeKey' => 'post:' . $document_post_id,
+				],
+			]
+		);
+		$this->assertIsArray( $created );
+
+		return $created;
+	}
+
+	public function test_decision_denies_a_both_editable_divergent_post_target_before_content_access(): void {
+		$document_content = '<!-- wp:paragraph --><p>Document 100</p><!-- /wp:paragraph -->';
+		$target_content   = $this->post_blocks_content();
+		$this->seed_post_blocks_document( $document_content, 100 );
+		$this->seed_post_blocks_document( $target_content, 200 );
+		WordPressTestState::$users[7]     = [
+			'display_name' => 'Ada Approver',
+			'user_login'   => 'ada',
+			'roles'        => [ 'administrator' ],
+		];
+		WordPressTestState::$capabilities = [
+			'edit_post:100' => true,
+			'edit_post:200' => true,
+		];
+		\FlavorAgent\Attestation\Repository::install();
+		$pending = $this->create_pending_post_blocks_entry( 'post-target-mismatch-approval', 100, 200 );
+
+		WordPressTestState::$get_post_calls      = [];
+		WordPressTestState::$get_post_type_calls = [];
+		WordPressTestState::$updated_posts       = [];
+		WordPressTestState::$capability_checks   = [];
+		$decided                                 = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['id'],
+			'approve',
+			'Approved after review'
+		);
+
+		$this->assertIsArray( $decided );
+		$this->assertSame( 'failed', $decided['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $decided['apply']['failureCode'] );
+		$this->assertSame(
+			'The stored post target does not match its canonical document identity.',
+			$decided['apply']['failureMessage']
+		);
+		$this->assertStringNotContainsString( $document_content, $decided['apply']['failureMessage'] );
+		$this->assertStringNotContainsString( $target_content, $decided['apply']['failureMessage'] );
+		$this->assertSame( 7, $decided['apply']['decidedBy'] );
+		$this->assertSame( 'Ada Approver', $decided['apply']['decidedByName'] );
+		$this->assertSame( 'Approved after review', $decided['apply']['decisionNote'] );
+		$this->assertNotSame( '', (string) $decided['apply']['decidedAt'] );
+		$this->assertSame( $document_content, (string) WordPressTestState::$posts[100]->post_content );
+		$this->assertSame( $target_content, (string) WordPressTestState::$posts[200]->post_content );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertNull( \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $pending['id'] ) );
+		$this->assertSame( $decided, Repository::find( (string) $pending['id'] ) );
+	}
+
+	public function test_decision_persists_forbidden_for_a_coherent_denied_post_target_without_content_access(): void {
+		$target_content = $this->post_blocks_content();
+		$this->seed_post_blocks_document( $target_content, 200 );
+		WordPressTestState::$capabilities = [ 'edit_post:200' => false ];
+		\FlavorAgent\Attestation\Repository::install();
+		$pending = $this->create_pending_post_blocks_entry( 'post-target-forbidden-approval', 200, 200 );
+
+		WordPressTestState::$get_post_calls      = [];
+		WordPressTestState::$get_post_type_calls = [];
+		WordPressTestState::$updated_posts       = [];
+		WordPressTestState::$capability_checks   = [];
+		$decided                                 = \FlavorAgent\Apply\PendingApplyDecision::decide(
+			(string) $pending['id'],
+			'approve'
+		);
+
+		$this->assertIsArray( $decided );
+		$this->assertSame( 'failed', $decided['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $decided['apply']['failureCode'] );
+		$this->assertSame(
+			'You are not allowed to apply changes to this post.',
+			$decided['apply']['failureMessage']
+		);
+		$this->assertStringNotContainsString( $target_content, $decided['apply']['failureMessage'] );
+		$this->assertSame( $target_content, (string) WordPressTestState::$posts[200]->post_content );
+		$this->assertSame( [], WordPressTestState::$get_post_calls );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertNull( \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $pending['id'] ) );
+		$this->assertSame( $decided, Repository::find( (string) $pending['id'] ) );
 	}
 
 	public function test_request_post_blocks_apply_rejects_stale_signatures(): void {

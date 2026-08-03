@@ -66,6 +66,9 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $capabilities = [];
 
+		/** @var array<int, array{capability: string, args: array<int, mixed>}> */
+		public static array $capability_checks = [];
+
 		public static array $block_templates = [];
 
 		/**
@@ -116,6 +119,12 @@ namespace FlavorAgent\Tests\Support {
 
 		/** @var array<int, object> */
 		public static array $posts = [];
+
+		/** @var array<int, int> */
+		public static array $get_post_calls = [];
+
+		/** @var array<int, int> */
+		public static array $get_post_type_calls = [];
 
 		/** @var array<int, array<string, mixed>> */
 		public static array $updated_posts = [];
@@ -389,6 +398,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$connectors                  = [];
 			self::$connector_api_errors        = [];
 			self::$capabilities                = [];
+			self::$capability_checks           = [];
 			self::$block_templates             = [];
 			self::$block_templates_read_hook   = null;
 			self::$transients                  = [];
@@ -406,6 +416,8 @@ namespace FlavorAgent\Tests\Support {
 			self::$option_autoload              = [];
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
+			self::$get_post_calls              = [];
+			self::$get_post_type_calls         = [];
 			self::$updated_posts               = [];
 			self::$inserted_posts              = [];
 			self::$deleted_posts               = [];
@@ -2411,6 +2423,11 @@ namespace {
 	if (! function_exists('current_user_can')) {
 		function current_user_can(string $capability, ...$args): bool
 		{
+			WordPressTestState::$capability_checks[] = [
+				'capability' => $capability,
+				'args'       => $args,
+			];
+
 			if ([] !== $args) {
 				$specific_key = $capability . ':' . implode(
 					':',
@@ -3404,8 +3421,21 @@ namespace {
 			}
 
 			$id = (int) (is_object($post_id) ? ($post_id->ID ?? 0) : $post_id);
+			WordPressTestState::$get_post_calls[] = $id;
 
 			return WordPressTestState::$posts[$id] ?? null;
+		}
+	}
+
+	if (! function_exists('get_post_type')) {
+		function get_post_type($post = null)
+		{
+			$id = (int) (is_object($post) ? ($post->ID ?? 0) : $post);
+			WordPressTestState::$get_post_type_calls[] = $id;
+
+			return isset(WordPressTestState::$posts[$id])
+				? (string) (WordPressTestState::$posts[$id]->post_type ?? '')
+				: false;
 		}
 	}
 

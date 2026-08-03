@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Apply\TemplateApplyExecutor;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -64,12 +65,17 @@ final class TemplateApplyExecutorTest extends TestCase {
 	 */
 	private function entry( array $operations ): array {
 		return [
-			'surface' => 'template',
-			'target'  => [
+			'surface'  => 'template',
+			'target'   => [
 				'templateRef'  => self::TEMPLATE_REF,
 				'templateType' => 'home',
 			],
-			'apply'   => [ 'operations' => $operations ],
+			'document' => [
+				'entityId' => self::TEMPLATE_REF,
+				'postType' => 'wp_template',
+				'scopeKey' => 'wp_template:' . self::TEMPLATE_REF,
+			],
+			'apply'    => [ 'operations' => $operations ],
 		];
 	}
 
@@ -78,14 +84,160 @@ final class TemplateApplyExecutorTest extends TestCase {
 	 */
 	private static function executed_entry( string $before, string $after ): array {
 		return [
-			'surface' => 'template',
-			'target'  => [
+			'surface'  => 'template',
+			'target'   => [
 				'templateRef'  => self::TEMPLATE_REF,
 				'templateType' => 'home',
 			],
-			'before'  => [ 'content' => $before ],
-			'after'   => [ 'content' => $after ],
+			'document' => [
+				'entityId' => self::TEMPLATE_REF,
+				'postType' => 'wp_template',
+				'scopeKey' => 'wp_template:' . self::TEMPLATE_REF,
+			],
+			'before'   => [ 'content' => $before ],
+			'after'    => [ 'content' => $after ],
 		];
+	}
+
+	public function test_resolve_target_identity_returns_the_canonical_template_subject(): void {
+		$identity = TemplateApplyExecutor::resolve_target_identity( $this->entry( [] ) );
+
+		$this->assertSame(
+			[
+				'target'   => [
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+				],
+				'document' => [
+					'entityId' => self::TEMPLATE_REF,
+					'postType' => 'wp_template',
+					'scopeKey' => 'wp_template:' . self::TEMPLATE_REF,
+				],
+			],
+			$identity
+		);
+	}
+
+	public function test_authorize_target_rejects_each_divergent_template_document_field_before_capability(): void {
+		$mutations = [
+			'entityId' => 'twentytwentyfive//single',
+			'postType' => 'wp_template_part',
+			'scopeKey' => 'wp_template:twentytwentyfive//single',
+		];
+
+		foreach ( $mutations as $field => $value ) {
+			$entry                                 = $this->entry( [] );
+			$entry['document'][ $field ]           = $value;
+			$reads                                 = 0;
+			WordPressTestState::$capability_checks = [];
+			WordPressTestState::$block_templates_read_hook = static function () use ( &$reads ): void {
+				++$reads;
+			};
+
+			$result = TemplateApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result, $field );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code(), $field );
+			$this->assertSame( 409, $result->get_error_data()['status'] ?? null, $field );
+			$this->assertSame( 0, $reads, $field );
+			$this->assertSame( [], WordPressTestState::$capability_checks, $field );
+		}
+
+		foreach ( array_keys( $mutations ) as $field ) {
+			$entry = $this->entry( [] );
+			unset( $entry['document'][ $field ] );
+			$reads                                 = 0;
+			WordPressTestState::$capability_checks = [];
+			WordPressTestState::$block_templates_read_hook = static function () use ( &$reads ): void {
+				++$reads;
+			};
+
+			$result = TemplateApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result, 'missing ' . $field );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code(), 'missing ' . $field );
+			$this->assertSame( 0, $reads, 'missing ' . $field );
+			$this->assertSame( [], WordPressTestState::$capability_checks, 'missing ' . $field );
+		}
+	}
+
+	public function test_authorize_target_requires_edit_theme_options_for_a_canonical_template(): void {
+		$result = TemplateApplyExecutor::authorize_target( $this->entry( [] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] ?? null );
+		$this->assertSame(
+			[
+				[
+					'capability' => 'edit_theme_options',
+					'args'       => [],
+				],
+			],
+			WordPressTestState::$capability_checks
+		);
+
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		$this->assertTrue( TemplateApplyExecutor::authorize_target( $this->entry( [] ) ) );
+	}
+
+	public function test_authorize_target_allows_non_security_document_metadata_when_canonical_fields_match(): void {
+		$entry                           = $this->entry( [] );
+		$entry['document']['entityKind'] = 'postType';
+		$entry['document']['entityName'] = 'wp_template';
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		$this->assertTrue( TemplateApplyExecutor::authorize_target( $entry ) );
+	}
+
+	public function test_authorize_target_rejects_non_string_template_refs_before_reads_or_capability(): void {
+		$fixtures = [ [], false, 17, new \stdClass() ];
+
+		foreach ( $fixtures as $template_ref ) {
+			$entry                          = $this->entry( [] );
+			$entry['target']['templateRef'] = $template_ref;
+			$canonical_template_ref         = is_array( $template_ref ) ? 'Array' : ( is_int( $template_ref ) ? (string) $template_ref : '' );
+
+			if ( '' !== $canonical_template_ref ) {
+				$entry['document'] = [
+					'entityId' => $canonical_template_ref,
+					'postType' => 'wp_template',
+					'scopeKey' => 'wp_template:' . $canonical_template_ref,
+				];
+			}
+
+			$reads = 0;
+
+			WordPressTestState::$capability_checks         = [];
+			WordPressTestState::$block_templates_read_hook = static function () use ( &$reads ): void {
+				++$reads;
+			};
+
+			$result = TemplateApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+			$this->assertSame( 409, $result->get_error_data()['status'] ?? null );
+			$this->assertSame( 0, $reads );
+			$this->assertSame( [], WordPressTestState::$capability_checks );
+		}
+	}
+
+	public function test_resolve_baseline_rejects_repository_slug_fallback_to_a_different_template_id(): void {
+		WordPressTestState::$block_templates['wp_template'] = [
+			(object) [
+				'id'      => 'othertheme//home',
+				'wp_id'   => 0,
+				'slug'    => 'home',
+				'title'   => 'Other Home',
+				'content' => '<!-- wp:paragraph --><p>Wrong subject</p><!-- /wp:paragraph -->',
+			],
+		];
+
+		$result = TemplateApplyExecutor::resolve_baseline( $this->entry( [] ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
 	}
 
 	private function register_pattern( string $name, string $content ): void {
@@ -441,7 +593,7 @@ final class TemplateApplyExecutorTest extends TestCase {
 				'content' => $content,
 			],
 			(object) [
-				'id'      => 'twentytwentyfive//home-concurrent',
+				'id'      => self::TEMPLATE_REF,
 				'wp_id'   => 9200,
 				'slug'    => 'home',
 				'title'   => 'Home',
@@ -476,6 +628,65 @@ final class TemplateApplyExecutorTest extends TestCase {
 		$this->assertStringContainsString( 'Hero', (string) WordPressTestState::$posts[9200]->post_content );
 	}
 
+	public function test_persist_duplicate_row_guard_rejects_a_same_slug_different_template_id_before_content_or_writes(): void {
+		$content       = $this->paragraph( 'Body' );
+		$content_reads = 0;
+		$candidate     = new class( $content, $content_reads ) {
+			public string $id   = 'twentytwentyfive//home-concurrent';
+			public int $wp_id   = 9209;
+			public string $slug = 'home';
+			private string $stored_content;
+			private $content_reads;
+
+			public function __construct( string $stored_content, int &$content_reads ) {
+				$this->stored_content = $stored_content;
+				$this->content_reads  =& $content_reads;
+			}
+
+			public function __isset( string $name ): bool {
+				return 'content' === $name;
+			}
+
+			public function __get( string $name ): mixed {
+				if ( 'content' === $name ) {
+					++$this->content_reads;
+					return $this->stored_content;
+				}
+
+				return null;
+			}
+		};
+		WordPressTestState::$block_templates['wp_template'] = [
+			(object) [
+				'id'      => self::TEMPLATE_REF,
+				'wp_id'   => 0,
+				'slug'    => 'home',
+				'title'   => 'Home',
+				'content' => $content,
+			],
+			$candidate,
+		];
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+
+		$result = TemplateApplyExecutor::execute(
+			$this->entry(
+				[
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+		$this->assertSame( 0, $content_reads );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$this->assertSame( [], WordPressTestState::$inserted_posts );
+	}
+
 	/**
 	 * The duplicate-row guard must not blind-overwrite a concurrent
 	 * materialization. When the row another actor created already holds our
@@ -500,7 +711,7 @@ final class TemplateApplyExecutorTest extends TestCase {
 				'content' => $content,
 			],
 			(object) [
-				'id'      => 'twentytwentyfive//home-concurrent',
+				'id'      => self::TEMPLATE_REF,
 				'wp_id'   => 9210,
 				'slug'    => 'home',
 				'title'   => 'Home',
@@ -555,7 +766,7 @@ final class TemplateApplyExecutorTest extends TestCase {
 				'content' => $content,
 			],
 			(object) [
-				'id'      => 'twentytwentyfive//home-concurrent',
+				'id'      => self::TEMPLATE_REF,
 				'wp_id'   => 9211,
 				'slug'    => 'home',
 				'title'   => 'Home',
@@ -890,7 +1101,7 @@ final class TemplateApplyExecutorTest extends TestCase {
 				$data['post_name'] = 'home-2';
 
 				WordPressTestState::$block_templates['wp_template'][] = (object) [
-					'id'      => 'twentytwentyfive//home-winner',
+					'id'      => self::TEMPLATE_REF,
 					'wp_id'   => 9300,
 					'slug'    => 'home',
 					'title'   => 'Home',

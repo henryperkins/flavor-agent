@@ -25,6 +25,49 @@ use FlavorAgent\LLM\TemplatePrompt;
 final class TemplateApplyExecutor implements ExternalApplyExecutor {
 
 	/**
+	 * @param array<string, mixed> $entry
+	 * @return array{target: array<string, string>, document: array{entityId: string, postType: string, scopeKey: string}}|\WP_Error
+	 */
+	public static function resolve_target_identity( array $entry ): array|\WP_Error {
+		$target  = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+		$surface = (string) ( $entry['surface'] ?? '' );
+		$raw_ref = $target['templateRef'] ?? null;
+		$ref     = is_string( $raw_ref ) ? trim( $raw_ref ) : '';
+		$type    = sanitize_key( (string) ( $target['templateType'] ?? '' ) );
+
+		if ( 'template' !== $surface || ! is_string( $raw_ref ) || '' === $ref ) {
+			return self::target_mismatch();
+		}
+
+		return [
+			'target'   => array_merge(
+				[ 'templateRef' => $ref ],
+				'' !== $type ? [ 'templateType' => $type ] : []
+			),
+			'document' => [
+				'entityId' => $ref,
+				'postType' => 'wp_template',
+				'scopeKey' => 'wp_template:' . $ref,
+			],
+		];
+	}
+
+	/** @param array<string, mixed> $entry */
+	public static function authorize_target( array $entry ): true|\WP_Error {
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		if ( ! self::has_matching_document( $entry, $identity['document'] ) ) {
+			return self::target_mismatch();
+		}
+
+		return current_user_can( 'edit_theme_options' ) ? true : self::target_forbidden();
+	}
+
+	/**
 	 * Re-resolve the live template, re-validate every stored operation against a
 	 * freshly collected live context, re-verify each path-addressed op's
 	 * expectedTarget fingerprint, mutate the parsed block tree atomically, and
@@ -35,8 +78,14 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{target: array<string, string>, before: array<string, string>, after: array<string, mixed>}|\WP_Error
 	 */
 	public static function execute( array $entry ): array|\WP_Error {
-		$ref      = self::template_ref( $entry );
-		$type     = self::template_type( $entry );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$ref      = $identity['target']['templateRef'];
+		$type     = (string) ( $identity['target']['templateType'] ?? '' );
 		$template = self::resolve_template( $ref );
 
 		if ( is_wp_error( $template ) ) {
@@ -112,7 +161,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			return $fresh;
 		}
 
-		$persisted = self::persist( $fresh, $after_content, $before_hash );
+		$persisted = self::persist( $fresh, $after_content, $before_hash, $ref );
 
 		if ( is_wp_error( $persisted ) ) {
 			return $persisted;
@@ -128,12 +177,13 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			// Identity comes from the re-gated entity, not the start-of-execute
 			// read: this is the value that lands in the activity row and the
 			// Ring III attestation subject, so it must describe what was written.
-			'target' => [
-				'templateRef'  => (string) ( $fresh->id ?? $ref ),
-				'templateType' => $type,
-				'slug'         => (string) ( $fresh->slug ?? '' ),
-				'title'        => (string) ( $fresh->title ?? '' ),
-			],
+			'target' => array_merge(
+				$identity['target'],
+				[
+					'slug'  => (string) ( $fresh->slug ?? '' ),
+					'title' => (string) ( $fresh->title ?? '' ),
+				]
+			),
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
 				'content'    => $persisted_content,
@@ -149,7 +199,13 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 * @param array<string, mixed> $entry
 	 */
 	public static function resolve_baseline( array $entry ): string|\WP_Error {
-		$content = self::resolve_live_content( self::template_ref( $entry ) );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$content = self::resolve_live_content( $identity['target']['templateRef'] );
 
 		return is_wp_error( $content )
 			? $content
@@ -195,7 +251,13 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{result: string, after: array{content: string}}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
-		$ref      = self::template_ref( $entry );
+		$identity = self::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$ref      = $identity['target']['templateRef'];
 		$template = self::resolve_template( $ref );
 
 		if ( is_wp_error( $template ) ) {
@@ -238,7 +300,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			return $fresh;
 		}
 
-		$persisted = self::persist( $fresh, (string) $before['content'], $live_hash );
+		$persisted = self::persist( $fresh, (string) $before['content'], $live_hash, $ref );
 
 		if ( is_wp_error( $persisted ) ) {
 			return $persisted;
@@ -256,22 +318,25 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 		];
 	}
 
-	/**
-	 * @param array<string, mixed> $entry
-	 */
-	private static function template_ref( array $entry ): string {
-		$target = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+	/** @param array<string, mixed> $entry @param array{entityId: string, postType: string, scopeKey: string} $canonical */
+	private static function has_matching_document( array $entry, array $canonical ): bool {
+		$document = is_array( $entry['document'] ?? null ) ? $entry['document'] : [];
 
-		return trim( (string) ( $target['templateRef'] ?? '' ) );
+		foreach ( $canonical as $field => $value ) {
+			if ( ! array_key_exists( $field, $document ) || $value !== $document[ $field ] ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
-	/**
-	 * @param array<string, mixed> $entry
-	 */
-	private static function template_type( array $entry ): string {
-		$target = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
+	private static function target_mismatch(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_apply_target_mismatch', 'The stored template target does not match its canonical document identity.', [ 'status' => 409 ] );
+	}
 
-		return sanitize_key( (string) ( $target['templateType'] ?? '' ) );
+	private static function target_forbidden(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_apply_target_forbidden', 'You are not allowed to apply changes to this template.', [ 'status' => 403 ] );
 	}
 
 	/**
@@ -294,6 +359,10 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 				'The requested template is not available on this site.',
 				[ 'status' => 404 ]
 			);
+		}
+
+		if ( $ref !== (string) ( $template->id ?? '' ) ) {
+			return self::target_mismatch();
 		}
 
 		return $template;
@@ -351,7 +420,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @return int|\WP_Error The persisted post id.
 	 */
-	private static function persist( object $template, string $content, string $expected_hash ): int|\WP_Error {
+	private static function persist( object $template, string $content, string $expected_hash, string $canonical_ref ): int|\WP_Error {
 		$wp_id = (int) ( $template->wp_id ?? 0 );
 
 		if ( $wp_id > 0 ) {
@@ -401,7 +470,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 		// Duplicate-row guard: if a wp_template post already exists for this
 		// slug + theme (a concurrent materialization), reconcile against it
 		// instead of inserting a second row or blind-overwriting its content.
-		$reconciled = self::reconcile_existing_row( $slug, $content, $expected_hash );
+		$reconciled = self::reconcile_existing_row( $canonical_ref, $slug, $content, $expected_hash );
 
 		if ( null !== $reconciled ) {
 			return $reconciled;
@@ -469,7 +538,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 			}
 
 			// A row that raced us to publish is visible now; reconcile against it.
-			$reconciled = self::reconcile_existing_row( $slug, $content, $expected_hash );
+			$reconciled = self::reconcile_existing_row( $canonical_ref, $slug, $content, $expected_hash );
 
 			if ( null !== $reconciled ) {
 				return $reconciled;
@@ -501,10 +570,14 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @return int|\WP_Error|null
 	 */
-	private static function reconcile_existing_row( string $slug, string $content, string $expected_hash ): int|\WP_Error|null {
+	private static function reconcile_existing_row( string $canonical_ref, string $slug, string $content, string $expected_hash ): int|\WP_Error|null {
 		$existing = get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template' );
 
 		foreach ( $existing as $candidate ) {
+			if ( ! is_object( $candidate ) || $canonical_ref !== (string) ( $candidate->id ?? '' ) ) {
+				return self::target_mismatch();
+			}
+
 			$candidate_wp_id = (int) ( $candidate->wp_id ?? 0 );
 
 			if ( $candidate_wp_id <= 0 ) {
@@ -528,7 +601,7 @@ final class TemplateApplyExecutor implements ExternalApplyExecutor {
 				);
 			}
 
-			return self::persist( (object) [ 'wp_id' => $candidate_wp_id ], $content, $expected_hash );
+			return self::persist( (object) [ 'wp_id' => $candidate_wp_id ], $content, $expected_hash, $canonical_ref );
 		}
 
 		return null;

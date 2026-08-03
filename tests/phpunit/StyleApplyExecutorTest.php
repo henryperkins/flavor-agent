@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Apply\StyleApplyExecutor;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -409,15 +410,20 @@ final class StyleApplyExecutorTest extends TestCase {
 	private function global_styles_entry( array $overrides = [] ): array {
 		return array_replace_recursive(
 			[
-				'surface' => 'global-styles',
-				'target'  => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
-				'before'  => [
+				'surface'  => 'global-styles',
+				'target'   => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
+				'document' => [
+					'entityId' => self::GLOBAL_STYLES_ID,
+					'postType' => 'global_styles',
+					'scopeKey' => StyleAbilities::canonical_scope_key_for( 'global-styles', self::GLOBAL_STYLES_ID ),
+				],
+				'before'   => [
 					'userConfig' => [
 						'settings' => [],
 						'styles'   => [],
 					],
 				],
-				'after'   => [
+				'after'    => [
 					'userConfig' => [
 						'settings' => [],
 						'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
@@ -426,6 +432,151 @@ final class StyleApplyExecutorTest extends TestCase {
 			],
 			$overrides
 		);
+	}
+
+	/** @return array<string, mixed> */
+	private function style_book_identity_entry(): array {
+		return [
+			'surface'  => 'style-book',
+			'target'   => [
+				'globalStylesId' => self::GLOBAL_STYLES_ID,
+				'blockName'      => 'core/paragraph',
+			],
+			'document' => [
+				'entityId' => self::GLOBAL_STYLES_ID,
+				'postType' => 'global_styles',
+				'scopeKey' => StyleAbilities::canonical_scope_key_for(
+					'style-book',
+					self::GLOBAL_STYLES_ID,
+					'core/paragraph'
+				),
+			],
+		];
+	}
+
+	public function test_resolve_target_identity_returns_canonical_global_styles_and_style_book_subjects(): void {
+		$global = StyleApplyExecutor::resolve_target_identity( $this->global_styles_entry() );
+		$book   = StyleApplyExecutor::resolve_target_identity( $this->style_book_identity_entry() );
+
+		$this->assertSame(
+			[
+				'target'   => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
+				'document' => [
+					'entityId' => self::GLOBAL_STYLES_ID,
+					'postType' => 'global_styles',
+					'scopeKey' => 'global_styles:' . self::GLOBAL_STYLES_ID,
+				],
+			],
+			$global
+		);
+		$this->assertSame(
+			[
+				'target'   => [
+					'globalStylesId' => self::GLOBAL_STYLES_ID,
+					'blockName'      => 'core/paragraph',
+				],
+				'document' => [
+					'entityId' => self::GLOBAL_STYLES_ID,
+					'postType' => 'global_styles',
+					'scopeKey' => 'style_book:' . self::GLOBAL_STYLES_ID . ':core/paragraph',
+				],
+			],
+			$book
+		);
+	}
+
+	public function test_authorize_target_rejects_each_divergent_style_document_field_before_capability(): void {
+		$mutations = [
+			'entityId' => '18',
+			'postType' => 'wp_global_styles',
+			'scopeKey' => 'global_styles:18',
+		];
+
+		foreach ( $mutations as $field => $value ) {
+			$entry                                 = $this->global_styles_entry();
+			$entry['document'][ $field ]           = $value;
+			WordPressTestState::$capability_checks = [];
+
+			$result = StyleApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result, $field );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code(), $field );
+			$this->assertSame( [], WordPressTestState::$get_post_calls, $field );
+			$this->assertSame( [], WordPressTestState::$capability_checks, $field );
+		}
+
+		foreach ( array_keys( $mutations ) as $field ) {
+			$entry = $this->global_styles_entry();
+			unset( $entry['document'][ $field ] );
+			WordPressTestState::$capability_checks = [];
+
+			$result = StyleApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result, 'missing ' . $field );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code(), 'missing ' . $field );
+			$this->assertSame( [], WordPressTestState::$get_post_calls, 'missing ' . $field );
+			$this->assertSame( [], WordPressTestState::$capability_checks, 'missing ' . $field );
+		}
+	}
+
+	public function test_resolve_target_identity_rejects_a_noncanonical_global_styles_id(): void {
+		$entry                             = $this->global_styles_entry();
+		$entry['target']['globalStylesId'] = '17junk';
+
+		$result = StyleApplyExecutor::resolve_target_identity( $entry );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+	}
+
+	public function test_authorize_target_rejects_style_book_without_a_block_name_before_capability(): void {
+		$entry = $this->style_book_identity_entry();
+		unset( $entry['target']['blockName'] );
+
+		$result = StyleApplyExecutor::authorize_target( $entry );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$capability_checks );
+	}
+
+	public function test_authorize_target_rejects_non_string_style_book_block_names_before_capability(): void {
+		$fixtures = [ [], false, 17, new \stdClass() ];
+
+		foreach ( $fixtures as $block_name ) {
+			$entry                        = $this->style_book_identity_entry();
+			$entry['target']['blockName'] = $block_name;
+			$canonical_block_name         = is_array( $block_name ) ? 'Array' : ( is_int( $block_name ) ? (string) $block_name : '' );
+
+			if ( '' !== $canonical_block_name ) {
+				$entry['document']['scopeKey'] = StyleAbilities::canonical_scope_key_for(
+					'style-book',
+					self::GLOBAL_STYLES_ID,
+					$canonical_block_name
+				);
+			}
+
+			WordPressTestState::$capability_checks = [];
+
+			$result = StyleApplyExecutor::authorize_target( $entry );
+
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'flavor_agent_apply_target_mismatch', $result->get_error_code() );
+			$this->assertSame( 409, $result->get_error_data()['status'] ?? null );
+			$this->assertSame( [], WordPressTestState::$capability_checks );
+		}
+	}
+
+	public function test_authorize_target_requires_edit_theme_options_for_canonical_style_subjects(): void {
+		$result = StyleApplyExecutor::authorize_target( $this->global_styles_entry() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] ?? null );
+
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		$this->assertTrue( StyleApplyExecutor::authorize_target( $this->global_styles_entry() ) );
+		$this->assertTrue( StyleApplyExecutor::authorize_target( $this->style_book_identity_entry() ) );
 	}
 
 	public function test_undo_restores_the_full_before_config_for_global_styles(): void {

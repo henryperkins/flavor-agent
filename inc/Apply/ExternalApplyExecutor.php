@@ -10,6 +10,16 @@ namespace FlavorAgent\Apply;
  */
 interface ExternalApplyExecutor {
 
+	/**
+	 * @return array{
+	 *     target: array<string, int|string>,
+	 *     document: array{entityId: string, postType: string, scopeKey: string}
+	 * }|\WP_Error
+	 */
+	public static function resolve_target_identity( array $entry ): array|\WP_Error;
+
+	public static function authorize_target( array $entry ): true|\WP_Error;
+
 	/** Re-resolve the live subject and return the drift baseline string for gate 2. */
 	public static function resolve_baseline( array $entry ): string|\WP_Error;
 
