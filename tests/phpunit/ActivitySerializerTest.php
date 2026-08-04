@@ -394,7 +394,7 @@ final class ActivitySerializerTest extends TestCase {
 		$this->assertSame( 'not_applicable', $entry['undo']['status'] );
 	}
 
-	public function test_hydrate_row_projects_only_exact_decision_claims_as_pending(): void {
+	public function test_hydrate_row_redacts_every_non_exact_claim_prefixed_execution_result(): void {
 		$row = [
 			'activity_id'      => 'apply-row-claim',
 			'surface'          => 'global-styles',
@@ -410,11 +410,27 @@ final class ActivitySerializerTest extends TestCase {
 
 		$row['execution_result'] = 'claim:not-an-owner-token';
 		$malformed               = Serializer::hydrate_row( $row );
-		$this->assertSame( 'claim:not-an-owner-token', $malformed['executionResult'] );
+		$this->assertSame( 'invalid', $malformed['executionResult'] );
 
 		$row['execution_result'] = 'CLAIM:' . str_repeat( 'A', 24 );
 		$uppercase               = Serializer::hydrate_row( $row );
-		$this->assertSame( 'CLAIM:' . str_repeat( 'A', 24 ), $uppercase['executionResult'] );
+		$this->assertSame( 'invalid', $uppercase['executionResult'] );
+
+		$row['execution_result'] = ' claim:' . str_repeat( 'b', 24 );
+		$leading_space           = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $leading_space['executionResult'] );
+
+		$row['execution_result'] = 'claim:' . str_repeat( 'c', 24 ) . ' ';
+		$trailing_space          = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $trailing_space['executionResult'] );
+
+		$row['execution_result'] = 'claim:' . str_repeat( 'd', 24 ) . "\n";
+		$trailing_lf             = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $trailing_lf['executionResult'] );
+
+		$row['execution_result'] = 'claim:' . str_repeat( 'e', 24 ) . "\r\n";
+		$trailing_crlf           = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $trailing_crlf['executionResult'] );
 	}
 
 	public function test_hydrate_row_does_not_query_attestation_storage(): void {

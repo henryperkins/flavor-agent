@@ -95,6 +95,7 @@ final class ApplyAbilitiesTest extends TestCase {
 			[
 				'ID'           => $wp_id,
 				'post_type'    => 'wp_template',
+				'post_name'    => 'home',
 				'post_content' => $content,
 			]
 		);
@@ -555,6 +556,226 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertSame( [], $written['styles'] );
 	}
 
+	public function test_undo_activity_requires_recovery_when_a_newer_action_appears_during_finalization(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+		$newer                                    = null;
+		WordPressTestState::$after_wp_update_post = function () use ( &$newer ): void {
+			$newer = $this->create_executed_style_row();
+		};
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+
+		$this->assertIsArray( $newer );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'activity_finalization', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( [], $written['styles'], 'The target changed before the activity finalization lost ordered-tail eligibility.' );
+	}
+
+	public function test_undo_activity_requires_recovery_when_final_activity_storage_fails(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+		WordPressTestState::$before_activity_table_update = static fn (): bool => false;
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'activity_finalization', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( [], $written['styles'], 'The target changed even though its activity row could not be finalized.' );
+	}
+
+	public function test_undo_activity_reports_finalization_context_drift_without_writing_the_wrong_site_row(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+
+		$original_database                                = $GLOBALS['wpdb'];
+		$original_blog                                    = WordPressTestState::$current_blog_id;
+		$activity_table                                   = Repository::table_name();
+		$wrong_database                                   = new \wpdb();
+		$wrong_table                                      = 'wp_2_flavor_agent_activity';
+		$wrong_database->prefix                           = 'wp_2_';
+		$wrong_database->options                          = 'wp_2_options';
+		$wrong_database->posts                            = 'wp_2_posts';
+		$wrong_database->postmeta                         = 'wp_2_postmeta';
+		WordPressTestState::$db_tables[ $wrong_table ]    = WordPressTestState::$db_tables[ $activity_table ];
+		WordPressTestState::$before_activity_table_update = static function () use ( $wrong_database ): void {
+			$GLOBALS['wpdb']                     = $wrong_database;
+			WordPressTestState::$current_blog_id = 2;
+		};
+
+		try {
+			$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'finalization_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( 'undone', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+		$this->assertSame(
+			'available',
+			json_decode( (string) ( WordPressTestState::$db_tables[ $wrong_table ][0]['undo_state'] ?? '' ), true )['status'] ?? null
+		);
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( [], $written['styles'] );
+	}
+
+	public function test_undo_activity_reports_finalization_context_when_the_activity_update_throws_after_site_drift(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+
+		$original_database                                = $GLOBALS['wpdb'];
+		$original_blog                                    = WordPressTestState::$current_blog_id;
+		$activity_table                                   = Repository::table_name();
+		$wrong_database                                   = new \wpdb();
+		$wrong_table                                      = 'wp_2_flavor_agent_activity';
+		$wrong_database->prefix                           = 'wp_2_';
+		$wrong_database->options                          = 'wp_2_options';
+		$wrong_database->posts                            = 'wp_2_posts';
+		$wrong_database->postmeta                         = 'wp_2_postmeta';
+		WordPressTestState::$db_tables[ $wrong_table ]    = WordPressTestState::$db_tables[ $activity_table ];
+		WordPressTestState::$before_activity_table_update = static function () use ( $wrong_database ): void {
+			$GLOBALS['wpdb']                     = $wrong_database;
+			WordPressTestState::$current_blog_id = 2;
+
+			throw new \RuntimeException( 'final undo activity update interrupted' );
+		};
+
+		try {
+			$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'finalization_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+		$this->assertSame(
+			'available',
+			json_decode( (string) ( WordPressTestState::$db_tables[ $wrong_table ][0]['undo_state'] ?? '' ), true )['status'] ?? null
+		);
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( [], $written['styles'] );
+	}
+
+	public function test_undo_activity_does_not_terminalize_when_context_changes_during_revert_attestation(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+		\FlavorAgent\Attestation\Repository::install();
+		\FlavorAgent\Attestation\Repository::insert(
+			[
+				'attestation_id'      => 'att_undo_context_prior',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:' . self::GLOBAL_STYLES_ID,
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => str_repeat( 'a', 64 ),
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'signature',
+				'key_id'              => 'key',
+				'related_activity_id' => (string) $row['id'],
+			]
+		);
+
+		$original_database        = $GLOBALS['wpdb'];
+		$original_blog            = WordPressTestState::$current_blog_id;
+		$original_home            = WordPressTestState::$home_url;
+		$activity_table           = Repository::table_name();
+		$wrong_database           = new \wpdb();
+		$wrong_database->prefix   = 'wp_2_';
+		$wrong_database->options  = 'wp_2_options';
+		$wrong_database->posts    = 'wp_2_posts';
+		$wrong_database->postmeta = 'wp_2_postmeta';
+		$wrong_activity_table     = 'wp_2_flavor_agent_activity';
+		$wrong_attestation_table  = 'wp_2_flavor_agent_attestations';
+		WordPressTestState::$db_tables[ $wrong_activity_table ]    = WordPressTestState::$db_tables[ $activity_table ];
+		WordPressTestState::$db_tables[ $wrong_attestation_table ] = [];
+		WordPressTestState::$db_tables['wp_2_options']             = [];
+		$secret_key = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		$switched   = false;
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( $secret_key, $wrong_database, &$switched ): string {
+				if ( ! $switched ) {
+					$switched                            = true;
+					$GLOBALS['wpdb']                     = $wrong_database;
+					WordPressTestState::$current_blog_id = 2;
+					WordPressTestState::$home_url        = 'https://wrong-site.example';
+				}
+
+				return $secret_key;
+			}
+		);
+
+		try {
+			$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+			WordPressTestState::$home_url        = $original_home;
+		}
+
+		$this->assertTrue( $switched );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'attestation_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+		$this->assertSame( 'available', json_decode( WordPressTestState::$db_tables[ $wrong_activity_table ][0]['undo_state'], true )['status'] ?? null );
+		$this->assertCount( 0, WordPressTestState::$db_tables[ $wrong_attestation_table ] );
+
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( [], $written['styles'], 'The executor succeeded, but the drifted request must remain unterminated for recovery.' );
+	}
+
 	public function test_undo_activity_persists_failed_on_drift(): void {
 		$row = $this->create_executed_style_row();
 		$this->seed_global_styles_post(
@@ -570,6 +791,75 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertSame( 'failed', $result['result'] );
 		$this->assertSame( 'failed', $result['entry']['undo']['status'] );
 		$this->assertNotSame( '', (string) $result['entry']['undo']['error'] );
+	}
+
+	public function test_undo_activity_requires_recovery_when_failed_drift_cannot_be_persisted(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => '#999999' ] ],
+			]
+		);
+		WordPressTestState::$before_activity_table_update = static fn (): bool => false;
+
+		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'activity_finalization', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( '#999999', $written['styles']['color']['text'] ?? null );
+	}
+
+	public function test_undo_activity_reports_context_drift_after_persisting_failed_drift_on_the_owner_site(): void {
+		$row = $this->create_executed_style_row();
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => '#999999' ] ],
+			]
+		);
+
+		$original_database                                = $GLOBALS['wpdb'];
+		$original_blog                                    = WordPressTestState::$current_blog_id;
+		$activity_table                                   = Repository::table_name();
+		$wrong_database                                   = new \wpdb();
+		$wrong_table                                      = 'wp_2_flavor_agent_activity';
+		$wrong_database->prefix                           = 'wp_2_';
+		$wrong_database->options                          = 'wp_2_options';
+		$wrong_database->posts                            = 'wp_2_posts';
+		$wrong_database->postmeta                         = 'wp_2_postmeta';
+		WordPressTestState::$db_tables[ $wrong_table ]    = WordPressTestState::$db_tables[ $activity_table ];
+		WordPressTestState::$before_activity_table_update = static function () use ( $wrong_database ): void {
+			$GLOBALS['wpdb']                     = $wrong_database;
+			WordPressTestState::$current_blog_id = 2;
+		};
+
+		try {
+			$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'finalization_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( 'failed', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+		$this->assertSame(
+			'available',
+			json_decode( (string) ( WordPressTestState::$db_tables[ $wrong_table ][0]['undo_state'] ?? '' ), true )['status'] ?? null
+		);
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame( '#999999', $written['styles']['color']['text'] ?? null );
 	}
 
 	public function test_undo_activity_reports_persisted_undone_rows_idempotently_without_rewrite(): void {
@@ -661,6 +951,175 @@ final class ApplyAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$get_post_calls );
 		$this->assertSame( [], WordPressTestState::$updated_posts );
 		$this->assertNull( \FlavorAgent\Attestation\Repository::find_by_related_activity( (string) $row['id'] ) );
+	}
+
+	public function test_undo_activity_fails_before_a_hook_time_site_switch_can_undo_another_site_same_id_target(): void {
+		$after = '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->';
+		$this->seed_post_blocks_post( 200, $after );
+		$row = $this->create_executed_post_blocks_row( 'undo-site-context-owner', 200, 200 );
+
+		$original_database                = $GLOBALS['wpdb'];
+		$original_blog                    = WordPressTestState::$current_blog_id;
+		$original_post                    = WordPressTestState::$posts[200];
+		$wrong_post                       = new \WP_Post(
+			[
+				'ID'           => 200,
+				'post_type'    => 'post',
+				'post_content' => $after,
+			]
+		);
+		$wrong_database                   = new \wpdb();
+		$wrong_database->prefix           = 'wp_2_';
+		$wrong_database->options          = 'wp_2_options';
+		$wrong_database->posts            = 'wp_2_posts';
+		$wrong_database->postmeta         = 'wp_2_postmeta';
+		$switched                         = false;
+		$wrong_persisted_content          = null;
+		WordPressTestState::$capabilities = [
+			'edit_post' => static function () use ( $wrong_database, $wrong_post, &$switched ): bool {
+				if ( ! $switched ) {
+					$switched                            = true;
+					$GLOBALS['wpdb']                     = $wrong_database;
+					WordPressTestState::$current_blog_id = 2;
+					WordPressTestState::$posts[200]      = $wrong_post;
+				}
+
+				return true;
+			},
+		];
+
+		try {
+			$result                  = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+			$wrong_persisted_content = (string) WordPressTestState::$posts[200]->post_content;
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+			WordPressTestState::$posts[200]      = $original_post;
+		}
+
+		$this->assertTrue( $switched );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'pre_execution_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( $after, $wrong_persisted_content, 'The same-ID target from the switched site must not be undone.' );
+		$this->assertSame( $after, (string) WordPressTestState::$posts[200]->post_content );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+	}
+
+	public function test_undo_activity_captures_the_owner_site_before_filterable_id_sanitization(): void {
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+		$row = $this->create_executed_style_row();
+
+		$original_database        = $GLOBALS['wpdb'];
+		$original_blog            = WordPressTestState::$current_blog_id;
+		$original_home            = WordPressTestState::$home_url;
+		$original_post            = WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ];
+		$activity_table           = Repository::table_name();
+		$wrong_database           = new \wpdb();
+		$wrong_post               = new \WP_Post(
+			[
+				'ID'           => (int) self::GLOBAL_STYLES_ID,
+				'post_type'    => 'wp_global_styles',
+				'post_content' => (string) wp_json_encode(
+					[
+						'version'                     => 3,
+						'isGlobalStylesUserThemeJSON' => true,
+						'settings'                    => [],
+						'styles'                      => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+					]
+				),
+			]
+		);
+		$wrong_database->prefix   = 'wp_2_';
+		$wrong_database->options  = 'wp_2_options';
+		$wrong_database->posts    = 'wp_2_posts';
+		$wrong_database->postmeta = 'wp_2_postmeta';
+		$wrong_activity_table     = 'wp_2_flavor_agent_activity';
+		WordPressTestState::$db_tables[ $wrong_activity_table ] = WordPressTestState::$db_tables[ $activity_table ];
+		$switched                = false;
+		$wrong_persisted_content = null;
+		$sanitize_filter         = static function ( string $filtered ) use ( $wrong_database, $wrong_post, &$switched ): string {
+			if ( ! $switched ) {
+				$switched                            = true;
+				$GLOBALS['wpdb']                     = $wrong_database;
+				WordPressTestState::$current_blog_id = 2;
+				WordPressTestState::$home_url        = 'https://wrong-site.example';
+				WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ] = $wrong_post;
+			}
+
+			return $filtered;
+		};
+		add_filter( 'sanitize_text_field', $sanitize_filter );
+
+		try {
+			$result                  = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+			$wrong_persisted_content = (string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content;
+		} finally {
+			remove_filter( 'sanitize_text_field', $sanitize_filter );
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+			WordPressTestState::$home_url        = $original_home;
+			WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ] = $original_post;
+		}
+
+		$this->assertTrue( $switched );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'pre_execution_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( (string) $wrong_post->post_content, $wrong_persisted_content );
+		$this->assertSame( (string) $original_post->post_content, (string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
+	}
+
+	public function test_undo_activity_fails_before_a_posts_table_only_redirect_can_undo_another_target(): void {
+		$after = '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->';
+		$this->seed_post_blocks_post( 200, $after );
+		$row = $this->create_executed_post_blocks_row( 'undo-posts-table-owner', 200, 200 );
+
+		$database                         = $GLOBALS['wpdb'];
+		$original_posts_table             = $database->posts;
+		$original_post                    = WordPressTestState::$posts[200];
+		$redirected_post                  = new \WP_Post(
+			[
+				'ID'           => 200,
+				'post_type'    => 'post',
+				'post_content' => $after,
+			]
+		);
+		$redirected_content               = null;
+		$redirected                       = false;
+		WordPressTestState::$capabilities = [
+			'edit_post' => static function () use ( $database, $redirected_post, &$redirected ): bool {
+				if ( ! $redirected ) {
+					$redirected                     = true;
+					$database->posts                = 'wp_2_posts';
+					WordPressTestState::$posts[200] = $redirected_post;
+				}
+
+				return true;
+			},
+		];
+
+		try {
+			$result             = ApplyAbilities::undo_activity( [ 'activityId' => (string) $row['id'] ] );
+			$redirected_content = (string) WordPressTestState::$posts[200]->post_content;
+		} finally {
+			$database->posts                = $original_posts_table;
+			WordPressTestState::$posts[200] = $original_post;
+		}
+
+		$this->assertTrue( $redirected );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_undo_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'pre_execution_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( $after, $redirected_content, 'Changing only wpdb->posts must not redirect an undo write.' );
+		$this->assertSame( $after, (string) WordPressTestState::$posts[200]->post_content );
+		$this->assertSame( 'available', Repository::find( (string) $row['id'] )['undo']['status'] ?? null );
 	}
 
 	public function test_ordered_undo_blocking_precedes_authorization_of_an_older_malformed_row(): void {

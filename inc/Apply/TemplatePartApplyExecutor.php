@@ -406,22 +406,40 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		}
 
 		try {
-			$part = self::assert_part_unchanged( $canonical_ref, $expected_hash );
+			$context = $lock->context();
+			$part    = self::assert_part_unchanged( $canonical_ref, $expected_hash );
 
 			if ( is_wp_error( $part ) ) {
 				return $part;
 			}
 
-			$wp_id     = (int) ( $part->wp_id ?? 0 );
-			$persisted = $wp_id > 0
-				? self::persist_existing_template_part( $wp_id, $content )
-				: self::materialize_template_part( $part, $content, $expected_hash, $canonical_ref );
+			if ( ! $context->matches_current() ) {
+				return self::write_context_changed();
+			}
+
+			$wp_id = (int) ( $part->wp_id ?? 0 );
+
+			if ( $wp_id > 0 ) {
+				return self::persist_existing_template_part_after_gate(
+					$wp_id,
+					$content,
+					$canonical_ref,
+					$expected_hash,
+					$context
+				);
+			}
+
+			$persisted = self::materialize_template_part( $part, $content, $expected_hash, $canonical_ref, $context );
 
 			if ( is_wp_error( $persisted ) ) {
 				return $persisted;
 			}
 
-			$persisted_state = self::resolve_persisted_state( $canonical_ref, $persisted );
+			if ( is_array( $persisted ) ) {
+				return $persisted;
+			}
+
+			$persisted_state = self::resolve_persisted_state( $canonical_ref, $persisted, $context );
 
 			if ( is_wp_error( $persisted_state ) ) {
 				return $persisted_state;
@@ -434,42 +452,213 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	}
 
 	/**
-	 * Update one DB-backed template part while its exact target lock is already held.
+	 * Capture the exact database bytes, then repeat the semantic template-part
+	 * gate. WP_Block_Template content may include Block Hooks and therefore is
+	 * not a safe byte-for-byte predicate for the underlying posts-table row.
 	 *
-	 * @return int|\WP_Error The persisted post id.
+	 * @return array{entity: object, content: string}|\WP_Error
 	 */
-	private static function persist_existing_template_part( int $wp_id, string $content ): int|\WP_Error {
-		$updated = wp_update_post(
-			[
-				'ID'           => $wp_id,
-				'post_content' => $content,
-			],
-			true
-		);
-
-		if ( is_wp_error( $updated ) ) {
-			return $updated;
+	private static function persist_existing_template_part_after_gate(
+		int $wp_id,
+		string $content,
+		string $canonical_ref,
+		string $expected_hash,
+		MaterializationWriteContext $context
+	): array|\WP_Error {
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
 		}
 
-		if ( 0 === (int) $updated ) {
+		self::invalidate_part_cache( $wp_id );
+
+		$before    = $context->read_post_row( $wp_id );
+		$ref_parts = explode( '//', $canonical_ref, 2 );
+
+		if (
+			! is_object( $before )
+			|| 'wp_template_part' !== (string) ( $before->post_type ?? '' )
+			|| (string) ( $ref_parts[1] ?? '' ) !== (string) ( $before->post_name ?? '' )
+		) {
 			return new \WP_Error(
-				'flavor_agent_apply_write_failed',
-				'Flavor Agent could not write the template part entity.',
+				'flavor_agent_apply_target_changed',
+				'The template part database row changed before Flavor Agent could capture its guarded write predicate.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$expected_content = (string) ( $before->post_content ?? '' );
+
+		self::invalidate_part_cache( $wp_id );
+
+		$current = self::assert_part_unchanged( $canonical_ref, $expected_hash );
+
+		if ( is_wp_error( $current ) ) {
+			return $current;
+		}
+
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
+		if ( ! self::is_exact_persisted_entity( $current, $canonical_ref, $wp_id ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_target_changed',
+				'The template part identity changed before Flavor Agent could persist this operation.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return self::persist_existing_template_part( $wp_id, $content, $canonical_ref, $expected_content, $context );
+	}
+
+	/**
+	 * Update one DB-backed template part while its exact target lock is already held.
+	 *
+	 * @return array{entity: object, content: string}|\WP_Error
+	 */
+	private static function persist_existing_template_part(
+		int $wp_id,
+		string $content,
+		string $canonical_ref,
+		string $expected_content,
+		MaterializationWriteContext $context
+	): array|\WP_Error {
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
+		$before = $context->read_post_row( $wp_id );
+
+		if ( ! is_object( $before ) || 'wp_template_part' !== (string) ( $before->post_type ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_post_write_read_failed',
+				'Flavor Agent could not capture the template part content immediately before writing it.',
 				[ 'status' => 500 ]
 			);
 		}
 
-		self::invalidate_part_cache( (int) $updated );
+		$before_content = (string) ( $before->post_content ?? '' );
 
-		return (int) $updated;
+		if ( ! hash_equals( $expected_content, $before_content ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_target_changed',
+				'The template part changed after Flavor Agent completed its final live-content gate.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		$prepared = BlockTemplateWritePreparer::prepare(
+			[
+				'ID'           => $wp_id,
+				'post_type'    => 'wp_template_part',
+				'post_content' => $content,
+			],
+			'wp_template_part',
+			'template part'
+		);
+
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
+		}
+
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
+		$ref_parts = explode( '//', $canonical_ref, 2 );
+		$write     = ExistingPostContentWriter::update(
+			$wp_id,
+			'wp_template_part',
+			(string) ( $ref_parts[1] ?? '' ),
+			$expected_content,
+			(string) $prepared['post_content'],
+			'template-part',
+			is_array( $prepared['meta_input'] ?? null ) ? $prepared['meta_input'] : [],
+			$context
+		);
+
+		if ( is_wp_error( $write ) ) {
+			return $write;
+		}
+
+		self::invalidate_part_cache( $wp_id );
+
+		if ( ! $context->matches_current() ) {
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				$wp_id,
+				'Flavor Agent wrote the template part but the site database context changed before attestation.'
+			);
+		}
+
+		$written = $context->read_post_row( $wp_id );
+
+		if ( ! is_object( $written ) || 'wp_template_part' !== (string) ( $written->post_type ?? '' ) ) {
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				$wp_id,
+				'Flavor Agent wrote the template part but could not capture the exact content needed for safe compensation.'
+			);
+		}
+
+		$written_content = (string) $write['content'];
+
+		if ( ! hash_equals( $written_content, (string) ( $written->post_content ?? '' ) ) ) {
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				$wp_id,
+				'Flavor Agent did not reconcile content that changed after its conditional write.',
+				409
+			);
+		}
+
+		$entity = ServerCollector::resolve_template_part_for_attestation( $canonical_ref );
+
+		if ( ! $context->matches_current() ) {
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				$wp_id,
+				'Flavor Agent wrote the template part but the site database context changed during attestation.'
+			);
+		}
+
+		if ( ! self::is_exact_persisted_entity( $entity, $canonical_ref, $wp_id ) ) {
+			$restored = ExistingPostContentCompensator::restore(
+				$wp_id,
+				'wp_template_part',
+				$written_content,
+				$before_content,
+				'template-part',
+				$context
+			);
+
+			if ( is_wp_error( $restored ) ) {
+				return $restored;
+			}
+
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				$wp_id,
+				'Flavor Agent restored the prior template part content, but the canonical post-write identity still requires reconciliation.'
+			);
+		}
+
+		return [
+			'entity'  => $entity,
+			'content' => (string) ( $entity->content ?? '' ),
+		];
 	}
 
 	/**
 	 * Materialize one file-backed template part while its exact target lock is held.
 	 *
-	 * @return int|\WP_Error The persisted post id.
+	 * @return int|array{entity: object, content: string}|\WP_Error The persisted post id or a reconciled existing state.
 	 */
-	private static function materialize_template_part( object $part, string $content, string $expected_hash, string $canonical_ref ): int|\WP_Error {
+	private static function materialize_template_part( object $part, string $content, string $expected_hash, string $canonical_ref, MaterializationWriteContext $context ): int|array|\WP_Error {
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
 		// Materialize a theme-file part into a wp_template_part post (Site Editor parity).
 		// Normalize through core's own post_name normalizer so the post-insert
 		// read-back compares like with like. sanitize_key() keeps `--` and edge
@@ -483,6 +672,8 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		$ref_parts  = 1 === substr_count( $canonical_ref, '//' ) ? explode( '//', $canonical_ref, 2 ) : [];
 		$ref_theme  = 2 === count( $ref_parts ) ? $ref_parts[0] : '';
 		$ref_slug   = 2 === count( $ref_parts ) ? $ref_parts[1] : '';
+		$area       = _filter_block_template_part_area( (string) ( $part->area ?? '' ) );
+		$origin     = (string) ( $part->source ?? '' );
 
 		if ( '' === $slug || '' === $stylesheet ) {
 			return new \WP_Error(
@@ -499,26 +690,45 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		// If another approval materialized the same active-theme part after our
 		// final read, reconcile against that row instead of creating a suffixed
 		// orphan or blind-overwriting what the other actor wrote.
-		$reconciled = self::reconcile_existing_row( $canonical_ref, $slug, $content, $expected_hash );
+		$reconciled = self::reconcile_existing_row( $canonical_ref, $slug, $content, $expected_hash, $ref_theme, $area, $origin, $context );
 
 		if ( null !== $reconciled ) {
 			return $reconciled;
 		}
 
-		$post_id = wp_insert_post(
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
+		$prepared = BlockTemplateWritePreparer::prepare(
 			[
 				'post_type'    => 'wp_template_part',
 				'post_status'  => 'publish',
 				'post_name'    => $slug,
 				'post_title'   => (string) ( $part->title ?? $slug ),
+				'post_excerpt' => (string) ( $part->description ?? '' ),
 				'post_content' => $content,
 				'tax_input'    => [
-					'wp_theme'              => [ $ref_theme ],
-					'wp_template_part_area' => [ sanitize_key( (string) ( $part->area ?? 'uncategorized' ) ) ],
+					'wp_theme'              => $ref_theme,
+					'wp_template_part_area' => $area,
+				],
+				'meta_input'   => [
+					'origin' => $origin,
 				],
 			],
-			true
+			'wp_template_part',
+			'template part'
 		);
+
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
+		}
+
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
+		$post_id = BlockTemplatePostInserter::insert( $prepared, 'template-part', $context );
 
 		if ( is_wp_error( $post_id ) ) {
 			return $post_id;
@@ -532,63 +742,69 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
-		$inserted = get_post( (int) $post_id );
+		if ( ! $context->matches_current() ) {
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				(int) $post_id,
+				'Flavor Agent could not prove the target site context after materializing the template part.'
+			);
+		}
 
-		// A failed read-back is not a slug collision. Falling into the collision
-		// arm would delete a row that was almost certainly written correctly and
-		// report a cause we know to be false, so fail closed and leave the row --
-		// matching execute()'s existing post-persist read-back contract.
+		$inserted = $context->read_post_row( (int) $post_id );
+
 		if ( ! is_object( $inserted ) ) {
-			return new \WP_Error(
-				'flavor_agent_apply_post_write_read_failed',
-				'Flavor Agent materialized the template part but could not confirm its stored slug.',
-				[ 'status' => 500 ]
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				(int) $post_id,
+				'Flavor Agent materialized the template part but could not confirm its exact stored row.'
 			);
 		}
 
 		$inserted_slug = (string) ( $inserted->post_name ?? '' );
 
-		if ( $slug !== $inserted_slug ) {
-			$deleted = wp_delete_post( (int) $post_id, true );
-
-			// wp_delete_post returns the deleted post, or false/null on failure --
-			// but a pre_delete_post filter can short-circuit deletion while still
-			// returning a WP_Post. Confirm the row is actually gone rather than
-			// trusting the return value: otherwise we strand the duplicate here
-			// and then also update the winning row below.
-			if ( ! $deleted || is_object( get_post( (int) $post_id ) ) ) {
-				return new \WP_Error(
-					'flavor_agent_apply_write_failed',
-					'Flavor Agent detected a template-part slug collision but could not remove the duplicate row.',
-					[ 'status' => 500 ]
-				);
-			}
-
-			// A row that raced us to publish is visible now; reconcile against it.
-			$reconciled = self::reconcile_existing_row( $canonical_ref, $slug, $content, $expected_hash );
-
-			if ( null !== $reconciled ) {
-				return $reconciled;
-			}
-
-			// Nothing published owns the slug, so this is not concurrency. Core's
-			// uniquifier also counts non-published rows that the publish-only probe
-			// cannot see. Report the real cause instead of phantom concurrency.
-			return new \WP_Error(
-				'flavor_agent_apply_slug_conflict',
-				'Another template part already uses this slug for the active theme. Resolve the conflicting template part before applying.',
-				[ 'status' => 409 ]
+		if (
+			'wp_template_part' !== (string) ( $inserted->post_type ?? '' )
+			|| $slug !== $inserted_slug
+			|| ! hash_equals( (string) $prepared['post_content'], (string) ( $inserted->post_content ?? '' ) )
+			|| (string) ( $prepared['post_excerpt'] ?? '' ) !== (string) ( $inserted->post_excerpt ?? '' )
+		) {
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				(int) $post_id,
+				'Flavor Agent did not claim or remove the materialized template part because its final stored row changed during insertion.',
+				409
 			);
+		}
+
+		$side_effects_verified = MaterializedTemplateSideEffectVerifier::verify(
+			(int) $post_id,
+			$ref_theme,
+			(string) ( $prepared['tax_input']['wp_template_part_area'] ?? '' ),
+			(string) ( $prepared['meta_input']['origin'] ?? '' ),
+			'template-part',
+			$context
+		);
+
+		if ( is_wp_error( $side_effects_verified ) ) {
+			return $side_effects_verified;
 		}
 
 		self::invalidate_part_cache( (int) $post_id );
 		$materialized = ServerCollector::resolve_template_part_for_attestation( $canonical_ref );
 
+		if ( ! $context->matches_current() ) {
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				(int) $post_id,
+				'Flavor Agent materialized the template part but the site database context changed during identity attestation.'
+			);
+		}
+
 		if ( ! is_object( $materialized ) ) {
-			return new \WP_Error(
-				'flavor_agent_apply_post_write_read_failed',
-				'Flavor Agent materialized the template part but could not confirm its canonical theme-qualified identity.',
-				[ 'status' => 500 ]
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				(int) $post_id,
+				'Flavor Agent materialized the template part but could not confirm its canonical theme-qualified identity.'
 			);
 		}
 
@@ -596,28 +812,11 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		$materialized_ref = (string) ( $materialized->id ?? '' );
 
 		if ( $canonical_ref !== $materialized_ref || $materialized_id !== (int) $post_id ) {
-			$deleted = wp_delete_post( (int) $post_id, true );
-
-			if ( ! $deleted || is_object( get_post( (int) $post_id ) ) ) {
-				return new \WP_Error(
-					'flavor_agent_apply_write_failed',
-					'Flavor Agent could not remove a template-part row whose canonical identity was not confirmed.',
-					[ 'status' => 500 ]
-				);
-			}
-
-			if ( $canonical_ref === $materialized_ref && $materialized_id > 0 ) {
-				$reconciled = self::reconcile_existing_row( $canonical_ref, $slug, $content, $expected_hash );
-
-				if ( null !== $reconciled ) {
-					return $reconciled;
-				}
-			}
-
-			return new \WP_Error(
-				'flavor_agent_apply_post_write_read_failed',
-				'Flavor Agent materialized the template part but could not confirm its canonical theme-qualified identity.',
-				[ 'status' => 500 ]
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				(int) $post_id,
+				'Flavor Agent left the materialized template part unchanged because its canonical identity could not be proven.',
+				409
 			);
 		}
 
@@ -634,11 +833,28 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 * closed. A canonical row is accepted idempotently, rejected when it diverged
 	 * from the validated baseline, or updated in place when the baseline matches.
 	 *
-	 * @return int|\WP_Error|null
+	 * @return array{entity: object, content: string}|\WP_Error|null
 	 */
-	private static function reconcile_existing_row( string $canonical_ref, string $slug, string $content, string $expected_hash ): int|\WP_Error|null {
+	private static function reconcile_existing_row(
+		string $canonical_ref,
+		string $slug,
+		string $content,
+		string $expected_hash,
+		string $theme,
+		string $area,
+		string $origin,
+		MaterializationWriteContext $context
+	): array|\WP_Error|null {
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
 		$existing                  = get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template_part' );
 		$found_unrelated_candidate = false;
+
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
 
 		foreach ( $existing as $candidate ) {
 			if ( ! is_object( $candidate ) || $canonical_ref !== (string) ( $candidate->id ?? '' ) ) {
@@ -653,15 +869,11 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			}
 
 			$candidate_hash = self::content_hash( (string) ( $candidate->content ?? '' ) );
-
-			// Already the state we intended to write: accept without rewriting.
-			if ( hash_equals( self::content_hash( $content ), $candidate_hash ) ) {
-				return $candidate_wp_id;
-			}
+			$desired_hash   = self::content_hash( $content );
 
 			// Diverged from the baseline this apply was validated against, so the
 			// operations were never checked against what is actually stored.
-			if ( ! hash_equals( $expected_hash, $candidate_hash ) ) {
+			if ( ! hash_equals( $desired_hash, $candidate_hash ) && ! hash_equals( $expected_hash, $candidate_hash ) ) {
 				return new \WP_Error(
 					'flavor_agent_apply_target_changed',
 					'The template part changed while Flavor Agent was materializing it. Regenerate the request and try again.',
@@ -669,14 +881,47 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 				);
 			}
 
-			return self::persist_existing_template_part( $candidate_wp_id, $content );
+			$side_effects_verified = MaterializedTemplateSideEffectVerifier::verify(
+				$candidate_wp_id,
+				$theme,
+				$area,
+				$origin,
+				'template-part',
+				$context
+			);
+
+			if ( is_wp_error( $side_effects_verified ) ) {
+				return $side_effects_verified;
+			}
+
+			// Already the state we intended to write: accept without rewriting.
+			if ( hash_equals( $desired_hash, $candidate_hash ) ) {
+				return self::resolve_persisted_state( $canonical_ref, $candidate_wp_id, $context );
+			}
+
+			$persisted = self::persist_existing_template_part_after_gate( $candidate_wp_id, $content, $canonical_ref, $expected_hash, $context );
+
+			if ( is_wp_error( $persisted ) ) {
+				return $persisted;
+			}
+
+			$side_effects_verified = MaterializedTemplateSideEffectVerifier::verify(
+				$candidate_wp_id,
+				$theme,
+				$area,
+				$origin,
+				'template-part',
+				$context
+			);
+
+			return is_wp_error( $side_effects_verified ) ? $side_effects_verified : $persisted;
 		}
 
 		return $found_unrelated_candidate ? self::target_mismatch() : null;
 	}
 
-	private static function resolve_persisted_content( int $post_id ): string|\WP_Error {
-		$post = $post_id > 0 && function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+	private static function resolve_persisted_content( int $post_id, MaterializationWriteContext $context ): string|\WP_Error {
+		$post = $post_id > 0 ? $context->read_post_row( $post_id ) : null;
 
 		if ( ! is_object( $post ) || 'wp_template_part' !== (string) ( $post->post_type ?? '' ) ) {
 			return new \WP_Error(
@@ -695,8 +940,20 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 	 *
 	 * @return array{entity: object, content: string}|\WP_Error
 	 */
-	private static function resolve_persisted_state( string $canonical_ref, int $post_id ): array|\WP_Error {
+	private static function resolve_persisted_state( string $canonical_ref, int $post_id, MaterializationWriteContext $context ): array|\WP_Error {
+		if ( ! $context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
 		$entity = ServerCollector::resolve_template_part_for_attestation( $canonical_ref );
+
+		if ( ! $context->matches_current() ) {
+			return ExistingPostContentCompensator::recovery_required(
+				'template-part',
+				$post_id,
+				'Flavor Agent wrote the template part but the site database context changed during persisted-state resolution.'
+			);
+		}
 
 		if ( ! self::is_exact_persisted_entity( $entity, $canonical_ref, $post_id ) ) {
 			return new \WP_Error(
@@ -706,7 +963,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
-		$content = self::resolve_persisted_content( $post_id );
+		$content = self::resolve_persisted_content( $post_id, $context );
 
 		if ( is_wp_error( $content ) ) {
 			return $content;
@@ -714,7 +971,7 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 
 		return [
 			'entity'  => $entity,
-			'content' => $content,
+			'content' => (string) ( $entity->content ?? '' ),
 		];
 	}
 
@@ -733,6 +990,14 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 		if ( $post_id > 0 && function_exists( 'clean_post_cache' ) ) {
 			clean_post_cache( $post_id );
 		}
+	}
+
+	private static function write_context_changed(): \WP_Error {
+		return new \WP_Error(
+			'flavor_agent_apply_write_context_changed',
+			'Flavor Agent stopped because the target site database context changed during template-part persistence.',
+			[ 'status' => 409 ]
+		);
 	}
 
 	private function __construct() {}

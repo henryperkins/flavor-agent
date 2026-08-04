@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Attestation;
 
+use FlavorAgent\Activity\ActivityStorageContext;
+
 /**
  * Append-only, retention-independent store for Ring III attestations.
  * Deliberately has no update/delete and is not registered with the activity
@@ -14,28 +16,36 @@ final class Repository {
 	public const SCHEMA_OPTION  = 'flavor_agent_attestation_schema_version';
 	public const SCHEMA_VERSION = 2;
 
-	public static function table_name(): string {
+	public static function table_name( ?ActivityStorageContext $storage_context = null ): string {
+		if ( null !== $storage_context ) {
+			return $storage_context->prefix() . 'flavor_agent_attestations';
+		}
+
 		global $wpdb;
 
 		return $wpdb->prefix . 'flavor_agent_attestations';
 	}
 
-	public static function maybe_install(): void {
-		if ( (int) \get_option( self::SCHEMA_OPTION, 0 ) < self::SCHEMA_VERSION || ! self::table_exists() ) {
-			self::install();
+	public static function maybe_install( ?ActivityStorageContext $storage_context = null ): void {
+		$installed_version = null !== $storage_context
+			? (int) $storage_context->read_option( self::SCHEMA_OPTION, 0 )
+			: (int) \get_option( self::SCHEMA_OPTION, 0 );
+
+		if ( $installed_version < self::SCHEMA_VERSION || ! self::table_exists( $storage_context ) ) {
+			self::install( $storage_context );
 		}
 	}
 
-	public static function install(): void {
-		global $wpdb;
+	public static function install( ?ActivityStorageContext $storage_context = null ): void {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) || ! isset( $wpdb->prefix ) ) {
+		if ( ! is_object( $database ) ) {
 			return;
 		}
 
-		$table   = self::table_name();
-		$charset = method_exists( $wpdb, 'get_charset_collate' )
-			? (string) $wpdb->get_charset_collate()
+		$table   = self::table_name( $storage_context );
+		$charset = method_exists( $database, 'get_charset_collate' )
+			? (string) $database->get_charset_collate()
 			: '';
 		$sql     = "CREATE TABLE {$table} (
 			attestation_id varchar(64) NOT NULL,
@@ -66,31 +76,35 @@ final class Repository {
 			}
 		}
 
-		if ( function_exists( 'dbDelta' ) ) {
+		if ( null === $storage_context && function_exists( 'dbDelta' ) ) {
 			\dbDelta( $sql );
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.SchemaChange,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Plugin-owned schema creation for migration and activation paths.
-			$result = $wpdb->query( $sql );
+			$result = $database->query( $sql );
 
 			if ( false === $result ) {
 				return;
 			}
 		}
 
-		if ( ! self::table_exists() ) {
+		if ( ! self::table_exists( $storage_context ) ) {
 			return;
 		}
 
-		\update_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
+		if ( null !== $storage_context ) {
+			$storage_context->write_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
+		} else {
+			\update_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
+		}
 	}
 
 	/**
 	 * @param array<string, mixed> $row
 	 */
-	public static function insert( array $row ): bool {
-		global $wpdb;
+	public static function insert( array $row, ?ActivityStorageContext $storage_context = null ): bool {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return false;
 		}
 
@@ -111,21 +125,21 @@ final class Repository {
 		];
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned attestation table must execute immediately.
-		return false !== $wpdb->insert( self::table_name(), $record );
+		return false !== $database->insert( self::table_name( $storage_context ), $record );
 	}
 
 	/**
 	 * @return array<string, mixed>|null
 	 */
-	public static function find( string $id ): ?array {
-		global $wpdb;
+	public static function find( string $id, ?ActivityStorageContext $storage_context = null ): ?array {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return null;
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read from plugin-owned attestation table with prepared id.
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table_name() . ' WHERE attestation_id = %s', $id ), ARRAY_A );
+		$row = $database->get_row( $database->prepare( 'SELECT * FROM ' . self::table_name( $storage_context ) . ' WHERE attestation_id = %s', $id ), ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
 	}
@@ -133,15 +147,15 @@ final class Repository {
 	/**
 	 * @return array<string, mixed>|null
 	 */
-	public static function find_by_reverts( string $id ): ?array {
-		global $wpdb;
+	public static function find_by_reverts( string $id, ?ActivityStorageContext $storage_context = null ): ?array {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return null;
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read from plugin-owned attestation table with prepared id.
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table_name() . ' WHERE reverts_attestation_id = %s ORDER BY created_at DESC', $id ), ARRAY_A );
+		$row = $database->get_row( $database->prepare( 'SELECT * FROM ' . self::table_name( $storage_context ) . ' WHERE reverts_attestation_id = %s ORDER BY created_at DESC', $id ), ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
 	}
@@ -149,15 +163,15 @@ final class Repository {
 	/**
 	 * @return array<string, mixed>|null
 	 */
-	public static function find_by_supersedes( string $id ): ?array {
-		global $wpdb;
+	public static function find_by_supersedes( string $id, ?ActivityStorageContext $storage_context = null ): ?array {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return null;
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read from plugin-owned attestation table with prepared id.
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table_name() . ' WHERE supersedes_attestation_id = %s ORDER BY created_at DESC', $id ), ARRAY_A );
+		$row = $database->get_row( $database->prepare( 'SELECT * FROM ' . self::table_name( $storage_context ) . ' WHERE supersedes_attestation_id = %s ORDER BY created_at DESC', $id ), ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
 	}
@@ -166,10 +180,10 @@ final class Repository {
 	 * @param array<int, string> $ids
 	 * @return array<string, array<string, mixed>>
 	 */
-	public static function find_reverts_by_attestation_ids( array $ids ): array {
-		global $wpdb;
+	public static function find_reverts_by_attestation_ids( array $ids, ?ActivityStorageContext $storage_context = null ): array {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return [];
 		}
 
@@ -180,12 +194,12 @@ final class Repository {
 		}
 
 		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%s' ) );
-		$sql          = 'SELECT * FROM ' . self::table_name() . " WHERE reverts_attestation_id IN ({$placeholders}) ORDER BY created_at DESC";
+		$sql          = 'SELECT * FROM ' . self::table_name( $storage_context ) . " WHERE reverts_attestation_id IN ({$placeholders}) ORDER BY created_at DESC";
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Placeholder list is generated from a bounded id list.
-		$sql = $wpdb->prepare( $sql, $ids );
+		$sql = $database->prepare( $sql, $ids );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Batch read from plugin-owned attestation table; $sql is prepared above.
-		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$rows = $database->get_results( $sql, ARRAY_A );
 
 		return self::index_latest_rows(
 			is_array( $rows ) ? $rows : [],
@@ -197,10 +211,10 @@ final class Repository {
 	 * @param array<int, string> $ids
 	 * @return array<string, array<string, mixed>>
 	 */
-	public static function find_supersedes_by_attestation_ids( array $ids ): array {
-		global $wpdb;
+	public static function find_supersedes_by_attestation_ids( array $ids, ?ActivityStorageContext $storage_context = null ): array {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return [];
 		}
 
@@ -211,12 +225,12 @@ final class Repository {
 		}
 
 		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%s' ) );
-		$sql          = 'SELECT * FROM ' . self::table_name() . " WHERE supersedes_attestation_id IN ({$placeholders}) ORDER BY created_at DESC";
+		$sql          = 'SELECT * FROM ' . self::table_name( $storage_context ) . " WHERE supersedes_attestation_id IN ({$placeholders}) ORDER BY created_at DESC";
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Placeholder list is generated from a bounded id list.
-		$sql = $wpdb->prepare( $sql, $ids );
+		$sql = $database->prepare( $sql, $ids );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Batch read from plugin-owned attestation table; $sql is prepared above.
-		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$rows = $database->get_results( $sql, ARRAY_A );
 
 		return self::index_latest_rows(
 			is_array( $rows ) ? $rows : [],
@@ -227,15 +241,15 @@ final class Repository {
 	/**
 	 * @return array<string, mixed>|null
 	 */
-	public static function find_latest_by_subject( string $subject_name ): ?array {
-		global $wpdb;
+	public static function find_latest_by_subject( string $subject_name, ?ActivityStorageContext $storage_context = null ): ?array {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return null;
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read from plugin-owned attestation table with prepared subject name.
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table_name() . ' WHERE subject_name = %s ORDER BY created_at DESC', $subject_name ), ARRAY_A );
+		$row = $database->get_row( $database->prepare( 'SELECT * FROM ' . self::table_name( $storage_context ) . ' WHERE subject_name = %s ORDER BY created_at DESC', $subject_name ), ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
 	}
@@ -243,15 +257,15 @@ final class Repository {
 	/**
 	 * @return array<string, mixed>|null
 	 */
-	public static function find_by_related_activity( string $activity_id ): ?array {
-		global $wpdb;
+	public static function find_by_related_activity( string $activity_id, ?ActivityStorageContext $storage_context = null ): ?array {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return null;
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Read from plugin-owned attestation table with prepared id.
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table_name() . ' WHERE related_activity_id = %s AND reverts_attestation_id IS NULL ORDER BY created_at DESC', $activity_id ), ARRAY_A );
+		$row = $database->get_row( $database->prepare( 'SELECT * FROM ' . self::table_name( $storage_context ) . ' WHERE related_activity_id = %s AND reverts_attestation_id IS NULL ORDER BY created_at DESC', $activity_id ), ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
 	}
@@ -260,10 +274,10 @@ final class Repository {
 	 * @param array<int, string> $activity_ids
 	 * @return array<string, array<string, mixed>>
 	 */
-	public static function find_by_related_activities( array $activity_ids ): array {
-		global $wpdb;
+	public static function find_by_related_activities( array $activity_ids, ?ActivityStorageContext $storage_context = null ): array {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return [];
 		}
 
@@ -274,12 +288,12 @@ final class Repository {
 		}
 
 		$placeholders = implode( ', ', array_fill( 0, count( $activity_ids ), '%s' ) );
-		$sql          = 'SELECT * FROM ' . self::table_name() . " WHERE related_activity_id IN ({$placeholders}) AND reverts_attestation_id IS NULL ORDER BY created_at DESC";
+		$sql          = 'SELECT * FROM ' . self::table_name( $storage_context ) . " WHERE related_activity_id IN ({$placeholders}) AND reverts_attestation_id IS NULL ORDER BY created_at DESC";
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Placeholder list is generated from a bounded id list.
-		$sql = $wpdb->prepare( $sql, $activity_ids );
+		$sql = $database->prepare( $sql, $activity_ids );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Batch read from plugin-owned attestation table; $sql is prepared above.
-		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$rows = $database->get_results( $sql, ARRAY_A );
 
 		return self::index_latest_rows(
 			is_array( $rows ) ? $rows : [],
@@ -325,17 +339,27 @@ final class Repository {
 		return $indexed;
 	}
 
-	private static function table_exists(): bool {
-		global $wpdb;
+	private static function table_exists( ?ActivityStorageContext $storage_context = null ): bool {
+		$database = self::database( $storage_context );
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return false;
 		}
 
-		$table = self::table_name();
-		$like  = method_exists( $wpdb, 'esc_like' ) ? $wpdb->esc_like( $table ) : $table;
+		$table = self::table_name( $storage_context );
+		$like  = method_exists( $database, 'esc_like' ) ? $database->esc_like( $table ) : $table;
 
-		return (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ) === $table;
+		return (string) $database->get_var( $database->prepare( 'SHOW TABLES LIKE %s', $like ) ) === $table;
+	}
+
+	private static function database( ?ActivityStorageContext $storage_context = null ): ?object {
+		if ( null !== $storage_context ) {
+			return $storage_context->database();
+		}
+
+		global $wpdb;
+
+		return is_object( $wpdb ) ? $wpdb : null;
 	}
 
 	private function __construct() {}

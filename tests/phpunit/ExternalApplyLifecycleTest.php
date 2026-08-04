@@ -171,6 +171,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			[
 				'ID'           => $wp_id,
 				'post_type'    => 'wp_template_part',
+				'post_name'    => 'header',
 				'post_content' => $content,
 			]
 		);
@@ -191,6 +192,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			[
 				'ID'           => $wp_id,
 				'post_type'    => 'wp_template',
+				'post_name'    => 'home',
 				'post_content' => $content,
 			]
 		);
@@ -540,6 +542,359 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'pending', $released['executionResult'] );
 	}
 
+	public function test_abandoned_decision_claim_diagnostics_and_operator_recovery_never_expose_or_reuse_the_owner(): void {
+		$created     = $this->create_pending_entry( [ 'id' => 'operator-recovery-claim' ] );
+		$activity_id = (string) $created['id'];
+		$claim       = Repository::claim_external_apply_decision( $activity_id );
+		$this->assertIsString( $claim );
+
+		$diagnostics = Repository::external_apply_decision_claim_diagnostics( $activity_id );
+		$this->assertSame( $activity_id, $diagnostics['activityId'] ?? null );
+		$this->assertNotSame( '', (string) ( $diagnostics['processingSince'] ?? '' ) );
+		$this->assertStringNotContainsString( $claim, (string) wp_json_encode( $diagnostics ) );
+		$this->assertSame( 1, Repository::count_active_pending_external_applies( 7 ) );
+
+		$wrong_claim = substr( $claim, 0, -1 ) . ( str_ends_with( $claim, 'a' ) ? 'b' : 'a' );
+		$denied      = \FlavorAgent\Apply\PendingApplyDecision::recover_abandoned_claim(
+			$activity_id,
+			$claim,
+			'Confirmed the request is not active.'
+		);
+		$this->assertInstanceOf( \WP_Error::class, $denied );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $denied->get_error_code() );
+
+		WordPressTestState::$capabilities['manage_options'] = true;
+		$wrong = \FlavorAgent\Apply\PendingApplyDecision::recover_abandoned_claim(
+			$activity_id,
+			$wrong_claim,
+			'Confirmed the request is not active.'
+		);
+		$this->assertInstanceOf( \WP_Error::class, $wrong );
+		$this->assertSame( 'flavor_agent_apply_invalid_transition', $wrong->get_error_code() );
+
+		$recovered = \FlavorAgent\Apply\PendingApplyDecision::recover_abandoned_claim(
+			$activity_id,
+			$claim,
+			'Confirmed the request is not active.'
+		);
+		$this->assertIsArray( $recovered );
+		$this->assertSame( 'failed', $recovered['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_recovery_required', $recovered['apply']['failureCode'] );
+		$this->assertSame( 0, Repository::count_active_pending_external_applies( 7 ) );
+
+		$stale_owner = Repository::transition_claimed_external_apply(
+			$activity_id,
+			[ 'applyStatus' => 'rejected' ],
+			$claim
+		);
+		$this->assertInstanceOf( \WP_Error::class, $stale_owner );
+		$this->assertSame( 'flavor_agent_apply_invalid_transition', $stale_owner->get_error_code() );
+	}
+
+	public function test_abandoned_claim_recovery_captures_the_owner_site_before_capability_filters_run(): void {
+		$created        = $this->create_pending_entry( [ 'id' => 'operator-recovery-context-owner' ] );
+		$activity_id    = (string) $created['id'];
+		$claim          = Repository::claim_external_apply_decision( $activity_id );
+		$original_table = Repository::table_name();
+		$this->assertIsString( $claim );
+
+		$original_database                             = $GLOBALS['wpdb'];
+		$original_blog                                 = WordPressTestState::$current_blog_id;
+		$wrong_database                                = new \wpdb();
+		$wrong_table                                   = 'wp_2_flavor_agent_activity';
+		$wrong_database->prefix                        = 'wp_2_';
+		$wrong_database->options                       = 'wp_2_options';
+		$wrong_database->posts                         = 'wp_2_posts';
+		$wrong_database->postmeta                      = 'wp_2_postmeta';
+		$wrong_database->terms                         = 'wp_2_terms';
+		$wrong_database->term_taxonomy                 = 'wp_2_term_taxonomy';
+		$wrong_database->term_relationships            = 'wp_2_term_relationships';
+		WordPressTestState::$db_tables[ $wrong_table ] = WordPressTestState::$db_tables[ $original_table ];
+		$switched                                      = false;
+		WordPressTestState::$capabilities['manage_options'] = static function () use ( $wrong_database, &$switched ): bool {
+			if ( ! $switched ) {
+				$switched                            = true;
+				$GLOBALS['wpdb']                     = $wrong_database;
+				WordPressTestState::$current_blog_id = 2;
+			}
+
+			return true;
+		};
+
+		try {
+			$result = \FlavorAgent\Apply\PendingApplyDecision::recover_abandoned_claim(
+				$activity_id,
+				$claim,
+				'Confirmed the request is not active.'
+			);
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertTrue( $switched );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'recovery_authorization_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( $claim, WordPressTestState::$db_tables[ $original_table ][0]['execution_result'] ?? null );
+		$this->assertSame( $claim, WordPressTestState::$db_tables[ $wrong_table ][0]['execution_result'] ?? null );
+	}
+
+	public function test_abandoned_claim_recovery_does_not_transition_after_note_sanitization_changes_site(): void {
+		$created        = $this->create_pending_entry( [ 'id' => 'operator-recovery-note-context' ] );
+		$activity_id    = (string) $created['id'];
+		$claim          = Repository::claim_external_apply_decision( $activity_id );
+		$original_table = Repository::table_name();
+		$this->assertIsString( $claim );
+
+		$original_database                                  = $GLOBALS['wpdb'];
+		$original_blog                                      = WordPressTestState::$current_blog_id;
+		$wrong_database                                     = new \wpdb();
+		$wrong_table                                        = 'wp_2_flavor_agent_activity';
+		$wrong_database->prefix                             = 'wp_2_';
+		$wrong_database->options                            = 'wp_2_options';
+		$wrong_database->posts                              = 'wp_2_posts';
+		$wrong_database->postmeta                           = 'wp_2_postmeta';
+		$wrong_database->terms                              = 'wp_2_terms';
+		$wrong_database->term_taxonomy                      = 'wp_2_term_taxonomy';
+		$wrong_database->term_relationships                 = 'wp_2_term_relationships';
+		WordPressTestState::$db_tables[ $wrong_table ]      = WordPressTestState::$db_tables[ $original_table ];
+		WordPressTestState::$capabilities['manage_options'] = true;
+		$switched        = false;
+		$sanitize_filter = static function ( string $filtered ) use ( $wrong_database, &$switched ): string {
+			if ( ! $switched ) {
+				$switched                            = true;
+				$GLOBALS['wpdb']                     = $wrong_database;
+				WordPressTestState::$current_blog_id = 2;
+			}
+
+			return $filtered;
+		};
+		add_filter( 'sanitize_textarea_field', $sanitize_filter );
+
+		try {
+			$result = \FlavorAgent\Apply\PendingApplyDecision::recover_abandoned_claim(
+				$activity_id,
+				$claim,
+				'Confirmed the request is not active.'
+			);
+		} finally {
+			remove_filter( 'sanitize_textarea_field', $sanitize_filter );
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertTrue( $switched );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'recovery_finalization_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( $claim, WordPressTestState::$db_tables[ $original_table ][0]['execution_result'] ?? null );
+		$this->assertSame( $claim, WordPressTestState::$db_tables[ $wrong_table ][0]['execution_result'] ?? null );
+	}
+
+	public function test_unexpected_authorization_exception_consumes_the_claim_as_failed_before_execution(): void {
+		$pending = $this->create_pending_entry( [ 'id' => 'authorization-exception' ] );
+		WordPressTestState::$capabilities['edit_theme_options'] = static function (): bool {
+			throw new \RuntimeException( 'authorization interrupted' );
+		};
+
+		$result = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['id'], 'approve' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'failed', $result['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_unexpected_failure', $result['apply']['failureCode'] );
+		$this->assertSame( 'failed', $result['executionResult'] );
+	}
+
+	public function test_unsupported_executor_consumes_the_claim_as_failed_before_execution(): void {
+		$pending = $this->create_pending_entry(
+			[
+				'id'      => 'unsupported-executor',
+				'surface' => 'unsupported-surface',
+			]
+		);
+
+		$result = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['id'], 'approve' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'failed', $result['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_surface_unsupported', $result['apply']['failureCode'] );
+		$this->assertSame( 'failed', $result['executionResult'] );
+	}
+
+	public function test_unexpected_baseline_exception_consumes_the_claim_as_failed_before_execution(): void {
+		$this->seed_global_styles_world();
+		WordPressTestState::$next_get_post_throws = new \RuntimeException( 'baseline interrupted' );
+		$pending                                  = $this->create_pending_entry( [ 'id' => 'baseline-exception' ] );
+
+		$result = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['id'], 'approve' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'failed', $result['apply']['status'] );
+		$this->assertSame( 'flavor_agent_apply_unexpected_failure', $result['apply']['failureCode'] );
+		$this->assertSame( 'failed', $result['executionResult'] );
+	}
+
+	public function test_unexpected_execute_exception_preserves_the_claim_for_operator_reconciliation(): void {
+		$content = $this->template_part_content();
+		$this->seed_template_part( $content, 8799 );
+		$pending = $this->create_template_part_pending_entry( $content );
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				unset( $data );
+
+				throw new \RuntimeException( 'write path interrupted' );
+			}
+		);
+
+		$result = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['id'], 'approve' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'execute', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( (string) $pending['id'], $result->get_error_data()['activityId'] ?? null );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+
+		$stored = Repository::find( (string) $pending['id'] );
+		$this->assertIsArray( $stored );
+		$this->assertSame( 'pending', $stored['executionResult'] );
+		$diagnostics = Repository::external_apply_decision_claim_diagnostics( (string) $pending['id'] );
+		$this->assertSame( (string) $pending['id'], $diagnostics['activityId'] ?? null );
+	}
+
+	public function test_executed_apply_reports_finalization_context_drift_after_the_bound_activity_update(): void {
+		$this->seed_global_styles_world();
+		$pending = $this->create_pending_entry(
+			[
+				'id'      => 'apply-finalization-context',
+				'request' => [
+					'apply' => [
+						'signatures' => [
+							'baselineConfigHash' => \FlavorAgent\Apply\StyleApplyExecutor::comparable_config_hash(
+								[
+									'settings' => [],
+									'styles'   => [],
+								]
+							),
+						],
+					],
+				],
+			]
+		);
+
+		$original_database                             = $GLOBALS['wpdb'];
+		$original_blog                                 = WordPressTestState::$current_blog_id;
+		$activity_table                                = Repository::table_name();
+		$wrong_database                                = new \wpdb();
+		$wrong_table                                   = 'wp_2_flavor_agent_activity';
+		$wrong_database->prefix                        = 'wp_2_';
+		$wrong_database->options                       = 'wp_2_options';
+		$wrong_database->posts                         = 'wp_2_posts';
+		$wrong_database->postmeta                      = 'wp_2_postmeta';
+		WordPressTestState::$db_tables[ $wrong_table ] = WordPressTestState::$db_tables[ $activity_table ];
+		$update_intercepted                            = false;
+		$secret_key                                    = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( $secret_key, $wrong_database, &$update_intercepted ): string {
+				WordPressTestState::$before_activity_table_update = static function () use ( $wrong_database, &$update_intercepted ): void {
+					$update_intercepted                  = true;
+					$GLOBALS['wpdb']                     = $wrong_database;
+					WordPressTestState::$current_blog_id = 2;
+				};
+
+				return $secret_key;
+			}
+		);
+
+		try {
+			$result = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['id'], 'approve' );
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertTrue( $update_intercepted );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'finalization_context', $result->get_error_data()['phase'] ?? null );
+		$this->assertSame( 'available', Repository::find( (string) $pending['id'] )['apply']['status'] ?? null );
+		$this->assertSame( 'pending', WordPressTestState::$db_tables[ $wrong_table ][0]['execution_result'] ?? null );
+		$written = json_decode( (string) WordPressTestState::$posts[17]->post_content, true );
+		$this->assertSame( 'var:preset|color|accent', $written['styles']['color']['text'] ?? null );
+	}
+
+	public function test_executed_apply_reports_finalization_context_when_the_activity_update_throws_after_site_drift(): void {
+		$this->seed_global_styles_world();
+		$pending = $this->create_pending_entry(
+			[
+				'id'      => 'apply-finalization-context-throw',
+				'request' => [
+					'apply' => [
+						'signatures' => [
+							'baselineConfigHash' => \FlavorAgent\Apply\StyleApplyExecutor::comparable_config_hash(
+								[
+									'settings' => [],
+									'styles'   => [],
+								]
+							),
+						],
+					],
+				],
+			]
+		);
+
+		$original_database                             = $GLOBALS['wpdb'];
+		$original_blog                                 = WordPressTestState::$current_blog_id;
+		$activity_table                                = Repository::table_name();
+		$wrong_database                                = new \wpdb();
+		$wrong_table                                   = 'wp_2_flavor_agent_activity';
+		$wrong_database->prefix                        = 'wp_2_';
+		$wrong_database->options                       = 'wp_2_options';
+		$wrong_database->posts                         = 'wp_2_posts';
+		$wrong_database->postmeta                      = 'wp_2_postmeta';
+		WordPressTestState::$db_tables[ $wrong_table ] = WordPressTestState::$db_tables[ $activity_table ];
+		$update_intercepted                            = false;
+		$secret_key                                    = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( $secret_key, $wrong_database, &$update_intercepted ): string {
+				WordPressTestState::$before_activity_table_update = static function () use ( $wrong_database, &$update_intercepted ): void {
+					$update_intercepted                  = true;
+					$GLOBALS['wpdb']                     = $wrong_database;
+					WordPressTestState::$current_blog_id = 2;
+
+					throw new \RuntimeException( 'final activity update interrupted' );
+				};
+
+				return $secret_key;
+			}
+		);
+
+		try {
+			$result = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['id'], 'approve' );
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertTrue( $update_intercepted );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_recovery_required', $result->get_error_code() );
+		$this->assertSame( 'finalization_context', $result->get_error_data()['phase'] ?? null );
+		$stored = Repository::find( (string) $pending['id'] );
+		$this->assertIsArray( $stored );
+		$this->assertSame( 'pending', $stored['executionResult'] ?? null );
+		$this->assertMatchesRegularExpression(
+			'/^claim:[a-f0-9]{24}$/',
+			(string) ( WordPressTestState::$db_tables[ $activity_table ][0]['execution_result'] ?? '' )
+		);
+		$this->assertSame( 'pending', WordPressTestState::$db_tables[ $wrong_table ][0]['execution_result'] ?? null );
+		$written = json_decode( (string) WordPressTestState::$posts[17]->post_content, true );
+		$this->assertSame( 'var:preset|color|accent', $written['styles']['color']['text'] ?? null );
+	}
+
 	public function test_transition_rejects_unknown_target_status(): void {
 		$created = $this->create_pending_entry();
 
@@ -676,6 +1031,84 @@ final class ExternalApplyLifecycleTest extends TestCase {
 			WordPressTestState::$transients['flavor_agent_pending_external_apply_notice_snapshot']['nextExpiryAt'] ?? null,
 			'An active claim cannot expire and must not force repeated notice-cache rebuilds.'
 		);
+	}
+
+	public function test_decision_claim_with_trailing_line_break_is_not_an_exact_owner(): void {
+		$created = $this->create_pending_entry( [ 'id' => 'pending-line-break-claim' ] );
+		$claim   = Repository::claim_external_apply_decision( (string) $created['id'] );
+
+		$this->assertIsString( $claim );
+
+		foreach ( [ "\n", "\r\n" ] as $suffix ) {
+			$released = Repository::release_external_apply_decision_claim(
+				(string) $created['id'],
+				$claim . $suffix
+			);
+
+			$this->assertInstanceOf( \WP_Error::class, $released );
+			$this->assertSame( 'flavor_agent_apply_invalid_transition', $released->get_error_code() );
+		}
+
+		$this->assertTrue( Repository::release_external_apply_decision_claim( (string) $created['id'], $claim ) );
+	}
+
+	public function test_decision_claim_release_and_terminalization_stay_bound_to_the_acquisition_table(): void {
+		$created = $this->create_pending_entry( [ 'id' => 'bound-decision-store' ] );
+		$context = Repository::capture_storage_context();
+		$this->assertNotInstanceOf( \WP_Error::class, $context );
+		$claim = Repository::claim_external_apply_decision( (string) $created['id'], $context );
+		$this->assertIsString( $claim );
+
+		$original_database                             = $GLOBALS['wpdb'];
+		$original_blog                                 = WordPressTestState::$current_blog_id;
+		$original_table                                = Repository::table_name( $context );
+		$wrong_table                                   = 'wp_2_flavor_agent_activity';
+		$original_row                                  = WordPressTestState::$db_tables[ $original_table ][0];
+		$wrong_row                                     = $original_row;
+		$wrong_row['execution_result']                 = $claim;
+		WordPressTestState::$db_tables[ $wrong_table ] = [ $wrong_row ];
+		$wrong_database                                = new \wpdb();
+		$wrong_database->prefix                        = 'wp_2_';
+
+		try {
+			$GLOBALS['wpdb']                     = $wrong_database;
+			WordPressTestState::$current_blog_id = 2;
+			$released                            = Repository::release_external_apply_decision_claim(
+				(string) $created['id'],
+				$claim,
+				$context
+			);
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertTrue( $released );
+		$this->assertSame( 'pending', WordPressTestState::$db_tables[ $original_table ][0]['execution_result'] );
+		$this->assertSame( $claim, WordPressTestState::$db_tables[ $wrong_table ][0]['execution_result'] );
+
+		$terminal_claim = Repository::claim_external_apply_decision( (string) $created['id'], $context );
+		$this->assertIsString( $terminal_claim );
+		WordPressTestState::$db_tables[ $wrong_table ][0]['execution_result'] = $terminal_claim;
+
+		try {
+			$GLOBALS['wpdb']                     = $wrong_database;
+			WordPressTestState::$current_blog_id = 2;
+			$transitioned                        = Repository::transition_claimed_external_apply(
+				(string) $created['id'],
+				[ 'applyStatus' => 'rejected' ],
+				$terminal_claim,
+				$context
+			);
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertIsArray( $transitioned );
+		$this->assertSame( 'rejected', $transitioned['apply']['status'] );
+		$this->assertSame( 'rejected', WordPressTestState::$db_tables[ $original_table ][0]['execution_result'] );
+		$this->assertSame( $terminal_claim, WordPressTestState::$db_tables[ $wrong_table ][0]['execution_result'] );
 	}
 
 	public function test_pending_external_apply_notification_snapshot_invalidates_when_new_pending_rows_are_created(): void {
@@ -900,11 +1333,33 @@ final class ExternalApplyLifecycleTest extends TestCase {
 				],
 			]
 		);
+		$this->create_pending_entry(
+			[
+				'id'       => 'row-leading-space-claim',
+				'target'   => [ 'globalStylesId' => '19' ],
+				'document' => [
+					'scopeKey' => 'global_styles:19',
+					'entityId' => '19',
+				],
+			]
+		);
+		$this->create_pending_entry(
+			[
+				'id'       => 'row-trailing-space-claim',
+				'target'   => [ 'globalStylesId' => '20' ],
+				'document' => [
+					'scopeKey' => 'global_styles:20',
+					'entityId' => '20',
+				],
+			]
+		);
 
 		$table            = Repository::table_name();
 		$malformed_claims = [
-			'row-malformed-claim' => 'claim:not-an-owner-token',
-			'row-uppercase-claim' => 'CLAIM:' . str_repeat( 'A', 24 ),
+			'row-malformed-claim'      => 'claim:not-an-owner-token',
+			'row-uppercase-claim'      => 'CLAIM:' . str_repeat( 'A', 24 ),
+			'row-leading-space-claim'  => ' claim:' . str_repeat( 'b', 24 ),
+			'row-trailing-space-claim' => 'claim:' . str_repeat( 'c', 24 ) . ' ',
 		];
 
 		foreach ( WordPressTestState::$db_tables[ $table ] ?? [] as $index => $row ) {
@@ -924,8 +1379,10 @@ final class ExternalApplyLifecycleTest extends TestCase {
 
 		$this->assertSame( 'applied', $statuses['row-malformed-claim'] );
 		$this->assertSame( 'applied', $statuses['row-uppercase-claim'] );
+		$this->assertSame( 'applied', $statuses['row-leading-space-claim'] );
+		$this->assertSame( 'applied', $statuses['row-trailing-space-claim'] );
 		$this->assertSame( 0, $result['summary']['pending'] );
-		$this->assertSame( 2, $result['summary']['applied'] );
+		$this->assertSame( 4, $result['summary']['applied'] );
 	}
 
 	public function test_admin_query_reports_pre_execution_failed_rows_as_failed(): void {
@@ -1173,6 +1630,121 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'external-template-apply-v1', $template_statement['predicate']['governance']['lane'] );
 		$this->assertSame( 'wp_template:' . self::TEMPLATE_REF, $template_statement['subject'][0]['name'] );
 		$this->assertSame( [], $failures );
+	}
+
+	public function test_attestation_and_key_writes_stay_bound_when_the_site_context_changes_during_signing(): void {
+		$original_database = $GLOBALS['wpdb'];
+		$original_blog     = WordPressTestState::$current_blog_id;
+		$original_home     = WordPressTestState::$home_url;
+		$secret_key        = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+
+		\FlavorAgent\Attestation\Repository::install();
+		\FlavorAgent\Attestation\Repository::insert(
+			[
+				'attestation_id'      => 'att_original_prior',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:17',
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => str_repeat( 'a', 64 ),
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'original-signature',
+				'key_id'              => 'original-key',
+				'related_activity_id' => 'original-prior-activity',
+			]
+		);
+		$this->seed_global_styles_world();
+		$created = $this->create_pending_entry(
+			[
+				'id'      => 'attestation-context-owner',
+				'request' => [
+					'apply' => [
+						'signatures' => [
+							'baselineConfigHash' => \FlavorAgent\Apply\StyleApplyExecutor::comparable_config_hash(
+								[
+									'settings' => [],
+									'styles'   => [],
+								]
+							),
+						],
+					],
+				],
+			]
+		);
+
+		$original_activity_table    = Repository::table_name();
+		$original_attestation_table = \FlavorAgent\Attestation\Repository::table_name();
+		$wrong_activity_table       = 'wp_2_flavor_agent_activity';
+		$wrong_attestation_table    = 'wp_2_flavor_agent_attestations';
+		$wrong_options_table        = 'wp_2_options';
+		$wrong_database             = new \wpdb();
+		$wrong_database->prefix     = 'wp_2_';
+		$wrong_database->options    = $wrong_options_table;
+		$wrong_database->posts      = 'wp_2_posts';
+
+		WordPressTestState::$db_tables[ $wrong_activity_table ]    = WordPressTestState::$db_tables[ $original_activity_table ];
+		WordPressTestState::$db_tables[ $wrong_attestation_table ] = [
+			[
+				'attestation_id'      => 'att_wrong_prior',
+				'surface'             => 'global-styles',
+				'subject_name'        => 'wp_global_styles:17',
+				'subject_scope'       => 'global-styles',
+				'after_digest'        => str_repeat( 'b', 64 ),
+				'statement_bytes'     => '{}',
+				'signature_b64'       => 'wrong-signature',
+				'key_id'              => 'wrong-key',
+				'related_activity_id' => 'wrong-prior-activity',
+				'created_at'          => '2026-08-03 00:00:00',
+			],
+		];
+		WordPressTestState::$db_tables[ $wrong_options_table ]     = [];
+
+		$switched = false;
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( $secret_key, $wrong_database, &$switched ): string {
+				if ( ! $switched ) {
+					$switched                            = true;
+					$GLOBALS['wpdb']                     = $wrong_database;
+					WordPressTestState::$current_blog_id = 2;
+					WordPressTestState::$home_url        = 'https://wrong-site.example';
+				}
+
+				return $secret_key;
+			}
+		);
+
+		try {
+			$decision = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $created['id'], 'approve' );
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+			WordPressTestState::$home_url        = $original_home;
+		}
+
+		$this->assertTrue( $switched );
+		$this->assertInstanceOf( \WP_Error::class, $decision );
+		$this->assertSame( 'flavor_agent_apply_recovery_required', $decision->get_error_code() );
+		$this->assertSame( 'attestation_context', $decision->get_error_data()['phase'] ?? null );
+
+		$original_activity = WordPressTestState::$db_tables[ $original_activity_table ][0];
+		$wrong_activity    = WordPressTestState::$db_tables[ $wrong_activity_table ][0];
+		$this->assertMatchesRegularExpression( '/^claim:[a-f0-9]{24}$/', (string) $original_activity['execution_result'] );
+		$this->assertSame( 'pending', $wrong_activity['execution_result'] );
+
+		$original_attestations = WordPressTestState::$db_tables[ $original_attestation_table ] ?? [];
+		$this->assertCount( 2, $original_attestations );
+		$this->assertCount( 1, WordPressTestState::$db_tables[ $wrong_attestation_table ] );
+		$this->assertSame( 'att_wrong_prior', WordPressTestState::$db_tables[ $wrong_attestation_table ][0]['attestation_id'] );
+		$new_attestation = $original_attestations[1];
+		$this->assertSame( (string) $created['id'], $new_attestation['related_activity_id'] ?? null );
+		$this->assertSame( 'att_original_prior', $new_attestation['supersedes_attestation_id'] ?? null );
+
+		$statement = json_decode( (string) ( $new_attestation['statement_bytes'] ?? '' ), true );
+		$this->assertIsArray( $statement );
+		$this->assertSame( 'https://example.test', $statement['predicate']['site']['url'] ?? null );
+
+		$this->assertIsArray( WordPressTestState::$options['flavor_agent_attestation_public_keys'] ?? null );
+		$this->assertSame( [], WordPressTestState::$db_tables[ $wrong_options_table ] );
 	}
 
 	public function test_apply_attestation_target_fields_never_fall_back_to_a_template_part_id(): void {
@@ -1989,6 +2561,9 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $contender );
 		$this->assertSame( 'flavor_agent_apply_materialization_locked', $contender->get_error_code() );
 		$this->assertSame( 409, $contender->get_error_data()['status'] ?? null );
+		$this->assertSame( $activity_id, $contender->get_error_data()['activityId'] ?? null );
+		$this->assertNotSame( '', (string) ( $contender->get_error_data()['processingSince'] ?? '' ) );
+		$this->assertStringNotContainsString( 'claim:', (string) wp_json_encode( $contender->get_error_data() ) );
 
 		$stored = Repository::find( $activity_id );
 		$this->assertIsArray( $stored );
@@ -2044,8 +2619,8 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$expiry      = null;
 		add_filter(
 			'wp_insert_post_data',
-			static function ( array $data ) use ( $activity_id, &$expiry ): array {
-				if ( 8827 === (int) ( $data['ID'] ?? 0 ) ) {
+			static function ( array $data, array $postarr ) use ( $activity_id, &$expiry ): array {
+				if ( 8827 === (int) ( $postarr['ID'] ?? 0 ) ) {
 					$expiry = Repository::transition_external_apply(
 						$activity_id,
 						[ 'applyStatus' => 'expired' ]
@@ -2055,7 +2630,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 				return $data;
 			},
 			10,
-			4
+			2
 		);
 
 		$approved = \FlavorAgent\Apply\PendingApplyDecision::decide(
@@ -2073,6 +2648,69 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'available', $stored['apply']['status'] );
 		$this->assertSame( 'Outer approval', $stored['apply']['decisionNote'] );
 		$this->assertSame( 1, substr_count( (string) WordPressTestState::$posts[8827]->post_content, '>Hero<' ) );
+	}
+
+	public function test_template_decision_claim_survives_retention_cleanup_during_target_write(): void {
+		$content = $this->template_content();
+		$this->seed_template( $content, 8828 );
+		$this->register_pattern( 'tt5/hero', $this->paragraph( 'Hero' ) );
+		$signatures = $this->resolve_template_signatures();
+		$pending    = \FlavorAgent\Abilities\ApplyAbilities::request_template_apply(
+			[
+				'scope'      => [
+					'surface'      => 'template',
+					'templateRef'  => self::TEMPLATE_REF,
+					'templateType' => 'home',
+					'slug'         => 'home',
+					'title'        => 'Home',
+				],
+				'prompt'     => 'add a hero',
+				'operations' => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'tt5/hero',
+						'placement'   => 'start',
+					],
+				],
+				'signatures' => [
+					'resolvedContextSignature' => (string) $signatures['resolvedContextSignature'],
+					'reviewContextSignature'   => (string) $signatures['reviewContextSignature'],
+				],
+			]
+		);
+		$this->assertIsArray( $pending );
+
+		$activity_id = (string) $pending['activityId'];
+		$table       = Repository::table_name();
+
+		foreach ( WordPressTestState::$db_tables[ $table ] ?? [] as $index => $row ) {
+			if ( $activity_id === (string) ( $row['activity_id'] ?? '' ) ) {
+				WordPressTestState::$db_tables[ $table ][ $index ]['created_at'] = '2020-01-01 00:00:00';
+			}
+		}
+
+		$deleted = null;
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data, array $postarr ) use ( &$deleted ): array {
+				if ( 8828 === (int) ( $postarr['ID'] ?? 0 ) ) {
+					$deleted = Repository::delete_before( '2026-01-01T00:00:00Z' );
+				}
+
+				return $data;
+			},
+			10,
+			2
+		);
+
+		$approved = \FlavorAgent\Apply\PendingApplyDecision::decide( $activity_id, 'approve', 'Retained owner' );
+
+		$this->assertSame( 0, $deleted );
+		$this->assertIsArray( $approved );
+		$this->assertSame( 'available', $approved['apply']['status'] );
+		$this->assertSame( 'Retained owner', $approved['apply']['decisionNote'] );
+		$this->assertSame( 1, substr_count( (string) WordPressTestState::$posts[8828]->post_content, '>Hero<' ) );
+		$this->assertSame( $approved, Repository::find( $activity_id ) );
 	}
 
 	// -----------------------------------------------------------------

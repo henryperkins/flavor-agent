@@ -8,12 +8,11 @@ use FlavorAgent\Attestation\AttestationService;
 
 final class Serializer {
 
-	private const EXTERNAL_APPLY_DECISION_CLAIM_PATTERN = '/^claim:[a-f0-9]{24}$/';
-	private const UNDO_STATUS_AVAILABLE                 = 'available';
-	private const UNDO_STATUS_FAILED                    = 'failed';
-	private const UNDO_STATUS_NOT_APPLICABLE            = 'not_applicable';
-	private const UNDO_STATUS_REVIEW                    = 'review';
-	private const UNDO_STATUS_UNDONE                    = 'undone';
+	private const UNDO_STATUS_AVAILABLE      = 'available';
+	private const UNDO_STATUS_FAILED         = 'failed';
+	private const UNDO_STATUS_NOT_APPLICABLE = 'not_applicable';
+	private const UNDO_STATUS_REVIEW         = 'review';
+	private const UNDO_STATUS_UNDONE         = 'undone';
 
 	/**
 	 * @param array<string, mixed> $entry
@@ -436,12 +435,15 @@ final class Serializer {
 		return trim( (string) $value );
 	}
 
-	private static function normalize_execution_result_for_read( $value ): string {
-		$normalized = self::normalize_string( $value );
+	public static function normalize_execution_result_for_read( $value ): string {
+		$raw        = (string) $value;
+		$normalized = self::normalize_string( $raw );
 
-		return 1 === preg_match( self::EXTERNAL_APPLY_DECISION_CLAIM_PATTERN, $normalized )
-			? 'pending'
-			: $normalized;
+		if ( ExternalApplyDecisionClaim::is_active( $raw ) ) {
+			return 'pending';
+		}
+
+		return ExternalApplyDecisionClaim::has_normalized_prefix( $raw ) ? 'invalid' : $normalized;
 	}
 
 	private static function resolve_user_label( int $user_id ): string {

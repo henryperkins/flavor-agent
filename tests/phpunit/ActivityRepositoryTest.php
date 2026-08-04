@@ -1921,6 +1921,87 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'flavor_agent_activity_invalid_undo_transition', $rewrite->get_error_code() );
 	}
 
+	public function test_update_undo_status_does_not_overwrite_a_concurrent_undo_state(): void {
+		Repository::install();
+		Repository::create( $this->build_template_entry( 'activity-cas-race', '2026-03-24T10:00:00Z' ) );
+
+		$table           = Repository::table_name();
+		$concurrent_undo = (string) wp_json_encode(
+			[
+				'status'    => 'failed',
+				'error'     => 'Concurrent finalizer owns this state.',
+				'updatedAt' => '2026-03-24T10:01:00+00:00',
+			]
+		);
+		WordPressTestState::$before_activity_table_update = static function ( string $updated_table ) use ( $table, $concurrent_undo ): void {
+			foreach ( WordPressTestState::$db_tables[ $table ] as $index => $row ) {
+				if ( 'activity-cas-race' === (string) ( $row['activity_id'] ?? '' ) ) {
+					WordPressTestState::$db_tables[ $table ][ $index ]['undo_state'] = $concurrent_undo;
+				}
+			}
+
+			self::assertSame( $table, $updated_table );
+		};
+
+		$updated = Repository::update_undo_status( 'activity-cas-race', 'undone' );
+
+		$this->assertInstanceOf( \WP_Error::class, $updated );
+		$this->assertSame( 'flavor_agent_activity_update_failed', $updated->get_error_code() );
+		$this->assertSame( $concurrent_undo, WordPressTestState::$db_tables[ $table ][0]['undo_state'] ?? null );
+	}
+
+	public function test_update_undo_status_accepts_an_exact_idempotent_concurrent_terminal_state(): void {
+		Repository::install();
+		Repository::create( $this->build_template_entry( 'activity-cas-idempotent', '2026-03-24T10:00:00Z' ) );
+
+		$table = Repository::table_name();
+		WordPressTestState::$before_activity_table_update = static function ( string $updated_table, array $data ) use ( $table ): int {
+			foreach ( WordPressTestState::$db_tables[ $table ] as $index => $row ) {
+				if ( 'activity-cas-idempotent' === (string) ( $row['activity_id'] ?? '' ) ) {
+					WordPressTestState::$db_tables[ $table ][ $index ] = array_merge( $row, $data );
+				}
+			}
+
+			self::assertSame( $table, $updated_table );
+
+			return 0;
+		};
+
+		$updated = Repository::update_undo_status( 'activity-cas-idempotent', 'undone' );
+
+		$this->assertIsArray( $updated );
+		$this->assertSame( 'undone', $updated['undo']['status'] ?? null );
+	}
+
+	public function test_update_undo_status_rejects_a_non_exact_idempotent_terminal_state(): void {
+		Repository::install();
+		Repository::create( $this->build_template_entry( 'activity-cas-non-exact', '2026-03-24T10:00:00Z' ) );
+
+		$table          = Repository::table_name();
+		$concurrent_raw = '';
+		WordPressTestState::$before_activity_table_update = static function ( string $updated_table, array $data ) use ( $table, &$concurrent_raw ): int {
+			$terminal              = json_decode( (string) ( $data['undo_state'] ?? '' ), true );
+			$terminal['updatedAt'] = '2026-03-24T10:02:00+00:00';
+			$concurrent_raw        = (string) wp_json_encode( $terminal );
+
+			foreach ( WordPressTestState::$db_tables[ $table ] as $index => $row ) {
+				if ( 'activity-cas-non-exact' === (string) ( $row['activity_id'] ?? '' ) ) {
+					WordPressTestState::$db_tables[ $table ][ $index ]['undo_state'] = $concurrent_raw;
+				}
+			}
+
+			self::assertSame( $table, $updated_table );
+
+			return 0;
+		};
+
+		$updated = Repository::update_undo_status( 'activity-cas-non-exact', 'undone' );
+
+		$this->assertInstanceOf( \WP_Error::class, $updated );
+		$this->assertSame( 'flavor_agent_activity_update_failed', $updated->get_error_code() );
+		$this->assertSame( $concurrent_raw, WordPressTestState::$db_tables[ $table ][0]['undo_state'] ?? null );
+	}
+
 	public function test_ordered_undo_check_works_with_many_entries_for_same_entity(): void {
 		Repository::install();
 

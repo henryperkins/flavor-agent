@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Apply;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Activity\ActivityStorageContext;
 use FlavorAgent\Attestation\AttestationService;
 use FlavorAgent\Attestation\RecordResult;
 
@@ -23,12 +24,78 @@ final class PendingApplyDecision {
 	}
 
 	/**
+	 * Terminalize one abandoned decision claim after an administrator has
+	 * independently confirmed process quiescence and reconciled the live target.
+	 * The exact observed owner is consumed once and is never restored to pending.
+	 *
+	 * @return array<string, mixed>|\WP_Error The transitioned activity entry.
+	 */
+	public static function recover_abandoned_claim( string $activity_id, string $observed_claim, string $note = '' ): array|\WP_Error {
+		$storage_context = ActivityRepository::capture_storage_context();
+
+		if ( is_wp_error( $storage_context ) ) {
+			return $storage_context;
+		}
+
+		$authorized = function_exists( 'current_user_can' ) && current_user_can( 'manage_options' );
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::recovery_required_error( $activity_id, 'recovery_authorization_context', $storage_context );
+		}
+
+		if ( ! $authorized ) {
+			return new \WP_Error(
+				'flavor_agent_apply_target_forbidden',
+				'Only an administrator can recover an abandoned Flavor Agent apply decision.',
+				[ 'status' => 403 ]
+			);
+		}
+
+		try {
+			$decided_by      = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+			$decided_by_name = self::actor_display_name( $decided_by );
+			$note            = sanitize_textarea_field( $note );
+		} catch ( \Throwable $error ) {
+			self::record_unexpected_failure( $activity_id, 'recovery_finalization', $error, $storage_context );
+
+			return self::recovery_required_error( $activity_id, 'recovery_finalization', $storage_context );
+		}
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::recovery_required_error( $activity_id, 'recovery_finalization_context', $storage_context );
+		}
+
+		return self::transition_before_execution(
+			$activity_id,
+			$observed_claim,
+			[
+				'applyStatus'    => 'failed',
+				'decidedBy'      => $decided_by,
+				'decidedByName'  => $decided_by_name,
+				'decidedAt'      => gmdate( 'c' ),
+				'decisionNote'   => $note,
+				'failureCode'    => 'flavor_agent_apply_recovery_required',
+				'failureMessage' => 'An administrator closed an abandoned apply decision after reconciling the live target.',
+			],
+			$storage_context,
+			'recovery_finalization',
+			true
+		);
+	}
+
+	/**
 	 * Atomically claim and execute one activity decision.
 	 *
 	 * @return array<string, mixed>|\WP_Error The transitioned activity entry.
 	 */
 	private static function decide_with_claim( string $activity_id, string $decision, string $note ): array|\WP_Error {
-		$entry = ActivityRepository::find( $activity_id );
+		$storage_context = ActivityRepository::capture_storage_context();
+
+		if ( is_wp_error( $storage_context ) ) {
+			return $storage_context;
+		}
+
+		$entry = ActivityRepository::find( $activity_id, $storage_context );
 
 		if ( ! is_array( $entry ) ) {
 			return new \WP_Error(
@@ -38,7 +105,7 @@ final class PendingApplyDecision {
 			);
 		}
 
-		$entry  = ActivityRepository::maybe_expire_pending_apply( $entry );
+		$entry  = ActivityRepository::maybe_expire_pending_apply( $entry, $storage_context );
 		$apply  = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 		$status = (string) ( $apply['status'] ?? '' );
 
@@ -66,20 +133,52 @@ final class PendingApplyDecision {
 			);
 		}
 
-		$claim = ActivityRepository::claim_external_apply_decision( $activity_id );
+		$claim = ActivityRepository::claim_external_apply_decision( $activity_id, $storage_context );
 
 		if ( is_wp_error( $claim ) ) {
 			return $claim;
 		}
 
-		$decided_by      = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
-		$decided_by_name = self::actor_display_name( $decided_by );
+		$decided_by      = 0;
+		$decided_by_name = '';
 		$decided_at      = gmdate( 'c' );
-		$note            = sanitize_textarea_field( $note );
+		$raw_note        = $note;
+		$note            = '';
+
+		try {
+			$decided_by      = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+			$decided_by_name = self::actor_display_name( $decided_by );
+			$note            = sanitize_textarea_field( $raw_note );
+		} catch ( \Throwable $error ) {
+			return self::fail_unexpected_before_execution(
+				$activity_id,
+				$claim,
+				$decided_by,
+				$decided_by_name,
+				$decided_at,
+				$note,
+				'decision_metadata',
+				$error,
+				$storage_context
+			);
+		}
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::fail_context_changed_before_execution(
+				$activity_id,
+				$claim,
+				$decided_by,
+				$decided_by_name,
+				$decided_at,
+				$note,
+				$storage_context
+			);
+		}
 
 		if ( 'reject' === $decision ) {
-			return ActivityRepository::transition_claimed_external_apply(
+			return self::transition_before_execution(
 				$activity_id,
+				$claim,
 				[
 					'applyStatus'   => 'rejected',
 					'decidedBy'     => $decided_by,
@@ -87,7 +186,7 @@ final class PendingApplyDecision {
 					'decidedAt'     => $decided_at,
 					'decisionNote'  => $note,
 				],
-				$claim
+				$storage_context
 			);
 		}
 
@@ -95,11 +194,26 @@ final class PendingApplyDecision {
 		$signatures = is_array( $apply['signatures'] ?? null ) ? $apply['signatures'] : [];
 		$baseline   = (string) ( $signatures['baselineConfigHash'] ?? $signatures['baselineContentHash'] ?? '' );
 
-		$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
+		try {
+			$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
+		} catch ( \Throwable $error ) {
+			return self::fail_unexpected_before_execution(
+				$activity_id,
+				$claim,
+				$decided_by,
+				$decided_by_name,
+				$decided_at,
+				$note,
+				'registry',
+				$error,
+				$storage_context
+			);
+		}
 
 		if ( null === $executor ) {
-			return ActivityRepository::transition_claimed_external_apply(
+			return self::transition_before_execution(
 				$activity_id,
+				$claim,
 				[
 					'applyStatus'    => 'failed',
 					'decidedBy'      => $decided_by,
@@ -109,15 +223,42 @@ final class PendingApplyDecision {
 					'failureCode'    => 'flavor_agent_apply_surface_unsupported',
 					'failureMessage' => 'No external-apply executor is registered for this surface.',
 				],
-				$claim
+				$storage_context
 			);
 		}
 
-		$authorized = $executor::authorize_target( $entry );
+		try {
+			$authorized = $executor::authorize_target( $entry );
+		} catch ( \Throwable $error ) {
+			return self::fail_unexpected_before_execution(
+				$activity_id,
+				$claim,
+				$decided_by,
+				$decided_by_name,
+				$decided_at,
+				$note,
+				'authorization',
+				$error,
+				$storage_context
+			);
+		}
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::fail_context_changed_before_execution(
+				$activity_id,
+				$claim,
+				$decided_by,
+				$decided_by_name,
+				$decided_at,
+				$note,
+				$storage_context
+			);
+		}
 
 		if ( is_wp_error( $authorized ) ) {
-			return ActivityRepository::transition_claimed_external_apply(
+			return self::transition_before_execution(
 				$activity_id,
+				$claim,
 				[
 					'applyStatus'    => 'failed',
 					'decidedBy'      => $decided_by,
@@ -127,15 +268,56 @@ final class PendingApplyDecision {
 					'failureCode'    => (string) $authorized->get_error_code(),
 					'failureMessage' => (string) $authorized->get_error_message(),
 				],
-				$claim
+				$storage_context
 			);
 		}
 
 		// Second freshness check: the live baseline must still match the
 		// baseline recorded at request time. Drift fails closed.
-		$live_baseline = $executor::resolve_baseline( $entry );
-		$stale_reason  = '';
-		$failure_code  = 'flavor_agent_apply_stale';
+		try {
+			$live_baseline = $executor::resolve_baseline( $entry );
+		} catch ( \Throwable $error ) {
+			return self::fail_unexpected_before_execution(
+				$activity_id,
+				$claim,
+				$decided_by,
+				$decided_by_name,
+				$decided_at,
+				$note,
+				'baseline',
+				$error,
+				$storage_context
+			);
+		}
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::fail_context_changed_before_execution(
+				$activity_id,
+				$claim,
+				$decided_by,
+				$decided_by_name,
+				$decided_at,
+				$note,
+				$storage_context
+			);
+		}
+
+		if ( ! is_string( $live_baseline ) && ! is_wp_error( $live_baseline ) ) {
+			return self::fail_unexpected_before_execution(
+				$activity_id,
+				$claim,
+				$decided_by,
+				$decided_by_name,
+				$decided_at,
+				$note,
+				'baseline',
+				new \UnexpectedValueException( 'The executor returned an invalid baseline result.' ),
+				$storage_context
+			);
+		}
+
+		$stale_reason = '';
+		$failure_code = 'flavor_agent_apply_stale';
 
 		if ( is_wp_error( $live_baseline ) ) {
 			$stale_reason = $live_baseline->get_error_message();
@@ -147,8 +329,9 @@ final class PendingApplyDecision {
 		}
 
 		if ( '' !== $stale_reason ) {
-			return ActivityRepository::transition_claimed_external_apply(
+			return self::transition_before_execution(
 				$activity_id,
+				$claim,
 				[
 					'applyStatus'    => 'failed',
 					'decidedBy'      => $decided_by,
@@ -158,25 +341,46 @@ final class PendingApplyDecision {
 					'failureCode'    => $failure_code,
 					'failureMessage' => $stale_reason,
 				],
-				$claim
+				$storage_context
 			);
 		}
 
-		$result = $executor::execute( $entry );
+		try {
+			$result = $executor::execute( $entry );
+		} catch ( \Throwable $error ) {
+			self::record_unexpected_failure( $activity_id, 'execute', $error, $storage_context );
+
+			return self::recovery_required_error( $activity_id, 'execute', $storage_context );
+		}
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::recovery_required_error( $activity_id, 'site_context', $storage_context );
+		}
 
 		if ( is_wp_error( $result ) ) {
 			if ( in_array( $result->get_error_code(), [ 'flavor_agent_apply_materialization_locked', 'flavor_agent_apply_lock_unavailable' ], true ) ) {
-				$released = ActivityRepository::release_external_apply_decision_claim( $activity_id, $claim );
+				try {
+					$released = ActivityRepository::release_external_apply_decision_claim( $activity_id, $claim, $storage_context );
+				} catch ( \Throwable $error ) {
+					self::record_unexpected_failure( $activity_id, 'claim_release', $error, $storage_context );
+
+					return self::recovery_required_error( $activity_id, 'claim_release', $storage_context );
+				}
 
 				if ( is_wp_error( $released ) ) {
-					return $released;
+					return self::recovery_required_error( $activity_id, 'claim_release', $storage_context );
 				}
 
 				return $result;
 			}
 
-			return ActivityRepository::transition_claimed_external_apply(
+			if ( 'flavor_agent_apply_recovery_required' === $result->get_error_code() ) {
+				return $result;
+			}
+
+			return self::transition_after_execution(
 				$activity_id,
+				$claim,
 				[
 					'applyStatus'    => 'failed',
 					'decidedBy'      => $decided_by,
@@ -186,8 +390,24 @@ final class PendingApplyDecision {
 					'failureCode'    => (string) $result->get_error_code(),
 					'failureMessage' => (string) $result->get_error_message(),
 				],
-				$claim
+				$storage_context
 			);
+		}
+
+		if (
+			! is_array( $result )
+			|| ! is_array( $result['target'] ?? null )
+			|| ! is_array( $result['before'] ?? null )
+			|| ! is_array( $result['after'] ?? null )
+		) {
+			self::record_unexpected_failure(
+				$activity_id,
+				'execute',
+				new \UnexpectedValueException( 'The executor returned an invalid apply result.' ),
+				$storage_context
+			);
+
+			return self::recovery_required_error( $activity_id, 'execute', $storage_context );
 		}
 
 		$attestation_status     = null;
@@ -212,21 +432,28 @@ final class PendingApplyDecision {
 					$attestation_context[ $key ] = $value;
 				}
 
-				$attestation_result     = AttestationService::record_apply( $attestation_context );
+				$attestation_result     = AttestationService::record_apply( $attestation_context, $storage_context );
 				$attestation_status     = $attestation_result->status();
 				$attestation_error_code = $attestation_result->error_code();
 			} catch ( \Throwable $e ) {
 				$attestation_status     = RecordResult::STATUS_FAILED;
 				$attestation_error_code = 'unexpected_failure';
-				AttestationService::record_failure(
-					$e,
-					[
-						'operation'  => 'apply',
-						'activityId' => $activity_id,
-						'errorCode'  => $attestation_error_code,
-					]
-				);
+
+				if ( $storage_context->matches_current() ) {
+					AttestationService::record_failure(
+						$e,
+						[
+							'operation'  => 'apply',
+							'activityId' => $activity_id,
+							'errorCode'  => $attestation_error_code,
+						]
+					);
+				}
 			}
+		}
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::recovery_required_error( $activity_id, 'attestation_context', $storage_context );
 		}
 
 		$changes = [
@@ -246,10 +473,186 @@ final class PendingApplyDecision {
 			$changes['attestationErrorCode'] = $attestation_error_code;
 		}
 
-		return ActivityRepository::transition_claimed_external_apply(
+		return self::transition_after_execution(
 			$activity_id,
+			$claim,
 			$changes,
-			$claim
+			$storage_context
+		);
+	}
+
+	/**
+	 * An unexpected pre-write failure can safely consume the claim as failed.
+	 * If that terminal activity update is itself uncertain, preserve the
+	 * fail-closed operator-recovery contract instead of exposing the exception.
+	 *
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private static function fail_unexpected_before_execution(
+		string $activity_id,
+		string $claim,
+		int $decided_by,
+		string $decided_by_name,
+		string $decided_at,
+		string $note,
+		string $phase,
+		\Throwable $error,
+		ActivityStorageContext $storage_context
+	): array|\WP_Error {
+		self::record_unexpected_failure( $activity_id, $phase, $error, $storage_context );
+
+		return self::transition_before_execution(
+			$activity_id,
+			$claim,
+			[
+				'applyStatus'    => 'failed',
+				'decidedBy'      => $decided_by,
+				'decidedByName'  => $decided_by_name,
+				'decidedAt'      => $decided_at,
+				'decisionNote'   => $note,
+				'failureCode'    => 'flavor_agent_apply_unexpected_failure',
+				'failureMessage' => 'Flavor Agent stopped before target execution because an unexpected internal failure occurred.',
+			],
+			$storage_context
+		);
+	}
+
+	private static function fail_context_changed_before_execution(
+		string $activity_id,
+		string $claim,
+		int $decided_by,
+		string $decided_by_name,
+		string $decided_at,
+		string $note,
+		ActivityStorageContext $storage_context
+	): array|\WP_Error {
+		return self::transition_before_execution(
+			$activity_id,
+			$claim,
+			[
+				'applyStatus'    => 'failed',
+				'decidedBy'      => $decided_by,
+				'decidedByName'  => $decided_by_name,
+				'decidedAt'      => $decided_at,
+				'decisionNote'   => $note,
+				'failureCode'    => 'flavor_agent_apply_write_context_changed',
+				'failureMessage' => 'Flavor Agent stopped before target execution because the site database context changed.',
+			],
+			$storage_context
+		);
+	}
+
+	/**
+	 * Consume a claim before the mutation boundary. Storage uncertainty still
+	 * requires explicit operator reconciliation of the activity owner state.
+	 *
+	 * @param array<string, mixed> $changes
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private static function transition_before_execution(
+		string $activity_id,
+		string $claim,
+		array $changes,
+		ActivityStorageContext $storage_context,
+		string $failure_phase = 'pre_execution_finalization',
+		bool $preserve_owner_conflict = false
+	): array|\WP_Error {
+		try {
+			$transitioned = ActivityRepository::transition_claimed_external_apply( $activity_id, $changes, $claim, $storage_context );
+		} catch ( \Throwable $transition_error ) {
+			self::record_unexpected_failure( $activity_id, $failure_phase, $transition_error, $storage_context );
+
+			return self::recovery_required_error( $activity_id, $failure_phase, $storage_context );
+		}
+
+		if ( is_wp_error( $transitioned ) ) {
+			if ( $preserve_owner_conflict && 'flavor_agent_apply_invalid_transition' === $transitioned->get_error_code() ) {
+				return $transitioned;
+			}
+
+			self::record_unexpected_failure(
+				$activity_id,
+				$failure_phase,
+				new \RuntimeException( 'The pre-execution apply decision could not be terminalized: ' . (string) $transitioned->get_error_code() ),
+				$storage_context
+			);
+
+			return self::recovery_required_error( $activity_id, $failure_phase, $storage_context );
+		}
+
+		return $transitioned;
+	}
+
+	/**
+	 * Once execute has returned, any uncertain terminal activity write requires
+	 * reconciliation because the target may already have changed.
+	 *
+	 * @param array<string, mixed> $changes
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private static function transition_after_execution( string $activity_id, string $claim, array $changes, ActivityStorageContext $storage_context ): array|\WP_Error {
+		try {
+			$transitioned = ActivityRepository::transition_claimed_external_apply( $activity_id, $changes, $claim, $storage_context );
+		} catch ( \Throwable $error ) {
+			if ( ! $storage_context->matches_current() ) {
+				return self::recovery_required_error( $activity_id, 'finalization_context', $storage_context );
+			}
+
+			self::record_unexpected_failure( $activity_id, 'finalization', $error, $storage_context );
+
+			return self::recovery_required_error( $activity_id, 'finalization', $storage_context );
+		}
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::recovery_required_error( $activity_id, 'finalization_context', $storage_context );
+		}
+
+		if ( is_wp_error( $transitioned ) ) {
+			self::record_unexpected_failure(
+				$activity_id,
+				'finalization',
+				new \RuntimeException( 'The executed apply could not be terminalized: ' . (string) $transitioned->get_error_code() ),
+				$storage_context
+			);
+
+			return self::recovery_required_error( $activity_id, 'finalization', $storage_context );
+		}
+
+		return $transitioned;
+	}
+
+	private static function record_unexpected_failure( string $activity_id, string $phase, \Throwable $error, ?ActivityStorageContext $storage_context = null ): void {
+		if ( null !== $storage_context && ! $storage_context->matches_current() ) {
+			return;
+		}
+
+		AttestationService::record_failure(
+			$error,
+			[
+				'operation'  => 'apply_' . $phase,
+				'activityId' => $activity_id,
+				'errorCode'  => 'unexpected_failure',
+			]
+		);
+	}
+
+	private static function recovery_required_error( string $activity_id, string $phase, ?ActivityStorageContext $storage_context = null ): \WP_Error {
+		$diagnostics = ActivityRepository::external_apply_decision_claim_diagnostics( $activity_id, $storage_context );
+		$data        = [
+			'status'           => 500,
+			'recoveryRequired' => true,
+			'activityId'       => $activity_id,
+			'phase'            => $phase,
+		];
+
+		if ( isset( $diagnostics['processingSince'] ) ) {
+			$data['processingSince'] = (string) $diagnostics['processingSince'];
+		}
+
+		return new \WP_Error(
+			'flavor_agent_apply_recovery_required',
+			'Flavor Agent could not prove a safe terminal apply state. Reconcile the target before recovering this activity.',
+			$data
 		);
 	}
 

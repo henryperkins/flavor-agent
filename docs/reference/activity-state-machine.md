@@ -31,12 +31,14 @@ Page-level template external applies (`flavor-agent/request-template-apply`) reu
 `apply.status`: `pending → available (approved + executed) | rejected | expired | failed`
 
 - One row throughout: the pending row carries the proposed operations, requester provenance (`apply.requestedBy`, `apply.requestReference`), and freshness signatures under `request.apply`, hydrated as top-level `entry.apply`. On approval (`POST /flavor-agent/v1/activity/{id}/decision`, `manage_options` + the row's mutation capability) the server re-validates freshness and operations, executes through the surface executor selected by `ExternalApplyExecutorRegistry`, records execution-time `before`/`after` snapshots, sets `decidedBy`/`decidedByName`/`decidedAt`, and the row becomes a normal undoable apply row (`apply.status: available`, `undo.status: available`, ordered undo applies).
-- `execution_result` mirrors the lifecycle for SQL filtering: `pending`, `rejected`, `expired`, `failed` before execution; `applied` once executed.
+- `execution_result` mirrors the lifecycle for SQL filtering: `pending`, `rejected`, `expired`, `failed` before execution; `applied` once executed. A decision first compare-and-swaps raw `pending` to an internal exact lowercase `claim:<24 hex>` owner before target work, then only that owner may commit the terminal transition. Public reads project an exact active claim as `pending`; malformed, uppercase, or whitespace-wrapped historical claim-prefixed values project as `invalid` without exposing their suffix and are never treated as active ownership.
 - Freshness is checked twice: at request (signature recompute plus claimed-config equality against the live entity) and again at approval (live config must still match the `baselineConfigHash` recorded at request). Drift at approval transitions the row to `failed` with a stale reason the agent observes via `flavor-agent/get-activity`.
 - Expiry: default 24 h (`flavor_agent_external_apply_pending_ttl` filter), enforced lazily on reads and swept by the existing `flavor_agent_prune_activity` cron. A per-user pending cap (default 10, `flavor_agent_external_apply_pending_cap` filter) bounds queue abuse.
 - Pending, rejected, expired, and approval-failed rows use `undo.status: not_applicable`, keep `before`/`after` empty, never participate in ordered undo, and never block undo of older executed rows. Executed rows with `undo.status: failed` keep the existing blocking semantics because the mutation may still be live.
 - Operator guidance: an open Site Editor session editing Global Styles will make approvals fail closed (the live entity no longer matches the request-time baseline) — re-request the apply after the editing session saves. The Site Editor also does not live-refresh when an external apply lands; the new row appears on the next activity hydration.
 - Advisory review claims (`POST`/`DELETE /flavor-agent/v1/activity/{id}/claim`) are an advisory overlay on the `pending` state, never a transition input: they surface "being reviewed by X" coordination but do not gate a decision. The only transition guard remains the write-boundary `pending` check, and a claim is cleared on the committed transition.
+
+The advisory transient review claim above is distinct from the internal decision owner stored temporarily in `execution_result`. The former coordinates UI review; the latter serializes approval/rejection execution and is never exposed publicly.
 
 ## Undo States
 
@@ -64,7 +66,7 @@ Only `undone` and `failed` are persisted by `update_undo_status()`. The runtime 
 
 No other persisted transitions are accepted. The `update_undo_status()` method rejects any status value other than `undone` or `failed` with a `400` error.
 
-Persisted server state remains one-way: `update_undo_status()` only writes `undone` and `failed`.
+Persisted server state remains one-way: `update_undo_status()` only writes `undone` and `failed`. Its write compares the exact raw `undo_state` read for the attempt; a concurrent same-row transition cannot be overwritten. A zero-row update is accepted only when a refetch proves the exact requested terminal state already exists.
 
 Even those writes are only valid while the persisted server state is still `available`. Terminal rewrites are rejected with HTTP `409`, including:
 
@@ -73,6 +75,8 @@ Even those writes are only valid while the persisted server state is still `avai
 - `failed -> undone`
 
 When the client receives `409 flavor_agent_activity_invalid_undo_transition` while persisting an undo change, it treats that response as a reconciliation signal rather than an automatic permanent failure. The store refreshes the server-backed activity entry and adopts the persisted terminal state when it already exists there.
+
+Server-side governed undo has a stricter post-mutation boundary. Once an executor changes the target, any newer-action conflict, activity storage error, same-row race, failed final hydration, or storage-context drift returns `flavor_agent_undo_recovery_required` with a bounded phase. It must not be reported as ordinary success or an ordinary lifecycle/storage error because the target may already differ from the still-available activity row. Operators reconcile the target, revert attestation, and activity row before retrying.
 
 At runtime, the client can still resolve an entry back to effectively `available` when the live editor or style state shows the recorded "after" snapshot has been reapplied again (for example after a native redo). That runtime revival is computed from current editor/style state; it is not a persisted `undo.status` transition back to `available`.
 
@@ -163,5 +167,7 @@ Schema version 3 also projects filterable admin-audit metadata into dedicated co
 - `inc/Activity/Repository.php`
 - `inc/Activity/Permissions.php`
 - `inc/Activity/Serializer.php`
+- `inc/Activity/ExternalApplyDecisionClaim.php`
+- `inc/Activity/ActivityStorageContext.php`
 - `src/store/index.js` (`undoActivity`, `loadActivitySession`, `createActivityEntry`)
 - `src/store/activity-history.js`

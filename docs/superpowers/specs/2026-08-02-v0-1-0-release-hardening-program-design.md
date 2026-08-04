@@ -1,7 +1,7 @@
 # Flavor Agent v0.1.0 Release-Hardening Program — Design
 
 Date: 2026-08-02
-Status: Approved direction; written-spec review findings incorporated
+Status: Slice 1 integration unit is PR #76; Slices 2–4 remain open
 
 ## Goal
 
@@ -48,7 +48,7 @@ Exit criteria:
 - Target-authorization failures reached by the decision service persist an honest failed row; outer permission denial leaves the row pending, and denied undo leaves live state and the row unchanged.
 - Targeted PHPUnit, the shared verification pipeline, and matching approval/undo browser coverage pass on the final security SHA.
 
-Implementation record (2026-08-02): Slice 1 is implemented in commit `c2b781ff26151a3edc2dab65a142f36a04333445`, published on branch `release-hardening-v0-1-0`. At that revision, all seven primary PHPUnit suites passed locally: 242 tests / 1,256 assertions. This record intentionally makes no claim about transient pull-request state and does not satisfy PR review, merge, deployment, Plugin Check, browser, or final-SHA verifier gates; those require separate authorization and evidence, including post-merge verification on the actual merge SHA. Slices 2–4 remain outside this implementation commit and retain their own design, implementation, integration, and release gates.
+Implementation record (updated 2026-08-03): commit `c2b781ff26151a3edc2dab65a142f36a04333445` was the first local Slice 1 implementation. Focused security PR #76 is the integration unit and incorporates review-driven hardening for decision claims, site-bound activity/attestation storage, exact undo finalization, existing-row WordPress save fidelity, Core Block Hooks metadata, and materialization side effects. The initial 242-test record is a historical baseline, not final evidence. PR #76 must pass the full strict verifier and the matching WordPress 7.0 approval/undo harness on its final immutable head, then be merged with an expected-head guard and ancestry proof. This document does not claim a transient PR, merge, deployment, tag, or release state. Slices 2–4 remain outside PR #76 and retain their own design, implementation, integration, and release gates.
 
 ### Slice 2: Corpus contract alignment
 

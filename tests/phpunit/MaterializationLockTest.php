@@ -27,6 +27,10 @@ final class MaterializationLockTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $contender );
 		$this->assertSame( 'flavor_agent_apply_materialization_locked', $contender->get_error_code() );
 		$this->assertSame( $owned, self::lock_options() );
+		$error_data = $contender->get_error_data();
+		$this->assertSame( array_key_first( $owned ), $error_data['lockOptionName'] ?? null );
+		$this->assertNotSame( '', (string) ( $error_data['acquiredAt'] ?? '' ) );
+		$this->assertStringNotContainsString( (string) reset( $owned ), (string) wp_json_encode( $error_data ) );
 
 		$lock_key   = (string) array_key_first( $owned );
 		$lock_owner = (string) $owned[ $lock_key ];
@@ -67,6 +71,139 @@ final class MaterializationLockTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $contender );
 		$this->assertSame( 'flavor_agent_apply_materialization_locked', $contender->get_error_code() );
 		$this->assertSame( 'corrupt-or-abandoned-owner', WordPressTestState::$options[ $keys[0] ] );
+		$this->assertArrayNotHasKey( 'acquiredAt', $contender->get_error_data() );
+
+		$crafted_token                           = str_repeat( 'a', 32 );
+		WordPressTestState::$options[ $keys[0] ] = (string) wp_json_encode(
+			[
+				'version'    => 1,
+				'owner'      => $crafted_token,
+				'acquiredAt' => $crafted_token,
+			]
+		);
+		$crafted                                 = MaterializationLock::acquire( 'template-part', 'twentytwentyfive//header' );
+		$this->assertInstanceOf( \WP_Error::class, $crafted );
+		$this->assertArrayNotHasKey( 'acquiredAt', $crafted->get_error_data() );
+		$this->assertStringNotContainsString( $crafted_token, (string) wp_json_encode( $crafted->get_error_data() ) );
+	}
+
+	public function test_operator_recovery_is_owner_qualified_and_cannot_delete_a_successor(): void {
+		$first = MaterializationLock::acquire( 'template', 'twentytwentyfive//home' );
+		$this->assertInstanceOf( MaterializationLock::class, $first );
+		$owned       = self::lock_options();
+		$first_key   = (string) array_key_first( $owned );
+		$first_owner = (string) $owned[ $first_key ];
+
+		$denied = MaterializationLock::recover_abandoned(
+			'template',
+			'twentytwentyfive//home',
+			$first_owner
+		);
+		$this->assertInstanceOf( \WP_Error::class, $denied );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $denied->get_error_code() );
+		$this->assertSame( $owned, self::lock_options() );
+
+		WordPressTestState::$capabilities['manage_options'] = true;
+
+		$wrong = MaterializationLock::recover_abandoned(
+			'template',
+			'twentytwentyfive//home',
+			'not-the-observed-owner'
+		);
+		$this->assertInstanceOf( \WP_Error::class, $wrong );
+		$this->assertSame( 'flavor_agent_apply_lock_recovery_conflict', $wrong->get_error_code() );
+		$this->assertSame( $owned, self::lock_options() );
+
+		$this->assertTrue(
+			MaterializationLock::recover_abandoned( 'template', 'twentytwentyfive//home', $first_owner )
+		);
+		$this->assertSame( [], self::lock_options() );
+
+		$successor = MaterializationLock::acquire( 'template', 'twentytwentyfive//home' );
+		$this->assertInstanceOf( MaterializationLock::class, $successor );
+		$successor_owned = self::lock_options();
+
+		$stale = MaterializationLock::recover_abandoned(
+			'template',
+			'twentytwentyfive//home',
+			$first_owner
+		);
+		$this->assertInstanceOf( \WP_Error::class, $stale );
+		$this->assertSame( 'flavor_agent_apply_lock_recovery_conflict', $stale->get_error_code() );
+		$this->assertSame( $successor_owned, self::lock_options() );
+		$this->assertTrue( $successor->release() );
+	}
+
+	public function test_operator_recovery_captures_the_owner_site_before_capability_filters_run(): void {
+		$lock = MaterializationLock::acquire( 'template', 'twentytwentyfive//home' );
+		$this->assertInstanceOf( MaterializationLock::class, $lock );
+		$owned      = self::lock_options();
+		$origin_key = (string) array_key_first( $owned );
+		$owner      = (string) $owned[ $origin_key ];
+		$wrong_key  = 'flavor_agent_materialization_lock_' . hash(
+			'sha256',
+			"2\0template\0twentytwentyfive//home"
+		);
+
+		$original_database                             = $GLOBALS['wpdb'];
+		$original_blog                                 = WordPressTestState::$current_blog_id;
+		$wrong_database                                = new \wpdb();
+		$wrong_database->prefix                        = 'wp_2_';
+		$wrong_database->options                       = 'wp_2_options';
+		$wrong_database->posts                         = 'wp_2_posts';
+		$wrong_database->postmeta                      = 'wp_2_postmeta';
+		$wrong_database->terms                         = 'wp_2_terms';
+		$wrong_database->term_taxonomy                 = 'wp_2_term_taxonomy';
+		$wrong_database->term_relationships            = 'wp_2_term_relationships';
+		WordPressTestState::$db_tables['wp_2_options'] = [
+			[
+				'option_name'  => $wrong_key,
+				'option_value' => $owner,
+				'autoload'     => 'no',
+			],
+		];
+		$switched                                      = false;
+		WordPressTestState::$capabilities['manage_options'] = static function () use ( $wrong_database, &$switched ): bool {
+			if ( ! $switched ) {
+				$switched                            = true;
+				$GLOBALS['wpdb']                     = $wrong_database;
+				WordPressTestState::$current_blog_id = 2;
+			}
+
+			return true;
+		};
+
+		try {
+			$result = MaterializationLock::recover_abandoned(
+				'template',
+				'twentytwentyfive//home',
+				$owner
+			);
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertTrue( $switched );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_lock_unavailable', $result->get_error_code() );
+		$this->assertSame( $origin_key, $result->get_error_data()['lockOptionName'] ?? null );
+		$this->assertStringNotContainsString( $owner, (string) wp_json_encode( $result->get_error_data() ) );
+		$this->assertSame( $owner, self::lock_options()[ $origin_key ] ?? null );
+		$this->assertSame( $owner, WordPressTestState::$db_tables['wp_2_options'][0]['option_value'] ?? null );
+	}
+
+	public function test_release_reports_a_persisted_owner_when_delete_fails_and_can_retry(): void {
+		$lock = MaterializationLock::acquire( 'template', 'twentytwentyfive//home' );
+		$this->assertInstanceOf( MaterializationLock::class, $lock );
+		WordPressTestState::$option_delete_fails = true;
+
+		$this->assertFalse( $lock->release() );
+		$this->assertCount( 1, self::lock_options() );
+
+		WordPressTestState::$option_delete_fails = false;
+		$this->assertTrue( $lock->release() );
+		$this->assertSame( [], self::lock_options() );
 	}
 
 	public function test_lock_key_partitions_by_site_surface_and_exact_canonical_ref(): void {
@@ -112,6 +249,16 @@ final class MaterializationLockTest extends TestCase {
 		$acquisition_store = new class() {
 
 			public string $options = 'wp_options';
+
+			public string $posts = 'wp_posts';
+
+			public string $postmeta = 'wp_postmeta';
+
+			public string $terms = 'wp_terms';
+
+			public string $term_taxonomy = 'wp_term_taxonomy';
+
+			public string $term_relationships = 'wp_term_relationships';
 
 			/** @var array<string, array<string, string>> */
 			public array $rows = [];

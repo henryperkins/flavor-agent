@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\StyleAbilities;
+use FlavorAgent\Apply\MaterializationWriteContext;
 use FlavorAgent\Apply\StyleApplyExecutor;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -16,6 +17,7 @@ final class StyleApplyExecutorTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		WordPressTestState::reset();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
 		$this->seed_global_styles_post(
 			[
 				'settings' => [],
@@ -370,11 +372,274 @@ final class StyleApplyExecutorTest extends TestCase {
 					'presetType' => 'color',
 					'presetSlug' => 'accent',
 				],
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|base',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'base',
+				],
 			]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_apply_rechecks_theme_permission_at_the_final_write_boundary(): void {
+		$this->assertTrue( StyleApplyExecutor::authorize_target( $this->global_styles_entry() ) );
+		WordPressTestState::$capabilities['edit_theme_options'] = false;
+
+		$result = StyleApplyExecutor::apply(
+			'global-styles',
+			self::GLOBAL_STYLES_ID,
+			[
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'text' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|base',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'base',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_forbidden', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_apply_does_not_overwrite_a_concurrent_content_change_after_save_filters_run(): void {
+		$concurrent = '{"version":3,"styles":{"color":{"text":"#123456"}}}';
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$decoded              = json_decode( (string) $data['post_content'], true );
+					$decoded['filtered']  = true;
+					$data['post_content'] = wp_json_encode( $decoded );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+		WordPressTestState::$before_conditional_post_content_write = static function ( int $post_id ) use ( $concurrent ): void {
+			WordPressTestState::$posts[ $post_id ]->post_content = $concurrent;
+		};
+
+		$result = StyleApplyExecutor::apply(
+			'global-styles',
+			self::GLOBAL_STYLES_ID,
+			[
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'text' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|base',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'base',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( $concurrent, WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_apply_preserves_core_save_filters_and_records_the_filtered_write(): void {
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				if ( isset( $data['post_content'] ) ) {
+					$decoded              = json_decode( (string) $data['post_content'], true );
+					$decoded['filtered']  = true;
+					$data['post_content'] = wp_json_encode( $decoded );
+				}
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$result = StyleApplyExecutor::apply(
+			'global-styles',
+			self::GLOBAL_STYLES_ID,
+			[
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'text' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|base',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'base',
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$written = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertTrue( $written['filtered'] ?? false );
+		$this->assertCount( 1, WordPressTestState::$updated_posts );
+	}
+
+	public function test_apply_and_undo_snapshot_the_exact_filtered_persisted_styles(): void {
+		$write_count = 0;
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ) use ( &$write_count ): array {
+				if ( ! isset( $data['post_content'] ) ) {
+					return $data;
+				}
+
+				++$write_count;
+				$decoded = json_decode( wp_unslash( (string) $data['post_content'] ), true );
+
+				if ( 1 === $write_count ) {
+					$decoded['styles']['color']['text'] = '#123456';
+				} else {
+					$decoded['styles'] = [ 'color' => [ 'text' => '#654321' ] ];
+				}
+
+				$data['post_content'] = wp_slash( wp_json_encode( $decoded ) );
+
+				return $data;
+			},
+			10,
+			4
+		);
+
+		$applied = StyleApplyExecutor::apply(
+			'global-styles',
+			self::GLOBAL_STYLES_ID,
+			[
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'text' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|base',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'base',
+				],
+			]
+		);
+
+		$this->assertIsArray( $applied );
+		$persisted_apply = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame(
+			[
+				'settings' => $persisted_apply['settings'],
+				'styles'   => $persisted_apply['styles'],
+			],
+			$applied['after']['userConfig']
+		);
+		$this->assertSame( '#123456', $applied['after']['userConfig']['styles']['color']['text'] );
+
+		$undone = StyleApplyExecutor::undo(
+			[
+				'surface' => 'global-styles',
+				'target'  => $applied['target'],
+				'before'  => $applied['before'],
+				'after'   => $applied['after'],
+			]
+		);
+
+		$this->assertIsArray( $undone );
+		$this->assertSame( 'undone', $undone['result'] );
+		$persisted_undo = json_decode(
+			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+			true
+		);
+		$this->assertSame(
+			[
+				'userConfig' => [
+					'settings' => $persisted_undo['settings'],
+					'styles'   => $persisted_undo['styles'],
+				],
+			],
+			$undone['after']
+		);
+		$this->assertSame( '#654321', $undone['after']['userConfig']['styles']['color']['text'] );
+	}
+
+	public function test_apply_does_not_write_when_the_global_styles_type_changes_at_the_database_boundary(): void {
+		$before = (string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content;
+		WordPressTestState::$before_conditional_post_content_write = static function ( int $post_id ): void {
+			WordPressTestState::$posts[ $post_id ]->post_type = 'post';
+		};
+
+		$result = StyleApplyExecutor::apply(
+			'global-styles',
+			self::GLOBAL_STYLES_ID,
+			[
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'text' ],
+					'value'      => 'var:preset|color|accent',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'accent',
+				],
+				[
+					'type'       => 'set_styles',
+					'path'       => [ 'color', 'background' ],
+					'value'      => 'var:preset|color|base',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'base',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( 'post', WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_type );
+		$this->assertSame( $before, WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content );
 		$this->assertSame( [], WordPressTestState::$updated_posts );
 	}
 
@@ -385,6 +650,8 @@ final class StyleApplyExecutorTest extends TestCase {
 		$method->setAccessible( true );
 
 		try {
+			$write_context = MaterializationWriteContext::capture();
+			$this->assertInstanceOf( MaterializationWriteContext::class, $write_context );
 			$result = $method->invoke(
 				null,
 				(int) self::GLOBAL_STYLES_ID,
@@ -392,7 +659,11 @@ final class StyleApplyExecutorTest extends TestCase {
 				[
 					'settings' => [],
 					'styles'   => [],
-				]
+				],
+				(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
+				(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_name,
+				'global-styles',
+				$write_context
 			);
 		} finally {
 			fclose( $handle );
@@ -568,6 +839,7 @@ final class StyleApplyExecutorTest extends TestCase {
 	}
 
 	public function test_authorize_target_requires_edit_theme_options_for_canonical_style_subjects(): void {
+		WordPressTestState::$capabilities['edit_theme_options'] = false;
 		$result = StyleApplyExecutor::authorize_target( $this->global_styles_entry() );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -589,13 +861,34 @@ final class StyleApplyExecutorTest extends TestCase {
 
 		$result = StyleApplyExecutor::undo( $this->global_styles_entry() );
 
-		$this->assertSame( [ 'result' => 'undone' ], $result );
+		$this->assertSame( 'undone', $result['result'] );
 
 		$written = json_decode(
 			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
 			true
 		);
 		$this->assertSame( [], $written['styles'] );
+	}
+
+	public function test_undo_does_not_overwrite_a_concurrent_type_change_at_the_database_boundary(): void {
+		$this->seed_global_styles_post(
+			[
+				'settings' => [],
+				'styles'   => [ 'color' => [ 'text' => 'var:preset|color|accent' ] ],
+			]
+		);
+		$before = (string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content;
+		WordPressTestState::$before_conditional_post_content_write = static function ( int $post_id ): void {
+			WordPressTestState::$posts[ $post_id ]->post_type = 'post';
+		};
+
+		$result = StyleApplyExecutor::undo( $this->global_styles_entry() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_target_changed', $result->get_error_code() );
+		$this->assertSame( 'post', WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_type );
+		$this->assertSame( $before, WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
 	}
 
 	public function test_undo_reports_already_undone_when_live_config_matches_before(): void {
@@ -608,7 +901,7 @@ final class StyleApplyExecutorTest extends TestCase {
 
 		$result = StyleApplyExecutor::undo( $this->global_styles_entry() );
 
-		$this->assertSame( [ 'result' => 'already_undone' ], $result );
+		$this->assertSame( 'already_undone', $result['result'] );
 		$this->assertSame( [], WordPressTestState::$updated_posts, 'Already-undone must not write.' );
 	}
 
@@ -676,7 +969,7 @@ final class StyleApplyExecutorTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( [ 'result' => 'undone' ], $result );
+		$this->assertSame( 'undone', $result['result'] );
 
 		$written = json_decode(
 			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
@@ -718,7 +1011,7 @@ final class StyleApplyExecutorTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( [ 'result' => 'undone' ], $result );
+		$this->assertSame( 'undone', $result['result'] );
 
 		$written = json_decode(
 			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
@@ -763,7 +1056,7 @@ final class StyleApplyExecutorTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( [ 'result' => 'undone' ], $result );
+		$this->assertSame( 'undone', $result['result'] );
 
 		$written = json_decode(
 			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,
@@ -816,7 +1109,7 @@ final class StyleApplyExecutorTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( [ 'result' => 'undone' ], $result );
+		$this->assertSame( 'undone', $result['result'] );
 
 		$written = json_decode(
 			(string) WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content,

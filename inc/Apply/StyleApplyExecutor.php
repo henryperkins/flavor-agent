@@ -89,7 +89,7 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	}
 
 	/**
-	 * @return array{postId: int, config: array{settings: array<string, mixed>, styles: array<string, mixed>}, raw: array<string, mixed>, fingerprint: string}|\WP_Error
+	 * @return array{postId: int, postName: string, content: string, config: array{settings: array<string, mixed>, styles: array<string, mixed>}, raw: array<string, mixed>, fingerprint: string}|\WP_Error
 	 */
 	public static function resolve_user_global_styles( string $global_styles_id ): array|\WP_Error {
 		$post_id = (int) $global_styles_id;
@@ -126,6 +126,8 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 
 		return [
 			'postId'      => $post_id,
+			'postName'    => (string) ( $post->post_name ?? '' ),
+			'content'     => $content,
 			'config'      => [
 				'settings' => is_array( $raw['settings'] ?? null ) ? $raw['settings'] : [],
 				'styles'   => is_array( $raw['styles'] ?? null ) ? $raw['styles'] : [],
@@ -260,6 +262,12 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{target: array<string, mixed>, before: array<string, mixed>, after: array<string, mixed>}|\WP_Error
 	 */
 	public static function apply( string $surface, string $global_styles_id, array $operations, string $block_name = '' ): array|\WP_Error {
+		$write_context = MaterializationWriteContext::capture();
+
+		if ( is_wp_error( $write_context ) ) {
+			return $write_context;
+		}
+
 		$surface  = self::SURFACE_STYLE_BOOK === $surface ? self::SURFACE_STYLE_BOOK : self::SURFACE_GLOBAL_STYLES;
 		$resolved = self::resolve_user_global_styles( $global_styles_id );
 
@@ -356,10 +364,18 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 			return $unchanged;
 		}
 
-		$write = self::write_user_global_styles( $resolved['postId'], $resolved['raw'], $after_config );
+		$persisted_config = self::write_user_global_styles(
+			$resolved['postId'],
+			$resolved['raw'],
+			$after_config,
+			$resolved['content'],
+			$resolved['postName'],
+			$surface,
+			$write_context
+		);
 
-		if ( is_wp_error( $write ) ) {
-			return $write;
+		if ( is_wp_error( $persisted_config ) ) {
+			return $persisted_config;
 		}
 
 		if ( self::SURFACE_STYLE_BOOK === $surface ) {
@@ -375,7 +391,7 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 				],
 				'before' => [ 'userConfig' => self::trim_config_to_block_branch( $before_config, $block_name ) ],
 				'after'  => [
-					'userConfig' => self::trim_config_to_block_branch( $after_config, $block_name ),
+					'userConfig' => self::trim_config_to_block_branch( $persisted_config, $block_name ),
 					'operations' => $applied,
 				],
 			];
@@ -385,7 +401,7 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 			'target' => [ 'globalStylesId' => $global_styles_id ],
 			'before' => [ 'userConfig' => $before_config ],
 			'after'  => [
-				'userConfig' => $after_config,
+				'userConfig' => $persisted_config,
 				'operations' => $applied,
 			],
 		];
@@ -397,9 +413,15 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	 * restore before (full config for Global Styles, block branch for Style Book).
 	 *
 	 * @param array<string, mixed> $entry Hydrated activity entry.
-	 * @return array{result: string}|\WP_Error
+	 * @return array{result: string, after?: array{userConfig: array<string, mixed>}}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
+		$write_context = MaterializationWriteContext::capture();
+
+		if ( is_wp_error( $write_context ) ) {
+			return $write_context;
+		}
+
 		$identity = self::resolve_target_identity( $entry );
 
 		if ( is_wp_error( $identity ) ) {
@@ -432,11 +454,14 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 		$live = $resolved['config'];
 
 		if ( self::SURFACE_STYLE_BOOK === $surface ) {
-			return self::undo_style_book_branch( $resolved, $live, $before_config, $after_config, $target );
+			return self::undo_style_book_branch( $resolved, $live, $before_config, $after_config, $target, $write_context );
 		}
 
 		if ( self::comparable_config( $live ) === self::comparable_config( $before_config ) ) {
-			return [ 'result' => 'already_undone' ];
+			return [
+				'result' => 'already_undone',
+				'after'  => [ 'userConfig' => $live ],
+			];
 		}
 
 		if ( self::comparable_config( $live ) !== self::comparable_config( $after_config ) ) {
@@ -456,31 +481,45 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 			return $unchanged;
 		}
 
-		$write = self::write_user_global_styles(
+		$persisted_config = self::write_user_global_styles(
 			$resolved['postId'],
 			$resolved['raw'],
 			[
 				'settings' => is_array( $before_config['settings'] ?? null ) ? $before_config['settings'] : [],
 				'styles'   => is_array( $before_config['styles'] ?? null ) ? $before_config['styles'] : [],
-			]
+			],
+			$resolved['content'],
+			$resolved['postName'],
+			$surface,
+			$write_context
 		);
 
-		if ( is_wp_error( $write ) ) {
-			return $write;
+		if ( is_wp_error( $persisted_config ) ) {
+			return $persisted_config;
 		}
 
-		return [ 'result' => 'undone' ];
+		return [
+			'result' => 'undone',
+			'after'  => [ 'userConfig' => $persisted_config ],
+		];
 	}
 
 	/**
-	 * @param array{postId: int, config: array<string, mixed>, raw: array<string, mixed>} $resolved
+	 * @param array{postId: int, postName: string, content: string, config: array<string, mixed>, raw: array<string, mixed>} $resolved
 	 * @param array<string, mixed> $live
 	 * @param array<string, mixed> $before_config
 	 * @param array<string, mixed> $after_config
 	 * @param array<string, mixed> $target
-	 * @return array{result: string}|\WP_Error
+	 * @return array{result: string, after?: array{userConfig: array<string, mixed>}}|\WP_Error
 	 */
-	private static function undo_style_book_branch( array $resolved, array $live, array $before_config, array $after_config, array $target ): array|\WP_Error {
+	private static function undo_style_book_branch(
+		array $resolved,
+		array $live,
+		array $before_config,
+		array $after_config,
+		array $target,
+		MaterializationWriteContext $write_context
+	): array|\WP_Error {
 		$block_name = trim( (string) ( $target['blockName'] ?? '' ) );
 
 		if ( '' === $block_name ) {
@@ -500,7 +539,10 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 		$after_branch  = Canonicalizer::canonicalize_values_deep( Canonicalizer::sort_keys_deep( self::read_path( $after_styles, $branch_path ) ) );
 
 		if ( $live_branch === $before_branch ) {
-			return [ 'result' => 'already_undone' ];
+			return [
+				'result' => 'already_undone',
+				'after'  => [ 'userConfig' => self::trim_config_to_block_branch( $live, $block_name ) ],
+			];
 		}
 
 		if ( $live_branch !== $after_branch ) {
@@ -524,20 +566,27 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 			return $unchanged;
 		}
 
-		$write = self::write_user_global_styles(
+		$persisted_config = self::write_user_global_styles(
 			$resolved['postId'],
 			$resolved['raw'],
 			[
 				'settings' => is_array( $live['settings'] ?? null ) ? $live['settings'] : [],
 				'styles'   => is_array( $next_styles ) ? $next_styles : [],
-			]
+			],
+			$resolved['content'],
+			$resolved['postName'],
+			self::SURFACE_STYLE_BOOK,
+			$write_context
 		);
 
-		if ( is_wp_error( $write ) ) {
-			return $write;
+		if ( is_wp_error( $persisted_config ) ) {
+			return $persisted_config;
 		}
 
-		return [ 'result' => 'undone' ];
+		return [
+			'result' => 'undone',
+			'after'  => [ 'userConfig' => self::trim_config_to_block_branch( $persisted_config, $block_name ) ],
+		];
 	}
 
 	/** @param array<string, mixed> $entry @param array{entityId: string, postType: string, scopeKey: string} $canonical */
@@ -583,9 +632,17 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	}
 
 	/**
-	 * @return true|\WP_Error
+	 * @return array{settings: array<string, mixed>, styles: array<string, mixed>}|\WP_Error
 	 */
-	private static function write_user_global_styles( int $post_id, array $raw, array $after_config ): true|\WP_Error {
+	private static function write_user_global_styles(
+		int $post_id,
+		array $raw,
+		array $after_config,
+		string $expected_content,
+		string $expected_post_name,
+		string $surface,
+		MaterializationWriteContext $write_context
+	): array|\WP_Error {
 		$content = array_merge(
 			$raw,
 			[
@@ -609,24 +666,39 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
-		$updated = function_exists( 'wp_update_post' )
-			? wp_update_post(
-				[
-					'ID'           => $post_id,
-					'post_content' => $encoded,
-				]
-			)
-			: 0;
+		if ( ! $write_context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
+		if ( ! current_user_can( 'edit_theme_options' ) ) {
+			return self::target_forbidden();
+		}
+
+		$updated = ExistingPostContentWriter::update(
+			$post_id,
+			'wp_global_styles',
+			$expected_post_name,
+			$expected_content,
+			$encoded,
+			$surface,
+			[],
+			$write_context
+		);
 
 		if ( is_wp_error( $updated ) ) {
 			return $updated;
 		}
 
-		if ( 0 === (int) $updated ) {
-			return new \WP_Error(
-				'flavor_agent_apply_write_failed',
-				'Flavor Agent could not write the Global Styles entity.',
-				[ 'status' => 500 ]
+		$persisted_content = $updated['content'] ?? null;
+		$persisted_raw     = is_string( $persisted_content )
+			? json_decode( $persisted_content, true )
+			: null;
+
+		if ( ! is_array( $persisted_raw ) || JSON_ERROR_NONE !== json_last_error() ) {
+			return ExistingPostContentCompensator::recovery_required(
+				$surface,
+				$post_id,
+				'Flavor Agent wrote Global Styles but could not derive an undo snapshot from the persisted content.'
 			);
 		}
 
@@ -634,7 +706,18 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 			\WP_Theme_JSON_Resolver::clean_cached_data();
 		}
 
-		return true;
+		return [
+			'settings' => is_array( $persisted_raw['settings'] ?? null ) ? $persisted_raw['settings'] : [],
+			'styles'   => is_array( $persisted_raw['styles'] ?? null ) ? $persisted_raw['styles'] : [],
+		];
+	}
+
+	private static function write_context_changed(): \WP_Error {
+		return new \WP_Error(
+			'flavor_agent_apply_write_context_changed',
+			'The target site database context changed before Flavor Agent could persist Global Styles.',
+			[ 'status' => 409 ]
+		);
 	}
 
 	/**

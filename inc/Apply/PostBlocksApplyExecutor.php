@@ -83,6 +83,12 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{target: array<string, mixed>, before: array<string, string>, after: array<string, mixed>}|\WP_Error
 	 */
 	public static function execute( array $entry ): array|\WP_Error {
+		$write_context = MaterializationWriteContext::capture();
+
+		if ( is_wp_error( $write_context ) ) {
+			return $write_context;
+		}
+
 		$identity = self::resolve_target_identity( $entry );
 
 		if ( is_wp_error( $identity ) ) {
@@ -158,16 +164,27 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 			return $fresh;
 		}
 
-		$persisted = self::persist( $post_id, $after_content );
+		$authorized = self::authorize_target( $entry );
+
+		if ( is_wp_error( $authorized ) ) {
+			return $authorized;
+		}
+
+		if ( ! $write_context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
+		$persisted = self::persist(
+			$post_id,
+			$identity['target']['postType'],
+			(string) ( $fresh->post_name ?? '' ),
+			(string) ( $fresh->post_content ?? '' ),
+			$after_content,
+			$write_context
+		);
 
 		if ( is_wp_error( $persisted ) ) {
 			return $persisted;
-		}
-
-		$persisted_content = self::resolve_persisted_content( $persisted );
-
-		if ( is_wp_error( $persisted_content ) ) {
-			return $persisted_content;
 		}
 
 		return [
@@ -177,41 +194,13 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 			),
 			'before' => [ 'content' => $before_content ],
 			'after'  => [
-				// The read-back, not the locally serialized string: see
-				// resolve_persisted_content() for why recording the latter makes
-				// the apply permanently unrevertable.
-				'content'    => $persisted_content,
+				// The guarded writer's read-back, not the locally serialized string:
+				// save filters may rewrite content, and recording the local value can
+				// make the apply permanently unrevertable.
+				'content'    => $persisted['content'],
 				'operations' => $executable_operations,
 			],
 		];
-	}
-
-	/**
-	 * Read back what wp_update_post actually stored.
-	 *
-	 * A save filter can rewrite post_content on write — wp_filter_post_kses runs
-	 * whenever the approving user lacks unfiltered_html (every non-super-admin on
-	 * multisite, and everyone under DISALLOW_UNFILTERED_HTML), and any third-party
-	 * content_save_pre / wp_insert_post_data filter has the same effect. Recording
-	 * the locally serialized string instead would leave the activity row
-	 * describing content that is not on the site, and undo's
-	 * hash_equals( $live_hash, $after_hash ) guard would never match again, so the
-	 * governed apply could never be reversed through the plugin's own undo path.
-	 *
-	 * Parity with TemplateApplyExecutor / TemplatePartApplyExecutor.
-	 */
-	private static function resolve_persisted_content( int $post_id ): string|\WP_Error {
-		$post = $post_id > 0 && function_exists( 'get_post' ) ? get_post( $post_id ) : null;
-
-		if ( ! is_object( $post ) ) {
-			return new \WP_Error(
-				'flavor_agent_apply_post_write_read_failed',
-				'Flavor Agent wrote the post but could not confirm its persisted content.',
-				[ 'status' => 500 ]
-			);
-		}
-
-		return (string) ( $post->post_content ?? '' );
 	}
 
 	/**
@@ -246,6 +235,12 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{result: string}|\WP_Error
 	 */
 	public static function undo( array $entry ): array|\WP_Error {
+		$write_context = MaterializationWriteContext::capture();
+
+		if ( is_wp_error( $write_context ) ) {
+			return $write_context;
+		}
+
 		$identity = self::resolve_target_identity( $entry );
 
 		if ( is_wp_error( $identity ) ) {
@@ -294,7 +289,24 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 			return $unchanged;
 		}
 
-		$persisted = self::persist( $post_id, (string) $before['content'] );
+		$authorized = self::authorize_target( $entry );
+
+		if ( is_wp_error( $authorized ) ) {
+			return $authorized;
+		}
+
+		if ( ! $write_context->matches_current() ) {
+			return self::write_context_changed();
+		}
+
+		$persisted = self::persist(
+			$post_id,
+			$identity['target']['postType'],
+			(string) ( $post->post_name ?? '' ),
+			(string) ( $post->post_content ?? '' ),
+			(string) $before['content'],
+			$write_context
+		);
 
 		return is_wp_error( $persisted ) ? $persisted : [ 'result' => 'undone' ];
 	}
@@ -362,35 +374,37 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 	}
 
 	/**
-	 * Persist the mutated content through wp_update_post. Creating a revision
-	 * is expected and desirable (extra recovery evidence). Fails closed;
-	 * invalidates the post cache after every write.
+	 * Persist through core so save filters, revisions, and post lifecycle hooks
+	 * retain their normal behavior. The shared writer binds the actual posts-table
+	 * mutation to the exact content and canonical identity captured above.
 	 *
-	 * @return int|\WP_Error The persisted post id.
+	 * @return array{content: string}|\WP_Error
 	 */
-	private static function persist( int $post_id, string $content ): int|\WP_Error {
-		$updated = wp_update_post(
-			[
-				'ID'           => $post_id,
-				'post_content' => $content,
-			],
-			true
+	private static function persist(
+		int $post_id,
+		string $post_type,
+		string $post_name,
+		string $expected_content,
+		string $content,
+		MaterializationWriteContext $context
+	): array|\WP_Error {
+		return ExistingPostContentWriter::update(
+			$post_id,
+			$post_type,
+			$post_name,
+			$expected_content,
+			$content,
+			'post-blocks',
+			[],
+			$context
 		);
+	}
 
-		if ( is_wp_error( $updated ) ) {
-			return $updated;
-		}
-
-		if ( 0 === (int) $updated ) {
-			return new \WP_Error(
-				'flavor_agent_apply_write_failed',
-				'Flavor Agent could not write the post entity.',
-				[ 'status' => 500 ]
-			);
-		}
-
-		clean_post_cache( (int) $updated );
-
-		return (int) $updated;
+	private static function write_context_changed(): \WP_Error {
+		return new \WP_Error(
+			'flavor_agent_apply_write_context_changed',
+			'The target site database context changed before Flavor Agent could persist this post.',
+			[ 'status' => 409 ]
+		);
 	}
 }
