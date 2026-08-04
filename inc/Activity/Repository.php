@@ -162,6 +162,15 @@ final class Repository {
 		}
 
 		$normalized = Serializer::normalize_entry( $entry );
+
+		if ( ExternalApplyDecisionClaim::has_normalized_prefix( (string) $normalized['executionResult'] ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_entry',
+				'Flavor Agent activity entries cannot set the reserved external-apply decision claim state.',
+				[ 'status' => 400 ]
+			);
+		}
+
 		$normalized = RecommendationOutcome::normalize_entry( $normalized );
 
 		if ( is_wp_error( $normalized ) ) {
@@ -632,24 +641,27 @@ final class Repository {
 	/**
 	 * @return array<string, mixed>|null
 	 */
-	public static function find( string $activity_id ): ?array {
-		$row = self::find_row( $activity_id );
+	public static function find( string $activity_id, ?ActivityStorageContext $context = null ): ?array {
+		$row = self::find_row( $activity_id, $context );
 
-		return is_array( $row ) ? self::hydrate_activity_row( $row ) : null;
+		return is_array( $row )
+			? self::hydrate_activity_row( $row, true, $context )
+			: null;
 	}
 
 	/**
 	 * @param array<string, mixed> $row
 	 * @return array<string, mixed>
 	 */
-	private static function hydrate_activity_row( array $row, bool $include_attestation = true ): array {
+	private static function hydrate_activity_row( array $row, bool $include_attestation = true, ?ActivityStorageContext $context = null ): array {
 		if ( ! $include_attestation ) {
 			return Serializer::hydrate_row( $row );
 		}
 
 		$activity_id = trim( (string) ( $row['activity_id'] ?? '' ) );
 		$attestation = self::attestations_for_activity_ids(
-			'' !== $activity_id ? [ $activity_id ] : []
+			'' !== $activity_id ? [ $activity_id ] : [],
+			$context
 		);
 
 		return Serializer::hydrate_row_with_attestation(
@@ -697,7 +709,7 @@ final class Repository {
 	 * @param array<int, string> $activity_ids
 	 * @return array<string, array<string, mixed>>
 	 */
-	private static function attestations_for_activity_ids( array $activity_ids ): array {
+	private static function attestations_for_activity_ids( array $activity_ids, ?ActivityStorageContext $context = null ): array {
 		$activity_ids = array_values(
 			array_unique(
 				array_filter(
@@ -714,7 +726,7 @@ final class Repository {
 			return [];
 		}
 
-		$attestations = AttestationRepository::find_by_related_activities( $activity_ids );
+		$attestations = AttestationRepository::find_by_related_activities( $activity_ids, $context );
 
 		if ( [] === $attestations ) {
 			return [];
@@ -726,7 +738,8 @@ final class Repository {
 					static fn ( array $row ): string => (string) ( $row['attestation_id'] ?? '' ),
 					$attestations
 				)
-			)
+			),
+			$context
 		);
 		$supersedes = AttestationRepository::find_supersedes_by_attestation_ids(
 			array_values(
@@ -734,7 +747,8 @@ final class Repository {
 					static fn ( array $row ): string => (string) ( $row['attestation_id'] ?? '' ),
 					$attestations
 				)
-			)
+			),
+			$context
 		);
 
 		foreach ( $attestations as $activity_id => $row ) {
@@ -759,10 +773,16 @@ final class Repository {
 	/**
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public static function update_undo_status( string $activity_id, string $status, ?string $error = null, array $metadata = [] ) {
-		global $wpdb;
+	public static function update_undo_status(
+		string $activity_id,
+		string $status,
+		?string $error = null,
+		array $metadata = [],
+		?ActivityStorageContext $context = null
+	) {
+		$database = null !== $context ? $context->database() : self::current_database();
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return new \WP_Error(
 				'flavor_agent_activity_storage_unavailable',
 				'Flavor Agent activity storage is unavailable.',
@@ -778,7 +798,7 @@ final class Repository {
 			);
 		}
 
-		$current_row = self::find_row( $activity_id );
+		$current_row = self::find_row( $activity_id, $context );
 
 		if ( ! is_array( $current_row ) ) {
 			return new \WP_Error(
@@ -788,8 +808,9 @@ final class Repository {
 			);
 		}
 
-		$current_entry = Serializer::hydrate_row( $current_row );
-		$current_undo  = is_array( $current_entry['undo'] ?? null ) ? $current_entry['undo'] : [];
+		$current_entry    = Serializer::hydrate_row( $current_row );
+		$current_undo     = is_array( $current_entry['undo'] ?? null ) ? $current_entry['undo'] : [];
+		$prior_undo_state = (string) ( $current_row['undo_state'] ?? '' );
 
 		if ( 'available' !== (string) ( $current_undo['status'] ?? '' ) ) {
 			return new \WP_Error(
@@ -799,7 +820,7 @@ final class Repository {
 			);
 		}
 
-		if ( 'undone' === $status && ! self::is_ordered_undo_eligible( $current_row ) ) {
+		if ( 'undone' === $status && ! self::is_ordered_undo_eligible( $current_row, $context ) ) {
 			return new \WP_Error(
 				'flavor_agent_activity_undo_blocked',
 				'Undo blocked by newer AI actions.',
@@ -829,19 +850,21 @@ final class Repository {
 			}
 		}
 
-		$undo = Serializer::normalize_undo_for_storage(
+		$undo               = Serializer::normalize_undo_for_storage(
 			$undo_state,
 			$timestamp
 		);
+		$encoded_undo_state = Serializer::encode_json( $undo );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
-		$updated = $wpdb->update(
-			self::table_name(),
+		$updated = $database->update(
+			self::table_name( $context ),
 			[
-				'undo_state' => Serializer::encode_json( $undo ),
+				'undo_state' => $encoded_undo_state,
 				'updated_at' => Serializer::mysql_datetime_from_timestamp( $timestamp ),
 			],
 			[
 				'activity_id' => $activity_id,
+				'undo_state'  => $prior_undo_state,
 			]
 		);
 
@@ -853,7 +876,23 @@ final class Repository {
 			);
 		}
 
-		$stored = self::find( $activity_id );
+		if ( 0 === (int) $updated ) {
+			$current_row = self::find_row( $activity_id, $context );
+
+			if (
+				! is_array( $current_row )
+				|| $activity_id !== (string) ( $current_row['activity_id'] ?? '' )
+				|| $encoded_undo_state !== (string) ( $current_row['undo_state'] ?? '' )
+			) {
+				return new \WP_Error(
+					'flavor_agent_activity_update_failed',
+					'Flavor Agent could not update the activity entry because its undo state changed concurrently.',
+					[ 'status' => 409 ]
+				);
+			}
+		}
+
+		$stored = self::find( $activity_id, $context );
 
 		if ( is_array( $stored ) ) {
 			return $stored;
@@ -866,10 +905,193 @@ final class Repository {
 		);
 	}
 
-	public static function can_perform_ordered_undo( string $activity_id ): bool {
-		$row = self::find_row( $activity_id );
+	public static function can_perform_ordered_undo( string $activity_id, ?ActivityStorageContext $context = null ): bool {
+		$row = self::find_row( $activity_id, $context );
 
-		return is_array( $row ) && self::is_ordered_undo_eligible( $row );
+		return is_array( $row ) && self::is_ordered_undo_eligible( $row, $context );
+	}
+
+	/**
+	 * Atomically claim one pending external apply before any target state is read
+	 * or written. The owner-qualified execution_result value makes every existing
+	 * pending transition, including expiry, lose the same database CAS.
+	 *
+	 * @return string|\WP_Error Opaque claim owner value for terminal transition.
+	 */
+	public static function claim_external_apply_decision( string $activity_id, ?ActivityStorageContext $context = null ): string|\WP_Error {
+		$database = null !== $context ? $context->database() : self::current_database();
+
+		if ( ! is_object( $database ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_storage_unavailable',
+				'Flavor Agent activity storage is unavailable.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$row = self::find_row( $activity_id, $context );
+
+		if ( ! is_array( $row ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_not_found',
+				'Flavor Agent could not find that activity entry.',
+				[ 'status' => 404 ]
+			);
+		}
+
+		$entry = Serializer::hydrate_row( $row );
+		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
+
+		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only claim pending decisions.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		try {
+			$claim = ExternalApplyDecisionClaim::PREFIX . bin2hex( random_bytes( 12 ) );
+		} catch ( \Throwable ) {
+			return new \WP_Error(
+				'flavor_agent_activity_claim_failed',
+				'Flavor Agent could not create an external-apply decision claim.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$timestamp = gmdate( 'c' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Claims a plugin-owned activity row with an owner-qualified compare-and-swap before target execution.
+		$updated = $database->update(
+			self::table_name( $context ),
+			[
+				'execution_result' => $claim,
+				'updated_at'       => Serializer::mysql_datetime_from_timestamp( $timestamp ),
+			],
+			[
+				'activity_id'      => $activity_id,
+				'execution_result' => 'pending',
+			]
+		);
+
+		if ( false === $updated ) {
+			return new \WP_Error(
+				'flavor_agent_activity_update_failed',
+				'Flavor Agent could not claim the external-apply decision.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( 0 === (int) $updated ) {
+			$current = self::find_row( $activity_id, $context );
+
+			if ( is_array( $current ) && self::is_external_apply_decision_claim( (string) ( $current['execution_result'] ?? '' ) ) ) {
+				return new \WP_Error(
+					'flavor_agent_apply_materialization_locked',
+					'Another Flavor Agent request is processing this apply decision. Retry the request.',
+					[
+						'status'          => 409,
+						'activityId'      => $activity_id,
+						'processingSince' => Serializer::normalize_timestamp( (string) ( $current['updated_at'] ?? '' ) ),
+					]
+				);
+			}
+
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent external applies only claim the pending state once.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		if ( null === $context || $context->matches_current() ) {
+			self::invalidate_pending_external_apply_notification_snapshot_cache();
+		}
+
+		return $claim;
+	}
+
+	/**
+	 * Return public-safe diagnostics for an owner-qualified decision claim.
+	 *
+	 * The opaque owner is deliberately omitted. Recovery must obtain the exact
+	 * raw value through an authenticated operator channel after independently
+	 * confirming that the original request is no longer active.
+	 *
+	 * @return array{activityId: string, processingSince: string}|array{}
+	 */
+	public static function external_apply_decision_claim_diagnostics( string $activity_id, ?ActivityStorageContext $context = null ): array {
+		$row = self::find_row( $activity_id, $context );
+
+		if ( ! is_array( $row ) || ! self::is_external_apply_decision_claim( (string) ( $row['execution_result'] ?? '' ) ) ) {
+			return [];
+		}
+
+		return [
+			'activityId'      => $activity_id,
+			'processingSince' => Serializer::normalize_timestamp( (string) ( $row['updated_at'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * Release an owner-qualified decision claim only when target execution did not
+	 * begin (for example, target-lock contention), restoring safe retryability.
+	 *
+	 * @return true|\WP_Error
+	 */
+	public static function release_external_apply_decision_claim( string $activity_id, string $claim, ?ActivityStorageContext $context = null ) {
+		$database = null !== $context ? $context->database() : self::current_database();
+
+		if ( ! self::is_external_apply_decision_claim( $claim ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent received an invalid external-apply decision claim.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		if ( ! is_object( $database ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_storage_unavailable',
+				'Flavor Agent activity storage is unavailable.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Releases only the caller-owned activity decision claim after a no-write retryable outcome.
+		$updated = $database->update(
+			self::table_name( $context ),
+			[
+				'execution_result' => 'pending',
+				'updated_at'       => Serializer::mysql_datetime_from_timestamp( gmdate( 'c' ) ),
+			],
+			[
+				'activity_id'      => $activity_id,
+				'execution_result' => $claim,
+			]
+		);
+
+		if ( false === $updated ) {
+			return new \WP_Error(
+				'flavor_agent_activity_update_failed',
+				'Flavor Agent could not release the external-apply decision claim.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( 0 === (int) $updated ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent could not release an external-apply decision claim it no longer owns.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		if ( null === $context || $context->matches_current() ) {
+			self::invalidate_pending_external_apply_notification_snapshot_cache();
+		}
+
+		return true;
 	}
 
 	/**
@@ -878,10 +1100,36 @@ final class Repository {
 	 * @param array<string, mixed> $changes {applyStatus, decidedBy?, decidedByName?, decidedAt?, decisionNote?, failureCode?, failureMessage?, executedAt?, attestationStatus?, attestationErrorCode?, before?, after?, target?}
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public static function transition_external_apply( string $activity_id, array $changes ) {
-		global $wpdb;
+	public static function transition_external_apply( string $activity_id, array $changes, ?ActivityStorageContext $context = null ) {
+		return self::transition_external_apply_from_execution_result( $activity_id, $changes, 'pending', $context );
+	}
 
-		if ( ! is_object( $wpdb ) ) {
+	/**
+	 * Consume an owner-qualified decision claim in the terminal activity update.
+	 *
+	 * @param array<string, mixed> $changes
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function transition_claimed_external_apply( string $activity_id, array $changes, string $claim, ?ActivityStorageContext $context = null ) {
+		if ( ! self::is_external_apply_decision_claim( $claim ) ) {
+			return new \WP_Error(
+				'flavor_agent_apply_invalid_transition',
+				'Flavor Agent received an invalid external-apply decision claim.',
+				[ 'status' => 409 ]
+			);
+		}
+
+		return self::transition_external_apply_from_execution_result( $activity_id, $changes, $claim, $context );
+	}
+
+	/**
+	 * @param array<string, mixed> $changes
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private static function transition_external_apply_from_execution_result( string $activity_id, array $changes, string $expected_execution_result, ?ActivityStorageContext $context = null ) {
+		$database = null !== $context ? $context->database() : self::current_database();
+
+		if ( ! is_object( $database ) ) {
 			return new \WP_Error(
 				'flavor_agent_activity_storage_unavailable',
 				'Flavor Agent activity storage is unavailable.',
@@ -889,7 +1137,7 @@ final class Repository {
 			);
 		}
 
-		$row = self::find_row( $activity_id );
+		$row = self::find_row( $activity_id, $context );
 
 		if ( ! is_array( $row ) ) {
 			return new \WP_Error(
@@ -946,15 +1194,15 @@ final class Repository {
 			);
 		}
 
-		// Keep the pending guard at the write boundary so simultaneous decisions
-		// cannot overwrite an already-decided row after both readers saw pending.
+		// Keep the exact owner/state guard at the write boundary. Ordinary expiry
+		// consumes pending; an executing decision consumes only its opaque claim.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
-		$updated = $wpdb->update(
-			self::table_name(),
+		$updated = $database->update(
+			self::table_name( $context ),
 			$update,
 			[
 				'activity_id'      => $activity_id,
-				'execution_result' => 'pending',
+				'execution_result' => $expected_execution_result,
 			]
 		);
 
@@ -974,26 +1222,30 @@ final class Repository {
 			);
 		}
 
-		$stored_row = self::find_row( $activity_id );
+		$stored_row = self::find_row( $activity_id, $context );
 
 		if ( is_array( $stored_row ) ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Refreshes derived admin projection columns for the transitioned row.
-			$wpdb->update(
-				self::table_name(),
+			$database->update(
+				self::table_name( $context ),
 				self::build_admin_projection_from_row( $stored_row ),
 				[ 'activity_id' => $activity_id ]
 			);
 		}
 
-		self::invalidate_pending_external_apply_notification_snapshot_cache();
+		if ( null === $context || $context->matches_current() ) {
+			self::invalidate_pending_external_apply_notification_snapshot_cache();
+		}
 
 		// Committed out of pending: drop any advisory review claim so the decided
 		// row never shows a stale "being reviewed" badge. Reached only on the
 		// committed-success path — non-committing 404/409/500 returns above never
 		// arrive here, so a lost-race transition leaves the claim intact.
-		ApplyClaim::clear( $activity_id );
+		if ( null === $context || $context->matches_current() ) {
+			ApplyClaim::clear( $activity_id );
+		}
 
-		$stored = self::find( $activity_id );
+		$stored = self::find( $activity_id, $context );
 
 		if ( is_array( $stored ) ) {
 			return $stored;
@@ -1006,13 +1258,17 @@ final class Repository {
 		);
 	}
 
+	private static function is_external_apply_decision_claim( string $value ): bool {
+		return ExternalApplyDecisionClaim::is_active( $value );
+	}
+
 	/**
 	 * Lazily expire a hydrated pending external apply that is past its expiresAt.
 	 *
 	 * @param array<string, mixed> $entry
 	 * @return array<string, mixed>
 	 */
-	public static function maybe_expire_pending_apply( array $entry ): array {
+	public static function maybe_expire_pending_apply( array $entry, ?ActivityStorageContext $context = null ): array {
 		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 
 		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
@@ -1027,7 +1283,8 @@ final class Repository {
 
 		$expired = self::transition_external_apply(
 			(string) ( $entry['id'] ?? '' ),
-			[ 'applyStatus' => 'expired' ]
+			[ 'applyStatus' => 'expired' ],
+			$context
 		);
 
 		return is_array( $expired ) ? $expired : $entry;
@@ -1075,9 +1332,10 @@ final class Repository {
 		}
 
 		$sql = $wpdb->prepare(
-			'SELECT * FROM %i WHERE execution_result = %s AND user_id = %d',
+			'SELECT * FROM %i WHERE (execution_result = %s OR CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s) AND user_id = %d',
 			self::table_name(),
 			'pending',
+			ExternalApplyDecisionClaim::SQL_HEX_PATTERN,
 			$user_id
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Counts the requesting user's pending external applies; prepared above.
@@ -1177,15 +1435,17 @@ final class Repository {
 		}
 
 		$sql = $wpdb->prepare(
-			'SELECT activity_id, user_id, surface, target_json, request_json, document_json, execution_result FROM %i WHERE execution_result = %s ORDER BY created_at DESC, id DESC',
+			'SELECT activity_id, user_id, surface, target_json, request_json, document_json, execution_result FROM %i WHERE execution_result = %s OR CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s ORDER BY created_at DESC, id DESC',
 			self::table_name(),
-			'pending'
+			'pending',
+			ExternalApplyDecisionClaim::SQL_HEX_PATTERN
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Rebuilds the admin notice snapshot from the plugin-owned activity table only when the cache is invalid or stale.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
-			$entry = self::maybe_expire_pending_external_apply_notice_entry(
+			$is_claimed = self::is_external_apply_decision_claim( (string) ( $row['execution_result'] ?? '' ) );
+			$entry      = self::maybe_expire_pending_external_apply_notice_entry(
 				self::hydrate_pending_external_apply_notice_entry( $row )
 			);
 
@@ -1199,7 +1459,9 @@ final class Repository {
 				$snapshot['latest'] = $entry;
 			}
 
-			self::track_pending_external_apply_notice_expiry( $snapshot, (string) ( $entry['apply']['expiresAt'] ?? '' ) );
+			if ( ! $is_claimed ) {
+				self::track_pending_external_apply_notice_expiry( $snapshot, (string) ( $entry['apply']['expiresAt'] ?? '' ) );
+			}
 		}
 
 		return $snapshot;
@@ -1244,7 +1506,7 @@ final class Repository {
 			'surface'         => trim( (string) ( $row['surface'] ?? '' ) ),
 			'target'          => Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' ),
 			'document'        => Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' ),
-			'executionResult' => trim( (string) ( $row['execution_result'] ?? '' ) ),
+			'executionResult' => Serializer::normalize_execution_result_for_read( $row['execution_result'] ?? '' ),
 			'userId'          => $user_id,
 			'userLabel'       => self::resolve_admin_user_label( $user_id ),
 		];
@@ -1320,9 +1582,10 @@ final class Repository {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Deletes from the plugin-owned activity log table must execute immediately.
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
-				'DELETE FROM %i WHERE created_at < %s',
+				'DELETE FROM %i WHERE created_at < %s AND NOT (CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s)',
 				$table_name,
-				gmdate( 'Y-m-d H:i:s', $unix_timestamp )
+				gmdate( 'Y-m-d H:i:s', $unix_timestamp ),
+				ExternalApplyDecisionClaim::SQL_HEX_PATTERN
 			)
 		);
 
@@ -1430,7 +1693,50 @@ final class Repository {
 		return $processed;
 	}
 
-	public static function table_name(): string {
+	public static function capture_storage_context(): ActivityStorageContext|\WP_Error {
+		global $wpdb;
+
+		if (
+			! is_object( $wpdb )
+			|| ! isset( $wpdb->prefix )
+			|| ! is_callable( [ $wpdb, 'prepare' ] )
+			|| ! is_callable( [ $wpdb, 'get_row' ] )
+			|| ! is_callable( [ $wpdb, 'get_var' ] )
+			|| ! is_callable( [ $wpdb, 'insert' ] )
+			|| ! is_callable( [ $wpdb, 'update' ] )
+		) {
+			return new \WP_Error(
+				'flavor_agent_activity_storage_unavailable',
+				'Flavor Agent activity storage is unavailable.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		$database       = $wpdb;
+		$prefix         = (string) $database->prefix;
+		$options_table  = isset( $database->options ) ? (string) $database->options : $prefix . 'options';
+		$posts_table    = isset( $database->posts ) ? (string) $database->posts : $prefix . 'posts';
+		$postmeta_table = isset( $database->postmeta ) ? (string) $database->postmeta : $prefix . 'postmeta';
+		$blog_id        = function_exists( 'get_current_blog_id' ) ? (int) get_current_blog_id() : 0;
+		$site_url       = function_exists( 'home_url' ) ? (string) home_url() : '';
+
+		return new ActivityStorageContext(
+			$database,
+			$prefix . self::TABLE_SUFFIX,
+			$prefix,
+			$blog_id,
+			$options_table,
+			$posts_table,
+			$postmeta_table,
+			$site_url
+		);
+	}
+
+	public static function table_name( ?ActivityStorageContext $context = null ): string {
+		if ( null !== $context ) {
+			return $context->table_name();
+		}
+
 		global $wpdb;
 
 		$prefix = is_object( $wpdb ) && isset( $wpdb->prefix )
@@ -1443,23 +1749,29 @@ final class Repository {
 	/**
 	 * @return array<string, mixed>|null
 	 */
-	private static function find_row( string $activity_id ): ?array {
-		global $wpdb;
+	private static function find_row( string $activity_id, ?ActivityStorageContext $context = null ): ?array {
+		$database = null !== $context ? $context->database() : self::current_database();
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return null;
 		}
 
-		$table_name = self::table_name();
-		$sql        = $wpdb->prepare(
+		$table_name = self::table_name( $context );
+		$sql        = $database->prepare(
 			'SELECT * FROM %i WHERE activity_id = %s LIMIT 1',
 			$table_name,
 			$activity_id
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads from the plugin-owned activity table are prepared above and should bypass object caching.
-		$row = $wpdb->get_row( $sql, ARRAY_A );
+		$row = $database->get_row( $sql, ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
+	}
+
+	private static function current_database(): ?object {
+		global $wpdb;
+
+		return is_object( $wpdb ) ? $wpdb : null;
 	}
 
 	/**
@@ -1766,7 +2078,7 @@ final class Repository {
 	/**
 	 * @param array<string, mixed> $row
 	 */
-	private static function is_ordered_undo_eligible( array $row ): bool {
+	private static function is_ordered_undo_eligible( array $row, ?ActivityStorageContext $context = null ): bool {
 		$current_entry = Serializer::hydrate_row( $row );
 		$current_undo  = is_array( $current_entry['undo'] ?? null ) ? $current_entry['undo'] : [];
 
@@ -1774,21 +2086,21 @@ final class Repository {
 			return false;
 		}
 
-		global $wpdb;
+		$database = null !== $context ? $context->database() : self::current_database();
 
-		if ( ! is_object( $wpdb ) ) {
+		if ( ! is_object( $database ) ) {
 			return false;
 		}
 
-		$table_name = self::table_name();
-		$sql        = $wpdb->prepare(
+		$table_name = self::table_name( $context );
+		$sql        = $database->prepare(
 			'SELECT activity_id, activity_type, execution_result, undo_state FROM %i WHERE entity_type = %s AND entity_ref = %s ORDER BY created_at ASC, id ASC',
 			$table_name,
 			(string) ( $row['entity_type'] ?? '' ),
 			(string) ( $row['entity_ref'] ?? '' )
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads from the plugin-owned activity table are prepared above and should bypass object caching.
-		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$rows = $database->get_results( $sql, ARRAY_A );
 
 		if ( ! is_array( $rows ) ) {
 			return false;
@@ -2635,7 +2947,7 @@ final class Repository {
 		$newer_active_condition = self::get_admin_sql_newer_active_exists();
 
 		return '(CASE'
-			. " WHEN t.execution_result IN ('pending') THEN 'pending'"
+			. " WHEN t.execution_result IN ('pending') OR CONVERT(HEX(t.execution_result) USING utf8mb4) REGEXP '" . ExternalApplyDecisionClaim::SQL_HEX_PATTERN . "' THEN 'pending'"
 			. " WHEN t.execution_result IN ('rejected') THEN 'rejected'"
 			. " WHEN t.execution_result IN ('expired') THEN 'expired'"
 			. " WHEN t.execution_result IN ('failed') THEN 'failed'"
@@ -2906,6 +3218,13 @@ final class Repository {
 			}
 
 			$entity_indexes[ $key ][] = $index;
+			$raw_execution_result     = (string) ( $row['execution_result'] ?? '' );
+			$execution_result         = trim( $raw_execution_result );
+
+			if ( self::is_external_apply_decision_claim( $raw_execution_result ) ) {
+				$activity_id                = trim( (string) ( $row['activity_id'] ?? '' ) );
+				$status_map[ $activity_id ] = 'pending';
+			}
 
 			if ( self::is_review_only_row( $row ) ) {
 				$activity_id                = trim( (string) ( $row['activity_id'] ?? '' ) );
@@ -2937,6 +3256,12 @@ final class Repository {
 				$undo_status = self::get_admin_row_undo_status( $row );
 
 				if ( '' === $activity_id ) {
+					continue;
+				}
+
+				if ( self::is_external_apply_decision_claim( (string) ( $row['execution_result'] ?? '' ) ) ) {
+					$status_map[ $activity_id ] = 'pending';
+					$has_active_newer_entry     = true;
 					continue;
 				}
 

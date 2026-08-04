@@ -68,7 +68,7 @@ register_deactivation_hook(
 );
 
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
-add_action( 'init', [ FlavorAgent\Attestation\Repository::class, 'maybe_install' ], 5 );
+add_action( 'init', [ FlavorAgent\Attestation\Repository::class, 'maybe_install' ], 5, 0 );
 add_action( 'init', [ FlavorAgent\Activity\RequestLoggingBridge::class, 'register' ], 5 );
 // When the WordPress AI plugin's "AI Request Logging" experiment is enabled the
 // bridge defaults to deferring to core logging. The "AI Activity Dual Logging"

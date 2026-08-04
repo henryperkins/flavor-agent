@@ -483,7 +483,10 @@ final class ApplyAbilities {
 		$baseline = PostBlocksApplyExecutor::resolve_baseline(
 			[
 				'surface' => 'post-blocks',
-				'target'  => [ 'postId' => $post_id ],
+				'target'  => [
+					'postId'   => $post_id,
+					'postType' => function_exists( 'get_post_type' ) ? (string) get_post_type( $post_id ) : '',
+				],
 			]
 		);
 
@@ -879,6 +882,12 @@ final class ApplyAbilities {
 	}
 
 	public static function undo_activity( mixed $input ): array|\WP_Error {
+		$storage_context = ActivityRepository::capture_storage_context();
+
+		if ( is_wp_error( $storage_context ) ) {
+			return $storage_context;
+		}
+
 		$input       = self::normalize_map( $input );
 		$activity_id = sanitize_text_field( (string) ( $input['activityId'] ?? '' ) );
 
@@ -890,7 +899,7 @@ final class ApplyAbilities {
 			);
 		}
 
-		$entry = ActivityRepository::find( $activity_id );
+		$entry = ActivityRepository::find( $activity_id, $storage_context );
 
 		if ( ! is_array( $entry ) ) {
 			return new \WP_Error(
@@ -900,7 +909,7 @@ final class ApplyAbilities {
 			);
 		}
 
-		$entry    = ActivityRepository::maybe_expire_pending_apply( $entry );
+		$entry    = ActivityRepository::maybe_expire_pending_apply( $entry, $storage_context );
 		$surface  = (string) ( $entry['surface'] ?? '' );
 		$executor = ExternalApplyExecutorRegistry::for_surface( $surface );
 
@@ -939,7 +948,7 @@ final class ApplyAbilities {
 			);
 		}
 
-		if ( ! ActivityRepository::can_perform_ordered_undo( $activity_id ) ) {
+		if ( ! ActivityRepository::can_perform_ordered_undo( $activity_id, $storage_context ) ) {
 			return new \WP_Error(
 				'flavor_agent_activity_undo_blocked',
 				'Undo blocked by newer AI actions.',
@@ -947,14 +956,57 @@ final class ApplyAbilities {
 			);
 		}
 
+		$authorized = $executor::authorize_target( $entry );
+
+		if ( is_wp_error( $authorized ) ) {
+			return $authorized;
+		}
+
+		$identity = $executor::resolve_target_identity( $entry );
+
+		if ( is_wp_error( $identity ) ) {
+			return $identity;
+		}
+
+		$canonical_target = $identity['target'];
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::undo_recovery_required_error( $activity_id, 'pre_execution_context' );
+		}
+
 		$result = $executor::undo( $entry );
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::undo_recovery_required_error( $activity_id, 'execution_context' );
+		}
 
 		if ( is_wp_error( $result ) ) {
 			if ( 'flavor_agent_undo_drift' === $result->get_error_code() ) {
-				$failed = ActivityRepository::update_undo_status( $activity_id, 'failed', $result->get_error_message() );
+				try {
+					$failed = ActivityRepository::update_undo_status(
+						$activity_id,
+						'failed',
+						$result->get_error_message(),
+						[],
+						$storage_context
+					);
+				} catch ( \Throwable ) {
+					return self::undo_recovery_required_error(
+						$activity_id,
+						$storage_context->matches_current() ? 'activity_finalization' : 'finalization_context'
+					);
+				}
+
+				if ( ! $storage_context->matches_current() ) {
+					return self::undo_recovery_required_error( $activity_id, 'finalization_context' );
+				}
+
+				if ( is_wp_error( $failed ) ) {
+					return self::undo_recovery_required_error( $activity_id, 'activity_finalization' );
+				}
 
 				return [
-					'entry'  => is_array( $failed ) ? $failed : $entry,
+					'entry'  => $failed,
 					'result' => 'failed',
 					'error'  => $result->get_error_message(),
 				];
@@ -965,13 +1017,16 @@ final class ApplyAbilities {
 
 		$attestation_metadata = [];
 		if ( AttestationService::surface_eligible( $surface ) ) {
-			$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id );
+			$prior = \FlavorAgent\Attestation\Repository::find_by_related_activity( $activity_id, $storage_context );
+
+			if ( ! $storage_context->matches_current() ) {
+				return self::undo_recovery_required_error( $activity_id, 'attestation_context' );
+			}
 
 			if ( null === $prior ) {
 				$attestation_metadata['attestationStatus'] = 'not_applicable';
 			} else {
 				try {
-					$target              = is_array( $entry['target'] ?? null ) ? $entry['target'] : [];
 					$persisted_after     = is_array( $result['after'] ?? null )
 						? $result['after']
 						: ( is_array( $entry['before'] ?? null ) ? $entry['before'] : [] );
@@ -988,40 +1043,64 @@ final class ApplyAbilities {
 					];
 
 					if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
-						$attestation_context['globalStylesId'] = (string) ( $target['globalStylesId'] ?? '' );
-						$attestation_context['blockName']      = (string) ( $target['blockName'] ?? '' );
+						$attestation_context['globalStylesId'] = (string) ( $canonical_target['globalStylesId'] ?? '' );
+						$attestation_context['blockName']      = (string) ( $canonical_target['blockName'] ?? '' );
 					} else {
 						$attestation_context['templateRef'] = 'template-part' === $surface
-							? (string) ( $target['templatePartRef'] ?? $target['templatePartId'] ?? '' )
-							: (string) ( $target['templateRef'] ?? '' );
+							? (string) ( $canonical_target['templatePartRef'] ?? '' )
+							: (string) ( $canonical_target['templateRef'] ?? '' );
 					}
 
 					$attestation_result                           = AttestationService::record_revert(
 						(string) $prior['attestation_id'],
-						$attestation_context
+						$attestation_context,
+						$storage_context
 					);
 					$attestation_metadata['attestationStatus']    = $attestation_result->status();
 					$attestation_metadata['attestationErrorCode'] = $attestation_result->error_code();
 				} catch ( \Throwable $e ) {
 					$attestation_metadata['attestationStatus']    = RecordResult::STATUS_FAILED;
 					$attestation_metadata['attestationErrorCode'] = 'unexpected_failure';
-					AttestationService::record_failure(
-						$e,
-						[
-							'operation'            => 'revert',
-							'activityId'           => $activity_id,
-							'errorCode'            => 'unexpected_failure',
-							'revertsAttestationId' => (string) $prior['attestation_id'],
-						]
-					);
+					if ( $storage_context->matches_current() ) {
+						AttestationService::record_failure(
+							$e,
+							[
+								'operation'            => 'revert',
+								'activityId'           => $activity_id,
+								'errorCode'            => 'unexpected_failure',
+								'revertsAttestationId' => (string) $prior['attestation_id'],
+							]
+						);
+					}
 				}
 			}
 		}
 
-		$updated = ActivityRepository::update_undo_status( $activity_id, 'undone', null, $attestation_metadata );
+		if ( ! $storage_context->matches_current() ) {
+			return self::undo_recovery_required_error( $activity_id, 'attestation_context' );
+		}
+
+		try {
+			$updated = ActivityRepository::update_undo_status(
+				$activity_id,
+				'undone',
+				null,
+				$attestation_metadata,
+				$storage_context
+			);
+		} catch ( \Throwable ) {
+			return self::undo_recovery_required_error(
+				$activity_id,
+				$storage_context->matches_current() ? 'activity_finalization' : 'finalization_context'
+			);
+		}
+
+		if ( ! $storage_context->matches_current() ) {
+			return self::undo_recovery_required_error( $activity_id, 'finalization_context' );
+		}
 
 		if ( is_wp_error( $updated ) ) {
-			return $updated;
+			return self::undo_recovery_required_error( $activity_id, 'activity_finalization' );
 		}
 
 		return [
@@ -1029,6 +1108,19 @@ final class ApplyAbilities {
 			'result' => 'already_undone' === (string) ( $result['result'] ?? '' ) ? 'already_undone' : 'undone',
 			'error'  => null,
 		];
+	}
+
+	private static function undo_recovery_required_error( string $activity_id, string $phase ): \WP_Error {
+		return new \WP_Error(
+			'flavor_agent_undo_recovery_required',
+			'Flavor Agent could not prove a safe terminal undo state. Reconcile the target before retrying this activity.',
+			[
+				'status'           => 500,
+				'recoveryRequired' => true,
+				'activityId'       => $activity_id,
+				'phase'            => $phase,
+			]
+		);
 	}
 
 	/**

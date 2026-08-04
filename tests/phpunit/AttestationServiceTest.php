@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Attestation\AttestationService;
 use FlavorAgent\Attestation\BlockContentCanonicalizer;
+use FlavorAgent\Attestation\Canonicalizer;
 use FlavorAgent\Attestation\KeyManager;
 use FlavorAgent\Attestation\RecordResult;
 use FlavorAgent\Attestation\Repository;
 use FlavorAgent\Attestation\Signer;
+use FlavorAgent\Attestation\Verifier;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -52,6 +55,187 @@ final class AttestationServiceTest extends TestCase {
 		$this->assertSame( RecordResult::STATUS_RECORDED, $result->status() );
 		$this->assertMatchesRegularExpression( '/^att_[a-f0-9]{32}$/', (string) $result->attestation_id() );
 		$this->assertNull( $result->error_code() );
+	}
+
+	public function test_record_apply_invalidates_a_cached_missing_key_registry(): void {
+		$this->configure_key();
+		Repository::install();
+		$storage_context = ActivityRepository::capture_storage_context();
+		$this->assertNotInstanceOf( \WP_Error::class, $storage_context );
+		$this->assertSame( [], KeyManager::jwks()['keys'] );
+
+		$result = AttestationService::record_apply( $this->apply_context(), $storage_context );
+
+		$this->assertSame( RecordResult::STATUS_RECORDED, $result->status() );
+		$this->assertCount( 1, KeyManager::jwks()['keys'] );
+	}
+
+	public function test_public_jwks_reads_a_bound_registration_after_context_drift_despite_a_cached_miss(): void {
+		$this->configure_key();
+		Repository::install();
+		$storage_context = ActivityRepository::capture_storage_context();
+		$this->assertNotInstanceOf( \WP_Error::class, $storage_context );
+
+		$this->assertSame( [], get_option( 'flavor_agent_attestation_public_keys', [] ) );
+		$this->assertSame( [], KeyManager::jwks()['keys'] );
+
+		$original_database        = $GLOBALS['wpdb'];
+		$original_blog            = WordPressTestState::$current_blog_id;
+		$original_home            = WordPressTestState::$home_url;
+		$wrong_database           = new \wpdb();
+		$wrong_database->prefix   = 'wp_2_';
+		$wrong_database->options  = 'wp_2_options';
+		$wrong_database->posts    = 'wp_2_posts';
+		$wrong_database->postmeta = 'wp_2_postmeta';
+		$context                  = $this->apply_context();
+
+		try {
+			$GLOBALS['wpdb']                     = $wrong_database;
+			WordPressTestState::$current_blog_id = 2;
+			WordPressTestState::$home_url        = 'https://wrong-site.example';
+			$result                              = AttestationService::record_apply( $context, $storage_context );
+		} finally {
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+			WordPressTestState::$home_url        = $original_home;
+		}
+
+		$this->assertSame( RecordResult::STATUS_RECORDED, $result->status() );
+		$this->assertCount( 1, KeyManager::jwks( $storage_context )['keys'] );
+
+		$attestation_id = $result->attestation_id();
+		$this->assertNotNull( $attestation_id );
+		$row = Repository::find( $attestation_id, $storage_context );
+		$this->assertIsArray( $row );
+
+		$public_jwks = KeyManager::jwks();
+		$this->assertCount( 1, $public_jwks['keys'] );
+		$this->assertSame( (string) $row['key_id'], $public_jwks['keys'][0]['kid'] );
+
+		$verification = Verifier::verify(
+			[
+				'statement_b64' => KeyManager::b64url( (string) $row['statement_bytes'] ),
+				'signature_b64' => (string) $row['signature_b64'],
+				'key_id'        => (string) $row['key_id'],
+			],
+			$public_jwks,
+			Canonicalizer::canonical_bytes( $context['after']['userConfig'] ),
+			$attestation_id,
+			'https://example.test'
+		);
+
+		$this->assertSame( 'verified', $verification['verificationStatus'] );
+		$this->assertContains( 'signature_valid', $verification['outcomes'] );
+		$this->assertContains( 'live_matches_subject', $verification['outcomes'] );
+	}
+
+	public function test_record_apply_fails_when_the_public_key_cannot_be_registered(): void {
+		$this->configure_key();
+		Repository::install();
+		$storage_context = ActivityRepository::capture_storage_context();
+		$this->assertNotInstanceOf( \WP_Error::class, $storage_context );
+
+		$failure_event   = null;
+		$disable_logging = static fn (): bool => false;
+		add_action(
+			'flavor_agent_attestation_record_failed',
+			static function ( array $event ) use ( &$failure_event ): void {
+				$failure_event = $event;
+			}
+		);
+		add_filter( 'flavor_agent_attestation_failure_logging_enabled', $disable_logging );
+		WordPressTestState::$option_insert_fails = true;
+
+		try {
+			$result = AttestationService::record_apply( $this->apply_context(), $storage_context );
+		} finally {
+			WordPressTestState::$option_insert_fails = false;
+			remove_filter( 'flavor_agent_attestation_failure_logging_enabled', $disable_logging );
+		}
+
+		$this->assertSame( RecordResult::STATUS_FAILED, $result->status() );
+		$this->assertSame( 'signing_failed', $result->error_code() );
+		$this->assertNull( $result->attestation_id() );
+		$this->assertNull( Repository::find_by_related_activity( 'act_9', $storage_context ) );
+		$this->assertSame( [], KeyManager::jwks( $storage_context )['keys'] );
+		$this->assertIsArray( $failure_event );
+		$this->assertSame( 'apply', $failure_event['operation'] ?? null );
+		$this->assertSame( 'act_9', $failure_event['activityId'] ?? null );
+		$this->assertSame( 'signing_failed', $failure_event['errorCode'] ?? null );
+		$this->assertSame( 'Flavor Agent could not sign the attestation statement.', $failure_event['message'] ?? null );
+	}
+
+	public function test_record_apply_does_not_notify_ambient_site_observers_after_bound_context_drift(): void {
+		$this->configure_key();
+
+		$original_database                   = $GLOBALS['wpdb'];
+		$original_blog                       = WordPressTestState::$current_blog_id;
+		$original_home                       = WordPressTestState::$home_url;
+		$origin_database                     = new class() extends \wpdb {
+			/** @var callable|null */
+			public $before_option_insert = null;
+
+			public function insert( string $table, array $data, array $format = [] ) {
+				if ( $this->options === $table && is_callable( $this->before_option_insert ) ) {
+					$callback                   = $this->before_option_insert;
+					$this->before_option_insert = null;
+					$callback();
+				}
+
+				return parent::insert( $table, $data, $format );
+			}
+		};
+		$wrong_database                      = new \wpdb();
+		$wrong_database->prefix              = 'wp_2_';
+		$wrong_database->options             = 'wp_2_options';
+		$wrong_database->posts               = 'wp_2_posts';
+		$wrong_database->postmeta            = 'wp_2_postmeta';
+		$GLOBALS['wpdb']                     = $origin_database;
+		WordPressTestState::$current_blog_id = 1;
+
+		Repository::install();
+		$storage_context = ActivityRepository::capture_storage_context();
+		$this->assertNotInstanceOf( \WP_Error::class, $storage_context );
+
+		$switched                              = false;
+		$failure_event                         = null;
+		$logging_filter_calls                  = 0;
+		$failure_observer                      = static function ( array $event ) use ( &$failure_event ): void {
+			$failure_event = $event;
+		};
+		$logging_observer                      = static function ( bool $enabled ) use ( &$logging_filter_calls ): bool {
+			++$logging_filter_calls;
+
+			return false;
+		};
+		$origin_database->before_option_insert = static function () use ( $wrong_database, &$switched ): void {
+			$switched                            = true;
+			$GLOBALS['wpdb']                     = $wrong_database;
+			WordPressTestState::$current_blog_id = 2;
+			WordPressTestState::$home_url        = 'https://wrong-site.example';
+		};
+		add_action( 'flavor_agent_attestation_record_failed', $failure_observer );
+		add_filter( 'flavor_agent_attestation_failure_logging_enabled', $logging_observer );
+		WordPressTestState::$option_insert_fails = true;
+
+		try {
+			$result = AttestationService::record_apply( $this->apply_context(), $storage_context );
+		} finally {
+			WordPressTestState::$option_insert_fails = false;
+			remove_action( 'flavor_agent_attestation_record_failed', $failure_observer );
+			remove_filter( 'flavor_agent_attestation_failure_logging_enabled', $logging_observer );
+			$GLOBALS['wpdb']                     = $original_database;
+			WordPressTestState::$current_blog_id = $original_blog;
+			WordPressTestState::$home_url        = $original_home;
+		}
+
+		$this->assertTrue( $switched );
+		$this->assertSame( RecordResult::STATUS_FAILED, $result->status() );
+		$this->assertSame( 'signing_failed', $result->error_code() );
+		$this->assertNull( $failure_event );
+		$this->assertSame( 0, $logging_filter_calls );
+		$this->assertNull( Repository::find_by_related_activity( 'act_9', $storage_context ) );
+		$this->assertSame( [], KeyManager::jwks( $storage_context )['keys'] );
 	}
 
 	public function test_record_apply_returns_not_configured_without_key(): void {

@@ -394,6 +394,45 @@ final class ActivitySerializerTest extends TestCase {
 		$this->assertSame( 'not_applicable', $entry['undo']['status'] );
 	}
 
+	public function test_hydrate_row_redacts_every_non_exact_claim_prefixed_execution_result(): void {
+		$row = [
+			'activity_id'      => 'apply-row-claim',
+			'surface'          => 'global-styles',
+			'activity_type'    => 'apply_global_styles_suggestion',
+			'request_json'     => '{"apply":{"status":"pending"}}',
+			'execution_result' => 'claim:' . str_repeat( 'a', 24 ),
+			'undo_state'       => '{"status":"not_applicable"}',
+			'created_at'       => '2026-06-10 01:00:00',
+		];
+
+		$claimed = Serializer::hydrate_row( $row );
+		$this->assertSame( 'pending', $claimed['executionResult'] );
+
+		$row['execution_result'] = 'claim:not-an-owner-token';
+		$malformed               = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $malformed['executionResult'] );
+
+		$row['execution_result'] = 'CLAIM:' . str_repeat( 'A', 24 );
+		$uppercase               = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $uppercase['executionResult'] );
+
+		$row['execution_result'] = ' claim:' . str_repeat( 'b', 24 );
+		$leading_space           = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $leading_space['executionResult'] );
+
+		$row['execution_result'] = 'claim:' . str_repeat( 'c', 24 ) . ' ';
+		$trailing_space          = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $trailing_space['executionResult'] );
+
+		$row['execution_result'] = 'claim:' . str_repeat( 'd', 24 ) . "\n";
+		$trailing_lf             = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $trailing_lf['executionResult'] );
+
+		$row['execution_result'] = 'claim:' . str_repeat( 'e', 24 ) . "\r\n";
+		$trailing_crlf           = Serializer::hydrate_row( $row );
+		$this->assertSame( 'invalid', $trailing_crlf['executionResult'] );
+	}
+
 	public function test_hydrate_row_does_not_query_attestation_storage(): void {
 		AttestationRepository::install();
 		AttestationRepository::insert(

@@ -178,8 +178,8 @@ git commit -m "feat(attestation): extract Canonicalizer as single source of trut
 - Test: `tests/phpunit/AttestationKeyManagerTest.php`
 
 **Interfaces:**
-- Produces: `KeyManager::configured(): bool`, `private_key(): ?string` (64-byte sodium secret), `public_key(): ?string` (32-byte), `key_id(): ?string`, `ensure_registered(): void`, `jwks(): array`, `b64url(string $b): string`.
-- Consumes: the `FLAVOR_AGENT_ATTEST_PRIVATE_KEY` constant; `get_option`/`update_option` (stubbed by `WordPressTestState::$options`).
+- Produces: `KeyManager::configured(): bool`, `private_key(): ?string` (64-byte sodium secret), `public_key(?string $private_key = null): ?string` (32-byte), `key_id(?string $public_key = null): ?string`, `ensure_registered(?ActivityStorageContext $context = null, ?string $public_key = null, ?string $key_id = null): bool`, `jwks(?ActivityStorageContext $context = null): array`, `b64url(string $b): string`.
+- Consumes: the `FLAVOR_AGENT_ATTEST_PRIVATE_KEY` constant and either the captured activity storage context or the current authoritative options table. Key registration failure is fatal to signing; public JWKS reads bypass stale option-cache misses.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -202,7 +202,7 @@ final class AttestationKeyManagerTest extends TestCase {
         $sk = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
         add_filter( 'flavor_agent_attest_private_key', static fn() => $sk );
         $this->assertTrue( KeyManager::configured() );
-        KeyManager::ensure_registered();
+        $this->assertTrue( KeyManager::ensure_registered() );
         $jwks = KeyManager::jwks();
         $this->assertSame( 'OKP', $jwks['keys'][0]['kty'] );
         $this->assertSame( 'Ed25519', $jwks['keys'][0]['crv'] );
@@ -223,6 +223,9 @@ Expected: FAIL — class not found.
 declare(strict_types=1);
 namespace FlavorAgent\Attestation;
 
+use FlavorAgent\Activity\ActivityStorageContext;
+use FlavorAgent\Activity\Repository as ActivityRepository;
+
 final class KeyManager {
     private const REGISTRY_OPTION = 'flavor_agent_attestation_public_keys';
 
@@ -241,26 +244,26 @@ final class KeyManager {
         return null !== self::private_key();
     }
 
-    public static function public_key(): ?string {
-        $sk = self::private_key();
+    public static function public_key( ?string $private_key = null ): ?string {
+        $sk = $private_key ?? self::private_key();
         return null === $sk ? null : sodium_crypto_sign_publickey_from_secretkey( $sk );
     }
 
-    public static function key_id(): ?string {
-        $pk = self::public_key();
-        return null === $pk ? null : substr( hash( 'sha256', $pk ), 0, 16 );
+    public static function key_id( ?string $public_key = null ): ?string {
+        $pk = $public_key ?? self::public_key();
+        return null === $pk ? null : substr( hash( 'sha256', $pk ), 0, 32 );
     }
 
-    public static function ensure_registered(): void {
-        $pk  = self::public_key();
-        $kid = self::key_id();
+    public static function ensure_registered( ?ActivityStorageContext $context = null, ?string $public_key = null, ?string $key_id = null ): bool {
+        $pk  = $public_key ?? self::public_key();
+        $kid = $key_id ?? ( null !== $pk ? self::key_id( $pk ) : null );
         if ( null === $pk || null === $kid ) {
-            return;
+            return false;
         }
-        $registry = \get_option( self::REGISTRY_OPTION, [] );
+        $registry = null !== $context ? $context->read_option( self::REGISTRY_OPTION, [] ) : \get_option( self::REGISTRY_OPTION, [] );
         $registry = is_array( $registry ) ? $registry : [];
         if ( isset( $registry[ $kid ] ) ) {
-            return;
+            return true;
         }
         foreach ( $registry as $id => $rec ) {
             if ( 'active' === ( $rec['status'] ?? '' ) ) {
@@ -268,11 +271,17 @@ final class KeyManager {
             }
         }
         $registry[ $kid ] = [ 'kid' => $kid, 'x' => self::b64url( $pk ), 'status' => 'active', 'createdAt' => gmdate( 'c' ) ];
-        \update_option( self::REGISTRY_OPTION, $registry, false );
+        return null !== $context
+            ? $context->write_option( self::REGISTRY_OPTION, $registry, false )
+            : \update_option( self::REGISTRY_OPTION, $registry, false );
     }
 
-    public static function jwks(): array {
-        $registry = \get_option( self::REGISTRY_OPTION, [] );
+    public static function jwks( ?ActivityStorageContext $context = null ): array {
+        if ( null === $context ) {
+            $captured = ActivityRepository::capture_storage_context();
+            $context  = $captured instanceof ActivityStorageContext ? $captured : null;
+        }
+        $registry = null !== $context ? $context->read_option( self::REGISTRY_OPTION, [] ) : \get_option( self::REGISTRY_OPTION, [] );
         $keys     = [];
         foreach ( ( is_array( $registry ) ? $registry : [] ) as $rec ) {
             $keys[] = [ 'kty' => 'OKP', 'crv' => 'Ed25519', 'x' => (string) $rec['x'], 'kid' => (string) $rec['kid'], 'use' => 'sig', 'alg' => 'EdDSA' ];
@@ -358,7 +367,10 @@ final class Signer {
         if ( null === $sk ) {
             return null;
         }
-        KeyManager::ensure_registered();
+        if ( ! KeyManager::ensure_registered() ) {
+            sodium_memzero( $sk );
+            return null;
+        }
         return [
             'statement' => $canonical_statement,
             'signature' => sodium_crypto_sign_detached( $canonical_statement, $sk ),
