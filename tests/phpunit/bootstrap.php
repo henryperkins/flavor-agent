@@ -1677,17 +1677,41 @@ namespace {
 						return false;
 					}
 
-					if (
-						! array_key_exists($option_name, WordPressTestState::$options)
-						|| (string) WordPressTestState::$options[$option_name] !== $option_value
-					) {
-						return 0;
-					}
+					if ('wp_options' !== $table) {
+						$rows    = WordPressTestState::$db_tables[$table] ?? [];
+						$deleted = false;
 
-					unset(
-						WordPressTestState::$options[$option_name],
-						WordPressTestState::$option_autoload[$option_name]
-					);
+						foreach ($rows as $index => $row) {
+							if (
+								$option_name !== (string) ($row['option_name'] ?? '')
+								|| $option_value !== (string) ($row['option_value'] ?? '')
+							) {
+								continue;
+							}
+
+							unset($rows[$index]);
+							$deleted = true;
+							break;
+						}
+
+						if (! $deleted) {
+							return 0;
+						}
+
+						WordPressTestState::$db_tables[$table] = array_values($rows);
+					} else {
+						if (
+							! array_key_exists($option_name, WordPressTestState::$options)
+							|| (string) WordPressTestState::$options[$option_name] !== $option_value
+						) {
+							return 0;
+						}
+
+						unset(
+							WordPressTestState::$options[$option_name],
+							WordPressTestState::$option_autoload[$option_name]
+						);
+					}
 
 					$hook = WordPressTestState::$after_materialization_lock_delete;
 
@@ -1924,6 +1948,8 @@ namespace {
 						}
 					}
 
+					$post = WordPressTestState::$posts[$post_id] ?? null;
+
 					if (! is_object($post)) {
 						return 0;
 					}
@@ -2148,6 +2174,20 @@ namespace {
 							array_filter(
 								$rows,
 								static fn(array $row): bool => (int) ($row['ID'] ?? 0) === $post_id
+							)
+						);
+					}
+
+					foreach (['post_type', 'post_name', 'post_status'] as $column) {
+						if (! preg_match("/\\b{$column}\\s*=\\s*'((?:\\\\'|[^'])*)'/i", $query, $column_match)) {
+							continue;
+						}
+
+						$expected = stripslashes((string) ($column_match[1] ?? ''));
+						$rows     = array_values(
+							array_filter(
+								$rows,
+								static fn(array $row): bool => (string) ($row[$column] ?? '') === $expected
 							)
 						);
 					}
@@ -2777,8 +2817,14 @@ namespace {
 					if (null !== $current_value) {
 						return false;
 					}
-				} elseif (! $this->guarded_digest_matches($query, '`meta_value`', (string) $current_value)) {
-					return false;
+				} else {
+					$stored_value = is_string($current_value)
+						? $current_value
+						: maybe_serialize($current_value);
+
+					if (! is_string($stored_value) || ! $this->guarded_digest_matches($query, '`meta_value`', $stored_value)) {
+						return false;
+					}
 				}
 
 				return $this->guarded_digest_matches(
@@ -4356,8 +4402,9 @@ namespace {
 			);
 			$current_exists = [] !== $meta_rows;
 			$current_value  = $current_exists ? ($meta_rows[0]['meta_value'] ?? null) : null;
+			$serialized_meta_value = maybe_serialize($meta_value);
 
-			if (empty($prev_value) && $current_exists && $current_value === $meta_value) {
+			if (empty($prev_value) && $current_exists && $current_value === $serialized_meta_value) {
 				return false;
 			}
 
@@ -4366,7 +4413,6 @@ namespace {
 			}
 
 			$meta_id = (int) ($meta_rows[0]['meta_id'] ?? flavor_agent_test_meta_id($object_id, $meta_key));
-			$serialized_meta_value = maybe_serialize($meta_value);
 			do_action("update_{$meta_type}_meta", $meta_id, $object_id, $meta_key, $meta_value);
 			do_action('update_postmeta', $meta_id, $object_id, $meta_key, $meta_value);
 			$where = [
@@ -5467,7 +5513,30 @@ namespace {
 	if (! function_exists('add_option')) {
 		function add_option(string $name, $value = '', string $deprecated = '', $autoload = 'yes'): bool
 		{
+			global $wpdb;
+
 			unset($deprecated);
+
+			$table = is_object($wpdb) && isset($wpdb->options) ? (string) $wpdb->options : 'wp_options';
+
+			if ('wp_options' !== $table) {
+				$rows = WordPressTestState::$db_tables[$table] ?? [];
+
+				foreach ($rows as $row) {
+					if ($name === (string) ($row['option_name'] ?? '')) {
+						return false;
+					}
+				}
+
+				$rows[] = [
+					'option_name'  => $name,
+					'option_value' => $value,
+					'autoload'     => $autoload,
+				];
+				WordPressTestState::$db_tables[$table] = $rows;
+
+				return true;
+			}
 
 			if (array_key_exists($name, WordPressTestState::$options)) {
 				return false;

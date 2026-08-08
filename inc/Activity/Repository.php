@@ -1701,6 +1701,7 @@ final class Repository {
 			|| ! isset( $wpdb->prefix )
 			|| ! is_callable( [ $wpdb, 'prepare' ] )
 			|| ! is_callable( [ $wpdb, 'get_row' ] )
+			|| ! is_callable( [ $wpdb, 'get_results' ] )
 			|| ! is_callable( [ $wpdb, 'get_var' ] )
 			|| ! is_callable( [ $wpdb, 'insert' ] )
 			|| ! is_callable( [ $wpdb, 'update' ] )

@@ -22,28 +22,28 @@ final class Signer {
 			return null;
 		}
 
-		$public_key = KeyManager::public_key( $sk );
-		$key_id     = null !== $public_key ? KeyManager::key_id( $public_key ) : null;
+		try {
+			$public_key = KeyManager::public_key( $sk );
+			$key_id     = null !== $public_key ? KeyManager::key_id( $public_key ) : null;
 
-		if ( null === $public_key || null === $key_id ) {
-			return null;
-		}
+			if ( null === $public_key || null === $key_id ) {
+				return null;
+			}
 
-		if ( ! KeyManager::ensure_registered( $storage_context, $public_key, $key_id ) ) {
+			if ( ! KeyManager::ensure_registered( $storage_context, $public_key, $key_id ) ) {
+				return null;
+			}
+
+			$signature = sodium_crypto_sign_detached( $canonical_statement, $sk );
+
+			return [
+				'statement' => $canonical_statement,
+				'signature' => $signature,
+				'keyId'     => $key_id,
+			];
+		} finally {
 			sodium_memzero( $sk );
-
-			return null;
 		}
-
-		$signature = sodium_crypto_sign_detached( $canonical_statement, $sk );
-
-		sodium_memzero( $sk );
-
-		return [
-			'statement' => $canonical_statement,
-			'signature' => $signature,
-			'keyId'     => $key_id,
-		];
 	}
 
 	public static function verify( string $canonical_statement, string $signature, string $public_key ): bool {

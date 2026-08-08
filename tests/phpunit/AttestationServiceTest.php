@@ -57,6 +57,26 @@ final class AttestationServiceTest extends TestCase {
 		$this->assertNull( $result->error_code() );
 	}
 
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_record_apply_clears_the_signer_and_service_private_key_copies(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- A process-local namespace shim is the only observable boundary for the native in-memory zeroing side effect.
+		eval(
+			'namespace FlavorAgent\\Attestation; function sodium_memzero( string &$value ): void {'
+			. ' ++$GLOBALS["flavor_agent_service_memzero_calls"]; \\sodium_memzero( $value ); }'
+		);
+		$GLOBALS['flavor_agent_service_memzero_calls'] = 0;
+		$this->configure_key();
+		Repository::install();
+
+		$result = AttestationService::record_apply( $this->apply_context() );
+
+		$this->assertSame( RecordResult::STATUS_RECORDED, $result->status() );
+		$this->assertSame( 2, $GLOBALS['flavor_agent_service_memzero_calls'] );
+	}
+
 	public function test_record_apply_invalidates_a_cached_missing_key_registry(): void {
 		$this->configure_key();
 		Repository::install();

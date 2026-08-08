@@ -172,6 +172,15 @@ final class MaterializationLock {
 	 * Operator-only owner-qualified recovery after independently confirming that
 	 * the request is inactive and reconciling the live target.
 	 *
+	 * The caller must read the exact raw option_value directly from the current
+	 * option row named by lockOptionName; contention diagnostics intentionally do
+	 * not expose that owner value. Surface must be `template` or `template-part`,
+	 * and the canonical reference must exactly match the `{stylesheet}//{slug}`
+	 * value used for acquisition.
+	 *
+	 * @param string $surface Governed template surface (`template` or `template-part`).
+	 * @param string $canonical_ref Exact `{stylesheet}//{slug}` canonical reference used for acquisition.
+	 * @param string $observed_owner Exact raw option_value observed directly in the database.
 	 * @return true|\WP_Error
 	 */
 	public static function recover_abandoned( string $surface, string $canonical_ref, string $observed_owner ): true|\WP_Error {

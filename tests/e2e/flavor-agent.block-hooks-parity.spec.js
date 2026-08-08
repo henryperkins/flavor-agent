@@ -1,5 +1,8 @@
 const { test, expect } = require( '@playwright/test' );
 const { getWp70HarnessConfig, runWpCli } = require( '../../scripts/wp70-e2e' );
+const {
+	parseBlockHooksParityProbeOutput,
+} = require( '../../scripts/block-hooks-parity-probe' );
 
 const harness = getWp70HarnessConfig();
 
@@ -166,6 +169,9 @@ $hook_filter = static function ( array $hooked, string $position, $anchor, $cont
 	return $hooked;
 };
 add_filter( 'hooked_block_types', $hook_filter, 10, 4 );
+
+$payload = null;
+$failure = null;
 
 try {
 	$template_source = \\FlavorAgent\\Context\\ServerCollector::resolve_template_for_apply( $template_ref );
@@ -429,16 +435,21 @@ try {
 			),
 		),
 	);
+} catch ( \\Throwable $error ) {
+	$failure = array(
+		'class'   => get_class( $error ),
+		'message' => $error->getMessage(),
+	);
 } finally {
 	remove_filter( 'hooked_block_types', $hook_filter, 10 );
 	$cleanup_rows();
 }
 
-echo wp_json_encode( $payload );
+echo wp_json_encode( null !== $failure ? array( 'probeError' => $failure ) : $payload );
 `,
 	] );
 
-	return JSON.parse( result.stdout.trim() );
+	return parseBlockHooksParityProbeOutput( result.stdout.trim() );
 }
 
 test( '@wp70-site-editor template and template-part writes preserve real Block Hooks semantics through undo', () => {

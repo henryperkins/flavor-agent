@@ -302,8 +302,8 @@ final class PostBlocksApplyExecutor implements ExternalApplyExecutor {
 		$persisted = self::persist(
 			$post_id,
 			$identity['target']['postType'],
-			(string) ( $post->post_name ?? '' ),
-			(string) ( $post->post_content ?? '' ),
+			(string) ( $unchanged->post_name ?? '' ),
+			(string) ( $unchanged->post_content ?? '' ),
 			(string) $before['content'],
 			$write_context
 		);

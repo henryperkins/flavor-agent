@@ -88,7 +88,11 @@ final class AttestationService {
 				'supersedesAttestationId' => '' !== $supersedes ? $supersedes : null,
 			]
 		);
-		$signed         = Signer::sign( $statement, $storage_context, $private_key );
+		try {
+			$signed = Signer::sign( $statement, $storage_context, $private_key );
+		} finally {
+			sodium_memzero( $private_key );
+		}
 
 		if ( null === $signed ) {
 			return self::failed_result(

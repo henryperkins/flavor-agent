@@ -137,16 +137,31 @@ final class MaterializationLockTest extends TestCase {
 	public function test_operator_recovery_captures_the_owner_site_before_capability_filters_run(): void {
 		$lock = MaterializationLock::acquire( 'template', 'twentytwentyfive//home' );
 		$this->assertInstanceOf( MaterializationLock::class, $lock );
-		$owned      = self::lock_options();
-		$origin_key = (string) array_key_first( $owned );
-		$owner      = (string) $owned[ $origin_key ];
-		$wrong_key  = 'flavor_agent_materialization_lock_' . hash(
-			'sha256',
-			"2\0template\0twentytwentyfive//home"
-		);
+		$owned         = self::lock_options();
+		$origin_key    = (string) array_key_first( $owned );
+		$owner         = (string) $owned[ $origin_key ];
+		$original_blog = WordPressTestState::$current_blog_id;
+		$wrong_key     = '';
+		$wrong_lock    = null;
+
+		try {
+			WordPressTestState::$current_blog_id = 2;
+			$wrong_lock                          = MaterializationLock::acquire( 'template', 'twentytwentyfive//home' );
+			$this->assertInstanceOf( MaterializationLock::class, $wrong_lock );
+			$wrong_site_options = array_diff_key( self::lock_options(), $owned );
+			$this->assertCount( 1, $wrong_site_options );
+			$wrong_key = (string) array_key_first( $wrong_site_options );
+		} finally {
+			if ( $wrong_lock instanceof MaterializationLock ) {
+				$wrong_lock->release();
+			}
+			WordPressTestState::$current_blog_id = $original_blog;
+		}
+
+		$this->assertNotSame( '', $wrong_key );
+		$this->assertSame( $owned, self::lock_options() );
 
 		$original_database                             = $GLOBALS['wpdb'];
-		$original_blog                                 = WordPressTestState::$current_blog_id;
 		$wrong_database                                = new \wpdb();
 		$wrong_database->prefix                        = 'wp_2_';
 		$wrong_database->options                       = 'wp_2_options';

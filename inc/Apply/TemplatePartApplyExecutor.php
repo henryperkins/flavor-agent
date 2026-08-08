@@ -963,10 +963,12 @@ final class TemplatePartApplyExecutor implements ExternalApplyExecutor {
 			);
 		}
 
-		$content = self::resolve_persisted_content( $post_id, $context );
+		// Prove the raw stored row still exists under the expected post type. The
+		// entity view below is the semantic content source, including Block Hooks.
+		$stored_row_proof = self::resolve_persisted_content( $post_id, $context );
 
-		if ( is_wp_error( $content ) ) {
-			return $content;
+		if ( is_wp_error( $stored_row_proof ) ) {
+			return $stored_row_proof;
 		}
 
 		return [

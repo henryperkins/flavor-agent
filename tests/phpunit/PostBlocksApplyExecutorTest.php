@@ -1152,6 +1152,30 @@ final class PostBlocksApplyExecutorTest extends TestCase {
 		);
 	}
 
+	public function test_undo_uses_the_final_post_read_as_its_guarded_write_baseline(): void {
+		$before           = $this->paragraph( 'Keep' ) . $this->paragraph( 'Drop' );
+		$after            = $this->paragraph( 'Keep' );
+		$equivalent_after = '<!--   wp:paragraph   --><p>Keep</p><!-- /wp:paragraph -->';
+		$post_id          = 9373;
+		$this->seed_post( $post_id, $after );
+		WordPressTestState::$posts[ $post_id ]->post_name = 'original-slug';
+		WordPressTestState::$before_get_post              = static function () use ( $equivalent_after, $post_id ): void {
+			WordPressTestState::$before_get_post = static function () use ( $equivalent_after, $post_id ): void {
+				$fresh               = clone WordPressTestState::$posts[ $post_id ];
+				$fresh->post_name    = 'renamed-slug';
+				$fresh->post_content = $equivalent_after;
+
+				WordPressTestState::$posts[ $post_id ] = $fresh;
+			};
+		};
+
+		$result = PostBlocksApplyExecutor::undo( self::executed_entry( $post_id, $before, $after ) );
+
+		$this->assertSame( [ 'result' => 'undone' ], $result );
+		$this->assertSame( $before, $this->live_content( $post_id ) );
+		$this->assertSame( 'renamed-slug', WordPressTestState::$posts[ $post_id ]->post_name );
+	}
+
 	public function test_undo_does_not_overwrite_a_concurrent_content_change_at_the_database_boundary(): void {
 		$before     = $this->paragraph( 'Keep' ) . $this->paragraph( 'Drop' );
 		$after      = $this->paragraph( 'Keep' );

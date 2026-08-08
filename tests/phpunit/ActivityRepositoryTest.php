@@ -57,6 +57,42 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	public function test_capture_storage_context_rejects_a_database_without_get_results(): void {
+		$original_wpdb   = $GLOBALS['wpdb'] ?? null;
+		$GLOBALS['wpdb'] = new class() {
+			public string $prefix = 'wp_';
+
+			public function prepare(): string {
+				return '';
+			}
+
+			public function get_row(): null {
+				return null;
+			}
+
+			public function get_var(): null {
+				return null;
+			}
+
+			public function insert(): int {
+				return 1;
+			}
+
+			public function update(): int {
+				return 1;
+			}
+		};
+
+		try {
+			$result = Repository::capture_storage_context();
+		} finally {
+			$GLOBALS['wpdb'] = $original_wpdb;
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_activity_storage_unavailable', $result->get_error_code() );
+	}
+
 	public function test_create_and_query_return_structured_entries_for_scope(): void {
 		Repository::install();
 

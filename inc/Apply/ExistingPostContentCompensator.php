@@ -107,7 +107,9 @@ final class ExistingPostContentCompensator {
 			);
 		}
 
-		if ( 1 !== (int) $restored ) {
+		// Zero changed rows can mean the exact prior bytes are already present.
+		// Let the context-bound read-back prove that safe idempotent outcome.
+		if ( ! in_array( (int) $restored, [ 0, 1 ], true ) ) {
 			return self::recovery_required(
 				$surface,
 				$post_id,
