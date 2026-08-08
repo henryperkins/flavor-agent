@@ -77,6 +77,63 @@ final class AttestationServiceTest extends TestCase {
 		$this->assertSame( 2, $GLOBALS['flavor_agent_service_memzero_calls'] );
 	}
 
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_record_apply_clears_the_service_private_key_when_public_key_derivation_throws(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- Process-local namespace shims expose the native failure and zeroing boundaries.
+		eval(
+			'namespace FlavorAgent\\Attestation; function sodium_crypto_sign_publickey_from_secretkey( string $value ): string {'
+			. ' if ( str_repeat( "\\x01", \\SODIUM_CRYPTO_SIGN_SECRETKEYBYTES ) !== $value ) {'
+			. ' return \\sodium_crypto_sign_publickey_from_secretkey( $value ); }'
+			. ' throw new \\SodiumException( "Invalid private key bytes." ); }'
+			. ' function sodium_memzero( string &$value ): void {'
+			. ' ++$GLOBALS["flavor_agent_service_memzero_calls"]; \\sodium_memzero( $value ); }'
+		);
+		$GLOBALS['flavor_agent_service_memzero_calls'] = 0;
+
+		$private_key = str_repeat( "\x01", SODIUM_CRYPTO_SIGN_SECRETKEYBYTES );
+		add_filter( 'flavor_agent_attest_private_key', static fn (): string => base64_encode( $private_key ) );
+
+		try {
+			AttestationService::record_apply( $this->apply_context() );
+			$this->fail( 'Expected invalid private-key bytes to fail public-key derivation.' );
+		} catch ( \SodiumException $error ) {
+			$this->assertSame( 'Invalid private key bytes.', $error->getMessage() );
+		}
+
+		$this->assertSame( 1, $GLOBALS['flavor_agent_service_memzero_calls'] );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_record_apply_clears_the_service_private_key_when_lane_validation_throws(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- A process-local namespace shim is the only observable boundary for the native in-memory zeroing side effect.
+		eval(
+			'namespace FlavorAgent\\Attestation; function sodium_memzero( string &$value ): void {'
+			. ' ++$GLOBALS["flavor_agent_service_memzero_calls"]; \\sodium_memzero( $value ); }'
+		);
+		$GLOBALS['flavor_agent_service_memzero_calls'] = 0;
+		$this->configure_key();
+		$context            = $this->apply_context();
+		$context['surface'] = 'post-blocks';
+
+		try {
+			AttestationService::record_apply( $context );
+			$this->fail( 'Expected the unsupported surface to fail owned-lane validation.' );
+		} catch ( \InvalidArgumentException $error ) {
+			$this->assertSame(
+				'Flavor Agent only attests governed external style, template, and template-part apply lanes.',
+				$error->getMessage()
+			);
+		}
+
+		$this->assertSame( 1, $GLOBALS['flavor_agent_service_memzero_calls'] );
+	}
+
 	public function test_record_apply_invalidates_a_cached_missing_key_registry(): void {
 		$this->configure_key();
 		Repository::install();

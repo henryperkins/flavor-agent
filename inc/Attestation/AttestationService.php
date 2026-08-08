@@ -33,63 +33,63 @@ final class AttestationService {
 			return RecordResult::not_configured();
 		}
 
-		$public_key = KeyManager::public_key( $private_key );
-		$key_id     = null !== $public_key ? KeyManager::key_id( $public_key ) : null;
-
-		if ( null === $public_key || null === $key_id ) {
-			return RecordResult::failed( 'signing_failed' );
-		}
-
-		self::assert_owned_lane_context( $ctx );
-
-		$surface         = trim( (string) $ctx['surface'] );
-		$subject_context = self::subject_context( $surface, $ctx );
-		$scope           = $subject_context['scope'];
-		$subject         = $subject_context['subject'];
-		$before_dig      = $subject_context['beforeDigest'];
-		$after_dig       = $subject_context['afterDigest'];
-		$decision        = (string) ( $ctx['decision'] ?? 'approve' );
-		$supersedes      = isset( $ctx['supersedesAttestationId'] ) ? trim( (string) $ctx['supersedesAttestationId'] ) : '';
-
-		if ( '' === $supersedes && 'revert' !== $decision ) {
-			$prior = Repository::find_latest_by_subject( $subject, $storage_context );
-
-			if ( is_array( $prior ) ) {
-				$supersedes = trim( (string) ( $prior['attestation_id'] ?? '' ) );
-			}
-		}
-
-		$attestation_id = 'att_' . bin2hex( random_bytes( 16 ) );
-		$statement      = StatementBuilder::build(
-			[
-				'attestationId'           => $attestation_id,
-				'surface'                 => $surface,
-				'scope'                   => $scope,
-				'subjectName'             => $subject,
-				'governanceClaim'         => self::GOVERNANCE_CLAIM,
-				'governanceLane'          => self::lane_for_surface( $surface ),
-				'approvalSurface'         => self::GOVERNANCE_APPROVAL_SURFACE,
-				'executor'                => self::executor_for_surface( $surface ),
-				'operations'              => is_array( $ctx['operations'] ?? null ) ? $ctx['operations'] : [],
-				'beforeDigest'            => $before_dig,
-				'afterDigest'             => $after_dig,
-				'freshnessSignature'      => (string) ( $ctx['freshnessSignature'] ?? '' ),
-				'actorRole'               => (string) ( $ctx['actorRole'] ?? '' ),
-				'proposerVia'             => 'mcp/flavor-agent',
-				'decision'                => $decision,
-				'requestedAt'             => (string) ( $ctx['requestedAt'] ?? '' ),
-				'decidedAt'               => (string) ( $ctx['decidedAt'] ?? '' ),
-				'siteUrl'                 => null !== $storage_context
-					? $storage_context->site_url()
-					: (string) ( function_exists( 'home_url' ) ? home_url() : '' ),
-				'keyId'                   => $key_id,
-				'relatedActivityId'       => isset( $ctx['relatedActivityId'] ) ? (string) $ctx['relatedActivityId'] : null,
-				'revertsAttestationId'    => isset( $ctx['revertsAttestationId'] ) ? (string) $ctx['revertsAttestationId'] : null,
-				'supersedesAttestationId' => '' !== $supersedes ? $supersedes : null,
-			]
-		);
 		try {
-			$signed = Signer::sign( $statement, $storage_context, $private_key );
+			$public_key = KeyManager::public_key( $private_key );
+			$key_id     = null !== $public_key ? KeyManager::key_id( $public_key ) : null;
+
+			if ( null === $public_key || null === $key_id ) {
+				return RecordResult::failed( 'signing_failed' );
+			}
+
+			self::assert_owned_lane_context( $ctx );
+
+			$surface         = trim( (string) $ctx['surface'] );
+			$subject_context = self::subject_context( $surface, $ctx );
+			$scope           = $subject_context['scope'];
+			$subject         = $subject_context['subject'];
+			$before_dig      = $subject_context['beforeDigest'];
+			$after_dig       = $subject_context['afterDigest'];
+			$decision        = (string) ( $ctx['decision'] ?? 'approve' );
+			$supersedes      = isset( $ctx['supersedesAttestationId'] ) ? trim( (string) $ctx['supersedesAttestationId'] ) : '';
+
+			if ( '' === $supersedes && 'revert' !== $decision ) {
+				$prior = Repository::find_latest_by_subject( $subject, $storage_context );
+
+				if ( is_array( $prior ) ) {
+					$supersedes = trim( (string) ( $prior['attestation_id'] ?? '' ) );
+				}
+			}
+
+			$attestation_id = 'att_' . bin2hex( random_bytes( 16 ) );
+			$statement      = StatementBuilder::build(
+				[
+					'attestationId'           => $attestation_id,
+					'surface'                 => $surface,
+					'scope'                   => $scope,
+					'subjectName'             => $subject,
+					'governanceClaim'         => self::GOVERNANCE_CLAIM,
+					'governanceLane'          => self::lane_for_surface( $surface ),
+					'approvalSurface'         => self::GOVERNANCE_APPROVAL_SURFACE,
+					'executor'                => self::executor_for_surface( $surface ),
+					'operations'              => is_array( $ctx['operations'] ?? null ) ? $ctx['operations'] : [],
+					'beforeDigest'            => $before_dig,
+					'afterDigest'             => $after_dig,
+					'freshnessSignature'      => (string) ( $ctx['freshnessSignature'] ?? '' ),
+					'actorRole'               => (string) ( $ctx['actorRole'] ?? '' ),
+					'proposerVia'             => 'mcp/flavor-agent',
+					'decision'                => $decision,
+					'requestedAt'             => (string) ( $ctx['requestedAt'] ?? '' ),
+					'decidedAt'               => (string) ( $ctx['decidedAt'] ?? '' ),
+					'siteUrl'                 => null !== $storage_context
+						? $storage_context->site_url()
+						: (string) ( function_exists( 'home_url' ) ? home_url() : '' ),
+					'keyId'                   => $key_id,
+					'relatedActivityId'       => isset( $ctx['relatedActivityId'] ) ? (string) $ctx['relatedActivityId'] : null,
+					'revertsAttestationId'    => isset( $ctx['revertsAttestationId'] ) ? (string) $ctx['revertsAttestationId'] : null,
+					'supersedesAttestationId' => '' !== $supersedes ? $supersedes : null,
+				]
+			);
+			$signed         = Signer::sign( $statement, $storage_context, $private_key );
 		} finally {
 			sodium_memzero( $private_key );
 		}
