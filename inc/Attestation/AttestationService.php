@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Attestation;
 
+use FlavorAgent\Activity\ActivityStorageContext;
+
 /**
  * Records self-signed site-key attestations for Flavor Agent's owned
  * governed external-apply lanes.
@@ -24,65 +26,81 @@ final class AttestationService {
 	 * Record a signed attestation for an approved governed external-apply lane.
 	 * @param array<string, mixed> $ctx
 	 */
-	public static function record_apply( array $ctx ): RecordResult {
-		if ( ! KeyManager::configured() ) {
+	public static function record_apply( array $ctx, ?ActivityStorageContext $storage_context = null ): RecordResult {
+		$private_key = KeyManager::private_key();
+
+		if ( null === $private_key ) {
 			return RecordResult::not_configured();
 		}
 
-		self::assert_owned_lane_context( $ctx );
+		try {
+			$public_key = KeyManager::public_key( $private_key );
+			$key_id     = null !== $public_key ? KeyManager::key_id( $public_key ) : null;
 
-		$surface         = trim( (string) $ctx['surface'] );
-		$subject_context = self::subject_context( $surface, $ctx );
-		$scope           = $subject_context['scope'];
-		$subject         = $subject_context['subject'];
-		$before_dig      = $subject_context['beforeDigest'];
-		$after_dig       = $subject_context['afterDigest'];
-		$decision        = (string) ( $ctx['decision'] ?? 'approve' );
-		$supersedes      = isset( $ctx['supersedesAttestationId'] ) ? trim( (string) $ctx['supersedesAttestationId'] ) : '';
-
-		if ( '' === $supersedes && 'revert' !== $decision ) {
-			$prior = Repository::find_latest_by_subject( $subject );
-
-			if ( is_array( $prior ) ) {
-				$supersedes = trim( (string) ( $prior['attestation_id'] ?? '' ) );
+			if ( null === $public_key || null === $key_id ) {
+				return RecordResult::failed( 'signing_failed' );
 			}
-		}
 
-		$attestation_id = 'att_' . bin2hex( random_bytes( 16 ) );
-		$statement      = StatementBuilder::build(
-			[
-				'attestationId'           => $attestation_id,
-				'surface'                 => $surface,
-				'scope'                   => $scope,
-				'subjectName'             => $subject,
-				'governanceClaim'         => self::GOVERNANCE_CLAIM,
-				'governanceLane'          => self::lane_for_surface( $surface ),
-				'approvalSurface'         => self::GOVERNANCE_APPROVAL_SURFACE,
-				'executor'                => self::executor_for_surface( $surface ),
-				'operations'              => is_array( $ctx['operations'] ?? null ) ? $ctx['operations'] : [],
-				'beforeDigest'            => $before_dig,
-				'afterDigest'             => $after_dig,
-				'freshnessSignature'      => (string) ( $ctx['freshnessSignature'] ?? '' ),
-				'actorRole'               => (string) ( $ctx['actorRole'] ?? '' ),
-				'proposerVia'             => 'mcp/flavor-agent',
-				'decision'                => $decision,
-				'requestedAt'             => (string) ( $ctx['requestedAt'] ?? '' ),
-				'decidedAt'               => (string) ( $ctx['decidedAt'] ?? '' ),
-				'siteUrl'                 => (string) ( function_exists( 'home_url' ) ? home_url() : '' ),
-				'keyId'                   => (string) KeyManager::key_id(),
-				'relatedActivityId'       => isset( $ctx['relatedActivityId'] ) ? (string) $ctx['relatedActivityId'] : null,
-				'revertsAttestationId'    => isset( $ctx['revertsAttestationId'] ) ? (string) $ctx['revertsAttestationId'] : null,
-				'supersedesAttestationId' => '' !== $supersedes ? $supersedes : null,
-			]
-		);
-		$signed         = Signer::sign( $statement );
+			self::assert_owned_lane_context( $ctx );
+
+			$surface         = trim( (string) $ctx['surface'] );
+			$subject_context = self::subject_context( $surface, $ctx );
+			$scope           = $subject_context['scope'];
+			$subject         = $subject_context['subject'];
+			$before_dig      = $subject_context['beforeDigest'];
+			$after_dig       = $subject_context['afterDigest'];
+			$decision        = (string) ( $ctx['decision'] ?? 'approve' );
+			$supersedes      = isset( $ctx['supersedesAttestationId'] ) ? trim( (string) $ctx['supersedesAttestationId'] ) : '';
+
+			if ( '' === $supersedes && 'revert' !== $decision ) {
+				$prior = Repository::find_latest_by_subject( $subject, $storage_context );
+
+				if ( is_array( $prior ) ) {
+					$supersedes = trim( (string) ( $prior['attestation_id'] ?? '' ) );
+				}
+			}
+
+			$attestation_id = 'att_' . bin2hex( random_bytes( 16 ) );
+			$statement      = StatementBuilder::build(
+				[
+					'attestationId'           => $attestation_id,
+					'surface'                 => $surface,
+					'scope'                   => $scope,
+					'subjectName'             => $subject,
+					'governanceClaim'         => self::GOVERNANCE_CLAIM,
+					'governanceLane'          => self::lane_for_surface( $surface ),
+					'approvalSurface'         => self::GOVERNANCE_APPROVAL_SURFACE,
+					'executor'                => self::executor_for_surface( $surface ),
+					'operations'              => is_array( $ctx['operations'] ?? null ) ? $ctx['operations'] : [],
+					'beforeDigest'            => $before_dig,
+					'afterDigest'             => $after_dig,
+					'freshnessSignature'      => (string) ( $ctx['freshnessSignature'] ?? '' ),
+					'actorRole'               => (string) ( $ctx['actorRole'] ?? '' ),
+					'proposerVia'             => 'mcp/flavor-agent',
+					'decision'                => $decision,
+					'requestedAt'             => (string) ( $ctx['requestedAt'] ?? '' ),
+					'decidedAt'               => (string) ( $ctx['decidedAt'] ?? '' ),
+					'siteUrl'                 => null !== $storage_context
+						? $storage_context->site_url()
+						: (string) ( function_exists( 'home_url' ) ? home_url() : '' ),
+					'keyId'                   => $key_id,
+					'relatedActivityId'       => isset( $ctx['relatedActivityId'] ) ? (string) $ctx['relatedActivityId'] : null,
+					'revertsAttestationId'    => isset( $ctx['revertsAttestationId'] ) ? (string) $ctx['revertsAttestationId'] : null,
+					'supersedesAttestationId' => '' !== $supersedes ? $supersedes : null,
+				]
+			);
+			$signed         = Signer::sign( $statement, $storage_context, $private_key );
+		} finally {
+			sodium_memzero( $private_key );
+		}
 
 		if ( null === $signed ) {
 			return self::failed_result(
 				'signing_failed',
 				'Flavor Agent could not sign the attestation statement.',
 				$ctx,
-				$attestation_id
+				$attestation_id,
+				$storage_context
 			);
 		}
 
@@ -99,7 +117,8 @@ final class AttestationService {
 				'reverts_attestation_id'    => isset( $ctx['revertsAttestationId'] ) ? (string) $ctx['revertsAttestationId'] : null,
 				'supersedes_attestation_id' => '' !== $supersedes ? $supersedes : null,
 				'related_activity_id'       => isset( $ctx['relatedActivityId'] ) ? (string) $ctx['relatedActivityId'] : null,
-			]
+			],
+			$storage_context
 		);
 
 		if ( ! $ok ) {
@@ -107,7 +126,8 @@ final class AttestationService {
 				'storage_failed',
 				'Flavor Agent could not persist the attestation record.',
 				$ctx,
-				$attestation_id
+				$attestation_id,
+				$storage_context
 			);
 		}
 
@@ -117,27 +137,39 @@ final class AttestationService {
 	/**
 	 * @param array<string, mixed> $ctx
 	 */
-	public static function record_revert( string $prior_attestation_id, array $ctx ): RecordResult {
+	public static function record_revert(
+		string $prior_attestation_id,
+		array $ctx,
+		?ActivityStorageContext $storage_context = null
+	): RecordResult {
 		$ctx['revertsAttestationId'] = $prior_attestation_id;
 		$ctx['decision']             = 'revert';
 
-		return self::record_apply( $ctx );
+		return self::record_apply( $ctx, $storage_context );
 	}
 
 	/**
 	 * @param array<string, mixed> $context
 	 */
-	private static function failed_result( string $error_code, string $message, array $context, string $attestation_id ): RecordResult {
-		self::record_failure(
-			new \RuntimeException( $message ),
-			[
-				'operation'            => 'revert' === (string) ( $context['decision'] ?? 'approve' ) ? 'revert' : 'apply',
-				'activityId'           => (string) ( $context['relatedActivityId'] ?? '' ),
-				'attestationId'        => $attestation_id,
-				'errorCode'            => $error_code,
-				'revertsAttestationId' => (string) ( $context['revertsAttestationId'] ?? '' ),
-			]
-		);
+	private static function failed_result(
+		string $error_code,
+		string $message,
+		array $context,
+		string $attestation_id,
+		?ActivityStorageContext $storage_context = null
+	): RecordResult {
+		if ( null === $storage_context || $storage_context->matches_current() ) {
+			self::record_failure(
+				new \RuntimeException( $message ),
+				[
+					'operation'            => 'revert' === (string) ( $context['decision'] ?? 'approve' ) ? 'revert' : 'apply',
+					'activityId'           => (string) ( $context['relatedActivityId'] ?? '' ),
+					'attestationId'        => $attestation_id,
+					'errorCode'            => $error_code,
+					'revertsAttestationId' => (string) ( $context['revertsAttestationId'] ?? '' ),
+				]
+			);
+		}
 
 		return RecordResult::failed( $error_code );
 	}

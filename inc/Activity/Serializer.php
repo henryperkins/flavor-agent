@@ -250,7 +250,7 @@ final class Serializer {
 			'request'         => self::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' ),
 			'document'        => self::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' ),
 			'timestamp'       => $timestamp,
-			'executionResult' => self::normalize_string( $row['execution_result'] ?? 'applied' ),
+			'executionResult' => self::normalize_execution_result_for_read( $row['execution_result'] ?? 'applied' ),
 			'undo'            => $undo,
 			'userId'          => $user_id,
 			'userLabel'       => self::resolve_user_label( $user_id ),
@@ -433,6 +433,17 @@ final class Serializer {
 
 	private static function normalize_string( $value ): string {
 		return trim( (string) $value );
+	}
+
+	public static function normalize_execution_result_for_read( $value ): string {
+		$raw        = (string) $value;
+		$normalized = self::normalize_string( $raw );
+
+		if ( ExternalApplyDecisionClaim::is_active( $raw ) ) {
+			return 'pending';
+		}
+
+		return ExternalApplyDecisionClaim::has_normalized_prefix( $raw ) ? 'invalid' : $normalized;
 	}
 
 	private static function resolve_user_label( int $user_id ): string {

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Attestation;
 
+use FlavorAgent\Activity\ActivityStorageContext;
+use FlavorAgent\Activity\Repository as ActivityRepository;
+
 final class KeyManager {
 
 	private const REGISTRY_OPTION = 'flavor_agent_attestation_public_keys';
@@ -29,27 +32,33 @@ final class KeyManager {
 		return null !== self::private_key();
 	}
 
-	public static function public_key(): ?string {
-		$sk = self::private_key();
+	public static function public_key( ?string $private_key = null ): ?string {
+		$sk = $private_key ?? self::private_key();
 
 		return null === $sk ? null : sodium_crypto_sign_publickey_from_secretkey( $sk );
 	}
 
-	public static function key_id(): ?string {
-		$pk = self::public_key();
+	public static function key_id( ?string $public_key = null ): ?string {
+		$pk = $public_key ?? self::public_key();
 
 		return null === $pk ? null : substr( hash( 'sha256', $pk ), 0, 32 );
 	}
 
-	public static function ensure_registered(): void {
-		$pk  = self::public_key();
-		$kid = self::key_id();
+	public static function ensure_registered(
+		?ActivityStorageContext $storage_context = null,
+		?string $public_key = null,
+		?string $key_id = null
+	): bool {
+		$pk  = $public_key ?? self::public_key();
+		$kid = $key_id ?? ( null !== $pk ? self::key_id( $pk ) : null );
 
 		if ( null === $pk || null === $kid ) {
-			return;
+			return false;
 		}
 
-		$registry = \get_option( self::REGISTRY_OPTION, [] );
+		$registry = null !== $storage_context
+			? $storage_context->read_option( self::REGISTRY_OPTION, [] )
+			: \get_option( self::REGISTRY_OPTION, [] );
 		$registry = is_array( $registry ) ? $registry : [];
 
 		$changed = false;
@@ -84,15 +93,29 @@ final class KeyManager {
 		}
 
 		if ( $changed ) {
-			\update_option( self::REGISTRY_OPTION, $registry, false );
+			return null !== $storage_context
+				? $storage_context->write_option( self::REGISTRY_OPTION, $registry, false )
+				: \update_option( self::REGISTRY_OPTION, $registry, false );
 		}
+
+		return true;
 	}
 
 	/**
 	 * @return array{keys: list<array{kty: string, crv: string, x: string, kid: string, use: string, alg: string, status: string, createdAt: string}>}
 	 */
-	public static function jwks(): array {
-		$registry = \get_option( self::REGISTRY_OPTION, [] );
+	public static function jwks( ?ActivityStorageContext $storage_context = null ): array {
+		if ( null === $storage_context ) {
+			$current_context = ActivityRepository::capture_storage_context();
+
+			if ( $current_context instanceof ActivityStorageContext ) {
+				$storage_context = $current_context;
+			}
+		}
+
+		$registry = null !== $storage_context
+			? $storage_context->read_option( self::REGISTRY_OPTION, [] )
+			: \get_option( self::REGISTRY_OPTION, [] );
 		$keys     = [];
 
 		foreach ( is_array( $registry ) ? $registry : [] as $record ) {

@@ -1518,6 +1518,7 @@ final class PatternIndexTest extends TestCase {
 					'flavor_agent_qdrant_key' => 'qdrant-key',
 				]
 			);
+			wp_cache_delete( 'notoptions', 'options' );
 	}
 
 	private function configure_cloudflare_ai_search_backends(): void {

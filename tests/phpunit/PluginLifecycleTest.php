@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Activity\RequestLoggingBridge;
+use FlavorAgent\Attestation\Repository as AttestationRepository;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\OpenAI\Provider;
@@ -53,6 +54,22 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertHookNotRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_api_token', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_flavor_agent_qdrant_url', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_home', [ PatternIndex::class, 'handle_dependency_change' ] );
+	}
+
+	public function test_attestation_install_init_hook_accepts_no_wordpress_hook_arguments(): void {
+		$attestation_install_hooks = array_values(
+			array_filter(
+				WordPressTestState::$filters['init'][5] ?? [],
+				static fn ( array $entry ): bool => [ AttestationRepository::class, 'maybe_install' ] === ( $entry['callback'] ?? null )
+			)
+		);
+
+		$this->assertCount( 1, $attestation_install_hooks );
+		$this->assertSame(
+			0,
+			$attestation_install_hooks[0]['accepted_args'] ?? null,
+			'WordPress supplies an empty-string init argument unless this typed callback explicitly accepts zero arguments.'
+		);
 	}
 
 	public function test_plugin_bootstrap_does_not_register_native_recommended_pattern_category(): void {
@@ -158,7 +175,7 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertTrue( RequestLoggingBridge::should_persist_request_diagnostic() );
 
 		// Disabling the dual-logging option defers to core logging alone.
-		WordPressTestState::$options['flavor_agent_dual_log_request_diagnostics'] = false;
+		update_option( 'flavor_agent_dual_log_request_diagnostics', false );
 		$this->assertFalse( RequestLoggingBridge::should_persist_request_diagnostic() );
 	}
 
