@@ -520,6 +520,7 @@ module.exports = {
 	getWp70HarnessConfig,
 	parseCompanionPlugins,
 	parseGutenbergVersion,
+	readGutenbergFlag,
 	resetSiteEditorState,
 	runWpCli,
 	teardownWp70Harness,

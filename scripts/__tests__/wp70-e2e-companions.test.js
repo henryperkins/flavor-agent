@@ -1,8 +1,18 @@
+const fs = require( 'fs' );
+const path = require( 'path' );
+
 const {
 	DEFAULT_GUTENBERG_VERSION,
 	parseCompanionPlugins,
 	parseGutenbergVersion,
+	readGutenbergFlag,
 } = require( '../wp70-e2e' );
+
+const PACKAGE_JSON = require( '../../package.json' );
+const WORKFLOW_PATH = path.join(
+	__dirname,
+	'../../.github/workflows/verify.yml'
+);
 
 describe( 'WP 7.0 harness companion plugins', () => {
 	test( 'defaults to the mandatory AI plugin, unpinned', () => {
@@ -74,5 +84,56 @@ describe( 'WP 7.0 harness Gutenberg opt-in', () => {
 
 	test( 'pins a patched release rather than the superseded 23.7.0', () => {
 		expect( DEFAULT_GUTENBERG_VERSION ).toBe( '23.7.1' );
+	} );
+} );
+
+// A silently-ignored flag is the dangerous failure here: the CI leg would run
+// without Gutenberg and still report green, which reads as evidence it is not.
+describe( 'WP 7.0 harness --with-gutenberg flag', () => {
+	test( 'reads the bare flag as an opt-in', () => {
+		const flag = readGutenbergFlag( [ '--with-gutenberg' ] );
+
+		expect( flag ).toBe( '1' );
+		expect( parseGutenbergVersion( flag ) ).toBe(
+			DEFAULT_GUTENBERG_VERSION
+		);
+	} );
+
+	test( 'reads an explicit version off the flag', () => {
+		expect( readGutenbergFlag( [ '--with-gutenberg=23.6.2' ] ) ).toBe(
+			'23.6.2'
+		);
+	} );
+
+	test( 'treats an empty value as the pinned default', () => {
+		expect( readGutenbergFlag( [ '--with-gutenberg=' ] ) ).toBe( '1' );
+	} );
+
+	test( 'stays undefined when the flag is absent', () => {
+		expect( readGutenbergFlag( [] ) ).toBeUndefined();
+		expect( readGutenbergFlag( [ '--other' ] ) ).toBeUndefined();
+	} );
+
+	test( 'the npm script CI runs actually passes the flag', () => {
+		// The Gutenberg CI leg invokes this script by name; if it lost the flag
+		// the leg would quietly verify the bundled editor twice.
+		expect(
+			PACKAGE_JSON.scripts[ 'wp:e2e:wp70:bootstrap:gutenberg' ]
+		).toContain( '--with-gutenberg' );
+	} );
+
+	test( 'the e2e-wp70 workflow runs both editor legs', () => {
+		const workflow = fs.readFileSync( WORKFLOW_PATH, 'utf8' );
+
+		expect( workflow ).toContain(
+			'bootstrap: npm run wp:e2e:wp70:bootstrap\n'
+		);
+		expect( workflow ).toContain(
+			'bootstrap: npm run wp:e2e:wp70:bootstrap:gutenberg\n'
+		);
+		// Distinct artifact names, or the second leg's upload collides.
+		expect( workflow ).toContain(
+			'name: playwright-wp70-${{ matrix.editor.label }}'
+		);
 	} );
 } );

@@ -225,6 +225,8 @@ npm run test:e2e:wp70
 
 `--with-gutenberg=<version>` (or `FLAVOR_AGENT_WP70_GUTENBERG`) targets another point on the line; use `23.6.2` rather than `23.6.0` for the 23.6 line, and `23.7.1` rather than `23.7.0`, because each earlier tag was superseded. Bootstrap prints the WordPress image and the resolved companion list — copy both into the compatibility record in `gutenberg-feature-tracking.md`, since "ran against Gutenberg" without a version is not evidence.
 
+CI runs both targets: the `e2e-wp70` job is a matrix over `bundled` (the editor inside the pinned WordPress image) and `gutenberg-23.7.1`, with `fail-fast: false` so one red leg does not cancel the other. Both legs are still `continue-on-error: true` while the harness earns its place as a gate, so read the job log rather than the check badge — a failing step inside a `continue-on-error` job still reports success.
+
 Current Site Editor browser specs exercise Flavor Agent editor behavior and selected Abilities API routes, but they do not validate the dedicated MCP server or the AI plugin Settings UI. Use the representative local runtime for MCP/AI-plugin manual checks, or extend `scripts/wp70-e2e.js` only when adding a dedicated MCP or AI-plugin Playwright spec.
 
 ## Remote Screenshot Audits
