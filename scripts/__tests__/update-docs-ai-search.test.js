@@ -27,6 +27,7 @@ const {
 	pollUntilSettled,
 	processEntries,
 	readSitemap,
+	resolveSameSourceDeletion,
 	resolveStaleDeletion,
 	resolveSummaryStatus,
 	findSupersededSourceItems,
@@ -121,7 +122,77 @@ describe( 'update-docs-ai-search helpers', () => {
 			chunkCount: 1,
 			sourceTypes: [ 'developer-docs' ],
 			ok: true,
+			attempts: 1,
 		} );
+		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'retries public endpoint validation past an empty post-ingest index resync', async () => {
+		// Cloudflare answers a failed retrieval with HTTP 200 and no chunks while the index
+		// resyncs after ingest, so the first probes look like an empty corpus.
+		const usableResult = {
+			result: {
+				chunks: [
+					{
+						item: {
+							metadata: {
+								source_url:
+									'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+							},
+						},
+					},
+				],
+			},
+		};
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const responses = [
+			{ result: { chunks: [] } },
+			// Partially rebuilt index: results exist but none are developer docs.
+			{
+				result: {
+					chunks: [
+						{ item: { metadata: { source_url: 'https://make.wordpress.org/ai/2026/04/01/hello/' } } },
+					],
+				},
+			},
+			usableResult,
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( responses.shift(), 'https://example.com/search' ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			validationAttempts: 5,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( { ok: true, chunkCount: 1, attempts: 3 } );
+		expect( global.fetch ).toHaveBeenCalledTimes( 3 );
+	} );
+
+	test( 'reports validation failure with a return_on_failure-free diagnostic probe', async () => {
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( { result: { chunks: [] } }, 'https://example.com/search' )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			validationAttempts: 3,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( { ok: false, chunkCount: 0, attempts: 3 } );
+		// Three validation attempts, then one diagnostic probe.
+		expect( global.fetch ).toHaveBeenCalledTimes( 4 );
+
+		const attemptBody = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
+		expect( attemptBody.ai_search_options.retrieval.return_on_failure ).toBe( true );
+
+		const diagnosticBody = JSON.parse( global.fetch.mock.calls[ 3 ][ 1 ].body );
+		expect( diagnosticBody.ai_search_options.retrieval ).not.toHaveProperty( 'return_on_failure' );
+		expect( validation.diagnostic ).toMatchObject( { status: 200, chunkCount: 0 } );
 	} );
 
 	test( 'resolves trusted relative canonical URLs against the response URL', () => {
@@ -833,9 +904,19 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( resolveStaleDeletion( { ...healthy, uploadErrors: 1 } ).delete ).toBe( false );
 		expect( resolveStaleDeletion( { ...healthy, pollPending: 2 } ).delete ).toBe( false );
 		expect( resolveStaleDeletion( { ...healthy, pollErrors: 1 } ).delete ).toBe( false );
-		expect( resolveStaleDeletion( { ...healthy, validationOk: false } ) ).toEqual( {
+		// Validation that returned results but not the expected ones is noisy, not blind.
+		expect(
+			resolveStaleDeletion( { ...healthy, validationOk: false, validationChunkCount: 8 } )
+		).toEqual( {
 			delete: true,
 			reason: 'validation-warning',
+		} );
+		// Zero chunks means the retrieval index told us nothing → never prune on that.
+		expect(
+			resolveStaleDeletion( { ...healthy, validationOk: false, validationChunkCount: 0 } )
+		).toEqual( {
+			delete: false,
+			reason: 'validation-unavailable',
 		} );
 	} );
 
@@ -929,6 +1010,7 @@ describe( 'update-docs-ai-search helpers', () => {
 			pollPending: 0,
 			pollErrors: 0,
 			validationOk: false,
+			validationChunkCount: 8,
 			previousManifestCount: 13000,
 		};
 
@@ -936,6 +1018,110 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( resolveStaleDeletion( run ) ).toEqual( {
 			delete: true,
 			reason: 'validation-warning',
+		} );
+	} );
+
+	test( 'resolveSameSourceDeletion gates superseded generations on settlement and retrieval', () => {
+		const settled = {
+			dryRun: false,
+			pollSkipped: false,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationChunkCount: 8,
+		};
+
+		expect( resolveSameSourceDeletion( settled ) ).toEqual( {
+			delete: true,
+			reason: 'settled-current-sources',
+		} );
+
+		// Item-level settlement problems keep the prior behaviour.
+		expect( resolveSameSourceDeletion( { ...settled, dryRun: true } ).delete ).toBe( false );
+		expect( resolveSameSourceDeletion( { ...settled, pollSkipped: true } ).reason ).toBe(
+			'replacement-not-settled'
+		);
+		expect( resolveSameSourceDeletion( { ...settled, uploadErrors: 1 } ).reason ).toBe(
+			'replacement-not-settled'
+		);
+		expect( resolveSameSourceDeletion( { ...settled, pollPending: 1 } ).reason ).toBe(
+			'replacement-not-settled'
+		);
+		expect( resolveSameSourceDeletion( { ...settled, pollErrors: 1 } ).reason ).toBe(
+			'replacement-not-settled'
+		);
+
+		// A settled replacement is still not safe to swap in while retrieval is dark:
+		// deleting the old generation could leave the source with no searchable copy.
+		expect( resolveSameSourceDeletion( { ...settled, validationChunkCount: 0 } ) ).toEqual( {
+			delete: false,
+			reason: 'validation-unavailable',
+		} );
+		// Degraded-but-present retrieval is only a warning, exactly as for stale deletion.
+		expect(
+			resolveSameSourceDeletion( { ...settled, validationChunkCount: 1 } ).delete
+		).toBe( true );
+	} );
+
+	test( 'both destructive paths refuse to delete on the same zero-chunk evidence', () => {
+		// Regression guard for the real gap: same-source generations are deleted earlier in
+		// main() than resolveStaleDeletion() runs, so a zero-chunk run could skip bulk stale
+		// deletion while still pruning superseded generations. The two resolvers must agree.
+		const zeroChunk = {
+			dryRun: false,
+			deleteStale: true,
+			explicitSources: false,
+			limit: 0,
+			discoveryErrors: 0,
+			pollSkipped: false,
+			discovered: 13317,
+			prepared: 13316,
+			buildErrors: 0,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: false,
+			validationChunkCount: 0,
+			previousManifestCount: 13000,
+		};
+
+		expect( resolveStaleDeletion( zeroChunk ).delete ).toBe( false );
+		expect( resolveSameSourceDeletion( zeroChunk ).delete ).toBe( false );
+		expect( resolveStaleDeletion( zeroChunk ).reason ).toBe( 'validation-unavailable' );
+		expect( resolveSameSourceDeletion( zeroChunk ).reason ).toBe( 'validation-unavailable' );
+
+		// ...and both allow deletion once retrieval proves the corpus is answerable.
+		const retrievable = { ...zeroChunk, validationOk: true, validationChunkCount: 8 };
+		expect( resolveStaleDeletion( retrievable ).delete ).toBe( true );
+		expect( resolveSameSourceDeletion( retrievable ).delete ).toBe( true );
+	} );
+
+	test( 'resolveStaleDeletion refuses to prune when the retrieval index returned no chunks', () => {
+		// Regression guard for the 2026-08-10 scheduled run, which pruned 8 managed items
+		// under `validation-warning` even though the public endpoint had answered HTTP 200
+		// with zero chunks — i.e. the run had no evidence the corpus was retrievable.
+		const run = {
+			dryRun: false,
+			deleteStale: true,
+			explicitSources: false,
+			limit: 0,
+			discoveryErrors: 0,
+			pollSkipped: false,
+			discovered: 13317,
+			prepared: 13316,
+			buildErrors: 0,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: false,
+			validationChunkCount: 0,
+			previousManifestCount: 13000,
+		};
+
+		expect( resolveSummaryStatus( run ) ).toBe( 'needs-attention' );
+		expect( resolveStaleDeletion( run ) ).toEqual( {
+			delete: false,
+			reason: 'validation-unavailable',
 		} );
 	} );
 
