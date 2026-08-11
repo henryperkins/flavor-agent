@@ -18,11 +18,20 @@ The local WordPress stack also expects Docker, Docker Compose, PHP, Composer, WP
 
 ## WordPress Image Pinning
 
-The primary local stack defaults to `wordpress:beta`, which tracks the current RC/beta. WordPress does not publish a `nightly` Docker tag; `beta` is the closest bleeding-edge tag on Docker Hub. To pin a specific build (for example, to match CI), override `WORDPRESS_BASE_IMAGE` in `.env`:
+The primary local stack defaults to `wordpress:beta-7.1-php8.2-apache`, the current WordPress 7.1 release-candidate line. WordPress does not publish a `nightly` Docker tag; the `beta-*` tags are the closest bleeding-edge tags on Docker Hub, and they cover release candidates as well as betas. Keeping the `7.1` segment matters: the tag rolls forward on its own through RC2 and later, but stays on the 7.1 line, whereas the bare `beta` tag silently jumps to 7.2 betas as soon as those start publishing. To pin a different build (for example, to match CI), override `WORDPRESS_BASE_IMAGE` in `.env`:
 
 ```env
-# Current RC/beta (default)
-WORDPRESS_BASE_IMAGE=wordpress:beta
+# Current WordPress 7.1 RC line, PHP 8.2 (default)
+WORDPRESS_BASE_IMAGE=wordpress:beta-7.1-php8.2-apache
+
+# Same line on PHP 8.3, which is what the bare `beta` tag resolves to today
+# WORDPRESS_BASE_IMAGE=wordpress:beta-7.1-apache
+
+# Freeze on one exact RC build (does not roll forward to RC2)
+# WORDPRESS_BASE_IMAGE=wordpress:beta-7.1-RC1-php8.2-apache
+
+# Newest pre-release of any major (rolls onto 7.2 betas when they land)
+# WORDPRESS_BASE_IMAGE=wordpress:beta
 
 # Latest stable (downgrade if you need to test against ship-released WordPress)
 # WORDPRESS_BASE_IMAGE=wordpress:php8.2-apache
@@ -47,6 +56,7 @@ npm run wp:rebuild
 ```
 
 The first run creates `.env` from `.env.example` through `scripts/ensure-local-env.js` before starting containers. The wrapper in `scripts/docker-compose.js` uses the Docker Compose CLI plugin when available and falls back to `docker-compose`.
+Devcontainer and Codespaces runs cannot rely on that script, because Compose resolves `docker-compose.yml` before any npm script can execute. Two things cover the gap: every interpolated variable in `docker-compose.yml` carries the same default as `.env.example`, so the stack builds with no `.env` at all, and the `initializeCommand` in `.devcontainer/devcontainer.json` copies `.env.example` to `.env` on the host before container creation. The copy is no-clobber, so a customized `.env` is never overwritten.
 The WordPress service also listens on the configured `WORDPRESS_PORT` inside the container so Site Health REST API and loopback checks can call `http://localhost:8888` from both the host and the container. On startup it ensures `wp-content/upgrade` is writable by the web server user for plugin and theme update checks.
 
 ### Browser Auth Base URL

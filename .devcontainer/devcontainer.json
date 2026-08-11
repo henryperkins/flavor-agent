@@ -31,5 +31,6 @@
 			}
 		}
 	},
+	"initializeCommand": "cp -n '${localWorkspaceFolder}/.env.example' '${localWorkspaceFolder}/.env' || true",
 	"postCreateCommand": "npm run setup:deps && composer install"
 }
