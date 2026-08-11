@@ -31,6 +31,14 @@ const BUILD_ERROR_ATTENTION_RATIO = 0.02;
 // pruned after the replacement key settles.
 const DOC_LAYOUT_VERSION = 2;
 const VALIDATION_QUERY = 'WordPress developer documentation block.json metadata reference for WordPress 7.0';
+// Cloudflare AI Search resyncs its retrieval index asynchronously after items are
+// ingested, and `pollUntilSettled` only proves item-level settlement — not that the
+// public index has caught up. A single-shot check therefore races the resync and can
+// see an empty or partially rebuilt index (HTTP 200, zero or degraded chunks, because
+// `return_on_failure` reports retrieval failure as success). Retry across a bounded
+// window so only a persistently unhealthy corpus fails the run.
+const VALIDATION_ATTEMPTS = 5;
+const VALIDATION_RETRY_BASE_MS = 10_000;
 
 const METADATA_SCHEMA = [
 	{ field_name: 'source_url', data_type: 'text' },
@@ -63,7 +71,10 @@ Options:
   --dry-run              Discover and build payloads without Cloudflare writes.
   --delete-stale         Opt in to deleting stale managed docs items. Off by default and
                          always skipped for --limit, --source-url/--source-file, and any
-                         run with discovery/build/upload/poll/validation problems.
+                         run with discovery/build/upload/poll problems. A validation
+                         failure that still returned chunks is a warning and does not
+                         block pruning; a validation response with zero chunks blocks
+                         both deletion paths (reason: validation-unavailable).
   --no-delete            Force stale deletion off (overrides --delete-stale).
   --full                 Re-fetch every discovered URL even if unchanged since the
                          last ingest (bypasses the sitemap-lastmod incremental skip).
@@ -72,6 +83,12 @@ Options:
                          normal corpus updates.
   --skip-configure       Compatibility no-op; configuration is skipped by default.
   --poll-seconds=<n>     Poll uploaded items before validation. Default: 180.
+  --validation-attempts=<n>  Total public endpoint validation attempts before the run is
+                         marked needs-attention (default 5, exponential backoff from 10s:
+                         10/20/40/80). Retries ride out the asynchronous Cloudflare index
+                         resync that follows ingest. After the budget is exhausted one
+                         further diagnostic probe runs without return_on_failure to
+                         record Cloudflare's real error; it is not a validation attempt.
   --output=<dir>         Write summary artifacts here.
   --help, -h             Show this message.
 
@@ -94,6 +111,8 @@ function parseArgs( argv ) {
 		deleteStale: false,
 		configureInstance: false,
 		pollSeconds: 180,
+		validationAttempts: VALIDATION_ATTEMPTS,
+		validationRetryDelayMs: VALIDATION_RETRY_BASE_MS,
 		fullRefetch: false,
 		outputDir: DEFAULT_OUTPUT_DIR,
 	};
@@ -160,6 +179,12 @@ function parseArgs( argv ) {
 				break;
 			case 'poll-seconds':
 				options.pollSeconds = normalizeNonNegativeInteger( value, 'poll-seconds' );
+				break;
+			case 'validation-attempts':
+				options.validationAttempts = Math.max(
+					1,
+					normalizeNonNegativeInteger( value, 'validation-attempts' )
+				);
 				break;
 			case 'output':
 				options.outputDir = path.resolve( value );
@@ -1677,9 +1702,11 @@ function findSupersededSourceItems( items, desiredKeys, desiredSourceIdentities,
 // Stale deletion is the one destructive step, so it runs only for a full, demonstrably
 // healthy run. Targeted runs (explicit --source-url/--source-file), an out-of-ratio build
 // failure, and any upload or poll problem disable it so a degraded discovery cannot
-// wipe the corpus. Public endpoint validation still marks the run as needing attention,
-// but it must not block stale deletion because stale generations can be the reason
-// validation is noisy in the first place.
+// wipe the corpus. Public endpoint validation that returned *some* results still marks
+// the run as needing attention without blocking stale deletion, because stale generations
+// can be the reason validation is noisy in the first place. Zero chunks is different: the
+// retrieval index answered with nothing, so the run learned nothing about corpus health
+// and must not prune blind.
 function resolveStaleDeletion( run ) {
 	if ( run.dryRun ) {
 		return { delete: false, reason: 'dry-run' };
@@ -1731,10 +1758,35 @@ function resolveStaleDeletion( run ) {
 	) {
 		return { delete: false, reason: 'prepared-count-regression' };
 	}
+	if ( run.validationOk !== true && ! ( run.validationChunkCount > 0 ) ) {
+		return { delete: false, reason: 'validation-unavailable' };
+	}
 	if ( run.validationOk !== true ) {
 		return { delete: true, reason: 'validation-warning' };
 	}
 	return { delete: true, reason: 'healthy' };
+}
+
+// Deleting superseded same-source generations is the *other* destructive path, and it runs
+// before resolveStaleDeletion(). Item-level settlement proves the replacement was ingested,
+// not that it is retrievable, so this must apply the same retrieval-evidence rule as
+// resolveStaleDeletion(): with a dark index (zero chunks) we cannot tell whether dropping
+// the old generation leaves the source with no searchable copy at all. Keep the two
+// resolvers' `validation-unavailable` behavior in lockstep.
+function resolveSameSourceDeletion( run ) {
+	if ( run.dryRun ) {
+		return { delete: false, reason: 'dry-run' };
+	}
+	if ( run.pollSkipped ) {
+		return { delete: false, reason: 'replacement-not-settled' };
+	}
+	if ( run.uploadErrors > 0 || run.pollPending > 0 || run.pollErrors > 0 ) {
+		return { delete: false, reason: 'replacement-not-settled' };
+	}
+	if ( ! ( run.validationChunkCount > 0 ) ) {
+		return { delete: false, reason: 'validation-unavailable' };
+	}
+	return { delete: true, reason: 'settled-current-sources' };
 }
 
 function resolveSummaryStatus( run ) {
@@ -1811,31 +1863,39 @@ function delay( ms ) {
 	return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
 }
 
-async function validatePublicEndpoint( options ) {
+function validationRequestBody( options, returnOnFailure ) {
+	const retrieval = {
+		retrieval_type: 'hybrid',
+		max_num_results: 8,
+		match_threshold: 0.2,
+		context_expansion: 1,
+		fusion_method: 'rrf',
+	};
+	// `return_on_failure` makes Cloudflare answer a failed retrieval with HTTP 200 and no
+	// chunks. That is what the validation loop wants (a retryable soft signal), but the
+	// final diagnostic probe drops it so a persistent failure reports its real error.
+	if ( returnOnFailure ) {
+		retrieval.return_on_failure = true;
+	}
+	return JSON.stringify( {
+		messages: [
+			{
+				role: 'user',
+				content: VALIDATION_QUERY.replace( '7.0', options.release.replace( '-', '.' ) ),
+			},
+		],
+		ai_search_options: { retrieval },
+	} );
+}
+
+async function validationProbe( options, returnOnFailure ) {
 	const response = await fetchWithTimeout( options.publicUrl, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
 			'User-Agent': USER_AGENT,
 		},
-		body: JSON.stringify( {
-			messages: [
-				{
-					role: 'user',
-					content: VALIDATION_QUERY.replace( '7.0', options.release.replace( '-', '.' ) ),
-				},
-			],
-			ai_search_options: {
-				retrieval: {
-					retrieval_type: 'hybrid',
-					max_num_results: 8,
-					match_threshold: 0.2,
-					context_expansion: 1,
-					fusion_method: 'rrf',
-					return_on_failure: true,
-				},
-			},
-		} ),
+		body: validationRequestBody( options, returnOnFailure ),
 	} );
 	const text = await response.text();
 	let data;
@@ -1855,7 +1915,67 @@ async function validatePublicEndpoint( options ) {
 		sourceTypes,
 		urls: urls.slice( 0, 8 ),
 		ok: response.ok && chunks.length > 0 && sourceTypes.includes( 'developer-docs' ),
+		responseText: text,
 	};
+}
+
+// Probe the public endpoint until it proves the corpus is retrievable, or the attempt
+// budget runs out. Every non-ok outcome is retryable: the index resync that follows
+// ingest surfaces as zero chunks or a degraded, non-developer-docs result set rather
+// than as a transport error, so there is nothing else to discriminate on.
+async function validatePublicEndpoint( options ) {
+	const maxAttempts = Math.max(
+		1,
+		Number.isInteger( options.validationAttempts ) && options.validationAttempts > 0
+			? options.validationAttempts
+			: VALIDATION_ATTEMPTS
+	);
+	const retryDelayMs = Number.isFinite( options.validationRetryDelayMs )
+		? Math.max( 0, options.validationRetryDelayMs )
+		: VALIDATION_RETRY_BASE_MS;
+
+	let last;
+	for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
+		try {
+			last = await validationProbe( options, true );
+		} catch ( error ) {
+			last = {
+				status: 0,
+				chunkCount: 0,
+				sourceTypes: [],
+				urls: [],
+				ok: false,
+				error: error?.message || String( error ),
+			};
+		}
+		delete last.responseText;
+		last.attempts = attempt;
+		if ( last.ok ) {
+			return last;
+		}
+		if ( attempt < maxAttempts ) {
+			console.warn(
+				`Public endpoint validation attempt ${ attempt }/${ maxAttempts } was not usable ` +
+					`(status ${ last.status }, ${ last.chunkCount } chunks); retrying after index resync.`
+			);
+			await delay( retryDelayMs * 2 ** ( attempt - 1 ) );
+		}
+	}
+
+	// Persistent failure: ask once more without `return_on_failure` so the summary records
+	// Cloudflare's actual retrieval error instead of a silent HTTP 200 with no chunks.
+	try {
+		const diagnostic = await validationProbe( options, false );
+		last.diagnostic = {
+			status: diagnostic.status,
+			chunkCount: diagnostic.chunkCount,
+			body: String( diagnostic.responseText || '' ).slice( 0, 500 ),
+		};
+	} catch ( error ) {
+		last.diagnostic = { error: error?.message || String( error ) };
+	}
+
+	return last;
 }
 
 function extractChunkUrl( chunk ) {
@@ -2130,14 +2250,17 @@ async function main() {
 	const buildErrorCount = processed.buildErrors.length;
 	const pollPending = poll.pending || 0;
 	const pollErrorCount = Array.isArray( poll.errors ) ? poll.errors.length : 0;
-	const settledReplacementKeys = ! options.dryRun &&
-		poll.skipped !== true &&
-		uploadErrorCount === 0 &&
-		pollPending === 0 &&
-		pollErrorCount === 0;
+	const sameSourceDeletion = resolveSameSourceDeletion( {
+		dryRun: options.dryRun,
+		pollSkipped: poll.skipped === true,
+		uploadErrors: uploadErrorCount,
+		pollPending,
+		pollErrors: pollErrorCount,
+		validationChunkCount: validation.chunkCount,
+	} );
 	const deletedItemIds = new Set();
 
-	if ( auth && settledReplacementKeys ) {
+	if ( auth && sameSourceDeletion.delete ) {
 		const superseded = findSupersededSourceItems(
 			existingItems,
 			processed.desiredKeys,
@@ -2171,6 +2294,7 @@ async function main() {
 		pollPending,
 		pollErrors: pollErrorCount,
 		validationOk: validation.ok,
+		validationChunkCount: validation.chunkCount,
 		previousManifestCount,
 	} );
 
@@ -2218,7 +2342,7 @@ async function main() {
 		sameSourceDeletion: {
 			performed: sameSourceDeleted.length > 0,
 			deleted: sameSourceDeleted.length,
-			reason: settledReplacementKeys ? 'settled-current-sources' : 'replacement-not-settled',
+			reason: sameSourceDeletion.reason,
 		},
 		staleDeletion: { performed: deletion.delete, reason: deletion.reason },
 		counts: {
@@ -2267,6 +2391,7 @@ module.exports = {
 	evaluateSettlement,
 	isSettlementComplete,
 	listBuiltinItems,
+	resolveSameSourceDeletion,
 	resolveStaleDeletion,
 	resolveSummaryStatus,
 	extractTitle,
