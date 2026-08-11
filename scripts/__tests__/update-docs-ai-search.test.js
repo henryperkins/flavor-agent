@@ -25,6 +25,7 @@ const {
 	normalizeTrustedUrl,
 	parseArgs,
 	pollUntilSettled,
+	pollWindow,
 	processEntries,
 	readSitemap,
 	resolveSameSourceDeletion,
@@ -76,6 +77,42 @@ function docsHtml( { canonical, title = 'WordPress Docs Page', body = '' } ) {
 		`<p>${ content }</p>`,
 		'</main></body></html>',
 	].join( '' );
+}
+
+function pollOptions( overrides = {} ) {
+	return {
+		dryRun: false,
+		instance: 'wp-dev',
+		pollSeconds: 10,
+		pollIntervalSeconds: 1,
+		pollMaxSeconds: 60,
+		pollProgressGraceSeconds: 5,
+		...overrides,
+	};
+}
+
+// Drives pollUntilSettled by scripting the two endpoints it reads: the instance /stats
+// active count and the per-item status in the listing.
+function settlementFetchMock( { active, itemStatus } ) {
+	return jest.fn( ( url ) => {
+		const href = String( url );
+		if ( href.endsWith( '/stats' ) ) {
+			return mockJsonResponse(
+				{ result: { queued: active(), running: 0, outdated: 0, error: 0 } },
+				href
+			);
+		}
+		if ( href.includes( '/items?' ) ) {
+			return mockJsonResponse(
+				{
+					result: [ { id: 'item-1', key: 'desired-key', status: itemStatus() } ],
+					result_info: { count: 1, per_page: 50, total_count: 1 },
+				},
+				href
+			);
+		}
+		throw new Error( `Unexpected fetch: ${ href }` );
+	} );
 }
 
 describe( 'update-docs-ai-search helpers', () => {
@@ -1329,11 +1366,171 @@ describe( 'update-docs-ai-search helpers', () => {
 			{ accountId: 'account', apiToken: 'token' }
 		);
 
-		expect( result ).toEqual( { skipped: false, pending: 0, errors: [] } );
+		expect( result ).toMatchObject( {
+			skipped: false,
+			pending: 0,
+			errors: [],
+			polls: 1,
+			initialActive: 0,
+			bestActive: 0,
+			finalActive: 0,
+			extended: false,
+		} );
 		expect( global.fetch.mock.calls[ 0 ][ 0 ] ).toContain( '/stats' );
 		expect(
 			global.fetch.mock.calls.filter( ( [ url ] ) => String( url ).includes( '/items?' ) )
 		).toHaveLength( 1 );
+	} );
+
+	test( 'pollWindow never lets the hard cap shorten an explicitly requested base window', () => {
+		expect( pollWindow( { pollSeconds: 600 } ) ).toEqual( {
+			baseMs: 600_000,
+			hardMs: 1_800_000,
+			graceMs: 120_000,
+			intervalMs: 5000,
+		} );
+		// An operator asking for a 3600s base must not be cut back to the 1800s default cap.
+		expect( pollWindow( { pollSeconds: 3600 } ).hardMs ).toBe( 3_600_000 );
+		expect(
+			pollWindow( { pollSeconds: 60, pollMaxSeconds: 90, pollProgressGraceSeconds: 10, pollIntervalSeconds: 2 } )
+		).toEqual( { baseMs: 60_000, hardMs: 90_000, graceMs: 10_000, intervalMs: 2000 } );
+	} );
+
+	test( 'pollUntilSettled retries the item sweep when /stats clears before the listing agrees', async () => {
+		// Regression guard for run 31462270794: /stats read zero while one desired key was
+		// still queued in the item listing. The old single-shot sweep failed the whole run on
+		// that momentary disagreement instead of re-checking inside the remaining window.
+		let itemsCall = 0;
+		global.fetch = settlementFetchMock( {
+			active: () => 0,
+			itemStatus: () => ( itemsCall++ === 0 ? 'queued' : 'completed' ),
+		} );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				pollOptions( { pollSeconds: 10 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 30_000 );
+			const result = await promise;
+
+			expect( result ).toMatchObject( { skipped: false, pending: 0, errors: [], polls: 2 } );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	test( 'pollUntilSettled extends past the base window while the active count keeps falling', async () => {
+		let poll = 0;
+		global.fetch = settlementFetchMock( {
+			// 20 → 0 over twenty polls at one second each, so success lands well past the
+			// ten-second base window.
+			active: () => Math.max( 0, 20 - poll++ ),
+			itemStatus: () => 'completed',
+		} );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				pollOptions( { pollSeconds: 10, pollMaxSeconds: 120, pollProgressGraceSeconds: 5 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 120_000 );
+			const result = await promise;
+
+			expect( result ).toMatchObject( { pending: 0, errors: [], initialActive: 20, bestActive: 0 } );
+			expect( result.extended ).toBe( true );
+			expect( result.elapsedMs ).toBeGreaterThan( 10_000 );
+			expect( result.elapsedMs ).toBeLessThan( 120_000 );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	test( 'pollUntilSettled stops a plateau after the progress grace instead of waiting out the cap', async () => {
+		global.fetch = settlementFetchMock( { active: () => 3, itemStatus: () => 'queued' } );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				// A ten-minute cap the plateau must NOT consume.
+				pollOptions( { pollSeconds: 10, pollMaxSeconds: 600, pollProgressGraceSeconds: 5 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 600_000 );
+			const result = await promise;
+
+			// A stuck item stays pending — extension never reclassifies it as settled.
+			expect( result.pending ).toBe( 1 );
+			expect( result.bestActive ).toBe( 3 );
+			expect( result.elapsedMs ).toBeLessThan( 30_000 );
+			expect( result.lastProgressAgeMs ).toBeGreaterThanOrEqual( 5000 );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	test( 'pollUntilSettled enforces the hard cap even while still making progress', async () => {
+		let poll = 0;
+		global.fetch = settlementFetchMock( {
+			// Always a new low, so only the hard cap can stop this.
+			active: () => 1000 - poll++,
+			itemStatus: () => 'queued',
+		} );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				pollOptions( { pollSeconds: 10, pollMaxSeconds: 20, pollProgressGraceSeconds: 100_000 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 300_000 );
+			const result = await promise;
+
+			expect( result.pending ).toBe( 1 );
+			expect( result.elapsedMs ).toBeGreaterThanOrEqual( 20_000 );
+			expect( result.elapsedMs ).toBeLessThan( 30_000 );
+			expect( result.extended ).toBe( true );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	test( 'pollUntilSettled reports residual pending from a final item-level sweep', async () => {
+		// The loop's last observation is not authoritative: the returned pending count comes
+		// from a fresh sweep after the window closes.
+		let itemsCall = 0;
+		global.fetch = settlementFetchMock( {
+			active: () => 2,
+			// Every in-loop sweep is skipped (stats never clear); the final sweep is the only
+			// listing call, and it is what decides the reported pending count.
+			itemStatus: () => {
+				itemsCall += 1;
+				return 'completed';
+			},
+		} );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				pollOptions( { pollSeconds: 10, pollMaxSeconds: 20, pollProgressGraceSeconds: 5 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 60_000 );
+			const result = await promise;
+
+			expect( itemsCall ).toBe( 1 );
+			expect( result.pending ).toBe( 0 );
+			expect( result.errors ).toEqual( [] );
+		} finally {
+			jest.useRealTimers();
+		}
 	} );
 
 	test( 'processEntries dedupes canonical source identities before upload', async () => {

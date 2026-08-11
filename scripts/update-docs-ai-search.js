@@ -39,6 +39,15 @@ const VALIDATION_QUERY = 'WordPress developer documentation block.json metadata 
 // window so only a persistently unhealthy corpus fails the run.
 const VALIDATION_ATTEMPTS = 5;
 const VALIDATION_RETRY_BASE_MS = 10_000;
+// Ingest settlement is eventually consistent in two separate places: the instance /stats
+// counters clear before the item listing agrees, and one slow item can trail a large
+// upload batch. The base --poll-seconds window is extended while the run is still making
+// progress, up to a hard cap. Extension is driven by new lows in the active count, so a
+// plateau expires on its own and a permanently stuck item still terminates with pending
+// > 0 — waiting longer is never allowed to redefine an incomplete ingest as success.
+const POLL_INTERVAL_SECONDS = 5;
+const POLL_MAX_SECONDS = 1800;
+const POLL_PROGRESS_GRACE_SECONDS = 120;
 
 const METADATA_SCHEMA = [
 	{ field_name: 'source_url', data_type: 'text' },
@@ -82,7 +91,15 @@ Options:
                          trigger an instance-wide Cloudflare resync; leave off for
                          normal corpus updates.
   --skip-configure       Compatibility no-op; configuration is skipped by default.
-  --poll-seconds=<n>     Poll uploaded items before validation. Default: 180.
+  --poll-seconds=<n>     Base settlement window for uploaded items, before validation.
+                         Default: 180 (the workflow passes 600).
+  --poll-interval-seconds=<n>  Delay between settlement polls. Default: 5.
+  --poll-max-seconds=<n> Hard cap on the settlement window. The base window is extended
+                         past --poll-seconds only while the active item count keeps
+                         reaching new lows, never beyond this cap. Default: 1800.
+  --poll-progress-grace-seconds=<n>  Once past the base window, give up this long after
+                         the last new low in the active count. A plateau therefore
+                         expires instead of waiting out the hard cap. Default: 120.
   --validation-attempts=<n>  Total public endpoint validation attempts before the run is
                          marked needs-attention (default 5, exponential backoff from 10s:
                          10/20/40/80). Retries ride out the asynchronous Cloudflare index
@@ -111,6 +128,9 @@ function parseArgs( argv ) {
 		deleteStale: false,
 		configureInstance: false,
 		pollSeconds: 180,
+		pollIntervalSeconds: POLL_INTERVAL_SECONDS,
+		pollMaxSeconds: POLL_MAX_SECONDS,
+		pollProgressGraceSeconds: POLL_PROGRESS_GRACE_SECONDS,
 		validationAttempts: VALIDATION_ATTEMPTS,
 		validationRetryDelayMs: VALIDATION_RETRY_BASE_MS,
 		fullRefetch: false,
@@ -179,6 +199,21 @@ function parseArgs( argv ) {
 				break;
 			case 'poll-seconds':
 				options.pollSeconds = normalizeNonNegativeInteger( value, 'poll-seconds' );
+				break;
+			case 'poll-interval-seconds':
+				options.pollIntervalSeconds = Math.max(
+					1,
+					normalizeNonNegativeInteger( value, 'poll-interval-seconds' )
+				);
+				break;
+			case 'poll-max-seconds':
+				options.pollMaxSeconds = normalizeNonNegativeInteger( value, 'poll-max-seconds' );
+				break;
+			case 'poll-progress-grace-seconds':
+				options.pollProgressGraceSeconds = normalizeNonNegativeInteger(
+					value,
+					'poll-progress-grace-seconds'
+				);
 				break;
 			case 'validation-attempts':
 				options.validationAttempts = Math.max(
@@ -1811,45 +1846,123 @@ function resolveSummaryStatus( run ) {
 	return 'ok';
 }
 
+function pollWindow( options ) {
+	const baseSeconds = options.pollSeconds;
+	const capSeconds = Number.isFinite( options.pollMaxSeconds )
+		? options.pollMaxSeconds
+		: POLL_MAX_SECONDS;
+	const graceSeconds = Number.isFinite( options.pollProgressGraceSeconds )
+		? options.pollProgressGraceSeconds
+		: POLL_PROGRESS_GRACE_SECONDS;
+	const intervalSeconds = Number.isFinite( options.pollIntervalSeconds ) && options.pollIntervalSeconds > 0
+		? options.pollIntervalSeconds
+		: POLL_INTERVAL_SECONDS;
+
+	return {
+		baseMs: baseSeconds * 1000,
+		// A cap below the base window would silently shorten an explicitly requested poll.
+		hardMs: Math.max( baseSeconds, capSeconds ) * 1000,
+		graceMs: Math.max( 0, graceSeconds ) * 1000,
+		intervalMs: intervalSeconds * 1000,
+	};
+}
+
+// Wait for every desired key to reach a terminal, non-error state. The instance /stats
+// counters are only a cheap first gate: they can read zero while the item listing still
+// reports a key as queued, so the item-level sweep is retried inside the window rather
+// than being a single shot that fails the run on a momentary disagreement.
+//
+// Past the base window the poll keeps going only while it is demonstrably converging —
+// each new low in the active count restarts the progress grace — and never past the hard
+// cap. That preserves the zero-pending contract: extension buys time for a slow ingest,
+// it never reclassifies a stuck one as settled.
 async function pollUntilSettled( desiredKeys, options, auth ) {
 	if ( options.dryRun || options.pollSeconds <= 0 || desiredKeys.size === 0 ) {
 		return { skipped: true, pending: 0, errors: [] };
 	}
 
-	const deadline = Date.now() + options.pollSeconds * 1000;
+	const { baseMs, hardMs, graceMs, intervalMs } = pollWindow( options );
+	const startedAt = Date.now();
 	let lastStats = null;
-	while ( Date.now() < deadline ) {
-		lastStats = await getInstanceStats( options, auth );
-		if ( statsActiveCount( lastStats ) !== 0 ) {
-			await delay( 5000 );
-			continue;
-		}
+	let polls = 0;
+	let initialActive = null;
+	let bestActive = Infinity;
+	let lastProgressAt = startedAt;
+	let finalActive = 0;
+	let terminal = false;
 
-		const latest = await listBuiltinItems( options, auth );
-		const settlement = evaluateSettlement( latest, desiredKeys );
-
-		// Keys that never appear (dropped write / eventual-consistency lag) are not
-		// "pending" in the listing, so success requires zero missing keys; item-level
-		// error/skip statuses must also clear, or a degraded index would settle as "ok".
-		if ( isSettlementComplete( settlement ) ) {
-			return { skipped: false, pending: 0, errors: settlement.errors };
-		}
-
+	const telemetry = () => {
+		const elapsedMs = Date.now() - startedAt;
 		return {
-			skipped: false,
-			pending: settlement.missing.length + settlement.pending.length,
-			errors: settlement.errors,
-			stats: lastStats,
+			polls,
+			elapsedMs,
+			initialActive,
+			bestActive: Number.isFinite( bestActive ) ? bestActive : null,
+			finalActive,
+			lastProgressAgeMs: Date.now() - lastProgressAt,
+			extended: elapsedMs > baseMs,
 		};
+	};
+
+	for ( ;; ) {
+		polls += 1;
+		lastStats = await getInstanceStats( options, auth );
+		let active = statsActiveCount( lastStats );
+
+		if ( active === 0 ) {
+			const latest = await listBuiltinItems( options, auth );
+			const settlement = evaluateSettlement( latest, desiredKeys );
+
+			// Keys that never appear (dropped write / eventual-consistency lag) are not
+			// "pending" in the listing, so success requires zero missing keys; item-level
+			// error/skip statuses must also clear, or a degraded index would settle as "ok".
+			if ( isSettlementComplete( settlement ) ) {
+				finalActive = 0;
+				bestActive = 0;
+				if ( initialActive === null ) {
+					initialActive = 0;
+				}
+				return {
+					skipped: false,
+					pending: 0,
+					errors: settlement.errors,
+					...telemetry(),
+				};
+			}
+
+			// error/skipped are terminal states; more waiting cannot clear them.
+			terminal = settlement.errors.length > 0;
+			active = settlement.missing.length + settlement.pending.length;
+		}
+
+		if ( initialActive === null ) {
+			initialActive = active;
+		}
+		if ( active < bestActive ) {
+			bestActive = active;
+			lastProgressAt = Date.now();
+		}
+		finalActive = active;
+
+		const now = Date.now();
+		if ( terminal || now >= hardMs + startedAt ) {
+			break;
+		}
+		if ( now >= baseMs + startedAt && now - lastProgressAt >= graceMs ) {
+			break;
+		}
+		await delay( intervalMs );
 	}
 
 	const latest = await listBuiltinItems( options, auth );
 	const { missing, pending, errors } = evaluateSettlement( latest, desiredKeys );
+	finalActive = missing.length + pending.length;
 	return {
 		skipped: false,
-		pending: missing.length + pending.length,
+		pending: finalActive,
 		errors,
 		stats: lastStats,
+		...telemetry(),
 	};
 }
 
@@ -2345,6 +2458,19 @@ async function main() {
 			reason: sameSourceDeletion.reason,
 		},
 		staleDeletion: { performed: deletion.delete, reason: deletion.reason },
+		// Settlement trajectory, not just its endpoint: without this a residual pending item
+		// is indistinguishable from a stuck one, which is exactly what run 31462270794 left
+		// unanswerable.
+		settlement: {
+			skipped: poll.skipped === true,
+			polls: poll.polls ?? null,
+			elapsedMs: poll.elapsedMs ?? null,
+			initialActive: poll.initialActive ?? null,
+			bestActive: poll.bestActive ?? null,
+			finalActive: poll.finalActive ?? null,
+			lastProgressAgeMs: poll.lastProgressAgeMs ?? null,
+			extended: poll.extended ?? false,
+		},
 		counts: {
 			uploaded: processed.uploaded.length,
 			skipped: processed.skipped.length,
@@ -2391,6 +2517,7 @@ module.exports = {
 	evaluateSettlement,
 	isSettlementComplete,
 	listBuiltinItems,
+	pollWindow,
 	resolveSameSourceDeletion,
 	resolveStaleDeletion,
 	resolveSummaryStatus,
