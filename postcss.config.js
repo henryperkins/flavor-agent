@@ -44,16 +44,36 @@ const isProduction = process.env.NODE_ENV === 'production';
  * Bare specifiers go through Node's own resolution so `exports` maps, including
  * conditional and subpath entries, are honored.
  *
- * @param {string} id   The `@import` target as written in the stylesheet.
- * @param {string} base Directory of the importing stylesheet.
+ * A failed bare lookup is rethrown through postcss's own `node.error()` so the
+ * build names the stylesheet and line that asked for the import, the way
+ * postcss-import's default resolver does. Node's reason is kept verbatim in the
+ * message because it is the part worth reading: MODULE_NOT_FOUND means the
+ * package is missing, while ERR_PACKAGE_PATH_NOT_EXPORTED means it is installed
+ * but does not publish that subpath — a distinction that decides whether the fix
+ * is an install or a relative path.
+ *
+ * @param {string} id      The `@import` target as written in the stylesheet.
+ * @param {string} base    Directory of the importing stylesheet.
+ * @param {Object} options postcss-import options (unused).
+ * @param {Object} node    The `@import` at-rule, used for source position.
  * @return {string} Absolute path to the imported file.
  */
-function resolveImport( id, base ) {
+function resolveImport( id, base, options, node ) {
 	if ( id.startsWith( '.' ) || path.isAbsolute( id ) ) {
 		return path.resolve( base, id );
 	}
 
-	return require.resolve( id, { paths: [ base ] } );
+	try {
+		return require.resolve( id, { paths: [ base ] } );
+	} catch ( error ) {
+		if ( typeof node?.error !== 'function' ) {
+			throw error;
+		}
+
+		throw node.error(
+			`Failed to resolve "${ id }" from ${ base }: ${ error.message }`
+		);
+	}
 }
 
 const plugins = [
