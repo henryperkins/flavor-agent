@@ -79,27 +79,49 @@ describe( 'WPDS token compatibility', () => {
 		);
 	} );
 
-	test( 'imports the design tokens file the theme package publicly exports', () => {
+	test( 'imports the design tokens through the theme package public export', () => {
+		const importTarget = fs
+			.readFileSync(
+				path.join( SRC_DIR, 'admin', 'wpds-runtime.css' ),
+				'utf8'
+			)
+			.match( /@import\s+"([^"]+design-tokens\.css)"/ )?.[ 1 ];
+
+		// The public subpath, never a path into node_modules. The package moved
+		// this file out of `src/` in 1.0.0 (gutenberg#80213) while keeping the
+		// export, so a deep path silently pins us to the 0.x layout.
+		expect( importTarget ).toBe( '@wordpress/theme/design-tokens.css' );
+	} );
+
+	test( 'resolves that export to a file the theme package ships', () => {
 		const themePackageJsonPath = require.resolve(
 			'@wordpress/theme/package.json'
 		);
-		const themeExportTarget = require( '@wordpress/theme/package.json' )
-			.exports[ './design-tokens.css' ];
 		const exportedFile = path.resolve(
 			path.dirname( themePackageJsonPath ),
-			themeExportTarget
+			require( '@wordpress/theme/package.json' ).exports[
+				'./design-tokens.css'
+			]
 		);
 
-		const bridgePath = path.join( SRC_DIR, 'admin', 'wpds-runtime.css' );
-		const importTarget = fs
-			.readFileSync( bridgePath, 'utf8' )
-			.match( /@import\s+"([^"]+design-tokens\.css)"/ )?.[ 1 ];
-		const importedFile = importTarget
-			? path.resolve( path.dirname( bridgePath ), importTarget )
-			: null;
-
-		expect( importedFile ).toBe( exportedFile );
+		// Mirrors the bare-specifier branch of postcss.config.js's resolver,
+		// so this fails if the build's resolution stops honoring `exports`.
+		expect(
+			require.resolve( '@wordpress/theme/design-tokens.css', {
+				paths: [ path.join( SRC_DIR, 'admin' ) ],
+			} )
+		).toBe( exportedFile );
 		expect( fs.existsSync( exportedFile ) ).toBe( true );
+	} );
+
+	test( 'no stylesheet reaches into the theme package directory', () => {
+		const deepImports = listCssFiles( SRC_DIR ).filter( ( filePath ) =>
+			/node_modules[/\\]@wordpress[/\\]theme/.test(
+				fs.readFileSync( filePath, 'utf8' )
+			)
+		);
+
+		expect( deepImports ).toEqual( [] );
 	} );
 
 	test( 'pairs legacy color tokens with the current names', () => {

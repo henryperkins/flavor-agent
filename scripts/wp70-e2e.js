@@ -13,15 +13,30 @@ const DEFAULT_THEME_SLUG = 'flavor-agent-e2e';
 // Flavor Agent declares `Requires Plugins: ai` in its plugin header, so WP
 // refuses to activate the plugin unless the AI plugin is present. The WP 7.1
 // harness intentionally stays minimal (no MCP / AI provider plugins) — extend
-// via FLAVOR_AGENT_WP70_COMPANION_PLUGINS only when a spec needs it.
+// via FLAVOR_AGENT_WP70_COMPANION_PLUGINS only when a spec needs it. Entries
+// accept a `slug@version` form so a gate can pin exactly what it verified.
 const DEFAULT_COMPANION_PLUGINS = [ 'ai' ];
+// The Gutenberg plugin line the editor gates target when they run against it.
+// 23.7.1 rather than 23.7.0: 23.7.0 was superseded two days later by the
+// 23.7.1 security release. Gutenberg is opt-in — the default run exercises the
+// editor that ships in the pinned WordPress image, so installing it by default
+// would silently change what every existing WP 7.0 gate verifies. Enable with
+// `--with-gutenberg` or FLAVOR_AGENT_WP70_GUTENBERG, either of which also
+// accepts an explicit version to test another point on the line.
+const DEFAULT_GUTENBERG_VERSION = '23.7.1';
 
-function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
+function getWp70HarnessConfig(
+	rootDir = path.resolve( __dirname, '..' ),
+	options = {}
+) {
 	const wordpressPort =
 		process.env.FLAVOR_AGENT_WP70_PORT || DEFAULT_WORDPRESS_PORT;
 	const baseURL =
 		process.env.FLAVOR_AGENT_WP70_URL ||
 		`http://127.0.0.1:${ wordpressPort }`;
+	const gutenbergVersion = parseGutenbergVersion(
+		options.gutenberg ?? process.env.FLAVOR_AGENT_WP70_GUTENBERG
+	);
 
 	return {
 		rootDir,
@@ -37,8 +52,10 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 			process.env.FLAVOR_AGENT_WP70_RESET === '1',
 		themeSlug: process.env.FLAVOR_AGENT_WP70_THEME || DEFAULT_THEME_SLUG,
 		companionPlugins: parseCompanionPlugins(
-			process.env.FLAVOR_AGENT_WP70_COMPANION_PLUGINS
+			process.env.FLAVOR_AGENT_WP70_COMPANION_PLUGINS,
+			gutenbergVersion
 		),
+		gutenbergVersion,
 		wordpressTitle:
 			process.env.FLAVOR_AGENT_WP70_TITLE || 'Flavor Agent WP 7.1 E2E',
 		adminUser: process.env.FLAVOR_AGENT_WP70_ADMIN_USER || 'admin',
@@ -78,23 +95,89 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 	};
 }
 
-function parseCompanionPlugins( raw ) {
-	if ( raw === undefined || raw === null || raw === '' ) {
-		return [ ...DEFAULT_COMPANION_PLUGINS ];
+/**
+ * Split a companion entry into its slug and optional pinned version.
+ *
+ * @param {string} entry Either `slug` or `slug@version`.
+ * @return {{slug: string, version: (string|null)}} Parsed companion.
+ */
+function parseCompanionPlugin( entry ) {
+	const separator = entry.lastIndexOf( '@' );
+
+	if ( separator <= 0 ) {
+		return { slug: entry, version: null };
 	}
 
-	const slugs = String( raw )
-		.split( ',' )
-		.map( ( slug ) => slug.trim() )
-		.filter( ( slug ) => slug.length > 0 );
+	return {
+		slug: entry.slice( 0, separator ),
+		version: entry.slice( separator + 1 ),
+	};
+}
 
-	if ( ! slugs.includes( 'ai' ) ) {
+/**
+ * Build the companion plugin list for a harness run.
+ *
+ * @param {string|undefined} raw       FLAVOR_AGENT_WP70_COMPANION_PLUGINS value.
+ * @param {string|null}      gutenberg Gutenberg version to add, or null to skip.
+ * @return {Array<{slug: string, version: (string|null)}>} Companions to install.
+ */
+function parseCompanionPlugins( raw, gutenberg = null ) {
+	const entries =
+		raw === undefined || raw === null || raw === ''
+			? [ ...DEFAULT_COMPANION_PLUGINS ]
+			: String( raw )
+					.split( ',' )
+					.map( ( entry ) => entry.trim() )
+					.filter( ( entry ) => entry.length > 0 );
+
+	const companions = entries.map( parseCompanionPlugin );
+
+	if ( ! companions.some( ( companion ) => companion.slug === 'ai' ) ) {
 		// `ai` is mandatory (Flavor Agent's plugin header requires it). Always
 		// install it first regardless of how the override list is ordered.
-		slugs.unshift( 'ai' );
+		companions.unshift( { slug: 'ai', version: null } );
 	}
 
-	return slugs;
+	if ( gutenberg ) {
+		// An explicit `gutenberg` entry in the override list wins, so a caller
+		// can pin a different version than the flag's default.
+		const existing = companions.find(
+			( companion ) => companion.slug === 'gutenberg'
+		);
+
+		if ( ! existing ) {
+			companions.push( { slug: 'gutenberg', version: gutenberg } );
+		}
+	}
+
+	return companions;
+}
+
+/**
+ * Resolve the requested Gutenberg version, if any.
+ *
+ * Accepts a boolean-ish opt-in (`1`, `true`) that selects the pinned default,
+ * or an explicit version string. Anything falsy leaves Gutenberg out.
+ *
+ * @param {string|undefined} raw Flag or environment value.
+ * @return {string|null} Version to install, or null.
+ */
+function parseGutenbergVersion( raw ) {
+	if ( raw === undefined || raw === null || raw === '' ) {
+		return null;
+	}
+
+	const value = String( raw ).trim();
+
+	if ( value === '0' || value.toLowerCase() === 'false' ) {
+		return null;
+	}
+
+	if ( value === '1' || value.toLowerCase() === 'true' ) {
+		return DEFAULT_GUTENBERG_VERSION;
+	}
+
+	return value;
 }
 
 function runCommand( command, args, options = {} ) {
@@ -255,18 +338,39 @@ update_option( 'page_for_posts', 0 );
 }
 
 function installCompanionPlugins( harness ) {
-	const slugs = harness.companionPlugins || [];
-	if ( slugs.length === 0 ) {
+	const companions = harness.companionPlugins || [];
+	if ( companions.length === 0 ) {
 		return;
 	}
 
-	runWpCli( harness, [
-		'plugin',
-		'install',
-		...slugs,
-		'--activate',
-		'--force',
-	] );
+	// `wp plugin install --version=` applies to the whole command, so pinned
+	// companions each get their own call and the rest install together.
+	const unpinned = companions
+		.filter( ( companion ) => ! companion.version )
+		.map( ( companion ) => companion.slug );
+
+	if ( unpinned.length > 0 ) {
+		runWpCli( harness, [
+			'plugin',
+			'install',
+			...unpinned,
+			'--activate',
+			'--force',
+		] );
+	}
+
+	for ( const companion of companions.filter(
+		( candidate ) => candidate.version
+	) ) {
+		runWpCli( harness, [
+			'plugin',
+			'install',
+			companion.slug,
+			`--version=${ companion.version }`,
+			'--activate',
+			'--force',
+		] );
+	}
 }
 
 function seedFlavorAgentOptions( harness ) {
@@ -288,8 +392,11 @@ function seedFlavorAgentOptions( harness ) {
 	}
 }
 
-async function bootstrapWp70Harness() {
-	const harness = getWp70HarnessConfig();
+async function bootstrapWp70Harness( options = {} ) {
+	const harness = getWp70HarnessConfig(
+		path.resolve( __dirname, '..' ),
+		options
+	);
 
 	ensureOutputDirectory( harness );
 
@@ -343,13 +450,46 @@ function teardownWp70Harness() {
 	return harness;
 }
 
+/**
+ * Read `--with-gutenberg` / `--with-gutenberg=<version>` off the argument list.
+ *
+ * A flag rather than an environment prefix so the npm scripts stay portable.
+ *
+ * @param {string[]} argv Arguments after the subcommand.
+ * @return {string|undefined} Raw flag value, or undefined when absent.
+ */
+function readGutenbergFlag( argv ) {
+	const flag = argv.find( ( argument ) =>
+		argument.startsWith( '--with-gutenberg' )
+	);
+
+	if ( flag === undefined ) {
+		return undefined;
+	}
+
+	const [ , value ] = flag.split( '=' );
+
+	return value === undefined || value === '' ? '1' : value;
+}
+
 async function main() {
 	const command = process.argv[ 2 ] || 'bootstrap';
 
 	if ( command === 'bootstrap' ) {
-		const harness = await bootstrapWp70Harness();
+		const harness = await bootstrapWp70Harness( {
+			gutenberg: readGutenbergFlag( process.argv.slice( 3 ) ),
+		} );
+		const pinned = harness.companionPlugins
+			.map(
+				( companion ) =>
+					companion.slug +
+					( companion.version ? `@${ companion.version }` : '' )
+			)
+			.join( ', ' );
 		process.stdout.write(
-			`WP 7.1 browser harness ready at ${ harness.baseURL }\n`
+			`WP 7.1 browser harness ready at ${ harness.baseURL }\n` +
+				`  WordPress image: ${ harness.composeEnv.WORDPRESS_BASE_IMAGE }\n` +
+				`  Companion plugins: ${ pinned }\n`
 		);
 		return;
 	}
@@ -375,8 +515,11 @@ if ( require.main === module ) {
 }
 
 module.exports = {
+	DEFAULT_GUTENBERG_VERSION,
 	bootstrapWp70Harness,
 	getWp70HarnessConfig,
+	parseCompanionPlugins,
+	parseGutenbergVersion,
 	resetSiteEditorState,
 	runWpCli,
 	teardownWp70Harness,

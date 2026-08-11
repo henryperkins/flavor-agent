@@ -126,12 +126,8 @@ add_action(
 			return;
 		}
 
-		wp_register_script_module(
-			'@wordpress/core-abilities',
-			content_url('mu-plugins/flavor-agent-playground-core-abilities.js'),
-			[],
-			false
-		);
+		// Only `@wordpress/abilities` is stubbed: the bridge intentionally does
+		// not depend on `@wordpress/core-abilities` (see flavor-agent.php).
 		wp_register_script_module(
 			'@wordpress/abilities',
 			content_url('mu-plugins/flavor-agent-playground-abilities.js'),
