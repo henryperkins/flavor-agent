@@ -393,6 +393,69 @@ check_present_in_each_fixed \
 	"${repo_root}/CLAUDE.md" \
 	"${repo_root}/.github/copilot-instructions.md"
 
+# --- mcp-adapter upstream-drift guards -------------------------------------
+#
+# mcp-adapter is an optional runtime dependency pinned by docs only -- nothing
+# in the tree reads its version -- so upstream releases drift these docs
+# silently. The v0.5.0 -> v0.6.1 jump proved it: 52 upstream commits, an
+# inverted install recommendation, and a changed default-server exposure rule
+# all landed while six doc sites still asserted "the README has not been
+# updated". Refresh procedure lives in docs/reference/wordpress-ai-roadmap-tracking.md.
+#
+# Historical/dated records are excluded on purpose: the 2026-05-24 gap audit
+# legitimately quotes the superseded framing under a dated currentness note,
+# and STATUS.md is an append-only verification log.
+
+check_absent \
+	'superseded mcp-adapter version pin still appears in live docs (current: v0.6.1)' \
+	'the upstream README at v0.5.0' \
+	"${live_docs[@]}" \
+	"${repo_root}/docs/reference/local-environment-setup.md" \
+	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
+
+check_absent \
+	'stale "README has not been updated" claim about mcp-adapter still appears in live docs (upstream rewrote it at v0.6.x)' \
+	'the README has not been updated' \
+	"${live_docs[@]}" \
+	"${repo_root}/docs/reference/local-environment-setup.md" \
+	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
+
+# Exposure-rule guard. Since mcp-adapter 0.6.0 (McpAbilityExposure, #254) an
+# absent meta.mcp key INHERITS meta.public rather than defaulting to private,
+# so any doc still describing the old "carries no mcp meta" mechanism is
+# describing a guarantee the adapter no longer provides.
+check_absent \
+	'docs still describe MCP privacy as the absence of an mcp meta key (0.6.0+ inherits meta.public instead)' \
+	'carry **no `mcp` meta**' \
+	"${live_docs[@]}" \
+	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
+
+check_absent_regex \
+	'superseded meta.mcp.public ability count still appears in live docs (current: seventeen)' \
+	'(ten|Ten) externally-useful read helpers and (all )?six preview siblings declare' \
+	"${live_docs[@]}" \
+	"${repo_root}/.github/copilot-instructions.md"
+
+check_present_in_each_fixed \
+	'mcp-adapter version pin drifted between the setup reference and the contributor runbooks' \
+	'v0.6.1' \
+	"${repo_root}/CLAUDE.md" \
+	"${repo_root}/.github/copilot-instructions.md" \
+	"${repo_root}/docs/reference/local-environment-setup.md"
+
+check_present_fixed \
+	'setup reference should keep the pinned mcp-adapter tag checkout rather than tracking trunk' \
+	'git checkout v0.6.1' \
+	"${repo_root}/docs/reference/local-environment-setup.md"
+
+check_present_in_each_fixed \
+	'docs should record that MCP exposure now inherits meta.public when meta.mcp.public is absent' \
+	'McpAbilityExposure' \
+	"${repo_root}/CLAUDE.md" \
+	"${repo_root}/.github/copilot-instructions.md" \
+	"${repo_root}/docs/reference/abilities-and-routes.md" \
+	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
+
 if (( failed > 0 )); then
 	echo >&2
 	echo "Doc freshness: ${failed} of ${total} checks failed." >&2

@@ -156,10 +156,10 @@ final class RegistrationSchemaTest extends TestCase {
 		$meta = Registration::external_apply_meta( 'flavor-agent/request-template-part-apply' );
 		$this->assertFalse( $meta['annotations']['destructive'] );
 		$this->assertFalse( $meta['annotations']['idempotent'] );
-		$this->assertArrayNotHasKey(
-			'mcp',
-			$meta,
-			'request-template-part-apply must stay off the universal MCP server.'
+		$this->assertSame(
+			false,
+			$meta['mcp']['public'] ?? null,
+			'request-template-part-apply must stay off the universal MCP server via an explicit mcp.public = false; an absent key would inherit meta.public under mcp-adapter >= 0.6.0.'
 		);
 	}
 
@@ -219,10 +219,10 @@ final class RegistrationSchemaTest extends TestCase {
 		$meta = Registration::external_apply_meta( 'flavor-agent/request-template-apply' );
 		$this->assertFalse( $meta['annotations']['destructive'] );
 		$this->assertFalse( $meta['annotations']['idempotent'] );
-		$this->assertArrayNotHasKey(
-			'mcp',
-			$meta,
-			'request-template-apply must stay off the universal MCP server.'
+		$this->assertSame(
+			false,
+			$meta['mcp']['public'] ?? null,
+			'request-template-apply must stay off the universal MCP server via an explicit mcp.public = false; an absent key would inherit meta.public under mcp-adapter >= 0.6.0.'
 		);
 	}
 
