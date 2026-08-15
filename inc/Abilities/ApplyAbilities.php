@@ -120,7 +120,7 @@ final class ApplyAbilities {
 		}
 
 		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
-		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) );
+		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_external_apply_pending_cap.
 
 		if ( ActivityRepository::count_active_pending_external_applies( $user_id ) >= $cap ) {
 			return new \WP_Error(
@@ -155,7 +155,7 @@ final class ApplyAbilities {
 		$suggestion        = self::normalize_map( $input['suggestion'] ?? [] );
 		$timestamp         = gmdate( 'c' );
 		$day_in_seconds    = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
-		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) );
+		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_external_apply_pending_ttl.
 		$expires_at        = gmdate( 'c', time() + $ttl );
 		$scope_key         = StyleAbilities::canonical_scope_key_for( $surface, $global_styles_id, $block_name );
 		$request_reference = sanitize_text_field( (string) ( $input['requestReference'] ?? '' ) );
@@ -328,7 +328,7 @@ final class ApplyAbilities {
 		}
 
 		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
-		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) );
+		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_external_apply_pending_cap.
 
 		if ( ActivityRepository::count_active_pending_external_applies( $user_id ) >= $cap ) {
 			return new \WP_Error(
@@ -344,7 +344,7 @@ final class ApplyAbilities {
 		$suggestion        = self::normalize_map( $input['suggestion'] ?? [] );
 		$timestamp         = gmdate( 'c' );
 		$day_in_seconds    = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
-		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) );
+		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_external_apply_pending_ttl.
 		$expires_at        = gmdate( 'c', time() + $ttl );
 		$scope_key         = 'wp_template_part:' . $template_part_id;
 		$request_reference = sanitize_text_field( (string) ( $input['requestReference'] ?? '' ) );
@@ -514,7 +514,7 @@ final class ApplyAbilities {
 		}
 
 		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
-		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) );
+		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_external_apply_pending_cap.
 
 		if ( ActivityRepository::count_active_pending_external_applies( $user_id ) >= $cap ) {
 			return new \WP_Error(
@@ -531,7 +531,7 @@ final class ApplyAbilities {
 		$suggestion        = self::normalize_map( $input['suggestion'] ?? [] );
 		$timestamp         = gmdate( 'c' );
 		$day_in_seconds    = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
-		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) );
+		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_external_apply_pending_ttl.
 		$expires_at        = gmdate( 'c', time() + $ttl );
 		$scope_key         = $post_type . ':' . $post_id;
 		$request_reference = sanitize_text_field( (string) ( $input['requestReference'] ?? '' ) );
@@ -734,7 +734,7 @@ final class ApplyAbilities {
 		}
 
 		$user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
-		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) );
+		$cap     = max( 1, (int) apply_filters( self::PENDING_CAP_FILTER, self::DEFAULT_PENDING_CAP ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_external_apply_pending_cap.
 
 		if ( ActivityRepository::count_active_pending_external_applies( $user_id ) >= $cap ) {
 			return new \WP_Error(
@@ -750,7 +750,7 @@ final class ApplyAbilities {
 		$suggestion        = self::normalize_map( $input['suggestion'] ?? [] );
 		$timestamp         = gmdate( 'c' );
 		$day_in_seconds    = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
-		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) );
+		$ttl               = max( 60, (int) apply_filters( self::PENDING_TTL_FILTER, $day_in_seconds ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_external_apply_pending_ttl.
 		$expires_at        = gmdate( 'c', time() + $ttl );
 		$scope_key         = 'wp_template:' . $template_ref;
 		$request_reference = sanitize_text_field( (string) ( $input['requestReference'] ?? '' ) );

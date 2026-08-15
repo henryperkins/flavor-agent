@@ -1542,6 +1542,7 @@ final class WordPressAIClient {
 	}
 
 	private static function is_prompt_prevented_by_filter( object $prompt ): bool {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Reads the canonical php-ai-client prompt-prevention contract; the hook name is owned upstream.
 		return (bool) apply_filters( 'wp_ai_client_prevent_prompt', false, $prompt );
 	}
 

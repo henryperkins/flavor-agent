@@ -49,6 +49,7 @@ final class RequestLoggingBridge {
 		}
 
 		$master_enabled = (bool) \apply_filters(
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Consumes the AI plugin's own master feature-gate filter wpai_features_enabled, which is deliberately not plugin-prefixed.
 			self::MASTER_OPTION,
 			(bool) \get_option( self::MASTER_OPTION, false )
 		);
@@ -58,6 +59,7 @@ final class RequestLoggingBridge {
 		}
 
 		return (bool) \apply_filters(
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Consumes the AI plugin's own feature-gate filter wpai_feature_ai-request-logging_enabled, which is deliberately not plugin-prefixed.
 			self::EXPERIMENT_OPTION,
 			(bool) \get_option( self::EXPERIMENT_OPTION, false )
 		);

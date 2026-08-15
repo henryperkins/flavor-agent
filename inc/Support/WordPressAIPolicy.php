@@ -25,6 +25,7 @@ final class WordPressAIPolicy {
 	public static function system_instruction( string $instruction, string $ability_name = '', array $data = [] ): string {
 		$ability_name = '' !== $ability_name ? $ability_name : 'flavor-agent';
 
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Applies the AI plugin's own wpai_system_instruction contract; the hook name is owned upstream.
 		return (string) apply_filters( 'wpai_system_instruction', $instruction, $ability_name, $data );
 	}
 
@@ -66,10 +67,12 @@ final class WordPressAIPolicy {
 	}
 
 	public static function pre_normalize_content( string $content ): string {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Applies the AI plugin's own wpai_pre_normalize_content contract; the hook name is owned upstream.
 		return (string) apply_filters( 'wpai_pre_normalize_content', $content );
 	}
 
 	public static function normalize_content( string $content ): string {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Applies the AI plugin's own wpai_normalize_content contract; the hook name is owned upstream.
 		return trim( (string) apply_filters( 'wpai_normalize_content', $content ) );
 	}
 

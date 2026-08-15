@@ -46,6 +46,7 @@ final class FeatureBootstrap {
 		}
 
 		$features_enabled = (bool) \apply_filters(
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- AI plugin master feature-gate filter, deliberately not plugin-prefixed.
 			'wpai_features_enabled',
 			self::enabled_option( 'wpai_features_enabled', false )
 		);
@@ -55,7 +56,7 @@ final class FeatureBootstrap {
 		}
 
 		return (bool) \apply_filters(
-			// phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- AI plugin feature filters include the hyphenated feature ID.
+			// phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores,WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- AI plugin feature-gate filter: deliberately unprefixed and hyphenated because it carries the feature ID.
 			'wpai_feature_flavor-agent_enabled',
 			self::enabled_option( 'wpai_feature_flavor-agent_enabled', false )
 		);

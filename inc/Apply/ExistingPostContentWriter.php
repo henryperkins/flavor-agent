@@ -685,6 +685,7 @@ final class ExistingPostContentWriter {
 	private static function wp_update_post_depth(): int {
 		$depth = 0;
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- Reentrancy detection, not debug output: the guarded writer must tell Core's own post update apart from a third-party hook callback before it allows the write.
 		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS | DEBUG_BACKTRACE_PROVIDE_OBJECT ) as $frame ) {
 			if ( 'wp_update_post' === (string) ( $frame['function'] ?? '' ) ) {
 				++$depth;
@@ -698,6 +699,7 @@ final class ExistingPostContentWriter {
 		$query_depth  = 0;
 		$update_depth = 0;
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- Reentrancy detection, not debug output: the guarded writer must tell Core's own post update apart from a third-party hook callback before it allows the write.
 		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS | DEBUG_BACKTRACE_PROVIDE_OBJECT ) as $frame ) {
 			if ( $database !== ( $frame['object'] ?? null ) ) {
 				continue;
@@ -722,6 +724,7 @@ final class ExistingPostContentWriter {
 
 		$seen_database_update = false;
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- Reentrancy detection, not debug output: the guarded writer must tell Core's own post update apart from a third-party hook callback before it allows the write.
 		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS | DEBUG_BACKTRACE_PROVIDE_OBJECT ) as $frame ) {
 			if ( ! $seen_database_update ) {
 				if ( $database === ( $frame['object'] ?? null ) && 'update' === (string) ( $frame['function'] ?? '' ) ) {

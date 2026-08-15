@@ -190,6 +190,7 @@ final class BlockTemplatePostInserter {
 	private static function wp_insert_post_depth(): int {
 		$depth = 0;
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- Reentrancy detection, not debug output: the guarded writer must tell Core's own post insert apart from a third-party hook callback before it allows the write.
 		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS | DEBUG_BACKTRACE_PROVIDE_OBJECT ) as $frame ) {
 			if ( 'wp_insert_post' === (string) ( $frame['function'] ?? '' ) ) {
 				++$depth;
@@ -203,6 +204,7 @@ final class BlockTemplatePostInserter {
 		$query_depth  = 0;
 		$insert_depth = 0;
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- Reentrancy detection, not debug output: the guarded writer must tell Core's own post insert apart from a third-party hook callback before it allows the write.
 		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS | DEBUG_BACKTRACE_PROVIDE_OBJECT ) as $frame ) {
 			if ( $database !== ( $frame['object'] ?? null ) ) {
 				continue;
@@ -225,6 +227,7 @@ final class BlockTemplatePostInserter {
 
 		$seen_database_query = false;
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- Reentrancy detection, not debug output: the guarded writer must tell Core's own post insert apart from a third-party hook callback before it allows the write.
 		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS | DEBUG_BACKTRACE_PROVIDE_OBJECT ) as $frame ) {
 			if ( ! $seen_database_query ) {
 				if ( $database === ( $frame['object'] ?? null ) && 'query' === (string) ( $frame['function'] ?? '' ) ) {

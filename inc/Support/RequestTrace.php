@@ -167,6 +167,7 @@ final class RequestTrace {
 	private static function emit( array $entry ): void {
 		if ( function_exists( 'do_action' ) ) {
 			try {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_diagnostic_trace.
 				do_action( self::ACTION_HOOK, $entry );
 			} catch ( \Throwable ) {
 				// Diagnostic observers must not change request behavior.
@@ -192,6 +193,7 @@ final class RequestTrace {
 
 		if ( function_exists( 'apply_filters' ) ) {
 			try {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Constant resolves to the prefixed hook flavor_agent_diagnostic_trace_enabled.
 				$enabled = (bool) apply_filters( self::ENABLED_FILTER, $enabled );
 			} catch ( \Throwable ) {
 				return false;

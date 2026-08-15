@@ -788,6 +788,7 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 	 */
 	private static function raise_request_time_limit(): void {
 		if ( function_exists( 'set_time_limit' ) ) {
+			// phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Best-effort ceiling lift for the provisioning cron worker only; guarded by function_exists and already bounded by the poll budget plus cron reschedule.
 			set_time_limit( 0 );
 		}
 	}
