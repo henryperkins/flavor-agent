@@ -50,7 +50,26 @@ final class MCPServerBootstrapTest extends TestCase {
 		$this->assertContains( 'flavor-agent/get-activity', $call[9] );
 		$this->assertContains( 'flavor-agent/list-activity', $call[9] );
 		$this->assertContains( 'flavor-agent/undo-activity', $call[9] );
-		$this->assertCount( 15, $call[9] );
+
+		// Discovery reads: without these, twelve of the curated tools take a ref a
+		// dedicated-server-only client has no way to enumerate.
+		$this->assertContains( 'flavor-agent/list-templates', $call[9] );
+		$this->assertContains( 'flavor-agent/list-template-parts', $call[9] );
+		$this->assertContains( 'flavor-agent/list-patterns', $call[9] );
+		$this->assertContains( 'flavor-agent/get-theme-styles', $call[9] );
+
+		// The three deliberately non-public helpers stay off: adding them here
+		// would reverse a recorded non-publicity decision.
+		$this->assertNotContains( 'flavor-agent/check-status', $call[9] );
+		$this->assertNotContains( 'flavor-agent/list-synced-patterns', $call[9] );
+		$this->assertNotContains( 'flavor-agent/get-synced-pattern', $call[9] );
+
+		$this->assertCount( 19, $call[9] );
+		$this->assertSame(
+			\count( $call[9] ),
+			\count( \array_unique( $call[9] ) ),
+			'A duplicate tool name would be registered twice on the server.'
+		);
 		$this->assertSame( [], $call[10] );
 		$this->assertSame( [], $call[11] );
 		$this->assertIsCallable( $call[12] );

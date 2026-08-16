@@ -127,8 +127,11 @@ Enforced by:
 - `src/store/block-targeting.js` — live-target resolution by clientId or blockPath, revalidated before undo
 - `src/store/update-helpers.js` — undo snapshots taken at apply time
 - `POST /flavor-agent/v1/activity/{id}/undo` — ordered undo-state transitions (`docs/reference/activity-state-machine.md`)
+- `inc/AgentsAPI/DispatchGuard.php` — refuses `undo-activity` through an agent runtime's generic ability dispatch
 
-Tested by: `src/store/__tests__/activity-undo.test.js`, `src/store/__tests__/block-targeting.test.js`; drift-disabled undo cases in the WP 7.0 Playwright suite (`npm run test:e2e:wp70`).
+Tested by: `src/store/__tests__/activity-undo.test.js`, `src/store/__tests__/block-targeting.test.js`, `tests/phpunit/AgentsApiDispatchGuardTest.php`; drift-disabled undo cases in the WP 7.0 Playwright suite (`npm run test:e2e:wp70`).
+
+Undo is the one governed mutation with no second approval — it is drift-checked but not review-gated, because reversing an already-approved change back to its recorded before-state is not a new decision. That makes it the sharp edge when an agent runtime can reach abilities by name, which is why `DispatchGuard` guards it specifically and leaves the review-gated `request-*-apply` abilities reachable. See [agents-api-integration.md](agents-api-integration.md).
 
 ### Fresh
 

@@ -137,6 +137,44 @@ The expected local runtime includes these active slugs:
 
 Configure text-generation credentials in `Settings > Connectors`. The WordPress 7.0 Field Guide identifies Anthropic, Google, and OpenAI as the default Connectors screen providers, so the representative local runtime installs the matching WordPress.org-authored provider connector plugins when available. Provider plugins own their provider-specific setup; do not use Flavor Agent's embedding settings as a replacement for the Connectors runtime. In `Settings > Flavor Agent`, configure one Embedding Model for semantic features, then choose Pattern Storage when testing pattern recommendations: Qdrant uses the Embedding Model plus Qdrant, while Cloudflare AI Search uses a private managed pattern index. Developer Docs uses Flavor Agent's built-in public endpoint and does not require local Cloudflare credentials.
 
+## Optional: Agents API (agent-runtime integration only)
+
+Automattic's [Agents API](https://github.com/Automattic/agents-api) is **not** part of the expected runtime above. Install it only when validating Flavor Agent's optional agent adapter; every other surface behaves identically without it, and the adapter registers nothing when it is absent.
+
+Supported release: **`v0.7.0` or newer** (`FlavorAgent\AgentsAPI\Compatibility::MINIMUM_VERSION`). Pin an exact released tag rather than tracking `main` — the project is pre-1.0 and `main` may be ahead of its latest tag. An older tag, or a build whose version header cannot be read, is reported as unsupported and the adapter stays inert.
+
+Agents API is not on WordPress.org; upstream ships it as a plugin or a Composer package, both loading the same bootstrap. Clone the pinned tag into `wp-content/plugins`:
+
+```bash
+docker compose exec -T wordpress bash -lc 'set -e
+cd /var/www/html/wp-content/plugins
+if [ ! -d agents-api/.git ]; then
+	rm -rf agents-api
+	git clone --branch v0.7.0 --depth 1 https://github.com/Automattic/agents-api.git agents-api
+else
+	# An existing checkout may sit on another branch or tag. The adapter is
+	# pinned, so move it onto v0.7.0 rather than activating whatever is there.
+	cd agents-api
+	git fetch --depth 1 origin tag v0.7.0
+	git checkout --detach v0.7.0
+	cd ..
+fi
+cd agents-api
+git describe --tags --exact-match >/dev/null 2>&1 || { echo "agents-api checkout is not on a tag; expected v0.7.0" >&2; exit 1; }
+composer install --no-interaction --prefer-dist
+wp plugin activate agents-api --allow-root'
+```
+
+Verify the adapter from the runtime rather than by eye — `flavor-agent/check-status` reports agent-runtime readiness under a top-level `agentRuntime` key, independent of recommendation backend readiness:
+
+```bash
+docker compose exec -T wordpress wp eval \
+	'echo wp_json_encode( FlavorAgent\Abilities\InfraAbilities::check_status( [] )["agentRuntime"] );' --allow-root
+# {"present":true,"supported":true,"version":"0.7.0","minimumVersion":"0.7.0","reason":"ok","missingContract":""}
+```
+
+With the Flavor Agent AI feature enabled, `wp_get_agent( 'flavor-agent' )` then returns a definition whose `enabled_tools` covers status, discovery, preview, recommendation, and scoped activity reads — and no `request-*-apply` or `undo-activity` tool. See [agents-api-integration.md](agents-api-integration.md).
+
 ## Abilities Explorer (AI plugin Experiment)
 
 The canonical AI plugin ships an Abilities Explorer Experiment that mounts at `Tools > Abilities Explorer` once enabled. It auto-discovers every ability registered with `wp_register_ability()` that declares `meta.show_in_rest = true`, shows the input/output schemas, and lets operators dispatch the ability with custom JSON input directly from wp-admin. It is the primary local harness for verifying Flavor Agent ability wiring without writing a Playwright spec.

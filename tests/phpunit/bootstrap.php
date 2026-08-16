@@ -250,6 +250,9 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<string, int> */
 		public static array $do_action_counts = [];
 
+		/** @var array<int, string> Stack of currently-firing action names. */
+		public static array $current_actions = [];
+
 		/** @var array<string, mixed> */
 		public static array $wp_cli_commands = [];
 
@@ -530,6 +533,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$db_queries                  = [];
 			self::$filters                     = [];
 			self::$do_action_counts            = [];
+			self::$current_actions             = [];
 			self::$wp_cli_commands             = [];
 			self::$wp_cli_messages             = [];
 			self::$wp_cli_exit_code            = null;
@@ -3663,21 +3667,30 @@ namespace {
 			WordPressTestState::$do_action_counts[$hook_name] =
 				(WordPressTestState::$do_action_counts[$hook_name] ?? 0) + 1;
 
-			if (empty(WordPressTestState::$filters[$hook_name])) {
-				return;
-			}
+			// Pushed before the no-callbacks bail so `doing_action()` answers
+			// true for a hook with no listeners, as core does. The Agents API
+			// stubs gate registration on exactly that.
+			WordPressTestState::$current_actions[] = $hook_name;
 
-			$callbacks = WordPressTestState::$filters[$hook_name];
-			ksort($callbacks);
-
-			foreach ($callbacks as $entries) {
-				foreach ($entries as $entry) {
-					$accepted_args = (int) ($entry['accepted_args'] ?? 1);
-					$callback_args = 0 === $accepted_args
-						? []
-						: array_slice($args, 0, $accepted_args);
-					call_user_func_array($entry['callback'], $callback_args);
+			try {
+				if (empty(WordPressTestState::$filters[$hook_name])) {
+					return;
 				}
+
+				$callbacks = WordPressTestState::$filters[$hook_name];
+				ksort($callbacks);
+
+				foreach ($callbacks as $entries) {
+					foreach ($entries as $entry) {
+						$accepted_args = (int) ($entry['accepted_args'] ?? 1);
+						$callback_args = 0 === $accepted_args
+							? []
+							: array_slice($args, 0, $accepted_args);
+						call_user_func_array($entry['callback'], $callback_args);
+					}
+				}
+			} finally {
+				array_pop(WordPressTestState::$current_actions);
 			}
 		}
 	}
@@ -4462,6 +4475,42 @@ namespace {
 		}
 	}
 
+	if (! function_exists('did_action')) {
+		function did_action(string $hook_name): int
+		{
+			return (int) (WordPressTestState::$do_action_counts[$hook_name] ?? 0);
+		}
+	}
+
+	if (! function_exists('doing_action')) {
+		function doing_action(?string $hook_name = null): bool
+		{
+			if (null === $hook_name) {
+				return [] !== WordPressTestState::$current_actions;
+			}
+
+			return in_array($hook_name, WordPressTestState::$current_actions, true);
+		}
+	}
+
+	if (! function_exists('get_file_data')) {
+		function get_file_data(string $file, array $headers, string $context = ''): array
+		{
+			unset($context);
+
+			$contents = is_readable($file) ? (string) file_get_contents($file) : '';
+			$data     = [];
+
+			foreach ($headers as $field => $regex) {
+				$data[$field] = preg_match('/^[ \t\/*#@]*' . preg_quote($regex, '/') . ':(.*)$/mi', $contents, $match) && $match[1]
+					? trim(preg_replace('/\s*(?:\*\/|\?>).*/', '', $match[1]) ?? '')
+					: '';
+			}
+
+			return $data;
+		}
+	}
+
 	if (! function_exists('wp_register_ability')) {
 		function wp_register_ability(string $id, array $args): void
 		{
@@ -4488,6 +4537,50 @@ namespace {
 			}
 
 			WordPressTestState::$registered_abilities[$id] = $ability_args;
+		}
+	}
+
+	if (! function_exists('wp_get_ability')) {
+		function wp_get_ability(string $id): ?object
+		{
+			$args = WordPressTestState::$registered_abilities[$id] ?? null;
+
+			if (! is_array($args)) {
+				return null;
+			}
+
+			return new class ($id, $args) {
+				public function __construct(private string $id, private array $args)
+				{
+				}
+
+				public function get_name(): string
+				{
+					return $this->id;
+				}
+
+				public function get_description(): string
+				{
+					return (string) ($this->args['description'] ?? '');
+				}
+
+				public function get_input_schema(): array
+				{
+					return is_array($this->args['input_schema'] ?? null) ? $this->args['input_schema'] : [];
+				}
+
+				public function get_meta(): array
+				{
+					return is_array($this->args['meta'] ?? null) ? $this->args['meta'] : [];
+				}
+
+				public function get_meta_item(string $key, mixed $default = null): mixed
+				{
+					$meta = is_array($this->args['meta'] ?? null) ? $this->args['meta'] : [];
+
+					return $meta[$key] ?? $default;
+				}
+			};
 		}
 	}
 

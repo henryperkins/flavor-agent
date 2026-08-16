@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
+use FlavorAgent\AgentsAPI\Compatibility as AgentsApiCompatibility;
 use FlavorAgent\AI\FeatureBootstrap;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
@@ -107,6 +108,11 @@ final class InfraAbilities {
 					'runtime'    => $cloudflare_runtime_state,
 				],
 			],
+			// Reported separately from `backends` on purpose: an absent or
+			// unsupported agent runtime says nothing about whether
+			// recommendations are configured, and conflating the two would make
+			// "no Agents API" read as "no working provider".
+			'agentRuntime'       => AgentsApiCompatibility::status(),
 		];
 	}
 
