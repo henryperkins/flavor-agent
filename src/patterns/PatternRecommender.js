@@ -6,11 +6,15 @@
  * browse-only from Gutenberg's perspective: it does not rewrite the
  * native pattern registry or category metadata.
  *
- * Two modes:
- * - Passive: fetches on editor load using postType
- * - Active: fetches on inserter search input with prompt
+ * Ranking is dispatched on inserter intent, never on editor load:
+ * - Inserter open: ranks the current insertion point, once the visible
+ *   pattern catalog has hydrated
+ * - Inserter search: re-ranks with the typed prompt
  * - Unavailable: keeps the inserter surface visible with a shared
- *   capability notice when ranking backends are missing
+ *   capability notice when the server reports the surface unavailable
+ * - Catalog unavailable: core finished resolving block patterns and
+ *   produced none, so there is nothing to rank; offers a retry that
+ *   invalidates core's resolution rather than re-requesting a ranking
  *
  * Pattern settings reads and DOM discovery are split so selector
  * degradation stays isolated from the settings compatibility path.
@@ -76,6 +80,12 @@ import {
 } from './recommendation-utils';
 
 const SEARCH_DEBOUNCE_MS = 400;
+// How long the inserter-open ranking waits for core's block-pattern catalog
+// before it reports the catalog unavailable instead of implying work is still
+// in progress. Core resolves `getBlockPatterns` exactly once per page and never
+// retries it, so without this the surface would claim to be "preparing"
+// recommendations for the lifetime of the editor.
+const PATTERN_CATALOG_STALL_TIMEOUT_MS = 20_000;
 const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
 const EMPTY_BLOCK_EDITOR_SETTINGS = {};
 const EMPTY_BLOCK_TREE = [];
@@ -738,6 +748,11 @@ function PatternInserterNotice( {
 			"This spot doesn't accept patterns. Click into the page body (or a container that allows patterns) to get recommendations.",
 			'flavor-agent'
 		);
+	} else if ( status === 'catalog-unavailable' ) {
+		resolvedMessage = __(
+			'WordPress returned no block patterns for this site, so there is nothing to rank yet. Retry, or reload the editor if this persists.',
+			'flavor-agent'
+		);
 	}
 
 	return (
@@ -756,6 +771,11 @@ function PatternInserterNotice( {
 						{ __( 'Ranking failed', 'flavor-agent' ) }
 					</span>
 				) }
+				{ status === 'catalog-unavailable' && (
+					<span className="flavor-agent-pill flavor-agent-pill--stale">
+						{ __( 'Patterns unavailable', 'flavor-agent' ) }
+					</span>
+				) }
 				{ status === 'loading' && (
 					<span className="flavor-agent-pill">
 						{ __( 'Ranking…', 'flavor-agent' ) }
@@ -769,15 +789,16 @@ function PatternInserterNotice( {
 			>
 				{ resolvedMessage }
 			</p>
-			{ status === 'error' && typeof onRetry === 'function' && (
-				<Button
-					variant="link"
-					onClick={ onRetry }
-					className="flavor-agent-pattern-summary__retry"
-				>
-					{ __( 'Retry', 'flavor-agent' ) }
-				</Button>
-			) }
+			{ ( status === 'error' || status === 'catalog-unavailable' ) &&
+				typeof onRetry === 'function' && (
+					<Button
+						variant="link"
+						onClick={ onRetry }
+						className="flavor-agent-pattern-summary__retry"
+					>
+						{ __( 'Retry', 'flavor-agent' ) }
+					</Button>
+				) }
 		</div>
 	);
 }
@@ -1881,6 +1902,72 @@ export default function PatternRecommender() {
 		recordPatternOutcome,
 	] );
 
+	// Core resolves `getBlockPatterns` once per page and registers no
+	// `shouldInvalidate` for it, so a failed or genuinely empty resolution is
+	// permanent for the editor's lifetime. `hasFinishedResolution` reports true
+	// for both 'finished' and 'error', which is exactly the "core is done and
+	// produced nothing" signal this surface needs to stop implying progress.
+	const hasResolvedBlockPatternCatalog = useSelect( ( select ) => {
+		const coreData = select( 'core' );
+
+		if ( typeof coreData?.hasFinishedResolution !== 'function' ) {
+			return false;
+		}
+
+		return Boolean( coreData.hasFinishedResolution( 'getBlockPatterns' ) );
+	}, [] );
+
+	const [ hasPatternCatalogTimedOut, setHasPatternCatalogTimedOut ] =
+		useState( false );
+	const [ patternCatalogRetryGeneration, setPatternCatalogRetryGeneration ] =
+		useState( 0 );
+
+	// Backstop for runtimes where the resolution metadata above is unavailable
+	// (older core, or a catalog populated by something other than the resolver).
+	useEffect( () => {
+		if (
+			! canRecommend ||
+			! isInserterOpen ||
+			! effectivePostType ||
+			! currentPatternRuntimeSignature ||
+			insertionPointAllowsNoPatterns ||
+			hasResolvedBlockPatternCatalog ||
+			visiblePatternNames.length > 0
+		) {
+			setHasPatternCatalogTimedOut( false );
+			return undefined;
+		}
+
+		const timer = setTimeout( () => {
+			setHasPatternCatalogTimedOut( true );
+		}, PATTERN_CATALOG_STALL_TIMEOUT_MS );
+
+		return () => clearTimeout( timer );
+	}, [
+		canRecommend,
+		isInserterOpen,
+		effectivePostType,
+		currentPatternRuntimeSignature,
+		insertionPointAllowsNoPatterns,
+		hasResolvedBlockPatternCatalog,
+		visiblePatternNames.length,
+		patternCatalogRetryGeneration,
+	] );
+
+	const isPatternCatalogUnavailable =
+		visiblePatternNames.length === 0 &&
+		( hasResolvedBlockPatternCatalog || hasPatternCatalogTimedOut );
+
+	const handleRetryPatternCatalog = useCallback( () => {
+		setHasPatternCatalogTimedOut( false );
+		setPatternCatalogRetryGeneration( ( generation ) => generation + 1 );
+		// Invalidating core's resolution is what actually refetches the catalog;
+		// re-requesting a ranking would be pointless while it stays empty.
+		registry
+			.dispatch?.( 'core' )
+			?.invalidateResolutionForStoreSelector?.( 'getBlockPatterns' );
+	}, [ registry ] );
+
 	useEffect( () => {
 		if (
 			! canRecommend ||
@@ -1919,6 +2006,10 @@ export default function PatternRecommender() {
 
 	const handleSearchInput = useCallback(
 		( value ) => {
+			if ( visiblePatternNames.length === 0 ) {
+				return;
+			}
+
 			scheduleSearchFetch( () => {
 				if (
 					! effectivePostType ||
@@ -1944,6 +2035,7 @@ export default function PatternRecommender() {
 			effectivePostType,
 			currentPatternRuntimeSignature,
 			insertionPointAllowsNoPatterns,
+			visiblePatternNames.length,
 			buildBaseInput,
 			fetchPatternRecommendationsForCurrentTarget,
 			scheduleSearchFetch,
@@ -2054,6 +2146,13 @@ export default function PatternRecommender() {
 			);
 		} else if ( insertionPointAllowsNoPatterns ) {
 			notice = <PatternInserterNotice status="no-patterns" />;
+		} else if ( isPatternCatalogUnavailable ) {
+			notice = (
+				<PatternInserterNotice
+					status="catalog-unavailable"
+					onRetry={ handleRetryPatternCatalog }
+				/>
+			);
 		} else if ( patternStatus === 'error' ) {
 			notice = (
 				<PatternInserterNotice

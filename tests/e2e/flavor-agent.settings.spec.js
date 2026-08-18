@@ -1,4 +1,4 @@
-const { test, expect } = require( '@playwright/test' );
+const { test, expect } = require( './test-fixtures' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 const { getWp70HarnessConfig, runWpCli } = require( '../../scripts/wp70-e2e' );
 

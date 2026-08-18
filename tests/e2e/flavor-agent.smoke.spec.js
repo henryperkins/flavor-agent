@@ -1,4 +1,4 @@
-const { test, expect } = require( '@playwright/test' );
+const { test, expect } = require( './test-fixtures' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 const {
 	getWp70HarnessConfig,
@@ -3536,6 +3536,11 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		Boolean( window.flavorAgentData?.canRecommendPatterns )
 	);
 	await seedParagraphBlock( page );
+	// The inserter-open ranking is gated on a non-empty visible pattern list,
+	// which comes entirely from core's /wp/v2/block-patterns/patterns resolver.
+	// Assert the catalog hydrated first so a harness fault fails here, at a
+	// named precondition, instead of as an opaque "no ability request" timeout.
+	await waitForPatternCatalogHydration( page );
 	const searchPrompt = 'hero';
 
 	await dismissWelcomeGuide( page );
@@ -3702,6 +3707,10 @@ test( 'pattern surface inserts a recommended pattern at the top-level root and r
 	// Seeds and SELECTS a single top-level paragraph, so the captured insertion
 	// root is undefined -> the null/'' code path under test.
 	await seedParagraphBlock( page );
+	// This test asserts a ranking request carrying a non-empty
+	// visiblePatternNames, so an unhydrated catalog fails it. Surface that as a
+	// precondition rather than as a downstream assertion timeout.
+	await waitForPatternCatalogHydration( page );
 	await dismissWelcomeGuide( page );
 
 	await page

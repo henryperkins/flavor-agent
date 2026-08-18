@@ -1,4 +1,4 @@
-const { test, expect } = require( '@playwright/test' );
+const { test, expect } = require( './test-fixtures' );
 const { buildQueryString } = require( '@wordpress/url' );
 const {
 	getWp70HarnessConfig,

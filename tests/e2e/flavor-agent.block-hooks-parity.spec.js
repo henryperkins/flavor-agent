@@ -1,4 +1,4 @@
-const { test, expect } = require( '@playwright/test' );
+const { test, expect } = require( './test-fixtures' );
 const { getWp70HarnessConfig, runWpCli } = require( '../../scripts/wp70-e2e' );
 const {
 	parseBlockHooksParityProbeOutput,

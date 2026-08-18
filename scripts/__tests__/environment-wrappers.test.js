@@ -40,11 +40,11 @@ describe( 'environment wrapper configuration', () => {
 			'utf8'
 		);
 
-		expect( configSource ).toContain(
-			'`--mount-dir ${ quoteShellArg( pluginDir ) } /wordpress/wp-content/plugins/flavor-agent`'
+		expect( configSource ).toMatch(
+			/`--mount-dir \$\{ quoteShellArg\(\s*pluginDir\s*\) \} \/wordpress\/wp-content\/plugins\/flavor-agent`/
 		);
-		expect( configSource ).toContain(
-			'`--mount-dir ${ quoteShellArg( muPluginDir ) } /wordpress/wp-content/mu-plugins`'
+		expect( configSource ).toMatch(
+			/`--mount-dir \$\{ quoteShellArg\(\s*muPluginDir\s*\) \} \/wordpress\/wp-content\/mu-plugins`/
 		);
 	} );
 } );

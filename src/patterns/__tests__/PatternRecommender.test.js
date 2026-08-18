@@ -20,6 +20,7 @@ const mockGetAllowedPatterns = jest.fn();
 const mockFindInserterContainer = jest.fn();
 const mockFindInserterSearchInput = jest.fn();
 const mockGetVisiblePatternNames = jest.fn();
+const mockInvalidateResolutionForStoreSelector = jest.fn();
 
 const fs = require( 'fs' );
 const path = require( 'path' );
@@ -137,6 +138,13 @@ const DOCS_GROUNDING_WARNING = {
 
 function createSelectMap() {
 	return {
+		core: {
+			hasFinishedResolution: jest.fn(
+				( selectorName ) =>
+					selectorName === 'getBlockPatterns' &&
+					Boolean( state.hasResolvedBlockPatterns )
+			),
+		},
 		'core/editor': {
 			getCurrentPostType: jest.fn( () => state.postType ),
 			isInserterOpened: jest.fn( () => state.isInserterOpen ),
@@ -305,6 +313,9 @@ describe( 'PatternRecommender', () => {
 			postType: 'page',
 			isInserterOpen: true,
 			visiblePatternNames: [ 'theme/hero' ],
+			// Whether core has finished (or failed) resolving getBlockPatterns.
+			// Defaults to false so an empty catalog reads as "still hydrating".
+			hasResolvedBlockPatterns: false,
 			allowedPatterns: [],
 			editSite: {
 				postType: 'page',
@@ -449,6 +460,13 @@ describe( 'PatternRecommender', () => {
 		} );
 		mockUseRegistry.mockImplementation( () => ( {
 			select: ( storeName ) => createSelectMap()[ storeName ] || {},
+			dispatch: ( storeName ) =>
+				storeName === 'core'
+					? {
+							invalidateResolutionForStoreSelector:
+								mockInvalidateResolutionForStoreSelector,
+					  }
+					: {},
 		} ) );
 		mockUseSelect.mockImplementation( ( callback ) =>
 			callback( ( storeName ) => createSelectMap()[ storeName ] )
@@ -907,6 +925,177 @@ describe( 'PatternRecommender', () => {
 		expect( document.body.textContent ).not.toContain(
 			"This spot doesn't accept patterns."
 		);
+	} );
+
+	describe( 'empty core pattern catalog', () => {
+		function renderWithEmptyCatalog( patternStatus = 'idle' ) {
+			const inserterContainer = document.createElement( 'div' );
+
+			inserterContainer.className =
+				'block-editor-inserter__panel-content';
+			document.body.appendChild( inserterContainer );
+			state.visiblePatternNames = [];
+			state.topLevelAllowedPatterns = [];
+			state.store.patternStatus = patternStatus;
+			mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+			renderComponent();
+
+			return inserterContainer;
+		}
+
+		test( 'keeps preparing while core is still resolving the catalog', () => {
+			state.hasResolvedBlockPatterns = false;
+
+			renderWithEmptyCatalog();
+
+			expect( document.body.textContent ).toContain(
+				'Preparing pattern recommendations for this insertion point.'
+			);
+			expect( document.body.textContent ).not.toContain(
+				'WordPress returned no block patterns for this site'
+			);
+		} );
+
+		test( 'reports the catalog unavailable once core resolution finishes empty', () => {
+			state.hasResolvedBlockPatterns = true;
+
+			const inserterContainer = renderWithEmptyCatalog();
+
+			expect( document.body.textContent ).toContain(
+				'WordPress returned no block patterns for this site'
+			);
+			expect( document.body.textContent ).not.toContain(
+				'Preparing pattern recommendations for this insertion point.'
+			);
+			expect(
+				findButtonByText( inserterContainer, 'Retry' )
+			).toBeTruthy();
+			// Still no ranking request: there is nothing to rank.
+			expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+		} );
+
+		test.each( [ 'ready', 'error', 'loading' ] )(
+			'reports the catalog unavailable when stale ranking status is %s',
+			( patternStatus ) => {
+				state.hasResolvedBlockPatterns = true;
+
+				const inserterContainer =
+					renderWithEmptyCatalog( patternStatus );
+
+				expect( document.body.textContent ).toContain(
+					'WordPress returned no block patterns for this site'
+				);
+				expect(
+					findButtonByText( inserterContainer, 'Retry' )
+				).toBeTruthy();
+				expect( document.body.textContent ).not.toContain(
+					'Flavor Agent did not find a strong pattern match'
+				);
+			}
+		);
+
+		test( 'falls back to a bounded wait when resolution metadata is unavailable', () => {
+			// Core older than the metadata contract, or a catalog populated by
+			// something other than the resolver.
+			state.hasResolvedBlockPatterns = false;
+
+			renderWithEmptyCatalog();
+
+			expect( document.body.textContent ).toContain(
+				'Preparing pattern recommendations for this insertion point.'
+			);
+
+			act( () => {
+				jest.advanceTimersByTime( 20_000 );
+			} );
+
+			expect( document.body.textContent ).toContain(
+				'WordPress returned no block patterns for this site'
+			);
+		} );
+
+		test( 'retry invalidates core resolution instead of re-requesting a ranking', () => {
+			state.hasResolvedBlockPatterns = true;
+
+			const inserterContainer = renderWithEmptyCatalog();
+
+			act( () => {
+				findButtonByText( inserterContainer, 'Retry' ).click();
+			} );
+
+			expect(
+				mockInvalidateResolutionForStoreSelector
+			).toHaveBeenCalledWith( 'getBlockPatterns' );
+			expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+		} );
+
+		test( 'retry starts a fresh bounded wait for unresolved catalogs', () => {
+			state.hasResolvedBlockPatterns = false;
+
+			const inserterContainer = renderWithEmptyCatalog();
+
+			act( () => {
+				jest.advanceTimersByTime( 20_000 );
+			} );
+			act( () => {
+				findButtonByText( inserterContainer, 'Retry' ).click();
+			} );
+
+			expect( document.body.textContent ).toContain(
+				'Preparing pattern recommendations for this insertion point.'
+			);
+
+			act( () => {
+				jest.advanceTimersByTime( 19_999 );
+			} );
+
+			expect( document.body.textContent ).toContain(
+				'Preparing pattern recommendations for this insertion point.'
+			);
+
+			act( () => {
+				jest.advanceTimersByTime( 1 );
+			} );
+
+			expect( document.body.textContent ).toContain(
+				'WordPress returned no block patterns for this site'
+			);
+		} );
+
+		test( 'does not request rankings for inserter searches while the catalog is empty', () => {
+			const searchInput = {
+				addEventListener: jest.fn(),
+				removeEventListener: jest.fn(),
+			};
+			let inputListener = null;
+
+			state.hasResolvedBlockPatterns = true;
+			mockFindInserterSearchInput.mockReturnValue( searchInput );
+			searchInput.addEventListener.mockImplementation(
+				( event, listener ) => {
+					if ( event === 'input' ) {
+						inputListener = listener;
+					}
+				}
+			);
+
+			renderWithEmptyCatalog();
+
+			expect( inputListener ).toEqual( expect.any( Function ) );
+			expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+
+			act( () => {
+				inputListener( {
+					target: {
+						value: 'hero',
+					},
+				} );
+				jest.advanceTimersByTime( 400 );
+			} );
+
+			expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+		} );
 	} );
 
 	test( 'uses unreadable synced-pattern diagnostics for the empty state message', () => {
