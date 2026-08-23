@@ -5,6 +5,8 @@ Audit grounded in the last 30 days of WordPress core AI activity (Make WP AI, Ma
 > Currentness note, 2026-06-10: this remains a dated audit snapshot. Subsequent preview-ability and governed external-apply work raised the contract as of that date to 29 abilities (seven recommendation, twelve helper/read, one docs search, five preview siblings, and four external-apply abilities). The ability-scale watch item remains valid, but use `docs/reference/current-open-work.md` and `docs/reference/abilities-and-routes.md` for the current count.
 >
 > Currentness note, 2026-07-20: every ability count and apply/attestation scope below is superseded. The live contract is **35 abilities** (eight recommendation, thirteen helper/read, one docs search, six preview siblings, and seven external-apply abilities), governed external apply spans **four lanes** (style, `wp_template`, `wp_template_part`, post-blocks), and Ring III attestation covers **three lanes** (`external-style-apply-v1`, `external-template-apply-v1`, `external-template-part-apply-v1`) with post-blocks deliberately excluded. Read the numbers below as 2026-05-24 history, not current state.
+>
+> Currentness note, 2026-08-23: the service-first AI Client assessment below is also historical. AI plugin `1.3.0` deprecated `AI_Service` / `get_ai_service()`, and Flavor Agent now calls `wp_ai_client_prompt()` directly with an explicit snake_case-to-camelCase `ModelConfig` mapping. Use `docs/reference/wordpress-ai-roadmap-tracking.md` for the release overlay.
 
 ## How to read this
 

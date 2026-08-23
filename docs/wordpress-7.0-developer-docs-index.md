@@ -167,6 +167,7 @@ These are not dedicated release docs, but they surfaced in Developer Blog search
 
 These are not core release-plan docs, but they affect how WordPress 7.0-era AI and local tooling can be used around Flavor Agent.
 
+- 2026-08-18: [AI plugin 1.3.0 release](https://github.com/WordPress/ai/releases/tag/1.3.0)
 - 2026-07-14: [AI plugin 1.2.0 release](https://github.com/WordPress/ai/releases/tag/1.2.0)
 - 2026-07-01: [AI plugin 1.1.0 release](https://github.com/WordPress/ai/releases/tag/1.1.0)
 - 2026-06-16: [AI plugin 1.0.2 release](https://github.com/WordPress/ai/releases/tag/1.0.2)
@@ -182,4 +183,4 @@ These are not core release-plan docs, but they affect how WordPress 7.0-era AI a
 - 5 testing docs
 - 9 supplemental Developer Blog roundup posts and tooling articles
 - 13 supplemental Gutenberg release/update posts
-- 7 supplemental Playground and AI ecosystem posts
+- 8 supplemental Playground and AI ecosystem posts

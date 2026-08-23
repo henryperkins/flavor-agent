@@ -25,6 +25,18 @@ final class WordPressAIClient {
 	private const PROMPT_PREVENTED_MESSAGE    = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
 	private const DEFAULT_REQUEST_TIMEOUT     = 90;
 	private const REASONING_EFFORTS           = [ 'low', 'medium', 'high', 'xhigh' ];
+	private const MODEL_CONFIG_OPTION_KEY_MAP = [
+		'candidate_count'   => 'candidateCount',
+		'max_tokens'        => 'maxTokens',
+		'temperature'       => 'temperature',
+		'top_p'             => 'topP',
+		'top_k'             => 'topK',
+		'stop_sequences'    => 'stopSequences',
+		'presence_penalty'  => 'presencePenalty',
+		'frequency_penalty' => 'frequencyPenalty',
+		'logprobs'          => 'logprobs',
+		'top_logprobs'      => 'topLogprobs',
+	];
 	private const SCHEMA_UNION_LIMIT          = 16;
 	/**
 	 * Byte ceiling above which a response schema is treated as grammar-heavy.
@@ -73,8 +85,7 @@ final class WordPressAIClient {
 	 * is present. When it is absent we may still operate via Jetpack AI.
 	 */
 	private static function wordpress_ai_client_runtime_available(): bool {
-		return function_exists( 'WordPress\\AI\\get_ai_service' )
-			|| function_exists( 'wp_ai_client_prompt' );
+		return function_exists( 'wp_ai_client_prompt' );
 	}
 
 	/**
@@ -511,26 +522,6 @@ final class WordPressAIClient {
 	 * @return object|\WP_Error
 	 */
 	private static function make_prompt( string $user_prompt, array $options = [] ): mixed {
-		if ( function_exists( 'WordPress\\AI\\get_ai_service' ) ) {
-			try {
-				$service = \WordPress\AI\get_ai_service();
-
-				if ( is_object( $service ) && is_callable( [ $service, 'create_textgen_prompt' ] ) ) {
-					$prompt = $service->create_textgen_prompt( $user_prompt, $options );
-
-					if ( is_wp_error( $prompt ) ) {
-						return $prompt;
-					}
-
-					if ( is_object( $prompt ) ) {
-						return $prompt;
-					}
-				}
-			} catch ( \Throwable $throwable ) {
-				// Fall back to the raw SDK entry point below for older or partial installs.
-			}
-		}
-
 		if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
 			return new \WP_Error(
 				'wp_ai_client_unavailable',
@@ -582,14 +573,20 @@ final class WordPressAIClient {
 	/**
 	 * Apply sanitized model options to a prompt builder via using_model_config.
 	 *
-	 * system_instruction is intentionally excluded because chat() applies it to
-	 * the returned builder through apply_system_instruction().
+	 * The public options use WordPress-style snake_case keys, while ModelConfig
+	 * consumes the SDK's camelCase keys. system_instruction is intentionally
+	 * excluded because chat() applies it through apply_system_instruction().
 	 *
 	 * @param array<string, mixed> $options
 	 */
 	private static function apply_options_to_prompt_builder( object $prompt, array $options ): object {
-		$model_options = $options;
-		unset( $model_options['system_instruction'] );
+		$model_options = [];
+
+		foreach ( self::MODEL_CONFIG_OPTION_KEY_MAP as $option_key => $model_config_key ) {
+			if ( array_key_exists( $option_key, $options ) ) {
+				$model_options[ $model_config_key ] = $options[ $option_key ];
+			}
+		}
 
 		if ( [] === $model_options ) {
 			return $prompt;

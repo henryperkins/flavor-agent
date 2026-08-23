@@ -1,12 +1,14 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-07-20
+> Last updated: 2026-08-23
 
 ## Working
 
 ### Abilities API (WordPress 7.0+)
 
 Flavor Agent defines 35 ability contracts. The 14 helper/search abilities register whenever the Abilities API is available; the six `preview-recommend-*` signature-only siblings register when the canonical WordPress AI contracts are available; the eight recommendation abilities plus seven governed external-apply abilities register only when the WordPress AI plugin feature contracts are available and the Flavor Agent feature is enabled through the AI plugin feature toggles. Useful recommendation and external-apply output still depends on the per-surface capability and backend gates documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md). The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`/`openWorld`) — lives there too.
+
+AI plugin [`1.3.0`](https://github.com/WordPress/ai/releases/tag/1.3.0) compatibility is documented and the Docker-backed WordPress 7.0 E2E harness passes with that release active (30/30); connector-backed live text generation and model resolution have not been smoke-tested. Flavor Agent now calls `wp_ai_client_prompt()` directly instead of the deprecated `AI_Service` / `get_ai_service()` layer and explicitly maps its public snake_case generation options to the AI Client SDK's camelCase `ModelConfig` keys. The release's Custom Abilities opt-in gate applies to the AI plugin's custom abilities, not Flavor Agent's registrations, and public `log_ai_request()` complements the existing request-log bridge and local diagnostics. Embedding helpers are not usable on supported WordPress 7.0/7.1 because [`#946`](https://github.com/WordPress/ai/pull/946) disables `SDK_Overlay`; Flavor Agent retains plugin-owned embeddings and retrieval.
 
 - **Block**: `recommend-block`, `introspect-block`, `list-allowed-blocks`
 - **Content**: `recommend-content`

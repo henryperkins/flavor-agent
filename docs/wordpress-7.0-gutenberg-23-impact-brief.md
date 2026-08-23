@@ -1,7 +1,7 @@
 # Flavor Agent Impact Brief: WordPress 7.0 and Gutenberg 23
 
 > Compiled: 2026-04-23
-> Reviewed: 2026-06-18
+> Reviewed: 2026-08-23 (minimal currentness correction; snapshot scope retained)
 > Scope: dated upstream release posture plus the concrete impact on this repo's shipped code and docs
 > Status: retained as a point-in-time compatibility snapshot for the WordPress 7.0 / Gutenberg 23.x release cycle. Use `docs/reference/gutenberg-feature-tracking.md` for ongoing Gutenberg/API tracking and `docs/reference/wordpress-ai-roadmap-tracking.md` for ongoing WordPress AI roadmap pressure.
 > Use `docs/wordpress-7.0-developer-docs-index.md` for the broader upstream source map and `docs/wp7-migration-opportunities.md` for the older migration snapshot.
@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | WordPress 7.0 schedule | WordPress 7.0 "Armstrong" was released on 2026-05-20 after the extended release cycle. The 2026-05-14 Field Guide remains the current developer source map. | Repo docs can now frame 7.0 as released, while keeping the Field Guide as the feature map for compatibility checks. |
 | WordPress 7.0 release mode | 7.0 is released as of this 2026-05-21 refresh. Real-time collaboration was removed from 7.0 on 2026-05-08 before final release. | Move harness wording from pre-release to stable once the local Docker/runtime stack intentionally follows the stable image. Do not treat RTC as a WordPress 7.0 core requirement. |
-| AI plugin latest | AI plugin `1.1.0` was published on 2026-07-01 (superseding the `1.0.2` patch, 2026-06-16). The 1.0.0 Flavor Agent-relevant items remain Request Logging, Connector Approvals, no-provider/removed-provider guidance, and feature-specific provider handling. `1.1.0` adds two items with direct FA bearing — the Key Encryption experiment (`#560`, a proving ground for a future core Secrets Management API, not a public API) and the developer-settings explicit-Save change (`#761`, no FA code change; smoke green 2026-07-02) — plus the renamed `core/read-settings` ability (`#691`/`#806`), character-based content gating (`#581`/`#802`), and the Type Ahead experiment (`#151`). | Connector Approval remains a local request-time integration concern and Request Logging is the activity-strategy decision. `1.1.0` needs no FA code change; keep the Key Encryption item on the `STATUS.md` secrets watch and mirror character-based gating only if FA gates a surface on content length. |
+| AI plugin latest | [`AI plugin 1.3.0`](https://github.com/WordPress/ai/releases/tag/1.3.0) was released on 2026-08-18 (milestone #22). It adds Custom Abilities opt-in gating for the AI plugin's own custom abilities, built-in-ability prompt extension points, public `log_ai_request()` records, and deprecates `AI_Service` / `get_ai_service()` in favor of direct `wp_ai_client_prompt()` use. Embedding helpers are present but [`#946`](https://github.com/WordPress/ai/pull/946) disables `SDK_Overlay`, so `generate_embeddings()` remains unavailable on supported WP 7.0/7.1. | Preserve Flavor Agent's existing ability gates, direct-core client path, and request-log bridge/local diagnostics. The prompt hooks do not run Flavor Agent prompt assembly and are design precedent only. Keep plugin-owned embeddings and retrieval. The Docker-backed WordPress 7.0 E2E harness passes with 1.3.0 active; connector-backed text generation remains untested. |
 | Gutenberg plugin latest | The latest tracked Gutenberg release is `23.4.0`, published 2026-06-17. Its Flavor Agent-relevant items are the React 19 experiment, Pattern label wording, nested Loginout support in Navigation Submenus, DataViewsPicker `pickerActivity`, entity view config filtering, `@wordpress/theme` density removal / element-size tokens, and Connectors API-key autocomplete blocking. | Useful for forward-compat testing and upstream watch items, but not a signal that WordPress core 7.0 ships every 23.4 API unchanged. |
 | Gutenberg in core | The Block Editor handbook still lists WordPress `7.0.x` as based on Gutenberg `22.6`, with later bug fixes cherry-picked as needed during beta/RC and point releases. | Flavor Agent should keep runtime assumptions anchored to WordPress 7.0 core behavior first, and treat 22.7-23.4 as supplemental compatibility context. |
 | Main upstream pressure point | The remaining Field Guide impact for Flavor Agent is not RTC; it is alignment with the 7.0 AI Client, Client-Side Abilities, Connectors, DataViews/DataForms, design tools, pattern/contentOnly behavior, and PHP 7.4 core minimum. | Flavor Agent is already on the core AI/Abilities path, so this is mostly a documentation and regression-watch update rather than new product work. |
@@ -23,7 +23,7 @@
 
 Flavor Agent already treats the WordPress AI Client plus Connectors as a real first-class runtime path.
 
-- `inc/LLM/WordPressAIClient.php` prefers the WordPress AI service prompt factory when available, falls back to `wp_ai_client_prompt()`, and fails clearly when the core AI client is unavailable.
+- `inc/LLM/WordPressAIClient.php` uses the canonical `wp_ai_client_prompt()` entry point directly, applies preferred models and an explicit SDK `ModelConfig` key mapping, and fails clearly when the core AI client is unavailable.
 - `inc/OpenAI/Provider.php` already checks connector registration and connector-backed credentials such as `connectors_ai_openai_api_key`.
 - Live docs already frame `Settings > Connectors` as the fallback path rather than a side note.
 
@@ -179,6 +179,7 @@ The 23.4 refresh does not justify a broad `@wordpress/*` package bump by itself.
 - [AI plugin 1.0.0 release](https://github.com/WordPress/ai/releases/tag/1.0.0)
 - [AI plugin 1.0.2 release](https://github.com/WordPress/ai/releases/tag/1.0.2)
 - [AI plugin 1.1.0 release](https://github.com/WordPress/ai/releases/tag/1.1.0)
+- [AI plugin 1.3.0 release](https://github.com/WordPress/ai/releases/tag/1.3.0)
 - [Real-time collaboration will not ship in WordPress 7.0](https://make.wordpress.org/core/2026/05/08/rtc-removed-from-7-0/)
 - [Gutenberg 23.2.0 release](https://github.com/WordPress/gutenberg/releases/tag/v23.2.0)
 - [What’s new in Gutenberg 23.4? (June 17, 2026)](https://make.wordpress.org/core/2026/06/17/whats-new-in-gutenberg-23-4-june-17-2026/)

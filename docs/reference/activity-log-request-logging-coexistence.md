@@ -1,6 +1,6 @@
 # Activity Log ↔ Core AI Request Logging Coexistence
 
-**Status:** Shipped bridge design · **Date:** 2026-05-25 · **Driving issue:** `WordPress/ai#437` (merged, shipped in AI 1.0.0 on 2026-05-19)
+**Status:** Shipped bridge design · **Date:** 2026-05-25 · **Driving issues:** `WordPress/ai#437` (merged, shipped in AI 1.0.0 on 2026-05-19) and [`#914`](https://github.com/WordPress/ai/pull/914) (public explicit logging API, shipped in AI 1.3.0 on 2026-08-18)
 
 > **Update (2026-06-03):** The original design below **suppressed** Flavor Agent's `request_diagnostic` rows whenever core Request Logging was enabled. That default was reversed: Flavor Agent now **dual-logs by default**, keeping its own `request_diagnostic` rows (surface, result count, pipeline trace, undo lineage) alongside core's logs. The behavior is gated by `RequestLoggingBridge::should_persist_request_diagnostic()` plus the **AI Activity Dual Logging** experiment (Settings > Flavor Agent > Experimental Features, on by default); disabling that option restores the suppress-and-defer behavior described below. Passages that still describe unconditional suppression reflect the original 2026-05-25 design.
 
@@ -201,9 +201,9 @@ if ( Activity\RequestLoggingBridge::should_persist_request_diagnostic() ) {
 The same wrap applies to `Cloudflare\AISearchClient::record_request_diagnostic()` (line 1590) — but docs grounding goes through Cloudflare's HTTP, **not** the AI Client transporter, so it is *not* automatically captured by core Request Logging. Decide separately:
 
 - **Option A:** Keep emitting docs-grounding `request_diagnostic` rows always (since core Request Logging doesn't see them). This is the safest choice.
-- **Option B:** Also forward docs-grounding events into `wpai_request_logs` by directly calling whatever public emit method core exposes (if any). Adds value, but creates a load-bearing dependency on core's public emit API which doesn't seem to exist as of PR #437 (the only documented integration is the decorator + filters, both of which sit at the SDK HTTP transporter layer).
+- **Option B:** Also forward docs-grounding events into `wpai_request_logs` through public `WordPress\AI\log_ai_request()` (AI 1.3.0, [`#914`](https://github.com/WordPress/ai/pull/914)). This is now available for an explicit non-transporter record, but creates a separate core-log representation and does not automatically receive the bridge's transporter-enriched context. A future caller would need an explicit context/linking design.
 
-**Recommend A** until core exposes a public emit hook usable from non-SDK code paths.
+**Keep A as the current bridge posture.** The public API makes B an optional future enhancement, not a replacement for local docs diagnostics: docs grounding is not an AI Client request, and the local row carries Flavor Agent-specific diagnostic context. Do not rename the existing `wpai_request_logged` bridge hook; it remains the hook that captures IDs from transport-created core rows.
 
 ### Editor-inline activity panel — keep as-is
 
@@ -248,12 +248,14 @@ This makes the relationship visible without forcing the site owner to read this 
 | No | n/a | Flavor Agent writes request_diagnostic + apply rows. Unchanged from today. |
 | Yes (≥1.0.0) | Off | Flavor Agent writes request_diagnostic + apply rows. Unchanged from today. |
 | Yes (≥1.0.0) | On | **Dual logging (default):** Flavor Agent keeps writing request_diagnostic + apply rows (apply rows carry `request.ai.requestLogId` = UUID); core also captures the AI request with Flavor Agent context attached via filter. With AI Activity Dual Logging **off**, Flavor Agent skips request_diagnostic and defers to core. |
+| AI plugin deactivated | n/a | AI plugin `1.3.0` performs no cleanup on deactivation. Flavor Agent activity rows and AI-plugin settings remain stored; recommendation feature contracts are unavailable until reactivation. |
+| AI plugin deleted (≥1.3.0 default cleanup) | n/a | Core drops `wpai_request_logs` and removes every `wpai_*` option, including Flavor Agent's AI-plugin feature toggle and developer model selection. Flavor Agent-owned activity/settings remain, but a stored `request.ai.requestLogId` may no longer resolve to a core row. Returning `false` from `wpai_remove_data_on_uninstall` preserves AI plugin data. |
 | Yes, AI plugin downgraded mid-session | n/a → n/a | Bridge re-checks capability per request; behaves as the table above. No persistent state in Flavor Agent that depends on the bridge being on. |
 
 ## Open questions
 
 1. **Cost data in Activity admin.** Core Request Logging includes cost-calculator data in its own admin surface. Flavor Agent's inline view currently limits itself to provider, model, duration, tokens, and previews.
-2. **Docs-grounding forwarding.** Core Request Logging only captures AI Client HTTP traffic, so docs-grounding diagnostics remain local Flavor Agent activity rows unless upstream exposes a non-transporter emit API.
+2. **Docs-grounding forwarding.** Public `WordPress\AI\log_ai_request()` now permits a non-transporter core-log row, but docs-grounding diagnostics remain local by current design because their richer Flavor Agent context and transport-independent behavior are not replaced by that optional record.
 3. **`@wordpress/dataviews` version skew.** Both Flavor Agent's `src/admin/activity-log.js` and core's Request Logs use DataViews. Verify visual drift during release QA when both pages are active on the same install.
 
 ## Migration plan
@@ -267,6 +269,7 @@ This makes the relationship visible without forcing the site owner to read this 
 
 - Code references in this doc point to verified file paths and line numbers as of 2026-05-25.
 - Core Request Logging architecture summarized from [WordPress/ai#437](https://github.com/WordPress/ai/pull/437) (merged 2026-05-19 in AI 1.0.0).
+- Public non-transporter logging summarized from [WordPress/ai#914](https://github.com/WordPress/ai/pull/914) (shipped 2026-08-18 in AI 1.3.0); the API returns `false` while Request Logging is disabled.
 - `wpai_request_logs` schema verified from [`AI_Request_Log_Schema.php`](https://github.com/WordPress/ai/blob/trunk/includes/Logging/AI_Request_Log_Schema.php) at the time of writing.
 - The shipped hook names are `wpai_request_log_context` and `wpai_request_logged`; the experiment option is `wpai_feature_ai-request-logging_enabled` behind the master `wpai_features_enabled` gate.
 - Cross-references the gap audit (`docs/reference/wp-ai-stack-gap-audit-2026-05-24.md`, item 2 in the prioritized list) and the roadmap tracking doc (`docs/reference/wordpress-ai-roadmap-tracking.md`, action implications #1 and #4).
