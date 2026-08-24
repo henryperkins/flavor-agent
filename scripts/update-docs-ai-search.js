@@ -39,6 +39,16 @@ const VALIDATION_QUERY = 'WordPress developer documentation block.json metadata 
 // window so only a persistently unhealthy corpus fails the run.
 const VALIDATION_ATTEMPTS = 5;
 const VALIDATION_RETRY_BASE_MS = 10_000;
+const VALIDATION_SOURCE_MAX_AGE_DAYS = {
+	'developer-docs': 90,
+	'make-core': 21,
+	'developer-blog': 45,
+	'make-ai': 21,
+	'wordpress-news': 21,
+};
+const VALIDATION_RELEASE_FLOORS = {
+	'7-0': Date.parse( '2026-05-20T00:00:00Z' ),
+};
 // Ingest settlement is eventually consistent in two separate places: the instance /stats
 // counters clear before the item listing agrees, and one slow item can trail a large
 // upload batch. The base --poll-seconds window is extended while the run is still making
@@ -106,6 +116,8 @@ Options:
                          resync that follows ingest. After the budget is exhausted one
                          further diagnostic probe runs without return_on_failure to
                          record Cloudflare's real error; it is not a validation attempt.
+                         Success requires current stable docs plus current Make/Core or
+                         Developer Blog evidence under the runbook freshness windows.
   --output=<dir>         Write summary artifacts here.
   --help, -h             Show this message.
 
@@ -2021,13 +2033,34 @@ async function validationProbe( options, returnOnFailure ) {
 	const chunks = Array.isArray( result?.chunks ) ? result.chunks : [];
 	const urls = chunks.map( extractChunkUrl ).filter( Boolean );
 	const sourceTypes = [ ...new Set( urls.map( classifySourceUrl ).filter( Boolean ) ) ];
+	const checkedAtMs = Number.isFinite( options.now ) ? options.now : Date.now();
+	const evidence = chunks
+		.map( ( chunk ) => validationEvidenceForChunk( chunk, options.release, checkedAtMs ) )
+		.filter( ( item ) => item.url || item.sourceType );
+	const currentSourceTypes = [
+		...new Set( evidence.filter( ( item ) => item.current ).map( ( item ) => item.sourceType ) ),
+	];
+	const freshness = {
+		checkedAt: new Date( checkedAtMs ).toISOString(),
+		developerDocs: currentSourceTypes.includes( 'developer-docs' ),
+		releaseCycle: currentSourceTypes.some( ( type ) =>
+			[ 'make-core', 'developer-blog' ].includes( type )
+		),
+	};
 
 	return {
 		status: response.status,
 		chunkCount: chunks.length,
 		sourceTypes,
+		currentSourceTypes,
 		urls: urls.slice( 0, 8 ),
-		ok: response.ok && chunks.length > 0 && sourceTypes.includes( 'developer-docs' ),
+		evidence: evidence.slice( 0, 8 ),
+		freshness,
+		ok:
+			response.ok &&
+			chunks.length > 0 &&
+			freshness.developerDocs &&
+			freshness.releaseCycle,
 		responseText: text,
 	};
 }
@@ -2052,11 +2085,19 @@ async function validatePublicEndpoint( options ) {
 		try {
 			last = await validationProbe( options, true );
 		} catch ( error ) {
+			const checkedAtMs = Number.isFinite( options.now ) ? options.now : Date.now();
 			last = {
 				status: 0,
 				chunkCount: 0,
 				sourceTypes: [],
+				currentSourceTypes: [],
 				urls: [],
+				evidence: [],
+				freshness: {
+					checkedAt: new Date( checkedAtMs ).toISOString(),
+					developerDocs: false,
+					releaseCycle: false,
+				},
 				ok: false,
 				error: error?.message || String( error ),
 			};
@@ -2107,6 +2148,69 @@ function extractChunkUrl( chunk ) {
 	return ( match?.[ 1 ] || match?.[ 2 ] || '' ).trim();
 }
 
+function chunkMetadata( chunk ) {
+	if ( ! chunk || typeof chunk !== 'object' ) {
+		return {};
+	}
+	const item = chunk.item && typeof chunk.item === 'object' ? chunk.item : {};
+	return item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+}
+
+function normalizedTimestamp( value ) {
+	const timestamp = parseTimestampMs( value );
+	return Number.isFinite( timestamp ) ? new Date( timestamp ).toISOString() : '';
+}
+
+function validationEvidenceForChunk( chunk, release, checkedAtMs ) {
+	const metadata = chunkMetadata( chunk );
+	const url = extractChunkUrl( chunk );
+	const sourceType = classifySourceUrl( url );
+	const retrievedAt = normalizedTimestamp( metadata.retrieved_at || metadata.retrievedAt || '' );
+	const publishedAt = normalizedTimestamp( metadata.published_at || metadata.publishedAt || '' );
+	const evidence = {
+		url,
+		sourceType,
+		retrievedAt,
+		publishedAt,
+		current: false,
+		basis: 'unsupported-source',
+	};
+
+	if ( sourceType === 'developer-docs' ) {
+		if ( ! retrievedAt ) {
+			evidence.basis = 'missing-retrieved-at';
+			return evidence;
+		}
+		evidence.current =
+			parseTimestampMs( retrievedAt ) >=
+			checkedAtMs - VALIDATION_SOURCE_MAX_AGE_DAYS[ sourceType ] * DAY_MS;
+		evidence.basis = evidence.current ? 'retrieved-at' : 'stale-retrieved-at';
+		return evidence;
+	}
+
+	if ( Object.hasOwn( VALIDATION_SOURCE_MAX_AGE_DAYS, sourceType ) ) {
+		if ( ! publishedAt ) {
+			evidence.basis = 'missing-published-at';
+			return evidence;
+		}
+		const publishedAtMs = parseTimestampMs( publishedAt );
+		const rollingCutoff =
+			checkedAtMs - VALIDATION_SOURCE_MAX_AGE_DAYS[ sourceType ] * DAY_MS;
+		const releaseFloor = VALIDATION_RELEASE_FLOORS[ release ];
+		if ( publishedAtMs >= rollingCutoff ) {
+			evidence.current = true;
+			evidence.basis = 'published-at';
+		} else if ( Number.isFinite( releaseFloor ) && publishedAtMs >= releaseFloor ) {
+			evidence.current = true;
+			evidence.basis = 'release-floor';
+		} else {
+			evidence.basis = 'stale-published-at';
+		}
+	}
+
+	return evidence;
+}
+
 function classifySourceUrl( value ) {
 	let url;
 	try {
@@ -2122,6 +2226,12 @@ function classifySourceUrl( value ) {
 	}
 	if ( url.hostname === 'make.wordpress.org' && url.pathname.startsWith( '/core/' ) ) {
 		return 'make-core';
+	}
+	if ( url.hostname === 'make.wordpress.org' && url.pathname.startsWith( '/ai/' ) ) {
+		return 'make-ai';
+	}
+	if ( url.hostname === 'wordpress.org' && url.pathname.startsWith( '/news/' ) ) {
+		return 'wordpress-news';
 	}
 	return '';
 }

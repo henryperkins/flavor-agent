@@ -127,7 +127,7 @@ describe( 'update-docs-ai-search helpers', () => {
 		jest.restoreAllMocks();
 	} );
 
-	test( 'validates the public endpoint with a developer-docs-specific query', async () => {
+	test( 'validates the public endpoint with current docs and release-cycle evidence', async () => {
 		global.fetch = jest.fn( () =>
 			mockJsonResponse( {
 				result: {
@@ -137,6 +137,16 @@ describe( 'update-docs-ai-search helpers', () => {
 								metadata: {
 									source_url:
 										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-08-20T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/08/10/wordpress-7-0-dev-notes/',
+									published_at: '2026-08-10T00:00:00Z',
 								},
 							},
 						},
@@ -148,6 +158,7 @@ describe( 'update-docs-ai-search helpers', () => {
 		const validation = await validatePublicEndpoint( {
 			publicUrl: 'https://example.com/search',
 			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
 		} );
 		const request = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
 
@@ -156,12 +167,250 @@ describe( 'update-docs-ai-search helpers', () => {
 		);
 		expect( validation ).toMatchObject( {
 			status: 200,
-			chunkCount: 1,
-			sourceTypes: [ 'developer-docs' ],
+			chunkCount: 2,
+			sourceTypes: [ 'developer-docs', 'make-core' ],
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			freshness: {
+				developerDocs: true,
+				releaseCycle: true,
+			},
 			ok: true,
 			attempts: 1,
 		} );
 		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'rejects expected corpus sources when their freshness metadata is stale', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-05-01T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/03/15/wordpress-7-0-field-guide/',
+									published_at: '2026-03-15T00:00:00Z',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [],
+			freshness: {
+				checkedAt: '2026-08-24T00:00:00.000Z',
+				developerDocs: false,
+				releaseCycle: false,
+			},
+			evidence: [
+				{
+					sourceType: 'developer-docs',
+					retrievedAt: '2026-05-01T00:00:00.000Z',
+					publishedAt: '',
+					current: false,
+					basis: 'stale-retrieved-at',
+				},
+				{
+					sourceType: 'make-core',
+					retrievedAt: '',
+					publishedAt: '2026-03-15T00:00:00.000Z',
+					current: false,
+					basis: 'stale-published-at',
+				},
+			],
+		} );
+	} );
+
+	test( 'accepts WordPress 7.0 release-cycle evidence published on the release floor', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-08-20T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/05/20/wordpress-7-0/',
+									published_at: '2026-05-20T00:00:00Z',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			freshness: {
+				developerDocs: true,
+				releaseCycle: true,
+			},
+			evidence: [
+				{ sourceType: 'developer-docs', current: true, basis: 'retrieved-at' },
+				{ sourceType: 'make-core', current: true, basis: 'release-floor' },
+			],
+		} );
+		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'rejects corpus sources with missing freshness timestamps', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/reference/functions/register-block-type/',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/news/2026/08/12/wordpress-7-0-block-metadata/',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [],
+			freshness: { developerDocs: false, releaseCycle: false },
+			evidence: [
+				{ sourceType: 'developer-docs', current: false, basis: 'missing-retrieved-at' },
+				{ sourceType: 'developer-blog', current: false, basis: 'missing-published-at' },
+			],
+		} );
+	} );
+
+	test( 'accepts every source at its rolling freshness boundary and records optional sources', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2026-05-26T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url:
+							'https://developer.wordpress.org/news/2026/07/10/wordpress-7-0-block-metadata/',
+						published_at: '2026-07-10T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/core/2026/08/03/wordpress-7-0-dev-notes/',
+						published_at: '2026-08-03T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/ai/2026/08/03/ai-client-update/',
+						published_at: '2026-08-03T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://wordpress.org/news/2026/08/wordpress-7-0-release/',
+						published_at: '2026-08-03T00:00:00Z',
+					},
+				},
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [
+				'developer-docs',
+				'developer-blog',
+				'make-core',
+				'make-ai',
+				'wordpress-news',
+			],
+			freshness: { developerDocs: true, releaseCycle: true },
+		} );
+		expect( validation.evidence.map( ( item ) => item.basis ) ).toEqual( [
+			'retrieved-at',
+			'published-at',
+			'published-at',
+			'published-at',
+			'published-at',
+		] );
 	} );
 
 	test( 'retries public endpoint validation past an empty post-ingest index resync', async () => {
@@ -175,6 +424,16 @@ describe( 'update-docs-ai-search helpers', () => {
 							metadata: {
 								source_url:
 									'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+								retrieved_at: '2026-08-20T00:00:00Z',
+							},
+						},
+					},
+					{
+						item: {
+							metadata: {
+								source_url:
+									'https://developer.wordpress.org/news/2026/08/12/wordpress-7-0-block-metadata/',
+								published_at: '2026-08-12T00:00:00Z',
 							},
 						},
 					},
@@ -199,11 +458,12 @@ describe( 'update-docs-ai-search helpers', () => {
 		const validation = await validatePublicEndpoint( {
 			publicUrl: 'https://example.com/search',
 			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
 			validationAttempts: 5,
 			validationRetryDelayMs: 0,
 		} );
 
-		expect( validation ).toMatchObject( { ok: true, chunkCount: 1, attempts: 3 } );
+		expect( validation ).toMatchObject( { ok: true, chunkCount: 2, attempts: 3 } );
 		expect( global.fetch ).toHaveBeenCalledTimes( 3 );
 	} );
 
@@ -230,6 +490,31 @@ describe( 'update-docs-ai-search helpers', () => {
 		const diagnosticBody = JSON.parse( global.fetch.mock.calls[ 3 ][ 1 ].body );
 		expect( diagnosticBody.ai_search_options.retrieval ).not.toHaveProperty( 'return_on_failure' );
 		expect( validation.diagnostic ).toMatchObject( { status: 200, chunkCount: 0 } );
+	} );
+
+	test( 'records empty freshness evidence when public validation cannot connect', async () => {
+		global.fetch = jest.fn( () => Promise.reject( new Error( 'network unavailable' ) ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			error: 'network unavailable',
+			currentSourceTypes: [],
+			evidence: [],
+			freshness: {
+				checkedAt: '2026-08-24T00:00:00.000Z',
+				developerDocs: false,
+				releaseCycle: false,
+			},
+			diagnostic: { error: 'network unavailable' },
+		} );
 	} );
 
 	test( 'resolves trusted relative canonical URLs against the response URL', () => {
