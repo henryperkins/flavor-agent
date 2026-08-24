@@ -101,7 +101,7 @@ Every ingested item or chunk should preserve enough provenance for `inc/Cloudfla
 
 - `source_url` or equivalent metadata resolving to the canonical HTTPS URL
 - `retrieved_at` as the crawl timestamp
-- `published_at` for Make/Core and Developer Blog posts
+- `published_at` for Make/Core, Developer Blog, Make/AI, and WordPress News posts
 - `content_hash` for change detection
 - a stable title
 - a source key that is either reconstructable to the canonical URL (`<host>/<path>` or `ai-search/<instanceId>/<host>/<path>/<hash>/part-0001.md`), or a bounded managed key `ai-search/<instanceId>/<host>/<slug>/<short-hash>/part-0001.md` whose `<host>` segment matches the canonical URL host. Deep developer-docs URLs exceed Cloudflare's 128-byte item-filename limit, so their keys carry a truncated slug plus short hash and rely on the metadata `source_url` for provenance.
@@ -119,7 +119,7 @@ Corpus validation:
 - In an agent session with the MCP server available, run the same query through `wordpress-docs-ai-search` and confirm the returned chunks include the stable docs plus current-cycle sources expected below.
 - Query the public endpoint with the same request shape used by `AISearchClient::build_search_request_body()`: a user message containing the validation query and `ai_search_options.retrieval.max_num_results` set to at least `4`.
 - Confirm at least one `developer-docs` chunk and at least one `make-core` or `developer-blog` chunk. Record any `make-ai` or `wordpress-news` chunks in the evidence; they are not required for validation to pass.
-- Confirm release-cycle chunks from `make.wordpress.org/core` or the Developer Blog include a qualifying `published_at`: within the rolling freshness window, or on/after May 20, 2026 for WordPress 7.0. A recent `retrieved_at` crawl timestamp does not make an older release-cycle post current. Stable handbook/reference chunks from `developer.wordpress.org` may use `retrieved_at` for crawl freshness because those pages represent maintained reference material rather than dated release-cycle posts.
+- Confirm release-cycle chunks from `make.wordpress.org/core` or the Developer Blog include a qualifying `published_at`: no later than the validation time and within the rolling freshness window, or on/after May 20, 2026 for WordPress 7.0. A recent `retrieved_at` crawl timestamp does not make an older release-cycle post current. Stable handbook/reference chunks from `developer.wordpress.org` may use `retrieved_at` for crawl freshness because those pages represent maintained reference material rather than dated release-cycle posts; that timestamp must likewise not be in the future. Invalid URLs and release-cycle listing/archive URLs never qualify as current evidence.
 - Treat the updater's `validation.ok` as the automated form of those checks. Inspect `validation.freshness`, `validation.currentSourceTypes`, and `validation.evidence` for the validation time, requirement results, normalized timestamps, source classification, and the freshness basis used for each returned chunk. Missing or stale timestamps leave `validation.ok` false even when the expected source URLs rank.
 - Record the observed `retrieved_at`, `published_at`, source URLs, and result count in the release notes or verification log.
 - Record the validation evidence under `docs/validation/`; this runbook is the decision record for corpus refreshes.
