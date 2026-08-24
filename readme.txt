@@ -2,7 +2,7 @@
 Contributors: hperkins
 Tags: ai, blocks, patterns, editor
 Requires at least: 7.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 8.2
 Stable tag: 0.1.0
 License: GPLv2 or later
