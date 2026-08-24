@@ -2031,12 +2031,12 @@ async function validationProbe( options, returnOnFailure ) {
 	}
 	const result = data?.result && typeof data.result === 'object' ? data.result : data;
 	const chunks = Array.isArray( result?.chunks ) ? result.chunks : [];
-	const urls = chunks.map( extractChunkUrl ).filter( Boolean );
-	const sourceTypes = [ ...new Set( urls.map( classifySourceUrl ).filter( Boolean ) ) ];
 	const checkedAtMs = Number.isFinite( options.now ) ? options.now : Date.now();
-	const evidence = chunks
-		.map( ( chunk ) => validationEvidenceForChunk( chunk, options.release, checkedAtMs ) )
-		.filter( ( item ) => item.url || item.sourceType );
+	const evidence = chunks.map( ( chunk ) =>
+		validationEvidenceForChunk( chunk, options.release, checkedAtMs )
+	);
+	const urls = evidence.map( ( item ) => item.url ).filter( Boolean );
+	const sourceTypes = [ ...new Set( evidence.map( ( item ) => item.sourceType ).filter( Boolean ) ) ];
 	const currentSourceTypes = [
 		...new Set( evidence.filter( ( item ) => item.current ).map( ( item ) => item.sourceType ) ),
 	];
@@ -2136,16 +2136,13 @@ function extractChunkUrl( chunk ) {
 	if ( ! chunk || typeof chunk !== 'object' ) {
 		return '';
 	}
-	const item = chunk.item && typeof chunk.item === 'object' ? chunk.item : {};
-	const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+	const metadata = chunkMetadata( chunk );
 	for ( const key of [ 'source_url', 'sourceUrl', 'url', 'original_url', 'originalUrl', 'permalink' ] ) {
 		if ( typeof metadata[ key ] === 'string' && metadata[ key ].trim() ) {
 			return metadata[ key ].trim();
 		}
 	}
-	const text = typeof chunk.text === 'string' ? chunk.text : '';
-	const match = text.match( /(?:source_url|original_url):\s*(?:"([^"]+)"|([^\n]+))/i );
-	return ( match?.[ 1 ] || match?.[ 2 ] || '' ).trim();
+	return '';
 }
 
 function chunkMetadata( chunk ) {
@@ -2153,7 +2150,26 @@ function chunkMetadata( chunk ) {
 		return {};
 	}
 	const item = chunk.item && typeof chunk.item === 'object' ? chunk.item : {};
-	return item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+	const itemMetadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+	return { ...chunkFrontmatterMetadata( chunk ), ...itemMetadata };
+}
+
+function chunkFrontmatterMetadata( chunk ) {
+	const text = typeof chunk?.text === 'string' ? chunk.text : '';
+	const match = text.match( /^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/ );
+	if ( ! match ) {
+		return {};
+	}
+
+	const supported = new Set( [ 'source_url', 'original_url', 'retrieved_at', 'published_at' ] );
+	const metadata = {};
+	for ( const line of match[ 1 ].split( /\r?\n/ ) ) {
+		const field = line.match( /^([a-z_]+):\s*(?:"([^"]*)"|'([^']*)'|([^#]*?))\s*$/i );
+		if ( field && supported.has( field[ 1 ].toLowerCase() ) ) {
+			metadata[ field[ 1 ].toLowerCase() ] = ( field[ 2 ] ?? field[ 3 ] ?? field[ 4 ] ?? '' ).trim();
+		}
+	}
+	return metadata;
 }
 
 function normalizedTimestamp( value ) {
@@ -2163,7 +2179,8 @@ function normalizedTimestamp( value ) {
 
 function validationEvidenceForChunk( chunk, release, checkedAtMs ) {
 	const metadata = chunkMetadata( chunk );
-	const url = extractChunkUrl( chunk );
+	const extractedUrl = extractChunkUrl( chunk );
+	const url = normalizeTrustedUrl( extractedUrl );
 	const sourceType = classifySourceUrl( url );
 	const retrievedAt = normalizedTimestamp( metadata.retrieved_at || metadata.retrievedAt || '' );
 	const publishedAt = normalizedTimestamp( metadata.published_at || metadata.publishedAt || '' );
@@ -2175,14 +2192,27 @@ function validationEvidenceForChunk( chunk, release, checkedAtMs ) {
 		current: false,
 		basis: 'unsupported-source',
 	};
+	if ( ! url ) {
+		evidence.basis = 'invalid-source-url';
+		return evidence;
+	}
+	if ( sourceType !== 'developer-docs' && ! isCorpusDocumentUrl( url ) ) {
+		evidence.basis = 'ineligible-source-url';
+		return evidence;
+	}
 
 	if ( sourceType === 'developer-docs' ) {
 		if ( ! retrievedAt ) {
 			evidence.basis = 'missing-retrieved-at';
 			return evidence;
 		}
+		const retrievedAtMs = parseTimestampMs( retrievedAt );
+		if ( retrievedAtMs > checkedAtMs ) {
+			evidence.basis = 'future-retrieved-at';
+			return evidence;
+		}
 		evidence.current =
-			parseTimestampMs( retrievedAt ) >=
+			retrievedAtMs >=
 			checkedAtMs - VALIDATION_SOURCE_MAX_AGE_DAYS[ sourceType ] * DAY_MS;
 		evidence.basis = evidence.current ? 'retrieved-at' : 'stale-retrieved-at';
 		return evidence;
@@ -2194,6 +2224,10 @@ function validationEvidenceForChunk( chunk, release, checkedAtMs ) {
 			return evidence;
 		}
 		const publishedAtMs = parseTimestampMs( publishedAt );
+		if ( publishedAtMs > checkedAtMs ) {
+			evidence.basis = 'future-published-at';
+			return evidence;
+		}
 		const rollingCutoff =
 			checkedAtMs - VALIDATION_SOURCE_MAX_AGE_DAYS[ sourceType ] * DAY_MS;
 		const releaseFloor = VALIDATION_RELEASE_FLOORS[ release ];

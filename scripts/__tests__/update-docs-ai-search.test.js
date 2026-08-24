@@ -339,6 +339,201 @@ describe( 'update-docs-ai-search helpers', () => {
 		} );
 	} );
 
+	test( 'rejects invalid and archive URLs from freshness evidence', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2026-08-20T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/news/all-posts/',
+						published_at: '2026-08-20T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'http://make.wordpress.org/core/2026/08/20/dev-note/',
+						published_at: '2026-08-20T00:00:00Z',
+					},
+				},
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [ 'developer-docs' ],
+			freshness: { developerDocs: true, releaseCycle: false },
+			evidence: [
+				{ sourceType: 'developer-docs', current: true, basis: 'retrieved-at' },
+				{
+					url: 'https://developer.wordpress.org/news/all-posts/',
+					sourceType: 'developer-blog',
+					current: false,
+					basis: 'ineligible-source-url',
+				},
+				{ url: '', sourceType: '', current: false, basis: 'invalid-source-url' },
+			],
+		} );
+	} );
+
+	test( 'accepts freshness provenance from legacy chunk frontmatter', async () => {
+		const chunks = [
+			{
+				text: [
+					'---',
+					'source_url: "https://developer.wordpress.org/reference/functions/register-block-type/"',
+					'retrieved_at: "2026-08-20T00:00:00Z"',
+					'---',
+					'# register_block_type',
+				].join( '\n' ),
+			},
+			{
+				text: [
+					'---',
+					'source_url: "https://developer.wordpress.org/news/2026/08/12/wordpress-7-0-block-metadata/"',
+					'published_at: "2026-08-12T00:00:00Z"',
+					'---',
+					'# WordPress 7.0 block metadata',
+				].join( '\n' ),
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'developer-blog' ],
+			evidence: [
+				{
+					retrievedAt: '2026-08-20T00:00:00.000Z',
+					current: true,
+					basis: 'retrieved-at',
+				},
+				{
+					publishedAt: '2026-08-12T00:00:00.000Z',
+					current: true,
+					basis: 'published-at',
+				},
+			],
+		} );
+	} );
+
+	test( 'prefers structured item metadata over legacy frontmatter', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2026-08-20T00:00:00Z',
+					},
+				},
+				text: [
+					'---',
+					'source_url: "http://developer.wordpress.org/reference/functions/register-block-type/"',
+					'retrieved_at: "2099-01-01T00:00:00Z"',
+					'---',
+				].join( '\n' ),
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/core/2026/08/12/wordpress-7-0-dev-note/',
+						published_at: '2026-08-12T00:00:00Z',
+					},
+				},
+				text: [
+					'---',
+					'source_url: "https://make.wordpress.org/core/2026/03/15/old-note/"',
+					'published_at: "2026-03-15T00:00:00Z"',
+					'---',
+				].join( '\n' ),
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			evidence: [
+				{ current: true, basis: 'retrieved-at' },
+				{ current: true, basis: 'published-at' },
+			],
+		} );
+	} );
+
+	test( 'rejects freshness timestamps that are later than validation time', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2099-01-01T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url:
+							'https://developer.wordpress.org/news/2026/08/12/wordpress-7-0-block-metadata/',
+						published_at: '2099-01-01T00:00:00Z',
+					},
+				},
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [],
+			freshness: { developerDocs: false, releaseCycle: false },
+			evidence: [
+				{ sourceType: 'developer-docs', current: false, basis: 'future-retrieved-at' },
+				{ sourceType: 'developer-blog', current: false, basis: 'future-published-at' },
+			],
+		} );
+	} );
+
 	test( 'accepts every source at its rolling freshness boundary and records optional sources', async () => {
 		const chunks = [
 			{
@@ -410,6 +605,70 @@ describe( 'update-docs-ai-search helpers', () => {
 			'published-at',
 			'published-at',
 			'published-at',
+		] );
+	} );
+
+	test( 'rejects every source immediately before its rolling freshness boundary', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2026-05-25T23:59:59.999Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url:
+							'https://developer.wordpress.org/news/2026/07/09/wordpress-7-1-block-metadata/',
+						published_at: '2026-07-09T23:59:59.999Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/core/2026/08/02/wordpress-7-1-dev-notes/',
+						published_at: '2026-08-02T23:59:59.999Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/ai/2026/08/02/ai-client-update/',
+						published_at: '2026-08-02T23:59:59.999Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://wordpress.org/news/2026/08/wordpress-7-1-release/',
+						published_at: '2026-08-02T23:59:59.999Z',
+					},
+				},
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( { ok: false, currentSourceTypes: [] } );
+		expect( validation.evidence.map( ( item ) => item.basis ) ).toEqual( [
+			'stale-retrieved-at',
+			'stale-published-at',
+			'stale-published-at',
+			'stale-published-at',
+			'stale-published-at',
 		] );
 	} );
 
