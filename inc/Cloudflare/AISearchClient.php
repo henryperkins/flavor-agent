@@ -16,8 +16,8 @@ final class AISearchClient {
 	private const BEST_EFFORT_TIMEOUT        = 5;
 	private const VALIDATION_PROBE_QUERY     = 'block editor';
 	private const VALIDATION_PROBE_RESULTS   = 3;
-	private const DEFAULT_PUBLIC_SEARCH_URL  = 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search';
-	private const PUBLIC_HOST_SUFFIX         = '.search.ai.cloudflare.com';
+	private const DEFAULT_PUBLIC_SEARCH_URL  = 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search'; // phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Disclosed server-side Cloudflare AI Search API endpoint; no executable or static asset is loaded from it.
+	private const PUBLIC_HOST_SUFFIX         = '.search.ai.cloudflare.com'; // phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Hostname allowlist used to validate configurable Cloudflare API endpoints, not a remotely hosted asset.
 	private const REASON_GROUNDED            = 'grounded';
 	private const REASON_QUERY_EMPTY         = 'query_empty';
 	private const REASON_UNCONFIGURED        = 'unconfigured';
