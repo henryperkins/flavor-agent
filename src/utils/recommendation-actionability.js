@@ -12,6 +12,7 @@ import {
 	BLOCK_OPERATION_ERROR_STALE_TARGET,
 	BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED,
 } from './block-operation-catalog';
+import { __ } from '@wordpress/i18n';
 
 export const ACTIONABILITY_TIER_INLINE_SAFE = 'inline-safe';
 export const ACTIONABILITY_TIER_REVIEW_SAFE = 'review-safe';
@@ -42,19 +43,43 @@ const TIER_LABELS = Object.freeze( {
 } );
 
 const REASON_LABELS = Object.freeze( {
-	[ ACTIONABILITY_REASON_SAFE_LOCAL_ATTRIBUTE_UPDATE ]:
+	[ ACTIONABILITY_REASON_SAFE_LOCAL_ATTRIBUTE_UPDATE ]: __(
 		'Safe local attribute update',
-	[ ACTIONABILITY_REASON_VALID_STRUCTURAL_OPERATION ]:
+		'flavor-agent'
+	),
+	[ ACTIONABILITY_REASON_VALID_STRUCTURAL_OPERATION ]: __(
 		'Valid structural operation',
-	[ ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT ]: 'Missing pattern context',
-	[ ACTIONABILITY_REASON_PATTERN_NOT_AVAILABLE ]: 'Pattern unavailable',
-	[ ACTIONABILITY_REASON_TARGET_STALE ]: 'Target stale',
-	[ ACTIONABILITY_REASON_TARGET_AMBIGUOUS ]: 'Target ambiguous',
-	[ ACTIONABILITY_REASON_LOCKED_TARGET ]: 'Locked target',
-	[ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ]: 'Unsupported operation',
-	[ ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE ]:
+		'flavor-agent'
+	),
+	[ ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT ]: __(
+		'Missing pattern context',
+		'flavor-agent'
+	),
+	[ ACTIONABILITY_REASON_PATTERN_NOT_AVAILABLE ]: __(
+		'Pattern unavailable',
+		'flavor-agent'
+	),
+	[ ACTIONABILITY_REASON_TARGET_STALE ]: __( 'Target stale', 'flavor-agent' ),
+	[ ACTIONABILITY_REASON_TARGET_AMBIGUOUS ]: __(
+		'Target ambiguous',
+		'flavor-agent'
+	),
+	[ ACTIONABILITY_REASON_LOCKED_TARGET ]: __(
+		'Locked target',
+		'flavor-agent'
+	),
+	[ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ]: __(
+		'Unsupported operation',
+		'flavor-agent'
+	),
+	[ ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE ]: __(
 		'Multi-target structural change',
-	[ ACTIONABILITY_REASON_MANUAL_COPY_ONLY ]: 'Manual follow-through',
+		'flavor-agent'
+	),
+	[ ACTIONABILITY_REASON_MANUAL_COPY_ONLY ]: __(
+		'Manual follow-through',
+		'flavor-agent'
+	),
 } );
 
 export function getActionabilityLabel( tier = '' ) {

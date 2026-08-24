@@ -1,15 +1,6 @@
-jest.mock( '@wordpress/i18n', () => ( {
-	__: jest.fn( ( value ) => value ),
-	sprintf: jest.fn( ( template, ...values ) =>
-		values.reduce( ( result, value, index ) => {
-			return result
-				.replaceAll( `%${ index + 1 }$s`, String( value ) )
-				.replaceAll( `%${ index + 1 }$d`, String( value ) )
-				.replace( '%s', String( value ) )
-				.replace( '%d', String( value ) );
-		}, template )
-	),
-} ) );
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 
 const fs = require( 'fs' );
 const path = require( 'path' );

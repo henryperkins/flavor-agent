@@ -1,6 +1,6 @@
-jest.mock( '@wordpress/i18n', () => ( {
-	__: jest.fn( ( text ) => text ),
-} ) );
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 
 import * as i18n from '@wordpress/i18n';
 

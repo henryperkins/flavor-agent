@@ -1,3 +1,5 @@
+import { __ } from '@wordpress/i18n';
+
 import vocabulary from '../../shared/validation-reasons.json';
 
 export const VALIDATION_REASONS_VERSION = vocabulary.version;
@@ -12,23 +14,29 @@ const SEVERITY_RANK = { rejected: 2, downgraded: 1, no_op: 0 };
  * @type {Object<string, string>}
  */
 const REASON_LABELS = Object.freeze( {
-	failed_contrast: 'Insufficient color contrast',
-	unsupported_scope: 'Scope not supported',
-	unsupported_path: 'Style path not supported',
-	preset_required: 'A preset value is required',
-	preset_unavailable: 'Preset unavailable',
-	invalid_freeform_value: 'Invalid value',
-	unavailable_variation: 'Style variation unavailable',
-	no_executable_operations: 'No applicable changes',
-	invalid_template_area: 'Template area not allowed',
-	no_assigned_part: 'No template part assigned',
-	area_mismatch: 'Template area mismatch',
-	unknown_pattern: 'Pattern unavailable',
-	repeated_pattern_insert: 'Pattern already inserted',
-	too_many_operations: 'Too many changes to apply at once',
-	advisory_only: 'Advisory only',
-	operation_validation_failed: 'Could not validate the change',
-	no_op: 'No change needed',
+	failed_contrast: __( 'Insufficient color contrast', 'flavor-agent' ),
+	unsupported_scope: __( 'Scope not supported', 'flavor-agent' ),
+	unsupported_path: __( 'Style path not supported', 'flavor-agent' ),
+	preset_required: __( 'A preset value is required', 'flavor-agent' ),
+	preset_unavailable: __( 'Preset unavailable', 'flavor-agent' ),
+	invalid_freeform_value: __( 'Invalid value', 'flavor-agent' ),
+	unavailable_variation: __( 'Style variation unavailable', 'flavor-agent' ),
+	no_executable_operations: __( 'No applicable changes', 'flavor-agent' ),
+	invalid_template_area: __( 'Template area not allowed', 'flavor-agent' ),
+	no_assigned_part: __( 'No template part assigned', 'flavor-agent' ),
+	area_mismatch: __( 'Template area mismatch', 'flavor-agent' ),
+	unknown_pattern: __( 'Pattern unavailable', 'flavor-agent' ),
+	repeated_pattern_insert: __( 'Pattern already inserted', 'flavor-agent' ),
+	too_many_operations: __(
+		'Too many changes to apply at once',
+		'flavor-agent'
+	),
+	advisory_only: __( 'Advisory only', 'flavor-agent' ),
+	operation_validation_failed: __(
+		'Could not validate the change',
+		'flavor-agent'
+	),
+	no_op: __( 'No change needed', 'flavor-agent' ),
 } );
 
 /**

@@ -1,13 +1,6 @@
-jest.mock( '@wordpress/i18n', () => ( {
-	__: jest.fn( ( text ) => text ),
-	sprintf: jest.fn( ( template, ...args ) =>
-		args.reduce( ( message, value, index ) => {
-			const positional = new RegExp( `%${ index + 1 }\\$s`, 'g' );
-
-			return message.replace( positional, value ).replace( '%s', value );
-		}, template )
-	),
-} ) );
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 
 import * as i18n from '@wordpress/i18n';
 import {

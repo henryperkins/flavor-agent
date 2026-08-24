@@ -25,6 +25,7 @@ import {
 	MANUAL_IDEAS_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
+	SURFACE_TONES,
 } from '../components/surface-labels';
 import {
 	buildGlobalStylesExecutionContractFromSettings,
@@ -44,7 +45,7 @@ import {
 import { useStyleSurfaceActivityContext } from '../style-surfaces/use-style-surface-activity-context';
 import { useStyleSurfaceDerivedContext } from '../style-surfaces/use-style-surface-derived-context';
 import {
-	getStyleSuggestionToneLabel,
+	getStyleSuggestionTone,
 	isInlineStyleNotice,
 	StyleOperationList,
 	StyleSuggestionCard,
@@ -131,12 +132,17 @@ function GlobalStylesPanel( {
 				/>
 			) }
 			<SurfacePanelIntro
-				eyebrow="Site Editor Styles"
-				introCopy="Global Styles suggestions stay theme-backed and keep the review-before-apply contract intact."
+				eyebrow={ __( 'Site Editor Styles', 'flavor-agent' ) }
+				introCopy={ __(
+					'Global Styles suggestions stay theme-backed and keep the review-before-apply contract intact.',
+					'flavor-agent'
+				) }
 				className="flavor-agent-style-surface__intro"
 			>
 				<div className="flavor-agent-style-surface__meta">
-					<span className="flavor-agent-pill">Global Styles</span>
+					<span className="flavor-agent-pill">
+						{ __( 'Global Styles', 'flavor-agent' ) }
+					</span>
 					<span className="flavor-agent-pill">
 						{ REVIEW_LANE_LABEL }
 					</span>
@@ -177,26 +183,35 @@ function GlobalStylesPanel( {
 			) }
 
 			<SurfaceComposer
-				title="Ask Flavor Agent"
+				title={ __( 'Ask Flavor Agent', 'flavor-agent' ) }
 				prompt={ prompt }
 				onPromptChange={ setPrompt }
 				onFetch={ onRequest }
-				label="Describe the style direction"
-				placeholder="Describe the style direction you want across the site."
+				label={ __( 'Describe the style direction', 'flavor-agent' ) }
+				placeholder={ __(
+					'Describe the style direction you want across the site.',
+					'flavor-agent'
+				) }
 				helperText={
 					showSecondaryGuidance
-						? 'Flavor Agent will keep recommendations inside theme-backed Global Styles controls. Raw CSS and custom CSS are out of scope.'
+						? __(
+								'Flavor Agent will keep recommendations inside theme-backed Global Styles controls. Raw CSS and custom CSS are out of scope.',
+								'flavor-agent'
+						  )
 						: ''
 				}
 				rows={ 4 }
 				starterPrompts={ [
-					'Refine hierarchy and rhythm',
-					'Make the palette feel warmer',
-					'Tighten spacing and rhythm',
+					__( 'Refine hierarchy and rhythm', 'flavor-agent' ),
+					__( 'Make the palette feel warmer', 'flavor-agent' ),
+					__( 'Tighten spacing and rhythm', 'flavor-agent' ),
 				] }
-				fetchLabel="Get Style Suggestions"
-				loadingLabel="Thinking…"
-				submitHint="Press Cmd/Ctrl+Enter to submit."
+				fetchLabel={ __( 'Get Style Suggestions', 'flavor-agent' ) }
+				loadingLabel={ __( 'Thinking\u2026', 'flavor-agent' ) }
+				submitHint={ __(
+					'Press Cmd/Ctrl+Enter to submit.',
+					'flavor-agent'
+				) }
 				isLoading={ isLoading }
 				disabled={ ! capabilityAvailable }
 			/>
@@ -217,7 +232,7 @@ function GlobalStylesPanel( {
 						'Recommended style adjustment'
 					}
 					description={ featuredSuggestion.description || '' }
-					tone={ getStyleSuggestionToneLabel( featuredSuggestion ) }
+					tone={ getStyleSuggestionTone( featuredSuggestion ) }
 					why={
 						featuredSuggestion.tone === 'executable'
 							? 'Start here first, then review the exact operations before applying them.'
@@ -236,7 +251,7 @@ function GlobalStylesPanel( {
 			{ executableSuggestions.length > 0 && (
 				<RecommendationLane
 					title={ REVIEW_LANE_LABEL }
-					tone={ REVIEW_LANE_LABEL }
+					tone={ SURFACE_TONES.REVIEW }
 					count={ executableSuggestions.length }
 					countNoun="suggestion"
 					description={
@@ -325,8 +340,11 @@ function GlobalStylesPanel( {
 				entries={ activityEntries }
 				isUndoing={ isUndoing }
 				onUndo={ onUndo }
-				title="Recent AI Style Actions"
-				description="Undo is only available while the current Global Styles state still matches the applied AI change."
+				title={ __( 'Recent AI Style Actions', 'flavor-agent' ) }
+				description={ __(
+					'Undo is only available while the current Global Styles state still matches the applied AI change.',
+					'flavor-agent'
+				) }
 				initialOpen={ ! hasResult }
 				resetKey={ activityResetKey }
 				maxVisible={ 3 }

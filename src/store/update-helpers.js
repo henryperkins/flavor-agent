@@ -16,6 +16,7 @@ import {
 	summarizeActionability,
 } from '../utils/recommendation-actionability';
 import { normalizeStyleSupportPath } from '../utils/style-support-paths';
+import { __ } from '@wordpress/i18n';
 
 const NESTED_MERGE_KEYS = new Set( [ 'metadata', 'style' ] );
 const BANNED_TOP_LEVEL_ATTRIBUTE_KEYS = new Set( [ 'customCSS' ] );
@@ -599,8 +600,10 @@ function buildClientServerOperationMismatchRejections(
 		)
 		.map( ( operation ) => ( {
 			code: BLOCK_OPERATION_ERROR_CLIENT_SERVER_OPERATION_MISMATCH,
-			message:
+			message: __(
 				'The browser validation result no longer matches the server-approved structural operation.',
+				'flavor-agent'
+			),
 			operation,
 		} ) );
 }
@@ -2178,7 +2181,10 @@ export function buildBlockRecommendationDiagnostics(
 			);
 		} else {
 			detailLines.push(
-				'Flavor Agent returned no block-lane suggestions for this request.'
+				__(
+					'Flavor Agent returned no block-lane suggestions for this request.',
+					'flavor-agent'
+				)
 			);
 		}
 	} else if ( rawCounts.block === 0 ) {
@@ -2198,7 +2204,10 @@ export function buildBlockRecommendationDiagnostics(
 		) {
 			reasonCodes.push( 'theme_safety_removed_block_items' );
 			detailLines.push(
-				'At least one block suggestion was removed because its attribute updates were empty or unsafe after theme-safety checks.'
+				__(
+					'At least one block suggestion was removed because its attribute updates were empty or unsafe after theme-safety checks.',
+					'flavor-agent'
+				)
 			);
 		}
 
@@ -2208,7 +2217,10 @@ export function buildBlockRecommendationDiagnostics(
 		) {
 			reasonCodes.push( 'execution_contract_removed_block_items' );
 			detailLines.push(
-				'At least one block suggestion was removed because it targeted an unsupported panel, style path, preset, or style variation for this block.'
+				__(
+					'At least one block suggestion was removed because it targeted an unsupported panel, style path, preset, or style variation for this block.',
+					'flavor-agent'
+				)
 			);
 		}
 
@@ -2220,15 +2232,24 @@ export function buildBlockRecommendationDiagnostics(
 			detailLines.push(
 				Array.isArray( bindableAttributeKeys ) &&
 					bindableAttributeKeys.length > 0
-					? 'At least one block suggestion targeted unsupported bindings for this block.'
-					: 'Binding-only block suggestions were removed because this block exposes no bindable attributes.'
+					? __(
+							'At least one block suggestion targeted unsupported bindings for this block.',
+							'flavor-agent'
+					  )
+					: __(
+							'Binding-only block suggestions were removed because this block exposes no bindable attributes.',
+							'flavor-agent'
+					  )
 			);
 		}
 
 		if ( restrictions.disabled ) {
 			reasonCodes.push( 'block_editing_disabled' );
 			detailLines.push(
-				'The selected block is in disabled editing mode, so block-lane suggestions cannot be used.'
+				__(
+					'The selected block is in disabled editing mode, so block-lane suggestions cannot be used.',
+					'flavor-agent'
+				)
 			);
 		} else if ( restrictions.contentOnly ) {
 			if (
@@ -2239,7 +2260,10 @@ export function buildBlockRecommendationDiagnostics(
 			) {
 				reasonCodes.push( 'content_only_inner_blocks_lock' );
 				detailLines.push(
-					'This block is content-restricted and exposes editable content only through inner blocks, so wrapper-level block updates were removed.'
+					__(
+						'This block is content-restricted and exposes editable content only through inner blocks, so wrapper-level block updates were removed.',
+						'flavor-agent'
+					)
 				);
 			} else if (
 				contentSafeBlockSuggestions.length <
@@ -2247,7 +2271,10 @@ export function buildBlockRecommendationDiagnostics(
 			) {
 				reasonCodes.push( 'content_only_removed_block_items' );
 				detailLines.push(
-					'This block is content-restricted, so non-content block updates were removed.'
+					__(
+						'This block is content-restricted, so non-content block updates were removed.',
+						'flavor-agent'
+					)
 				);
 			}
 		}
@@ -2255,7 +2282,10 @@ export function buildBlockRecommendationDiagnostics(
 		if ( reasonCodes.length === 0 ) {
 			reasonCodes.push( 'block_items_removed_after_validation' );
 			detailLines.push(
-				'Block-lane suggestions were removed after validation for the current block context.'
+				__(
+					'Block-lane suggestions were removed after validation for the current block context.',
+					'flavor-agent'
+				)
 			);
 		}
 	}
@@ -2268,7 +2298,10 @@ export function buildBlockRecommendationDiagnostics(
 	) {
 		reasonCodes.push( 'no_mapped_inspector_panels' );
 		detailLines.push(
-			'The block context exposed no mapped inspector panels for this request.'
+			__(
+				'The block context exposed no mapped inspector panels for this request.',
+				'flavor-agent'
+			)
 		);
 	}
 
@@ -2296,8 +2329,11 @@ export function buildBlockRecommendationDiagnostics(
 		hasEmptyBlockResult: true,
 		title:
 			rawCounts.block === 0
-				? 'No block-lane suggestions returned'
-				: 'Block-lane suggestions were filtered out',
+				? __( 'No block-lane suggestions returned', 'flavor-agent' )
+				: __(
+						'Block-lane suggestions were filtered out',
+						'flavor-agent'
+				  ),
 		detailLines,
 		reasonCodes: [ ...new Set( reasonCodes ) ],
 		rawCounts,

@@ -52,7 +52,7 @@ This is the in-harness operational form of the repo source docs — keep them al
 - DataViews contract drift (don't claim DataForm is in AI Activity runtime unless opened code proves it); Settings validation errors hidden in collapsed details/accordion.
 - Core AI Request Logs / dual logging drift: `AiRequestLogPanel`, `ai/v1/logs/{id}` fetches, token-only unavailable states, Tools > AI Request Logs links, and Settings copy should match current core-logging and dual-logging behavior.
 - PHP admin escaping (confirm context-specific escaping); duplicated runtime logic with concrete drift risk; dead exports / orphaned CSS **only** after confirming runtime entry/import paths.
-- Direct `__experimental*` usage **outside** the compat/wrapper boundary: `src/patterns/pattern-settings.js`, `src/patterns/compat.js`, `src/context/theme-settings.js`, `src/context/theme-tokens.js`, `src/context/block-inspector.js`, `src/global-styles/selectors.js`.
+- Direct `__experimental*` usage **outside** the compat/wrapper boundary: `src/patterns/pattern-settings.js`, `src/patterns/compat.js`, `src/context/theme-settings.js`, `src/context/theme-tokens.js`, `src/context/block-inspector.js`, `src/global-styles/selectors.js`, `src/utils/style-support-paths.js`, `src/patterns/PatternAdaptationPreview.js`.
 
 ## Severity
 

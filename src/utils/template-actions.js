@@ -34,6 +34,7 @@ import {
 	matchesTemplatePartArea,
 } from './template-part-areas';
 import { deepStructuralEqual } from './structural-equality';
+import { __ } from '@wordpress/i18n';
 
 /* ------------------------------------------------------------------ */
 /*  Block-tree helpers                                                 */
@@ -536,7 +537,10 @@ function resolveInsertionRootClientId(
 	if ( ! resolvedRoot ) {
 		return {
 			ok: false,
-			error: 'Flavor Agent could not resolve the current insertion container for this template-part operation.',
+			error: __(
+				'Flavor Agent could not resolve the current insertion container for this template-part operation.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -590,7 +594,10 @@ function restoreBlockSnapshotsAtInsertionPoint(
 	if ( ! Number.isInteger( index ) || index < 0 || snapshots.length === 0 ) {
 		return {
 			ok: false,
-			error: 'Flavor Agent could not resolve the insertion point needed to restore the previous block state.',
+			error: __(
+				'Flavor Agent could not resolve the insertion point needed to restore the previous block state.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -629,7 +636,10 @@ function restoreBlockSnapshotsAtInsertionPoint(
 	) {
 		return {
 			ok: false,
-			error: 'Flavor Agent could not restore the previous block state automatically.',
+			error: __(
+				'Flavor Agent could not restore the previous block state automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -796,7 +806,10 @@ function validateTemplateDocumentState(
 	if ( isValid === false ) {
 		return {
 			ok: false,
-			error: 'Flavor Agent could not keep this document aligned with the current WordPress template constraints. The changes were reverted.',
+			error: __(
+				'Flavor Agent could not keep this document aligned with the current WordPress template constraints. The changes were reverted.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -1221,7 +1234,10 @@ function prepareInsertPatternOperation(
 			error:
 				placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ||
 				placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
-					? 'Flavor Agent could not resolve the targetPath for this template insertion.'
+					? __(
+							'Flavor Agent could not resolve the targetPath for this template insertion.',
+							'flavor-agent'
+					  )
 					: `Flavor Agent could not resolve the ${ placement } insertion point for this template.`,
 		};
 	}
@@ -1279,7 +1295,10 @@ function prepareInsertPatternOperation(
 
 	if ( ! rootLocator ) {
 		return {
-			error: 'Flavor Agent could not resolve the current insertion container for this pattern.',
+			error: __(
+				'Flavor Agent could not resolve the current insertion container for this pattern.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -1394,7 +1413,10 @@ function prepareTemplatePartInsertPatternOperation(
 			error:
 				placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ||
 				placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
-					? 'Flavor Agent could not resolve the targetPath for this template-part insertion.'
+					? __(
+							'Flavor Agent could not resolve the targetPath for this template-part insertion.',
+							'flavor-agent'
+					  )
 					: `Flavor Agent could not resolve the ${ placement } insertion point for this template part.`,
 		};
 	}
@@ -1506,7 +1528,10 @@ function prepareTemplatePartInsertPatternOperation(
 function resolveTemplatePartTargetByPath( targetPath, workingBlocks ) {
 	if ( ! Array.isArray( targetPath ) || targetPath.length === 0 ) {
 		return {
-			error: 'Flavor Agent could not resolve the targetPath for this template-part operation.',
+			error: __(
+				'Flavor Agent could not resolve the targetPath for this template-part operation.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -1514,7 +1539,10 @@ function resolveTemplatePartTargetByPath( targetPath, workingBlocks ) {
 
 	if ( ! targetBlock ) {
 		return {
-			error: 'The target block path no longer exists in this template part. Regenerate recommendations and try again.',
+			error: __(
+				'The target block path no longer exists in this template part. Regenerate recommendations and try again.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -1524,7 +1552,10 @@ function resolveTemplatePartTargetByPath( targetPath, workingBlocks ) {
 
 	if ( ! rootLocator ) {
 		return {
-			error: 'Flavor Agent could not resolve the parent container for this template-part operation.',
+			error: __(
+				'Flavor Agent could not resolve the parent container for this template-part operation.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -1640,7 +1671,10 @@ function validateRemovalAnchor(
 		) {
 			return {
 				ok: false,
-				error: 'Template-part content changed after this block was removed and cannot be undone automatically.',
+				error: __(
+					'Template-part content changed after this block was removed and cannot be undone automatically.',
+					'flavor-agent'
+				),
 			};
 		}
 
@@ -1654,14 +1688,20 @@ function validateRemovalAnchor(
 	if ( ! resolvedRoot ) {
 		return {
 			ok: false,
-			error: 'Flavor Agent could not resolve the parent container for this removed block.',
+			error: __(
+				'Flavor Agent could not resolve the parent container for this removed block.',
+				'flavor-agent'
+			),
 		};
 	}
 
 	if ( resolvedRoot.blocks.length !== index ) {
 		return {
 			ok: false,
-			error: 'Template-part content changed after this block was removed and cannot be undone automatically.',
+			error: __(
+				'Template-part content changed after this block was removed and cannot be undone automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -1977,7 +2017,10 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 			if ( hasConflictingTarget ) {
 				return {
 					ok: false,
-					error: 'This suggestion targets overlapping template-part block paths and cannot be applied automatically.',
+					error: __(
+						'This suggestion targets overlapping template-part block paths and cannot be applied automatically.',
+						'flavor-agent'
+					),
 				};
 			}
 		}
@@ -2008,7 +2051,10 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 				) {
 					return {
 						ok: false,
-						error: 'Flavor Agent could not update the working template-part structure for this insertion.',
+						error: __(
+							'Flavor Agent could not update the working template-part structure for this insertion.',
+							'flavor-agent'
+						),
 					};
 				}
 
@@ -2037,7 +2083,10 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 				) {
 					return {
 						ok: false,
-						error: 'Flavor Agent could not update the working template-part structure for this replacement.',
+						error: __(
+							'Flavor Agent could not update the working template-part structure for this replacement.',
+							'flavor-agent'
+						),
 					};
 				}
 
@@ -2065,7 +2114,10 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 				) {
 					return {
 						ok: false,
-						error: 'Flavor Agent could not update the working template-part structure for this removal.',
+						error: __(
+							'Flavor Agent could not update the working template-part structure for this removal.',
+							'flavor-agent'
+						),
 					};
 				}
 
@@ -2368,7 +2420,10 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 
 				if ( ! targetBlock?.clientId ) {
 					return failTemplatePartApplyAndRollback(
-						'The targeted block is no longer available for replacement. Regenerate recommendations and try again.',
+						__(
+							'The targeted block is no longer available for replacement. Regenerate recommendations and try again.',
+							'flavor-agent'
+						),
 						appliedOperations
 					);
 				}
@@ -2520,7 +2575,10 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 
 				if ( ! targetBlock?.clientId ) {
 					return failTemplatePartApplyAndRollback(
-						'The targeted block is no longer available for removal. Regenerate recommendations and try again.',
+						__(
+							'The targeted block is no longer available for removal. Regenerate recommendations and try again.',
+							'flavor-agent'
+						),
 						appliedOperations
 					);
 				}
@@ -2716,7 +2774,10 @@ function prepareUndoTemplatePartOperation(
 
 	if ( ! block ) {
 		return {
-			error: 'A template-part block from this AI action is no longer available to undo.',
+			error: __(
+				'A template-part block from this AI action is no longer available to undo.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -2767,8 +2828,14 @@ function resolveInsertedPatternSlice(
 			error:
 				Array.isArray( operation?.insertedClientIds ) &&
 				operation.insertedClientIds.length > 0
-					? 'This pattern insertion was recorded before refresh-safe undo support and cannot be undone automatically.'
-					: 'This pattern insertion does not include the stable insertion locator needed for automatic undo.',
+					? __(
+							'This pattern insertion was recorded before refresh-safe undo support and cannot be undone automatically.',
+							'flavor-agent'
+					  )
+					: __(
+							'This pattern insertion does not include the stable insertion locator needed for automatic undo.',
+							'flavor-agent'
+					  ),
 		};
 	}
 
@@ -2778,8 +2845,14 @@ function resolveInsertedPatternSlice(
 			error:
 				Array.isArray( operation?.insertedClientIds ) &&
 				operation.insertedClientIds.length > 0
-					? 'This pattern insertion was recorded before refresh-safe undo support and cannot be undone automatically.'
-					: 'This pattern insertion does not include the recorded post-apply snapshot needed for automatic undo.',
+					? __(
+							'This pattern insertion was recorded before refresh-safe undo support and cannot be undone automatically.',
+							'flavor-agent'
+					  )
+					: __(
+							'This pattern insertion does not include the recorded post-apply snapshot needed for automatic undo.',
+							'flavor-agent'
+					  ),
 		};
 	}
 
@@ -2795,7 +2868,10 @@ function resolveInsertedPatternSlice(
 	if ( ! slice ) {
 		return {
 			ok: false,
-			error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
+			error: __(
+				'Inserted pattern content changed after apply and cannot be undone automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -2810,7 +2886,10 @@ function resolveInsertedPatternSlice(
 	) {
 		return {
 			ok: false,
-			error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
+			error: __(
+				'Inserted pattern content changed after apply and cannot be undone automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -2866,7 +2945,10 @@ function prepareUndoReplaceBlockWithPatternOperation(
 		operation.removedBlocksSnapshot.length === 0
 	) {
 		return {
-			error: 'This template-part block replacement is missing the removed-block snapshot needed for automatic undo.',
+			error: __(
+				'This template-part block replacement is missing the removed-block snapshot needed for automatic undo.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -2888,7 +2970,10 @@ function prepareUndoRemoveBlockOperation(
 		operation.removedBlocksSnapshot.length === 0
 	) {
 		return {
-			error: 'This template-part block removal is missing the removed-block snapshot needed for automatic undo.',
+			error: __(
+				'This template-part block removal is missing the removed-block snapshot needed for automatic undo.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -2922,7 +3007,10 @@ export function prepareTemplateUndoOperations(
 	if ( operations.length === 0 ) {
 		return {
 			ok: false,
-			error: 'This AI template action does not include undoable operations.',
+			error: __(
+				'This AI template action does not include undoable operations.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -2986,7 +3074,10 @@ export function prepareTemplatePartUndoOperations(
 	if ( operations.length === 0 ) {
 		return {
 			ok: false,
-			error: 'This AI template-part action does not include undoable operations.',
+			error: __(
+				'This AI template-part action does not include undoable operations.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -3091,7 +3182,10 @@ export function getTemplateActivityUndoState(
 		error:
 			prepared.error ||
 			existingUndo.error ||
-			'This AI template action can no longer be undone automatically.',
+			__(
+				'This AI template action can no longer be undone automatically.',
+				'flavor-agent'
+			),
 	};
 }
 
@@ -3137,7 +3231,10 @@ export function getTemplatePartActivityUndoState(
 		error:
 			prepared.error ||
 			existingUndo.error ||
-			'This AI template-part action can no longer be undone automatically.',
+			__(
+				'This AI template-part action can no longer be undone automatically.',
+				'flavor-agent'
+			),
 	};
 }
 

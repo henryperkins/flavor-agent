@@ -10,16 +10,9 @@ jest.mock( '@wordpress/blocks', () => ( {
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: {},
 } ) );
-jest.mock( '@wordpress/i18n', () => ( {
-	__: jest.fn( ( text ) => text ),
-	sprintf: jest.fn( ( template, ...args ) =>
-		args.reduce( ( message, value, index ) => {
-			const positional = new RegExp( `%${ index + 1 }\\$s`, 'g' );
-
-			return message.replace( positional, value ).replace( '%s', value );
-		}, template )
-	),
-} ) );
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 
 const i18n = require( '@wordpress/i18n' );
 const { select, dispatch } = require( '@wordpress/data' );

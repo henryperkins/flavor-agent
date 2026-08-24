@@ -10,9 +10,12 @@ import {
 	validateBlockOperationSequence,
 } from './block-operation-catalog';
 import { buildContextSignature } from './context-signature';
+import { __ } from '@wordpress/i18n';
 
-const STRUCTURAL_DRIFT_UNDO_ERROR =
-	'The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically.';
+const STRUCTURAL_DRIFT_UNDO_ERROR = __(
+	'The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+	'flavor-agent'
+);
 
 function cloneValue( value ) {
 	if ( value === undefined ) {
@@ -260,20 +263,34 @@ function mapValidationFailureCode( validation ) {
 
 export function getBlockStructuralActionErrorMessage( code = '' ) {
 	const messages = {
-		target_missing:
+		target_missing: __(
 			'The selected block is no longer available. Refresh recommendations and try again.',
-		target_mismatch:
+			'flavor-agent'
+		),
+		target_mismatch: __(
 			'The selected block no longer matches the reviewed operation. Refresh recommendations and try again.',
-		pattern_missing:
+			'flavor-agent'
+		),
+		pattern_missing: __(
 			'The recommended pattern is no longer available. Refresh recommendations and try again.',
-		locked_target:
+			'flavor-agent'
+		),
+		locked_target: __(
 			'The selected block is locked and cannot be structurally changed.',
-		content_only_target:
+			'flavor-agent'
+		),
+		content_only_target: __(
 			'The selected block is content-only and cannot be structurally changed.',
-		structural_actions_disabled:
+			'flavor-agent'
+		),
+		structural_actions_disabled: __(
 			'Block structural actions are disabled for this environment.',
-		operation_invalid:
+			'flavor-agent'
+		),
+		operation_invalid: __(
 			'The structural operation is no longer valid. Refresh recommendations and try again.',
+			'flavor-agent'
+		),
 	};
 
 	return messages[ code ] || messages.operation_invalid;
@@ -554,7 +571,10 @@ function applyReplaceBlockWithPatternOperation( {
 		return {
 			ok: false,
 			code: 'operation_invalid',
-			error: 'The selected block could not be removed before replacement.',
+			error: __(
+				'The selected block could not be removed before replacement.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -722,7 +742,10 @@ export function getBlockStructuralActivityUndoState(
 			...existingUndo,
 			canUndo: false,
 			status: 'failed',
-			error: 'This block structural action is missing its recorded structure and cannot be undone automatically.',
+			error: __(
+				'This block structural action is missing its recorded structure and cannot be undone automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -764,7 +787,10 @@ export function undoBlockStructuralSuggestionOperations( activity, registry ) {
 	if ( operations.length === 0 || ! expectedAfterSignature ) {
 		return {
 			ok: false,
-			error: 'This block structural action is missing its recorded structure and cannot be undone automatically.',
+			error: __(
+				'This block structural action is missing its recorded structure and cannot be undone automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 

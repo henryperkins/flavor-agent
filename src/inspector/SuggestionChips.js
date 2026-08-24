@@ -10,7 +10,9 @@ import { __ } from '@wordpress/i18n';
 
 import {
 	getTonePillClassName,
+	getToneLabel,
 	STALE_STATUS_LABEL,
+	SURFACE_TONES,
 } from '../components/surface-labels';
 import InlineActionFeedback from '../components/InlineActionFeedback';
 import { STORE_NAME } from '../store';
@@ -40,6 +42,7 @@ export default function SuggestionChips( {
 	interactive = true,
 	title = '',
 	tone = '',
+	toneLabel = '',
 	selectable = false,
 	selectedKeys = new Set(),
 	appliedKeys = new Set(),
@@ -119,19 +122,20 @@ export default function SuggestionChips( {
 			suggestions,
 		} );
 	const tonePillClassName = isStale
-		? 'flavor-agent-pill--stale'
+		? getTonePillClassName( SURFACE_TONES.STALE )
 		: getTonePillClassName( tone );
+	const resolvedToneLabel = toneLabel || getToneLabel( tone );
 
 	return (
 		<div className="flavor-agent-chip-surface">
-			{ ( title || tone || isStale ) && (
+			{ ( title || resolvedToneLabel || isStale ) && (
 				<div className="flavor-agent-chip-surface__header">
 					{ title && (
 						<div className="flavor-agent-section-label">
 							{ title }
 						</div>
 					) }
-					{ ( tone || isStale ) && (
+					{ ( resolvedToneLabel || isStale ) && (
 						<span
 							className={ `flavor-agent-pill${
 								tonePillClassName
@@ -139,7 +143,7 @@ export default function SuggestionChips( {
 									: ''
 							}` }
 						>
-							{ isStale ? STALE_STATUS_LABEL : tone }
+							{ isStale ? STALE_STATUS_LABEL : resolvedToneLabel }
 						</span>
 					) }
 				</div>

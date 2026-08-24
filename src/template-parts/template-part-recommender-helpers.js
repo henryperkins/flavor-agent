@@ -11,6 +11,7 @@ import {
 } from '../utils/live-structure-snapshots';
 import { buildContextSignature } from '../utils/context-signature';
 import { normalizeDesignSemantics } from '../utils/recommendation-design-semantics';
+import { __ } from '@wordpress/i18n';
 
 const TEMPLATE_PART_ATTRIBUTE_FIELDS = [
 	'tagName',
@@ -281,11 +282,11 @@ function buildTemplatePartInsertionAnchors( operationTargets = [] ) {
 	const anchors = [
 		{
 			placement: 'start',
-			label: 'Start of template part',
+			label: __( 'Start of template part', 'flavor-agent' ),
 		},
 		{
 			placement: 'end',
-			label: 'End of template part',
+			label: __( 'End of template part', 'flavor-agent' ),
 		},
 	];
 

@@ -820,7 +820,7 @@ export default function TemplateRecommender() {
 	return (
 		<PluginDocumentSettingPanel
 			name="flavor-agent-template-recommendations"
-			title="AI Template Recommendations"
+			title={ __( 'AI Template Recommendations', 'flavor-agent' ) }
 		>
 			<div className="flavor-agent-panel flavor-agent-template-panel">
 				<SurfaceScopeBar
@@ -838,12 +838,18 @@ export default function TemplateRecommender() {
 
 				{ canRecommend && (
 					<SurfaceComposer
-						title="Ask Flavor Agent"
+						title={ __( 'Ask Flavor Agent', 'flavor-agent' ) }
 						prompt={ prompt }
 						onPromptChange={ setPrompt }
 						onFetch={ handleFetch }
-						placeholder="Describe the structure or layout you want."
-						label="What are you trying to achieve with this template?"
+						placeholder={ __(
+							'Describe the structure or layout you want.',
+							'flavor-agent'
+						) }
+						label={ __(
+							'What are you trying to achieve with this template?',
+							'flavor-agent'
+						) }
 						hideLabelFromVision
 						rows={ 2 }
 						meta={
@@ -1052,11 +1058,13 @@ function TemplateSuggestionCard( {
 							</span>
 						) }
 						<span className="flavor-agent-pill">
-							{ suggestion.canApply ? 'Ready' : 'Manual' }
+							{ suggestion.canApply
+								? __( 'Ready', 'flavor-agent' )
+								: __( 'Manual', 'flavor-agent' ) }
 						</span>
 						{ isApplied && (
 							<span className="flavor-agent-done-badge">
-								Applied
+								{ __( 'Applied', 'flavor-agent' ) }
 							</span>
 						) }
 					</div>
@@ -1101,7 +1109,7 @@ function TemplateSuggestionCard( {
 						<div className="flavor-agent-template-list">
 							<div className="flavor-agent-template-list__header">
 								<div className="flavor-agent-section-label">
-									Template Parts
+									{ __( 'Template Parts', 'flavor-agent' ) }
 								</div>
 								<span className="flavor-agent-pill">
 									{ formatCount(
@@ -1194,7 +1202,10 @@ function TemplateSuggestionCard( {
 						<div className="flavor-agent-template-list">
 							<div className="flavor-agent-template-list__header">
 								<div className="flavor-agent-section-label">
-									Suggested Patterns
+									{ __(
+										'Suggested Patterns',
+										'flavor-agent'
+									) }
 								</div>
 								<span className="flavor-agent-pill">
 									{ formatCount(

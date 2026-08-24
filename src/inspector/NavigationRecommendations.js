@@ -8,8 +8,13 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 
-import { formatCount, humanizeString } from '../utils/format-count';
+import {
+	formatCount,
+	humanizeString,
+	joinClassNames,
+} from '../utils/format-count';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
@@ -21,8 +26,9 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
 import {
-	MANUAL_IDEAS_LABEL,
-	STALE_STATUS_LABEL,
+	getTonePillClassName,
+	getToneLabel,
+	SURFACE_TONES,
 } from '../components/surface-labels';
 import {
 	collectBlockContext,
@@ -34,6 +40,34 @@ import {
 } from '../utils/capability-flags';
 import { buildContextSignature } from '../utils/context-signature';
 import { buildNavigationRecommendationRequestSignature } from '../utils/recommendation-request-signature';
+
+/**
+ * Composer copy shared by the embedded and full navigation panels.
+ *
+ * Both branches rendered the same six strings verbatim; hoisting them keeps the
+ * two surfaces from drifting and gives translators one entry per string.
+ */
+const NAVIGATION_COMPOSER_COPY = {
+	placeholder: __(
+		'Describe the structure or behavior you want.',
+		'flavor-agent'
+	),
+	label: __(
+		'What do you want to improve about this navigation?',
+		'flavor-agent'
+	),
+	helperText: __(
+		'Flavor Agent will suggest the next navigation changes to make manually.',
+		'flavor-agent'
+	),
+	starterPrompts: [
+		__( 'Improve menu hierarchy', 'flavor-agent' ),
+		__( 'Reduce overlay friction', 'flavor-agent' ),
+		__( 'Improve keyboard support', 'flavor-agent' ),
+	],
+	fetchLabel: __( 'Get Navigation Suggestions', 'flavor-agent' ),
+	loadingLabel: __( 'Getting navigation suggestions\u2026', 'flavor-agent' ),
+};
 
 function formatChangeType( type ) {
 	return humanizeString( type || 'change' );
@@ -585,37 +619,55 @@ export default function NavigationRecommendations( {
 	}
 
 	const menuId = Number( navigationBlock?.attributes?.ref || 0 );
-	const laneTone = isStaleResult ? STALE_STATUS_LABEL : MANUAL_IDEAS_LABEL;
-	let laneDescription =
-		'Use this subsection to ask for navigation-specific next steps without creating a second top-level recommendation stack.';
-	let embeddedDescription =
-		'Ask for navigation-specific next steps without leaving the main block recommendation flow.';
+	const laneTone = isStaleResult ? SURFACE_TONES.STALE : SURFACE_TONES.MANUAL;
+	const laneToneLabel = getToneLabel( laneTone );
+	let laneDescription = __(
+		'Use this subsection to ask for navigation-specific next steps without creating a second top-level recommendation stack.',
+		'flavor-agent'
+	);
+	let embeddedDescription = __(
+		'Ask for navigation-specific next steps without leaving the main block recommendation flow.',
+		'flavor-agent'
+	);
 
 	if ( interactionState === 'advisory-ready' ) {
-		laneDescription =
-			'Navigation recommendations stay advisory here. Make accepted changes manually in the editor.';
-		embeddedDescription =
-			'Navigation suggestions stay advisory here and still need manual follow-through in the editor.';
+		laneDescription = __(
+			'Navigation recommendations stay advisory here. Make accepted changes manually in the editor.',
+			'flavor-agent'
+		);
+		embeddedDescription = __(
+			'Navigation suggestions stay advisory here and still need manual follow-through in the editor.',
+			'flavor-agent'
+		);
 	}
 
 	if ( isStaleResult ) {
-		laneDescription =
-			'These ideas are shown for reference from the last request. Refresh before using them to change the current navigation block.';
+		laneDescription = __(
+			'These ideas are shown for reference from the last request. Refresh before using them to change the current navigation block.',
+			'flavor-agent'
+		);
 	}
 
 	const embeddedHeaderMeta = (
 		<>
 			<span
-				className={
+				className={ joinClassNames(
+					'flavor-agent-pill',
 					isStaleResult
-						? 'flavor-agent-pill flavor-agent-pill--stale'
-						: 'flavor-agent-pill'
-				}
+						? getTonePillClassName( SURFACE_TONES.STALE )
+						: ''
+				) }
 			>
-				{ laneTone }
+				{ laneToneLabel }
 			</span>
 			{ menuId > 0 && (
-				<span className="flavor-agent-pill">{ `Menu ID ${ menuId }` }</span>
+				<span className="flavor-agent-pill">
+					{ sprintf(
+						/* translators: %d: navigation menu post ID. */
+						__( 'Menu ID %d', 'flavor-agent' ),
+						menuId
+					) }
+				</span>
 			) }
 			{ hasSuggestions && (
 				<span className="flavor-agent-pill">
@@ -625,22 +677,44 @@ export default function NavigationRecommendations( {
 		</>
 	);
 	const featuredDescription = isStaleResult
-		? 'These ideas came from the previous navigation state. Refresh before using them as your next step.'
-		: 'Start with this change first, then work through the supporting ideas below.';
+		? __(
+				'These ideas came from the previous navigation state. Refresh before using them as your next step.',
+				'flavor-agent'
+		  )
+		: __(
+				'Start with this change first, then work through the supporting ideas below.',
+				'flavor-agent'
+		  );
 	const groupedDescription = isStaleResult
-		? 'These accepted changes came from the previous request. Refresh before following them in the current navigation block.'
-		: 'Make these accepted changes manually in the navigation block.';
+		? __(
+				'These accepted changes came from the previous request. Refresh before following them in the current navigation block.',
+				'flavor-agent'
+		  )
+		: __(
+				'Make these accepted changes manually in the navigation block.',
+				'flavor-agent'
+		  );
 
 	return (
 		<>
 			{ ! embedded && (
 				<SurfacePanelIntro
-					eyebrow="Navigation Recommendations"
-					introCopy="Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only, so accepted changes still need manual follow-through. Treat each idea as guidance, not a pre-applied edit."
+					eyebrow={ __(
+						'Navigation Recommendations',
+						'flavor-agent'
+					) }
+					introCopy={ __(
+						'Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only, so accepted changes still need manual follow-through. Treat each idea as guidance, not a pre-applied edit.',
+						'flavor-agent'
+					) }
 					meta={
 						menuId > 0 ? (
 							<span className="flavor-agent-pill">
-								Menu ID { menuId }
+								{ sprintf(
+									/* translators: %d: navigation menu post ID. */
+									__( 'Menu ID %d', 'flavor-agent' ),
+									menuId
+								) }
 							</span>
 						) : null
 					}
@@ -653,12 +727,15 @@ export default function NavigationRecommendations( {
 				( embedded ? (
 					<div
 						className="flavor-agent-navigation-embedded"
-						aria-label="Navigation recommendations"
+						aria-label={ __(
+							'Navigation recommendations',
+							'flavor-agent'
+						) }
 					>
 						<div className="flavor-agent-navigation-embedded__header">
 							<div className="flavor-agent-navigation-embedded__copy">
 								<p className="flavor-agent-section-label">
-									Navigation Ideas
+									{ __( 'Navigation Ideas', 'flavor-agent' ) }
 								</p>
 								<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
 									{ embeddedDescription }
@@ -670,20 +747,23 @@ export default function NavigationRecommendations( {
 						</div>
 
 						<SurfaceComposer
-							title="Ask About Navigation"
+							title={ __(
+								'Ask About Navigation',
+								'flavor-agent'
+							) }
 							prompt={ prompt }
 							onPromptChange={ handlePromptChange }
 							onFetch={ handleFetch }
-							placeholder="Describe the structure or behavior you want."
-							label="What do you want to improve about this navigation?"
-							helperText="Flavor Agent will suggest the next navigation changes to make manually."
-							starterPrompts={ [
-								'Improve menu hierarchy',
-								'Reduce overlay friction',
-								'Improve keyboard support',
-							] }
-							fetchLabel="Get Navigation Suggestions"
-							loadingLabel="Getting navigation suggestions\u2026"
+							placeholder={ NAVIGATION_COMPOSER_COPY.placeholder }
+							label={ NAVIGATION_COMPOSER_COPY.label }
+							helperText={ NAVIGATION_COMPOSER_COPY.helperText }
+							starterPrompts={
+								NAVIGATION_COMPOSER_COPY.starterPrompts
+							}
+							fetchLabel={ NAVIGATION_COMPOSER_COPY.fetchLabel }
+							loadingLabel={
+								NAVIGATION_COMPOSER_COPY.loadingLabel
+							}
 							fetchVariant="secondary"
 							isLoading={ isLoading }
 							disabled={ ! requestInput }
@@ -726,7 +806,10 @@ export default function NavigationRecommendations( {
 
 						{ featuredSuggestion && (
 							<NavigationEmbeddedSection
-								title="Recommended next change"
+								title={ __(
+									'Recommended next change',
+									'flavor-agent'
+								) }
 								description={ featuredDescription }
 							>
 								<NavigationSuggestionCard
@@ -782,7 +865,10 @@ export default function NavigationRecommendations( {
 						/>
 
 						<RecommendationLane
-							title="Recommended Next Changes"
+							title={ __(
+								'Recommended Next Changes',
+								'flavor-agent'
+							) }
 							tone={ laneTone }
 							count={
 								hasSuggestions
@@ -793,20 +879,29 @@ export default function NavigationRecommendations( {
 							description={ laneDescription }
 						>
 							<SurfaceComposer
-								title="Ask Flavor Agent"
+								title={ __(
+									'Ask Flavor Agent',
+									'flavor-agent'
+								) }
 								prompt={ prompt }
 								onPromptChange={ handlePromptChange }
 								onFetch={ handleFetch }
-								placeholder="Describe the structure or behavior you want."
-								label="What do you want to improve about this navigation?"
-								helperText="Flavor Agent will suggest the next navigation changes to make manually."
-								starterPrompts={ [
-									'Improve menu hierarchy',
-									'Reduce overlay friction',
-									'Improve keyboard support',
-								] }
-								fetchLabel="Get Navigation Suggestions"
-								loadingLabel="Getting navigation suggestions\u2026"
+								placeholder={
+									NAVIGATION_COMPOSER_COPY.placeholder
+								}
+								label={ NAVIGATION_COMPOSER_COPY.label }
+								helperText={
+									NAVIGATION_COMPOSER_COPY.helperText
+								}
+								starterPrompts={
+									NAVIGATION_COMPOSER_COPY.starterPrompts
+								}
+								fetchLabel={
+									NAVIGATION_COMPOSER_COPY.fetchLabel
+								}
+								loadingLabel={
+									NAVIGATION_COMPOSER_COPY.loadingLabel
+								}
 								fetchVariant="secondary"
 								isLoading={ isLoading }
 								disabled={ ! requestInput }

@@ -7,13 +7,21 @@
  * this component surfaces that information to the user.
  */
 import { Button } from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
 
 import { joinClassNames } from '../utils/format-count';
 import {
 	CURRENT_STATUS_LABEL,
+	getTonePillClassName,
 	REFRESH_ACTION_LABEL,
 	STALE_STATUS_LABEL,
+	SURFACE_TONES,
 } from './surface-labels';
+
+const DEFAULT_STALE_MESSAGE = __(
+	'Context has changed since the last request.',
+	'flavor-agent'
+);
 
 export default function SurfaceScopeBar( {
 	scopeLabel = '',
@@ -21,7 +29,7 @@ export default function SurfaceScopeBar( {
 	isFresh = false,
 	hasResult = false,
 	announceChanges = false,
-	staleMessage = 'Context has changed since the last request.',
+	staleMessage = DEFAULT_STALE_MESSAGE,
 	staleReason = '',
 	refreshLabel = REFRESH_ACTION_LABEL,
 	onRefresh,
@@ -91,9 +99,11 @@ export default function SurfaceScopeBar( {
 					<span
 						className={ joinClassNames(
 							'flavor-agent-pill',
-							isFresh
-								? 'flavor-agent-pill--fresh'
-								: 'flavor-agent-pill--stale'
+							getTonePillClassName(
+								isFresh
+									? SURFACE_TONES.FRESH
+									: SURFACE_TONES.STALE
+							)
 						) }
 					>
 						{ isFresh ? CURRENT_STATUS_LABEL : STALE_STATUS_LABEL }
@@ -107,6 +117,9 @@ export default function SurfaceScopeBar( {
 							disabled={ isRefreshing }
 							className="flavor-agent-scope-bar__refresh"
 						>
+							{ /* The ellipsis is a progress affordance appended to
+							     an already-translated label, not part of the
+							     translatable phrase. */ }
 							{ isRefreshing
 								? `${ refreshLabel }\u2026`
 								: refreshLabel }

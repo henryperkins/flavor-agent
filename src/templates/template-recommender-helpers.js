@@ -12,6 +12,7 @@ import {
 	summarizeBlockAttributes,
 } from '../utils/live-structure-snapshots';
 import { normalizeDesignSemantics } from '../utils/recommendation-design-semantics';
+import { __ } from '@wordpress/i18n';
 export { formatCount } from '../utils/format-count';
 
 const ENTITY_PART = 'part';
@@ -74,7 +75,7 @@ function getTemplateOperationKey( operation = {} ) {
 
 export function formatTemplateTypeLabel( templateType ) {
 	if ( ! templateType ) {
-		return 'Current Template';
+		return __( 'Current Template', 'flavor-agent' );
 	}
 
 	return `${ templateType
@@ -546,7 +547,7 @@ export function buildTemplateSuggestionViewModel(
 			name: operation.patternName,
 			title: operation.patternTitle,
 			actionType: PATTERN_BROWSE_ACTION,
-			ctaLabel: 'Browse pattern',
+			ctaLabel: __( 'Browse pattern', 'flavor-agent' ),
 		} );
 	}
 
@@ -560,7 +561,7 @@ export function buildTemplateSuggestionViewModel(
 			name,
 			title: patternTitleMap[ name ] || name,
 			actionType: PATTERN_BROWSE_ACTION,
-			ctaLabel: 'Browse pattern',
+			ctaLabel: __( 'Browse pattern', 'flavor-agent' ),
 		} );
 	}
 
@@ -583,7 +584,7 @@ export function buildTemplateSuggestionViewModel(
 			area,
 			reason: partReasonLookup[ key ] || '',
 			actionType: TEMPLATE_PART_REVIEW_ACTION,
-			ctaLabel: 'Review in editor',
+			ctaLabel: __( 'Review in editor', 'flavor-agent' ),
 		} );
 	}
 
@@ -615,7 +616,7 @@ export function buildTemplateSuggestionViewModel(
 								)
 							] || '',
 						actionType: TEMPLATE_PART_REVIEW_ACTION,
-						ctaLabel: 'Review in editor',
+						ctaLabel: __( 'Review in editor', 'flavor-agent' ),
 				  } ) )
 				: advisoryTemplateParts,
 		patternSuggestions,

@@ -45,6 +45,7 @@ import {
 } from './activity-session';
 import { getRecommendationIdentityForApply } from './recommendation-outcomes';
 import { formatCount } from '../utils/format-count';
+import { __ } from '@wordpress/i18n';
 
 function getEntityActivityEntries( activityLog, activity ) {
 	const entityKey = getActivityEntityKey( activity );
@@ -548,7 +549,10 @@ function undoBlockActivity( activity, registry ) {
 	) {
 		return {
 			ok: false,
-			error: 'This block action is missing its recorded after state and cannot be undone automatically.',
+			error: __(
+				'This block action is missing its recorded after state and cannot be undone automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -561,7 +565,10 @@ function undoBlockActivity( activity, registry ) {
 	if ( ! resolvedBlock?.clientId ) {
 		return {
 			ok: false,
-			error: 'The original block target for this AI action is missing.',
+			error: __(
+				'The original block target for this AI action is missing.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -580,7 +587,10 @@ function undoBlockActivity( activity, registry ) {
 	if ( ! currentAttributes ) {
 		return {
 			ok: false,
-			error: 'The target block is no longer available to undo.',
+			error: __(
+				'The target block is no longer available to undo.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -623,14 +633,20 @@ function undoBlockActivity( activity, registry ) {
 	) {
 		return {
 			ok: false,
-			error: 'The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+			error: __(
+				'The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 
 	if ( typeof blockEditorDispatch.updateBlockAttributes !== 'function' ) {
 		return {
 			ok: false,
-			error: 'The block editor could not restore the previous block attributes.',
+			error: __(
+				'The block editor could not restore the previous block attributes.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -732,13 +748,19 @@ export function createUndoActivityAction( {
 				localDispatch(
 					setUndoState(
 						'error',
-						'There is no AI action available to undo.'
+						__(
+							'There is no AI action available to undo.',
+							'flavor-agent'
+						)
 					)
 				);
 
 				return {
 					ok: false,
-					error: 'There is no AI action available to undo.',
+					error: __(
+						'There is no AI action available to undo.',
+						'flavor-agent'
+					),
 				};
 			}
 
@@ -794,7 +816,10 @@ export function createUndoActivityAction( {
 							timestamp: reconciledUndo.updatedAt || timestamp,
 							error:
 								reconciledUndo.error ||
-								'This AI action can no longer be undone automatically.',
+								__(
+									'This AI action can no longer be undone automatically.',
+									'flavor-agent'
+								),
 							entry: reconciledEntry,
 						};
 					}
@@ -832,13 +857,19 @@ export function createUndoActivityAction( {
 						localDispatch(
 							setUndoState(
 								'error',
-								'There is no AI action available to undo.'
+								__(
+									'There is no AI action available to undo.',
+									'flavor-agent'
+								)
 							)
 						);
 
 						return {
 							ok: false,
-							error: 'There is no AI action available to undo.',
+							error: __(
+								'There is no AI action available to undo.',
+								'flavor-agent'
+							),
 						};
 					}
 				} catch {
@@ -990,7 +1021,10 @@ export function createUndoActivityAction( {
 			if ( resolvedUndo?.status === 'failed' ) {
 				const failureMessage =
 					resolvedUndo?.error ||
-					'This AI action can no longer be undone automatically.';
+					__(
+						'This AI action can no longer be undone automatically.',
+						'flavor-agent'
+					);
 				const syncResult = await syncUndoStateChange(
 					'failed',
 					failureMessage
@@ -1018,7 +1052,10 @@ export function createUndoActivityAction( {
 					setUndoState(
 						'error',
 						resolvedUndo?.error ||
-							'This AI action can no longer be undone automatically.',
+							__(
+								'This AI action can no longer be undone automatically.',
+								'flavor-agent'
+							),
 						activityId
 					)
 				);
@@ -1027,7 +1064,10 @@ export function createUndoActivityAction( {
 					ok: false,
 					error:
 						resolvedUndo?.error ||
-						'This AI action can no longer be undone automatically.',
+						__(
+							'This AI action can no longer be undone automatically.',
+							'flavor-agent'
+						),
 				};
 			}
 
@@ -1052,7 +1092,8 @@ export function createUndoActivityAction( {
 			}
 
 			if ( ! result.ok ) {
-				const failureMessage = result.error || 'Undo failed.';
+				const failureMessage =
+					result.error || __( 'Undo failed.', 'flavor-agent' );
 				const syncResult = await syncUndoStateChange(
 					'failed',
 					failureMessage
@@ -1077,7 +1118,9 @@ export function createUndoActivityAction( {
 			if ( ! syncResult.ok ) {
 				const surfacedError =
 					syncResult.error ||
-					buildUndoAuditSyncError( 'Undo applied locally.' );
+					buildUndoAuditSyncError(
+						__( 'Undo applied locally.', 'flavor-agent' )
+					);
 
 				localDispatch(
 					setUndoState( 'error', surfacedError, activityId )

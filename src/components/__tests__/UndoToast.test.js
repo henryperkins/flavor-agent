@@ -8,9 +8,9 @@ jest.mock( '@wordpress/icons', () => ( {
 	undo: 'svg-undo',
 } ) );
 
-jest.mock( '@wordpress/i18n', () => ( {
-	__: ( text ) => text,
-} ) );
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 
 jest.mock( '@wordpress/compose', () => ( {
 	useReducedMotion: jest.fn( () => false ),

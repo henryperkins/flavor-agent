@@ -1,9 +1,10 @@
 import { formatCount, joinClassNames } from '../utils/format-count';
-import { getTonePillClassName } from './surface-labels';
+import { getTonePillClassName, getToneLabel } from './surface-labels';
 
 export default function RecommendationLane( {
 	title = '',
 	tone = '',
+	toneLabel = '',
 	badge = '',
 	count = null,
 	countLabel = '',
@@ -19,6 +20,7 @@ export default function RecommendationLane( {
 	}
 
 	const resolvedCountLabel = countLabel || formatCount( count, countNoun );
+	const resolvedToneLabel = toneLabel || getToneLabel( tone );
 
 	return (
 		<div
@@ -31,7 +33,7 @@ export default function RecommendationLane( {
 			<div className="flavor-agent-panel__group-header">
 				<div className="flavor-agent-panel__group-title">{ title }</div>
 				<div className="flavor-agent-card__meta">
-					{ tone && (
+					{ resolvedToneLabel && (
 						<span
 							className={ joinClassNames(
 								'flavor-agent-pill',
@@ -39,7 +41,7 @@ export default function RecommendationLane( {
 									'flavor-agent-pill--prominent'
 							) }
 						>
-							{ tone }
+							{ resolvedToneLabel }
 						</span>
 					) }
 					{ badge && (

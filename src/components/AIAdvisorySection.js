@@ -7,6 +7,8 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import { __, sprintf } from '@wordpress/i18n';
+
 import { formatCount, joinClassNames } from '../utils/format-count';
 import { ADVISORY_ONLY_LABEL, MANUAL_IDEAS_LABEL } from './surface-labels';
 
@@ -146,7 +148,11 @@ export default function AIAdvisorySection( {
 					onClick={ () => setShowAll( true ) }
 					className="flavor-agent-advisory-section__show-more"
 				>
-					{ `Show ${ totalChildren - maxVisible } more` }
+					{ sprintf(
+						/* translators: %d: number of additional items revealed by the control. */
+						__( 'Show %d more', 'flavor-agent' ),
+						totalChildren - maxVisible
+					) }
 				</Button>
 			) }
 		</div>

@@ -47,6 +47,29 @@ body.settings_page_flavor-agent-activity {
     rgba(255, 255, 255, 0.74)
   );
   --flavor-agent-activity-log-shell: var(--wpds-color-background-surface, var(--wpds-color-bg-surface, #ffffff));
+
+  /* Semantic status colors. These resolve through the plugin's own brand
+     tokens (tokens.css is imported by activity-log.js), which in turn defer to
+     the WPDS runtime where one is mounted. Never hardcode status hex here: a
+     literal bypasses both layers and drifts from the editor surfaces. */
+  --flavor-agent-activity-log-warning: var(
+    --flavor-agent-color-warning,
+    var(--wpds-color-foreground-content-warning, #926300)
+  );
+  --flavor-agent-activity-log-warning-strong: color-mix(
+    in srgb,
+    var(--flavor-agent-activity-log-warning) 80%,
+    var(--flavor-agent-activity-log-ink)
+  );
+  --flavor-agent-activity-log-error: var(
+    --flavor-agent-color-error,
+    var(--wpds-color-foreground-content-error, #cc1818)
+  );
+  --flavor-agent-activity-log-error-strong: color-mix(
+    in srgb,
+    var(--flavor-agent-activity-log-error) 70%,
+    var(--flavor-agent-activity-log-ink)
+  );
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -869,13 +892,14 @@ body.settings_page_flavor-agent-activity {
 .flavor-agent-activity-log__visual-diff-row.is-undone {
   border-color: color-mix(
     in srgb,
-    #b26200 24%,
+    var(--flavor-agent-activity-log-warning-strong) 24%,
     var(--flavor-agent-activity-log-border-soft)
   );
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, #f5a623 10%, #fff) 0%,
+      color-mix(in srgb, var(--flavor-agent-activity-log-warning) 10%, #fff)
+        0%,
       var(--wpds-color-background-surface, var(--wpds-color-bg-surface, #fff)) 100%
     );
 }
@@ -883,13 +907,13 @@ body.settings_page_flavor-agent-activity {
 .flavor-agent-activity-log__visual-diff-row.is-blocked {
   border-color: color-mix(
     in srgb,
-    #8a1f1f 20%,
+    var(--flavor-agent-activity-log-error-strong) 20%,
     var(--flavor-agent-activity-log-border-soft)
   );
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, #d63638 8%, #fff) 0%,
+      color-mix(in srgb, var(--flavor-agent-activity-log-error) 8%, #fff) 0%,
       var(--wpds-color-background-surface, var(--wpds-color-bg-surface, #fff)) 100%
     );
 }
@@ -942,14 +966,22 @@ body.settings_page_flavor-agent-activity {
 
 .flavor-agent-activity-log__visual-diff-row.is-undone
   .flavor-agent-activity-log__visual-diff-status {
-  background: color-mix(in srgb, #f5a623 18%, #fff);
-  color: #8a5200;
+  background: color-mix(
+    in srgb,
+    var(--flavor-agent-activity-log-warning) 18%,
+    #fff
+  );
+  color: var(--flavor-agent-activity-log-warning-strong);
 }
 
 .flavor-agent-activity-log__visual-diff-row.is-blocked
   .flavor-agent-activity-log__visual-diff-status {
-  background: color-mix(in srgb, #d63638 14%, #fff);
-  color: #8a1f1f;
+  background: color-mix(
+    in srgb,
+    var(--flavor-agent-activity-log-error) 14%,
+    #fff
+  );
+  color: var(--flavor-agent-activity-log-error-strong);
 }
 
 .flavor-agent-activity-log__visual-diff-row.is-unsupported
@@ -1022,7 +1054,11 @@ body.settings_page_flavor-agent-activity {
 
 .flavor-agent-activity-log__visual-diff-row.is-variation
   .flavor-agent-activity-log__visual-diff-chip {
-  background: color-mix(in srgb, #f5a623 16%, #fff);
+  background: color-mix(
+    in srgb,
+    var(--flavor-agent-activity-log-warning) 16%,
+    #fff
+  );
 }
 
 .flavor-agent-activity-log__visual-diff-live {

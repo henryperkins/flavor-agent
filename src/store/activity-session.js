@@ -7,6 +7,7 @@ import {
 	readPersistedActivityLog,
 	writePersistedActivityLog,
 } from './activity-history';
+import { __ } from '@wordpress/i18n';
 
 const SERVER_ACTIVITY_FETCH_LIMIT = 100;
 const SERVER_ACTIVITY_SURFACE_LIMIT = 20;
@@ -133,7 +134,10 @@ function getApiErrorStatus( error ) {
 		: 0;
 }
 
-export function getApiErrorMessage( error, fallback = 'Request failed.' ) {
+export function getApiErrorMessage(
+	error,
+	fallback = __( 'Request failed.', 'flavor-agent' )
+) {
 	return typeof error?.message === 'string' && error.message
 		? error.message
 		: fallback;

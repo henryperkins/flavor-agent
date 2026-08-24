@@ -3,21 +3,9 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 const fs = require( 'fs' );
 const path = require( 'path' );
 
-jest.mock( '@wordpress/i18n', () => ( {
-	__: jest.fn( ( value ) => value ),
-	_n: jest.fn( ( single, plural, count ) =>
-		count === 1 ? single : plural
-	),
-	sprintf: jest.fn( ( template, ...values ) =>
-		values.reduce( ( result, value, index ) => {
-			return result
-				.replaceAll( `%${ index + 1 }$s`, String( value ) )
-				.replaceAll( `%${ index + 1 }$d`, String( value ) )
-				.replace( '%s', String( value ) )
-				.replace( '%d', String( value ) );
-		}, template )
-	),
-} ) );
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 
 function getDataViewsMockState() {
 	return global.__flavorAgentActivityLogDataViewsState;

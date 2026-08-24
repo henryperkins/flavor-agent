@@ -13,7 +13,6 @@ describe( 'getInserterBadgeState', () => {
 			status: 'hidden',
 			count: 0,
 			content: null,
-			tooltip: null,
 			ariaLabel: null,
 			className: null,
 		} );
@@ -42,7 +41,6 @@ describe( 'getInserterBadgeState', () => {
 			status: 'loading',
 			count: 0,
 			content: null,
-			tooltip: 'Finding patterns...',
 			ariaLabel: 'Finding pattern recommendations',
 			className:
 				'flavor-agent-inserter-badge flavor-agent-inserter-badge--loading',
@@ -60,8 +58,8 @@ describe( 'getInserterBadgeState', () => {
 			status: 'ready',
 			count: 1,
 			content: '1',
-			tooltip: 'High-confidence recommendation',
-			ariaLabel: '1 pattern recommendation available',
+			ariaLabel:
+				'1 pattern recommendation available. High-confidence recommendation',
 			className:
 				'flavor-agent-inserter-badge flavor-agent-inserter-badge--ready',
 		} );
@@ -82,14 +80,13 @@ describe( 'getInserterBadgeState', () => {
 			status: 'ready',
 			count: 3,
 			content: '3',
-			tooltip: '3 pattern recommendations',
 			ariaLabel: '3 pattern recommendations available',
 			className:
 				'flavor-agent-inserter-badge flavor-agent-inserter-badge--ready',
 		} );
 	} );
 
-	test( 'returns error state with fallback tooltip and error aria-label', () => {
+	test( 'returns error state with the failure reason folded into the aria-label', () => {
 		expect(
 			getInserterBadgeState( {
 				status: 'error',
@@ -100,8 +97,7 @@ describe( 'getInserterBadgeState', () => {
 			status: 'error',
 			count: 0,
 			content: '!',
-			tooltip: 'Server failed',
-			ariaLabel: 'Pattern recommendation error',
+			ariaLabel: 'Pattern recommendation error: Server failed',
 			className:
 				'flavor-agent-inserter-badge flavor-agent-inserter-badge--error',
 		} );

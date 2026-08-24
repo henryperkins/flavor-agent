@@ -1,3 +1,5 @@
+import { __ } from '@wordpress/i18n';
+
 const TEMPLATE_OPERATION_ASSIGN = 'assign_template_part';
 const TEMPLATE_OPERATION_REPLACE = 'replace_template_part';
 const TEMPLATE_OPERATION_INSERT_PATTERN = 'insert_pattern';
@@ -146,7 +148,10 @@ function getTemplatePartTargetPathConflict(
 	) {
 		return {
 			ok: false,
-			error: 'This suggestion targets overlapping template-part block paths and cannot be applied automatically.',
+			error: __(
+				'This suggestion targets overlapping template-part block paths and cannot be applied automatically.',
+				'flavor-agent'
+			),
 			code: 'overlapping_block_paths',
 		};
 	}
@@ -158,7 +163,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 	if ( ! Array.isArray( operations ) || operations.length === 0 ) {
 		return {
 			ok: false,
-			error: 'This suggestion does not include any executable template operations.',
+			error: __(
+				'This suggestion does not include any executable template operations.',
+				'flavor-agent'
+			),
 			code: 'no_executable_operations',
 		};
 	}
@@ -182,7 +190,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				if ( ! slug || ! area ) {
 					return {
 						ok: false,
-						error: 'Template-part assignments must include both a slug and an area.',
+						error: __(
+							'Template-part assignments must include both a slug and an area.',
+							'flavor-agent'
+						),
 						code: 'invalid_template_area',
 					};
 				}
@@ -214,7 +225,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				if ( ! currentSlug || ! slug || ! area ) {
 					return {
 						ok: false,
-						error: 'Template-part replacements must include currentSlug, slug, and area.',
+						error: __(
+							'Template-part replacements must include currentSlug, slug, and area.',
+							'flavor-agent'
+						),
 						code: 'invalid_template_area',
 					};
 				}
@@ -256,7 +270,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				if ( ! patternName ) {
 					return {
 						ok: false,
-						error: 'Pattern insertions must include a pattern name.',
+						error: __(
+							'Pattern insertions must include a pattern name.',
+							'flavor-agent'
+						),
 						code: 'unknown_pattern',
 					};
 				}
@@ -264,7 +281,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				if ( hasPatternInsert ) {
 					return {
 						ok: false,
-						error: 'Only one pattern insertion can be applied automatically per suggestion.',
+						error: __(
+							'Only one pattern insertion can be applied automatically per suggestion.',
+							'flavor-agent'
+						),
 						code: 'repeated_pattern_insert',
 					};
 				}
@@ -273,7 +293,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				if ( hasTargetPath && ! targetPath ) {
 					return {
 						ok: false,
-						error: 'Template pattern insertions that include a targetPath must provide a non-empty array of non-negative indexes.',
+						error: __(
+							'Template pattern insertions that include a targetPath must provide a non-empty array of non-negative indexes.',
+							'flavor-agent'
+						),
 						code: 'invalid_anchor',
 					};
 				}
@@ -281,7 +304,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				if ( ! placement ) {
 					return {
 						ok: false,
-						error: 'Template pattern insertions must include a placement.',
+						error: __(
+							'Template pattern insertions must include a placement.',
+							'flavor-agent'
+						),
 						code: 'invalid_placement',
 					};
 				}
@@ -295,7 +321,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				) {
 					return {
 						ok: false,
-						error: 'Template pattern insertions must use start, end, before_block_path, or after_block_path.',
+						error: __(
+							'Template pattern insertions must use start, end, before_block_path, or after_block_path.',
+							'flavor-agent'
+						),
 						code: 'invalid_placement',
 					};
 				}
@@ -303,7 +332,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				if ( anchoredPlacements.has( placement ) && ! targetPath ) {
 					return {
 						ok: false,
-						error: 'Anchored template pattern insertions must include a targetPath.',
+						error: __(
+							'Anchored template pattern insertions must include a targetPath.',
+							'flavor-agent'
+						),
 						code: 'invalid_anchor',
 					};
 				}
@@ -350,7 +382,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 	if ( ! Array.isArray( operations ) || operations.length === 0 ) {
 		return {
 			ok: false,
-			error: 'This suggestion does not include any executable template-part operations.',
+			error: __(
+				'This suggestion does not include any executable template-part operations.',
+				'flavor-agent'
+			),
 			code: 'no_executable_operations',
 		};
 	}
@@ -358,7 +393,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 	if ( operations.length > 3 ) {
 		return {
 			ok: false,
-			error: 'Template-part suggestions can apply at most 3 operations automatically.',
+			error: __(
+				'Template-part suggestions can apply at most 3 operations automatically.',
+				'flavor-agent'
+			),
 			code: 'too_many_operations',
 		};
 	}
@@ -389,7 +427,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				if ( ! patternName ) {
 					return {
 						ok: false,
-						error: 'Template-part pattern insertions must include both a pattern name and placement.',
+						error: __(
+							'Template-part pattern insertions must include both a pattern name and placement.',
+							'flavor-agent'
+						),
 						code: 'unknown_pattern',
 					};
 				}
@@ -397,7 +438,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				if ( ! placement ) {
 					return {
 						ok: false,
-						error: 'Template-part pattern insertions must include both a pattern name and placement.',
+						error: __(
+							'Template-part pattern insertions must include both a pattern name and placement.',
+							'flavor-agent'
+						),
 						code: 'invalid_placement',
 					};
 				}
@@ -410,7 +454,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				) {
 					return {
 						ok: false,
-						error: 'Template-part pattern insertions must use an explicit start, end, before_block_path, or after_block_path placement.',
+						error: __(
+							'Template-part pattern insertions must use an explicit start, end, before_block_path, or after_block_path placement.',
+							'flavor-agent'
+						),
 						code: 'invalid_placement',
 					};
 				}
@@ -418,7 +465,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				if ( anchoredPlacements.has( placement ) && ! targetPath ) {
 					return {
 						ok: false,
-						error: 'Anchored template-part pattern insertions must include a targetPath.',
+						error: __(
+							'Anchored template-part pattern insertions must include a targetPath.',
+							'flavor-agent'
+						),
 						code: 'invalid_anchor',
 					};
 				}
@@ -471,7 +521,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				if ( ! patternName ) {
 					return {
 						ok: false,
-						error: 'Template-part block replacements must include patternName, expectedBlockName, and targetPath.',
+						error: __(
+							'Template-part block replacements must include patternName, expectedBlockName, and targetPath.',
+							'flavor-agent'
+						),
 						code: 'unknown_pattern',
 					};
 				}
@@ -479,7 +532,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				if ( ! expectedTarget?.name || ! targetPath ) {
 					return {
 						ok: false,
-						error: 'Template-part block replacements must include patternName, expectedBlockName, and targetPath.',
+						error: __(
+							'Template-part block replacements must include patternName, expectedBlockName, and targetPath.',
+							'flavor-agent'
+						),
 						code: 'invalid_anchor',
 					};
 				}
@@ -490,7 +546,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				) {
 					return {
 						ok: false,
-						error: 'Template-part block replacements must use a matching expectedBlockName and expectedTarget.name.',
+						error: __(
+							'Template-part block replacements must use a matching expectedBlockName and expectedTarget.name.',
+							'flavor-agent'
+						),
 						code: 'invalid_anchor',
 					};
 				}
@@ -529,7 +588,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				if ( ! expectedTarget?.name || ! targetPath ) {
 					return {
 						ok: false,
-						error: 'Template-part block removals must include expectedBlockName and targetPath.',
+						error: __(
+							'Template-part block removals must include expectedBlockName and targetPath.',
+							'flavor-agent'
+						),
 						code: 'invalid_anchor',
 					};
 				}
@@ -540,7 +602,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				) {
 					return {
 						ok: false,
-						error: 'Template-part block removals must use a matching expectedBlockName and expectedTarget.name.',
+						error: __(
+							'Template-part block removals must use a matching expectedBlockName and expectedTarget.name.',
+							'flavor-agent'
+						),
 						code: 'invalid_anchor',
 					};
 				}

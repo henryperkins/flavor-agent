@@ -30,6 +30,7 @@ import {
 	decorateRecommendationPayload,
 	getRecommendationOutcomeSummaryFromPayload,
 } from './recommendation-outcomes';
+import { __ } from '@wordpress/i18n';
 
 function buildMethodNames( baseName ) {
 	return {
@@ -101,9 +102,15 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		surface: 'template',
 		abortKey: '_templateAbort',
 		abilityName: 'flavor-agent/recommend-template',
-		requestErrorMessage: 'Template recommendation request failed.',
-		applyFailureMessage: 'Template apply failed.',
-		unexpectedErrorMessage: 'Template apply failed unexpectedly.',
+		requestErrorMessage: __(
+			'Template recommendation request failed.',
+			'flavor-agent'
+		),
+		applyFailureMessage: __( 'Template apply failed.', 'flavor-agent' ),
+		unexpectedErrorMessage: __(
+			'Template apply failed unexpectedly.',
+			'flavor-agent'
+		),
 		inputKey: 'templateRef',
 		collectionKey: 'templateRecommendations',
 		explanationKey: 'templateExplanation',
@@ -156,9 +163,18 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		surface: 'template-part',
 		abortKey: '_templatePartAbort',
 		abilityName: 'flavor-agent/recommend-template-part',
-		requestErrorMessage: 'Template-part recommendation request failed.',
-		applyFailureMessage: 'Template-part apply failed.',
-		unexpectedErrorMessage: 'Template-part apply failed unexpectedly.',
+		requestErrorMessage: __(
+			'Template-part recommendation request failed.',
+			'flavor-agent'
+		),
+		applyFailureMessage: __(
+			'Template-part apply failed.',
+			'flavor-agent'
+		),
+		unexpectedErrorMessage: __(
+			'Template-part apply failed unexpectedly.',
+			'flavor-agent'
+		),
 		inputKey: 'templatePartRef',
 		collectionKey: 'templatePartRecommendations',
 		explanationKey: 'templatePartExplanation',
@@ -211,9 +227,18 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		surface: 'global-styles',
 		abortKey: '_globalStylesAbort',
 		abilityName: 'flavor-agent/recommend-style',
-		requestErrorMessage: 'Global Styles recommendation request failed.',
-		applyFailureMessage: 'Global Styles apply failed.',
-		unexpectedErrorMessage: 'Global Styles apply failed unexpectedly.',
+		requestErrorMessage: __(
+			'Global Styles recommendation request failed.',
+			'flavor-agent'
+		),
+		applyFailureMessage: __(
+			'Global Styles apply failed.',
+			'flavor-agent'
+		),
+		unexpectedErrorMessage: __(
+			'Global Styles apply failed unexpectedly.',
+			'flavor-agent'
+		),
 		inputKey: 'scope',
 		collectionKey: 'globalStylesSuggestions',
 		explanationKey: 'globalStylesExplanation',
@@ -281,9 +306,15 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 		surface: 'style-book',
 		abortKey: '_styleBookAbort',
 		abilityName: 'flavor-agent/recommend-style',
-		requestErrorMessage: 'Style Book recommendation request failed.',
-		applyFailureMessage: 'Style Book apply failed.',
-		unexpectedErrorMessage: 'Style Book apply failed unexpectedly.',
+		requestErrorMessage: __(
+			'Style Book recommendation request failed.',
+			'flavor-agent'
+		),
+		applyFailureMessage: __( 'Style Book apply failed.', 'flavor-agent' ),
+		unexpectedErrorMessage: __(
+			'Style Book apply failed unexpectedly.',
+			'flavor-agent'
+		),
 		inputKey: 'scope',
 		collectionKey: 'styleBookSuggestions',
 		explanationKey: 'styleBookExplanation',

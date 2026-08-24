@@ -9,13 +9,9 @@ jest.mock( '@wordpress/block-editor', () => ( {
 	BlockPreview: ( props ) => mockBlockPreview( props ),
 } ) );
 
-jest.mock( '@wordpress/i18n', () => ( {
-	__: ( value ) => value,
-	sprintf: ( template, ...values ) => {
-		let i = 0;
-		return template.replace( /%s/g, () => values[ i++ ] ?? '' );
-	},
-} ) );
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );

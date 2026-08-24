@@ -56,23 +56,9 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: 'core/editor',
 } ) );
 
-jest.mock( '@wordpress/i18n', () => {
-	const translate = jest.fn( ( value ) => value );
-	const sprintf = jest.fn( ( template, ...values ) => {
-		let i = 0;
-		return template
-			.replace(
-				/%(\d+)\$s/g,
-				( _, n ) => values[ Number( n ) - 1 ] ?? ''
-			)
-			.replace( /%s/g, () => values[ i++ ] ?? '' );
-	} );
-
-	return {
-		__: translate,
-		sprintf,
-	};
-} );
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 
 jest.mock( '@wordpress/notices', () => ( {
 	store: 'core/notices',
@@ -122,6 +108,7 @@ const {
 	sprintf: mockSprintf,
 } = require( '@wordpress/i18n' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
+const { formatTemplate } = require( '../../test-utils/i18n-mock' );
 
 import PatternRecommender from '../PatternRecommender';
 
@@ -417,15 +404,11 @@ describe( 'PatternRecommender', () => {
 		mockTranslate.mockClear();
 		mockTranslate.mockImplementation( ( value ) => value );
 		mockSprintf.mockClear();
-		mockSprintf.mockImplementation( ( template, ...values ) => {
-			let i = 0;
-			return template
-				.replace(
-					/%(\d+)\$s/g,
-					( _, n ) => values[ Number( n ) - 1 ] ?? ''
-				)
-				.replace( /%s/g, () => values[ i++ ] ?? '' );
-		} );
+		// Restore the shared factory's formatter rather than re-deriving one
+		// here: a local reimplementation silently drifts (it used to drop %d).
+		mockSprintf.mockImplementation( ( template, ...values ) =>
+			formatTemplate( template, values )
+		);
 		mockUseDispatch.mockImplementation( ( storeName ) => {
 			if ( storeName === 'flavor-agent' ) {
 				return {

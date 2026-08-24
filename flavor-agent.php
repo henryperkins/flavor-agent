@@ -6,6 +6,7 @@
  * Version: 0.1.0
  * Author: Lakefront Digital
  * Text Domain: flavor-agent
+ * Domain Path: /languages
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 7.0
@@ -182,6 +183,14 @@ function flavor_agent_enqueue_editor(): void {
 		$asset['dependencies'],
 		$asset['version'],
 		true
+	);
+
+	// Without this the bundle's __()/_n() calls have no locale data loaded and
+	// every editor string renders its English source regardless of site locale.
+	wp_set_script_translations(
+		'flavor-agent-editor',
+		'flavor-agent',
+		FLAVOR_AGENT_DIR . 'languages'
 	);
 
 	if ( file_exists( $css_path ) ) {

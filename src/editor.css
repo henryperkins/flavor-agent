@@ -2545,9 +2545,15 @@
   }
 }
 
+/* Reduced motion: the pulse is the loading badge's only visual signal, and it
+   carries no glyph, so removing the animation would leave a filled dot that
+   reads like a ready badge with a missing count. Swap in a static hollow ring
+   so "working" stays distinguishable from "ready" without motion. */
 @media (prefers-reduced-motion: reduce) {
   .flavor-agent-inserter-badge--loading {
     animation: none;
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--flavor-agent-editor-accent);
   }
 }
 

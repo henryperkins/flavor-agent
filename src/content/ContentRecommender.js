@@ -8,6 +8,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
@@ -29,39 +30,58 @@ const SUPPORTED_POST_TYPES = new Set( [ 'post', 'page' ] );
 const CONTENT_MODES = [ 'draft', 'edit', 'critique' ];
 const CONTENT_MODE_CONFIG = {
 	draft: {
-		label: 'Draft',
-		title: 'Generate draft text',
-		placeholder:
+		label: __( 'Draft', 'flavor-agent' ),
+		title: __( 'Generate draft text', 'flavor-agent' ),
+		placeholder: __(
 			'Describe the draft you want (for example: concise launch post for store managers).',
-		helperText: 'Generated text is for review and manual copy.',
-		fetchLabel: 'Generate Draft Text',
+			'flavor-agent'
+		),
+		helperText: __(
+			'Generated text is for review and manual copy.',
+			'flavor-agent'
+		),
+		fetchLabel: __( 'Generate Draft Text', 'flavor-agent' ),
 		starterPrompts: [
-			'Sharper opening',
-			'Cleaner structure',
-			'Stronger closing',
+			__( 'Sharper opening', 'flavor-agent' ),
+			__( 'Cleaner structure', 'flavor-agent' ),
+			__( 'Stronger closing', 'flavor-agent' ),
 		],
 	},
 	edit: {
-		label: 'Edit',
-		title: 'Generate revision text',
-		placeholder:
+		label: __( 'Edit', 'flavor-agent' ),
+		title: __( 'Generate revision text', 'flavor-agent' ),
+		placeholder: __(
 			'Describe the revision pass (for example: tighten intro and trim repetition).',
-		helperText: 'Review the revision and copy useful text manually.',
-		fetchLabel: 'Generate Revision Text',
+			'flavor-agent'
+		),
+		helperText: __(
+			'Review the revision and copy useful text manually.',
+			'flavor-agent'
+		),
+		fetchLabel: __( 'Generate Revision Text', 'flavor-agent' ),
 		starterPrompts: [
-			'Tighter pacing',
-			'Less repetition',
-			'Sharper voice',
+			__( 'Tighter pacing', 'flavor-agent' ),
+			__( 'Less repetition', 'flavor-agent' ),
+			__( 'Sharper voice', 'flavor-agent' ),
 		],
 	},
 	critique: {
-		label: 'Critique',
-		title: 'Stress-test the draft',
-		placeholder:
+		label: __( 'Critique', 'flavor-agent' ),
+		title: __( 'Stress-test the draft', 'flavor-agent' ),
+		placeholder: __(
 			'Describe the critique focus (for example: clarity gaps and weak transitions).',
-		helperText: 'Flags issues without changing the post.',
-		fetchLabel: 'Generate Critique',
-		starterPrompts: [ 'Weakest lines', 'Structure drift', 'Vague wording' ],
+			'flavor-agent'
+		),
+		helperText: __(
+			'Flags issues without changing the post.',
+			'flavor-agent'
+		),
+		fetchLabel: __( 'Generate Critique', 'flavor-agent' ),
+		starterPrompts: [
+			__( 'Weakest lines', 'flavor-agent' ),
+			__( 'Structure drift', 'flavor-agent' ),
+			__( 'Vague wording', 'flavor-agent' ),
+		],
 	},
 };
 
@@ -84,10 +104,10 @@ function summarizePrompt( prompt = '' ) {
 	const summary = String( prompt ).replace( /\s+/g, ' ' ).trim();
 
 	if ( ! summary ) {
-		return 'No prompt saved';
+		return __( 'No prompt saved', 'flavor-agent' );
 	}
 
-	return summary.length > 72 ? `${ summary.slice( 0, 69 ) }...` : summary;
+	return summary.length > 72 ? `${ summary.slice( 0, 69 ) }\u2026` : summary;
 }
 
 function hasRecommendationOutput( recommendation ) {
@@ -117,7 +137,7 @@ function ContentRequestSummary( {
 		>
 			<span className="flavor-agent-content-recommender__refine-copy">
 				<span className="flavor-agent-content-recommender__refine-label">
-					Refine request
+					{ __( 'Refine request', 'flavor-agent' ) }
 				</span>
 				<span className="flavor-agent-content-recommender__refine-summary">
 					<span className="flavor-agent-pill">{ modeLabel }</span>
@@ -195,7 +215,7 @@ function ContentIssueCard( { issue = {}, compact = false } ) {
 			) }
 		>
 			<div className="flavor-agent-card__label">
-				{ issue?.original || 'Voice issue' }
+				{ issue?.original || __( 'Voice issue', 'flavor-agent' ) }
 			</div>
 			{ issue?.problem && (
 				<p className="flavor-agent-card__description">
@@ -204,7 +224,11 @@ function ContentIssueCard( { issue = {}, compact = false } ) {
 			) }
 			{ issue?.revision && (
 				<p className="flavor-agent-card__description">
-					Suggested wording: { issue.revision }
+					{ sprintf(
+						/* translators: %s: suggested replacement wording. */
+						__( 'Suggested wording: %s', 'flavor-agent' ),
+						issue.revision
+					) }
 				</p>
 			) }
 		</div>
@@ -338,7 +362,10 @@ export default function ContentRecommender() {
 				hasSuggestions: hasOutput,
 				emptyMessage:
 					hasResult && ! hasOutput
-						? 'No content recommendation was returned for the current request.'
+						? __(
+								'No content recommendation was returned for the current request.',
+								'flavor-agent'
+						  )
 						: '',
 				onDismissAction: Boolean( contentError ),
 			} ),
@@ -377,24 +404,29 @@ export default function ContentRecommender() {
 
 	const activeMode = getContentModeConfig( contentMode );
 	const documentTypeLabel =
-		formatContextLabel( postContext.postType ) || 'Post';
+		formatContextLabel( postContext.postType ) ||
+		__( 'Post', 'flavor-agent' );
 	const documentStatusLabel = formatContextLabel( postContext.status );
 	const documentNoun = documentTypeLabel.toLowerCase();
 	const hasDocumentTitle = Boolean( postContext.title.trim() );
 	const documentTitle = hasDocumentTitle
 		? postContext.title.trim()
-		: `Untitled ${ documentNoun }`;
+		: sprintf(
+				/* translators: %s: lowercased post type label, such as "post" or "page". */
+				__( 'Untitled %s', 'flavor-agent' ),
+				documentNoun
+		  );
 	const generatedContent = String( contentRecommendation?.content || '' );
 	const hasGeneratedContent = generatedContent.trim() !== '';
 	const copyButtonLabel =
 		hasGeneratedContent && copiedContent === generatedContent
-			? 'Copied text'
-			: 'Copy generated text';
+			? __( 'Copied text', 'flavor-agent' )
+			: __( 'Copy generated text', 'flavor-agent' );
 
 	return (
 		<PluginDocumentSettingPanel
 			name="flavor-agent-content-recommender"
-			title="Content Recommendations"
+			title={ __( 'Content Recommendations', 'flavor-agent' ) }
 		>
 			<div className="flavor-agent-panel flavor-agent-content-recommender">
 				<div className="flavor-agent-content-recommender__context">
@@ -436,7 +468,15 @@ export default function ContentRecommender() {
 
 						{ isStaleResult && (
 							<StaleResultBanner
-								message={ `This ${ documentNoun } changed since the last ${ activeMode.label.toLowerCase() } request — refresh before relying on the previous text.` }
+								message={ sprintf(
+									/* translators: 1: lowercased post type label. 2: lowercased content mode label, such as "draft". */
+									__(
+										'This %1$s changed since the last %2$s request — refresh before relying on the previous text.',
+										'flavor-agent'
+									),
+									documentNoun,
+									activeMode.label.toLowerCase()
+								) }
 								onRefresh={ handleFetch }
 								isRefreshing={ contentStatus === 'loading' }
 							/>
@@ -461,7 +501,10 @@ export default function ContentRecommender() {
 								meta={
 									<ButtonGroup
 										className="flavor-agent-content-recommender__modes"
-										aria-label="Content mode"
+										aria-label={ __(
+											'Content mode',
+											'flavor-agent'
+										) }
 									>
 										{ CONTENT_MODES.map( ( mode ) => (
 											<Button
@@ -482,14 +525,24 @@ export default function ContentRecommender() {
 								}
 								prompt={ prompt }
 								onPromptChange={ setPrompt }
-								label={ `What should Flavor Agent do with this ${ documentNoun }?` }
+								label={ sprintf(
+									/* translators: %s: lowercased post type label, such as "post" or "page". */
+									__(
+										'What should Flavor Agent do with this %s?',
+										'flavor-agent'
+									),
+									documentNoun
+								) }
 								hideLabelFromVision
 								placeholder={ activeMode.placeholder }
 								helperText={ activeMode.helperText }
 								rows={ 3 }
 								onFetch={ handleFetch }
 								fetchLabel={ activeMode.fetchLabel }
-								loadingLabel="Requesting content…"
+								loadingLabel={ __(
+									'Requesting content\u2026',
+									'flavor-agent'
+								) }
 								isLoading={ contentStatus === 'loading' }
 								className="flavor-agent-content-recommender__composer"
 								starterPrompts={ activeMode.starterPrompts }
@@ -501,15 +554,24 @@ export default function ContentRecommender() {
 								eyebrow=""
 								title={
 									contentRecommendation?.title ||
-									`${ formatModeLabel(
-										contentRecommendation?.mode ||
-											contentMode
-									) } result`
+									sprintf(
+										/* translators: %s: content mode label, such as "Draft" or "Critique". */
+										__( '%s result', 'flavor-agent' ),
+										formatModeLabel(
+											contentRecommendation?.mode ||
+												contentMode
+										)
+									)
 								}
 								description={
 									contentRecommendation?.summary || ''
 								}
-								tone={ formatModeLabel(
+								/*
+								 * The content mode is a request descriptor, not a
+								 * lifecycle state, so it carries no tone token —
+								 * only pill text.
+								 */
+								toneLabel={ formatModeLabel(
 									contentRecommendation?.mode || contentMode
 								) }
 								primaryActionLabel={
@@ -538,8 +600,11 @@ export default function ContentRecommender() {
 						( Array.isArray( contentRecommendation?.issues ) &&
 							contentRecommendation.issues.length > 0 ) ? (
 							<AIAdvisorySection
-								title="Editorial Notes"
-								advisoryLabel="Review"
+								title={ __(
+									'Editorial Notes',
+									'flavor-agent'
+								) }
+								advisoryLabel={ __( 'Review', 'flavor-agent' ) }
 								count={
 									( contentRecommendation?.notes || [] )
 										.length +
@@ -576,8 +641,18 @@ export default function ContentRecommender() {
 						) : null }
 
 						<AIActivitySection
-							title="Recent Content Requests"
-							description={ `Recent requests for this ${ documentNoun }.` }
+							title={ __(
+								'Recent Content Requests',
+								'flavor-agent'
+							) }
+							description={ sprintf(
+								/* translators: %s: lowercased post type label, such as "post" or "page". */
+								__(
+									'Recent requests for this %s.',
+									'flavor-agent'
+								),
+								documentNoun
+							) }
 							entries={ activityEntries }
 							initialOpen={ false }
 							maxVisible={ 1 }

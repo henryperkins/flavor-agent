@@ -141,7 +141,7 @@ Report confirmed issues for:
 - PHP admin escaping issues; confirm context-specific escaping
 - duplicated runtime logic with concrete drift risk
 - dead exports or orphaned CSS only after confirming runtime entry/import paths
-- direct `__experimental*` usage outside wrapper/compat locations such as `src/patterns/pattern-settings.js`, `src/patterns/compat.js`, `src/context/theme-settings.js`, `src/context/theme-tokens.js`, `src/context/block-inspector.js`, and `src/global-styles/selectors.js`
+- direct `__experimental*` usage outside wrapper/compat locations such as `src/patterns/pattern-settings.js`, `src/patterns/compat.js`, `src/context/theme-settings.js`, `src/context/theme-tokens.js`, `src/context/block-inspector.js`, `src/global-styles/selectors.js`, `src/utils/style-support-paths.js` (theme.json support-path alias), and `src/patterns/PatternAdaptationPreview.js` (`BlockPreview` fallback)
 
 Do not treat the list as permission to speculate. A reportable finding still needs opened runtime code and a concrete impact.
 

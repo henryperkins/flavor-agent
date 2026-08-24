@@ -1,0 +1,5368 @@
+# Copyright (C) 2026 Lakefront Digital
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Flavor Agent 0.1.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/flavor-agent\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-08-24T13:16:58+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: flavor-agent\n"
+
+#. Plugin Name of the plugin
+#: flavor-agent.php
+#: inc/Abilities/Registration.php:43
+#: inc/Admin/Settings/Page.php:51
+#: inc/AI/FlavorAgentFeature.php:26
+#: inc/MCP/ServerBootstrap.php:37
+msgid "Flavor Agent"
+msgstr ""
+
+#. Description of the plugin
+#: flavor-agent.php
+msgid "Governed AI changes for WordPress: bounded operations, review-gated structural changes, server-side attribution, and drift-safe undo."
+msgstr ""
+
+#. Author of the plugin
+#: flavor-agent.php
+msgid "Lakefront Digital"
+msgstr ""
+
+#: inc/Abilities/ContentAbilities.php:29
+msgid "You cannot request content recommendations for that post."
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1042
+msgid "Content recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1043
+msgid "Navigation recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1044
+msgid "Pattern recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1045
+msgid "Block recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1046
+msgid "Template recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1047
+msgid "Template-part recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1048
+msgid "Post content structure recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1049
+msgid "Global Styles recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1050
+msgid "Style Book recommendation request"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1051
+msgid "AI request diagnostic"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1188
+msgid "Content request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1189
+msgid "Navigation request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1190
+msgid "Pattern request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1191
+msgid "Block request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1192
+msgid "Template request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1193
+msgid "Template-part request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1194
+msgid "Post content structure request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1195
+msgid "Global Styles request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1196
+msgid "Style Book request failed"
+msgstr ""
+
+#: inc/Abilities/RecommendationAbilityExecution.php:1197
+msgid "AI request failed"
+msgstr ""
+
+#: inc/Abilities/Registration.php:44
+msgid "Governed AI abilities for WordPress: schema-bounded recommendations, read-only context and preview helpers, and review-gated external applies with server-side attribution and drift-safe undo. AI proposes; WordPress approves."
+msgstr ""
+
+#: inc/Abilities/Registration.php:103
+msgid "Preview block recommendation signatures"
+msgstr ""
+
+#: inc/Abilities/Registration.php:104
+msgid "Resolve the apply-context signature for a block recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients."
+msgstr ""
+
+#: inc/Abilities/Registration.php:108
+msgid "Preview navigation recommendation signatures"
+msgstr ""
+
+#: inc/Abilities/Registration.php:109
+msgid "Resolve the review-context signature for a navigation recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients."
+msgstr ""
+
+#: inc/Abilities/Registration.php:113
+msgid "Preview style recommendation signatures"
+msgstr ""
+
+#: inc/Abilities/Registration.php:114
+msgid "Resolve the review and apply context signatures for a Global Styles or Style Book recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients."
+msgstr ""
+
+#: inc/Abilities/Registration.php:118
+msgid "Preview template recommendation signatures"
+msgstr ""
+
+#: inc/Abilities/Registration.php:119
+msgid "Resolve the review and apply context signatures for a template recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients."
+msgstr ""
+
+#: inc/Abilities/Registration.php:123
+msgid "Preview template-part recommendation signatures"
+msgstr ""
+
+#: inc/Abilities/Registration.php:124
+msgid "Resolve the review and apply context signatures for a template-part recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients."
+msgstr ""
+
+#: inc/Abilities/Registration.php:128
+msgid "Preview post-blocks recommendation signatures"
+msgstr ""
+
+#: inc/Abilities/Registration.php:129
+msgid "Resolve the review and apply context signatures for a post-blocks recommendation request without invoking the AI Connector. Read-only preflight for the Abilities Explorer and external MCP clients."
+msgstr ""
+
+#: inc/Abilities/Registration.php:157
+msgid "Get block recommendations"
+msgstr ""
+
+#: inc/Abilities/Registration.php:158
+msgid "Suggest attribute and style changes for a block using theme design tokens. Responses are bounded by the block operation schema and execution contract, classified for inline or review-gated apply, and carry freshness signatures so a stale editing context cannot apply."
+msgstr ""
+
+#: inc/Abilities/Registration.php:162
+msgid "Recommend editorial content"
+msgstr ""
+
+#: inc/Abilities/Registration.php:163
+msgid "Draft, edit, or critique blog posts, essays, and site copy in Henry Perkins's voice. Editorial-only by contract: schema-bounded text output with no apply path, so it never mutates site content."
+msgstr ""
+
+#: inc/Abilities/Registration.php:167
+msgid "Recommend patterns"
+msgstr ""
+
+#: inc/Abilities/Registration.php:168
+msgid "Rank registered and synced block patterns for the current editing context. Read-only ranking with explained reasons: pattern insertion stays native Gutenberg behavior, and Flavor Agent owns no pattern apply or undo."
+msgstr ""
+
+#: inc/Abilities/Registration.php:172
+msgid "Recommend navigation structure"
+msgstr ""
+
+#: inc/Abilities/Registration.php:173
+msgid "Suggest navigation menu structure, overlay behavior, and organization. Advisory-only by contract: schema-bounded guidance with review-context signatures and no navigation apply path in this release."
+msgstr ""
+
+#: inc/Abilities/Registration.php:177
+msgid "Recommend site styles"
+msgstr ""
+
+#: inc/Abilities/Registration.php:178
+msgid "Suggest theme-safe style changes and theme style variations for supported Site Editor style surfaces. Operations are bounded to validated theme.json paths with WCAG AA contrast checks, reviewed before apply, and recorded server-side with drift-checked undo."
+msgstr ""
+
+#: inc/Abilities/Registration.php:182
+msgid "Recommend template structure"
+msgstr ""
+
+#: inc/Abilities/Registration.php:183
+msgid "Suggest template-part arrangements and patterns for a template type. Operations come from a bounded template-operation vocabulary, are previewed and reviewed before deterministic apply, and recorded server-side with drift-checked undo."
+msgstr ""
+
+#: inc/Abilities/Registration.php:187
+msgid "Recommend template-part structure"
+msgstr ""
+
+#: inc/Abilities/Registration.php:188
+msgid "Suggest focused structural improvements and patterns for a single template part. Operations come from a bounded template-part operation vocabulary, are previewed and reviewed before deterministic apply, and recorded server-side with drift-checked undo."
+msgstr ""
+
+#: inc/Abilities/Registration.php:192
+msgid "Recommend post content structure"
+msgstr ""
+
+#: inc/Abilities/Registration.php:193
+msgid "Suggest focused structural improvements and patterns for a single post or page document. Operations come from the bounded structural-operation vocabulary over a server-collected, lock-aware document target contract, and external applies stay review-gated with drift-checked undo."
+msgstr ""
+
+#: inc/Abilities/Registration.php:208
+msgid "Request a governed style apply"
+msgstr ""
+
+#: inc/Abilities/Registration.php:209
+msgid "Queue a reviewed Global Styles or Style Book apply from a recommend-style result. Validates operations and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved."
+msgstr ""
+
+#: inc/Abilities/Registration.php:213
+msgid "Request a governed template-part apply"
+msgstr ""
+
+#: inc/Abilities/Registration.php:214
+msgid "Queue a reviewed template-part structural apply from a recommend-template-part result. Validates the proposed operations and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved."
+msgstr ""
+
+#: inc/Abilities/Registration.php:218
+msgid "Request a governed template apply"
+msgstr ""
+
+#: inc/Abilities/Registration.php:219
+msgid "Queue a reviewed page-level template structural apply from a recommend-template result. Validates the proposed operation and freshness signatures, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved."
+msgstr ""
+
+#: inc/Abilities/Registration.php:223
+msgid "Request a governed post-blocks apply"
+msgstr ""
+
+#: inc/Abilities/Registration.php:224
+msgid "Queue a reviewed structural apply against one post or page from a recommend-post-blocks result. Validates the proposed operations and freshness signatures against the live lock-aware document contract, then creates a pending approval row a site administrator decides in Settings > AI Activity. Mutates nothing until approved."
+msgstr ""
+
+#: inc/Abilities/Registration.php:228
+msgid "Get one AI activity entry"
+msgstr ""
+
+#: inc/Abilities/Registration.php:229
+msgid "Return a single Flavor Agent activity entry by id, including external-apply lifecycle status, decision provenance, and undo state. The polling read for agents awaiting an approval decision."
+msgstr ""
+
+#: inc/Abilities/Registration.php:233
+msgid "List scoped AI activity"
+msgstr ""
+
+#: inc/Abilities/Registration.php:234
+msgid "Return Flavor Agent activity entries for one scope key with optional surface and status filters. Admin-global reads stay on the REST activity route."
+msgstr ""
+
+#: inc/Abilities/Registration.php:238
+msgid "Undo an applied AI activity entry"
+msgstr ""
+
+#: inc/Abilities/Registration.php:239
+msgid "Server-side undo of an executed Global Styles, Style Book, template, template-part, or post-blocks activity row: enforces ordered undo, verifies the recorded after-state still matches the live entity, restores the before snapshot, and persists the one-way undone/failed transition."
+msgstr ""
+
+#: inc/Abilities/Registration.php:710
+msgid "Introspect block type"
+msgstr ""
+
+#: inc/Abilities/Registration.php:711
+msgid "Return a block type's capabilities: supports, Inspector panels, attributes, styles, and variations. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:739
+msgid "List allowed blocks"
+msgstr ""
+
+#: inc/Abilities/Registration.php:740
+msgid "Return block types registered on the current site, with optional search, pagination, and variation payload controls. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:796
+msgid "List block patterns"
+msgstr ""
+
+#: inc/Abilities/Registration.php:797
+msgid "Return registered block patterns, optionally filtered by category, block type, template type, search, and payload size controls. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:855
+msgid "Get block pattern"
+msgstr ""
+
+#: inc/Abilities/Registration.php:856
+msgid "Return a single registered block pattern by name. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:884
+msgid "List synced patterns"
+msgstr ""
+
+#: inc/Abilities/Registration.php:885
+msgid "Return wp_block pattern entities available on the site, optionally filtered by sync status, search, and payload size controls. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:937
+msgid "Get synced pattern"
+msgstr ""
+
+#: inc/Abilities/Registration.php:938
+msgid "Return a single wp_block pattern entity by numeric post ID. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:966
+msgid "List template parts"
+msgstr ""
+
+#: inc/Abilities/Registration.php:967
+msgid "Return registered template-part metadata (id, slug, title, area) for editors. The id is the templatePartRef accepted by recommend-template-part. Optional content is returned only for users who can edit themes. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:1013
+msgid "List templates"
+msgstr ""
+
+#: inc/Abilities/Registration.php:1014
+msgid "Return registered block-template metadata (id, slug, title, description) for the active theme, with optional content only for users who can edit themes. Read-only. The id is the templateRef accepted by recommend-template."
+msgstr ""
+
+#: inc/Abilities/Registration.php:1058
+msgid "Search WordPress developer docs"
+msgstr ""
+
+#: inc/Abilities/Registration.php:1059
+msgid "Query Flavor Agent's trusted WordPress developer docs search backend. Read-only; results follow the plugin's trusted-source and currentness policy."
+msgstr ""
+
+#: inc/Abilities/Registration.php:1158
+msgid "Get active theme"
+msgstr ""
+
+#: inc/Abilities/Registration.php:1159
+msgid "Return the active theme name, stylesheet, template, and version. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:1178
+msgid "Get theme presets"
+msgstr ""
+
+#: inc/Abilities/Registration.php:1179
+msgid "Return the active theme design presets from global settings, including colors, typography, spacing, shadows, gradients, and duotone presets. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:1198
+msgid "Get theme styles"
+msgstr ""
+
+#: inc/Abilities/Registration.php:1199
+msgid "Return the applied global theme styles plus extracted element and block pseudo-state styles, along with the live Global Styles scope and context needed to call recommend-style or request-style-apply. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:1218
+msgid "Get theme design tokens"
+msgstr ""
+
+#: inc/Abilities/Registration.php:1219
+msgid "Return the current theme's color palette, font sizes, font families, spacing, shadows, and layout constraints. Read-only."
+msgstr ""
+
+#: inc/Abilities/Registration.php:1249
+msgid "Check Flavor Agent status"
+msgstr ""
+
+#: inc/Abilities/Registration.php:1250
+msgid "Report configured Flavor Agent backends, active models, and abilities currently available to the current user. Read-only diagnostic."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:37
+#: src/utils/capability-flags.js:192
+msgid "Configure a text-generation provider in Settings > Connectors to enable block recommendations."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:41
+msgid "Block recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:52
+msgid "Configure a text-generation provider in Settings > Connectors to enable content recommendations."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:56
+msgid "Content recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:61
+msgid "Configure a text-generation provider in Settings > Connectors to enable template recommendations."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:65
+msgid "Template recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:70
+msgid "Configure a text-generation provider in Settings > Connectors to enable template-part recommendations."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:74
+msgid "Template-part recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:79
+msgid "Configure a text-generation provider in Settings > Connectors to enable navigation recommendations."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:83
+msgid "Navigation recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:88
+msgid "Configure a text-generation provider in Settings > Connectors to enable Global Styles recommendations."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:92
+msgid "Global Styles recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:97
+msgid "Configure a text-generation provider in Settings > Connectors to enable Style Book recommendations."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:101
+msgid "Style Book recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:206
+#: src/utils/capability-flags.js:216
+msgid "Navigation recommendations require the edit_theme_options capability."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:231
+#: src/utils/capability-flags.js:226
+msgid "Global Styles recommendations require the edit_theme_options capability."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:255
+#: src/utils/capability-flags.js:240
+msgid "Style Book recommendations require the edit_theme_options capability."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:292
+msgid "Enable Flavor Agent in Settings > AI to use recommendation surfaces."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:293
+msgid "Flavor Agent recommendations are disabled. Ask an administrator to enable Flavor Agent in Settings > AI."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:423
+msgid "Pattern recommendations are not configured yet. Ask an administrator to configure Pattern Storage in Settings > Flavor Agent and a text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:428
+msgid "Pattern recommendations need the first pattern catalog sync in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:431
+msgid "Pattern recommendations need the first pattern catalog sync in Settings > Flavor Agent."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:435
+msgid "Pattern catalog is building. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:439
+msgid "Pattern catalog sync failed. Review the last sync error in Settings > Flavor Agent."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:444
+#: src/utils/capability-flags.js:254
+msgid "Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:448
+msgid "Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:451
+#: inc/Abilities/SurfaceCapabilities.php:462
+msgid "Pattern recommendations need a usable text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:455
+#: src/utils/capability-flags.js:250
+msgid "Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors."
+msgstr ""
+
+#: inc/Abilities/SurfaceCapabilities.php:459
+msgid "Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent."
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:27
+msgid "Flavor Agent Activity"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:28
+msgid "AI Activity"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:52
+#: src/admin/activity-log.js:3761
+msgid "AI Activity Log"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:56
+msgid "Flavor Agent could not load the interactive activity log. Reload this page. If the problem persists, rebuild the plugin assets and try again."
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:64
+#: src/admin/activity-log.js:3782
+msgid "Flavor Agent settings"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:67
+#: src/admin/activity-log.js:3785
+msgid "Connectors"
+msgstr ""
+
+#. translators: %d: number of additional pending requests
+#: inc/Admin/ActivityPage.php:103
+#, php-format
+msgid " and %d more pending request(s)"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:110
+msgid "Pending external apply awaiting approval"
+msgstr ""
+
+#. translators: %s: optional "and N more" suffix
+#: inc/Admin/ActivityPage.php:115
+#, php-format
+msgid ": review in AI Activity%s."
+msgstr ""
+
+#. translators: 1: requested target, 2: requester label, 3: expiry value
+#: inc/Admin/ActivityPage.php:126
+#, php-format
+msgid "Target: %1$s. Requested by: %2$s. Expires: %3$s."
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:136
+#: inc/Admin/Settings/Page.php:584
+msgid "Open AI Activity"
+msgstr ""
+
+#. translators: 1: post title, 2: post ID.
+#: inc/Admin/ActivityPage.php:299
+#, php-format
+msgid "Post: %1$s (#%2$s)"
+msgstr ""
+
+#. translators: %s: post title.
+#: inc/Admin/ActivityPage.php:307
+#, php-format
+msgid "Post: %s"
+msgstr ""
+
+#. translators: %s: post ID.
+#: inc/Admin/ActivityPage.php:310
+#, php-format
+msgid "Post #%s"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:311
+#: src/admin/activity-log-utils.js:541
+#: src/content/ContentRecommender.js:408
+msgid "Post"
+msgstr ""
+
+#. translators: %s: global styles entity id.
+#. translators: %s: global styles entity id
+#. translators: %s: Global Styles entity identifier.
+#. translators: %s: Global Styles ID.
+#: inc/Admin/ActivityPage.php:317
+#: inc/Admin/ActivityPage.php:331
+#: src/admin/activity-log-utils.js:532
+#: src/admin/activity-log-utils.js:1528
+#: src/admin/activity-log-utils.js:2543
+#, php-format,js-format
+msgid "Global Styles %s"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:318
+#: inc/Admin/ActivityPage.php:340
+#: src/admin/activity-log-utils.js:1076
+#: src/global-styles/GlobalStylesRecommender.js:111
+#: src/global-styles/GlobalStylesRecommender.js:144
+msgid "Global Styles"
+msgstr ""
+
+#. translators: 1: block name, 2: global styles context
+#: inc/Admin/ActivityPage.php:322
+#, php-format
+msgid "Style Book (%1$s, %2$s)"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:337
+#: src/admin/activity-log-utils.js:1078
+#: src/admin/activity-log-utils.js:2535
+#: src/style-book/StyleBookRecommender.js:136
+#: src/style-book/StyleBookRecommender.js:160
+#: src/style-book/StyleBookRecommender.js:169
+msgid "Style Book"
+msgstr ""
+
+#. translators: %d: requester user ID.
+#: inc/Admin/ActivityPage.php:354
+#, php-format
+msgid "User #%d"
+msgstr ""
+
+#. translators: %d: requester user ID.
+#: inc/Admin/ActivityPage.php:354
+msgid "Unknown requester"
+msgstr ""
+
+#. translators: 1: requester label, 2: requester reference
+#: inc/Admin/ActivityPage.php:359
+#, php-format
+msgid "%1$s (reference: %2$s)"
+msgstr ""
+
+#: inc/Admin/ActivityPage.php:376
+msgid "Unknown"
+msgstr ""
+
+#: inc/Admin/Settings/Feedback.php:386
+msgid "Cloudflare Workers AI validation failed. Check the account ID, API token, and embedding model, then try again."
+msgstr ""
+
+#: inc/Admin/Settings/Feedback.php:387
+msgid "Qdrant validation failed. Check the cluster URL and API key, then try again."
+msgstr ""
+
+#: inc/Admin/Settings/Feedback.php:388
+msgid "Cloudflare AI Search Pattern Storage validation failed. Check the Cloudflare credentials from the Embedding Model section and managed pattern index, then try again."
+msgstr ""
+
+#: inc/Admin/Settings/Feedback.php:389
+msgid "Validation failed. Check the saved values and try again."
+msgstr ""
+
+#: inc/Admin/Settings/Fields.php:33
+#: inc/Admin/Settings/Fields.php:35
+msgid "Saved value hidden. Leave blank to keep it, or enter a replacement."
+msgstr ""
+
+#: inc/Admin/Settings/Fields.php:88
+msgid "Saved"
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:36
+#: src/admin/activity-log.js:894
+msgid "Overview"
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:40
+msgid "Flavor Agent mediates AI changes through one governed loop: AI proposes; WordPress approves. This page configures the plugin-owned backends behind that loop."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:41
+msgid "Use Connectors for text generation. Flavor Agent shows the active chat path here."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:42
+msgid "Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:43
+msgid "When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:50
+msgid "Models & Storage"
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:54
+msgid "Embedding credentials power semantic matching, including Qdrant pattern recommendations."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:55
+msgid "Pattern Storage chooses where the pattern catalog is indexed. Qdrant uses the configured Embedding Model."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:56
+msgid "Private AI Search pattern storage reuses the Cloudflare account and token from the Embedding Model section. Flavor Agent creates and owns a dedicated pattern index when Cloudflare AI Search Pattern Storage is selected."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:57
+msgid "Qdrant and AI Search scores use different scales, so tune thresholds separately."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:64
+msgid "Troubleshooting"
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:68
+msgid "Developer Docs use the built-in developer.wordpress.org grounding path. The only runtime warning is a temporarily unreachable search backend; recommendations still run without grounding."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:69
+msgid "The Developer Docs group shows compact runtime status. Detailed grounding diagnostics, fingerprints, and request history belong in AI Activity entries and validation logs rather than the primary settings form."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:70
+msgid "Pattern Sync stays unavailable until the selected storage path is configured. The sync panel shows stale reasons, last errors, and technical index details."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:71
+msgid "When core Guidelines are available, Flavor Agent reads them first."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:72
+msgid "Guidelines import fills the form. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:73
+msgid "AI Activity Dual Logging keeps Flavor Agent request diagnostics alongside core AI Request Logs when core logging is enabled."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:88
+msgid "Quick Links"
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:92
+#: inc/Admin/Settings/Page.php:35
+#: inc/Admin/Settings/Page.php:37
+#: inc/Admin/Settings/Page.php:555
+#: src/utils/capability-flags.js:142
+#: src/utils/capability-flags.js:163
+msgid "Open Connectors"
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:97
+#: inc/Admin/Settings/Page.php:35
+#: inc/Admin/Settings/Page.php:37
+msgid "Open Activity Log"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:54
+msgid "Flavor Agent Settings"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:57
+msgid "Configure setup, storage, docs, and guidance."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:80
+msgid "1. AI Model"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:90
+msgid "2. Embedding Model"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:100
+msgid "3. Patterns"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:110
+msgid "4. Developer Docs"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:120
+msgid "5. Guidelines"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:130
+msgid "6. Experimental Features"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:142
+msgid "Save Changes"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:186
+#: inc/Admin/Settings/State.php:195
+msgid "AI Activity logging controls."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:225
+msgid "AI model settings saved."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:232
+msgid "Embedding model settings saved."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:240
+msgid "Pattern settings saved. Run Pattern Sync to update the index."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:241
+msgid "Pattern settings saved."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:248
+msgid "Developer docs settings saved."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:255
+msgid "Guidelines saved."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:262
+msgid "Experimental feature settings saved."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:295
+msgid "Jetpack AI"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:299
+msgid "WordPress AI Client"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:302
+#: src/admin/activity-log-utils.js:3086
+msgid "Not available"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:307
+#: inc/Admin/Settings/Page.php:1480
+#: inc/Admin/Settings/State.php:141
+#: inc/Admin/Settings/State.php:217
+#: inc/Admin/Settings/State.php:264
+#: inc/Admin/Settings/State.php:283
+#: inc/Admin/Settings/State.php:438
+#: src/admin/settings-page-controller.js:8
+#: src/admin/settings-page-controller.js:134
+#: src/templates/TemplateRecommender.js:1062
+msgid "Ready"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:308
+#: inc/Admin/Settings/State.php:138
+#: inc/Admin/Settings/State.php:220
+#: src/admin/settings-page-controller.js:119
+#: src/admin/settings-page-controller.js:320
+msgid "Needs setup"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:319
+msgid "AI Runtime"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:325
+msgid "AI Model"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:331
+msgid "Embedding Model"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:337
+msgid "Patterns"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:346
+msgid "Developer Docs"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:352
+msgid "Guidelines"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:358
+msgid "Experimental Features"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:539
+msgid "Not configured"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:542
+msgid "Text generation is managed in Connectors."
+msgstr ""
+
+#. translators: %s: runtime chat provider label
+#: inc/Admin/Settings/Page.php:548
+#, php-format
+msgid "Current: %s."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:566
+msgid "Flavor Agent records request diagnostics in its own activity log. Upgrade to WordPress AI 1.0.0+ to access core AI request observability."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:575
+msgid "AI Request Logging is enabled. Flavor Agent also records its own request diagnostics here and forwards surface, scope, and document context into each Tools > AI Request Logs row (dual logging)."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:576
+msgid "AI Request Logging is enabled. Flavor Agent defers to core logging and forwards surface, scope, and document context into each Tools > AI Request Logs row."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:579
+msgid "Open AI Request Logs"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:588
+msgid "Flavor Agent is recording request diagnostics in its own activity log. Enable the AI Request Logging experiment in Settings > AI to also capture provider, model, token, and cost data centrally."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:591
+msgid "Open AI settings"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:596
+msgid "AI Activity Storage"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:597
+msgid "Read-only status for recommendation request observability."
+msgstr ""
+
+#. translators: %s: embedding provider label
+#: inc/Admin/Settings/Page.php:624
+#, php-format
+msgid "Current embedding provider: %s."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:635
+msgid "Cloudflare Workers AI"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:636
+msgid "Used for embeddings."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:669
+msgid "Choose where the pattern catalog is stored."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:682
+msgid "Qdrant Pattern Storage"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:683
+msgid "Vector storage for the pattern index."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:703
+msgid "Cloudflare AI Search Pattern Storage"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:704
+msgid "Managed pattern index using the saved Cloudflare credentials from the Embedding Model section."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:712
+msgid "Advanced Ranking"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:739
+msgid "Built-in developer.wordpress.org grounding is active."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:742
+msgid "This panel reports the last live recommendation-time docs request; it does not probe the backend when the page loads."
+msgstr ""
+
+#. translators: %s: last docs search timestamp.
+#: inc/Admin/Settings/Page.php:751
+#, php-format
+msgid "Last search: %s."
+msgstr ""
+
+#. translators: %d: number of guidance chunks returned by the last docs search.
+#: inc/Admin/Settings/Page.php:756
+#, php-format
+msgid "Last result count: %d."
+msgstr ""
+
+#. translators: %s: last docs search outcome label.
+#: inc/Admin/Settings/Page.php:764
+#, php-format
+msgid "Last outcome: %s"
+msgstr ""
+
+#. translators: %s: last docs search error code.
+#: inc/Admin/Settings/Page.php:772
+#, php-format
+msgid "Last error code: %s."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:808
+msgid "Core Guidelines connected."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:858
+msgid "Block Guidelines"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:862
+msgid "Add extra rules for a specific block when needed."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:876
+#: src/admin/activity-log-utils.js:433
+#: src/admin/activity-log-utils.js:1080
+msgid "Block"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:886
+msgid "Guideline text"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:892
+msgid "Enter guidelines for how this block should be used..."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:899
+msgid "Cancel"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:902
+#: src/admin/settings-page-controller.js:713
+msgid "Add Block Guideline"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:916
+msgid "Import JSON"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:919
+msgid "Export JSON"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:924
+msgid "Import fills the form. Save Changes to persist."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:964
+msgid "Qdrant"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:965
+msgid "Cloudflare AI Search"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:975
+msgid "Pattern storage backend"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:997
+msgid "Active"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1010
+msgid "Save Changes to switch pattern storage."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1022
+msgid "Qdrant pattern storage ready."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1023
+msgid "Add Qdrant URL and API key to sync the pattern catalog."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1052
+#: inc/Admin/Settings/Validation.php:1034
+msgid "Managed pattern index ready."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1061
+msgid "Needs Cloudflare credentials from the Embedding Model section."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1070
+msgid "Managed pattern index is provisioning in the background. Refresh this page shortly."
+msgstr ""
+
+#. translators: %s: deterministic Cloudflare AI Search instance ID
+#: inc/Admin/Settings/Page.php:1081
+#, php-format
+msgid "Managed pattern index needs attention. Flavor Agent will not adopt %s until ownership and schema can be proven. Fix or remove the conflicting Cloudflare AI Search instance, then save settings again."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1096
+#: inc/Admin/Settings/Page.php:1449
+#: inc/Admin/Settings/State.php:382
+msgid "Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1105
+msgid "Managed pattern index provisioning failed. Check the Cloudflare credentials from Embedding Model, then save settings again."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1118
+msgid "Managed pattern index needs attention."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1129
+msgid "Create managed pattern index."
+msgstr ""
+
+#. translators: %s: Cloudflare AI Search instance ID.
+#: inc/Admin/Settings/Page.php:1143
+#, php-format
+msgid "Instance ID: %s"
+msgstr ""
+
+#. translators: %s: error code returned while provisioning Cloudflare AI Search.
+#: inc/Admin/Settings/Page.php:1153
+#, php-format
+msgid "Error code: %s"
+msgstr ""
+
+#. translators: %s: error message returned while provisioning Cloudflare AI Search.
+#: inc/Admin/Settings/Page.php:1163
+#, php-format
+msgid "Error message: %s"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1177
+msgid "Advanced details"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1285
+#: src/admin/settings-page-controller.js:359
+msgid "Not synced yet"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1329
+#: inc/Admin/Settings/Page.php:1407
+msgid "Sync Pattern Catalog"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1351
+#: src/admin/activity-log.js:900
+#: src/admin/activity-log.js:3353
+msgid "Status"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1357
+msgid "Indexed Patterns"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1363
+msgid "Last Synced"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1369
+msgid "Refresh Needed Because"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1376
+msgid "Last Error"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1386
+msgid "Technical details"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1391
+msgid "Qdrant Collection"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1397
+msgid "Embedding Dimension"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1445
+msgid "Managed pattern index is provisioning in the background. Wait for validation before syncing."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1453
+msgid "Managed pattern index provisioning failed. Check Cloudflare credentials in Embedding Model, then save settings again."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1456
+msgid "Save Cloudflare credentials in Embedding Model and create the managed pattern index before syncing."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1467
+msgid "Complete Embedding Model and Qdrant Pattern Storage before syncing."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1471
+msgid "Complete Embedding Model before syncing."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1474
+msgid "Add the Qdrant URL and API key before syncing."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1488
+msgid "Provisioning"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1491
+#: inc/Admin/Settings/Page.php:1505
+#: inc/Admin/Settings/State.php:242
+#: inc/Admin/Settings/State.php:256
+msgid "Needs pattern storage"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1498
+#: inc/Admin/Settings/State.php:235
+#: inc/Admin/Settings/State.php:249
+msgid "Needs model & storage"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1502
+#: inc/Admin/Settings/State.php:239
+#: inc/Admin/Settings/State.php:253
+msgid "Needs embedding model"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1512
+msgid "Pattern recommendations stay unavailable until setup is complete."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1516
+msgid "Pattern recommendations need attention before use."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1520
+#: src/admin/settings-page-controller.js:175
+msgid "Pattern recommendations are ready."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1521
+msgid "Pattern recommendations are available but out of date."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1522
+#: src/admin/settings-page-controller.js:182
+msgid "Pattern recommendations are syncing now."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1523
+msgid "Pattern recommendations stay unavailable until you sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:131
+msgid "Text-generation provider status."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:133
+#: inc/Admin/Settings/State.php:157
+msgid "Required"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:142
+msgid "Partial"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:155
+msgid "Embedding credentials for semantic features."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:164
+msgid "Storage and sync for pattern recommendations."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:166
+#: inc/Admin/Settings/State.php:184
+#: inc/Admin/Settings/State.php:197
+msgid "Optional"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:172
+msgid "Built-in developer.wordpress.org grounding."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:174
+msgid "Built in"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:180
+msgid "Site and block guidance."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:186
+msgid "Core bridge"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:198
+msgid "Logging"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:260
+#: inc/Admin/Settings/State.php:280
+#: src/admin/settings-page-controller.js:126
+msgid "Needs attention"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:265
+#: inc/Admin/Settings/State.php:439
+#: src/admin/settings-page-controller.js:9
+#: src/admin/settings-page-controller.js:139
+msgid "Refresh needed"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:266
+#: inc/Admin/Settings/State.php:437
+#: src/admin/settings-page-controller.js:7
+#: src/admin/settings-page-controller.js:144
+msgid "Syncing"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:267
+#: src/admin/settings-page-controller.js:149
+msgid "Needs sync"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:276
+msgid "Unavailable"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:290
+msgid "The last live Developer Docs grounding request failed to reach the search backend. Recommendations still run without it."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:293
+msgid "The last live Developer Docs grounding request failed. Recommendations still run without it."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:298
+msgid "Grounding attached successfully."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:299
+msgid "The last live docs request returned no trusted Developer Docs matches."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:300
+msgid "The last live docs request failed before any Developer Docs guidance could be attached."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:310
+#: inc/Admin/Settings/State.php:321
+msgid "Off"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:313
+#: inc/Admin/Settings/State.php:324
+msgid "On"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:338
+msgid "Text generation is not configured. Open Connectors to choose a provider."
+msgstr ""
+
+#. translators: 1: provider label
+#: inc/Admin/Settings/State.php:345
+#, php-format
+msgid "%1$s is saved from an older setup, but that connector is not available. Open Connectors to choose a provider."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:356
+msgid "Embedding model is not configured."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:372
+#: inc/Admin/Settings/State.php:392
+msgid "Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:377
+msgid "Managed Cloudflare AI Search pattern index is provisioning. Sync will unlock after validation finishes."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:387
+msgid "Managed Cloudflare AI Search pattern index provisioning failed. Check the status panel, then save settings again."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:399
+msgid "Embedding Model is required before syncing patterns."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:404
+msgid "Pattern Storage is required before syncing."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:440
+#: src/admin/settings-page-controller.js:6
+msgid "Error"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:441
+#: src/admin/settings-page-controller.js:10
+msgid "Not synced"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:458
+msgid "Embedding model, provider, or vector size changed."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:459
+#: src/admin/settings-page-controller.js:26
+msgid "Pattern index collection naming changed and needs a rebuild."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:460
+#: src/admin/settings-page-controller.js:30
+msgid "Pattern index collection is missing and needs a rebuild."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:461
+#: src/admin/settings-page-controller.js:34
+msgid "Pattern index collection vector size no longer matches the active embedding configuration."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:462
+#: src/admin/settings-page-controller.js:38
+msgid "Qdrant endpoint changed."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:463
+#: src/admin/settings-page-controller.js:39
+msgid "Embedding endpoint changed."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:464
+#: src/admin/settings-page-controller.js:43
+msgid "Registered patterns changed."
+msgstr ""
+
+#: inc/Admin/Settings/Validation.php:901
+msgid "We kept your previous Cloudflare Workers AI settings because validation failed."
+msgstr ""
+
+#. translators: 1: previous embedding dimension, 2: validated embedding dimension
+#: inc/Admin/Settings/Validation.php:938
+#, php-format
+msgid "The saved Qdrant pattern index uses %1$d embedding dimensions, but the validated Cloudflare Workers AI model returns %2$d. Re-sync patterns before relying on Qdrant pattern recommendations."
+msgstr ""
+
+#: inc/Admin/Settings/Validation.php:975
+msgid "We kept your previous Qdrant settings because validation failed."
+msgstr ""
+
+#: inc/Admin/Settings/Validation.php:989
+msgid "We kept your previous private Cloudflare AI Search pattern settings because validation failed."
+msgstr ""
+
+#. translators: %s: Cloudflare AI Search embedding model ID
+#: inc/Admin/Settings/Validation.php:1006
+#, php-format
+msgid "Cloudflare AI Search Pattern Storage will use %s because the saved Embedding Model is not supported by Cloudflare AI Search."
+msgstr ""
+
+#: inc/Admin/Settings/Validation.php:1030
+msgid "Managed pattern index created."
+msgstr ""
+
+#: inc/Admin/Settings/Validation.php:1032
+msgid "Managed pattern index adopted."
+msgstr ""
+
+#: inc/Admin/Settings/Validation.php:1033
+msgid "Managed pattern index provisioning started."
+msgstr ""
+
+#: inc/AI/FeatureBootstrap.php:135
+msgid "Flavor Agent's governed AI surfaces require the WordPress AI plugin Feature framework and the Abilities API. Recommendation UI and governed external applies stay unavailable until those canonical AI contracts are active."
+msgstr ""
+
+#: inc/AI/FlavorAgentFeature.php:27
+msgid "AI-assisted recommendations for blocks, content, patterns, navigation, styles, templates, and template parts."
+msgstr ""
+
+#: inc/AzureOpenAI/ResponsesClient.php:40
+msgid "Chat is owned by Settings > Connectors. Configure a text-generation provider there to enable Flavor Agent recommendations."
+msgstr ""
+
+#: inc/AzureOpenAI/ResponsesClient.php:68
+msgid "Configure a text-generation provider in Settings > Connectors to enable Flavor Agent recommendations."
+msgstr ""
+
+#: inc/LLM/StyleContrastValidator.php:29
+#: src/utils/style-operations.js:477
+msgid "Contrast check unavailable: theme variation and color overrides must be reviewed separately."
+msgstr ""
+
+#: inc/LLM/StyleContrastValidator.php:64
+#: src/utils/style-operations.js:513
+msgid "Contrast check unavailable: unsupported readable color path."
+msgstr ""
+
+#. translators: 1: contrast ratio, 2: foreground label, 3: background label, 4: style scope
+#. translators: 1: contrast ratio. 2: text color label. 3: background color label. 4: style scope key.
+#: inc/LLM/StyleContrastValidator.php:109
+#: src/utils/style-operations.js:560
+#, php-format,js-format
+msgid "Contrast check: %1$s:1 between \"%2$s\" and \"%3$s\" at %4$s, below the 4.5:1 minimum."
+msgstr ""
+
+#. translators: 1: color side, either background or text; 2: style scope
+#. translators: 1: color side, such as "background" or "text". 2: style scope key.
+#: inc/LLM/StyleContrastValidator.php:525
+#: src/utils/style-operations.js:374
+#, php-format,js-format
+msgid "Contrast check unavailable: unresolved %1$s at %2$s."
+msgstr ""
+
+#. translators: 1: number of dropped operations, 2: total operations submitted
+#: inc/LLM/StylePrompt.php:1079
+#, php-format
+msgid "Validation: %1$d of %2$d operations could not be applied safely at this scope."
+msgstr ""
+
+#: inc/MCP/ServerBootstrap.php:38
+msgid "Governed AI changes for WordPress: schema-validated operations with freshness signatures, review-gated structural changes, server-side attribution, and drift-checked undo. Tools cover block, content, navigation, pattern, style, template, template-part, and post-content-structure recommendations plus the governed style, template, template-part, and post-blocks apply loops (request a pending apply, read its decision state, undo executed rows). Approval stays with site administrators in Settings > AI Activity."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:40
+msgid "Surfaces"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:43
+msgid "Action types"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:47
+msgid "Provider and model"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:51
+msgid "Validation reasons"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:55
+msgid "Guideline versions"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:59
+msgid "Ranking signals"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:63
+msgid "Pattern traits"
+msgstr ""
+
+#. translators: %s: template identifier.
+#: src/admin/activity-log-utils.js:516
+#: src/admin/activity-log-utils.js:1492
+#: src/admin/activity-log-utils.js:2483
+#, js-format
+msgid "Template %s"
+msgstr ""
+
+#. translators: %s: template part identifier.
+#: src/admin/activity-log-utils.js:524
+#: src/admin/activity-log-utils.js:1512
+#: src/admin/activity-log-utils.js:2504
+#, js-format
+msgid "Template part %s"
+msgstr ""
+
+#. translators: 1: post type, 2: numeric post ID.
+#: src/admin/activity-log-utils.js:540
+#, js-format
+msgid "%1$s #%2$s"
+msgstr ""
+
+#. translators: 1: document type, 2: document identifier.
+#. translators: 1: review action label. 2: suggestion label.
+#: src/admin/activity-log-utils.js:549
+#: src/style-surfaces/presentation.js:182
+#, js-format
+msgid "%1$s %2$s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:550
+#: src/admin/activity-log.js:911
+msgid "Document"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:561
+msgid "Record request"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:563
+msgid "Apply block suggestion"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:565
+msgid "Apply block structural suggestion"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:567
+msgid "Apply template suggestion"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:569
+msgid "Apply template-part suggestion"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:571
+msgid "Apply post content structure suggestion"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:576
+msgid "Apply Global Styles suggestion"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:657
+msgid "style value"
+msgstr ""
+
+#. translators: %s: theme variation title.
+#: src/admin/activity-log-utils.js:688
+#, js-format
+msgid "Theme variation → %s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:711
+#: src/admin/activity-log-utils.js:1002
+msgid "Insert pattern"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:712
+msgid "Replace block with pattern"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:716
+msgid "Remove block"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:720
+msgid "start"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:721
+msgid "end"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:722
+#: src/templates/TemplateRecommender.js:191
+msgid "before"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:723
+#: src/templates/TemplateRecommender.js:192
+msgid "after"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:747
+msgid "Operation"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:987
+msgid "Request diagnostic"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1003
+msgid "Insert block"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1015
+msgid "Replace template part"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1016
+msgid "Assign template part"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1023
+msgid "Apply style"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1030
+msgid "Modify attributes"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1064
+#: src/admin/activity-log-utils.js:1498
+msgid "Content"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1066
+#: src/admin/activity-log-utils.js:1502
+msgid "Navigation"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1068
+#: src/admin/activity-log-utils.js:1506
+#: src/inspector/BlockRecommendationsPanel.js:1368
+msgid "Pattern"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1070
+msgid "Template"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1072
+msgid "Template part"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1074
+msgid "Post content"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1082
+msgid "Activity"
+msgstr ""
+
+#. translators: %s: comma-separated attribute keys.
+#: src/admin/activity-log-utils.js:1103
+#, js-format
+msgid "Attributes: %s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1378
+msgid "No mutation has been applied."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1385
+msgid "The apply did not mutate the site."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1390
+msgid "This is the newest still-applied AI action for this entity."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1408
+msgid "Undo already completed."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1412
+msgid "Undo is unavailable."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1423
+#: src/admin/activity-log-utils.js:1437
+msgid "Undo not applicable"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1427
+#: src/components/AIActivitySection.js:163
+msgid "Undo available"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1455
+msgid "Template suggestion applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1459
+msgid "Template-part suggestion applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1463
+msgid "Post content structure suggestion applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1470
+msgid "Global Styles suggestion applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1474
+msgid "Style Book suggestion applied"
+msgstr ""
+
+#. translators: %s: block name.
+#: src/admin/activity-log-utils.js:1480
+#, js-format
+msgid "%s suggestion applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1485
+msgid "AI action recorded"
+msgstr ""
+
+#. translators: %s: post title or ID.
+#: src/admin/activity-log-utils.js:1520
+#: src/admin/activity-log-utils.js:2512
+#, js-format
+msgid "Post %s"
+msgstr ""
+
+#. translators: %s: block title.
+#: src/admin/activity-log-utils.js:1539
+#, js-format
+msgid "Style Book %s"
+msgstr ""
+
+#. translators: %s: block name.
+#: src/admin/activity-log-utils.js:1547
+#, js-format
+msgid "%s block"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1659
+#: src/admin/activity-log.js:3373
+#: src/components/AIActivitySection.js:100
+#: src/content/ContentRecommender.js:607
+#: src/style-surfaces/presentation.js:118
+msgid "Review"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1662
+#: src/components/AIActivitySection.js:108
+msgid "Request failed"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1666
+#: src/admin/activity-log-utils.js:1851
+#: src/components/AIActivitySection.js:125
+msgid "Apply failed"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1669
+#: src/components/AIActivitySection.js:153
+#: src/components/AIActivitySection.js:170
+msgid "Undo unavailable"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1671
+#: src/admin/activity-log-utils.js:1853
+#: src/admin/activity-log.js:161
+#: src/admin/activity-log.js:1634
+#: src/admin/activity-log.js:3374
+#: src/components/AIActivitySection.js:144
+msgid "Undone"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1673
+#: src/admin/activity-log-utils.js:1855
+#: src/admin/activity-log-utils.js:2892
+#: src/admin/activity-log.js:191
+#: src/admin/activity-log.js:1636
+#: src/admin/activity-log.js:3377
+#: src/components/AIActivitySection.js:148
+msgid "Undo blocked"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1675
+#: src/admin/activity-log-utils.js:2851
+#: src/admin/activity-log-utils.js:3221
+#: src/admin/activity-log.js:173
+#: src/admin/activity-log.js:3363
+#: src/components/AIActivitySection.js:116
+msgid "Pending approval"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1677
+#: src/admin/activity-log-utils.js:1847
+#: src/admin/activity-log.js:179
+#: src/admin/activity-log.js:3367
+#: src/components/AIActivitySection.js:120
+msgid "Rejected"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1679
+#: src/admin/activity-log-utils.js:1849
+#: src/admin/activity-log.js:185
+#: src/admin/activity-log.js:3371
+#: src/components/AIActivitySection.js:122
+msgid "Expired"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1681
+#: src/admin/activity-log-utils.js:1857
+#: src/admin/activity-log.js:1640
+#: src/admin/activity-log.js:3359
+#: src/components/AIActivitySection.js:175
+#: src/inspector/SuggestionChips.js:277
+#: src/template-parts/TemplatePartRecommender.js:1152
+#: src/templates/TemplateRecommender.js:1067
+msgid "Applied"
+msgstr ""
+
+#. translators: %s: attestation lane identifier.
+#: src/admin/activity-log-utils.js:1690
+#, js-format
+msgid "External style apply (%s)"
+msgstr ""
+
+#. translators: %s: attestation lane identifier.
+#: src/admin/activity-log-utils.js:1696
+#, js-format
+msgid "External template apply (%s)"
+msgstr ""
+
+#. translators: %s: attestation lane identifier.
+#: src/admin/activity-log-utils.js:1702
+#, js-format
+msgid "External template part apply (%s)"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1777
+msgid "Undo attestation recorded."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1779
+msgid "Undo was not attested because the original apply had no attestation."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1784
+msgid "Undo completed without attestation because no signing key was configured."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1789
+msgid "Undo completed, but attestation recording failed."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1800
+msgid "Attestation recorded."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1802
+msgid "Applied without attestation because no signing key was configured."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1807
+msgid "Applied, but attestation recording failed."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1845
+msgid "Approval required"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:1859
+msgid "External apply"
+msgstr ""
+
+#. translators: %s: user ID.
+#: src/admin/activity-log-utils.js:1867
+#: src/admin/activity-log-utils.js:3551
+#, js-format
+msgid "User #%s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2105
+#: src/admin/activity-log-utils.js:2358
+msgid "Baseline unavailable"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2106
+#: src/admin/activity-log-utils.js:2340
+msgid "After unavailable"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2107
+#: src/admin/activity-log-utils.js:2300
+#: src/admin/activity-log-utils.js:2312
+#: src/admin/activity-log-utils.js:2342
+msgid "Not applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2307
+msgid "Theme variation"
+msgstr ""
+
+#. translators: 1: template part slug, 2: template part area.
+#: src/admin/activity-log-utils.js:2496
+#, js-format
+msgid "Template part %1$s · %2$s"
+msgstr ""
+
+#. translators: 1: block title, 2: global styles ID.
+#: src/admin/activity-log-utils.js:2528
+#, js-format
+msgid "Style Book %1$s · Global Styles %2$s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2579
+msgid "An external agent requested this bounded template apply. Review the operation, provenance, and freshness evidence before deciding."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2583
+msgid "This external template apply row is retained for approval, provenance, freshness, and undo review."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2587
+#: src/admin/activity-log-utils.js:2604
+#: src/admin/activity-log-utils.js:2621
+msgid "AI proposes; WordPress approves. Approving applies this bounded structural change from WordPress; rejecting keeps the site unchanged."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2596
+msgid "An external agent requested this bounded template-part apply. Review the operation, provenance, and freshness evidence before deciding."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2600
+msgid "This external template-part apply row is retained for approval, provenance, freshness, and undo review."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2613
+msgid "An external agent requested this bounded post-content apply. Review the operation, provenance, and freshness evidence before deciding."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2617
+msgid "This external post-content apply row is retained for approval, provenance, freshness, and undo review."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2629
+msgid "An external agent requested this bounded style apply. Review the operation, provenance, and freshness evidence before deciding."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2633
+msgid "This external style apply row is retained for approval, provenance, freshness, and undo review."
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2637
+msgid "AI proposes; WordPress approves. Approving applies this bounded style change from WordPress; rejecting keeps the site unchanged."
+msgstr ""
+
+#. translators: 1: number of changes, 2: change target, e.g. "Global Styles 17".
+#: src/admin/activity-log-utils.js:2766
+#, js-format
+msgid "%1$d change applied to %2$s"
+msgid_plural "%1$d changes applied to %2$s"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of changes.
+#: src/admin/activity-log-utils.js:2777
+#, js-format
+msgid "%d change applied"
+msgid_plural "%d changes applied"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: number of changes, 2: change target, e.g. "Global Styles 17".
+#: src/admin/activity-log-utils.js:2789
+#, js-format
+msgid "%1$d change proposed to %2$s"
+msgid_plural "%1$d changes proposed to %2$s"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of changes.
+#: src/admin/activity-log-utils.js:2800
+#, js-format
+msgid "%d change proposed"
+msgid_plural "%d changes proposed"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/admin/activity-log-utils.js:2827
+#: src/admin/activity-log-utils.js:2876
+msgid "Yes — confirmed current when applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2833
+msgid "Yes — was current when applied, later undone"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2839
+msgid "Yes — was current when applied"
+msgstr ""
+
+#. translators: %s: expiry timestamp.
+#: src/admin/activity-log-utils.js:2848
+#, js-format
+msgid "Pending approval — expires %s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2854
+msgid "No — the request lapsed before approval"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2860
+msgid "Not applied — rejected before approval"
+msgstr ""
+
+#. translators: %s: failure reason.
+#: src/admin/activity-log-utils.js:2869
+#, js-format
+msgid "No — apply blocked: %s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2872
+msgid "No — apply did not complete"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2882
+msgid "Yes — this apply can be undone"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2884
+msgid "Already undone"
+msgstr ""
+
+#. translators: %s: reason the undo is blocked.
+#: src/admin/activity-log-utils.js:2889
+#, js-format
+msgid "Undo blocked — %s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2894
+msgid "Not yet — awaiting approval"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2899
+msgid "Nothing to undo — never applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2901
+msgid "Nothing to undo — apply did not complete"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2907
+msgid "Not reversible"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2911
+msgid "What changed"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2912
+#: src/admin/activity-log.js:2547
+msgid "Requested"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2914
+msgid "Current when applied"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2917
+msgid "Reversible"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:2991
+msgid "You’re reviewing this."
+msgstr ""
+
+#. translators: 1: user label e.g. "User #5"; 2: relative time e.g. "3 minutes".
+#: src/admin/activity-log-utils.js:3006
+#, js-format
+msgid "%1$s is reviewing · %2$s"
+msgstr ""
+
+#. translators: %s: user label e.g. "User #5".
+#: src/admin/activity-log-utils.js:3012
+#, js-format
+msgid "%s is reviewing"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3027
+msgid "Open template"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3040
+msgid "Open template part"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3050
+#: src/admin/activity-log-utils.js:3060
+msgid "Open Styles"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3070
+#: src/admin/activity-log-utils.js:3080
+msgid "Open post"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3157
+msgid "Open target"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3168
+msgid "Open focused view"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3177
+msgid "Same surface"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3185
+msgid "Same user"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3193
+msgid "Same entity"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3200
+msgid "Same block path"
+msgstr ""
+
+#. translators: %s: expiry timestamp.
+#: src/admin/activity-log-utils.js:3225
+#, js-format
+msgid "Expires %s"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3249
+msgid "AI request"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3261
+#: src/admin/activity-log.js:2384
+msgid "Attestation"
+msgstr ""
+
+#: src/admin/activity-log-utils.js:3567
+msgid "No fallback"
+msgstr ""
+
+#. translators: %s: selected provider name.
+#: src/admin/activity-log-utils.js:3574
+#, js-format
+msgid "Fallback from selected %s."
+msgstr ""
+
+#: src/admin/activity-log.js:115
+msgid "Complete or reset the date filter to load activity."
+msgstr ""
+
+#: src/admin/activity-log.js:149
+msgid "Recorded actions"
+msgstr ""
+
+#: src/admin/activity-log.js:155
+msgid "Still applied"
+msgstr ""
+
+#: src/admin/activity-log.js:167
+msgid "Review-only"
+msgstr ""
+
+#: src/admin/activity-log.js:197
+#: src/admin/activity-log.js:3381
+msgid "Failed or unavailable"
+msgstr ""
+
+#: src/admin/activity-log.js:312
+msgid "Shown recommendations"
+msgstr ""
+
+#: src/admin/activity-log.js:317
+msgid "Review selection"
+msgstr ""
+
+#: src/admin/activity-log.js:322
+msgid "Apply conversion"
+msgstr ""
+
+#: src/admin/activity-log.js:327
+msgid "Undo rate"
+msgstr ""
+
+#: src/admin/activity-log.js:332
+msgid "Validation blocked"
+msgstr ""
+
+#: src/admin/activity-log.js:337
+msgid "Insert failed"
+msgstr ""
+
+#. translators: %s: count of activity rows in the report bucket.
+#: src/admin/activity-log.js:367
+#, js-format
+msgid "%s rows"
+msgstr ""
+
+#. translators: %s: review-selection percentage.
+#: src/admin/activity-log.js:376
+#, js-format
+msgid "Review %s"
+msgstr ""
+
+#. translators: %s: apply-conversion percentage.
+#: src/admin/activity-log.js:383
+#, js-format
+msgid "Apply %s"
+msgstr ""
+
+#. translators: %s: validation-blocked percentage.
+#: src/admin/activity-log.js:390
+#, js-format
+msgid "Blocked %s"
+msgstr ""
+
+#: src/admin/activity-log.js:422
+msgid "Governance learning report"
+msgstr ""
+
+#. translators: 1: sampled activity rows, 2: report row limit.
+#: src/admin/activity-log.js:428
+#, js-format
+msgid "Recent sample: %1$s of %2$s rows"
+msgstr ""
+
+#: src/admin/activity-log.js:444
+msgid "Truncated to newest matching rows"
+msgstr ""
+
+#. translators: %s: activity search query.
+#: src/admin/activity-log.js:834
+#, js-format
+msgid "No AI actions matched “%s”."
+msgstr ""
+
+#: src/admin/activity-log.js:837
+msgid "No AI activity has been recorded yet."
+msgstr ""
+
+#: src/admin/activity-log.js:843
+msgid "No matching activity"
+msgstr ""
+
+#: src/admin/activity-log.js:861
+msgid "Activity log unavailable"
+msgstr ""
+
+#: src/admin/activity-log.js:866
+#: src/admin/activity-log.js:3159
+msgid "Flavor Agent could not load the recent AI activity log."
+msgstr ""
+
+#: src/admin/activity-log.js:874
+#: src/admin/activity-log.js:3740
+msgid "Retry loading activity"
+msgstr ""
+
+#: src/admin/activity-log.js:901
+#: src/admin/activity-log.js:1112
+#: src/admin/activity-log.js:2311
+#: src/admin/activity-log.js:2317
+#: src/admin/activity-log.js:2323
+#: src/admin/activity-log.js:2341
+#: src/admin/activity-log.js:3322
+msgid "Recorded"
+msgstr ""
+
+#: src/admin/activity-log.js:902
+#: src/admin/activity-log.js:3342
+msgid "Surface"
+msgstr ""
+
+#: src/admin/activity-log.js:903
+#: src/admin/activity-log.js:3329
+msgid "Action type"
+msgstr ""
+
+#: src/admin/activity-log.js:905
+#: src/admin/activity-log.js:3506
+msgid "Recorded activity type"
+msgstr ""
+
+#: src/admin/activity-log.js:908
+#: src/admin/activity-log.js:3428
+msgid "Entity"
+msgstr ""
+
+#: src/admin/activity-log.js:909
+#: src/admin/activity-log.js:3408
+msgid "Post type"
+msgstr ""
+
+#: src/admin/activity-log.js:910
+#: src/admin/activity-log.js:3419
+msgid "Entity ID"
+msgstr ""
+
+#: src/admin/activity-log.js:912
+msgid "Document scope"
+msgstr ""
+
+#: src/admin/activity-log.js:913
+#: src/admin/activity-log.js:3435
+msgid "Block path"
+msgstr ""
+
+#: src/admin/activity-log.js:914
+#: src/admin/activity-log.js:3397
+msgid "User"
+msgstr ""
+
+#: src/admin/activity-log.js:920
+#: src/admin/activity-log.js:931
+#: src/admin/activity-log.js:2566
+msgid "Undo state"
+msgstr ""
+
+#: src/admin/activity-log.js:932
+#: src/admin/activity-log.js:2567
+msgid "Undo reason"
+msgstr ""
+
+#: src/admin/activity-log.js:933
+msgid "Undo error"
+msgstr ""
+
+#: src/admin/activity-log.js:938
+msgid "Provider diagnostics"
+msgstr ""
+
+#: src/admin/activity-log.js:944
+#: src/admin/activity-log.js:1512
+#: src/admin/activity-log.js:3444
+msgid "Provider"
+msgstr ""
+
+#: src/admin/activity-log.js:945
+#: src/admin/activity-log.js:1513
+#: src/admin/activity-log.js:3455
+msgid "Model"
+msgstr ""
+
+#: src/admin/activity-log.js:946
+#: src/admin/activity-log.js:3462
+msgid "Provider path"
+msgstr ""
+
+#: src/admin/activity-log.js:947
+#: src/admin/activity-log.js:3473
+msgid "Configured in"
+msgstr ""
+
+#: src/admin/activity-log.js:948
+#: src/admin/activity-log.js:3484
+msgid "Credential source"
+msgstr ""
+
+#: src/admin/activity-log.js:949
+#: src/admin/activity-log.js:3495
+msgid "Selected provider"
+msgstr ""
+
+#: src/admin/activity-log.js:950
+msgid "Connector"
+msgstr ""
+
+#: src/admin/activity-log.js:951
+msgid "Connector plugin"
+msgstr ""
+
+#: src/admin/activity-log.js:952
+msgid "Fallback"
+msgstr ""
+
+#: src/admin/activity-log.js:953
+msgid "Token usage"
+msgstr ""
+
+#: src/admin/activity-log.js:954
+msgid "Latency"
+msgstr ""
+
+#: src/admin/activity-log.js:955
+msgid "Endpoint"
+msgstr ""
+
+#: src/admin/activity-log.js:956
+msgid "Timeout"
+msgstr ""
+
+#: src/admin/activity-log.js:957
+msgid "Payload"
+msgstr ""
+
+#: src/admin/activity-log.js:958
+msgid "Response"
+msgstr ""
+
+#: src/admin/activity-log.js:960
+msgid "Provider request ID"
+msgstr ""
+
+#: src/admin/activity-log.js:964
+msgid "Transport detail"
+msgstr ""
+
+#: src/admin/activity-log.js:972
+msgid "Request context"
+msgstr ""
+
+#: src/admin/activity-log.js:981
+msgid "Prompt recorded"
+msgstr ""
+
+#: src/admin/activity-log.js:987
+msgid "Ability"
+msgstr ""
+
+#: src/admin/activity-log.js:988
+msgid "Route"
+msgstr ""
+
+#: src/admin/activity-log.js:989
+msgid "Reference"
+msgstr ""
+
+#: src/admin/activity-log.js:990
+#: src/admin/activity-log.js:3513
+msgid "Prompt"
+msgstr ""
+
+#: src/admin/activity-log.js:995
+msgid "State snapshots"
+msgstr ""
+
+#: src/admin/activity-log.js:998
+#: src/admin/activity-log.js:1007
+msgid "Structured diff"
+msgstr ""
+
+#: src/admin/activity-log.js:999
+#: src/admin/activity-log.js:1008
+#: src/admin/activity-log.js:1772
+msgid "Before"
+msgstr ""
+
+#: src/admin/activity-log.js:1000
+#: src/admin/activity-log.js:1009
+#: src/admin/activity-log.js:1785
+msgid "After"
+msgstr ""
+
+#: src/admin/activity-log.js:1062
+msgid "AI request log available; diagnostics and snapshots below"
+msgstr ""
+
+#: src/admin/activity-log.js:1069
+msgid "No model request; diagnostics and snapshots below"
+msgstr ""
+
+#: src/admin/activity-log.js:1076
+msgid "Request token recorded; AI request log unavailable"
+msgstr ""
+
+#: src/admin/activity-log.js:1082
+msgid "Provider diagnostics, request context, and state snapshots below"
+msgstr ""
+
+#: src/admin/activity-log.js:1091
+msgid "Current status"
+msgstr ""
+
+#: src/admin/activity-log.js:1096
+#: src/admin/activity-log.js:3232
+msgid "Action"
+msgstr ""
+
+#: src/admin/activity-log.js:1104
+msgid "Surface / entity"
+msgstr ""
+
+#: src/admin/activity-log.js:1108
+#: src/admin/activity-log.js:2546
+msgid "Requested by"
+msgstr ""
+
+#: src/admin/activity-log.js:1116
+msgid "Technical review"
+msgstr ""
+
+#: src/admin/activity-log.js:1184
+msgid "At a glance"
+msgstr ""
+
+#: src/admin/activity-log.js:1216
+msgid "Selected row actions"
+msgstr ""
+
+#: src/admin/activity-log.js:1221
+msgid "Open"
+msgstr ""
+
+#: src/admin/activity-log.js:1246
+msgid "Related rows"
+msgstr ""
+
+#: src/admin/activity-log.js:1278
+msgid "Focused row"
+msgstr ""
+
+#. translators: %s: focused activity row title.
+#: src/admin/activity-log.js:1284
+#, js-format
+msgid "Showing the focused activity row: %s"
+msgstr ""
+
+#: src/admin/activity-log.js:1290
+msgid "Showing a focused activity row from the URL."
+msgstr ""
+
+#: src/admin/activity-log.js:1297
+msgid "Clear focused row"
+msgstr ""
+
+#: src/admin/activity-log.js:1424
+#: src/admin/activity-log.js:1444
+#: src/admin/activity-log.js:1523
+msgid "AI request log"
+msgstr ""
+
+#: src/admin/activity-log.js:1427
+msgid "No model request was attempted for this diagnostic."
+msgstr ""
+
+#: src/admin/activity-log.js:1447
+msgid "AI request log unavailable (core logging may have been disabled at request time)."
+msgstr ""
+
+#: src/admin/activity-log.js:1495
+msgid "Flavor Agent could not load this AI request log."
+msgstr ""
+
+#: src/admin/activity-log.js:1505
+msgid "View AI request"
+msgstr ""
+
+#: src/admin/activity-log.js:1506
+msgid "Loading AI request log."
+msgstr ""
+
+#: src/admin/activity-log.js:1514
+msgid "Duration"
+msgstr ""
+
+#: src/admin/activity-log.js:1515
+msgid "Tokens"
+msgstr ""
+
+#: src/admin/activity-log.js:1526
+msgid "Open the WordPress AI request trace for provider, model, timing, tokens, request, and response previews."
+msgstr ""
+
+#: src/admin/activity-log.js:1563
+msgid "Open in AI Request Logs"
+msgstr ""
+
+#: src/admin/activity-log.js:1579
+msgid "Loaded request details"
+msgstr ""
+
+#: src/admin/activity-log.js:1590
+msgid "Request preview"
+msgstr ""
+
+#: src/admin/activity-log.js:1595
+msgid "Response preview"
+msgstr ""
+
+#: src/admin/activity-log.js:1632
+msgid "Proposed only"
+msgstr ""
+
+#: src/admin/activity-log.js:1638
+msgid "Text fallback"
+msgstr ""
+
+#: src/admin/activity-log.js:1650
+msgid "Live preview resolved from the current theme palette, not a frozen snapshot of when this change was recorded."
+msgstr ""
+
+#: src/admin/activity-log.js:1723
+msgid "Style changes"
+msgstr ""
+
+#: src/admin/activity-log.js:1739
+msgid "Variation identity was not recorded in the snapshots. Inspect State snapshots below for raw evidence."
+msgstr ""
+
+#: src/admin/activity-log.js:1747
+msgid "Rendered as plain text because this operation does not have a safe visual diff."
+msgstr ""
+
+#: src/admin/activity-log.js:1762
+msgid "Proposed variation"
+msgstr ""
+
+#: src/admin/activity-log.js:1777
+msgid "Proposed"
+msgstr ""
+
+#: src/admin/activity-log.js:1869
+msgid "Governed change"
+msgstr ""
+
+#: src/admin/activity-log.js:1882
+msgid "Signature valid"
+msgstr ""
+
+#: src/admin/activity-log.js:1883
+msgid "Record tampered"
+msgstr ""
+
+#: src/admin/activity-log.js:1884
+msgid "Statement profile invalid"
+msgstr ""
+
+#: src/admin/activity-log.js:1885
+msgid "Attestation identity mismatch"
+msgstr ""
+
+#: src/admin/activity-log.js:1889
+msgid "Attestation chain invalid"
+msgstr ""
+
+#: src/admin/activity-log.js:1890
+msgid "Attestation chain resolution incomplete"
+msgstr ""
+
+#: src/admin/activity-log.js:1894
+msgid "Live subject matches"
+msgstr ""
+
+#: src/admin/activity-log.js:1895
+msgid "Reverted by attestation"
+msgstr ""
+
+#: src/admin/activity-log.js:1896
+msgid "Superseded by attestation"
+msgstr ""
+
+#: src/admin/activity-log.js:1900
+msgid "Live subject changed since attestation"
+msgstr ""
+
+#: src/admin/activity-log.js:1904
+msgid "Live subject unavailable"
+msgstr ""
+
+#. translators: %s: attestation subject-state error code.
+#: src/admin/activity-log.js:1927
+#, js-format
+msgid "Subject error: %s"
+msgstr ""
+
+#. translators: %s: terminal attestation id.
+#: src/admin/activity-log.js:1937
+#, js-format
+msgid "Terminal attestation: %s"
+msgstr ""
+
+#. translators: %d: number of signed attestation links followed.
+#: src/admin/activity-log.js:1947
+#, js-format
+msgid "Chain depth: %d"
+msgstr ""
+
+#: src/admin/activity-log.js:1990
+msgid "Verification completed using the public attestation endpoints."
+msgstr ""
+
+#. translators: %s: attestation signing key id.
+#: src/admin/activity-log.js:2030
+#, js-format
+msgid "Key: %s"
+msgstr ""
+
+#: src/admin/activity-log.js:2038
+msgid "Signature: present"
+msgstr ""
+
+#: src/admin/activity-log.js:2039
+msgid "Signature: not present"
+msgstr ""
+
+#: src/admin/activity-log.js:2043
+msgid "Statement: present"
+msgstr ""
+
+#: src/admin/activity-log.js:2044
+msgid "Statement: not present"
+msgstr ""
+
+#. translators: %s: attestation governance claim.
+#: src/admin/activity-log.js:2051
+#, js-format
+msgid "Claim: %s"
+msgstr ""
+
+#. translators: %s: attestation governance lane.
+#: src/admin/activity-log.js:2061
+#, js-format
+msgid "Owned lane: %s"
+msgstr ""
+
+#: src/admin/activity-log.js:2068
+msgid "Envelope loaded from the public endpoint."
+msgstr ""
+
+#. translators: %s: canonical subject digest.
+#: src/admin/activity-log.js:2085
+#, js-format
+msgid "Digest: %s"
+msgstr ""
+
+#. translators: %s: attestation subject scope.
+#: src/admin/activity-log.js:2095
+#, js-format
+msgid "Scope: %s"
+msgstr ""
+
+#: src/admin/activity-log.js:2102
+msgid "Live subject state loaded from the public endpoint."
+msgstr ""
+
+#: src/admin/activity-log.js:2119
+msgid "What happened"
+msgstr ""
+
+#: src/admin/activity-log.js:2187
+msgid "The attestation verification data could not be loaded."
+msgstr ""
+
+#: src/admin/activity-log.js:2206
+msgid "External verification"
+msgstr ""
+
+#: src/admin/activity-log.js:2209
+msgid "Run the site-served verification summary here, or open the public envelope and live subject endpoints for independent verification."
+msgstr ""
+
+#: src/admin/activity-log.js:2224
+msgid "Run verification"
+msgstr ""
+
+#: src/admin/activity-log.js:2236
+msgid "Load envelope"
+msgstr ""
+
+#: src/admin/activity-log.js:2248
+msgid "Load live subject"
+msgstr ""
+
+#: src/admin/activity-log.js:2255
+msgid "Open envelope JSON"
+msgstr ""
+
+#: src/admin/activity-log.js:2264
+msgid "Open live subject JSON"
+msgstr ""
+
+#: src/admin/activity-log.js:2309
+msgid "Resolved signature"
+msgstr ""
+
+#: src/admin/activity-log.js:2312
+#: src/admin/activity-log.js:2318
+#: src/admin/activity-log.js:2324
+msgid "Not recorded"
+msgstr ""
+
+#: src/admin/activity-log.js:2315
+msgid "Review signature"
+msgstr ""
+
+#: src/admin/activity-log.js:2321
+msgid "Baseline hash"
+msgstr ""
+
+#: src/admin/activity-log.js:2329
+msgid "Attestation ID"
+msgstr ""
+
+#: src/admin/activity-log.js:2331
+msgid "Claim"
+msgstr ""
+
+#: src/admin/activity-log.js:2335
+msgid "Owned lane"
+msgstr ""
+
+#: src/admin/activity-log.js:2338
+msgid "Key"
+msgstr ""
+
+#: src/admin/activity-log.js:2339
+msgid "Subject"
+msgstr ""
+
+#: src/admin/activity-log.js:2340
+msgid "Scope"
+msgstr ""
+
+#: src/admin/activity-log.js:2343
+msgid "Reverted by"
+msgstr ""
+
+#: src/admin/activity-log.js:2347
+msgid "Superseded by"
+msgstr ""
+
+#: src/admin/activity-log.js:2356
+msgid "Cryptographic record — freshness signatures, attestation, and raw diagnostics"
+msgstr ""
+
+#: src/admin/activity-log.js:2363
+msgid "Cryptographic record"
+msgstr ""
+
+#: src/admin/activity-log.js:2366
+msgid "Freshness signatures, attestation, raw diagnostics"
+msgstr ""
+
+#: src/admin/activity-log.js:2376
+msgid "Freshness signatures"
+msgstr ""
+
+#: src/admin/activity-log.js:2392
+msgid "Raw governance diagnostics"
+msgstr ""
+
+#: src/admin/activity-log.js:2545
+#: src/inspector/BlockRecommendationsPanel.js:1372
+msgid "Target"
+msgstr ""
+
+#: src/admin/activity-log.js:2548
+msgid "Expires"
+msgstr ""
+
+#: src/admin/activity-log.js:2549
+msgid "Request reference"
+msgstr ""
+
+#: src/admin/activity-log.js:2550
+msgid "Decided by"
+msgstr ""
+
+#: src/admin/activity-log.js:2551
+msgid "Decided"
+msgstr ""
+
+#: src/admin/activity-log.js:2552
+msgid "Executed"
+msgstr ""
+
+#: src/admin/activity-log.js:2553
+msgid "Decision note"
+msgstr ""
+
+#: src/admin/activity-log.js:2556
+msgid "Failure code"
+msgstr ""
+
+#: src/admin/activity-log.js:2557
+msgid "Failure reason"
+msgstr ""
+
+#: src/admin/activity-log.js:2559
+msgid "Apply attestation"
+msgstr ""
+
+#: src/admin/activity-log.js:2563
+msgid "Undo attestation"
+msgstr ""
+
+#: src/admin/activity-log.js:2625
+msgid "The decision could not be recorded."
+msgstr ""
+
+#: src/admin/activity-log.js:2641
+msgid "Governance evidence"
+msgstr ""
+
+#: src/admin/activity-log.js:2653
+msgid "Requested operations"
+msgstr ""
+
+#: src/admin/activity-log.js:2657
+msgid "Executed operations"
+msgstr ""
+
+#: src/admin/activity-log.js:2662
+msgid "Full provenance"
+msgstr ""
+
+#: src/admin/activity-log.js:2668
+msgid "Outcome and undo"
+msgstr ""
+
+#: src/admin/activity-log.js:2676
+msgid "Decision"
+msgstr ""
+
+#: src/admin/activity-log.js:2688
+msgid "Release review claim"
+msgstr ""
+
+#: src/admin/activity-log.js:2694
+msgid "Decision note (optional)"
+msgstr ""
+
+#: src/admin/activity-log.js:2714
+msgid "Approve and apply"
+msgstr ""
+
+#: src/admin/activity-log.js:2722
+msgid "Reject"
+msgstr ""
+
+#: src/admin/activity-log.js:2748
+msgid "Entry details"
+msgstr ""
+
+#: src/admin/activity-log.js:2751
+msgid "Select an activity item to inspect request metadata, provider ownership, undo state, and navigation links."
+msgstr ""
+
+#: src/admin/activity-log.js:3219
+msgid "Icon"
+msgstr ""
+
+#: src/admin/activity-log.js:3263
+msgid "Activity evidence"
+msgstr ""
+
+#: src/admin/activity-log.js:3287
+msgid "Description"
+msgstr ""
+
+#: src/admin/activity-log.js:3299
+msgid "Date"
+msgstr ""
+
+#: src/admin/activity-log.js:3315
+msgid "Timestamp"
+msgstr ""
+
+#: src/admin/activity-log.js:3739
+msgid "Reset date filter"
+msgstr ""
+
+#: src/admin/activity-log.js:3765
+msgid "Decide pending external applies and review recent AI actions across editor, Site Editor, and admin surfaces. AI proposes; WordPress approves."
+msgstr ""
+
+#: src/admin/activity-log.js:3779
+#: src/components/surface-labels.js:52
+msgid "Refresh"
+msgstr ""
+
+#: src/admin/activity-log.js:3848
+msgid "Search AI activity"
+msgstr ""
+
+#: src/admin/activity-log.js:3861
+msgid "Loading activity…"
+msgstr ""
+
+#: src/admin/activity-log.js:3874
+msgid "Approvals"
+msgstr ""
+
+#: src/admin/activity-log.js:3882
+#: src/inspector/panel-delegation.js:49
+msgid "Filter"
+msgstr ""
+
+#: src/admin/activity-log.js:3891
+msgid "View options"
+msgstr ""
+
+#: src/admin/activity-log.js:3899
+msgid "Reset view"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:22
+msgid "Embedding provider, model, or vector size changed."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:160
+msgid "Pattern recommendations are not available until the required setup is complete."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:167
+msgid "Pattern recommendations need attention before they can be trusted."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:177
+msgid "Pattern recommendations are usable but out of date."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:187
+msgid "Pattern recommendations are not available until you sync the catalog."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:681
+msgid "Select a block"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:722
+msgid "Update Block Guideline"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:737
+msgid "No block guidelines yet."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:780
+#: src/content/ContentRecommender.js:51
+msgid "Edit"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:788
+msgid "Remove"
+msgstr ""
+
+#. translators: %s: block label.
+#: src/admin/settings-page-controller.js:799
+#, js-format
+msgid "Remove the block guideline for %s?"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:822
+msgid "Block guideline removed. Save Changes to persist."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:849
+msgid "Check that your file contains a guideline_categories object."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:897
+msgid "Choose a block before saving a block guideline."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:911
+msgid "Enter guideline text before saving a block guideline."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:926
+msgid "Block guideline ready. Save Changes to persist."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:955
+msgid "Check that your file contains valid JSON and try again."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:966
+msgid "Guidelines imported into the form. Save Changes to persist."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:977
+msgid "Could not import guidelines."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:998
+msgid "Guidelines exported."
+msgstr ""
+
+#. translators: %s: sync status label.
+#: src/admin/settings-page-controller.js:1033
+#, js-format
+msgid "Pattern catalog sync queued. Status: %s."
+msgstr ""
+
+#. translators: 1: indexed pattern count, 2: removed pattern count, 3: sync status label.
+#: src/admin/settings-page-controller.js:1043
+#, js-format
+msgid "Synced %1$d patterns, removed %2$d. Status: %3$s."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1250
+msgid "Syncing…"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1280
+#: src/admin/settings-page-controller.js:1303
+msgid "Unable to refresh sync status."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1336
+msgid "Syncing pattern catalog."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1355
+#: src/admin/settings-page-controller.js:1383
+msgid "Sync failed."
+msgstr ""
+
+#: src/components/AIActivitySection.js:9
+msgid "Recent AI Actions"
+msgstr ""
+
+#: src/components/AIActivitySection.js:18
+msgid "Content request diagnostic"
+msgstr ""
+
+#: src/components/AIActivitySection.js:19
+msgid "Navigation request diagnostic"
+msgstr ""
+
+#: src/components/AIActivitySection.js:20
+msgid "Pattern request diagnostic"
+msgstr ""
+
+#: src/components/AIActivitySection.js:21
+msgid "Template request diagnostic"
+msgstr ""
+
+#: src/components/AIActivitySection.js:22
+msgid "Template part request diagnostic"
+msgstr ""
+
+#: src/components/AIActivitySection.js:23
+msgid "Post content structure request diagnostic"
+msgstr ""
+
+#: src/components/AIActivitySection.js:27
+msgid "Global Styles request diagnostic"
+msgstr ""
+
+#: src/components/AIActivitySection.js:28
+msgid "Style Book request diagnostic"
+msgstr ""
+
+#: src/components/AIActivitySection.js:37
+msgid "Template action"
+msgstr ""
+
+#: src/components/AIActivitySection.js:38
+msgid "Template part action"
+msgstr ""
+
+#: src/components/AIActivitySection.js:39
+msgid "Post content action"
+msgstr ""
+
+#: src/components/AIActivitySection.js:40
+msgid "Global Styles action"
+msgstr ""
+
+#: src/components/AIActivitySection.js:137
+msgid "Undo pending sync"
+msgstr ""
+
+#: src/components/AIActivitySection.js:138
+msgid "Audit sync pending"
+msgstr ""
+
+#: src/components/AIActivitySection.js:183
+msgid "External apply awaiting admin approval."
+msgstr ""
+
+#. translators: %s: reviewer-supplied rejection note.
+#: src/components/AIActivitySection.js:193
+#, js-format
+msgid "External apply rejected: %s"
+msgstr ""
+
+#: src/components/AIActivitySection.js:196
+msgid "External apply request was rejected."
+msgstr ""
+
+#: src/components/AIActivitySection.js:199
+msgid "External apply request expired before approval."
+msgstr ""
+
+#: src/components/AIActivitySection.js:208
+msgid "External apply request failed."
+msgstr ""
+
+#. translators: %s: block name, with the core/ prefix removed.
+#: src/components/AIActivitySection.js:228
+#, js-format
+msgid "Block request diagnostic · %s"
+msgstr ""
+
+#: src/components/AIActivitySection.js:231
+msgid "Block request diagnostic"
+msgstr ""
+
+#. translators: %s: Style Book block title.
+#: src/components/AIActivitySection.js:244
+#, js-format
+msgid "Style Book action · %s"
+msgstr ""
+
+#: src/components/AIActivitySection.js:247
+msgid "Style Book action"
+msgstr ""
+
+#: src/components/AIActivitySection.js:254
+msgid "Block action"
+msgstr ""
+
+#: src/components/AIActivitySection.js:405
+msgid "AI action"
+msgstr ""
+
+#: src/components/AIActivitySection.js:421
+msgid "Activity audit sync pending."
+msgstr ""
+
+#: src/components/AIActivitySection.js:454
+msgid "View activity"
+msgstr ""
+
+#: src/components/AIActivitySection.js:470
+msgid "Undoing…"
+msgstr ""
+
+#: src/components/AIActivitySection.js:471
+#: src/components/UndoToast.js:38
+#: src/store/toasts.js:49
+msgid "Undo"
+msgstr ""
+
+#. translators: %d: number of additional activity rows revealed by the control.
+#. translators: %d: number of additional items revealed by the control.
+#: src/components/AIActivitySection.js:488
+#: src/components/AIAdvisorySection.js:153
+#, js-format
+msgid "Show %d more"
+msgstr ""
+
+#: src/components/AIReviewSection.js:7
+msgid "Confirm Apply"
+msgstr ""
+
+#: src/components/AIReviewSection.js:8
+msgid "Cancel Preview"
+msgstr ""
+
+#: src/components/RecommendationHero.js:7
+msgid "Recommended Next Step"
+msgstr ""
+
+#: src/components/StaleResultBanner.js:18
+msgid "Context has changed since the last request. Refresh before relying on the previous results."
+msgstr ""
+
+#: src/components/surface-labels.js:44
+msgid "Apply now"
+msgstr ""
+
+#: src/components/surface-labels.js:45
+msgid "Manual ideas"
+msgstr ""
+
+#: src/components/surface-labels.js:46
+msgid "Review first"
+msgstr ""
+
+#: src/components/surface-labels.js:47
+msgid "Review Before Apply"
+msgstr ""
+
+#: src/components/surface-labels.js:48
+#: src/utils/validation-reasons.js:34
+msgid "Advisory only"
+msgstr ""
+
+#: src/components/surface-labels.js:49
+msgid "Executable"
+msgstr ""
+
+#: src/components/surface-labels.js:50
+msgid "Current"
+msgstr ""
+
+#: src/components/surface-labels.js:51
+msgid "Stale"
+msgstr ""
+
+#: src/components/SurfaceComposer.js:32
+msgid "Describe what you want to achieve."
+msgstr ""
+
+#: src/components/SurfaceComposer.js:33
+msgid "What are you trying to achieve?"
+msgstr ""
+
+#: src/components/SurfaceComposer.js:47
+msgid "Getting suggestions…"
+msgstr ""
+
+#: src/components/SurfaceComposer.js:134
+msgid "Starter prompts"
+msgstr ""
+
+#: src/components/SurfaceScopeBar.js:21
+msgid "Context has changed since the last request."
+msgstr ""
+
+#: src/components/ToastRegion.js:45
+msgid "Flavor Agent recent changes"
+msgstr ""
+
+#: src/components/UndoToast.js:204
+msgid "Undo unavailable for this change"
+msgstr ""
+
+#: src/components/UndoToast.js:259
+msgid "Persistent until Undo or Dismiss"
+msgstr ""
+
+#: src/components/UndoToast.js:289
+msgid "Dismiss"
+msgstr ""
+
+#: src/content/ContentRecommender.js:33
+msgid "Draft"
+msgstr ""
+
+#: src/content/ContentRecommender.js:34
+msgid "Generate draft text"
+msgstr ""
+
+#: src/content/ContentRecommender.js:35
+msgid "Describe the draft you want (for example: concise launch post for store managers)."
+msgstr ""
+
+#: src/content/ContentRecommender.js:39
+msgid "Generated text is for review and manual copy."
+msgstr ""
+
+#: src/content/ContentRecommender.js:43
+msgid "Generate Draft Text"
+msgstr ""
+
+#: src/content/ContentRecommender.js:45
+msgid "Sharper opening"
+msgstr ""
+
+#: src/content/ContentRecommender.js:46
+msgid "Cleaner structure"
+msgstr ""
+
+#: src/content/ContentRecommender.js:47
+msgid "Stronger closing"
+msgstr ""
+
+#: src/content/ContentRecommender.js:52
+msgid "Generate revision text"
+msgstr ""
+
+#: src/content/ContentRecommender.js:53
+msgid "Describe the revision pass (for example: tighten intro and trim repetition)."
+msgstr ""
+
+#: src/content/ContentRecommender.js:57
+msgid "Review the revision and copy useful text manually."
+msgstr ""
+
+#: src/content/ContentRecommender.js:61
+msgid "Generate Revision Text"
+msgstr ""
+
+#: src/content/ContentRecommender.js:63
+msgid "Tighter pacing"
+msgstr ""
+
+#: src/content/ContentRecommender.js:64
+msgid "Less repetition"
+msgstr ""
+
+#: src/content/ContentRecommender.js:65
+msgid "Sharper voice"
+msgstr ""
+
+#: src/content/ContentRecommender.js:69
+msgid "Critique"
+msgstr ""
+
+#: src/content/ContentRecommender.js:70
+msgid "Stress-test the draft"
+msgstr ""
+
+#: src/content/ContentRecommender.js:71
+msgid "Describe the critique focus (for example: clarity gaps and weak transitions)."
+msgstr ""
+
+#: src/content/ContentRecommender.js:75
+msgid "Flags issues without changing the post."
+msgstr ""
+
+#: src/content/ContentRecommender.js:79
+msgid "Generate Critique"
+msgstr ""
+
+#: src/content/ContentRecommender.js:81
+msgid "Weakest lines"
+msgstr ""
+
+#: src/content/ContentRecommender.js:82
+msgid "Structure drift"
+msgstr ""
+
+#: src/content/ContentRecommender.js:83
+msgid "Vague wording"
+msgstr ""
+
+#: src/content/ContentRecommender.js:107
+msgid "No prompt saved"
+msgstr ""
+
+#: src/content/ContentRecommender.js:140
+msgid "Refine request"
+msgstr ""
+
+#: src/content/ContentRecommender.js:218
+msgid "Voice issue"
+msgstr ""
+
+#. translators: %s: suggested replacement wording.
+#: src/content/ContentRecommender.js:229
+#, js-format
+msgid "Suggested wording: %s"
+msgstr ""
+
+#: src/content/ContentRecommender.js:365
+msgid "No content recommendation was returned for the current request."
+msgstr ""
+
+#. translators: %s: lowercased post type label, such as "post" or "page".
+#: src/content/ContentRecommender.js:416
+#, js-format
+msgid "Untitled %s"
+msgstr ""
+
+#: src/content/ContentRecommender.js:423
+msgid "Copied text"
+msgstr ""
+
+#: src/content/ContentRecommender.js:424
+msgid "Copy generated text"
+msgstr ""
+
+#: src/content/ContentRecommender.js:429
+msgid "Content Recommendations"
+msgstr ""
+
+#. translators: 1: lowercased post type label. 2: lowercased content mode label, such as "draft".
+#: src/content/ContentRecommender.js:473
+#, js-format
+msgid "This %1$s changed since the last %2$s request — refresh before relying on the previous text."
+msgstr ""
+
+#: src/content/ContentRecommender.js:504
+msgid "Content mode"
+msgstr ""
+
+#. translators: %s: lowercased post type label, such as "post" or "page".
+#: src/content/ContentRecommender.js:530
+#, js-format
+msgid "What should Flavor Agent do with this %s?"
+msgstr ""
+
+#: src/content/ContentRecommender.js:542
+msgid "Requesting content…"
+msgstr ""
+
+#. translators: %s: content mode label, such as "Draft" or "Critique".
+#: src/content/ContentRecommender.js:559
+#, js-format
+msgid "%s result"
+msgstr ""
+
+#: src/content/ContentRecommender.js:603
+msgid "Editorial Notes"
+msgstr ""
+
+#: src/content/ContentRecommender.js:644
+msgid "Recent Content Requests"
+msgstr ""
+
+#. translators: %s: lowercased post type label, such as "post" or "page".
+#: src/content/ContentRecommender.js:650
+#, js-format
+msgid "Recent requests for this %s."
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:113
+msgid "the current live style state or prompt"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:119
+msgid "Only the operations shown here will run against the current Global Styles scope."
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:135
+msgid "Site Editor Styles"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:136
+msgid "Global Styles suggestions stay theme-backed and keep the review-before-apply contract intact."
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:186
+#: src/inspector/BlockRecommendationsPanel.js:1077
+#: src/inspector/NavigationRecommendations.js:882
+#: src/style-book/StyleBookRecommender.js:209
+#: src/template-parts/TemplatePartRecommender.js:940
+#: src/templates/TemplateRecommender.js:841
+msgid "Ask Flavor Agent"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:190
+msgid "Describe the style direction"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:191
+msgid "Describe the style direction you want across the site."
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:197
+msgid "Flavor Agent will keep recommendations inside theme-backed Global Styles controls. Raw CSS and custom CSS are out of scope."
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:205
+msgid "Refine hierarchy and rhythm"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:206
+msgid "Make the palette feel warmer"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:207
+msgid "Tighten spacing and rhythm"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:209
+#: src/style-book/StyleBookRecommender.js:228
+msgid "Get Style Suggestions"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:210
+#: src/style-book/StyleBookRecommender.js:229
+msgid "Thinking…"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:211
+#: src/style-book/StyleBookRecommender.js:230
+msgid "Press Cmd/Ctrl+Enter to submit."
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:343
+msgid "Recent AI Style Actions"
+msgstr ""
+
+#: src/global-styles/GlobalStylesRecommender.js:344
+msgid "Undo is only available while the current Global Styles state still matches the applied AI change."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1132
+msgid "AI block suggestions"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1182
+msgid "Settings suggestions"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1189
+msgid "Settings changes apply here only."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1198
+msgid "AI settings suggestions"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1217
+msgid "Style suggestions"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1224
+msgid "Style changes apply here only."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1233
+msgid "AI style suggestions"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1253
+#: src/inspector/BlockRecommendationsPanel.js:1259
+msgid "Recommended together"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1278
+msgid "Select all"
+msgstr ""
+
+#. translators: %d: number of selected suggestions to apply.
+#: src/inspector/BlockRecommendationsPanel.js:1291
+#, js-format
+msgid "Apply selected (%d)"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1337
+msgid "Insert pattern before the selected block."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1338
+msgid "Insert pattern after the selected block."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1342
+msgid "Replace the selected block with a pattern."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1348
+msgid "Review structural operation."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1353
+msgid "Before this block"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1357
+msgid "After this block"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1376
+#: src/inspector/panel-delegation.js:67
+msgid "Position"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1431
+#: src/inspector/BlockRecommendationsPanel.js:1540
+msgid "Validator computed"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1483
+msgid "Selected structural review"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1489
+msgid "This review is scoped to the current block, request token, and request signature."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1603
+#: src/inspector/BlockRecommendationsPanel.js:1647
+msgid "AI Recommendations"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1651
+msgid "Last Selected Block"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1652
+msgid "Using the last selected block until selection returns."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:51
+msgid "Describe the structure or behavior you want."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:55
+msgid "What do you want to improve about this navigation?"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:59
+msgid "Flavor Agent will suggest the next navigation changes to make manually."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:64
+msgid "Improve menu hierarchy"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:65
+msgid "Reduce overlay friction"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:66
+msgid "Improve keyboard support"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:68
+msgid "Get Navigation Suggestions"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:69
+msgid "Getting navigation suggestions…"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:624
+msgid "Use this subsection to ask for navigation-specific next steps without creating a second top-level recommendation stack."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:628
+msgid "Ask for navigation-specific next steps without leaving the main block recommendation flow."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:634
+msgid "Navigation recommendations stay advisory here. Make accepted changes manually in the editor."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:638
+msgid "Navigation suggestions stay advisory here and still need manual follow-through in the editor."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:645
+msgid "These ideas are shown for reference from the last request. Refresh before using them to change the current navigation block."
+msgstr ""
+
+#. translators: %d: navigation menu post ID.
+#: src/inspector/NavigationRecommendations.js:667
+#: src/inspector/NavigationRecommendations.js:715
+#, js-format
+msgid "Menu ID %d"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:680
+msgid "These ideas came from the previous navigation state. Refresh before using them as your next step."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:684
+msgid "Start with this change first, then work through the supporting ideas below."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:689
+msgid "These accepted changes came from the previous request. Refresh before following them in the current navigation block."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:693
+msgid "Make these accepted changes manually in the navigation block."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:702
+msgid "Navigation Recommendations"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:706
+msgid "Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only, so accepted changes still need manual follow-through. Treat each idea as guidance, not a pre-applied edit."
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:730
+msgid "Navigation recommendations"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:738
+msgid "Navigation Ideas"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:750
+msgid "Ask About Navigation"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:809
+msgid "Recommended next change"
+msgstr ""
+
+#: src/inspector/NavigationRecommendations.js:868
+msgid "Recommended Next Changes"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:24
+msgid "AI typography suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:25
+msgid "Typography"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:30
+msgid "AI spacing suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:31
+msgid "Dimensions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:36
+msgid "AI border suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:37
+msgid "Border"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:42
+msgid "AI shadow suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:43
+msgid "Shadow"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:48
+msgid "AI filter suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:54
+msgid "AI background suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:55
+msgid "Background"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:66
+msgid "AI position suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:72
+msgid "AI advanced suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:73
+msgid "Advanced"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:78
+msgid "AI bindings suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:79
+msgid "Bindings"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:84
+msgid "AI list view suggestions"
+msgstr ""
+
+#: src/inspector/panel-delegation.js:85
+msgid "List View"
+msgstr ""
+
+#: src/inspector/SuggestionChips.js:30
+msgid "Suggestion"
+msgstr ""
+
+#: src/inspector/SuggestionChips.js:159
+msgid "These hints mirror the latest AI Recommendations result. Apply them from that main panel."
+msgstr ""
+
+#: src/inspector/SuggestionChips.js:174
+msgid "These suggestions reflect the last AI Recommendations request. Refresh that main panel to update them for the current block."
+msgstr ""
+
+#: src/patterns/inserter-badge-state.js:4
+msgid "Pattern recommendation request failed."
+msgstr ""
+
+#. translators: %d: number of pattern recommendations.
+#: src/patterns/inserter-badge-state.js:12
+#, js-format
+msgid "%d pattern recommendation"
+msgid_plural "%d pattern recommendations"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/patterns/inserter-badge-state.js:49
+msgid "Finding pattern recommendations"
+msgstr ""
+
+#. translators: %s: reason the pattern recommendation request failed.
+#: src/patterns/inserter-badge-state.js:61
+#, js-format
+msgid "Pattern recommendation error: %s"
+msgstr ""
+
+#. translators: %s: localized "<n> pattern recommendations" phrase.
+#: src/patterns/inserter-badge-state.js:72
+#, js-format
+msgid "%s available"
+msgstr ""
+
+#. translators: 1: "<n> pattern recommendations available". 2: why the top recommendations matched.
+#: src/patterns/inserter-badge-state.js:83
+#, js-format
+msgid "%1$s. %2$s"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:16
+msgid "Heading level matched to nearby headings"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:20
+msgid "Alignment matched to the container"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:24
+msgid "Colors aligned to theme presets"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:28
+msgid "Spacing aligned to theme presets"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:32
+msgid "Button style matched to the theme"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:41
+msgid "Cosmetic adjustment"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:51
+msgid "none"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:55
+#: src/patterns/PatternAdaptationPreview.js:64
+#: src/patterns/PatternAdaptationPreview.js:69
+msgid "empty"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:65
+#: src/patterns/PatternAdaptationPreview.js:70
+msgid "updated"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:137
+msgid "Unknown block"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:141
+msgid "change"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:168
+msgid "Adapted preview"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:180
+msgid "The insertion point changed, so this adapted preview is out of date. Insert the original or close and try again."
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:192
+msgid "Flavor Agent could not build a safe adaptation for this pattern. You can still insert the original."
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:203
+msgid "Pattern comparison"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:208
+#: src/patterns/PatternAdaptationPreview.js:211
+msgid "Original pattern"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:225
+#: src/patterns/PatternAdaptationPreview.js:228
+msgid "Adapted result"
+msgstr ""
+
+#. translators: %s: pattern title.
+#: src/patterns/PatternAdaptationPreview.js:281
+#, js-format
+msgid "Insert adapted %s"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:285
+msgid "Insert adapted"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:292
+#: src/patterns/PatternRecommender.js:702
+msgid "Insert original"
+msgstr ""
+
+#: src/patterns/PatternAdaptationPreview.js:295
+msgid "Close"
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:634
+#, js-format
+msgid "Insert %s"
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:639
+#, js-format
+msgid "Insert original %s"
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:683
+msgid "Preview adapted"
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:701
+msgid "Insert"
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:724
+msgid "Preparing pattern recommendations for this insertion point."
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:730
+msgid "Ranking patterns for this insertion point."
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:737
+msgid "Pattern recommendation request failed for this insertion point."
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:742
+msgid "Flavor Agent did not find a strong pattern match for this insertion point yet."
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:747
+msgid "This spot doesn't accept patterns. Click into the page body (or a container that allows patterns) to get recommendations."
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:752
+msgid "WordPress returned no block patterns for this site, so there is nothing to rank yet. Retry, or reload the editor if this persists."
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:766
+msgid "No matches yet"
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:771
+msgid "Ranking failed"
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:776
+msgid "Patterns unavailable"
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:781
+msgid "Ranking…"
+msgstr ""
+
+#: src/patterns/PatternRecommender.js:799
+msgid "Retry"
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:1422
+#, js-format
+msgid "Cannot insert pattern \"%s\" at the requested location. Gutenberg inserted it somewhere else, so Flavor Agent removed those blocks."
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:1430
+#, js-format
+msgid "Cannot confirm pattern \"%s\" was inserted. Gutenberg did not report the inserted blocks at the target location."
+msgstr ""
+
+#. translators: %s: pattern title.
+#: src/patterns/PatternRecommender.js:1459
+#, js-format
+msgid "Pattern \"%s\" inserted."
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:1557
+#, js-format
+msgid "Cannot insert pattern \"%s\" because Gutenberg rejected the insertion request."
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:1608
+#, js-format
+msgid "Cannot insert pattern \"%s\" because the insertion point has changed since these recommendations were ranked. Refreshing now — try again in a moment."
+msgstr ""
+
+#. translators: 1: pattern title 2: comma-separated block names.
+#: src/patterns/PatternRecommender.js:1642
+#, js-format
+msgid "Cannot insert pattern \"%1$s\" here. The following blocks are not allowed at this insertion point: %2$s."
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:1674
+#, js-format
+msgid "Cannot insert pattern \"%s\" because Flavor Agent could not verify the current server apply context. Refreshing now — try again in a moment."
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:1708
+#, js-format
+msgid "Cannot insert pattern \"%s\" because the server-resolved apply context has changed since these recommendations were ranked. Refreshing now — try again in a moment."
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:1731
+#, js-format
+msgid "Cannot insert pattern \"%s\" because Flavor Agent could not revalidate the current server apply context. Try again or refresh recommendations."
+msgstr ""
+
+#. translators: %s: block pattern title.
+#: src/patterns/PatternRecommender.js:1778
+#, js-format
+msgid "Cannot insert pattern \"%s\" because Gutenberg did not provide insertable block content for it."
+msgstr ""
+
+#: src/patterns/recommendation-utils.js:36
+msgid "Semantic match"
+msgstr ""
+
+#: src/patterns/recommendation-utils.js:37
+msgid "Structural fit"
+msgstr ""
+
+#: src/patterns/recommendation-utils.js:38
+msgid "AI Search match"
+msgstr ""
+
+#: src/patterns/recommendation-utils.js:39
+msgid "Model ranked"
+msgstr ""
+
+#: src/patterns/recommendation-utils.js:79
+msgid "Allowed here"
+msgstr ""
+
+#: src/patterns/recommendation-utils.js:87
+msgid "Nearby block fit"
+msgstr ""
+
+#: src/store/activity-history.js:26
+msgid "This template action was recorded before refresh-safe undo support and cannot be undone automatically."
+msgstr ""
+
+#: src/store/activity-history.js:31
+msgid "Undo blocked by newer AI actions."
+msgstr ""
+
+#: src/store/activity-history.js:770
+#: src/store/activity-undo.js:552
+msgid "This block action is missing its recorded after state and cannot be undone automatically."
+msgstr ""
+
+#: src/store/activity-history.js:788
+#: src/store/activity-undo.js:568
+msgid "The original block target for this AI action is missing."
+msgstr ""
+
+#: src/store/activity-history.js:817
+#: src/store/activity-undo.js:590
+msgid "The target block is no longer available to undo."
+msgstr ""
+
+#: src/store/activity-history.js:887
+#: src/store/activity-undo.js:636
+msgid "The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically."
+msgstr ""
+
+#: src/store/activity-history.js:902
+msgid "The activity entry is unavailable."
+msgstr ""
+
+#: src/store/activity-session.js:139
+msgid "Request failed."
+msgstr ""
+
+#: src/store/activity-undo.js:646
+msgid "The block editor could not restore the previous block attributes."
+msgstr ""
+
+#: src/store/activity-undo.js:751
+#: src/store/activity-undo.js:760
+#: src/store/activity-undo.js:860
+#: src/store/activity-undo.js:869
+msgid "There is no AI action available to undo."
+msgstr ""
+
+#: src/store/activity-undo.js:819
+#: src/store/activity-undo.js:1024
+#: src/store/activity-undo.js:1055
+#: src/store/activity-undo.js:1067
+msgid "This AI action can no longer be undone automatically."
+msgstr ""
+
+#: src/store/activity-undo.js:1096
+msgid "Undo failed."
+msgstr ""
+
+#: src/store/activity-undo.js:1122
+msgid "Undo applied locally."
+msgstr ""
+
+#: src/store/block-targeting.js:22
+msgid "The target block changed position or type and cannot be undone automatically."
+msgstr ""
+
+#: src/store/executable-surfaces.js:105
+msgid "Template recommendation request failed."
+msgstr ""
+
+#: src/store/executable-surfaces.js:109
+msgid "Template apply failed."
+msgstr ""
+
+#: src/store/executable-surfaces.js:110
+msgid "Template apply failed unexpectedly."
+msgstr ""
+
+#: src/store/executable-surfaces.js:166
+msgid "Template-part recommendation request failed."
+msgstr ""
+
+#: src/store/executable-surfaces.js:170
+msgid "Template-part apply failed."
+msgstr ""
+
+#: src/store/executable-surfaces.js:174
+msgid "Template-part apply failed unexpectedly."
+msgstr ""
+
+#: src/store/executable-surfaces.js:230
+msgid "Global Styles recommendation request failed."
+msgstr ""
+
+#: src/store/executable-surfaces.js:234
+msgid "Global Styles apply failed."
+msgstr ""
+
+#: src/store/executable-surfaces.js:238
+msgid "Global Styles apply failed unexpectedly."
+msgstr ""
+
+#: src/store/executable-surfaces.js:309
+msgid "Style Book recommendation request failed."
+msgstr ""
+
+#: src/store/executable-surfaces.js:313
+msgid "Style Book apply failed."
+msgstr ""
+
+#: src/store/executable-surfaces.js:314
+msgid "Style Book apply failed unexpectedly."
+msgstr ""
+
+#: src/store/index.js:582
+msgid "This template result is stale. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:587
+msgid "This template-part result is stale. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:592
+msgid "This Global Styles result is stale. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:597
+msgid "This Style Book result is stale. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:602
+msgid "This result is stale. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:612
+msgid "This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:617
+msgid "This template-part result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:622
+msgid "This Global Styles result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:627
+msgid "This Style Book result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:632
+msgid "This result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:642
+msgid "This template result is missing the server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:647
+msgid "This template-part result is missing the server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:652
+msgid "This Global Styles result is missing the server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:657
+msgid "This Style Book result is missing the server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:662
+msgid "This result is missing the server-resolved apply context. Refresh recommendations before applying it."
+msgstr ""
+
+#: src/store/index.js:672
+msgid "Flavor Agent could not revalidate this template result against the current server apply context. Try again or refresh recommendations."
+msgstr ""
+
+#: src/store/index.js:677
+msgid "Flavor Agent could not revalidate this template-part result against the current server apply context. Try again or refresh recommendations."
+msgstr ""
+
+#: src/store/index.js:682
+msgid "Flavor Agent could not revalidate this Global Styles result against the current server apply context. Try again or refresh recommendations."
+msgstr ""
+
+#: src/store/index.js:687
+msgid "Flavor Agent could not revalidate this Style Book result against the current server apply context. Try again or refresh recommendations."
+msgstr ""
+
+#: src/store/index.js:692
+msgid "Flavor Agent could not revalidate this result against the current server apply context. Try again or refresh recommendations."
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:35
+msgid "Recommendations shown"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:36
+msgid "Recommendation selected for review"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:40
+msgid "Recommendation blocked by stale context"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:44
+msgid "Recommendation blocked by validation"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:48
+msgid "Pattern insertion failed"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:49
+msgid "Pattern inserted from recommendation shelf"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:53
+msgid "Adapted pattern preview shown"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:57
+msgid "Adapted pattern inserted from preview"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:61
+msgid "Pattern adaptation blocked"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:62
+msgid "Adapted pattern insertion failed"
+msgstr ""
+
+#: src/store/recommendation-outcomes.js:937
+msgid "Recommendation outcome"
+msgstr ""
+
+#: src/store/toasts.js:37
+msgid "Block updated"
+msgstr ""
+
+#: src/store/toasts.js:38
+msgid "Template applied"
+msgstr ""
+
+#: src/store/toasts.js:39
+msgid "Template part applied"
+msgstr ""
+
+#: src/store/toasts.js:40
+msgid "Global styles updated"
+msgstr ""
+
+#: src/store/toasts.js:41
+msgid "Style Book updated"
+msgstr ""
+
+#: src/store/toasts.js:48
+msgid "Update applied"
+msgstr ""
+
+#: src/store/undo-toast-action.js:5
+msgid "The change could not be reverted."
+msgstr ""
+
+#: src/store/undo-toast-action.js:9
+msgid "Undo failed"
+msgstr ""
+
+#: src/store/update-helpers.js:603
+msgid "The browser validation result no longer matches the server-approved structural operation."
+msgstr ""
+
+#: src/store/update-helpers.js:2184
+msgid "Flavor Agent returned no block-lane suggestions for this request."
+msgstr ""
+
+#: src/store/update-helpers.js:2207
+msgid "At least one block suggestion was removed because its attribute updates were empty or unsafe after theme-safety checks."
+msgstr ""
+
+#: src/store/update-helpers.js:2220
+msgid "At least one block suggestion was removed because it targeted an unsupported panel, style path, preset, or style variation for this block."
+msgstr ""
+
+#: src/store/update-helpers.js:2235
+msgid "At least one block suggestion targeted unsupported bindings for this block."
+msgstr ""
+
+#: src/store/update-helpers.js:2239
+msgid "Binding-only block suggestions were removed because this block exposes no bindable attributes."
+msgstr ""
+
+#: src/store/update-helpers.js:2249
+msgid "The selected block is in disabled editing mode, so block-lane suggestions cannot be used."
+msgstr ""
+
+#: src/store/update-helpers.js:2263
+msgid "This block is content-restricted and exposes editable content only through inner blocks, so wrapper-level block updates were removed."
+msgstr ""
+
+#: src/store/update-helpers.js:2274
+msgid "This block is content-restricted, so non-content block updates were removed."
+msgstr ""
+
+#: src/store/update-helpers.js:2285
+msgid "Block-lane suggestions were removed after validation for the current block context."
+msgstr ""
+
+#: src/store/update-helpers.js:2301
+msgid "The block context exposed no mapped inspector panels for this request."
+msgstr ""
+
+#: src/store/update-helpers.js:2332
+msgid "No block-lane suggestions returned"
+msgstr ""
+
+#: src/store/update-helpers.js:2333
+msgid "Block-lane suggestions were filtered out"
+msgstr ""
+
+#. translators: %s: selected Style Book block title.
+#: src/style-book/StyleBookRecommender.js:122
+#, js-format
+msgid "Flavor Agent will keep changes inside the theme-backed Style Book controls for %s. Raw CSS and custom CSS are out of scope."
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:128
+msgid "Select a Style Book example to request safe, theme-backed block style changes. Raw CSS and custom CSS are out of scope."
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:138
+msgid "the current live block styles or prompt"
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:144
+msgid "Only the operations shown here will run against the active Style Book example."
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:161
+msgid "Review stays required before Flavor Agent applies theme-backed block style changes to the active Style Book example."
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:213
+msgid "Describe the block style direction"
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:217
+msgid "Describe the block style direction you want."
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:224
+msgid "Make this block feel more editorial"
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:225
+msgid "Strengthen emphasis and hierarchy"
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:226
+msgid "Soften spacing and surfaces"
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:366
+msgid "Recent AI Style Book Actions"
+msgstr ""
+
+#: src/style-book/StyleBookRecommender.js:367
+msgid "Undo is only available while the current Style Book block styles still match the applied AI change."
+msgstr ""
+
+#. translators: %s: theme style variation title.
+#: src/style-surfaces/presentation.js:30
+#, js-format
+msgid "Switch to variation: %s"
+msgstr ""
+
+#: src/style-surfaces/presentation.js:49
+msgid "Review this change before applying it."
+msgstr ""
+
+#: src/style-surfaces/presentation.js:117
+msgid "Reviewing"
+msgstr ""
+
+#: src/style-surfaces/presentation.js:120
+msgid "suggestion"
+msgstr ""
+
+#: src/style-surfaces/presentation.js:151
+msgid "Review open"
+msgstr ""
+
+#: src/template-parts/template-part-recommender-helpers.js:285
+msgid "Start of template part"
+msgstr ""
+
+#: src/template-parts/template-part-recommender-helpers.js:289
+msgid "End of template part"
+msgstr ""
+
+#: src/template-parts/TemplatePartRecommender.js:76
+msgid "template-part"
+msgstr ""
+
+#: src/template-parts/TemplatePartRecommender.js:78
+msgid "the current live structure or prompt"
+msgstr ""
+
+#: src/template-parts/TemplatePartRecommender.js:905
+msgid "AI Template Part Recommendations"
+msgstr ""
+
+#. translators: %s: template part area label, such as "Header".
+#: src/template-parts/TemplatePartRecommender.js:914
+#, js-format
+msgid "Area: %s"
+msgstr ""
+
+#. translators: %s: template part slug.
+#: src/template-parts/TemplatePartRecommender.js:921
+#, js-format
+msgid "Slug: %s"
+msgstr ""
+
+#: src/template-parts/TemplatePartRecommender.js:944
+#: src/templates/TemplateRecommender.js:845
+msgid "Describe the structure or layout you want."
+msgstr ""
+
+#: src/template-parts/TemplatePartRecommender.js:948
+msgid "What are you trying to achieve with this template part?"
+msgstr ""
+
+#: src/template-parts/TemplatePartRecommender.js:1192
+msgid "Details"
+msgstr ""
+
+#: src/template-parts/TemplatePartRecommender.js:1197
+msgid "Focus Blocks"
+msgstr ""
+
+#: src/template-parts/TemplatePartRecommender.js:1245
+#: src/templates/TemplateRecommender.js:1205
+msgid "Suggested Patterns"
+msgstr ""
+
+#: src/templates/template-recommender-helpers.js:78
+msgid "Current Template"
+msgstr ""
+
+#: src/templates/template-recommender-helpers.js:550
+#: src/templates/template-recommender-helpers.js:564
+msgid "Browse pattern"
+msgstr ""
+
+#: src/templates/template-recommender-helpers.js:587
+#: src/templates/template-recommender-helpers.js:619
+msgid "Review in editor"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:94
+msgid "the template"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:101
+msgid "current template part"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:107
+msgid "the current block"
+msgstr ""
+
+#. translators: %s: one-based nested block path.
+#: src/templates/TemplateRecommender.js:138
+#, js-format
+msgid "Path %s"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:146
+msgid "Start of template"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:148
+msgid "End of template"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:150
+msgid "Before target block"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:152
+msgid "After target block"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:174
+msgid "at the start of the template."
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:181
+msgid "at the end of the template."
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:195
+msgid "target block"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:198
+msgid "target path"
+msgstr ""
+
+#. translators: 1: placement label. 2: block path label.
+#: src/templates/TemplateRecommender.js:203
+#, js-format
+msgid "%1$s (%2$s)"
+msgstr ""
+
+#. translators: 1: before/after relation. 2: block label. 3: block path label.
+#: src/templates/TemplateRecommender.js:209
+#, js-format
+msgid "%1$s %2$s at %3$s."
+msgstr ""
+
+#. translators: %s: selected block label.
+#: src/templates/TemplateRecommender.js:231
+#, js-format
+msgid "after %s"
+msgstr ""
+
+#. translators: %s: root block label.
+#: src/templates/TemplateRecommender.js:239
+#, js-format
+msgid "inside %s"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:248
+msgid "at the start of the template"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:251
+msgid "at the end of the template"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:256
+msgid "template"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:258
+msgid "the current live template or prompt"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:823
+msgid "AI Template Recommendations"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:849
+msgid "What are you trying to achieve with this template?"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:1063
+msgid "Manual"
+msgstr ""
+
+#: src/templates/TemplateRecommender.js:1112
+msgid "Template Parts"
+msgstr ""
+
+#: src/utils/block-structural-actions.js:15
+msgid "The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:266
+msgid "The selected block is no longer available. Refresh recommendations and try again."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:270
+msgid "The selected block no longer matches the reviewed operation. Refresh recommendations and try again."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:274
+msgid "The recommended pattern is no longer available. Refresh recommendations and try again."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:278
+msgid "The selected block is locked and cannot be structurally changed."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:282
+msgid "The selected block is content-only and cannot be structurally changed."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:286
+msgid "Block structural actions are disabled for this environment."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:290
+msgid "The structural operation is no longer valid. Refresh recommendations and try again."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:574
+msgid "The selected block could not be removed before replacement."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:745
+#: src/utils/block-structural-actions.js:790
+msgid "This block structural action is missing its recorded structure and cannot be undone automatically."
+msgstr ""
+
+#: src/utils/capability-flags.js:133
+#: src/utils/capability-flags.js:169
+#: src/utils/capability-flags.js:182
+msgid "Open Flavor Agent settings"
+msgstr ""
+
+#: src/utils/capability-flags.js:198
+msgid "Content recommendations need a text-generation provider configured in Settings > Connectors."
+msgstr ""
+
+#: src/utils/capability-flags.js:204
+msgid "Template recommendations need a text-generation provider configured in Settings > Connectors."
+msgstr ""
+
+#: src/utils/capability-flags.js:210
+msgid "Template-part recommendations need a text-generation provider configured in Settings > Connectors."
+msgstr ""
+
+#: src/utils/capability-flags.js:220
+msgid "Navigation recommendations need a text-generation provider configured in Settings > Connectors."
+msgstr ""
+
+#: src/utils/capability-flags.js:230
+msgid "Global Styles recommendations need a text-generation provider configured in Settings > Connectors."
+msgstr ""
+
+#: src/utils/capability-flags.js:236
+msgid "Style Book recommendations are not available in this plugin build yet."
+msgstr ""
+
+#: src/utils/capability-flags.js:244
+msgid "Style Book recommendations need a text-generation provider configured in Settings > Connectors."
+msgstr ""
+
+#: src/utils/capability-flags.js:261
+msgid "This Flavor Agent surface is not available right now."
+msgstr ""
+
+#. translators: 1: AI connector ID. 2: caller plugin basename.
+#: src/utils/capability-flags.js:392
+#, js-format
+msgid "Flavor Agent needs administrator approval to use the %1$s connector. An approval request for %2$s has been submitted."
+msgstr ""
+
+#. translators: 1: AI connector ID. 2: caller plugin basename.
+#: src/utils/capability-flags.js:401
+#, js-format
+msgid "Flavor Agent needs administrator approval to use the %1$s connector. An approval request for %2$s has been submitted. Ask an administrator to review it in Connector Approvals."
+msgstr ""
+
+#: src/utils/capability-flags.js:408
+msgid "Open approvals page"
+msgstr ""
+
+#: src/utils/docs-grounding-warning.js:45
+msgid "Suggestions are running without developer-docs grounding right now because the docs search request failed. They are still usable; grounding will return when the search backend is reachable."
+msgstr ""
+
+#: src/utils/docs-grounding-warning.js:50
+msgid "Suggestions are running without developer-docs grounding right now because this request did not return any trusted Developer Docs matches. They are still usable."
+msgstr ""
+
+#: src/utils/docs-grounding-warning.js:55
+msgid "Suggestions are running without developer-docs grounding right now because this request reused a cached no-match Developer Docs result. They are still usable."
+msgstr ""
+
+#: src/utils/docs-grounding-warning.js:60
+msgid "Suggestions are running without developer-docs grounding right now because this review check is cache-only and no docs result was cached for it. They are still usable."
+msgstr ""
+
+#: src/utils/docs-grounding-warning.js:65
+msgid "Suggestions are running without developer-docs grounding right now because this request did not produce a Developer Docs query. They are still usable."
+msgstr ""
+
+#: src/utils/docs-grounding-warning.js:70
+msgid "Suggestions are running without developer-docs grounding right now because the built-in Developer Docs endpoint is not configured. They are still usable."
+msgstr ""
+
+#: src/utils/docs-grounding-warning.js:75
+msgid "Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable."
+msgstr ""
+
+#. translators: %d: number of AI actions.
+#: src/utils/format-count.js:24
+#, js-format
+msgid "%d action"
+msgid_plural "%d actions"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of blocks.
+#: src/utils/format-count.js:30
+#, js-format
+msgid "%d block"
+msgid_plural "%d blocks"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of changes.
+#: src/utils/format-count.js:36
+#, js-format
+msgid "%d change"
+msgid_plural "%d changes"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of ideas.
+#: src/utils/format-count.js:42
+#, js-format
+msgid "%d idea"
+msgid_plural "%d ideas"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of items.
+#: src/utils/format-count.js:48
+#, js-format
+msgid "%d item"
+msgid_plural "%d items"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of notes.
+#: src/utils/format-count.js:54
+#, js-format
+msgid "%d note"
+msgid_plural "%d notes"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of operations.
+#: src/utils/format-count.js:60
+#, js-format
+msgid "%d operation"
+msgid_plural "%d operations"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of blocks that support pattern overrides.
+#: src/utils/format-count.js:66
+#, js-format
+msgid "%d override-ready block"
+msgid_plural "%d override-ready blocks"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of template parts.
+#: src/utils/format-count.js:77
+#, js-format
+msgid "%d part"
+msgid_plural "%d parts"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of patterns.
+#: src/utils/format-count.js:83
+#, js-format
+msgid "%d pattern"
+msgid_plural "%d patterns"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of ranked patterns.
+#: src/utils/format-count.js:89
+#, js-format
+msgid "%d ranked pattern"
+msgid_plural "%d ranked patterns"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of recommendations.
+#: src/utils/format-count.js:100
+#, js-format
+msgid "%d recommendation"
+msgid_plural "%d recommendations"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of suggestions.
+#: src/utils/format-count.js:111
+#, js-format
+msgid "%d suggestion"
+msgid_plural "%d suggestions"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of synced patterns.
+#: src/utils/format-count.js:117
+#, js-format
+msgid "%d synced pattern"
+msgid_plural "%d synced patterns"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of template operations.
+#: src/utils/format-count.js:128
+#, js-format
+msgid "%d template operation"
+msgid_plural "%d template operations"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of template-part operations.
+#: src/utils/format-count.js:139
+#, js-format
+msgid "%d template-part operation"
+msgid_plural "%d template-part operations"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of viewport constraints.
+#: src/utils/format-count.js:150
+#, js-format
+msgid "%d viewport constraint"
+msgid_plural "%d viewport constraints"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/utils/recommendation-actionability.js:46
+msgid "Safe local attribute update"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:50
+msgid "Valid structural operation"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:54
+msgid "Missing pattern context"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:58
+#: src/utils/validation-reasons.js:28
+msgid "Pattern unavailable"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:62
+msgid "Target stale"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:63
+msgid "Target ambiguous"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:67
+msgid "Locked target"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:71
+msgid "Unsupported operation"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:75
+msgid "Multi-target structural change"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:79
+msgid "Manual follow-through"
+msgstr ""
+
+#. translators: %s: recommendation surface label.
+#: src/utils/recommendation-stale-reasons.js:42
+#, js-format
+msgid "This %s result no longer matches the current server review context. Refresh before reviewing or applying anything from the previous result."
+msgstr ""
+
+#. translators: %s: recommendation surface label.
+#: src/utils/recommendation-stale-reasons.js:53
+#, js-format
+msgid "This %s result no longer matches the current server-resolved apply context. Refresh before reviewing or applying anything from the previous result."
+msgstr ""
+
+#. translators: %s: recommendation surface label.
+#: src/utils/recommendation-stale-reasons.js:64
+#, js-format
+msgid "This %s result is missing server-resolved apply context. Refresh before reviewing or applying anything from the previous result."
+msgstr ""
+
+#. translators: 1: recommendation surface label. 2: live context description.
+#: src/utils/recommendation-stale-reasons.js:74
+#, js-format
+msgid "This %1$s result no longer matches %2$s. Refresh before reviewing or applying anything from the previous result."
+msgstr ""
+
+#: src/utils/template-actions.js:540
+msgid "Flavor Agent could not resolve the current insertion container for this template-part operation."
+msgstr ""
+
+#: src/utils/template-actions.js:597
+msgid "Flavor Agent could not resolve the insertion point needed to restore the previous block state."
+msgstr ""
+
+#: src/utils/template-actions.js:639
+msgid "Flavor Agent could not restore the previous block state automatically."
+msgstr ""
+
+#: src/utils/template-actions.js:809
+msgid "Flavor Agent could not keep this document aligned with the current WordPress template constraints. The changes were reverted."
+msgstr ""
+
+#: src/utils/template-actions.js:1237
+msgid "Flavor Agent could not resolve the targetPath for this template insertion."
+msgstr ""
+
+#: src/utils/template-actions.js:1298
+msgid "Flavor Agent could not resolve the current insertion container for this pattern."
+msgstr ""
+
+#: src/utils/template-actions.js:1416
+msgid "Flavor Agent could not resolve the targetPath for this template-part insertion."
+msgstr ""
+
+#: src/utils/template-actions.js:1531
+msgid "Flavor Agent could not resolve the targetPath for this template-part operation."
+msgstr ""
+
+#: src/utils/template-actions.js:1542
+msgid "The target block path no longer exists in this template part. Regenerate recommendations and try again."
+msgstr ""
+
+#: src/utils/template-actions.js:1555
+msgid "Flavor Agent could not resolve the parent container for this template-part operation."
+msgstr ""
+
+#: src/utils/template-actions.js:1674
+#: src/utils/template-actions.js:1701
+msgid "Template-part content changed after this block was removed and cannot be undone automatically."
+msgstr ""
+
+#: src/utils/template-actions.js:1691
+msgid "Flavor Agent could not resolve the parent container for this removed block."
+msgstr ""
+
+#: src/utils/template-actions.js:2020
+#: src/utils/template-operation-sequence.js:151
+msgid "This suggestion targets overlapping template-part block paths and cannot be applied automatically."
+msgstr ""
+
+#: src/utils/template-actions.js:2054
+msgid "Flavor Agent could not update the working template-part structure for this insertion."
+msgstr ""
+
+#: src/utils/template-actions.js:2086
+msgid "Flavor Agent could not update the working template-part structure for this replacement."
+msgstr ""
+
+#: src/utils/template-actions.js:2117
+msgid "Flavor Agent could not update the working template-part structure for this removal."
+msgstr ""
+
+#: src/utils/template-actions.js:2423
+msgid "The targeted block is no longer available for replacement. Regenerate recommendations and try again."
+msgstr ""
+
+#: src/utils/template-actions.js:2578
+msgid "The targeted block is no longer available for removal. Regenerate recommendations and try again."
+msgstr ""
+
+#: src/utils/template-actions.js:2777
+msgid "A template-part block from this AI action is no longer available to undo."
+msgstr ""
+
+#: src/utils/template-actions.js:2831
+#: src/utils/template-actions.js:2848
+msgid "This pattern insertion was recorded before refresh-safe undo support and cannot be undone automatically."
+msgstr ""
+
+#: src/utils/template-actions.js:2835
+msgid "This pattern insertion does not include the stable insertion locator needed for automatic undo."
+msgstr ""
+
+#: src/utils/template-actions.js:2852
+msgid "This pattern insertion does not include the recorded post-apply snapshot needed for automatic undo."
+msgstr ""
+
+#: src/utils/template-actions.js:2871
+#: src/utils/template-actions.js:2889
+msgid "Inserted pattern content changed after apply and cannot be undone automatically."
+msgstr ""
+
+#: src/utils/template-actions.js:2948
+msgid "This template-part block replacement is missing the removed-block snapshot needed for automatic undo."
+msgstr ""
+
+#: src/utils/template-actions.js:2973
+msgid "This template-part block removal is missing the removed-block snapshot needed for automatic undo."
+msgstr ""
+
+#: src/utils/template-actions.js:3010
+msgid "This AI template action does not include undoable operations."
+msgstr ""
+
+#: src/utils/template-actions.js:3077
+msgid "This AI template-part action does not include undoable operations."
+msgstr ""
+
+#: src/utils/template-actions.js:3185
+msgid "This AI template action can no longer be undone automatically."
+msgstr ""
+
+#: src/utils/template-actions.js:3234
+msgid "This AI template-part action can no longer be undone automatically."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:166
+msgid "This suggestion does not include any executable template operations."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:193
+msgid "Template-part assignments must include both a slug and an area."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:228
+msgid "Template-part replacements must include currentSlug, slug, and area."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:273
+msgid "Pattern insertions must include a pattern name."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:284
+msgid "Only one pattern insertion can be applied automatically per suggestion."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:296
+msgid "Template pattern insertions that include a targetPath must provide a non-empty array of non-negative indexes."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:307
+msgid "Template pattern insertions must include a placement."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:324
+msgid "Template pattern insertions must use start, end, before_block_path, or after_block_path."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:335
+msgid "Anchored template pattern insertions must include a targetPath."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:385
+msgid "This suggestion does not include any executable template-part operations."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:396
+msgid "Template-part suggestions can apply at most 3 operations automatically."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:430
+#: src/utils/template-operation-sequence.js:441
+msgid "Template-part pattern insertions must include both a pattern name and placement."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:457
+msgid "Template-part pattern insertions must use an explicit start, end, before_block_path, or after_block_path placement."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:468
+msgid "Anchored template-part pattern insertions must include a targetPath."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:524
+#: src/utils/template-operation-sequence.js:535
+msgid "Template-part block replacements must include patternName, expectedBlockName, and targetPath."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:549
+msgid "Template-part block replacements must use a matching expectedBlockName and expectedTarget.name."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:591
+msgid "Template-part block removals must include expectedBlockName and targetPath."
+msgstr ""
+
+#: src/utils/template-operation-sequence.js:605
+msgid "Template-part block removals must use a matching expectedBlockName and expectedTarget.name."
+msgstr ""
+
+#: src/utils/validation-reasons.js:17
+msgid "Insufficient color contrast"
+msgstr ""
+
+#: src/utils/validation-reasons.js:18
+msgid "Scope not supported"
+msgstr ""
+
+#: src/utils/validation-reasons.js:19
+msgid "Style path not supported"
+msgstr ""
+
+#: src/utils/validation-reasons.js:20
+msgid "A preset value is required"
+msgstr ""
+
+#: src/utils/validation-reasons.js:21
+msgid "Preset unavailable"
+msgstr ""
+
+#: src/utils/validation-reasons.js:22
+msgid "Invalid value"
+msgstr ""
+
+#: src/utils/validation-reasons.js:23
+msgid "Style variation unavailable"
+msgstr ""
+
+#: src/utils/validation-reasons.js:24
+msgid "No applicable changes"
+msgstr ""
+
+#: src/utils/validation-reasons.js:25
+msgid "Template area not allowed"
+msgstr ""
+
+#: src/utils/validation-reasons.js:26
+msgid "No template part assigned"
+msgstr ""
+
+#: src/utils/validation-reasons.js:27
+msgid "Template area mismatch"
+msgstr ""
+
+#: src/utils/validation-reasons.js:29
+msgid "Pattern already inserted"
+msgstr ""
+
+#: src/utils/validation-reasons.js:30
+msgid "Too many changes to apply at once"
+msgstr ""
+
+#: src/utils/validation-reasons.js:35
+msgid "Could not validate the change"
+msgstr ""
+
+#: src/utils/validation-reasons.js:39
+msgid "No change needed"
+msgstr ""

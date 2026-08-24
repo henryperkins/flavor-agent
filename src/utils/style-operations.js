@@ -289,9 +289,19 @@ function getContrastScopeKeysInOrder( scopeKeys = [] ) {
 		}
 	}
 
+	// Plain code-unit ordering, matching PHP `sort()` in
+	// StyleContrastValidator::scope_keys_in_enum_order(). `localeCompare` is
+	// locale-aware and would report a different scope first on some locales
+	// when several block scopes fail at once.
 	return [
 		...known.filter( Boolean ),
-		...blocks.sort( ( left, right ) => left.localeCompare( right ) ),
+		...blocks.sort( ( left, right ) => {
+			if ( left === right ) {
+				return 0;
+			}
+
+			return left < right ? -1 : 1;
+		} ),
 	];
 }
 
@@ -422,10 +432,36 @@ function getContrastRatio( foregroundHex, backgroundHex ) {
 	return ( lighter + 0.05 ) / ( darker + 0.05 );
 }
 
+/**
+ * Name a contrast operand for the failure message.
+ *
+ * Accepts both preset spellings the server accepts. `parsePresetValue()` only
+ * matches the `var:preset|color|slug` form, so the CSS-custom-property spelling
+ * needs its own branch — without it the client reported a raw hex where
+ * `StyleContrastValidator::label_for()` reported the preset slug, and the same
+ * rejected suggestion produced two different messages.
+ *
+ * Kept behaviorally identical to `StyleContrastValidator::label_for()`.
+ *
+ * @param {Object} operation   Contrast operand operation.
+ * @param {string} hexFallback Resolved hex to fall back to.
+ * @return {string} Preset slug when the value names one, else the hex.
+ */
 function getContrastLabel( operation, hexFallback ) {
 	const parsed = parsePresetValue( operation?.value );
 
-	return parsed?.type === 'color' ? parsed.slug : hexFallback;
+	if ( parsed?.type === 'color' ) {
+		return parsed.slug;
+	}
+
+	const cssVarMatch =
+		typeof operation?.value === 'string'
+			? operation.value.match(
+					/^var\(--wp--preset--color--([a-z0-9_-]+)\)$/i
+			  )
+			: null;
+
+	return cssVarMatch ? sanitizeStyleKey( cssVarMatch[ 1 ] ) : hexFallback;
 }
 
 function validateReadableColorContrast( operations = [], context = {} ) {
