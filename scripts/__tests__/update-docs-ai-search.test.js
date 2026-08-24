@@ -294,6 +294,56 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	test( 'rejects WordPress 7.0 release-cycle evidence immediately before the release floor', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-08-20T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/05/19/wordpress-7-0/',
+									published_at: '2026-05-19T23:59:59.999Z',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [ 'developer-docs' ],
+			freshness: {
+				developerDocs: true,
+				releaseCycle: false,
+			},
+			evidence: [
+				{ sourceType: 'developer-docs', current: true, basis: 'retrieved-at' },
+				{ sourceType: 'make-core', current: false, basis: 'stale-published-at' },
+			],
+		} );
+	} );
+
 	test( 'rejects corpus sources with missing freshness timestamps', async () => {
 		global.fetch = jest.fn( () =>
 			mockJsonResponse( {
@@ -489,6 +539,65 @@ describe( 'update-docs-ai-search helpers', () => {
 			evidence: [
 				{ current: true, basis: 'retrieved-at' },
 				{ current: true, basis: 'published-at' },
+			],
+		} );
+	} );
+
+	test( 'prefers structured camelCase metadata over snake_case frontmatter aliases', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						sourceUrl: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrievedAt: '2026-08-20T00:00:00Z',
+					},
+				},
+				text: [
+					'---',
+					'source_url: "http://developer.wordpress.org/reference/functions/register-block-type/"',
+					'retrieved_at: "2099-01-01T00:00:00Z"',
+					'---',
+				].join( '\n' ),
+			},
+			{
+				item: {
+					metadata: {
+						sourceUrl: 'https://make.wordpress.org/core/2026/08/12/wordpress-7-0-dev-note/',
+						publishedAt: '2026-08-12T00:00:00Z',
+					},
+				},
+				text: [
+					'---',
+					'source_url: "https://make.wordpress.org/core/2026/03/15/old-note/"',
+					'published_at: "2026-03-15T00:00:00Z"',
+					'---',
+				].join( '\n' ),
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			evidence: [
+				{
+					url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+					retrievedAt: '2026-08-20T00:00:00.000Z',
+					current: true,
+				},
+				{
+					url: 'https://make.wordpress.org/core/2026/08/12/wordpress-7-0-dev-note/',
+					publishedAt: '2026-08-12T00:00:00.000Z',
+					current: true,
+				},
 			],
 		} );
 	} );

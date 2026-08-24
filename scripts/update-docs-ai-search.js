@@ -2151,7 +2151,36 @@ function chunkMetadata( chunk ) {
 	}
 	const item = chunk.item && typeof chunk.item === 'object' ? chunk.item : {};
 	const itemMetadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
-	return { ...chunkFrontmatterMetadata( chunk ), ...itemMetadata };
+	const frontmatterMetadata = chunkFrontmatterMetadata( chunk );
+	return {
+		...frontmatterMetadata,
+		...itemMetadata,
+		source_url:
+			metadataValue( itemMetadata, [
+				'source_url',
+				'sourceUrl',
+				'url',
+				'original_url',
+				'originalUrl',
+				'permalink',
+			] ) || metadataValue( frontmatterMetadata, [ 'source_url', 'original_url' ] ),
+		retrieved_at:
+			metadataValue( itemMetadata, [ 'retrieved_at', 'retrievedAt' ] ) ||
+			metadataValue( frontmatterMetadata, [ 'retrieved_at' ] ),
+		published_at:
+			metadataValue( itemMetadata, [ 'published_at', 'publishedAt' ] ) ||
+			metadataValue( frontmatterMetadata, [ 'published_at' ] ),
+	};
+}
+
+function metadataValue( metadata, keys ) {
+	for ( const key of keys ) {
+		const value = metadata[ key ];
+		if ( value !== undefined && value !== null && String( value ).trim() ) {
+			return value;
+		}
+	}
+	return '';
 }
 
 function chunkFrontmatterMetadata( chunk ) {
