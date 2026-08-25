@@ -1313,7 +1313,13 @@ async function openFirstTemplateEditor( page ) {
 		} )
 		.first();
 
-	await expect( templateButton ).toBeVisible();
+	// The Site Editor renders the DataViews template grid before its records
+	// resolve, so the row exists as `gridcell "Navigate to item Actions"` with
+	// no title for a while. On WordPress 7.1 that gap routinely outlasts the
+	// default 5s expect timeout under Playground — the same test passes in
+	// isolation and fails when the suite is under load — so wait explicitly on
+	// the title rather than on the grid being present.
+	await expect( templateButton ).toBeVisible( { timeout: 60_000 } );
 	await templateButton.click();
 	await page.waitForFunction(
 		() =>
@@ -2130,7 +2136,7 @@ async function getTemplatePartInsertState( page, insertedContent ) {
 
 // Playground WP 6.9.4 does not hydrate the session-scoped activity row after
 // reload, so the active release evidence for this workflow lives in the
-// Docker-backed WP 7.0 harness.
+// Docker-backed WP 7.1 harness.
 test( '@wp70-site-editor block inspector smoke applies, persists, and undoes AI recommendations', async ( {
 	page,
 } ) => {
@@ -4597,7 +4603,7 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 } );
 
 // Playground WP 6.9.4 rejects root template insertion in this path even after
-// the plugin preflight passes. The WP 7.0 harness exercises the shipped
+// the plugin preflight passes. The WP 7.1 harness exercises the shipped
 // template apply workflow against the Docker-backed editor runtime.
 test( '@wp70-site-editor template surface smoke previews and applies executable template recommendations', async ( {
 	page,

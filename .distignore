@@ -5,6 +5,7 @@
 .devcontainer
 .github
 .git
+.worktrees
 .gitattributes
 .vscode
 eslint.config.js

@@ -32,9 +32,9 @@ npm run dist           # release packaging via scripts/build-dist.sh → dist/
 npm run lint:js        # ESLint on src/
 npm run lint:plugin    # WP Plugin Check (requires bash + wp-cli + WP_PLUGIN_CHECK_PATH)
 npm run test:unit -- --runInBand  # Jest unit tests
-npm run test:e2e       # Playwright smoke suites (Playground + WP 7.0)
+npm run test:e2e       # Playwright smoke suites (Playground + Site Editor, both WP 7.1)
 npm run test:e2e:playground  # fast Playground smoke suite
-npm run test:e2e:wp70  # Docker-backed WP 7.0 Site Editor suite
+npm run test:e2e:wp70  # Docker-backed WP 7.1 Site Editor suite
 npm run verify         # aggregate: build + lint + plugin-check + unit + PHP + E2E → output/verify/summary.json
 npm run verify:strict  # verify with --strict (warnings fail the run)
 npm run verify -- --skip=lint-plugin  # omit plugin-check when WP-CLI or WP root is unavailable
@@ -46,8 +46,8 @@ npm run ensure:local-env  # pre-flight check for docker compose + .env wiring
 npm run wp:start       # docker compose up; follow docs/reference/local-environment-setup.md for nightly + companion plugins
 npm run wp:stop        # docker compose down
 npm run wp:reset       # docker compose down -v (destroys volumes)
-npm run wp:e2e:wp70:bootstrap  # provision WP 7.0 browser harness
-npm run wp:e2e:wp70:teardown   # stop WP 7.0 browser harness
+npm run wp:e2e:wp70:bootstrap  # provision WP 7.1 browser harness
+npm run wp:e2e:wp70:teardown   # stop WP 7.1 browser harness
 
 composer install       # install PHP deps (PSR-4 autoloader)
 composer lint:php      # WPCS via phpcs

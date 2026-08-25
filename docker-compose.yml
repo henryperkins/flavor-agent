@@ -3,15 +3,28 @@
 # before any npm script can run `scripts/ensure-local-env.js` to create `.env`.
 services:
     db:
-        image: mariadb:11.4
+        image: ${MARIADB_IMAGE:-dhi.io/mariadb:11.8-debian13-dev}
         restart: unless-stopped
         environment:
+            # Honoured by the Docker Official mariadb image. DHI's entrypoint
+            # ignores all but MARIADB_ROOT_PASSWORD (see the db-bootstrap
+            # service below), but they are kept so MARIADB_IMAGE can be pointed
+            # back at `mariadb:11.4` unchanged.
             MARIADB_DATABASE: ${MYSQL_DATABASE:-wordpress}
             MARIADB_USER: ${MYSQL_USER:-wordpress}
             MARIADB_PASSWORD: ${MYSQL_PASSWORD:-wordpress}
             MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+        # DHI initialises root with `--auth-root-authentication-method=normal`,
+        # so root needs a password even over the local socket and the bundled
+        # healthcheck.sh cannot run its innodb_initialized query without one.
+        # MYSQL_PWD is supplied here rather than in `environment:` on purpose:
+        # the entrypoint's own "Configuring root users" step connects as
+        # passwordless root during first-time init, and a container-wide
+        # MYSQL_PWD makes that step fail, leaving root with no password at all.
         healthcheck:
-            test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+            test:
+                - CMD-SHELL
+                - MYSQL_PWD="$$MARIADB_ROOT_PASSWORD" healthcheck.sh --connect --innodb_initialized
             interval: 10s
             timeout: 5s
             retries: 10
@@ -19,12 +32,33 @@ services:
         volumes:
             - db_data:/var/lib/mysql
 
+    # DHI's MariaDB entrypoint provisions the root account only: it has no
+    # MARIADB_DATABASE/MARIADB_USER handling and no /docker-entrypoint-initdb.d
+    # hook, so the application database and user are created here. Runs once per
+    # `up`, and the SQL is idempotent, which also makes it a harmless no-op
+    # against the Docker Official image (which provisions them from the
+    # MARIADB_* variables above).
+    db-bootstrap:
+        image: ${MARIADB_IMAGE:-dhi.io/mariadb:11.8-debian13-dev}
+        restart: 'no'
+        depends_on:
+            db:
+                condition: service_healthy
+        environment:
+            # Keeps the root password off the command line.
+            MYSQL_PWD: ${MYSQL_ROOT_PASSWORD:-root}
+        entrypoint: ['mariadb']
+        command:
+            - --host=db
+            - --user=root
+            - "--execute=CREATE DATABASE IF NOT EXISTS `${MYSQL_DATABASE:-wordpress}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER IF NOT EXISTS '${MYSQL_USER:-wordpress}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD:-wordpress}'; ALTER USER '${MYSQL_USER:-wordpress}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD:-wordpress}'; GRANT ALL PRIVILEGES ON `${MYSQL_DATABASE:-wordpress}`.* TO '${MYSQL_USER:-wordpress}'@'%';"
+
     wordpress:
         build:
             context: .
             dockerfile: docker/wordpress/Dockerfile
             args:
-                WORDPRESS_BASE_IMAGE: ${WORDPRESS_BASE_IMAGE:-wordpress:beta-7.1-php8.2-apache}
+                WORDPRESS_BASE_IMAGE: ${WORDPRESS_BASE_IMAGE:-wordpress:7.1.0-php8.3-apache}
         restart: unless-stopped
         healthcheck:
             test:
@@ -37,6 +71,8 @@ services:
         depends_on:
             db:
                 condition: service_healthy
+            db-bootstrap:
+                condition: service_completed_successfully
         environment:
             WORDPRESS_DB_HOST: db:3306
             WORDPRESS_DB_NAME: ${MYSQL_DATABASE:-wordpress}
@@ -50,25 +86,9 @@ services:
                 define( 'SCRIPT_DEBUG', true );
                 define( 'DISALLOW_FILE_MODS', false );
                 define( 'WP_ENVIRONMENT_TYPE', 'local' );
-        command:
-            - bash
-            - -lc
-            - |
-                set -e
-                loopback_port="$${WORDPRESS_LOOPBACK_PORT:-8888}"
-                if [ "$${loopback_port}" != "80" ]; then
-                    if ! grep -Eq "^Listen[[:space:]]+$${loopback_port}([[:space:]]|$$)" /etc/apache2/ports.conf; then
-                        printf '\nListen %s\n' "$${loopback_port}" >> /etc/apache2/ports.conf
-                    fi
-                    sed "s/<VirtualHost \*:80>/<VirtualHost *:$${loopback_port}>/" \
-                        /etc/apache2/sites-available/000-default.conf \
-                        > /etc/apache2/sites-available/localhost-loopback.conf
-                    a2ensite localhost-loopback >/dev/null
-                fi
-                mkdir -p /var/www/html/wp-content/upgrade
-                chown -R www-data:www-data /var/www/html/wp-content/upgrade
-                chmod 775 /var/www/html/wp-content/upgrade
-                exec docker-entrypoint.sh apache2-foreground
+        # Startup lives in docker/wordpress/entrypoint.sh: it prepares the
+        # writable paths, configures the loopback listener, and starts nginx
+        # (DHI php-fpm bases) or Apache (Docker Official bases).
         ports:
             - '${WORDPRESS_PORT:-8888}:80'
         volumes:
@@ -80,6 +100,8 @@ services:
             - ./tests/e2e/wp70-themes/flavor-agent-child:/var/www/html/wp-content/themes/flavor-agent-child
         working_dir: /var/www/html
 
+    # No Docker Hardened Image is published for phpMyAdmin, so this stays on the
+    # Docker Official image.
     phpmyadmin:
         image: phpmyadmin:5-apache
         restart: unless-stopped

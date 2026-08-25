@@ -18,29 +18,64 @@ The local WordPress stack also expects Docker, Docker Compose, PHP, Composer, WP
 
 ## WordPress Image Pinning
 
-The primary local stack defaults to `wordpress:beta-7.1-php8.2-apache`, the current WordPress 7.1 release-candidate line. WordPress does not publish a `nightly` Docker tag; the `beta-*` tags are the closest bleeding-edge tags on Docker Hub, and they cover release candidates as well as betas. Keeping the `7.1` segment matters: the tag rolls forward on its own through RC2 and later, but stays on the 7.1 line, whereas the bare `beta` tag silently jumps to 7.2 betas as soon as those start publishing. To pin a different build (for example, to match CI), override `WORDPRESS_BASE_IMAGE` in `.env`:
+The primary local stack defaults to the Docker Official WordPress image (Apache/mod_php), with MariaDB on a Docker Hardened Image (DHI):
 
 ```env
-# Current WordPress 7.1 RC line, PHP 8.2 (default)
-WORDPRESS_BASE_IMAGE=wordpress:beta-7.1-php8.2-apache
+WORDPRESS_BASE_IMAGE=wordpress:7.1.0-php8.3-apache
+MARIADB_IMAGE=dhi.io/mariadb:11.8-debian13-dev
+```
 
-# Same line on PHP 8.3, which is what the bare `beta` tag resolves to today
-# WORDPRESS_BASE_IMAGE=wordpress:beta-7.1-apache
+WordPress 7.1 has no Docker Hardened Image yet — DHI's newest WordPress build is `7.0.4` — so the WordPress container stays on the Docker Official image until DHI catches up. MariaDB already runs on DHI.
 
-# Freeze on one exact RC build (does not roll forward to RC2)
-# WORDPRESS_BASE_IMAGE=wordpress:beta-7.1-RC1-php8.2-apache
+DHI images are pulled from `dhi.io` and need a (free) Docker account: `docker login dhi.io`. When the WordPress container runs on a DHI base, the `-dev` tags are mandatory, not a preference — that container needs a shell, `apt-get`, `curl`, Composer and WP-CLI for `npm run wp:*`, `scripts/plugin-check.sh` and the E2E harnesses, and non-dev DHI tags ship none of those. Treat that image as a development harness only.
+
+Two DHI properties shape the setup when the WordPress container runs on a DHI base:
+
+- **php-fpm only.** DHI publishes no Apache/mod_php WordPress variant, so `docker/wordpress/build-setup.sh` installs nginx and `docker/wordpress/entrypoint.sh` fronts php-fpm (127.0.0.1:9000) with it. The published port and the in-container loopback listener are unchanged.
+- **No beta/RC/nightly channel.** DHI ships stable releases only. Tracking trunk still requires the Docker Official `wordpress:beta-*` images.
+
+`docker/wordpress/Dockerfile` supports both base-image families and detects which one it is building on, so switching is a one-line `.env` change:
+
+```env
+# WordPress 7.1 stable on PHP 8.2 (matches the Site Editor E2E harness)
+# WORDPRESS_BASE_IMAGE=wordpress:7.1.0-php8.2-apache
+
+# Track 7.1 pre-releases as they roll forward (RC/beta line for the 7.1 major)
+# WORDPRESS_BASE_IMAGE=wordpress:beta-7.1-php8.2-apache
 
 # Newest pre-release of any major (rolls onto 7.2 betas when they land)
 # WORDPRESS_BASE_IMAGE=wordpress:beta
 
-# Latest stable (downgrade if you need to test against ship-released WordPress)
-# WORDPRESS_BASE_IMAGE=wordpress:php8.2-apache
+# Newest DHI WordPress build (7.0.4; php-fpm + nginx, one major behind)
+# WORDPRESS_BASE_IMAGE=dhi.io/wordpress:7.0.4-debian13-php8.3-fpm-dev
 
-# Pin stable 7.0.0 (matches the WP 7.0 E2E harness)
-# WORDPRESS_BASE_IMAGE=wordpress:7.0.0-php8.2-apache
+# Move the WordPress container back to DHI once DHI publishes a 7.1 build
+# WORDPRESS_BASE_IMAGE=dhi.io/wordpress:7.1.x-debian13-php8.3-fpm-dev
+
+# Docker Official MariaDB
+# MARIADB_IMAGE=mariadb:11.4
 ```
 
-The separate `FLAVOR_AGENT_WP70_BASE_IMAGE` stays pinned to the exact stable `wordpress:7.0.0-php8.2-apache` for the reproducible WP 7.0 E2E harness (`npm run test:e2e:wp70`). The fully qualified patch tag is deliberate: the floating `7.0` tag can be republished, which would silently change what the release gates verified.
+WordPress does not publish a `nightly` Docker tag; the `beta-*` tags are the closest bleeding-edge tags on Docker Hub, and they cover release candidates as well as betas. Keeping the `7.1` segment matters: the tag rolls forward on its own through RC2 and later but stays on the 7.1 line, whereas the bare `beta` tag silently jumps to 7.2 betas as soon as those start publishing.
+
+The separate `FLAVOR_AGENT_WP70_BASE_IMAGE` stays pinned to the exact stable `wordpress:7.1.0-php8.2-apache` for the reproducible Site Editor E2E harness (`npm run test:e2e:wp70`). The fully qualified patch tag is deliberate: the floating `7.1` tag can be republished, which would silently change what the release gates verified. Holding that harness on PHP 8.2 while the dev container runs PHP 8.3 is also deliberate — it keeps the plugin's declared `Requires PHP: 8.2` floor under continuous browser coverage. DHI publishes no 7.1 WordPress build, so moving that harness to DHI would change what the release gates verify and is a deliberate decision, not a drop-in swap.
+
+The `wp70` segment in `scripts/wp70-e2e.js`, `playwright.wp70.config.js`, the `FLAVOR_AGENT_WP70_*` variables, and the `@wp70-site-editor` spec tag is a historical name from when that harness was introduced on WordPress 7.0. It identifies the Docker-backed Site Editor harness, not the WordPress version it runs; both Playwright harnesses now run WordPress 7.1.
+
+### Migrating An Existing Stack To DHI
+
+DHI runs MariaDB as uid **65532**; the Docker Official image used uid **999**. An existing `db_data` volume is therefore unreadable to the DHI server, and the switch needs a one-time volume reset (this destroys the local database):
+
+```bash
+npm run wp:reset     # docker compose down -v
+npm run wp:rebuild
+```
+
+The DHI MariaDB entrypoint provisions only the `root` account — it has no `MARIADB_DATABASE`/`MARIADB_USER` handling and no `/docker-entrypoint-initdb.d` hook. `docker-compose.yml` therefore creates the application database and user from a Compose config mounted at `/etc/mariadb/bootstrap.sql` and passed to the server via `MARIADB_OPTIONS=--init-file=...`. The SQL replays on every start, so anything added to it must stay idempotent. The Docker Official image ignores `MARIADB_OPTIONS` and keeps using the `MARIADB_*` variables, which is why both are set.
+
+DHI also ships a minimal `/etc/passwd`, `/etc/group` and no `init-system-helpers`. `build-setup.sh` restores the `adm` group, the `www-data` account and `init-system-helpers` before installing packages, because Debian maintainer scripts (nginx) fail without them. `www-data` is aliased onto uid/gid **65532** — the DHI `nonroot` account the php-fpm pool already runs as — rather than the conventional 33, so files the WordPress entrypoint chowns to `www-data` stay writable by PHP.
+
+No Docker Hardened Image is published for phpMyAdmin, so that service stays on `phpmyadmin:5-apache`.
 
 ## Start And Install WordPress
 
@@ -69,7 +104,7 @@ For one-off Playwright probes against the Docker-backed local stack, resolve the
 npm run --silent wp:browser-url
 ```
 
-Use that value as the Playwright `baseURL` and login target. The helper prefers explicit overrides such as `FLAVOR_AGENT_BROWSER_BASE_URL`, then reads `wp option get home` from the WordPress container, and only falls back to `http://localhost:${WORDPRESS_PORT:-8888}` when the container is unavailable. The dedicated WP 7.0 harness remains separate: use `getWp70HarnessConfig().baseURL`, because the harness sets WordPress `home` and `siteurl` to the same origin during bootstrap.
+Use that value as the Playwright `baseURL` and login target. The helper prefers explicit overrides such as `FLAVOR_AGENT_BROWSER_BASE_URL`, then reads `wp option get home` from the WordPress container, and only falls back to `http://localhost:${WORDPRESS_PORT:-8888}` when the container is unavailable. The dedicated Site Editor harness remains separate: use `getWp70HarnessConfig().baseURL`, because the harness sets WordPress `home` and `siteurl` to the same origin during bootstrap.
 
 Install WordPress if the database volume is new. The examples below use the Docker Compose CLI form; if your host only has `docker-compose`, use `node scripts/docker-compose.js exec -T ...` or the wrapper-backed npm scripts instead.
 
@@ -160,13 +195,13 @@ Flavor Agent conventions when using the Explorer:
 - **Helper abilities are safe to click.** The ten externally-discoverable read helpers (`introspect-block`, `list-allowed-blocks`, `list-patterns`, `get-pattern`, `list-template-parts`, `list-templates`, `get-active-theme`, `get-theme-presets`, `get-theme-styles`, `get-theme-tokens`) are read-only and side-effect-free.
 - **Three abilities stay editor-internal.** `list-synced-patterns`, `get-synced-pattern`, and `check-status` are not marked `mcp.public` and stay scoped to Abilities-API consumers; the Explorer still lists them because it reads `show_in_rest`, not `mcp.public`.
 
-## WP 7.0 Browser Harness Scope
+## Site Editor Browser Harness Scope
 
 `scripts/wp70-e2e.js` provisions a deterministic Docker-backed browser harness for editor and Site Editor regressions. It is not the full representative local runtime described above unless a test explicitly extends it with companion plugins.
 
 The bootstrap installs and activates the `ai` plugin from WordPress.org because Flavor Agent declares `Requires Plugins: ai` in its plugin header — without it `wp plugin activate flavor-agent` would refuse to run. To install additional companions for a specific spec (for example `gutenberg` or a provider connector), set `FLAVOR_AGENT_WP70_COMPANION_PLUGINS` to a comma-separated slug list before running `npm run wp:e2e:wp70:bootstrap`; `ai` is always force-prepended to the list.
 
-Current WP 7.0 browser specs exercise Flavor Agent editor behavior and selected Abilities API routes, but they do not validate the dedicated MCP server or the AI plugin Settings UI. Use the representative local runtime for MCP/AI-plugin manual checks, or extend `scripts/wp70-e2e.js` only when adding a dedicated MCP or AI-plugin Playwright spec.
+Current Site Editor browser specs exercise Flavor Agent editor behavior and selected Abilities API routes, but they do not validate the dedicated MCP server or the AI plugin Settings UI. Use the representative local runtime for MCP/AI-plugin manual checks, or extend `scripts/wp70-e2e.js` only when adding a dedicated MCP or AI-plugin Playwright spec.
 
 ## Remote Screenshot Audits
 

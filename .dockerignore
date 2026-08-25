@@ -1,5 +1,9 @@
 .git
 .env
+.worktrees
 node_modules
+**/node_modules
 vendor
+**/vendor
 build
+**/build

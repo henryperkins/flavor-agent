@@ -14,7 +14,7 @@ let attestationKeyConfigured = false;
 
 // End-to-end coverage of the human approval gate. Unlike the route-mocked
 // Playground activity specs, this one runs against the real repository and
-// decision route on the Docker-backed WP 7.0 (MySQL) harness: the governance
+// decision route on the Docker-backed WP 7.1 (MySQL) harness: the governance
 // property under test (approval re-checks freshness and fails closed against
 // live server state) only exists when the real decision route and
 // StyleApplyExecutor run. Playground's SQLite + load-without-activation harness

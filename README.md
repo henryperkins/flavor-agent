@@ -52,7 +52,7 @@ Flavor Agent is for WordPress builders, editors, and plugin developers who want 
 4. Activate **Flavor Agent** in WordPress.
 5. Configure text generation in `Settings > Connectors`; optionally configure pattern retrieval, embeddings, developer-doc grounding limits/diagnostics, and guidelines in `Settings > Flavor Agent`.
 
-For a representative development environment, use the local setup notes in [`docs/reference/local-environment-setup.md`](docs/reference/local-environment-setup.md). WordPress 7.0 is released; the Docker-backed Site Editor harness pins the exact stable `wordpress:7.0.0-php8.2-apache` image so harness runs stay reproducible.
+For a representative development environment, use the local setup notes in [`docs/reference/local-environment-setup.md`](docs/reference/local-environment-setup.md). WordPress 7.1 is released; the Docker-backed Site Editor harness pins the exact stable `wordpress:7.1.0-php8.2-apache` image so harness runs stay reproducible.
 
 ## Current status
 
@@ -68,7 +68,7 @@ Automated evidence currently recorded in the repository includes:
 - `vendor/bin/phpunit` passing `1925` tests / `8825` assertions on 2026-07-20.
 - `npm run test:unit` passing `1679` tests across `109` suites on 2026-07-20.
 - `vendor/bin/phpcs` clean (zero errors, zero warnings) on 2026-07-20.
-- Playwright harnesses (`test:e2e:playground`, `test:e2e:wp70`) have **not** been re-run since the WP 7.0 harness was repinned to stable `wordpress:7.0.0-php8.2-apache`; the last recorded runs predate that change.
+- Playwright harnesses re-run on WordPress 7.1 on 2026-08-25: `test:e2e:playground` `17 passed / 0 failed` (Playground CLI `3.1.13` → `3.1.51`, `--wp=6.9.4` → `--wp=7.1`) and `test:e2e:wp70` `30 passed / 0 failed` (`wordpress:7.0.0-php8.2-apache` → `wordpress:7.1.0-php8.2-apache`).
 
 These are working-tree numbers, not release evidence. Re-run the full gates — strict verify including Plugin Check, both Playwright harnesses, `npm run check:docs`, and `npm run dist` — on the exact commit you tag, and record the results before publishing.
 
@@ -115,7 +115,7 @@ Common commands:
 - `npm run lint:js` and `composer lint:php` for linting.
 - `npm run test:unit -- --runInBand` and `vendor/bin/phpunit` for unit tests.
 - `npm run test:e2e:playground` for the fast Playground smoke suite.
-- `npm run test:e2e:wp70` for the Docker-backed WordPress 7.0 Site Editor suite.
+- `npm run test:e2e:wp70` for the Docker-backed WordPress 7.1 Site Editor suite.
 - `npm run verify` for the aggregate verification runner.
 
 Release packaging is available through `npm run dist`.
