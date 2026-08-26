@@ -6143,15 +6143,48 @@ test( 'an unregistered block style is asserted as empty in the recommendation re
 	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
 	await dismissWelcomeGuide( page );
 	await promptInput.fill( 'Improve this quote.' );
+	// Opening or focusing inspector controls can move editor selection into the
+	// quote's default inner paragraph. Reassert the intended target immediately
+	// before submitting so this request exercises the style-less quote contract.
+	await page.evaluate( () => {
+		const blockEditor = window.wp.data.select( 'core/block-editor' );
+		const quote = blockEditor.getBlocks()[ 0 ];
+
+		if ( quote?.clientId ) {
+			window.wp.data
+				.dispatch( 'core/block-editor' )
+				.selectBlock( quote.clientId );
+		}
+	} );
+	await expect
+		.poll( () =>
+			page.evaluate(
+				() =>
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getSelectedBlock()?.name || ''
+			)
+		)
+		.toBe( 'core/quote' );
 	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
 
 	await expect
-		.poll( () => blockRequests.length, { timeout: 30_000 } )
+		.poll(
+			() =>
+				blockRequests.filter(
+					( request ) =>
+						request.editorContext?.block?.name === 'core/quote'
+				).length,
+			{ timeout: 30_000 }
+		)
 		.toBeGreaterThan( 0 );
 
 	// The client must assert emptiness rather than omit the key — that is the
 	// distinction D4 makes the server honour.
-	const context = blockRequests[ 0 ].editorContext || {};
+	const context =
+		blockRequests.find(
+			( request ) => request.editorContext?.block?.name === 'core/quote'
+		)?.editorContext || {};
 
 	expect( context.block ).toHaveProperty( 'styles' );
 	expect( context.block.styles ).toEqual( [] );
