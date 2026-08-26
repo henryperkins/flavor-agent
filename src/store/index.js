@@ -1493,6 +1493,40 @@ function rebaselineBlockAfterAttributeApply( {
 	);
 }
 
+function captureBlockApplyLiveContext( registry, clientId ) {
+	if ( typeof registry?.select !== 'function' ) {
+		return { context: null, signature: '' };
+	}
+
+	return getLiveBlockContextData(
+		registry.select.bind( registry ),
+		clientId
+	);
+}
+
+function verifyBlockApplyLiveContextFreshness( {
+	baselineSignature,
+	clientId,
+	registry,
+	localDispatch,
+	setApplyState,
+} ) {
+	const liveData = captureBlockApplyLiveContext( registry, clientId );
+	const isFresh =
+		Boolean( baselineSignature ) &&
+		Boolean( liveData?.signature ) &&
+		liveData.signature === baselineSignature;
+
+	if ( isFresh ) {
+		return { ok: true, liveData };
+	}
+
+	const error = buildClientStaleApplyErrorMessage( 'block' );
+	localDispatch( setApplyState( 'error', error, 'client' ) );
+
+	return { ok: false, error, staleReason: 'client' };
+}
+
 function buildBlockBatchSuggestionKey(
 	recommendationSetId,
 	memberSuggestionKeys
@@ -1991,13 +2025,10 @@ const actions = {
 				return false;
 			}
 
-			const scope = getCurrentActivityScope( registry );
 			const applyErrorMessage =
 				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.';
 			const advisoryApplyMessage =
 				'This suggestion is advisory and requires manual follow-through or a broader preview/apply flow.';
-
-			syncStoreActivitySession( localDispatch, select, scope );
 
 			const staleApplyResult = guardSurfaceApplyFreshness( {
 				surface: 'block',
@@ -2037,12 +2068,52 @@ const actions = {
 				return false;
 			}
 
-			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
-
 			const storedResolvedContextSignature =
 				select.getBlockResolvedContextSignature?.( clientId ) || null;
 			const storedRequestToken =
 				select.getBlockRequestToken?.( clientId ) || 0;
+
+			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
+
+			const capturedLiveData = captureBlockApplyLiveContext(
+				registry,
+				clientId
+			);
+			const baselineSignature = normalizeStringMessage(
+				capturedLiveData?.signature
+			);
+			const requestContextSignature = normalizeStringMessage(
+				liveRequestInput?.contextSignature
+			);
+
+			if (
+				liveRequestInput?.clientId !== clientId ||
+				! baselineSignature ||
+				! requestContextSignature ||
+				baselineSignature !== requestContextSignature
+			) {
+				const error = buildClientStaleApplyErrorMessage( 'block' );
+				localDispatch(
+					actions.setBlockApplyState(
+						clientId,
+						'error',
+						error,
+						null,
+						'client'
+					)
+				);
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion,
+						reason: 'client',
+						target: { clientId },
+					} )
+				);
+				return false;
+			}
+
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface: 'block',
@@ -2053,11 +2124,6 @@ const actions = {
 						select.isBlockResolvedRebaselinePending?.(
 							clientId
 						) === true,
-					adoptResolvedContextSignature: ( resolvedSignature ) =>
-						actions.adoptBlockResolvedContextBaseline(
-							clientId,
-							resolvedSignature
-						),
 					abortId: `block:${ clientId }`,
 					isCurrent: ( storedSignature ) =>
 						normalizeStringMessage(
@@ -2080,7 +2146,16 @@ const actions = {
 			);
 
 			if ( ! resolvedFreshness.ok ) {
-				if ( ! resolvedFreshness.skipped ) {
+				if ( resolvedFreshness.skipped ) {
+					if (
+						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+						storedRequestToken
+					) {
+						localDispatch(
+							actions.setBlockApplyState( clientId, 'idle' )
+						);
+					}
+				} else {
 					localDispatch(
 						actions.recordRecommendationOutcome( {
 							event: 'stale_blocked',
@@ -2095,6 +2170,53 @@ const actions = {
 				}
 				return false;
 			}
+
+			const liveFreshness = verifyBlockApplyLiveContextFreshness( {
+				baselineSignature,
+				clientId,
+				registry,
+				localDispatch,
+				setApplyState: ( status, error, staleReason = null ) =>
+					actions.setBlockApplyState(
+						clientId,
+						status,
+						error,
+						null,
+						staleReason
+					),
+			} );
+
+			if ( ! liveFreshness.ok ) {
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion,
+						reason: 'client',
+						target: { clientId },
+					} )
+				);
+				return false;
+			}
+
+			if (
+				resolvedFreshness.adopted === true &&
+				resolvedFreshness.resolvedContextSignature
+			) {
+				localDispatch(
+					actions.adoptBlockResolvedContextBaseline(
+						clientId,
+						resolvedFreshness.resolvedContextSignature
+					)
+				);
+			}
+
+			// INVARIANT: everything from here to the editor dispatch must stay
+			// synchronous. Any await introduced below reopens the live-context race
+			// that verifyBlockApplyLiveContextFreshness() exists to close, and must be
+			// paired with a fresh verification immediately before the mutation.
+			const scope = getCurrentActivityScope( registry );
+			syncStoreActivitySession( localDispatch, select, scope );
 
 			try {
 				const storedRecommendationPayload =
@@ -2363,12 +2485,64 @@ const actions = {
 				return false;
 			}
 
-			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
-
 			const storedResolvedContextSignature =
 				select.getBlockResolvedContextSignature?.( clientId ) || null;
 			const storedRequestToken =
 				select.getBlockRequestToken?.( clientId ) || 0;
+
+			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
+
+			const capturedLiveData = captureBlockApplyLiveContext(
+				registry,
+				clientId
+			);
+			const baselineSignature = normalizeStringMessage(
+				capturedLiveData?.signature
+			);
+			const requestContextSignature = normalizeStringMessage(
+				liveRequestInput?.contextSignature
+			);
+
+			if (
+				liveRequestInput?.clientId !== clientId ||
+				! baselineSignature ||
+				! requestContextSignature ||
+				baselineSignature !== requestContextSignature
+			) {
+				const error = buildClientStaleApplyErrorMessage( 'block' );
+				localDispatch(
+					actions.setBlockApplyState(
+						clientId,
+						'error',
+						error,
+						batchSuggestionKey,
+						'client'
+					)
+				);
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion: {
+							suggestionKey: batchSuggestionKey,
+							members: memberSuggestionKeys,
+							recommendationOutcome: {
+								recommendationSetId,
+								...( batchLearningAttribution
+									? {
+											learningAttribution:
+												batchLearningAttribution,
+									  }
+									: {} ),
+							},
+						},
+						reason: 'client',
+						target: { clientId, members: memberSuggestionKeys },
+					} )
+				);
+				return false;
+			}
+
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface: 'block',
@@ -2379,11 +2553,6 @@ const actions = {
 						select.isBlockResolvedRebaselinePending?.(
 							clientId
 						) === true,
-					adoptResolvedContextSignature: ( resolvedSignature ) =>
-						actions.adoptBlockResolvedContextBaseline(
-							clientId,
-							resolvedSignature
-						),
 					abortId: `block:${ clientId }`,
 					isCurrent: ( storedSignature ) =>
 						normalizeStringMessage(
@@ -2406,7 +2575,16 @@ const actions = {
 			);
 
 			if ( ! resolvedFreshness.ok ) {
-				if ( ! resolvedFreshness.skipped ) {
+				if ( resolvedFreshness.skipped ) {
+					if (
+						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+						storedRequestToken
+					) {
+						localDispatch(
+							actions.setBlockApplyState( clientId, 'idle' )
+						);
+					}
+				} else {
 					localDispatch(
 						actions.recordRecommendationOutcome( {
 							event: 'stale_blocked',
@@ -2433,6 +2611,63 @@ const actions = {
 				}
 				return false;
 			}
+
+			const liveFreshness = verifyBlockApplyLiveContextFreshness( {
+				baselineSignature,
+				clientId,
+				registry,
+				localDispatch,
+				setApplyState: ( status, error, staleReason = null ) =>
+					actions.setBlockApplyState(
+						clientId,
+						status,
+						error,
+						batchSuggestionKey,
+						staleReason
+					),
+			} );
+
+			if ( ! liveFreshness.ok ) {
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion: {
+							suggestionKey: batchSuggestionKey,
+							members: memberSuggestionKeys,
+							recommendationOutcome: {
+								recommendationSetId,
+								...( batchLearningAttribution
+									? {
+											learningAttribution:
+												batchLearningAttribution,
+									  }
+									: {} ),
+							},
+						},
+						reason: 'client',
+						target: { clientId, members: memberSuggestionKeys },
+					} )
+				);
+				return false;
+			}
+
+			if (
+				resolvedFreshness.adopted === true &&
+				resolvedFreshness.resolvedContextSignature
+			) {
+				localDispatch(
+					actions.adoptBlockResolvedContextBaseline(
+						clientId,
+						resolvedFreshness.resolvedContextSignature
+					)
+				);
+			}
+
+			// INVARIANT: everything from here to the editor dispatch must stay
+			// synchronous. Any await introduced below reopens the live-context race
+			// that verifyBlockApplyLiveContextFreshness() exists to close, and must be
+			// paired with a fresh verification immediately before the mutation.
 
 			const scope = getCurrentActivityScope( registry );
 			syncStoreActivitySession( localDispatch, select, scope );
@@ -2594,10 +2829,6 @@ const actions = {
 				return false;
 			}
 
-			const scope = getCurrentActivityScope( registry );
-
-			syncStoreActivitySession( localDispatch, select, scope );
-
 			const staleApplyResult = guardSurfaceApplyFreshness( {
 				surface: 'block',
 				currentRequestSignature,
@@ -2636,12 +2867,52 @@ const actions = {
 				return false;
 			}
 
-			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
-
 			const storedResolvedContextSignature =
 				select.getBlockResolvedContextSignature?.( clientId ) || null;
 			const storedRequestToken =
 				select.getBlockRequestToken?.( clientId ) || 0;
+
+			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
+
+			const capturedLiveData = captureBlockApplyLiveContext(
+				registry,
+				clientId
+			);
+			const baselineSignature = normalizeStringMessage(
+				capturedLiveData?.signature
+			);
+			const requestContextSignature = normalizeStringMessage(
+				liveRequestInput?.contextSignature
+			);
+
+			if (
+				liveRequestInput?.clientId !== clientId ||
+				! baselineSignature ||
+				! requestContextSignature ||
+				baselineSignature !== requestContextSignature
+			) {
+				const error = buildClientStaleApplyErrorMessage( 'block' );
+				localDispatch(
+					actions.setBlockApplyState(
+						clientId,
+						'error',
+						error,
+						null,
+						'client'
+					)
+				);
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion,
+						reason: 'client',
+						target: { clientId },
+					} )
+				);
+				return false;
+			}
+
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface: 'block',
@@ -2670,7 +2941,16 @@ const actions = {
 			);
 
 			if ( ! resolvedFreshness.ok ) {
-				if ( ! resolvedFreshness.skipped ) {
+				if ( resolvedFreshness.skipped ) {
+					if (
+						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+						storedRequestToken
+					) {
+						localDispatch(
+							actions.setBlockApplyState( clientId, 'idle' )
+						);
+					}
+				} else {
 					localDispatch(
 						actions.recordRecommendationOutcome( {
 							event: 'stale_blocked',
@@ -2686,6 +2966,41 @@ const actions = {
 				return false;
 			}
 
+			const liveFreshness = verifyBlockApplyLiveContextFreshness( {
+				baselineSignature,
+				clientId,
+				registry,
+				localDispatch,
+				setApplyState: ( status, error, staleReason = null ) =>
+					actions.setBlockApplyState(
+						clientId,
+						status,
+						error,
+						null,
+						staleReason
+					),
+			} );
+
+			if ( ! liveFreshness.ok ) {
+				localDispatch(
+					actions.recordRecommendationOutcome( {
+						event: 'stale_blocked',
+						surface: 'block',
+						suggestion,
+						reason: 'client',
+						target: { clientId },
+					} )
+				);
+				return false;
+			}
+
+			// INVARIANT: everything from here to the editor dispatch must stay
+			// synchronous. Any await introduced below reopens the live-context race
+			// that verifyBlockApplyLiveContextFreshness() exists to close, and must be
+			// paired with a fresh verification immediately before the mutation.
+			const scope = getCurrentActivityScope( registry );
+			syncStoreActivitySession( localDispatch, select, scope );
+
 			try {
 				const storedRecommendationPayload =
 					select.getBlockRecommendations( clientId ) || null;
@@ -2694,14 +3009,10 @@ const actions = {
 					registry?.select?.( 'core/block-editor' ) || {};
 				const blockEditorDispatch =
 					registry?.dispatch?.( 'core/block-editor' ) || {};
-				const blockContext =
-					liveRequestInput?.editorContext?.block ||
-					storedRecommendations.blockContext ||
-					{};
+				const verifiedContext = liveFreshness.liveData?.context || {};
+				const blockContext = verifiedContext.block || {};
 				const blockOperationContext =
-					liveRequestInput?.editorContext?.blockOperationContext ||
-					storedRecommendations.blockOperationContext ||
-					null;
+					verifiedContext.blockOperationContext || null;
 
 				if ( ! blockOperationContext ) {
 					const error =
