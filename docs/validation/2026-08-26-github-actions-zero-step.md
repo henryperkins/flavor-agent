@@ -115,9 +115,9 @@ clean commit `e38fb57` passed all nine strict local steps with zero skips, its
 209-file zip payload passed Plugin Check with zero errors and zero warnings,
 and the complete log bundle and artifact have recorded SHA-256 identities.
 
-Before publication, the final tag must still be created at the intended
-immutable SHA, checked out independently, strictly reverified, and rebuilt (or
-the attached zip must be proven byte-identical to the verified build). The zip,
-complete local logs, and this waiver record must then be attached or linked in
-the final release. This approval does not itself create a tag or publish a
+At the time of approval, the final tag still had to be created at the intended
+immutable SHA, checked out independently, strictly reverified, and rebuilt. The
+later GitHub release and its `v0.1.0-tag-verification.md` asset record completion
+of those retained gates and attachment of the verified zip, complete local
+logs, and this waiver. This approval did not itself create a tag or publish a
 release.
