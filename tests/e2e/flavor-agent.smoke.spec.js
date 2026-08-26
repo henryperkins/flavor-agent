@@ -2489,7 +2489,7 @@ test( '@wp70-site-editor block apply aborts when live context changes during sig
 	const RACE_SUGGESTION_LABEL = 'Apply delayed content update';
 	const recommendBlockRoutePattern =
 		recommendationAbilityRoute( 'recommend-block' );
-	const backgroundSignatureOnlyRequests = [];
+	const completedBackgroundSignatureOnlyRequests = [];
 	const capturedApplySignatureOnlyRequests = [];
 	let raceClientId = null;
 	let captureSignatureOnlyRequest;
@@ -2527,9 +2527,7 @@ test( '@wp70-site-editor block apply aborts when live context changes during sig
 		);
 
 		if ( isSignatureOnly ) {
-			if ( hasOwnContextSignature ) {
-				backgroundSignatureOnlyRequests.push( body );
-			} else {
+			if ( ! hasOwnContextSignature ) {
 				const applyStatusAtCapture = raceClientId
 					? await page.evaluate(
 							( selectedClientId ) =>
@@ -2560,6 +2558,12 @@ test( '@wp70-site-editor block apply aborts when live context changes during sig
 					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
 				} ),
 			} );
+
+			if ( hasOwnContextSignature ) {
+				// Keep this completion marker after the awaited fulfillment so the
+				// pre-Apply poll proves the background route handler has settled.
+				completedBackgroundSignatureOnlyRequests.push( body );
+			}
 			return;
 		}
 
@@ -2639,13 +2643,13 @@ test( '@wp70-site-editor block apply aborts when live context changes during sig
 		await expect( suggestionButton ).toBeVisible( { timeout: 15_000 } );
 		await expect( suggestionButton ).toBeEnabled();
 		await expect
-			.poll( () => backgroundSignatureOnlyRequests.length, {
+			.poll( () => completedBackgroundSignatureOnlyRequests.length, {
 				timeout: 15_000,
 			} )
 			.toBeGreaterThanOrEqual( 1 );
 		expect(
 			Object.prototype.hasOwnProperty.call(
-				backgroundSignatureOnlyRequests[ 0 ],
+				completedBackgroundSignatureOnlyRequests[ 0 ],
 				'contextSignature'
 			)
 		).toBe( true );
@@ -2749,10 +2753,9 @@ test( '@wp70-site-editor block apply aborts when live context changes during sig
 		await expect( page.locator( '.flavor-agent-toast' ) ).toHaveCount( 0 );
 	} finally {
 		releaseHeldSignatureOnlyRequest();
-		await page.unroute(
-			recommendBlockRoutePattern,
-			handleRecommendBlockRoute
-		);
+		// This page owns its routes. Wait for active handlers to settle while
+		// removing every future route before the finalizer returns.
+		await page.unrouteAll( { behavior: 'wait' } );
 	}
 } );
 
