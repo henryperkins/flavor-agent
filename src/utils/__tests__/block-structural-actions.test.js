@@ -1,5 +1,6 @@
 import {
 	applyBlockStructuralSuggestionOperations,
+	getBlockStructuralActivityUndoState,
 	prepareBlockStructuralOperation,
 	undoBlockStructuralSuggestionOperations,
 } from '../block-structural-actions';
@@ -106,6 +107,17 @@ function removeBlocksByClientIds( blocks, clientIds ) {
 	}
 }
 
+function getAllClientIds( blocks = [] ) {
+	return blocks
+		.flatMap( ( block ) => [
+			block?.clientId,
+			...getAllClientIds(
+				Array.isArray( block?.innerBlocks ) ? block.innerBlocks : []
+			),
+		] )
+		.filter( Boolean );
+}
+
 function createBlockEditor( {
 	blocks = [
 		{
@@ -117,10 +129,21 @@ function createBlockEditor( {
 	],
 	editingModes = {},
 	failNextInsert = false,
+	nextInsertBlockCount = null,
+	canInsertBlockType = () => true,
+	canRemoveBlock = () => true,
+	canRemoveBlocks = ( clientIds ) =>
+		clientIds.every( ( clientId ) => canRemoveBlock( clientId ) ),
+	noOpNextRemove = false,
+	noOpNextRestoreInsert = false,
 } = {} ) {
 	const state = {
 		blocks: cloneValue( blocks ),
-		failNextInsert,
+		nextInsertBlockCount: failNextInsert ? 0 : nextInsertBlockCount,
+		noOpNextRemove,
+		noOpNextRestoreInsert,
+		insertAttempts: [],
+		initialClientIds: new Set( getAllClientIds( blocks ) ),
 	};
 
 	const blockEditorSelect = {
@@ -144,18 +167,54 @@ function createBlockEditor( {
 		getBlockEditingMode: jest.fn(
 			( clientId ) => editingModes[ clientId ] || 'default'
 		),
+		canInsertBlockType: jest.fn( canInsertBlockType ),
+		canRemoveBlock: jest.fn( canRemoveBlock ),
+		canRemoveBlocks: jest.fn( canRemoveBlocks ),
 	};
 	const blockEditorDispatch = {
 		insertBlocks: jest.fn( ( blocksToInsert, index, rootClientId ) => {
-			if ( state.failNextInsert ) {
-				state.failNextInsert = false;
+			const attemptedBlocks = cloneValue( blocksToInsert );
+			const isRestoration = attemptedBlocks.some(
+				( block ) =>
+					state.initialClientIds.has( block.clientId ) &&
+					! findBlockByClientId( state.blocks, block.clientId )
+			);
+
+			state.insertAttempts.push( {
+				blocks: attemptedBlocks,
+				topLevelClientIds: attemptedBlocks.map(
+					( block ) => block.clientId
+				),
+				innerClientIds: attemptedBlocks.flatMap( ( block ) =>
+					getAllClientIds( block.innerBlocks )
+				),
+				index,
+				rootClientId,
+				isRestoration,
+			} );
+
+			if ( isRestoration && state.noOpNextRestoreInsert ) {
+				state.noOpNextRestoreInsert = false;
 				return;
 			}
 
+			const insertCount = Number.isInteger( state.nextInsertBlockCount )
+				? state.nextInsertBlockCount
+				: attemptedBlocks.length;
+			state.nextInsertBlockCount = null;
 			const container = getBlockContainer( state.blocks, rootClientId );
-			container.splice( index, 0, ...cloneValue( blocksToInsert ) );
+			container.splice(
+				index,
+				0,
+				...attemptedBlocks.slice( 0, insertCount )
+			);
 		} ),
 		removeBlocks: jest.fn( ( clientIds ) => {
+			if ( state.noOpNextRemove ) {
+				state.noOpNextRemove = false;
+				return;
+			}
+
 			removeBlocksByClientIds( state.blocks, clientIds );
 		} ),
 		selectBlock: jest.fn(),
@@ -166,6 +225,42 @@ function createBlockEditor( {
 		blockEditorSelect,
 		blockEditorDispatch,
 	};
+}
+
+const cachedNestedPatternBlocks = [
+	{
+		clientId: 'cached-pattern-group',
+		name: 'core/group',
+		attributes: {
+			className: 'cached-group',
+		},
+		innerBlocks: [
+			{
+				clientId: 'cached-pattern-inner',
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Nested pattern content',
+				},
+				innerBlocks: [],
+			},
+		],
+	},
+	{
+		clientId: 'cached-pattern-heading',
+		name: 'core/heading',
+		attributes: {
+			content: 'Pattern heading',
+		},
+		innerBlocks: [],
+	},
+];
+
+function parseCachedNestedPatternBlocks( patternName ) {
+	if ( patternName !== 'theme/hero' ) {
+		throw new Error( 'Pattern missing.' );
+	}
+
+	return cachedNestedPatternBlocks;
 }
 
 function parsePatternBlocks( patternName ) {
@@ -194,6 +289,50 @@ function buildSuggestion( operation = baseOperation ) {
 		actionability: {
 			tier: 'review-safe',
 			executableOperations: [ operation ],
+		},
+	};
+}
+
+function buildReplaceOperation( overrides = {} ) {
+	return {
+		...baseOperation,
+		type: 'replace_block_with_pattern',
+		action: 'replace',
+		position: undefined,
+		...overrides,
+	};
+}
+
+function applyOperation( {
+	editor,
+	operation = baseOperation,
+	context = baseContext,
+	parser = parsePatternBlocks,
+} ) {
+	return applyBlockStructuralSuggestionOperations( {
+		suggestion: buildSuggestion( operation ),
+		blockOperationContext: context,
+		blockEditorSelect: editor.blockEditorSelect,
+		blockEditorDispatch: editor.blockEditorDispatch,
+		parsePatternBlocks: parser,
+	} );
+}
+
+function buildActivityFromResult( result, operations = result.operations ) {
+	return {
+		surface: 'block',
+		type: 'apply_block_structural_suggestion',
+		before: {
+			structuralSignature: result.beforeSignature,
+		},
+		after: {
+			operations,
+			structuralSignature: result.afterSignature,
+		},
+		undo: {
+			canUndo: true,
+			status: 'available',
+			error: null,
 		},
 	};
 }
@@ -305,190 +444,854 @@ describe( 'block structural actions', () => {
 		}
 	);
 
-	test( 'applyBlockStructuralSuggestionOperations inserts patterns before and after the selected block', () => {
-		const { state, blockEditorSelect, blockEditorDispatch } =
-			createBlockEditor( {
+	test( 'repeated cached nested-pattern applies receive fresh recursive identities and record exact runtime IDs', () => {
+		const sourceSnapshot = cloneValue( cachedNestedPatternBlocks );
+		const editor = createBlockEditor();
+
+		const firstResult = applyOperation( {
+			editor,
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		const firstAttempt = editor.state.insertAttempts[ 0 ];
+		const firstLiveBlocks = firstAttempt.topLevelClientIds.map(
+			( clientId ) =>
+				cloneValue( editor.blockEditorSelect.getBlock( clientId ) )
+		);
+		const secondResult = applyOperation( {
+			editor,
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		const secondAttempt = editor.state.insertAttempts[ 1 ];
+
+		expect( firstResult.ok ).toBe( true );
+		expect( secondResult.ok ).toBe( true );
+		expect( firstAttempt.topLevelClientIds ).not.toEqual(
+			expect.arrayContaining( [
+				'cached-pattern-group',
+				'cached-pattern-heading',
+			] )
+		);
+		expect( firstAttempt.innerClientIds ).not.toContain(
+			'cached-pattern-inner'
+		);
+		expect( secondAttempt.topLevelClientIds ).not.toEqual(
+			expect.arrayContaining( [
+				'cached-pattern-group',
+				'cached-pattern-heading',
+			] )
+		);
+		expect( secondAttempt.innerClientIds ).not.toContain(
+			'cached-pattern-inner'
+		);
+		expect(
+			firstAttempt.topLevelClientIds.map(
+				( clientId, index ) =>
+					clientId !== secondAttempt.topLevelClientIds[ index ]
+			)
+		).toEqual( [ true, true ] );
+		expect(
+			firstAttempt.innerClientIds.map(
+				( clientId, index ) =>
+					clientId !== secondAttempt.innerClientIds[ index ]
+			)
+		).toEqual( [ true ] );
+		expect( firstResult.operations[ 0 ].insertedClientIds ).toEqual(
+			firstAttempt.topLevelClientIds
+		);
+		expect( secondResult.operations[ 0 ].insertedClientIds ).toEqual(
+			secondAttempt.topLevelClientIds
+		);
+		expect( firstLiveBlocks[ 0 ].innerBlocks[ 0 ].clientId ).toBe(
+			firstAttempt.innerClientIds[ 0 ]
+		);
+		expect(
+			editor.blockEditorSelect.getBlock(
+				secondAttempt.topLevelClientIds[ 0 ]
+			).innerBlocks[ 0 ].clientId
+		).toBe( secondAttempt.innerClientIds[ 0 ] );
+		expect( cachedNestedPatternBlocks ).toEqual( sourceSnapshot );
+		expect( parseCachedNestedPatternBlocks( 'theme/hero' ) ).toBe(
+			cachedNestedPatternBlocks
+		);
+	} );
+
+	test.each( [
+		{ position: 'insert_before', nextInsertBlockCount: 0 },
+		{ position: 'insert_before', nextInsertBlockCount: 1 },
+		{ position: 'insert_after', nextInsertBlockCount: 0 },
+		{ position: 'insert_after', nextInsertBlockCount: 1 },
+	] )(
+		'rolls back only exact newly-present IDs for $position with insert count $nextInsertBlockCount',
+		( { position, nextInsertBlockCount } ) => {
+			const initialBlocks =
+				position === 'insert_before'
+					? [
+							{
+								clientId: 'before-neighbor',
+								name: 'core/paragraph',
+								attributes: { content: 'Before neighbor' },
+								innerBlocks: [],
+							},
+							{
+								clientId: 'block-1',
+								name: 'core/group',
+								attributes: {},
+								innerBlocks: [],
+							},
+					  ]
+					: [
+							{
+								clientId: 'block-1',
+								name: 'core/group',
+								attributes: {},
+								innerBlocks: [],
+							},
+							{
+								clientId: 'after-neighbor',
+								name: 'core/paragraph',
+								attributes: { content: 'After neighbor' },
+								innerBlocks: [],
+							},
+					  ];
+			const initialIds = initialBlocks.map( ( block ) => block.clientId );
+			const editor = createBlockEditor( {
+				blocks: initialBlocks,
+				nextInsertBlockCount,
+			} );
+
+			const result = applyOperation( {
+				editor,
+				operation: { ...baseOperation, position },
+				parser: parseCachedNestedPatternBlocks,
+			} );
+			const attemptedIds =
+				editor.state.insertAttempts[ 0 ].topLevelClientIds;
+			const rollbackCalls =
+				editor.blockEditorDispatch.removeBlocks.mock.calls;
+
+			expect( result.ok ).toBe( false );
+			expect( result.operations ).toBeUndefined();
+			expect(
+				editor.state.blocks.map( ( block ) => block.clientId )
+			).toEqual( initialIds );
+			expect( rollbackCalls ).toEqual(
+				nextInsertBlockCount === 0
+					? []
+					: [ [ [ attemptedIds[ 0 ] ], false ] ]
+			);
+			expect( rollbackCalls.flat( 2 ) ).not.toEqual(
+				expect.arrayContaining( initialIds )
+			);
+		}
+	);
+
+	test( 'reports rollback failure when exact partial-insert cleanup is a no-op', () => {
+		const editor = createBlockEditor( {
+			blocks: [
+				{
+					clientId: 'block-1',
+					name: 'core/group',
+					attributes: {},
+					innerBlocks: [],
+				},
+				{
+					clientId: 'after-neighbor',
+					name: 'core/paragraph',
+					attributes: {},
+					innerBlocks: [],
+				},
+			],
+			nextInsertBlockCount: 1,
+			noOpNextRemove: true,
+		} );
+
+		const result = applyOperation( {
+			editor,
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		const insertedId =
+			editor.state.insertAttempts[ 0 ].topLevelClientIds[ 0 ];
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				code: 'rollback_failed',
+				error: 'Flavor Agent could not safely roll back the structural change. Review the block structure before continuing.',
+			} )
+		);
+		expect(
+			editor.blockEditorSelect.getBlock( insertedId )
+		).not.toBeNull();
+		expect(
+			editor.blockEditorSelect.getBlock( 'after-neighbor' )
+		).not.toBeNull();
+		expect( result.operations ).toBeUndefined();
+	} );
+
+	test.each( [ 0, 1 ] )(
+		'restores an exact replacement snapshot after insert count %i without deleting its neighbor',
+		( nextInsertBlockCount ) => {
+			const originalBlocks = [
+				{
+					clientId: 'block-1',
+					name: 'core/group',
+					attributes: { className: 'original-target' },
+					innerBlocks: [
+						{
+							clientId: 'original-inner',
+							name: 'core/paragraph',
+							attributes: { content: 'Original nested content' },
+							innerBlocks: [],
+						},
+					],
+				},
+				{
+					clientId: 'replacement-neighbor',
+					name: 'core/heading',
+					attributes: { content: 'Keep me' },
+					innerBlocks: [],
+				},
+			];
+			const editor = createBlockEditor( {
+				blocks: originalBlocks,
+				nextInsertBlockCount,
+			} );
+
+			const result = applyOperation( {
+				editor,
+				operation: buildReplaceOperation(),
+				parser: parseCachedNestedPatternBlocks,
+			} );
+			const attemptedIds =
+				editor.state.insertAttempts[ 0 ].topLevelClientIds;
+			const removalCalls =
+				editor.blockEditorDispatch.removeBlocks.mock.calls;
+
+			expect( result.ok ).toBe( false );
+			expect( result.operations ).toBeUndefined();
+			expect( editor.state.blocks ).toEqual( originalBlocks );
+			expect( removalCalls ).toEqual(
+				nextInsertBlockCount === 0
+					? [ [ [ 'block-1' ], false ] ]
+					: [
+							[ [ 'block-1' ], false ],
+							[ [ attemptedIds[ 0 ] ], false ],
+					  ]
+			);
+			expect( removalCalls.flat( 2 ) ).not.toContain(
+				'replacement-neighbor'
+			);
+		}
+	);
+
+	test( 'reports restore failure when replacement rollback cannot confirm the original target', () => {
+		const editor = createBlockEditor( {
+			nextInsertBlockCount: 0,
+			noOpNextRestoreInsert: true,
+		} );
+
+		const result = applyOperation( {
+			editor,
+			operation: buildReplaceOperation(),
+			parser: parseCachedNestedPatternBlocks,
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				code: 'restore_failed',
+				error: 'Flavor Agent could not restore the replaced block after the structural change failed. Review the block structure before continuing.',
+			} )
+		);
+		expect( editor.blockEditorSelect.getBlock( 'block-1' ) ).toBeNull();
+		expect( result.operations ).toBeUndefined();
+	} );
+
+	test.each( [ 'insert_before', 'insert_after' ] )(
+		'preflights every parsed type at the destination before %s dispatch',
+		( position ) => {
+			const editor = createBlockEditor( {
+				canInsertBlockType: ( name ) => name !== 'core/heading',
+			} );
+
+			const result = applyOperation( {
+				editor,
+				operation: { ...baseOperation, position },
+				parser: parseCachedNestedPatternBlocks,
+			} );
+
+			expect( result.ok ).toBe( false );
+			expect(
+				editor.blockEditorDispatch.insertBlocks
+			).not.toHaveBeenCalled();
+			expect(
+				editor.blockEditorSelect.canInsertBlockType
+			).toHaveBeenCalledWith( 'core/heading', null );
+		}
+	);
+
+	test( 'replacement preflights target removal, replacement insertion, and original restoration before mutation', () => {
+		const targetDenied = createBlockEditor( {
+			canRemoveBlock: ( clientId ) => clientId !== 'block-1',
+		} );
+		const targetDeniedResult = applyOperation( {
+			editor: targetDenied,
+			operation: buildReplaceOperation(),
+		} );
+		expect( targetDeniedResult.ok ).toBe( false );
+		expect(
+			targetDenied.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+		expect(
+			targetDenied.blockEditorDispatch.insertBlocks
+		).not.toHaveBeenCalled();
+
+		const replacementDenied = createBlockEditor( {
+			canInsertBlockType: ( name ) => name !== 'core/heading',
+		} );
+		const replacementDeniedResult = applyOperation( {
+			editor: replacementDenied,
+			operation: buildReplaceOperation(),
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		expect( replacementDeniedResult.ok ).toBe( false );
+		expect(
+			replacementDenied.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+		expect(
+			replacementDenied.blockEditorDispatch.insertBlocks
+		).not.toHaveBeenCalled();
+
+		const restoreDenied = createBlockEditor( {
+			canInsertBlockType: ( name ) => name !== 'core/group',
+		} );
+		const restoreDeniedResult = applyOperation( {
+			editor: restoreDenied,
+			operation: buildReplaceOperation(),
+		} );
+		expect( restoreDeniedResult.ok ).toBe( false );
+		expect(
+			restoreDenied.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+		expect(
+			restoreDenied.blockEditorDispatch.insertBlocks
+		).not.toHaveBeenCalled();
+	} );
+
+	test( 'fails closed when live insertion or rollback selectors are missing', () => {
+		for ( const selectorName of [
+			'canInsertBlockType',
+			'canRemoveBlocks',
+			'getBlockRootClientId',
+		] ) {
+			const editor = createBlockEditor();
+			delete editor.blockEditorSelect[ selectorName ];
+
+			const result = applyOperation( { editor } );
+
+			expect( result.ok ).toBe( false );
+			expect(
+				editor.blockEditorDispatch.insertBlocks
+			).not.toHaveBeenCalled();
+		}
+
+		const replacementEditor = createBlockEditor();
+		delete replacementEditor.blockEditorSelect.canRemoveBlock;
+		const replacementResult = applyOperation( {
+			editor: replacementEditor,
+			operation: buildReplaceOperation(),
+		} );
+		expect( replacementResult.ok ).toBe( false );
+		expect(
+			replacementEditor.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+	} );
+
+	test( 'returns rollback failure without guessing when Core denies removal of a partial runtime insertion', () => {
+		const editor = createBlockEditor( {
+			blocks: [
+				{
+					clientId: 'block-1',
+					name: 'core/group',
+					attributes: {},
+					innerBlocks: [],
+				},
+				{
+					clientId: 'after-neighbor',
+					name: 'core/paragraph',
+					attributes: {},
+					innerBlocks: [],
+				},
+			],
+			nextInsertBlockCount: 1,
+			canRemoveBlocks: () => false,
+		} );
+
+		const result = applyOperation( {
+			editor,
+			parser: parseCachedNestedPatternBlocks,
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				code: 'rollback_failed',
+			} )
+		);
+		expect(
+			editor.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+		expect(
+			editor.blockEditorSelect.getBlock( 'after-neighbor' )
+		).not.toBeNull();
+		expect( result.operations ).toBeUndefined();
+	} );
+
+	test.each( [
+		{ label: 'truthy lock', remove: true, ok: false },
+		{ label: 'explicit false lock', remove: false, ok: true },
+		{ label: 'malformed truthy lock', remove: 'yes', ok: false },
+	] )(
+		'uses the parsed top-level block own $label only for rollback capability',
+		( { remove, ok } ) => {
+			const editor = createBlockEditor();
+			const parser = () => [
+				{
+					clientId: 'locked-source',
+					name: 'core/paragraph',
+					attributes: { lock: { remove } },
+					innerBlocks: [],
+				},
+			];
+
+			const result = applyOperation( { editor, parser } );
+
+			expect( result.ok ).toBe( ok );
+			expect(
+				editor.blockEditorDispatch.insertBlocks
+			).toHaveBeenCalledTimes( ok ? 1 : 0 );
+		}
+	);
+
+	test.each( [
+		{ attributes: { lock: { move: true, remove: false } }, type: 'insert' },
+		{
+			attributes: { lock: { move: true, remove: false } },
+			type: 'replace',
+		},
+		{ attributes: { templateLock: 'all' }, type: 'insert' },
+		{ attributes: { templateLock: 'all' }, type: 'replace' },
+	] )(
+		'allows $type beside a selected block with attributes $attributes when Core selectors allow it',
+		( { attributes, type } ) => {
+			const editor = createBlockEditor( {
 				blocks: [
 					{
-						clientId: 'before',
-						name: 'core/paragraph',
-						attributes: {},
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes,
 						innerBlocks: [],
 					},
+				],
+			} );
+
+			const result = applyOperation( {
+				editor,
+				operation:
+					type === 'replace'
+						? buildReplaceOperation()
+						: baseOperation,
+			} );
+
+			expect( result.ok ).toBe( true );
+		}
+	);
+
+	test( 'keeps move-unlocked remove-locked targets eligible for sibling insertion but not replacement', () => {
+		const blocks = [
+			{
+				clientId: 'block-1',
+				name: 'core/group',
+				attributes: { lock: { move: false, remove: true } },
+				innerBlocks: [],
+			},
+		];
+		const insertEditor = createBlockEditor( {
+			blocks,
+			canRemoveBlock: ( clientId ) => clientId !== 'block-1',
+		} );
+		const replaceEditor = createBlockEditor( {
+			blocks,
+			canRemoveBlock: ( clientId ) => clientId !== 'block-1',
+		} );
+
+		expect( applyOperation( { editor: insertEditor } ).ok ).toBe( true );
+		expect(
+			applyOperation( {
+				editor: replaceEditor,
+				operation: buildReplaceOperation(),
+			} ).ok
+		).toBe( false );
+		expect(
+			replaceEditor.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+	} );
+
+	test( 'successful insert and replacement operations record exact fresh top-level runtime IDs', () => {
+		const insertEditor = createBlockEditor();
+		const insertResult = applyOperation( {
+			editor: insertEditor,
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		const insertIds =
+			insertEditor.state.insertAttempts[ 0 ].topLevelClientIds;
+
+		expect( insertResult.ok ).toBe( true );
+		expect( insertResult.operations[ 0 ].insertedClientIds ).toEqual(
+			insertIds
+		);
+		expect( insertIds ).not.toEqual(
+			expect.arrayContaining( [
+				'cached-pattern-group',
+				'cached-pattern-heading',
+			] )
+		);
+
+		const replaceEditor = createBlockEditor();
+		const replaceResult = applyOperation( {
+			editor: replaceEditor,
+			operation: buildReplaceOperation(),
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		const replacementIds =
+			replaceEditor.state.insertAttempts[ 0 ].topLevelClientIds;
+
+		expect( replaceResult.ok ).toBe( true );
+		expect( replaceResult.operations[ 0 ].replacementClientIds ).toEqual(
+			replacementIds
+		);
+		expect( replacementIds ).not.toEqual(
+			expect.arrayContaining( [
+				'cached-pattern-group',
+				'cached-pattern-heading',
+			] )
+		);
+	} );
+
+	test( 'undo removes exact inserted runtime IDs', () => {
+		const editor = createBlockEditor();
+		const result = applyOperation( {
+			editor,
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		const insertedClientIds = result.operations[ 0 ].insertedClientIds;
+		editor.blockEditorDispatch.removeBlocks.mockClear();
+
+		const undoResult = undoBlockStructuralSuggestionOperations(
+			buildActivityFromResult( result ),
+			{
+				select: () => editor.blockEditorSelect,
+				dispatch: () => editor.blockEditorDispatch,
+			}
+		);
+
+		expect( undoResult ).toEqual( { ok: true } );
+		expect( editor.blockEditorDispatch.removeBlocks ).toHaveBeenCalledWith(
+			insertedClientIds,
+			false
+		);
+		expect(
+			editor.state.blocks.map( ( block ) => block.clientId )
+		).toEqual( [ 'block-1' ] );
+	} );
+
+	test( 'replacement undo removes exact replacement IDs and restores the original snapshot', () => {
+		const originalBlocks = [
+			{
+				clientId: 'block-1',
+				name: 'core/group',
+				attributes: { className: 'original' },
+				innerBlocks: [
+					{
+						clientId: 'original-inner',
+						name: 'core/paragraph',
+						attributes: { content: 'Original' },
+						innerBlocks: [],
+					},
+				],
+			},
+			{
+				clientId: 'neighbor',
+				name: 'core/heading',
+				attributes: { content: 'Neighbor' },
+				innerBlocks: [],
+			},
+		];
+		const editor = createBlockEditor( { blocks: originalBlocks } );
+		const result = applyOperation( {
+			editor,
+			operation: buildReplaceOperation(),
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		const replacementClientIds =
+			result.operations[ 0 ].replacementClientIds;
+		editor.blockEditorDispatch.removeBlocks.mockClear();
+		editor.state.insertAttempts = [];
+
+		const undoResult = undoBlockStructuralSuggestionOperations(
+			buildActivityFromResult( result ),
+			{
+				select: () => editor.blockEditorSelect,
+				dispatch: () => editor.blockEditorDispatch,
+			}
+		);
+
+		expect( undoResult ).toEqual( { ok: true } );
+		expect( editor.blockEditorDispatch.removeBlocks ).toHaveBeenCalledWith(
+			replacementClientIds,
+			false
+		);
+		expect( editor.state.insertAttempts[ 0 ].topLevelClientIds ).toEqual( [
+			'block-1',
+		] );
+		expect( editor.state.blocks ).toEqual( originalBlocks );
+	} );
+
+	test.each( [
+		{
+			label: 'missing runtime IDs',
+			buildIds: () => undefined,
+			deleteIds: true,
+			expectedError:
+				'This block structural action is missing its recorded structure and cannot be undone automatically.',
+		},
+		{
+			label: 'empty runtime IDs',
+			buildIds: () => [],
+			expectedError:
+				'This block structural action is missing its recorded structure and cannot be undone automatically.',
+		},
+		{
+			label: 'duplicate runtime IDs',
+			buildIds: ( validId ) => [ validId, validId ],
+			expectedError:
+				'This block structural action is missing its recorded structure and cannot be undone automatically.',
+		},
+		{
+			label: 'unresolved runtime IDs',
+			buildIds: () => [ 'missing-id' ],
+			expectedError:
+				'The recorded blocks are no longer available in this editor session, so this structural action cannot be undone automatically.',
+		},
+		{
+			label: 'wrong-root runtime IDs',
+			buildIds: () => [ 'nested-existing' ],
+			expectedError:
+				'The recorded blocks are no longer available in this editor session, so this structural action cannot be undone automatically.',
+		},
+	] )(
+		'fails undo before dispatch for $label and does not advertise Undo',
+		( { buildIds, deleteIds, expectedError } ) => {
+			const editor = createBlockEditor( {
+				blocks: [
 					{
 						clientId: 'block-1',
 						name: 'core/group',
 						attributes: {},
 						innerBlocks: [],
 					},
+					{
+						clientId: 'existing-container',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [
+							{
+								clientId: 'nested-existing',
+								name: 'core/paragraph',
+								attributes: {},
+								innerBlocks: [],
+							},
+						],
+					},
 				],
 			} );
+			const result = applyOperation( { editor } );
+			const operation = cloneValue( result.operations[ 0 ] );
+			const validId =
+				editor.state.insertAttempts[ 0 ].topLevelClientIds[ 0 ];
 
-		const afterResult = applyBlockStructuralSuggestionOperations( {
-			suggestion: buildSuggestion(),
-			blockOperationContext: baseContext,
-			blockEditorSelect,
-			blockEditorDispatch,
-			parsePatternBlocks,
-		} );
+			if ( deleteIds ) {
+				delete operation.insertedClientIds;
+			} else {
+				operation.insertedClientIds = buildIds( validId );
+			}
 
-		expect( afterResult.ok ).toBe( true );
-		expect( state.blocks.map( ( block ) => block.clientId ) ).toEqual( [
-			'before',
-			'block-1',
-			'pattern-1',
-		] );
+			const activity = buildActivityFromResult( result, [ operation ] );
+			editor.blockEditorDispatch.removeBlocks.mockClear();
+			editor.blockEditorDispatch.insertBlocks.mockClear();
 
-		const beforeResult = applyBlockStructuralSuggestionOperations( {
-			suggestion: buildSuggestion( {
-				...baseOperation,
-				targetClientId: 'before',
-				position: 'insert_before',
-				expectedTarget: {
-					clientId: 'before',
-					name: 'core/paragraph',
-				},
-			} ),
-			blockOperationContext: {
-				...baseContext,
-				targetClientId: 'before',
-				targetBlockName: 'core/paragraph',
-			},
-			blockEditorSelect,
-			blockEditorDispatch,
-			parsePatternBlocks,
-		} );
+			expect(
+				getBlockStructuralActivityUndoState(
+					activity,
+					editor.blockEditorSelect
+				)
+			).toEqual(
+				expect.objectContaining( {
+					canUndo: false,
+					status: 'failed',
+					error: expectedError,
+				} )
+			);
+			const undoResult = undoBlockStructuralSuggestionOperations(
+				activity,
+				{
+					select: () => editor.blockEditorSelect,
+					dispatch: () => editor.blockEditorDispatch,
+				}
+			);
+			expect( undoResult ).toEqual( {
+				ok: false,
+				error: expectedError,
+			} );
+			expect(
+				editor.blockEditorDispatch.removeBlocks
+			).not.toHaveBeenCalled();
+			expect(
+				editor.blockEditorDispatch.insertBlocks
+			).not.toHaveBeenCalled();
+		}
+	);
 
-		expect( beforeResult.ok ).toBe( true );
-		expect( state.blocks.map( ( block ) => block.clientId ) ).toEqual( [
-			'pattern-1',
-			'before',
-			'block-1',
-			'pattern-1',
-		] );
+	test( 'fails undo permission preflight before dispatch for native denial and missing selectors', () => {
+		for ( const mode of [ 'denied', 'missing' ] ) {
+			const editor = createBlockEditor();
+			const result = applyOperation( { editor } );
+			const activity = buildActivityFromResult( result );
+			editor.blockEditorDispatch.removeBlocks.mockClear();
+
+			if ( mode === 'denied' ) {
+				editor.blockEditorSelect.canRemoveBlocks.mockReturnValue(
+					false
+				);
+			} else {
+				delete editor.blockEditorSelect.canRemoveBlocks;
+			}
+
+			expect(
+				getBlockStructuralActivityUndoState(
+					activity,
+					editor.blockEditorSelect
+				)
+			).toEqual(
+				expect.objectContaining( {
+					canUndo: false,
+					error: 'The current editor constraints do not allow this structural action to be undone automatically.',
+				} )
+			);
+			expect(
+				undoBlockStructuralSuggestionOperations( activity, {
+					select: () => editor.blockEditorSelect,
+					dispatch: () => editor.blockEditorDispatch,
+				} ).ok
+			).toBe( false );
+			expect(
+				editor.blockEditorDispatch.removeBlocks
+			).not.toHaveBeenCalled();
+		}
 	} );
 
-	test( 'applyBlockStructuralSuggestionOperations replaces the selected block transactionally', () => {
-		const { state, blockEditorSelect, blockEditorDispatch } =
-			createBlockEditor();
-
-		const result = applyBlockStructuralSuggestionOperations( {
-			suggestion: buildSuggestion( {
-				...baseOperation,
-				type: 'replace_block_with_pattern',
-				action: 'replace',
-				position: undefined,
-			} ),
-			blockOperationContext: baseContext,
-			blockEditorSelect,
-			blockEditorDispatch,
-			parsePatternBlocks,
+	test( 'replacement undo fails before dispatch when the original target type cannot be reinserted', () => {
+		const editor = createBlockEditor();
+		const result = applyOperation( {
+			editor,
+			operation: buildReplaceOperation(),
 		} );
-
-		expect( result ).toEqual(
-			expect.objectContaining( {
-				ok: true,
-				operations: [
-					expect.objectContaining( {
-						type: 'replace_block_with_pattern',
-						removedBlocksSnapshot: [
-							expect.objectContaining( {
-								clientId: 'block-1',
-								name: 'core/group',
-							} ),
-						],
-						insertedBlocksSnapshot: [
-							expect.objectContaining( {
-								name: 'core/paragraph',
-							} ),
-						],
-					} ),
-				],
-			} )
+		const activity = buildActivityFromResult( result );
+		editor.blockEditorDispatch.removeBlocks.mockClear();
+		editor.blockEditorDispatch.insertBlocks.mockClear();
+		editor.blockEditorSelect.canInsertBlockType.mockImplementation(
+			( name ) => name !== 'core/group'
 		);
-		expect( state.blocks.map( ( block ) => block.clientId ) ).toEqual( [
-			'pattern-1',
-		] );
+
+		expect(
+			getBlockStructuralActivityUndoState(
+				activity,
+				editor.blockEditorSelect
+			).canUndo
+		).toBe( false );
+		expect(
+			undoBlockStructuralSuggestionOperations( activity, {
+				select: () => editor.blockEditorSelect,
+				dispatch: () => editor.blockEditorDispatch,
+			} ).ok
+		).toBe( false );
+		expect(
+			editor.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+		expect(
+			editor.blockEditorDispatch.insertBlocks
+		).not.toHaveBeenCalled();
 	} );
 
-	test( 'applyBlockStructuralSuggestionOperations restores removed blocks when replacement insertion fails', () => {
-		const { state, blockEditorSelect, blockEditorDispatch } =
-			createBlockEditor( { failNextInsert: true } );
-
-		const result = applyBlockStructuralSuggestionOperations( {
-			suggestion: buildSuggestion( {
-				...baseOperation,
-				type: 'replace_block_with_pattern',
-				action: 'replace',
-				position: undefined,
-			} ),
-			blockOperationContext: baseContext,
-			blockEditorSelect,
-			blockEditorDispatch,
-			parsePatternBlocks,
-		} );
-
-		expect( result.ok ).toBe( false );
-		expect( state.blocks ).toEqual( [
-			expect.objectContaining( {
-				clientId: 'block-1',
-				name: 'core/group',
-			} ),
-		] );
-	} );
-
-	test( 'undoBlockStructuralSuggestionOperations removes inserted blocks when post-apply state has not drifted', () => {
-		const { state, blockEditorSelect, blockEditorDispatch } =
-			createBlockEditor();
-		const result = applyBlockStructuralSuggestionOperations( {
-			suggestion: buildSuggestion(),
-			blockOperationContext: baseContext,
-			blockEditorSelect,
-			blockEditorDispatch,
-			parsePatternBlocks,
-		} );
+	test( 'undo reports incomplete when exact runtime-ID removal is a no-op', () => {
+		const editor = createBlockEditor();
+		const result = applyOperation( { editor } );
+		const runtimeId =
+			editor.state.insertAttempts[ 0 ].topLevelClientIds[ 0 ];
+		editor.state.noOpNextRemove = true;
+		editor.blockEditorDispatch.removeBlocks.mockClear();
 
 		const undoResult = undoBlockStructuralSuggestionOperations(
+			buildActivityFromResult( result ),
 			{
-				after: {
-					operations: result.operations,
-					structuralSignature: result.afterSignature,
-				},
-			},
-			{
-				select: () => blockEditorSelect,
-				dispatch: () => blockEditorDispatch,
+				select: () => editor.blockEditorSelect,
+				dispatch: () => editor.blockEditorDispatch,
 			}
 		);
 
-		expect( undoResult ).toEqual( { ok: true } );
-		expect( state.blocks.map( ( block ) => block.clientId ) ).toEqual( [
-			'block-1',
-		] );
+		expect( undoResult ).toEqual( {
+			ok: false,
+			error: 'The structural action could not be undone completely. Review the block structure before continuing.',
+		} );
+		expect( editor.blockEditorSelect.getBlock( runtimeId ) ).not.toBeNull();
 	} );
 
-	test( 'undoBlockStructuralSuggestionOperations blocks undo when post-apply structure drifts', () => {
-		const { state, blockEditorSelect, blockEditorDispatch } =
-			createBlockEditor();
-		const result = applyBlockStructuralSuggestionOperations( {
-			suggestion: buildSuggestion(),
-			blockOperationContext: baseContext,
-			blockEditorSelect,
-			blockEditorDispatch,
-			parsePatternBlocks,
+	test( 'replacement undo reports incomplete when original restoration is a no-op', () => {
+		const editor = createBlockEditor();
+		const result = applyOperation( {
+			editor,
+			operation: buildReplaceOperation(),
 		} );
-		state.blocks[ 1 ].attributes.content = 'Edited after apply';
+		editor.state.noOpNextRestoreInsert = true;
+		editor.blockEditorDispatch.removeBlocks.mockClear();
 
 		const undoResult = undoBlockStructuralSuggestionOperations(
+			buildActivityFromResult( result ),
 			{
-				after: {
-					operations: result.operations,
-					structuralSignature: result.afterSignature,
-				},
-			},
+				select: () => editor.blockEditorSelect,
+				dispatch: () => editor.blockEditorDispatch,
+			}
+		);
+
+		expect( undoResult ).toEqual( {
+			ok: false,
+			error: 'The structural action could not be undone completely. Review the block structure before continuing.',
+		} );
+		expect( editor.blockEditorSelect.getBlock( 'block-1' ) ).toBeNull();
+	} );
+
+	test( 'post-apply structural drift blocks undo before runtime-ID permission checks', () => {
+		const editor = createBlockEditor();
+		const result = applyOperation( { editor } );
+		editor.state.blocks[ 1 ].attributes.content = 'Edited after apply';
+		editor.blockEditorSelect.canRemoveBlocks.mockClear();
+		editor.blockEditorDispatch.removeBlocks.mockClear();
+
+		const undoResult = undoBlockStructuralSuggestionOperations(
+			buildActivityFromResult( result ),
 			{
-				select: () => blockEditorSelect,
-				dispatch: () => blockEditorDispatch,
+				select: () => editor.blockEditorSelect,
+				dispatch: () => editor.blockEditorDispatch,
 			}
 		);
 
@@ -498,9 +1301,58 @@ describe( 'block structural actions', () => {
 				error: 'The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
 			} )
 		);
-		expect( state.blocks.map( ( block ) => block.clientId ) ).toEqual( [
-			'block-1',
-			'pattern-1',
-		] );
+		expect(
+			editor.blockEditorSelect.canRemoveBlocks
+		).not.toHaveBeenCalled();
+		expect(
+			editor.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+	} );
+
+	test( 'reloaded structurally identical blocks with regenerated IDs fail at the editor-session boundary', () => {
+		const applyEditor = createBlockEditor();
+		const result = applyOperation( {
+			editor: applyEditor,
+			parser: parseCachedNestedPatternBlocks,
+		} );
+		let reloadSequence = 0;
+		const regenerateIds = ( blocks ) =>
+			blocks.map( ( block ) => ( {
+				...cloneValue( block ),
+				clientId: `reloaded-${ ++reloadSequence }`,
+				innerBlocks: regenerateIds( block.innerBlocks || [] ),
+			} ) );
+		const reloadEditor = createBlockEditor( {
+			blocks: regenerateIds( applyEditor.state.blocks ),
+		} );
+		const activity = buildActivityFromResult( result );
+
+		expect(
+			getBlockStructuralActivityUndoState(
+				activity,
+				reloadEditor.blockEditorSelect
+			)
+		).toEqual(
+			expect.objectContaining( {
+				canUndo: false,
+				status: 'failed',
+				error: 'The recorded blocks are no longer available in this editor session, so this structural action cannot be undone automatically.',
+			} )
+		);
+		expect(
+			undoBlockStructuralSuggestionOperations( activity, {
+				select: () => reloadEditor.blockEditorSelect,
+				dispatch: () => reloadEditor.blockEditorDispatch,
+			} )
+		).toEqual( {
+			ok: false,
+			error: 'The recorded blocks are no longer available in this editor session, so this structural action cannot be undone automatically.',
+		} );
+		expect(
+			reloadEditor.blockEditorDispatch.removeBlocks
+		).not.toHaveBeenCalled();
+		expect(
+			reloadEditor.blockEditorDispatch.insertBlocks
+		).not.toHaveBeenCalled();
 	} );
 } );

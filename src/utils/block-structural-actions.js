@@ -10,10 +10,35 @@ import {
 	validateBlockOperationSequence,
 } from './block-operation-catalog';
 import { buildContextSignature } from './context-signature';
+import { cloneBlock } from '@wordpress/blocks';
 import { __ } from '@wordpress/i18n';
 
 const STRUCTURAL_DRIFT_UNDO_ERROR = __(
 	'The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+	'flavor-agent'
+);
+const STRUCTURAL_ROLLBACK_ERROR = __(
+	'Flavor Agent could not safely roll back the structural change. Review the block structure before continuing.',
+	'flavor-agent'
+);
+const STRUCTURAL_RESTORE_ERROR = __(
+	'Flavor Agent could not restore the replaced block after the structural change failed. Review the block structure before continuing.',
+	'flavor-agent'
+);
+const STRUCTURAL_UNDO_PERMISSION_ERROR = __(
+	'The current editor constraints do not allow this structural action to be undone automatically.',
+	'flavor-agent'
+);
+const STRUCTURAL_UNDO_INCOMPLETE_ERROR = __(
+	'The structural action could not be undone completely. Review the block structure before continuing.',
+	'flavor-agent'
+);
+const STRUCTURAL_UNDO_SESSION_ERROR = __(
+	'The recorded blocks are no longer available in this editor session, so this structural action cannot be undone automatically.',
+	'flavor-agent'
+);
+const STRUCTURAL_MISSING_UNDO_ERROR = __(
+	'This block structural action is missing its recorded structure and cannot be undone automatically.',
 	'flavor-agent'
 );
 
@@ -77,6 +102,31 @@ function normalizeBlockSnapshots( blocks = [] ) {
 
 function cloneBlockTree( blocks = [] ) {
 	return Array.isArray( blocks ) ? cloneValue( blocks ) : [];
+}
+
+function getRequestedTopLevelClientIds( blocks = [] ) {
+	const ids = blocks.map( ( block ) => block?.clientId || '' );
+
+	return ids.every( Boolean ) && new Set( ids ).size === ids.length
+		? ids
+		: [];
+}
+
+function canInsertParsedBlocks( blocks, rootClientId, blockEditorSelect ) {
+	if ( typeof blockEditorSelect?.canInsertBlockType !== 'function' ) {
+		return false;
+	}
+
+	return blocks.every(
+		( block ) =>
+			Boolean( block?.name ) &&
+			blockEditorSelect.canInsertBlockType( block.name, rootClientId ) ===
+				true
+	);
+}
+
+function parsedBlocksAreRollbackCapable( blocks = [] ) {
+	return blocks.every( ( block ) => ! block?.attributes?.lock?.remove );
 }
 
 function blockSnapshotsMatch( left = [], right = [] ) {
@@ -280,6 +330,8 @@ export function getBlockStructuralActionErrorMessage( code = '' ) {
 			'The structural operation is no longer valid. Refresh recommendations and try again.',
 			'flavor-agent'
 		),
+		rollback_failed: STRUCTURAL_ROLLBACK_ERROR,
+		restore_failed: STRUCTURAL_RESTORE_ERROR,
 	};
 
 	return messages[ code ] || messages.operation_invalid;
@@ -365,7 +417,7 @@ function parseBlocksForOperation( operation, parsePatternBlocks ) {
 
 		return {
 			ok: true,
-			blocks: cloneBlockTree( blocks ),
+			blocks: blocks.map( ( block ) => cloneBlock( block ) ),
 		};
 	} catch ( error ) {
 		const code =
@@ -382,34 +434,138 @@ function parseBlocksForOperation( operation, parsePatternBlocks ) {
 	}
 }
 
-function removeInsertedSlice(
+function normalizeRootClientId( rootClientId ) {
+	return rootClientId || null;
+}
+
+function prepareParsedInsertion(
+	blocks,
+	rootClientId,
+	blockEditorSelect = {}
+) {
+	const requestedClientIds = getRequestedTopLevelClientIds( blocks );
+
+	if (
+		requestedClientIds.length !== blocks.length ||
+		! parsedBlocksAreRollbackCapable( blocks ) ||
+		typeof blockEditorSelect.getBlock !== 'function' ||
+		typeof blockEditorSelect.getBlockRootClientId !== 'function' ||
+		typeof blockEditorSelect.canRemoveBlocks !== 'function' ||
+		! canInsertParsedBlocks( blocks, rootClientId, blockEditorSelect )
+	) {
+		return null;
+	}
+
+	const beforePresentClientIds = new Set(
+		requestedClientIds.filter( ( clientId ) =>
+			Boolean( blockEditorSelect.getBlock( clientId ) )
+		)
+	);
+
+	if ( beforePresentClientIds.size > 0 ) {
+		return null;
+	}
+
+	return {
+		requestedClientIds,
+		beforePresentClientIds,
+	};
+}
+
+function getNewlyPresentRequestedClientIds(
+	requestedClientIds,
+	beforePresentClientIds,
+	blockEditorSelect
+) {
+	return requestedClientIds.filter(
+		( clientId ) =>
+			! beforePresentClientIds.has( clientId ) &&
+			Boolean( blockEditorSelect.getBlock?.( clientId ) )
+	);
+}
+
+function insertedBlocksMatchRequest( {
+	blocks,
+	clientIds,
+	index,
+	rootClientId,
+	rootLocator,
+	blockEditorSelect,
+} ) {
+	if ( clientIds.length !== blocks.length ) {
+		return false;
+	}
+
+	const insertedSlice = getBlockSlice(
+		blockEditorSelect,
+		rootLocator,
+		index,
+		blocks.length
+	);
+	const sliceClientIds = insertedSlice.map(
+		( block ) => block?.clientId || ''
+	);
+
+	return (
+		sliceClientIds.length === clientIds.length &&
+		sliceClientIds.every(
+			( clientId, clientIndex ) => clientId === clientIds[ clientIndex ]
+		) &&
+		blockSnapshotsMatch( insertedSlice, blocks ) &&
+		clientIds.every(
+			( clientId ) =>
+				Boolean( blockEditorSelect.getBlock?.( clientId ) ) &&
+				normalizeRootClientId(
+					blockEditorSelect.getBlockRootClientId?.( clientId )
+				) === normalizeRootClientId( rootClientId )
+		)
+	);
+}
+
+function removeExactInsertedBlocks(
+	clientIds,
+	blockEditorSelect,
+	blockEditorDispatch
+) {
+	if ( clientIds.length === 0 ) {
+		return true;
+	}
+
+	if (
+		typeof blockEditorSelect?.canRemoveBlocks !== 'function' ||
+		blockEditorSelect.canRemoveBlocks( clientIds ) !== true
+	) {
+		return false;
+	}
+
+	blockEditorDispatch.removeBlocks?.( clientIds, false );
+
+	return clientIds.every(
+		( clientId ) => ! blockEditorSelect.getBlock?.( clientId )
+	);
+}
+
+function restoreRemovedBlocks(
 	operation,
 	blockEditorSelect,
 	blockEditorDispatch
 ) {
-	const insertedCount = Array.isArray( operation?.insertedBlocksSnapshot )
-		? operation.insertedBlocksSnapshot.length
-		: 0;
-	const slice = getBlockSlice(
-		blockEditorSelect,
-		operation?.rootLocator,
-		operation?.index,
-		insertedCount
-	);
-	const clientIds = slice
-		.map( ( block ) => block?.clientId )
-		.filter( Boolean );
-
-	if ( clientIds.length > 0 ) {
-		blockEditorDispatch.removeBlocks?.( clientIds, false );
-	}
-}
-
-function restoreRemovedBlocks( operation, blockEditorDispatch ) {
 	const removedBlocks = cloneBlockTree( operation?.removedBlocksSnapshot );
 
 	if ( removedBlocks.length === 0 ) {
-		return;
+		return false;
+	}
+
+	const rootClientId = resolveRootClientId( operation.rootLocator );
+
+	if (
+		! canInsertParsedBlocks(
+			removedBlocks,
+			rootClientId,
+			blockEditorSelect
+		)
+	) {
+		return false;
 	}
 
 	blockEditorDispatch.insertBlocks?.(
@@ -420,9 +576,33 @@ function restoreRemovedBlocks( operation, blockEditorDispatch ) {
 		// null records the blocks in byClientId without adding them to the root
 		// order, so the restored block never renders. Normalize to '' (nested
 		// string roots are preserved by resolveRootClientId).
-		resolveRootClientId( operation.rootLocator ) ?? '',
+		rootClientId ?? '',
 		true,
 		0
+	);
+
+	const restoredSlice = getBlockSlice(
+		blockEditorSelect,
+		operation.rootLocator,
+		operation.index,
+		removedBlocks.length
+	);
+	const expectedClientIds = getRequestedTopLevelClientIds( removedBlocks );
+
+	return (
+		expectedClientIds.length === removedBlocks.length &&
+		restoredSlice.length === removedBlocks.length &&
+		restoredSlice.every(
+			( block, index ) => block?.clientId === expectedClientIds[ index ]
+		) &&
+		blockSnapshotsMatch( restoredSlice, removedBlocks ) &&
+		expectedClientIds.every(
+			( clientId ) =>
+				Boolean( blockEditorSelect.getBlock?.( clientId ) ) &&
+				normalizeRootClientId(
+					blockEditorSelect.getBlockRootClientId?.( clientId )
+				) === normalizeRootClientId( rootClientId )
+		)
 	);
 }
 
@@ -452,6 +632,34 @@ function applyInsertPatternOperation( {
 		};
 	}
 
+	const insertion = prepareParsedInsertion(
+		parsed.blocks,
+		location.rootClientId,
+		blockEditorSelect
+	);
+
+	if ( ! insertion ) {
+		return {
+			ok: false,
+			code: 'operation_invalid',
+			error: getBlockStructuralActionErrorMessage( 'operation_invalid' ),
+		};
+	}
+
+	if (
+		! canInsertParsedBlocks(
+			parsed.blocks,
+			location.rootClientId,
+			blockEditorSelect
+		)
+	) {
+		return {
+			ok: false,
+			code: 'operation_invalid',
+			error: getBlockStructuralActionErrorMessage( 'operation_invalid' ),
+		};
+	}
+
 	const rootLocator = buildRootLocator(
 		location.rootClientId,
 		blockEditorSelect
@@ -469,28 +677,37 @@ function applyInsertPatternOperation( {
 		0
 	);
 
-	const insertedSlice = getBlockSlice(
-		blockEditorSelect,
-		rootLocator,
-		index,
-		parsed.blocks.length
+	const insertedClientIds = getNewlyPresentRequestedClientIds(
+		insertion.requestedClientIds,
+		insertion.beforePresentClientIds,
+		blockEditorSelect
 	);
+	const insertedBlocksAreValid = insertedBlocksMatchRequest( {
+		blocks: parsed.blocks,
+		clientIds: insertedClientIds,
+		index,
+		rootClientId: location.rootClientId,
+		rootLocator,
+		blockEditorSelect,
+	} );
+	const insertedBlocksAreRemovable =
+		insertedClientIds.length > 0 &&
+		blockEditorSelect.canRemoveBlocks( insertedClientIds ) === true;
 
-	if (
-		insertedSlice.length !== parsed.blocks.length ||
-		! blockSnapshotsMatch( insertedSlice, parsed.blocks )
-	) {
-		const rollbackOperation = {
-			...operation,
-			rootLocator,
-			index,
-			insertedBlocksSnapshot: normalizeBlockSnapshots( parsed.blocks ),
-		};
-		removeInsertedSlice(
-			rollbackOperation,
-			blockEditorSelect,
-			blockEditorDispatch
-		);
+	if ( ! insertedBlocksAreValid || ! insertedBlocksAreRemovable ) {
+		if (
+			! removeExactInsertedBlocks(
+				insertedClientIds,
+				blockEditorSelect,
+				blockEditorDispatch
+			)
+		) {
+			return {
+				ok: false,
+				code: 'rollback_failed',
+				error: STRUCTURAL_ROLLBACK_ERROR,
+			};
+		}
 
 		return {
 			ok: false,
@@ -507,7 +724,8 @@ function applyInsertPatternOperation( {
 			...operation,
 			rootLocator,
 			index,
-			insertedBlocksSnapshot: normalizeBlockSnapshots( insertedSlice ),
+			insertedClientIds,
+			insertedBlocksSnapshot: normalizeBlockSnapshots( parsed.blocks ),
 		},
 	};
 }
@@ -538,11 +756,35 @@ function applyReplaceBlockWithPatternOperation( {
 		};
 	}
 
+	const removedBlocksSnapshot = cloneBlockTree( [ liveBlock ] );
+	const insertion = prepareParsedInsertion(
+		parsed.blocks,
+		location.rootClientId,
+		blockEditorSelect
+	);
+
+	if (
+		! insertion ||
+		typeof blockEditorSelect.canRemoveBlock !== 'function' ||
+		blockEditorSelect.canRemoveBlock( liveBlock.clientId ) !== true ||
+		! canInsertParsedBlocks(
+			removedBlocksSnapshot,
+			location.rootClientId,
+			blockEditorSelect
+		)
+	) {
+		return {
+			ok: false,
+			code: 'operation_invalid',
+			error: getBlockStructuralActionErrorMessage( 'operation_invalid' ),
+		};
+	}
+
 	const rootLocator = buildRootLocator(
 		location.rootClientId,
 		blockEditorSelect
 	);
-	const removedBlocksSnapshot = cloneBlockTree( [ liveBlock ] );
+
 	const baseOperation = {
 		...operation,
 		rootLocator,
@@ -550,6 +792,14 @@ function applyReplaceBlockWithPatternOperation( {
 		removedBlocksSnapshot,
 		insertedBlocksSnapshot: normalizeBlockSnapshots( parsed.blocks ),
 	};
+
+	if ( blockEditorSelect.canRemoveBlock( liveBlock.clientId ) !== true ) {
+		return {
+			ok: false,
+			code: 'operation_invalid',
+			error: getBlockStructuralActionErrorMessage( 'operation_invalid' ),
+		};
+	}
 
 	blockEditorDispatch.removeBlocks?.( [ liveBlock.clientId ], false );
 
@@ -564,6 +814,34 @@ function applyReplaceBlockWithPatternOperation( {
 		};
 	}
 
+	if (
+		! canInsertParsedBlocks(
+			parsed.blocks,
+			location.rootClientId,
+			blockEditorSelect
+		)
+	) {
+		if (
+			! restoreRemovedBlocks(
+				baseOperation,
+				blockEditorSelect,
+				blockEditorDispatch
+			)
+		) {
+			return {
+				ok: false,
+				code: 'restore_failed',
+				error: STRUCTURAL_RESTORE_ERROR,
+			};
+		}
+
+		return {
+			ok: false,
+			code: 'operation_invalid',
+			error: getBlockStructuralActionErrorMessage( 'operation_invalid' ),
+		};
+	}
+
 	blockEditorDispatch.insertBlocks?.(
 		parsed.blocks,
 		location.index,
@@ -572,23 +850,51 @@ function applyReplaceBlockWithPatternOperation( {
 		0
 	);
 
-	const insertedSlice = getBlockSlice(
-		blockEditorSelect,
-		rootLocator,
-		location.index,
-		parsed.blocks.length
+	const replacementClientIds = getNewlyPresentRequestedClientIds(
+		insertion.requestedClientIds,
+		insertion.beforePresentClientIds,
+		blockEditorSelect
 	);
+	const replacementBlocksAreValid = insertedBlocksMatchRequest( {
+		blocks: parsed.blocks,
+		clientIds: replacementClientIds,
+		index: location.index,
+		rootClientId: location.rootClientId,
+		rootLocator,
+		blockEditorSelect,
+	} );
+	const replacementBlocksAreRemovable =
+		replacementClientIds.length > 0 &&
+		blockEditorSelect.canRemoveBlocks( replacementClientIds ) === true;
 
-	if (
-		insertedSlice.length !== parsed.blocks.length ||
-		! blockSnapshotsMatch( insertedSlice, parsed.blocks )
-	) {
-		removeInsertedSlice(
-			baseOperation,
-			blockEditorSelect,
-			blockEditorDispatch
-		);
-		restoreRemovedBlocks( baseOperation, blockEditorDispatch );
+	if ( ! replacementBlocksAreValid || ! replacementBlocksAreRemovable ) {
+		if (
+			! removeExactInsertedBlocks(
+				replacementClientIds,
+				blockEditorSelect,
+				blockEditorDispatch
+			)
+		) {
+			return {
+				ok: false,
+				code: 'rollback_failed',
+				error: STRUCTURAL_ROLLBACK_ERROR,
+			};
+		}
+
+		if (
+			! restoreRemovedBlocks(
+				baseOperation,
+				blockEditorSelect,
+				blockEditorDispatch
+			)
+		) {
+			return {
+				ok: false,
+				code: 'restore_failed',
+				error: STRUCTURAL_RESTORE_ERROR,
+			};
+		}
 
 		return {
 			ok: false,
@@ -603,7 +909,8 @@ function applyReplaceBlockWithPatternOperation( {
 		ok: true,
 		operation: {
 			...baseOperation,
-			insertedBlocksSnapshot: normalizeBlockSnapshots( insertedSlice ),
+			replacementClientIds,
+			insertedBlocksSnapshot: normalizeBlockSnapshots( parsed.blocks ),
 		},
 	};
 }
@@ -702,6 +1009,117 @@ export function getBlockStructuralActivitySignature(
 	return buildStructuralSignature( operations, blockEditorSelect );
 }
 
+function getOperationRuntimeClientIds( operation ) {
+	switch ( operation?.type ) {
+		case BLOCK_OPERATION_INSERT_PATTERN:
+			return operation.insertedClientIds;
+		case BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN:
+			return operation.replacementClientIds;
+		default:
+			return null;
+	}
+}
+
+function validateStructuralUndoOperations(
+	operations,
+	blockEditorSelect = {}
+) {
+	const seenClientIds = new Set();
+
+	for ( const operation of operations ) {
+		const runtimeClientIds = getOperationRuntimeClientIds( operation );
+
+		if (
+			! Array.isArray( runtimeClientIds ) ||
+			runtimeClientIds.length === 0 ||
+			new Set( runtimeClientIds ).size !== runtimeClientIds.length ||
+			runtimeClientIds.some(
+				( clientId ) =>
+					typeof clientId !== 'string' ||
+					! clientId ||
+					seenClientIds.has( clientId )
+			)
+		) {
+			return {
+				ok: false,
+				error: STRUCTURAL_MISSING_UNDO_ERROR,
+			};
+		}
+
+		runtimeClientIds.forEach( ( clientId ) =>
+			seenClientIds.add( clientId )
+		);
+
+		if (
+			typeof blockEditorSelect.getBlock !== 'function' ||
+			typeof blockEditorSelect.getBlockRootClientId !== 'function'
+		) {
+			return {
+				ok: false,
+				error: STRUCTURAL_UNDO_SESSION_ERROR,
+			};
+		}
+
+		const rootClientId = resolveRootClientId( operation.rootLocator );
+		const runtimeBlocks = runtimeClientIds.map( ( clientId ) =>
+			blockEditorSelect.getBlock( clientId )
+		);
+
+		if (
+			runtimeBlocks.some( ( block ) => ! block?.clientId ) ||
+			runtimeClientIds.some(
+				( clientId ) =>
+					normalizeRootClientId(
+						blockEditorSelect.getBlockRootClientId( clientId )
+					) !== normalizeRootClientId( rootClientId )
+			)
+		) {
+			return {
+				ok: false,
+				error: STRUCTURAL_UNDO_SESSION_ERROR,
+			};
+		}
+
+		if (
+			typeof blockEditorSelect.canRemoveBlocks !== 'function' ||
+			blockEditorSelect.canRemoveBlocks( runtimeClientIds ) !== true
+		) {
+			return {
+				ok: false,
+				error: STRUCTURAL_UNDO_PERMISSION_ERROR,
+			};
+		}
+
+		if ( operation.type === BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN ) {
+			const removedBlocks = cloneBlockTree(
+				operation.removedBlocksSnapshot
+			);
+
+			if ( removedBlocks.length === 0 ) {
+				return {
+					ok: false,
+					error: STRUCTURAL_MISSING_UNDO_ERROR,
+				};
+			}
+
+			if (
+				! canInsertParsedBlocks(
+					removedBlocks,
+					rootClientId,
+					blockEditorSelect
+				)
+			) {
+				return {
+					ok: false,
+					error: STRUCTURAL_UNDO_PERMISSION_ERROR,
+				};
+			}
+		}
+	}
+
+	return { ok: true };
+}
+
 export function getBlockStructuralActivityUndoState(
 	entry,
 	blockEditorSelect = {}
@@ -728,14 +1146,28 @@ export function getBlockStructuralActivityUndoState(
 			...existingUndo,
 			canUndo: false,
 			status: 'failed',
-			error: __(
-				'This block structural action is missing its recorded structure and cannot be undone automatically.',
-				'flavor-agent'
-			),
+			error: STRUCTURAL_MISSING_UNDO_ERROR,
 		};
 	}
 
 	if ( currentSignature === afterSignature ) {
+		const operations = Array.isArray( entry?.after?.operations )
+			? entry.after.operations
+			: [];
+		const validation = validateStructuralUndoOperations(
+			operations,
+			blockEditorSelect
+		);
+
+		if ( ! validation.ok ) {
+			return {
+				...existingUndo,
+				canUndo: false,
+				status: 'failed',
+				error: validation.error,
+			};
+		}
+
 		return {
 			...existingUndo,
 			canUndo: true,
@@ -773,10 +1205,7 @@ export function undoBlockStructuralSuggestionOperations( activity, registry ) {
 	if ( operations.length === 0 || ! expectedAfterSignature ) {
 		return {
 			ok: false,
-			error: __(
-				'This block structural action is missing its recorded structure and cannot be undone automatically.',
-				'flavor-agent'
-			),
+			error: STRUCTURAL_MISSING_UNDO_ERROR,
 		};
 	}
 
@@ -792,23 +1221,65 @@ export function undoBlockStructuralSuggestionOperations( activity, registry ) {
 		};
 	}
 
-	for ( const operation of [ ...operations ].reverse() ) {
-		switch ( operation.type ) {
-			case BLOCK_OPERATION_INSERT_PATTERN:
-				removeInsertedSlice(
-					operation,
-					blockEditorSelect,
-					blockEditorDispatch
-				);
-				break;
+	const validation = validateStructuralUndoOperations(
+		operations,
+		blockEditorSelect
+	);
 
+	if ( ! validation.ok ) {
+		return validation;
+	}
+
+	for ( const operation of [ ...operations ].reverse() ) {
+		const runtimeClientIds = getOperationRuntimeClientIds( operation );
+
+		if ( blockEditorSelect.canRemoveBlocks( runtimeClientIds ) !== true ) {
+			return {
+				ok: false,
+				error: STRUCTURAL_UNDO_PERMISSION_ERROR,
+			};
+		}
+
+		blockEditorDispatch.removeBlocks?.( runtimeClientIds, false );
+
+		if (
+			runtimeClientIds.some( ( clientId ) =>
+				Boolean( blockEditorSelect.getBlock( clientId ) )
+			)
+		) {
+			return {
+				ok: false,
+				error: STRUCTURAL_UNDO_INCOMPLETE_ERROR,
+			};
+		}
+
+		switch ( operation.type ) {
 			case BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN:
-				removeInsertedSlice(
-					operation,
-					blockEditorSelect,
-					blockEditorDispatch
-				);
-				restoreRemovedBlocks( operation, blockEditorDispatch );
+				if (
+					! canInsertParsedBlocks(
+						cloneBlockTree( operation.removedBlocksSnapshot ),
+						resolveRootClientId( operation.rootLocator ),
+						blockEditorSelect
+					)
+				) {
+					return {
+						ok: false,
+						error: STRUCTURAL_UNDO_PERMISSION_ERROR,
+					};
+				}
+
+				if (
+					! restoreRemovedBlocks(
+						operation,
+						blockEditorSelect,
+						blockEditorDispatch
+					)
+				) {
+					return {
+						ok: false,
+						error: STRUCTURAL_UNDO_INCOMPLETE_ERROR,
+					};
+				}
 				break;
 		}
 	}
