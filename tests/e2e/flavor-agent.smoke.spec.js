@@ -2400,7 +2400,297 @@ test( '@wp70-site-editor block inspector smoke applies, persists, and undoes AI 
 		} );
 } );
 
-test( '@wp70-site-editor block structural review applies, blocks locked targets, and undoes', async ( {
+test( '@wp70-site-editor block preview metadata cannot initiate a network request', async ( {
+	page,
+} ) => {
+	test.setTimeout( 180_000 );
+	resetWp70TemplateSmokeState();
+
+	const MALICIOUS_PREVIEW_LABEL = 'Preview network probe';
+	const PREVIEW_PROBE_URL = 'https://preview-probe.invalid/pixel';
+	const attemptedPreviewRequests = [];
+
+	await page.route( 'https://preview-probe.invalid/**', async ( route ) => {
+		attemptedPreviewRequests.push( route.request().url() );
+		await route.abort();
+	} );
+	await page.route(
+		recommendationAbilityRoute( 'recommend-block' ),
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					payload: {
+						...BLOCK_RESPONSE.payload,
+						block: [
+							{
+								...BLOCK_RESPONSE.payload.block[ 0 ],
+								label: MALICIOUS_PREVIEW_LABEL,
+								preview: `url(${ PREVIEW_PROBE_URL })`,
+							},
+						],
+					},
+				} ),
+			} );
+		}
+	);
+
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await seedParagraphBlock( page );
+	await ensureSettingsSidebarOpen( page );
+
+	const promptInput = page.getByPlaceholder(
+		'Describe the outcome you want for this block.'
+	);
+	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+	const maliciousSuggestion = page.getByRole( 'button', {
+		name: MALICIOUS_PREVIEW_LABEL,
+		exact: true,
+	} );
+	await expect( maliciousSuggestion ).toBeVisible( { timeout: 15_000 } );
+	await expect
+		.poll( () =>
+			maliciousSuggestion.evaluate( ( element ) =>
+				element.style.getPropertyValue( '--flavor-agent-chip-preview' )
+			)
+		)
+		.toBe( '' );
+	await expect(
+		maliciousSuggestion.locator( '.flavor-agent-chip__preview' )
+	).toHaveCount( 0 );
+
+	await page.evaluate(
+		() =>
+			new Promise( ( resolve ) => {
+				window.requestAnimationFrame( () => {
+					window.requestAnimationFrame( resolve );
+				} );
+			} )
+	);
+	expect( attemptedPreviewRequests ).toEqual( [] );
+} );
+
+test( '@wp70-site-editor block apply aborts when live context changes during signature revalidation', async ( {
+	page,
+} ) => {
+	test.setTimeout( 180_000 );
+	resetWp70TemplateSmokeState();
+
+	const TEST_RESOLVED_SIGNATURE =
+		'test-resolved-signature-block-live-context-race';
+	const RACE_SUGGESTION_LABEL = 'Apply delayed content update';
+	const capturedSignatureOnlyRequests = [];
+	let holdSignatureOnlyRequest = false;
+	let captureSignatureOnlyRequest;
+	let releaseSignatureOnlyRequest;
+	const signatureOnlyRequestCaptured = new Promise( ( resolve ) => {
+		captureSignatureOnlyRequest = resolve;
+	} );
+	const signatureOnlyRequestRelease = new Promise( ( resolve ) => {
+		releaseSignatureOnlyRequest = resolve;
+	} );
+
+	await page.route(
+		recommendationAbilityRoute( 'recommend-block' ),
+		async ( route ) => {
+			let body = {};
+			try {
+				body = getAbilityRequestInput(
+					route.request().postDataJSON() || {}
+				);
+			} catch {
+				body = {};
+			}
+
+			if ( body?.resolveSignatureOnly ) {
+				if ( holdSignatureOnlyRequest ) {
+					holdSignatureOnlyRequest = false;
+					capturedSignatureOnlyRequests.push( body );
+					captureSignatureOnlyRequest();
+					await signatureOnlyRequestRelease;
+				}
+
+				await route.fulfill( {
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify( {
+						payload: {
+							resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+						},
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					} ),
+				} );
+				return;
+			}
+
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					payload: {
+						settings: [],
+						styles: [],
+						block: [
+							{
+								label: RACE_SUGGESTION_LABEL,
+								panel: 'typography',
+								attributeUpdates: {
+									content: 'AI content',
+								},
+							},
+						],
+						executionContract: {
+							allowedPanels: [ 'typography' ],
+							panelMappingKnown: true,
+							contentAttributeKeys: [ 'content' ],
+							configAttributeKeys: [],
+						},
+						explanation: 'Mocked delayed block recommendation',
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					},
+					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+				} ),
+			} );
+		}
+	);
+
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+
+	const clientId = await seedParagraphBlock( page );
+	await page.evaluate( ( selectedClientId ) => {
+		window.wp.data
+			.dispatch( 'core/block-editor' )
+			.updateBlockAttributes( selectedClientId, {
+				content: 'Original content',
+			} );
+	}, clientId );
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( selectedClientId ) =>
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getBlockAttributes( selectedClientId )?.content || '',
+				clientId
+			)
+		)
+		.toBe( 'Original content' );
+	await ensureSettingsSidebarOpen( page );
+
+	const promptInput = page.getByPlaceholder(
+		'Describe the outcome you want for this block.'
+	);
+	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+	const suggestionButton = page.getByRole( 'button', {
+		name: RACE_SUGGESTION_LABEL,
+		exact: true,
+	} );
+	await expect( suggestionButton ).toBeVisible( { timeout: 15_000 } );
+	await expect( suggestionButton ).toBeEnabled();
+	holdSignatureOnlyRequest = true;
+	await suggestionButton.click();
+	await signatureOnlyRequestCaptured;
+	expect( capturedSignatureOnlyRequests ).toHaveLength( 1 );
+	expect( capturedSignatureOnlyRequests[ 0 ].resolveSignatureOnly ).toBe(
+		true
+	);
+
+	await page.evaluate( ( selectedClientId ) => {
+		window.wp.data
+			.dispatch( 'core/block-editor' )
+			.updateBlockAttributes( selectedClientId, {
+				content: 'User edit during validation',
+			} );
+	}, clientId );
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( selectedClientId ) =>
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getBlockAttributes( selectedClientId )?.content || '',
+				clientId
+			)
+		)
+		.toBe( 'User edit during validation' );
+
+	releaseSignatureOnlyRequest();
+
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( { selectedClientId, suggestionLabel } ) => {
+					const blockEditor =
+						window.wp.data.select( 'core/block-editor' );
+					const flavorAgent = window.wp.data.select( 'flavor-agent' );
+					const matchingApplyActivities = (
+						flavorAgent.getActivityLog?.() || []
+					).filter(
+						( entry ) =>
+							entry?.type === 'apply_suggestion' &&
+							entry?.suggestion === suggestionLabel
+					);
+
+					return {
+						content:
+							blockEditor.getBlockAttributes?.( selectedClientId )
+								?.content || '',
+						applyStatus:
+							flavorAgent.getBlockApplyStatus?.(
+								selectedClientId
+							) || '',
+						applyError:
+							flavorAgent.getBlockApplyError?.(
+								selectedClientId
+							) || '',
+						staleReason:
+							flavorAgent.getBlockStaleReason?.(
+								selectedClientId
+							) || '',
+						matchingApplyActivityCount:
+							matchingApplyActivities.length,
+						toastCount: ( flavorAgent.getToasts?.() || [] ).length,
+					};
+				},
+				{
+					selectedClientId: clientId,
+					suggestionLabel: RACE_SUGGESTION_LABEL,
+				}
+			)
+		)
+		.toEqual( {
+			content: 'User edit during validation',
+			applyStatus: 'error',
+			applyError:
+				'This result is stale. Refresh recommendations before applying it.',
+			staleReason: 'client',
+			matchingApplyActivityCount: 0,
+			toastCount: 0,
+		} );
+	await expect(
+		page.locator( '.flavor-agent-activity-row' ).filter( {
+			hasText: RACE_SUGGESTION_LABEL,
+		} )
+	).toHaveCount( 0 );
+	await expect( page.locator( '.flavor-agent-toast' ) ).toHaveCount( 0 );
+} );
+
+test( '@wp70-site-editor block structural sibling insertion respects action-specific permissions and undoes', async ( {
 	page,
 } ) => {
 	test.setTimeout( 180_000 );
@@ -2499,6 +2789,13 @@ test( '@wp70-site-editor block structural review applies, blocks locked targets,
 	} );
 
 	const clientId = await seedParagraphBlock( page );
+	await page.evaluate( ( selectedClientId ) => {
+		window.wp.data
+			.dispatch( 'core/block-editor' )
+			.updateBlockAttributes( selectedClientId, {
+				lock: { move: true, remove: true },
+			} );
+	}, clientId );
 	await registerTemplatePattern( page, {
 		insertedContent: BLOCK_STRUCTURAL_INSERTED_CONTENT,
 		patternName: BLOCK_STRUCTURAL_PATTERN_NAME,
@@ -2525,108 +2822,6 @@ test( '@wp70-site-editor block structural review applies, blocks locked targets,
 		} )
 	).toBeVisible();
 
-	await page.evaluate( ( selectedClientId ) => {
-		window.wp.data
-			.dispatch( 'core/block-editor' )
-			.updateBlockAttributes( selectedClientId, {
-				lock: { move: true },
-			} );
-	}, clientId );
-	const lockedApplyResult = await page.evaluate(
-		async ( selectedClientId ) => {
-			const flavorAgent = window.wp.data.select( 'flavor-agent' );
-			const recommendations =
-				flavorAgent.getBlockRecommendations?.( selectedClientId ) || {};
-			const suggestion =
-				( recommendations.block || [] ).find(
-					( candidate ) =>
-						( candidate?.actionability?.executableOperations || [] )
-							.length > 0
-				) || null;
-			const blockOperationContext =
-				recommendations.blockOperationContext ||
-				recommendations.blockContext?.blockOperationContext ||
-				null;
-
-			if ( ! suggestion || ! blockOperationContext ) {
-				return {
-					ok: false,
-					error: 'No structural suggestion was available.',
-				};
-			}
-
-			const ok = await window.wp.data
-				.dispatch( 'flavor-agent' )
-				.applyBlockStructuralSuggestion(
-					selectedClientId,
-					suggestion,
-					null,
-					{
-						clientId: selectedClientId,
-						editorContext: {
-							block: recommendations.blockContext || {},
-							blockOperationContext,
-						},
-						prompt: recommendations.prompt || '',
-					}
-				);
-
-			return { ok };
-		},
-		clientId
-	);
-
-	expect( lockedApplyResult ).toEqual( { ok: false } );
-
-	await expect
-		.poll( () =>
-			page.evaluate(
-				( { insertedContent, selectedClientId } ) => {
-					const flavorAgent = window.wp.data.select( 'flavor-agent' );
-					const blocks =
-						window.wp.data
-							.select( 'core/block-editor' )
-							.getBlocks?.() || [];
-
-					return {
-						applyStatus:
-							flavorAgent.getBlockApplyStatus?.(
-								selectedClientId
-							) || '',
-						applyError:
-							flavorAgent.getBlockApplyError?.(
-								selectedClientId
-							) || '',
-						hasInsertedContent:
-							JSON.stringify( blocks ).includes(
-								insertedContent
-							),
-					};
-				},
-				{
-					insertedContent: BLOCK_STRUCTURAL_INSERTED_CONTENT,
-					selectedClientId: clientId,
-				}
-			)
-		)
-		.toEqual( {
-			applyStatus: 'error',
-			applyError:
-				'The selected block is locked and cannot be structurally changed.',
-			hasInsertedContent: false,
-		} );
-
-	await page.evaluate( ( selectedClientId ) => {
-		window.wp.data
-			.dispatch( 'core/block-editor' )
-			.updateBlockAttributes( selectedClientId, {
-				lock: undefined,
-			} );
-	}, clientId );
-	await page.getByRole( 'button', { name: 'Review' } ).click();
-	await expect(
-		page.getByRole( 'button', { name: 'Apply reviewed structure' } )
-	).toBeVisible();
 	await page
 		.getByRole( 'button', { name: 'Apply reviewed structure' } )
 		.click();
@@ -2968,6 +3163,13 @@ test( '@wp70-site-editor block structural replace applies and undoes', async ( {
 	await dismissWelcomeGuide( page );
 
 	const clientId = await seedParagraphBlock( page );
+	await page.evaluate( ( selectedClientId ) => {
+		window.wp.data
+			.dispatch( 'core/block-editor' )
+			.updateBlockAttributes( selectedClientId, {
+				lock: { move: true, remove: false },
+			} );
+	}, clientId );
 	await registerTemplatePattern( page, {
 		insertedContent: BLOCK_STRUCTURAL_INSERTED_CONTENT,
 		patternName: BLOCK_STRUCTURAL_PATTERN_NAME,
