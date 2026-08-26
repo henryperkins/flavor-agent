@@ -4,7 +4,7 @@ Flavor Agent lets AI work on a live WordPress site without unchecked control. Ev
 
 I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
 
-> **Release status:** implementation hardening, current live-corpus evidence, the connector-backed runtime smoke, and the minimum visual proof gate are closed on the current `0.1.0` candidate, but exact-tag verification is outstanding. RC1–RC3 are published; there is no final `v0.1.0` tag or release yet. Executable CI or an explicit waiver, a clean release artifact, and verification against the final immutable SHA remain release gates. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
+> **Release status:** implementation hardening, current live-corpus evidence, the connector-backed runtime smoke, the minimum visual proof gate, and a clean inspected candidate artifact are closed for `0.1.0`, but exact-tag verification is outstanding. RC1–RC3 are published; there is no final `v0.1.0` tag or release yet. Executable CI or an explicit waiver, followed by rebuild and verification against the final immutable SHA, remain release gates. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 
 1.0 when the core Abilities/AI Client surfaces stabilize.
 
@@ -69,8 +69,9 @@ Automated evidence currently recorded in the repository includes:
 - A real Anthropic-backed `flavor-agent/recommend-content` request resolved `claude-sonnet-4-6` and completed without an unexpected error on 2026-08-26; see [`docs/validation/2026-08-26-anthropic-connector-smoke.md`](docs/validation/2026-08-26-anthropic-connector-smoke.md).
 - A second fresh Anthropic-backed request rendered successfully in the native WordPress 7.1 post editor and produced the minimum editor still; see [`docs/validation/2026-08-26-wordpress-7.1-anthropic-editor-proof.md`](docs/validation/2026-08-26-wordpress-7.1-anthropic-editor-proof.md).
 - A targeted public-corpus updater run settled its WordPress 7.1 source with zero pending items or deletions, then returned current stable Developer Docs and current Make/Core evidence in the same bounded query; see [`docs/validation/2026-08-26-public-corpus-validation.md`](docs/validation/2026-08-26-public-corpus-validation.md).
+- Clean commit `e38fb57` passed all nine strict verification steps with no skips, then produced an inspected 209-file zip whose extracted payload passed Plugin Check with zero errors and zero warnings; see [`docs/validation/2026-08-26-v0.1.0-candidate-artifact.md`](docs/validation/2026-08-26-v0.1.0-candidate-artifact.md).
 
-These are candidate working-tree results, not exact-tag release evidence. Re-run the full gates — strict verify including Plugin Check, both Playwright harnesses, `npm run check:docs`, and `npm run dist` — on the exact commit you tag, and record the results before publishing.
+These are candidate results, not exact-tag release evidence. Re-run the full gates — strict verify including Plugin Check, both Playwright harnesses, `npm run check:docs`, and `npm run dist` — on the exact commit you tag, and record the results before publishing.
 
 ## Architecture at a glance
 
