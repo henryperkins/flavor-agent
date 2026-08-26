@@ -1,5 +1,6 @@
 import {
 	applyBlockStructuralSuggestionOperations,
+	getBlockStructuralActivitySignature,
 	getBlockStructuralActivityUndoState,
 	prepareBlockStructuralOperation,
 	undoBlockStructuralSuggestionOperations,
@@ -135,14 +136,18 @@ function createBlockEditor( {
 	canRemoveBlocks = ( clientIds ) =>
 		clientIds.every( ( clientId ) => canRemoveBlock( clientId ) ),
 	noOpNextRemove = false,
+	noOpRemoveAtAttempt = null,
 	noOpNextRestoreInsert = false,
 } = {} ) {
 	const state = {
 		blocks: cloneValue( blocks ),
 		nextInsertBlockCount: failNextInsert ? 0 : nextInsertBlockCount,
 		noOpNextRemove,
+		noOpRemoveAtAttempt,
 		noOpNextRestoreInsert,
 		insertAttempts: [],
+		mutationEvents: [],
+		removeAttemptCount: 0,
 		initialClientIds: new Set( getAllClientIds( blocks ) ),
 	};
 
@@ -174,6 +179,9 @@ function createBlockEditor( {
 	const blockEditorDispatch = {
 		insertBlocks: jest.fn( ( blocksToInsert, index, rootClientId ) => {
 			const attemptedBlocks = cloneValue( blocksToInsert );
+			const topLevelClientIds = attemptedBlocks.map(
+				( block ) => block.clientId
+			);
 			const isRestoration = attemptedBlocks.some(
 				( block ) =>
 					state.initialClientIds.has( block.clientId ) &&
@@ -182,15 +190,19 @@ function createBlockEditor( {
 
 			state.insertAttempts.push( {
 				blocks: attemptedBlocks,
-				topLevelClientIds: attemptedBlocks.map(
-					( block ) => block.clientId
-				),
+				topLevelClientIds,
 				innerClientIds: attemptedBlocks.flatMap( ( block ) =>
 					getAllClientIds( block.innerBlocks )
 				),
 				index,
 				rootClientId,
 				isRestoration,
+			} );
+			state.mutationEvents.push( {
+				type: 'insert',
+				clientIds: topLevelClientIds,
+				index,
+				rootClientId,
 			} );
 
 			if ( isRestoration && state.noOpNextRestoreInsert ) {
@@ -210,7 +222,16 @@ function createBlockEditor( {
 			);
 		} ),
 		removeBlocks: jest.fn( ( clientIds ) => {
-			if ( state.noOpNextRemove ) {
+			state.removeAttemptCount += 1;
+			state.mutationEvents.push( {
+				type: 'remove',
+				clientIds: [ ...clientIds ],
+			} );
+
+			if (
+				state.noOpNextRemove ||
+				state.removeAttemptCount === state.noOpRemoveAtAttempt
+			) {
 				state.noOpNextRemove = false;
 				return;
 			}
@@ -335,6 +356,122 @@ function buildActivityFromResult( result, operations = result.operations ) {
 			error: null,
 		},
 	};
+}
+
+function createMultiOperationUndoFixture( options = {} ) {
+	const originalBlockB = {
+		clientId: 'original-b',
+		name: 'core/heading',
+		attributes: { content: 'Original B' },
+		innerBlocks: [],
+	};
+	const originalBlockC = {
+		clientId: 'original-c',
+		name: 'core/group',
+		attributes: { className: 'original-c' },
+		innerBlocks: [
+			{
+				clientId: 'original-c-inner',
+				name: 'core/paragraph',
+				attributes: { content: 'Original nested content' },
+				innerBlocks: [],
+			},
+		],
+	};
+	const beforeBlocks = [
+		{
+			clientId: 'keep-start',
+			name: 'core/paragraph',
+			attributes: { content: 'Keep start' },
+			innerBlocks: [],
+		},
+		originalBlockB,
+		originalBlockC,
+		{
+			clientId: 'keep-end',
+			name: 'core/paragraph',
+			attributes: { content: 'Keep end' },
+			innerBlocks: [],
+		},
+	];
+	const afterBlocks = [
+		beforeBlocks[ 0 ],
+		{
+			clientId: 'inserted-a',
+			name: 'core/paragraph',
+			attributes: { content: 'Inserted A' },
+			innerBlocks: [],
+		},
+		{
+			clientId: 'replacement-b',
+			name: 'core/quote',
+			attributes: { value: 'Replacement B' },
+			innerBlocks: [],
+		},
+		{
+			clientId: 'replacement-c',
+			name: 'core/quote',
+			attributes: { value: 'Replacement C' },
+			innerBlocks: [],
+		},
+		beforeBlocks[ 3 ],
+	];
+	const rootLocator = { type: 'root', rootClientId: null };
+	const operations = [
+		{
+			type: 'insert_pattern',
+			insertedClientIds: [ 'inserted-a' ],
+			rootLocator,
+			index: 1,
+			insertedBlocksSnapshot: [
+				{
+					name: 'core/paragraph',
+					attributes: { content: 'Inserted A' },
+					innerBlocks: [],
+				},
+			],
+		},
+		{
+			type: 'replace_block_with_pattern',
+			replacementClientIds: [ 'replacement-b' ],
+			rootLocator,
+			index: 2,
+			insertedBlocksSnapshot: [
+				{
+					name: 'core/quote',
+					attributes: { value: 'Replacement B' },
+					innerBlocks: [],
+				},
+			],
+			removedBlocksSnapshot: [ originalBlockB ],
+		},
+		{
+			type: 'replace_block_with_pattern',
+			replacementClientIds: [ 'replacement-c' ],
+			rootLocator,
+			index: 3,
+			insertedBlocksSnapshot: [
+				{
+					name: 'core/quote',
+					attributes: { value: 'Replacement C' },
+					innerBlocks: [],
+				},
+			],
+			removedBlocksSnapshot: [ originalBlockC ],
+		},
+	];
+	const editor = createBlockEditor( { blocks: afterBlocks, ...options } );
+	const activity = {
+		after: {
+			operations,
+			structuralSignature: getBlockStructuralActivitySignature(
+				{ after: { operations } },
+				editor.blockEditorSelect
+			),
+		},
+	};
+
+	return { activity, beforeBlocks, editor };
 }
 
 describe( 'block structural actions', () => {
@@ -1055,6 +1192,86 @@ describe( 'block structural actions', () => {
 			'block-1',
 		] );
 		expect( editor.state.blocks ).toEqual( originalBlocks );
+	} );
+
+	test( 'multi-operation undo reverses exact removals and replacement restoration against live state', () => {
+		const { activity, beforeBlocks, editor } =
+			createMultiOperationUndoFixture();
+
+		const result = undoBlockStructuralSuggestionOperations( activity, {
+			select: () => editor.blockEditorSelect,
+			dispatch: () => editor.blockEditorDispatch,
+		} );
+
+		expect( result ).toEqual( { ok: true } );
+		expect( editor.state.mutationEvents ).toEqual( [
+			{ type: 'remove', clientIds: [ 'replacement-c' ] },
+			{
+				type: 'insert',
+				clientIds: [ 'original-c' ],
+				index: 3,
+				rootClientId: '',
+			},
+			{ type: 'remove', clientIds: [ 'replacement-b' ] },
+			{
+				type: 'insert',
+				clientIds: [ 'original-b' ],
+				index: 2,
+				rootClientId: '',
+			},
+			{ type: 'remove', clientIds: [ 'inserted-a' ] },
+		] );
+		expect( editor.state.blocks ).toEqual( beforeBlocks );
+	} );
+
+	test( 'multi-operation undo stops after a middle no-op and preserves the remaining live operations', () => {
+		const { activity, editor } = createMultiOperationUndoFixture( {
+			noOpRemoveAtAttempt: 2,
+		} );
+
+		const result = undoBlockStructuralSuggestionOperations( activity, {
+			select: () => editor.blockEditorSelect,
+			dispatch: () => editor.blockEditorDispatch,
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'The structural action could not be undone completely. Review the block structure before continuing.',
+		} );
+		expect( editor.state.mutationEvents ).toEqual( [
+			{ type: 'remove', clientIds: [ 'replacement-c' ] },
+			{
+				type: 'insert',
+				clientIds: [ 'original-c' ],
+				index: 3,
+				rootClientId: '',
+			},
+			{ type: 'remove', clientIds: [ 'replacement-b' ] },
+		] );
+		expect(
+			editor.state.blocks.map( ( block ) => block.clientId )
+		).toEqual( [
+			'keep-start',
+			'inserted-a',
+			'replacement-b',
+			'original-c',
+			'keep-end',
+		] );
+		expect(
+			editor.blockEditorSelect.getBlock( 'replacement-c' )
+		).toBeNull();
+		expect( editor.blockEditorSelect.getBlock( 'original-b' ) ).toBeNull();
+		expect( editor.blockEditorSelect.getBlock( 'original-c' ) ).toEqual(
+			expect.objectContaining( {
+				attributes: { className: 'original-c' },
+				innerBlocks: [
+					expect.objectContaining( {
+						clientId: 'original-c-inner',
+						attributes: { content: 'Original nested content' },
+					} ),
+				],
+			} )
+		);
 	} );
 
 	test.each( [
