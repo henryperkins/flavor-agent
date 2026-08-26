@@ -124,7 +124,7 @@ Validated `set_styles` and `set_block_styles` operations are enriched with:
 
 ## First-materialization slugs
 
-When a theme-file template or template part is materialized into a `wp_template` / `wp_template_part` post, the slug written and later probed for collisions must be idempotent under core's `sanitize_title()` (`sanitize_title( sanitize_key( $slug ) )`). Comparing a `sanitize_key()`-only slug against the stored `post_name` falsely reports `flavor_agent_apply_slug_conflict` on repeated dashes.
+When a theme-file template or template part is materialized into a `wp_template` / `wp_template_part` post, the slug written and later probed for collisions must be idempotent under core's `sanitize_title()` (`sanitize_title( sanitize_key( $slug ) )`). `sanitize_key()` keeps `--` and edge dashes that `sanitize_title()` — which `wp_insert_post()` applies to `post_name` — collapses and trims. A `sanitize_key()`-only slug therefore fails the post-insert read-back (`$slug !== $inserted->post_name`) and returns `flavor_agent_apply_recovery_required` (409, via `ExistingPostContentCompensator::recovery_required()`); `reconcile_existing_row()` cannot recover it either, because it probes `slug__in => [ 'page--wide' ]` while the stored row is `page-wide`. Normalized in `TemplateApplyExecutor::materialize_template()` and `TemplatePartApplyExecutor::materialize_template_part()`.
 
 ## Primary Source Files
 

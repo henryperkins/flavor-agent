@@ -54,7 +54,12 @@ At request time, `WordPressAIClient::chat()` first tries any standardized WP AI 
 
 Anthropic is intentionally unmapped until its provider plugin documents the accepted reasoning/thinking payload contract; Flavor Agent should add that mapping with provider-specific tests when the contract is known.
 
-Connectors-path chat requests resolve provider metadata as `wordpress_ai_client`. Anthropic-only schema mitigations (including the compiled-grammar size cap for `recommend-block`) must not key off slug `anthropic`; the 4096-byte local heuristic is not a published Anthropic limit.
+Connectors-path chat requests resolve provider metadata as `wordpress_ai_client`, a sentinel `Provider::is_connector()` rejects. With no explicit provider argument and no AI-plugin per-feature selection, `resolve_provider_model_selection()` returns `''`, so `$provider` reaches `WordPressAIClient::prepare_output_schema()` empty. Output-schema mitigations split on that fact, and the split is deliberate:
+
+- **Lossless mitigations are intentionally un-gated.** Union compaction (`compact_schema_for_union_limit()`) and repeated-subschema sharing (`share_repeated_subschemas()`) preserve JSON Schema semantics, so they run without a provider slug. Gating them on `anthropic` would mean they never ran on the Connectors path — the path that needs them.
+- **Lossy mitigations are intentionally gated on `anthropic`.** `normalize_output_schema_for_provider()` (strips `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`) and `prepare_anthropic_output_schema()` (strips `enum`) both early-return unless `'anthropic' === $provider`. Each gives up part of the response contract, so it stays behind a known-Anthropic slug rather than firing on a guess. Do not remove those guards to make them reach the Connectors path: that silently drops schema constraints for every other provider.
+
+`OUTPUT_SCHEMA_BYTE_LIMIT` (4096 bytes) is a local heuristic applied to every output schema — not a published Anthropic limit, and not specific to `recommend-block`.
 
 ## Embedding Runtime Chain
 
