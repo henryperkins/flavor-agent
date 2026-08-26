@@ -25,9 +25,14 @@ jest.mock( '../../utils/style-operations', () => ( {
 	undoGlobalStyleSuggestionOperations: jest.fn(),
 } ) );
 const mockRawHandler = jest.fn();
-jest.mock( '@wordpress/blocks', () => ( {
-	rawHandler: ( ...args ) => mockRawHandler( ...args ),
-} ) );
+jest.mock( '@wordpress/blocks', () => {
+	const { cloneBlock } = jest.requireActual( '@wordpress/blocks' );
+
+	return {
+		cloneBlock,
+		rawHandler: ( ...args ) => mockRawHandler( ...args ),
+	};
+} );
 
 import apiFetch from '@wordpress/api-fetch';
 import { normalizeAbilityExecutionResult } from '../../../assets/ability-execution-utils';
@@ -263,6 +268,30 @@ function createBlockApplyRegistry( {
 			storeName === 'core/block-editor' ? blockEditorSelect : blocksSelect
 		),
 		updateBlockAttributes: wrappedUpdateBlockAttributes,
+	};
+}
+
+function createStructuralCoreSelectors( {
+	getLiveBlocks,
+	insertableBlockNames,
+	rootClientId = null,
+} ) {
+	const hasLiveBlock = ( clientId ) =>
+		getLiveBlocks().some( ( block ) => block.clientId === clientId );
+
+	return {
+		canInsertBlockType: jest.fn(
+			( blockName, destinationRootClientId ) =>
+				insertableBlockNames.includes( blockName ) &&
+				( destinationRootClientId || null ) === ( rootClientId || null )
+		),
+		canRemoveBlock: jest.fn( ( clientId ) => hasLiveBlock( clientId ) ),
+		canRemoveBlocks: jest.fn(
+			( clientIds ) =>
+				Array.isArray( clientIds ) &&
+				clientIds.length > 0 &&
+				clientIds.every( ( clientId ) => hasLiveBlock( clientId ) )
+		),
 	};
 }
 
@@ -3827,6 +3856,10 @@ describe( 'store action thunks', () => {
 					},
 				],
 			} ) ),
+			...createStructuralCoreSelectors( {
+				getLiveBlocks: () => blocks,
+				insertableBlockNames: [ 'core/paragraph' ],
+			} ),
 		};
 		const dispatch = jest.fn();
 		const select = {
@@ -3912,12 +3945,14 @@ describe( 'store action thunks', () => {
 			registry,
 			select,
 		} );
+		const insertedClientId = blocks[ 1 ].clientId;
 
 		expect( result ).toBe( true );
+		expect( insertedClientId ).not.toBe( 'pattern-1' );
 		expect( insertBlocks ).toHaveBeenCalledWith(
 			[
 				expect.objectContaining( {
-					clientId: 'pattern-1',
+					clientId: insertedClientId,
 					name: 'core/paragraph',
 				} ),
 			],
@@ -3928,7 +3963,14 @@ describe( 'store action thunks', () => {
 		);
 		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
 			'block-1',
-			'pattern-1',
+			insertedClientId,
+		] );
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			null
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			insertedClientId,
 		] );
 		expect( dispatch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
@@ -3949,6 +3991,7 @@ describe( 'store action thunks', () => {
 							expect.objectContaining( {
 								type: 'insert_pattern',
 								patternName: 'theme/hero',
+								insertedClientIds: [ insertedClientId ],
 							} ),
 						],
 					} ),
@@ -4007,6 +4050,10 @@ describe( 'store action thunks', () => {
 					},
 				],
 			} ) ),
+			...createStructuralCoreSelectors( {
+				getLiveBlocks: () => blocks,
+				insertableBlockNames: [ 'core/paragraph' ],
+			} ),
 		};
 		const dispatch = jest.fn();
 		const select = {
@@ -4091,8 +4138,17 @@ describe( 'store action thunks', () => {
 			registry,
 			select,
 		} );
+		const insertedClientId = blocks[ 2 ].clientId;
 
 		expect( result ).toBe( true );
+		expect( insertedClientId ).not.toBe( 'pattern-1' );
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			null
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			insertedClientId,
+		] );
 		expect( dispatch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				type: 'LOG_ACTIVITY',
@@ -4102,6 +4158,13 @@ describe( 'store action thunks', () => {
 						clientId: 'block-1',
 						blockName: 'core/paragraph',
 						blockPath: [ 1 ],
+					} ),
+					after: expect.objectContaining( {
+						operations: [
+							expect.objectContaining( {
+								insertedClientIds: [ insertedClientId ],
+							} ),
+						],
 					} ),
 				} ),
 			} )
@@ -4157,7 +4220,9 @@ describe( 'store action thunks', () => {
 				rootClientId === 'root-1' ? childBlocks : [ rootBlock ]
 			),
 			getBlockRootClientId: jest.fn( ( clientId ) =>
-				clientId === 'block-1' ? 'root-1' : null
+				childBlocks.some( ( block ) => block.clientId === clientId )
+					? 'root-1'
+					: null
 			),
 			getBlockIndex: jest.fn( ( clientId ) =>
 				childBlocks.findIndex(
@@ -4169,6 +4234,11 @@ describe( 'store action thunks', () => {
 				__experimentalAdditionalBlockPatterns: [],
 			} ) ),
 			__experimentalGetAllowedPatterns: experimentalAllowedPatterns,
+			...createStructuralCoreSelectors( {
+				getLiveBlocks: () => childBlocks,
+				insertableBlockNames: [ 'core/paragraph' ],
+				rootClientId: 'root-1',
+			} ),
 		};
 		const dispatch = jest.fn();
 		const select = {
@@ -4227,13 +4297,15 @@ describe( 'store action thunks', () => {
 			registry,
 			select,
 		} );
+		const insertedClientId = childBlocks[ 1 ].clientId;
 
 		expect( result ).toBe( true );
 		expect( experimentalAllowedPatterns ).toHaveBeenCalledWith( 'root-1' );
+		expect( insertedClientId ).not.toBe( 'pattern-1' );
 		expect( insertBlocks ).toHaveBeenCalledWith(
 			[
 				expect.objectContaining( {
-					clientId: 'pattern-1',
+					clientId: insertedClientId,
 					name: 'core/paragraph',
 				} ),
 			],
@@ -4244,7 +4316,14 @@ describe( 'store action thunks', () => {
 		);
 		expect( childBlocks.map( ( block ) => block.clientId ) ).toEqual( [
 			'block-1',
-			'pattern-1',
+			insertedClientId,
+		] );
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			'root-1'
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			insertedClientId,
 		] );
 	} );
 
@@ -4303,6 +4382,10 @@ describe( 'store action thunks', () => {
 					},
 				],
 			} ) ),
+			...createStructuralCoreSelectors( {
+				getLiveBlocks: () => blocks,
+				insertableBlockNames: [ 'core/group', 'core/paragraph' ],
+			} ),
 		};
 		const dispatch = jest.fn();
 		const select = {
@@ -4366,11 +4449,27 @@ describe( 'store action thunks', () => {
 			registry,
 			select,
 		} );
+		const replacementClientId = blocks[ 0 ].clientId;
 
 		expect( result ).toBe( true );
+		expect( replacementClientId ).not.toBe( 'pattern-1' );
 		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
-			'pattern-1',
+			replacementClientId,
 			'block-2',
+		] );
+		expect( blockEditorSelect.canRemoveBlock ).toHaveBeenCalledWith(
+			'block-1'
+		);
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/group',
+			null
+		);
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			null
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			replacementClientId,
 		] );
 		expect( dispatch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
@@ -4381,6 +4480,13 @@ describe( 'store action thunks', () => {
 						clientId: 'block-1',
 						blockName: 'core/group',
 						blockPath: [ 0 ],
+					} ),
+					after: expect.objectContaining( {
+						operations: [
+							expect.objectContaining( {
+								replacementClientIds: [ replacementClientId ],
+							} ),
+						],
 					} ),
 				} ),
 			} )
@@ -7451,6 +7557,7 @@ describe( 'store action thunks', () => {
 			{
 				type: 'insert_pattern',
 				patternName: 'theme/hero',
+				insertedClientIds: [ 'pattern-1' ],
 				rootLocator: {
 					type: 'root',
 					rootClientId: null,
@@ -7469,6 +7576,22 @@ describe( 'store action thunks', () => {
 		];
 		const blockEditorSelect = {
 			getBlocks: jest.fn( () => blocks ),
+			getBlock: jest.fn( ( clientId ) =>
+				blocks.find( ( block ) => block.clientId === clientId )
+			),
+			getBlockRootClientId: jest.fn( ( clientId ) =>
+				blocks.some( ( block ) => block.clientId === clientId )
+					? null
+					: undefined
+			),
+			canRemoveBlocks: jest.fn(
+				( clientIds ) =>
+					Array.isArray( clientIds ) &&
+					clientIds.length > 0 &&
+					clientIds.every( ( clientId ) =>
+						blocks.some( ( block ) => block.clientId === clientId )
+					)
+			),
 		};
 		const removeBlocks = jest.fn( ( clientIds ) => {
 			for ( let index = blocks.length - 1; index >= 0; index-- ) {
@@ -7528,6 +7651,15 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( removeBlocks ).toHaveBeenCalledWith( [ 'pattern-1' ], false );
+		expect( blockEditorSelect.getBlock ).toHaveBeenCalledWith(
+			'pattern-1'
+		);
+		expect( blockEditorSelect.getBlockRootClientId ).toHaveBeenCalledWith(
+			'pattern-1'
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			'pattern-1',
+		] );
 		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
 			'block-1',
 		] );
