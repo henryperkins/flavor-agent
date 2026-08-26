@@ -128,7 +128,7 @@ Each item in settings/styles is an object:
   "isCurrentStyle": false,
   "isRecommended": false,
   "confidence": 0.0,
-  "preview": "Hex color for visual preview swatch or empty string",
+  "preview": "Hex color in #RGB, #RGBA, #RRGGBB, or #RRGGBBAA form for the visual preview swatch, or empty string",
   "presetSlug": "Theme preset slug or empty string",
   "cssVar": "CSS custom property reference or empty string",
   "groupId": "",
@@ -148,7 +148,7 @@ Each item in block is an object:
   "isCurrentStyle": false,
   "isRecommended": false,
   "confidence": 0.0,
-  "preview": "Hex color for visual preview swatch or empty string",
+  "preview": "Hex color in #RGB, #RGBA, #RRGGBB, or #RRGGBBAA form for the visual preview swatch, or empty string",
   "presetSlug": "Theme preset slug or empty string",
   "cssVar": "CSS custom property reference or empty string",
   "groupId": "",
@@ -2935,6 +2935,20 @@ SYSTEM;
 		return '' !== $sanitized ? $sanitized : null;
 	}
 
+	private static function sanitize_preview_color( mixed $value ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$color = trim( $value );
+
+		if ( 1 !== preg_match( '/\A\#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\z/D', $color ) ) {
+			return null;
+		}
+
+		return strtolower( $color );
+	}
+
 	private static function validate_suggestions( array $suggestions, string $group, array $ranking_context = [] ): array {
 		$valid = [];
 		$order = 0;
@@ -2949,7 +2963,7 @@ SYSTEM;
 			$attribute_updates      = self::sanitize_attribute_updates( $raw_attribute_updates );
 			$is_advisory_block_type = 'block' === $group && self::is_advisory_only_block_type( $type );
 			$confidence             = self::sanitize_optional_number( $s['confidence'] ?? null );
-			$preview                = self::sanitize_optional_text_value( $s['preview'] ?? null );
+			$preview                = self::sanitize_preview_color( $s['preview'] ?? null );
 			$preset_slug            = self::sanitize_optional_text_value( $s['presetSlug'] ?? null, true );
 			$css_var                = self::sanitize_optional_text_value( $s['cssVar'] ?? null );
 

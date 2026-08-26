@@ -2264,6 +2264,73 @@ describe( 'external apply helpers', () => {
 		} );
 	} );
 
+	test( 'getStyleVisualDiffRows only renders whole CSS color values as swatches', () => {
+		const accepted = [
+			'#fff',
+			'#17232a',
+			'#ff0000ff',
+			'rgb(0,0,0)',
+			'rgba(0, 0, 0, 0.5)',
+			'hsl(0 0% 0%)',
+			'hsla(0,0%,0%,.5)',
+			'color-mix(in srgb, red, blue)',
+			'color-mix(in srgb, rgb(0 0 0), blue)',
+			'color-mix(in oklab, hsl(0 0% 0%) 40%, #fff)',
+			'color-mix(in srgb, rgba(0, 0, 0, .5), blue)',
+			'color-mix(in srgb, hsl(0 0% 0%), blue)',
+		];
+		const rejected = [
+			'rgb(0, 0, 0) url(https://preview-probe.invalid/pixel)',
+			'hsl(0 0% 0%) no-repeat url(https://preview-probe.invalid/pixel)',
+			'color-mix(in srgb, red, blue) url(https://preview-probe.invalid/pixel)',
+			'url(https://preview-probe.invalid/pixel)',
+			'red',
+			'var(--t)',
+			'#fff; background-image: url(https://preview-probe.invalid/pixel)',
+			'#fff} body { background: url(https://preview-probe.invalid/pixel)',
+			'rgb(url(https://preview-probe.invalid/pixel))',
+			'color-mix(in srgb, url(https://preview-probe.invalid/pixel), blue)',
+			'color-mix(in srgb, image-set("a.png"), blue)',
+			'color-mix(in srgb, red, blue), url(https://preview-probe.invalid/pixel)',
+		];
+		const getAfterVisual = ( value ) =>
+			getStyleVisualDiffRows(
+				createStyleApplyEntry( {
+					status: 'applied',
+					after: {
+						userConfig: {
+							styles: {
+								color: { text: value },
+							},
+						},
+						operations: [
+							{
+								type: 'set_styles',
+								path: [ 'color', 'text' ],
+								value,
+							},
+						],
+					},
+					apply: { status: 'available', operations: [] },
+				} )
+			)[ 0 ].afterVisual;
+
+		accepted.forEach( ( value ) => {
+			expect( getAfterVisual( value ) ).toEqual( {
+				type: 'swatch',
+				label: value,
+				cssValue: value,
+			} );
+		} );
+
+		rejected.forEach( ( value ) => {
+			const visual = getAfterVisual( value );
+
+			expect( visual ).not.toMatchObject( { type: 'swatch' } );
+			expect( visual?.cssValue ).toBeUndefined();
+		} );
+	} );
+
 	test( 'getStyleVisualDiffRows falls back to chips when preset colors are unavailable on the admin page', () => {
 		const rows = getStyleVisualDiffRows(
 			createStyleApplyEntry( {

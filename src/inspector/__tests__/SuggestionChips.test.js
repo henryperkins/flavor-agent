@@ -302,6 +302,80 @@ describe( 'SuggestionChips', () => {
 		expect( mockCollectBlockContext ).not.toHaveBeenCalled();
 	} );
 
+	[
+		{
+			name: 'passive',
+			props: { interactive: false },
+			selector: '.flavor-agent-chip--passive',
+		},
+		{
+			name: 'selectable',
+			props: { selectable: true },
+			selector: '.flavor-agent-chip-row',
+		},
+		{
+			name: 'interactive button',
+			props: {},
+			selector: 'button.flavor-agent-chip',
+		},
+	].forEach( ( { name, props, selector } ) => {
+		test( `does not render a hostile preview in ${ name } mode`, () => {
+			act( () => {
+				getRoot().render(
+					<SuggestionChips
+						clientId="block-1"
+						label="AI color suggestions"
+						{ ...props }
+						suggestions={ [
+							{
+								label: 'Unsafe color',
+								panel: 'color',
+								preview:
+									'url(https://preview-probe.invalid/pixel)',
+							},
+						] }
+					/>
+				);
+			} );
+
+			const chip = getContainer().querySelector( selector );
+
+			expect(
+				chip.style.getPropertyValue( '--flavor-agent-chip-preview' )
+			).toBe( '' );
+			expect(
+				chip.querySelector( '.flavor-agent-chip__preview' )
+			).toBeNull();
+		} );
+	} );
+
+	test( 'canonicalizes a valid preview before rendering the interactive swatch', () => {
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					suggestions={ [
+						{
+							label: 'Safe color',
+							panel: 'color',
+							preview: ' #ABC ',
+						},
+					] }
+				/>
+			);
+		} );
+
+		const chip = getContainer().querySelector( 'button.flavor-agent-chip' );
+
+		expect(
+			chip.style.getPropertyValue( '--flavor-agent-chip-preview' )
+		).toBe( '#abc' );
+		expect(
+			chip.querySelector( '.flavor-agent-chip__preview' )
+		).not.toBeNull();
+	} );
+
 	test( 'disables an applied chip while inline feedback is visible', async () => {
 		act( () => {
 			getRoot().render(
