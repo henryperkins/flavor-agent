@@ -16,7 +16,6 @@ final class BlockOperationValidatorTest extends TestCase {
 				'targetClientId'               => 'block-1',
 				'targetBlockName'              => 'core/group',
 				'targetSignature'              => 'target-sig',
-				'isTargetLocked'               => false,
 				'isContentOnly'                => false,
 				'editingMode'                  => 'default',
 				'allowedPatterns'              => [
@@ -183,18 +182,6 @@ final class BlockOperationValidatorTest extends TestCase {
 				$base,
 				BlockOperationValidator::ERROR_CROSS_SURFACE_TARGET,
 			],
-			'locked target'              => [
-				[
-					[
-						'type'           => 'insert_pattern',
-						'patternName'    => 'theme/hero',
-						'targetClientId' => 'block-1',
-						'position'       => 'insert_after',
-					],
-				],
-				$this->base_context( [ 'isTargetLocked' => true ] ),
-				BlockOperationValidator::ERROR_LOCKED_TARGET,
-			],
 			'content only target'        => [
 				[
 					[
@@ -248,6 +235,23 @@ final class BlockOperationValidatorTest extends TestCase {
 				BlockOperationValidator::ERROR_MULTI_OPERATION_UNSUPPORTED,
 			],
 		];
+	}
+
+	public function test_legacy_lock_context_cannot_override_an_allowed_insertion(): void {
+		$result = BlockOperationValidator::validate_sequence(
+			[
+				[
+					'type'           => 'insert_pattern',
+					'patternName'    => 'theme/hero',
+					'targetClientId' => 'block-1',
+					'position'       => 'insert_after',
+				],
+			],
+			$this->base_context( [ 'isTargetLocked' => true ] )
+		);
+
+		$this->assertTrue( $result['ok'] );
+		$this->assertSame( [], $result['rejectedOperations'] );
 	}
 
 	public function test_empty_sequence_returns_no_executable_operations_without_rejection_noise(): void {

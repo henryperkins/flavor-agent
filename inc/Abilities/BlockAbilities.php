@@ -877,7 +877,6 @@ final class BlockAbilities {
 			'targetClientId'  => $target_client_id,
 			'targetBlockName' => $target_block_name,
 			'targetSignature' => $target_signature,
-			'isTargetLocked'  => ! empty( $context['isTargetLocked'] ),
 			'isContentOnly'   => ! empty( $context['isContentOnly'] ) || ! empty( $context['isInsideContentOnly'] ),
 			'editingMode'     => self::normalize_editing_mode( $context['editingMode'] ?? 'default' ),
 			'allowedPatterns' => $allowed_patterns,

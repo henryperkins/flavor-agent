@@ -252,7 +252,6 @@ export function buildBlockOperationValidationContext( blockContext = {} ) {
 		targetBlockName: operationContext.targetBlockName || '',
 		targetSignature: operationContext.targetSignature || '',
 		allowedPatterns: operationContext.allowedPatterns || [],
-		isTargetLocked: operationContext.isTargetLocked === true,
 		isContentOnly:
 			operationContext.isContentOnly === true ||
 			operationContext.isInsideContentOnly === true ||
@@ -366,14 +365,6 @@ function validateSharedOperationFields( rawOperation, context, patternLookup ) {
 			rawOperation,
 			BLOCK_OPERATION_ERROR_STALE_TARGET,
 			'Block operations must match the current target signature.'
-		);
-	}
-
-	if ( context.isTargetLocked || context.locked ) {
-		return rejectOperation(
-			rawOperation,
-			BLOCK_OPERATION_ERROR_LOCKED_TARGET,
-			'Block operations cannot mutate a locked target.'
 		);
 	}
 

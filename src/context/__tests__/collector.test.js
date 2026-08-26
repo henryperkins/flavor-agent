@@ -420,6 +420,8 @@ describe( 'collectBlockContext', () => {
 			getBlockRootClientId: jest.fn().mockReturnValue( 'parent-1' ),
 			getBlockOrder: jest.fn().mockReturnValue( [ 'client-1' ] ),
 			getBlockName: jest.fn(),
+			canInsertBlockType: jest.fn().mockReturnValue( true ),
+			canRemoveBlock: jest.fn().mockReturnValue( true ),
 		};
 
 		mockIntrospectBlockInstance.mockReturnValue( {
@@ -453,6 +455,7 @@ describe( 'collectBlockContext', () => {
 				title: 'Hero',
 				source: 'theme',
 				blockTypes: [ 'core/group' ],
+				blocks: [ { name: 'core/group' } ],
 				content: '<!-- wp:group /-->',
 			},
 		] );
@@ -566,70 +569,132 @@ describe( 'collectBlockContext', () => {
 		);
 	} );
 
-	test( 'omits allowed pattern actions for locked structural targets', () => {
-		window.flavorAgentData = {
-			enableBlockStructuralActions: true,
-		};
-		const selectedNode = {
-			clientId: 'client-1',
-			name: 'core/group',
-			innerBlocks: [],
-			structuralIdentity: { role: 'hero-slot' },
-		};
-		const blockEditor = {
-			getBlockRootClientId: jest.fn().mockReturnValue( null ),
-			getBlockOrder: jest.fn().mockReturnValue( [ 'client-1' ] ),
-			getBlockName: jest.fn(),
-		};
+	test.each( [
+		[
+			'movement-only locks',
+			{ lock: { move: true, remove: false } },
+			true,
+			true,
+			[ 'insert_before', 'insert_after', 'replace' ],
+		],
+		[
+			'removal locks',
+			{ lock: { move: false, remove: true } },
+			true,
+			false,
+			[ 'insert_before', 'insert_after' ],
+		],
+		[
+			'a selected container template lock',
+			{ templateLock: 'all' },
+			true,
+			true,
+			[ 'insert_before', 'insert_after', 'replace' ],
+		],
+		[ 'a missing insertion selector', {}, null, true, [] ],
+		[
+			'a missing removal selector',
+			{},
+			true,
+			null,
+			[ 'insert_before', 'insert_after' ],
+		],
+	] )(
+		'uses Core action permissions for %s',
+		( _label, currentAttributes, canInsert, canRemove, allowedActions ) => {
+			window.flavorAgentData = {
+				enableBlockStructuralActions: true,
+			};
+			const selectedNode = {
+				clientId: 'client-1',
+				name: 'core/group',
+				innerBlocks: [],
+				structuralIdentity: { role: 'hero-slot' },
+			};
+			const blockEditor = {
+				getBlockRootClientId: jest.fn().mockReturnValue( 'parent-1' ),
+				getBlockOrder: jest.fn().mockReturnValue( [ 'client-1' ] ),
+				getBlockName: jest.fn(),
+				...( canInsert === null
+					? {}
+					: {
+							canInsertBlockType: jest
+								.fn()
+								.mockReturnValue( canInsert ),
+					  } ),
+				...( canRemove === null
+					? {}
+					: {
+							canRemoveBlock: jest
+								.fn()
+								.mockReturnValue( canRemove ),
+					  } ),
+			};
 
-		mockIntrospectBlockInstance.mockReturnValue( {
-			name: 'core/group',
-			title: 'Group',
-			currentAttributes: {
-				lock: {
-					move: true,
-					remove: true,
+			mockIntrospectBlockInstance.mockReturnValue( {
+				name: 'core/group',
+				title: 'Group',
+				currentAttributes,
+				inspectorPanels: {},
+				bindableAttributes: [],
+				styles: [],
+				activeStyle: null,
+				variations: [],
+				supportsContentRole: false,
+				contentAttributes: {},
+				configAttributes: {},
+				editingMode: 'default',
+				isInsideContentOnly: false,
+				blockVisibility: null,
+				childCount: 0,
+			} );
+			mockIntrospectBlockTree.mockReturnValue( [ selectedNode ] );
+			mockAnnotateStructuralIdentity.mockReturnValue( [ selectedNode ] );
+			mockFindNodePath.mockReturnValue( [ selectedNode ] );
+			mockFindBranchRoot.mockReturnValue( selectedNode );
+			mockSummarizeTree.mockReturnValue( [ { block: 'core/group' } ] );
+			mockCollectThemeTokens.mockReturnValue( {} );
+			mockSummarizeTokens.mockReturnValue( {} );
+			mockSelect.mockReturnValue( blockEditor );
+			mockGetAllowedPatterns.mockReturnValue( [
+				{
+					name: 'theme/hero',
+					title: 'Hero',
+					source: 'theme',
+					blocks: [ { name: 'core/group' } ],
+					content: '<!-- wp:group /-->',
 				},
-			},
-			inspectorPanels: {},
-			bindableAttributes: [],
-			styles: [],
-			activeStyle: null,
-			variations: [],
-			supportsContentRole: false,
-			contentAttributes: {},
-			configAttributes: {},
-			editingMode: 'default',
-			isInsideContentOnly: false,
-			blockVisibility: null,
-			childCount: 0,
-		} );
-		mockIntrospectBlockTree.mockReturnValue( [ selectedNode ] );
-		mockAnnotateStructuralIdentity.mockReturnValue( [ selectedNode ] );
-		mockFindNodePath.mockReturnValue( [ selectedNode ] );
-		mockFindBranchRoot.mockReturnValue( selectedNode );
-		mockSummarizeTree.mockReturnValue( [ { block: 'core/group' } ] );
-		mockCollectThemeTokens.mockReturnValue( {} );
-		mockSummarizeTokens.mockReturnValue( {} );
-		mockSelect.mockReturnValue( blockEditor );
-		mockGetAllowedPatterns.mockReturnValue( [
-			{
-				name: 'theme/hero',
-				title: 'Hero',
-				source: 'theme',
-				content: '<!-- wp:group /-->',
-			},
-		] );
+			] );
 
-		const result = collectBlockContext( 'client-1' );
+			const result = collectBlockContext( 'client-1' );
 
-		expect( result.blockOperationContext ).toEqual( {
-			targetClientId: 'client-1',
-			targetBlockName: 'core/group',
-			targetSignature: expect.any( String ),
-			allowedPatterns: [],
-		} );
-	} );
+			expect( result.blockOperationContext ).toEqual(
+				expect.objectContaining( {
+					targetClientId: 'client-1',
+					targetBlockName: 'core/group',
+					targetSignature: expect.any( String ),
+				} )
+			);
+			expect(
+				result.blockOperationContext.allowedPatterns.map(
+					( pattern ) => ( {
+						name: pattern.name,
+						allowedActions: pattern.allowedActions,
+					} )
+				)
+			).toEqual(
+				allowedActions.length === 0
+					? []
+					: [ { name: 'theme/hero', allowedActions } ]
+			);
+			expect( blockEditor.canInsertBlockType?.mock.calls || [] ).toEqual(
+				canInsert === null ? [] : [ [ 'core/group', 'parent-1' ] ]
+			);
+			expect( blockEditor.canRemoveBlock?.mock.calls || [] ).toEqual(
+				canRemove === null ? [] : [ [ 'client-1' ] ]
+			);
+		}
+	);
 
 	test( 'omits allowed pattern context when structural actions are disabled', () => {
 		mockIntrospectBlockInstance.mockReturnValue( {
@@ -1782,6 +1847,7 @@ describe( 'getLiveBlockContextSignature', () => {
 				name: 'theme/hero',
 				title: 'Hero',
 				source: 'theme',
+				blocks: [ { name: 'core/paragraph' } ],
 				content: '<!-- wp:paragraph /-->',
 			},
 		];
@@ -1793,6 +1859,8 @@ describe( 'getLiveBlockContextSignature', () => {
 			getBlockName: jest.fn().mockReturnValue( 'core/paragraph' ),
 			getBlockAttributes: jest.fn().mockReturnValue( {} ),
 			getBlockCount: jest.fn().mockReturnValue( 1 ),
+			canInsertBlockType: jest.fn().mockReturnValue( true ),
+			canRemoveBlock: jest.fn().mockReturnValue( true ),
 		};
 		mockSelect.mockReturnValue( contextEditor );
 
@@ -1819,6 +1887,7 @@ describe( 'getLiveBlockContextSignature', () => {
 				name: 'theme/sidebar-callout',
 				title: 'Sidebar callout',
 				source: 'theme',
+				blocks: [ { name: 'core/paragraph' } ],
 				content: '<!-- wp:paragraph /-->',
 			},
 		];
@@ -1832,5 +1901,47 @@ describe( 'getLiveBlockContextSignature', () => {
 		expect( sig2 ).not.toBe( '' );
 		expect( sig1 ).not.toEqual( sig2 );
 		expect( mockGetAllowedPatterns ).toHaveBeenCalledTimes( 4 );
+	} );
+
+	test( 'subscribes to Core insertion and removal permissions at the destination root', () => {
+		window.flavorAgentData = {
+			enableBlockStructuralActions: true,
+		};
+		setupCollectMocks();
+		mockGetAllowedPatterns.mockReturnValue( [
+			{
+				name: 'theme/hero',
+				blocks: [ { name: 'core/paragraph' } ],
+				content: '<!-- wp:paragraph /-->',
+			},
+		] );
+		mockSelect.mockReturnValue( {
+			getBlockRootClientId: jest
+				.fn()
+				.mockReturnValue( 'destination-root' ),
+			getBlockOrder: jest.fn().mockReturnValue( [ 'test-block' ] ),
+			getBlockName: jest.fn().mockReturnValue( 'core/paragraph' ),
+			getBlockAttributes: jest.fn().mockReturnValue( {} ),
+			getBlockCount: jest.fn().mockReturnValue( 1 ),
+		} );
+		const canInsertBlockType = jest.fn().mockReturnValue( true );
+		const canRemoveBlock = jest.fn().mockReturnValue( true );
+
+		getLiveBlockContextSignature(
+			buildRegistrySelect( {
+				getBlockRootClientId: jest
+					.fn()
+					.mockReturnValue( 'destination-root' ),
+				canInsertBlockType,
+				canRemoveBlock,
+			} ),
+			'test-block'
+		);
+
+		expect( canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			'destination-root'
+		);
+		expect( canRemoveBlock ).toHaveBeenCalledWith( 'test-block' );
 	} );
 } );

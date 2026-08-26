@@ -216,7 +216,7 @@ describe( 'block structural actions', () => {
 		);
 	} );
 
-	test( 'prepareBlockStructuralOperation rejects stale signatures, disabled flags, locks, content-only targets, missing patterns, and invalid actions', () => {
+	test( 'prepareBlockStructuralOperation rejects stale signatures, disabled flags, content-only targets, missing patterns, and invalid actions', () => {
 		const { blockEditorSelect } = createBlockEditor();
 
 		expect(
@@ -242,17 +242,6 @@ describe( 'block structural actions', () => {
 		).toEqual(
 			expect.objectContaining( { code: 'structural_actions_disabled' } )
 		);
-
-		expect(
-			prepareBlockStructuralOperation( {
-				operation: baseOperation,
-				blockOperationContext: {
-					...baseContext,
-					isTargetLocked: true,
-				},
-				blockEditorSelect,
-			} )
-		).toEqual( expect.objectContaining( { code: 'locked_target' } ) );
 
 		expect(
 			prepareBlockStructuralOperation( {
@@ -287,6 +276,34 @@ describe( 'block structural actions', () => {
 			} )
 		).toEqual( expect.objectContaining( { code: 'operation_invalid' } ) );
 	} );
+
+	test.each( [
+		[ 'move', { lock: { move: true } } ],
+		[ 'remove', { lock: { remove: true } } ],
+		[ 'template lock', { templateLock: 'all' } ],
+	] )(
+		'prepares an allowed operation despite the selected block %s attribute',
+		( _label, attributes ) => {
+			const { blockEditorSelect } = createBlockEditor( {
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes,
+						innerBlocks: [],
+					},
+				],
+			} );
+
+			expect(
+				prepareBlockStructuralOperation( {
+					operation: baseOperation,
+					blockOperationContext: baseContext,
+					blockEditorSelect,
+				} )
+			).toEqual( expect.objectContaining( { ok: true } ) );
+		}
+	);
 
 	test( 'applyBlockStructuralSuggestionOperations inserts patterns before and after the selected block', () => {
 		const { state, blockEditorSelect, blockEditorDispatch } =

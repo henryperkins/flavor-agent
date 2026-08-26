@@ -8,7 +8,6 @@ import {
 	BLOCK_OPERATION_ERROR_CROSS_SURFACE_TARGET,
 	BLOCK_OPERATION_ERROR_INVALID_INSERTION_POSITION,
 	BLOCK_OPERATION_ERROR_INVALID_TARGET_TYPE,
-	BLOCK_OPERATION_ERROR_LOCKED_TARGET,
 	BLOCK_OPERATION_ERROR_MISSING_PATTERN_NAME,
 	BLOCK_OPERATION_ERROR_MISSING_TARGET_CLIENT_ID,
 	BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED,
@@ -81,7 +80,6 @@ describe( 'block operation catalog', () => {
 			targetBlockName: 'core/group',
 			targetSignature: 'sig:block-1',
 			allowedPatterns,
-			isTargetLocked: false,
 			isContentOnly: true,
 			editingMode: 'contentOnly',
 		} );
@@ -411,22 +409,6 @@ describe( 'block operation catalog', () => {
 			[ BLOCK_OPERATION_ERROR_INVALID_TARGET_TYPE ],
 		],
 		[
-			'locked targets',
-			[
-				{
-					type: BLOCK_OPERATION_INSERT_PATTERN,
-					patternName: 'flavor-agent/cta-with-image',
-					targetClientId: 'block-1',
-					position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
-				},
-			],
-			{
-				...baseContext,
-				isTargetLocked: true,
-			},
-			[ BLOCK_OPERATION_ERROR_LOCKED_TARGET ],
-		],
-		[
 			'content-only targets',
 			[
 				{
@@ -474,6 +456,26 @@ describe( 'block operation catalog', () => {
 		expect( result.ok ).toBe( false );
 		expect( result.operations ).toEqual( [] );
 		expect( getRejectedCodes( result ) ).toEqual( expectedCodes );
+	} );
+
+	test( 'does not let a legacy lock field override an allowed insertion', () => {
+		const result = validateBlockOperationSequence(
+			[
+				{
+					type: BLOCK_OPERATION_INSERT_PATTERN,
+					patternName: 'flavor-agent/cta-with-image',
+					targetClientId: 'block-1',
+					position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
+				},
+			],
+			{
+				...baseContext,
+				isTargetLocked: true,
+			}
+		);
+
+		expect( result.ok ).toBe( true );
+		expect( result.rejectedOperations ).toEqual( [] );
 	} );
 
 	test( 'sanitizes rejected operation payloads', () => {

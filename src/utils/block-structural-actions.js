@@ -229,17 +229,6 @@ function buildStructuralSignature( operations = [], blockEditorSelect = {} ) {
 	} );
 }
 
-function hasLockedBlockAttribute( block = {} ) {
-	const lock =
-		block?.attributes?.lock &&
-		typeof block.attributes.lock === 'object' &&
-		! Array.isArray( block.attributes.lock )
-			? block.attributes.lock
-			: null;
-
-	return Boolean( lock && Object.keys( lock ).length > 0 );
-}
-
 function mapValidationFailureCode( validation ) {
 	const code = validation?.rejectedOperations?.[ 0 ]?.code || '';
 
@@ -331,9 +320,6 @@ export function prepareBlockStructuralOperation( {
 		...blockOperationContext,
 		targetBlockName: liveBlock.name,
 		editingMode,
-		isTargetLocked:
-			blockOperationContext?.isTargetLocked === true ||
-			hasLockedBlockAttribute( liveBlock ),
 		isContentOnly:
 			blockOperationContext?.isContentOnly === true ||
 			blockOperationContext?.isInsideContentOnly === true ||

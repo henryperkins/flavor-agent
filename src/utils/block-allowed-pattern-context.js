@@ -68,13 +68,16 @@ function targetAllowsStructuralActions( target = {} ) {
 		toNonEmptyString( target.targetBlockName ) !== '' &&
 		editingMode !== 'disabled' &&
 		editingMode !== 'contentOnly' &&
-		target.isInsideContentOnly !== true &&
-		target.isTargetLocked !== true
+		target.isInsideContentOnly !== true
 	);
 }
 
-function getAllowedActionsForPattern( pattern, target ) {
+function getAllowedActionsForPattern( pattern, target, permissions = {} ) {
 	if ( ! targetAllowsStructuralActions( target ) ) {
+		return [];
+	}
+
+	if ( permissions.canInsertPattern?.( pattern ) !== true ) {
 		return [];
 	}
 
@@ -85,8 +88,9 @@ function getAllowedActionsForPattern( pattern, target ) {
 	const blockTypes = normalizeStringArray( pattern.blockTypes );
 
 	if (
-		blockTypes.length === 0 ||
-		blockTypes.includes( target.targetBlockName )
+		permissions.canRemoveTarget === true &&
+		( blockTypes.length === 0 ||
+			blockTypes.includes( target.targetBlockName ) )
 	) {
 		actions.push( BLOCK_OPERATION_ACTION_REPLACE );
 	}
@@ -101,14 +105,17 @@ export function buildBlockOperationTargetSignature( target = {} ) {
 		structuralIdentity: target.structuralIdentity || {},
 		editingMode: toNonEmptyString( target.editingMode || 'default' ),
 		isInsideContentOnly: target.isInsideContentOnly === true,
-		isTargetLocked: target.isTargetLocked === true,
 		childCount: Number.isFinite( target.childCount )
 			? target.childCount
 			: null,
 	} );
 }
 
-export function buildAllowedPatternContext( patterns = [], target = {} ) {
+export function buildAllowedPatternContext(
+	patterns = [],
+	target = {},
+	permissions = {}
+) {
 	const targetClientId = toNonEmptyString( target.targetClientId );
 	const targetBlockName = toNonEmptyString( target.targetBlockName );
 	const targetSignature = toNonEmptyString( target.targetSignature );
@@ -127,11 +134,15 @@ export function buildAllowedPatternContext( patterns = [], target = {} ) {
 			continue;
 		}
 
-		const allowedActions = getAllowedActionsForPattern( pattern, {
-			...target,
-			targetClientId,
-			targetBlockName,
-		} );
+		const allowedActions = getAllowedActionsForPattern(
+			pattern,
+			{
+				...target,
+				targetClientId,
+				targetBlockName,
+			},
+			permissions
+		);
 
 		if ( allowedActions.length === 0 ) {
 			continue;
