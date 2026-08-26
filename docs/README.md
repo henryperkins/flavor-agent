@@ -79,9 +79,6 @@ Read these documents in this order:
 8. `docs/flavor-agent-readme.md`
    - Editor-flow and architecture walkthrough.
    - Use this as the architecture-oriented companion to the feature docs.
-9. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
-   - Release-cycle research snapshots for upstream WordPress changes that matter to Flavor Agent.
-   - Use the snapshots for compatibility context.
 
 ## Doc Ownership
 
@@ -131,10 +128,6 @@ Each top-level doc has one job:
 7. `docs/flavor-agent-readme.md` answers:
    - How does the broader editor architecture fit together?
    - How do the surface docs fit into the repo-level implementation story?
-8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md` answer:
-   - Which upstream WordPress 7.0 and Gutenberg changes matter to Flavor Agent?
-   - Which release-cycle notes are authoritative or merely supplemental?
-   - Which migration or tooling opportunities are worth tracking without treating them as shipped repo behavior?
 
 ## Update Contract
 
@@ -146,7 +139,7 @@ When changing the plugin:
 4. Update the matching file in `docs/features/` if a shipped surface behavior changes.
 5. Update the matching file in `docs/reference/` if an ability, route, permission, response contract, provider chain, operation vocabulary, undo lifecycle, or release-validation rule changes.
 6. Update `docs/flavor-agent-readme.md` if the architecture-level editor flow or repo walkthrough changes.
-7. Update the relevant WordPress reference doc (`docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, or `docs/wp7-migration-opportunities.md`) when upstream WordPress release-cycle research or migration guidance changes.
+7. Update `docs/reference/gutenberg-feature-tracking.md` or `docs/reference/wordpress-ai-roadmap-tracking.md` when upstream Gutenberg or WordPress AI release-cycle research changes.
 8. Delete or rewrite stale planning docs instead of letting two forward-looking plans compete.
 
 ## Current Backbone
@@ -160,20 +153,19 @@ Right now the intended doc stack is:
 5. Per-surface deep dives: `docs/features/README.md`
 6. Programmatic and UI contract docs: `docs/reference/` (current-open-work, abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, governance-layer, release-surface-scope-review, surfaces/release-stop-lines, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, external-service-disclosure, developer-docs-public-corpus-runbook, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking, agentic-plan-implementation-guide)
 7. Architecture companion: `docs/flavor-agent-readme.md`
-8. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md`
 
-If those eight documentation groups stay aligned, the repo has a solid documentation backbone.
+If those seven documentation groups stay aligned, the repo has a solid documentation backbone.
 
 ## Temporary Artifacts
 
-Point-in-time artifacts do not belong in the durable reading order. Completed implementation plans, code audits, and clipped external research should be deleted or moved to an explicit archive once their outcomes move into code, tests, `STATUS.md`, or the backbone docs.
+Point-in-time artifacts do not belong in the durable reading order. Completed implementation plans, code audits, and clipped external research should be deleted once their outcomes move into code, tests, `STATUS.md`, or the backbone docs. Git history retains them.
 
-Archived files under `docs/superpowers/plans/archive/` are historical execution/review context only. Do not treat them as active backlog, and do not start implementation from an archived plan without first re-grounding it against the current source tree and writing a fresh active plan. Design specs under `docs/superpowers/specs/` may also be historical once their status line says implemented; use the live feature/reference docs as the current contract.
+Do not start implementation from a deleted or historical plan without first re-grounding it against the current source tree and writing a fresh active plan.
 
 Retain only artifacts with an active maintenance job:
 
 1. `docs/prompts/surface-review-prompt.md` — the single reusable review prompt for editor and admin surfaces.
-2. `docs/validation/` — saved release evidence. Keep these files only until the corresponding release tag or sign-off package no longer needs them.
+2. `docs/validation/` — saved release evidence for the current tag. Keep only the files the published sign-off package still cites.
 
 If a future audit or research note becomes load-bearing for a decision, promote the surviving takeaway into `docs/reference/` or a per-surface feature doc instead of keeping the raw artifact in the tree.
 
@@ -187,6 +179,6 @@ Before adding a new Markdown file under `docs/`, prefer one of these paths:
 
 1. update an existing backbone, feature, or reference doc;
 2. create a short release/validation artifact with a clear deletion point;
-3. keep long implementation plans outside the durable docs tree unless they are actively being executed; if a repo-local copy must be retained after execution, move it under an archive path and add an explicit status banner.
+3. keep long implementation plans outside the durable docs tree unless they are actively being executed; delete them after the outcome is represented in code, tests, `STATUS.md`, `docs/features/`, or durable `docs/reference/` files.
 
 If a document is kept long-term, add or preserve enough context for a future maintainer to know its status, owner, and update trigger.

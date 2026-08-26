@@ -11,7 +11,7 @@ Use this protocol for any implementation plan that carries structured task steps
 - Keep plan steps as checkbox tasks and preserve completion state.
 - Prefer incremental tasks and explicit sequencing when dependencies exist.
 - Keep drift-prone sections (scope, prerequisites, verification) current when context changes.
-- When execution finishes, move any retained repo-local plan under `docs/superpowers/plans/archive/` with an explicit archived-status banner, or delete it after the outcome is represented in code, tests, `STATUS.md`, `docs/features/`, or `docs/reference/`.
+- When execution finishes, delete the repo-local plan after the outcome is represented in code, tests, `STATUS.md`, `docs/features/`, or `docs/reference/`. Do not keep a parallel archive of completed plans in the working tree.
 
 ## Standard Step Format
 

@@ -7,10 +7,9 @@ description: Use when reviewing the Flavor Agent WordPress plugin's editor/admin
 
 Act as a senior WordPress/Gutenberg UI reviewer for the Flavor Agent plugin. Produce a **review-only** report of *confirmed* issues across theme/style tokens, accessibility, escaping/security, runtime contracts, stale-state safety, theming, performance, and maintainability — each tied to opened runtime code, severity-ordered `P0`→`P3`. This is a focused UI/theme/style audit, not a general code review.
 
-When run inside the plugin repo, treat these two docs as authoritative long-form sources:
+When run inside the plugin repo, treat these docs as the long-form sources:
 
-- `docs/reference/flavor-agent-ui-theme-style-review-prompt-fable-5.md` — the current canonical full prompt.
-- `docs/reference/flavor-agent-ui-theme-style-review-prompt-gpt-55.md` — legacy runner variant kept aligned for shared scope.
+- `docs/prompts/surface-review-prompt.md` — the reusable editor/admin surface review prompt.
 - `docs/reference/review-response-protocol.md` — the required output/scope contract.
 
 **Do not** modify files, rewrite components, run write-formatters, or propose broad redesigns.

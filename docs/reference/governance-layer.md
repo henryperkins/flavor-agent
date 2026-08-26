@@ -181,6 +181,8 @@ Generation-side governance is caller-independent: external recommendation calls 
 
 The boundary, stated plainly: external agents can now request style, template, template-part, and post-blocks applies, read their attribution, and undo executed style, template, template-part, and post-blocks rows — but approval is never exposed to agents. Every external apply is review-gated through `POST /flavor-agent/v1/activity/{id}/decision` (`manage_options` plus the row's mutation capability) in `Settings > AI Activity`, with freshness re-verified at request and again at approval. AI proposes; WordPress approves. The block surface still remains editor-owned, and admin-global activity reads stay REST-only.
 
+Approval and server-side undo authorize the **canonical WordPress target the executor will read, mutate, and attest**, not the caller's claimed document fields. `ExternalApplyExecutor::resolve_target_identity()` is the single parser for that target; `authorize_target()` runs identity validation before capability, and neither baseline collection nor content reads happen until authorization succeeds. Divergent, missing, malformed, or non-canonical identities fail closed with `flavor_agent_apply_target_mismatch` (HTTP 409). A coherent target the current user cannot edit fails with `flavor_agent_apply_target_forbidden` (HTTP 403). There is no production filter or caller-controlled authorization seam on this path.
+
 ### Recommendation context trust boundary
 
 Recommendation context is **caller-supplied advisory input on both paths**. There is no enforced first-party channel.

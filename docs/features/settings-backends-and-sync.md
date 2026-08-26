@@ -25,7 +25,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Cloudflare AI Search pattern recommendation ranking threshold.
 - Developer Docs source status and max result count. Developer docs use Flavor Agent's built-in public endpoint and do not expose Cloudflare credential fields.
 - Guidelines: site context, copy guidelines, image guidelines, additional guidelines, and block-specific notes. When the core/Gutenberg Guidelines store is present, Flavor Agent reads that store first and keeps the legacy fields as migration/import-export tooling.
-- Experimental Features: AI Activity Dual Logging controls. Block structural actions graduated to unconditionally-on on 2026-06-03 and are no longer listed here; opt-out is now the `flavor_agent_enable_block_structural_actions` filter.
+- Experimental Features: AI Activity Dual Logging controls (on by default). When on, Flavor Agent keeps `request_diagnostic` rows alongside core `Tools > AI Request Logs`; when off, it skips those diagnostics and defers to core while still recording apply/undo. Exact coexistence contract: `docs/features/activity-and-audit.md#request-logging-coexistence`. Block structural actions graduated to unconditionally-on on 2026-06-03 and are no longer listed here; opt-out is now the `flavor_agent_enable_block_structural_actions` filter.
 - Manual pattern sync through the `Sync Pattern Catalog` button.
 
 Chat is no longer configured with plugin-owned chat credentials on this screen. Provider ownership, credential precedence, reasoning-effort routing, and exact backend requirements are canonical in `docs/reference/provider-precedence.md`.

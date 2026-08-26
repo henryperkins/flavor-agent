@@ -1219,11 +1219,11 @@ describe( 'update helpers', () => {
 			explanation: 'The server list is authoritative.',
 		};
 
-		// ACCEPTED RISK (docs/superpowers/plans/2026-07-20-block-external-introspection-parity.md,
-		// Decision 2): the server contract overrides the client-derived mirror
-		// for registeredStyles at src/store/update-helpers.js:673-683 — only
-		// contentAttributeKeys and configAttributeKeys get client fallback. A
-		// style the client no longer knows about therefore still applies.
+		// ACCEPTED RISK: the server contract overrides the client-derived
+		// mirror for registeredStyles — only contentAttributeKeys and
+		// configAttributeKeys get client fallback. A style the client no
+		// longer knows about therefore still applies. See
+		// docs/reference/governance-layer.md (recommendation context trust).
 		expect(
 			sanitizeRecommendationsForContext(
 				recommendations,

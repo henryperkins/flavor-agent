@@ -265,4 +265,4 @@ No changes to `components/AIReviewSection.js`, `components/RecommendationLane.js
 - `WordPressAIClient::chat()` signature verified at `inc/LLM/WordPressAIClient.php` lines 49–278.
 - Review-signature gate behavior verified at `inc/Support/RecommendationSignature.php` and `inc/Support/RecommendationReviewSignature.php`.
 - Recommendation ability schemas verified in `inc/Abilities/Registration.php` (`recommendation_output_schema()`).
-- Cross-references the gap audit (`docs/reference/wp-ai-stack-gap-audit-2026-05-24.md`, item 5 in the prioritized list).
+- Cross-references the streaming watch item in `docs/reference/wordpress-ai-roadmap-tracking.md` and `docs/reference/current-open-work.md`.

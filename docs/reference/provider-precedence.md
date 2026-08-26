@@ -54,6 +54,8 @@ At request time, `WordPressAIClient::chat()` first tries any standardized WP AI 
 
 Anthropic is intentionally unmapped until its provider plugin documents the accepted reasoning/thinking payload contract; Flavor Agent should add that mapping with provider-specific tests when the contract is known.
 
+Connectors-path chat requests resolve provider metadata as `wordpress_ai_client`. Anthropic-only schema mitigations (including the compiled-grammar size cap for `recommend-block`) must not key off slug `anthropic`; the 4096-byte local heuristic is not a published Anthropic limit.
+
 ## Embedding Runtime Chain
 
 `Provider::embedding_configuration()` resolves the active plugin-owned Embedding Model. These embeddings are used by Flavor Agent semantic features that need plugin-managed vectors. The Qdrant pattern storage backend uses this Embedding Model. The Cloudflare AI Search pattern backend uses Cloudflare AI Search managed embeddings/indexing for pattern sync and retrieval and does not call `EmbeddingClient` there. When Workers AI credentials change, the save flow validates them with `EmbeddingClient::validate_configuration()` before creating or adopting the managed AI Search instance; unchanged values may reuse the saved Workers AI configuration and validate the managed AI Search instance/signature instead of re-probing Workers AI.

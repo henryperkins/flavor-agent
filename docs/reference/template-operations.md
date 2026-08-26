@@ -122,6 +122,10 @@ Validated `set_styles` and `set_block_styles` operations are enriched with:
 - `valueType` — `preset` or `freeform`
 - `presetType`, `presetSlug`, `cssVar` — when the value resolves to a theme preset
 
+## First-materialization slugs
+
+When a theme-file template or template part is materialized into a `wp_template` / `wp_template_part` post, the slug written and later probed for collisions must be idempotent under core's `sanitize_title()` (`sanitize_title( sanitize_key( $slug ) )`). Comparing a `sanitize_key()`-only slug against the stored `post_name` falsely reports `flavor_agent_apply_slug_conflict` on repeated dashes.
+
 ## Primary Source Files
 
 - `inc/LLM/TemplatePrompt.php`

@@ -1,5 +1,7 @@
 # Extending The Block Operation Recommendation Pipeline
 
+This document is direction notes for a later block-operation expansion, not an execution plan. Do not implement from it without a fresh source-grounded plan in `docs/reference/current-open-work.md`.
+
 The best extension path is to keep the current safety model, but widen the operation catalog and scopes in deliberate tiers.
 
 Right now the block surface is centered on one selected block. It collects selected-block context plus siblings, parent, structural ancestors, branch, theme tokens, and allowed patterns in `src/context/collector.js`. The only executable structural operations are selected-block `insert_pattern` and `replace_block_with_pattern`, defined in `src/utils/block-operation-catalog.js` and enforced server-side by `inc/Context/BlockOperationValidator.php`. Apply then goes through the transactional structural executor in `src/utils/block-structural-actions.js`.

@@ -14,8 +14,8 @@ use FlavorAgent\LLM\TemplatePrompt;
  * Mirrors StyleApplyExecutor: read the live template, re-validate operations and
  * expectedTarget fingerprints, mutate the parsed block tree atomically through
  * BlockTreeMutator, persist via core post APIs, and snapshot before/after
- * post_content. See
- * docs/superpowers/specs/2026-06-28-wp-template-external-apply-executor-design.md.
+ * post_content. Live contract: `docs/reference/governance-layer.md` and
+ * `docs/reference/abilities-and-routes.md`.
  *
  * `undo()` re-resolves the live template and restores the before snapshot under the
  * same equality semantics as StyleApplyExecutor::undo, completing the
