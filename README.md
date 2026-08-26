@@ -4,7 +4,7 @@ Flavor Agent lets AI work on a live WordPress site without unchecked control. Ev
 
 I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
 
-> **Release status:** implementation hardening, current live-corpus evidence, the connector-backed runtime smoke, the minimum visual proof gate, a clean inspected candidate artifact, and the infrastructure-only GitHub Actions disposition are closed for `0.1.0`. Exact-tag verification is outstanding. RC1–RC3 are published; there is no final `v0.1.0` tag or release yet. The maintainer-approved CI waiver retains every local verification and artifact gate; rebuild and verification against the final immutable SHA remain mandatory. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
+> **Release status:** `v0.1.0` is the final initial release. Implementation hardening, current live-corpus evidence, connector-backed Anthropic behavior, minimum visual proof, clean artifact inspection, and the infrastructure-only GitHub Actions disposition are closed. GitHub-hosted jobs did not execute because of the recorded account lock; the maintainer-approved waiver retains every local, browser, Plugin Check, packaging, and exact-tag gate. The GitHub release carries the verified zip, complete local logs, waiver record, checksums, and exact-tag verification record. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 
 1.0 when the core Abilities/AI Client surfaces stabilize.
 
@@ -71,7 +71,7 @@ Automated evidence currently recorded in the repository includes:
 - A targeted public-corpus updater run settled its WordPress 7.1 source with zero pending items or deletions, then returned current stable Developer Docs and current Make/Core evidence in the same bounded query; see [`docs/validation/2026-08-26-public-corpus-validation.md`](docs/validation/2026-08-26-public-corpus-validation.md).
 - Clean commit `e38fb57` passed all nine strict verification steps with no skips, then produced an inspected 209-file zip whose extracted payload passed Plugin Check with zero errors and zero warnings; see [`docs/validation/2026-08-26-v0.1.0-candidate-artifact.md`](docs/validation/2026-08-26-v0.1.0-candidate-artifact.md).
 
-These are candidate results, not exact-tag release evidence. Re-run the full gates — strict verify including Plugin Check, both Playwright harnesses, `npm run check:docs`, and `npm run dist` — on the exact commit you tag, and record the results before publishing.
+The GitHub `v0.1.0` release is the canonical exact-tag evidence boundary. Its attached verification record identifies the tag object and commit, the fresh-checkout environment and strict results, the rebuilt zip and log checksums, and the byte-comparison result against the pre-tag candidate.
 
 ## Architecture at a glance
 

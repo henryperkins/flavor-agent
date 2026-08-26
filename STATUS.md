@@ -2,6 +2,16 @@
 
 > Last updated: 2026-08-26
 
+## Release
+
+`v0.1.0` is the final initial release. The GitHub release is the canonical
+exact-tag evidence boundary and carries `flavor-agent.zip`, the complete local
+verification logs, the CI-waiver record, checksums, and the tag-verification
+record. GitHub-hosted jobs remain zero-step/non-passing because of the account
+billing lock; only runner execution is waived. All strict local, WordPress 7.1
+browser, Plugin Check, live corpus, Anthropic connector, visual, packaging,
+inventory, checksum, and exact-tag controls remain required.
+
 ## Working
 
 ### Abilities API (WordPress 7.0+)
