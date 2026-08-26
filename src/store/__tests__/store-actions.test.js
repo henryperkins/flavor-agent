@@ -1,3 +1,6 @@
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../context/collector', () => ( {
 	getLiveBlockContextData: jest.fn( () => ( {
@@ -77,6 +80,8 @@ import {
 import { getClientRequestSessionId } from '../client-request-identity';
 import { CONNECTOR_NOT_APPROVED_CODE } from '../request-error-details';
 import { resetRecommendationOutcomeDedupeForTests } from '../recommendation-outcomes';
+
+const i18n = require( '@wordpress/i18n' );
 
 const TEMPLATE_PROMPT =
 	'Make this template read more like an editorial front page.';
@@ -338,6 +343,7 @@ function createStructuralCoreSelectors( {
 describe( 'store action thunks', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		i18n.__.mockImplementation( ( text ) => text );
 		getLiveBlockContextData.mockReset();
 		getLiveBlockContextData.mockReturnValue( {
 			context: { block: { name: 'core/group' } },
@@ -677,6 +683,50 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'fetchBlockRecommendations preserves source-locale fallback and transport diagnostics', async () => {
+		apiFetch.mockRejectedValue( {
+			data: {
+				requestMeta: {
+					errorSummary: {
+						wrappedMessage:
+							'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+					},
+				},
+			},
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+
+		await actions.fetchBlockRecommendations(
+			'block-1',
+			{ block: { name: 'core/paragraph' } },
+			'Tighten this copy.'
+		)( {
+			dispatch,
+			registry: {
+				select: jest.fn( getScopedEditorSelectors ),
+			},
+			select,
+		} );
+
+		const diagnostics = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'SET_BLOCK_RECS'
+		)?.[ 0 ].diagnostics;
+
+		expect( diagnostics ).toEqual(
+			expect.objectContaining( {
+				title: 'Block request failed',
+				errorMessage: 'Request failed.',
+				detailLines: [
+					'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+				],
+			} )
+		);
+	} );
+
 	test( 'fetchBlockRecommendations keeps connector approval details on request state only', async () => {
 		const connectorApprovalError = {
 			code: CONNECTOR_NOT_APPROVED_CODE,
@@ -815,6 +865,14 @@ describe( 'store action thunks', () => {
 		apiFetch.mockRejectedValue( {
 			code: 'invalid_json',
 			message: 'The response is not a valid JSON response.',
+			data: {
+				requestMeta: {
+					errorSummary: {
+						wrappedMessage:
+							'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+					},
+				},
+			},
 		} );
 
 		const dispatch = jest.fn();
@@ -871,12 +929,60 @@ describe( 'store action thunks', () => {
 					errorMessage:
 						'The block recommendation endpoint returned a non-JSON response.',
 					detailLines: expect.arrayContaining( [
+						'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
 						'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
 						'Original parser message: The response is not a valid JSON response.',
 					] ),
 				} ),
 			} )
 		);
+	} );
+
+	test( 'formats translated diagnostic labels without translating connector or parser messages', async () => {
+		i18n.__.mockImplementation( ( text ) => {
+			const translations = {
+				'Transport detail: %s': 'Translated transport: %s',
+				'Original parser message: %s': 'Translated parser: %s',
+			};
+
+			return translations[ text ] || text;
+		} );
+		apiFetch.mockRejectedValue( {
+			code: 'invalid_json',
+			message: 'Parser-owned detail',
+			data: {
+				requestMeta: {
+					errorSummary: {
+						wrappedMessage: 'Connector-owned detail',
+					},
+				},
+			},
+		} );
+		const dispatch = jest.fn();
+
+		await actions.fetchBlockRecommendations(
+			'block-1',
+			{ block: { name: 'core/paragraph' } },
+			'Tighten this copy.'
+		)( {
+			dispatch,
+			registry: {
+				select: jest.fn( getScopedEditorSelectors ),
+			},
+			select: {
+				getBlockRequestToken: jest.fn().mockReturnValue( 7 ),
+			},
+		} );
+
+		const detailLines = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'SET_BLOCK_RECS'
+		)?.[ 0 ].diagnostics.detailLines;
+
+		expect( detailLines ).toEqual( [
+			'Translated transport: Connector-owned detail',
+			'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
+			'Translated parser: Parser-owned detail',
+		] );
 	} );
 
 	test( 'fetchNavigationRecommendations dispatches fallback data on request failures', async () => {

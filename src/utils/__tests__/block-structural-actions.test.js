@@ -1,3 +1,9 @@
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
+
+const i18n = require( '@wordpress/i18n' );
+
 import {
 	applyBlockStructuralSuggestionOperations,
 	getBlockStructuralActivitySignature,
@@ -475,6 +481,10 @@ function createMultiOperationUndoFixture( options = {} ) {
 }
 
 describe( 'block structural actions', () => {
+	afterEach( () => {
+		i18n.__.mockImplementation( ( text ) => text );
+	} );
+
 	test( 'prepareBlockStructuralOperation rejects a missing live target', () => {
 		const result = prepareBlockStructuralOperation( {
 			operation: baseOperation,
@@ -721,6 +731,90 @@ describe( 'block structural actions', () => {
 			);
 		}
 	);
+
+	test.each( [
+		{
+			label: 'insertion',
+			operation: baseOperation,
+			expected:
+				'Pattern “theme/hero” could not be inserted for the selected block.',
+		},
+		{
+			label: 'replacement',
+			operation: buildReplaceOperation(),
+			expected:
+				'Pattern “theme/hero” could not replace the selected block.',
+		},
+	] )(
+		'reports the supplied pattern name when $label verification fails',
+		( { operation, expected } ) => {
+			const editor = createBlockEditor( { nextInsertBlockCount: 0 } );
+			const result = applyOperation( {
+				editor,
+				operation,
+				parser: parseCachedNestedPatternBlocks,
+			} );
+
+			expect( result ).toEqual(
+				expect.objectContaining( {
+					ok: false,
+					code: 'operation_invalid',
+					error: expected,
+				} )
+			);
+		}
+	);
+
+	test.each( [
+		{
+			label: 'insertion',
+			operation: baseOperation,
+			expected:
+				'Pattern “unknown” could not be inserted for the selected block.',
+		},
+		{
+			label: 'replacement',
+			operation: buildReplaceOperation(),
+			expected: 'Pattern “unknown” could not replace the selected block.',
+		},
+	] )(
+		'uses the product-owned unknown fallback when $label verification loses the pattern name',
+		( { operation, expected } ) => {
+			const editor = createBlockEditor( { nextInsertBlockCount: 0 } );
+			const result = applyOperation( {
+				editor,
+				operation,
+				parser: ( patternName, preparedOperation ) => {
+					preparedOperation.patternName = '';
+					return parseCachedNestedPatternBlocks( patternName );
+				},
+			} );
+
+			expect( result.error ).toBe( expected );
+		}
+	);
+
+	test( 'formats translated insertion failures without translating a supplied pattern name', () => {
+		i18n.__.mockImplementation( ( text ) => {
+			if (
+				text ===
+				'Pattern “%s” could not be inserted for the selected block.'
+			) {
+				return 'Translated insertion failure for “%s”.';
+			}
+
+			return text;
+		} );
+		const editor = createBlockEditor( { nextInsertBlockCount: 0 } );
+		const result = applyOperation( {
+			editor,
+			parser: parseCachedNestedPatternBlocks,
+		} );
+
+		expect( result.error ).toBe(
+			'Translated insertion failure for “theme/hero”.'
+		);
+	} );
 
 	test( 'reports rollback failure when exact partial-insert cleanup is a no-op', () => {
 		const editor = createBlockEditor( {

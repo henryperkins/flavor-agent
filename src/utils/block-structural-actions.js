@@ -11,7 +11,7 @@ import {
 } from './block-operation-catalog';
 import { buildContextSignature } from './context-signature';
 import { cloneBlock } from '@wordpress/blocks';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 const STRUCTURAL_DRIFT_UNDO_ERROR = __(
 	'The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
@@ -712,9 +712,14 @@ function applyInsertPatternOperation( {
 		return {
 			ok: false,
 			code: 'operation_invalid',
-			error: `Pattern “${
-				operation.patternName || 'unknown'
-			}” could not be inserted for the selected block.`,
+			error: sprintf(
+				/* translators: %s: block pattern name. */
+				__(
+					'Pattern “%s” could not be inserted for the selected block.',
+					'flavor-agent'
+				),
+				operation.patternName || __( 'unknown', 'flavor-agent' )
+			),
 		};
 	}
 
@@ -899,9 +904,14 @@ function applyReplaceBlockWithPatternOperation( {
 		return {
 			ok: false,
 			code: 'operation_invalid',
-			error: `Pattern “${
-				operation.patternName || 'unknown'
-			}” could not replace the selected block.`,
+			error: sprintf(
+				/* translators: %s: block pattern name. */
+				__(
+					'Pattern “%s” could not replace the selected block.',
+					'flavor-agent'
+				),
+				operation.patternName || __( 'unknown', 'flavor-agent' )
+			),
 		};
 	}
 

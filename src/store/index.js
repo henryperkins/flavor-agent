@@ -7,7 +7,7 @@
  */
 import { rawHandler } from '@wordpress/blocks';
 import { createReduxStore, register } from '@wordpress/data';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import {
@@ -253,10 +253,14 @@ const SURFACE_INTERACTION_CONTRACT = Object.freeze( {
 		stages: SHARED_PANEL_SEQUENCE,
 	} ),
 } );
-const BLOCK_REST_INVALID_JSON_MESSAGE =
-	'The block recommendation endpoint returned a non-JSON response.';
-const BLOCK_REST_INVALID_JSON_DETAIL =
-	'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.';
+const BLOCK_REST_INVALID_JSON_MESSAGE = __(
+	'The block recommendation endpoint returned a non-JSON response.',
+	'flavor-agent'
+);
+const BLOCK_REST_INVALID_JSON_DETAIL = __(
+	'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
+	'flavor-agent'
+);
 
 function getSurfaceContract( surface ) {
 	return SURFACE_INTERACTION_CONTRACT[ surface ] || null;
@@ -1130,7 +1134,10 @@ function buildBlockRecommendationFailureDiagnostics(
 	requestData = {},
 	requestToken = null
 ) {
-	const rawMessage = getApiErrorMessage( error, 'Request failed.' );
+	const rawMessage = getApiErrorMessage(
+		error,
+		__( 'Request failed.', 'flavor-agent' )
+	);
 	const errorCode = getApiErrorCode( error );
 	const isInvalidJsonResponse = errorCode === 'invalid_json';
 	const message = isInvalidJsonResponse
@@ -1145,20 +1152,32 @@ function buildBlockRecommendationFailureDiagnostics(
 	const detailLines = [];
 
 	if ( wrappedMessage && wrappedMessage !== message ) {
-		detailLines.push( `Transport detail: ${ wrappedMessage }` );
+		detailLines.push(
+			sprintf(
+				/* translators: %s: transport error detail returned by the connector. */
+				__( 'Transport detail: %s', 'flavor-agent' ),
+				wrappedMessage
+			)
+		);
 	}
 
 	if ( isInvalidJsonResponse ) {
 		detailLines.push( BLOCK_REST_INVALID_JSON_DETAIL );
 
 		if ( rawMessage && rawMessage !== message ) {
-			detailLines.push( `Original parser message: ${ rawMessage }` );
+			detailLines.push(
+				sprintf(
+					/* translators: %s: original parser error message. */
+					__( 'Original parser message: %s', 'flavor-agent' ),
+					rawMessage
+				)
+			);
 		}
 	}
 
 	return {
 		type: 'failure',
-		title: 'Block request failed',
+		title: __( 'Block request failed', 'flavor-agent' ),
 		detailLines,
 		requestMeta,
 		errorCode,
@@ -1863,7 +1882,7 @@ const actions = {
 							'error',
 							requestErrorDetails?.message ||
 								diagnostics.errorMessage ||
-								'Request failed.',
+								__( 'Request failed.', 'flavor-agent' ),
 							requestToken,
 							requestErrorDetails
 						)
@@ -2024,11 +2043,6 @@ const actions = {
 			if ( select.getBlockApplyStatus?.( clientId ) === 'applying' ) {
 				return false;
 			}
-
-			const applyErrorMessage =
-				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.';
-			const advisoryApplyMessage =
-				'This suggestion is advisory and requires manual follow-through or a broader preview/apply flow.';
 
 			const staleApplyResult = guardSurfaceApplyFreshness( {
 				surface: 'block',
@@ -2245,6 +2259,11 @@ const actions = {
 				let isNoOp = false;
 
 				if ( execution.isAdvisoryOnly ) {
+					const advisoryApplyMessage = __(
+						'This suggestion is advisory and requires manual follow-through or a broader preview/apply flow.',
+						'flavor-agent'
+					);
+
 					localDispatch(
 						actions.setBlockApplyState(
 							clientId,
@@ -2313,7 +2332,10 @@ const actions = {
 						actions.setBlockApplyState(
 							clientId,
 							'error',
-							applyErrorMessage
+							__(
+								'This suggestion includes unsupported or unsafe attribute changes and could not be applied.',
+								'flavor-agent'
+							)
 						)
 					);
 					localDispatch(
@@ -2390,7 +2412,11 @@ const actions = {
 					actions.setBlockApplyState(
 						clientId,
 						'error',
-						error?.message || applyErrorMessage
+						error?.message ||
+							__(
+								'This suggestion includes unsupported or unsafe attribute changes and could not be applied.',
+								'flavor-agent'
+							)
 					)
 				);
 				throw error;
@@ -2434,9 +2460,6 @@ const actions = {
 				recommendationSetId,
 				memberSuggestionKeys
 			);
-			const applyErrorMessage =
-				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.';
-
 			const staleApplyResult = guardSurfaceApplyFreshness( {
 				surface: 'block',
 				currentRequestSignature,
@@ -2718,6 +2741,11 @@ const actions = {
 				attributeSnapshotsMatch( currentAttributes, workingAttributes )
 			) {
 				if ( appliedAttributeKeys.length === 0 ) {
+					const applyErrorMessage = __(
+						'This suggestion includes unsupported or unsafe attribute changes and could not be applied.',
+						'flavor-agent'
+					);
+
 					localDispatch(
 						actions.setBlockApplyState(
 							clientId,

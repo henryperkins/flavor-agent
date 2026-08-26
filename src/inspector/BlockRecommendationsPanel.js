@@ -66,22 +66,33 @@ import useBlockRecommendationRequestData from './use-block-recommendation-reques
 
 const EMPTY_BLOCK_SUGGESTIONS = [];
 const EMPTY_SURFACE_SUGGESTIONS = [];
-const BLOCK_COMPOSER_HELPER_TEXT =
-	'One-click apply stays limited to safe local block changes.';
-const CONTENT_ONLY_COMPOSER_HELPER_TEXT =
-	'Content-only mode avoids style and settings changes.';
-const CONTENT_ONLY_NOTICE_TEXT =
-	'This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only.';
+const BLOCK_COMPOSER_HELPER_TEXT = __(
+	'One-click apply stays limited to safe local block changes.',
+	'flavor-agent'
+);
+const CONTENT_ONLY_COMPOSER_HELPER_TEXT = __(
+	'Content-only mode avoids style and settings changes.',
+	'flavor-agent'
+);
+const CONTENT_ONLY_NOTICE_TEXT = __(
+	'This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only.',
+	'flavor-agent'
+);
 const DEFAULT_BLOCK_STARTER_PROMPTS = [
-	'Improve clarity',
-	'More editorial',
-	'Simplify layout',
+	__( 'Improve clarity', 'flavor-agent' ),
+	__( 'More editorial', 'flavor-agent' ),
+	__( 'Simplify layout', 'flavor-agent' ),
 ];
 const CONTENT_ONLY_STARTER_PROMPTS = [
-	'Tighten the copy',
-	'Clarify the message',
-	'More concise',
+	__( 'Tighten the copy', 'flavor-agent' ),
+	__( 'Clarify the message', 'flavor-agent' ),
+	__( 'More concise', 'flavor-agent' ),
 ];
+const SELECTED_BLOCK_EYEBROW = __( 'Selected Block', 'flavor-agent' );
+const DEFAULT_BLOCK_INTRO_COPY = __(
+	'Ask for a specific outcome or fetch recommendations based on the current block context.',
+	'flavor-agent'
+);
 const HIDDEN_ADVISORY_BLOCKER_REASONS = new Set( [
 	ACTIONABILITY_REASON_MANUAL_COPY_ONLY,
 	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
@@ -398,8 +409,8 @@ function getPreselectedKeysFromSets( visibleSets, selectableSuggestions ) {
 
 export function BlockRecommendationsContent( {
 	clientId,
-	eyebrow = 'Selected Block',
-	introCopy = 'Ask for a specific outcome or fetch recommendations based on the current block context.',
+	eyebrow = SELECTED_BLOCK_EYEBROW,
+	introCopy = DEFAULT_BLOCK_INTRO_COPY,
 	prompt = undefined,
 	onPromptChange = undefined,
 	requestData = null,
@@ -647,17 +658,26 @@ export function BlockRecommendationsContent( {
 				hasUndoSuccess,
 				emptyMessage:
 					hasFreshResult && ! hasSurfaceSuggestions
-						? 'No recommendations were returned for the current prompt.'
+						? __(
+								'No recommendations were returned for the current prompt.',
+								'flavor-agent'
+						  )
 						: '',
 				applySuccessMessage: hasApplySuccess
-					? `Applied ${
-							latestBlockActivity?.suggestion || 'suggestion'
-					  }.`
+					? sprintf(
+							/* translators: %s: recommendation label. */
+							__( 'Applied %s.', 'flavor-agent' ),
+							latestBlockActivity?.suggestion ||
+								__( 'suggestion', 'flavor-agent' )
+					  )
 					: '',
 				undoSuccessMessage: hasUndoSuccess
-					? `Undid ${
-							lastUndoneBlockActivity?.suggestion || 'suggestion'
-					  }.`
+					? sprintf(
+							/* translators: %s: recommendation label. */
+							__( 'Undid %s.', 'flavor-agent' ),
+							lastUndoneBlockActivity?.suggestion ||
+								__( 'suggestion', 'flavor-agent' )
+					  )
 					: '',
 				onDismissAction: Boolean( error ),
 				onApplyDismissAction: Boolean( blockApplyError ),
@@ -827,7 +847,7 @@ export function BlockRecommendationsContent( {
 			surface: 'block',
 			suggestion:
 				requestDiagnostics.title ||
-				'No block-lane suggestions returned',
+				__( 'No block-lane suggestions returned', 'flavor-agent' ),
 			target: {
 				clientId,
 				blockName:
@@ -893,8 +913,11 @@ export function BlockRecommendationsContent( {
 		[ blockActivityEntries, diagnosticActivityEntry ]
 	);
 	const activitySectionDescription = diagnosticActivityEntry
-		? 'Recent request diagnostics and applied actions for this block.'
-		: 'Newest valid block action can be undone here.';
+		? __(
+				'Recent request diagnostics and applied actions for this block.',
+				'flavor-agent'
+		  )
+		: __( 'Newest valid block action can be undone here.', 'flavor-agent' );
 
 	const handleFetch = useCallback( () => {
 		if ( ! canRecommendBlocks ) {
@@ -1003,11 +1026,17 @@ export function BlockRecommendationsContent( {
 		? CONTENT_ONLY_STARTER_PROMPTS
 		: DEFAULT_BLOCK_STARTER_PROMPTS;
 	const composerLabel = isContentRestricted
-		? 'What do you want to improve about this content?'
-		: 'What do you want to improve about this block?';
+		? __(
+				'What do you want to improve about this content?',
+				'flavor-agent'
+		  )
+		: __( 'What do you want to improve about this block?', 'flavor-agent' );
 	const composerPlaceholder = isContentRestricted
-		? 'Describe the content change you want for this block.'
-		: 'Describe the outcome you want for this block.';
+		? __(
+				'Describe the content change you want for this block.',
+				'flavor-agent'
+		  )
+		: __( 'Describe the outcome you want for this block.', 'flavor-agent' );
 
 	if ( ! clientId || ! block || isDisabled ) {
 		return null;
@@ -1021,18 +1050,24 @@ export function BlockRecommendationsContent( {
 
 	if ( isStaleResult ) {
 		if ( effectiveStaleReason === 'missing-resolved-signature' ) {
-			staleScopeReason =
-				'Server apply context is missing. Refresh before applying the previous result.';
+			staleScopeReason = __(
+				'Server apply context is missing. Refresh before applying the previous result.',
+				'flavor-agent'
+			);
 		} else if ( effectiveStaleReason === 'server-apply' ) {
-			staleScopeReason =
-				'Server apply context changed. Refresh before applying the previous result.';
+			staleScopeReason = __(
+				'Server apply context changed. Refresh before applying the previous result.',
+				'flavor-agent'
+			);
 		} else {
-			staleScopeReason =
-				'Block or prompt changed. Refresh before applying the previous result.';
+			staleScopeReason = __(
+				'Block or prompt changed. Refresh before applying the previous result.',
+				'flavor-agent'
+			);
 		}
 	}
 
-	const shouldShowScopeNote = eyebrow !== 'Selected Block' && introCopy;
+	const shouldShowScopeNote = eyebrow !== SELECTED_BLOCK_EYEBROW && introCopy;
 
 	return (
 		<div className="flavor-agent-panel flavor-agent-block-panel">
@@ -1114,11 +1149,14 @@ export function BlockRecommendationsContent( {
 					title={ APPLY_NOW_LABEL }
 					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ executableBlockSuggestions.length }
-					countNoun="suggestion"
+					countNoun={ __( 'suggestion', 'flavor-agent' ) }
 					description={
 						isStaleResult
 							? ''
-							: 'Inline-safe changes can apply directly.'
+							: __(
+									'Inline-safe changes can apply directly.',
+									'flavor-agent'
+							  )
 					}
 					meta={
 						<EligibilitySummary
@@ -1144,11 +1182,14 @@ export function BlockRecommendationsContent( {
 					title={ REVIEW_LANE_LABEL }
 					tone={ isStaleResult ? '' : SURFACE_TONES.REVIEW }
 					count={ reviewBlockSuggestions.length }
-					countNoun="suggestion"
+					countNoun={ __( 'suggestion', 'flavor-agent' ) }
 					description={
 						isStaleResult
 							? ''
-							: 'Review required before structural apply.'
+							: __(
+									'Review required before structural apply.',
+									'flavor-agent'
+							  )
 					}
 					meta={
 						<EligibilitySummary
@@ -1182,7 +1223,7 @@ export function BlockRecommendationsContent( {
 					title={ __( 'Settings suggestions', 'flavor-agent' ) }
 					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ settingsSuggestions.length }
-					countNoun="suggestion"
+					countNoun={ __( 'suggestion', 'flavor-agent' ) }
 					description={
 						isStaleResult
 							? ''
@@ -1217,7 +1258,7 @@ export function BlockRecommendationsContent( {
 					title={ __( 'Style suggestions', 'flavor-agent' ) }
 					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ styleSuggestions.length }
-					countNoun="suggestion"
+					countNoun={ __( 'suggestion', 'flavor-agent' ) }
 					description={
 						isStaleResult
 							? ''
@@ -1299,12 +1340,18 @@ export function BlockRecommendationsContent( {
 				<AIAdvisorySection
 					title={ MANUAL_IDEAS_LABEL }
 					count={ advisoryBlockSuggestions.length }
-					countNoun="suggestion"
+					countNoun={ __( 'suggestion', 'flavor-agent' ) }
 					initialOpen
 					description={
 						isStaleResult
-							? 'These ideas are shown for reference from the last request. Refresh before acting on them against the current block.'
-							: 'Manual follow-through only.'
+							? __(
+									'These ideas are shown for reference from the last request. Refresh before acting on them against the current block.',
+									'flavor-agent'
+							  )
+							: __(
+									'Manual follow-through only.',
+									'flavor-agent'
+							  )
 					}
 				>
 					{ advisoryBlockSuggestions.map( ( suggestion ) => (
@@ -1411,11 +1458,19 @@ function ReviewSuggestionCard( {
 	const operationDetails = executableOperations.flatMap( ( operation ) =>
 		getReviewOperationDetails( operation, patternTitleMap )
 	);
-	const label = suggestion?.label || 'Suggestion';
+	const label = suggestion?.label || __( 'Suggestion', 'flavor-agent' );
 	const reviewDetailsId = getReviewDetailsId( suggestion );
 	const reviewButtonLabel = isStale
-		? `Refresh to review ${ label }`
-		: `Review ${ label }`;
+		? sprintf(
+				/* translators: %s: recommendation label. */
+				__( 'Refresh to review %s', 'flavor-agent' ),
+				label
+		  )
+		: sprintf(
+				/* translators: %s: recommendation label. */
+				__( 'Review %s', 'flavor-agent' ),
+				label
+		  );
 
 	return (
 		<div className="flavor-agent-card">
@@ -1442,7 +1497,9 @@ function ReviewSuggestionCard( {
 					aria-expanded={ isActive ? 'true' : 'false' }
 					aria-controls={ isActive ? reviewDetailsId : undefined }
 				>
-					{ isStale ? 'Refresh to review' : 'Review' }
+					{ isStale
+						? __( 'Refresh to review', 'flavor-agent' )
+						: __( 'Review', 'flavor-agent' ) }
 				</Button>
 			</div>
 
@@ -1501,8 +1558,11 @@ function ReviewSuggestionCard( {
 							className="flavor-agent-card__apply"
 						>
 							{ isApplying
-								? 'Applying structure'
-								: 'Apply reviewed structure' }
+								? __( 'Applying structure', 'flavor-agent' )
+								: __(
+										'Apply reviewed structure',
+										'flavor-agent'
+								  ) }
 						</Button>
 					) }
 				</div>
@@ -1526,7 +1586,8 @@ function AdvisorySuggestionCard( { suggestion } ) {
 			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
 				<div className="flavor-agent-card__lead">
 					<span className="flavor-agent-card__label">
-						{ suggestion?.label || 'Suggestion' }
+						{ suggestion?.label ||
+							__( 'Suggestion', 'flavor-agent' ) }
 					</span>
 					{ typeLabel && (
 						<div className="flavor-agent-card__meta">
@@ -1552,7 +1613,11 @@ function AdvisorySuggestionCard( { suggestion } ) {
 
 			{ reasonLabels.length > 0 && (
 				<p className="flavor-agent-card__description">
-					{ `Eligibility blockers: ${ reasonLabels.join( ', ' ) }.` }
+					{ sprintf(
+						/* translators: %s: comma-separated eligibility blocker labels. */
+						__( 'Eligibility blockers: %s.', 'flavor-agent' ),
+						reasonLabels.join( ', ' )
+					) }
 				</p>
 			) }
 		</div>
@@ -1587,13 +1652,13 @@ function EligibilitySummary( { suggestions = [] } ) {
 function getAdvisorySuggestionTypeLabel( suggestion ) {
 	switch ( suggestion?.type ) {
 		case 'structural_recommendation':
-			return 'Structure';
+			return __( 'Structure', 'flavor-agent' );
 		case 'pattern_replacement':
-			return 'Pattern';
+			return __( 'Pattern', 'flavor-agent' );
 		case 'style_variation':
-			return 'Style variation';
+			return __( 'Style variation', 'flavor-agent' );
 		default:
-			return 'Manual idea';
+			return __( 'Manual idea', 'flavor-agent' );
 	}
 }
 

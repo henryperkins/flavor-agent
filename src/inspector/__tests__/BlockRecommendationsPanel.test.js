@@ -19,6 +19,12 @@ const mockRenderAIActivitySection = jest.fn();
 const mockRenderNavigationRecommendations = jest.fn();
 let mockShouldRenderNavigationRecommendations = false;
 
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
+
+const i18n = require( '@wordpress/i18n' );
+
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
 } ) );
@@ -501,6 +507,7 @@ function findSelectableCheckbox( suggestionLabel ) {
 beforeEach( () => {
 	jest.clearAllMocks();
 	jest.useFakeTimers();
+	i18n.__.mockImplementation( ( text ) => text );
 	mockSuggestionChips.mockReset();
 	mockGetBlocks.mockImplementation( () => getState().blockEditor.blocks );
 	mockShouldRenderNavigationRecommendations = false;
@@ -1003,6 +1010,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			'Applied Refresh hero copy.'
 		);
 		expect(
+			getContainer().textContent.match( /Refresh hero copy/g )
+		).toHaveLength( 1 );
+		expect(
 			mockRenderAIActivitySection.mock.calls[
 				mockRenderAIActivitySection.mock.calls.length - 1
 			][ 0 ]
@@ -1025,6 +1035,110 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		} );
 
 		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'shows an undo success notice with the authored suggestion label once', () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						surface: 'block',
+						suggestion: 'Refresh hero copy',
+						target: {
+							clientId: 'block-1',
+						},
+						undo: {
+							canUndo: false,
+							status: 'undone',
+							error: null,
+						},
+					},
+				],
+				lastUndoneActivityId: 'activity-1',
+				undoStatus: 'success',
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain(
+			'Undid Refresh hero copy.'
+		);
+		expect(
+			getContainer().textContent.match( /Refresh hero copy/g )
+		).toHaveLength( 1 );
+	} );
+
+	test( 'formats translated status sentences without translating or duplicating authored labels', () => {
+		i18n.__.mockImplementation( ( text ) => {
+			const translations = {
+				'Applied %s.': 'Translated applied: %s.',
+				'Undid %s.': 'Translated undone: %s.',
+			};
+
+			return translations[ text ] || text;
+		} );
+		const activity = {
+			id: 'activity-1',
+			surface: 'block',
+			suggestion: 'Model-authored label',
+			suggestionKey: 'model-authored-label',
+			target: {
+				clientId: 'block-1',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+				error: null,
+			},
+		};
+		currentState = createState( {
+			store: {
+				activityLog: [ activity ],
+				blockApplyStatuses: {
+					'block-1': 'success',
+				},
+				blockLastAppliedSuggestionKeys: {
+					'block-1': 'model-authored-label',
+				},
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain(
+			'Translated applied: Model-authored label.'
+		);
+		expect(
+			getContainer().textContent.match( /Model-authored label/g )
+		).toHaveLength( 1 );
+
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						...activity,
+						undo: {
+							...activity.undo,
+							canUndo: false,
+							status: 'undone',
+						},
+					},
+				],
+				lastUndoneActivityId: 'activity-1',
+				undoStatus: 'success',
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain(
+			'Translated undone: Model-authored label.'
+		);
+		expect(
+			getContainer().textContent.match( /Model-authored label/g )
+		).toHaveLength( 1 );
 	} );
 
 	test( 'does not show an apply success notice for prior undoable block activity after apply state is idle', () => {
@@ -1583,6 +1697,11 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( reviewButton.getAttribute( 'aria-label' ) ).toBe(
 			'Review Add a hero pattern after this group'
 		);
+		expect(
+			reviewButton
+				.getAttribute( 'aria-label' )
+				.match( /Add a hero pattern after this group/g )
+		).toHaveLength( 1 );
 		expect( reviewButton.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
 		expect( reviewButton.getAttribute( 'aria-controls' ) ).toBeNull();
 
@@ -1659,6 +1778,24 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				editorContext: liveContext,
 			} )
 		);
+
+		i18n.__.mockImplementation( ( text ) =>
+			text === 'Review %s' ? 'Translated review %s' : text
+		);
+		renderContent();
+
+		const translatedReviewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Review' );
+
+		expect( translatedReviewButton.getAttribute( 'aria-label' ) ).toBe(
+			'Translated review Add a hero pattern after this group'
+		);
+		expect(
+			translatedReviewButton
+				.getAttribute( 'aria-label' )
+				.match( /Add a hero pattern after this group/g )
+		).toHaveLength( 1 );
 	} );
 
 	test( 'renders human review details without leaking internal tokens for replace operations', () => {
@@ -2139,6 +2276,14 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( reviewButton ).toBeDefined();
 		expect( reviewButton.disabled ).toBe( true );
+		expect( reviewButton.getAttribute( 'aria-label' ) ).toBe(
+			'Refresh to review Replace with a callout pattern'
+		);
+		expect(
+			reviewButton
+				.getAttribute( 'aria-label' )
+				.match( /Replace with a callout pattern/g )
+		).toHaveLength( 1 );
 	} );
 
 	test( 'keeps block review controls active when a legacy docs grounding stale reason is stored', () => {
@@ -2301,6 +2446,17 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 											position: 'insert_after',
 										},
 									},
+									{
+										code: 'locked_target',
+										message:
+											'The selected block is locked.',
+										operation: {
+											type: 'insert_pattern',
+											patternName: 'theme/hero',
+											targetClientId: 'block-1',
+											position: 'insert_after',
+										},
+									},
 								],
 							},
 						],
@@ -2326,7 +2482,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			'Tighten copy and consider a hero pattern'
 		);
 		expect( getContainer().textContent ).toContain(
-			'Eligibility blockers: Missing pattern context.'
+			'Eligibility blockers: Missing pattern context, Locked target.'
 		);
 		expect( mockSuggestionChips ).toHaveBeenCalledWith(
 			expect.objectContaining( {
@@ -2339,6 +2495,17 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					} ),
 				],
 			} )
+		);
+
+		i18n.__.mockImplementation( ( text ) =>
+			text === 'Eligibility blockers: %s.'
+				? 'Translated blockers: %s.'
+				: text
+		);
+		renderContent();
+
+		expect( getContainer().textContent ).toContain(
+			'Translated blockers: Missing pattern context, Locked target.'
 		);
 	} );
 
@@ -2740,6 +2907,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 						title: 'Block request failed',
 						detailLines: [
 							'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+							'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
 						],
 						blockName: 'core/paragraph',
 						blockPath: [ 0, 1 ],
@@ -2786,6 +2954,12 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				} ),
 				undo: expect.objectContaining( {
 					status: 'failed',
+				} ),
+				diagnostic: expect.objectContaining( {
+					detailLines: [
+						'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+						'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
+					],
 				} ),
 			} )
 		);
