@@ -30,7 +30,41 @@ define( 'FLAVOR_AGENT_FILE', __FILE__ );
 define( 'FLAVOR_AGENT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_AGENT_URL', plugin_dir_url( __FILE__ ) );
 
-require_once FLAVOR_AGENT_DIR . 'vendor/autoload.php';
+$flavor_agent_autoloader = FLAVOR_AGENT_DIR . 'vendor/autoload.php';
+
+if ( is_readable( $flavor_agent_autoloader ) ) {
+	require_once $flavor_agent_autoloader;
+} else {
+	// A deployment that ships without the generated Composer autoloader would
+	// otherwise fatal the entire site on load. The plugin has no runtime Composer
+	// dependencies -- composer.json declares only require-dev plus the single
+	// PSR-4 root -- so its own classes resolve straight from inc/.
+	spl_autoload_register(
+		static function ( string $class_name ): void {
+			$prefix = 'FlavorAgent\\';
+
+			if ( ! str_starts_with( $class_name, $prefix ) ) {
+				return;
+			}
+
+			$relative_class = substr( $class_name, strlen( $prefix ) );
+
+			// Only plain PSR-4 names are mapped, so a hand-built class_exists()
+			// string cannot escape inc/ through traversal segments.
+			if ( ! preg_match( '/^[A-Za-z_][A-Za-z0-9_]*(?:\\\\[A-Za-z_][A-Za-z0-9_]*)*$/', $relative_class ) ) {
+				return;
+			}
+
+			$path = FLAVOR_AGENT_DIR . 'inc/' . str_replace( '\\', '/', $relative_class ) . '.php';
+
+			if ( is_readable( $path ) ) {
+				require_once $path;
+			}
+		}
+	);
+}
+
+unset( $flavor_agent_autoloader );
 
 add_filter( 'wpai_default_feature_classes', [ FlavorAgent\AI\FeatureBootstrap::class, 'register_feature_class' ] );
 add_action( 'admin_notices', [ FlavorAgent\AI\FeatureBootstrap::class, 'render_missing_contract_notice' ] );
