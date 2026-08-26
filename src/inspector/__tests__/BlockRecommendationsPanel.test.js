@@ -1453,10 +1453,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			text === 'suggestion' ? 'translated-suggestion-token' : text
 		);
 		i18n._n.mockImplementation( ( single, plural, count ) => {
-			if (
-				single === '%d suggestion' &&
-				plural === '%d suggestions'
-			) {
+			if ( single === '%d suggestion' && plural === '%d suggestions' ) {
 				return Number( count ) === 1
 					? '%d sugerencia'
 					: '%d sugerencias';
@@ -1847,9 +1844,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				.getAttribute( 'aria-label' )
 				.match( /Add a hero pattern after this group/g )
 		).toHaveLength( 1 );
-		expect( translatedReviewButton.getAttribute( 'aria-label' ) ).not.toContain(
-			'Incorrectly translated recommendation label'
-		);
+		expect(
+			translatedReviewButton.getAttribute( 'aria-label' )
+		).not.toContain( 'Incorrectly translated recommendation label' );
 		expect( i18n._x ).toHaveBeenCalledWith(
 			'Review %s',
 			'recommendation action label',
