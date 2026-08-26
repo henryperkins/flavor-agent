@@ -54,6 +54,17 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 
 This is still the first governance-console slice, not the final observability product. It includes external apply decisions, attestation discovery for eligible style/template/template-part lanes, structured diff and before/after summaries, a rendered backend/API aggregate report contract, the first selected-row action/discovery layer (focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges), and a first rich visual diff layer for style-governance rows. Broader cross-operator workflows and deeper observability remain open.
 
+## Request Logging Coexistence
+
+Core AI Request Logging (`Tools > AI Request Logs`) captures AI Client HTTP calls. Flavor Agent's activity repository captures apply/undo state. The two layers coexist; Flavor Agent does not replace core logs.
+
+- Flavor Agent enriches `wpai_request_logs.context` via `wpai_request_log_context` and captures the core `log_id` through `wpai_request_logged`.
+- **AI Activity Dual Logging is on by default** (`Settings > Flavor Agent > Experimental Features`). Flavor Agent keeps writing `request_diagnostic` rows (surface, result count, pipeline trace, undo lineage) alongside core, and apply rows carry `request.ai.requestLogId`.
+- Opting out restores suppress-and-defer: Flavor Agent skips `request_diagnostic` when core logging is on, and the admin page defers to `Tools > AI Request Logs`.
+- Apply/undo rows always stay in Flavor Agent activity. Core Request Logging does not record editor state transitions.
+
+Enforced by `inc/Activity/RequestLoggingBridge.php`. Settings-screen copy lives in `docs/features/settings-backends-and-sync.md`.
+
 ## Ordered Undo Rules
 
 Undo is tail-ordered and state-validated before a stored action can be reverted. The canonical state model, terminal transitions, per-surface undo inputs, and blocked/unavailable projections live in `docs/reference/activity-state-machine.md`.
@@ -102,4 +113,5 @@ Undo is tail-ordered and state-validated before a stored action can be reverted.
 - `inc/Activity/Permissions.php`
 - `inc/Activity/Repository.php`
 - `inc/Activity/Serializer.php`
+- `inc/Activity/RequestLoggingBridge.php`
 - `inc/REST/Agent_Controller.php`

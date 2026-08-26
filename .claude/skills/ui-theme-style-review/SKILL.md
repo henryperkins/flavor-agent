@@ -11,8 +11,7 @@ Act as a senior WordPress/Gutenberg UI reviewer for this plugin. Produce a **rev
 
 This is the in-harness operational form of the repo source docs — keep them aligned:
 
-- `docs/reference/flavor-agent-ui-theme-style-review-prompt-fable-5.md` — the current canonical full prompt.
-- `docs/reference/flavor-agent-ui-theme-style-review-prompt-gpt-55.md` — legacy runner variant kept aligned for shared scope.
+- `docs/prompts/surface-review-prompt.md` — the reusable editor/admin surface review prompt.
 - `docs/reference/review-response-protocol.md` — the required output/scope contract.
 
 **Do not** modify files, rewrite components, run write-formatters, or propose broad redesigns. This is distinct from the generic `/code-review` and `/security-review` skills: it is scoped to this plugin's editor + admin UI surfaces and the theming/a11y/stale-state/contract categories below.

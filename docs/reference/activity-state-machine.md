@@ -78,6 +78,8 @@ When the client receives `409 flavor_agent_activity_invalid_undo_transition` whi
 
 Server-side governed undo has a stricter post-mutation boundary. Once an executor changes the target, any newer-action conflict, activity storage error, same-row race, failed final hydration, or storage-context drift returns `flavor_agent_undo_recovery_required` with a bounded phase. It must not be reported as ordinary success or an ordinary lifecycle/storage error because the target may already differ from the still-available activity row. Operators reconcile the target, revert attestation, and activity row before retrying.
 
+Style undo and baseline hashes canonicalize core's save-time CSS custom-property form (`var(--wp--preset--color--slug)`) back to theme.json preset refs (`var:preset|color|slug`) before comparing live Global Styles / Style Book state to the recorded after-snapshot. Client canonicalization is comparison-only and must not rewrite recommendation signatures. Without that step, an otherwise-untouched preset apply fails `flavor_agent_undo_drift`.
+
 At runtime, the client can still resolve an entry back to effectively `available` when the live editor or style state shows the recorded "after" snapshot has been reapplied again (for example after a native redo). That runtime revival is computed from current editor/style state; it is not a persisted `undo.status` transition back to `available`.
 
 ## Ordered Undo Rule
