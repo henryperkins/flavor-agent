@@ -943,6 +943,9 @@ describe( 'store action thunks', () => {
 			const translations = {
 				'Transport detail: %s': 'Translated transport: %s',
 				'Original parser message: %s': 'Translated parser: %s',
+				'Connector-owned detail':
+					'Incorrectly translated connector detail',
+				'Parser-owned detail': 'Incorrectly translated parser detail',
 			};
 
 			return translations[ text ] || text;
@@ -983,6 +986,12 @@ describe( 'store action thunks', () => {
 			'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
 			'Translated parser: Parser-owned detail',
 		] );
+		expect( i18n.__.mock.calls.map( ( [ text ] ) => text ) ).toEqual(
+			expect.not.arrayContaining( [
+				'Connector-owned detail',
+				'Parser-owned detail',
+			] )
+		);
 	} );
 
 	test( 'fetchNavigationRecommendations dispatches fallback data on request failures', async () => {

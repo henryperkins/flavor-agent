@@ -508,6 +508,10 @@ beforeEach( () => {
 	jest.clearAllMocks();
 	jest.useFakeTimers();
 	i18n.__.mockImplementation( ( text ) => text );
+	i18n._x.mockImplementation( ( text ) => text );
+	i18n._n.mockImplementation( ( single, plural, count ) =>
+		Number( count ) === 1 ? single : plural
+	);
 	mockSuggestionChips.mockReset();
 	mockGetBlocks.mockImplementation( () => getState().blockEditor.blocks );
 	mockShouldRenderNavigationRecommendations = false;
@@ -1075,6 +1079,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			const translations = {
 				'Applied %s.': 'Translated applied: %s.',
 				'Undid %s.': 'Translated undone: %s.',
+				'Model-authored label': 'Incorrectly translated authored label',
 			};
 
 			return translations[ text ] || text;
@@ -1113,6 +1118,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect(
 			getContainer().textContent.match( /Model-authored label/g )
 		).toHaveLength( 1 );
+		expect( getContainer().textContent ).not.toContain(
+			'Incorrectly translated authored label'
+		);
 
 		currentState = createState( {
 			store: {
@@ -1139,6 +1147,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect(
 			getContainer().textContent.match( /Model-authored label/g )
 		).toHaveLength( 1 );
+		expect( i18n.__.mock.calls.map( ( [ text ] ) => text ) ).not.toContain(
+			'Model-authored label'
+		);
 	} );
 
 	test( 'does not show an apply success notice for prior undoable block activity after apply state is idle', () => {
@@ -1434,6 +1445,37 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					} ),
 				],
 			} )
+		);
+	} );
+
+	test( 'uses a stable suggestion token for non-source-locale plural counts', () => {
+		i18n.__.mockImplementation( ( text ) =>
+			text === 'suggestion' ? 'translated-suggestion-token' : text
+		);
+		i18n._n.mockImplementation( ( single, plural, count ) => {
+			if (
+				single === '%d suggestion' &&
+				plural === '%d suggestions'
+			) {
+				return Number( count ) === 1
+					? '%d sugerencia'
+					: '%d sugerencias';
+			}
+
+			return Number( count ) === 1 ? single : plural;
+		} );
+		const recommendations = buildPanelRecommendations();
+		recommendations.settings.push( {
+			...recommendations.settings[ 0 ],
+			label: 'Full-width layout',
+			suggestionKey: 'block:settings:2',
+		} );
+
+		renderBlockRecommendationsPanel( { recommendations } );
+
+		expect( getContainer().textContent ).toContain( '2 sugerencias' );
+		expect( getContainer().textContent ).not.toContain(
+			'2 translated-suggestion-token'
 		);
 	} );
 
@@ -1780,7 +1822,16 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		);
 
 		i18n.__.mockImplementation( ( text ) =>
-			text === 'Review %s' ? 'Translated review %s' : text
+			text === 'Add a hero pattern after this group'
+				? 'Incorrectly translated recommendation label'
+				: text
+		);
+		i18n._x.mockImplementation( ( text, context, domain ) =>
+			text === 'Review %s' &&
+			context === 'recommendation action label' &&
+			domain === 'flavor-agent'
+				? 'Translated review %s'
+				: text
 		);
 		renderContent();
 
@@ -1796,6 +1847,17 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				.getAttribute( 'aria-label' )
 				.match( /Add a hero pattern after this group/g )
 		).toHaveLength( 1 );
+		expect( translatedReviewButton.getAttribute( 'aria-label' ) ).not.toContain(
+			'Incorrectly translated recommendation label'
+		);
+		expect( i18n._x ).toHaveBeenCalledWith(
+			'Review %s',
+			'recommendation action label',
+			'flavor-agent'
+		);
+		expect( i18n.__.mock.calls.map( ( [ text ] ) => text ) ).not.toContain(
+			'Add a hero pattern after this group'
+		);
 	} );
 
 	test( 'renders human review details without leaking internal tokens for replace operations', () => {

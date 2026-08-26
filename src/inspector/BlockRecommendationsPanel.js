@@ -10,7 +10,7 @@ import {
 	useState,
 } from '@wordpress/element';
 import { starFilled as icon } from '@wordpress/icons';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 
 import { STORE_NAME } from '../store';
 import {
@@ -1149,7 +1149,7 @@ export function BlockRecommendationsContent( {
 					title={ APPLY_NOW_LABEL }
 					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ executableBlockSuggestions.length }
-					countNoun={ __( 'suggestion', 'flavor-agent' ) }
+					countNoun="suggestion"
 					description={
 						isStaleResult
 							? ''
@@ -1182,7 +1182,7 @@ export function BlockRecommendationsContent( {
 					title={ REVIEW_LANE_LABEL }
 					tone={ isStaleResult ? '' : SURFACE_TONES.REVIEW }
 					count={ reviewBlockSuggestions.length }
-					countNoun={ __( 'suggestion', 'flavor-agent' ) }
+					countNoun="suggestion"
 					description={
 						isStaleResult
 							? ''
@@ -1223,7 +1223,7 @@ export function BlockRecommendationsContent( {
 					title={ __( 'Settings suggestions', 'flavor-agent' ) }
 					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ settingsSuggestions.length }
-					countNoun={ __( 'suggestion', 'flavor-agent' ) }
+					countNoun="suggestion"
 					description={
 						isStaleResult
 							? ''
@@ -1258,7 +1258,7 @@ export function BlockRecommendationsContent( {
 					title={ __( 'Style suggestions', 'flavor-agent' ) }
 					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ styleSuggestions.length }
-					countNoun={ __( 'suggestion', 'flavor-agent' ) }
+					countNoun="suggestion"
 					description={
 						isStaleResult
 							? ''
@@ -1340,7 +1340,7 @@ export function BlockRecommendationsContent( {
 				<AIAdvisorySection
 					title={ MANUAL_IDEAS_LABEL }
 					count={ advisoryBlockSuggestions.length }
-					countNoun={ __( 'suggestion', 'flavor-agent' ) }
+					countNoun="suggestion"
 					initialOpen
 					description={
 						isStaleResult
@@ -1468,7 +1468,11 @@ function ReviewSuggestionCard( {
 		  )
 		: sprintf(
 				/* translators: %s: recommendation label. */
-				__( 'Review %s', 'flavor-agent' ),
+				_x(
+					'Review %s',
+					'recommendation action label',
+					'flavor-agent'
+				),
 				label
 		  );
 

@@ -784,6 +784,9 @@ describe( 'block structural actions', () => {
 			const result = applyOperation( {
 				editor,
 				operation,
+				// Validation makes an empty pattern name unreachable at apply time.
+				// Mutating the already-prepared operation through this existing parser
+				// seam exercises only the defensive product-owned fallback.
 				parser: ( patternName, preparedOperation ) => {
 					preparedOperation.patternName = '';
 					return parseCachedNestedPatternBlocks( patternName );
@@ -802,6 +805,9 @@ describe( 'block structural actions', () => {
 			) {
 				return 'Translated insertion failure for “%s”.';
 			}
+			if ( text === 'theme/hero' ) {
+				return 'Incorrectly translated pattern name';
+			}
 
 			return text;
 		} );
@@ -813,6 +819,12 @@ describe( 'block structural actions', () => {
 
 		expect( result.error ).toBe(
 			'Translated insertion failure for “theme/hero”.'
+		);
+		expect( result.error ).not.toContain(
+			'Incorrectly translated pattern name'
+		);
+		expect( i18n.__.mock.calls.map( ( [ text ] ) => text ) ).not.toContain(
+			'theme/hero'
 		);
 	} );
 

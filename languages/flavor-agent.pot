@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-26T22:41:37+00:00\n"
+"POT-Creation-Date: 2026-08-26T23:00:59+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: flavor-agent\n"
@@ -1717,7 +1717,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1068
 #: src/admin/activity-log-utils.js:1506
 #: src/inspector/BlockRecommendationsPanel.js:1415
-#: src/inspector/BlockRecommendationsPanel.js:1657
+#: src/inspector/BlockRecommendationsPanel.js:1661
 msgid "Pattern"
 msgstr ""
 
@@ -1826,7 +1826,7 @@ msgstr ""
 #: src/admin/activity-log.js:3373
 #: src/components/AIActivitySection.js:111
 #: src/content/ContentRecommender.js:607
-#: src/inspector/BlockRecommendationsPanel.js:1502
+#: src/inspector/BlockRecommendationsPanel.js:1506
 #: src/style-surfaces/presentation.js:118
 msgid "Review"
 msgstr ""
@@ -2290,9 +2290,7 @@ msgid "%s rows"
 msgstr ""
 
 #. translators: %s: review-selection percentage.
-#. translators: %s: recommendation label.
 #: src/admin/activity-log.js:376
-#: src/inspector/BlockRecommendationsPanel.js:1471
 #, js-format
 msgid "Review %s"
 msgstr ""
@@ -3723,11 +3721,6 @@ msgstr ""
 
 #: src/inspector/BlockRecommendationsPanel.js:671
 #: src/inspector/BlockRecommendationsPanel.js:679
-#: src/inspector/BlockRecommendationsPanel.js:1152
-#: src/inspector/BlockRecommendationsPanel.js:1185
-#: src/inspector/BlockRecommendationsPanel.js:1226
-#: src/inspector/BlockRecommendationsPanel.js:1261
-#: src/inspector/BlockRecommendationsPanel.js:1343
 #: src/style-surfaces/presentation.js:120
 msgid "suggestion"
 msgstr ""
@@ -3868,7 +3861,7 @@ msgid "Position"
 msgstr ""
 
 #: src/inspector/BlockRecommendationsPanel.js:1461
-#: src/inspector/BlockRecommendationsPanel.js:1590
+#: src/inspector/BlockRecommendationsPanel.js:1594
 #: src/inspector/SuggestionChips.js:31
 msgid "Suggestion"
 msgstr ""
@@ -3879,59 +3872,66 @@ msgstr ""
 msgid "Refresh to review %s"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1486
-#: src/inspector/BlockRecommendationsPanel.js:1601
+#. translators: %s: recommendation label.
+#: src/inspector/BlockRecommendationsPanel.js:1471
+#, js-format
+msgctxt "recommendation action label"
+msgid "Review %s"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1490
+#: src/inspector/BlockRecommendationsPanel.js:1605
 msgid "Validator computed"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1501
+#: src/inspector/BlockRecommendationsPanel.js:1505
 msgid "Refresh to review"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1540
+#: src/inspector/BlockRecommendationsPanel.js:1544
 msgid "Selected structural review"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1546
+#: src/inspector/BlockRecommendationsPanel.js:1550
 msgid "This review is scoped to the current block, request token, and request signature."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1561
+#: src/inspector/BlockRecommendationsPanel.js:1565
 msgid "Applying structure"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1562
+#: src/inspector/BlockRecommendationsPanel.js:1566
 msgid "Apply reviewed structure"
 msgstr ""
 
 #. translators: %s: comma-separated eligibility blocker labels.
-#: src/inspector/BlockRecommendationsPanel.js:1618
+#: src/inspector/BlockRecommendationsPanel.js:1622
 #, js-format
 msgid "Eligibility blockers: %s."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1655
+#: src/inspector/BlockRecommendationsPanel.js:1659
 msgid "Structure"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1659
+#: src/inspector/BlockRecommendationsPanel.js:1663
 msgid "Style variation"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1661
+#: src/inspector/BlockRecommendationsPanel.js:1665
 msgid "Manual idea"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1668
-#: src/inspector/BlockRecommendationsPanel.js:1712
+#: src/inspector/BlockRecommendationsPanel.js:1672
+#: src/inspector/BlockRecommendationsPanel.js:1716
 msgid "AI Recommendations"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1716
+#: src/inspector/BlockRecommendationsPanel.js:1720
 msgid "Last Selected Block"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1717
+#: src/inspector/BlockRecommendationsPanel.js:1721
 msgid "Using the last selected block until selection returns."
 msgstr ""
 
