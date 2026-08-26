@@ -87,5 +87,37 @@ Conditional fallback if the account cannot be unlocked before the release:
 - Obtain an explicit maintainer decision accepting this infrastructure-only
   exception before creating or publishing `v0.1.0`.
 
-This document diagnoses the failure and defines the waiver conditions. It does
-not itself approve the waiver or make the current candidate shippable.
+## Maintainer waiver decision
+
+Decision recorded: `2026-08-26T08:02:32Z`.
+
+Status: **approved for final `v0.1.0`, infrastructure scope only**.
+
+The maintainer confirmed during the release session that GitHub Actions will
+not execute and that restoration of the account is not expected in the
+foreseeable future. Waiting for a hosted rerun is therefore not a viable
+`v0.1.0` release path. This statement approves the conditional fallback above.
+
+The waiver covers only the absence of GitHub-hosted runner execution. It does
+not reclassify any zero-step GitHub check as passing, and it does not waive:
+
+- strict build, lint, unit, PHP, docs, Plugin Check, or browser verification;
+- WordPress 7.1 Playground and Docker Site Editor coverage;
+- live public-corpus, connector-backed Anthropic, or minimum visual evidence;
+- clean-commit artifact construction, archive inventory, dependency/license
+  review, or checksum recording;
+- verification against the exact final tag; or
+- attachment of the verified zip and complete local log bundle to the release.
+
+The compensating pre-tag controls are recorded in
+[`2026-08-26-v0.1.0-candidate-artifact.md`](2026-08-26-v0.1.0-candidate-artifact.md):
+clean commit `e38fb57` passed all nine strict local steps with zero skips, its
+209-file zip payload passed Plugin Check with zero errors and zero warnings,
+and the complete log bundle and artifact have recorded SHA-256 identities.
+
+Before publication, the final tag must still be created at the intended
+immutable SHA, checked out independently, strictly reverified, and rebuilt (or
+the attached zip must be proven byte-identical to the verified build). The zip,
+complete local logs, and this waiver record must then be attached or linked in
+the final release. This approval does not itself create a tag or publish a
+release.

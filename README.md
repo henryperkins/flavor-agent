@@ -4,7 +4,7 @@ Flavor Agent lets AI work on a live WordPress site without unchecked control. Ev
 
 I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
 
-> **Release status:** implementation hardening, current live-corpus evidence, the connector-backed runtime smoke, the minimum visual proof gate, and a clean inspected candidate artifact are closed for `0.1.0`, but exact-tag verification is outstanding. RC1–RC3 are published; there is no final `v0.1.0` tag or release yet. Executable CI or an explicit waiver, followed by rebuild and verification against the final immutable SHA, remain release gates. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
+> **Release status:** implementation hardening, current live-corpus evidence, the connector-backed runtime smoke, the minimum visual proof gate, a clean inspected candidate artifact, and the infrastructure-only GitHub Actions disposition are closed for `0.1.0`. Exact-tag verification is outstanding. RC1–RC3 are published; there is no final `v0.1.0` tag or release yet. The maintainer-approved CI waiver retains every local verification and artifact gate; rebuild and verification against the final immutable SHA remain mandatory. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 
 1.0 when the core Abilities/AI Client surfaces stabilize.
 
