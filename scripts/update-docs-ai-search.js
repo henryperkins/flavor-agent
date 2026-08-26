@@ -7,7 +7,7 @@ const path = require( 'node:path' );
 
 const DEFAULT_INSTANCE = 'wp-dev-docs';
 const DEFAULT_PUBLIC_SEARCH_URL = 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search';
-const DEFAULT_RELEASE = '7-0';
+const DEFAULT_RELEASE = '7-1';
 const DEFAULT_OUTPUT_DIR = path.resolve( __dirname, '..', 'output', 'docs-ai-search' );
 const LEGACY_ITEM_KEY_PREFIX = 'wp-dev-docs-';
 const USER_AGENT = 'Flavor Agent Developer Docs AI Search Updater (+https://github.com/henryperkins/flavor-agent)';
@@ -28,9 +28,11 @@ const BUILD_ERROR_ATTENTION_RATIO = 0.02;
 // standalone `# title` H1 that produced title-only first chunks). The version is
 // folded into the content hash, so every changed item mints a new key and
 // re-uploads on the next `--full` run. Superseded same-source generations are
-// pruned after the replacement key settles.
+// pruned only on eligible non-targeted runs after the replacement key settles.
 const DOC_LAYOUT_VERSION = 2;
-const VALIDATION_QUERY = 'WordPress developer documentation block.json metadata reference for WordPress 7.0';
+const VALIDATION_QUERIES = Object.freeze( {
+	'7-1': 'WordPress 7.1 block.json metadata reference Gutenberg 23.8',
+} );
 // Cloudflare AI Search resyncs its retrieval index asynchronously after items are
 // ingested, and `pollUntilSettled` only proves item-level settlement — not that the
 // public index has caught up. A single-shot check therefore races the resync and can
@@ -48,6 +50,7 @@ const VALIDATION_SOURCE_MAX_AGE_DAYS = {
 };
 const VALIDATION_RELEASE_FLOORS = {
 	'7-0': Date.parse( '2026-05-20T00:00:00Z' ),
+	'7-1': Date.parse( '2026-08-19T00:00:00Z' ),
 };
 // Ingest settlement is eventually consistent in two separate places: the instance /stats
 // counters clear before the item listing agrees, and one slow item can trail a large
@@ -74,7 +77,7 @@ Usage:
   node scripts/update-docs-ai-search.js [options]
 
 Options:
-  --release=<slug>       Active WordPress major release slug, e.g. 7-0.
+  --release=<slug>       Active WordPress major release slug, e.g. 7-1.
   --instance=<id>        AI Search instance ID. Defaults to env or wp-dev-docs.
   --public-url=<url>     Public /search endpoint used for validation.
   --source-url=<url>     Restrict the run to specific trusted URLs (replaces sitemap
@@ -259,7 +262,7 @@ function normalizeNonNegativeInteger( value, label ) {
 function normalizeRelease( value ) {
 	const release = String( value || '' ).trim().toLowerCase();
 	if ( ! /^[0-9]+-[0-9]+$/.test( release ) ) {
-		throw new Error( 'Release slug must look like 7-0.' );
+		throw new Error( 'Release slug must look like 7-1.' );
 	}
 	return release;
 }
@@ -1824,6 +1827,9 @@ function resolveSameSourceDeletion( run ) {
 	if ( run.dryRun ) {
 		return { delete: false, reason: 'dry-run' };
 	}
+	if ( run.explicitSources ) {
+		return { delete: false, reason: 'targeted-run' };
+	}
 	if ( run.pollSkipped ) {
 		return { delete: false, reason: 'replacement-not-settled' };
 	}
@@ -2006,7 +2012,12 @@ function validationRequestBody( options, returnOnFailure ) {
 		messages: [
 			{
 				role: 'user',
-				content: VALIDATION_QUERY.replace( '7.0', options.release.replace( '-', '.' ) ),
+				content:
+					VALIDATION_QUERIES[ options.release ] ||
+					`WordPress developer documentation block.json metadata reference for WordPress ${ options.release.replace(
+						'-',
+						'.'
+					) }`,
 			},
 		],
 		ai_search_options: { retrieval },
@@ -2538,6 +2549,7 @@ async function main() {
 	const pollErrorCount = Array.isArray( poll.errors ) ? poll.errors.length : 0;
 	const sameSourceDeletion = resolveSameSourceDeletion( {
 		dryRun: options.dryRun,
+		explicitSources: explicitSourcesRequested( options ),
 		pollSkipped: poll.skipped === true,
 		uploadErrors: uploadErrorCount,
 		pollPending,

@@ -1,30 +1,28 @@
 # Flavor Agent
 
-Flavor Agent lets AI work on a live WordPress site without unchecked control. Every AI action it mediates runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, every recorded change reversible with drift detection so an undo never clobbers later human edits. Humans get this through native Gutenberg and Site Editor surfaces — blocks, content, patterns, templates, template parts, navigation, Global Styles, and Style Book; external agents get the same recommendation, validation, and freshness contracts through the WordPress Abilities API and MCP. Built on the WordPress 7.0 AI stack. The recommendation surfaces are the demonstration; the governance layer is the product — its contract map lives in [`docs/reference/governance-layer.md`](docs/reference/governance-layer.md).
+Flavor Agent lets AI work on a live WordPress site without unchecked control. Every AI action it mediates runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, every recorded change reversible with drift detection so an undo never clobbers later human edits. Humans get this through native Gutenberg and Site Editor surfaces — blocks, content, patterns, templates, template parts, navigation, Global Styles, and Style Book; external agents get the same recommendation, validation, and freshness contracts through the WordPress Abilities API and MCP. Built on the WordPress 7.1 AI stack while retaining a WordPress 7.0 minimum. The recommendation surfaces are the demonstration; the governance layer is the product — its contract map lives in [`docs/reference/governance-layer.md`](docs/reference/governance-layer.md).
 
 I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
 
-> **Release status:** `0.1.0` is in pre-tag hardening. RC1–RC3 are published; there is no final `v0.1.0` release yet, and release gates still have to be run against the exact tagged commit. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
+> **Release status:** implementation hardening, current live-corpus evidence, the connector-backed runtime smoke, and the minimum visual proof gate are closed on the current `0.1.0` candidate, but exact-tag verification is outstanding. RC1–RC3 are published; there is no final `v0.1.0` tag or release yet. Executable CI or an explicit waiver, a clean release artifact, and verification against the final immutable SHA remain release gates. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 
 1.0 when the core Abilities/AI Client surfaces stabilize.
 
 ## See it
 
-The first governance screenshot is available at `docs/screenshots/activity-audit.png`: a WP70 `Settings > AI Activity` row seeded with a pending external style apply and opened in the approval/audit detail panel. That is the primary release proof point: an external agent proposes a bounded Global Styles / Style Book operation, WordPress holds it for a human decision, and the resulting activity row carries attribution, freshness, and undo state.
+Two minimum release stills are available. `docs/screenshots/activity-audit.png` shows a WordPress 7.0 `Settings > AI Activity` row with a pending external style apply open in the approval/audit panel. `docs/screenshots/content-recommendation.png` shows a fresh Anthropic-backed recommendation in the native WordPress 7.1 post editor. Together they show the governed proposal/review model at both the editor and administration layers.
 
-Before publishing the GitHub release, add the remaining stills and replace this placeholder section with a short demo sequence:
+The minimum pair exists; these remaining stills are optional additions to the public demo sequence:
 
-- `docs/screenshots/activity-audit.png` — existing `Settings > AI Activity` external-apply approval/audit detail.
 - `docs/screenshots/inspector-recommendation.png` — selected block recommendation in the native Inspector.
 - `docs/screenshots/global-styles-review.png` — Global Styles or Style Book operation in review-first mode.
 - `docs/screenshots/template-review.png` — Site Editor template recommendation in review-first mode.
 - `docs/screenshots/pattern-inserter.png` — ranked patterns in the native inserter shelf.
-- `docs/screenshots/content-recommendation.png` — editorial-only content recommendation in the post editor.
 - `docs/screenshots/settings-readiness.png` — Connectors/plugin-owned backend readiness in wp-admin.
 
 Ship the code without a GIF if necessary, but do not ship the public release without the governance-console proof plus at least one strong native editor still.
 
-**As of 2026-07-20 only the governance-console still exists.** Each remaining asset needs a publicly reachable staged site with live provider credentials, so none of them can be captured from the local Docker stack. Per-asset blockers are recorded in [`docs/releases/v0.1.0-proof-assets.md`](docs/releases/v0.1.0-proof-assets.md). Treat that as an open release gate, not a formality.
+**As of 2026-08-26 the minimum visual gate is closed.** The WordPress 7.1 editor still came from a fresh Anthropic-backed `recommend-content` request; its environment, interaction, credential boundary, browser health, and checksum are recorded in [`docs/validation/2026-08-26-wordpress-7.1-anthropic-editor-proof.md`](docs/validation/2026-08-26-wordpress-7.1-anthropic-editor-proof.md). Per-asset status remains in [`docs/releases/v0.1.0-proof-assets.md`](docs/releases/v0.1.0-proof-assets.md).
 
 ## What it does
 
@@ -57,7 +55,7 @@ For a representative development environment, use the local setup notes in [`doc
 ## Current status
 
 - Version: `0.1.0`
-- WordPress: requires and tests against WordPress 7.0+
+- WordPress: requires WordPress 7.0+; release browser gates target WordPress 7.1
 - PHP: requires PHP 8.2+
 - JavaScript toolchain: Node 20/npm 10 or Node 24/npm 11
 - Canonical status log: [`STATUS.md`](STATUS.md)
@@ -65,12 +63,14 @@ For a representative development environment, use the local setup notes in [`doc
 
 Automated evidence currently recorded in the repository includes:
 
-- `vendor/bin/phpunit` passing `1925` tests / `8825` assertions on 2026-07-20.
-- `npm run test:unit` passing `1679` tests across `109` suites on 2026-07-20.
-- `vendor/bin/phpcs` clean (zero errors, zero warnings) on 2026-07-20.
-- Playwright harnesses re-run on WordPress 7.1 on 2026-08-25: `test:e2e:playground` `17 passed / 0 failed` (Playground CLI `3.1.13` → `3.1.51`, `--wp=6.9.4` → `--wp=7.1`) and `test:e2e:wp70` `30 passed / 0 failed` (`wordpress:7.0.0-php8.2-apache` → `wordpress:7.1.0-php8.2-apache`).
+- The 2026-08-25 candidate commit records strict build, JS/PHP lint, docs checks, `1,750` JS tests across `112` suites, and `2,244` PHP tests / `10,526` assertions passing.
+- Plugin Check passed against the correctly staged `209`-file release tree on 2026-08-25.
+- Playwright harnesses passed on WordPress 7.1 on 2026-08-25: `test:e2e:playground` `17 passed / 0 failed` and `test:e2e:wp70` `30 passed / 0 failed`, followed by a deliberate cold-boot `30 passed / 0 failed` rerun.
+- A real Anthropic-backed `flavor-agent/recommend-content` request resolved `claude-sonnet-4-6` and completed without an unexpected error on 2026-08-26; see [`docs/validation/2026-08-26-anthropic-connector-smoke.md`](docs/validation/2026-08-26-anthropic-connector-smoke.md).
+- A second fresh Anthropic-backed request rendered successfully in the native WordPress 7.1 post editor and produced the minimum editor still; see [`docs/validation/2026-08-26-wordpress-7.1-anthropic-editor-proof.md`](docs/validation/2026-08-26-wordpress-7.1-anthropic-editor-proof.md).
+- A targeted public-corpus updater run settled its WordPress 7.1 source with zero pending items or deletions, then returned current stable Developer Docs and current Make/Core evidence in the same bounded query; see [`docs/validation/2026-08-26-public-corpus-validation.md`](docs/validation/2026-08-26-public-corpus-validation.md).
 
-These are working-tree numbers, not release evidence. Re-run the full gates — strict verify including Plugin Check, both Playwright harnesses, `npm run check:docs`, and `npm run dist` — on the exact commit you tag, and record the results before publishing.
+These are candidate working-tree results, not exact-tag release evidence. Re-run the full gates — strict verify including Plugin Check, both Playwright harnesses, `npm run check:docs`, and `npm run dist` — on the exact commit you tag, and record the results before publishing.
 
 ## Architecture at a glance
 

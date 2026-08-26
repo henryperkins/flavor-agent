@@ -344,6 +344,60 @@ describe( 'update-docs-ai-search helpers', () => {
 		} );
 	} );
 
+	test( 'accepts WordPress 7.1 release-cycle evidence published on the release floor', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-09-20T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/08/19/wordpress-7-1-release-day-process/',
+									published_at: '2026-08-19T00:00:00Z',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-09-20T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+		const request = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
+
+		expect( request.messages[ 0 ].content ).toBe(
+			'WordPress 7.1 block.json metadata reference Gutenberg 23.8'
+		);
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			freshness: {
+				developerDocs: true,
+				releaseCycle: true,
+			},
+			evidence: [
+				{ sourceType: 'developer-docs', current: true, basis: 'retrieved-at' },
+				{ sourceType: 'make-core', current: true, basis: 'release-floor' },
+			],
+		} );
+	} );
+
 	test( 'rejects corpus sources with missing freshness timestamps', async () => {
 		global.fetch = jest.fn( () =>
 			mockJsonResponse( {
@@ -1202,6 +1256,21 @@ describe( 'update-docs-ai-search helpers', () => {
 		);
 	} );
 
+	test( 'defaults the active release profile to WordPress 7.1', () => {
+		const previousRelease = process.env.WP_DOCS_RELEASE;
+		delete process.env.WP_DOCS_RELEASE;
+
+		try {
+			expect( parseArgs( [] ).release ).toBe( '7-1' );
+		} finally {
+			if ( previousRelease === undefined ) {
+				delete process.env.WP_DOCS_RELEASE;
+			} else {
+				process.env.WP_DOCS_RELEASE = previousRelease;
+			}
+		}
+	} );
+
 	test( 'discoverSourceUrls keeps recent Make/Core posts and drops stale or undated ones', async () => {
 		global.fetch = jest.fn( ( url ) => {
 			const href = String( url );
@@ -1714,6 +1783,7 @@ describe( 'update-docs-ai-search helpers', () => {
 	test( 'resolveSameSourceDeletion gates superseded generations on settlement and retrieval', () => {
 		const settled = {
 			dryRun: false,
+			explicitSources: false,
 			pollSkipped: false,
 			uploadErrors: 0,
 			pollPending: 0,
@@ -1728,6 +1798,10 @@ describe( 'update-docs-ai-search helpers', () => {
 
 		// Item-level settlement problems keep the prior behaviour.
 		expect( resolveSameSourceDeletion( { ...settled, dryRun: true } ).delete ).toBe( false );
+		expect( resolveSameSourceDeletion( { ...settled, explicitSources: true } ) ).toEqual( {
+			delete: false,
+			reason: 'targeted-run',
+		} );
 		expect( resolveSameSourceDeletion( { ...settled, pollSkipped: true } ).reason ).toBe(
 			'replacement-not-settled'
 		);
@@ -1881,6 +1955,10 @@ describe( 'update-docs-ai-search helpers', () => {
 			`CLOUDFLARE_AI_SEARCH_PUBLIC_URL: \${{ vars.CLOUDFLARE_AI_SEARCH_PUBLIC_URL || '${ defaults.publicUrl }' }}`
 		);
 		expect( workflow ).toContain( `name: Update ${ defaults.instance } corpus` );
+		expect( workflow ).toContain( `        default: '${ defaults.release }'` );
+		expect( workflow ).toContain(
+			`INPUT_RELEASE: \${{ github.event.inputs.release || '${ defaults.release }' }}`
+		);
 	} );
 
 	test( 'corpus runbook documents the updater defaults', () => {
@@ -1906,6 +1984,10 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( runbook ).toContain( 'https://wordpress.org/news/' );
 		expect( runbook ).toContain( 'https://make.wordpress.org/ai/' );
 		expect( runbook ).toContain( '--recent-post-max-age-days' );
+		expect( runbook ).toContain( `--release=${ defaults.release }` );
+		expect( runbook ).toContain(
+			'WordPress 7.1 block.json metadata reference Gutenberg 23.8'
+		);
 	} );
 
 	test( 'workflow requires explicit opt-in before updating Cloudflare instance config', () => {
