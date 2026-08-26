@@ -187,6 +187,34 @@ function createDeferred() {
 	return { promise, reject, resolve };
 }
 
+const BLOCK_APPLY_STALE_FORBIDDEN_ACTION_TYPES = [
+	'LOG_ACTIVITY',
+	'FLAVOR_AGENT_TOAST_ENQUEUE',
+	'SET_BLOCK_CLIENT_CONTEXT_BASELINE',
+	'SET_BLOCK_RESOLVED_REBASELINE_PENDING',
+	'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE',
+	'SET_ACTIVITY_SESSION',
+];
+
+function expectNoBlockApplyStaleSideEffects( dispatch ) {
+	const actionTypes = dispatch.mock.calls
+		.map( ( [ action ] ) => action?.type )
+		.filter( Boolean );
+
+	for ( const actionType of BLOCK_APPLY_STALE_FORBIDDEN_ACTION_TYPES ) {
+		expect( actionTypes ).not.toContain( actionType );
+	}
+}
+
+function getScopedEditorSelectors( storeName ) {
+	return storeName === 'core/editor'
+		? {
+				getCurrentPostType: () => 'post',
+				getCurrentPostId: () => 42,
+		  }
+		: {};
+}
+
 function createSelectorsForState( getState ) {
 	return Object.fromEntries(
 		Object.entries( selectors ).map( ( [ key, selector ] ) => [
@@ -8860,7 +8888,9 @@ describe( 'store action thunks', () => {
 		};
 		const registry = {
 			select: jest.fn( ( storeName ) =>
-				storeName === 'core/block-editor' ? blockEditorSelect : {}
+				storeName === 'core/block-editor'
+					? blockEditorSelect
+					: getScopedEditorSelectors( storeName )
 			),
 			dispatch: jest.fn( () => ( { updateBlockAttributes } ) ),
 		};
@@ -8942,19 +8972,7 @@ describe( 'store action thunks', () => {
 				suggestion,
 			} )
 		);
-		expect(
-			dispatch.mock.calls
-				.map( ( [ action ] ) => action?.type )
-				.filter( Boolean )
-		).not.toEqual(
-			expect.arrayContaining( [
-				'LOG_ACTIVITY',
-				'ENQUEUE_TOAST',
-				'SET_BLOCK_CLIENT_CONTEXT_BASELINE',
-				'SET_BLOCK_RESOLVED_REBASELINE_PENDING',
-				'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE',
-			] )
-		);
+		expectNoBlockApplyStaleSideEffects( dispatch );
 	} );
 
 	test( 'live context changes during block apply revalidation for a batch', async () => {
@@ -8983,7 +9001,7 @@ describe( 'store action thunks', () => {
 								},
 							],
 					  }
-					: {}
+					: getScopedEditorSelectors( storeName )
 			),
 			dispatch: jest.fn( () => ( { updateBlockAttributes } ) ),
 		};
@@ -9077,17 +9095,7 @@ describe( 'store action thunks', () => {
 				} ),
 			} )
 		);
-		expect(
-			dispatch.mock.calls.map( ( [ action ] ) => action?.type )
-		).not.toEqual(
-			expect.arrayContaining( [
-				'LOG_ACTIVITY',
-				'ENQUEUE_TOAST',
-				'SET_BLOCK_CLIENT_CONTEXT_BASELINE',
-				'SET_BLOCK_RESOLVED_REBASELINE_PENDING',
-				'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE',
-			] )
-		);
+		expectNoBlockApplyStaleSideEffects( dispatch );
 	} );
 
 	test( 'live context changes during block apply revalidation for a structural suggestion', async () => {
@@ -9143,7 +9151,9 @@ describe( 'store action thunks', () => {
 		};
 		const registry = {
 			select: jest.fn( ( storeName ) =>
-				storeName === 'core/block-editor' ? blockEditorSelect : {}
+				storeName === 'core/block-editor'
+					? blockEditorSelect
+					: getScopedEditorSelectors( storeName )
 			),
 			dispatch: jest.fn( () => ( {
 				insertBlocks,
@@ -9221,6 +9231,15 @@ describe( 'store action thunks', () => {
 		} );
 
 		await expect( applyPromise ).resolves.toBe( false );
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This result is stale. Refresh recommendations before applying it.',
+				null,
+				'client'
+			)
+		);
 		expect( blocks ).toEqual( expectedTree );
 		expect( insertBlocks ).not.toHaveBeenCalled();
 		expect( removeBlocks ).not.toHaveBeenCalled();
@@ -9232,17 +9251,7 @@ describe( 'store action thunks', () => {
 				suggestion,
 			} )
 		);
-		expect(
-			dispatch.mock.calls.map( ( [ action ] ) => action?.type )
-		).not.toEqual(
-			expect.arrayContaining( [
-				'LOG_ACTIVITY',
-				'ENQUEUE_TOAST',
-				'SET_BLOCK_CLIENT_CONTEXT_BASELINE',
-				'SET_BLOCK_RESOLVED_REBASELINE_PENDING',
-				'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE',
-			] )
-		);
+		expectNoBlockApplyStaleSideEffects( dispatch );
 	} );
 
 	test.each( [
@@ -9260,9 +9269,24 @@ describe( 'store action thunks', () => {
 				requestClientId: 'block-2',
 			},
 		],
+		[
+			'raw non-empty signatures differ only by whitespace',
+			{
+				collectorSignature: 'sig',
+				requestClientId: 'block-1',
+				requestContextSignature: ' sig ',
+			},
+		],
 	] )(
 		'block apply preflight blocks when %s',
-		async ( label, { collectorSignature, requestClientId } ) => {
+		async (
+			label,
+			{
+				collectorSignature,
+				requestClientId,
+				requestContextSignature = 'live-before',
+			}
+		) => {
 			getLiveBlockContextData.mockReturnValue( {
 				context: { block: { name: 'core/group' } },
 				signature: collectorSignature,
@@ -9316,7 +9340,7 @@ describe( 'store action thunks', () => {
 				} ),
 				{
 					clientId: requestClientId,
-					contextSignature: 'live-before',
+					contextSignature: requestContextSignature,
 					editorContext: { block: { name: 'core/group' } },
 					prompt: 'Improve this block.',
 				}
@@ -9331,17 +9355,7 @@ describe( 'store action thunks', () => {
 					reason: 'client',
 				} )
 			);
-			expect(
-				dispatch.mock.calls.map( ( [ action ] ) => action?.type )
-			).not.toEqual(
-				expect.arrayContaining( [
-					'LOG_ACTIVITY',
-					'ENQUEUE_TOAST',
-					'SET_BLOCK_CLIENT_CONTEXT_BASELINE',
-					'SET_BLOCK_RESOLVED_REBASELINE_PENDING',
-					'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE',
-				] )
-			);
+			expectNoBlockApplyStaleSideEffects( dispatch );
 		}
 	);
 

@@ -2079,17 +2079,19 @@ const actions = {
 				registry,
 				clientId
 			);
-			const baselineSignature = normalizeStringMessage(
-				capturedLiveData?.signature
+			const baselineSignature = capturedLiveData?.signature;
+			const requestContextSignature = liveRequestInput?.contextSignature;
+			const hasBaselineSignature = Boolean(
+				normalizeStringMessage( baselineSignature )
 			);
-			const requestContextSignature = normalizeStringMessage(
-				liveRequestInput?.contextSignature
+			const hasRequestContextSignature = Boolean(
+				normalizeStringMessage( requestContextSignature )
 			);
 
 			if (
 				liveRequestInput?.clientId !== clientId ||
-				! baselineSignature ||
-				! requestContextSignature ||
+				! hasBaselineSignature ||
+				! hasRequestContextSignature ||
 				baselineSignature !== requestContextSignature
 			) {
 				const error = buildClientStaleApplyErrorMessage( 'block' );
@@ -2496,17 +2498,19 @@ const actions = {
 				registry,
 				clientId
 			);
-			const baselineSignature = normalizeStringMessage(
-				capturedLiveData?.signature
+			const baselineSignature = capturedLiveData?.signature;
+			const requestContextSignature = liveRequestInput?.contextSignature;
+			const hasBaselineSignature = Boolean(
+				normalizeStringMessage( baselineSignature )
 			);
-			const requestContextSignature = normalizeStringMessage(
-				liveRequestInput?.contextSignature
+			const hasRequestContextSignature = Boolean(
+				normalizeStringMessage( requestContextSignature )
 			);
 
 			if (
 				liveRequestInput?.clientId !== clientId ||
-				! baselineSignature ||
-				! requestContextSignature ||
+				! hasBaselineSignature ||
+				! hasRequestContextSignature ||
 				baselineSignature !== requestContextSignature
 			) {
 				const error = buildClientStaleApplyErrorMessage( 'block' );
@@ -2878,17 +2882,19 @@ const actions = {
 				registry,
 				clientId
 			);
-			const baselineSignature = normalizeStringMessage(
-				capturedLiveData?.signature
+			const baselineSignature = capturedLiveData?.signature;
+			const requestContextSignature = liveRequestInput?.contextSignature;
+			const hasBaselineSignature = Boolean(
+				normalizeStringMessage( baselineSignature )
 			);
-			const requestContextSignature = normalizeStringMessage(
-				liveRequestInput?.contextSignature
+			const hasRequestContextSignature = Boolean(
+				normalizeStringMessage( requestContextSignature )
 			);
 
 			if (
 				liveRequestInput?.clientId !== clientId ||
-				! baselineSignature ||
-				! requestContextSignature ||
+				! hasBaselineSignature ||
+				! hasRequestContextSignature ||
 				baselineSignature !== requestContextSignature
 			) {
 				const error = buildClientStaleApplyErrorMessage( 'block' );
