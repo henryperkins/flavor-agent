@@ -2487,48 +2487,67 @@ test( '@wp70-site-editor block apply aborts when live context changes during sig
 	const TEST_RESOLVED_SIGNATURE =
 		'test-resolved-signature-block-live-context-race';
 	const RACE_SUGGESTION_LABEL = 'Apply delayed content update';
-	const capturedSignatureOnlyRequests = [];
-	let holdSignatureOnlyRequest = false;
+	const recommendBlockRoutePattern =
+		recommendationAbilityRoute( 'recommend-block' );
+	const backgroundSignatureOnlyRequests = [];
+	const capturedApplySignatureOnlyRequests = [];
+	let raceClientId = null;
 	let captureSignatureOnlyRequest;
 	let releaseSignatureOnlyRequest;
+	let hasReleasedSignatureOnlyRequest = false;
 	const signatureOnlyRequestCaptured = new Promise( ( resolve ) => {
 		captureSignatureOnlyRequest = resolve;
 	} );
 	const signatureOnlyRequestRelease = new Promise( ( resolve ) => {
 		releaseSignatureOnlyRequest = resolve;
 	} );
+	const releaseHeldSignatureOnlyRequest = () => {
+		if ( hasReleasedSignatureOnlyRequest ) {
+			return;
+		}
 
-	await page.route(
-		recommendationAbilityRoute( 'recommend-block' ),
-		async ( route ) => {
-			let body = {};
-			try {
-				body = getAbilityRequestInput(
-					route.request().postDataJSON() || {}
-				);
-			} catch {
-				body = {};
-			}
+		hasReleasedSignatureOnlyRequest = true;
+		releaseSignatureOnlyRequest();
+	};
 
-			if ( body?.resolveSignatureOnly ) {
-				if ( holdSignatureOnlyRequest ) {
-					holdSignatureOnlyRequest = false;
-					capturedSignatureOnlyRequests.push( body );
-					captureSignatureOnlyRequest();
-					await signatureOnlyRequestRelease;
-				}
+	const handleRecommendBlockRoute = async ( route ) => {
+		let body = {};
+		try {
+			body = getAbilityRequestInput(
+				route.request().postDataJSON() || {}
+			);
+		} catch {
+			body = {};
+		}
 
-				await route.fulfill( {
-					status: 200,
-					contentType: 'application/json',
-					body: JSON.stringify( {
-						payload: {
-							resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-						},
-						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-					} ),
+		const isSignatureOnly = body?.resolveSignatureOnly === true;
+		const hasOwnContextSignature = Object.prototype.hasOwnProperty.call(
+			body,
+			'contextSignature'
+		);
+
+		if ( isSignatureOnly ) {
+			if ( hasOwnContextSignature ) {
+				backgroundSignatureOnlyRequests.push( body );
+			} else {
+				const applyStatusAtCapture = raceClientId
+					? await page.evaluate(
+							( selectedClientId ) =>
+								window.wp.data
+									.select( 'flavor-agent' )
+									.getBlockApplyStatus?.(
+										selectedClientId
+									) || '',
+							raceClientId
+					  )
+					: '';
+
+				capturedApplySignatureOnlyRequests.push( {
+					applyStatusAtCapture,
+					input: body,
 				} );
-				return;
+				captureSignatureOnlyRequest();
+				await signatureOnlyRequestRelease;
 			}
 
 			await route.fulfill( {
@@ -2536,158 +2555,205 @@ test( '@wp70-site-editor block apply aborts when live context changes during sig
 				contentType: 'application/json',
 				body: JSON.stringify( {
 					payload: {
-						settings: [],
-						styles: [],
-						block: [
-							{
-								label: RACE_SUGGESTION_LABEL,
-								panel: 'typography',
-								attributeUpdates: {
-									content: 'AI content',
-								},
-							},
-						],
-						executionContract: {
-							allowedPanels: [ 'typography' ],
-							panelMappingKnown: true,
-							contentAttributeKeys: [ 'content' ],
-							configAttributeKeys: [],
-						},
-						explanation: 'Mocked delayed block recommendation',
 						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
 					},
 					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
 				} ),
 			} );
+			return;
 		}
-	);
 
-	await page.goto( '/wp-admin/post-new.php', {
-		waitUntil: 'domcontentloaded',
-	} );
-	await waitForWordPressReady( page );
-	await waitForFlavorAgent( page );
-	await dismissWelcomeGuide( page );
-
-	const clientId = await seedParagraphBlock( page );
-	await page.evaluate( ( selectedClientId ) => {
-		window.wp.data
-			.dispatch( 'core/block-editor' )
-			.updateBlockAttributes( selectedClientId, {
-				content: 'Original content',
-			} );
-	}, clientId );
-	await expect
-		.poll( () =>
-			page.evaluate(
-				( selectedClientId ) =>
-					window.wp.data
-						.select( 'core/block-editor' )
-						.getBlockAttributes( selectedClientId )?.content || '',
-				clientId
-			)
-		)
-		.toBe( 'Original content' );
-	await ensureSettingsSidebarOpen( page );
-
-	const promptInput = page.getByPlaceholder(
-		'Describe the outcome you want for this block.'
-	);
-	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
-	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
-
-	const suggestionButton = page.getByRole( 'button', {
-		name: RACE_SUGGESTION_LABEL,
-		exact: true,
-	} );
-	await expect( suggestionButton ).toBeVisible( { timeout: 15_000 } );
-	await expect( suggestionButton ).toBeEnabled();
-	holdSignatureOnlyRequest = true;
-	await suggestionButton.click();
-	await signatureOnlyRequestCaptured;
-	expect( capturedSignatureOnlyRequests ).toHaveLength( 1 );
-	expect( capturedSignatureOnlyRequests[ 0 ].resolveSignatureOnly ).toBe(
-		true
-	);
-
-	await page.evaluate( ( selectedClientId ) => {
-		window.wp.data
-			.dispatch( 'core/block-editor' )
-			.updateBlockAttributes( selectedClientId, {
-				content: 'User edit during validation',
-			} );
-	}, clientId );
-	await expect
-		.poll( () =>
-			page.evaluate(
-				( selectedClientId ) =>
-					window.wp.data
-						.select( 'core/block-editor' )
-						.getBlockAttributes( selectedClientId )?.content || '',
-				clientId
-			)
-		)
-		.toBe( 'User edit during validation' );
-
-	releaseSignatureOnlyRequest();
-
-	await expect
-		.poll( () =>
-			page.evaluate(
-				( { selectedClientId, suggestionLabel } ) => {
-					const blockEditor =
-						window.wp.data.select( 'core/block-editor' );
-					const flavorAgent = window.wp.data.select( 'flavor-agent' );
-					const matchingApplyActivities = (
-						flavorAgent.getActivityLog?.() || []
-					).filter(
-						( entry ) =>
-							entry?.type === 'apply_suggestion' &&
-							entry?.suggestion === suggestionLabel
-					);
-
-					return {
-						content:
-							blockEditor.getBlockAttributes?.( selectedClientId )
-								?.content || '',
-						applyStatus:
-							flavorAgent.getBlockApplyStatus?.(
-								selectedClientId
-							) || '',
-						applyError:
-							flavorAgent.getBlockApplyError?.(
-								selectedClientId
-							) || '',
-						staleReason:
-							flavorAgent.getBlockStaleReason?.(
-								selectedClientId
-							) || '',
-						matchingApplyActivityCount:
-							matchingApplyActivities.length,
-						toastCount: ( flavorAgent.getToasts?.() || [] ).length,
-					};
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( {
+				payload: {
+					settings: [],
+					styles: [],
+					block: [
+						{
+							label: RACE_SUGGESTION_LABEL,
+							panel: 'typography',
+							attributeUpdates: {
+								content: 'AI content',
+							},
+						},
+					],
+					executionContract: {
+						allowedPanels: [ 'typography' ],
+						panelMappingKnown: true,
+						contentAttributeKeys: [ 'content' ],
+						configAttributeKeys: [],
+					},
+					explanation: 'Mocked delayed block recommendation',
+					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
 				},
-				{
-					selectedClientId: clientId,
-					suggestionLabel: RACE_SUGGESTION_LABEL,
-				}
-			)
-		)
-		.toEqual( {
-			content: 'User edit during validation',
-			applyStatus: 'error',
-			applyError:
-				'This result is stale. Refresh recommendations before applying it.',
-			staleReason: 'client',
-			matchingApplyActivityCount: 0,
-			toastCount: 0,
+				resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+			} ),
 		} );
-	await expect(
-		page.locator( '.flavor-agent-activity-row' ).filter( {
-			hasText: RACE_SUGGESTION_LABEL,
-		} )
-	).toHaveCount( 0 );
-	await expect( page.locator( '.flavor-agent-toast' ) ).toHaveCount( 0 );
+	};
+
+	await page.route( recommendBlockRoutePattern, handleRecommendBlockRoute );
+
+	try {
+		await page.goto( '/wp-admin/post-new.php', {
+			waitUntil: 'domcontentloaded',
+		} );
+		await waitForWordPressReady( page );
+		await waitForFlavorAgent( page );
+		await dismissWelcomeGuide( page );
+
+		const clientId = await seedParagraphBlock( page );
+		raceClientId = clientId;
+		await page.evaluate( ( selectedClientId ) => {
+			window.wp.data
+				.dispatch( 'core/block-editor' )
+				.updateBlockAttributes( selectedClientId, {
+					content: 'Original content',
+				} );
+		}, clientId );
+		await expect
+			.poll( () =>
+				page.evaluate(
+					( selectedClientId ) =>
+						window.wp.data
+							.select( 'core/block-editor' )
+							.getBlockAttributes( selectedClientId )?.content ||
+						'',
+					clientId
+				)
+			)
+			.toBe( 'Original content' );
+		await ensureSettingsSidebarOpen( page );
+
+		const promptInput = page.getByPlaceholder(
+			'Describe the outcome you want for this block.'
+		);
+		await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+		await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+		const suggestionButton = page.getByRole( 'button', {
+			name: RACE_SUGGESTION_LABEL,
+			exact: true,
+		} );
+		await expect( suggestionButton ).toBeVisible( { timeout: 15_000 } );
+		await expect( suggestionButton ).toBeEnabled();
+		await expect
+			.poll( () => backgroundSignatureOnlyRequests.length, {
+				timeout: 15_000,
+			} )
+			.toBeGreaterThanOrEqual( 1 );
+		expect(
+			Object.prototype.hasOwnProperty.call(
+				backgroundSignatureOnlyRequests[ 0 ],
+				'contextSignature'
+			)
+		).toBe( true );
+		await suggestionButton.click();
+		await signatureOnlyRequestCaptured;
+		expect( capturedApplySignatureOnlyRequests ).toHaveLength( 1 );
+		expect(
+			capturedApplySignatureOnlyRequests[ 0 ].input.resolveSignatureOnly
+		).toBe( true );
+		expect(
+			Object.prototype.hasOwnProperty.call(
+				capturedApplySignatureOnlyRequests[ 0 ].input,
+				'contextSignature'
+			)
+		).toBe( false );
+		expect(
+			capturedApplySignatureOnlyRequests[ 0 ].applyStatusAtCapture
+		).toBe( 'applying' );
+
+		await page.evaluate( ( selectedClientId ) => {
+			window.wp.data
+				.dispatch( 'core/block-editor' )
+				.updateBlockAttributes( selectedClientId, {
+					content: 'User edit during validation',
+				} );
+		}, clientId );
+		await expect
+			.poll( () =>
+				page.evaluate(
+					( selectedClientId ) =>
+						window.wp.data
+							.select( 'core/block-editor' )
+							.getBlockAttributes( selectedClientId )?.content ||
+						'',
+					clientId
+				)
+			)
+			.toBe( 'User edit during validation' );
+
+		releaseHeldSignatureOnlyRequest();
+
+		await expect
+			.poll( () =>
+				page.evaluate(
+					( { selectedClientId, suggestionLabel } ) => {
+						const blockEditor =
+							window.wp.data.select( 'core/block-editor' );
+						const flavorAgent =
+							window.wp.data.select( 'flavor-agent' );
+						const matchingApplyActivities = (
+							flavorAgent.getActivityLog?.() || []
+						).filter(
+							( entry ) =>
+								entry?.type === 'apply_suggestion' &&
+								entry?.suggestion === suggestionLabel
+						);
+
+						return {
+							content:
+								blockEditor.getBlockAttributes?.(
+									selectedClientId
+								)?.content || '',
+							applyStatus:
+								flavorAgent.getBlockApplyStatus?.(
+									selectedClientId
+								) || '',
+							applyError:
+								flavorAgent.getBlockApplyError?.(
+									selectedClientId
+								) || '',
+							staleReason:
+								flavorAgent.getBlockStaleReason?.(
+									selectedClientId
+								) || '',
+							matchingApplyActivityCount:
+								matchingApplyActivities.length,
+							toastCount: ( flavorAgent.getToasts?.() || [] )
+								.length,
+						};
+					},
+					{
+						selectedClientId: clientId,
+						suggestionLabel: RACE_SUGGESTION_LABEL,
+					}
+				)
+			)
+			.toEqual( {
+				content: 'User edit during validation',
+				applyStatus: 'error',
+				applyError:
+					'This result is stale. Refresh recommendations before applying it.',
+				staleReason: 'client',
+				matchingApplyActivityCount: 0,
+				toastCount: 0,
+			} );
+		await expect(
+			page.locator( '.flavor-agent-activity-row' ).filter( {
+				hasText: RACE_SUGGESTION_LABEL,
+			} )
+		).toHaveCount( 0 );
+		await expect( page.locator( '.flavor-agent-toast' ) ).toHaveCount( 0 );
+	} finally {
+		releaseHeldSignatureOnlyRequest();
+		await page.unroute(
+			recommendBlockRoutePattern,
+			handleRecommendBlockRoute
+		);
+	}
 } );
 
 test( '@wp70-site-editor block structural sibling insertion respects action-specific permissions and undoes', async ( {
